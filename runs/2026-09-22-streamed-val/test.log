@@ -1,0 +1,17 @@
+=== producers 2026-09-22T12:11:11+00:00
+shim jax/.lake/build/generated_vit_tiny_imagenet_shim.py
+N=1  wall   43.1 s  bytes 30105800800  ≈ 50000 images  → 1160 img/s (incl. TF startup)
+N=2  wall   31.1 s  bytes 30105800816  ≈ 50000 images  → 1608 img/s (incl. TF startup)
+N=4  wall   25.7 s  bytes 30105800848  ≈ 50000 images  → 1946 img/s (incl. TF startup)
+=== gate test 2026-09-22T12:12:51+00:00
+── streamed-val gate (test): vit-in adamdp128x4wxclipdrop, 1 vs 4 replicas ──
+   ckpt   .lake/build/vitin_adamdp128x4wxclipdrop_ckpt_xla_warmprobe-vit-f32.bin
+   logs   runs/2026-09-22-streamed-val/vit
+  T1      R=1                            <no accuracy line, rc=1>  (51s)
+  TN      R=4                            checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000  (44s)
+  F_order R=1 LEAN_MLIR_VAL_FAULT=order  <no accuracy line, rc=1>  (52s)
+  F_tail  R=1 LEAN_MLIR_VAL_FAULT=tail   checkpoint: acc = 1023/256 = 399.609375%  top5 = 3460/256  (51s)
+
+✗ arm T1 produced no accuracy line or bitmap — see runs/2026-09-22-streamed-val/vit/T1.log
+✗ arm F_order produced no accuracy line or bitmap — see runs/2026-09-22-streamed-val/vit/F_order.log
+gate rc=1

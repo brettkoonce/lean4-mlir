@@ -1,0 +1,25 @@
+=== rebuild 2026-09-22T12:23:52+00:00
+✔ [24/26] Built LeanMlir.VerifiedTrain:c.o (22s)
+✔ [25/26] Built «score-checkpoint»:exe (192ms)
+✔ [26/26] Built «vit-imagenet-verified»:exe (211ms)
+Build completed successfully (26 jobs).
+=== gate test 2026-09-22T12:24:22+00:00
+── streamed-val gate (test): vit-in adamdp128x4wxclipdrop, 1 vs 4 replicas ──
+   ckpt   .lake/build/vitin_adamdp128x4wxclipdrop_ckpt_xla_warmprobe-vit-f32.bin
+   logs   runs/2026-09-22-streamed-val/vit
+  T1      R=1                            checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000  (51s)
+  TN      R=4                            checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000  (44s)
+  F_order R=1 LEAN_MLIR_VAL_FAULT=order  checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000  (51s)
+  F_tail  R=1 LEAN_MLIR_VAL_FAULT=tail   checkpoint: acc = 1023/49920 = 2.049279%  top5 = 3460/49920  (51s)
+
+✗ test    T1 != G1 — 2018 images differ
+          G1 checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000
+          T1 checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000
+✗ test    TN != G1 — 2018 images differ
+          G1 checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000
+          TN checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000
+✓ control F_order != G1 — same count, 2008 images flipped: the mis-pairing a count cannot see
+✓ control F_tail reads 49920, not 50000: the dropped tail shows in the denominator
+
+✗ FAIL — logs in runs/2026-09-22-streamed-val/vit
+gate rc=1

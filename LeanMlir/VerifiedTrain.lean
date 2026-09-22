@@ -452,48 +452,6 @@ def mkSessionDp (mlirPath : String) (replicas : Nat) : IO LowererSession := do
   IO.println s!"  xla/pjrt {mlirPath}  (eval, SHARDED over {replicas} replicas)"
   LowererSession.createDp mlirPath replicas.toUSize
 
-/-- **The eval pass**: score `nEval` images through a forward session, `replicas × evalBs` per
-    invoke. `(top-1 correct, top-5 correct, per-image top-1 bitmap)`. The bitmap is filled only
-    when `wantBits`, in eval order, one byte per image.
-
-    ⭐ ONE copy, shared by the per-epoch eval in `trainAdamSched` and by `scoreCheckpoint`. That is
-    not tidiness: `scripts/sharded_eval_gate.sh` compares 1 replica against N through
-    `score-checkpoint`, and a gate on a COPY of the loop says nothing about the loop that runs.
-
-    ⚠⚠ THE RAGGED TAIL is the first thing to get wrong. 50,000 is not a multiple of 4 × 64 = 256:
-    it is 195 full invokes and an 80-image tail, which fills replica 0 and a quarter of replica 1,
-    while replicas 2 and 3 score pure padding. `F32.sliceImagesPad` zero-pads the invoke to the
-    global batch, the shim gathers the logits back in ROW ORDER, and only
-    `min gB (nEval − bi·gB)` rows are scored. The pad rows are computed and never read. -/
-def evalScore (sess : LowererSession) (fn : String) (params shapes evalImg evalLbl : ByteArray)
-    (nEval evalBs evalD0 nc replicas : Nat) (nResident gen : USize) (wantBits : Bool) :
-    IO (Nat × Nat × ByteArray) := do
-  let r := max replicas 1
-  let gB := r * evalBs
-  let xShape := packXShape #[gB, evalD0]
-  let nbt := (nEval + gB - 1) / gB   -- ceil: the last partial invoke is zero-padded, not dropped
-  let mut correct := 0
-  let mut correct5 := 0
-  let mut bits : ByteArray := ByteArray.empty
-  for bi in [0:nbt] do
-    -- ⚠ `evalD0`, not the train width: the val buffer was drained at the EVAL width (RSB-A3 trains
-    -- at 160², evaluates at 224²), and slicing it at the other one strides through it wrongly.
-    let xb := F32.sliceImagesPad evalImg (bi * gB) gB evalD0 nEval
-    let logits ← if r == 1
-      then LowererSession.forwardF32 sess fn params shapes xb xShape gB.toUSize nc.toUSize
-             nResident gen
-      else LowererSession.forwardF32Dp sess fn params shapes xb xShape gB.toUSize nc.toUSize
-             r.toUSize nResident gen
-    for j in [0:min gB (nEval - bi * gB)] do   -- score real rows only, not the pad
-      let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
-      let lbl  := F32.readLabel evalLbl (bi * gB + j)
-      if pred == lbl then correct := correct + 1
-      if wantBits then bits := bits.push (if pred == lbl then 1 else 0)
-      -- top-5 by the label's RANK, matching the reference's `sum(logits > true_logit) < 5`.
-      if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
-        correct5 := correct5 + 1
-  return (correct, correct5, bits)
-
 /-- Init one parameter from its `(dims, initKind)` spec, matching the JAX reference's
     initialisers — they are the oracle these nets are paired against:
 
@@ -957,6 +915,188 @@ def readShimBatchRR (hs : Array ShimProc) (k batch flat : Nat) (nclasses : Nat :
   | none   => throw <| IO.userError "readShimBatchRR: no shim producers were spawned"
 
 
+/-- Where `evalScore` reads its rows from (planning/streaming_val.md §3.2). -/
+inductive EvalRows where
+  /-- The whole split held in RAM — MNIST, CIFAR, Imagenette: today's slicing, unchanged. -/
+  | held (img lbl : ByteArray)
+  /-- ImageNet: streamed per pass from `hs.size` batch-block producers (`spawnValStream`),
+      `shimBatch` rows per shim batch, `flat` floats per image, read round-robin — global batch
+      `k` from producer `(k + offset) % n`, where `offset` is 0 except under the gate's order
+      fault. `dropTail` drops a partial final batch (`LEAN_MLIR_EVAL_BATCHSTATS`, or the gate's
+      tail fault) instead of refusing the short pass. -/
+  | stream (hs : Array ShimProc) (shimBatch flat offset : Nat) (dropTail : Bool)
+
+/-- The streamed reader's carry. Shim batches arrive at `shimBatch` rows and an eval invoke wants
+    `gB = R × evalBs` of them — one shim batch for ConvNeXt at 4 × 64, four for ViT at 4 × 256, a
+    quarter of one at R = 1, bs 64 — so rows are carried across pulls. -/
+structure ValCarry where
+  img   : ByteArray := ByteArray.empty
+  lbl   : ByteArray := ByteArray.empty
+  rows  : Nat := 0
+  next  : Nat := 0        -- the next global shim batch to read
+  ended : Bool := false
+  total : Nat := 0        -- rows delivered so far: the per-pass denominator check
+
+/-- Pull the next `gB` rows off the stream: `(xb, lbl, real)` with `xb` zero-padded to `gB × flat`
+    floats and `real ≤ gB` the rows to score; `real = 0` means the pass is over. The first `rows = 0`
+    in round-robin order IS the end: every producer has emitted all of its blocks by then (producer
+    `b % n` has exactly `⌊b / n⌋` of them when global batch `b` is the first past the end).
+    Sequential by construction — `evalScore` issues the next pull only after awaiting this one — so
+    the carry needs no lock. -/
+def pullValRows (st : IO.Ref ValCarry) (hs : Array ShimProc) (shimBatch flat offset gB : Nat)
+    (dropTail : Bool) : IO (ByteArray × ByteArray × Nat) := do
+  let mut c ← st.get
+  while c.rows < gB && !c.ended do
+    let some p := hs[(c.next + offset) % hs.size]?
+      | throw <| IO.userError "val stream: no producers were spawned"
+    let (i, l, rows) ← readShimBatchPartial p.h shimBatch flat
+    if rows == 0 then c := { c with ended := true }
+    else if rows < shimBatch && dropTail then
+      IO.println s!"  ⚠ dropping the {rows}-image val tail (LEAN_MLIR_EVAL_BATCHSTATS, or the gate's \
+tail fault) — this pass's denominator is {c.total + c.rows}, not 50,000"
+      c := { c with ended := true }
+    else
+      -- `++` into a pre-sized buffer never reallocates (loadData's 2026-08 lesson); size the carry
+      -- for the rows one pull can hold before the remainder is carried.
+      let img := if c.img.isEmpty then ByteArray.emptyWithCapacity (4 * (gB + shimBatch) * flat) ++ i
+                 else c.img ++ i
+      c := { c with img := img, lbl := c.lbl ++ l, rows := c.rows + rows, next := c.next + 1 }
+  let real := min gB c.rows
+  let xb ← if real == gB then pure (c.img.extract 0 (4 * gB * flat))
+           else pure ((c.img.extract 0 (4 * real * flat)) ++ (← F32.const ((gB - real) * flat).toUSize 0.0))
+  let lb := c.lbl.extract 0 (4 * real)
+  st.set { c with img := c.img.extract (4 * real * flat) c.img.size,
+                  lbl := c.lbl.extract (4 * real) c.lbl.size,
+                  rows := c.rows - real, total := c.total + real }
+  pure (xb, lb, real)
+
+/-- Spawn the per-pass val producers (planning/streaming_val.md §3.2): `n` batch-block producers of
+    the validation split at `shimBatch` rows — fresh for every pass and reaped by `reapValStream`, so
+    nothing accumulates across epochs and the closed pipe stays the end-of-pass marker. `flat` is the
+    EVAL width (RSB-A3 trains at 160² and evaluates at 224²), read off the artifact by the caller.
+
+    ⚠ The gate-only fault knobs, in the `PJRT_FFI_FAULT` style — controls that must go red:
+    `LEAN_MLIR_VAL_FAULT=order` starts the round-robin on producer 1 (every image scored against
+    another image's label: same count, different bitmap), `=tail` drops the 80-row tail (the C4
+    bug class: 49,920). `scripts/streamed_val_gate.sh`. -/
+def spawnValStream (net : VerifiedNet) (flat : Nat) (n : Nat := 2) (shimBatch : Nat := 256) :
+    IO EvalRows := do
+  let hs ← spawnShimSharded net.shimScript "validation" shimBatch flat 0 n
+  let fault ← IO.getEnv "LEAN_MLIR_VAL_FAULT"
+  let offset := if fault == some "order" then 1 else 0
+  let dropTail := (← IO.getEnv "LEAN_MLIR_EVAL_BATCHSTATS").isSome || fault == some "tail"
+  if let some f := fault then
+    IO.println s!"  ⚠ LEAN_MLIR_VAL_FAULT={f}: {if f == "order" then "the round-robin starts on producer 1" else if f == "tail" then "the partial last batch is dropped" else "unknown fault, no effect"} — the gate's CONTROL, not a configuration"
+  IO.println s!"  ▸ val: STREAMED per pass — {hs.size} batch-block producer(s), {shimBatch}-row blocks \
+k, k+{hs.size}, … read round-robin, nothing held (the 30 GB drain is gone; \
+planning/streaming_val.md)"
+  pure (.stream hs shimBatch flat offset dropTail)
+
+/-- Kill then wait, the `<defunct>` lesson: the val stream ends by itself, but a dropped tail or a
+    refusal can leave a child still writing. -/
+def reapValStream : EvalRows → IO Unit
+  | .stream hs .. => do
+      for p in hs do
+        try p.child.kill catch _ => pure ()
+        let _ ← p.child.wait
+  | _ => pure ()
+
+/-- **The eval pass**: score `nEval` images through a forward session, `replicas × evalBs` per
+    invoke. `(top-1 correct, top-5 correct, images scored, per-image top-1 bitmap)`. The bitmap is
+    filled only when `wantBits`, in eval order, one byte per image. `rows` is where the images come
+    from: the held split, or ImageNet's per-pass stream (`EvalRows`).
+
+    ⭐ ONE copy, shared by the per-epoch eval in `trainAdamSched` and by `scoreCheckpoint`. That is
+    not tidiness: `scripts/sharded_eval_gate.sh` compares 1 replica against N through
+    `score-checkpoint`, and a gate on a COPY of the loop says nothing about the loop that runs.
+
+    ⚠⚠ THE RAGGED TAIL is the first thing to get wrong. 50,000 is not a multiple of 4 × 64 = 256:
+    it is 195 full invokes and an 80-image tail, which fills replica 0 and a quarter of replica 1,
+    while replicas 2 and 3 score pure padding. `F32.sliceImagesPad` zero-pads the invoke to the
+    global batch, the shim gathers the logits back in ROW ORDER, and only
+    `min gB (nEval − bi·gB)` rows are scored. The pad rows are computed and never read. -/
+
+def evalScore (sess : LowererSession) (fn : String) (params shapes : ByteArray) (rows : EvalRows)
+    (nEval evalBs evalD0 nc replicas : Nat) (nResident gen : USize) (wantBits : Bool) :
+    IO (Nat × Nat × Nat × ByteArray) := do
+  let r := max replicas 1
+  let gB := r * evalBs
+  let xShape := packXShape #[gB, evalD0]
+  let nbt := (nEval + gB - 1) / gB   -- ceil: the last partial invoke is zero-padded, not dropped
+  let mut correct := 0
+  let mut correct5 := 0
+  let mut bits : ByteArray := ByteArray.empty
+  -- The streamed source reads AHEAD: the pull for invoke k+1 is issued before invoke k runs, one in
+  -- flight, so the ~30 GB of pipe reads per pass overlap compute instead of serialising with it
+  -- (the train loop's depth-n prefetch, at depth 1). The task touches only the carry.
+  let carry ← IO.mkRef ({} : ValCarry)
+  let issue : BaseIO (Task (Except IO.Error (ByteArray × ByteArray × Nat))) :=
+    match rows with
+    | .stream hs sb flat off dt => IO.asTask (pullValRows carry hs sb flat off gB dt) Task.Priority.default
+    | .held _ _ => IO.asTask (pure (ByteArray.empty, ByteArray.empty, 0)) Task.Priority.default
+  let mut inflight : Option (Task (Except IO.Error (ByteArray × ByteArray × Nat))) := none
+  if let .stream .. := rows then inflight := some (← issue)
+  for bi in [0:nbt] do
+    let mut xb := ByteArray.empty
+    let mut lb := ByteArray.empty
+    let mut real := 0
+    let mut lblBase := 0
+    match rows with
+    | .held img lbl =>
+        -- ⚠ `evalD0`, not the train width: the val buffer is at the EVAL width (RSB-A3 trains at
+        -- 160², evaluates at 224²), and slicing it at the other one strides through it wrongly.
+        xb := F32.sliceImagesPad img (bi * gB) gB evalD0 nEval
+        lb := lbl; real := min gB (nEval - bi * gB); lblBase := bi * gB
+    | .stream .. =>
+        let some tk := inflight | throw <| IO.userError "val stream: no pull in flight"
+        let (i, l, n) ← IO.ofExcept (← IO.wait tk)
+        inflight ← if bi + 1 < nbt then pure (some (← issue)) else pure none
+        xb := i; lb := l; real := n
+    if real == 0 then break   -- the stream ended early; the count check below refuses
+    let logits ← if r == 1
+      then LowererSession.forwardF32 sess fn params shapes xb xShape gB.toUSize nc.toUSize
+             nResident gen
+      else LowererSession.forwardF32Dp sess fn params shapes xb xShape gB.toUSize nc.toUSize
+             r.toUSize nResident gen
+    for j in [0:real] do   -- score real rows only, not the pad
+      let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
+      let lbl  := F32.readLabel lb (lblBase + j)
+      if pred == lbl then correct := correct + 1
+      if wantBits then bits := bits.push (if pred == lbl then 1 else 0)
+      -- top-5 by the label's RANK, matching the reference's `sum(logits > true_logit) < 5`.
+      if (F32.rankOf logits (j * nc).toUSize nc.toUSize lbl.toUSize).toNat < 5 then
+        correct5 := correct5 + 1
+  -- ⚠⚠ `scored` IS NOT AN ACCUMULATOR. It was: `scored := scored + real` as the loop's last
+  -- statement. Measured 2026-09-22 (Lean 4.34): on the R = 1 path that came back holding only the
+  -- LAST invoke's rows (80 of 50,000; 256 with the tail dropped) while `correct`, mutated inside
+  -- the inner loop, summed correctly — and it was right at R = 4, and right again on the same
+  -- binary path the moment an `eprintln` read it after the assignment. That is the shape of a
+  -- code-generation issue, not of this loop (a 20-line copy of the loop's shape sums correctly in
+  -- isolation), so the denominator is read from what the pass delivered instead: the carry's
+  -- `total` for a stream, `nEval` for a held split (the loop scores `min gB (nEval − bi·gB)` rows
+  -- per invoke by construction). The bitmap's length cross-checks it whenever one is kept.
+  let scored ← match rows with
+    | .stream .. => do pure (← carry.get).total
+    | .held _ _  => pure nEval
+  if wantBits && bits.size != scored then
+    throw <| IO.userError s!"eval scored {bits.size} rows but its source delivered {scored} — the two \
+counts must agree, and neither is a number to report"
+  -- ⭐ ASSERTED EVERY PASS, because it is the denominator every top-1 divides by and it moved once
+  -- already (49,920 → 50,000, 2026-08-14). A short pass is a refusal, not a plausible number; an
+  -- over-long one is refused too (one more pull must come back empty).
+  match rows with
+  | .stream hs sb flat off dt =>
+      if scored == nEval then
+        let (_, _, extra) ← pullValRows carry hs sb flat off 1 dt
+        if extra != 0 then
+          throw <| IO.userError s!"val stream delivered MORE than {nEval} images — the block sharding double-counted a batch"
+        IO.println s!"  ▸ val = all {nEval} streamed (timm's denominator)"
+      else if !dt then
+        throw <| IO.userError s!"val stream delivered {scored} of {nEval} images — a short pass is a \
+refusal, not a number (a producer died, or the block sharding lost a batch)"
+  | _ => pure ()
+  return (correct, correct5, scored, bits)
+
 /-- Load the train + eval splits for a dataset. Returns
     `(trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop?)` where
     `trainPix` is the stored per-example width of the *training* images (256² for
@@ -1008,87 +1148,18 @@ private def loadData (net : VerifiedNet) (dataDir : String) (evalD0 : Nat := 0)
     -- Train is NOT loaded here — it is streamed per step (`trainAdamSched`). Only `nTrain` matters
     -- from this side, and it is the tfds count, which is what sets steps/epoch.
     --
-    -- Val IS drained into RAM, once, so the eval loop below is untouched: 195 batches × 256 after
-    -- tfds `drop_remainder` = 49,920 images = 30.0 GB. That is the SAME count
-    -- `jax/runs/r34_imagenet_bf16_90ep/RESULTS.md` reports for its in-training val, so the two
-    -- paths score the identical set.
-    -- ⚠⚠ THIS IS THE **VAL** WIDTH, AND IT IS NOT ALWAYS THE TRAIN WIDTH. ImageNet val is drained
-    -- at the EVAL forward's rendered width, which under RSB-A3 is 224² while TRAIN is 160²
-    -- (`resnet50Imagenet160Verified`). Until 2026-08-06 this was the literal `3*224*224` AND was
-    -- returned as `trainPix` too, so the train stream inherited the val resolution: the 160 net
-    -- asked its shim for 150,528 floats/img while the shim correctly sent 76,800, and the wire
-    -- guard refused ("shim sends batch=64 flat=76800, the render wants batch=64 flat=150528").
-    -- ▶ Now READ OFF THE ARTIFACT by the caller and passed in, exactly like `evalBs` — so the val
-    -- drain, the eval invoke's `xShape` and the eval slicer all size from one parse of one
-    -- declaration, and a 224 net still gets 150,528 because that is what its eval render says.
-    let evalFlat := evalD0
-    let flat := evalFlat
-    let vb := 256
-    -- ⚠⚠ **NO LONGER A HARDCODED 195, 2026-08-14.** This read `nB := 195` — "what
-    -- `drop_remainder` leaves of 50,000" — so the drain stopped at 49,920 and **80 val images were
-    -- silently discarded**, on every ImageNet net, in every number this repo has quoted.
-    -- `validate.py` in timm scores all 50,000, so ours were over a different denominator: not an
-    -- error bar, a different measurement. `nB` is now an UPPER BOUND and the terminator is the
-    -- closed pipe, which is what the comment below always claimed it was.
+    -- ⭐ Val is NOT loaded either, since 2026-09-22. It used to be drained here into RAM once —
+    -- 50,000 × 150,528 × 4 B = 30 GB held for the life of the run, nearly all of the trainer's RSS —
+    -- and now streams per pass from batch-block producers (`spawnValStream` → `evalScore`), so those
+    -- 28 GiB go back to the page cache the train split wants (planning/streaming_val.md §0).
+    -- `nEval` is ImageNet's 50,000: the denominator every top-1 here divides by (timm's), and every
+    -- pass asserts the stream delivered exactly that many.
     --
-    -- ⚠ The bound is deliberately loose (`196` = ⌈50000/256⌉, +1 of slack) and the loop exits on
-    -- `rows = 0`. A tight equality here is the same fragility being removed: `.batch(256)` over
-    -- 50,000 gives 196 batches only at THIS `vb`, and `vb` is a local constant that has changed
-    -- before.
-    let nB := 196
-    -- ⚠ The VAL split takes the same per-net shim as train. It streams the center-crop path
-    -- (`training=False` ⇒ no RRC, no AutoAugment/RandAugment, no erasing), so the two nets whose
-    -- pipelines differ only in TRAIN augmentation drain an identical val set — but the crop rule
-    -- itself is per-config (`testCropRatio`), so the script still has to be the net's own.
-    let vp ← spawnShim net.shimScript "validation" vb flat 0
-    let h := vp.h
-    IO.println "  imagenet: draining the val split into RAM (~30 GB, one time)…"
-    -- Reserve the final size and append each batch as it lands, rather than collecting all
-    -- ~196 chunks and folding `(· ++ ·)` over them at the end. The fold cost ~45 GB of pure
-    -- overhead on a 28 GiB result: the chunk array stayed live for the whole fold (30 GB) WHILE
-    -- the accumulator grew beside it, and `++` is `copySlice … (exact := false)`, i.e. it DOUBLES
-    -- capacity when it grows — so the last few appends allocated a 2× buffer before freeing the
-    -- old one. Measured peak RSS was 75.5 GB. Pre-sizing removes both: `++` into a buffer that
-    -- already has the capacity never reallocates, so peak is the result plus one 154 MB batch.
-    let mut evI := ByteArray.emptyWithCapacity (nB * vb * flat * 4)
-    let mut evL := ByteArray.emptyWithCapacity (nB * vb * 4)
-    let mut n := 0
-    -- The validation iterator neither shuffles nor repeats, so it ends; the closed pipe IS the
-    -- terminator, and `readShimBatchPartial` reports it as `rows = 0` rather than throwing.
-    -- ▶ `LEAN_MLIR_EVAL_BATCHSTATS=1` scores through `@<slug>_fwd` with BATCH statistics, where
-    -- the zero-padded tail of a partial final batch would shift the real rows' normalisation. It
-    -- is a declared diagnostic, so the tail is DROPPED under it rather than silently mis-scored —
-    -- and the drop is announced, because a denominator that changes with a debug flag is exactly
-    -- the kind of thing that gets quoted later without the flag.
-    let dropTail := (← IO.getEnv "LEAN_MLIR_EVAL_BATCHSTATS").isSome
-    let mut ended := false
-    for _ in [0:nB] do
-      if !ended then
-        let (i, l, rows) ← readShimBatchPartial h vb flat
-        if rows == 0 then ended := true
-        else if rows < vb && dropTail then
-          IO.println s!"  ⚠ LEAN_MLIR_EVAL_BATCHSTATS: dropping the {rows}-image tail — batch-stat \
-scoring cannot see a zero-padded batch. This run's eval denominator is {n}, not 50,000."
-          ended := true
-        else
-          evI := evI ++ i; evL := evL ++ l; n := n + rows
-    IO.println s!"  imagenet: val ready — {n} images, {evI.size / 1048576} MB"
-    -- ⚠ REAP IT. The val stream ends by itself, but `LEAN_MLIR_EVAL_BATCHSTATS` can stop the drain
-    -- early with the child still writing, so kill THEN wait rather than waiting on a live process.
-    -- Without this the producer stayed a `<defunct>` python for the life of every ImageNet run.
-    try vp.child.kill catch _ => pure ()
-    let _ ← vp.child.wait
-    -- ⭐ ANNOUNCED, because it is the denominator every top-1 from this run divides by, and it
-    -- moved on 2026-08-14 (49,920 → 50,000). A number quoted against the old denominator is not
-    -- comparable to one quoted against timm's, and nothing else in the output says which was used.
-    if n != 50000 then
-      IO.println s!"  ⚠ val is {n} of ImageNet's 50,000 — top-1 here is NOT over timm's denominator"
-    else
-      IO.println "  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)"
-    -- ▶ `trainPix` is `net.d0`, the width of the images the TRAIN stream carries — 150,528 for every
-    -- 224 net (so this is INERT for all of them: `net.d0 == 3*224*224` exactly) and 76,800 for the
-    -- 160 net. It is deliberately not `evalFlat`; see the warning above.
-    return (ByteArray.empty, ByteArray.empty, 1281167, evI, evL, n, net.d0, false)
+    -- ⚠⚠ THE VAL WIDTH IS NOT ALWAYS THE TRAIN WIDTH: RSB-A3 trains at 160² and evaluates at 224²,
+    -- and `evalD0` — read off the eval artifact by the caller — is what the val producers are
+    -- spawned at. `trainPix` stays `net.d0`, the width of the images the TRAIN stream carries.
+    IO.println s!"  imagenet: val streams per pass (50,000 images at eval width {evalD0}) — nothing is held"
+    return (ByteArray.empty, ByteArray.empty, 1281167, ByteArray.empty, ByteArray.empty, 50000, net.d0, false)
 
 /-- Synthetic-input data for the `lake run benchmark` probes (`LEAN_MLIR_BENCH_SYNTH`):
     ONE constant batch, reused every step, but with the dataset's *real* `nTrain` so the
@@ -2584,11 +2655,17 @@ gate's control, not a configuration.")
     -- `valEvery`: this epoch is scored if it is on the cadence or the last one this process
     -- runs (`nEpochs` is the MAX_EPOCHS-capped count, so a capped probe still gets its eval).
     let evalThisEpoch := valEvery ≤ 1 || (ep + 1) % valEvery == 0 || ep + 1 == nEpochs
-    let (correct, correct5, correctBits) ← if skipEval || !evalThisEpoch then pure (0, 0, ByteArray.empty)
-      else evalScore evalSess evalFn evalParams evalShapes evalImg evalLbl
+    let (correct, correct5, nScored, correctBits) ← if skipEval || !evalThisEpoch then pure (0, 0, nEval, ByteArray.empty)
+      else do
+        -- ImageNet streams its val per pass (fresh producers, reaped after); the rest hold it.
+        let rows ← if net.data == .imagenet then spawnValStream net evalD0
+                   else pure (.held evalImg evalLbl)
+        let r ← evalScore evalSess evalFn evalParams evalShapes rows
              nEval evalBs evalD0 nc replicas evalResident (ep + 1).toUSize dumpCorrect.isSome
-    let acc := correct.toFloat / nEval.toFloat * 100.0
-    let acc5 := correct5.toFloat / nEval.toFloat * 100.0
+        reapValStream rows
+        pure r
+    let acc := correct.toFloat / nScored.toFloat * 100.0
+    let acc5 := correct5.toFloat / nScored.toFloat * 100.0
     -- ⚠ Under `LEAN_MLIR_SKIP_EVAL` the loop above runs ZERO batches, so `correct` is 0 and this
     -- line printed `acc = 0/49920 = 0.000000%  top5 = 0/49920` — a number INDISTINGUISHABLE from a
     -- catastrophically broken net, on a run that scored nothing. Found 2026-08-05 on R50's first
@@ -2602,7 +2679,7 @@ gate's control, not a configuration.")
     else
       -- ⚠ The CI is APPENDED, never woven into the existing fields: `blueprint/src/content.tex`
       -- quotes these lines verbatim and every `runs/*/` log is read by eye against that format.
-      IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%  [95% CI {wilson95 correct nEval}]"
+      IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nScored} = {acc}%  top5 = {correct5}/{nScored} = {acc5}%  [95% CI {wilson95 correct nScored}]"
       -- ⚠⚠ `{variant}` is in the name, not just `{pfx}_e{N}`. `cifar8w-bn-ablation` and
       -- `cifar8w-ablation` each run THREE optimizer arms in one process (sgd/mom/adam), so a
       -- variant-less name has arm 2 overwrite arm 1 and arm 3 overwrite arm 2 — two thirds of
@@ -2819,21 +2896,23 @@ adds a 4th region and the EMA shadow a 5th."
   -- Hold the parameters on device across every batch — one push per replica, not one per invoke.
   -- `gen` is a constant because θ never changes here, which is the whole difference from the
   -- training loop.
-  let (correct, correct5, correctBits) ← evalScore sess s!"m.{net.slug}_fwd" theta fwdShapes
-    evalImg evalLbl nEval evalBs evalD0 nc replicas net.paramShapes.size.toUSize 1
+  let rows ← if net.data == .imagenet then spawnValStream net evalD0 else pure (.held evalImg evalLbl)
+  let (correct, correct5, nScored, correctBits) ← evalScore sess s!"m.{net.slug}_fwd" theta fwdShapes
+    rows nEval evalBs evalD0 nc replicas net.paramShapes.size.toUSize 1
     dumpCorrect.isSome
-  let acc := correct.toFloat / nEval.toFloat * 100.0
-  let acc5 := correct5.toFloat / nEval.toFloat * 100.0
+  reapValStream rows
+  let acc := correct.toFloat / nScored.toFloat * 100.0
+  let acc5 := correct5.toFloat / nScored.toFloat * 100.0
   -- ⭐ Printed in the SAME shape as the in-training line, so the equality gate is a literal
   -- comparison of two strings rather than an arithmetic one.
-  IO.println s!"  checkpoint: acc = {correct}/{nEval} = {acc}%  top5 = {correct5}/{nEval} = {acc5}%  [95% CI {wilson95 correct nEval}]"
+  IO.println s!"  checkpoint: acc = {correct}/{nScored} = {acc}%  top5 = {correct5}/{nScored} = {acc5}%  [95% CI {wilson95 correct nScored}]"
   match dumpCorrect with
   | some pfx =>
       IO.FS.writeBinFile s!"{pfx}.bin" correctBits
       IO.println s!"    per-example top-1 bitmap -> {pfx}.bin ({correctBits.size} bytes) — pair two of these with scripts/mcnemar.py"
   | none => pure ()
-  if nEval != 50000 && net.data == .imagenet then
-    IO.println s!"  ⚠ val is {nEval} of ImageNet's 50,000 — this is NOT over timm's denominator"
+  if nScored != 50000 && net.data == .imagenet then
+    IO.println s!"  ⚠ val is {nScored} of ImageNet's 50,000 — this is NOT over timm's denominator"
   (← IO.getStdout).flush
 
 /-- Train driver for the **2-parameter linear** path (Chapter 1). The verified

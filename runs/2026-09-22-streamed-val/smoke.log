@@ -1,0 +1,12 @@
+=== trainer 2026-09-22T12:36:23+00:00
+trainer peak VmRSS: 2414 MiB
+checkpoint: .lake/build/vitin_adam128_ckpt_xla_streamsmoke.bin
+46:12:38:08 Epoch 1/300: loss=6.923771 lr=0.000100
+50:12:38:08   ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held (the 30 GB drain is gone; planning/streaming_val.md)
+51:12:38:08   ▸ val = all 50000 streamed (timm's denominator)
+52:12:38:08   epoch 1: test_acc = 55/50000 = 0.110000%  top5 = 283/50000 = 0.566000%  [95% CI 0.08–0.14]
+53:12:38:08     per-example top-1 bitmap -> runs/2026-09-22-streamed-val/smoke/inrun_adam128_e1.bin (50000 bytes)
+=== score-checkpoint 2026-09-22T12:38:09+00:00
+checkpoint: acc = 55/50000 = 0.110000%  top5 = 283/50000
+✓ in-run bitmap == score-checkpoint bitmap (50000 bytes)
+smoke rc=0

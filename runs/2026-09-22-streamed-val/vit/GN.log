@@ -1,0 +1,33 @@
+ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  SCORING A CHECKPOINT — no training. ViT-Tiny (ImageNet-1k) adamdp128x4wxclipdrop, .lake/build/vitin_adamdp128x4wxclipdrop_ckpt_xla_warmprobe-vit-f32.bin
+  region 0 of 3 (the live weights), 5717416 params
+I0922 12:08:09.046228 1279879 service.cc:154] XLA service 0x7152ec79b7c0 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0922 12:08:09.046341 1279879 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0922 12:08:09.046384 1279879 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0922 12:08:09.046407 1279879 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0922 12:08:09.046427 1279879 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0922 12:08:09.049713 1279879 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0922 12:08:09.049761 1279879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0922 12:08:09.049812 1279879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 1 for BFCAllocator.
+I0922 12:08:09.049835 1279879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 2 for BFCAllocator.
+I0922 12:08:09.049860 1279879 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 3 for BFCAllocator.
+I0922 12:08:09.059928 1279879 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/vitin_fwd.mlir (@vitin_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 1231 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790078890.606392 1279987 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1790078892.612049 1280133 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @vitin_fwd holds 200 parameter tensors (21.8 MB) on 4 devices; they stop crossing PCIe from here
+I0922 12:09:03.635615 1279916 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0922 12:09:03.638393 1279913 cuda_dnn.cc:440] Loaded cuDNN version 92302
+I0922 12:09:03.679282 1279919 cuda_dnn.cc:440] Loaded cuDNN version 92302
+  xla/pjrt verified_mlir/vitin_fwd.mlir  (eval, SHARDED over 4 replicas)
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet: draining the val split into RAM (~30 GB, one time)…
+  imagenet: val ready — 50000 images, 28710 MB
+  ▸ val = all 50,000 (timm's denominator; drop_remainder=False on the val split)
+  EVAL SHARDED: 4 replicas x 256 = 1024 images per invoke, 49 invokes, last one 848 real + 176 pad
+  checkpoint: acc = 1024/50000 = 2.048000%  top5 = 3466/50000 = 6.932000%  [95% CI 1.93–2.18]
+    per-example top-1 bitmap -> runs/2026-09-22-streamed-val/vit/GN.bin (50000 bytes) — pair two of these with scripts/mcnemar.py

@@ -3544,6 +3544,34 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "        shard = (int(_i), int(_n))\n" ++
   "        if not (0 <= shard[0] < shard[1]):\n" ++
   "            raise SystemExit('SHIM_SHARD=%s: need 0 <= i < N' % _sh)\n" ++
+  -- ⭐ VAL-ONLY BATCH-BLOCK SHARDING (2026-09-22, planning/streaming_val.md §3.1). `ds.shard` above
+  -- is ELEMENT-level — producer i emits elements i, i+N, i+2N, … — which is fine for train (shuffled
+  -- anyway) and wrong for val: the trainer reads its producers round-robin BY BATCH, and every
+  -- per-image bitmap (`LEAN_MLIR_DUMP_CORRECT`, McNemar, the eval gates) is in the one-producer
+  -- order. So on the validation split a sharded producer walks the split in the order tfds yields
+  -- it and keeps only the batch BLOCKS k, k+N, k+2N, … of `batch` records: global batch b read from
+  -- producer b % N is then the one-producer drain's batch b, the 80-row tail included (block 195
+  -- lands on producer 195 % N). Every producer reads all 6.3 GiB of raw records (cheap from cache)
+  -- and decodes only its 1/N, since the filter sits before `_pp`.
+  --
+  -- ⚠⚠ NOT absolute-index slices (`validation[0:256]+validation[512:768]+…`). That was the first
+  -- cut, and `scripts/streamed_val_gate.sh` refused it: same 50,000 images, same count, same top-5,
+  -- 2,018 bitmap positions moved. tfds reads a split as an INTERLEAVE of its shard files (cycle
+  -- length 16), so the order it yields — the order every bitmap is in — is not index order, and
+  -- an index slice reproduces the set but not the sequence. Only walking the same stream does.
+  --
+  -- Installed on the name the shared `build_imagenet_iter` calls, not in it: that fragment is
+  -- emitted into every reference `_full.py` too, and those regenerate byte-identical.
+  "    if shard is not None and not training:\n" ++
+  "        _k, _n = shard\n" ++
+  "        _tfds_load = tfds.load\n" ++
+  "        def _load_val_blocks(*a, **kw):\n" ++
+  "            ds = _tfds_load(*a, **kw)\n" ++
+  "            return (ds.enumerate()\n" ++
+  "                      .filter(lambda j, _: (j // batch) % _n == _k)\n" ++
+  "                      .map(lambda _, ex: ex))\n" ++
+  "        tfds.load = _load_val_blocks\n" ++
+  "        shard = None\n" ++
   "    it = iter(build_imagenet_iter(split, batch, training, training, shard))\n" ++
   -- ⚠⚠ `flat` IS THE WIRE'S PER-IMAGE SIZE, and under `trainRes` it is NOT the same on both
   -- splits. The dataset above already resizes train to `_TRAIN_SIZE` and eval to `_IMG_SIZE`

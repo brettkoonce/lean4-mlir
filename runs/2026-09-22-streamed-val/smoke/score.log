@@ -1,0 +1,29 @@
+ViT-Tiny on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses
+  SCORING A CHECKPOINT — no training. ViT-Tiny (ImageNet-1k) adam128, .lake/build/vitin_adam128_ckpt_xla_streamsmoke.bin
+  region 0 of 3 (the live weights), 5717416 params
+I0922 12:38:10.012810 1306212 service.cc:154] XLA service 0x76c584009510 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0922 12:38:10.012879 1306212 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 4060 Ti, Compute Capability 8.9 (Driver: 12.9.0[575.57.8]; Runtime: 12.9.0; Toolkit: 12.9.0; DNN: 9.23.2)
+I0922 12:38:10.014550 1306212 se_gpu_pjrt_client.cc:1342] Using BFC allocator.
+I0922 12:38:10.014589 1306212 gpu_helpers.cc:162] XLA backend allocating 11.68GiB (12543066112 bytes) on device 0 for BFCAllocator.
+I0922 12:38:10.021439 1306212 cuda_dnn.cc:440] Loaded cuDNN version 92302
+[pjrt_ffi] XLA backend: PJRT 0.114, 1 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+[pjrt_ffi] compiled verified_mlir/vitin_fwd.mlir (@vitin_fwd, 1 outputs, 1 replica) in 1216 ms
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790080691.551609 1306290 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1790080693.684634 1306435 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790080694.247380 1306402 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1790080696.362718 1306653 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @vitin_fwd holds 200 parameter tensors (21.8 MB) on 1 device; they stop crossing PCIe from here
+  xla/pjrt verified_mlir/vitin_fwd.mlir
+  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet shim: jax/.lake/build/generated_vit_tiny_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 1)
+  imagenet shim: 2 sharded producers (round-robin over batches)
+  ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held (the 30 GB drain is gone; planning/streaming_val.md)
+  ▸ val = all 50000 streamed (timm's denominator)
+  checkpoint: acc = 55/50000 = 0.110000%  top5 = 283/50000 = 0.566000%  [95% CI 0.08–0.14]
+    per-example top-1 bitmap -> runs/2026-09-22-streamed-val/smoke/score.bin (50000 bytes) — pair two of these with scripts/mcnemar.py
