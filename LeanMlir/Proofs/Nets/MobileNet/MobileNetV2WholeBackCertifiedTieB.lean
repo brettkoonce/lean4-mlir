@@ -204,8 +204,6 @@ theorem cbrBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
 -- § ⭐⭐ THE TIE — stem and head concrete, the seventeen bottlenecks opaque
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 1000000 in
 /-- ⭐⭐ **`mnv2InputGradB` IS the certified whole-net batch-BN MobileNetV2 gradient.** The
     committed backward chain, with its two BatchNorm and two relu6-mask slots filled by the
     certified per-op backwards and its seventeen bottlenecks left OPAQUE, equals the backward of
@@ -318,8 +316,6 @@ theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
       dense_transpose_eq_vjp_backward Wfc bfc (fun _ => 0)]
   rfl
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 1000000 in
 /-- ⭐⭐ **The batched chain IS the `pdiv`-contracted Jacobian of the twenty-one-stage net** — at
     every batch size, every input, every loss cotangent and every input pixel. The tie above read
     through the apex's own `.correct`; `mobilenetv2ForwardB_full_eq_slots` below is what says

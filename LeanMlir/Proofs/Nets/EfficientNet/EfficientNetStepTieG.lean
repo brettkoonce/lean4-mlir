@@ -478,8 +478,6 @@ theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
   exact enet_noexp_tiedG xN vN epsStr cotN p.dε hd p.pε hp
     p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
 
-set_option maxHeartbeats 4000000 in
-set_option maxRecDepth 100000 in
 /-- **The whole 16-MBConv EfficientNet-B0 train step, tied at the GRADIENT nodes and the
     SMOOTHED loss.** Threading the real batched (true-BN + SE) forward
     `efficientnetForwardB_full` and the backward cotangent chain (swish masks, the SE

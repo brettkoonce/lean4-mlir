@@ -1473,6 +1473,8 @@ open Proofs
 
 -- ...and the KERNEL ENGINE for driver-scale tail checks (the ListDot recipe)
 #print axioms Proofs.binomTailNum_eq
+#print axioms Proofs.binomTailGo_eq
+#print axioms Proofs.binomTailNumFast_eq
 #print axioms Proofs.binomTail_eq_kernel
 #print axioms Proofs.binomTail_le_of_kernel_check
 

@@ -52,8 +52,6 @@ namespace Proofs
 
 open scoped BigOperators
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 2000000 in
 /-- ⭐⭐ **`r50InputGradB` IS the certified whole-net ResNet-50 gradient.** The committed backward
     chain, with its stem BatchNorm and relu-mask slots filled by the certified per-op backwards,
     its saved pool activation the stem's own, and its sixteen bottlenecks left OPAQUE, equals the
@@ -151,8 +149,6 @@ theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
       r34HeadBBack_eq_vjp_backward Wd bd (opaqueA16 (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
   rfl
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 2000000 in
 /-- ⭐⭐ **The chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at every batch
     size, every resolution, every input, every loss cotangent and every input pixel. The tie above
     read through the apex's own `.correct`; `resnet50ForwardB_full_eq_slots` below is what says

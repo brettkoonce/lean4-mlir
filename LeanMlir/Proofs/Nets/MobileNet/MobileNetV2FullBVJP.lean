@@ -56,8 +56,6 @@ namespace Proofs
 
 open scoped BigOperators
 
-set_option maxHeartbeats 1000000
-
 -- ════════════════════════════════════════════════════════════════
 -- § The batched smoothness bundles
 --   ⭐ `IVPos` / `IVNoExpPos` are reused from `MobileNetV2FullVJP.lean` — a BN epsilon's

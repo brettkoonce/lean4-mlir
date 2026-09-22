@@ -372,8 +372,6 @@ of theirs, `g` is the smoothed loss cotangent at a general target, and every cot
 `batchMapAux N` of the per-example chain — `vitCotB2outV` at the top, then twelve
 `vitBlockCotInAtMHV` attention-residual fan-ins down to the embed-output cotangent. -/
 
-set_option maxHeartbeats 16000000 in
-set_option maxRecDepth 400000 in
 /-- ⭐⭐ **The whole depth-12 multi-head ViT-Tiny train step, tied at the BATCHED index, the
     GRADIENT nodes and the SMOOTHED loss — all 200 parameters.** The real forward
     `patchEmbed → 12 multi-head vector-LN blocks → final vector-LN → CLS-slice → dense head` as

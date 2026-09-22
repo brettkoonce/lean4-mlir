@@ -59,10 +59,6 @@ namespace Proofs
 
 open scoped BigOperators
 
--- The 4×4-stem and 2×2-downsample leaves and the twelve-stage `rfl` recurse deeper than the
--- default allows, exactly as the per-example tie's leaves do (`ConvNeXtWholeBackCertifiedTie.lean`).
-set_option maxRecDepth 100000
-
 -- ═════════════════════════════════════════════════
 -- § The batched saved activations — stage by stage
 -- ═════════════════════════════════════════════════

@@ -298,7 +298,6 @@ def mobilenetv2FwdGraphPaperEval (epsStr : String) (ε : ℝ) (w : MNV2PaperWeig
                                             (.flatConvStridedXlaF (h := 112) (w := 112) "%Ws" "%bs" w.sW w.sb
                                               (.operand "%x" x)))))))))))))))))))))))))
 
-set_option maxRecDepth 20000 in
 /-- ⭐ **Seventeen-block inference MobileNetV2 forward faithfulness.** The typed graph denotes
     `mobilenetv2ForwardPaperEval` — chained from the per-block-kind `*GraphEvalW_faithful` lemmas
     and then a structural `rfl`, the training twin's recipe with `bnPerChannelEvalF_faithful` in

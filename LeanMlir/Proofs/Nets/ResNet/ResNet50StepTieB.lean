@@ -513,7 +513,6 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
 --   delegation and is true at `bias = 0`, so the stem contributes 3 exercised slots of 4.
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxHeartbeats 1600000 in
 /-- ⭐⭐ **The whole batch-BN ResNet-50 train step, tied.** Threading `resnet50ForwardB_full`'s own
     prefixes as the block inputs and an arbitrary loss cotangent `g` down through the certified head
     backward and the sixteen certified bottleneck backwards, every parameter GRADIENT node of the

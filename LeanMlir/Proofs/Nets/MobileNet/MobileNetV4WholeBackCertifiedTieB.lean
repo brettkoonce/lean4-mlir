@@ -240,8 +240,6 @@ noncomputable def mnv4B_full_has_vjp_at {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s
 -- § ⭐⭐ THE TIE — stem and head concrete, the fused stage and 21 blocks opaque
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 2000000 in
 /-- ⭐⭐ **`mnv4InputGradB` IS the certified whole-net MobileNetV4-Conv-M gradient.** The committed
     backward chain, with its three BatchNorm and three relu-mask slots filled by the certified
     per-op backwards and its fused stage and twenty-one UIB blocks left OPAQUE, equals the
@@ -390,8 +388,6 @@ theorem mnv4InputGradB_eq_mnv4B_full_vjp (N : Nat) {nCls : Nat}
         (opaqueA24 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) (cbReluB N (h := 7) (w := 7) Wh bh εh γh βh) x)]
   rfl
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 2000000 in
 /-- ⭐⭐ **The chain IS the `pdiv`-contracted Jacobian of the twenty-six-stage net** — at every
     batch size, every class count, every input, every loss cotangent and every input pixel. The
     tie above read through the apex's own `.correct`; `mobilenetv4ForwardB_full_eq_slots` below is
@@ -606,7 +602,6 @@ theorem mnv4Chain_apply {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s
 -- § ⭐⭐ THE SHAPE CHECK — the twenty-six slots ARE the committed forward
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 800000 in
 /-- ⭐⭐ **The twenty-six slots the tie is about ARE `mobilenetv4ForwardB_full`.** The committed
     forward, regrouped into exactly the twenty-six arguments `mnv4B_full_has_vjp_at` takes: the
     XLA-`SAME` stem, the fused stage, the three pre-strided rows (1, 3, 11) as

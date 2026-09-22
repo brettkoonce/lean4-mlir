@@ -33,8 +33,9 @@ actually deploys the EXACT binomial lower confidence limit (Clopper–Pearson,
   the radius `σ·Φ⁻¹(q₀)` is certified" (w.p. `≥ 1 − α`);
 * the KERNEL ENGINE (the ListDot recipe): `binomTailNum` — a kernel-
   computable ℕ tail numerator (`descFactorial/factorial` binomials on the
-  small side) — with the once-proven bridge `binomTail_eq_kernel`, so each
-  per-image hypothesis is ONE `decide +kernel` bignum inequality
+  small side) — with the once-proven bridge `binomTail_eq_kernel`, and its
+  evaluation form `binomTailNumFast` (one pass, each binomial from the last), so
+  each per-image hypothesis is ONE `decide +kernel` bignum inequality
   (`binomTail_le_of_kernel_check`), as `SmoothingCPScorecard.lean` states them.
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
@@ -505,8 +506,11 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
 hundreds of terms, `Nat.choose` far from the diagonal). The ListDot recipe
 applies instead: a kernel-computable ℕ numerator + a once-proven bridge, so
 each per-image scorecard hypothesis is ONE `decide +kernel` bignum
-inequality (~0.1 s even for thousands of terms — kernel `Nat.pow`/`mul`
-are GMP-accelerated). -/
+inequality (kernel `Nat.pow`/`mul`/`div` are GMP-accelerated). The kernel
+evaluates `binomTailNumFast`, not `binomTailNum`: the sum recomputes each
+`descFactorial i / i!` from scratch, quadratic in the tail length (2.2 s at
+the scorecard's 4835-term worst case), where the loop carries `C(N,i)` and
+`b^i` forward (0.4 s). -/
 
 /-- Kernel-computable tail numerator: `Σ_{i=0}^{N-k} C(N,i)·a^(N-i)·(d-a)^i`
     (`i = N - j`, so the binomial coefficient rides the SMALL side, and
@@ -553,13 +557,61 @@ lemma binomTail_eq_kernel {N k : ℕ} (hk : k ≤ N) {a d : ℕ} (ha : a ≤ d)
   rw [← hdn]
   ring
 
+/-- One step of the evaluation loop per term, tail-recursive so the kernel's
+    recursion depth stays flat in the tail length: `i` is the term index, `acc`
+    the Horner accumulator, `c = C(N,i)`, `bp = b^i`. `C(N,i+1)` is the exact
+    quotient `C(N,i)·(N-i)/(i+1)` (`Nat.choose_succ_right_eq`). -/
+def binomTailGo (N a b : ℕ) : ℕ → ℕ → ℕ → ℕ → ℕ → ℕ
+  | 0, _, acc, _, _ => acc
+  | f + 1, i, acc, c, bp =>
+    let c' := c * (N - i) / (i + 1)
+    let bp' := bp * b
+    binomTailGo N a b f (i + 1) (acc * a + c' * bp') c' bp'
+
+/-- The kernel-evaluated form of `binomTailNum`: `a^k · Σ_{i≤N-k} C(N,i)·(d-a)^i·a^(N-k-i)`
+    by Horner in `a` (`binomTailNumFast_eq`). -/
+def binomTailNumFast (N k a d : ℕ) : ℕ := a ^ k * binomTailGo N a (d - a) (N - k) 0 1 1 1
+
+/-- The loop invariant: `f` steps from `(i, acc, C(N,i), b^i)`. -/
+lemma binomTailGo_eq (N a b : ℕ) (f : ℕ) : ∀ i acc,
+    binomTailGo N a b f i acc (N.choose i) (b ^ i)
+      = acc * a ^ f + ∑ t ∈ Finset.range f,
+          N.choose (i + 1 + t) * b ^ (i + 1 + t) * a ^ (f - 1 - t) := by
+  induction f with
+  | zero => intro i acc; simp [binomTailGo]
+  | succ f ih =>
+    intro i acc
+    have hc : N.choose i * (N - i) / (i + 1) = N.choose (i + 1) := by
+      rw [← Nat.choose_succ_right_eq, Nat.mul_div_cancel _ (Nat.succ_pos i)]
+    simp only [binomTailGo, hc, ← pow_succ, ih, Finset.sum_range_succ']
+    rw [Finset.sum_congr rfl fun t _ => by
+      rw [show i + 1 + 1 + t = i + 1 + (t + 1) by omega,
+        show f - 1 - t = f + 1 - 1 - (t + 1) by omega]]
+    simp only [add_zero, Nat.add_sub_cancel, Nat.sub_zero]
+    ring
+
+lemma binomTailNumFast_eq {N k : ℕ} (hk : k ≤ N) (a d : ℕ) :
+    binomTailNumFast N k a d = binomTailNum N k a d := by
+  have h := binomTailGo_eq N a (d - a) (N - k) 0 1
+  simp only [Nat.choose_zero_right, pow_zero] at h
+  rw [binomTailNumFast, h, binomTailNum, Finset.sum_range_succ', mul_add, Finset.mul_sum,
+    add_comm]
+  refine congrArg₂ (· + ·) (Finset.sum_congr rfl fun t ht => ?_) ?_
+  · rw [Finset.mem_range] at ht
+    rw [← Nat.choose_eq_descFactorial_div_factorial, show 0 + 1 + t = t + 1 by omega,
+      show N - (t + 1) = k + (N - k - 1 - t) by omega, pow_add]
+    ring
+  · rw [one_mul, ← pow_add, Nat.add_sub_cancel' hk]
+    simp
+
 /-- **One kernel bignum inequality certifies a tail bound**: the per-image
     scorecard hypothesis at `q₀ = a/d`, `α = 1/A`, discharged by
     `decide +kernel`. -/
 lemma binomTail_le_of_kernel_check {N k a d A : ℕ} (hk : k ≤ N) (ha : a ≤ d)
     (hd : 0 < d) (hA : 0 < A)
-    (hcheck : A * binomTailNum N k a d ≤ d ^ N) :
+    (hcheck : A * binomTailNumFast N k a d ≤ d ^ N) :
     binomTail N k ((a : ℝ) / d) ≤ 1 / (A : ℝ) := by
+  rw [binomTailNumFast_eq hk] at hcheck
   have hdN : (0:ℝ) < (d:ℝ) ^ N := by positivity
   have hA' : (0:ℝ) < (A:ℝ) := by exact_mod_cast hA
   rw [binomTail_eq_kernel hk ha hd, div_le_div_iff₀ hdN hA']

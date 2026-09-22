@@ -922,7 +922,6 @@ theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : N
 -- § 7. The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxHeartbeats 1600000 in
 /-- ⭐⭐⭐ **The synchronised-BN data-parallel MobileNetV2 step IS the single-device step at the
     global batch.** `R` replicas at batch `N`, each dividing its loss by `B`, each running the
     render's sync-BN backward chain from its own label-smoothed cotangent; every parameter's

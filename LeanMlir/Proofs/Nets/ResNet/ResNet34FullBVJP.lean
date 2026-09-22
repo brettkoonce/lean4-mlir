@@ -46,8 +46,6 @@ namespace Proofs
 
 open scoped BigOperators
 
-set_option maxHeartbeats 1000000
-
 -- ════════════════════════════════════════════════════════════════
 -- § Per-block hypothesis bundles
 -- ════════════════════════════════════════════════════════════════

@@ -621,8 +621,6 @@ The full §1a tie: the WHOLE 16-MBConv (262-param) EfficientNet-B0 train step is
 forward→loss→backward, no free activations, no symbolic cotangent. The residual fan-in at the 9
 identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so it is automatic. -/
 
-set_option maxHeartbeats 4000000 in
-set_option maxRecDepth 100000 in
 /-- **The whole 16-MBConv EfficientNet-B0 train step, tied.** Threading the real batched (true-BN + SE)
     forward `efficientnetForwardB_full` and the loss-driven backward cotangent chain (swish masks, SE
     gate fan-in, true-BN backs, the residual fan-in folded into the block VJPs), the stem, all 16

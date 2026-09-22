@@ -948,7 +948,6 @@ theorem replicaLossCot_eq (R N nCls : Nat) (hR : 0 < R) (α B : ℝ)
 -- § 8. The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxHeartbeats 1600000 in
 /-- ⭐⭐⭐ **The synchronised-BN data-parallel ResNet-34 step IS the single-device step at the global
     batch.** `R` replicas at batch `N`, each dividing its loss by `B`, each running the render's
     sync-BN backward chain from its own label-smoothed cotangent; every parameter's all-reduced

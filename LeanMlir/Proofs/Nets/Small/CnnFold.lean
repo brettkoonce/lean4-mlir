@@ -207,7 +207,6 @@ no symbolic cotangent. (Residual: the conv backward is rendered hand-written, so
 ↔ `cnnChainCot` correspondence is the per-op trust, same kind the whole suite carries; making it a
 printed `SHlo` subgraph with a `den` pin — the cnn analogue of `MlpPoC.cot{0,1}_den` — is the polish.) -/
 
-set_option maxRecDepth 4000 in
 /-- **Whole cnn conv tail, tied.** All four conv kernel/bias ops, at the real conv forward and the
     composed softmax-CE cotangent, denote the certified loss-descent step. -/
 theorem cnn_conv_tied_certified {ic c h w d1 nClasses kH kW : Nat}

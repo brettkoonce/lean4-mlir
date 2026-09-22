@@ -1361,8 +1361,6 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
 -- § 7. The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxHeartbeats 4000000 in
-set_option maxRecDepth 100000 in
 /-- ⭐⭐⭐ **The synchronised-BN data-parallel EfficientNet-B0 step IS the single-device step at the
     global batch.** `R` replicas at batch `N`, each dividing its loss by `B`, each running the
     render's sync-BN backward chain from its own label-smoothed cotangent; every parameter's

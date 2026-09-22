@@ -830,7 +830,6 @@ noncomputable def mnv4Blk21 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (256 * 7 * 7)) :=
   (CertLayer.residual (mnv4BodyOfRow N mnv4Row21 w.b21)).fwd (mnv4Blk20 N w x)
 
-set_option maxHeartbeats 1600000 in
 /-- ⭐⭐ **The whole batch-BN MobileNetV4-Conv-M train step, tied.** Threading the net's own forward
     prefixes as the block inputs and an arbitrary loss cotangent `g` down through the certified
     head backward, the 21 certified UIB block backwards and the fused stage, every parameter

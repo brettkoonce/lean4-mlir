@@ -81,7 +81,6 @@ theorem cifarCnn8Forward_factor {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
         ∘ (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈)
         ∘ cifar8Prefix7 W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ := rfl
 
-set_option maxHeartbeats 1000000 in
 /-- **CIFAR-8 last-conv SGD descent.** One SGD step on the LAST conv `W₈` of the actual
     `cifarCnn8Forward` net (the earlier seven conv layers held fixed — their output on `image` is the
     frozen feature map `x₁`) decreases the CIFAR-8 cross-entropy loss by at least `lr·‖∇‖²/2`, under

@@ -44,7 +44,6 @@ theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
                     W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j := by
   funext j; simp only [den, softmax]
 
-set_option maxRecDepth 32000 in
 /-- **Whole cifar8-bn conv+BN tail, tied.** All 32 conv/BN params (8 conv `W`+`b`, 8 BN `γ`+`β`), at the
     real cifar8-bn forward and the composed softmax-CE cotangent, denote the certified loss-descent
     step. The conv ops are fed the BN-back cotangents `cotC1–8`; the BN ops the relu-masked

@@ -452,8 +452,6 @@ tie then holds at its real input + threaded cotangent. The full §1a tie: the wh
 182-parameter ConvNeXt-T train step is den-composed forward → loss → backward, no free
 activations, no symbolic cotangent. -/
 
-set_option maxHeartbeats 16000000 in
-set_option maxRecDepth 400000 in
 /-- **The whole [3,3,9,3] ConvNeXt-T train step, tied.** Threading the real (channel-LN,
     per-channel layer-scale) forward and the loss-driven backward cotangent chain (GELU masks, the
     residual fan-in at every identity skip, the channel-LN-back at every downsample and at the

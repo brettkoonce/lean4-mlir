@@ -670,7 +670,6 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
 -- § The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxHeartbeats 1600000 in
 /-- ⭐⭐ **The whole batch-BN MobileNetV2 train step, tied.** Threading
     `mobilenetv2ForwardB_full`'s own prefixes as the block inputs and the label-smoothed loss
     cotangent down through the head chain and the seventeen certified block backwards, every

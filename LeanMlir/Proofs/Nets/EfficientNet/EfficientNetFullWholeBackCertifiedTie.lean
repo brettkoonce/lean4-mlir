@@ -106,8 +106,6 @@ noncomputable def efficientnetB_full_has_vjp {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 
 -- § The tie — stem and head concrete, the sixteen blocks opaque
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 4000000 in
 /-- ⭐⭐ **THE TIE — `efficientnetInputGradB_full` IS the certified whole-net paper-B0 gradient.**
     The committed backward chain, with its stem/head BatchNorm and swish slots filled by the
     certified per-op backwards and its sixteen MBConv blocks left opaque, equals the backward
@@ -183,8 +181,6 @@ theorem efficientnetInputGradB_full_eq_efficientnetB_full_vjp
 -- § The tie at the CONCRETE blocks, against `efficientnetForwardB_full_has_vjp`
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 4000000 in
 /-- ⭐⭐ **The chain, at the sixteen concrete MBConv blocks, IS `efficientnetForwardB_full_has_vjp`'s
     backward.** The tie above instantiated at `mbNoExpW`/`mbStridedW`/`mbResidW`/`mbExpW` at
     `B0Weights`'s widths, then `HasVJP.backward_unique` between the generic apex and the

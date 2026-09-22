@@ -92,11 +92,6 @@ namespace Proofs
 
 open scoped BigOperators
 
--- ⚠ Both R50 tier files raise this. Here it is the 24-stage chain: the whole-net faithfulness
--- proof rewrites through every stage, and the kernel's check of the resulting term does not fit
--- the 200000 default. A `(kernel) deterministic timeout` on a `simp only` is what that looks like.
-set_option maxHeartbeats 2000000
-
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════

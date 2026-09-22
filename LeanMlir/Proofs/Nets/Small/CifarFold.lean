@@ -186,7 +186,6 @@ theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
   -- are `dense W₇ b₇ (relu … pool₂)` — unfold both to match.
   simp only [cifarCnnForward, mnistLinear, Function.comp_apply]
 
-set_option maxRecDepth 8000 in
 /-- **Whole cifar conv tail, tied.** All four conv kernel/bias ops, at the real cifar forward and the
     composed softmax-CE cotangent `g = softmax(cifarCnnForward … xv) − onehot` (`cifarLossCot_den`),
     denote the certified loss-descent step. Each `den = certified` is the generic `convW_den`/`convB_den`

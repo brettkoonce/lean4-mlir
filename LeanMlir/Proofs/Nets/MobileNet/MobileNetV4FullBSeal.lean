@@ -79,7 +79,6 @@ open Proofs BatchSeal StableHLO R34FullBSeal
 #guard 1 + (StableHLO.mnv4Blocks.map (fun s =>
     (if s.preDWk = 0 then 0 else 1) + 1 + (if s.postDWk = 0 then 0 else 1))).sum + 2 = 54
 
-set_option maxHeartbeats 1000000
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. The structural weights

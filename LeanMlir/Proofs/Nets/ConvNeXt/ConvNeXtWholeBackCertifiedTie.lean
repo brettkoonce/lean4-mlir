@@ -488,7 +488,6 @@ private theorem cnxT11 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 
     (cnxV11 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy
       = (cnxV10 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x
         ((dense_has_vjp w.Wd w.bd).backward (cnxSavedA10 w x) dy) := rfl
-set_option maxRecDepth 100000
 
 -- ── the three normalised leaf ties the wrappers need ──
 

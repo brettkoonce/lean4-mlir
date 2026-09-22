@@ -359,8 +359,6 @@ backward cotangents are `batchMapAux N` of the per-example chain, composed from 
 the eighteen identity-skip merges, the channel-LN-back at each of the three downsamples, and the
 stem LN's own back before the patchify conv's gradients. -/
 
-set_option maxHeartbeats 16000000 in
-set_option maxRecDepth 400000 in
 /-- ⭐⭐ **The whole [3,3,9,3] ConvNeXt-T train step, tied at the BATCHED index, the GRADIENT
     nodes and the SMOOTHED loss.** Threading the real channel-LN / per-channel layer-scale forward
     as `batchMap N` of the per-example prefixes, and the label-smoothed loss cotangent

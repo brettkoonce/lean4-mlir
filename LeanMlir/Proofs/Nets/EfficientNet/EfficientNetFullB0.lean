@@ -369,7 +369,6 @@ end StableHLO
 -- § The full B0 VJP — all 16 MBConv blocks (the full-depth analogue of `efficientnet_has_vjp`)
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 20000 in
 /-- **The full EfficientNet-B0 has a (correct) VJP.** Chained from the per-block gradients (stem → 16
     MBConv blocks → head) via `vjp_comp`. Stated on the `∘`-composition of the blocks (= the full
     forward by construction; keeps the blocks opaque so the chain closes structurally). The full-depth,

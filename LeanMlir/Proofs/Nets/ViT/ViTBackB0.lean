@@ -224,7 +224,6 @@ private lemma sum_heads_3d {M : Type*} [AddCommMonoid M] (heads d : Nat)
       (fun kk => f (finProdFinEquiv (h, kk)))]
   rw [Fintype.sum_prod_type]
 
-set_option maxHeartbeats 1600000 in
 /-- The multi-head QKV-stack dense-back fan-in: contracting the column-stacked
     per-head SDPA backward against `mhsa_qkv_W` splits into a sum over heads of
     the three per-projection dense-backs at head `h`'s columns. -/
@@ -272,7 +271,6 @@ noncomputable def mhsaBackCollapsedMH (N heads d : Nat)
        + (∑ j : Fin d, Wk c (finProdFinEquiv (h, j)) * dKg h r j)
        + (∑ j : Fin d, Wv c (finProdFinEquiv (h, j)) * dVg h r j))
 
-set_option maxHeartbeats 4000000 in
 /-- **MHSA backward general-`heads` collapse.** The clean MHSA witness's backward
     equals the per-head sum fan-in `mhsaBackCollapsedMH`. -/
 theorem mhsaClean_backward_collapseMH (N heads d : Nat)
@@ -572,7 +570,6 @@ noncomputable def mhsaBackGraphMH {Np1 hm1 d : Nat}
       (SHlo.denseRowBack "%Wv" Wv (SHlo.headPadF h
         (sdpaBackVGraph Np1 d (p h) (SHlo.headSliceF h dAtt)))))
 
-set_option maxHeartbeats 2000000 in
 /-- **MHSA backward-graph faithfulness (multi-head, `heads = hm1 + 1`).** The
     per-head fan-in graph denotes the proven `mhsa_has_vjp_mat.backward` (flattened)
     at general heads, with the saved per-head dense projections, scaled scores, and

@@ -280,8 +280,6 @@ theorem vit_embed_tied (wN xN bN clsN pN lrStr cotN : String)
   · intro i; exact ViTPoC.posEmbedSgd_den pN lrStr cotN Wc bc cls pos img dyEmbed lr i
 
 
-set_option maxHeartbeats 16000000 in
-set_option maxRecDepth 400000 in
 /-- **The whole depth-12 MULTI-HEAD ViT-Tiny train step, tied — ALL 200 params** (the vit peer of
     convnext's `cnx_net_tied_certified`, at the committed config: 3 heads, d_head=64, D=192, N=196,
     mlpDim=768, 10 classes, 16×16 patches). The real forward `patchEmbed → 12 multi-head vector-LN

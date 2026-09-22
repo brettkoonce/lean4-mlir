@@ -499,7 +499,6 @@ noncomputable def rowB (N K : Nat) (v : Vec (N * K)) : Vec (N * (1 * K)) :=
 -- § The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxHeartbeats 1600000 in
 /-- ⭐⭐ **The whole batch-BN ResNet-34 train step, tied.** Threading `resnet34ForwardB_full`'s own
     prefixes as the block inputs and the label-smoothed loss cotangent down through the certified
     head backward and the sixteen certified block backwards, every parameter GRADIENT node of the
