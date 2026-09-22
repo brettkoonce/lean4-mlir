@@ -1,0 +1,16 @@
+[sup] 2026-09-18 14:26:13 START job=cnx-default-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-18-cnx-verified-300ep
+[sup] 2026-09-18 14:26:13 cmd: .lake/build/bin/convnext-imagenet-verified data
+[sup] 2026-09-18 14:26:13 eta: bf16 ~102 h (4.25 d) on 4x 3060 — MEASURED 1,224 s/epoch at e3 (1,120 s steps at 220 ms + 105 s eval/ckpt), 300 ep
+[sup] 2026-09-18 14:26:13 attempt 1: resuming at epoch 0/300 (next rest: 999)
+[sup] 2026-09-18 14:26:13   launched PID=54244 PGID=54244
+[sup]   last line:   step 2/5004: loss=6.893871
+[sup] 2026-09-18 14:46:42   ended (exited) at epoch 1; 15s then retry
+[sup] 2026-09-18 14:46:57 attempt 2: resuming at epoch 1/300 (next rest: 999)
+[sup] 2026-09-18 14:46:57   launched PID=66103 PGID=66103
+[sup] 2026-09-22 01:54:23 START job=cnx-default-4gpu devs=0,1,2,3 epochs=300 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-18-cnx-verified-300ep
+[sup] 2026-09-22 01:54:23 cmd: .lake/build/bin/convnext-imagenet-verified data
+[sup] 2026-09-22 01:54:23 eta: bf16 ~102 h (4.25 d) on 4x 3060 — MEASURED 1,224 s/epoch at e3 (1,120 s steps at 220 ms + 105 s eval/ckpt), 300 ep
+[sup] 2026-09-22 01:54:23 attempt 1: resuming at epoch 263/300 (next rest: 999)
+[sup] 2026-09-22 01:54:23   launched PID=25144 PGID=25144
+[sup]   last line:   epoch 300: test_acc = 40651/50000 = 81.302000%  top5 = 47804/50000 = 95.608000%  [95% CI 80.96–81.64]
+[sup] 2026-09-22 14:03:53 ✅ COMPLETE — 300/300 epochs

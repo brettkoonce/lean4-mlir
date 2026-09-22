@@ -1,0 +1,11 @@
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790086302.248503  211487 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790086303.040154  211487 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+W0922 14:11:58.467555  211669 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+backend=gpu devices=4
+loaded /home/skoonce/convnext_t300_3060/convnext_tiny_imagenet_e300.state.npz  step=1501200
+EMA (reported)  top-1 40769/50000 = 0.8154   top-5 47754/50000 = 0.9551
+    per-image top-1 bitmap -> runs/2026-09-18-cnx-verified-300ep/mcnemar/reference_e300_ema.bin (50000 bytes)
+raw weights     top-1 40753/50000 = 0.8151   top-5 47750/50000 = 0.9550
+    per-image top-1 bitmap -> runs/2026-09-18-cnx-verified-300ep/mcnemar/reference_e300_raw.bin (50000 bytes)

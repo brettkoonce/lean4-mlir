@@ -1,0 +1,44 @@
+## verified (raw, e300) vs JAX reference RAW (e300) — the pairing target
+  n = 50000
+  reference-raw 40753/50000 = 81.51%   95% CI 81.16–81.84
+  verified-raw 40652/50000 = 81.30%   95% CI 80.96–81.64
+  unpaired gap: -0.20 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 38850   both wrong 7445   only reference-raw 1903   only verified-raw 1802
+  discordant: 3705 of 50000 (7.4%) — the only images the test looks at
+  McNemar exact two-sided p = 0.1004   (chi2 w/ continuity = 2.70)
+  ✗ NOT significant at p<0.05 — the 101 net flips do not separate these two
+    models on 50000 images, whatever the two point estimates look like
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.
+
+## verified (raw, e300) vs JAX reference EMA (e300) — arm-mismatched, for completeness
+  n = 50000
+  reference-EMA 40769/50000 = 81.54%   95% CI 81.20–81.88
+  verified-raw 40652/50000 = 81.30%   95% CI 80.96–81.64
+  unpaired gap: -0.23 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 38861   both wrong 7440   only reference-EMA 1908   only verified-raw 1791
+  discordant: 3699 of 50000 (7.4%) — the only images the test looks at
+  McNemar exact two-sided p = 0.05647   (chi2 w/ continuity = 3.64)
+  ✗ NOT significant at p<0.05 — the 117 net flips do not separate these two
+    models on 50000 images, whatever the two point estimates look like
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.
+
+## CONTROL: the reference's raw vs its own EMA (one run, two arms)
+  n = 50000
+  reference-raw 40753/50000 = 81.51%   95% CI 81.16–81.84
+  reference-EMA 40769/50000 = 81.54%   95% CI 81.20–81.88
+  unpaired gap: +0.03 pt   (the CIs OVERLAP — unpaired, this is inconclusive)
+
+  paired table:  both right 40721   both wrong 9199   only reference-raw 32   only reference-EMA 48
+  discordant: 80 of 50000 (0.2%) — the only images the test looks at
+  McNemar exact two-sided p = 0.09291   (chi2 w/ continuity = 2.81)
+  ✗ NOT significant at p<0.05 — the 16 net flips do not separate these two
+    models on 50000 images, whatever the two point estimates look like
+
+  ⚠ This is about these two CHECKPOINTS, not about the recipe. A claim of the form
+    'change X is worth Y points' needs n seeds per arm, not a paired test on one pair.

@@ -90,8 +90,11 @@ def main():
 
     # ⚠ Exact binomial, not the chi-square approximation. The chi2 form is unreliable when the
     # discordant count is small, which is exactly the regime two near-identical checkpoints land in.
+    # ⚠ INTEGER arithmetic until the one division. `2.0 ** (b + c)` is a FLOAT and overflows past
+    # b + c ≈ 1,024 — first hit 2026-09-22 on an ImageNet pair (3,705 discordant) with an
+    # OverflowError. `int / int` is correctly rounded at any size, and the result is ≤ 1.
     k = min(b, c)
-    p_exact = min(1.0, 2.0 * sum(math.comb(b + c, i) for i in range(k + 1)) / 2.0 ** (b + c))
+    p_exact = min(1.0, 2 * sum(math.comb(b + c, i) for i in range(k + 1)) / 2 ** (b + c))
     chi2 = (abs(b - c) - 1) ** 2 / (b + c)      # with continuity correction
     print(f"  McNemar exact two-sided p = {p_exact:.4g}   (chi2 w/ continuity = {chi2:.2f})")
     better = args.label_b if c > b else args.label_a

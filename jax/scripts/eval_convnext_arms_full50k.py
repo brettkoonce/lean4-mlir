@@ -68,16 +68,34 @@ ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)
 ds = ds.batch(BATCH, drop_remainder=False)      # keep ALL 50k
 ds = ds.prefetch(tf.data.AUTOTUNE)
 
+# Per-image, not summed on device, so `DUMP_CORRECT` can write the paired bitmap. The totals are
+# the same integers either way.
 @jax.jit
 def _score(pr, x, y):
     logits = m.forward(pr, x)                  # forward-only: drop_key=None
     _, top5 = jax.lax.top_k(logits, 5)
-    return (jnp.sum(jnp.argmax(logits, axis=-1) == y),
-            jnp.sum(jnp.any(top5 == y[:, None], axis=-1)))
+    return (jnp.argmax(logits, axis=-1) == y,
+            jnp.any(top5 == y[:, None], axis=-1))
 
-for tag, pr in (("EMA (reported)", ema_params), ("raw weights   ", params)):
+# ▶ `DUMP_CORRECT=<prefix>` writes `<prefix>_{ema,raw}.bin`: one byte per val image, 1 = top-1
+# correct, in tfds `validation` FILE order. That is `LEAN_MLIR_DUMP_CORRECT`'s format, so
+# `scripts/mcnemar.py` pairs a reference arm against a verified checkpoint directly. The order
+# matches the verified side's single-producer val drain: neither shuffles, and tf.data's map keeps
+# order. It also writes `<prefix>_labels.bin` (int32 LE, same order), so an alignment claim can be
+# CHECKED, not assumed. Unset ⇒ nothing is written and the output is unchanged.
+DUMP = os.environ.get("DUMP_CORRECT")
+import numpy as np
+for tag, key, pr in (("EMA (reported)", "ema", ema_params), ("raw weights   ", "raw", params)):
     c1 = c5 = total = 0
+    bits, labels = [], []
     for x, y in tfds.as_numpy(ds):
         a, b = _score(pr, jnp.asarray(x), jnp.asarray(y))
-        c1 += int(a); c5 += int(b); total += int(y.shape[0])
+        a = np.asarray(a); b = np.asarray(b)
+        c1 += int(a.sum()); c5 += int(b.sum()); total += int(y.shape[0])
+        if DUMP:
+            bits.append(a.astype(np.uint8)); labels.append(np.asarray(y, dtype=np.int32))
     print(f"{tag}  top-1 {c1}/{total} = {c1/total:.4f}   top-5 {c5}/{total} = {c5/total:.4f}")
+    if DUMP:
+        np.concatenate(bits).tofile(f"{DUMP}_{key}.bin")
+        np.concatenate(labels).astype("<i4").tofile(f"{DUMP}_labels.bin")
+        print(f"    per-image top-1 bitmap -> {DUMP}_{key}.bin ({total} bytes)")
