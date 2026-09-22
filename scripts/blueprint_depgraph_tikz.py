@@ -264,11 +264,13 @@ def book(chapters, nums, nodes, edges, tex, textwidth_pt=460.0, textheight_pt=38
     return '\n'.join(out), (x1 - x0) * s, (y1 - y0) * s, BASE * s, dict(count), dict(size), {lines(u)[0]: cited[u] for u in ambient}
 
 
-# The appendix-C figure: the six whole-network certificates and what each stands on,
-# chapter by chapter, from the same \uses lines. Nodes are the blueprint labels.
+# Figure 1.1: the five chapter networks' whole-network certificates and what each stands
+# on, chapter by chapter, from the same \uses lines. One column per chapter net, in chapter
+# order — the side quests (ResNet-50, MobileNetV4) have the same kind of certificate but
+# belong to their chapters, not to the map. Nodes are the blueprint labels.
 SPINES = [('thm:resnet34_full_has_vjp', 'ResNet-34'), ('thm:mobilenetv2_full_has_vjp', 'MobileNetV2'),
-          ('thm:mobilenetv4_full_has_vjp', 'MobileNetV4'), ('thm:efficientnet_full_has_vjp', 'EfficientNet-B0'),
-          ('thm:convnext_whole_back', 'ConvNeXt-T'), ('thm:vitTiny_has_vjp_correct', 'ViT-Tiny')]
+          ('thm:efficientnet_full_has_vjp', 'EfficientNet-B0'), ('thm:convnext_whole_back', 'ConvNeXt-T'),
+          ('thm:vitTiny_has_vjp_correct', 'ViT-Tiny')]
 
 def spines(chapters, nums, nodes, edges, tex, textwidth_pt=460.0):
     """A grid, not a dot layout: one column per whole-network certificate, one row per
@@ -329,7 +331,7 @@ if __name__ == '__main__':
     tikz, w, h, font, count, size, cited = book(chapters, nums, nodes, edges, tex)
     stikz, sw, sh, sfont, spine_info = spines(chapters, nums, nodes, edges, tex)
     open('%s/spines.tex' % outdir, 'w').write('\\begin{center}\n' + stikz + '\n\\end{center}\n')
-    print('%-26s the six certificates and the chapters each stands on  %5.0f x %5.0f pt  font %.1f  %s' % ('spines', sw, sh, sfont, spine_info))
+    print('%-26s the chapter nets\' certificates and the chapters each stands on  %5.0f x %5.0f pt  font %.1f  %s' % ('spines', sw, sh, sfont, spine_info))
     open('%s/book.tex' % outdir, 'w').write('\\begin{center}\n' + tikz + '\n\\end{center}\n')
     print('%-26s the book at chapter scale: %d boxes, %d arrows, %d citations  %5.0f x %5.0f pt  font %.1f  double-bordered: %s' % ('book', len(size), len(count), sum(count.values()), w, h, font, cited))
     k = 0; alls = units(nodes, edges)

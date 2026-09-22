@@ -415,8 +415,8 @@ Chapter & Contracts & Witnesses & Steps & New primitive / result \\
 
 That's the ladder at a glance. Every chapter's theorems section opens
 with its dependency graph, every box a Lean theorem and a link, and
-Figure~\ref{fig:spines} in Chapter~\ref{chap:tensor} follows the six
-whole-network certificates back to the Chapter~1 calculus, chapter by
+Figure~\ref{fig:spines} in Chapter~\ref{chap:tensor} follows the five
+chapter networks' certificates back to the Chapter~1 calculus, chapter by
 chapter. The per-chapter detail lives where the work does, because each
 chapter names its contracts as it proves them. Appendix~\ref{app:verification}
 covers how those claims get checked, through the audits, the bridge
@@ -780,11 +780,11 @@ deep end, here is the shape of what's coming, at the scale of chapters:
 \begin{figure}[H]
 \centering
 \input{figures/depgraph/spines}
-\caption{The six whole-network certificates and what each stands on. A
-column follows one certificate's proof up through every statement it
+\caption{The five chapter networks' whole-network certificates and what each
+stands on. A column follows one certificate's proof up through every statement it
 cites, transitively; the circle at a chapter is how many of that chapter's
 statements it reaches, the double circle marks the chapter that proves it,
-and every box is a link. All six reach this chapter's calculus,
+and every box is a link. All five reach this chapter's calculus,
 Chapter~\ref{chap:bn}'s normalisation lemmas and
 \S\ref{sec:matrix_machinery}'s matrix-level machinery, because every
 certificate is stated in the batched form and proved row by row.
@@ -16892,8 +16892,8 @@ One property makes the whole edifice auditable: \textbf{every chapter is
 pure composition}. Every primitive either inherits from Mathlib's
 \(\fderiv\) or composes previously-proved theorems, so each
 architecture's whole-network VJP traces back to the Chapter~1 calculus.
-Figure~\ref{fig:spines} follows each of the six whole-network
-certificates back through everything it cites, chapter by chapter;
+Figure~\ref{fig:spines} follows each chapter network's whole-network
+certificate back through everything it cites, chapter by chapter;
 Figure~\ref{fig:chapter_map} is the citation graph between the chapters
 themselves.
 
