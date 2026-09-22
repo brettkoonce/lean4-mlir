@@ -10464,8 +10464,8 @@ and also the least accurate one in it, and
 sentence are the same fact.
 
 \medskip\noindent\textbf{Two compile lines, and the second one is the
-whole eval story.} Like ConvNeXt and unlike the three BatchNorm
-chapters, ViT emits no \texttt{vit\_fwd\_eval}. LayerNorm computes its
+whole eval story.} Like ConvNeXt, and unlike the three chapters whose
+BatchNorm keeps running statistics, ViT emits no \texttt{vit\_fwd\_eval}. LayerNorm computes its
 statistics from the activation in front of it every time, so there is
 nothing to freeze and the training forward and the evaluation forward
 are the same function.
@@ -13637,7 +13637,7 @@ augmentation needs a longer schedule to absorb, so \textbf{the optimum epoch
 count is a property of the augmentation pack} --- there is no schedule that can
 be tuned once and carried across packs.
 
-\medskip\noindent \textbf{The result worth reading is not the mean.} Per-class
+\medskip\noindent \textbf{The mean hides where detection fails.} Per-class
 AP runs from car down to bicycle, a spread of $19\times$, and scale augmentation
 narrowed it from $43\times$ by lifting exactly the classes that were worst:
 awning-tricycle by $59\%$, bicycle by $41\%$, tricycle by $40\%$, against car's
@@ -13652,8 +13652,8 @@ and rare, and an averaged mAP is precisely the statistic that hides it.
 \medskip\noindent The stack beats the hand-written PyTorch replica of
 this same architecture by $54\%$, and runs at 65\,fps on one RTX 4060 Ti
 --- or $55.9$\,fps on a 25\,W Jetson Orin Nano under TensorRT, with a
-uint8 input path and the clocks pinned, which is the deployment this dataset
-implies. The replica, not YOLOv8, is the yardstick: it
+uint8 input path and the clocks pinned. The replica, not YOLOv8, is the
+yardstick: it
 isolates implementation quality from architecture, which a comparison against a
 different model would conflate. The two YOLOv8s rows say something more
 interesting than either alone. At a matched budget it scores $0.140$ --- below
@@ -16199,9 +16199,8 @@ which are detection, segmentation, language, signal processing and
 physics, and each has a dataset of its own:
 
 \begin{itemize}
-  \item \textbf{VisDrone-DET2019} is where detection leaves the household
-    frame entirely. It is drone-altitude imagery where the objects are the
-    problem: a median box is $20 \times 25$\,px in the source frame, some 70
+  \item \textbf{VisDrone-DET2019} is drone-altitude imagery where the
+    objects are the problem: a median box is $20 \times 25$\,px in the source frame, some 70
     of them per image, so a single $7\times7$ grid collapses outright and
     the multi-scale FPN head of Definition~\ref{layer:fpnModule} becomes
     necessary rather than decorative.
