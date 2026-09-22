@@ -3,17 +3,19 @@
 
   python3 scripts/nqs_figure.py runs/2026-09-11-nqs-ising nqs_ising.png
 
-Reads every `<arch>_h<h>_metrics.json` under `<run>/n12/` and `<run>/n64/`
-(the files `lake exe nqs-ising` writes, copied there), brackets each against
-the closed forms in `scripts/nqs_metrics.py`, and draws:
+Reads `<run>/n64/*_metrics.json` (the sweep) and `<run>/samples/` (the GPT's
+`_samples.bin` dumps from `lake exe nqs-ising`, copied there), brackets against
+the closed forms in `scripts/nqs_metrics.py`, and draws, for a reader who has
+not met the Ising chain:
 
-  (a) the ansatz: a spin configuration split into patch tokens, the transformer,
-      its head, and the host adding the mean-field reference log ψ_ref(σ) before
-      any ratio is formed — with the GPT variant's logit bias beside it;
-  (b) relative energy error against h/J for the ladder (mean field, MLP, ViT,
-      GPT), N = 12 by enumeration and N = 64 by Jordan-Wigner side by side;
-  (c) the long-range test: ⟨σᶻ₁σᶻ₁₊ᵣ⟩ against r at h = J, N = 64, exact against
-      the trained ViT and GPT.
+  (a) what the network is asked to find — rows of 64 spins drawn from the
+      trained GPT wavefunction at h/J = 0.2, 1 and 2: ordered, critical,
+      disordered;
+  (b) the check — for every one of the 4,096 configurations at N = 12, h = J,
+      the probability the trained GPT assigns against the exact ground state's,
+      with the mean-field reference it starts from in grey;
+  (c) the result — relative energy error against h/J at N = 64 for the ladder,
+      the mean-field floor in grey, bars the Monte Carlo standard error.
 
 Series colours: mean field grey, MLP blue, ViT orange, GPT aqua — the same
 slots throughout. Needs matplotlib (the system python3, not the JAX venv).
@@ -23,7 +25,7 @@ import numpy as np
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+from matplotlib.colors import ListedColormap
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import nqs_metrics as M
@@ -51,6 +53,13 @@ def load(sub):
     return rows
 
 
+def samples(name, N):
+    """`<prefix>_samples.bin`: one row per sample, N spins as ±1 f32, then weight,
+    E_loc and <s^x>. At N ≤ 14 the rows are every configuration with its p(σ)."""
+    a = np.fromfile(f"{run}/samples/{name}_samples.bin", dtype=np.float32).reshape(-1, N + 3)
+    return a[:, :N], a[:, N].astype(np.float64)
+
+
 def style(ax):
     ax.tick_params(length=2, color=MUTED)
     for s in ax.spines.values():
@@ -59,100 +68,86 @@ def style(ax):
     ax.set_axisbelow(True)
 
 
-fig = plt.figure(figsize=(13.2, 3.9), constrained_layout=True)
-gs = fig.add_gridspec(1, 4, width_ratios=[1.35, 1, 1, 1])
-axA = fig.add_subplot(gs[0, 0])
-axB1 = fig.add_subplot(gs[0, 1])
-axB2 = fig.add_subplot(gs[0, 2], sharey=axB1)
-axC = fig.add_subplot(gs[0, 3])
+fig = plt.figure(figsize=(13.2, 4.3), constrained_layout=True)
+# the panel labels go in a band above the axes, placed after the layout pass (a long
+# label on the first raster would otherwise be laid out as that axes' own decoration)
+fig.get_layout_engine().set(rect=(0, 0, 1, 0.94))
+gs = fig.add_gridspec(1, 3, width_ratios=[1.9, 1, 1])
+gsA = gs[0, 0].subgridspec(1, 3, wspace=0.06)
+axA = [fig.add_subplot(gsA[0, i]) for i in range(3)]
+axB = fig.add_subplot(gs[0, 1])
+axC = fig.add_subplot(gs[0, 2])
 
-# ── (a) the ansatz ───────────────────────────────────────────────────────────
-axA.set_xlim(0, 10); axA.set_ylim(0, 10); axA.axis("off")
+# ── (a) samples from the trained GPT wavefunction, N = 64 ───────────────────
+ROWS = 96
+for ax, (name, h, word) in zip(axA, [("nqs_ising_gpt_n64_q1_h20", 0.2, "ordered"),
+                                      ("nqs_ising_gpt_n64_q3_h100", 1.0, "critical"),
+                                      ("nqs_ising_gpt_n64_r2_h200", 2.0, "disordered")]):
+    S, _ = samples(name, 64)
+    ax.imshow(S[:ROWS] > 0, cmap=ListedColormap(["white", INK]), aspect="auto",
+              interpolation="nearest")
+    ax.set_xticks([]); ax.set_yticks([])
+    for s in ax.spines.values():
+        s.set_color(RULE); s.set_linewidth(0.6)
+    ax.set_title(f"h = {h:g} J   {word}", fontsize=8.2, loc="center", pad=3)
+axA[0].set_ylabel(f"{ROWS} samples, one per row", fontsize=7.6)
+axA[1].set_xlabel("the 64 spins of the chain: dark up, light down", fontsize=7.6)
 
+# ── (b) all 4,096 configurations at N = 12: network against exact ───────────
+N12, h12 = 12, 1.0
+S12, p_gpt = samples("nqs_ising_gpt_n12_g2_h100", N12)
+idx = ((S12 > 0).astype(np.int64) << np.arange(N12)).sum(axis=1)   # bit i of the index is spin i
+H, Sall = M.hamiltonian(N12, h12)
+w, v = np.linalg.eigh(H)
+p_exact = v[:, 0] ** 2
+p_exact = p_exact[idx]
+phi = M.mean_field(N12, h12)["phi"]
+up, dn = math.cos(phi / 2) ** 2, math.sin(phi / 2) ** 2
+p_mf = np.prod(np.where(S12 > 0, up, dn), axis=1)
+axB.scatter(p_exact, p_mf, s=5, color=COL["mf"], alpha=0.55, lw=0, label="mean-field reference (the start)", zorder=2)
+axB.scatter(p_exact, p_gpt, s=5, color=COL["gpt"], alpha=0.8, lw=0, label="trained GPT", zorder=3)
+lo, hi = p_exact.min() * 0.5, p_exact.max() * 2
+axB.plot([lo, hi], [lo, hi], color=INK, lw=0.9, ls=(0, (3, 2)), zorder=4)
+axB.set_xscale("log"); axB.set_yscale("log")
+axB.set_xlim(lo, hi); axB.set_ylim(lo, hi)
+axB.set_xlabel("exact ground state:  |ψ(σ)|²")
+axB.set_ylabel("network:  |ψ_θ(σ)|²")
+axB.legend(loc="upper left", frameon=False, fontsize=7.3, handlelength=1.0, markerscale=2.2)
+style(axB)
 
-def box(x, y, w, h, text, fc="white", ec=RULE, fs=7.6, weight="normal", color=INK):
-    axA.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0.02,rounding_size=0.18",
-                                 fc=fc, ec=ec, lw=0.8))
-    axA.text(x + w / 2, y + h / 2, text, ha="center", va="center", fontsize=fs,
-             color=color, weight=weight, linespacing=1.25)
-
-
-def arrow(x0, y0, x1, y1, color=INK):
-    axA.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle="-|>", mutation_scale=8,
-                                  lw=0.8, color=color, shrinkA=0, shrinkB=0))
-
-
-spins = "↑↓↓↑ ↑↑↓↑ ↓↑↑↓ ↑↓↑↑"
-box(0.3, 8.45, 9.4, 1.15, f"σ ∈ {{±1}}ᴺ        {spins}", fs=8)
-arrow(2.55, 8.45, 2.55, 7.5)
-arrow(7.45, 8.45, 7.45, 7.5)
-box(0.3, 6.25, 4.5, 1.25, "patches of p spins → token ids\n(9, 13, 6, 11)", fs=7.3)
-box(5.2, 6.25, 4.5, 1.25, "mean-field reference\nlog ψ_ref(σ) = Σᵢ (a + b σᵢ)", fc="#eef4fc", fs=7.3)
-arrow(2.55, 6.25, 2.55, 5.3)
-box(0.3, 4.0, 4.5, 1.3, "transformer\nViT: encoder, mean over tokens\nGPT: causal, lmHead", fs=7.1)
-arrow(2.55, 4.0, 2.55, 3.05)
-box(0.3, 1.85, 4.5, 1.2, "head → f_θ(σ)\nGPT: logits, + log p_ref as bias", fs=7.1)
-arrow(4.8, 2.45, 5.2, 2.45)
-arrow(7.45, 6.25, 7.45, 3.05)
-box(5.2, 1.85, 4.5, 1.2, "host adds them:\nlog ψ_θ = log ψ_ref + f_θ", fc="#eef4fc", fs=7.3, weight="bold")
-axA.text(5.0, 0.75, "E_loc from ψ ratios on the eval graph;  ∂E/∂θ through the DDPM MSE block,\ntarget y = out − M·w/2 with w = 2 p(σ)(E_loc − E)",
-         ha="center", va="center", fontsize=6.8, color=MUTED, linespacing=1.3)
-axA.set_title("(a)  structure × residual: the ansatz", loc="left")
-
-# ── (b) relative energy error against h ──────────────────────────────────────
-for ax, sub, N, title in [(axB1, "n12", 12, "(b)  N = 12, ceiling by enumeration"),
-                          (axB2, "n64", 64, "N = 64, ceiling by Jordan-Wigner")]:
-    rows = load(sub)
-    hs = np.arange(0.2, 2.01, 0.2)
-    mfe = [abs(M.mean_field(N, h)["E"] - M.exact(N, h)["E0"]) / abs(M.exact(N, h)["E0"]) for h in hs]
-    ax.plot(hs, mfe, color=COL["mf"], lw=1.6, label=NAME["mf"], zorder=2)
-    for a in ("mlp", "vit", "gpt"):
-        if a not in rows:
-            continue
-        h = np.array([m["h"] for m in rows[a]])
-        E0 = np.array([M.exact(N, x)["E0"] for x in h])
-        rel = np.array([m["E"] for m in rows[a]]) - E0
-        rel = rel / np.abs(E0)
-        se = np.array([math.sqrt(max(m["var"], 0) / max(m["samples"], 1)) for m in rows[a]]) / np.abs(E0)
-        if N > 14:
-            ax.errorbar(h, np.abs(rel), yerr=se, color=COL[a], marker=MARK[a], ms=4.5, lw=1.4,
-                        capsize=2, elinewidth=0.8, label=NAME[a], zorder=3)
-        else:
-            ax.plot(h, np.abs(rel), color=COL[a], marker=MARK[a], ms=4.5, lw=1.4, label=NAME[a], zorder=3)
-    ax.set_yscale("log")
-    ax.set_xlabel("h / J")
-    ax.set_xticks(hs[::2])
-    ax.axvline(1.0, color=RULE, lw=0.8, ls=(0, (3, 3)), zorder=1)
-    ax.set_title(title, loc="left")
-    style(ax)
-axB1.set_ylabel("|E − E₀| / |E₀|")
-plt.setp(axB2.get_yticklabels(), visible=False)
-axB2.legend(loc="lower right", frameon=False, fontsize=7.3, handlelength=1.6)
-axB1.text(1.02, 0.97, "transition", transform=axB1.get_xaxis_transform(), fontsize=6.5,
-          color=MUTED, ha="left", va="top", rotation=90)
-axB2.text(0.02, 0.97, "bars: Monte Carlo s.e.\nof the sample energy", transform=axB2.transAxes,
-          fontsize=6.3, color=MUTED, ha="left", va="top")
-
-# ── (c) the long-range test at h = J, N = 64 ────────────────────────────────
-rows64 = load("n64")
-ex = M.jw_exact(64, 1.0)
-r = np.arange(0, 33)
-axC.plot(r, ex["corr"], color=INK, lw=1.6, label="exact (Jordan-Wigner)", zorder=3)
-mf = M.mean_field(64, 1.0)["corr"]
-axC.plot(r, mf, color=COL["mf"], lw=1.4, ls=(0, (4, 2)), label="mean field", zorder=2)
-for a in ("vit", "gpt"):
-    m = next((m for m in rows64.get(a, []) if abs(m["h"] - 1.0) < 1e-6), None)
-    if m is None:
+# ── (c) relative energy error against h, N = 64 ─────────────────────────────
+rows = load("n64")
+hs = np.arange(0.2, 2.01, 0.2)
+mfe = [abs(M.mean_field(64, h)["E"] - M.exact(64, h)["E0"]) / abs(M.exact(64, h)["E0"]) for h in hs]
+axC.plot(hs, mfe, color=COL["mf"], lw=1.6, label=NAME["mf"], zorder=2)
+for a in ("mlp", "vit", "gpt"):
+    if a not in rows:
         continue
-    c = np.array(m["corr"])
-    axC.plot(r[:len(c)], c, color=COL[a], marker=MARK[a], ms=3.6, lw=0, label=NAME[a], zorder=4,
-             markeredgecolor="white", markeredgewidth=0.5)
-axC.set_xlabel("r")
-axC.set_ylabel("⟨σᶻ₁ σᶻ₁₊ᵣ⟩ at h = J, N = 64")
-axC.set_xlim(0, 32); axC.set_ylim(0.3, 1.02)
-axC.legend(loc="upper right", frameon=False, fontsize=7.3, handlelength=1.6)
-axC.set_title("(c)  the long-range test", loc="left")
+    h = np.array([m["h"] for m in rows[a]])
+    E0 = np.array([M.exact(64, x)["E0"] for x in h])
+    rel = (np.array([m["E"] for m in rows[a]]) - E0) / np.abs(E0)
+    se = np.array([math.sqrt(max(m["var"], 0) / max(m["samples"], 1)) for m in rows[a]]) / np.abs(E0)
+    axC.errorbar(h, np.abs(rel), yerr=se, color=COL[a], marker=MARK[a], ms=4.5, lw=1.4,
+                 capsize=2, elinewidth=0.8, label=NAME[a], zorder=3)
+axC.set_yscale("log")
+axC.set_xlabel("h / J")
+axC.set_xticks(hs[::2])
+axC.axvline(1.0, color=RULE, lw=0.8, ls=(0, (3, 3)), zorder=1)
+axC.text(1.02, 0.97, "transition", transform=axC.get_xaxis_transform(), fontsize=6.5,
+         color=MUTED, ha="left", va="top", rotation=90)
+axC.set_ylabel("|E − E₀| / |E₀|")
+# bottom middle: the bars at h = 0.2, 0.6 and 1.8 run to the floor, the transition line
+# behind the labels is hidden by the white patch
+axC.legend(loc="lower left", bbox_to_anchor=(0.27, 0.0), frameon=True, framealpha=0.92,
+           edgecolor="none", fontsize=7.3, handlelength=1.6)
+axC.text(0.02, 0.97, "N = 64, ceiling by Jordan-Wigner\nbars: Monte Carlo s.e.", transform=axC.transAxes,
+         fontsize=6.3, color=MUTED, ha="left", va="top")
 style(axC)
 
+fig.canvas.draw()
+for ax, label in [(axA[0], "(a)  what the network is asked to find: the ground state of a ring of spins"),
+                  (axB, f"(b)  the check: every configuration, N = {N12}, h = J"),
+                  (axC, "(c)  the result: energy error against field")]:
+    fig.text(ax.get_position().x0, 0.985, label, fontsize=9.5, ha="left", va="top", in_layout=False)
 fig.savefig(out, dpi=190, facecolor="white")
 print("wrote", out)

@@ -288,8 +288,10 @@ sym12/      the N = 12 sweep with the Z2-symmetrised reference (MLP, ViT)
 ablation/   the noref runs (Table 2) and the h = 0.8 investigation; logs/
 checks/     the sampler gates (`check` runs)
 j1j2/       rung R4: the J1-J2 chain at N = 16, metrics + psi dumps + curves, table3.md, logs/, wide/
+samples/    the GPT `_samples.bin` dumps the figure reads: every configuration with its p(σ) at N = 12, h = J (`g2_h100`),
+            and the first 256 of the 8,192 autoregressive draws at N = 64 for h = 0.2 (`q1_h20`), 1.0 (`q3_h100`) and 2.0 (`r2_h200`, the lr 1e-3 rerun)
 nqs_j1j2.png    the rung-4 figure (scripts/nqs_j1j2_figure.py)
-nqs_ising.png   the figure (scripts/nqs_figure.py)
+nqs_ising.png   the figure (scripts/nqs_figure.py): samples at three fields, network vs exact p(σ), the N = 64 sweep
 ```
 
 Reproduce one row:
