@@ -694,7 +694,9 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let trainPixels := dio.trainPixels
   let allShapes := spec.shapesBA
   let xSh := spec.xShape batchN
-  let nP := spec.totalParams
+  let nP := F32.size params
+  if nP != spec.totalParams then
+    throw <| IO.userError s!"{spec.name}: parameter buffer holds {nP} floats, NetSpec.totalParams says {spec.totalParams}"
   let nT := 3 * nP
   let baseLR : Float := cfg.learningRate
   let warmup : Nat := cfg.warmupEpochs

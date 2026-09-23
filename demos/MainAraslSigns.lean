@@ -186,15 +186,12 @@ split {split}, {epochs} epochs, batch {B}, lr {lr}, seed {seed}\
   IO.FS.writeFile s!"{gpfx}_train_step.mlir" trainMlir
   IO.FS.writeFile s!"{gpfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec B)
   let evalSess ← LowererSession.create (← NetSpec.graphArtifact gpfx "fwd_eval")
-  -- ⚠ sized from the initialised buffer, not `spec.totalParams`: the two disagree on SE
-  -- nets (totalParams counts squeeze-excite off the block input, `paramShapes` — which
-  -- `heInitParams`, `shapesBA` and the emitted graph all follow — off the expanded width;
-  -- 4.0M vs 7.1M for B0), and a wrong nP reads the loss from inside a weight tensor.
+  -- Sized from the initialised buffer: a wrong nP reads the loss from inside a weight tensor.
   let p0 ← spec.heInitParams
   let nP := F32.size p0
   let nT := 3 * nP
   let nBn := spec.nBnStats
-  IO.eprintln s!"  {nP} params ({spec.totalParams} by NetSpec.totalParams), {nBn} BN stat floats"
+  IO.eprintln s!"  {nP} params, {nBn} BN stat floats"
   let allShapes := spec.shapesBA
   let evalShapes := spec.evalShapesBA
   let bnShapes := spec.bnShapesBA

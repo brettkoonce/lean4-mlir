@@ -56,11 +56,19 @@ Everything in the Status table is on main. Pick up in this order; each is its ow
 `lake exe docstring-checkrefs`, `git status verified_mlir/` clean, plus `CertsHeavy` when a
 certificate or root file moves and `tests/comparator/run.sh` when anything leaves `Tensor.lean`).
 
-1. **Owner decisions first** (one AskUserQuestion): the SE width `totalParams` should use (§0.1,
-   then a one-step CPU probe of `efficientnet-train`); §8's pinned cuts (14 forwarding grad-node
-   aliases, `SgdDescentCnn`'s 19 margin instances, `resnet34_has_vjp_at`, IBP residue pins); the
-   three orphan `*_correct` contracts (`residual{,Proj}_has_vjp_at_correct`,
-   `depthwiseStride2FlatXla_has_vjp_correct` — pin or cut; the book's contracts table counts them).
+1. **Owner decisions — DECIDED 2026-09-23:**
+   - §0.1 SE width = **`ic/4`** (block input; timm, JAX `Codegen.lean`, `Spec.lean` and the verified
+     renderer already agree — `ca6a655d` never reached `SpecHelpers.paramShapes`/`heInitParams` or
+     `MlirCodegen`'s SE emitter, which still use `mid/4`). Fix those, size `Train.lean` from
+     `heInitParams`, assert `totalParams` agrees; CPU-probe `efficientnet-train`. The gw-detect
+     B0 arm becomes true B0 (5.3M, not 7.1M).
+   - Cut: the 14 forwarding grad-node aliases (with §2.4), `resnet34_has_vjp_at` + its ~160 lines,
+     the 3 IBP residue pins, the 3 orphan `*_correct` contracts (cited nowhere — the comparator
+     checks the non-`_at` `residual_has_vjp_correct`).
+   - Retire: the MNv2 per-channel legacy chain (move `IVPos` first), `tests/Audit*` + `AUDIT_REPORT*`,
+     the rank-3 kit (drop its 2 blueprint nodes); rename `lean_lib «Codegen»` → `«Reference»`.
+   - Keep: `SgdDescentCnn`'s margin instances (they are the descent proof's stages); no optional
+     renames; `pdiv_finset_sum`'s binder untouched.
 2. **§2.4 grad-node home** — `GradNodesB.lean` beside `Foundation/Bf16GradNodes.lean` for the ~25
    generic f32 `*GradB_den` lemmas now in `ResNet34FoldB` / `ConvNeXtFoldGB` / `EfficientNetFoldG` /
    `ViTFoldGB`; keep full names (0 pins move). Then `Foundation/DataParallelNode` and

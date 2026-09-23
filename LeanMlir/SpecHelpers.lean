@@ -71,7 +71,7 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) := Id.run do
       for bi in [:n] do
         let blockIc := if bi == 0 then ic else oc
         let mid := blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
+        let seMid := mbConvSeMid blockIc
         if expand != 1 then
           shapes := shapes.push #[mid, blockIc, 1, 1] |>.push #[mid] |>.push #[mid]
         shapes := shapes.push #[mid, 1, kSize, kSize] |>.push #[mid] |>.push #[mid]
@@ -350,7 +350,7 @@ private def heInitLayer (l : Layer) (seed : USize) : IO (Array ByteArray × USiz
     for bi in [:n] do
       let blockIc := if bi == 0 then ic else oc
       let mid := blockIc * expand
-      let seMid := Nat.max 1 (mid / 4)
+      let seMid := mbConvSeMid blockIc
       if expand != 1 then
         let (W, g, b, s') ← heConvBn mid blockIc 1 s
         parts := parts.push W |>.push g |>.push b

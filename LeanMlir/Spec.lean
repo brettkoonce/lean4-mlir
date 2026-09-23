@@ -24,6 +24,11 @@ def fpnDetectParamShapes (oc c3 c4 c5 A tower : Nat) : List (List Nat) := Id.run
       s := s ++ [[oc, oc, 3, 3], [oc]]
   return s ++ [[ap, oc], [ap, oc], [ap, oc], [ap], [ap], [ap]]
 
+/-- Squeeze width of an `.mbConv` block's SE: a quarter of the block's input channels
+    (timm's `se_ratio` taken over the block input, not the expanded width). Every
+    parameter-layout writer and emitter reads it from here. -/
+def mbConvSeMid (blockIc : Nat) : Nat := Nat.max 1 (blockIc / 4)
+
 def Layer.nParams : Layer → Nat
   | .conv2d ic oc k _ _     => oc * ic * k * k + oc
   | .convBn ic oc k _ _     => oc * ic * k * k + 2 * oc
@@ -63,14 +68,14 @@ def Layer.nParams : Layer → Nat
       let mid := ic * expand
       let expandP := if expand == 1 then 0 else (mid * ic + 2 * mid)
       let dwP := mid * k * k + 2 * mid
-      let seMid := Nat.max 1 (ic / 4)   -- canonical SE: off block input, not expanded mid
+      let seMid := mbConvSeMid ic
       let seP := if useSE then (seMid * mid + seMid) + (mid * seMid + mid) else 0
       let projP := oc * mid + 2 * oc
       let firstBlock := expandP + dwP + seP + projP
       let midR := oc * expand
       let expandR := if expand == 1 then 0 else (midR * oc + 2 * midR)
       let dwR := midR * k * k + 2 * midR
-      let seMidR := Nat.max 1 (oc / 4)   -- repeat blocks: input is oc
+      let seMidR := mbConvSeMid oc
       let seR := if useSE then (seMidR * midR + seMidR) + (midR * seMidR + midR) else 0
       let projR := oc * midR + 2 * oc
       let restBlock := expandR + dwR + seR + projR

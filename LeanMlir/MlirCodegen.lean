@@ -487,7 +487,7 @@ private def emitMbConv (startPidx : Nat) (curSSA : String) (curShape : List Nat)
     let stride := if bi == 0 then firstStride else 1
     let blockIc := if bi == 0 then ic else oc
     let mid := blockIc * expand
-    let seMid := Nat.max 1 (mid / 4)
+    let seMid := mbConvSeMid blockIc
     let useSkip := stride == 1 && blockIc == oc
     -- 1. Expand: 1×1 convBn + activation (skip if expand == 1)
     if expand != 1 then
@@ -2693,7 +2693,7 @@ private def emitForwardSig (spec : NetSpec) (batchSize : Nat) : String := Id.run
         for bi in [:nBlocks] do
           let blockIc := if bi == 0 then ic else oc
           let mid := blockIc * expand
-          let seMid := Nat.max 1 (mid / 4)
+          let seMid := mbConvSeMid blockIc
           if expand != 1 then
             params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, blockIc, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
             pidx := pidx + 1
@@ -3204,7 +3204,7 @@ private def emitForwardEvalSig (spec : NetSpec) (batchSize : Nat) : String := Id
         for bi in [:nBlocks] do
           let blockIc := if bi == 0 then ic else oc
           let mid := blockIc * expand
-          let seMid := Nat.max 1 (mid / 4)
+          let seMid := mbConvSeMid blockIc
           if expand != 1 then
             params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, blockIc, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
             pidx := pidx + 1
@@ -6096,7 +6096,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let stride := if bi == 0 then firstStride else 1
         let blockIc := if bi == 0 then ic else oc
         let mid := blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
+        let seMid := mbConvSeMid blockIc
         let useSkip := stride == 1 && blockIc == oc
         -- Expand: 1×1 + activation (skip if expand==1). Dispatch on `act`.
         if expand != 1 then
@@ -9268,7 +9268,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       for bi in [:nBlocks] do
         let blockIc := if bi == 0 then ic else oc
         let mid := blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
+        let seMid := mbConvSeMid blockIc
         let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
         if expand != 1 then
           let wTy := tensorTy [mid, blockIc, 1, 1]
@@ -9710,7 +9710,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       for bi in [:nBlocks] do
         let blockIc := if bi == 0 then ic else oc
         let mid := blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
+        let seMid := mbConvSeMid blockIc
         let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
         if expand != 1 then
           params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, blockIc, 1, 1]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
@@ -9895,7 +9895,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
       for bi in [:nBlocks] do
         let blockIc := if bi == 0 then ic else oc
         let mid := blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
+        let seMid := mbConvSeMid blockIc
         let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
         if expand != 1 then
           params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, 1, 1]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
