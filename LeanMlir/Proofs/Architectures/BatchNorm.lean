@@ -873,4 +873,51 @@ theorem bn_input_grad_correct (n : Nat) (ε γ β : ℝ) (hε : 0 < ε)
     ∑ j : Fin n, pdiv (bnForward n ε γ β) x i j * dy j := by
   exact (bn_has_vjp n ε γ β hε).correct x dy i
 
+/-- **BN acts on coordinate differences by `γ·istd`** — the exact identity that propagates the
+    carrier undamped through every BN, and the reason no BN-variance derivative is ever taken:
+    the difference is `γ · (difference) · istd` with `istd` evaluated at the *same* activation. -/
+theorem bnForward_chan_diff_γ {n : Nat} (ε γ β : ℝ) (z : Vec n) (k₀ k₁ : Fin n) :
+    bnForward n ε γ β z k₀ - bnForward n ε γ β z k₁ = γ * (z k₀ - z k₁) * bnIstd n z ε := by
+  simp only [bnForward, bnXhat]; ring
+
+/-- **The two-sided BN margin** `|bn − β| ≤ |γ|·√n`, with no mean/variance computation
+    (`bnXhat_sq_le`). `bnForward_lb`'s symmetric form; what makes a large `β` keep a relu off its
+    kink at **every** input, so the structural net needs no eventually-argument for its relus. -/
+theorem bnForward_abs_sub_le {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (v : Vec n) (k : Fin n) :
+    |bnForward n ε γ β v k - β| ≤ |γ| * Real.sqrt (n : ℝ) := by
+  have habs : |bnXhat n ε v k| ≤ Real.sqrt (n : ℝ) := Real.abs_le_sqrt (bnXhat_sq_le ε hε v k)
+  have he : bnForward n ε γ β v k - β = γ * bnXhat n ε v k := by simp only [bnForward]; ring
+  rw [he, abs_mul]
+  exact mul_le_mul_of_nonneg_left habs (abs_nonneg γ)
+
+/-- `√n < β` from `n < β²` — the margin check at each of the witness's BN widths. -/
+theorem sqrt_lt_param (n : ℕ) (β : ℝ) (hβ : 0 ≤ β) (h : (n : ℝ) < β ^ 2) :
+    Real.sqrt (n : ℝ) < β :=
+  (Real.sqrt_lt n.cast_nonneg hβ).2 h
+
+/-- `bnIstd` is continuous in the activation (`ε > 0`). -/
+theorem bnIstd_cont {n : Nat} (ε : ℝ) (hε : 0 < ε) (k : Fin n) :
+    Continuous (fun v : Vec n => bnIstd n v ε) :=
+  (continuous_apply k).comp (bnIstdBroadcast_diff n ε hε).continuous
+
+/-- with `ε = 1` a batch `istd` is at most `1`, which keeps the ray's gap inside the window
+    `swishGap_pos` needs. -/
+theorem bnIstd_le_one {n : Nat} (z : Vec n) : bnIstd n z 1 ≤ 1 := by
+  have hv := bnVar_nonneg n z
+  have h1 : (1:ℝ) ≤ Real.sqrt (bnVar n z + 1) := by
+    have hs : Real.sqrt 1 ≤ Real.sqrt (bnVar n z + 1) := Real.sqrt_le_sqrt (by linarith)
+    simpa using hs
+  rw [bnIstd, div_le_one (by linarith)]
+  exact h1
+
+theorem bnMean_pair (m : Nat) (hm : 0 < m) (a : Fin 2 → ℝ) (z : Vec (2 * m))
+    (hz : ∀ (n : Fin 2) (q : Fin m), z (finProdFinEquiv (n, q)) = a n) :
+    bnMean (2 * m) z = (a 0 + a 1) / 2 := by
+  have : Nonempty (Fin m) := ⟨⟨0, hm⟩⟩
+  rw [bnMean_eq_expect, ← Fintype.expect_equiv finProdFinEquiv (fun p => z (finProdFinEquiv p)) z
+    (fun _ => rfl), ← Finset.univ_product_univ, Finset.expect_product]
+  simp only [hz, Fintype.expect_const]
+  simp only [Fintype.expect_eq_sum_div_card, Fin.sum_univ_two, Fintype.card_fin]
+  norm_num
+
 end Proofs

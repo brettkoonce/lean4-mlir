@@ -384,4 +384,187 @@ theorem layerScale_has_vjp_correct {n : Nat} (γ : Vec n)
     ∑ j : Fin n, pdiv (layerScale γ) x i j * dy j :=
   (layerScale_has_vjp γ).correct x dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Vector-[D] LayerNorm — per-token forward + VJP, and its per-token (rowwise) lift
+--   (ViT's LN sites and ConvNeXt's channel-LN both read it)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Vector-[D] LayerNorm**: per-token normalize (the scalar LN at γ=1, β=0 — pure
+    x̂), then the per-channel affine `γ ⊙ x̂ + β`. The committed `ViTRender` LN form. -/
+noncomputable def layerNormVec (D : Nat) (ε : ℝ) (γv βv : Vec D) (x : Vec D) : Vec D :=
+  fun k => γv k * layerNormForward D ε 1 0 x k + βv k
+
+lemma layerNormVec_diff (D : Nat) (ε : ℝ) (γv βv : Vec D) (hε : 0 < ε) :
+    Differentiable ℝ (layerNormVec D ε γv βv) := by
+  have h : Differentiable ℝ (layerNormForward D ε 1 0) := bnForward_differentiable D ε 1 0 hε
+  unfold layerNormVec; fun_prop
+
+/-- Identity-plus-constant Jacobian: `∂(p_k + C_k)/∂p_i = δ_(i,k)`. -/
+theorem pdiv_id_add_const {m : Nat} (C : Vec m) (x : Vec m) (i j : Fin m) :
+    pdiv (fun p : Vec m => fun k => p k + C k) x i j = if i = j then 1 else 0 := by
+  rw [show (fun p : Vec m => fun k => p k + C k) = fun p => p + C from rfl,
+    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
+  simp only [basisVec_apply, @eq_comm _ j i]
+
+/-- Masked-gather-plus-constant Jacobian:
+    `∂(mask_k·cl_(σ k) + C_k)/∂cl_i = mask_k·δ_(i,σ k)`. -/
+theorem pdiv_maskGather_add_const {m D : Nat} (mask : Vec m) (σ : Fin m → Fin D)
+    (C : Vec m) (x : Vec D) (i : Fin D) (j : Fin m) :
+    pdiv (fun cl : Vec D => fun k => mask k * cl (σ k) + C k) x i j
+      = mask j * (if i = σ j then 1 else 0) := by
+  rw [show (fun cl : Vec D => fun k => mask k * cl (σ k) + C k)
+      = fun cl => (fun k => mask k * cl (σ k)) + C from rfl,
+    pdiv_of_affine _ _ (fun _ _ => by funext; simp [mul_add])
+      (fun _ _ => by funext; simp [mul_left_comm])]
+  simp only [basisVec_apply, @eq_comm _ (σ j) i]
+
+/-- The bias translation's VJP — backward is the identity (`dx = dy`). -/
+noncomputable def biasAdd_has_vjp {n : Nat} (βv : Vec n) :
+    HasVJP (fun z : Vec n => fun k => z k + βv k) where
+  backward := fun _z dy => dy
+  correct := by
+    intro z dy i
+    simp [pdiv_id_add_const βv z]
+
+/-- **Vector-LN VJP** — `(+β) ∘ layerScale γ ∘ LN(1,0)`, three proven pieces glued
+    by `vjp_comp`. Only `0 < ε`. -/
+noncomputable def layerNormVec_has_vjp (D : Nat) (ε : ℝ) (γv βv : Vec D)
+    (hε : 0 < ε) : HasVJP (layerNormVec D ε γv βv) :=
+  have h1 : Differentiable ℝ (layerNormForward D ε 1 0) :=
+    bnForward_differentiable D ε 1 0 hε
+  have h2 : Differentiable ℝ (layerScale γv) := layerScale_differentiable γv
+  have h3 : Differentiable ℝ (fun z : Vec D => fun k => z k + βv k) := by
+    rw [differentiable_pi]; intro k
+    exact (differentiable_pi.mp differentiable_id k).add_const (βv k)
+  vjp_comp _ (fun z : Vec D => fun k => z k + βv k) (h2.comp h1) h3
+    (vjp_comp (layerNormForward D ε 1 0) (layerScale γv) h1 h2
+      (layerNorm_has_vjp D ε 1 0 hε) (layerScale_has_vjp γv))
+    (biasAdd_has_vjp βv)
+
+/-- Per-token vector-LN across a sequence — the rowwise lift. -/
+noncomputable def layerNormVec_per_token_has_vjp_mat (N D : Nat) (ε : ℝ)
+    (γv βv : Vec D) (hε : 0 < ε) :
+    HasVJPMat (fun X : Mat N D => fun r => layerNormVec D ε γv βv (X r)) :=
+  rowwise_has_vjp_mat (layerNormVec_has_vjp D ε γv βv hε)
+    (layerNormVec_diff D ε γv βv hε)
+
+/-- Generic flat differentiability of a rowwise lift — each output coordinate
+    is a coordinate of the per-row map applied to one row of the input. -/
+lemma rowwise_flat_diff {N D P : Nat} (g : Vec D → Vec P)
+    (hg : Differentiable ℝ g) :
+    Differentiable ℝ (fun v : Vec (N * D) =>
+      Mat.flatten ((fun X : Mat N D => fun n => g (X n)) (Mat.unflatten v))) := by
+  unfold Mat.flatten Mat.unflatten; fun_prop
+
+lemma layerNormVec_per_token_flat_diff (N D : Nat) (ε : ℝ) (γv βv : Vec D)
+    (hε : 0 < ε) :
+    Differentiable ℝ (fun v : Vec (N * D) =>
+      Mat.flatten ((fun X : Mat N D => fun n => layerNormVec D ε γv βv (X n))
+                   (Mat.unflatten v))) :=
+  rowwise_flat_diff _ (layerNormVec_diff D ε γv βv hε)
+
+-- ════════════════════════════════════════════════════════════════
+-- § Vector-LN γ/β parameter gradients
+--
+-- As a function of `γv : Vec D`, the rowwise vector-LN site is a coefficient-gather:
+-- `y_(r,k) = x̂_r(k)·γv(k) + βv(k)` — the masked-gather Jacobian recipe
+-- (`pdiv_maskGather_add_const`) with the per-row x̂ as the coefficient. The
+-- per-channel grads keep the channel axis: `dγ_k = Σ_tokens dy_(r,k)·x̂_r(k)`,
+-- `dβ_k = Σ_tokens dy_(r,k)` — `ViTRender`'s LN param-grad reduces.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Jacobian of the rowwise vector-LN site w.r.t. γv** —
+    `∂y_(r,k)/∂γv_i = δ_(i,k)·x̂_r(k)`. -/
+theorem pdiv_vecLN_gamma {N D : Nat} (ε : ℝ) (βv : Vec D) (X : Mat N D)
+    (γ : Vec D) (i : Fin D) (o : Fin (N * D)) :
+    pdiv (fun gv : Vec D =>
+            Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
+      = layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o).1)
+          (finProdFinEquiv.symm o).2 *
+        (if i = (finProdFinEquiv.symm o).2 then 1 else 0) := by
+  rw [show (fun gv : Vec D => Mat.flatten (fun r => layerNormVec D ε gv βv (X r)))
+        = (fun gv : Vec D => fun o' : Fin (N * D) =>
+            (fun o'' : Fin (N * D) =>
+              layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o'').1)
+                (finProdFinEquiv.symm o'').2) o' *
+              gv ((fun o'' : Fin (N * D) => (finProdFinEquiv.symm o'').2) o') +
+            (fun o'' : Fin (N * D) =>
+              βv (finProdFinEquiv.symm o'').2) o') from by
+      funext gv o'
+      unfold layerNormVec Mat.flatten
+      ring]
+  exact pdiv_maskGather_add_const _ _ _ γ i o
+
+/-- **Jacobian of the rowwise vector-LN site w.r.t. βv** — `∂y_(r,k)/∂βv_i = δ_(i,k)`. -/
+theorem pdiv_vecLN_beta {N D : Nat} (ε : ℝ) (γv : Vec D) (X : Mat N D)
+    (β : Vec D) (i : Fin D) (o : Fin (N * D)) :
+    pdiv (fun bv : Vec D =>
+            Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
+      = if i = (finProdFinEquiv.symm o).2 then 1 else 0 := by
+  rw [show (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γv bv (X r)))
+        = fun bv => (fun o' : Fin (N * D) => bv (finProdFinEquiv.symm o').2) +
+            fun o' => γv (finProdFinEquiv.symm o').2 *
+              layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o').1)
+                (finProdFinEquiv.symm o').2 from by
+      funext bv o'
+      unfold layerNormVec Mat.flatten
+      exact add_comm _ _,
+    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
+  simp [@eq_comm _ i]
+
+/-- The rendered **vector-LN γ gradient**: per-channel, the batch+token reduce
+    `dγ_k = Σ_r dY_(r,k)·x̂_r(k)` (KEEPS the channel axis — `ViTRender`'s form). -/
+noncomputable def vecLN_grad_gamma (N D : Nat) (ε : ℝ) (X dY : Mat N D) : Vec D :=
+  fun i => ∑ r : Fin N, dY r i * layerNormForward D ε 1 0 (X r) i
+
+/-- The rendered **vector-LN β gradient**: `dβ_k = Σ_r dY_(r,k)`. -/
+noncomputable def vecLN_grad_beta (N D : Nat) (dY : Mat N D) : Vec D :=
+  fun i => ∑ r : Fin N, dY r i
+
+/-- **Vector-LN γ-gradient bridge.** -/
+theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Vec D)
+    (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
+    vecLN_grad_gamma N D ε X (Mat.unflatten dy) i
+      = ∑ o : Fin (N * D),
+          pdiv (fun gv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
+            * dy o := by
+  simp_rw [pdiv_vecLN_gamma]
+  rw [sum_finProdFinEquiv (m := N) (n := D)]
+  simp [vecLN_grad_gamma, Mat.unflatten, mul_comm]
+
+/-- **Vector-LN β-gradient bridge.** -/
+theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec D)
+    (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
+    vecLN_grad_beta N D (Mat.unflatten dy) i
+      = ∑ o : Fin (N * D),
+          pdiv (fun bv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
+            * dy o := by
+  simp_rw [pdiv_vecLN_beta]
+  rw [sum_finProdFinEquiv (m := N) (n := D)]
+  simp [vecLN_grad_beta, Mat.unflatten]
+
+/-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes
+    the certified rowwise vector-LN ∂/∂γv contraction. Covers all five LN sites of
+    the vector-LN representative (and is the `ViTRender` per-channel LN-γ reduce). -/
+theorem vit_render_veclngamma_certified {N D : Nat} (ε : ℝ) (βv : Vec D)
+    (γ : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
+    γ i - lr * vecLN_grad_gamma N D ε X (Mat.unflatten dy) i
+      = γ i - lr * ∑ o : Fin (N * D),
+          pdiv (fun gv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
+            * dy o := by
+  rw [vit_veclnGamma_grad_bridge ε βv γ X dy i]
+
+/-- **Vector-LN β output, certified.** -/
+theorem vit_render_veclnbeta_certified {N D : Nat} (ε : ℝ) (γv : Vec D)
+    (β : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
+    β i - lr * vecLN_grad_beta N D (Mat.unflatten dy) i
+      = β i - lr * ∑ o : Fin (N * D),
+          pdiv (fun bv : Vec D =>
+                  Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
+            * dy o := by
+  rw [vit_veclnBeta_grad_bridge ε γv β X dy i]
+
 end Proofs

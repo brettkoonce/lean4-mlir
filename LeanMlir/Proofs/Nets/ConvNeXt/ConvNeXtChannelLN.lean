@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
-import LeanMlir.Proofs.Nets.ViT.ViTVecLN
+import LeanMlir.Proofs.Architectures.LayerNorm
 import LeanMlir.Proofs.Foundation.IndexCast
 
 /-! # ConvNeXt's REAL channel LayerNorm — the math side of §2m Route A
@@ -19,7 +19,7 @@ Every piece below is already proven and shipping:
 |---|---|
 | `reassocFwd`/`reassocBack` + VJPs | `PerChannelBN.lean` (the per-channel BN layout bridge) |
 | `transpose_has_vjp` | `Tensor.lean` |
-| `layerNormVec` + `layerNormVec_per_token_has_vjp_mat` | `ViTVecLN.lean` (ViT's `[192]` LN) |
+| `layerNormVec` + `layerNormVec_per_token_has_vjp_mat` | `LayerNorm` (ViT's `[192]` LN uses the same op) |
 | `hasVJPMat_to_hasVJP` | `Tensor.lean` |
 
 Settled on device before any of this was written (`lake build channel-ln`): the composition ties

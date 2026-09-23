@@ -11,7 +11,7 @@ everything in a ViT is per-example separable (the EfficientNet contrast).
 |--------------------------------------|----------------------------|--------------|
 | Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the M2 outer-product bridge row-lifted |
 | classifier `Wcls`/`bcls`             | dense on the CLS row       | M2 `weight/bias_grad_bridge` (**reuse** — single-vector dense) |
-| LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `vit_vecln{Gamma,Beta}_grad_bridge` (`ViTVecLN`) |
+| LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `vit_vecln{Gamma,Beta}_grad_bridge` (`LayerNorm`) |
 | `pos_embed`                          | additive (`patchEmbed_flat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
 | `cls_token`                          | row-0 scatter (`patchEmbed_flat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
 | patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbed_flat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
@@ -145,25 +145,6 @@ theorem vit_render_rowdenseb_certified {N a c : Nat} (W : Mat a c) (X : Mat N a)
 -- as a function of the CLS token it is a row-0 masked gather
 -- (⇒ dCls = the row-0 slice of the cotangent — exactly `clsSliceF`'s shape).
 -- ════════════════════════════════════════════════════════════════
-
-/-- Identity-plus-constant Jacobian: `∂(p_k + C_k)/∂p_i = δ_(i,k)`. -/
-theorem pdiv_id_add_const {m : Nat} (C : Vec m) (x : Vec m) (i j : Fin m) :
-    pdiv (fun p : Vec m => fun k => p k + C k) x i j = if i = j then 1 else 0 := by
-  rw [show (fun p : Vec m => fun k => p k + C k) = fun p => p + C from rfl,
-    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
-  simp only [basisVec_apply, @eq_comm _ j i]
-
-/-- Masked-gather-plus-constant Jacobian:
-    `∂(mask_k·cl_(σ k) + C_k)/∂cl_i = mask_k·δ_(i,σ k)`. -/
-theorem pdiv_maskGather_add_const {m D : Nat} (mask : Vec m) (σ : Fin m → Fin D)
-    (C : Vec m) (x : Vec D) (i : Fin D) (j : Fin m) :
-    pdiv (fun cl : Vec D => fun k => mask k * cl (σ k) + C k) x i j
-      = mask j * (if i = σ j then 1 else 0) := by
-  rw [show (fun cl : Vec D => fun k => mask k * cl (σ k) + C k)
-      = fun cl => (fun k => mask k * cl (σ k)) + C from rfl,
-    pdiv_of_affine _ _ (fun _ _ => by funext; simp [mul_add])
-      (fun _ _ => by funext; simp [mul_left_comm])]
-  simp only [basisVec_apply, @eq_comm _ (σ j) i]
 
 /-- **Jacobian of `patchEmbed_flat` w.r.t. the (flattened) position embedding** —
     the identity: pos is broadcast-added to every token. -/

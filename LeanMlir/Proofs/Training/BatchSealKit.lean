@@ -34,7 +34,7 @@ and `bnBatchLA_bcell` is the bridge. Everything after it is the usual BN algebra
   workhorse: a channel-independent property of every cell of a `bnBatchLA` output reduces to the
   scalar `bnForward` on one row, with no index decomposition at the call site).
 * §2 the BN consequences the seals need: constant channel ↦ `β`, the `|bn − β| ≤ |γ|√n` margin
-  (hence positivity, hence relu off its kink **at every input**; hence, two-sided, the relu6
+  (`bnForward_abs_sub_le`, in `BatchNorm` with the other op-level BN facts; hence positivity, hence relu off its kink **at every input**; hence, two-sided, the relu6
   window `bnBatchLA_window` / `bnBatchLA_smooth6`), the example-difference identity, and
   within-example injectivity (the stem pool's no-tie).
 * §3 the centre-tap kernel `ctK` and its conv value: the one weight shape that carries a signal
@@ -45,10 +45,11 @@ and `bnBatchLA_bcell` is the bridge. Everything after it is the usual BN algebra
   the even ones (`decimateOdd_unflatten`, `flatConvStride2Xla_ctK`, `bcell_convS2Xla_ctK`).
 * §3c the centre-tap **depthwise** kernel `ctDW`. ⭐ A depthwise cannot broadcast, so where `ctK`
   collapses the carrier to one value at every output channel, `ctDW` scales it channel by channel.
-* §4 the 3×3/s2 pool: it shifts with a uniform offset (`maxPool3s2_shift`, no argmax argument), and
-  it preserves nonnegativity.
-* §5 continuity odds and ends for the ray argument (`relu`, `bnIstd`; `relu6_continuous` sits with
-  `relu6` itself).
+* The op-level facts the ray argument leans on live with their ops, not here: the 3×3/s2 pool
+  shifts with a uniform offset and keeps nonnegativity (`maxPool3s2_shift`, `maxPool3s2_nonneg`,
+  `MaxPool3s2`), GAP shifts likewise (`globalAvgPool_shift`, `CNN`), and `relu`, `residual`, the
+  pool, `batchMap` and `bnIstd` are continuous (`MLP`, `Residual`, `MaxPool3s2`, `Batched`,
+  `BatchNorm`). §5 keeps `bnRowLA_continuous`, which is about this file's own reindex.
 * §11 the SYMMETRIC strided depthwise (`EDiff_dwS2`), MobileNetV4's; §3c's is the XLA one.
 * §12–§14 what MobileNetV4's **swish** needs, and nothing else does. ⭐⭐ `EDiff` carries only the
   gap between the two examples, which is all a relu-in-the-window or a centre-tap conv reads. A
@@ -203,28 +204,6 @@ theorem bnBatchLA_pointwise {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc)
 -- ════════════════════════════════════════════════════════════════
 -- § 2. What BN does to the structural weights
 -- ════════════════════════════════════════════════════════════════
-
-/-- **BN acts on coordinate differences by `γ·istd`** — the exact identity that propagates the
-    carrier undamped through every BN, and the reason no BN-variance derivative is ever taken:
-    the difference is `γ · (difference) · istd` with `istd` evaluated at the *same* activation. -/
-theorem bnForward_chan_diff_γ {n : Nat} (ε γ β : ℝ) (z : Vec n) (k₀ k₁ : Fin n) :
-    bnForward n ε γ β z k₀ - bnForward n ε γ β z k₁ = γ * (z k₀ - z k₁) * bnIstd n z ε := by
-  simp only [bnForward, bnXhat]; ring
-
-/-- **The two-sided BN margin** `|bn − β| ≤ |γ|·√n`, with no mean/variance computation
-    (`bnXhat_sq_le`). `bnForward_lb`'s symmetric form; what makes a large `β` keep a relu off its
-    kink at **every** input, so the structural net needs no eventually-argument for its relus. -/
-theorem bnForward_abs_sub_le {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (v : Vec n) (k : Fin n) :
-    |bnForward n ε γ β v k - β| ≤ |γ| * Real.sqrt (n : ℝ) := by
-  have habs : |bnXhat n ε v k| ≤ Real.sqrt (n : ℝ) := Real.abs_le_sqrt (bnXhat_sq_le ε hε v k)
-  have he : bnForward n ε γ β v k - β = γ * bnXhat n ε v k := by simp only [bnForward]; ring
-  rw [he, abs_mul]
-  exact mul_le_mul_of_nonneg_left habs (abs_nonneg γ)
-
-/-- `√n < β` from `n < β²` — the margin check at each of the witness's BN widths. -/
-theorem sqrt_lt_param (n : ℕ) (β : ℝ) (hβ : 0 ≤ β) (h : (n : ℝ) < β ^ 2) :
-    Real.sqrt (n : ℝ) < β :=
-  (Real.sqrt_lt n.cast_nonneg hβ).2 h
 
 /-- A constant activation has a constant row. -/
 theorem bnRowLA_const {N oc h w : Nat} (c₀ : ℝ) (ci : Fin oc) :
@@ -574,81 +553,16 @@ theorem forall_flat_of_cell {N c h w : Nat} {v : Vec (N * (c * h * w))} {P : ℝ
   exact hc n ci ii jj
 
 -- ════════════════════════════════════════════════════════════════
--- § 4. The stem pool
+-- § 5. `bnRowLA` is continuous (the other continuity, BN-bound and pool-shift facts the ray
+--   argument uses are in their op files: `BatchNorm`, `MLP`, `Residual`, `MaxPool3s2`, `CNN`,
+--   `Batched`)
 -- ════════════════════════════════════════════════════════════════
-
-/-- ⭐ **The 3×3/s2 pool shifts with a uniform offset.** If one slab's channel is another's plus
-    the constant `δ`, so are their pooled values — `max` of a uniformly shifted family
-    (`Finset.apply_sup'_eq_sup'_comp` at `(· + δ)`). No argmax or eventually-argument: this holds at
-    every point of the ray, which is what lets the carrier cross the only real kink in the net. -/
-theorem maxPool3s2_shift {c h w : Nat} (x y : Tensor3 c (2 * h) (2 * w)) (δ : ℝ) (ci : Fin c)
-    (hxy : ∀ r s, x ci r s = y ci r s + δ) (hi : Fin h) (wi : Fin w) :
-    maxPool3s2 x ci hi wi = maxPool3s2 y ci hi wi + δ := by
-  have hg : ∀ p q : ℝ, (p ⊔ q) + δ = (p + δ) ⊔ (q + δ) := fun p q => (max_add_add_right p q δ).symm
-  simp only [maxPool3s2, hxy]
-  exact (Finset.apply_sup'_eq_sup'_comp Finset.univ_nonempty (fun z : ℝ => z + δ) hg).symm
-
-/-- The pool keeps a nonnegative slab nonnegative (it selects a window cell). -/
-theorem maxPool3s2_nonneg {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
-    (hx : ∀ ci r s, 0 ≤ x ci r s) (ci : Fin c) (hi : Fin h) (wi : Fin w) :
-    0 ≤ maxPool3s2 x ci hi wi :=
-  le_trans (hx _ _ _) (le_maxPool3s2 x ci hi wi (0, 0))
-
--- ════════════════════════════════════════════════════════════════
--- § 4b. The head
--- ════════════════════════════════════════════════════════════════
-
-/-- **GAP of a uniformly shifted channel is shifted by the same constant.** -/
-theorem globalAvgPool_shift {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (x y : Tensor3 c h w) (δ : ℝ)
-    (ci : Fin c) (hxy : ∀ i j, x ci i j = y ci i j + δ) :
-    globalAvgPool x ci = globalAvgPool y ci + δ := by
-  have hh' : ((h : ℝ)) ≠ 0 := Nat.cast_ne_zero.mpr hh.ne'
-  have hw' : ((w : ℝ)) ≠ 0 := Nat.cast_ne_zero.mpr hw.ne'
-  simp only [globalAvgPool, hxy, Finset.sum_add_distrib, Finset.sum_const, Finset.card_univ,
-    Fintype.card_fin, nsmul_eq_mul]
-  field_simp
-
--- ════════════════════════════════════════════════════════════════
--- § 5. Continuity odds and ends (the ray argument)
--- ════════════════════════════════════════════════════════════════
-
-/-- `relu` is continuous everywhere — it is `max · 0`; only its *derivative* has a kink. -/
-theorem relu_continuous (n : Nat) : Continuous (relu n) :=
-  continuous_pi fun k => by simp only [relu_apply_eq_max]; exact (continuous_apply k).max continuous_const
-
-/-- A residual branch is continuous when its body is. -/
-theorem residual_continuous {n : Nat} (F : Vec n → Vec n) (hF : Continuous F) :
-    Continuous (residual F) :=
-  continuous_pi (fun k => ((continuous_apply k).comp hF).add (continuous_apply k))
-
-/-- A projected residual is continuous when both branches are. -/
-theorem residualProj_continuous {m n : Nat} (P F : Vec m → Vec n) (hP : Continuous P)
-    (hF : Continuous F) : Continuous (residualProj P F) :=
-  continuous_pi (fun k => ((continuous_apply k).comp hP).add ((continuous_apply k).comp hF))
-
-/-- `bnIstd` is continuous in the activation (`ε > 0`). -/
-theorem bnIstd_cont {n : Nat} (ε : ℝ) (hε : 0 < ε) (k : Fin n) :
-    Continuous (fun v : Vec n => bnIstd n v ε) :=
-  (continuous_apply k).comp (bnIstdBroadcast_diff n ε hε).continuous
 
 /-- `bnRowLA` is continuous in the activation — it is a reindex. -/
 theorem bnRowLA_continuous (N oc h w : Nat) (c : Fin oc) :
     Continuous (fun v : Vec (N * (oc * h * w)) => bnRowLA N oc h w v c) := by
   refine continuous_pi (fun q => ?_)
   exact continuous_apply _
-
-/-- `maxPool3s2Flat` is continuous (a `sup'` of coordinates). -/
-theorem maxPool3s2Flat_continuous (c h w : Nat) : Continuous (maxPool3s2Flat c h w) := by
-  refine continuous_pi (fun k => ?_)
-  show Continuous (fun v => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)) k)
-  simp only [Tensor3.flatten, maxPool3s2, Tensor3.unflatten]
-  exact Continuous.finset_sup'_apply Finset.univ_nonempty (fun ab _ => continuous_apply _)
-
-/-- `batchMap` of a continuous per-example op is continuous. -/
-theorem batchMap_continuous {N a b : Nat} (f : Vec a → Vec b) (hf : Continuous f) :
-    Continuous (StableHLO.batchMap N f) := by
-  refine continuous_pi (fun k => ?_)
-  exact ((continuous_apply _).comp hf).comp (continuous_pi (fun _ => continuous_apply _))
 
 -- ════════════════════════════════════════════════════════════════
 -- § 6. Channel-constant parameters and zeroed kernels
@@ -1103,16 +1017,6 @@ theorem BUnif_map {c h w : Nat} (f : ℝ → ℝ) (a a' : Fin 2 → Fin c → �
 --   `β ± γ·(gap/2)·istd`. THAT is what lets a non-affine activation be crossed: its two outputs
 --   are a function of the gap alone.
 -- ════════════════════════════════════════════════════════════════
-theorem bnMean_pair (m : Nat) (hm : 0 < m) (a : Fin 2 → ℝ) (z : Vec (2 * m))
-    (hz : ∀ (n : Fin 2) (q : Fin m), z (finProdFinEquiv (n, q)) = a n) :
-    bnMean (2 * m) z = (a 0 + a 1) / 2 := by
-  have : Nonempty (Fin m) := ⟨⟨0, hm⟩⟩
-  rw [bnMean_eq_expect, ← Fintype.expect_equiv finProdFinEquiv (fun p => z (finProdFinEquiv p)) z
-    (fun _ => rfl), ← Finset.univ_product_univ, Finset.expect_product]
-  simp only [hz, Fintype.expect_const]
-  simp only [Fintype.expect_eq_sum_div_card, Fin.sum_univ_two, Fintype.card_fin]
-  norm_num
-
 theorem bnBatchLA_pair {oc h w : Nat} (hhw : 0 < h * w) (ε : ℝ) (γ β : Vec oc)
     (a : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (oc * h * w)))
     (hv : BUnif (h := h) (w := w) a v) (a' : Fin 2 → Fin oc → ℝ)
@@ -1200,16 +1104,6 @@ theorem swishGap_pos {β u : ℝ} (hu : 0 < u) (hub : u ≤ β) : 0 < swishGap �
   have := swishScalar_lt h1 h2
   simp only [swishGap]
   linarith
-
-/-- with `ε = 1` a batch `istd` is at most `1`, which keeps the ray's gap inside the window
-    `swishGap_pos` needs. -/
-theorem bnIstd_le_one {n : Nat} (z : Vec n) : bnIstd n z 1 ≤ 1 := by
-  have hv := bnVar_nonneg n z
-  have h1 : (1:ℝ) ≤ Real.sqrt (bnVar n z + 1) := by
-    have hs : Real.sqrt 1 ≤ Real.sqrt (bnVar n z + 1) := Real.sqrt_le_sqrt (by linarith)
-    simpa using hs
-  rw [bnIstd, div_le_one (by linarith)]
-  exact h1
 
 end BatchSeal
 namespace R34FullBSeal

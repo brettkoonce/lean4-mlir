@@ -75,4 +75,11 @@ theorem batchMap_pointwise {N n : Nat} (g : ℝ → ℝ) (v : Vec (N * n)) :
   congrArg (fun w idx => g (w idx)) (Mat.flatten_unflatten v)
 
 end StableHLO
+
+/-- `batchMap` of a continuous per-example op is continuous. -/
+theorem batchMap_continuous {N a b : Nat} (f : Vec a → Vec b) (hf : Continuous f) :
+    Continuous (StableHLO.batchMap N f) := by
+  refine continuous_pi (fun k => ?_)
+  exact ((continuous_apply _).comp hf).comp (continuous_pi (fun _ => continuous_apply _))
+
 end Proofs

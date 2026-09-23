@@ -1,26 +1,19 @@
 import LeanMlir.Proofs.Nets.ViT.ViTChainClose
 
-/-! # ViT scaling pass — the vector-[D] LayerNorm upgrade
+/-! # ViT at vector-[D] LayerNorm
 
-The representative ViT close (Items A–D) used the proof's *scalar* LN γ/β. The
-committed production render (`ViTRender.lean`, the GPU-trained ViT-Tiny) is MORE
-faithful: vector `γ, β : [D]` per LN site, decomposed as
-`scalar-LN(1,0) ∘ per-channel scale γ ∘ + β`. This file brings the close to that
-form — `planning/archive/vit_close.md`'s top scaling-pass item:
+The committed ViT render (`ViTRender.lean`, the GPU-trained ViT-Tiny) carries a vector `γ, β : [D]`
+per LN site, spelled `scalar-LN(1,0) ∘ per-channel scale γ ∘ + β`. The op itself — `layerNormVec`,
+its VJP, its per-token lift and its γ/β parameter gradients (`vecLN_grad_gamma` / `_beta` and the
+`vit_render_vecln*_certified` step forms) — is in `Architectures/LayerNorm`, which ConvNeXt's
+channel-LN shares. This file is ViT's use of it:
 
-* **`layerNormVec`** — per-token normalize (scalar-LN at γ=1, β=0) then the
-  per-channel affine `γ ⊙ · + β`, with `HasVJP` composed from `layerNorm_has_vjp`
-  (at 1,0), `layerScale_has_vjp` (ch9), and the bias translation.
-* **`transformerBlockV`** — the vector-LN block, with its VJP composed through the
-  sublayer recipe (`biPathMat_has_vjp` + `vjpMat_comp` + `rowwise_has_vjp_mat`).
-  UNCONDITIONAL except `0 < ε`. The depth-`k` net built from it is `ViTDepthK`'s.
-* **The row-broadcast flat bridges** (`rowScaleFlat_flat`, `rowBiasFlat_flat`) for the
-  tokens each vector-LN site is spelled with: `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β`
-  (exactly the ViTRender decomposition).
-* **Vector γ/β param bridges** (`vit_render_vecln{gamma,beta}_certified`) — the
-  per-channel grads `dγ_k = Σ_tokens dy_(r,k)·x̂_r(k)`, `dβ_k = Σ_tokens dy_(r,k)`
-  (reduce over batch+tokens, KEEP the channel axis), certified via the
-  masked-gather Jacobian recipe.
+* §1 **`transformerBlockV`** — the vector-LN block, with its VJP composed through the sublayer
+  recipe (`biPathMat_has_vjp` + `vjpMat_comp` + `rowwise_has_vjp_mat`). UNCONDITIONAL except
+  `0 < ε`. The depth-`k` net built from it is `ViTDepthK`'s.
+* §2 **the row-broadcast flat bridges** (`rowScaleFlat_flat`, `rowBiasFlat_flat`) for the tokens
+  each vector-LN site is spelled with: `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β`.
+* §3 **the chain cotangents** at vector LN.
 -/
 
 namespace Proofs
@@ -28,65 +21,7 @@ namespace Proofs
 open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
--- § 1. Vector-[D] LayerNorm — per-token forward + VJP
--- ════════════════════════════════════════════════════════════════
-
-/-- **Vector-[D] LayerNorm**: per-token normalize (the scalar LN at γ=1, β=0 — pure
-    x̂), then the per-channel affine `γ ⊙ x̂ + β`. The committed `ViTRender` LN form. -/
-noncomputable def layerNormVec (D : Nat) (ε : ℝ) (γv βv : Vec D) (x : Vec D) : Vec D :=
-  fun k => γv k * layerNormForward D ε 1 0 x k + βv k
-
-lemma layerNormVec_diff (D : Nat) (ε : ℝ) (γv βv : Vec D) (hε : 0 < ε) :
-    Differentiable ℝ (layerNormVec D ε γv βv) := by
-  unfold layerNormVec; fun_prop (disch := assumption)
-
-/-- The bias translation's VJP — backward is the identity (`dx = dy`). -/
-noncomputable def biasAdd_has_vjp {n : Nat} (βv : Vec n) :
-    HasVJP (fun z : Vec n => fun k => z k + βv k) where
-  backward := fun _z dy => dy
-  correct := by
-    intro z dy i
-    simp [pdiv_id_add_const βv z]
-
-/-- **Vector-LN VJP** — `(+β) ∘ layerScale γ ∘ LN(1,0)`, three proven pieces glued
-    by `vjp_comp`. Only `0 < ε`. -/
-noncomputable def layerNormVec_has_vjp (D : Nat) (ε : ℝ) (γv βv : Vec D)
-    (hε : 0 < ε) : HasVJP (layerNormVec D ε γv βv) :=
-  have h1 : Differentiable ℝ (layerNormForward D ε 1 0) :=
-    bnForward_differentiable D ε 1 0 hε
-  have h2 : Differentiable ℝ (layerScale γv) := layerScale_differentiable γv
-  have h3 : Differentiable ℝ (fun z : Vec D => fun k => z k + βv k) := by
-    rw [differentiable_pi]; intro k
-    exact (differentiable_pi.mp differentiable_id k).add_const (βv k)
-  vjp_comp _ (fun z : Vec D => fun k => z k + βv k) (h2.comp h1) h3
-    (vjp_comp (layerNormForward D ε 1 0) (layerScale γv) h1 h2
-      (layerNorm_has_vjp D ε 1 0 hε) (layerScale_has_vjp γv))
-    (biasAdd_has_vjp βv)
-
-/-- Per-token vector-LN across a sequence — the rowwise lift. -/
-noncomputable def layerNormVec_per_token_has_vjp_mat (N D : Nat) (ε : ℝ)
-    (γv βv : Vec D) (hε : 0 < ε) :
-    HasVJPMat (fun X : Mat N D => fun r => layerNormVec D ε γv βv (X r)) :=
-  rowwise_has_vjp_mat (layerNormVec_has_vjp D ε γv βv hε)
-    (layerNormVec_diff D ε γv βv hε)
-
-/-- Generic flat differentiability of a rowwise lift — each output coordinate
-    is a coordinate of the per-row map applied to one row of the input. -/
-lemma rowwise_flat_diff {N D P : Nat} (g : Vec D → Vec P)
-    (hg : Differentiable ℝ g) :
-    Differentiable ℝ (fun v : Vec (N * D) =>
-      Mat.flatten ((fun X : Mat N D => fun n => g (X n)) (Mat.unflatten v))) := by
-  unfold Mat.flatten Mat.unflatten; fun_prop
-
-lemma layerNormVec_per_token_flat_diff (N D : Nat) (ε : ℝ) (γv βv : Vec D)
-    (hε : 0 < ε) :
-    Differentiable ℝ (fun v : Vec (N * D) =>
-      Mat.flatten ((fun X : Mat N D => fun n => layerNormVec D ε γv βv (X n))
-                   (Mat.unflatten v))) :=
-  rowwise_flat_diff _ (layerNormVec_diff D ε γv βv hε)
-
--- ════════════════════════════════════════════════════════════════
--- § 2. The vector-LN transformer block (sublayers + block + VJP)
+-- § 1. The vector-LN transformer block (sublayers + block + VJP)
 -- ════════════════════════════════════════════════════════════════
 
 /-- Attention sublayer with vector-LN: `X ↦ X + MHSA(LNᵥ(X))`. -/
@@ -244,7 +179,7 @@ end Proofs
 namespace Proofs.StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § 3. Row-broadcast flat bridges
+-- § 2. Row-broadcast flat bridges
 -- ════════════════════════════════════════════════════════════════
 
 /-- Row-broadcast scale commutation bridge. -/
@@ -264,115 +199,7 @@ end Proofs.StableHLO
 namespace Proofs
 
 -- ════════════════════════════════════════════════════════════════
--- § 4. Vector γ/β param bridges (the Item C analogue at vector LN)
---
--- As a function of `γv : Vec D`, the rowwise vector-LN site is a coefficient-gather:
--- `y_(r,k) = x̂_r(k)·γv(k) + βv(k)` — the masked-gather Jacobian recipe
--- (`pdiv_maskGather_add_const`) with the per-row x̂ as the coefficient. The
--- per-channel grads keep the channel axis: `dγ_k = Σ_tokens dy_(r,k)·x̂_r(k)`,
--- `dβ_k = Σ_tokens dy_(r,k)` — `ViTRender`'s LN param-grad reduces.
--- ════════════════════════════════════════════════════════════════
-
-/-- **Jacobian of the rowwise vector-LN site w.r.t. γv** —
-    `∂y_(r,k)/∂γv_i = δ_(i,k)·x̂_r(k)`. -/
-theorem pdiv_vecLN_gamma {N D : Nat} (ε : ℝ) (βv : Vec D) (X : Mat N D)
-    (γ : Vec D) (i : Fin D) (o : Fin (N * D)) :
-    pdiv (fun gv : Vec D =>
-            Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
-      = layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o).1)
-          (finProdFinEquiv.symm o).2 *
-        (if i = (finProdFinEquiv.symm o).2 then 1 else 0) := by
-  rw [show (fun gv : Vec D => Mat.flatten (fun r => layerNormVec D ε gv βv (X r)))
-        = (fun gv : Vec D => fun o' : Fin (N * D) =>
-            (fun o'' : Fin (N * D) =>
-              layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o'').1)
-                (finProdFinEquiv.symm o'').2) o' *
-              gv ((fun o'' : Fin (N * D) => (finProdFinEquiv.symm o'').2) o') +
-            (fun o'' : Fin (N * D) =>
-              βv (finProdFinEquiv.symm o'').2) o') from by
-      funext gv o'
-      unfold layerNormVec Mat.flatten
-      ring]
-  exact pdiv_maskGather_add_const _ _ _ γ i o
-
-/-- **Jacobian of the rowwise vector-LN site w.r.t. βv** — `∂y_(r,k)/∂βv_i = δ_(i,k)`. -/
-theorem pdiv_vecLN_beta {N D : Nat} (ε : ℝ) (γv : Vec D) (X : Mat N D)
-    (β : Vec D) (i : Fin D) (o : Fin (N * D)) :
-    pdiv (fun bv : Vec D =>
-            Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
-      = if i = (finProdFinEquiv.symm o).2 then 1 else 0 := by
-  rw [show (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γv bv (X r)))
-        = fun bv => (fun o' : Fin (N * D) => bv (finProdFinEquiv.symm o').2) +
-            fun o' => γv (finProdFinEquiv.symm o').2 *
-              layerNormForward D ε 1 0 (X (finProdFinEquiv.symm o').1)
-                (finProdFinEquiv.symm o').2 from by
-      funext bv o'
-      unfold layerNormVec Mat.flatten
-      exact add_comm _ _,
-    pdiv_of_affine _ _ (fun _ _ => rfl) (fun _ _ => rfl)]
-  simp [@eq_comm _ i]
-
-/-- The rendered **vector-LN γ gradient**: per-channel, the batch+token reduce
-    `dγ_k = Σ_r dY_(r,k)·x̂_r(k)` (KEEPS the channel axis — `ViTRender`'s form). -/
-noncomputable def vecLN_grad_gamma (N D : Nat) (ε : ℝ) (X dY : Mat N D) : Vec D :=
-  fun i => ∑ r : Fin N, dY r i * layerNormForward D ε 1 0 (X r) i
-
-/-- The rendered **vector-LN β gradient**: `dβ_k = Σ_r dY_(r,k)`. -/
-noncomputable def vecLN_grad_beta (N D : Nat) (dY : Mat N D) : Vec D :=
-  fun i => ∑ r : Fin N, dY r i
-
-/-- **Vector-LN γ-gradient bridge.** -/
-theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Vec D)
-    (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
-    vecLN_grad_gamma N D ε X (Mat.unflatten dy) i
-      = ∑ o : Fin (N * D),
-          pdiv (fun gv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
-            * dy o := by
-  simp_rw [pdiv_vecLN_gamma]
-  rw [sum_finProdFinEquiv (m := N) (n := D)]
-  simp [vecLN_grad_gamma, Mat.unflatten, mul_comm]
-
-/-- **Vector-LN β-gradient bridge.** -/
-theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec D)
-    (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
-    vecLN_grad_beta N D (Mat.unflatten dy) i
-      = ∑ o : Fin (N * D),
-          pdiv (fun bv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
-            * dy o := by
-  simp_rw [pdiv_vecLN_beta]
-  rw [sum_finProdFinEquiv (m := N) (n := D)]
-  simp [vecLN_grad_beta, Mat.unflatten]
-
-/-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes
-    the certified rowwise vector-LN ∂/∂γv contraction. Covers all five LN sites of
-    the vector-LN representative (and is the `ViTRender` per-channel LN-γ reduce). -/
-theorem vit_render_veclngamma_certified {N D : Nat} (ε : ℝ) (βv : Vec D)
-    (γ : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
-    γ i - lr * vecLN_grad_gamma N D ε X (Mat.unflatten dy) i
-      = γ i - lr * ∑ o : Fin (N * D),
-          pdiv (fun gv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
-            * dy o := by
-  rw [vit_veclnGamma_grad_bridge ε βv γ X dy i]
-
-/-- **Vector-LN β output, certified.** -/
-theorem vit_render_veclnbeta_certified {N D : Nat} (ε : ℝ) (γv : Vec D)
-    (β : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
-    β i - lr * vecLN_grad_beta N D (Mat.unflatten dy) i
-      = β i - lr * ∑ o : Fin (N * D),
-          pdiv (fun bv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
-            * dy o := by
-  rw [vit_veclnBeta_grad_bridge ε γv β X dy i]
-
-end Proofs
-
-namespace Proofs
-
--- ════════════════════════════════════════════════════════════════
--- § 5. Vector-LN chain cotangents (the Item D analogue)
+-- § 3. Vector-LN chain cotangents
 --
 -- The vector-LN block backward decomposes each LN input-VJP as the render emits
 -- it: `rowScaleF γ` on the cotangent (diagonal — the forward token), then

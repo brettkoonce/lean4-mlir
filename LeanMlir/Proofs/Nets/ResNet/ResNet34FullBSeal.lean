@@ -46,7 +46,7 @@ carrier is exactly what a channel's own mean subtracts, and at `N = 1` this net 
 input. The carrier here is `EDiff`: example 0's slab is example 1's plus a per-channel constant.
 Batch BN keeps it and scales it by `γ_c · istd_c` (`BatchSeal.bnBatchLA_exdiff`) because the two
 examples share one mean and one `istd`; the centre-tap convs copy channel 0's offset to every
-channel; the pool shifts with it (`BatchSeal.maxPool3s2_shift`, for every `t`, no argmax argument);
+channel; the pool shifts with it (`maxPool3s2_shift`, for every `t`, no argmax argument);
 the zeroed bodies add a batch-uniform constant and so are transparent. The class-0 output
 difference between the two examples is therefore `t · R t` with `R` a product of the four
 carrier-path `istd`s, continuous and positive, so `g'(0) = R 0 ≠ 0` and no BN-variance derivative
@@ -192,7 +192,7 @@ theorem sealDnB_eq (N h w ic oc : Nat) (hn : 0 < N * (h * w))
     hres k]
 
 /-- ⭐ **The stem with its relu removed**: pool ∘ bn ∘ strided conv. The pool stays — it is the
-    net's only remaining kink, and the carrier crosses it by `BatchSeal.maxPool3s2_shift`. -/
+    net's only remaining kink, and the carrier crosses it by `maxPool3s2_shift`. -/
 theorem r34StemB_eq {N h w ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
     (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hp : ∀ k, 0 < StableHLO.bnBatchLA N oc (2 * h) (2 * w) εs γs βs

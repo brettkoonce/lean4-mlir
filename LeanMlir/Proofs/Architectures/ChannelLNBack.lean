@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 /-! # The channel-LayerNorm backward — the rowwise vector-LN input-VJP and its conjugation
 
 The backward of ConvNeXt's real channel LayerNorm (`chanLNTensor3`, `ConvNeXtChannelLN.lean`)
-and of ViT's per-token vector LayerNorm (`layerNormVec`, `ViTVecLN.lean`), as the ℝ maps the
+and of ViT's per-token vector LayerNorm (`layerNormVec`, `LayerNorm.lean`), as the ℝ maps the
 certified ties are stated about. `rowLNVecFlatBack` is the per-row input-VJP — the per-channel
 `γ` scale then the three-term `bn_grad_input` at unit γ, lifted rowwise — and
 `chanLNTensor3Back` is that map conjugated by the same four layout permutations the forward

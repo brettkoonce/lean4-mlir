@@ -196,4 +196,14 @@ noncomputable def residualProj_has_vjp_at {m n : Nat}
     HasVJPAt (residualProj proj f) x :=
   biPath_has_vjp_at proj f x hproj_diff hf_diff hproj hf
 
+/-- A residual branch is continuous when its body is. -/
+theorem residual_continuous {n : Nat} (F : Vec n → Vec n) (hF : Continuous F) :
+    Continuous (residual F) :=
+  continuous_pi (fun k => ((continuous_apply k).comp hF).add (continuous_apply k))
+
+/-- A projected residual is continuous when both branches are. -/
+theorem residualProj_continuous {m n : Nat} (P F : Vec m → Vec n) (hP : Continuous P)
+    (hF : Continuous F) : Continuous (residualProj P F) :=
+  continuous_pi (fun k => ((continuous_apply k).comp hP).add ((continuous_apply k).comp hF))
+
 end Proofs

@@ -14,6 +14,11 @@ activation as `Mat oc (h·w)` (row = channel), per-channel BN is exactly
 `fun A => fun c => bnForward (h·w) ε (γ c) (β c) (A c)`. Its VJP runs each channel's
 `bn_has_vjp` on that channel's cotangent slice; the cross-channel blocks vanish.
 
+The file also holds inference BN (frozen statistics), batch BN on the `[N,C,H,W]` layout
+(`bnBatchTensor4`, chapter 7) and the sync-BN op at supplied statistics (`bnSyncTensor4`, its
+γ and input gradients) — the forms `StableHLO`'s `den` reads. Sharding that layout across
+replicas (`batchShard` and the shard = global identities) is `DataParallelSync`'s.
+
 Everything closes under `[propext, Classical.choice, Quot.sound]`.
 -/
 
@@ -517,133 +522,6 @@ theorem bnPerChannelEvalFlat_apply (oc m : Nat) (ε : ℝ) (γ β μ v : Vec oc)
   unfold bnPerChannelEvalFlat bnPerChannelEvalMat bnEvalForward Mat.flatten Mat.unflatten
   simp only [Prod.mk.eta, Equiv.apply_symm_apply]
 
-/-- The channel a `[N,C,H,W]` flat index belongs to. -/
-noncomputable def bnchwChan (N oc h w : Nat) (t : Fin (N * (oc * (h * w)))) : Fin oc :=
-  (finProdFinEquiv.symm (finProdFinEquiv.symm t).2).1
-
-/-- ⭐⭐ **The sync forward is POINTWISE once its statistics are fixed.**
-
-    Cell `t` becomes `γ_c·(x_t − μ_c)·(m2_c − μ_c² + ε)^(−1/2) + β_c` with `c` its own channel —
-    no other cell is read. Cells mix ONLY when the statistics are computed, and under sync-BN
-    that computation has been hoisted out into the collective.
-
-    ⭐ This is what makes the shard argument (`bnSyncTensor4_batchShard`) pure index bookkeeping:
-    a pointwise map commutes with any reindexing that preserves the channel, and sharding the
-    batch does. -/
-theorem bnSyncTensor4_apply (N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Vec oc)
-    (x : Vec (N * (oc * (h * w)))) (t : Fin (N * (oc * (h * w)))) :
-    bnSyncTensor4 N oc h w ε γ β μ m2 x t
-      = γ (bnchwChan N oc h w t)
-          * ((x t - μ (bnchwChan N oc h w t))
-             * (1 / Real.sqrt (m2 (bnchwChan N oc h w t)
-                  - μ (bnchwChan N oc h w t) * μ (bnchwChan N oc h w t) + ε)))
-        + β (bnchwChan N oc h w t) := by
-  unfold bnSyncTensor4
-  simp only [Function.comp_apply, bnchwBack]
-  rw [bnPerChannelEvalFlat_apply]
-  have hz : bnchwFwd N oc h w x (bnchwBackIdx N oc h w t) = x t := by
-    rw [bnchwFwd_apply, bnchwFwdIdx_bnchwBackIdx]
-  have hc : (finProdFinEquiv.symm (bnchwBackIdx N oc h w t)).1 = bnchwChan N oc h w t := by
-    unfold bnchwBackIdx bnchwChan
-    simp only [Equiv.symm_apply_apply]
-  rw [hz, hc]
-
-/-- Shard `r`'s block of a global batch laid out row-major `[R·N, a]`: example `(r, n)` of the
-    global batch is example `n` of shard `r`. The contiguous cut the DP shim makes. -/
-noncomputable def batchShard (R N a : Nat) (X : Vec ((R * N) * a)) (r : Fin R) : Vec (N * a) :=
-  fun idx => X (finProdFinEquiv
-    (finProdFinEquiv (r, (finProdFinEquiv.symm idx).1), (finProdFinEquiv.symm idx).2))
-
-/-- **Sharding the batch does not move a cell's CHANNEL.** The one fact P1 needs about the
-    layout: the batch axis is outside the channel axis in `[N,C,H,W]`, so cutting the batch
-    leaves every cell in the channel it was already in. -/
-theorem bnchwChan_batchShard (R N oc h w : Nat) (r : Fin R)
-    (idx : Fin (N * (oc * (h * w)))) :
-    bnchwChan (R*N) oc h w (finProdFinEquiv
-        (finProdFinEquiv (r, (finProdFinEquiv.symm idx).1), (finProdFinEquiv.symm idx).2))
-      = bnchwChan N oc h w idx := by
-  unfold bnchwChan
-  simp only [Equiv.symm_apply_apply]
-
-/-- The shard of a channel's ROW. Channel `c` of a global `[R·N,C,H,W]` batch is a
-    `(R·N)·h·w`-wide row; this is the equiv exhibiting it as `R` blocks of `N·h·w`, one per
-    replica — `(r, (n,s)) ↦ ((r,n), s)`. The row-level counterpart of `batchShard`. -/
-noncomputable def bnShardEquiv (R N hw : Nat) : Fin R × Fin (N * hw) ≃ Fin ((R * N) * hw) :=
-  (Equiv.prodCongr (Equiv.refl (Fin R)) finProdFinEquiv.symm).trans
-    (((Equiv.prodAssoc (Fin R) (Fin N) (Fin hw)).symm).trans
-      ((Equiv.prodCongr finProdFinEquiv (Equiv.refl (Fin hw))).trans finProdFinEquiv))
-
-/-- ⭐⭐ **The global channel row, restricted to replica `r`'s block, IS that replica's own
-    channel row.** The layout fact that connects a batch shard to the `[C, N·H·W]` world
-    `bnPerChannelFlat` reduces in — i.e. the one step the `bnchwFwd` relabel was hiding. -/
-theorem bnchwFwd_row_batchShard (R N oc h w : Nat) (X : Vec ((R * N) * (oc * (h * w))))
-    (c : Fin oc) (r : Fin R) (k : Fin (N * (h * w))) :
-    Mat.unflatten (bnchwFwd (R*N) oc h w X) c (bnShardEquiv R N (h*w) (r, k))
-      = Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c k := by
-  unfold Mat.unflatten bnchwFwd bnchwFwdIdx batchShard bnShardEquiv
-  simp only [Equiv.trans_apply, Equiv.prodCongr_apply, Equiv.coe_refl, Prod.map_apply, id_eq,
-             Equiv.prodAssoc_symm_apply, Equiv.symm_apply_apply]
-
-/-- ⭐⭐ **P1a — the sync forward COMMUTES WITH SHARDING, for any statistics at all.**
-
-    `shard_r ∘ (sync BN at μ, m2) = (sync BN at μ, m2) ∘ shard_r`. No hypothesis on `μ`/`m2`:
-    once the statistics are fixed the map is pointwise (`bnSyncTensor4_apply`) and sharding
-    preserves each cell's channel (`bnchwChan_batchShard`), so there is nothing to prove about
-    BatchNorm here — only about indices.
-
-    ⭐ This is the half of P1 that carries no mathematics, and separating it is what leaves the
-    real content in one place: whether the handed-in statistics ARE the global ones, which is
-    `bnMean_shard`/`bnMeanSq_shard`, i.e. exactly what `allReduceMeanF` computes. -/
-theorem bnSyncTensor4_batchShard (R N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Vec oc)
-    (X : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) :
-    batchShard R N (oc * (h * w)) (bnSyncTensor4 (R*N) oc h w ε γ β μ m2 X) r
-      = bnSyncTensor4 N oc h w ε γ β μ m2 (batchShard R N (oc * (h * w)) X r) := by
-  funext idx
-  unfold batchShard
-  rw [bnSyncTensor4_apply, bnSyncTensor4_apply, bnchwChan_batchShard]
-
-/-- ⭐⭐ **P1b — the GLOBAL per-channel mean is the mean of the replicas' per-channel means.**
-    `bnMean_shard` transported along the row shard. This is precisely what `syncStats`'s first
-    collective — `allReduceMeanF` over the replicas' `bnBatchMeanB` — computes. -/
-theorem bnMean_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
-    (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
-    bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
-      = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean (N*(h*w))
-          (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c) := by
-  rw [bnMean_shard hR hm (bnShardEquiv R N (h*w))]
-  simp only [bnchwFwd_row_batchShard]
-
-/-- ⭐⭐ **…and so is the global per-channel SECOND MOMENT.** ⛔ There is no such statement for
-    the variance alone — the mean of the shards' variances is not the variance of the union —
-    which is why the exchange carries Chan's corrected variance (`bnVar_row_shard_chan`) rather
-    than a plain `σ²_r`. -/
-theorem bnMeanSq_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
-    (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
-    bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
-      = (1 / (R : ℝ)) * ∑ r : Fin R, bnMeanSq (N*(h*w))
-          (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c) := by
-  rw [bnMeanSq_shard hR hm (bnShardEquiv R N (h*w))]
-  simp only [bnchwFwd_row_batchShard]
-
-/-- ⭐⭐ **Chan's parallel variance on the channel rows**: the global channel variance is the
-    replica mean of each replica's own two-pass variance plus its mean's squared offset from the
-    global mean. This is what the second collective of a sync-BN forward carries
-    (`StableHLO.bnBatchVarAtB`), and it is why no consumer ever forms `E[x²] − μ²`. -/
-theorem bnVar_row_shard_chan (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
-    (X : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
-    bnVar ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
-      = (1 / (R : ℝ)) * ∑ r : Fin R,
-          (bnVar (N*(h*w))
-              (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c)
-           + (bnMean (N*(h*w))
-                (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c)
-              - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))
-             * (bnMean (N*(h*w))
-                  (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c)
-                - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))) := by
-  rw [bnVar_shard_chan hR hm (bnShardEquiv R N (h*w))]
-  simp only [bnchwFwd_row_batchShard]
-
 /-- ⭐⭐ **`R = 1`: the sync forward at the batch's own statistics IS `bnBatchTensor4`.**
 
     The anchor the whole sync-BN render rests on, and the reason single-device artifacts do
@@ -661,57 +539,6 @@ theorem bnSyncTensor4_at_own_stats (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
   congr 2
   funext c
   exact bnEvalForward_at_own_stats _ hm _ _ _ _
-
-/-- ⭐⭐ **P2b's workhorse: a mean over the global batch of ANY pointwise function of two rows
-    is the mean of the replicas' means of the same.** Both dy-reductions the sync backward needs
-    have this shape — `mdy` reads only `dy`, `mdyx` reads `x` and `dy` together — so one lemma
-    covers both, and `bnMean_row_shard` is its one-row special case. -/
-theorem bnMean_pair_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
-    (X DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) (f : ℝ → ℝ → ℝ) :
-    bnMean ((R*N)*(h*w)) (fun k => f (Mat.unflatten (bnchwFwd (R*N) oc h w X) c k)
-                                      (Mat.unflatten (bnchwFwd (R*N) oc h w DY) c k))
-      = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean (N*(h*w)) (fun k =>
-          f (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r)) c k)
-            (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c k)) := by
-  rw [bnMean_shard hR hm (bnShardEquiv R N (h*w))]
-  simp only [bnchwFwd_row_batchShard]
-
-/-- ⭐⭐⭐ **P1 — SYNC-BN ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH BN.**
-
-    Handed the GLOBAL statistics — `(1/R)·Σ_r` of each replica's own `bnMean` and `bnMeanSq`,
-    which is what `syncStats` denotes once its `σ²` is read back as `m2 = σ² + μ²` — replica
-    `r`'s sync forward on its own shard equals `batchShard r` of `bnBatchTensor4` run on the
-    whole `R·N` batch.
-
-    ⭐ **The spec does not move**: the right-hand side is the EXISTING `bnBatchTensor4`, at
-    `N := R·N`. Nothing new is being specified; the render is being shown to hit a target the
-    tier already names.
-
-    It is P1a (pointwise, so sharding commutes — no mathematics) composed with P1b (the
-    statistics really are the all-reduced ones — all the mathematics) through
-    `bnSyncTensor4_at_own_stats`. -/
-theorem bnSyncTensor4_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
-    (hM : (R*N) * (h * w) ≠ 0) (ε : ℝ) (γ β : Vec oc)
-    (X : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) :
-    bnSyncTensor4 N oc h w ε γ β
-        (fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
-          (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c))
-        (fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMeanSq (N*(h*w))
-          (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c))
-        (batchShard R N (oc * (h * w)) X r)
-      = batchShard R N (oc * (h * w)) (bnBatchTensor4 (R*N) oc h w ε γ β X) r := by
-  have hμ : ∀ c : Fin oc, (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
-      (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c)
-      = bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) :=
-    fun c => (bnMean_row_shard R N oc h w hR hm X c).symm
-  have hm2 : ∀ c : Fin oc, (1 / (R : ℝ)) * ∑ r' : Fin R, bnMeanSq (N*(h*w))
-      (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c)
-      = bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) :=
-    fun c => (bnMeanSq_row_shard R N oc h w hR hm X c).symm
-  simp only [hμ, hm2]
-  rw [← bnSyncTensor4_batchShard]
-  exact congrArg (fun z => batchShard R N (oc * (h * w)) z r)
-    (bnSyncTensor4_at_own_stats (R*N) oc h w hM ε γ β X)
 
 theorem bnBatchTensor4_differentiable (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     Differentiable ℝ (bnBatchTensor4 N oc h w ε γ β) := by
@@ -795,36 +622,6 @@ theorem bnSyncPerChannel_grad_gamma_at_own_stats (oc m : Nat) (hm : m ≠ 0) (ε
   simp only [bnSyncPerChannel_grad_gamma, bnPerChannel_grad_gamma, bnSyncXhat_at_own_stats m hm,
              Mat.unflatten]
 
-/-- ⭐⭐ **A channel's γ gradient over the global batch is the SUM of the replicas' γ gradients
-    at the same handed-in statistics** — a sum, not a mean, because this is a parameter
-    gradient: the parameter collective's `1/R` is what turns it into the global-batch mean. The
-    row split `bnchwFwd_row_batchShard`, under `Σ` instead of `bnMean`. -/
-theorem bnSyncPerChannel_grad_gamma_row_shard (R N oc h w : Nat) (ε : ℝ) (μ m2 : Vec oc)
-    (X DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
-    bnSyncPerChannel_grad_gamma oc ((R*N)*(h*w)) ε μ m2
-        (bnchwFwd (R*N) oc h w X) (bnchwFwd (R*N) oc h w DY) c
-      = ∑ r : Fin R, bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε μ m2
-          (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r))
-          (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c := by
-  unfold bnSyncPerChannel_grad_gamma
-  rw [← Equiv.sum_comp (bnShardEquiv R N (h*w)), Fintype.sum_prod_type]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro k _
-  simp only [bnSyncXhat_apply, bnchwFwd_row_batchShard]
-
-/-- **…and so is the β gradient**, which reads no statistic at all: `Σ dy` over the global
-    channel row is the sum of the shards' `Σ dy`. -/
-theorem bnPerChannel_grad_beta_row_shard (R N oc h w : Nat)
-    (DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
-    bnPerChannel_grad_beta oc ((R*N)*(h*w)) (bnchwFwd (R*N) oc h w DY) c
-      = ∑ r : Fin R, bnPerChannel_grad_beta oc (N*(h*w))
-          (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c := by
-  unfold bnPerChannel_grad_beta
-  rw [← Equiv.sum_comp (bnShardEquiv R N (h*w)), Fintype.sum_prod_type]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro k _
-  exact bnchwFwd_row_batchShard R N oc h w DY c r k
-
 /-- ⭐⭐ **The SYNC batch-norm input-VJP on `[N,C,H,W]`** — `bnBatchTensor4_grad_input`'s peer,
     through the same `bnchwFwd`/`bnchwBack` bridge. What a replica emits for its shard of the
     backward, given the four all-reduced per-channel statistic vectors. -/
@@ -833,61 +630,6 @@ noncomputable def bnSyncTensor4_grad_input (N oc h w : Nat) (ε : ℝ) (γ μ m2
   bnchwBack N oc h w
     (bnSyncPerChannel_grad_input oc (N * (h * w)) ε γ μ m2 mdy mdyx
       (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy))
-
-/-- **The sync backward is POINTWISE too**, with the channel read off the index — it reads only
-    `x idx` and `dy idx`. Both its reductions were hoisted into the collective. -/
-theorem bnSyncPerChannel_grad_input_apply (oc m : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
-    (x dy : Vec (oc * m)) (idx : Fin (oc * m)) :
-    bnSyncPerChannel_grad_input oc m ε γ μ m2 mdy mdyx x dy idx
-      = (1 / Real.sqrt (m2 (finProdFinEquiv.symm idx).1
-             - μ (finProdFinEquiv.symm idx).1 * μ (finProdFinEquiv.symm idx).1 + ε))
-          * (γ (finProdFinEquiv.symm idx).1 * dy idx
-             - mdy (finProdFinEquiv.symm idx).1
-             - ((x idx - μ (finProdFinEquiv.symm idx).1)
-                * (1 / Real.sqrt (m2 (finProdFinEquiv.symm idx).1
-                     - μ (finProdFinEquiv.symm idx).1 * μ (finProdFinEquiv.symm idx).1 + ε)))
-               * mdyx (finProdFinEquiv.symm idx).1) := by
-  unfold bnSyncPerChannel_grad_input bnSync_grad_input bnSyncXhat Mat.unflatten
-  simp only [Prod.mk.eta, Equiv.apply_symm_apply]
-
-/-- The `[N,C,H,W]` lift: cell `t` of the sync backward depends only on `x t`, `dy t` and its
-    own channel's four statistics. -/
-theorem bnSyncTensor4_grad_input_apply (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
-    (x dy : Vec (N * (oc * (h * w)))) (t : Fin (N * (oc * (h * w)))) :
-    bnSyncTensor4_grad_input N oc h w ε γ μ m2 mdy mdyx x dy t
-      = (1 / Real.sqrt (m2 (bnchwChan N oc h w t)
-             - μ (bnchwChan N oc h w t) * μ (bnchwChan N oc h w t) + ε))
-          * (γ (bnchwChan N oc h w t) * dy t
-             - mdy (bnchwChan N oc h w t)
-             - ((x t - μ (bnchwChan N oc h w t))
-                * (1 / Real.sqrt (m2 (bnchwChan N oc h w t)
-                     - μ (bnchwChan N oc h w t) * μ (bnchwChan N oc h w t) + ε)))
-               * mdyx (bnchwChan N oc h w t)) := by
-  unfold bnSyncTensor4_grad_input
-  simp only [bnchwBack]
-  rw [bnSyncPerChannel_grad_input_apply]
-  have hx : bnchwFwd N oc h w x (bnchwBackIdx N oc h w t) = x t := by
-    rw [bnchwFwd_apply, bnchwFwdIdx_bnchwBackIdx]
-  have hd : bnchwFwd N oc h w dy (bnchwBackIdx N oc h w t) = dy t := by
-    show dy (bnchwFwdIdx N oc h w (bnchwBackIdx N oc h w t)) = dy t
-    rw [bnchwFwdIdx_bnchwBackIdx]
-  have hc : (finProdFinEquiv.symm (bnchwBackIdx N oc h w t)).1 = bnchwChan N oc h w t := by
-    unfold bnchwBackIdx bnchwChan
-    simp only [Equiv.symm_apply_apply]
-  rw [hx, hd, hc]
-
-/-- ⭐⭐ **P2a — the sync backward COMMUTES WITH SHARDING, for any statistics at all.**
-    The backward twin of `bnSyncTensor4_batchShard`, and equally free of mathematics: pointwise
-    plus channel-preserving reindex. -/
-theorem bnSyncTensor4_grad_input_batchShard (R N oc h w : Nat) (ε : ℝ)
-    (γ μ m2 mdy mdyx : Vec oc) (X DY : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) :
-    batchShard R N (oc * (h * w))
-        (bnSyncTensor4_grad_input (R*N) oc h w ε γ μ m2 mdy mdyx X DY) r
-      = bnSyncTensor4_grad_input N oc h w ε γ μ m2 mdy mdyx
-          (batchShard R N (oc * (h * w)) X r) (batchShard R N (oc * (h * w)) DY r) := by
-  funext idx
-  unfold batchShard
-  rw [bnSyncTensor4_grad_input_apply, bnSyncTensor4_grad_input_apply, bnchwChan_batchShard]
 
 /-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bnBatchTensor4_grad_input`.**
 
@@ -910,101 +652,6 @@ theorem bnSyncTensor4_grad_input_at_own_stats (N oc h w : Nat) (hm : N * (h * w)
   congr 1
   funext idx
   exact congrFun (bnSync_grad_input_at_own_stats _ hm _ _ _ _) _
-
-
-/-- The `R = 1` backward anchor restated with `bnSyncXhat` in the `mdyx` reduction — the form
-    the sync GRAPH produces, since `bnSyncDyStatsB` builds `x̂` from the statistics handed to it
-    rather than from `x` directly. -/
-theorem bnSyncTensor4_grad_input_at_own_stats' (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
-    (ε : ℝ) (γ : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
-    bnSyncTensor4_grad_input N oc h w ε γ
-        (fun c => bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
-        (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
-        (fun c => bnMean (N*(h*w)) (fun k =>
-          γ c * Mat.unflatten (bnchwFwd N oc h w dy) c k))
-        (fun c => bnMean (N*(h*w)) (fun k =>
-          bnSyncXhat (N*(h*w)) ε
-            (bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
-            (bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
-            (Mat.unflatten (bnchwFwd N oc h w x) c) k
-          * (γ c * Mat.unflatten (bnchwFwd N oc h w dy) c k)))
-        x dy
-      = bnBatchTensor4_grad_input N oc h w ε γ x dy := by
-  have hxh : (fun c => bnMean (N*(h*w)) (fun k =>
-              bnSyncXhat (N*(h*w)) ε
-                (bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
-                (bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
-                (Mat.unflatten (bnchwFwd N oc h w x) c) k
-              * (γ c * Mat.unflatten (bnchwFwd N oc h w dy) c k)))
-          = (fun c => bnMean (N*(h*w)) (fun k =>
-              bnXhat (N*(h*w)) ε (Mat.unflatten (bnchwFwd N oc h w x) c) k
-              * (γ c * Mat.unflatten (bnchwFwd N oc h w dy) c k))) := by
-    funext c
-    rw [bnSyncXhat_at_own_stats _ hm]
-  rw [hxh]
-  exact bnSyncTensor4_grad_input_at_own_stats N oc h w hm ε γ x dy
-
-/-- ⭐⭐⭐ **P2 — THE SYNC BACKWARD ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH
-    INPUT-VJP.**
-
-    Handed the four all-reduced statistics — each literally `(1/R)·Σ_r'` of a per-replica
-    quantity, which is what `syncStats`, then `allReduceMeanF` of `bnSyncDyStatsB`,
-    denotes — replica `r`'s sync backward equals `batchShard r` of `bnBatchTensor4_grad_input`
-    run on the whole `R·N` batch.
-
-    ⭐ **Including the cross-shard terms.** `mdyx` averages `x̂·dx̂` with `x̂` built from the GLOBAL
-    `μ`, `m2` — not from the shard's own statistics — which is exactly why `bnSyncDyStatsB`
-    consumes the already-reduced vector instead of recomputing one. That is what makes each
-    replica's output the true shard-`r` block of the global gradient, and hence the all-reduced
-    PARAMETER gradient exact rather than approximate.
-
-    ⭐ **The spec does not move**: the right-hand side is the existing
-    `bnBatchTensor4_grad_input` at `N := R·N`. -/
-theorem bnSyncTensor4_grad_input_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0)
-    (hm : N * (h * w) ≠ 0) (hM : (R*N) * (h * w) ≠ 0) (ε : ℝ) (γ : Vec oc)
-    (X DY : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) (μg m2g mdyg mdyxg : Vec oc)
-    (hμ : μg = fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
-      (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c))
-    (hm2 : m2g = fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMeanSq (N*(h*w))
-      (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c))
-    (hmdy : mdyg = fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w)) (fun k =>
-      γ c * Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r')) c k))
-    (hmdyx : mdyxg = fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w)) (fun k =>
-      bnSyncXhat (N*(h*w)) ε (μg c) (m2g c)
-        (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c) k
-      * (γ c * Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r')) c k))) :
-    bnSyncTensor4_grad_input N oc h w ε γ μg m2g mdyg mdyxg
-        (batchShard R N (oc * (h * w)) X r) (batchShard R N (oc * (h * w)) DY r)
-      = batchShard R N (oc * (h * w)) (bnBatchTensor4_grad_input (R*N) oc h w ε γ X DY) r := by
-  -- 1. the forward statistics are the global row's own (P1b)
-  have hμ' : μg = fun c => bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) := by
-    rw [hμ]; funext c; rw [← bnMean_row_shard R N oc h w hR hm X c]
-  have hm2' : m2g = fun c => bnMeanSq ((R*N)*(h*w))
-      (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) := by
-    rw [hm2]; funext c; rw [← bnMeanSq_row_shard R N oc h w hR hm X c]
-  -- 2. and so are the two dy reductions (P2b), via the pair lemma
-  have hmdy' : mdyg = fun c => bnMean ((R*N)*(h*w)) (fun k =>
-      γ c * Mat.unflatten (bnchwFwd (R*N) oc h w DY) c k) := by
-    rw [hmdy]; funext c
-    exact (bnMean_pair_row_shard R N oc h w hR hm X DY c (fun _ d => γ c * d)).symm
-  have hmdyx' : mdyxg = fun c => bnMean ((R*N)*(h*w)) (fun k =>
-      bnSyncXhat ((R*N)*(h*w)) ε
-        (bnMean   ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))
-        (bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))
-        (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) k
-      * (γ c * Mat.unflatten (bnchwFwd (R*N) oc h w DY) c k)) := by
-    rw [hmdyx, hμ', hm2']; funext c
-    simp only [bnSyncXhat_apply]
-    exact (bnMean_pair_row_shard R N oc h w hR hm X DY c
-      (fun xv dv => (xv - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c))
-        * (1 / Real.sqrt (bnMeanSq ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
-            - bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c)
-              * bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) + ε))
-        * (γ c * dv))).symm
-  -- 3. P2a composed with the R = 1 anchor at the global batch
-  rw [hμ', hm2', hmdy', hmdyx', ← bnSyncTensor4_grad_input_batchShard]
-  exact congrArg (fun z => batchShard R N (oc * (h * w)) z r)
-    (bnSyncTensor4_grad_input_at_own_stats' (R*N) oc h w hM ε γ X DY)
 
 /-- **Renderable batch-norm backward is faithful** (ℝ-headline): equals the
     `pdiv`-contracted (block-diagonal-across-channels, batch-coupled) Jacobian of

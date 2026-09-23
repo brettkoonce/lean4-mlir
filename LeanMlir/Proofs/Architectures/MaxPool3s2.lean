@@ -418,4 +418,28 @@ theorem maxPool3s2Flat_close {c h w : Nat} (vt va : Vec (c * (2 * h) * (2 * w)))
   simp only [maxPool3s2Flat, Tensor3.flatten]
   exact maxPool3s2_close (Tensor3.unflatten vt) (Tensor3.unflatten va) huf _ _ _
 
+/-- `maxPool3s2Flat` is continuous (a `sup'` of coordinates). -/
+theorem maxPool3s2Flat_continuous (c h w : Nat) : Continuous (maxPool3s2Flat c h w) := by
+  refine continuous_pi (fun k => ?_)
+  show Continuous (fun v => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)) k)
+  simp only [Tensor3.flatten, maxPool3s2, Tensor3.unflatten]
+  exact Continuous.finset_sup'_apply Finset.univ_nonempty (fun ab _ => continuous_apply _)
+
+/-- ⭐ **The 3×3/s2 pool shifts with a uniform offset.** If one slab's channel is another's plus
+    the constant `δ`, so are their pooled values — `max` of a uniformly shifted family
+    (`Finset.apply_sup'_eq_sup'_comp` at `(· + δ)`). No argmax or eventually-argument: this holds at
+    every point of the ray, which is what lets the carrier cross the only real kink in the net. -/
+theorem maxPool3s2_shift {c h w : Nat} (x y : Tensor3 c (2 * h) (2 * w)) (δ : ℝ) (ci : Fin c)
+    (hxy : ∀ r s, x ci r s = y ci r s + δ) (hi : Fin h) (wi : Fin w) :
+    maxPool3s2 x ci hi wi = maxPool3s2 y ci hi wi + δ := by
+  have hg : ∀ p q : ℝ, (p ⊔ q) + δ = (p + δ) ⊔ (q + δ) := fun p q => (max_add_add_right p q δ).symm
+  simp only [maxPool3s2, hxy]
+  exact (Finset.apply_sup'_eq_sup'_comp Finset.univ_nonempty (fun z : ℝ => z + δ) hg).symm
+
+/-- The pool keeps a nonnegative slab nonnegative (it selects a window cell). -/
+theorem maxPool3s2_nonneg {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
+    (hx : ∀ ci r s, 0 ≤ x ci r s) (ci : Fin c) (hi : Fin h) (wi : Fin w) :
+    0 ≤ maxPool3s2 x ci hi wi :=
+  le_trans (hx _ _ _) (le_maxPool3s2 x ci hi wi (0, 0))
+
 end Proofs
