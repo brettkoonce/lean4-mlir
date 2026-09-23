@@ -41,7 +41,7 @@ theorem cot1_den (p₁name dyName : String) :
       = (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g := by
   rw [mlpCotOut1_denote]
   funext i
-  simp only [den, Mat.mulVec]
+  simp only [denStepApp, Mat.mulVec]
 
 /-- Layer-0 cotangent subgraph `selectPos p₀ (dotOut W₁ cot1)` denotes `mlpCotOut0.denote g`. -/
 theorem cot0_den (p₀name c1name : String) :
@@ -51,7 +51,7 @@ theorem cot0_den (p₀name c1name : String) :
       = (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g := by
   rw [mlpCotOut0_denote, mlpCotOut1_denote]
   funext i
-  simp only [den, Mat.mulVec]
+  simp only [denStepApp, Mat.mulVec]
 
 /-! ## The six emitted parameter ops denote the certified SGD step
 
@@ -135,7 +135,7 @@ theorem mlpLossCot_den (nlogN ohN : String) (label : Fin d₃) :
           (.operand ohN (oneHot d₃ label)))
       = fun j => softmax d₃ (mnistLinear W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) j
                   - oneHot d₃ label j := by
-  funext j; simp only [den, softmax]
+  funext j; simp only [denStepApp, softmax]
 
 /-- **Output-layer weight op, fully tied to the WHOLE softmax-CE loss.** Fed the cotangent the
     emitted loss graph denotes (`mlpLossCot_den`), the `weightSgd` for `W₂` denotes

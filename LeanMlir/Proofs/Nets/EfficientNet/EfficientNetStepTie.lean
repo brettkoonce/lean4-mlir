@@ -104,7 +104,7 @@ theorem den_bnBatchLABack_eq_bnBatchBack {N oc h w : Nat} (gN xN es : String) (Î
       simp only [Fin.ext_iff, Fin.val_cast]
     simp_rw [h2]
     simp only [Finset.sum_ite_eq, Finset.mem_univ, ite_true, reassocB]
-  simp only [den]
+  simp only [denStep, denStepApp]
   simp_rw [h1]
   simp only [Finset.sum_ite_eq, Finset.mem_univ, ite_true]
   rw [hin]

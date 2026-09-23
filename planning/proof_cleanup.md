@@ -32,12 +32,13 @@ were measured say so.
 | `6f4d5716` (d) | `nlinarith` → `linarith` where it closes: 21 of 28 in FloatBridge, 1 of 4 in CrownBound | FloatBridge 7.4 s → 5.3 s |
 | `6f4d5716` (e) | IBP/CROWN scorecards: shared prelude (per-row ℓ1 facts, fallback images) → new `LipschitzCertScorecardIBPData`; IBP, IBPUncon, Crown, CrownUncon import it and not each other; both generators now emit the doc links the committed files carried by hand | local: data 6 s, then IBP 165 / IBPUncon 158 / Crown 254 / CrownUncon 302 in parallel — the tail after FullImgsA was IBP → IBPUncon → CrownUncon ≈ 625 s serial |
 | pending (f) | §3.1 ResNet-34 apex: nested apex body, `r34B_full_has_vjp_at_backward` (the peel, `rfl` at variable stages) and `r34StemB_has_vjp_at_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
+| pending (g) | §3.2 `den.eq_def` never built: `denStep`/`denStepApp` dsimprocs (smart unfolding, one constructor) replace `den` in all 118 `simp only` sets (29 files); StableHLO's file-wide `maxHeartbeats 4000000` and `cnnBackGraph_faithful`'s 2M out, `emitTok` alone keeps 1M (its compile needs ~2×; tracing trips 400k) | `den.eq_def` was 233 s on StableHLO's critical path (profiler); StableHLO 343 s → 83 s standalone, 91 s under lake; full `Proofs Certs` rebuild 2 m 20 s |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
 | module | s | kind |
 |---|---|---|
-| `Codegen/StableHLO` | 575 | hand-written ROOT (241 dependents) |
+| `Codegen/StableHLO` | 575 (91 local after (g)) | hand-written ROOT (241 dependents) |
 | `IbpConvScorecardImgsA/B/C/D` | 470–550 each | generated |
 | `SmoothingCPScorecard` | 392 (→ ~90 est. after (a)) | generated |
 | `LipschitzCertInstance` | 100–383 | generated (header says so) |
@@ -68,17 +69,21 @@ Still open from the old plan, independent of speed: retire the `r34PreK` + `_app
 (audit_resnet_small_convnext.md findings 1 and 3), and move `vjp_comp_diff_at` (now in per-net
 `ResNet34.lean`) and ConvNeXt's `vjp_comp_diff_at_fst_backward` to `Foundation/OpaquePrefix.lean`.
 
-### 3.2 `Codegen/StableHLO.lean` split
+### 3.2 `Codegen/StableHLO.lean` — the slow part DONE as §1(g); the split is optional now
 
-Profile first: `lake env lean -Dprofiler=true -Dprofiler.threshold=2000
-LeanMlir/Proofs/Codegen/StableHLO.lean` (~6 min). audit_codegen_certs.md §A has the line map
-(215-ctor `SHlo`, 215-arm `den`, a 3,607-line `emitTok`, `#eval` writers incl. three to `/tmp`,
-`deriving DecidableEq` on `Raw`/`Tok` with no users). Proposed: printer → `StableHLOPretty.lean`,
-renderers + `#eval`s + four unused chapter graphs → `StableHLOArtifacts.lean` (updates
-`regen_verified_mlir.sh` and the proofs.yml render guard). Also: 113 `simp only [… den …]` sites
-unfold the 215-arm match — name the existing `@[simp] den_*` lemmas instead; retest the
-file-wide `maxHeartbeats 4000000` claim that per-decl `set_option … in` can't cross a doc comment
-(116 sites in the repo do exactly that).
+The profile (`-Dtrace.profiler=true`, which names declarations; `-Dprofiler=true` only gives
+category totals) put 233 s of the 343 s in ONE step: realizing `den.eq_def` for the 215-arm match,
+triggered by the first `simp only [… den …]`, with every other proof blocked on it. The audit's
+"definitions, not proofs" guess and the header's "per-arm whnf cost" story were both wrong about
+where the time went. ⛔ Never name `den` in a simp set again — a downstream module that does pays
+the 233 s itself, since StableHLO's olean no longer carries the equations.
+
+What is left (~75 s, all serial `def` work): `skel` 21 s, `cnnBackGraph_faithful`'s kernel check
+18 s, `emitTok` 14 s + 8.5 s compile, `SHlo` 7.6 s. The printer split (`Raw`/`skel`/`Tok`/`emitTok`
+→ `StableHLOPretty.lean`, ~45 s of that) would let the 83 semantic-only importers stop waiting on
+it, at the cost of an import edit in each of the 68 direct importers — a smaller win than it was.
+`cnnBackGraph_faithful` + the chapter graphs + `#eval` writers → a leaf (audit A.2 row 1) is the
+cheap half. `deriving DecidableEq` on `Raw`/`Tok` has no users (grep) but was not measured.
 
 ### 3.3 Generators
 

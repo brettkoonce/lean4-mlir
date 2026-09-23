@@ -238,7 +238,7 @@ theorem convWeightGradB_smul {N ic oc h w kH kW : Nat} (xN cotN : String) (b : V
     (idx : Fin (oc * ic * kH * kW)) :
     den (SHlo.convWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
       = s * den (SHlo.convWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [den, batchSlice_smul, Finset.mul_sum]
+  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
   refine Finset.sum_congr rfl (fun n _ => ?_)
   rw [HasVJP.backward_smul]
 
@@ -247,7 +247,7 @@ theorem convStridedWeightGradB_smul {N ic oc h w kH kW : Nat} (xN cotN : String)
     (cot : Vec (N * (oc * h * w))) (s : ℝ) (idx : Fin (oc * ic * kH * kW)) :
     den (SHlo.convStridedWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
       = s * den (SHlo.convStridedWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [den, batchSlice_smul, Finset.mul_sum]
+  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
   refine Finset.sum_congr rfl (fun n _ => ?_)
   rw [HasVJP.backward_smul]
 
@@ -255,26 +255,26 @@ theorem bnGammaGradB_smul {N oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ)
     (v cot : Vec (N * (oc * (h * w)))) (s : ℝ) (k : Fin oc) :
     den (SHlo.bnGammaGradB vN epsStr ε v (.operand cotN (fun i => s * cot i))) k
       = s * den (SHlo.bnGammaGradB vN epsStr ε v (.operand cotN cot)) k := by
-  simp only [den, bnPerChannel_grad_gamma, bnchwFwd, Finset.mul_sum]
+  simp only [denStepApp, bnPerChannel_grad_gamma, bnchwFwd, Finset.mul_sum]
   exact Finset.sum_congr rfl (fun _ _ => by ring)
 
 theorem bnBetaGradB_smul {N oc h w : Nat} (cotN : String) (cot : Vec (N * (oc * (h * w))))
     (s : ℝ) (k : Fin oc) :
     den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (fun i => s * cot i))) k
       = s * den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN cot)) k := by
-  simp only [den, bnPerChannel_grad_beta, bnchwFwd, Finset.mul_sum]
+  simp only [denStepApp, bnPerChannel_grad_beta, bnchwFwd, Finset.mul_sum]
 
 theorem denseWeightGradB_smul {N a c : Nat} (xN cotN : String) (x : Vec (N * a))
     (cot : Vec (N * c)) (s : ℝ) (idx : Fin (a * c)) :
     den (SHlo.denseWeightGradB (c := c) xN x (.operand cotN (fun i => s * cot i))) idx
       = s * den (SHlo.denseWeightGradB (c := c) xN x (.operand cotN cot)) idx := by
-  simp only [den, Mat.flatten, batchSlice_smul, Finset.mul_sum]
+  simp only [denStep, denStepApp, Mat.flatten, batchSlice_smul, Finset.mul_sum]
   exact Finset.sum_congr rfl (fun _ _ => by ring)
 
 theorem denseBiasGradB_smul {N c : Nat} (cotN : String) (cot : Vec (N * c)) (s : ℝ) (j : Fin c) :
     den (SHlo.denseBiasGradB (N := N) (.operand cotN (fun i => s * cot i))) j
       = s * den (SHlo.denseBiasGradB (N := N) (.operand cotN cot)) j := by
-  simp only [den, batchSlice_smul, Finset.mul_sum]
+  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. Sharding — every link of the chain, on a replica, is the shard of the global link
@@ -592,7 +592,7 @@ theorem den_allReduceMeanF_convStridedWeightGradB_shard {N ic oc h w kH kW : Nat
       = (1 / (R : ℝ)) * den (.convStridedWeightGradB xN b X W (.operand cotN DY)) idx := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, hdy]
+  simp only [denStep, denStepApp, hdy]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
@@ -607,7 +607,7 @@ theorem den_allReduceMeanF_denseWeightGradB_shard {N a c : Nat} (R : Nat) (hR : 
       = (1 / (R : ℝ)) * den (.denseWeightGradB (c := c) xN A (.operand cotN DY)) idx := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, Mat.flatten, hdy]
+  simp only [denStep, denStepApp, Mat.flatten, hdy]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
@@ -621,7 +621,7 @@ theorem den_allReduceMeanF_denseBiasGradB_shard {N c : Nat} (R : Nat) (hR : 0 < 
       = (1 / (R : ℝ)) * den (.denseBiasGradB (N := R * N) (.operand cotN DY)) j := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, hdy]
+  simp only [denStep, denStepApp, hdy]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _

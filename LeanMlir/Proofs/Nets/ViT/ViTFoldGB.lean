@@ -84,7 +84,7 @@ theorem veclnGammaGradB_den {N R D : Nat} (xN epsStr cotN : String)
                   Mat.flatten (fun r =>
                     layerNormVec D ε gv βv (Mat.unflatten (batchSlice N (R * D) x n) r))) γ k o
             * batchSlice N (R * D) dy n o := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact vit_veclnGamma_grad_bridge ε βv γ
@@ -100,7 +100,7 @@ theorem rowDenseBiasGradB_den_lnbeta {N R D : Nat} (cotN : String)
       = ∑ n : Fin N, ∑ o : Fin (R * D),
           pdiv (fun bv : Vec D => Mat.flatten (fun r => layerNormVec D ε γv bv (X n r))) β i o
             * batchSlice N (R * D) dy n o := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact vit_veclnBeta_grad_bridge ε γv β (X n) (batchSlice N (R * D) dy n) i
@@ -123,7 +123,7 @@ theorem rowDenseWeightGradB_den {N tk a c : Nat} (xN cotN : String)
                     dense (Mat.unflatten v) bb (Mat.unflatten (batchSlice N (tk * a) x n) r)))
                (Mat.flatten W) (finProdFinEquiv (i, j)) o
             * batchSlice N (tk * c) dy n o := by
-  simp only [den, Mat.flatten, Equiv.symm_apply_apply]
+  simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
   exact vit_rowDenseW_grad_bridge bb
@@ -137,7 +137,7 @@ theorem rowDenseBiasGradB_den {N tk a c : Nat} (cotN : String)
       = ∑ n : Fin N, ∑ o : Fin (tk * c),
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X n r))) b i o
             * batchSlice N (tk * c) dy n o := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact vit_rowDenseb_grad_bridge W (X n) b (batchSlice N (tk * c) dy n) i
@@ -163,7 +163,7 @@ theorem patchEmbedWeightGradB_den {ic H W P tk D N : Nat} (xN cotN : String)
             (Kernel4.flatten Wp)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
             * batchSlice N ((tk + 1) * D) dy n o := by
-  simp only [den, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
+  simp only [denStep, denStepApp, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
   exact vit_patchW_grad_bridge Wp bc cls pos
@@ -180,7 +180,7 @@ theorem patchEmbedBiasGradB_den {ic H W P tk D N : Nat} (cotN : String)
                   patchEmbed_flat ic H W P tk D Wc b' cls pos
                     (batchSlice N (ic * H * W) img n)) bc i o
             * batchSlice N ((tk + 1) * D) dy n o := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact vit_patchb_grad_bridge Wc bc cls pos
@@ -200,7 +200,7 @@ theorem posEmbedGradB_den {ic H W P tk D N : Nat} (cotN : String)
                     (batchSlice N (ic * H * W) img n))
             (Mat.flatten pos) i o
             * batchSlice N ((tk + 1) * D) dy n o := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact Proofs.ViTPoCG.posEmbedGrad_den (ic := ic) (H := H) (W := W) (P := P) (N := tk) (D := D)
@@ -229,7 +229,7 @@ theorem clsGrad_denB {N : Nat} (cotN : String)
                   patchEmbed_flat 3 224 224 16 196 192 Wc bc cl pos
                     (batchSlice N (3 * 224 * 224) img n)) cls i j
             * batchSlice N (197 * 192) dyEmbed n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   have hslice : batchSlice N 192 (batchMap N (clsSliceFlat 196 192) dyEmbed) n
@@ -241,7 +241,7 @@ theorem clsGrad_denB {N : Nat} (cotN : String)
   -- is what leaves the bare `clsSliceFlat` this goal is stated at.
   have h := Proofs.ViTPoCG.clsGrad_den cotN Wc bc cls pos
     (batchSlice N (3 * 224 * 224) img n) (batchSlice N (197 * 192) dyEmbed n) i
-  simp only [den, Fin.sum_univ_one, batchSlice] at h
+  simp only [denStepApp, Fin.sum_univ_one, batchSlice] at h
   exact h
 
 -- ════════════════════════════════════════════════════════════════
@@ -257,7 +257,7 @@ theorem headWGradB_den {N D nC : Nat} (aN cotN : String)
       = ∑ n : Fin N, ∑ k : Fin nC,
           pdiv (fun v : Vec (D * nC) => dense (Mat.unflatten v) bc (batchSlice N D a n))
                (Mat.flatten Wc) (finProdFinEquiv (i, j)) k * batchSlice N nC cot n k := by
-  simp only [den, Mat.flatten, Equiv.symm_apply_apply]
+  simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
   exact dense_weight_grad_correct Wc bc (batchSlice N D a n) (batchSlice N nC cot n) i j
@@ -272,7 +272,7 @@ theorem headBGradB_den {N D nC : Nat} (cotN : String)
     (Wc : Mat D nC) (a : Vec D) (bc : Vec nC) (cot : Vec (N * nC)) (n : Fin N) (i : Fin nC) :
     batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN cot))) n i
       = ∑ j : Fin nC, pdiv (fun b' : Vec nC => dense Wc b' a) bc i j * batchSlice N nC cot n j := by
-  simp only [den]
+  simp only [denStep]
   exact dense_bias_grad_correct Wc bc a (batchSlice N nC cot n) i
 
 -- ════════════════════════════════════════════════════════════════

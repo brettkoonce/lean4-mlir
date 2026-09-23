@@ -35,7 +35,7 @@ per-net DP twin walks its chain with.
   γ statement above: the all-reduced mean of the `R` per-replica gradient nodes, each on its
   shard and at the shard-`r` block of the global cotangent, is `(1/R)·` the batch-`R·N`
   gradient node at the SAME per-example cotangents. Every other `*GradB` composes identically
-  (`simp only [den]`, the shard hypothesis, `sum_finProdFinEquiv`). The ℝ-level twin is
+  (`simp only [denStep, denStepApp]`, the shard hypothesis, `sum_finProdFinEquiv`). The ℝ-level twin is
   `DataParallel.dpSyncGrad_eq_globalBatchGrad`, the positive counterpart of
   `dpMeanGrad_ne_globalBatchGrad`.
 
@@ -276,7 +276,7 @@ theorem den_allReduceMeanF_convWeightGradB_shard {N ic oc h w kH kW : Nat} (R : 
       = (1 / (R : ℝ)) * den (.convWeightGradB xN b X W (.operand cotN DY)) idx := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, hdy]
+  simp only [denStep, denStepApp, hdy]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
@@ -296,7 +296,7 @@ theorem den_allReduceMeanF_bnBetaGradB_shard {N oc h w : Nat} (R : Nat) (hR : 0 
           (.operand cotN DY)) c := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, hdy]
+  simp only [denStep, denStepApp, hdy]
   exact (bnPerChannel_grad_beta_row_shard R N oc h w DY c).symm
 
 -- ════════════════════════════════════════════════════════════════

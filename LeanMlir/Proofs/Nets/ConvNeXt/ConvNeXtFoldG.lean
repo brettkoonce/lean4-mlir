@@ -32,7 +32,7 @@ theorem layerScaleChGammaGrad_den {c h w : Nat} (xN cotN : String)
     den (SHlo.layerScaleChGammaGrad xN x (.operand cotN dy)) cc
       = ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
-  simp only [den, Proofs.CnxPoC.pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
+  simp only [denStepApp, Proofs.CnxPoC.pdiv_layerScaleCh_gamma, ite_mul, zero_mul, @eq_comm _ cc]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The 22 spatial LayerNorm sites — the CHANNEL-LN form the render actually emits
@@ -49,7 +49,7 @@ theorem chanLnGammaGrad_den {c h w : Nat} (xN epsStr cotN : String)
           (chanLNRows c h w x) (.operand cotN (chanLNRows c h w cot))) k
       = ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   rw [chanLN_gamma_contract ε β γ x cot k]
   exact vit_veclnGamma_grad_bridge ε β γ (Mat.unflatten (chanLNRows c h w x))
     (chanLNRows c h w cot) k
@@ -62,7 +62,7 @@ theorem chanLnBetaGrad_den {c h w : Nat} (cotN : String)
           (.operand cotN (chanLNRows c h w cot))) k
       = ∑ j : Fin (c * h * w),
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   rw [chanLN_beta_contract ε γ β x cot k]
   exact vit_veclnBeta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
     (chanLNRows c h w cot) k

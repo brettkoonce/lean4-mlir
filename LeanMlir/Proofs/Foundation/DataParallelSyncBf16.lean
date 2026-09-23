@@ -98,7 +98,7 @@ theorem den_convBackBatchedBf16_shard {R N ic oc h w kH kW : Nat} (rnd : ℝ →
       = batchShard R N (ic * h * w)
           (den (.convBackBatchedBf16 (N := R * N) (ic := ic) (h := h) (w := w) rnd wN W b
             (.operand t DY))) r := by
-  simp only [den]
+  simp only [denStep]
   rw [hdy, batchShard_batchMap]
 
 /-- **…and so does the bf16 strided conv input-VJP.** -/
@@ -110,7 +110,7 @@ theorem den_convStridedBackBatchedBf16_shard {R N ic oc h w kH kW : Nat} (rnd : 
       = batchShard R N (ic * (2 * h) * (2 * w))
           (den (.convStridedBackBatchedBf16 (N := R * N) (ic := ic) (h := h) (w := w) rnd wN W b
             (.operand t DY))) r := by
-  simp only [den]
+  simp only [denStep]
   rw [hdy, batchShard_batchMap]
 
 -- ════════════════════════════════════════════════════════════════
@@ -174,7 +174,7 @@ theorem den_convWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R : Nat)
       = rnd (∑ r : Fin R, convWGradShardSum rnd xN cotN b X W DY r idx) := by
   rw [den_convWeightGradBBf16_eq_rnd rnd xN cotN]
   congr 1
-  simp only [convWGradShardSum, den]
+  simp only [convWGradShardSum, denStep, denStepApp]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
@@ -237,7 +237,7 @@ theorem den_convStridedWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R
       = rnd (∑ r : Fin R, convStridedWGradShardSum rnd xN cotN b X W DY r idx) := by
   rw [den_convStridedWeightGradBBf16_eq_rnd rnd xN cotN]
   congr 1
-  simp only [convStridedWGradShardSum, den]
+  simp only [convStridedWGradShardSum, denStep, denStepApp]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
@@ -323,7 +323,7 @@ theorem convBackBatchedBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (
       = fun i => s * den (.convBackBatchedBf16 (N := N) (ic := ic) (h := h) (w := w) rnd wN W b
           (.operand t DY)) i := by
   funext idx
-  simp only [den, batchMap, hrnd, HasVJP.backward_smul]
+  simp only [denStepApp, batchMap, hrnd, HasVJP.backward_smul]
 
 /-- **…and the strided one.** -/
 theorem convStridedBackBatchedBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (s : ℝ)
@@ -334,7 +334,7 @@ theorem convStridedBackBatchedBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ →
       = fun i => s * den (.convStridedBackBatchedBf16 (N := N) (ic := ic) (h := h) (w := w) rnd wN
           W b (.operand t DY)) i := by
   funext idx
-  simp only [den, batchMap, hrnd, HasVJP.backward_smul]
+  simp only [denStepApp, batchMap, hrnd, HasVJP.backward_smul]
 
 /-- **The bf16 conv weight gradient scales with its cotangent** when `rnd` commutes with it. -/
 theorem convWeightGradBBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (s : ℝ)
@@ -343,7 +343,7 @@ theorem convWeightGradBBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (
     (idx : Fin (oc * ic * kH * kW)) :
     den (.convWeightGradBBf16 rnd xN b x W (.operand t (fun i => s * DY i))) idx
       = s * den (.convWeightGradBBf16 rnd xN b x W (.operand t DY)) idx := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   rw [← hrnd, Finset.mul_sum]
   congr 1
   apply Finset.sum_congr rfl; intro n _
@@ -358,7 +358,7 @@ theorem convStridedWeightGradBBf16_smul {N ic oc h w kH kW : Nat} (rnd : ℝ →
     (DY : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
     den (.convStridedWeightGradBBf16 rnd xN b x W (.operand t (fun i => s * DY i))) idx
       = s * den (.convStridedWeightGradBBf16 rnd xN b x W (.operand t DY)) idx := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   rw [← hrnd, Finset.mul_sum]
   congr 1
   apply Finset.sum_congr rfl; intro n _

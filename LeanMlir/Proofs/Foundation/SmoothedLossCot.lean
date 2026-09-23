@@ -164,7 +164,7 @@ theorem smoothedLossCotGraph_den (N K : Nat) (α B : ℝ) (aStr negAK bStr logN 
     den (smoothedLossCotGraph N K α B aStr negAK bStr logN ohN logits t) i
       = (StableHLO.batchMap N (StableHLO.rowSoftmaxFlat 1 K) logits i - t i + t i * α
           + -(α / K)) / B := by
-  simp only [smoothedLossCotGraph, den, denOp]
+  simp only [smoothedLossCotGraph, denStep, denStepApp, denOp]
 
 /-- ⭐ **Each row of the emitted cotangent is the smoothed loss's gradient at that example's
     logits, divided by the batch.** `Mat.unflatten` splits the flat `N·(1·K)` activation into its
@@ -221,7 +221,7 @@ theorem smoothedLossCotGraphDiv_den (N K : Nat) (α B : ℝ) (aStr negAK bStr lo
     (logits t : Vec (N * K)) (i : Fin (N * K)) :
     den (smoothedLossCotGraphDiv N K α B aStr negAK bStr logN ohN logits t) i
       = (StableHLO.batchMap N (softmax K) logits i - t i + t i * α + -(α / K)) / B := by
-  simp only [smoothedLossCotGraphDiv, den, denOp, StableHLO.batchMap, softmax,
+  simp only [smoothedLossCotGraphDiv, denStepApp, denOp, StableHLO.batchMap, softmax,
     Equiv.symm_apply_apply]
 
 /-- ⭐ **Each example's row of the emitted cotangent is the smoothed loss's gradient at that

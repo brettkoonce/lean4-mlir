@@ -30,7 +30,7 @@ theorem posEmbedGrad_den {ic H W P N D : Nat} (cotN : String)
           pdiv (fun p : Vec ((N + 1) * D) =>
                   patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
             (Mat.flatten pos) i j * dy j := by
-  simp [den, pdiv_patchEmbed_pos]
+  simp [denStepApp, pdiv_patchEmbed_pos]
 
 /-- **CLS-token GRADIENT denotes the certified gradient.** The render slices row 0 of the embed
     cotangent (`clsSliceF`) and then reduces it as a `[1, D]` batch, so the op is
@@ -51,7 +51,7 @@ theorem clsGrad_den (cotN : String)
                   patchEmbed_flat 3 224 224 16 196 192 Wc bc cl pos img) cls i j * dyEmbed j := by
   have hstep : den (SHlo.denseBiasGradB (N := 1) (c := 192)
             (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i = cls_token_grad dyEmbed i := by
-    simp only [den, batchSlice, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
+    simp only [denStepApp, batchSlice, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
   rw [hstep]
   have h := vit_render_cls_certified Wc bc cls pos img dyEmbed 1 i
   linarith

@@ -193,7 +193,7 @@ theorem bceLossCotGraph_den (N K : Nat) (bk : ℝ) (bStr logN ohN : String)
     (logits t : Vec (N * (1 * K))) (i : Fin (N * (1 * K))) :
     den (bceLossCotGraph N K bk bStr logN ohN logits t) i
       = (sigmoid (N * (1 * K)) logits i - t i) / bk := by
-  simp only [bceLossCotGraph, den]
+  simp only [bceLossCotGraph, denStep, denStepApp]
 
 /-- ⭐ **Each row of the emitted cotangent is BCE-with-logits' gradient at that example's logits,
     divided by the baked constant.** `SmoothedLossCot`'s `smoothedLossCotGraph_row` at this loss,

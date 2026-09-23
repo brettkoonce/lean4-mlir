@@ -67,28 +67,15 @@ open Finset BigOperators
 namespace Proofs
 namespace StableHLO
 
--- Each extension of the `SHlo` constructor list raises the per-`whnf` cost of unfolding the
--- `den` match (the `brecOn`/`below` packaging scales with the constructor count), so the
--- `den (emit …) = <math>` faithfulness proofs below — even the trivial ones — sit closer to the
--- heartbeat ceiling with every added op. The MobileNetV2 depthwise-SGD ops (the 4 `depthwise*Sgd`
--- constructors) pushed several of these over the 200000 default; raise the file floor (the heavy
--- `cnnBackGraph_faithful` keeps its own larger `2000000` bump below).
+-- ⛔ Never name `den` in a `simp` set; name `denStep`/`denStepApp` (defined after `den`). `den`
+-- there makes Lean build `den.eq_def`, a 233 s proof for the 215-arm match (measured 2026-09-23 with
+-- `trace.profiler`), and every proof in this file waited on it. That cost, not the proofs, is what
+-- the 1M → 4M file-wide heartbeat floor this header used to carry was paying for. With the
+-- dsimprocs every proof here checks at the default budget and the module takes ~85 s instead of
+-- ~345 s. The one remaining bump is `emitTok`'s, for its compilation.
 --
--- ⚠ 2026-08-03, the batched-index move (§0.2 ▶2, increment 2): **1000000 → 4000000**. Adding
--- `geluBackB` + `lnRowBackB` put NINE of the proofs below over the 1M floor at once, and it is a
--- threshold effect rather than anything about these two ops — ONE new arm, shape-identical to the
--- existing `swishBackB`, trips the same nine. Measured: 4× clears every one, whole-file elaboration
--- 3m32s. ⚠ A `set_option … in` on each proof does NOT work here: the option does not attach across
--- the declaration's doc comment, and the proofs still report the 1M ceiling. The file floor is the
--- knob, which is what this comment's own history already said.
---
--- ⚠⚠ This REFINES §0.8's finding, it does not repeat it. There, two ops with NO `{n : Nat}` binder
--- made unfolding `den` so much dearer that **4× did not help at any budget tried** and the fix was
--- to remove arms. Here the arms are parametric, the per-arm cost is modest, and the budget IS the
--- fix. The rule to carry forward: *parametric arms are affordable at a price; fixed-index arms are
--- not affordable at all.* Anyone adding the ~11 remaining ViT/ConvNeXt forms should expect to move
--- this number again, and should check `den`'s elaboration time before assuming it still scales.
-set_option maxHeartbeats 4000000
+-- The arm-count rule from §0.8 still holds for `rfl` through `den`: *parametric arms are
+-- affordable; fixed-index arms (no `{n : Nat}` binder) are not.*
 
 -- ════════════════════════════════════════════════════════════════
 -- § Batched lift (EfficientNet) — per-example block-apply over N examples,
@@ -2407,6 +2394,28 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .gapBackBatched (N := N) (c := c) (h := h) (w := w) e =>
       batchMap N (fun dgap => (globalAvgPoolFlat_has_vjp c h w).backward (fun _ => 0) dgap) (den e)
 
+open Lean Meta in
+/-- `den e` (and `den e i`) one constructor deep, by smart unfolding at default transparency: the
+    match reduces the way the `den_*` lemmas' `rfl` does, and nothing asks for `den.eq_def`. -/
+def denUnfold? (e : Expr) : MetaM (Option Expr) := do
+  let args := e.getAppArgs
+  if args.size < 2 then return none
+  let some h ← withDefault <| unfoldDefinition? (mkAppN e.getAppFn args[:2]) | return none
+  return some (mkAppN h args[2:]).headBeta
+
+/-- What `simp only` should name instead of `den`. Naming `den` itself makes Lean build
+    `den.eq_def` — about four minutes for the 215-arm match, on the critical path of this module
+    and anything that first asks for it. `denStepApp` is the same step where `den e` is applied
+    to an index, which `simp` does not visit as `den e`. -/
+dsimproc denStep (den _) := fun e => do
+  let some e' ← denUnfold? e | return .continue
+  return .visit e'
+
+/-- `denStep` where `den e` is applied to an index. -/
+dsimproc denStepApp (den _ _) := fun e => do
+  let some e' ← denUnfold? e | return .continue
+  return .visit e'
+
 @[simp] theorem den_operand {n : Nat} (s : String) (v : Vec n) :
     den (.operand s v) = v := rfl
 @[simp] theorem den_dotIn {m n : Nat} (s : String) (W : Mat m n) (e : SHlo m) :
@@ -2855,24 +2864,24 @@ def lossCotGraph (oh : Vec n) : SHlo n :=
 
 /-- **Forward faithfulness.** The forward graph denotes `mnistLinear W b`. -/
 theorem fwdGraph_faithful : den (fwdGraph W b x) = mnistLinear W b x := by
-  funext j; simp only [fwdGraph, den, mnistLinear, dense]
+  funext j; simp only [fwdGraph, denStepApp, mnistLinear, dense]
 
 /-- **Dense input-VJP faithfulness.** The backward graph denotes the proven
     dense VJP backward `(dense_has_vjp W b).backward x = Mat.mulVec W`. -/
 theorem backGraph_faithful (dy : Vec n) :
     den (backGraph W dy) = (dense_has_vjp W b).backward x dy := by
-  funext i; simp only [backGraph, den, dense_has_vjp, Mat.mulVec]
+  funext i; simp only [backGraph, denStepApp, dense_has_vjp, Mat.mulVec]
 
 /-- The softmax sub-graph denotes the proven `softmax`. -/
 theorem softmaxDiv_expe_faithful (z : Vec n) :
     den (.softmaxDiv (.expe (.operand "%logits" z))) = softmax n z := by
-  funext j; simp only [den, softmax]
+  funext j; simp only [denStepApp, softmax]
 
 /-- **Loss-cotangent faithfulness (spec level).** -/
 theorem lossCotGraph_faithful (label : Fin n) :
     den (lossCotGraph W b x (oneHot n label)) = IR.emitLossCot n (mnistLinear W b x) label := by
   funext j
-  simp only [lossCotGraph, IR.emitLossCot, den, oneHot, softmax, fwdGraph_faithful,
+  simp only [lossCotGraph, IR.emitLossCot, denStepApp, oneHot, softmax, fwdGraph_faithful,
              mnistLinear, dense]
 
 /-- **Loss-cotangent faithfulness (to the proven gradient).** Via
@@ -2964,7 +2973,7 @@ private theorem max_zero_eq (a : ℝ) : max a 0 = if a > 0 then a else 0 := by
 
 /-- **ReLU forward faithfulness.** `maximum(·,0)` denotes the proven `relu`. -/
 theorem reluF_faithful {k : Nat} (e : SHlo k) : den (.reluF e) = relu k (den e) := by
-  funext i; simp only [den, relu]; exact max_zero_eq _
+  funext i; simp only [denStepApp, relu]; exact max_zero_eq _
 
 /-- **ReLU backward faithfulness (smooth point).** `select(x>0,·,0)` denotes the
     proven `relu_has_vjp_at` backward — the codegen's `relu'(0)=0` convention. -/
@@ -3071,7 +3080,7 @@ def denseF {a c : Nat} (wN bN : String) (W : Mat a c) (bias : Vec c) (e : SHlo a
 
 theorem denseF_faithful {a c : Nat} (wN bN : String) (W : Mat a c) (bias : Vec c) (e : SHlo a) :
     den (denseF wN bN W bias e) = dense W bias (den e) := by
-  funext j; simp only [denseF, den, dense]
+  funext j; simp only [denseF, denStepApp, dense]
 
 variable {e₀ e₁ e₂ e₃ : Nat}
 
@@ -3105,7 +3114,7 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
     den (mlpBackGraph W₀ W₁ W₂ (dense W₀ b₀ x)
           (dense W₁ b₁ (relu e₁ (dense W₀ b₀ x))) dy)
       = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
-  simp only [mlpBackGraph, den, mlp_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
+  simp only [mlpBackGraph, denStep, denStepApp, mlp_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
              HasVJP.toHasVJPAt, Mat.mulVec, Function.comp_apply]
   rfl
 
@@ -3180,7 +3189,7 @@ theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)
     den (.maxPoolBack xN x e)
       = (maxPoolFlat_has_vjp_at (Tensor3.unflatten x) h_smooth).backward (den e) := by
   funext idx
-  simp only [den, maxPoolBackFlat, maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
+  simp only [denStepApp, maxPoolBackFlat, maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
              maxPool2_has_vjp_at3]
 
 /-- ⭐ **3×3/s2 max-pool backward faithfulness (smooth point).** The emitted `select_and_scatter`
@@ -3198,7 +3207,7 @@ theorem maxPool3s2Back_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2
     den (.maxPool3s2Back xN x e)
       = (maxPool3s2Flat_has_vjp_at (Tensor3.unflatten x) h_smooth).backward (den e) := by
   funext idx
-  simp only [den, maxPool3s2BackFlat, maxPool3s2Flat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
+  simp only [denStepApp, maxPool3s2BackFlat, maxPool3s2Flat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
              maxPool3s2_has_vjp_at3]
 
 /-- **BN forward faithfulness.** The per-example reduce/normalize/affine graph
@@ -4199,7 +4208,6 @@ noncomputable def cnnBackGraph
 -- assemble through `vjp_comp_at`; the one `maxPoolBack` matches via VJP
 -- uniqueness (`HasVJPAt.backward_unique`) — sidestepping the `flatten∘unflatten`
 -- transport in `mnistCnnNoBn_has_vjp_at`'s maxpool step.
-set_option maxHeartbeats 2000000 in
 theorem cnnBackGraph_faithful
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
@@ -4226,7 +4234,7 @@ theorem cnnBackGraph_faithful
     den (cnnBackGraph W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ x dy)
       = (mnistCnnNoBn_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
           hc hh hw x h1 h2 h_mp h3 h4).backward dy := by
-  simp only [cnnBackGraph, den, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at,
+  simp only [cnnBackGraph, denStep, denStepApp, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at,
     denseRelu_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
     hasVJP3_to_hasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]
   rw [HasVJPAt.backward_unique _ (maxPoolFlat_has_vjp_at'
@@ -5494,6 +5502,9 @@ def allReduceMeanText (g : String) (ds : List Nat) (t : String) (R : Nat) : Stri
     s!"    %armean{t} = stablehlo.divide %arsum{t}, %arn{t} : {T}\n"
   (s, s!"%armean{t}")
 
+-- Compiling this one 99-arm def needs ~2× the default budget (more under `trace.profiler`, which
+-- trips 400000); 5× leaves room for new arms. Nothing else in the file needs a bump.
+set_option maxHeartbeats 1000000 in
 /-- Render one token: pop its operands' result-names off the stack, emit its
     StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
     here is the audited lexical boundary (validated by `iree-compile` + GPU run);

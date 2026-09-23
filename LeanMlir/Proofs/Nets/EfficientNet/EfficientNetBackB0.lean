@@ -307,7 +307,7 @@ theorem convBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
   -- The transport in `batchMap_has_vjp` unfolds to the per-example conv backward
   -- on each row; both sides then differ only in the (discarded) forward
   -- activation arg, since conv is linear (`conv2d_has_vjp3.backward` ignores it).
-  simp only [den, batchMap, batchMap_has_vjp, flatConv_has_vjp, hasVJPMat_to_hasVJP,
+  simp only [denStepApp, batchMap, batchMap_has_vjp, flatConv_has_vjp, hasVJPMat_to_hasVJP,
     rowwise_has_vjp_mat, hasVJP3_to_hasVJP, conv2d_has_vjp3]
   rfl
 
@@ -330,7 +330,7 @@ theorem convStridedBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
   -- The transport in `batchMap_has_vjp` unfolds to the per-example strided-conv
   -- backward on each row; both sides then differ only in the (discarded) forward
   -- activation arg, since strided conv is linear (its backward ignores it).
-  simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
   rfl
 
 /-- **Batched STRIDE-2 depthwise input-VJP faithfulness.** The stride-2 analogue
@@ -353,7 +353,7 @@ theorem depthwiseStridedBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
   -- The transport in `batchMap_has_vjp` unfolds to the per-example strided-depthwise
   -- backward on each row; both sides then differ only in the (discarded) forward
   -- activation arg, since strided depthwise is linear (its backward ignores it).
-  simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
   rfl
 
 /-- **Batched XLA-`SAME` STRIDE-2 depthwise input-VJP faithfulness.** The odd-phase peer of
@@ -368,7 +368,7 @@ theorem depthwiseStridedXlaBackBatched_faithful {N c h w kH kW : Nat} (wN : Stri
       = (batchMap_has_vjp (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXla_has_vjp W b)
           (depthwiseStride2FlatXla_differentiable W b)).backward v (den e) := by
   funext idx
-  simp only [den, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
   rfl
 
 /-- **Batched depthwise input-VJP faithfulness.** The depthwise analogue of
@@ -384,7 +384,7 @@ theorem depthwiseBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
       = (batchMap_has_vjp (depthwiseFlat W b) (depthwiseFlat_has_vjp W b)
           (depthwiseFlat_differentiable W b)).backward v (den e) := by
   funext idx
-  simp only [den, batchMap, batchMap_has_vjp, depthwiseFlat_has_vjp, hasVJPMat_to_hasVJP,
+  simp only [denStepApp, batchMap, batchMap_has_vjp, depthwiseFlat_has_vjp, hasVJPMat_to_hasVJP,
     rowwise_has_vjp_mat, hasVJP3_to_hasVJP, depthwise_has_vjp3]
   rfl
 
@@ -447,7 +447,7 @@ theorem seBackBatched_faithful {N c h w r : Nat} (w1N b1N w2N b2N vN : String)
     den (SHlo.seBackBatched (N := N) w1N b1N w2N b2N vN W₁ b₁ W₂ b₂ v e)
       = (seB_has_vjp N (h := h) (w := w) W₁ b₁ W₂ b₂).backward v (den e) := by
   funext idx
-  simp only [den, seB_has_vjp, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, seB_has_vjp, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Batched MBConv stage backward graphs (the bn wrapper unblocks these)

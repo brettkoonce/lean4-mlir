@@ -54,7 +54,7 @@ theorem convWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cot
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b
                     (Tensor3.unflatten (fun j => rnd (batchSlice N (ic * h * w) x n j)))))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   congr 1
   apply Finset.sum_congr rfl
   intro n _
@@ -73,7 +73,7 @@ theorem convStridedWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) 
                   flatConvStride2 (Kernel4.unflatten v') b
                     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   congr 1
   apply Finset.sum_congr rfl
   intro n _
@@ -92,7 +92,7 @@ theorem convStridedXlaWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → �
                   flatConvStride2Xla (Kernel4.unflatten v') b
                     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   congr 1
   apply Finset.sum_congr rfl
   intro n _
@@ -110,7 +110,7 @@ theorem convStride4WGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) 
                   flatConvStride4 (Kernel4.unflatten v') b
                     (fun j => rnd (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n j)))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   congr 1
   apply Finset.sum_congr rfl
   intro n _
@@ -128,7 +128,7 @@ theorem depthwiseWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xN co
                   Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
                     (Tensor3.unflatten (fun j => rnd (batchSlice N (c * h * w) x n j)))))
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   congr 1
   apply Finset.sum_congr rfl
   intro n _
@@ -148,7 +148,7 @@ theorem depthwiseStridedWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ)
                   depthwiseStride2Flat (Tensor3.unflatten v') b
                     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j)))
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   congr 1
   apply Finset.sum_congr rfl
   intro n _
@@ -167,7 +167,7 @@ theorem depthwiseStridedXlaWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → �
                   depthwiseStride2FlatXla (Tensor3.unflatten v') b
                     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j)))
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   congr 1
   apply Finset.sum_congr rfl
   intro n _
@@ -191,7 +191,7 @@ theorem rowDenseWGradBBf16_den {N tk a c : Nat} (rnd : ℝ → ℝ) (xN cotN : S
                       (fun k => rnd (Mat.unflatten (batchSlice N (tk * a) x n) r k))))
                (Mat.flatten W) (finProdFinEquiv (i, j)) o
             * rnd (batchSlice N (tk * c) dy n o) := by
-  simp only [den, Mat.flatten, Equiv.symm_apply_apply]
+  simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
   exact vit_rowDenseW_grad_bridge bb
@@ -215,7 +215,7 @@ theorem patchEmbedWGradBBf16_den {ic H W P tk D N : Nat} (rnd : ℝ → ℝ) (xN
             (Kernel4.flatten Wp)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
             * rnd (batchSlice N ((tk + 1) * D) dy n o)) := by
-  simp only [den, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
+  simp only [denStep, denStepApp, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
   congr 1
   apply Finset.sum_congr rfl
   intro n _

@@ -87,7 +87,7 @@ theorem e4m3_render_faithful (q : ℝ → ℝ) (sx : ℝ) (sW : Vec n)
     (W : Mat m n) (b : Vec n) (x : Vec m) :
     den (e4m3LinearGraph q sx sW W b x) = quantLinear q sx sW W b x := by
   funext j
-  simp only [e4m3LinearGraph, quantLinear, mnistLinear, dense, den, layerScale,
+  simp only [e4m3LinearGraph, quantLinear, mnistLinear, dense, denStepApp, layerScale,
     actCode, weightCode]
   rw [dequant_factors q sx sW W x j]
 

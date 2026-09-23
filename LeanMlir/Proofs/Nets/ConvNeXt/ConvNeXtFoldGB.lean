@@ -86,12 +86,12 @@ theorem layerScaleChGammaGradB_den {N c h w : Nat} (xN cotN : String)
           pdiv (fun γ' : Vec c =>
                   layerScale (fun k => γ' (chanIdx c h w k)) (batchSlice N (c * h * w) x n))
                γ cc j * batchSlice N (c * h * w) dy n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   have h := Proofs.CnxPoCG.layerScaleChGammaGrad_den (h := h) (w := w) xN cotN
     (batchSlice N (c * h * w) x n) γ (batchSlice N (c * h * w) dy n) cc
-  simp only [den] at h
+  simp only [denStepApp] at h
   exact h
 
 -- ════════════════════════════════════════════════════════════════
@@ -195,7 +195,7 @@ theorem psWGradB_den {N ic oc h w kH kW : Nat} (xN cotN : String)
                   flatConvStride4 (Kernel4.unflatten v') b
                     (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (flatConvStride4_weight_grad_has_vjp b
@@ -221,13 +221,13 @@ theorem chanLnGammaGradB_den {N c h w : Nat} (xN epsStr cotN : String)
       = ∑ n : Fin N, ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β (batchSlice N (c * h * w) x n)) γ k j
             * batchSlice N (c * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   rw [batchSlice_batchMap, batchSlice_batchMap]
   have h := Proofs.CnxPoCG.chanLnGammaGrad_den xN epsStr cotN ε β
     (batchSlice N (c * h * w) x n) γ (batchSlice N (c * h * w) cot n) k
-  simp only [den] at h
+  simp only [denStep, denStepApp] at h
   exact h
 
 /-- **Batched channel-LN β GRADIENT denotes the certified `Σ_n` β gradient.** The β gradient is
@@ -241,13 +241,13 @@ theorem chanLnBetaGradB_den {N c h w : Nat} (cotN : String)
       = ∑ n : Fin N, ∑ j : Fin (c * h * w),
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' (batchSlice N (c * h * w) x n)) β k j
             * batchSlice N (c * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   rw [batchSlice_batchMap]
   have h := Proofs.CnxPoCG.chanLnBetaGrad_den cotN ε γ (batchSlice N (c * h * w) x n) β
     (batchSlice N (c * h * w) cot n) k
-  simp only [den] at h
+  simp only [denStep, denStepApp] at h
   exact h
 
 -- ════════════════════════════════════════════════════════════════

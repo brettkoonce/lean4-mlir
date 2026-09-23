@@ -63,7 +63,7 @@ theorem convWGradB_den {N ic oc h w kH kW : Nat}
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b
                     (Tensor3.unflatten (batchSlice N (ic * h * w) x n))))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact conv_weight_grad_bridge b (Tensor3.unflatten (batchSlice N (ic * h * w) x n))
@@ -79,7 +79,7 @@ theorem convBGradB_den {N ic oc h w kH kW : Nat}
                   Tensor3.flatten (conv2d W b'
                     (Tensor3.unflatten (batchSlice N (ic * h * w) x n))))
                b o j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact conv_bias_grad_bridge W (Tensor3.unflatten (batchSlice N (ic * h * w) x n)) b
@@ -102,7 +102,7 @@ theorem convStridedWGradB_den {N ic oc h w kH kW : Nat}
                   flatConvStride2 (Kernel4.unflatten v') b
                     (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
@@ -117,7 +117,7 @@ theorem convStridedBGradB_den {N ic oc h w kH kW : Nat}
           pdiv (fun b' : Vec oc =>
                   flatConvStride2 W b' (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                b o j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (flatConvStride2_bias_grad_has_vjp W (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
@@ -139,7 +139,7 @@ theorem bnGammaGradB_den {N oc h w : Nat}
           pdiv (fun γ' : Vec oc =>
                   bnPerChannelFlat oc (N * (h * w)) ε γ' β (bnchwFwd N oc h w v))
                γ c j * bnchwFwd N oc h w cot j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   exact bnPerChannel_grad_gamma_correct oc (N * (h * w)) ε γ β
     (bnchwFwd N oc h w v) (bnchwFwd N oc h w cot) c
 
@@ -153,7 +153,7 @@ theorem bnBetaGradB_den {N oc h w : Nat}
       = ∑ j : Fin (oc * (N * (h * w))),
           pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ β' v)
                β c j * bnchwFwd N oc h w cot j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   exact bnPerChannel_grad_beta_correct oc (N * (h * w)) ε γ β v (bnchwFwd N oc h w cot) c
 
 /-- **One batched BN layer's γ and β gradient nodes, tied** — the pair every step tie states per
@@ -190,7 +190,7 @@ theorem denseWGradB_den {N a c : Nat}
       = ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun v : Vec (a * c) => dense (Mat.unflatten v) b (batchSlice N a x n))
                (Mat.flatten W) (finProdFinEquiv (i, j)) k * batchSlice N c cot n k := by
-  simp only [den, Mat.flatten, Equiv.symm_apply_apply]
+  simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
   exact dense_weight_grad_correct W b (batchSlice N a x n) (batchSlice N c cot n) i j
@@ -201,7 +201,7 @@ theorem denseBGradB_den {N c : Nat}
     den (SHlo.denseBiasGradB (N := N) (.operand cotN cot)) j
       = ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact dense_bias_grad_correct W b x (batchSlice N c cot n) j

@@ -204,7 +204,7 @@ theorem vit_cls_den (clsN lrStr cotN : String)
   have hstep : den (SHlo.denseBiasSgdB (N := 1) (c := 192) clsN lrStr cls lr
             (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i
       = cls i - lr * cls_token_grad dyEmbed i := by
-    simp only [den, batchSlice, clsSliceFlat, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
+    simp only [denStep, denStepApp, batchSlice, clsSliceFlat, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
   rw [hstep, vit_render_cls_certified Wc bc cls pos img dyEmbed lr i]
 
 /-- Final vector-LN γF/βF tied at the classifier-back cot `vitCotFl`. -/

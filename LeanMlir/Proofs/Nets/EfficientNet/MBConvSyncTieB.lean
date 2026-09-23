@@ -73,7 +73,7 @@ theorem depthwiseWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : 
     (idx : Fin (c * kH * kW)) :
     den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
       = s * den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [den, batchSlice_smul, Finset.mul_sum]
+  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
   refine Finset.sum_congr rfl (fun n _ => ?_)
   rw [show Tensor3.unflatten (fun i => s * batchSlice N (c * h * w) cot n i)
         = fun i₁ i₂ i₃ => s * Tensor3.unflatten (batchSlice N (c * h * w) cot n) i₁ i₂ i₃ from rfl,
@@ -85,7 +85,7 @@ theorem depthwiseStridedWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String
     (cot : Vec (N * (c * h * w))) (s : ℝ) (idx : Fin (c * kH * kW)) :
     den (SHlo.depthwiseStridedWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
       = s * den (SHlo.depthwiseStridedWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [den, batchSlice_smul, Finset.mul_sum]
+  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
   refine Finset.sum_congr rfl (fun n _ => ?_)
   rw [HasVJP.backward_smul]
 
@@ -94,7 +94,7 @@ theorem convStridedXlaWeightGradB_smul {N ic oc h w kH kW : Nat} (xN cotN : Stri
     (cot : Vec (N * (oc * h * w))) (s : ℝ) (idx : Fin (oc * ic * kH * kW)) :
     den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
       = s * den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [den, batchSlice_smul, Finset.mul_sum]
+  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
   refine Finset.sum_congr rfl (fun n _ => ?_)
   rw [HasVJP.backward_smul]
 
@@ -140,7 +140,7 @@ theorem den_allReduceMeanF_depthwiseWeightGradB_shard {N c h w kH kW : Nat} (R :
       = (1 / (R : ℝ)) * den (.depthwiseWeightGradB xN b X W (.operand cotN DY)) idx := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, hdy]
+  simp only [denStep, denStepApp, hdy]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
@@ -158,7 +158,7 @@ theorem den_allReduceMeanF_depthwiseStridedWeightGradB_shard {N c h w kH kW : Na
       = (1 / (R : ℝ)) * den (.depthwiseStridedWeightGradB xN b X W (.operand cotN DY)) idx := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, hdy]
+  simp only [denStep, denStepApp, hdy]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
@@ -177,7 +177,7 @@ theorem den_allReduceMeanF_convStridedXlaWeightGradB_shard {N ic oc h w kH kW : 
       = (1 / (R : ℝ)) * den (.convStridedXlaWeightGradB xN b X W (.operand cotN DY)) idx := by
   simp only [den_allReduceMeanF]
   congr 1
-  simp only [den, hdy]
+  simp only [denStep, denStepApp, hdy]
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _

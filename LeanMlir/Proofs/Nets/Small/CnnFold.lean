@@ -155,7 +155,7 @@ theorem cnnLossCot_den {ic c h w d1 nClasses kH kW : Nat}
           (.operand ohN (oneHot nClasses label)))
       = fun j => softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x) j
                   - oneHot nClasses label j := by
-  funext j; simp only [den, softmax]
+  funext j; simp only [denStepApp, softmax]
 
 /-- **Dense output weight op, tied to the WHOLE softmax-CE loss through the conv forward.** With the
     pool output = the real conv forward (`maxPoolFlat ∘ relu ∘ conv₂ ∘ relu ∘ conv₁`) and the

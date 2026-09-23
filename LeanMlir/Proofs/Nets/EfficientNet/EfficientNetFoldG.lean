@@ -102,7 +102,7 @@ theorem denseBGradB_den {N a c : Nat}
     den (SHlo.denseBiasGradB (N := N) (.operand cotN cot)) j
       = ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact dense_bias_grad_correct W b x (batchSlice N c cot n) j
@@ -125,7 +125,7 @@ theorem convStridedXlaWGradB_den {N ic oc h w kH kW : Nat}
                   flatConvStride2Xla (Kernel4.unflatten v') b
                     (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (flatConvStride2Xla_weight_grad_has_vjp b
@@ -149,7 +149,7 @@ theorem depthwiseWGradB_den {N c h w kH kW : Nat}
                   Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
                     (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b
@@ -169,7 +169,7 @@ theorem depthwiseStridedWGradB_den {N c h w kH kW : Nat}
                   depthwiseStride2Flat (Tensor3.unflatten v') b
                     (batchSlice N (c * (2 * h) * (2 * w)) x n))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (depthwiseStride2_weight_grad_has_vjp b

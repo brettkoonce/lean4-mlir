@@ -60,7 +60,7 @@ theorem layerScaleChGammaSgd_den {c h w : Nat} (gN xN lrStr cotN : String)
     den (SHlo.layerScaleChGammaSgd gN xN lrStr x γ lr (.operand cotN dy)) cc
       = γ cc - lr * ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => layerScale (fun k => γ' (chanIdx c h w k)) x) γ cc j * dy j := by
-  simp only [den]
+  simp only [denStepApp]
   exact cnx_render_lsgammaCh_certified x γ dy lr cc
 
 /-! ## The channel-LN γ/β ops — the two the committed render actually emits
@@ -82,7 +82,7 @@ theorem chanLnGammaSgd_den {c h w : Nat} (gN xN epsStr lrStr cotN : String)
           (chanLNRows c h w x) γ lr (.operand cotN (chanLNRows c h w cot))) k
       = γ k - lr * ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   exact cnx_render_chlngamma_certified ε β γ x cot lr k
 
 /-- **Channel-LN β op denotes the certified step.** The β grad is the plain row reduce, so the
@@ -95,7 +95,7 @@ theorem chanLnBetaSgd_den {c h w : Nat} (bN lrStr cotN : String)
           (.operand cotN (chanLNRows c h w cot))) k
       = β k - lr * ∑ j : Fin (c * h * w),
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   exact cnx_render_chlnbeta_certified ε γ β x cot lr k
 
 -- ════════════════════════════════════════════════════════════════

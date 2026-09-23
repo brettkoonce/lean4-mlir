@@ -294,7 +294,7 @@ theorem cnxLossCot_den (nlogN ohN : String) (logits : Vec 10) (label : Fin 10) :
     den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN logits)))
           (.operand ohN (oneHot 10 label)))
       = fun j => softmax 10 logits j - oneHot 10 label j := by
-  funext j; simp only [den, softmax]
+  funext j; simp only [denStepApp, softmax]
 
 /-! ## Forward aliases (`@[irreducible]`) — thread block inputs through the real forward
 

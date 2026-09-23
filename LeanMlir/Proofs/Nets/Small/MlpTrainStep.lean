@@ -297,7 +297,7 @@ theorem denseW_den {m n : Nat} (aN wN lrStr cotN : String)
                (finProdFinEquiv (i, j)) k * c k := by
   have step : den (SHlo.weightSgd aN wN lrStr a W lr (.operand cotN c)) (finProdFinEquiv (i, j))
             = W i j - lr * emitWeightGrad a Back.cotangent c i j := by
-    simp only [den, emitWeightGrad, Mat.outer, Back.denote, Mat.flatten, Equiv.symm_apply_apply]
+    simp only [denStepApp, emitWeightGrad, Mat.outer, Back.denote, Mat.flatten, Equiv.symm_apply_apply]
   rw [step, weight_grad_bridge W b a Back.cotangent c i j]; rfl
 
 /-- **Any emitted dense bias op = certified.** Generic peer of `denseW_den`. -/
@@ -308,7 +308,7 @@ theorem denseB_den {m n : Nat} (bN lrStr cotN : String)
           pdiv (fun b' : Vec n => dense W b' a) b i j * c j := by
   have step : den (SHlo.biasSgd bN lrStr b lr (.operand cotN c)) i
             = b i - lr * emitBiasGrad Back.cotangent c i := by
-    simp only [den, emitBiasGrad, Back.denote]
+    simp only [denStepApp, emitBiasGrad, Back.denote]
   rw [step, bias_grad_bridge W b a Back.cotangent c i]; rfl
 
 end Proofs.Cifar8PoC

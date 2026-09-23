@@ -98,7 +98,7 @@ theorem convStridedXlaBGradB_den {N ic oc h w kH kW : Nat} (cotN : String)
           pdiv (fun b' : Vec oc =>
                   flatConvStride2Xla W b' (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                b o j * batchSlice N (oc * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (flatConvStride2Xla_bias_grad_has_vjp W
@@ -116,7 +116,7 @@ theorem depthwiseBGradB_den {N c h w kH kW : Nat} (cotN : String)
                   Tensor3.flatten (depthwiseConv2d W b'
                     (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
                b o j * batchSlice N (c * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (depthwise_bias_grad_has_vjp W
@@ -137,7 +137,7 @@ theorem depthwiseStridedXlaWGradB_den {N c h w kH kW : Nat} (xN cotN : String)
                   depthwiseStride2FlatXla (Tensor3.unflatten v') b
                     (batchSlice N (c * (2 * h) * (2 * w)) x n))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (depthwiseStride2Xla_weight_grad_has_vjp b
@@ -154,7 +154,7 @@ theorem depthwiseStridedXlaBGradB_den {N c h w kH kW : Nat} (cotN : String)
           pdiv (fun b' : Vec c =>
                   depthwiseStride2FlatXla W b' (batchSlice N (c * (2 * h) * (2 * w)) x n))
                b o j * batchSlice N (c * h * w) cot n j := by
-  simp only [den]
+  simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
   exact (depthwiseStride2Xla_bias_grad_has_vjp W
