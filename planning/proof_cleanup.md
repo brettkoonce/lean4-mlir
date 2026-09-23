@@ -73,7 +73,8 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 
 **Next session, in order** (§3.1–§3.7 are done; §5 has the detail):
 
-1. §5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape — the main remaining proof-cleanup item.
+No main item left (§5.1 and §5.2 are §1(s)/(t)). Candidates, none measured: §3.1's `r34PreK` +
+`_apply` vocabulary; §3.6's `IsShardwise`; §5.3's housekeeping question.
 
 Parked (low payoff): `IsShardwise` for the `_shard` family (§3.6), the StableHLO printer split
 (§3.2, ~45 s), FullNets' matrix-level `G1` lemma (§3.3, ~20 s).
@@ -100,6 +101,7 @@ Parked (low payoff): `IsShardwise` for the `_shard` family (§3.6), the StableHL
 | (p) | §3.6 `_smul` kit: `IsHomog` (an `abbrev`, so `rw [h]`/`h s v` see the equation) + `IsHomog.comp` in DataParallelSync; 128 `X_smul` lemmas across 6 sync files restated `IsHomog (X …)` under the same name, `batchMap_smul` / `batchMapAux_smul` lift `IsHomog`, one-term delegates η-reduce (`batchMap_smul _ (HasVJP.backward_smul _ _)`); 21 explicit `… dy s` call sites swapped to `… s dy`. EfficientNetSyncStepTieG (the only sync file without them) got `variable` sections, `include hN hh hw` where the shard proofs need them | `IsHomog`: −55 lines. Sections: +21 lines but −6% of the file's bytes (97.1 → 90.9 kB) — the survey's "~300 lines from `variable`s" does not hold at this file's shape |
 | (q) | §3.5 training files. The conv2d / depthwise input-VJP proofs (CNN.lean, Depthwise.lean) share `sum_fin_ite_add_eq` + `padTap_indicator`: `simp` rewrites every Kronecker to "`c = ci` and the tap lands", collapses `(c, kh, kw)`, and `split_ifs` closes — the 25-line `show (let …)` restatements, the 55-line injectivity blocks and the triple `sum_eq_single`s are gone (−288 lines). `stepRadius` (SgdDescent) + nine named losses (`cnnConv2KernelLoss`, …, `linearLoss`, `cifar8LastConvLoss`) state the 16 `*_sgd_descends` rungs; each proof opens `simp only [stepRadius] at *; unfold <loss> at *` and is otherwise unchanged (`simp only [loss]` misses the partial application `gradAt (loss …)`; `unfold` does not). `TrainedLinearDescent`'s generator unfolds `linearLoss` after its `refine` (byte-reproducible before the edit). `Conv2Slot.loss_grad_lipschitz`: `set δ` for the drift constant (17 copies), `gcongr` for the 7-deep `mul_le_mul_of_nonneg_left` chain; margin3/4 the same | −763 lines net; CNN 5.9 → 6.2 s, SgdDescentCnn 20 s → 20 s — the audit's "statement elaboration is the 95 s" guess does not hold locally |
 | (s) | §5.1 generator paths. `trained_cnn_{witness,seal}.py` and `lipschitz_cert_{witness_s8,rationalize,power_iter}.py` read `data/` and write under this repo's root (`trained_linear_descent.py`'s `ROOT`); the three Lipschitz scratch snippets go to `SNIPPET_DIR` (default: the system temp dir) instead of a dead scratchpad path. Hand edits ported back so both witnesses and the seal regenerate byte-identically: `ite_eq_left`/`ite_eq_right`/`ite_true` (CNN seal, MLP witness), MLP witness's reduced-model banner, `norm_num [hpreVals]` and §1(i)'s `…Q, castM` simp set. Then `TrainedCnnSeal`'s `open Classical` out through the generator (§3.7's last). `xla_pad_op_check.py` / `mnv2_forward_tie.py` keep the sibling venv's `iree-compile` (a tool binary, env-overridable, never written to) | MNIST in `data/` is byte-identical to the sibling's; `../lean4-jax` has no modified files after every run; TrainedCnnSeal 37 s under lake, audit clean |
+| (t) | §5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape. `R34PosB`/`R34SmoothAtB` and `R50PosB`/`R50SmoothAtB` (stem + pool + one bundle per block; `0 < q` stays its own binder — a shape fact, not a weight fact) replace the apexes' 35 positional hypotheses each; each apex is `.fst` of a private `vjp_comp_diff_at` chain (`r34ChainB`/`r50ChainB`), and the new `resnet34ForwardB_full_differentiableAt`/`resnet50ForwardB_full_differentiableAt` are its `.snd` (audited). The seals gain `sealPos`/`sealSmooth`; `sealVJP` is one call and `sealDiffAt` (~40 lines each) one term. Statement changes: both apexes + `_correct`; the R50 one is in the comparator tier (regenerated). MobileNetV4's "R50 binds 33" prose restated as fields | −203 lines net; all four files ~3 s standalone before and after |
 | (r) | Polish. `MaxPool2IsArgmax.decidable` (CNN.lean) retires the 28 `open scoped Classical in` of §1(l); file-scope `open Classical` is out of IR, MLP, EvenKernelConvBack and the R34/ConvNeXt×2 ties (nothing else needed it). MobileNetV4's apex on `vjp_comp_diff_at` exports `mobilenetv4ForwardB_full_differentiableAt`, so its `sealDiffAt` is one term. The eight float rungs state their radius as `stepRadius … lr (budget)` (37 sites); the TrainedLinearDescent generator unfolds it | −221 lines; full corpus + comparator green |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
@@ -194,10 +196,7 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 * MobileNetV2 `eq_slots` / the 18 `mnv2PreB*_apply` lemmas stay: a generic 21-stage apply lemma is
   longer than what it replaces, and its closing `rfl` would have the kernel compare the concrete
   chain (the timeout `comp3_assoc`'s comment records). The `simp only` over the prefix defs is fast.
-* `sealDiffAt` for R34/R50 is still a hand chain. Tried the MNv2/V4 route (§1(r)) and reverted:
-  their apexes take 38–40 positional binders, which the chain def and the exported
-  `…_differentiableAt` each restate, so it is +99 lines unless the hypotheses are bundled first
-  (an apex statement change; the R50 apex appears inside a comparator-tier statement).
+* ~~`sealDiffAt` for R34/R50~~ — done as §1(t), bundles first (the unbundled try was +99 lines).
 * The `_shard` family (~130 lemmas) has the same shape as `_smul`; an `IsShardwise` predicate was not
   built. `[NeZero N]` for the `hN hh hw` threading was not done (it changes every caller's arguments).
 * The weight-gradient `den` `_smul` lemmas (pointwise, scalar-valued) keep their form.
@@ -223,24 +222,7 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 
 ### 5.1 Generator paths — DONE as §1(s)
 
-### 5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape (the main item)
-
-Template: §1(o) for MobileNetV2 and `MobileNetV4FullBVJP` for the chain. Both apexes
-(`resnet34ForwardB_full_has_vjp_at`, `resnet50ForwardB_full_has_vjp_at`) take 38–40 positional
-binders (`hsε`, one `R34IdPos`/`R34DownPos` per block, stem/pool clauses, one smoothness bundle per
-block at `r34PreK`).
-
-* Bundle them: `R34PosB w` / `R34SmoothAtB N w x` (R50: also `q hq0`), as `MNV2PosB` / `MNV2SmoothAtB`.
-* Build the apex on `vjp_comp_diff_at` (private chain, apex = `.fst`) and export
-  `…_differentiableAt` (= `.snd`); each seal's `sealDiffAt` (~40 lines) becomes one term and
-  `sealVJP`'s 38-argument call becomes `(sealPos) (sealX t) (sealSmooth nCls t)`.
-* ⚠ Statement changes: both apexes + `_correct` (AuditAxioms, blueprint `\lean{}` names), and the R50
-  apex appears inside a comparator-tier statement → regenerate `ChallengeTier`/`SolutionTier`
-  (`scripts/gen_comparator_tier.py`) and run `tests/comparator/run.sh` locally (~5 min, see memory).
-* ⛔ Tried 2026-09-23 WITHOUT bundling and reverted: the chain def and the export each restate all
-  40 binders, +99 lines. Bundle first.
-* Measure before quoting a saving: this session's survey estimates (`variable` sections ~300,
-  `IsHomog` ~200, statement elaboration = the 95 s) came in 2–5× high or not at all.
+### 5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape — DONE as §1(t)
 
 ### 5.3 Housekeeping
 

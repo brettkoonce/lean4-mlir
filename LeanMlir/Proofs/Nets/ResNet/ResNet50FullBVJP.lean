@@ -26,7 +26,8 @@ per-example op, so no hypothesis appears).
 carries **THREE** kink clauses, where ResNet-34's basic block carries two: the two interior relus
 and the post-residual OUTER relu. Sixteen blocks give 48 clauses, plus the stem's relu and the stem
 pool's no-tie condition — bundled per block into `R50IdSmoothAt` / `R50ProjSmoothAt` /
-`R50DownSmoothAt` so the apex binds 18 bundles rather than 50 loose hypotheses.
+`R50DownSmoothAt`, and those 18 bundles into one `R50SmoothAtB` (the positivity bundles into
+`R50PosB`), so the apex binds two hypotheses beside `0 < q`, as MobileNetV2's does.
 
 ⚠ The pool's condition is **per example** (`R34PoolSmoothAt`, reused): a tie is a property of one
 image's 3×3 window, not of the batch.
@@ -222,13 +223,125 @@ noncomputable def r50Pre16 (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) :
   r50IdB N q q w.s4b2 ∘ r50Pre15 N q w
 
 -- ════════════════════════════════════════════════════════════════
+-- § The whole hypothesis budget, in two structures
+-- ════════════════════════════════════════════════════════════════
+
+/-- Every BatchNorm `ε` of the net is positive: the stem's and each bottleneck's bundle. -/
+structure R50PosB {nCls : Nat} (w : R50BWeights nCls) : Prop where
+  s : 0 < w.sε
+  s1b0 : R50ProjPos w.s1b0
+  s1b1 : R50IdPos w.s1b1
+  s1b2 : R50IdPos w.s1b2
+  s2b0 : R50ProjPos w.s2b0
+  s2b1 : R50IdPos w.s2b1
+  s2b2 : R50IdPos w.s2b2
+  s2b3 : R50IdPos w.s2b3
+  s3b0 : R50ProjPos w.s3b0
+  s3b1 : R50IdPos w.s3b1
+  s3b2 : R50IdPos w.s3b2
+  s3b3 : R50IdPos w.s3b3
+  s3b4 : R50IdPos w.s3b4
+  s3b5 : R50IdPos w.s3b5
+  s4b0 : R50ProjPos w.s4b0
+  s4b1 : R50IdPos w.s4b1
+  s4b2 : R50IdPos w.s4b2
+
+/-- ⭐ **Every relu is away from its kink and the stem pool has no tie, each at the activation
+    its block actually sees**: the stem's clauses at the image, block `k`'s at `r50Pre(k-1)`. The
+    head has none (GAP and dense are smooth). -/
+structure R50SmoothAtB (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : Prop where
+  stem : R34StemSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ x
+  pool : R34PoolSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
+    (StableHLO.cbReluStridedB N (h := 2 * (2 * (2 * (2 * q)))) (w := 2 * (2 * (2 * (2 * q)))) w.sW w.sb w.sε w.sγ w.sβ x)
+  s1b0 : R50ProjSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x)
+  s1b1 : R50IdSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x)
+  s1b2 : R50IdSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Pre2 N q w x)
+  s2b0 : R50DownSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 (r50Pre3 N q w x)
+  s2b1 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 (r50Pre4 N q w x)
+  s2b2 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 (r50Pre5 N q w x)
+  s2b3 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 (r50Pre6 N q w x)
+  s3b0 : R50DownSmoothAt N (2 * q) (2 * q) w.s3b0 (r50Pre7 N q w x)
+  s3b1 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b1 (r50Pre8 N q w x)
+  s3b2 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b2 (r50Pre9 N q w x)
+  s3b3 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b3 (r50Pre10 N q w x)
+  s3b4 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b4 (r50Pre11 N q w x)
+  s3b5 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b5 (r50Pre12 N q w x)
+  s4b0 : R50DownSmoothAt N q q w.s4b0 (r50Pre13 N q w x)
+  s4b1 : R50IdSmoothAt N q q w.s4b1 (r50Pre14 N q w x)
+  s4b2 : R50IdSmoothAt N q q w.s4b2 (r50Pre15 N q w x)
+
+-- ════════════════════════════════════════════════════════════════
 -- § The apex
 -- ════════════════════════════════════════════════════════════════
 
+/-- The chain's VJP and its differentiability together, one `vjp_comp_diff_at` per block: the
+    apex is `.fst`, `resnet50ForwardB_full_differentiableAt` is `.snd`. -/
+private noncomputable def r50ChainB (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtB N q w x) :
+    PProd (HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x)
+      (DifferentiableAt ℝ (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x) :=
+  let p0 : PProd (HasVJPAt (r50Pre0 N q w) x) (DifferentiableAt ℝ (r50Pre0 N q w) x) :=
+    ⟨r34StemB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε hp.s w.sγ w.sβ
+        (by norm_num) (by omega) (by omega) x hx.stem hx.pool,
+      r34StemB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε hp.s w.sγ w.sβ
+        (by norm_num) (by omega) (by omega) x hx.stem hx.pool⟩
+  let p1 : PProd (HasVJPAt (r50Pre1 N q w) x) (DifferentiableAt ℝ (r50Pre1 N q w) x) :=
+    vjp_comp_diff_at _ _ x p0 ⟨r50ProjB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 hp.s1b0 _ hx.s1b0,
+      r50ProjB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 hp.s1b0 _ hx.s1b0⟩
+  let p2 : PProd (HasVJPAt (r50Pre2 N q w) x) (DifferentiableAt ℝ (r50Pre2 N q w) x) :=
+    vjp_comp_diff_at _ _ x p1 ⟨r50IdB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 hp.s1b1 _ hx.s1b1,
+      r50IdB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 hp.s1b1 _ hx.s1b1⟩
+  let p3 : PProd (HasVJPAt (r50Pre3 N q w) x) (DifferentiableAt ℝ (r50Pre3 N q w) x) :=
+    vjp_comp_diff_at _ _ x p2 ⟨r50IdB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 hp.s1b2 _ hx.s1b2,
+      r50IdB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 hp.s1b2 _ hx.s1b2⟩
+  let p4 : PProd (HasVJPAt (r50Pre4 N q w) x) (DifferentiableAt ℝ (r50Pre4 N q w) x) :=
+    vjp_comp_diff_at _ _ x p3 ⟨r50DownB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 hp.s2b0 _ hx.s2b0,
+      r50DownB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 hp.s2b0 _ hx.s2b0⟩
+  let p5 : PProd (HasVJPAt (r50Pre5 N q w) x) (DifferentiableAt ℝ (r50Pre5 N q w) x) :=
+    vjp_comp_diff_at _ _ x p4 ⟨r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 hp.s2b1 _ hx.s2b1,
+      r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 hp.s2b1 _ hx.s2b1⟩
+  let p6 : PProd (HasVJPAt (r50Pre6 N q w) x) (DifferentiableAt ℝ (r50Pre6 N q w) x) :=
+    vjp_comp_diff_at _ _ x p5 ⟨r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 hp.s2b2 _ hx.s2b2,
+      r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 hp.s2b2 _ hx.s2b2⟩
+  let p7 : PProd (HasVJPAt (r50Pre7 N q w) x) (DifferentiableAt ℝ (r50Pre7 N q w) x) :=
+    vjp_comp_diff_at _ _ x p6 ⟨r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 hp.s2b3 _ hx.s2b3,
+      r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 hp.s2b3 _ hx.s2b3⟩
+  let p8 : PProd (HasVJPAt (r50Pre8 N q w) x) (DifferentiableAt ℝ (r50Pre8 N q w) x) :=
+    vjp_comp_diff_at _ _ x p7 ⟨r50DownB_has_vjp_at N (2 * q) (2 * q) w.s3b0 hp.s3b0 _ hx.s3b0,
+      r50DownB_differentiableAt N (2 * q) (2 * q) w.s3b0 hp.s3b0 _ hx.s3b0⟩
+  let p9 : PProd (HasVJPAt (r50Pre9 N q w) x) (DifferentiableAt ℝ (r50Pre9 N q w) x) :=
+    vjp_comp_diff_at _ _ x p8 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b1 hp.s3b1 _ hx.s3b1,
+      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b1 hp.s3b1 _ hx.s3b1⟩
+  let p10 : PProd (HasVJPAt (r50Pre10 N q w) x) (DifferentiableAt ℝ (r50Pre10 N q w) x) :=
+    vjp_comp_diff_at _ _ x p9 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b2 hp.s3b2 _ hx.s3b2,
+      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b2 hp.s3b2 _ hx.s3b2⟩
+  let p11 : PProd (HasVJPAt (r50Pre11 N q w) x) (DifferentiableAt ℝ (r50Pre11 N q w) x) :=
+    vjp_comp_diff_at _ _ x p10 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b3 hp.s3b3 _ hx.s3b3,
+      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b3 hp.s3b3 _ hx.s3b3⟩
+  let p12 : PProd (HasVJPAt (r50Pre12 N q w) x) (DifferentiableAt ℝ (r50Pre12 N q w) x) :=
+    vjp_comp_diff_at _ _ x p11 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b4 hp.s3b4 _ hx.s3b4,
+      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b4 hp.s3b4 _ hx.s3b4⟩
+  let p13 : PProd (HasVJPAt (r50Pre13 N q w) x) (DifferentiableAt ℝ (r50Pre13 N q w) x) :=
+    vjp_comp_diff_at _ _ x p12 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b5 hp.s3b5 _ hx.s3b5,
+      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b5 hp.s3b5 _ hx.s3b5⟩
+  let p14 : PProd (HasVJPAt (r50Pre14 N q w) x) (DifferentiableAt ℝ (r50Pre14 N q w) x) :=
+    vjp_comp_diff_at _ _ x p13 ⟨r50DownB_has_vjp_at N q q w.s4b0 hp.s4b0 _ hx.s4b0,
+      r50DownB_differentiableAt N q q w.s4b0 hp.s4b0 _ hx.s4b0⟩
+  let p15 : PProd (HasVJPAt (r50Pre15 N q w) x) (DifferentiableAt ℝ (r50Pre15 N q w) x) :=
+    vjp_comp_diff_at _ _ x p14 ⟨r50IdB_has_vjp_at N q q w.s4b1 hp.s4b1 _ hx.s4b1,
+      r50IdB_differentiableAt N q q w.s4b1 hp.s4b1 _ hx.s4b1⟩
+  let p16 : PProd (HasVJPAt (r50Pre16 N q w) x) (DifferentiableAt ℝ (r50Pre16 N q w) x) :=
+    vjp_comp_diff_at _ _ x p15 ⟨r50IdB_has_vjp_at N q q w.s4b2 hp.s4b2 _ hx.s4b2,
+      r50IdB_differentiableAt N q q w.s4b2 hp.s4b2 _ hx.s4b2⟩
+  vjp_comp_diff_at _ _ x p16
+    ⟨(r34HeadB_has_vjp N q q w.Wd w.bd).toHasVJPAt _, r34HeadB_differentiable N q q w.Wd w.bd _⟩
+
 /-- ⭐⭐ **ResNet-50 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
-    bottlenecks.** Chains stem → the [3,4,6,3] ladder → head with `vjp_comp_at`, one positivity
-    bundle and one smoothness bundle per block. T1's VJP half, and the first tier ResNet-50 has
-    ever had at the net level.
+    bottlenecks.** Chains stem → the [3,4,6,3] ladder → head with `vjp_comp_diff_at` under two
+    hypotheses: `R50PosB` (every `ε > 0`) and `R50SmoothAtB` (every relu clause and the pool's
+    no-tie, each at its block's own input). T1's VJP half, and the first tier ResNet-50 has ever
+    had at the net level.
 
     ⚠ Pointwise, and necessarily: relu is kinked. ⛔ Each block contributes THREE clauses — the
     two interior relus and the post-residual OUTER relu — where ResNet-34's basic block
@@ -236,122 +349,11 @@ noncomputable def r50Pre16 (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) :
 
     ⭐ The head takes no hypothesis at all, and `N` and `q` are both variables, so this covers the
     224-px and 160-px artifacts at every batch size. ⛔ `0 < q` is needed for the stem pool. -/
-noncomputable def resnet50ForwardB_full_has_vjp_at (N q : Nat) (hq0 : 0 < q) {nCls : Nat}
-    (w : R50BWeights nCls) (hsε : 0 < w.sε)
-    (qs1b0 : R50ProjPos w.s1b0)
-    (qs1b1 : R50IdPos w.s1b1)
-    (qs1b2 : R50IdPos w.s1b2)
-    (qs2b0 : R50ProjPos w.s2b0)
-    (qs2b1 : R50IdPos w.s2b1)
-    (qs2b2 : R50IdPos w.s2b2)
-    (qs2b3 : R50IdPos w.s2b3)
-    (qs3b0 : R50ProjPos w.s3b0)
-    (qs3b1 : R50IdPos w.s3b1)
-    (qs3b2 : R50IdPos w.s3b2)
-    (qs3b3 : R50IdPos w.s3b3)
-    (qs3b4 : R50IdPos w.s3b4)
-    (qs3b5 : R50IdPos w.s3b5)
-    (qs4b0 : R50ProjPos w.s4b0)
-    (qs4b1 : R50IdPos w.s4b1)
-    (qs4b2 : R50IdPos w.s4b2)
-    (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
-    (h_stem : R34StemSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ x)
-    (h_pool : R34PoolSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
-      (StableHLO.cbReluStridedB N (h := 2 * (2 * (2 * (2 * q)))) (w := 2 * (2 * (2 * (2 * q)))) w.sW w.sb w.sε w.sγ w.sβ x))
-    (ss1b0 : R50ProjSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x))
-    (ss1b1 : R50IdSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x))
-    (ss1b2 : R50IdSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Pre2 N q w x))
-    (ss2b0 : R50DownSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 (r50Pre3 N q w x))
-    (ss2b1 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 (r50Pre4 N q w x))
-    (ss2b2 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 (r50Pre5 N q w x))
-    (ss2b3 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 (r50Pre6 N q w x))
-    (ss3b0 : R50DownSmoothAt N (2 * q) (2 * q) w.s3b0 (r50Pre7 N q w x))
-    (ss3b1 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b1 (r50Pre8 N q w x))
-    (ss3b2 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b2 (r50Pre9 N q w x))
-    (ss3b3 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b3 (r50Pre10 N q w x))
-    (ss3b4 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b4 (r50Pre11 N q w x))
-    (ss3b5 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b5 (r50Pre12 N q w x))
-    (ss4b0 : R50DownSmoothAt N q q w.s4b0 (r50Pre13 N q w x))
-    (ss4b1 : R50IdSmoothAt N q q w.s4b1 (r50Pre14 N q w x))
-    (ss4b2 : R50IdSmoothAt N q q w.s4b2 (r50Pre15 N q w x))
-    :
-    HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x := by
-  have dS : DifferentiableAt ℝ (r50Pre0 N q w) x :=
-    r34StemB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε hsε w.sγ w.sβ
-      (by norm_num) (by omega) (by omega) x h_stem h_pool
-  have vS : HasVJPAt (r50Pre0 N q w) x :=
-    r34StemB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε hsε w.sγ w.sβ
-      (by norm_num) (by omega) (by omega) x h_stem h_pool
-  have f0 : DifferentiableAt ℝ (r50Pre0 N q w) x := dS
-  have e0 : HasVJPAt (r50Pre0 N q w) x := vS
-  have d1 := r50ProjB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 qs1b0 _ ss1b0
-  have e1 : HasVJPAt (r50Pre1 N q w) x :=
-    vjp_comp_at _ _ x f0 d1 e0 (r50ProjB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 qs1b0 _ ss1b0)
-  have f1 : DifferentiableAt ℝ (r50Pre1 N q w) x := d1.comp x f0
-  have d2 := r50IdB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 qs1b1 _ ss1b1
-  have e2 : HasVJPAt (r50Pre2 N q w) x :=
-    vjp_comp_at _ _ x f1 d2 e1 (r50IdB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 qs1b1 _ ss1b1)
-  have f2 : DifferentiableAt ℝ (r50Pre2 N q w) x := d2.comp x f1
-  have d3 := r50IdB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 qs1b2 _ ss1b2
-  have e3 : HasVJPAt (r50Pre3 N q w) x :=
-    vjp_comp_at _ _ x f2 d3 e2 (r50IdB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 qs1b2 _ ss1b2)
-  have f3 : DifferentiableAt ℝ (r50Pre3 N q w) x := d3.comp x f2
-  have d4 := r50DownB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 qs2b0 _ ss2b0
-  have e4 : HasVJPAt (r50Pre4 N q w) x :=
-    vjp_comp_at _ _ x f3 d4 e3 (r50DownB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 qs2b0 _ ss2b0)
-  have f4 : DifferentiableAt ℝ (r50Pre4 N q w) x := d4.comp x f3
-  have d5 := r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 qs2b1 _ ss2b1
-  have e5 : HasVJPAt (r50Pre5 N q w) x :=
-    vjp_comp_at _ _ x f4 d5 e4 (r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 qs2b1 _ ss2b1)
-  have f5 : DifferentiableAt ℝ (r50Pre5 N q w) x := d5.comp x f4
-  have d6 := r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 qs2b2 _ ss2b2
-  have e6 : HasVJPAt (r50Pre6 N q w) x :=
-    vjp_comp_at _ _ x f5 d6 e5 (r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 qs2b2 _ ss2b2)
-  have f6 : DifferentiableAt ℝ (r50Pre6 N q w) x := d6.comp x f5
-  have d7 := r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 qs2b3 _ ss2b3
-  have e7 : HasVJPAt (r50Pre7 N q w) x :=
-    vjp_comp_at _ _ x f6 d7 e6 (r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 qs2b3 _ ss2b3)
-  have f7 : DifferentiableAt ℝ (r50Pre7 N q w) x := d7.comp x f6
-  have d8 := r50DownB_differentiableAt N (2 * q) (2 * q) w.s3b0 qs3b0 _ ss3b0
-  have e8 : HasVJPAt (r50Pre8 N q w) x :=
-    vjp_comp_at _ _ x f7 d8 e7 (r50DownB_has_vjp_at N (2 * q) (2 * q) w.s3b0 qs3b0 _ ss3b0)
-  have f8 : DifferentiableAt ℝ (r50Pre8 N q w) x := d8.comp x f7
-  have d9 := r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b1 qs3b1 _ ss3b1
-  have e9 : HasVJPAt (r50Pre9 N q w) x :=
-    vjp_comp_at _ _ x f8 d9 e8 (r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b1 qs3b1 _ ss3b1)
-  have f9 : DifferentiableAt ℝ (r50Pre9 N q w) x := d9.comp x f8
-  have d10 := r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b2 qs3b2 _ ss3b2
-  have e10 : HasVJPAt (r50Pre10 N q w) x :=
-    vjp_comp_at _ _ x f9 d10 e9 (r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b2 qs3b2 _ ss3b2)
-  have f10 : DifferentiableAt ℝ (r50Pre10 N q w) x := d10.comp x f9
-  have d11 := r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b3 qs3b3 _ ss3b3
-  have e11 : HasVJPAt (r50Pre11 N q w) x :=
-    vjp_comp_at _ _ x f10 d11 e10 (r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b3 qs3b3 _ ss3b3)
-  have f11 : DifferentiableAt ℝ (r50Pre11 N q w) x := d11.comp x f10
-  have d12 := r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b4 qs3b4 _ ss3b4
-  have e12 : HasVJPAt (r50Pre12 N q w) x :=
-    vjp_comp_at _ _ x f11 d12 e11 (r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b4 qs3b4 _ ss3b4)
-  have f12 : DifferentiableAt ℝ (r50Pre12 N q w) x := d12.comp x f11
-  have d13 := r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b5 qs3b5 _ ss3b5
-  have e13 : HasVJPAt (r50Pre13 N q w) x :=
-    vjp_comp_at _ _ x f12 d13 e12 (r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b5 qs3b5 _ ss3b5)
-  have f13 : DifferentiableAt ℝ (r50Pre13 N q w) x := d13.comp x f12
-  have d14 := r50DownB_differentiableAt N q q w.s4b0 qs4b0 _ ss4b0
-  have e14 : HasVJPAt (r50Pre14 N q w) x :=
-    vjp_comp_at _ _ x f13 d14 e13 (r50DownB_has_vjp_at N q q w.s4b0 qs4b0 _ ss4b0)
-  have f14 : DifferentiableAt ℝ (r50Pre14 N q w) x := d14.comp x f13
-  have d15 := r50IdB_differentiableAt N q q w.s4b1 qs4b1 _ ss4b1
-  have e15 : HasVJPAt (r50Pre15 N q w) x :=
-    vjp_comp_at _ _ x f14 d15 e14 (r50IdB_has_vjp_at N q q w.s4b1 qs4b1 _ ss4b1)
-  have f15 : DifferentiableAt ℝ (r50Pre15 N q w) x := d15.comp x f14
-  have d16 := r50IdB_differentiableAt N q q w.s4b2 qs4b2 _ ss4b2
-  have e16 : HasVJPAt (r50Pre16 N q w) x :=
-    vjp_comp_at _ _ x f15 d16 e15 (r50IdB_has_vjp_at N q q w.s4b2 qs4b2 _ ss4b2)
-  have f16 : DifferentiableAt ℝ (r50Pre16 N q w) x := d16.comp x f15
-  exact vjp_comp_at _ (r34HeadB N q q w.Wd w.bd) x f16
-    ((r34HeadB_differentiable N q q w.Wd w.bd) _) e16
-    ((r34HeadB_has_vjp N q q w.Wd w.bd).toHasVJPAt _)
-
+noncomputable def resnet50ForwardB_full_has_vjp_at (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtB N q w x) :
+    HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x :=
+  (r50ChainB N q hq0 w hp x hx).fst
 
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `r50PreK` form IS the committed forward
@@ -424,49 +426,24 @@ theorem resnet50ForwardB_full_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights
     `pdiv`-contracted Jacobian of `resnet50ForwardB_full` ITSELF — the committed
     nested-application forward `ResNet50FullB.lean` defines — not of the layered chain the VJP is
     assembled on. Tied back through `resnet50ForwardB_full_eq_chain`. -/
-theorem resnet50ForwardB_full_has_vjp_at_correct (N q : Nat) (hq0 : 0 < q) {nCls : Nat}
-    (w : R50BWeights nCls) (hsε : 0 < w.sε)
-    (qs1b0 : R50ProjPos w.s1b0)
-    (qs1b1 : R50IdPos w.s1b1)
-    (qs1b2 : R50IdPos w.s1b2)
-    (qs2b0 : R50ProjPos w.s2b0)
-    (qs2b1 : R50IdPos w.s2b1)
-    (qs2b2 : R50IdPos w.s2b2)
-    (qs2b3 : R50IdPos w.s2b3)
-    (qs3b0 : R50ProjPos w.s3b0)
-    (qs3b1 : R50IdPos w.s3b1)
-    (qs3b2 : R50IdPos w.s3b2)
-    (qs3b3 : R50IdPos w.s3b3)
-    (qs3b4 : R50IdPos w.s3b4)
-    (qs3b5 : R50IdPos w.s3b5)
-    (qs4b0 : R50ProjPos w.s4b0)
-    (qs4b1 : R50IdPos w.s4b1)
-    (qs4b2 : R50IdPos w.s4b2)
-    (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
-    (h_stem : R34StemSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ x)
-    (h_pool : R34PoolSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
-      (StableHLO.cbReluStridedB N (h := 2 * (2 * (2 * (2 * q)))) (w := 2 * (2 * (2 * (2 * q)))) w.sW w.sb w.sε w.sγ w.sβ x))
-    (ss1b0 : R50ProjSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x))
-    (ss1b1 : R50IdSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x))
-    (ss1b2 : R50IdSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 (r50Pre2 N q w x))
-    (ss2b0 : R50DownSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 (r50Pre3 N q w x))
-    (ss2b1 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 (r50Pre4 N q w x))
-    (ss2b2 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 (r50Pre5 N q w x))
-    (ss2b3 : R50IdSmoothAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 (r50Pre6 N q w x))
-    (ss3b0 : R50DownSmoothAt N (2 * q) (2 * q) w.s3b0 (r50Pre7 N q w x))
-    (ss3b1 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b1 (r50Pre8 N q w x))
-    (ss3b2 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b2 (r50Pre9 N q w x))
-    (ss3b3 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b3 (r50Pre10 N q w x))
-    (ss3b4 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b4 (r50Pre11 N q w x))
-    (ss3b5 : R50IdSmoothAt N (2 * q) (2 * q) w.s3b5 (r50Pre12 N q w x))
-    (ss4b0 : R50DownSmoothAt N q q w.s4b0 (r50Pre13 N q w x))
-    (ss4b1 : R50IdSmoothAt N q q w.s4b1 (r50Pre14 N q w x))
-    (ss4b2 : R50IdSmoothAt N q q w.s4b2 (r50Pre15 N q w x))
+theorem resnet50ForwardB_full_has_vjp_at_correct (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtB N q w x)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    (resnet50ForwardB_full_has_vjp_at N q hq0 w hsε qs1b0 qs1b1 qs1b2 qs2b0 qs2b1 qs2b2 qs2b3 qs3b0 qs3b1 qs3b2 qs3b3 qs3b4 qs3b5 qs4b0 qs4b1 qs4b2 x h_stem h_pool ss1b0 ss1b1 ss1b2 ss2b0 ss2b1 ss2b2 ss2b3 ss3b0 ss3b1 ss3b2 ss3b3 ss3b4 ss3b5 ss4b0 ss4b1 ss4b2).backward dy i =
+    (resnet50ForwardB_full_has_vjp_at N q hq0 w hp x hx).backward dy i =
       ∑ j : Fin (N * nCls), pdiv (resnet50ForwardB_full N q w) x i j * dy j := by
-  have h := (resnet50ForwardB_full_has_vjp_at N q hq0 w hsε qs1b0 qs1b1 qs1b2 qs2b0 qs2b1 qs2b2 qs2b3 qs3b0 qs3b1 qs3b2 qs3b3 qs3b4 qs3b5 qs4b0 qs4b1 qs4b2 x h_stem h_pool ss1b0 ss1b1 ss1b2 ss2b0 ss2b1 ss2b2 ss2b3 ss3b0 ss3b1 ss3b2 ss3b3 ss3b4 ss3b5 ss4b0 ss4b1 ss4b2).correct dy i
+  have h := (resnet50ForwardB_full_has_vjp_at N q hq0 w hp x hx).correct dy i
   rwa [show resnet50ForwardB_full N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
       from funext (resnet50ForwardB_full_eq_chain N q w)]
+
+/-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`, read
+    back through `resnet50ForwardB_full_eq_chain`. What the seal's `sealDiffAt` needs. -/
+theorem resnet50ForwardB_full_differentiableAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtB N q w x) :
+    DifferentiableAt ℝ (resnet50ForwardB_full N q w) x := by
+  rw [show resnet50ForwardB_full N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
+      from funext (resnet50ForwardB_full_eq_chain N q w)]
+  exact (r50ChainB N q hq0 w hp x hx).snd
 
 end Proofs

@@ -69,54 +69,19 @@ theorem chk_bn_input_grad_correct :
 /-- `Proofs.resnet50ForwardB_full_has_vjp_at_correct` -/
 theorem chk_resnet50ForwardB_full_has_vjp_at_correct :
     ∀ (N q : ℕ) (hq0 : (0 : ℕ) < q) {nCls : ℕ}
-      (w : Proofs.R50BWeights nCls) (hsε : (0 : ℝ) < w.sε) (qs1b0 : Proofs.R50ProjPos w.s1b0)
-      (qs1b1 : Proofs.R50IdPos w.s1b1) (qs1b2 : Proofs.R50IdPos w.s1b2) (qs2b0 : Proofs.R50ProjPos w.s2b0)
-      (qs2b1 : Proofs.R50IdPos w.s2b1) (qs2b2 : Proofs.R50IdPos w.s2b2) (qs2b3 : Proofs.R50IdPos w.s2b3)
-      (qs3b0 : Proofs.R50ProjPos w.s3b0) (qs3b1 : Proofs.R50IdPos w.s3b1) (qs3b2 : Proofs.R50IdPos w.s3b2)
-      (qs3b3 : Proofs.R50IdPos w.s3b3) (qs3b4 : Proofs.R50IdPos w.s3b4) (qs3b5 : Proofs.R50IdPos w.s3b5)
-      (qs4b0 : Proofs.R50ProjPos w.s4b0) (qs4b1 : Proofs.R50IdPos w.s4b1) (qs4b2 : Proofs.R50IdPos w.s4b2)
+      (w : Proofs.R50BWeights nCls) (hp : Proofs.R50PosB w)
       (x :
         Proofs.Vec
           (N *
             ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
               ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))))
-      (h_stem :
-        Proofs.R34StemSmoothAt N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) w.sW w.sb w.sε
-          w.sγ w.sβ x)
-      (h_pool :
-        Proofs.R34PoolSmoothAt N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))
-          (Proofs.StableHLO.cbReluStridedB N w.sW w.sb w.sε w.sγ w.sβ x))
-      (ss1b0 :
-        Proofs.R50ProjSmoothAt N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) w.s1b0
-          (Proofs.r50Pre0 N q w x))
-      (ss1b1 :
-        Proofs.R50IdSmoothAt N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) w.s1b1
-          (Proofs.r50Pre1 N q w x))
-      (ss1b2 :
-        Proofs.R50IdSmoothAt N ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))) w.s1b2
-          (Proofs.r50Pre2 N q w x))
-      (ss2b0 : Proofs.R50DownSmoothAt N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b0 (Proofs.r50Pre3 N q w x))
-      (ss2b1 : Proofs.R50IdSmoothAt N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b1 (Proofs.r50Pre4 N q w x))
-      (ss2b2 : Proofs.R50IdSmoothAt N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b2 (Proofs.r50Pre5 N q w x))
-      (ss2b3 : Proofs.R50IdSmoothAt N ((2 : ℕ) * ((2 : ℕ) * q)) ((2 : ℕ) * ((2 : ℕ) * q)) w.s2b3 (Proofs.r50Pre6 N q w x))
-      (ss3b0 : Proofs.R50DownSmoothAt N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b0 (Proofs.r50Pre7 N q w x))
-      (ss3b1 : Proofs.R50IdSmoothAt N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b1 (Proofs.r50Pre8 N q w x))
-      (ss3b2 : Proofs.R50IdSmoothAt N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b2 (Proofs.r50Pre9 N q w x))
-      (ss3b3 : Proofs.R50IdSmoothAt N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b3 (Proofs.r50Pre10 N q w x))
-      (ss3b4 : Proofs.R50IdSmoothAt N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b4 (Proofs.r50Pre11 N q w x))
-      (ss3b5 : Proofs.R50IdSmoothAt N ((2 : ℕ) * q) ((2 : ℕ) * q) w.s3b5 (Proofs.r50Pre12 N q w x))
-      (ss4b0 : Proofs.R50DownSmoothAt N q q w.s4b0 (Proofs.r50Pre13 N q w x))
-      (ss4b1 : Proofs.R50IdSmoothAt N q q w.s4b1 (Proofs.r50Pre14 N q w x))
-      (ss4b2 : Proofs.R50IdSmoothAt N q q w.s4b2 (Proofs.r50Pre15 N q w x)) (dy : Proofs.Vec (N * nCls))
+      (hx : Proofs.R50SmoothAtB N q w x) (dy : Proofs.Vec (N * nCls))
       (i :
         Fin
           (N *
             ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
               ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))))))),
-      (Proofs.resnet50ForwardB_full_has_vjp_at N q hq0 w hsε qs1b0 qs1b1 qs1b2 qs2b0 qs2b1 qs2b2 qs2b3 qs3b0 qs3b1 qs3b2
-              qs3b3 qs3b4 qs3b5 qs4b0 qs4b1 qs4b2 x h_stem h_pool ss1b0 ss1b1 ss1b2 ss2b0 ss2b1 ss2b2 ss2b3 ss3b0 ss3b1
-              ss3b2 ss3b3 ss3b4 ss3b5 ss4b0 ss4b1 ss4b2).backward
-          dy i =
+      (Proofs.resnet50ForwardB_full_has_vjp_at N q hq0 w hp x hx).backward dy i =
         ∑ j : Fin (N * nCls), Proofs.pdiv (Proofs.resnet50ForwardB_full N q w) x i j * dy j := by sorry
 
 /-- `Proofs.vitTiny_has_vjp_correct` -/

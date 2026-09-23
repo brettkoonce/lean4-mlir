@@ -10,16 +10,17 @@ with it MobileNetV4 has its first net-level tier.
 run; what pins the artifact to the reference's function is the pair of ties re-run 2026-09-07
 (forward `max |Δ| = 3.770e-06`, gradient inside the reference's own fp32 floor).
 
-## ⭐⭐ Eight hypotheses, not thirty-three
+## ⭐⭐ Eight fields, not thirty-five
 
-ResNet-50's apex (`resnet50ForwardB_full_has_vjp_at`) takes 33: a positivity bundle and a
-smoothness bundle per block, plus the stem's and the pool's, threaded through sixteen hand-written
-`r50Pre_k` prefix definitions and a bottom-up `have` chain. MobileNetV4's takes **eight** — one per
-prefix — and the difference is `CertLayer`:
+ResNet-50's apex (`resnet50ForwardB_full_has_vjp_at`) takes two structures, `R50PosB` and
+`R50SmoothAtB`, whose 35 hand-written fields are a positivity bundle and a smoothness bundle per
+block plus the stem's and the pool's, each smoothness field stated at its own hand-written
+`r50Pre_k` prefix. MobileNetV4's smoothness hypothesis has **eight** fields — one per prefix — and the
+difference is `CertLayer`:
 
 * `0 < ε` at all 77 BatchNorm sites is already INSIDE the weights — `UibParams` carries `hq he hd
   hz` and `Mnv4BWeights` carries the stem's, the fused stage's and the head's — so **no positivity
-  hypothesis appears at this tier at all**, where R50 binds sixteen.
+  hypothesis appears at this tier at all**, where `R50PosB` has seventeen fields.
 * every relu clause is some group's `.ok`, which `CertLayer.comp` built by conjoining each
   stage's condition **at that stage's own input** as the group was assembled. Writing them out
   would be roughly sixty clauses, each at a deeply nested activation. None is written down here.

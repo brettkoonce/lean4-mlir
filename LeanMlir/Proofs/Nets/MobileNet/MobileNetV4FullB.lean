@@ -43,8 +43,9 @@ composing the compositions, under something that can start unfolding `den`, that
 
 ⭐ So the top level is seven named prefixes (`mnv4Pre0` … `mnv4Pre6`) and the forward is their
 nest. What it costs is the hypothesis bundle: `Mnv4SmoothAt` binds one `.ok` per group, eight
-fields rather than two. What it keeps is everything that mattered — R50's apex binds 33, and MNv4
-binds no `0 < ε` hypothesis at all, because those live inside the weight records.
+fields rather than two. What it keeps is everything that mattered — R50's two apex bundles carry 35
+hand-written fields, and MNv4 binds no `0 < ε` hypothesis at all, because those live inside the
+weight records.
 
 ▶ **The general lesson, and it is not MNv4-specific:** a net whose resolutions are LITERALS cannot
 afford the proof idioms a net with a resolution BINDER can. ResNet-50's `q` keeps `den` stuck;
@@ -360,7 +361,7 @@ seven stages instead of eighteen. What that costs is the hypothesis bundle: `Mnv
 one `.ok` per group (seven) rather than one for the whole trunk. What it keeps is everything that
 mattered — each group's `.ok` is still the conjunction `CertLayer.comp` assembled from its blocks'
 conditions at their own activations, so ~60 relu clauses are still never written down, and no
-`0 < ε` hypothesis appears at all. R50's apex binds 33. -/
+`0 < ε` hypothesis appears at all. R50's two apex bundles carry 35 fields. -/
 
 /-- Prefix 0: the stem's output. -/
 @[reducible] noncomputable def mnv4Pre0 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)

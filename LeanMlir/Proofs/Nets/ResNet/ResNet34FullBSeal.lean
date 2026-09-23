@@ -622,6 +622,21 @@ theorem sc_e1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 7 7 (sealW nCls).e1 (r34Pre15 2 (sealW nCls) (sealX t)) :=
   sealIdSmooth 2 7 7 512 (by norm_num) _ (nn15 nCls t)
 
+/-- Every BN `ε` of the witness is `1`. -/
+theorem sealPos (nCls : Nat) : R34PosB (sealW nCls) :=
+  ⟨one_pos, sealIdPos 64, sealIdPos 64, sealIdPos 64, sealDnPos 64 128,
+    sealIdPos 128, sealIdPos 128, sealIdPos 128, sealDnPos 128 256,
+    sealIdPos 256, sealIdPos 256, sealIdPos 256, sealIdPos 256, sealIdPos 256,
+    sealDnPos 256 512, sealIdPos 512, sealIdPos 512⟩
+
+/-- The stem clause, the pool's no-tie and all 32 relu clauses at `(sealW nCls, sealX t)`. -/
+theorem sealSmooth (nCls : Nat) (t : ℝ) : R34SmoothAtB 2 (sealW nCls) (sealX t) :=
+  ⟨sealStemClause nCls t, sealPoolClause nCls t,
+    sc_a0 nCls t, sc_a1 nCls t, sc_a2 nCls t, sc_d2 nCls t,
+    sc_b0 nCls t, sc_b1 nCls t, sc_b2 nCls t, sc_d3 nCls t,
+    sc_c0 nCls t, sc_c1 nCls t, sc_c2 nCls t, sc_c3 nCls t, sc_c4 nCls t,
+    sc_d4 nCls t, sc_e0 nCls t, sc_e1 nCls t⟩
+
 /-- ⭐⭐ **The whole-net VJP at the witness** — every one of the 32 relu clauses, the stem clause
     and the pool's no-tie discharged at `(sealW nCls, sealX t)`, on `resnet34ForwardB_full`
     itself (transported through `resnet34ForwardB_full_eq_chain`). -/
@@ -630,60 +645,14 @@ noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
   rw [show resnet34ForwardB_full 2 (sealW nCls)
       = r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd ∘ r34Pre16 2 (sealW nCls)
       from funext (resnet34ForwardB_full_eq_chain 2 (sealW nCls))]
-  exact resnet34ForwardB_full_has_vjp_at 2 (sealW nCls) one_pos
-    (sealIdPos 64) (sealIdPos 64) (sealIdPos 64) (sealDnPos 64 128)
-    (sealIdPos 128) (sealIdPos 128) (sealIdPos 128) (sealDnPos 128 256)
-    (sealIdPos 256) (sealIdPos 256) (sealIdPos 256) (sealIdPos 256) (sealIdPos 256)
-    (sealDnPos 256 512) (sealIdPos 512) (sealIdPos 512)
-    (sealX t) (sealStemClause nCls t) (sealPoolClause nCls t)
-    (sc_a0 nCls t) (sc_a1 nCls t) (sc_a2 nCls t) (sc_d2 nCls t)
-    (sc_b0 nCls t) (sc_b1 nCls t) (sc_b2 nCls t) (sc_d3 nCls t)
-    (sc_c0 nCls t) (sc_c1 nCls t) (sc_c2 nCls t) (sc_c3 nCls t) (sc_c4 nCls t)
-    (sc_d4 nCls t) (sc_e0 nCls t) (sc_e1 nCls t)
+  exact resnet34ForwardB_full_has_vjp_at 2 (sealW nCls) (sealPos nCls) (sealX t)
+    (sealSmooth nCls t)
 
-/-- The net is differentiable at the witness — `fderiv_ne_zero_of_ray`'s first hypothesis. Built
-    block by block, as the apex's own proof builds its chain. -/
+/-- The net is differentiable at the witness — `fderiv_ne_zero_of_ray`'s first hypothesis. -/
 theorem sealDiffAt (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (resnet34ForwardB_full 2 (sealW nCls)) (sealX t) := by
-  rw [show resnet34ForwardB_full 2 (sealW nCls)
-      = r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd ∘ r34Pre16 2 (sealW nCls)
-      from funext (resnet34ForwardB_full_eq_chain 2 (sealW nCls))]
-  have f0 : DifferentiableAt ℝ (r34Pre0 2 (sealW nCls)) (sealX t) :=
-    r34StemB_differentiableAt 2 56 56 _ _ _ one_pos _ _ (by norm_num) (by norm_num)
-      (by norm_num) (sealX t) (sealStemClause nCls t) (sealPoolClause nCls t)
-  have f1 : DifferentiableAt ℝ (r34Pre1 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 56 56 (sealW nCls).a0 (sealIdPos 64) _ (sc_a0 nCls t)).comp (sealX t) f0
-  have f2 : DifferentiableAt ℝ (r34Pre2 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 56 56 (sealW nCls).a1 (sealIdPos 64) _ (sc_a1 nCls t)).comp (sealX t) f1
-  have f3 : DifferentiableAt ℝ (r34Pre3 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 56 56 (sealW nCls).a2 (sealIdPos 64) _ (sc_a2 nCls t)).comp (sealX t) f2
-  have f4 : DifferentiableAt ℝ (r34Pre4 2 (sealW nCls)) (sealX t) :=
-    (r34DownB_differentiableAt 2 28 28 (sealW nCls).d2 (sealDnPos 64 128) _ (sc_d2 nCls t)).comp (sealX t) f3
-  have f5 : DifferentiableAt ℝ (r34Pre5 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 28 28 (sealW nCls).b0 (sealIdPos 128) _ (sc_b0 nCls t)).comp (sealX t) f4
-  have f6 : DifferentiableAt ℝ (r34Pre6 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 28 28 (sealW nCls).b1 (sealIdPos 128) _ (sc_b1 nCls t)).comp (sealX t) f5
-  have f7 : DifferentiableAt ℝ (r34Pre7 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 28 28 (sealW nCls).b2 (sealIdPos 128) _ (sc_b2 nCls t)).comp (sealX t) f6
-  have f8 : DifferentiableAt ℝ (r34Pre8 2 (sealW nCls)) (sealX t) :=
-    (r34DownB_differentiableAt 2 14 14 (sealW nCls).d3 (sealDnPos 128 256) _ (sc_d3 nCls t)).comp (sealX t) f7
-  have f9 : DifferentiableAt ℝ (r34Pre9 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 14 14 (sealW nCls).c0 (sealIdPos 256) _ (sc_c0 nCls t)).comp (sealX t) f8
-  have f10 : DifferentiableAt ℝ (r34Pre10 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 14 14 (sealW nCls).c1 (sealIdPos 256) _ (sc_c1 nCls t)).comp (sealX t) f9
-  have f11 : DifferentiableAt ℝ (r34Pre11 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 14 14 (sealW nCls).c2 (sealIdPos 256) _ (sc_c2 nCls t)).comp (sealX t) f10
-  have f12 : DifferentiableAt ℝ (r34Pre12 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 14 14 (sealW nCls).c3 (sealIdPos 256) _ (sc_c3 nCls t)).comp (sealX t) f11
-  have f13 : DifferentiableAt ℝ (r34Pre13 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 14 14 (sealW nCls).c4 (sealIdPos 256) _ (sc_c4 nCls t)).comp (sealX t) f12
-  have f14 : DifferentiableAt ℝ (r34Pre14 2 (sealW nCls)) (sealX t) :=
-    (r34DownB_differentiableAt 2 7 7 (sealW nCls).d4 (sealDnPos 256 512) _ (sc_d4 nCls t)).comp (sealX t) f13
-  have f15 : DifferentiableAt ℝ (r34Pre15 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 7 7 (sealW nCls).e0 (sealIdPos 512) _ (sc_e0 nCls t)).comp (sealX t) f14
-  have f16 : DifferentiableAt ℝ (r34Pre16 2 (sealW nCls)) (sealX t) :=
-    (r34IdB_differentiableAt 2 7 7 (sealW nCls).e1 (sealIdPos 512) _ (sc_e1 nCls t)).comp (sealX t) f15
-  exact (r34HeadB_differentiable 2 7 7 (sealW nCls).Wd (sealW nCls).bd _).comp (sealX t) f16
+    DifferentiableAt ℝ (resnet34ForwardB_full 2 (sealW nCls)) (sealX t) :=
+  resnet34ForwardB_full_differentiableAt 2 (sealW nCls) (sealPos nCls) (sealX t)
+    (sealSmooth nCls t)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 8. The carrier along the ray

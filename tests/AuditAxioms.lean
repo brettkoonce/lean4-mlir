@@ -1819,6 +1819,7 @@ open Proofs
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at
 #print axioms Proofs.resnet34ForwardB_full_eq_chain
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at_correct
+#print axioms Proofs.resnet34ForwardB_full_differentiableAt
 
 -- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (ResNet34FoldB.lean, 2026-09-06)
 #print axioms Proofs.ResNet34PoCB.convWGradB_den
@@ -2259,6 +2260,7 @@ open Proofs
 #print axioms Proofs.resnet50ForwardB_full_has_vjp_at
 #print axioms Proofs.resnet50ForwardB_full_eq_chain
 #print axioms Proofs.resnet50ForwardB_full_has_vjp_at_correct
+#print axioms Proofs.resnet50ForwardB_full_differentiableAt
 
 -- T2, the typed forward graph (ResNet-50)
 #print axioms Proofs.StableHLO.r50IdGraphB_faithful

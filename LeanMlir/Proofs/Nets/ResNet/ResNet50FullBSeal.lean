@@ -682,6 +682,23 @@ theorem sc_s4b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
 -- § 8. The whole-net VJP at the witness, and differentiability there
 -- ════════════════════════════════════════════════════════════════
 
+/-- Every BN `ε` of the witness is `1`. -/
+theorem sealPos (nCls : Nat) : R50PosB (sealW nCls) :=
+  ⟨one_pos, sealPrPos 64 64 256, sealIdPos 64 256, sealIdPos 64 256,
+    sealPrPos 256 128 512, sealIdPos 128 512, sealIdPos 128 512, sealIdPos 128 512,
+    sealPrPos 512 256 1024, sealIdPos 256 1024, sealIdPos 256 1024, sealIdPos 256 1024,
+    sealIdPos 256 1024, sealIdPos 256 1024,
+    sealPrPos 1024 512 2048, sealIdPos 512 2048, sealIdPos 512 2048⟩
+
+/-- The stem clause, the pool's no-tie and all 48 relu clauses at `(sealW nCls, sealX q t)`. -/
+theorem sealSmooth (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
+    R50SmoothAtB 2 q (sealW nCls) (sealX q t) :=
+  ⟨sealStemClause q hq nCls t, sealPoolClause q hq nCls t,
+    sc_s1b0 q hq0 hq nCls t, sc_s1b1 q hq0 nCls t, sc_s1b2 q hq0 nCls t, sc_s2b0 q hq0 hq nCls t,
+    sc_s2b1 q hq0 nCls t, sc_s2b2 q hq0 nCls t, sc_s2b3 q hq0 nCls t, sc_s3b0 q hq0 hq nCls t,
+    sc_s3b1 q hq0 nCls t, sc_s3b2 q hq0 nCls t, sc_s3b3 q hq0 nCls t, sc_s3b4 q hq0 nCls t,
+    sc_s3b5 q hq0 nCls t, sc_s4b0 q hq0 hq nCls t, sc_s4b1 q hq0 nCls t, sc_s4b2 q hq0 nCls t⟩
+
 /-- ⭐⭐ **The whole-net VJP at the witness** — all 48 relu clauses, the stem clause and the
     pool's no-tie discharged at `(sealW nCls, sealX q t)`, on `resnet50ForwardB_full` itself
     (transported through `resnet50ForwardB_full_eq_chain`), at BOTH shipped resolutions. -/
@@ -690,88 +707,14 @@ noncomputable def sealVJP (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t
   rw [show resnet50ForwardB_full 2 q (sealW nCls)
       = r34HeadB 2 q q (sealW nCls).Wd (sealW nCls).bd ∘ r50Pre16 2 q (sealW nCls)
       from funext (resnet50ForwardB_full_eq_chain 2 q (sealW nCls))]
-  exact resnet50ForwardB_full_has_vjp_at 2 q hq0 (sealW nCls) one_pos
-    (sealPrPos 64 64 256) (sealIdPos 64 256) (sealIdPos 64 256)
-    (sealPrPos 256 128 512) (sealIdPos 128 512) (sealIdPos 128 512) (sealIdPos 128 512)
-    (sealPrPos 512 256 1024) (sealIdPos 256 1024) (sealIdPos 256 1024) (sealIdPos 256 1024)
-    (sealIdPos 256 1024) (sealIdPos 256 1024)
-    (sealPrPos 1024 512 2048) (sealIdPos 512 2048) (sealIdPos 512 2048)
-    (sealX q t) (sealStemClause q hq nCls t) (sealPoolClause q hq nCls t)
-    (sc_s1b0 q hq0 hq nCls t)
-    (sc_s1b1 q hq0 nCls t)
-    (sc_s1b2 q hq0 nCls t)
-    (sc_s2b0 q hq0 hq nCls t)
-    (sc_s2b1 q hq0 nCls t)
-    (sc_s2b2 q hq0 nCls t)
-    (sc_s2b3 q hq0 nCls t)
-    (sc_s3b0 q hq0 hq nCls t)
-    (sc_s3b1 q hq0 nCls t)
-    (sc_s3b2 q hq0 nCls t)
-    (sc_s3b3 q hq0 nCls t)
-    (sc_s3b4 q hq0 nCls t)
-    (sc_s3b5 q hq0 nCls t)
-    (sc_s4b0 q hq0 hq nCls t)
-    (sc_s4b1 q hq0 nCls t)
-    (sc_s4b2 q hq0 nCls t)
+  exact resnet50ForwardB_full_has_vjp_at 2 q hq0 (sealW nCls) (sealPos nCls) (sealX q t)
+    (sealSmooth q hq0 hq nCls t)
 
 /-- The net is differentiable at the witness — `fderiv_ne_zero_of_ray`'s first hypothesis. -/
 theorem sealDiffAt (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (resnet50ForwardB_full 2 q (sealW nCls)) (sealX q t) := by
-  rw [show resnet50ForwardB_full 2 q (sealW nCls)
-      = r34HeadB 2 q q (sealW nCls).Wd (sealW nCls).bd ∘ r50Pre16 2 q (sealW nCls)
-      from funext (resnet50ForwardB_full_eq_chain 2 q (sealW nCls))]
-  have f0 : DifferentiableAt ℝ (r50Pre0 2 q (sealW nCls)) (sealX q t) :=
-    r34StemB_differentiableAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) _ _ _ one_pos _ _ (by norm_num) (by omega)
-      (by omega) (sealX q t) (sealStemClause q hq nCls t) (sealPoolClause q hq nCls t)
-  have f1 : DifferentiableAt ℝ (r50Pre1 2 q (sealW nCls)) (sealX q t) :=
-    (r50ProjB_differentiableAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (sealW nCls).s1b0 (sealPrPos 64 64 256) _
-      (sc_s1b0 q hq0 hq nCls t)).comp (sealX q t) f0
-  have f2 : DifferentiableAt ℝ (r50Pre2 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (sealW nCls).s1b1 (sealIdPos 64 256) _
-      (sc_s1b1 q hq0 nCls t)).comp (sealX q t) f1
-  have f3 : DifferentiableAt ℝ (r50Pre3 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (sealW nCls).s1b2 (sealIdPos 64 256) _
-      (sc_s1b2 q hq0 nCls t)).comp (sealX q t) f2
-  have f4 : DifferentiableAt ℝ (r50Pre4 2 q (sealW nCls)) (sealX q t) :=
-    (r50DownB_differentiableAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b0 (sealPrPos 256 128 512) _
-      (sc_s2b0 q hq0 hq nCls t)).comp (sealX q t) f3
-  have f5 : DifferentiableAt ℝ (r50Pre5 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b1 (sealIdPos 128 512) _
-      (sc_s2b1 q hq0 nCls t)).comp (sealX q t) f4
-  have f6 : DifferentiableAt ℝ (r50Pre6 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b2 (sealIdPos 128 512) _
-      (sc_s2b2 q hq0 nCls t)).comp (sealX q t) f5
-  have f7 : DifferentiableAt ℝ (r50Pre7 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b3 (sealIdPos 128 512) _
-      (sc_s2b3 q hq0 nCls t)).comp (sealX q t) f6
-  have f8 : DifferentiableAt ℝ (r50Pre8 2 q (sealW nCls)) (sealX q t) :=
-    (r50DownB_differentiableAt 2 (2 * q) (2 * q) (sealW nCls).s3b0 (sealPrPos 512 256 1024) _
-      (sc_s3b0 q hq0 hq nCls t)).comp (sealX q t) f7
-  have f9 : DifferentiableAt ℝ (r50Pre9 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * q) (2 * q) (sealW nCls).s3b1 (sealIdPos 256 1024) _
-      (sc_s3b1 q hq0 nCls t)).comp (sealX q t) f8
-  have f10 : DifferentiableAt ℝ (r50Pre10 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * q) (2 * q) (sealW nCls).s3b2 (sealIdPos 256 1024) _
-      (sc_s3b2 q hq0 nCls t)).comp (sealX q t) f9
-  have f11 : DifferentiableAt ℝ (r50Pre11 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * q) (2 * q) (sealW nCls).s3b3 (sealIdPos 256 1024) _
-      (sc_s3b3 q hq0 nCls t)).comp (sealX q t) f10
-  have f12 : DifferentiableAt ℝ (r50Pre12 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * q) (2 * q) (sealW nCls).s3b4 (sealIdPos 256 1024) _
-      (sc_s3b4 q hq0 nCls t)).comp (sealX q t) f11
-  have f13 : DifferentiableAt ℝ (r50Pre13 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 (2 * q) (2 * q) (sealW nCls).s3b5 (sealIdPos 256 1024) _
-      (sc_s3b5 q hq0 nCls t)).comp (sealX q t) f12
-  have f14 : DifferentiableAt ℝ (r50Pre14 2 q (sealW nCls)) (sealX q t) :=
-    (r50DownB_differentiableAt 2 q q (sealW nCls).s4b0 (sealPrPos 1024 512 2048) _
-      (sc_s4b0 q hq0 hq nCls t)).comp (sealX q t) f13
-  have f15 : DifferentiableAt ℝ (r50Pre15 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 q q (sealW nCls).s4b1 (sealIdPos 512 2048) _
-      (sc_s4b1 q hq0 nCls t)).comp (sealX q t) f14
-  have f16 : DifferentiableAt ℝ (r50Pre16 2 q (sealW nCls)) (sealX q t) :=
-    (r50IdB_differentiableAt 2 q q (sealW nCls).s4b2 (sealIdPos 512 2048) _
-      (sc_s4b2 q hq0 nCls t)).comp (sealX q t) f15
-  exact (r34HeadB_differentiable 2 q q (sealW nCls).Wd (sealW nCls).bd _).comp (sealX q t) f16
+    DifferentiableAt ℝ (resnet50ForwardB_full 2 q (sealW nCls)) (sealX q t) :=
+  resnet50ForwardB_full_differentiableAt 2 q hq0 (sealW nCls) (sealPos nCls) (sealX q t)
+    (sealSmooth q hq0 hq nCls t)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 9. The carrier along the ray

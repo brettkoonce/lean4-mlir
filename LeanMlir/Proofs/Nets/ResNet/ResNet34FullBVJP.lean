@@ -26,9 +26,9 @@ derivative at a tie, so the GLOBAL `batchMap_has_vjp` cannot lift it. The per-ex
 **two** kink clauses per block, not one: the body's mid-relu AND the post-residual outer relu.
 That outer relu is ResNet's structural difference from MobileNetV2/EfficientNet, whose residual
 add IS the block output. Sixteen blocks therefore carry 32 clauses, plus the stem's relu and the
-stem pool's no-tie condition — bundled per block into `R34IdSmoothAt` / `R34DownSmoothAt` so the
-apex binds 18 smoothness bundles rather than 34 loose hypotheses, exactly as
-`MobileNetV2FullVJP.lean` bundles `IVSmoothAt`.
+stem pool's no-tie condition — bundled per block into `R34IdSmoothAt` / `R34DownSmoothAt`, and
+those 18 bundles into one `R34SmoothAtB` (the positivity bundles into `R34PosB`), so the apex
+binds two hypotheses, exactly as `MobileNetV2FullBVJP.lean`'s `MNV2SmoothAtB` / `MNV2PosB`.
 
 ⚠ The pool's condition is **per example** (`∀ r : Fin N, MaxPool3s2Smooth …` on that example's
 row), because a tie is a property of one image's window, not of the batch. That is the shape
@@ -235,12 +235,123 @@ noncomputable def r34Pre16 (N : Nat) {nCls : Nat} (w : R34BWeights nCls) :
   r34IdB N 7 7 w.e1 ∘ r34Pre15 N w
 
 -- ════════════════════════════════════════════════════════════════
+-- § The whole hypothesis budget, in two structures
+-- ════════════════════════════════════════════════════════════════
+
+/-- Every BatchNorm `ε` of the net is positive: the stem's and each block's bundle. -/
+structure R34PosB {nCls : Nat} (w : R34BWeights nCls) : Prop where
+  s : 0 < w.sε
+  a0 : R34IdPos w.a0
+  a1 : R34IdPos w.a1
+  a2 : R34IdPos w.a2
+  d2 : R34DownPos w.d2
+  b0 : R34IdPos w.b0
+  b1 : R34IdPos w.b1
+  b2 : R34IdPos w.b2
+  d3 : R34DownPos w.d3
+  c0 : R34IdPos w.c0
+  c1 : R34IdPos w.c1
+  c2 : R34IdPos w.c2
+  c3 : R34IdPos w.c3
+  c4 : R34IdPos w.c4
+  d4 : R34DownPos w.d4
+  e0 : R34IdPos w.e0
+  e1 : R34IdPos w.e1
+
+/-- ⭐ **Every relu is away from its kink and the stem pool has no tie, each at the activation
+    its block actually sees**: the stem's clauses at the image, block `k`'s at `r34Pre(k-1)`. The
+    head has none (GAP and dense are smooth). -/
+structure R34SmoothAtB (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Prop where
+  stem : R34StemSmoothAt N 56 56 w.sW w.sb w.sε w.sγ w.sβ x
+  pool : R34PoolSmoothAt N 56 56
+    (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) w.sW w.sb w.sε w.sγ w.sβ x)
+  a0 : R34IdSmoothAt N 56 56 w.a0 (r34Pre0 N w x)
+  a1 : R34IdSmoothAt N 56 56 w.a1 (r34Pre1 N w x)
+  a2 : R34IdSmoothAt N 56 56 w.a2 (r34Pre2 N w x)
+  d2 : R34DownSmoothAt N 28 28 w.d2 (r34Pre3 N w x)
+  b0 : R34IdSmoothAt N 28 28 w.b0 (r34Pre4 N w x)
+  b1 : R34IdSmoothAt N 28 28 w.b1 (r34Pre5 N w x)
+  b2 : R34IdSmoothAt N 28 28 w.b2 (r34Pre6 N w x)
+  d3 : R34DownSmoothAt N 14 14 w.d3 (r34Pre7 N w x)
+  c0 : R34IdSmoothAt N 14 14 w.c0 (r34Pre8 N w x)
+  c1 : R34IdSmoothAt N 14 14 w.c1 (r34Pre9 N w x)
+  c2 : R34IdSmoothAt N 14 14 w.c2 (r34Pre10 N w x)
+  c3 : R34IdSmoothAt N 14 14 w.c3 (r34Pre11 N w x)
+  c4 : R34IdSmoothAt N 14 14 w.c4 (r34Pre12 N w x)
+  d4 : R34DownSmoothAt N 7 7 w.d4 (r34Pre13 N w x)
+  e0 : R34IdSmoothAt N 7 7 w.e0 (r34Pre14 N w x)
+  e1 : R34IdSmoothAt N 7 7 w.e1 (r34Pre15 N w x)
+
+-- ════════════════════════════════════════════════════════════════
 -- § The apex
 -- ════════════════════════════════════════════════════════════════
 
+/-- The chain's VJP and its differentiability together, one `vjp_comp_diff_at` per block: the
+    apex is `.fst`, `resnet34ForwardB_full_differentiableAt` is `.snd`. -/
+private noncomputable def r34ChainB (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+    (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :
+    PProd (HasVJPAt (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x)
+      (DifferentiableAt ℝ (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x) :=
+  let p0 : PProd (HasVJPAt (r34Pre0 N w) x) (DifferentiableAt ℝ (r34Pre0 N w) x) :=
+    ⟨r34StemB_has_vjp_at N 56 56 w.sW w.sb w.sε hq.s w.sγ w.sβ
+        (by norm_num) (by norm_num) (by norm_num) x hx.stem hx.pool,
+      r34StemB_differentiableAt N 56 56 w.sW w.sb w.sε hq.s w.sγ w.sβ
+        (by norm_num) (by norm_num) (by norm_num) x hx.stem hx.pool⟩
+  let p1 : PProd (HasVJPAt (r34Pre1 N w) x) (DifferentiableAt ℝ (r34Pre1 N w) x) :=
+    vjp_comp_diff_at _ _ x p0 ⟨r34IdB_has_vjp_at N 56 56 w.a0 hq.a0 _ hx.a0,
+      r34IdB_differentiableAt N 56 56 w.a0 hq.a0 _ hx.a0⟩
+  let p2 : PProd (HasVJPAt (r34Pre2 N w) x) (DifferentiableAt ℝ (r34Pre2 N w) x) :=
+    vjp_comp_diff_at _ _ x p1 ⟨r34IdB_has_vjp_at N 56 56 w.a1 hq.a1 _ hx.a1,
+      r34IdB_differentiableAt N 56 56 w.a1 hq.a1 _ hx.a1⟩
+  let p3 : PProd (HasVJPAt (r34Pre3 N w) x) (DifferentiableAt ℝ (r34Pre3 N w) x) :=
+    vjp_comp_diff_at _ _ x p2 ⟨r34IdB_has_vjp_at N 56 56 w.a2 hq.a2 _ hx.a2,
+      r34IdB_differentiableAt N 56 56 w.a2 hq.a2 _ hx.a2⟩
+  let p4 : PProd (HasVJPAt (r34Pre4 N w) x) (DifferentiableAt ℝ (r34Pre4 N w) x) :=
+    vjp_comp_diff_at _ _ x p3 ⟨r34DownB_has_vjp_at N 28 28 w.d2 hq.d2 _ hx.d2,
+      r34DownB_differentiableAt N 28 28 w.d2 hq.d2 _ hx.d2⟩
+  let p5 : PProd (HasVJPAt (r34Pre5 N w) x) (DifferentiableAt ℝ (r34Pre5 N w) x) :=
+    vjp_comp_diff_at _ _ x p4 ⟨r34IdB_has_vjp_at N 28 28 w.b0 hq.b0 _ hx.b0,
+      r34IdB_differentiableAt N 28 28 w.b0 hq.b0 _ hx.b0⟩
+  let p6 : PProd (HasVJPAt (r34Pre6 N w) x) (DifferentiableAt ℝ (r34Pre6 N w) x) :=
+    vjp_comp_diff_at _ _ x p5 ⟨r34IdB_has_vjp_at N 28 28 w.b1 hq.b1 _ hx.b1,
+      r34IdB_differentiableAt N 28 28 w.b1 hq.b1 _ hx.b1⟩
+  let p7 : PProd (HasVJPAt (r34Pre7 N w) x) (DifferentiableAt ℝ (r34Pre7 N w) x) :=
+    vjp_comp_diff_at _ _ x p6 ⟨r34IdB_has_vjp_at N 28 28 w.b2 hq.b2 _ hx.b2,
+      r34IdB_differentiableAt N 28 28 w.b2 hq.b2 _ hx.b2⟩
+  let p8 : PProd (HasVJPAt (r34Pre8 N w) x) (DifferentiableAt ℝ (r34Pre8 N w) x) :=
+    vjp_comp_diff_at _ _ x p7 ⟨r34DownB_has_vjp_at N 14 14 w.d3 hq.d3 _ hx.d3,
+      r34DownB_differentiableAt N 14 14 w.d3 hq.d3 _ hx.d3⟩
+  let p9 : PProd (HasVJPAt (r34Pre9 N w) x) (DifferentiableAt ℝ (r34Pre9 N w) x) :=
+    vjp_comp_diff_at _ _ x p8 ⟨r34IdB_has_vjp_at N 14 14 w.c0 hq.c0 _ hx.c0,
+      r34IdB_differentiableAt N 14 14 w.c0 hq.c0 _ hx.c0⟩
+  let p10 : PProd (HasVJPAt (r34Pre10 N w) x) (DifferentiableAt ℝ (r34Pre10 N w) x) :=
+    vjp_comp_diff_at _ _ x p9 ⟨r34IdB_has_vjp_at N 14 14 w.c1 hq.c1 _ hx.c1,
+      r34IdB_differentiableAt N 14 14 w.c1 hq.c1 _ hx.c1⟩
+  let p11 : PProd (HasVJPAt (r34Pre11 N w) x) (DifferentiableAt ℝ (r34Pre11 N w) x) :=
+    vjp_comp_diff_at _ _ x p10 ⟨r34IdB_has_vjp_at N 14 14 w.c2 hq.c2 _ hx.c2,
+      r34IdB_differentiableAt N 14 14 w.c2 hq.c2 _ hx.c2⟩
+  let p12 : PProd (HasVJPAt (r34Pre12 N w) x) (DifferentiableAt ℝ (r34Pre12 N w) x) :=
+    vjp_comp_diff_at _ _ x p11 ⟨r34IdB_has_vjp_at N 14 14 w.c3 hq.c3 _ hx.c3,
+      r34IdB_differentiableAt N 14 14 w.c3 hq.c3 _ hx.c3⟩
+  let p13 : PProd (HasVJPAt (r34Pre13 N w) x) (DifferentiableAt ℝ (r34Pre13 N w) x) :=
+    vjp_comp_diff_at _ _ x p12 ⟨r34IdB_has_vjp_at N 14 14 w.c4 hq.c4 _ hx.c4,
+      r34IdB_differentiableAt N 14 14 w.c4 hq.c4 _ hx.c4⟩
+  let p14 : PProd (HasVJPAt (r34Pre14 N w) x) (DifferentiableAt ℝ (r34Pre14 N w) x) :=
+    vjp_comp_diff_at _ _ x p13 ⟨r34DownB_has_vjp_at N 7 7 w.d4 hq.d4 _ hx.d4,
+      r34DownB_differentiableAt N 7 7 w.d4 hq.d4 _ hx.d4⟩
+  let p15 : PProd (HasVJPAt (r34Pre15 N w) x) (DifferentiableAt ℝ (r34Pre15 N w) x) :=
+    vjp_comp_diff_at _ _ x p14 ⟨r34IdB_has_vjp_at N 7 7 w.e0 hq.e0 _ hx.e0,
+      r34IdB_differentiableAt N 7 7 w.e0 hq.e0 _ hx.e0⟩
+  let p16 : PProd (HasVJPAt (r34Pre16 N w) x) (DifferentiableAt ℝ (r34Pre16 N w) x) :=
+    vjp_comp_diff_at _ _ x p15 ⟨r34IdB_has_vjp_at N 7 7 w.e1 hq.e1 _ hx.e1,
+      r34IdB_differentiableAt N 7 7 w.e1 hq.e1 _ hx.e1⟩
+  vjp_comp_diff_at _ _ x p16
+    ⟨(r34HeadB_has_vjp N 7 7 w.Wd w.bd).toHasVJPAt _, r34HeadB_differentiable N 7 7 w.Wd w.bd _⟩
+
 /-- ⭐⭐ **ResNet-34 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
-    basic blocks.** Chains stem → the [3,4,6,3] ladder → head with `vjp_comp_at`, one positivity
-    bundle and one smoothness bundle per block. T1's VJP half for `formalization.yaml` 4e's port.
+    basic blocks.** Chains stem → the [3,4,6,3] ladder → head with `vjp_comp_diff_at` under two
+    hypotheses: `R34PosB` (every `ε > 0`) and `R34SmoothAtB` (every relu clause and the pool's
+    no-tie, each at its block's own input). T1's VJP half for `formalization.yaml` 4e's port.
 
     ⚠ Pointwise, and necessarily: relu is kinked. ⛔ Each block contributes TWO clauses — the
     body's mid-relu and the post-residual OUTER relu — where MobileNetV2's bottleneck contributes
@@ -249,119 +360,9 @@ noncomputable def r34Pre16 (N : Nat) {nCls : Nat} (w : R34BWeights nCls) :
     ⭐ The head takes no hypothesis at all (GAP and dense are smooth, and each is `batchMap` of a
     per-example op), and `N` is a variable: this tier carries no numerals. -/
 noncomputable def resnet34ForwardB_full_has_vjp_at (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
-    (hsε : 0 < w.sε)
-    (qa0 : R34IdPos w.a0)
-    (qa1 : R34IdPos w.a1)
-    (qa2 : R34IdPos w.a2)
-    (qd2 : R34DownPos w.d2)
-    (qb0 : R34IdPos w.b0)
-    (qb1 : R34IdPos w.b1)
-    (qb2 : R34IdPos w.b2)
-    (qd3 : R34DownPos w.d3)
-    (qc0 : R34IdPos w.c0)
-    (qc1 : R34IdPos w.c1)
-    (qc2 : R34IdPos w.c2)
-    (qc3 : R34IdPos w.c3)
-    (qc4 : R34IdPos w.c4)
-    (qd4 : R34DownPos w.d4)
-    (qe0 : R34IdPos w.e0)
-    (qe1 : R34IdPos w.e1)
-    (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
-    (h_stem : R34StemSmoothAt N 56 56 w.sW w.sb w.sε w.sγ w.sβ x)
-    (h_pool : R34PoolSmoothAt N 56 56
-      (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) w.sW w.sb w.sε w.sγ w.sβ x))
-    (sa0 : R34IdSmoothAt N 56 56 w.a0 (r34Pre0 N w x))
-    (sa1 : R34IdSmoothAt N 56 56 w.a1 (r34Pre1 N w x))
-    (sa2 : R34IdSmoothAt N 56 56 w.a2 (r34Pre2 N w x))
-    (sd2 : R34DownSmoothAt N 28 28 w.d2 (r34Pre3 N w x))
-    (sb0 : R34IdSmoothAt N 28 28 w.b0 (r34Pre4 N w x))
-    (sb1 : R34IdSmoothAt N 28 28 w.b1 (r34Pre5 N w x))
-    (sb2 : R34IdSmoothAt N 28 28 w.b2 (r34Pre6 N w x))
-    (sd3 : R34DownSmoothAt N 14 14 w.d3 (r34Pre7 N w x))
-    (sc0 : R34IdSmoothAt N 14 14 w.c0 (r34Pre8 N w x))
-    (sc1 : R34IdSmoothAt N 14 14 w.c1 (r34Pre9 N w x))
-    (sc2 : R34IdSmoothAt N 14 14 w.c2 (r34Pre10 N w x))
-    (sc3 : R34IdSmoothAt N 14 14 w.c3 (r34Pre11 N w x))
-    (sc4 : R34IdSmoothAt N 14 14 w.c4 (r34Pre12 N w x))
-    (sd4 : R34DownSmoothAt N 7 7 w.d4 (r34Pre13 N w x))
-    (se0 : R34IdSmoothAt N 7 7 w.e0 (r34Pre14 N w x))
-    (se1 : R34IdSmoothAt N 7 7 w.e1 (r34Pre15 N w x))
-    :
-    HasVJPAt (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x := by
-  have dS : DifferentiableAt ℝ (r34Pre0 N w) x :=
-    r34StemB_differentiableAt N 56 56 w.sW w.sb w.sε hsε w.sγ w.sβ
-      (by norm_num) (by norm_num) (by norm_num) x h_stem h_pool
-  have vS : HasVJPAt (r34Pre0 N w) x :=
-    r34StemB_has_vjp_at N 56 56 w.sW w.sb w.sε hsε w.sγ w.sβ
-      (by norm_num) (by norm_num) (by norm_num) x h_stem h_pool
-  have d1 := r34IdB_differentiableAt N 56 56 w.a0 qa0 _ sa0
-  have e1 : HasVJPAt (r34Pre1 N w) x :=
-    vjp_comp_at _ _ x dS d1 vS (r34IdB_has_vjp_at N 56 56 w.a0 qa0 _ sa0)
-  have f1 : DifferentiableAt ℝ (r34Pre1 N w) x := d1.comp x dS
-  have d2 := r34IdB_differentiableAt N 56 56 w.a1 qa1 _ sa1
-  have e2 : HasVJPAt (r34Pre2 N w) x :=
-    vjp_comp_at _ _ x f1 d2 e1 (r34IdB_has_vjp_at N 56 56 w.a1 qa1 _ sa1)
-  have f2 : DifferentiableAt ℝ (r34Pre2 N w) x := d2.comp x f1
-  have d3 := r34IdB_differentiableAt N 56 56 w.a2 qa2 _ sa2
-  have e3 : HasVJPAt (r34Pre3 N w) x :=
-    vjp_comp_at _ _ x f2 d3 e2 (r34IdB_has_vjp_at N 56 56 w.a2 qa2 _ sa2)
-  have f3 : DifferentiableAt ℝ (r34Pre3 N w) x := d3.comp x f2
-  have d4 := r34DownB_differentiableAt N 28 28 w.d2 qd2 _ sd2
-  have e4 : HasVJPAt (r34Pre4 N w) x :=
-    vjp_comp_at _ _ x f3 d4 e3 (r34DownB_has_vjp_at N 28 28 w.d2 qd2 _ sd2)
-  have f4 : DifferentiableAt ℝ (r34Pre4 N w) x := d4.comp x f3
-  have d5 := r34IdB_differentiableAt N 28 28 w.b0 qb0 _ sb0
-  have e5 : HasVJPAt (r34Pre5 N w) x :=
-    vjp_comp_at _ _ x f4 d5 e4 (r34IdB_has_vjp_at N 28 28 w.b0 qb0 _ sb0)
-  have f5 : DifferentiableAt ℝ (r34Pre5 N w) x := d5.comp x f4
-  have d6 := r34IdB_differentiableAt N 28 28 w.b1 qb1 _ sb1
-  have e6 : HasVJPAt (r34Pre6 N w) x :=
-    vjp_comp_at _ _ x f5 d6 e5 (r34IdB_has_vjp_at N 28 28 w.b1 qb1 _ sb1)
-  have f6 : DifferentiableAt ℝ (r34Pre6 N w) x := d6.comp x f5
-  have d7 := r34IdB_differentiableAt N 28 28 w.b2 qb2 _ sb2
-  have e7 : HasVJPAt (r34Pre7 N w) x :=
-    vjp_comp_at _ _ x f6 d7 e6 (r34IdB_has_vjp_at N 28 28 w.b2 qb2 _ sb2)
-  have f7 : DifferentiableAt ℝ (r34Pre7 N w) x := d7.comp x f6
-  have d8 := r34DownB_differentiableAt N 14 14 w.d3 qd3 _ sd3
-  have e8 : HasVJPAt (r34Pre8 N w) x :=
-    vjp_comp_at _ _ x f7 d8 e7 (r34DownB_has_vjp_at N 14 14 w.d3 qd3 _ sd3)
-  have f8 : DifferentiableAt ℝ (r34Pre8 N w) x := d8.comp x f7
-  have d9 := r34IdB_differentiableAt N 14 14 w.c0 qc0 _ sc0
-  have e9 : HasVJPAt (r34Pre9 N w) x :=
-    vjp_comp_at _ _ x f8 d9 e8 (r34IdB_has_vjp_at N 14 14 w.c0 qc0 _ sc0)
-  have f9 : DifferentiableAt ℝ (r34Pre9 N w) x := d9.comp x f8
-  have d10 := r34IdB_differentiableAt N 14 14 w.c1 qc1 _ sc1
-  have e10 : HasVJPAt (r34Pre10 N w) x :=
-    vjp_comp_at _ _ x f9 d10 e9 (r34IdB_has_vjp_at N 14 14 w.c1 qc1 _ sc1)
-  have f10 : DifferentiableAt ℝ (r34Pre10 N w) x := d10.comp x f9
-  have d11 := r34IdB_differentiableAt N 14 14 w.c2 qc2 _ sc2
-  have e11 : HasVJPAt (r34Pre11 N w) x :=
-    vjp_comp_at _ _ x f10 d11 e10 (r34IdB_has_vjp_at N 14 14 w.c2 qc2 _ sc2)
-  have f11 : DifferentiableAt ℝ (r34Pre11 N w) x := d11.comp x f10
-  have d12 := r34IdB_differentiableAt N 14 14 w.c3 qc3 _ sc3
-  have e12 : HasVJPAt (r34Pre12 N w) x :=
-    vjp_comp_at _ _ x f11 d12 e11 (r34IdB_has_vjp_at N 14 14 w.c3 qc3 _ sc3)
-  have f12 : DifferentiableAt ℝ (r34Pre12 N w) x := d12.comp x f11
-  have d13 := r34IdB_differentiableAt N 14 14 w.c4 qc4 _ sc4
-  have e13 : HasVJPAt (r34Pre13 N w) x :=
-    vjp_comp_at _ _ x f12 d13 e12 (r34IdB_has_vjp_at N 14 14 w.c4 qc4 _ sc4)
-  have f13 : DifferentiableAt ℝ (r34Pre13 N w) x := d13.comp x f12
-  have d14 := r34DownB_differentiableAt N 7 7 w.d4 qd4 _ sd4
-  have e14 : HasVJPAt (r34Pre14 N w) x :=
-    vjp_comp_at _ _ x f13 d14 e13 (r34DownB_has_vjp_at N 7 7 w.d4 qd4 _ sd4)
-  have f14 : DifferentiableAt ℝ (r34Pre14 N w) x := d14.comp x f13
-  have d15 := r34IdB_differentiableAt N 7 7 w.e0 qe0 _ se0
-  have e15 : HasVJPAt (r34Pre15 N w) x :=
-    vjp_comp_at _ _ x f14 d15 e14 (r34IdB_has_vjp_at N 7 7 w.e0 qe0 _ se0)
-  have f15 : DifferentiableAt ℝ (r34Pre15 N w) x := d15.comp x f14
-  have d16 := r34IdB_differentiableAt N 7 7 w.e1 qe1 _ se1
-  have e16 : HasVJPAt (r34Pre16 N w) x :=
-    vjp_comp_at _ _ x f15 d16 e15 (r34IdB_has_vjp_at N 7 7 w.e1 qe1 _ se1)
-  have f16 : DifferentiableAt ℝ (r34Pre16 N w) x := d16.comp x f15
-  exact vjp_comp_at _ (r34HeadB N 7 7 w.Wd w.bd) x f16
-    ((r34HeadB_differentiable N 7 7 w.Wd w.bd) _) e16
-    ((r34HeadB_has_vjp N 7 7 w.Wd w.bd).toHasVJPAt _)
-
+    (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :
+    HasVJPAt (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x :=
+  (r34ChainB N w hq x hx).fst
 
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `r34PreK` form IS the committed forward
@@ -455,48 +456,21 @@ theorem resnet34ForwardB_full_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights n
     `resnet34FwdGraphB_full_faithful` proves the typed graph denotes — not of the layered chain
     the VJP is assembled on. Tied back through `resnet34ForwardB_full_eq_chain`. -/
 theorem resnet34ForwardB_full_has_vjp_at_correct (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
-    (hsε : 0 < w.sε)
-    (qa0 : R34IdPos w.a0)
-    (qa1 : R34IdPos w.a1)
-    (qa2 : R34IdPos w.a2)
-    (qd2 : R34DownPos w.d2)
-    (qb0 : R34IdPos w.b0)
-    (qb1 : R34IdPos w.b1)
-    (qb2 : R34IdPos w.b2)
-    (qd3 : R34DownPos w.d3)
-    (qc0 : R34IdPos w.c0)
-    (qc1 : R34IdPos w.c1)
-    (qc2 : R34IdPos w.c2)
-    (qc3 : R34IdPos w.c3)
-    (qc4 : R34IdPos w.c4)
-    (qd4 : R34DownPos w.d4)
-    (qe0 : R34IdPos w.e0)
-    (qe1 : R34IdPos w.e1)
-    (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
-    (h_stem : R34StemSmoothAt N 56 56 w.sW w.sb w.sε w.sγ w.sβ x)
-    (h_pool : R34PoolSmoothAt N 56 56
-      (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) w.sW w.sb w.sε w.sγ w.sβ x))
-    (sa0 : R34IdSmoothAt N 56 56 w.a0 (r34Pre0 N w x))
-    (sa1 : R34IdSmoothAt N 56 56 w.a1 (r34Pre1 N w x))
-    (sa2 : R34IdSmoothAt N 56 56 w.a2 (r34Pre2 N w x))
-    (sd2 : R34DownSmoothAt N 28 28 w.d2 (r34Pre3 N w x))
-    (sb0 : R34IdSmoothAt N 28 28 w.b0 (r34Pre4 N w x))
-    (sb1 : R34IdSmoothAt N 28 28 w.b1 (r34Pre5 N w x))
-    (sb2 : R34IdSmoothAt N 28 28 w.b2 (r34Pre6 N w x))
-    (sd3 : R34DownSmoothAt N 14 14 w.d3 (r34Pre7 N w x))
-    (sc0 : R34IdSmoothAt N 14 14 w.c0 (r34Pre8 N w x))
-    (sc1 : R34IdSmoothAt N 14 14 w.c1 (r34Pre9 N w x))
-    (sc2 : R34IdSmoothAt N 14 14 w.c2 (r34Pre10 N w x))
-    (sc3 : R34IdSmoothAt N 14 14 w.c3 (r34Pre11 N w x))
-    (sc4 : R34IdSmoothAt N 14 14 w.c4 (r34Pre12 N w x))
-    (sd4 : R34DownSmoothAt N 7 7 w.d4 (r34Pre13 N w x))
-    (se0 : R34IdSmoothAt N 7 7 w.e0 (r34Pre14 N w x))
-    (se1 : R34IdSmoothAt N 7 7 w.e1 (r34Pre15 N w x))
+    (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
-    (resnet34ForwardB_full_has_vjp_at N w hsε qa0 qa1 qa2 qd2 qb0 qb1 qb2 qd3 qc0 qc1 qc2 qc3 qc4 qd4 qe0 qe1 x h_stem h_pool sa0 sa1 sa2 sd2 sb0 sb1 sb2 sd3 sc0 sc1 sc2 sc3 sc4 sd4 se0 se1).backward dy i =
+    (resnet34ForwardB_full_has_vjp_at N w hq x hx).backward dy i =
       ∑ j : Fin (N * nCls), pdiv (resnet34ForwardB_full N w) x i j * dy j := by
-  have h := (resnet34ForwardB_full_has_vjp_at N w hsε qa0 qa1 qa2 qd2 qb0 qb1 qb2 qd3 qc0 qc1 qc2 qc3 qc4 qd4 qe0 qe1 x h_stem h_pool sa0 sa1 sa2 sd2 sb0 sb1 sb2 sd3 sc0 sc1 sc2 sc3 sc4 sd4 se0 se1).correct dy i
+  have h := (resnet34ForwardB_full_has_vjp_at N w hq x hx).correct dy i
   rwa [show resnet34ForwardB_full N w = r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w
       from funext (resnet34ForwardB_full_eq_chain N w)]
+
+/-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`, read
+    back through `resnet34ForwardB_full_eq_chain`. What the seal's `sealDiffAt` needs. -/
+theorem resnet34ForwardB_full_differentiableAt (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+    (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :
+    DifferentiableAt ℝ (resnet34ForwardB_full N w) x := by
+  rw [show resnet34ForwardB_full N w = r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w
+      from funext (resnet34ForwardB_full_eq_chain N w)]
+  exact (r34ChainB N w hq x hx).snd
 
 end Proofs
