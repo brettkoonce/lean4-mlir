@@ -36,6 +36,7 @@ on:
       - 'LeanMlir/Proofs/Foundation/ListDot.lean'
       - 'LeanMlir/Proofs/Foundation/IntervalBound.lean'
       - 'LeanMlir/Proofs/Foundation/IntervalBoundConv.lean'
+      - 'LeanMlir/Proofs/Foundation/IntervalBoundConvQ.lean'
       - 'LeanMlir/Proofs/Foundation/CrownBound.lean'
       - 'tests/AuditAxiomsHeavy.lean'
       - 'lakefile.lean'
@@ -149,7 +150,9 @@ jobs:
           #   FullImgsB  4.39 GB   Full 3.47 GB  ConvNet 3.10 GB  Conv 2.65 GB
           #   Lean 4.34.0 (2026-09-18, per-module `lake build` under /usr/bin/time -v): the old
           #   ConvImgsA/B pair doubled to 16.11 GB (8.22 on 4.32.2 — 4.34 elaborates a module's
-          #   proofs concurrently); now four 2-image chunks ConvImgsA–D at 9.14–9.68 GB.
+          #   proofs concurrently); then four 2-image chunks ConvImgsA–D at 9.14–9.68 GB.
+          #   Since 2026-09-23 each image is ONE `decide +kernel` of an exact-ℚ checker
+          #   (Foundation/IntervalBoundConvQ): ~11 s and 3.6 GB per chunk (lake env lean).
           #   Crown / CrownUncon: UNMEASURED. Both are CertsHeavy roots (lakefile) and were
           #   missing from this loop until 2026-09-09, so the final `lake build CertsHeavy` was
           #   free to elaborate them together — the exact class this loop exists to prevent.

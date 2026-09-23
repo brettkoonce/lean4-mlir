@@ -158,11 +158,13 @@ the MAIN audit. -/
 -- convolution, a max-pool, and more than two layers — `conv2d(1→4, 3×3 SAME) → reluT
 -- → maxPool2 → denseT(64→10)` at trained k/256 weights, on 8×8 4×4-pooled MNIST,
 -- pixel-L∞ ε ∈ {1,2,4,8}/255 → 35/33/23/5 of the first 40 test images. Per image the
--- box data is carried ONLY at the largest certifying radius; the smaller radii are
+-- box is checked ONCE, at the largest certifying radius, by a `decide +kernel` of the
+-- exact-ℚ checker (Proofs.Foundation.IntervalBoundConvQ); the smaller radii are
 -- `CertifiedAtLinf3.mono` corollaries. Spot-check: the net's box-soundness chain, the
--- per-net |W|⊛𝟙 constant, and the four aggregates.
+-- checker's soundness and its instance, and the four aggregates.
 #print axioms Proofs.IBP.ConvNet.net_boxSound
-#print axioms Proofs.IBP.ConvNet.AC_eval
+#print axioms Proofs.IBP.convNetCheckQ_sound
+#print axioms Proofs.IBP.ConvNet.net_certified_of_check
 #print axioms Proofs.IBP.ConvNet.certsE1_certified
 #print axioms Proofs.IBP.ConvNet.certsE2_certified
 #print axioms Proofs.IBP.ConvNet.certsE4_certified

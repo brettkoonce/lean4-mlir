@@ -32,14 +32,15 @@ were measured say so.
 | `6f4d5716` (d) | `nlinarith` → `linarith` where it closes: 21 of 28 in FloatBridge, 1 of 4 in CrownBound | FloatBridge 7.4 s → 5.3 s |
 | `6f4d5716` (e) | IBP/CROWN scorecards: shared prelude (per-row ℓ1 facts, fallback images) → new `LipschitzCertScorecardIBPData`; IBP, IBPUncon, Crown, CrownUncon import it and not each other; both generators now emit the doc links the committed files carried by hand | local: data 6 s, then IBP 165 / IBPUncon 158 / Crown 254 / CrownUncon 302 in parallel — the tail after FullImgsA was IBP → IBPUncon → CrownUncon ≈ 625 s serial |
 | pending (f) | §3.1 ResNet-34 apex: nested apex body, `r34B_full_has_vjp_at_backward` (the peel, `rfl` at variable stages) and `r34StemB_has_vjp_at_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
-| pending (g) | §3.2 `den.eq_def` never built: `denStep`/`denStepApp` dsimprocs (smart unfolding, one constructor) replace `den` in all 118 `simp only` sets (29 files); StableHLO's file-wide `maxHeartbeats 4000000` and `cnnBackGraph_faithful`'s 2M out, `emitTok` alone keeps 1M (its compile needs ~2×; tracing trips 400k) | `den.eq_def` was 233 s on StableHLO's critical path (profiler); StableHLO 343 s → 83 s standalone, 91 s under lake; full `Proofs Certs` rebuild 2 m 20 s |
+| `bb38c790` (g) | §3.2 `den.eq_def` never built: `denStep`/`denStepApp` dsimprocs (smart unfolding, one constructor) replace `den` in all 118 `simp only` sets (29 files); StableHLO's file-wide `maxHeartbeats 4000000` and `cnnBackGraph_faithful`'s 2M out, `emitTok` alone keeps 1M (its compile needs ~2×; tracing trips 400k) | `den.eq_def` was 233 s on StableHLO's critical path (profiler); StableHLO 343 s → 83 s standalone, 91 s under lake; full `Proofs Certs` rebuild 2 m 20 s |
+| pending (h) | §3.3 conv IBP scorecard by reflection: new `Foundation/IntervalBoundConvQ.lean` (the layers over ℚ, cast lemmas, `convNetCheckQ` + `convNetCheckQ_sound`); the generator emits ℚ data, the ℝ net as its cast, and one `decide +kernel` per image — the intermediate tensors and their ~900 goals per image are gone (−1,640 lines); statements and the aggregate unchanged | profiled first: all simp (box ~250 s, conv eval ~180 s per image); ImgsA–D each 281 s / 9.9 GB → 11 s / 3.6 GB; generator byte-reproducible before the edit |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
 | module | s | kind |
 |---|---|---|
 | `Codegen/StableHLO` | 575 (91 local after (g)) | hand-written ROOT (241 dependents) |
-| `IbpConvScorecardImgsA/B/C/D` | 470–550 each | generated |
+| `IbpConvScorecardImgsA/B/C/D` | 470–550 each (~11 local after (h)) | generated |
 | `SmoothingCPScorecard` | 392 (→ ~90 est. after (a)) | generated |
 | `LipschitzCertInstance` | 100–383 | generated (header says so) |
 | `LipschitzCertScorecard*` | 70–300 each | generated |
@@ -87,10 +88,8 @@ cheap half. `deriving DecidableEq` on `Raw`/`Tok` has no users (grep) but was no
 
 ### 3.3 Generators
 
-* `scripts/ibp_conv_scorecard.py` (the four ~500 s modules): emits
-  `fin_cases o <;> fin_cases i <;> fin_cases j <;> simp [...]; try norm_num` over ℝ tables,
-  ~900 real `simp` calls per image. Try the ListDot shape on ONE image: data as ℚ/ℤ, computable
-  conv/box/pool, one soundness lemma, one `decide +kernel` per image.
+* ~~`scripts/ibp_conv_scorecard.py`~~ — done as §1(h). The four chunks could now be one
+  module (the split was a memory bound); left as four to keep certs-heavy.yml and the audit as-is.
 * `LipschitzCertInstance.lean`: `IntervalBound` and `LipschitzCertPairSDP` need only
   `denseE`/`reluE`/`certified_at_eps`/`sum_sq_matTvec_eq` from it — split those into a small
   `LipschitzDense.lean` so the float/IBP tier stops waiting on the instance data.

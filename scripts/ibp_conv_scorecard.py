@@ -300,16 +300,25 @@ def vec(vs):
     return "![" + ", ".join(r(v) for v in vs) + "]"
 
 
-def t3(T, c, h, w):
-    return "![" + ",\n    ".join("![" + ",\n     ".join(vec(T[o][i]) for i in range(h)) + "]"
+def rq(v):
+    v = Fraction(v)
+    return f"(({v.numerator}:ℚ)/{v.denominator})" if v.denominator != 1 else f"({v.numerator}:ℚ)"
+
+
+def vecq(vs):
+    return "![" + ", ".join(rq(v) for v in vs) + "]"
+
+
+def t3(T, c, h, w, v=vec):
+    return "![" + ",\n    ".join("![" + ",\n     ".join(v(T[o][i]) for i in range(h)) + "]"
                                  for o in range(c)) + "]"
 
 
-def t4(W, c, h, w):
-    """Fin c → Fin h → Fin w → Fin 10 → ℝ literal."""
+def t4(W, c, h, w, v=vec):
+    """Fin c → Fin h → Fin w → Fin 10 → ℝ (or ℚ, with v=vecq) literal."""
     return "![" + ",\n    ".join(
         "![" + ",\n     ".join(
-            "![" + ", ".join(vec(W[o][i][j]) for j in range(w)) + "]"
+            "![" + ", ".join(v(W[o][i][j]) for j in range(w)) + "]"
             for i in range(h)) + "]"
         for o in range(c)) + "]"
 
@@ -375,28 +384,18 @@ def main():
               f"of the {len(chosen)} images carrying Lean certificates")
 
     # ───── Lean ─────
-    # Emitted as SIX modules, not one: the net, N_CHUNKS image chunks, the
-    # aggregate. A single 8-image file peaked at 14.68 GB of elaboration
-    # (measured, LEAN_NUM_THREADS=1, olean deleted) — over the ~12 GB a 16 GB CI
-    # runner can actually carry. Lean does not reclaim between declarations
-    # within a process, and each image costs a 256-goal `cx*_eval` plus
-    # per-radius box/pool scans, so the peak tracks the number of images IN THE
-    # MODULE. Splitting them across their own modules bounds it to roughly one
-    # chunk — the same fix SmoothingDecChunk1..6 uses for the same reason.
-    # ⚠ Two chunks of four were enough on Lean 4.32.2 (8.22 GB) and are not on
-    # 4.34.0 (16.11 GB, same olean, same CPU-seconds): 4.34 elaborates a module's
-    # theorem proofs as concurrent tasks — ~8 cores busy even at
-    # LEAN_NUM_THREADS=1 — and holds twice the memory while they run.
-    # `Elab.async false` gets it back to 7.10 GB but serial, 29 min a chunk. Four
-    # chunks of two keep the concurrency and halve what is in flight.
+    # SIX modules: the net, N_CHUNKS image chunks, the aggregate. Each image is
+    # one `decide +kernel` of `convNetCheckQ` (Foundation/IntervalBoundConvQ.lean)
+    # at its largest certifying radius — seconds, not the ~250 s per image the
+    # earlier emitted ℝ `simp`/`norm_num` evaluation of every box entry cost. The
+    # chunking was a memory bound for that version and is now only layout.
     NS = "namespace Proofs\nnamespace IBP\nnamespace ConvNet\n"
-    OPTS = "set_option maxRecDepth 100000\nset_option maxHeartbeats 3200000\n"
     END = "end ConvNet\nend IBP\nend Proofs"
     MOD = "LeanMlir.Proofs.Certificates.IbpConvScorecard"
 
     L = []
     A = L.append
-    A("import LeanMlir.Proofs.Foundation.IntervalBoundConv\n")
+    A("import LeanMlir.Proofs.Foundation.IntervalBoundConvQ\n")
     n_emit = len(chosen)
     A(f'''/-! # IBP `L∞` scorecard for a CONVOLUTIONAL net — generated instance
 
@@ -435,24 +434,27 @@ the measured row is a measurement and is labelled as one. Both are LOWER bounds
 — a loose box cannot prove an image UNcertifiable. All
 `propext / Classical.choice / Quot.sound`.
 
-This module carries the net, its box-soundness witness and the per-position
-kernel `ℓ1` weight `AC`; the per-image boxes live in `IbpConvScorecardImgs{PARTS[0]}`–`{PARTS[-1]}`
-and the counts in `IbpConvScorecard`. The split is a memory bound, not
-bookkeeping: one 8-image module peaked at 14.68 GB, over what a 16 GB CI runner
-carries. -/\n''')
+This module carries the net — its weights as exact `ℚ` data, the `ℝ` net defined
+as their cast — its box-soundness witness, and `net_certified_of_check`, which
+turns one kernel-evaluated `convNetCheckQ` ([`Foundation/IntervalBoundConvQ.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/IntervalBoundConvQ.lean))
+into a certificate. The per-image theorems live in
+`IbpConvScorecardImgs{PARTS[0]}`–`{PARTS[-1]}` and the counts in `IbpConvScorecard`. -/\n''')
     A("namespace Proofs\nnamespace IBP\nnamespace ConvNet\n")
-    A("set_option maxRecDepth 100000")
-    A("set_option maxHeartbeats 3200000\n")
 
-    A("/-- Trained conv kernel (`k/256`). -/")
-    A(f"noncomputable def Wc : Kernel4 {C} 1 3 3 :=\n  ![" + ",\n    ".join(
-        "![![" + ",\n       ".join(vec([Wc9F[c][kh * 3 + kw] for kw in range(3)])
+    A("/-- Trained conv kernel (`k/256`), exact. -/")
+    A(f"def WcQ : Fin {C} → Fin 1 → Fin 3 → Fin 3 → ℚ :=\n  ![" + ",\n    ".join(
+        "![![" + ",\n       ".join(vecq([Wc9F[c][kh * 3 + kw] for kw in range(3)])
                                    for kh in range(3)) + "]]" for c in range(C)) + "]\n")
-    A(f"noncomputable def bc : Vec {C} := {vec([bcF[c] for c in range(C)])}\n")
-    A("/-- Trained dense head, indexed in place on the pooled activation. -/")
-    A(f"noncomputable def Wd : Fin {C} → Fin {P} → Fin {P} → Fin 10 → ℝ :=\n"
-      f"  {t4(WdF, C, P, P)}\n")
-    A(f"noncomputable def bd : Vec 10 := {vec([bdF[cls] for cls in range(10)])}\n")
+    A(f"def bcQ : Fin {C} → ℚ := {vecq([bcF[c] for c in range(C)])}\n")
+    A("/-- Trained dense head, indexed in place on the pooled activation, exact. -/")
+    A(f"def WdQ : Fin {C} → Fin {P} → Fin {P} → Fin 10 → ℚ :=\n"
+      f"  {t4(WdF, C, P, P, vecq)}\n")
+    A(f"def bdQ : Fin 10 → ℚ := {vecq([bdF[cls] for cls in range(10)])}\n")
+    A("/-- The conv kernel over `ℝ`: the cast of the exact data. -/")
+    A(f"noncomputable def Wc : Kernel4 {C} 1 3 3 := castK WcQ\n")
+    A(f"noncomputable def bc : Vec {C} := castV bcQ\n")
+    A(f"noncomputable def Wd : Fin {C} → Fin {P} → Fin {P} → Fin 10 → ℝ := castW WdQ\n")
+    A(f"noncomputable def bd : Vec 10 := castV bdQ\n")
 
     A("""/-- The certified network: conv → relu → max-pool → dense head. Four layers,
     a genuine convolution and a genuine max-pool — the shapes `ibp2_certified_at_eps`
@@ -473,17 +475,12 @@ carries. -/\n''')
     A(f"    ((maxPool2_boxSound3 (c := {C}) (h := {P}) (w := {P})).comp")
     A("      (reluT_boxSound3.comp (conv2d_boxSound3 Wc bc)))\n")
 
-    A("""/-- `AC = |Wc| ⊛ 𝟙` — the per-position `ℓ1` weight of the kernel, a per-NET
-    constant (SAME padding drops taps at the border, so it varies by position).
-    `convLo_uniform`/`convHi_uniform` turn the first layer's box into
-    `conv2d Wc bc x ∓ ε·AC`, so each image costs one forward pass, not two. -/""")
-    A(f"noncomputable def AC : Tensor3 {C} {S} {S} :=\n  {t3(ACF, C, S, S)}\n")
-    A(f"theorem AC_eval : ∀ (o : Fin {C}) (i j : Fin {S}),")
-    A(f"    conv2d (absK Wc) (fun _ => 0) (onesT 1 {S} {S}) o i j = AC o i j := by")
-    A("  intro o i j")
-    A("  fin_cases o <;> fin_cases i <;> fin_cases j <;>")
-    A("    · simp [conv2d, absK, onesT, Wc, AC, Fin.sum_univ_succ]")
-    A("      try norm_num\n")
+    A("""/-- **One image, one kernel check.** `convNetCheckQ` propagates the pixel box
+    through the exact-`ℚ` net; `true` is a certificate for `net` on the cast image. -/""")
+    A(f"theorem net_certified_of_check (x : Fin 1 → Fin {S} → Fin {S} → ℚ) (ε : ℚ) (y : Fin 10)")
+    A(f"    (hc : convNetCheckQ WcQ bcQ WdQ bdQ x ε y = true) :")
+    A(f"    CertifiedAtLinf3 net (ε : ℝ) (castT x) y :=")
+    A(f"  convNetCheckQ_sound WcQ bcQ WdQ bdQ x ε y hc\n")
     A(END)
 
     # image chunks: each gets its own module (see the note above). They are
@@ -500,70 +497,28 @@ carries. -/\n''')
         LI[part].append(
             f"/-! # Conv IBP scorecard, image chunk {part} — test images "
             + ", ".join(f"#{r['idx']}" for r in sel) + "\n\n"
-            "Per-image propagated boxes for the conv net of `IbpConvScorecardNet.lean`:\n"
-            "the layer-1 box via the uniform collapse, its ReLU/max-pool image, and the\n"
-            "`CertifiedAtLinf3` theorem at each certifying radius. Split off so that no\n"
-            "single module carries every image — peak elaboration tracks the images in\n"
-            "the module, not the corpus (see the generator). The aggregate lives in\n"
-            "`IbpConvScorecard.lean`. Generated by `scripts/ibp_conv_scorecard.py`. -/\n")
+            "Per-image `CertifiedAtLinf3` theorems for the conv net of\n"
+            "`IbpConvScorecardNet.lean`: each image's exact data and one kernel check of\n"
+            "its box at the largest certifying radius; smaller radii follow by `.mono`.\n"
+            "The aggregate lives in `IbpConvScorecard.lean`. Generated by\n"
+            "`scripts/ibp_conv_scorecard.py`. -/\n")
         LI[part].append(NS)
-        LI[part].append(OPTS)
 
     for rec in chosen:
         A = LI[part_of[rec["idx"]]].append
         k, y, xF = rec["idx"], rec["y"], rec["xF"]
         A(f"-- ═══════════════ MNIST test image #{k} (label {y}) ═══════════════")
-        A(f"noncomputable def img{k} : Tensor3 1 {S} {S} :=\n  {t3([xF], 1, S, S)}\n")
-        A(f"noncomputable def cx{k} : Tensor3 {C} {S} {S} :=\n  {t3(rec['z1'], C, S, S)}\n")
-        A(f"theorem cx{k}_eval : ∀ (o : Fin {C}) (i j : Fin {S}),")
-        A(f"    conv2d Wc bc img{k} o i j = cx{k} o i j := by")
-        A("  intro o i j")
-        A("  fin_cases o <;> fin_cases i <;> fin_cases j <;>")
-        A(f"    · simp [conv2d, Wc, bc, img{k}, cx{k}, Fin.sum_univ_succ]")
-        A("      try norm_num\n")
-        for n, (lo1, hi1, plo, phi) in rec["eps"].items():
-            tag = f"{k}e{n}"
-            e = f"(({n}:ℝ)/255)"
-            A(f"noncomputable def lo{tag} : Tensor3 {C} {S} {S} :=\n  {t3(lo1, C, S, S)}\n")
-            A(f"noncomputable def hi{tag} : Tensor3 {C} {S} {S} :=\n  {t3(hi1, C, S, S)}\n")
-            A("/-- The layer-1 box, via the uniform collapse `conv2d Wc bc x ∓ ε·AC`. -/")
-            A(f"theorem box{tag} :")
-            A(f"    convLo Wc bc (fun a b d => img{k} a b d - {e})")
-            A(f"      (fun a b d => img{k} a b d + {e}) = lo{tag} ∧")
-            A(f"    convHi Wc bc (fun a b d => img{k} a b d - {e})")
-            A(f"      (fun a b d => img{k} a b d + {e}) = hi{tag} := by")
-            A("  constructor <;> funext o i j")
-            A(f"  · rw [convLo_uniform, cx{k}_eval, AC_eval]")
-            A(f"    fin_cases o <;> fin_cases i <;> fin_cases j <;>")
-            A(f"      · simp [cx{k}, AC, lo{tag}]")
-            A("        try norm_num")
-            A(f"  · rw [convHi_uniform, cx{k}_eval, AC_eval]")
-            A(f"    fin_cases o <;> fin_cases i <;> fin_cases j <;>")
-            A(f"      · simp [cx{k}, AC, hi{tag}]")
-            A("        try norm_num\n")
-            A(f"noncomputable def plo{tag} : Tensor3 {C} {P} {P} :=\n  {t3(plo, C, P, P)}\n")
-            A(f"noncomputable def phi{tag} : Tensor3 {C} {P} {P} :=\n  {t3(phi, C, P, P)}\n")
-            A("/-- The box after ReLU and max-pool (both monotone: pool the endpoints). -/")
-            A(f"theorem pool{tag} :")
-            A(f"    {mp} (reluT lo{tag}) = plo{tag} ∧ {mp} (reluT hi{tag}) = phi{tag} := by")
-            A("  constructor <;> funext o i j <;>")
-            A("    fin_cases o <;> fin_cases i <;> fin_cases j <;>")
-            A(f"      · simp [maxPool2, reluT, lo{tag}, hi{tag}, plo{tag}, phi{tag}]")
-            A("        try norm_num\n")
-            A(f"""/-- **Certified at ε = {n}/255** (MNIST test image #{k}, class {y}): EVERY
+        A(f"/-- MNIST test image #{k}, pooled to {S}×{S}, exact. -/")
+        A(f"def img{k}Q : Fin 1 → Fin {S} → Fin {S} → ℚ :=\n  {t3([xF], 1, S, S, vecq)}\n")
+        A(f"noncomputable def img{k} : Tensor3 1 {S} {S} := castT img{k}Q\n")
+        n = rec["nmax"]
+        tag = f"{k}e{n}"
+        A(f"""/-- **Certified at ε = {n}/255** (MNIST test image #{k}, class {y}): EVERY
     pixel-`L∞` perturbation of size ≤ {n}/255 leaves class {y} the strict argmax of
-    the conv net — conv, max-pool and a dense head, four layers. -/""")
-            A(f"theorem cert{tag} : CertifiedAtLinf3 net {e} img{k} {y} := by")
-            A("  refine ibp3_certified_of_boxSound net_boxSound ?_")
-            A("  intro j hj")
-            A(f"  simp only [netLo, netHi, (box{tag}).1, (box{tag}).2,")
-            A(f"    (pool{tag}).1, (pool{tag}).2]")
-            A("  fin_cases j <;>")
-            A("    first")
-            A("    | exact absurd rfl hj")
-            A("    | · simp only [denseTLo, denseTHi]")
-            A(f"        simp [Wd, bd, plo{tag}, phi{tag}, Fin.sum_univ_succ]")
-            A("        try norm_num\n")
+    the conv net — conv, max-pool and a dense head, four layers. One kernel
+    evaluation of the exact box. -/""")
+        A(f"theorem cert{tag} : CertifiedAtLinf3 net (({n}:ℝ)/255) img{k} {y} := by")
+        A(f"  simpa [img{k}] using net_certified_of_check img{k}Q (({n}:ℚ)/255) {y} (by decide +kernel)\n")
         for n2 in rec["ok"]:
             if n2 == rec["nmax"]:
                 continue
