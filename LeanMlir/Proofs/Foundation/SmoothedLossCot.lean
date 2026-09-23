@@ -82,34 +82,15 @@ theorem softCE_grad (K : Nat) (t z : Vec K) (j : Fin K) :
       pdiv (fun z' : Vec K => fun _ : Fin 1 => t k * crossEntropy K z' k) z j 0
         = t k * (softmax K z j - oneHot K k j) := by
     intro k
-    have hc : DifferentiableAt ℝ (fun _ : Vec K => fun _ : Fin 1 => t k) z :=
-      differentiableAt_const _
-    have hd : DifferentiableAt ℝ (fun z' : Vec K => fun _ : Fin 1 => crossEntropy K z' k) z := by
-      rw [differentiableAt_pi]
-      intro _
-      exact (crossEntropy_differentiable K k) z
-    rw [pdiv_mul (fun _ : Vec K => fun _ : Fin 1 => t k)
-          (fun z' : Vec K => fun _ : Fin 1 => crossEntropy K z' k) z hc hd j 0,
-        pdiv_const (fun _ : Fin 1 => t k) z j 0, softmaxCE_grad K z k j]
-    ring
-  have hdiffs : ∀ k : Fin K, k ∈ (Finset.univ : Finset (Fin K)) →
-      DifferentiableAt ℝ (fun z' : Vec K => fun _ : Fin 1 => t k * crossEntropy K z' k) z := by
-    intro k _
-    rw [differentiableAt_pi]
-    intro _
-    exact ((crossEntropy_differentiable K k) z).const_mul (t k)
-  have hsum := pdiv_finset_sum (Finset.univ : Finset (Fin K))
-    (fun k => fun z' : Vec K => fun _ : Fin 1 => t k * crossEntropy K z' k) z hdiffs j 0
+    rw [pdiv_const_smul (t k) (fun z' : Vec K => fun _ : Fin 1 => crossEntropy K z' k) z
+        (differentiableAt_pi.2 fun _ => (crossEntropy_differentiable K k) z) j 0,
+      softmaxCE_grad K z k j]
   rw [show (fun (z' : Vec K) (_ : Fin 1) => softCE K t z')
-        = (fun (z' : Vec K) (kk : Fin 1) =>
-            ∑ k : Fin K, (fun k => fun z' : Vec K => fun _ : Fin 1 => t k * crossEntropy K z' k)
-              k z' kk) from rfl, hsum]
-  simp only [hterm, oneHot, mul_sub, mul_ite, mul_one, mul_zero]
-  rw [Finset.sum_sub_distrib, ← Finset.sum_mul,
-      Finset.sum_eq_single j
-        (fun k _ hk => ite_eq_right (fun h : j = k => hk h.symm))
-        (fun h => absurd (Finset.mem_univ j) h),
-      ite_eq_left rfl]
+        = fun z' _ => ∑ k : Fin K, t k * crossEntropy K z' k from rfl,
+    pdiv_lift_sum _ _ _ (fun k _ => differentiableAt_pi.2 fun _ =>
+      ((crossEntropy_differentiable K k) z).const_mul (t k))]
+  simp only [hterm, oneHot, mul_sub, mul_ite, mul_one, mul_zero, Finset.sum_sub_distrib,
+    ← Finset.sum_mul, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Label smoothing as a map on targets

@@ -447,10 +447,8 @@ theorem dense_close_fresh {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
     and the bridge only needs 1-Lipschitz-ness. -/
 theorem relu_close {n : Nat} (xt xa : Vec n) (e : ℝ)
     (hx : ∀ i, |xt i - xa i| ≤ e) (i : Fin n) :
-    |relu n xt i - relu n xa i| ≤ e := by
-  refine le_trans ?_ (hx i)
-  simpa only [relu, gt_iff_lt, ← max_def_lt, max_comm (0:ℝ)] using
-    abs_max_sub_max_le_abs (xt i) (xa i) 0
+    |relu n xt i - relu n xa i| ≤ e :=
+  (relu_entry_lipschitz n xt xa i).trans (hx i)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Capstones: the Tier-1 nets

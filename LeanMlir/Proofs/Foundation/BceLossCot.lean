@@ -151,23 +151,13 @@ theorem bceLogits_grad (K : Nat) (t z : Vec K) (j : Fin K) :
       pdiv (fun z' : Vec K => fun _ : Fin 1 => softplus (z' k) - t k * z' k) z j 0
         = if j = k then sigmoidScalar (z k) - t k else 0 := fun k =>
     pdiv_coordFun (fun r : ℝ => softplus r - t k * r) _ k z (hder k) j
-  have hdiffs : ∀ k : Fin K, k ∈ (Finset.univ : Finset (Fin K)) →
-      DifferentiableAt ℝ (fun z' : Vec K => fun _ : Fin 1 => softplus (z' k) - t k * z' k) z := by
-    intro k _
-    rw [differentiableAt_pi]
-    intro _
-    exact (hder k).differentiableAt.comp z
-      (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).differentiableAt
-  have hsum := pdiv_finset_sum (Finset.univ : Finset (Fin K))
-    (fun k => fun z' : Vec K => fun _ : Fin 1 => softplus (z' k) - t k * z' k) z hdiffs j 0
   rw [show (fun (z' : Vec K) (_ : Fin 1) => bceLogits K t z')
-        = (fun (z' : Vec K) (kk : Fin 1) =>
-            ∑ k : Fin K,
-              (fun k => fun z' : Vec K => fun _ : Fin 1 => softplus (z' k) - t k * z' k)
-                k z' kk) from rfl, hsum]
-  simp only [hterm]
-  rw [Finset.sum_ite_eq (Finset.univ : Finset (Fin K)) j
-        (fun k => sigmoidScalar (z k) - t k), ite_eq_left (Finset.mem_univ j)]
+        = fun z' _ => ∑ k : Fin K, (softplus (z' k) - t k * z' k) from rfl,
+    pdiv_lift_sum Finset.univ (fun k z' => softplus (z' k) - t k * z' k) z (fun k _ =>
+      differentiableAt_pi.2 fun _ =>
+        ((hder k).differentiableAt.comp z
+          (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).differentiableAt :))]
+  simp only [hterm, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The emitted graph

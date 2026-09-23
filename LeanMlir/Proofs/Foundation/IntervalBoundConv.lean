@@ -147,12 +147,8 @@ theorem denseHiV_uniform {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (ε :
 -- § ReLU
 -- ════════════════════════════════════════════════════════════════
 
-/-- `Proofs.relu`'s `if · > 0` form is the `max` form the box endpoints use. -/
-theorem relu_apply_eq_max {n : Nat} (x : Vec n) (i : Fin n) : relu n x i = max (x i) 0 := by
-  simp only [relu]
-  by_cases h : x i > 0
-  · rw [ite_eq_left h, max_eq_left h.le]
-  · rw [ite_eq_right h, max_eq_right (le_of_not_gt h)]
+-- `Proofs.relu_apply_eq_max` (MLP.lean): `relu`'s `if · > 0` form is the `max` form the box
+-- endpoints use.
 
 /-- Coordinatewise ReLU on tensors — the form a conv body uses between conv and
     pool, so the body never leaves tensor space. -/

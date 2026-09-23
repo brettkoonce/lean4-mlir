@@ -5,6 +5,7 @@ import LeanMlir.Proofs.Foundation.Tensor
 import Mathlib.Analysis.SpecialFunctions.Sqrt
 import Mathlib.Analysis.Calculus.FDeriv.Mul
 import Mathlib.Analysis.Calculus.Deriv.Inv
+import Mathlib.Algebra.BigOperators.Expect
 
 /-!
 # Batch Normalization VJP
@@ -50,6 +51,11 @@ namespace Proofs
 noncomputable def bnMean (n : Nat) (x : Vec n) : ℝ :=
   (∑ i : Fin n, x i) / (n : ℝ)
 
+/-- `bnMean` is Mathlib's finite average `𝔼 i, x i` (`Finset.expect`), so its reindexing and
+    product lemmas apply. -/
+theorem bnMean_eq_expect (n : Nat) (x : Vec n) : bnMean n x = 𝔼 i, x i := by
+  rw [Fintype.expect_eq_sum_div_card, Fintype.card_fin, bnMean]
+
 /-- Population variance: `σ² = (1/N) Σᵢ (xᵢ − μ)²` -/
 noncomputable def bnVar (n : Nat) (x : Vec n) : ℝ :=
   let μ := bnMean n x
@@ -82,24 +88,16 @@ noncomputable def bnMeanSq (n : Nat) (x : Vec n) : ℝ :=
     Stated at an arbitrary shard `e`, in the style `DataParallel.meanLoss_shard` sets: WHICH
     cells land on which replica never enters, only that together they are the whole. The
     contiguous cut the DP shim makes is the `finProdFinEquiv` instance. -/
-theorem bnMean_shard {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
+theorem bnMean_shard {R m M : Nat} (_hR : R ≠ 0) (_hm : m ≠ 0)
     (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
     bnMean M x = (1 / (R : ℝ)) * ∑ r : Fin R, bnMean m (fun k => x (e (r, k))) := by
-  -- ⭐ `M = R * m` is not a hypothesis — the equiv already forces it, by cardinality. That is
-  -- what lets this apply at ANY association of the target index (`(R*N)*(h*w)` as readily as
-  -- `R*(N*(h*w))`), which every use downstream needs.
-  have hcard : M = R * m := by
-    have h := Fintype.card_congr e; simpa using h.symm
-  subst hcard
-  have hRr : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hR
-  have hmr : (m : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hm
-  have hsum : ∑ i : Fin (R * m), x i = ∑ r : Fin R, ∑ k : Fin m, x (e (r, k)) := by
-    rw [← Equiv.sum_comp e x, Fintype.sum_prod_type]
-  unfold bnMean
-  rw [hsum]
-  simp only [div_eq_mul_inv, ← Finset.sum_mul]
-  push_cast
-  field_simp
+  -- ⭐ `M = R * m` is not a hypothesis — the equiv forces it, so this applies at ANY association
+  -- of the target index (`(R*N)*(h*w)` as readily as `R*(N*(h*w))`). An average over `Fin M` is an
+  -- average over `Fin R × Fin m` (`expect_equiv`), which is an average of averages.
+  simp only [bnMean_eq_expect]
+  rw [← Fintype.expect_equiv e (fun p => x (e p)) x (fun _ => rfl), ← Finset.univ_product_univ,
+    Finset.expect_product, Fintype.expect_eq_sum_div_card, Fintype.card_fin, div_eq_inv_mul,
+    one_div]
 
 /-- ⭐⭐ **…and so is the SECOND MOMENT**, which is the whole reason sync-BN reduces `E[x²]`
     rather than the variance. Free from `bnMean_shard`: `bnMeanSq n x` is definitionally

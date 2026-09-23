@@ -47,14 +47,6 @@ open StableHLO
 -- § Helpers: ReLU is 1-Lipschitz; margins freeze signs; ℓ1 column mass
 -- ════════════════════════════════════════════════════════════════
 
-/-- ReLU is entrywise 1-Lipschitz. `FloatBridge.lean` proves the same fact for
-    the rounded net (`relu` exact-in-float); this is the ℝ-side workhorse
-    that lets forward drift pass through a kinked layer unamplified. -/
-theorem relu_entry_lipschitz (n : Nat) (u v : Vec n) (k : Fin n) :
-    |relu n u k - relu n v k| ≤ |u k - v k| := by
-  simpa only [relu, gt_iff_lt, ← max_def_lt, max_comm (0:ℝ)] using
-    abs_max_sub_max_le_abs (u k) (v k) 0
-
 /-- **Margins freeze signs.** If a value drifts by at most `c` and sits at
     distance more than `c` from the kink, the drifted value is still off the
     kink *with the same sign* — the ReLU mask cannot flip. -/

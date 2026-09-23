@@ -94,44 +94,25 @@ theorem dense_weight_grad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
       ∑ k : Fin n,
         pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
              (Mat.flatten W) (finProdFinEquiv (i, j)) k * dy k := by
-  simp_rw [pdiv_dense_W]
-  -- Σ k, (if k = j then x i else 0) * dy k  collapses to x i * dy j
-  rw [Finset.sum_eq_single j
-      (fun k _ hne => by rw [ite_eq_right hne]; ring)
-      (fun h => absurd (Finset.mem_univ j) h)]
-  simp [Mat.outer]
+  simp [pdiv_dense_W, Mat.outer]
 
 /-- **Dense bias gradient is identity** — theorem (Phase 7).
 
     `∂ dense(W, b, x)_j / ∂ b_{j'} = δ(j, j')`, so the bias backward is
-    just `dy` itself. Derived from `pdiv_add` + `pdiv_const` + `pdiv_id`
-    — no new axiom. -/
+    just `dy` itself: `b' ↦ dense W b' x` is the identity plus a constant (`pdiv_of_affine`). -/
 theorem pdiv_dense_b {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
     (i j : Fin n) :
     pdiv (fun b' : Vec n => dense W b' x) b i j = if i = j then 1 else 0 := by
-  -- Rewrite `fun b' => dense W b' x` as `(constant in b') + (identity on b')`.
-  have hDec : (fun b' : Vec n => dense W b' x) =
-              (fun b' k => (fun (_ : Vec n) (k' : Fin n) =>
-                              ∑ i' : Fin m, x i' * W i' k') b' k +
-                           (fun (y : Vec n) => y) b' k) := by
-    funext b' k; rfl
-  have h_const_diff : DifferentiableAt ℝ
-      (fun (_ : Vec n) (k' : Fin n) => ∑ i' : Fin m, x i' * W i' k') b :=
-    differentiableAt_const _
-  have h_id_diff : DifferentiableAt ℝ (fun y : Vec n => y) b :=
-    differentiableAt_id
-  rw [hDec, pdiv_add _ _ _ h_const_diff h_id_diff, pdiv_const, pdiv_id]
-  ring
+  rw [show (fun b' : Vec n => dense W b' x) = fun v => (fun w => w) v + dense W 0 x by
+        funext v k; simp [dense, add_comm],
+      pdiv_of_affine (fun w => w) _ (fun _ _ => rfl) (fun _ _ => rfl)]
+  simp [eq_comm]
 
 theorem dense_bias_grad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (dy : Vec n) (i : Fin n) :
     dy i =
       ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' x) b i j * dy j := by
-  simp_rw [pdiv_dense_b W b x]
-  rw [Finset.sum_eq_single i
-      (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
-      (fun h => absurd (Finset.mem_univ i) h)]
-  simp
+  simp [pdiv_dense_b]
 
 /-- **Dense weight backward** — named accessor.
     `dW = x ⊗ dy` (outer product). -/
@@ -148,6 +129,34 @@ def dense_bias_grad {n : Nat} (dy : Vec n) : Vec n := dy
 
 noncomputable def relu (n : Nat) (x : Vec n) : Vec n :=
   fun i => if x i > 0 then x i else 0
+
+/-- `relu` is `max · 0`, coordinatewise. -/
+theorem relu_apply_eq_max {n : Nat} (x : Vec n) (i : Fin n) : relu n x i = max (x i) 0 :=
+  (max_def_lt' (x i) 0).symm
+
+/-- ReLU output is always nonnegative. -/
+theorem relu_nonneg (n : Nat) (v : Vec n) (k : Fin n) : 0 ≤ relu n v k := by
+  rw [relu_apply_eq_max]; exact le_max_right _ _
+
+/-- ReLU is entrywise 1-Lipschitz — what lets a drift (or a rounding error) pass through a kinked
+    layer unamplified. -/
+theorem relu_entry_lipschitz (n : Nat) (u v : Vec n) (k : Fin n) :
+    |relu n u k - relu n v k| ≤ |u k - v k| := by
+  rw [relu_apply_eq_max, relu_apply_eq_max]; exact abs_max_sub_max_le_abs _ _ _
+
+/-- **The Jacobian of a diagonal 0/1 mask.** If `f` has, at `x`, the derivative that keeps
+    coordinate `k` when `p k` and zeroes it otherwise, its `pdiv` is the diagonal indicator of `p`.
+    `relu` and `relu6` at a smooth point are both this. -/
+theorem pdiv_of_hasFDerivAt_mask {n : Nat} (f : Vec n → Vec n) (x : Vec n) (p : Fin n → Prop)
+    [DecidablePred p]
+    (hf : HasFDerivAt f (ContinuousLinearMap.pi fun k =>
+        if p k then ContinuousLinearMap.proj k else (0 : Vec n →L[ℝ] ℝ)) x) (i j : Fin n) :
+    pdiv f x i j = if i = j then (if p i then 1 else 0) else 0 := by
+  unfold pdiv
+  rw [hf.fderiv, ContinuousLinearMap.pi_apply]
+  by_cases hij : i = j
+  · subst hij; split_ifs <;> simp_all [basisVec_apply]
+  · split_ifs <;> simp [basisVec_apply, Ne.symm hij]
 
 /-- **ReLU's local linear part at a smooth point** — the diagonal
     indicator CLM. At each coordinate `k`, projects to `y k` if
@@ -191,17 +200,8 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0)
     (i j : Fin n) :
     pdiv (relu n) x i j =
-      if i = j then (if x i > 0 then 1 else 0) else 0 := by
-  rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
-  · subst hn0; exact i.elim0
-  unfold pdiv
-  rw [(relu_hasFDerivAt n x h_smooth).fderiv, reluLinearPart_apply, basisVec_apply]
-  by_cases hij : i = j
-  · subst hij; rw [ite_eq_left rfl, ite_eq_left rfl]
-  · rw [ite_eq_right (fun h : j = i => hij h.symm), ite_eq_right hij]
-    by_cases hxj : x j > 0
-    · rw [ite_eq_left hxj]
-    · rw [ite_eq_right hxj]
+      if i = j then (if x i > 0 then 1 else 0) else 0 :=
+  pdiv_of_hasFDerivAt_mask _ x _ (relu_hasFDerivAt n x h_smooth) i j
 
 /-- **ReLU bundled VJP — canonical (junk-at-kink) witness.**
 
@@ -326,43 +326,18 @@ noncomputable def mlp_has_vjp_at {d₀ d₁ d₂ d₃ : Nat}
     (x : Vec d₀)
     (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
     (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0) :
-    HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x := by
-  unfold mlpForward
-  -- relu d₁ ∘ dense W₀ b₀
-  have step1 : HasVJPAt (relu d₁ ∘ dense W₀ b₀) x :=
-    vjp_comp_at (dense W₀ b₀) (relu d₁) x
-      ((dense_differentiable W₀ b₀) x)
-      (relu_differentiableAt_of_smooth d₁ _ h_smooth_0)
-      ((dense_has_vjp W₀ b₀).toHasVJPAt x)
-      (relu_has_vjp_at d₁ _ h_smooth_0)
-  have step1_diff : DifferentiableAt ℝ (relu d₁ ∘ dense W₀ b₀) x :=
-    (relu_differentiableAt_of_smooth d₁ _ h_smooth_0).comp x
-      ((dense_differentiable W₀ b₀) x)
-  -- dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀
-  have step2 : HasVJPAt (dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
-    vjp_comp_at (relu d₁ ∘ dense W₀ b₀) (dense W₁ b₁) x
-      step1_diff
-      ((dense_differentiable W₁ b₁) _)
-      step1
-      ((dense_has_vjp W₁ b₁).toHasVJPAt _)
-  have step2_diff : DifferentiableAt ℝ (dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
-    ((dense_differentiable W₁ b₁) _).comp x step1_diff
-  -- relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀
-  have step3 : HasVJPAt (relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
-    vjp_comp_at (dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) (relu d₂) x
-      step2_diff
-      (relu_differentiableAt_of_smooth d₂ _ h_smooth_1)
-      step2
-      (relu_has_vjp_at d₂ _ h_smooth_1)
-  have step3_diff : DifferentiableAt ℝ
-      (relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) x :=
-    (relu_differentiableAt_of_smooth d₂ _ h_smooth_1).comp x step2_diff
-  -- dense W₂ b₂ ∘ (above)
-  exact vjp_comp_at (relu d₂ ∘ dense W₁ b₁ ∘ relu d₁ ∘ dense W₀ b₀) (dense W₂ b₂) x
-    step3_diff
-    ((dense_differentiable W₂ b₂) _)
-    step3
-    ((dense_has_vjp W₂ b₂).toHasVJPAt _)
+    HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x :=
+  let dn := fun {a c : Nat} (W : Mat a c) (b : Vec c) (y : Vec a) =>
+    (⟨(dense_has_vjp W b).toHasVJPAt y, dense_differentiable W b y⟩ :
+      PProd (HasVJPAt (dense W b) y) (DifferentiableAt ℝ (dense W b) y))
+  (vjp_comp_diff_at _ _ x
+    (vjp_comp_diff_at _ _ x
+      (vjp_comp_diff_at _ _ x
+        (vjp_comp_diff_at _ _ x (dn W₀ b₀ x)
+          ⟨relu_has_vjp_at d₁ _ h_smooth_0, relu_differentiableAt_of_smooth d₁ _ h_smooth_0⟩)
+        (dn W₁ b₁ _))
+      ⟨relu_has_vjp_at d₂ _ h_smooth_1, relu_differentiableAt_of_smooth d₂ _ h_smooth_1⟩)
+    (dn W₂ b₂ _)).fst
 
 /-! ## Public correctness theorems for the canonical-witness defs
 
@@ -433,13 +408,7 @@ noncomputable def relu6LinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n 
 
 @[simp] theorem relu6LinearPart_apply (n : Nat) (x y : Vec n) (k : Fin n) :
     relu6LinearPart n x y k = if 0 < x k ∧ x k < 6 then y k else 0 := by
-  show (ContinuousLinearMap.pi (fun k' =>
-          if 0 < x k' ∧ x k' < 6 then ContinuousLinearMap.proj k'
-                      else (0 : Vec n →L[ℝ] ℝ))) y k = _
-  rw [ContinuousLinearMap.pi_apply]
-  by_cases hxk : 0 < x k ∧ x k < 6
-  · rw [ite_eq_left hxk, ite_eq_left hxk]; rfl
-  · rw [ite_eq_right hxk, ite_eq_right hxk]; rfl
+  rw [relu6LinearPart, ContinuousLinearMap.pi_apply]; split_ifs <;> rfl
 
 theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) :
@@ -474,31 +443,15 @@ theorem relu6_differentiableAt_of_smooth (n : Nat) (x : Vec n)
 theorem pdiv_relu6 (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) (i j : Fin n) :
     pdiv (relu6 n) x i j =
-      if i = j then (if 0 < x i ∧ x i < 6 then 1 else 0) else 0 := by
-  rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
-  · subst hn0; exact i.elim0
-  unfold pdiv
-  rw [(relu6_hasFDerivAt n x h_smooth).fderiv, relu6LinearPart_apply, basisVec_apply]
-  by_cases hij : i = j
-  · subst hij; rw [ite_eq_left rfl, ite_eq_left rfl]
-  · rw [ite_eq_right (fun h : j = i => hij h.symm), ite_eq_right hij]
-    by_cases hxj : 0 < x j ∧ x j < 6
-    · rw [ite_eq_left hxj]
-    · rw [ite_eq_right hxj]
+      if i = j then (if 0 < x i ∧ x i < 6 then 1 else 0) else 0 :=
+  pdiv_of_hasFDerivAt_mask _ x _ (relu6_hasFDerivAt n x h_smooth) i j
 
 noncomputable def relu6_has_vjp_at (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : HasVJPAt (relu6 n) x where
   backward dy i := if 0 < x i ∧ x i < 6 then dy i else 0
   correct := by
     intro dy i
-    simp_rw [pdiv_relu6 n x h_smooth]
-    rw [Finset.sum_eq_single i
-        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
-        (fun h => absurd (Finset.mem_univ i) h)]
-    rw [ite_eq_left rfl]
-    by_cases hxi : 0 < x i ∧ x i < 6
-    · rw [ite_eq_left hxi, ite_eq_left hxi]; ring
-    · rw [ite_eq_right hxi, ite_eq_right hxi]; ring
+    simp_rw [pdiv_relu6 n x h_smooth]; simp
 
 /-- **ReLU6 is the identity inside its window.** Wherever every coordinate is strictly inside
     `(0,6)`, `min (max · 0) 6` does nothing — the step every structural witness takes to collapse a

@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.MaxPool3s2
-import LeanMlir.Proofs.Nets.ResNet.ResNet34
 
 /-!
 # The batch-BatchNorm seal kit — non-degeneracy machinery for the full-width nets
@@ -613,16 +612,8 @@ theorem globalAvgPool_shift {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (x y : Tenso
 -- ════════════════════════════════════════════════════════════════
 
 /-- `relu` is continuous everywhere — it is `max · 0`; only its *derivative* has a kink. -/
-theorem relu_continuous (n : Nat) : Continuous (relu n) := by
-  refine continuous_pi (fun k => ?_)
-  have he : (fun x : Vec n => relu n x k) = fun x : Vec n => max (x k) 0 := by
-    funext x
-    simp only [relu]
-    split_ifs with h
-    · exact (max_eq_left h.le).symm
-    · exact (max_eq_right (not_lt.mp h)).symm
-  rw [he]
-  exact (continuous_apply k).max continuous_const
+theorem relu_continuous (n : Nat) : Continuous (relu n) :=
+  continuous_pi fun k => by simp only [relu_apply_eq_max]; exact (continuous_apply k).max continuous_const
 
 /-- A residual branch is continuous when its body is. -/
 theorem residual_continuous {n : Nat} (F : Vec n → Vec n) (hF : Continuous F) :
@@ -1114,16 +1105,12 @@ theorem BUnif_map {c h w : Nat} (f : ℝ → ℝ) (a a' : Fin 2 → Fin c → �
 theorem bnMean_pair (m : Nat) (hm : 0 < m) (a : Fin 2 → ℝ) (z : Vec (2 * m))
     (hz : ∀ (n : Fin 2) (q : Fin m), z (finProdFinEquiv (n, q)) = a n) :
     bnMean (2 * m) z = (a 0 + a 1) / 2 := by
-  have hsum : ∑ k : Fin (2 * m), z k = (m : ℝ) * (a 0 + a 1) := by
-    rw [← Equiv.sum_comp finProdFinEquiv z, Fintype.sum_prod_type]
-    rw [Finset.sum_congr rfl (fun n _ => Finset.sum_congr rfl (fun q _ => hz n q))]
-    simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
-      Fin.sum_univ_two]
-    ring
-  have hmR : (m : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hm.ne'
-  rw [bnMean, hsum]
-  push_cast
-  field_simp
+  have : Nonempty (Fin m) := ⟨⟨0, hm⟩⟩
+  rw [bnMean_eq_expect, ← Fintype.expect_equiv finProdFinEquiv (fun p => z (finProdFinEquiv p)) z
+    (fun _ => rfl), ← Finset.univ_product_univ, Finset.expect_product]
+  simp only [hz, Fintype.expect_const]
+  simp only [Fintype.expect_eq_sum_div_card, Fin.sum_univ_two, Fintype.card_fin]
+  norm_num
 
 theorem bnBatchLA_pair {oc h w : Nat} (hhw : 0 < h * w) (ε : ℝ) (γ β : Vec oc)
     (a : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (oc * h * w)))

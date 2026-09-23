@@ -232,6 +232,15 @@ theorem pdiv_finset_sum {m n : Nat} {α : Type*} [DecidableEq α]
     funext y k; simp [Finset.sum_apply], fderiv_fun_sum hdiff]
   simp [pdiv, Finset.sum_apply]
 
+/-- `pdiv_finset_sum` at a scalar loss: the gradient of a sum of scalar losses (lifted to
+    `Vec 1`) is the sum of their gradients. The form every summed-loss cotangent takes. -/
+theorem pdiv_lift_sum {P : Nat} {α : Type*} [DecidableEq α] (S : Finset α)
+    (f : α → Vec P → ℝ) (x : Vec P)
+    (h : ∀ k ∈ S, DifferentiableAt ℝ (fun z : Vec P => fun _ : Fin 1 => f k z) x) (j : Fin P) :
+    pdiv (fun z : Vec P => fun _ : Fin 1 => ∑ k ∈ S, f k z) x j 0
+      = ∑ k ∈ S, pdiv (fun z : Vec P => fun _ : Fin 1 => f k z) x j 0 :=
+  pdiv_finset_sum S (fun k z _ => f k z) x h j 0
+
 /-- **Linear rule** — the Jacobian of a continuous linear map is the map itself read on the
     basis vector: `fderiv ℝ L x = L` at every `x` (`ContinuousLinearMap.fderiv`). -/
 theorem pdiv_clm {m n : Nat} (L : Vec m →L[ℝ] Vec n) (x : Vec m) (i : Fin m) (j : Fin n) :

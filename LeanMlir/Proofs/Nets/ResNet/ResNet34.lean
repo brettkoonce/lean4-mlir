@@ -135,15 +135,4 @@ noncomputable def resnet34_has_vjp_at
               dense x p9 hdense
   p10.fst
 
--- ════════════════════════════════════════════════════════════════
--- § ReLU helper shared by the batched seals
--- ════════════════════════════════════════════════════════════════
-
-/-- ReLU output is always nonnegative. -/
-theorem relu_nonneg (n : Nat) (v : Vec n) (k : Fin n) : 0 ≤ relu n v k := by
-  simp only [relu]
-  by_cases h : v k > 0
-  · rw [ite_eq_left h]; exact le_of_lt h
-  · rw [ite_eq_right h]
-
 end Proofs
