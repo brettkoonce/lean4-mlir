@@ -10972,72 +10972,6 @@ Jacobian (Theorem~\ref{thm:pdivMat_transpose}) with \(dY\):
 \end{enumerate}
 \end{proof}
 
-\begin{theorem}[3D chain rule]
-  \label{thm:pdiv3_comp}
-  \lean{Proofs.pdiv3_comp}
-  \leanok
-  \uses{ax:pdiv, ax:pdiv_comp}
-  \Prove{} for flattened-differentiable \(f\), \(g\):
-  \(\pdiv_3(g \circ f)\) is the middle-index contraction
-  \(\sum_{c_j, h_j, w_j} \pdiv_3 f \cdot \pdiv_3 g\).
-\end{theorem}
-
-\begin{proof}
-\leanok
-\begin{enumerate}
-  \item \(\pdiv_3\) is \(\pdiv\) of the flattened map
-    (Definition~\ref{def:hasvjp3}), and the flattened composite is
-    the composite of the flattened maps.
-    \pf{Unflatten \(\circ\) flatten cancels between the stages.}
-  \item \Qed{}
-    \pf{The rank-1 chain rule (Theorem~\ref{ax:pdiv_comp}) at the
-    flat level, then re-index the flat middle sum to
-    \((c_j, h_j, w_j)\) triples through the index bijection.}
-\end{enumerate}
-\end{proof}
-
-\begin{theorem}[3D VJP chain rule]
-  \label{thm:vjp3_comp}
-  \lean{Proofs.vjp3_comp}
-  \leanok
-  \uses{ax:pdiv, def:hasvjp3, thm:pdiv3_comp}
-  Rank-3 transcription of Theorem~\ref{thm:vjp_comp}: composite
-  backward \(B(x, dy) = B_f\bigl(x,\, B_g(f\,x,\, dy)\bigr)\).
-\end{theorem}
-
-\begin{proof}
-\leanok
-\begin{enumerate}
-  \item \Suffices{} the composite backward matches the \(\pdiv_3\)
-    triple-sum contraction. \pf{Definition~\ref{def:hasvjp3}.}
-  \item \Qed{}
-    \pf{Expand both \texttt{correct} fields, substitute the 3D chain
-    rule (Theorem~\ref{thm:pdiv3_comp}), then swap the two triple
-    sums by packing each into a product index
-    (\texttt{Finset.sum\_product}, \texttt{Finset.sum\_comm}) ---
-    the rank-3 rendition of Theorem~\ref{thm:vjp_comp} steps 3--6.}
-\end{enumerate}
-\end{proof}
-
-\begin{theorem}[3D additive fan-in]
-  \label{thm:biPath3_has_vjp}
-  \lean{Proofs.biPath3_has_vjp}
-  \leanok
-  \uses{ax:pdiv, ax:pdiv_add, def:hasvjp3}
-  Rank-3 transcription of Theorem~\ref{thm:biPath_has_vjp}: backward
-  is the sum of the two backwards.
-\end{theorem}
-
-\begin{proof}
-\leanok
-By Definition~\ref{def:hasvjp3} it suffices to match the triple-sum
-contraction: expand both \texttt{correct} fields, merge the three
-nested sums (\texttt{Finset.sum\_add\_distrib} three times), and
-apply the sum rule (Theorem~\ref{ax:pdiv_add}, through the flatten
-bijection) to rewrite \(\pdiv_3 f + \pdiv_3 g = \pdiv_3(f + g)\).
-\Qed{}
-\end{proof}
-
 \section{Attention proofs}
 \label{sec:attention_proofs}
 
@@ -16900,13 +16834,12 @@ themselves.
 \caption{The same fact at the scale of chapters. Each box is a chapter and
 the number of statements it proves; an arrow from one box to another means
 the second's proofs cite the first's, and its width grows with the count,
-\depgraphCitations{} citations in all. The two double-bordered boxes are cited by every
-chapter after them --- Chapter~\ref{chap:tensor} \depgraphCitesTensor{} times, for \(\pdiv\)
-and its rules; Chapter~\ref{chap:cnn} \depgraphCitesCnn{} times, for \texttt{conv2d} ---
-so their arrows are left out. The matrix-level machinery of
+\depgraphCitations{} citations in all. The double-bordered box is cited by every
+chapter after it --- Chapter~\ref{chap:tensor}, \depgraphCitesTensor{} times, for \(\pdiv\)
+and its rules --- so its arrows are left out. The matrix-level machinery of
 \S\ref{sec:matrix_machinery} is proved in Chapter~\ref{chap:attention}
-and sits where it is first used, between Chapters~\ref{chap:bn}
-and~\ref{chap:residual}; the dashed arrow is the one statement proved
+and sits beside Chapter~\ref{chap:bn}, one row above Chapter~\ref{chap:residual}, where it is
+first used; the dashed arrow is the one statement proved
 later than it is used, softmax's derivative. Every box is a link.}
 \label{fig:chapter_map}
 \end{figure}

@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # The per-op ℝ backward maps — what the certified backward ties are stated about
 
-Every whole-net certified backward tie (`ResNet34BackCertifiedTieB`, `MobileNetV2BackCertifiedTie`,
+Every whole-net certified backward tie (`ResNet34BackCertifiedTieB`, `MobileNetV2WholeBackCertifiedTieB`,
 `ConvNeXtBackCertifiedTie`, …) says that a hand-composed chain of per-op backward maps on the
 cotangent equals the certified VJP `.backward` of the committed forward. This file is the
 per-op vocabulary those chains are written in: the ReLU sign mask, the diagonal scale of a smooth

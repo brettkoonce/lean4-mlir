@@ -379,7 +379,7 @@ def cifar8wbBnVerified : VerifiedNetSpec :=
     stages 2–4) → GAP → dense. **110 params** (§2l step B: no conv biases). Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
     (`resnet34VerifiedB_denote_eq` → `resnet34ForwardB_full` at batch BN, every batch size, + rung E
     `resnet34VerifiedB_fwd_faithful`); the honest pointwise VJP is `resnet34ForwardB_full_has_vjp_at`
-    (`ResNet34FullBVJP.lean`), the audited parametric skeleton `Proofs.resnet34_has_vjp_at` below it. -/
+    (`ResNet34FullBVJP.lean`). -/
 def resnet34Verified : VerifiedNetSpec where
   name     := "ResNet-34"
   slug     := "resnet34"

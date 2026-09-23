@@ -69,7 +69,7 @@ def CertifiedAtLinf {n k : ℕ} (f : EuclideanSpace ℝ (Fin n) → EuclideanSpa
     instance therefore only needs to carry the certificate data for the LARGEST
     radius at which an image certifies; every smaller radius on the ε-grid is a
     one-line corollary rather than another propagated box. The peer of
-    `IBP.CertifiedAtLinfV.mono`. -/
+    `IBP.CertifiedAtLinf3.mono`. -/
 theorem CertifiedAtLinf.mono {n k : ℕ}
     {f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)} {ε ε' : ℝ}
     {x : EuclideanSpace ℝ (Fin n)} {y : Fin k}

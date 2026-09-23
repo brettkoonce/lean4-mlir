@@ -7712,7 +7712,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           gradShape := r.inShape
         | _ => pure ()
       else if r.addSkipGrad.startsWith "proj:" || r.addSkipGrad == "identity" then
-        code := code ++ s!"    // ─── residual skip-add backward (Residual.lean: residual_has_vjp via biPath3_has_vjp) ───\n"
+        code := code ++ s!"    // ─── residual skip-add backward (Residual.lean: residual_has_vjp via biPath_has_vjp) ───\n"
         code := code ++ s!"    //     dy flows to both branches: main path + skip (identity or 1x1-conv projection)\n"
         -- Residual skip-add backward
         let oTy := tensorTy r.outShape
@@ -7975,7 +7975,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         | [b, n, d] =>
           code := code ++ s!"    // ════════════════════════════════════════════════════════════════\n"
           code := code ++ s!"    // Transformer block backward — see LeanMlir/Proofs/:\n"
-          code := code ++ s!"    //   Residual skips (main + mlp)  Residual.lean: residual_has_vjp / biPath3_has_vjp\n"
+          code := code ++ s!"    //   Residual skips (main + mlp)  Residual.lean: residual_has_vjp / biPath_has_vjp\n"
           code := code ++ s!"    //   MLP (fc2, fc1)               MLP.lean: dense_has_vjp + dense_weight_grad_correct\n"
           code := code ++ s!"    //   GELU                         LayerNorm.lean: pdiv_gelu (tanh-form diagonal Jacobian)\n"
           code := code ++ s!"    //   LN2, LN1                     LayerNorm.lean: layerNorm_has_vjp\n"
@@ -8073,7 +8073,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %{tag}_ln2_invN = stablehlo.constant dense<{1.0 / dF}> : {ty}\n"
           code := code ++ s!"    %{tag}_ln2_scale = stablehlo.multiply %{tag}_ln2_istdbc, %{tag}_ln2_invN : {ty}\n"
           code := code ++ s!"    %{tag}_dln2_in = stablehlo.multiply %{tag}_ln2_scale, %{tag}_ln2_t4 : {ty}\n"
-          code := code ++ s!"    // ─── MLP-branch residual accumulate (Residual.lean: biPath3_has_vjp) ───\n"
+          code := code ++ s!"    // ─── MLP-branch residual accumulate (Residual.lean: biPath_has_vjp) ───\n"
           -- Residual 2 accumulate
           code := code ++ s!"    %{tag}_dr1 = stablehlo.add {dy}, %{tag}_dln2_in : {ty}\n"
           code := code ++ s!"    // ─── MHSA backward (Attention.lean: sdpa_back_Q/K/V_correct + rowSoftmax_has_vjp_mat) ───\n"
@@ -8186,7 +8186,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"              contracting_dims = [2] x [1],\n"
           code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
           code := code ++ s!"            : ({ty}, {tensorTy [d, d]}) -> {ty}\n"
-          code := code ++ s!"    // ─── Q/K/V backward fan-in into LN1 input (biPath3_has_vjp: three paths sum) ───\n"
+          code := code ++ s!"    // ─── Q/K/V backward fan-in into LN1 input (biPath_has_vjp: three paths sum) ───\n"
           code := code ++ s!"    %{tag}_dln1a = stablehlo.add %{tag}_dxq, %{tag}_dxk : {ty}\n"
           code := code ++ s!"    %{tag}_dln1 = stablehlo.add %{tag}_dln1a, %{tag}_dxv : {ty}\n"
           code := code ++ s!"    // ─── LN1 backward (LayerNorm.lean: layerNorm_has_vjp) ───\n"
@@ -8214,7 +8214,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %{tag}_ln1_invN = stablehlo.constant dense<{1.0 / dF}> : {ty}\n"
           code := code ++ s!"    %{tag}_ln1_scale = stablehlo.multiply %{tag}_ln1_istdbc, %{tag}_ln1_invN : {ty}\n"
           code := code ++ s!"    %{tag}_dln1_in = stablehlo.multiply %{tag}_ln1_scale, %{tag}_ln1_t4 : {ty}\n"
-          code := code ++ s!"    // ─── MHSA-branch residual accumulate → block input gradient (biPath3_has_vjp) ───\n"
+          code := code ++ s!"    // ─── MHSA-branch residual accumulate → block input gradient (biPath_has_vjp) ───\n"
           code := code ++ s!"    %{tag}_dblockin = stablehlo.add %{tag}_dr1, %{tag}_dln1_in : {ty}\n"
           gradSSA := s!"%{tag}_dblockin"
           gradShape := r.inShape

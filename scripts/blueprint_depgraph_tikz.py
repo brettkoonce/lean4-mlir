@@ -204,12 +204,14 @@ def book(chapters, nums, nodes, edges, tex, textwidth_pt=460.0, textheight_pt=38
     def ref(u): return chlab[chapters[u[1]]] if u[0] == 'ch' else SPLIT[u[1]]
     us = sorted(size, key=order)
     name = {u: 'u%d' % i for i, u in enumerate(us)}
-    # Rows follow the reading order, and a row holds two chapters only when neither cites
-    # the other (ResNet-34 and MobileNetV2, EfficientNet and ConvNeXt); the machinery box
-    # sits between chapters 4 and 5, where it is first used. Dot places within a row and
-    # routes the arrows; the rows themselves are pinned.
-    rows = [[1], [2, 3], [4], [4.5], [5, 6], [7, 8], [9]]
-    G = pgv.AGraph(directed=True, strict=False, rankdir='TB', ranksep=0.3, nodesep=0.25, splines='true')
+    # Rows follow the reading order, and a row holds two units only when neither cites
+    # the other (chapter 4 and the machinery box, ResNet-34 and MobileNetV2, EfficientNet
+    # and ConvNeXt); the machinery box sits beside chapter 4, one row above chapter 5, where
+    # it is first used. Chapters 2, 3 and 4 each cite the one before, so they stack as a
+    # spine down the left. Dot places within a row and routes the arrows; the rows
+    # themselves are pinned.
+    rows = [[1], [2], [3], [4, 4.5], [5, 6], [7, 8], [9]]
+    G = pgv.AGraph(directed=True, strict=False, rankdir='TB', ranksep=0.5, nodesep=0.25, splines='true')
     G.node_attr.update(fontsize=1)
     def box(label, fs, n=1): return dict(fixedsize='true', width=(len(label) * 0.62 * fs + 10) / 72.0, height=(fs * 1.25 * n + 5) / 72.0)
     for u in us: G.add_node(name[u], shape='box', **box(max(lines(u), key=len), BASE, 2))

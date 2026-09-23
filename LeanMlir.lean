@@ -35,7 +35,6 @@ import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 -- ℝ→Float32 bridge, Tier 1: standard-model rounding bounds for the toy nets.
 import LeanMlir.Proofs.Float.FloatBridge
@@ -105,7 +104,7 @@ re-runs Lean's kernel over 73 of the headline theorems independently of the elab
 
 ## The chapter nets
 
-Whole-network VJPs — [`resnet34_has_vjp_at`](find/#doc/Proofs.resnet34_has_vjp_at),
+Whole-network VJPs — [`resnet34ForwardB_full_has_vjp_at`](find/#doc/Proofs.resnet34ForwardB_full_has_vjp_at),
 `Proofs.mobilenetv2_has_vjp_at`, `Proofs.efficientnet_has_vjp`, `Proofs.convnext_has_vjp`,
 `Proofs.vit_full_has_vjp` — and, for every net the tiers train, the tie of the committed
 train-step render (the verified_mlir/ files the trainers load) to the certified chain, at the

@@ -154,7 +154,7 @@ theorem r34StemB_has_vjp_at_backward (N h w : Nat) {ic oc : Nat}
 
 /-- **Whole-network batched ResNet-34 VJP, every stage opaque.** `head ∘ b16 ∘ … ∘ b1 ∘ stem`,
     seventeen `vjp_comp_diff_at`s and nothing else. ⭐ ResNet-34's [3,4,6,3] ladder needs no
-    `ChainData` list and no separate downsample slot: a downsample block is just a block of a
+    list of blocks and no separate downsample slot: a downsample block is just a block of a
     different type, and the stem's pool lives INSIDE `stem`. Dimension-generic and parametric in
     every component, so the tie below is checked between variables.
 

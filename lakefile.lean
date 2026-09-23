@@ -87,7 +87,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.Small.MnistCNN,
              `LeanMlir.Proofs.Training.JacobianSeal,
              `LeanMlir.Proofs.Architectures.StridedConv,
-             `LeanMlir.Proofs.Nets.ResNet.ResNet34,
              `LeanMlir.Proofs.Architectures.PerChannelBN,
              `LeanMlir.Proofs.Codegen.MatBridge,
              `LeanMlir.Proofs.Foundation.IR,
@@ -113,7 +112,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP,
              `LeanMlir.Proofs.Float.FloatBridge,
              `LeanMlir.Proofs.Float.FloatSubnormalBridge,
              `LeanMlir.Proofs.Training.SgdDescent,
@@ -183,7 +181,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Float.ConvMixedComposeBridge,
              `LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge,
              `LeanMlir.Proofs.Architectures.ConvBackCertifiedTie,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB,
@@ -198,7 +195,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB,
              `LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie,
              `LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie,
              `LeanMlir.Proofs.Codegen.AdamStep,
              `LeanMlir.Proofs.Codegen.SgdMomentumStep,
@@ -302,11 +298,11 @@ lean_lib «ProofsMinimal» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Nets.Small.LinearFold, `LeanMlir.Proofs.Training.SgdDescentLinear]
 
-/-- **`lake build Codegen`** — the REFERENCE path's codegen + spec core, no proofs:
+/-- **`lake build Reference`** — the REFERENCE path's codegen + spec core, no proofs:
     `MlirCodegen` (NetSpec → MLIR at run time, unverified) and the modules around it. It does
     not build the verified path (`VerifiedSpec`/`VerifiedNets`/`VerifiedTrain`, which load
     `verified_mlir/`) or anything in `LeanMlir/Proofs/Codegen/`, and no CI job uses it. -/
-lean_lib «Codegen» where
+lean_lib «Reference» where
   srcDir := "."
   roots := #[`LeanMlir.MlirCodegen, `LeanMlir.Train, `LeanMlir.Spec,
              `LeanMlir.SpecHelpers, `LeanMlir.Types, `LeanMlir.IreeRuntime,

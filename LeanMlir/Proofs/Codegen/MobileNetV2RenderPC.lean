@@ -5,9 +5,8 @@ import LeanMlir.Proofs.Codegen.StableHLO
 Per-channel-BN mirrors (`bnPerChannelTensor3`: reduce over spatial `[2,3]`, `γ/β : Vec c`) of the
 global-BN stage abbreviations `ivExpand` / … / `ivProject`: `ivExpandPC` / `ivDepthwisePC` /
 `ivDepthwiseStridedPC` / `ivProjectPC`, and the two inverted-residual bodies composed from them
-(`invresBodyPC`, `invresBodyStridedPC`). The per-example VJP tier (`MobileNetV2BackCertifiedTie`,
-`MobileNetV2FullVJP`) is stated over these, and `MobileNetV2RenderPCEval` gives their
-frozen-statistics twins.
+(`invresBodyPC`, `invresBodyStridedPC`). `MobileNetV2RenderPCEval` gives their frozen-statistics
+twins.
 -/
 
 namespace Proofs

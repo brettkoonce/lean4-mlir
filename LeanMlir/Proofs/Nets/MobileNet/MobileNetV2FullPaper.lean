@@ -6,7 +6,8 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 `IVWNoExp` (the t=1 first bottleneck: no expand conv). They hold kernels, epsilons, gammas and
 betas — nothing that knows which BatchNorm world reduces them — so the batch-BN net
 (`MobileNetV2FullB.lean`, `MNV2BWeights`) and its step tie bind the same records the per-example
-net did.
+net did. `IVPos` / `IVNoExpPos` are their BN-epsilon positivity bundles: an epsilon's positivity
+does not know which axis the norm reduces either.
 
 Paper `[t,c,n,s]` spec (stem 3×3-s2 3→32; head 1×1 320→1280 → GAP → dense):
   (1, 16,1,1) (6, 24,2,2) (6, 32,3,2) (6, 64,4,2) (6, 96,3,1) (6,160,3,2) (6,320,1,1)
@@ -65,5 +66,20 @@ structure IVWNoExp (ic oc : Nat) where
   pε : ℝ
   pγ : Vec oc
   pβ : Vec oc
+
+-- ════════════════════════════════════════════════════════════════
+-- § Per-block BN-epsilon positivity bundles
+-- ════════════════════════════════════════════════════════════════
+
+/-- The three BN epsilons of a full bottleneck are positive. -/
+structure IVPos {ic mid oc : Nat} (q : IVW ic mid oc) : Prop where
+  he : 0 < q.eε
+  hd : 0 < q.dε
+  hp : 0 < q.pε
+
+/-- The two BN epsilons of the t=1 (no-expand) bottleneck are positive. -/
+structure IVNoExpPos {ic oc : Nat} (q : IVWNoExp ic oc) : Prop where
+  hd : 0 < q.dε
+  hp : 0 < q.pε
 
 end Proofs

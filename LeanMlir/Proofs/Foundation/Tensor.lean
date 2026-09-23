@@ -29,7 +29,7 @@ Contents, in file order:
 | section | what |
 |---|---|
 | Types, Matrix Operations | `Vec`, `Mat`, `Mat.mulVec`/`mul`/`transpose`/`outer`, `basisVec` |
-| Differentiation | `pdiv` and its rules (`pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_reindex`, …); the linear-map kits `pdiv_clm` / `pdiv_of_affine` / `pdiv_of_linear`, `pdiv_elementwise`, `pdiv_finset_sum`, `pdiv_const_smul` |
+| Differentiation | `pdiv` and its rules (`pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_reindex`, …); the linear-map kits `pdiv_of_affine` / `pdiv_of_linear`, `pdiv_elementwise`, `pdiv_finset_sum`, `pdiv_const_smul` |
 | VJP Framework, Pointwise VJP | `HasVJP` (global) and `HasVJPAt` (at a point), `canonical`, `backward_unique`, `vjp_comp` / `vjp_comp_at` / `vjp_comp_diff_at` and their `_backward` peels, `biPath` |
 | flattening | `Mat.flatten` / `unflatten` with `_apply` and `@[simp]` round-trips, `sum_finProdFinEquiv` |
 | Matrix-level | `pdivMat`, `HasVJPMat`, `vjpMat_comp`, row-independence (`pdivMat_rowIndep*`, `rowwise_has_vjp_mat`), and the matmul / scale / transpose Jacobians and VJPs. The multi-head column-slab kit and `HasVJPMat3` live in `Attention.lean` |
@@ -240,12 +240,6 @@ theorem pdiv_lift_sum {P : Nat} {α : Type*} [DecidableEq α] (S : Finset α)
     pdiv (fun z : Vec P => fun _ : Fin 1 => ∑ k ∈ S, f k z) x j 0
       = ∑ k ∈ S, pdiv (fun z : Vec P => fun _ : Fin 1 => f k z) x j 0 :=
   pdiv_finset_sum S (fun k z _ => f k z) x h j 0
-
-/-- **Linear rule** — the Jacobian of a continuous linear map is the map itself read on the
-    basis vector: `fderiv ℝ L x = L` at every `x` (`ContinuousLinearMap.fderiv`). -/
-theorem pdiv_clm {m n : Nat} (L : Vec m →L[ℝ] Vec n) (x : Vec m) (i : Fin m) (j : Fin n) :
-    pdiv L x i j = L (basisVec i) j := by
-  rw [pdiv, ContinuousLinearMap.fderiv]
 
 /-- **Affine rule** — if `f` is additive and homogeneous it is a linear map on the
     finite-dimensional `Vec m`, hence continuous (`LinearMap.continuous_on_pi`), and the Jacobian
@@ -596,13 +590,6 @@ theorem HasVJPMat.backward_unique_of_eq {a b c d : Nat} {f g : Mat a b → Mat c
     v.backward A dY = v'.backward A dY := by
   subst hfg; funext i j; rw [v.correct, v'.correct]
 
-/-- **Any two `HasVJPMat` witnesses for the same map have the same backward** —
-    `HasVJP.backward_unique`'s matrix peer. -/
-theorem HasVJPMat.backward_unique {a b c d : Nat} {f : Mat a b → Mat c d}
-    (v v' : HasVJPMat f) (A : Mat a b) (dY : Mat c d) :
-    v.backward A dY = v'.backward A dY :=
-  HasVJPMat.backward_unique_of_eq rfl v v' A dY
-
 /-- **Chain rule for matrix VJPs** — proved, no sorry.
     Direct transcription of `vjp_comp` to rank-2 indices. -/
 noncomputable def vjpMat_comp {a b c d e f : Nat}
@@ -934,12 +921,10 @@ theorem unflatten_differentiable {c h w : Nat} :
 
 end Tensor3
 
-/-- **3D partial derivative** — now a definition via the triple-nested
-    flatten bijection, no longer an axiom. The four structural rules
-    (comp / add / id) follow as theorems. Operator-specific VJPs at
-    rank 3 (`conv2d_has_vjp3`, `maxPool2_has_vjp3`, `depthwise_has_vjp3`)
-    are bundled `HasVJP3` defs in their respective files — those state
-    specific Jacobian values, not framework. -/
+/-- **3D partial derivative** — `pdiv` of the flattened map, both indices read through the
+    triple-nested flatten bijection. Operator-specific VJPs at rank 3 (`conv2d_has_vjp3`,
+    `maxPool2_has_vjp3`, `depthwise_has_vjp3`) are bundled `HasVJP3` defs in their own files;
+    nets compose them at `Vec`, through `hasVJP3_to_hasVJP` / `hasVJPAt3_to_hasVJPAt`. -/
 noncomputable def pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (x : Tensor3 c₁ h₁ w₁)
@@ -950,47 +935,6 @@ noncomputable def pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (Tensor3.flatten x)
     (finProdFinEquiv (finProdFinEquiv (ci, hi), wi))
     (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
-
-/-- **Chain rule for 3D partial derivatives** — theorem, via `pdiv_comp`
-    and two applications of `sum_finProdFinEquiv`. Requires
-    the flattened forms of `f` and `g` to be differentiable at the
-    relevant points. -/
-theorem pdiv3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
-    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
-    (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
-    (x : Tensor3 c₁ h₁ w₁)
-    (hf_diff : DifferentiableAt ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
-      (Tensor3.flatten x))
-    (hg_diff : DifferentiableAt ℝ
-      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u)))
-      (Tensor3.flatten (f x)))
-    (ci : Fin c₁) (hi : Fin h₁) (wi : Fin w₁)
-    (ck : Fin c₃) (hk : Fin h₃) (wk : Fin w₃) :
-    pdiv3 (g ∘ f) x ci hi wi ck hk wk =
-    ∑ cj : Fin c₂, ∑ hj : Fin h₂, ∑ wj : Fin w₂,
-      pdiv3 f x ci hi wi cj hj wj * pdiv3 g (f x) cj hj wj ck hk wk := by
-  unfold pdiv3
-  -- Flatten turns 3D composition into Vec composition (unflatten ∘ flatten = id).
-  have h_compose :
-      (fun v : Vec (c₁ * h₁ * w₁) =>
-        Tensor3.flatten ((g ∘ f) (Tensor3.unflatten v))) =
-      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u))) ∘
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v))) := by
-    funext v
-    simp [Function.comp, Tensor3.unflatten_flatten]
-  have h_mid :
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
-        (Tensor3.flatten x) = Tensor3.flatten (f x) := by
-    simp [Tensor3.unflatten_flatten]
-  have hg_diff' : DifferentiableAt ℝ
-      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u)))
-      ((fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
-        (Tensor3.flatten x)) := by
-    rw [h_mid]; exact hg_diff
-  rw [h_compose, pdiv_comp _ _ _ hf_diff hg_diff']
-  simp_rw [h_mid]
-  rw [sum_finProdFinEquiv, sum_finProdFinEquiv]
 
 /-- VJP for 3D→3D functions. -/
 structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
@@ -1018,65 +962,6 @@ structure HasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     backward dy ci hi wi =
     ∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
       pdiv3 f x ci hi wi co ho wo * dy co ho wo
-
-/-- Trivial lift: a global `HasVJP3` gives a `HasVJPAt3` at any point. -/
-def HasVJP3.toHasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
-    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
-    (hf : HasVJP3 f) (x : Tensor3 c₁ h₁ w₁) : HasVJPAt3 f x where
-  backward dy := hf.backward x dy
-  correct := hf.correct x
-
-/-- **Chain rule for pointwise Tensor3 VJPs.** Tensor3 analogue of
-    `vjp_comp_at`. Requires `DifferentiableAt` only at the relevant
-    points (on the flattened forms), which is what `vjp3_comp_at`
-    consumers built from `_at` instances of kinked operators can
-    actually supply. -/
-noncomputable def vjp3_comp_at {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
-    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
-    (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
-    (x : Tensor3 c₁ h₁ w₁)
-    (hf_diff : DifferentiableAt ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
-      (Tensor3.flatten x))
-    (hg_diff : DifferentiableAt ℝ
-      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u)))
-      (Tensor3.flatten (f x)))
-    (hf : HasVJPAt3 f x) (hg : HasVJPAt3 g (f x)) :
-    HasVJPAt3 (g ∘ f) x where
-  backward dy := hf.backward (hg.backward dy)
-  correct := by
-    intro dy ci hi wi
-    rw [hf.correct]; simp_rw [hg.correct]
-    conv_rhs =>
-      arg 2; ext ck; arg 2; ext hk; arg 2; ext wk
-      rw [show pdiv3 (g ∘ f) x ci hi wi ck hk wk * dy ck hk wk =
-          (∑ cj : Fin c₂, ∑ hj : Fin h₂, ∑ wj : Fin w₂,
-            pdiv3 f x ci hi wi cj hj wj * pdiv3 g (f x) cj hj wj ck hk wk) * dy ck hk wk
-        from by rw [← pdiv3_comp _ _ _ hf_diff hg_diff]]
-    simp_rw [Finset.sum_mul, mul_assoc, Finset.mul_sum]
-    show ∑ cj, ∑ hj, ∑ wj, ∑ ck, ∑ hk, ∑ wk, _ = ∑ ck, ∑ hk, ∑ wk, ∑ cj, ∑ hj, ∑ wj, _
-    calc _ = ∑ jj ∈ Finset.univ ×ˢ Finset.univ ×ˢ Finset.univ,
-             ∑ kk ∈ Finset.univ ×ˢ Finset.univ ×ˢ Finset.univ,
-             pdiv3 f x ci hi wi jj.1 jj.2.1 jj.2.2 *
-               (pdiv3 g (f x) jj.1 jj.2.1 jj.2.2 kk.1 kk.2.1 kk.2.2 *
-               dy kk.1 kk.2.1 kk.2.2) := by simp_rw [Finset.sum_product]
-         _ = _ := Finset.sum_comm
-         _ = _ := by simp_rw [Finset.sum_product]
-
-/-- **Chain rule for 3D VJPs** — `vjp3_comp_at` at every point. Requires the
-    flattened forms of `f` and `g` to be differentiable everywhere. -/
-noncomputable def vjp3_comp {c₁ h₁ w₁ c₂ h₂ w₂ c₃ h₃ w₃ : Nat}
-    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
-    (g : Tensor3 c₂ h₂ w₂ → Tensor3 c₃ h₃ w₃)
-    (hf_diff : Differentiable ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v))))
-    (hg_diff : Differentiable ℝ
-      (fun u : Vec (c₂ * h₂ * w₂) => Tensor3.flatten (g (Tensor3.unflatten u))))
-    (hf : HasVJP3 f) (hg : HasVJP3 g) :
-    HasVJP3 (g ∘ f) where
-  backward := fun x dy => hf.backward x (hg.backward (f x) dy)
-  correct x := (vjp3_comp_at f g x (hf_diff _) (hg_diff _) (hf.toHasVJPAt3 x)
-    (hg.toHasVJPAt3 (f x))).correct
 
 /-- **Bridge: `HasVJP3` → `HasVJP` via the `Tensor3.flatten` bijection.**
 
@@ -1127,71 +1012,5 @@ noncomputable def hasVJPAt3_to_hasVJPAt {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     simp only [Equiv.symm_apply_apply, hf.correct, pdiv3,
       sum_finProdFinEquiv (m := c₂ * h₂), sum_finProdFinEquiv (m := c₂)]
     rfl
-
-/-- **Identity Jacobian for Tensor3** — theorem, via `pdiv_id` and
-    injectivity of the nested `finProdFinEquiv`. -/
-theorem pdiv3_id {c h w : Nat} (x : Tensor3 c h w)
-    (ci : Fin c) (hi : Fin h) (wi : Fin w)
-    (co : Fin c) (ho : Fin h) (wo : Fin w) :
-    pdiv3 (fun (t : Tensor3 c h w) => t) x ci hi wi co ho wo =
-      if ci = co ∧ hi = ho ∧ wi = wo then 1 else 0 := by
-  simp [pdiv3, Tensor3.flatten_unflatten, pdiv_id, and_assoc]
-
-def identity3_has_vjp (c h w : Nat) : HasVJP3 (fun (x : Tensor3 c h w) => x) where
-  backward := fun _x dy => dy
-  correct := by
-    intro x dy ci hi wi
-    simp_rw [pdiv3_id]
-    simp [ite_and]
-
-/-- **Sum rule for Tensor3 partial derivatives** — theorem, via `pdiv_add`. -/
-theorem pdiv3_add {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
-    (f g : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
-    (x : Tensor3 c₁ h₁ w₁)
-    (hf_diff : DifferentiableAt ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v)))
-      (Tensor3.flatten x))
-    (hg_diff : DifferentiableAt ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (g (Tensor3.unflatten v)))
-      (Tensor3.flatten x))
-    (ci : Fin c₁) (hi : Fin h₁) (wi : Fin w₁)
-    (co : Fin c₂) (ho : Fin h₂) (wo : Fin w₂) :
-    pdiv3 (fun y c h w => f y c h w + g y c h w) x ci hi wi co ho wo
-    = pdiv3 f x ci hi wi co ho wo + pdiv3 g x ci hi wi co ho wo := by
-  unfold pdiv3
-  have h_flat : (fun v : Vec (c₁ * h₁ * w₁) =>
-                  Tensor3.flatten ((fun y c h w => f y c h w + g y c h w)
-                    (Tensor3.unflatten v))) =
-                (fun v k => (fun w => Tensor3.flatten (f (Tensor3.unflatten w))) v k +
-                            (fun w => Tensor3.flatten (g (Tensor3.unflatten w))) v k) := by
-    funext v k
-    unfold Tensor3.flatten
-    rfl
-  rw [h_flat, pdiv_add _ _ _ hf_diff hg_diff]
-
-@[reducible] noncomputable def biPath3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
-    (f g : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂) :
-    Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂ :=
-  fun x c h w => f x c h w + g x c h w
-
-noncomputable def biPath3_has_vjp {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
-    (f g : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
-    (hf_diff : Differentiable ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (f (Tensor3.unflatten v))))
-    (hg_diff : Differentiable ℝ
-      (fun v : Vec (c₁ * h₁ * w₁) => Tensor3.flatten (g (Tensor3.unflatten v))))
-    (hf : HasVJP3 f) (hg : HasVJP3 g) :
-    HasVJP3 (biPath3 f g) where
-  backward := fun x dy ci hi wi => hf.backward x dy ci hi wi + hg.backward x dy ci hi wi
-  correct := by
-    intro x dy ci hi wi
-    rw [hf.correct, hg.correct, ← Finset.sum_add_distrib]
-    congr 1; ext co
-    rw [← Finset.sum_add_distrib]
-    congr 1; ext ho
-    rw [← Finset.sum_add_distrib]
-    congr 1; ext wo
-    rw [pdiv3_add _ _ _ (hf_diff (Tensor3.flatten x)) (hg_diff (Tensor3.flatten x))]
-    ring
 
 end Proofs

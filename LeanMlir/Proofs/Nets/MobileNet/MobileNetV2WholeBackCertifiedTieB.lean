@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie
+import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 
@@ -60,7 +60,7 @@ namespace Proofs
 
 /-- **The whole-network MobileNetV2 VJP at opaque stages** (moved here 2026-09-19 from the retired per-example tie, whose apex it was). `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`. Twenty `vjp_comp_diff_at`s and nothing else:
     MobileNetV2's skips live INSIDE the block maps and its strides inside the strided bodies, so
-    there is no `ChainData` list and no separate downsample slot at any depth. Dimension-generic
+    there is no list of blocks and no separate downsample slot at any depth. Dimension-generic
     and parametric in every component. -/
 noncomputable def mobilenetv2PaperPC_has_vjp_at
     {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 : Nat}

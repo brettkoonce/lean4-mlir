@@ -32,9 +32,8 @@ the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
 
 ## Padding convention
 
-The strided inverted-residual pieces (per-channel BN, in `MobileNetV2FullVJP.lean` and
-`MobileNetV2BackCertifiedTie.lean`) read `flatConvStride2Xla` / `depthwiseStride2FlatXla`, the
-XLA-`SAME` (odd) phase every MobileNetV2 artifact emits. The 2-block generic `mobilenetv2Forward`
+The strided pieces of the batched chain (`MobileNetV2BackB0.lean` on) read `flatConvStride2Xla` /
+`depthwiseStride2FlatXla`, the XLA-`SAME` (odd) phase every MobileNetV2 artifact emits. The 2-block generic `mobilenetv2Forward`
 here has a stride-1 stem.
 
 All new defs/theorems certify to exactly `[propext, Classical.choice,

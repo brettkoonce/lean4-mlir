@@ -11,11 +11,11 @@ This file removes both restrictions. The soundness argument for IBP is
 *compositional* — "the box propagates" is a property of one layer, and depth is
 just `∘` — so the engine here is:
 
-* `InBox` / `InBox3` — a point lies in an axis-aligned box (flat / tensor);
-* `BoxSound f Flo Fhi` — `(Flo, Fhi)` is a sound interval transformer for `f`;
-* `BoxSound.comp` — **depth**: sound transformers compose exactly as the layers
+* `InBox3` / `InBox` — a point lies in an axis-aligned box (tensor / the head's logits);
+* `BoxSound3 f Flo Fhi` — `(Flo, Fhi)` is a sound interval transformer for `f`;
+* `BoxSound3.comp` — **depth**: sound transformers compose exactly as the layers
   do, so an `n`-layer net's transformer is `n` compositions and no new proof;
-* per-layer instances in tensor space (`BoxSound3`) — `relu` (endpoint `max`),
+* per-layer instances — `relu` (endpoint `max`),
   **`conv2d`** (sign-split over the padded taps), **`maxPool2`** (`max` is
   monotone, so pool the endpoints), and the dense head `denseT` (sign-split);
 * `ibp3_certified_of_boxSound` — the capstone: a sound tensor body and dense head
@@ -53,7 +53,7 @@ open scoped BigOperators
 -- § Boxes
 -- ════════════════════════════════════════════════════════════════
 
-/-- `u` lies in the axis-aligned box `[lo, hi]` (flat vectors). -/
+/-- `u` lies in the axis-aligned box `[lo, hi]` (flat vectors — the head's logits). -/
 def InBox {n : Nat} (lo hi u : Vec n) : Prop := ∀ i, lo i ≤ u i ∧ u i ≤ hi i
 
 /-- `u` lies in the axis-aligned box `[lo, hi]` (rank-3 tensors). -/
@@ -62,34 +62,16 @@ def InBox3 {c h w : Nat} (lo hi u : Tensor3 c h w) : Prop :=
 
 /-- **A sound interval transformer.** `Flo lo hi` / `Fhi lo hi` bracket `f` on
     every point of the box `[lo, hi]`. This is the only property a layer needs
-    to contribute to a certificate — it composes (`BoxSound.comp`) and it is
+    to contribute to a certificate — it composes (`BoxSound3.comp`) and it is
     what the capstone consumes. -/
-def BoxSound {n m : Nat} (f : Vec n → Vec m) (Flo Fhi : Vec n → Vec n → Vec m) : Prop :=
-  ∀ lo hi u, InBox lo hi u → InBox (Flo lo hi) (Fhi lo hi) (f u)
-
-/-- The rank-3 peer, for the layers that live in tensor space. -/
 def BoxSound3 {c h w c' h' w' : Nat} (f : Tensor3 c h w → Tensor3 c' h' w')
     (Flo Fhi : Tensor3 c h w → Tensor3 c h w → Tensor3 c' h' w') : Prop :=
   ∀ lo hi u, InBox3 lo hi u → InBox3 (Flo lo hi) (Fhi lo hi) (f u)
 
 /-- **Depth, for free.** Sound transformers compose exactly as their layers do:
-    feed the first layer's output box into the second layer's transformer. An
-    `n`-layer net therefore needs `n` per-layer soundness facts and `n-1` uses
-    of this lemma — no new argument per depth. -/
-theorem BoxSound.comp {n m p : Nat} {f : Vec n → Vec m} {g : Vec m → Vec p}
-    {Flo Fhi : Vec n → Vec n → Vec m} {Glo Ghi : Vec m → Vec m → Vec p}
-    (hg : BoxSound g Glo Ghi) (hf : BoxSound f Flo Fhi) :
-    BoxSound (g ∘ f) (fun lo hi => Glo (Flo lo hi) (Fhi lo hi))
-                     (fun lo hi => Ghi (Flo lo hi) (Fhi lo hi)) :=
-  fun lo hi u hu => hg _ _ _ (hf lo hi u hu)
-
-/-- Identity is its own transformer (the base case of a layer fold). -/
-theorem boxSound_id {n : Nat} : BoxSound (id : Vec n → Vec n) (fun lo _ => lo) (fun _ hi => hi) :=
-  fun _ _ _ hu => hu
-
-/-- Depth in tensor space — the `BoxSound3` peer of `BoxSound.comp`, so a conv
-    body (`maxpool ∘ relu ∘ conv ∘ …`) composes without round-tripping through
-    `flatten` between every layer. -/
+    feed the first layer's output box into the second layer's transformer, so a conv
+    body (`maxpool ∘ relu ∘ conv ∘ …`) of `n` layers needs `n` per-layer soundness
+    facts and `n-1` uses of this lemma — no new argument per depth. -/
 theorem BoxSound3.comp {c h w c' h' w' c'' h'' w'' : Nat}
     {f : Tensor3 c h w → Tensor3 c' h' w'} {g : Tensor3 c' h' w' → Tensor3 c'' h'' w''}
     {Flo Fhi : Tensor3 c h w → Tensor3 c h w → Tensor3 c' h' w'}
@@ -100,90 +82,19 @@ theorem BoxSound3.comp {c h w c' h' w' c'' h'' w'' : Nat}
   fun lo hi u hu => hg _ _ _ (hf lo hi u hu)
 
 -- ════════════════════════════════════════════════════════════════
--- § Dense (`Proofs.dense`, biased, `Vec`-space)
--- ════════════════════════════════════════════════════════════════
-
-/-- Sign-split LOWER image of `dense W b`: positive weights pull from `lo`,
-    negative from `hi`. Biases shift both endpoints equally. -/
-noncomputable def denseLoV {m n : Nat} (W : Mat m n) (b : Vec n) (lo hi : Vec m) : Vec n :=
-  fun j => (∑ i, if 0 ≤ W i j then lo i * W i j else hi i * W i j) + b j
-
-/-- Sign-split UPPER image of `dense W b`. -/
-noncomputable def denseHiV {m n : Nat} (W : Mat m n) (b : Vec n) (lo hi : Vec m) : Vec n :=
-  fun j => (∑ i, if 0 ≤ W i j then hi i * W i j else lo i * W i j) + b j
-
-/-- **Uniform-box collapse for dense** — the `Vec`-space peer of
-    `denseLo_uniform`: on `x ∓ ε` the sign split evaluates to
-    `⟨x, W⟩ + b ∓ ε·‖W_{·j}‖₁`, so an instance needs one dot and one `ℓ1` fact
-    per output, not a sign-split sum. -/
-theorem denseLoV_uniform {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (ε : ℝ) (j : Fin n) :
-    denseLoV W b (fun i => x i - ε) (fun i => x i + ε) j
-      = ((∑ i, x i * W i j) + b j) - ε * ∑ i, |W i j| := by
-  have key : (∑ i, if 0 ≤ W i j then (x i - ε) * W i j else (x i + ε) * W i j)
-      = (∑ i, x i * W i j) - ε * ∑ i, |W i j| := by
-    rw [Finset.mul_sum, ← Finset.sum_sub_distrib]
-    refine Finset.sum_congr rfl fun i _ => ?_
-    by_cases hW : 0 ≤ W i j
-    · rw [ite_eq_left hW, abs_of_nonneg hW]; ring
-    · rw [ite_eq_right hW, abs_of_neg (lt_of_not_ge hW)]; ring
-  simp only [denseLoV]
-  rw [key]; ring
-
-/-- Sibling of `denseLoV_uniform` for the upper endpoint. -/
-theorem denseHiV_uniform {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (ε : ℝ) (j : Fin n) :
-    denseHiV W b (fun i => x i - ε) (fun i => x i + ε) j
-      = ((∑ i, x i * W i j) + b j) + ε * ∑ i, |W i j| := by
-  have key : (∑ i, if 0 ≤ W i j then (x i + ε) * W i j else (x i - ε) * W i j)
-      = (∑ i, x i * W i j) + ε * ∑ i, |W i j| := by
-    rw [Finset.mul_sum, ← Finset.sum_add_distrib]
-    refine Finset.sum_congr rfl fun i _ => ?_
-    by_cases hW : 0 ≤ W i j
-    · rw [ite_eq_left hW, abs_of_nonneg hW]; ring
-    · rw [ite_eq_right hW, abs_of_neg (lt_of_not_ge hW)]; ring
-  simp only [denseHiV]
-  rw [key]; ring
-
--- ════════════════════════════════════════════════════════════════
 -- § ReLU
 -- ════════════════════════════════════════════════════════════════
-
--- `Proofs.relu_apply_eq_max` (MLP.lean): `relu`'s `if · > 0` form is the `max` form the box
--- endpoints use.
 
 /-- Coordinatewise ReLU on tensors — the form a conv body uses between conv and
     pool, so the body never leaves tensor space. -/
 noncomputable def reluT {c h w : Nat} (x : Tensor3 c h w) : Tensor3 c h w :=
   fun o i j => max (x o i j) 0
 
-/-- `reluT` IS the repo's `Proofs.relu`, read through `flatten` — so the conv
-    body's activation is the same function the VJP suite differentiates, not a
-    second ReLU. -/
-theorem flatten_reluT {c h w : Nat} (T : Tensor3 c h w) :
-    Tensor3.flatten (reluT T) = relu (c * h * w) (Tensor3.flatten T) := by
-  funext i
-  rw [relu_apply_eq_max]
-  rfl
-
 theorem reluT_boxSound3 {c h w : Nat} :
     BoxSound3 (reluT : Tensor3 c h w → Tensor3 c h w)
       (fun lo _ => reluT lo) (fun _ hi => reluT hi) := by
   intro lo hi u hu o i j
   exact ⟨max_le_max_right 0 (hu o i j).1, max_le_max_right 0 (hu o i j).2⟩
-
-/-- The input box of a `CertifiedAtLinfV` goal is stated on the FLAT vector
-    `x ∓ ε`; these two put it back in tensor space so the conv transformer's
-    uniform-collapse lemmas apply. -/
-theorem unflatten_sub_const {c h w : Nat} (T : Tensor3 c h w) (ε : ℝ) :
-    Tensor3.unflatten (fun i => Tensor3.flatten T i - ε) = fun a b d => T a b d - ε := by
-  funext a b d
-  unfold Tensor3.unflatten Tensor3.flatten
-  simp [Equiv.symm_apply_apply]
-
-theorem unflatten_add_const {c h w : Nat} (T : Tensor3 c h w) (ε : ℝ) :
-    Tensor3.unflatten (fun i => Tensor3.flatten T i + ε) = fun a b d => T a b d + ε := by
-  funext a b d
-  unfold Tensor3.unflatten Tensor3.flatten
-  simp [Equiv.symm_apply_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Convolution (`Proofs.conv2d`, SAME padding)
@@ -292,16 +203,6 @@ theorem maxPool2_boxSound3 {c h w : Nat} :
       (max_le_max (hu _ _ _).2 (hu _ _ _).2)
 
 -- ════════════════════════════════════════════════════════════════
--- § `L∞` certification, flat
--- ════════════════════════════════════════════════════════════════
-
-/-- `f` is *certified at `L∞` radius ε* on input `x` with class `y`: every
-    coordinatewise-bounded perturbation keeps `y` the strict argmax. The
-    `Vec`-space peer of `LipschitzCertDemo.CertifiedAtLinf`. -/
-def CertifiedAtLinfV {n k : Nat} (f : Vec n → Vec k) (ε : ℝ) (x : Vec n) (y : Fin k) : Prop :=
-  ∀ δ : Vec n, (∀ i, |δ i| ≤ ε) → ∀ j, j ≠ y → f (x + δ) j < f (x + δ) y
-
--- ════════════════════════════════════════════════════════════════
 -- § The tensor-space capstone (what a conv net actually instantiates)
 -- ════════════════════════════════════════════════════════════════
 
@@ -309,8 +210,7 @@ def CertifiedAtLinfV {n k : Nat} (f : Vec n → Vec k) (ε : ℝ) (x : Vec n) (y
 reads the activation directly. Stating the certificate there keeps `flatten` out
 of every per-image proof (it is an `Equiv` computation, and paying for it at each
 of the head's inputs is the difference between a cheap instance and an
-unaffordable one). The flat machinery above stays available for nets that need
-it; nothing here depends on it. -/
+unaffordable one). -/
 
 /-- The dense head of a conv net: `Fin c → Fin h → Fin w → Fin k` weights read
     the rank-3 activation in place (this is "flatten then dense", fused). -/
@@ -367,7 +267,7 @@ theorem denseT_boxSound3V {c h w k : Nat} (W : Fin c → Fin h → Fin w → Fin
 
 /-- `f` is *certified at pixel `L∞` radius ε* on the image `x` with class `y`:
     every perturbation bounded by `ε` in EVERY pixel keeps `y` the strict argmax.
-    The rank-3 (image-shaped) peer of `CertifiedAtLinfV`. -/
+    The image-shaped peer of `LipschitzCertDemo.CertifiedAtLinf`. -/
 def CertifiedAtLinf3 {c h w k : Nat} (f : Tensor3 c h w → Vec k) (ε : ℝ)
     (x : Tensor3 c h w) (y : Fin k) : Prop :=
   ∀ δ : Tensor3 c h w, (∀ a b d, |δ a b d| ≤ ε) →
@@ -382,12 +282,6 @@ theorem CertifiedAtLinf3.mono {c h w k : Nat} {f : Tensor3 c h w → Vec k} {ε 
     {x : Tensor3 c h w} {y : Fin k} (hc : CertifiedAtLinf3 f ε x y) (hle : ε' ≤ ε) :
     CertifiedAtLinf3 f ε' x y :=
   fun δ hδ => hc δ fun a b d => (hδ a b d).trans hle
-
-/-- The flat peer of `CertifiedAtLinf3.mono`. -/
-theorem CertifiedAtLinfV.mono {n k : Nat} {f : Vec n → Vec k} {ε ε' : ℝ}
-    {x : Vec n} {y : Fin k} (hc : CertifiedAtLinfV f ε x y) (hle : ε' ≤ ε) :
-    CertifiedAtLinfV f ε' x y :=
-  fun δ hδ => hc δ fun i => (hδ i).trans hle
 
 /-- **IBP `L∞` certificate for a conv net**, in the shape a convolutional
     classifier has: an arbitrary-depth tensor body (`conv`/`relu`/`pool`, composed by

@@ -18,7 +18,6 @@ import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.StableHLOParse
 import LeanMlir.Proofs.Codegen.StableHLOLex
 import LeanMlir.Proofs.Architectures.StridedConv
-import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
@@ -48,7 +47,6 @@ import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHeadChain
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Float.FloatSubnormalBridge
@@ -107,7 +105,6 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackChains
 import LeanMlir.Proofs.Nets.ViT.ViTBackChains
 import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
@@ -120,7 +117,6 @@ import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
 import LeanMlir.Proofs.Training.SgdDescentMlp
 import LeanMlir.Proofs.Codegen.AdamStep
@@ -552,8 +548,6 @@ open Proofs
 #print axioms flatConvStride2_has_vjp_correct
 -- ...and its weight-VJP (the kernel grad for training a strided block)
 #print axioms flatConvStride2_weight_grad_has_vjp_correct
--- THE WHOLE-NETWORK ResNet-34 VJP
-#print axioms resnet34_has_vjp_at
 -- ResNet-34's non-degeneracy, ON THE NET THE ARTIFACTS RUN (ResNet34FullBSeal.lean): the
 -- 2-channel per-example proxies that carried levels 2 and 3 until 2026-09-20 are retired, and
 -- both levels are now stated on `resnet34ForwardB_full` itself — full width, batch BN, 224x224.
@@ -757,9 +751,6 @@ open Proofs
 #print axioms StableHLO.vitBodyGraphKMHV_den
 #print axioms StableHLO.vitFwdGraphKMHV_faithful
 
--- MobileNetV2's per-channel strided stem stage (MobileNetV2FullVJP.lean; the per-example fold around it was retired 2026-09-20)
-#print axioms convBnRelu6StridedPC_has_vjp_at
-
 -- Full ConvNeXt-T [3,3,9,3] (ConvNeXtFullT.lean)
 #print axioms decimateOddFlat_has_vjp
 #print axioms flatConvStride4_has_vjp
@@ -907,9 +898,6 @@ open Proofs
 #print axioms Proofs.chanLNTensor3Back_eq_chanLN_vjp
 #print axioms Proofs.cnxBodyWithChanLNBack_eq_vjp
 #print axioms Proofs.cnxBlockChBack_eq_vjp
--- §B integrity tie (mnv2)
-#print axioms Proofs.invresBodyPC_has_vjp_at
-#print axioms Proofs.invresBodyStridedPC_has_vjp_at
 -- §B integrity tie (vit MHSA — the sdpa adjoint)
 #print axioms Proofs.projBack_core_coord
 #print axioms Proofs.woback_unflatten
@@ -925,11 +913,6 @@ open Proofs
 -- the two spellings of that scatter are one map: the render's `.maxPool3s2BackB` node = the chain's
 #print axioms Proofs.maxPool3s2BackFlat_eq_flatBack
 #print axioms Proofs.den_maxPool3s2BackB_eq_flatBackB
--- THE WHOLE-NET CERTIFIED TIE FOR THE PER-EXAMPLE MOBILENETV2 (MobileNetV2WholeBackCertifiedTie.lean)
-#print axioms Proofs.convStridedBnRelu6PC_has_vjp_at
-#print axioms Proofs.convStridedBnRelu6PC_differentiableAt
-#print axioms Proofs.convStridedBnRelu6PCBack_eq_vjp_backward
-#print axioms Proofs.convBnRelu6PCBack_eq_vjp_backward
 -- the generic 21-stage apex the batched MobileNetV2 tie instantiates (MobileNetV2WholeBackCertifiedTieB.lean; its per-example tie was retired 2026-09-20)
 #print axioms Proofs.mobilenetv2PaperPC_has_vjp_at
 -- AND FOR THE WHOLE EFFICIENTNET-B0 (EfficientNetWholeBackCertifiedTie.lean)
@@ -1647,12 +1630,10 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.crown2_certified_at_eps
 
 -- IBP PAST THE TWO-LAYER DENSE WALL (Foundation/IntervalBoundConv.lean)
-#print axioms Proofs.IBP.BoxSound.comp
 #print axioms Proofs.IBP.BoxSound3.comp
 #print axioms Proofs.IBP.BoxSound3V.comp3
 #print axioms Proofs.IBP.denseT_boxSound3V
 #print axioms Proofs.IBP.reluT_boxSound3
-#print axioms Proofs.IBP.flatten_reluT
 #print axioms Proofs.IBP.conv2d_boxSound3
 #print axioms Proofs.IBP.maxPool2_boxSound3
 -- the conv peer of denseLo_uniform
@@ -1660,10 +1641,9 @@ open Proofs
 #print axioms Proofs.IBP.convHi_uniform
 -- DEPTH, concretely
 #print axioms Proofs.IBP.deepNet_boxSound
--- capstones (flat and tensor shape) + radius monotonicity
+-- capstone + radius monotonicity
 #print axioms Proofs.IBP.ibp3_certified_of_boxSound
 #print axioms Proofs.IBP.CertifiedAtLinf3.mono
-#print axioms Proofs.IBP.CertifiedAtLinfV.mono
 
 -- THE IEEE AXIOMS, DISCHARGED (Binary32Instance.lean, post_audit_roadmap §2)
 #print axioms Proofs.rndP_err

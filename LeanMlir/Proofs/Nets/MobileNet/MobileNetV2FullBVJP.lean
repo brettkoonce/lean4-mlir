@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP
 
 /-! # MobileNetV2's whole-net input-VJP at TRUE BATCH-NORM (T1, the VJP half)
 
@@ -29,8 +28,7 @@ and the expand/depthwise stages are `cbrB` / `dwbrB` / `dwbrBstrided`. The `t = 
 
 ⚠ **Pointwise (`HasVJPAt`), not global, and necessarily.** relu6 is kinked on BOTH sides, so each
 site carries `≠ 0 ∧ ≠ 6` and a global `HasVJP` through it is false. That is the repo standard for
-the relu-family nets and matches `MobileNetV2FullVJP.lean`'s per-example fold; the axis this file
-moves is the BatchNorm world, not the pointwise/global one.
+the relu-family nets.
 
 ⛔ **Two kink clauses per bottleneck, and the second is not r34's.** ResNet-34's blocks carry the
 body's mid-relu AND a post-residual OUTER relu. MobileNetV2's carry the EXPAND relu6 and the
@@ -40,7 +38,7 @@ so the residual add IS the block output and contributes nothing. Sixteen expand-
 bundled into 19 binders.
 
 ⭐ **The positivity bundles are REUSED**, not re-declared: `IVPos` / `IVNoExpPos`
-(`MobileNetV2FullVJP.lean`) say `0 < ε` at each BatchNorm site and know nothing about which world
+(`MobileNetV2FullPaper.lean`) say `0 < ε` at each BatchNorm site and know nothing about which world
 reduces it. Only the smoothness bundles need batched peers, because a kink condition names the
 activation and `bnBatchLA` is a different activation from `bnPerChannelTensor3`.
 
@@ -58,7 +56,7 @@ open scoped BigOperators
 
 -- ════════════════════════════════════════════════════════════════
 -- § The batched smoothness bundles
---   ⭐ `IVPos` / `IVNoExpPos` are reused from `MobileNetV2FullVJP.lean` — a BN epsilon's
+--   ⭐ `IVPos` / `IVNoExpPos` are reused from `MobileNetV2FullPaper.lean` — a BN epsilon's
 --   positivity does not know which axis the norm reduces. Only these do.
 -- ════════════════════════════════════════════════════════════════
 
@@ -435,8 +433,7 @@ noncomputable def mobilenetv2ForwardB_full_has_vjp_at (N : Nat) {nCls : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `mnv2PreBK` form IS the committed forward
 --   ⚠ Peeled one layer at a time through `*_apply`. A one-step `rfl` against a seventeen-deep
---   nested application does not survive (`MobileNetV2FullVJP.lean`'s section header records the
---   kernel deterministic timeout); `rw [<the def>, Function.comp_apply]` closes on syntactically
+--   nested application does not survive (a kernel deterministic timeout); `rw [<the def>, Function.comp_apply]` closes on syntactically
 --   identical terms and never unfolds an inner layer.
 -- ════════════════════════════════════════════════════════════════
 

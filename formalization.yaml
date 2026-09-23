@@ -185,7 +185,7 @@ automation:
         disabled in config -- see the reviews notes below); XLA/PJRT for StableHLO->binary
         compilation (IREE as the differential compiler); a parallel JAX (Lean->Python
         codegen) pipeline for empirical cross-checking on GPU/CPU. The audit report
-        (tests/AUDIT_REPORT*.md) and mutation tests were themselves agent-assisted.
+        (planning/archive/audit_reports/) and mutation tests were themselves agent-assisted.
       cost:
         wall_time: ""        # not precisely tracked; project developed over months
         spend_usd: ""        # not tracked
@@ -363,7 +363,7 @@ review:
   reviewers: []
   notes: >-
     Three independent checks beyond `lake build`: (1) an agent self-audit
-    (tests/AUDIT_REPORT*.md) that found no axioms/sorries and surfaced the
+    (planning/archive/audit_reports/) that found no axioms/sorries and surfaced the
     fidelity caveats above, plus a `#print axioms` sweep of every audited
     declaration (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);

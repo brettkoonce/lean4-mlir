@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 /-! # ResNet-34's whole-net input-VJP at TRUE BATCH-NORM (T1, the VJP half)
 
 `ResNet34FullB.lean` states the batch-BN forward and its typed graph. This file gives that forward
-a certified `HasVJPAt` at the paper depth — the batched peer of what `MobileNetV2FullVJP.lean` does
+a certified `HasVJPAt` at the paper depth — the peer of what `MobileNetV2FullBVJP.lean` does
 for MobileNetV2's seventeen bottlenecks, and the last piece of T1 in `formalization.yaml` 4e's port.
 
 ## No new mathematics, and one new lemma one tier down
@@ -310,8 +310,7 @@ structure R34SmoothAtB (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (x : Vec (N
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `r34PreK` form IS the committed forward
 --   ⚠ Peeled one layer at a time through `*_apply`. A one-step `rfl` against a sixteen-deep
---   nested application does not survive (MobileNetV2FullVJP.lean's section header records the
---   kernel deterministic timeout); `rw [<the def>, Function.comp_apply]` closes on syntactically
+--   nested application does not survive (a kernel deterministic timeout); `rw [<the def>, Function.comp_apply]` closes on syntactically
 --   identical terms and never unfolds an inner layer.
 -- ════════════════════════════════════════════════════════════════
 

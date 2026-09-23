@@ -661,14 +661,6 @@ noncomputable def depthwiseStride2FlatXla_has_vjp {c h w kH kW : Nat}
   vjp_comp _ _ hf_diff (decimateOddFlat_differentiable c h w) hf_vjp
     (decimateOddFlat_has_vjp c h w)
 
-/-- **Stride-2 XLA-`SAME` depthwise input-VJP correctness** (the ℝ-carrying audit headline). -/
-theorem depthwiseStride2FlatXla_has_vjp_correct {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (x : Vec (c * (2 * h) * (2 * w))) (dy : Vec (c * h * w)) (i : Fin (c * (2 * h) * (2 * w))) :
-    (depthwiseStride2FlatXla_has_vjp W b).backward x dy i
-      = ∑ j : Fin (c * h * w), pdiv (depthwiseStride2FlatXla W b) x i j * dy j :=
-  (depthwiseStride2FlatXla_has_vjp W b).correct x dy i
-
 /-- **Stride-2 XLA-`SAME` depthwise weight-VJP.** The kernel-side peer, by `vjp_comp` of the proven
     stride-1 `depthwise_weight_grad_has_vjp3` with the odd-decimation VJP. -/
 noncomputable def depthwiseStride2Xla_weight_grad_has_vjp {c h w kH kW : Nat}

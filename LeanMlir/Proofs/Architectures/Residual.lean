@@ -196,23 +196,4 @@ noncomputable def residualProj_has_vjp_at {m n : Nat}
     HasVJPAt (residualProj proj f) x :=
   biPath_has_vjp_at proj f x hproj_diff hf_diff hproj hf
 
-/-- **Public correctness theorem for `residual_has_vjp_at`**. -/
-theorem residual_has_vjp_at_correct {n : Nat}
-    (f : Vec n → Vec n) (x : Vec n)
-    (hf_diff : DifferentiableAt ℝ f x) (hf : HasVJPAt f x)
-    (dy : Vec n) (i : Fin n) :
-    (residual_has_vjp_at f x hf_diff hf).backward dy i =
-    ∑ j : Fin n, pdiv (residual f) x i j * dy j :=
-  (residual_has_vjp_at f x hf_diff hf).correct dy i
-
-/-- **Public correctness theorem for `residualProj_has_vjp_at`**. -/
-theorem residualProj_has_vjp_at_correct {m n : Nat}
-    (proj f : Vec m → Vec n) (x : Vec m)
-    (hproj_diff : DifferentiableAt ℝ proj x) (hf_diff : DifferentiableAt ℝ f x)
-    (hproj : HasVJPAt proj x) (hf : HasVJPAt f x)
-    (dy : Vec n) (i : Fin m) :
-    (residualProj_has_vjp_at proj f x hproj_diff hf_diff hproj hf).backward dy i =
-    ∑ j : Fin n, pdiv (residualProj proj f) x i j * dy j :=
-  (residualProj_has_vjp_at proj f x hproj_diff hf_diff hproj hf).correct dy i
-
 end Proofs
