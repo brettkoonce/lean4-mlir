@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.SyncBnSites
-import LeanMlir.ViTRender
 
 /-! # ResNet-34 AdamW train step rendered from the verified AST, at the BATCHED index
 

@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Training.SgdDescentMlp
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
+import LeanMlir.Proofs.Nets.Small.CnnTrainStep
+import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 /-! # Lipschitz constants for the CNN softmax-CE loss — descent through the pool

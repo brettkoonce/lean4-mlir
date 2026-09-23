@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.ViTRender
 
 /-! # CNN + CIFAR render half — conv train-step text as a name-threaded render of proven graphs
 

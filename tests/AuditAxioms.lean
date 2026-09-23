@@ -257,6 +257,8 @@ open Proofs
 #print axioms pdiv_gelu
 #print axioms gelu_has_vjp_correct
 #print axioms swish_has_vjp_correct
+-- closed form the emitted swishBack text computes (no Lean consumer; keep pinned)
+#print axioms swishScalarDeriv_eq
 #print axioms layerNorm_has_vjp_correct
 
 -- Attention (apex)
@@ -302,6 +304,8 @@ open Proofs
 #print axioms convnext_has_vjp_correct
 #print axioms sigmoid_has_vjp
 #print axioms sigmoid_has_vjp_correct
+-- closed form the emitted sigmoidBack text computes (no Lean consumer; keep pinned)
+#print axioms sigmoidScalarDeriv_eq
 #print axioms efficientnet_has_vjp_at_correct
 -- EfficientNet promoted to an UNCONDITIONAL global VJP (all-smooth ops)
 #print axioms efficientnet_has_vjp

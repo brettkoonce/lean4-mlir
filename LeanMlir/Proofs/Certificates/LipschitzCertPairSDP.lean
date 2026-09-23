@@ -1,6 +1,4 @@
 import LeanMlir.Proofs.Certificates.LipschitzCertInstance
-import Mathlib.LinearAlgebra.Matrix.PosDef
-import Mathlib.Algebra.Order.Star.Real
 
 /-! # Per-pair LipSDP certificates (Fazlyab–Robey–Hassani–Morari–Pappas 2019)
 

@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.SyncBnSites
-import LeanMlir.ViTRender      -- the hand-written emitter's helpers; the collective is `allReduceMeanF` since 4d piece 2
 
 /-! # EfficientNet-B0 train step rendered ENTIRELY from the verified AST (batched)
 

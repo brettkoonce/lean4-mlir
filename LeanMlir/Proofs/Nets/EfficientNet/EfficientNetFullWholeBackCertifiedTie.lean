@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Foundation.OpaquePrefix
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains
 

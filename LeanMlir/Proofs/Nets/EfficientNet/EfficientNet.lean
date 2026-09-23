@@ -57,6 +57,13 @@ noncomputable def sigmoidScalarDeriv (x : ℝ) : ℝ :=
 theorem sigmoidScalar_eq_sigmoid : sigmoidScalar = Real.sigmoid := by
   funext x; simp [sigmoidScalar, Real.sigmoid]
 
+/-- The closed form σ' = σ·(1 − σ). `sigmoid_has_vjp`'s backward is stated with `deriv`; the
+    emitted `sigmoidBack` text computes `σ(x)·(1 − σ(x))` — this is the equation between them,
+    so it stays pinned in the axiom audit although no Lean proof consumes it. -/
+theorem sigmoidScalarDeriv_eq (x : ℝ) :
+    sigmoidScalarDeriv x = sigmoidScalar x * (1 - sigmoidScalar x) := by
+  simp [sigmoidScalarDeriv, sigmoidScalar_eq_sigmoid, Real.deriv_sigmoid]
+
 @[fun_prop]
 lemma sigmoidScalar_diff : Differentiable ℝ sigmoidScalar := by
   rw [sigmoidScalar_eq_sigmoid]; exact differentiable_sigmoid

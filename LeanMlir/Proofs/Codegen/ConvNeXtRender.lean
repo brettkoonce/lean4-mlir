@@ -1,6 +1,4 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Types
-import LeanMlir.ViTRender      -- the hand-written emitter's helpers; the collective is `allReduceMeanF` since 4d piece 2
 
 /-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)
 
