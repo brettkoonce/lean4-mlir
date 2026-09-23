@@ -73,8 +73,10 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 
 **Next session, in order** (§3.1–§3.7 are done; §5 has the detail):
 
-No main item left (§5.1 and §5.2 are §1(s)/(t)). Candidates, none measured: §3.1's `r34PreK` +
-`_apply` vocabulary; §3.6's `IsShardwise`; §5.3's housekeeping question.
+No main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
+[`certlayer_nets.md`](certlayer_nets.md): whole nets as one `CertLayer`, which would retire the
+`r34PreK`/`r50PreK`/`mnv2PreBK` chains and bundles outright (§3.1's vocabulary item folds into it).
+Also open, none measured: §3.6's `IsShardwise`; §5.3's housekeeping question.
 
 Parked (low payoff): `IsShardwise` for the `_shard` family (§3.6), the StableHLO printer split
 (§3.2, ~45 s), FullNets' matrix-level `G1` lemma (§3.3, ~20 s).
