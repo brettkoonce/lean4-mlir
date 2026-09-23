@@ -1,0 +1,5 @@
+utc	dimm	label	ce	ue
+2026-09-22 15:12:48	mc0/dimm0	CPU_SrcID#0_MC#0_Chan#0_DIMM#0	0	0
+2026-09-22 15:12:48	mc0/dimm2	CPU_SrcID#0_MC#0_Chan#1_DIMM#0	0	0
+2026-09-22 15:12:48	mc1/dimm0	CPU_SrcID#0_MC#1_Chan#0_DIMM#0	0	0
+2026-09-22 15:12:48	mc1/dimm2	CPU_SrcID#0_MC#1_Chan#1_DIMM#0	0	0
