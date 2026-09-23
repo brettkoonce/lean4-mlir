@@ -396,6 +396,11 @@ theorem mlp_hidden_loss_grad_lipschitz {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂)
         Finset.sum_eq_single j (fun l _ hl => by simp [hl]) (by simp), ite_eq_left rfl])
     v d hd hmargin hsmall t ht trivial trivial
 
+/-- The loss as a function of the flattened hidden-layer weights. -/
+noncomputable def mlpHiddenLoss {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
+    (a₀ : Vec d₁) (label : Fin d₃) : Vec (d₁ * d₂) → ℝ :=
+  fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label
+
 /-- **One inexact SGD step on the MLP's hidden weights provably decreases
     the cross-entropy loss.** All of `sgd_descends`' hypotheses discharged
     for the loss-of-`W₁` map: differentiability along the segment and the
@@ -413,45 +418,31 @@ theorem mlp_hidden_sgd_descends {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ j k, |W₂ j k| ≤ w₂)
     (hlr : 0 ≤ lr) (hη : 0 ≤ η)
     (hgh : ∀ idx, |gh idx -
-      gradAt (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+      gradAt (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx| ≤ η)
-    (hmargin : ∀ j, a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
-        (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) * η)) <
+    (hmargin : ∀ j, a * (stepRadius (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) lr η) <
       |dense W₁ b₁ a₀ j|)
-    (hsmall : 2 * (w₂ * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
-        (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) * η)))) < 1)
+    (hsmall : 2 * (w₂ * (a * (stepRadius (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
+      (Mat.flatten W₁) lr η))) < 1)
     (h1 : lr * η * (∑ idx, |gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx ^ 2) / 4)
-    (h2 : (2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 / (1 - 2 * (w₂ * (a * (lr *
-          ((∑ idx, |gradAt (fun w => crossEntropy d₃
-              (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
-            (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) * η)))))) *
-        (lr * ((∑ idx, |gradAt (fun w => crossEntropy d₃
-            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
-          (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) * η)) ^ 2 ≤
+    (h2 : (2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 / (1 - 2 * (w₂ * (a * (stepRadius
+      (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) lr η))))) *
+        (stepRadius (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) lr η) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx ^ 2) / 4) :
-    crossEntropy d₃ (dense W₂ b₂ (relu d₂
-        (dense (Mat.unflatten (Mat.flatten W₁ - lr • gh)) b₁ a₀))) label ≤
-      crossEntropy d₃ (dense W₂ b₂ (relu d₂
-        (dense (Mat.unflatten (Mat.flatten W₁)) b₁ a₀))) label -
+    (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁ - lr • gh) ≤
+      (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) -
         lr * (∑ idx, gradAt
-          (fun w => crossEntropy d₃
-            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+          (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
           (Mat.flatten W₁) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold mlpHiddenLoss at *
   set f : Vec (d₁ * d₂) → ℝ :=
     fun w => crossEntropy d₃
       (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label with hf
@@ -701,6 +692,12 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
   rw [← mul_assoc, Finset.mul_sum]
   exact Finset.sum_congr rfl fun l _ => by rw [mul_assoc, mul_assoc, mul_assoc]
 
+/-- The loss as a function of the flattened input-layer weights. -/
+noncomputable def mlpInputLoss {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
+    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) : Vec (d₀ * d₁) → ℝ :=
+  fun w => crossEntropy d₃
+    (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label
+
 /-- **One inexact SGD step on the MLP's input weights provably decreases
     the cross-entropy loss.** The deepest descent capstone: both ReLU
     layers' margins at the step radius `D = lr·(‖∇L‖₁ + d₀d₁·η)` freeze the
@@ -718,52 +715,35 @@ theorem mlp_input_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ l k, |W₂ l k| ≤ w₂)
     (hlr : 0 ≤ lr) (hη : 0 ≤ η)
     (hgh : ∀ idx, |gh idx -
-      gradAt (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+      gradAt (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx| ≤ η)
-    (hmargin0 : ∀ j, a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
-        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) * η)) <
+    (hmargin0 : ∀ j, a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) lr η) <
       |dense W₀ b₀ x j|)
-    (hmargin1 : ∀ l, w₁ * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
-        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) * η))) <
+    (hmargin1 : ∀ l, w₁ * (a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
+      (Mat.flatten W₀) lr η)) <
       |dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) l|)
-    (hsmall : 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
-        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) * η)))))) < 1)
+    (hsmall : 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
+      (Mat.flatten W₀) lr η))))) < 1)
     (h1 : lr * η * (∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx ^ 2) / 4)
     (h2 : (2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
-        (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
-          (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) * η)))))))) *
-        (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
-          (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) * η)) ^ 2 ≤
+        (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
+          (Mat.flatten W₀) lr η))))))) *
+        (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) lr η) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx ^ 2) / 4) :
-    crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁
-        (dense (Mat.unflatten (Mat.flatten W₀ - lr • gh)) b₀ x))))) label ≤
-      crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁
-        (dense (Mat.unflatten (Mat.flatten W₀)) b₀ x))))) label -
+    (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀ - lr • gh) ≤
+      (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) -
         lr * (∑ idx, gradAt
-          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
           (Mat.flatten W₀) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold mlpInputLoss at *
   set f : Vec (d₀ * d₁) → ℝ :=
     fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
       (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label with hf
@@ -813,6 +793,12 @@ theorem mlp_input_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁
 --   decreases the loss" holds with NO abstract gradient-accuracy parameter.
 -- ════════════════════════════════════════════════════════════════
 
+/-- The loss as a function of the flattened output-layer weights. -/
+noncomputable def mlpOutputLoss {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂)
+    (b₁ : Vec d₂) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) : Vec (d₂ * d₃) → ℝ :=
+  fun w => crossEntropy d₃
+    (dense (Mat.unflatten w) b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label
+
 /-- **One binary32 SGD step on the MLP's output weights provably decreases the
     cross-entropy loss — with NO abstract gradient-accuracy parameter.** The
     output-layer rung of the η-composition (Item D / G1 for the MLP). Since the
@@ -843,42 +829,34 @@ theorem mlp_output_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatMode
     (hδ : ∀ k', |M.dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) k' -
         dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) k'| ≤ δ)
     (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+        (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
         (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
           FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))) < 1)
     (h1 : lr * (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)) *
         (∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
           (Mat.flatten W₂) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+        (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
         (Mat.flatten W₂) idx ^ 2) / 4)
     (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
           (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
             FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))))) *
         (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
           (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
             FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃))) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-          (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+        (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
         (Mat.flatten W₂) idx ^ 2) / 4) :
     crossEntropy d₃ (dense (Mat.unflatten (Mat.flatten W₂ -
         lr • M.linearFloatGrad W₂ b₂
           (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) fexp label)) b₂
         (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label ≤
-      crossEntropy d₃ (dense (Mat.unflatten (Mat.flatten W₂)) b₂
-        (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label -
+      (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label) (Mat.flatten W₂) -
         lr * (∑ idx, gradAt
-          (fun w => crossEntropy d₃ (dense (Mat.unflatten w) b₂
-            (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label)
+          (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
           (Mat.flatten W₂) idx ^ 2) / 2 :=
   linear_float_sgd_descends M W₂ b₂
     (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label fexp
@@ -1073,8 +1051,7 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
     (hmargin_round : ∀ j', FloatModel.layerBudget M.u d₁ w₁ β₁ a 0 <
       |dense W₁ b₁ a₀ j'|)
     (hmargin_step : ∀ j, a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
           FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
             (FloatModel.layerBudget M.u d₃ w₂ 0 1
@@ -1084,8 +1061,7 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
                   (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) <
       |dense W₁ b₁ a₀ j|)
     (hsmall : 2 * (w₂ * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
           FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
             (FloatModel.layerBudget M.u d₃ w₂ 0 1
@@ -1100,16 +1076,13 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
                 (FloatModel.layerAct d₁ w₁ β₁ a)
                 (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃))) *
         (∑ idx, |gradAt
-          (fun w => crossEntropy d₃
-            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+          (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
           (Mat.flatten W₁) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx ^ 2) / 4)
     (h2 : (2 * (d₃ : ℝ) * w₂ ^ 2 * a ^ 2 / (1 - 2 * (w₂ * (a * (lr *
-          ((∑ idx, |gradAt (fun w => crossEntropy d₃
-              (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+          ((∑ idx, |gradAt (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
             (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
               FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
                 (FloatModel.layerBudget M.u d₃ w₂ 0 1
@@ -1117,8 +1090,7 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
                     (FloatModel.layerBudget M.u d₂ w₂ β₂
                       (FloatModel.layerAct d₁ w₁ β₁ a)
                       (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))))))) *
-        (lr * ((∑ idx, |gradAt (fun w => crossEntropy d₃
-            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (lr * ((∑ idx, |gradAt (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
           (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
             FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
               (FloatModel.layerBudget M.u d₃ w₂ 0 1
@@ -1127,18 +1099,15 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
                     (FloatModel.layerAct d₁ w₁ β₁ a)
                     (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃
-          (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx ^ 2) / 4) :
-    crossEntropy d₃ (dense W₂ b₂ (relu d₂
-        (dense (Mat.unflatten (Mat.flatten W₁ -
-          lr • M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label)) b₁ a₀))) label ≤
-      crossEntropy d₃ (dense W₂ b₂ (relu d₂
-        (dense (Mat.unflatten (Mat.flatten W₁)) b₁ a₀))) label -
+    (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁ -
+          lr • M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label) ≤
+      (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) -
         lr * (∑ idx, gradAt
-          (fun w => crossEntropy d₃
-            (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label)
+          (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
           (Mat.flatten W₁) idx ^ 2) / 2 := by
+  unfold mlpHiddenLoss at *
   have hu := M.u_nonneg
   -- the proven accuracy budget η of `mlp_w1_grad_close`
   set η : ℝ := FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
@@ -1469,8 +1438,7 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
         (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0) <
       |dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) l'|)
     (hmargin0_step : ∀ j, a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
           FloatModel.mulErr M.u a
             (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
@@ -1486,8 +1454,7 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
                       (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) <
       |dense W₀ b₀ x j|)
     (hmargin1_step : ∀ l, w₁ * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
           FloatModel.mulErr M.u a
             (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
@@ -1503,8 +1470,7 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
                       (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))))) <
       |dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) l|)
     (hsmall : 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
           FloatModel.mulErr M.u a
             (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
@@ -1529,17 +1495,14 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
                     (FloatModel.layerAct d₀ w₀ β₀ a)
                     (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))) *
         (∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
           (Mat.flatten W₀) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx ^ 2) / 4)
     (h2 : (2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
         (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
           (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
             FloatModel.mulErr M.u a
               (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
@@ -1554,8 +1517,7 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
                         (FloatModel.layerAct d₀ w₀ β₀ a)
                         (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))))))))) *
         (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
           (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
             FloatModel.mulErr M.u a
               (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
@@ -1570,19 +1532,15 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
                         (FloatModel.layerAct d₀ w₀ β₀ a)
                         (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-          (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx ^ 2) / 4) :
-    crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁
-        (dense (Mat.unflatten (Mat.flatten W₀ -
-          lr • M.mlpInputFloatGrad W₀ b₀ W₁ b₁ W₂ b₂ x fexp label))
-          b₀ x))))) label ≤
-      crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁
-        (dense (Mat.unflatten (Mat.flatten W₀)) b₀ x))))) label -
+    (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀ -
+          lr • M.mlpInputFloatGrad W₀ b₀ W₁ b₁ W₂ b₂ x fexp label) ≤
+      (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) -
         lr * (∑ idx, gradAt
-          (fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-            (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label)
+          (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
           (Mat.flatten W₀) idx ^ 2) / 2 := by
+  unfold mlpInputLoss at *
   have hu := M.u_nonneg
   -- the proven accuracy budget η of `mlp_w0_grad_close`
   set η : ℝ := FloatModel.mulErr M.u a

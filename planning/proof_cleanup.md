@@ -71,7 +71,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 * `trace.profiler` allocates: a heartbeat bump sized without it can fail under it (§1(g):
   `emitTok` at 400k).
 
-**Next, recommended order:** §3.5; §3.6's leftovers are listed there.
+**Next:** §3.5 and §3.6 are done; what is left is listed under each (§3.1–§3.6) and in §4.
 §3.3's matrix-level `G1` lemma and §3.2's printer split are optional (~20 s / ~45 s).
 
 ## 1. Done
@@ -94,6 +94,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 | (n) | §3.6 seal kits: `ne_of_ray_readout` / `fderiv_ne_zero_of_ray_readout` (JacobianSeal) make the four nets' `sealX_nonconstant` / `sealX_jacobian_nonzero` one term each; `EDiff_convBn` / `convS2Bn` / `dwBn` / `dwS2Bn` / `dwS2XlaBn` (BatchSealKit) fuse op + BatchNorm, so 43 of the 46 carrier steps are one call (the three stems keep their own shape) | −176 lines net; the four seals build in ~3 s each |
 | (o) | §3.6 statement ports. EfficientNet: `B0Weights.EpsPos` (with `MBW.EpsPos`, `MBWNoExp.EpsPos`) replaces the 49 `0 < ε` binders in 7 statements. MobileNetV2 on V4's shape: `MNV2PosB` + `MNV2SmoothAtB` replace the apex's 38 binders, built on `vjp_comp_diff_at`, which also yields the new `mobilenetv2ForwardB_full_differentiableAt` (the seal's 45-line `sealDiffAt` is one term); `mnv2_net_tiedB` takes `g` free; `mnv2_net_syncTiedB` is the free-`G`/`hgs` form over a named `mnv2NetSyncTiedB` Prop, with `_smoothedCE` restoring the old instantiated statement. Tier regenerated (`mnv2_net_syncTiedB` and both EfficientNet entries), blueprint entries mirror V4's | the local comparator run: all three configs "Your solution is okay!" (5 min); ports + (n) together −558 lines |
 | (p) | §3.6 `_smul` kit: `IsHomog` (an `abbrev`, so `rw [h]`/`h s v` see the equation) + `IsHomog.comp` in DataParallelSync; 128 `X_smul` lemmas across 6 sync files restated `IsHomog (X …)` under the same name, `batchMap_smul` / `batchMapAux_smul` lift `IsHomog`, one-term delegates η-reduce (`batchMap_smul _ (HasVJP.backward_smul _ _)`); 21 explicit `… dy s` call sites swapped to `… s dy`. EfficientNetSyncStepTieG (the only sync file without them) got `variable` sections, `include hN hh hw` where the shard proofs need them | `IsHomog`: −55 lines. Sections: +21 lines but −6% of the file's bytes (97.1 → 90.9 kB) — the survey's "~300 lines from `variable`s" does not hold at this file's shape |
+| (q) | §3.5 training files. The conv2d / depthwise input-VJP proofs (CNN.lean, Depthwise.lean) share `sum_fin_ite_add_eq` + `padTap_indicator`: `simp` rewrites every Kronecker to "`c = ci` and the tap lands", collapses `(c, kh, kw)`, and `split_ifs` closes — the 25-line `show (let …)` restatements, the 55-line injectivity blocks and the triple `sum_eq_single`s are gone (−288 lines). `stepRadius` (SgdDescent) + nine named losses (`cnnConv2KernelLoss`, …, `linearLoss`, `cifar8LastConvLoss`) state the 16 `*_sgd_descends` rungs; each proof opens `simp only [stepRadius] at *; unfold <loss> at *` and is otherwise unchanged (`simp only [loss]` misses the partial application `gradAt (loss …)`; `unfold` does not). `TrainedLinearDescent`'s generator unfolds `linearLoss` after its `refine` (byte-reproducible before the edit). `Conv2Slot.loss_grad_lipschitz`: `set δ` for the drift constant (17 copies), `gcongr` for the 7-deep `mul_le_mul_of_nonneg_left` chain; margin3/4 the same | −763 lines net; CNN 5.9 → 6.2 s, SgdDescentCnn 20 s → 20 s — the audit's "statement elaboration is the 95 s" guess does not hold locally |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -176,14 +177,12 @@ switch a site when it is touched anyway. Also left: `EfficientNet.lean`'s `unfol
 fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `meanLoss_apply` /
 `dpMean_apply` / `lossGrad_apply` trio in DataParallel (a leaf; §3.6 territory).
 
-### 3.5 Training files (mainstream-Mathlib idiom, the likeliest Mathlib-bump breakage)
+### 3.5 Training files — DONE as §1(q), with these left
 
-* Name the loss and step radius (`cnnConv2KernelLoss`, `stepRadius`, …): the loss expression is
-  restated ~300 times across SgdDescentCnn/Mlp/Linear/Cifar; statements outrun proofs.
-* 57 `mul_le_mul_*` + 55 `mul_nonneg` hand terms, zero `gcongr` — `positivity` / `gcongr`.
-* `Conv2Slot.loss_grad_lipschitz` (294 lines): `set δ := …`, extract the `by_cases` block.
-* CNN.lean:266–412 and Depthwise.lean:236–370 are one proof twice (~290 lines); Attention.lean
-  2123–2140 already does it the short way.
+* `positivity` cannot use hypotheses (`0 ≤ w₅`) for variable atoms, so the `mul_nonneg` chains over
+  the weight bounds stay; only the nested `mul_le_mul_of_nonneg_left` chains went to `gcongr`.
+* The float rungs' radius (with `cnnConv2GradBudget …` / `mulErr …` for `η`) and the Cifar rung's
+  conclusion are still spelled out; the Mlp/Cnn non-rung lemmas keep their closures.
 
 ### 3.6 Repetition kits — DONE as §1(n)–(p), with these left
 

@@ -190,6 +190,11 @@ theorem linear_loss_grad_lipschitz {m n : Nat} (b : Vec n) (x : Vec m)
         mul_le_mul (hx i) hsmle (abs_nonneg _) ha
     _ = (2 * a ^ 2 / (1 - 2 * (a * D))) * (t * D) := by ring
 
+/-- The linear classifier's loss as a function of its flattened weights. -/
+noncomputable def linearLoss {m n : Nat} (b : Vec n) (x : Vec m) (label : Fin n) :
+    Vec (m * n) → ℝ :=
+  fun w => crossEntropy n (dense (Mat.unflatten w) b x) label
+
 /-- **One inexact SGD step on the MNIST-linear classifier provably
     decreases the cross-entropy loss.** All of `sgd_descends`' hypotheses
     discharged for the Chapter-1 net: differentiability is
@@ -202,32 +207,27 @@ theorem linear_sgd_descends {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (label : Fin n) (gh : Vec (m * n)) {lr η a : ℝ}
     (ha : 0 ≤ a) (hx : ∀ i, |x i| ≤ a) (hlr : 0 ≤ lr) (hη : 0 ≤ η)
     (hgh : ∀ idx, |gh idx -
-      gradAt (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+      gradAt (linearLoss b x label)
         (Mat.flatten W) idx| ≤ η)
-    (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
-        (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) * η))) < 1)
+    (hsmall : 2 * (a * (stepRadius (linearLoss b x label) (Mat.flatten W) lr η)) < 1)
     (h1 : lr * η * (∑ idx, |gradAt
-        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (linearLoss b x label)
         (Mat.flatten W) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (linearLoss b x label)
         (Mat.flatten W) idx ^ 2) / 4)
-    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
-          (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) * η))))) *
-        (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
-          (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) * η)) ^ 2 ≤
+    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (stepRadius (linearLoss b x label) (Mat.flatten W) lr η)))) *
+        (stepRadius (linearLoss b x label) (Mat.flatten W) lr η) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (linearLoss b x label)
         (Mat.flatten W) idx ^ 2) / 4) :
-    crossEntropy n (dense (Mat.unflatten (Mat.flatten W - lr • gh)) b x)
-        label ≤
-      crossEntropy n (dense (Mat.unflatten (Mat.flatten W)) b x) label -
+    (linearLoss b x label) (Mat.flatten W - lr • gh) ≤
+      (linearLoss b x label) (Mat.flatten W) -
         lr * (∑ idx, gradAt
-          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (linearLoss b x label)
           (Mat.flatten W) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold linearLoss at *
   set f : Vec (m * n) → ℝ :=
     fun w => crossEntropy n (dense (Mat.unflatten w) b x) label with hf
   -- the Lipschitz constant at the step radius
@@ -329,33 +329,34 @@ theorem linear_float_sgd_descends {m n : Nat} (M : FloatModel) (W : Mat m n)
     (hρ1 : FloatModel.smRho M.u eexp n < 1)
     (hδ : ∀ k', |M.dense W b x k' - dense W b x k'| ≤ δ)
     (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
-        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (linearLoss b x label)
         (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
           FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))) < 1)
     (h1 : lr * (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)) *
         (∑ idx, |gradAt
-          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (linearLoss b x label)
           (Mat.flatten W) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (linearLoss b x label)
         (Mat.flatten W) idx ^ 2) / 4)
     (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (linearLoss b x label)
           (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
             FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))))) *
         (lr * ((∑ idx, |gradAt
-          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (linearLoss b x label)
           (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
             FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n))) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+        (linearLoss b x label)
         (Mat.flatten W) idx ^ 2) / 4) :
-    crossEntropy n (dense (Mat.unflatten (Mat.flatten W -
-        lr • M.linearFloatGrad W b x fexp label)) b x) label ≤
-      crossEntropy n (dense (Mat.unflatten (Mat.flatten W)) b x) label -
+    (linearLoss b x label) (Mat.flatten W -
+        lr • M.linearFloatGrad W b x fexp label) ≤
+      (linearLoss b x label) (Mat.flatten W) -
         lr * (∑ idx, gradAt
-          (fun w => crossEntropy n (dense (Mat.unflatten w) b x) label)
+          (linearLoss b x label)
           (Mat.flatten W) idx ^ 2) / 2 := by
+  unfold linearLoss at *
   -- the head budget is nonnegative (it bounds an absolute value)
   have hu := M.u_nonneg
   have hcot0 := M.cotErr_nonneg heexp0 hδ0 hρ1

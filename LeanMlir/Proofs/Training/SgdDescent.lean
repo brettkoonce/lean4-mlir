@@ -116,6 +116,12 @@ theorem descent_segment {m : Nat} (f : Vec m → ℝ) (x d : Vec m) {C D : ℝ}
     rw [hkey, hsplit]
   linarith
 
+/-- **The `ℓ1` radius of an inexact SGD step on `f` at `x`**: `lr·(‖∇f(x)‖₁ + m·η)`, the right-hand
+    side of `sgd_step_l1_le` at `g := ∇f(x)`. Named so the descent capstones' margin hypotheses
+    state it once instead of restating the gradient sum. -/
+noncomputable def stepRadius {m : Nat} (f : Vec m → ℝ) (x : Vec m) (lr η : ℝ) : ℝ :=
+  lr * ((∑ i, |gradAt f x i|) + (m : ℝ) * η)
+
 /-- **`ℓ1` radius of an inexact SGD step.** With the oracle `gh` within `η` of `g`
     coordinatewise, the step `−lr·gh` has `ℓ1` mass at most `lr·(‖g‖₁ + m·η)` — the
     radius every descent capstone feeds `descent_segment` and its margin lemmas. -/

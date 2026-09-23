@@ -81,6 +81,16 @@ theorem cifarCnn8Forward_factor {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
         ∘ (relu (c4 * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₈ b₈)
         ∘ cifar8Prefix7 W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ := rfl
 
+/-- The loss as a function of the flattened last-conv kernel. -/
+noncomputable def cifar8LastConvLoss {c4 h w d1 nClasses kH kW : Nat} (b₈ : Vec c4)
+    (x₁ : Tensor3 c4 (2*h) (2*w)) (W₉ : Mat (c4 * h * w) d1) (b₉ : Vec d1) (Wa : Mat d1 d1)
+    (ba : Vec d1) (Wb : Mat d1 nClasses) (bb : Vec nClasses) (label : Fin nClasses) :
+    Vec (c4 * c4 * kH * kW) → ℝ :=
+  fun v' => crossEntropy nClasses
+    (dense Wb bb (relu d1 (dense Wa ba (relu d1 (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 *
+      (2*h) * (2*w)) (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
+    label
+
 /-- **CIFAR-8 last-conv SGD descent.** One SGD step on the LAST conv `W₈` of the actual
     `cifarCnn8Forward` net (the earlier seven conv layers held fixed — their output on `image` is the
     frozen feature map `x₁`) decreases the CIFAR-8 cross-entropy loss by at least `lr·‖∇‖²/2`, under
@@ -114,104 +124,49 @@ theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat
     (hwb : 0 ≤ wb) (hWb : ∀ i j, |Wb i j| ≤ wb)
     (hlr : 0 ≤ lr) (hη : 0 ≤ η)
     (hgh : ∀ idx, |gh idx -
-      gradAt (fun v' : Vec (c4 * c4 * kH * kW) =>
-        crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-          (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-          label) (Kernel4.flatten W₈) idx| ≤ η)
-    (hm2 : ∀ k, a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c4 * c4 * kH * kW) =>
-          crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-            (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-            label) (Kernel4.flatten W₈) idx|) +
-        ((c4 * c4 * kH * kW : ℕ) : ℝ) * η)) <
+      gradAt (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) idx| ≤ η)
+    (hm2 : ∀ k, a * (stepRadius (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
+      (Kernel4.flatten W₈) lr η) <
       |Tensor3.flatten (conv2d W₈ b₈ x₁) k|)
-    (hmq : MaxPool2MarginQ (a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c4 * c4 * kH * kW) =>
-          crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-            (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-            label) (Kernel4.flatten W₈) idx|) +
-        ((c4 * c4 * kH * kW : ℕ) : ℝ) * η)))
+    (hmq : MaxPool2MarginQ (a * (stepRadius (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
+      (Kernel4.flatten W₈) lr η))
       (Tensor3.unflatten (relu (c4 * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₈ b₈ x₁)))))
-    (hm3 : ∀ l, w₉ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
-        |gradAt (fun v' : Vec (c4 * c4 * kH * kW) =>
-          crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-            (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-            label) (Kernel4.flatten W₈) idx|) +
-        ((c4 * c4 * kH * kW : ℕ) : ℝ) * η)))) <
+    (hm3 : ∀ l, w₉ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+      (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) lr η))) <
       |dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₈ b₈ x₁)))) l|)
     (hm4 : ∀ q, wa * ((d1 : ℝ) * (w₉ * (((2*h * (2*w) : ℕ) : ℝ) *
-        (a * (lr * ((∑ idx, |gradAt
-          (fun v' : Vec (c4 * c4 * kH * kW) =>
-            crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-              (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₈ x₁))))))))) label)
-            (Kernel4.flatten W₈) idx|) +
-          ((c4 * c4 * kH * kW : ℕ) : ℝ) * η)))))) <
+        (a * (stepRadius (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
+          (Kernel4.flatten W₈) lr η))))) <
       |dense Wa ba (relu d1 (dense W₉ b₉ (maxPoolFlat c4 h w
         (relu (c4 * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₈ b₈ x₁)))))) q|)
     (hsmall : 2 * (wb * ((d1 : ℝ) * (wa * ((d1 : ℝ) * (w₉ *
-      (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c4 * c4 * kH * kW) =>
-          crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-            (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-            label) (Kernel4.flatten W₈) idx|) +
-        ((c4 * c4 * kH * kW : ℕ) : ℝ) * η))))))))) < 1)
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+        (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) lr η)))))))) < 1)
     (h1 : lr * η * (∑ idx, |gradAt
-        (fun v' : Vec (c4 * c4 * kH * kW) =>
-          crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-            (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-            label) (Kernel4.flatten W₈) idx|) ≤
+        (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun v' : Vec (c4 * c4 * kH * kW) =>
-          crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-            (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-            label) (Kernel4.flatten W₈) idx ^ 2) / 4)
+        (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) idx ^ 2) / 4)
     (h2 : (2 * (nClasses : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d1 : ℝ) ^ 2 *
         (d1 : ℝ) ^ 2 * w₉ ^ 2 * wa ^ 2 * wb ^ 2 * a ^ 2 /
         (1 - 2 * (wb * ((d1 : ℝ) * (wa * ((d1 : ℝ) * (w₉ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
-            (fun v' : Vec (c4 * c4 * kH * kW) =>
-              crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-                (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-                  (Tensor3.flatten
-                    (conv2d (Kernel4.unflatten v') b₈ x₁))))))))) label)
-              (Kernel4.flatten W₈) idx|) +
-            ((c4 * c4 * kH * kW : ℕ) : ℝ) * η))))))))))) *
-        (lr * ((∑ idx, |gradAt
-          (fun v' : Vec (c4 * c4 * kH * kW) =>
-            crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-              (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₈ x₁))))))))) label)
-            (Kernel4.flatten W₈) idx|) +
-          ((c4 * c4 * kH * kW : ℕ) : ℝ) * η)) ^ 2 ≤
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+            (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) lr η)))))))))) *
+        (stepRadius (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
+          (Kernel4.flatten W₈) lr η) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun v' : Vec (c4 * c4 * kH * kW) =>
-          crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-            (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁)))))))))
-            label) (Kernel4.flatten W₈) idx ^ 2) / 4) :
+        (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label) (Kernel4.flatten W₈) idx ^ 2) / 4) :
     crossEntropy nClasses (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇
         (Kernel4.unflatten (Kernel4.flatten W₈ - lr • gh)) b₈ W₉ b₉ Wa ba Wb bb image) label ≤
       crossEntropy nClasses (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇
         (Kernel4.unflatten (Kernel4.flatten W₈)) b₈ W₉ b₉ Wa ba Wb bb image) label -
         lr * (∑ idx, gradAt
-          (fun v' : Vec (c4 * c4 * kH * kW) =>
-            crossEntropy nClasses (dense Wb bb (relu d1 (dense Wa ba (relu d1
-              (dense W₉ b₉ (maxPoolFlat c4 h w (relu (c4 * (2*h) * (2*w))
-                (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₈ x₁))))))))) label)
+          (cifar8LastConvLoss b₈ x₁ W₉ b₉ Wa ba Wb bb label)
             (Kernel4.flatten W₈) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold cifar8LastConvLoss at *
   -- the CIFAR-8 loss as a function of the last conv's weights = the cnn_conv2 program at `x₁`
   have hfac : ∀ v' : Vec (c4 * c4 * kH * kW),
       crossEntropy nClasses (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇

@@ -2342,9 +2342,7 @@ theorem margin3_keeps_offkink {P c h w d₃ : Nat}
   have h1 := z3_drift Z W₃ b₃ hZ1 hw₃ hW₃ v (t • e) l
   have h2 : w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |(t • e) idx|)) ≤
       w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)) :=
-    mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-      (mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) hρ)
-      (Nat.cast_nonneg _)) hw₃
+    by gcongr; exact smul_l1_mass_le e ht0 ht1 he
   linarith
 
 /-- The relu₄ margin keeps the second head pre-activation off the kink,
@@ -2374,10 +2372,7 @@ theorem margin4_keeps_offkink {P c h w d₃ d₄ : Nat}
   have h2 : w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
       (ρ * ∑ idx, |(t • e) idx|)))) ≤
       w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))) :=
-    mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-      (mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-        (mul_le_mul_of_nonneg_left (smul_l1_mass_le e ht0 ht1 he) hρ)
-        (Nat.cast_nonneg _)) hw₃) (Nat.cast_nonneg _)) hw₄
+    by gcongr; exact smul_l1_mass_le e ht0 ht1 he
   linarith
 
 end Conv2Slot
@@ -2619,13 +2614,13 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
   have hD0 : 0 ≤ D :=
     le_trans (Finset.sum_nonneg fun _ _ => abs_nonneg _) hd
   have hρD0 : 0 ≤ ρ * D := mul_nonneg hρ hD0
-  have hδ0 : (0:ℝ) ≤ w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-      (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))) :=
+  -- the logit-drift constant at the step radius, the object every bound below is written in
+  set δ : ℝ := w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))) with hδ
+  have hδ0 : (0:ℝ) ≤ δ :=
     mul_nonneg hw₅ (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₄
       (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₃
         (mul_nonneg (Nat.cast_nonneg _) hρD0)))))
-  have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-      (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))) := by linarith
+  have hden : (0:ℝ) < 1 - 2 * δ := by linarith
   -- base-point conditions from the margins
   have hz2_v : ∀ k,
       Z v k ≠ 0 :=
@@ -2704,8 +2699,7 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
         (Z (v + t • d)))))))) k -
       dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
         (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Z v))))))) k| ≤
-      t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))) := by
+      t * δ := by
     intro k
     have h1 := logit_drift Z W₃ b₃ W₄ b₄ W₅ b₅ hZ1
       hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ v (t • d) k
@@ -2718,26 +2712,17 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
     rw [h2] at h1
     have h3 : w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
         (((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |d idx|)))))) ≤
-        w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))) :=
-      mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-        (mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-          (mul_le_mul_of_nonneg_left (mul_le_mul_of_nonneg_left
-            (mul_le_mul_of_nonneg_left hd hρ) (Nat.cast_nonneg _)) hw₃)
-          (Nat.cast_nonneg _)) hw₄) (Nat.cast_nonneg _)) hw₅
+        δ :=
+      by rw [hδ]; gcongr
     have h4 := mul_le_mul_of_nonneg_left h3 ht0
     linarith
   have hS := softmax_seg_drift _ _ ht0 ht1 hδ0 hsmall hzdrift
-  have hΔ0 : (0:ℝ) ≤ 2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-      (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-      (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) :=
+  have hΔ0 : (0:ℝ) ≤ 2 * (t * δ) /
+      (1 - 2 * δ) :=
     div_nonneg (mul_nonneg (by norm_num) (mul_nonneg ht0 hδ0)) hden.le
   have hM0 : (0:ℝ) ≤ (d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
-      (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-        (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))))))))) :=
+      (w₅ * (2 * (t * δ) /
+        (1 - 2 * δ))))))) :=
     mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₃
       (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₄
         (mul_nonneg (Nat.cast_nonneg _) (mul_nonneg hw₅ hΔ0)))))
@@ -2745,40 +2730,30 @@ theorem loss_grad_lipschitz {P c h w d₃ d₄ nC : Nat}
   have hfinal : ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
       (|J ci hi wi| *
         ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
-          (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-            (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-            (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-              (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))))))))))) ≤
+          (w₅ * (2 * (t * δ) /
+            (1 - 2 * δ))))))))) ≤
       (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
         (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * ρ ^ 2 /
-        (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))))) * (t * D) := by
+        (1 - 2 * δ)) * (t * D) := by
     calc ∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
         (|J ci hi wi| *
           ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
-            (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-              (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-              (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-                (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))))))))))))
+            (w₅ * (2 * (t * δ) /
+              (1 - 2 * δ)))))))))
         = (∑ ci : Fin c, ∑ hi : Fin (2*h), ∑ wi : Fin (2*w),
             |J ci hi wi|) *
             ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
-              (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-                (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-                (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-                  (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))))))))))) := by
+              (w₅ * (2 * (t * δ) /
+                (1 - 2 * δ)))))))) := by
           simp only [← Finset.sum_mul]
       _ ≤ (((2*h * (2*w) : ℕ) : ℝ) * ρ) *
             ((d₃ : ℝ) * (w₃ * ((d₄ : ℝ) * (w₄ * ((nC : ℝ) *
-              (w₅ * (2 * (t * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-                (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D)))))))) /
-                (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-                  (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))))))))))) :=
+              (w₅ * (2 * (t * δ) /
+                (1 - 2 * δ)))))))) :=
           mul_le_mul_of_nonneg_right hJ hM0
       _ = (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
             (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * ρ ^ 2 /
-            (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-              (((2*h * (2*w) : ℕ) : ℝ) * (ρ * D))))))))) * (t * D) := by
+            (1 - 2 * δ)) * (t * D) := by
           ring
   refine le_trans (le_trans (by
     rw [← Finset.sum_sub_distrib]
@@ -2893,6 +2868,15 @@ theorem cnn_conv2_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
 -- § The conv2 capstone: one inexact SGD step provably descends
 -- ════════════════════════════════════════════════════════════════
 
+/-- The loss as a function of the flattened second-conv kernel. -/
+noncomputable def cnnConv2KernelLoss {c h w d₃ d₄ nC kH kW : Nat} (b₂ : Vec c)
+    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄)
+    (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) : Vec (c * c * kH * kW) → ℝ :=
+  fun v' => crossEntropy nC
+    (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c *
+      (2*h) * (2*w)) (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
+    label
+
 /-- **One inexact SGD step on the CNN's second conv kernel provably
     decreases the cross-entropy loss.** All of `sgd_descends`'
     hypotheses discharged for the loss-of-conv2-kernel map:
@@ -2918,111 +2902,47 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
     (hlr : 0 ≤ lr) (hη : 0 ≤ η)
     (hgh : ∀ idx, |gh idx -
-      gradAt (fun v' : Vec (c * c * kH * kW) =>
-        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-            (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-          label) (Kernel4.flatten W₂) idx| ≤ η)
-    (hm2 : ∀ k, a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
-        ((c * c * kH * kW : ℕ) : ℝ) * η)) <
+      gradAt (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx| ≤ η)
+    (hm2 : ∀ k, a * (stepRadius (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₂) lr η) <
       |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
-    (hmq : MaxPool2MarginQ (a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
-        ((c * c * kH * kW : ℕ) : ℝ) * η)))
+    (hmq : MaxPool2MarginQ (a * (stepRadius (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₂) lr η))
       (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
-    (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
-        |gradAt (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
-        ((c * c * kH * kW : ℕ) : ℝ) * η)))) <
+    (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+      (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) lr η))) <
       |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
     (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
-        (a * (lr * ((∑ idx, |gradAt
-          (fun v' : Vec (c * c * kH * kW) =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
-            (Kernel4.flatten W₂) idx|) +
-          ((c * c * kH * kW : ℕ) : ℝ) * η)))))) <
+        (a * (stepRadius (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
+          (Kernel4.flatten W₂) lr η))))) <
       |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
         (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
     (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-      (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
-        ((c * c * kH * kW : ℕ) : ℝ) * η))))))))) < 1)
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) lr η)))))))) < 1)
     (h1 : lr * η * (∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) ≤
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx ^ 2) / 4)
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx ^ 2) / 4)
     (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
         (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
         (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
-            (fun v' : Vec (c * c * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten
-                    (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
-              (Kernel4.flatten W₂) idx|) +
-            ((c * c * kH * kW : ℕ) : ℝ) * η))))))))))) *
-        (lr * ((∑ idx, |gradAt
-          (fun v' : Vec (c * c * kH * kW) =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
-            (Kernel4.flatten W₂) idx|) +
-          ((c * c * kH * kW : ℕ) : ℝ) * η)) ^ 2 ≤
+          (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+            (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) lr η)))))))))) *
+        (stepRadius (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
+          (Kernel4.flatten W₂) lr η) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d
-            (Kernel4.unflatten (Kernel4.flatten W₂ - lr • gh))
-            b₂ x₁))))))))) label ≤
-      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d
-            (Kernel4.unflatten (Kernel4.flatten W₂)) b₂ x₁)))))))))
-          label -
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx ^ 2) / 4) :
+    (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂ - lr • gh) ≤
+      (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) -
         lr * (∑ idx, gradAt
-          (fun v' : Vec (c * c * kH * kW) =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+          (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
           (Kernel4.flatten W₂) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold cnnConv2KernelLoss at *
   set f : Vec (c * c * kH * kW) → ℝ :=
     fun v' : Vec (c * c * kH * kW) =>
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
@@ -3146,32 +3066,20 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
       |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
     (hm2 : ∀ k, a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx|) +
         ((c * c * kH * kW : ℕ) : ℝ) *
           M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
             eexp)) <
       |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
     (hmq : MaxPool2MarginQ (a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx|) +
         ((c * c * kH * kW : ℕ) : ℝ) *
           M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
             eexp)))
       (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
     (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
-        |gradAt (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
+        |gradAt (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx|) +
         ((c * c * kH * kW : ℕ) : ℝ) *
           M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
             eexp)))) <
@@ -3179,11 +3087,7 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
     (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
         (a * (lr * ((∑ idx, |gradAt
-          (fun v' : Vec (c * c * kH * kW) =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+          (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
             (Kernel4.flatten W₂) idx|) +
           ((c * c * kH * kW : ℕ) : ℝ) *
             M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
@@ -3193,75 +3097,40 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
           (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
     (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
       (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) +
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx|) +
         ((c * c * kH * kW : ℕ) : ℝ) *
           M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
             eexp))))))))) < 1)
     (h1 : lr * (M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
           eexp) * (∑ idx, |gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx|) ≤
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx|) ≤
       lr * (∑ idx, gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx ^ 2) / 4)
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx ^ 2) / 4)
     (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
         (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
         (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
           (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt
-            (fun v' : Vec (c * c * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten
-                    (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+            (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₂) idx|) +
             ((c * c * kH * kW : ℕ) : ℝ) *
               M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅
                 β₅ eexp))))))))))) *
         (lr * ((∑ idx, |gradAt
-          (fun v' : Vec (c * c * kH * kW) =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+          (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
             (Kernel4.flatten W₂) idx|) +
           ((c * c * kH * kW : ℕ) : ℝ) *
             M.cnnConv2GradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
               eexp)) ^ 2 ≤
       lr * (∑ idx, gradAt
-        (fun v' : Vec (c * c * kH * kW) =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-            label) (Kernel4.flatten W₂) idx ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d
-            (Kernel4.unflatten (Kernel4.flatten W₂ -
+        (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) idx ^ 2) / 4) :
+    (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂ -
               lr • M.cnnConv2FloatGrad b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label
-                (Kernel4.flatten W₂)))
-            b₂ x₁))))))))) label ≤
-      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d
-            (Kernel4.unflatten (Kernel4.flatten W₂)) b₂ x₁)))))))))
-          label -
+                (Kernel4.flatten W₂)) ≤
+      (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₂) -
         lr * (∑ idx, gradAt
-          (fun v' : Vec (c * c * kH * kW) =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten
-                  (conv2d (Kernel4.unflatten v') b₂ x₁))))))))) label)
+          (cnnConv2KernelLoss b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
           (Kernel4.flatten W₂) idx ^ 2) / 2 := by
+  unfold cnnConv2KernelLoss at *
   have hu := M.u_nonneg
   -- nonnegativity of the proven budget
   have CPnn : 0 ≤ FloatModel.cnnConv2CotMag d₃ d₄ nC w₃ w₄ w₅ :=
@@ -5037,6 +4906,17 @@ theorem cnn_conv1_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
 -- § The conv1 capstone: one inexact SGD step provably descends
 -- ════════════════════════════════════════════════════════════════
 
+/-- The loss as a function of the flattened first-conv kernel. -/
+noncomputable def cnnConv1KernelLoss {ic c h w d₃ d₄ nC kH kW : Nat} (b₁ : Vec c)
+    (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c) (W₃ : Mat (c * h * w) d₃)
+    (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) :
+    Vec (c * ic * kH * kW) → ℝ :=
+  fun u' => crossEntropy nC
+    (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c *
+      (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)))))))))))))
+    label
+
 /-- **One inexact SGD step on the CNN's FIRST conv kernel provably
     decreases the cross-entropy loss.** The deepest rung: the step
     crosses relu₁, conv2 (as a function of its input — the point-free
@@ -5060,99 +4940,49 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
     (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
     (hlr : 0 ≤ lr) (hη : 0 ≤ η)
-    (hgh : ∀ idx, |gh idx - (gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+    (hgh : ∀ idx, |gh idx - (gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁)) idx| ≤ η)
-    (hm1 : ∀ k, a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η)) < |(Tensor3.flatten (conv2d W₁ b₁ x₀)) k|)
-    (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η)))) < |(Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))) k|)
-    (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η))))) (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
-    (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η)))))) < |(dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))) l|)
-    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η))))))))
+    (hm1 : ∀ k, a * (stepRadius (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₁) lr η) < |(Tensor3.flatten (conv2d W₁ b₁ x₀)) k|)
+    (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (a * (stepRadius
+      (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₁) lr η))) < |(Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu
+      (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))) k|)
+    (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (a * (stepRadius
+      (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₁) lr η))))
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
+      (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
+    (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+      (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₁) lr η))))) < |(dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))) l|)
+    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h *
+      (2*w) : ℕ) : ℝ) * (a * (stepRadius (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₁) lr η)))))))
       < |(dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))))) q|)
-    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η))))))))))) < 1)
-    (h1 : lr * η * (∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (a * (stepRadius
+      (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₁) lr η)))))))))) < 1)
+    (h1 : lr * η * (∑ idx, |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) ≤
-      lr * (∑ idx, (gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+      lr * (∑ idx, (gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁)) idx ^ 2) / 4)
-    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 / (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η))))))))))))) * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
-              (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η)) ^ 2 ≤
-      lr * (∑ idx, (gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 *
+      (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 / (1 - 2 * (w₅ *
+      ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h *
+      (2*w) : ℕ) : ℝ) * (a * (stepRadius (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (Kernel4.flatten W₁) lr η)))))))))))) * (stepRadius
+      (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₁) lr η) ^ 2 ≤
+      lr * (∑ idx, (gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁)) idx ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d (Kernel4.unflatten (Kernel4.flatten W₁ - lr • gh)) b₁ x₀))))))))))))) label ≤
-      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d (Kernel4.unflatten (Kernel4.flatten W₁)) b₁ x₀))))))))))))) label -
-        lr * (∑ idx, (gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+    (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₁ - lr • gh) ≤
+      (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₁) -
+        lr * (∑ idx, (gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁)) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold cnnConv1KernelLoss at *
   set f : Vec (c * ic * kH * kW) → ℝ :=
     fun u' : Vec (c * ic * kH * kW) =>
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
@@ -5292,45 +5122,25 @@ theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
       |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))) q|)
-    (hm1 : ∀ k, a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+    (hm1 : ∀ k, a * (lr * ((∑ idx, |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp)) < |(Tensor3.flatten (conv2d W₁ b₁ x₀)) k|)
     (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (a * (lr * ((∑ idx,
-              |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+              |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp)))) < |(Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
               (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))) k|)
     (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (a * (lr * ((∑ idx,
-              |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+              |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp))))) (Tensor3.unflatten (relu (c * (2*h) * (2*w))
               (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu
                 (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
     (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) *
-        (a * (lr * ((∑ idx, |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+        (a * (lr * ((∑ idx, |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp)))))) < |(dense W₃ b₃ (maxPoolFlat c h w (relu
@@ -5339,12 +5149,7 @@ theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
                   (conv2d W₁ b₁ x₀))))))))) l|)
     (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ *
         (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
-              |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+              |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp)))))))) < |(dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat
@@ -5353,78 +5158,37 @@ theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
                   (conv2d W₁ b₁ x₀))))))))))) q|)
     (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) :
         ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
-              |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+              |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp))))))))))) < 1)
     (h1 : lr * (M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃
           w₄ β₄ w₅ β₅ eexp) * (∑ idx,
-              |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+              |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) ≤
-      lr * (∑ idx, (gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+      lr * (∑ idx, (gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁)) idx ^ 2) / 4)
     (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2
         * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 /
         (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) :
           ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
-              |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+              |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp))))))))))))) * (lr * ((∑ idx,
-              |gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+              |gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) *
           M.cnnConv1GradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄
             w₅ β₅ eexp)) ^ 2 ≤
-      lr * (∑ idx, (gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+      lr * (∑ idx, (gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁)) idx ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
-          (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d
-            (Kernel4.unflatten (Kernel4.flatten W₁ -
+    (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₁ -
               lr • M.cnnConv1FloatGrad b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label
-                (Kernel4.flatten W₁)))
-            b₁ x₀))))))))))))) label ≤
-      crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃
-        (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂
-          (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d
-            (Kernel4.unflatten (Kernel4.flatten W₁)) b₁ x₀))))))))))))) label -
-        lr * (∑ idx, (gradAt (fun u' : Vec (c * ic * kH * kW) =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label)
+                (Kernel4.flatten W₁)) ≤
+      (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) (Kernel4.flatten W₁) -
+        lr * (∑ idx, (gradAt (cnnConv1KernelLoss b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               (Kernel4.flatten W₁)) idx ^ 2) / 2 := by
+  unfold cnnConv1KernelLoss at *
   have hu := M.u_nonneg
   -- nonnegativity of the proven budget
   have hA1nn : 0 ≤ FloatModel.layerAct (ic * kH * kW) w₁ β₁ a :=
@@ -5803,6 +5567,15 @@ theorem cnn_conv2_bias_loss_grad_lipschitz {c h w d₃ d₄ nC kH kW : Nat}
 -- § The conv2-bias capstone: one inexact SGD step provably descends
 -- ════════════════════════════════════════════════════════════════
 
+/-- The loss as a function of the second-conv bias. -/
+noncomputable def cnnConv2BiasLoss {c h w d₃ d₄ nC kH kW : Nat} (W₂ : Kernel4 c c kH kW)
+    (x₁ : Tensor3 c (2*h) (2*w)) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄)
+    (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) : Vec c → ℝ :=
+  fun b' => crossEntropy nC
+    (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c *
+      (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b' x₁)))))))))
+    label
+
 /-- **One inexact SGD step on the CNN's second conv BIAS provably
     decreases the cross-entropy loss.** The conv2-kernel capstone with
     the bias-rung radii: the four margins at the step radius
@@ -5821,94 +5594,43 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
     (hlr : 0 ≤ lr) (hη : 0 ≤ η)
     (hgh : ∀ o, |gh o -
-      gradAt (fun b' : Vec c =>
-        crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-          (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-            (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o| ≤ η)
-    (hm2 : ∀ k, lr * ((∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
-        (c : ℝ) * η) <
+      gradAt (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o| ≤ η)
+    (hm2 : ∀ k, stepRadius (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ lr η <
       |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
-    (hmq : MaxPool2MarginQ (lr * ((∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
-        (c : ℝ) * η))
+    (hmq : MaxPool2MarginQ (stepRadius (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ lr η)
       (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
-    (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o,
-        |gradAt (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
-        (c : ℝ) * η))) <
+    (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (stepRadius (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ lr η)) <
       |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
     (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
-        (lr * ((∑ o, |gradAt
-          (fun b' : Vec c =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
-          (c : ℝ) * η))))) <
+        (stepRadius (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ lr η)))) <
       |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
         (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
     (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-      (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
-        (c : ℝ) * η)))))))) < 1)
+      (((2*h * (2*w) : ℕ) : ℝ) * (stepRadius (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ lr η))))))) < 1)
     (h1 : lr * η * (∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) ≤
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) ≤
       lr * (∑ o, gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o ^ 2) / 4)
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o ^ 2) / 4)
     (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
         (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 /
         (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
-          (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o, |gradAt
-            (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
-              b₂ o|) +
-            (c : ℝ) * η)))))))))) *
-        (lr * ((∑ o, |gradAt
-          (fun b' : Vec c =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
-          (c : ℝ) * η)) ^ 2 ≤
+          (((2*h * (2*w) : ℕ) : ℝ) * (stepRadius (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ lr η))))))))) *
+        (stepRadius (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ lr η) ^ 2 ≤
       lr * (∑ o, gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
           b₂ o ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ (b₂ - lr • gh) x₁))))))))) label ≤
+    (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) (b₂ - lr • gh) ≤
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
         (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₂ b₂ x₁))))))))) label -
         lr * (∑ o, gradAt
-          (fun b' : Vec c =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
+          (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
             b₂ o ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold cnnConv2BiasLoss at *
   set f : Vec c → ℝ :=
     fun b' : Vec c =>
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
@@ -6312,6 +6034,17 @@ theorem cnn_conv1_bias_loss_grad_lipschitz {ic c h w d₃ d₄ nC kH kW : Nat}
 -- § The conv1-bias capstone: one inexact SGD step provably descends
 -- ════════════════════════════════════════════════════════════════
 
+/-- The loss as a function of the first-conv bias. -/
+noncomputable def cnnConv1BiasLoss {ic c h w d₃ d₄ nC kH kW : Nat} (W₁ : Kernel4 c ic kH kW)
+    (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c) (W₃ : Mat (c * h * w) d₃)
+    (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC) :
+    Vec c → ℝ :=
+  fun b' => crossEntropy nC
+    (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c *
+      (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
+      (Tensor3.flatten (conv2d W₁ b' x₀)))))))))))))
+    label
+
 /-- **One inexact SGD step on the CNN's FIRST conv BIAS provably
     decreases the cross-entropy loss.** The conv1-kernel capstone with
     the bias-rung radii: the FIVE margins at the step radius
@@ -6334,99 +6067,46 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (hw₄ : 0 ≤ w₄) (hW₄ : ∀ i j, |W₄ i j| ≤ w₄)
     (hw₅ : 0 ≤ w₅) (hW₅ : ∀ i j, |W₅ i j| ≤ w₅)
     (hlr : 0 ≤ lr) (hη : 0 ≤ η)
-    (hgh : ∀ idx, |gh idx - (gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hgh : ∀ idx, |gh idx - (gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁) idx| ≤ η)
-    (hm1 : ∀ k, lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm1 : ∀ k, lr * (((∑ idx, |gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * η)) < |(Tensor3.flatten (conv2d W₁ b₁ x₀)) k|)
-    (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * η)))) < |(Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))) k|)
-    (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * η))))) (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
-    (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr *
+      (((∑ idx, |gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * η)))))) < |(dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))) l|)
-    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h *
+      (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * η))))))))
       < |(dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))))) q|)
-    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * η))))))))))) < 1)
-    (h1 : lr * η * (∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (h1 : lr * η * (∑ idx, |gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) ≤
-      lr * (∑ idx, (gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+      lr * (∑ idx, (gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁) idx ^ 2) / 4)
-    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 / (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
-              b₁ idx|) + (c : ℝ) * η))))))))))))) * (lr * ((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
-              b₁ idx|) + (c : ℝ) * η)) ^ 2 ≤
-      lr * (∑ idx, (gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 *
+      (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 / (1 - 2 * (w₅ *
+      ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h *
+      (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+              b₁ idx|) + (c : ℝ) * η))))))))))))) * (stepRadius (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) b₁ lr η) ^ 2 ≤
+      lr * (∑ idx, (gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁) idx ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ (b₁ - lr • gh) x₀))))))))))))) label ≤
+    (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label) (b₁ - lr • gh) ≤
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))))))) label -
-        lr * (∑ idx, (gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+        lr * (∑ idx, (gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
+  unfold cnnConv1BiasLoss at *
   set f : Vec c → ℝ :=
     fun b' : Vec c =>
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
@@ -6736,37 +6416,25 @@ theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
       |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
         (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
     (hm2 : ∀ k, lr * ((∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) +
         (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
           w₅ β₅ eexp) <
       |Tensor3.flatten (conv2d W₂ b₂ x₁) k|)
     (hmq : MaxPool2MarginQ (lr * ((∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) +
         (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
           w₅ β₅ eexp))
       (Tensor3.unflatten (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))))
     (hm3 : ∀ l, w₃ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o,
-        |gradAt (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        |gradAt (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) +
         (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
           w₅ β₅ eexp))) <
       |dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ x₁)))) l|)
     (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((2*h * (2*w) : ℕ) : ℝ) *
         (lr * ((∑ o, |gradAt
-          (fun b' : Vec c =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+          (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) +
           (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄
             β₄ w₅ β₅ eexp))))) <
       |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w
@@ -6774,60 +6442,38 @@ theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
           (Tensor3.flatten (conv2d W₂ b₂ x₁)))))) q|)
     (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
       (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) +
         (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
           w₅ β₅ eexp)))))))) < 1)
     (h1 : lr * (M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄ β₄
           w₅ β₅ eexp) * (∑ o, |gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) ≤
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) ≤
       lr * (∑ o, gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o ^ 2) / 4)
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o ^ 2) / 4)
     (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 *
         (d₄ : ℝ) ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 /
         (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
           (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o, |gradAt
-            (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
+            (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₂ o|) +
             (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃
               w₄ β₄ w₅ β₅ eexp)))))))))) *
         (lr * ((∑ o, |gradAt
-          (fun b' : Vec c =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o|) +
+          (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o|) +
           (c : ℝ) * M.cnnConv2BiasGradBudget c h w d₃ d₄ nC kH kW a w₂ β₂ w₃ β₃ w₄
             β₄ w₅ β₅ eexp)) ^ 2 ≤
       lr * (∑ o, gradAt
-        (fun b' : Vec c =>
-          crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-            (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-              (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label) b₂ o ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-        (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂
-            (b₂ - lr • M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp
-              label) x₁))))))))) label ≤
+        (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label) b₂ o ^ 2) / 4) :
+    (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (b₂ - lr • M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp
+              label) ≤
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
         (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₂ b₂ x₁))))))))) label -
         lr * (∑ o, gradAt
-          (fun b' : Vec c =>
-            crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-              (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label)
+          (cnnConv2BiasLoss W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ label)
             b₂ o ^ 2) / 2 := by
+  unfold cnnConv2BiasLoss at *
   have hCotMagnn : 0 ≤ FloatModel.cnnConv2CotMag d₃ d₄ nC w₃ w₄ w₅ :=
     FloatModel.cnnConv2CotMag_nonneg hw₃ hw₄ hw₅
   have hCotBudnn : 0 ≤ M.cnnConv2CotBudget c h w d₃ d₄ nC kH kW a 0 w₂ β₂ w₃ β₃ w₄
@@ -7238,92 +6884,49 @@ theorem cnn_conv1_bias_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
       |dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
         (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))) q|)
-    (hm1 : ∀ k, lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm1 : ∀ k, lr * (((∑ idx, |gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))) < |(Tensor3.flatten (conv2d W₁ b₁ x₀)) k|)
-    (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm2 : ∀ k, ((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))))) < |(Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))) k|)
-    (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hmq : MaxPool2MarginQ (((c * kH * kW : ℕ) : ℝ) * (w₂ * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))) (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀)))))))))
-    (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm3 : ∀ l, w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr *
+      (((∑ idx, |gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))))))) < |(dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))) l|)
-    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hm4 : ∀ q, w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h *
+      (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))))))
       < |(dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))))) q|)
-    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (hsmall : 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ *
+      (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))))))))) < 1)
-    (h1 : lr * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp) * (∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (h1 : lr * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
+      eexp) * (∑ idx, |gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) ≤
-      lr * (∑ idx, (gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+      lr * (∑ idx, (gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁) idx ^ 2) / 4)
-    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 / (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
-              b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp)))))))))))))) * (lr * ((∑ idx, |gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+    (h2 : (2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 *
+      (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 / (1 - 2 * (w₅ *
+      ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h *
+      (2*w) : ℕ) : ℝ) * (lr * (((∑ idx, |gradAt
+      (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+              b₁ idx|) + (c : ℝ) *
+                (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅
+                eexp)))))))))))))) * (lr * ((∑ idx, |gradAt
+                (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁ idx|) + (c : ℝ) * (M.cnnConv1BiasGradBudget ic c h w d₃ d₄ nC kH kW a w₁ β₁ w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp))) ^ 2 ≤
-      lr * (∑ idx, (gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+      lr * (∑ idx, (gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁) idx ^ 2) / 4) :
-    crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ (b₁ - lr • M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label) x₀))))))))))))) label ≤
+    (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
+      (b₁ - lr • M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp label) ≤
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃ (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten (relu (c * (2*h) * (2*w)) (Tensor3.flatten (conv2d W₁ b₁ x₀))))))))))))) label -
-        lr * (∑ idx, (gradAt (fun b' : Vec c =>
-              crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
-                (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-                  (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
-                    (relu (c * (2*h) * (2*w)) (Tensor3.flatten
-                      (conv2d W₁ b' x₀))))))))))))) label)
+        lr * (∑ idx, (gradAt (cnnConv1BiasLoss W₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label)
               b₁) idx ^ 2) / 2 := by
+  unfold cnnConv1BiasLoss at *
   have hgh : ∀ idx, |M.cnnConv1BiasFloatGrad W₁ b₁ x₀ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ fexp
       label idx -
       gradAt (fun b' : Vec c =>

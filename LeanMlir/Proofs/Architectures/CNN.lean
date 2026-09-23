@@ -173,6 +173,32 @@ noncomputable def conv2d_input_grad_formula {ic oc h w kH kW : Nat}
         W co ci ⟨kh_nat, hpad.2.1⟩ ⟨kw_nat, hpad.2.2.2⟩ * dy co ho wo
       else 0
 
+theorem sum_fin_ite_add_eq {K : Nat} (f : Fin K → ℝ) (a b : Nat) :
+    ∑ k : Fin K, (if k.val + a = b then f k else 0)
+      = if h : a ≤ b ∧ b - a < K then f ⟨b - a, h.2⟩ else 0 := by
+  split_ifs with h
+  · rw [Fintype.sum_eq_single ⟨b - a, h.2⟩ fun k hk =>
+      ite_eq_right_iff.mpr fun e => absurd (Fin.ext (by simp; omega)) hk]
+    simp [show b - a + a = b by omega]
+  · exact Finset.sum_eq_zero fun k _ =>
+      ite_eq_right_iff.mpr fun e => absurd ⟨by omega, by have := k.isLt; omega⟩ h
+
+/-- The padded-tap indicator of a flat input index `(ci, hi, wi)`: output `(ho, wo)` reads it
+    through tap `(kh, kw)` of channel `c` exactly when the channel matches and the tap offsets
+    land on it — the padding condition is then automatic. -/
+theorem padTap_indicator {C h w kH kW : Nat} (c ci : Fin C) (hi ho : Fin h) (wi wo : Fin w)
+    (kh : Fin kH) (kw : Fin kW) :
+    (if hpad : (kH - 1) / 2 ≤ kh.val + ho.val ∧ kh.val + ho.val - (kH - 1) / 2 < h ∧
+        (kW - 1) / 2 ≤ kw.val + wo.val ∧ kw.val + wo.val - (kW - 1) / 2 < w then
+      (if finProdFinEquiv (finProdFinEquiv (ci, hi), wi) = finProdFinEquiv (finProdFinEquiv
+          (c, ⟨kh.val + ho.val - (kH - 1) / 2, hpad.2.1⟩), ⟨kw.val + wo.val - (kW - 1) / 2,
+            hpad.2.2.2⟩) then (1 : ℝ) else 0)
+      else 0)
+      = if c = ci ∧ kh.val + ho.val = hi.val + (kH - 1) / 2 ∧
+          kw.val + wo.val = wi.val + (kW - 1) / 2 then 1 else 0 := by
+  have := hi.isLt; have := wi.isLt
+  split_ifs <;> simp_all [Prod.ext_iff, Fin.ext_iff, eq_comm]
+
 /-- **Conv2d input-VJP** — proved from foundation rules.
 
     The function `v ↦ flatten (conv2d W b (unflatten v))` is affine in
@@ -180,9 +206,9 @@ noncomputable def conv2d_input_grad_formula {ic oc h w kH kW : Nat}
     `pdiv_of_affine` reads each per-`(idx_in, idx_out)` entry off the
     bias-free conv of the basis vector — a sum over `(c, kh, kw)` of
     `W o(idx_out) c kh kw` times the pad-guarded Kronecker. Reindex `Fin (oc*h*w) ↔ Fin oc × Fin h × Fin w`
-    on the sum-over-`idx_out`, then a triple `Finset.sum_eq_single` over
-    `(c, kh, kw)` (matching `idx_in`'s decoded `(ci, hi, wi)`) gives the
-    closed-form input gradient `conv2d_input_grad_formula`.
+    on the sum-over-`idx_out`; `padTap_indicator` turns each Kronecker into
+    "`c = ci` and the tap lands on `(hi, wi)`", and `sum_fin_ite_add_eq` collapses
+    `(c, kh, kw)` to the closed-form input gradient `conv2d_input_grad_formula`.
 
     The backward function (accessed as `(conv2d_has_vjp3 W b).backward`,
     or via the `conv2d_input_grad` abbrev below) implements
@@ -250,162 +276,20 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
         refine Finset.sum_congr rfl fun c _ => Finset.sum_congr rfl fun kh _ =>
           Finset.sum_congr rfl fun kw _ => ?_
         split_ifs <;> ring
-    -- Step 2: substitute h_pdiv into the RHS sum and collapse.
+    -- Step 2: substitute h_pdiv, rewrite each indicator to `c = ci ∧ tap lands`, collapse.
     show conv2d_input_grad_formula W dy ci hi wi =
       ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
         pdiv3 (conv2d W b) x ci hi wi co ho wo * dy co ho wo
     unfold conv2d_input_grad_formula pdiv3
-    apply Finset.sum_congr rfl; intro co _
-    apply Finset.sum_congr rfl; intro ho _
-    apply Finset.sum_congr rfl; intro wo _
-    -- For each (co, ho, wo), substitute h_pdiv at idx_out := flat(co, ho, wo).
+    refine Finset.sum_congr rfl fun co _ => Finset.sum_congr rfl fun ho _ =>
+      Finset.sum_congr rfl fun wo _ => ?_
     rw [h_pdiv (finProdFinEquiv (finProdFinEquiv (co, ho), wo))]
-    -- Simplify the decoding (Equiv.symm_apply_apply ⊢ ohw_o = co, ohw_hi = ho, ohw_wi = wo).
-    simp only [Equiv.symm_apply_apply]
-    -- Pull `dy co ho wo` out of the formula's if-true branch.
-    rw [show (let pH := (kH - 1) / 2
-              let pW := (kW - 1) / 2
-              let kh_nat := hi.val + pH - ho.val
-              let kw_nat := wi.val + pW - wo.val
-              if hpad : ho.val ≤ hi.val + pH ∧ kh_nat < kH ∧
-                  wo.val ≤ wi.val + pW ∧ kw_nat < kW then
-                W co ci ⟨kh_nat, hpad.2.1⟩ ⟨kw_nat, hpad.2.2.2⟩ * dy co ho wo
-              else 0) =
-            (let pH := (kH - 1) / 2
-             let pW := (kW - 1) / 2
-             let kh_nat := hi.val + pH - ho.val
-             let kw_nat := wi.val + pW - wo.val
-             if hpad : ho.val ≤ hi.val + pH ∧ kh_nat < kH ∧
-                 wo.val ≤ wi.val + pW ∧ kw_nat < kW then
-               W co ci ⟨kh_nat, hpad.2.1⟩ ⟨kw_nat, hpad.2.2.2⟩
-             else 0) * dy co ho wo from by
-      by_cases hb : ho.val ≤ hi.val + (kH - 1) / 2 ∧
-                     hi.val + (kH - 1) / 2 - ho.val < kH ∧
-                     wo.val ≤ wi.val + (kW - 1) / 2 ∧
-                     wi.val + (kW - 1) / 2 - wo.val < kW
-      · simp only [dite_eq_left hb]
-      · simp only [dite_eq_right hb, zero_mul]]
-    -- Goal: (if hb : back_cond then W co ci ⟨kh*⟩ ⟨kw*⟩ else 0) * dy co ho wo
-    --     = (∑ c kh kw, W co c kh kw * indicator) * dy co ho wo
-    congr 1
-    -- Convert the dependent-if indicator to a non-dependent conjunction-form.
-    have h_indicator : ∀ (c : Fin ic) (kh : Fin kH) (kw : Fin kW),
-        ((let pH := (kH - 1) / 2
-          let pW := (kW - 1) / 2
-          let hh := kh.val + ho.val
-          let ww := kw.val + wo.val
-          if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-            (if idx_in = finProdFinEquiv (finProdFinEquiv
-                (c, ⟨hh - pH, hpad.2.1⟩), ⟨ww - pW, hpad.2.2.2⟩) then (1 : ℝ) else 0)
-          else 0) : ℝ) =
-        (if c = ci ∧ kh.val + ho.val = hi.val + (kH - 1) / 2 ∧
-                     kw.val + wo.val = wi.val + (kW - 1) / 2 then (1 : ℝ) else 0) := by
-      intro c kh kw
-      by_cases hpad : (kH - 1) / 2 ≤ kh.val + ho.val ∧
-                      kh.val + ho.val - (kH - 1) / 2 < h ∧
-                      (kW - 1) / 2 ≤ kw.val + wo.val ∧
-                      kw.val + wo.val - (kW - 1) / 2 < w
-      · rw [dite_eq_left hpad]
-        by_cases h_match : c = ci ∧ kh.val + ho.val = hi.val + (kH - 1) / 2 ∧
-                                    kw.val + wo.val = wi.val + (kW - 1) / 2
-        · -- Build the explicit Fin equality for the indicator's RHS.
-          have h_idx_in_eq : idx_in = finProdFinEquiv (finProdFinEquiv
-              (c, ⟨kh.val + ho.val - (kH - 1) / 2, hpad.2.1⟩),
-              ⟨kw.val + wo.val - (kW - 1) / 2, hpad.2.2.2⟩) := by
-            rw [hidx_in]
-            have h_c : c = ci := h_match.1
-            have h_hi : (⟨kh.val + ho.val - (kH - 1) / 2, hpad.2.1⟩ : Fin h) = hi := by
-              apply Fin.ext
-              show kh.val + ho.val - (kH - 1) / 2 = hi.val
-              omega
-            have h_wi : (⟨kw.val + wo.val - (kW - 1) / 2, hpad.2.2.2⟩ : Fin w) = wi := by
-              apply Fin.ext
-              show kw.val + wo.val - (kW - 1) / 2 = wi.val
-              omega
-            rw [← h_c, ← h_hi, ← h_wi]
-          rw [ite_eq_left h_idx_in_eq, ite_eq_left h_match]
-        · rw [ite_eq_right h_match]
-          rw [ite_eq_right]
-          intro h_eq
-          apply h_match
-          rw [hidx_in] at h_eq
-          have h_inj := finProdFinEquiv.injective h_eq
-          have h_inj_pair := Prod.mk.inj h_inj
-          have h_inj_inner := finProdFinEquiv.injective h_inj_pair.1
-          have h_inj_inner_pair := Prod.mk.inj h_inj_inner
-          refine ⟨h_inj_inner_pair.1.symm, ?_, ?_⟩
-          · have h_hi : hi.val = kh.val + ho.val - (kH - 1) / 2 :=
-              Fin.ext_iff.mp h_inj_inner_pair.2
-            omega
-          · have h_wi : wi.val = kw.val + wo.val - (kW - 1) / 2 :=
-              Fin.ext_iff.mp h_inj_pair.2
-            omega
-      · rw [dite_eq_right hpad]
-        rw [ite_eq_right]
-        intro ⟨_, hkh_eq, hkw_eq⟩
-        apply hpad
-        refine ⟨?_, ?_, ?_, ?_⟩
-        · rw [hkh_eq]; exact Nat.le_add_left _ _
-        · rw [hkh_eq, Nat.add_sub_cancel]; exact hi.isLt
-        · rw [hkw_eq]; exact Nat.le_add_left _ _
-        · rw [hkw_eq, Nat.add_sub_cancel]; exact wi.isLt
-    simp_rw [h_indicator]
-    -- Goal: (if hb : back_cond then W co ci ⟨kh*⟩ ⟨kw*⟩ else 0)
-    --     = ∑ c kh kw, W co c kh kw * (if c = ci ∧ ... then 1 else 0)
-    by_cases hb : ho.val ≤ hi.val + (kH - 1) / 2 ∧
-                   hi.val + (kH - 1) / 2 - ho.val < kH ∧
-                   wo.val ≤ wi.val + (kW - 1) / 2 ∧
-                   wi.val + (kW - 1) / 2 - wo.val < kW
-    · rw [dite_eq_left hb]
-      -- Σ c collapses on c = ci, then Σ kh on kh = ⟨hi+pH-ho, hb.2.1⟩, then Σ kw similarly.
-      symm
-      rw [Finset.sum_eq_single ci ?_ ?_]
-      rw [Finset.sum_eq_single ⟨hi.val + (kH - 1) / 2 - ho.val, hb.2.1⟩ ?_ ?_]
-      rw [Finset.sum_eq_single ⟨wi.val + (kW - 1) / 2 - wo.val, hb.2.2.2⟩ ?_ ?_]
-      · -- Main: W co ci ⟨kh*⟩ ⟨kw*⟩ * (if ci=ci ∧ ... then 1 else 0) = W co ci ⟨kh*⟩ ⟨kw*⟩
-        rw [ite_eq_left]
-        · ring
-        refine ⟨rfl, ?_, ?_⟩
-        · show hi.val + (kH - 1) / 2 - ho.val + ho.val = hi.val + (kH - 1) / 2
-          omega
-        · show wi.val + (kW - 1) / 2 - wo.val + wo.val = wi.val + (kW - 1) / 2
-          omega
-      · intro kw _ hkw_ne
-        rw [ite_eq_right ?_]; · ring
-        intro ⟨_, _, hkw_eq⟩
-        apply hkw_ne
-        apply Fin.ext
-        show kw.val = wi.val + (kW - 1) / 2 - wo.val
-        omega
-      · intro hni; exact absurd (Finset.mem_univ _) hni
-      · intro kh _ hkh_ne
-        apply Finset.sum_eq_zero; intro kw _
-        rw [ite_eq_right ?_]; · ring
-        intro ⟨_, hkh_eq, _⟩
-        apply hkh_ne
-        apply Fin.ext
-        show kh.val = hi.val + (kH - 1) / 2 - ho.val
-        omega
-      · intro hni; exact absurd (Finset.mem_univ _) hni
-      · intro c _ hc_ne
-        apply Finset.sum_eq_zero; intro kh _
-        apply Finset.sum_eq_zero; intro kw _
-        rw [ite_eq_right (fun ⟨hcc, _, _⟩ => hc_ne hcc)]; ring
-      · intro hni; exact absurd (Finset.mem_univ ci) hni
-    · rw [dite_eq_right hb]
-      -- Show the inner sum is 0: for !back_cond, no (c, kh, kw) satisfies the indicator.
-      symm
-      apply Finset.sum_eq_zero; intro c _
-      apply Finset.sum_eq_zero; intro kh _
-      apply Finset.sum_eq_zero; intro kw _
-      rw [ite_eq_right ?_]; · ring
-      intro ⟨_, hkh_eq, hkw_eq⟩
-      apply hb
-      refine ⟨?_, ?_, ?_, ?_⟩
-      · have := kh.isLt; omega
-      · have := kh.isLt; omega
-      · have := kw.isLt; omega
-      · have := kw.isLt; omega
+    simp only [Equiv.symm_apply_apply, hidx_in, padTap_indicator, ite_and, mul_ite, mul_one,
+      mul_zero, Finset.sum_ite_irrel, Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ,
+      ite_true]
+    simp only [sum_fin_ite_add_eq]
+    clear h_pdiv
+    split_ifs <;> first | rfl | (exfalso; omega) | exact (zero_mul _).symm
 
 /-- Named accessor for the conv2d input backward — aligns with MLIR
     codegen (`stablehlo.convolution` in the backward pass). -/
