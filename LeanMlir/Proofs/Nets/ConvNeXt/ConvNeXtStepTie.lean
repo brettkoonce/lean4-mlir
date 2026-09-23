@@ -2,9 +2,9 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
-import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Nets.ViT.ViTFold
 import LeanMlir.Proofs.Architectures.ChannelLNBack
+import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # PoC: the FULL [3,3,9,3] ConvNeXt-T §1a TIE — the whole net tied through the real forward
 

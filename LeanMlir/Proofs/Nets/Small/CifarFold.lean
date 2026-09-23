@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Codegen.CnnRender
 import LeanMlir.Proofs.Nets.Small.CifarCNN
+import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # PoC: the CIFAR-CNN (Chapter 4, no-BN) train step, proof-tied to the certified SGD step
 
@@ -38,28 +39,6 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.CifarPoC
 
 /-! ## Conv layers — generic `den = certified` (covers all four conv layers) -/
-
-/-- **Any emitted conv weight op = certified.** Generic in the conv dims and the
-    cotangent `c`: the `convWeightSgd` op denotes `flatten W − lr·(certified
-    ∂conv/∂W · c)`. Instantiated at each layer's `(b,x,W,c)` it certifies W₁…W₄. -/
-theorem convW_den {ic oc h w kH kW : Nat}
-    (xN wN lrStr cotN : String) (b : Vec oc) (x : Tensor3 ic h w)
-    (W : Kernel4 oc ic kH kW) (c : Vec (oc*h*w)) (lr : ℝ) (idx : Fin (oc*ic*kH*kW)) :
-    den (SHlo.convWeightSgd xN wN lrStr b x W lr (.operand cotN c)) idx
-      = Kernel4.flatten W idx - lr * ∑ j : Fin (oc*h*w),
-          pdiv (fun v' : Vec (oc*ic*kH*kW) =>
-                  Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
-               (Kernel4.flatten W) idx j * c j :=
-  cnn_render_convW_certified b x (Kernel4.flatten W) c lr idx
-
-/-- **Any emitted conv bias op = certified.** Generic peer of `convW_den`. -/
-theorem convB_den {ic oc h w kH kW : Nat}
-    (bN lrStr cotN : String) (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
-    (b : Vec oc) (c : Vec (oc*h*w)) (lr : ℝ) (o : Fin oc) :
-    den (SHlo.convBiasSgd bN lrStr W x b lr (.operand cotN c)) o
-      = b o - lr * ∑ j : Fin (oc*h*w),
-          pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j :=
-  cnn_render_convb_certified W x b c lr o
 
 /-! ## Dense classifier head (W₅/W₆/W₇) — `weightSgd`/`biasSgd`, mirrors `CnnPoC`
 

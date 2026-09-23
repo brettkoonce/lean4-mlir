@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.IndexCast
 import LeanMlir.Proofs.Foundation.DataParallelSync
 import LeanMlir.Proofs.Foundation.BatchedBackLinks
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
@@ -25,19 +26,6 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.StableHLO
 
 open scoped BigOperators
-
-/-- **Relabel an AST value's index along a proved equality.** `h ▸ e`: the same graph, typed at
-    `m` instead of `n`. The emitted text does not change, because `skel` erases indices. -/
-def castIdx {n m : Nat} (h : n = m) (e : SHlo n) : SHlo m := h ▸ e
-
-theorem den_castIdx {n m : Nat} (h : n = m) (e : SHlo n) :
-    den (castIdx h e) = fun i => den e (Fin.cast h.symm i) := by
-  subst h; rfl
-
-/-- The `mul_assoc` relabelling under `N * ·` — the seam between the network's left-assoc
-    `N·(c·h·w)` and the BatchNorm ops' `N·(c·(h·w))`. -/
-theorem laAssoc (N oc h w : Nat) : N * (oc * h * w) = N * (oc * (h * w)) :=
-  congrArg (N * ·) (Nat.mul_assoc oc h w)
 
 /-- **Sharding commutes with relabelling the per-example index.** The batch axis is outside the
     per-example one, so relabelling within an example and cutting the batch do not interact. -/

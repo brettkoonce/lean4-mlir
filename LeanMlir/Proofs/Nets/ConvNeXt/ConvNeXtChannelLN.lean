@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTVecLN
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Foundation.IndexCast
 
 /-! # ConvNeXt's REAL channel LayerNorm — the math side of §2m Route A
 
@@ -312,25 +312,18 @@ namespace Proofs.StableHLO
 -- § The graph-side transport
 -- ════════════════════════════════════════════════════════════════
 
-/-- **`den` commutes with a type-level index transport.** Transporting the GRAPH along `m = n`
-    reindexes its denotation by the val-preserving `Fin.cast`. Stated at variable `m`/`n` so
-    `subst` applies — at `c*h*w = c*(h*w)` neither side is a variable and it would not. -/
-theorem den_cast {m n : Nat} (heq : m = n) (e : SHlo m) :
-    den (heq ▸ e) = fun k => den e (Fin.cast heq.symm k) := by
-  subst heq; rfl
-
-/-- **The graph's `▸` transport IS the math's Mat-split bridge** — `den_cast` composed with
+/-- **The graph's `▸` transport IS the math's Mat-split bridge** — `den_castIdx` composed with
     `reassocFwdIdx_val`. This is the lemma that keeps `ConvNeXtRender`'s `reassoc` and
     `chanLNTensor3` describing one function. -/
 theorem den_reassocS {c h w : Nat} (e : SHlo (c * h * w)) :
     den ((Nat.mul_assoc c h w) ▸ e) = reassocFwd c h w (den e) := by
-  rw [den_cast]
+  refine (den_castIdx (Nat.mul_assoc c h w) e).trans ?_
   funext k
   exact congrArg (den e) (Fin.ext (reassocFwdIdx_val c h w k).symm)
 
 theorem den_unassocS {c h w : Nat} (e : SHlo (c * (h * w))) :
     den ((Nat.mul_assoc c h w).symm ▸ e) = reassocBack c h w (den e) := by
-  rw [den_cast]
+  refine (den_castIdx (Nat.mul_assoc c h w).symm e).trans ?_
   funext k
   exact congrArg (den e) (Fin.ext (reassocBackIdx_val c h w k).symm)
 

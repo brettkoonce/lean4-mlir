@@ -144,7 +144,6 @@ import LeanMlir.Proofs.Float.E4M3Fold
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
-import LeanMlir.Proofs.Nets.Small.CifarBnFold
 import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
 import LeanMlir.Proofs.Nets.ViT.ViTFold
@@ -178,6 +177,7 @@ import LeanMlir.Proofs.Foundation.MuonGeometry
 import LeanMlir.Proofs.Foundation.MuonNewtonSchulz
 import LeanMlir.Proofs.Foundation.SpecVJP
 import LeanMlir.Proofs.Nets.Small.MlpCanonical
+import LeanMlir.Proofs.Foundation.SgdNodes
 
 open Proofs
 

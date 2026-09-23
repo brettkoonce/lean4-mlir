@@ -34,6 +34,7 @@ the "where is X?" problem. The fix is mostly *moves with names kept* — no pinn
 | BatchedBackLinks commit | §2.5 part 1 — the batched kit leaves the EfficientNet files, names kept. `BatchMapVJPAt` gains `batchMap_has_vjp` / `reindex_has_vjp` / `bnBatchLA_has_vjp` / `flatConv_has_vjp` (still StableHLO-only); new `Foundation/BatchedStages` (`cbsB` `stemB` `dwbsB` `dwbsSB` `seB` `projB` + their VJPs, from `EfficientNetRenderPC` / `EfficientNetChainClose`); new `Foundation/BatchedBackLinks` (`residualBackGraph`, the batched backward `_faithful` + stage backward graphs from `EfficientNetBackB0`, `EnetTiePoC`'s cotangent steps, `ResNet34TieB`'s `reluMaskB`/`cStridedInB`/`bnInB`/`mpInB`/`rowB`/`unrowB`). ResNet-34's and MNv4's T3 ties no longer import the EfficientNet tie; `EfficientNetStepTieG` no longer imports ResNet-34's. Gated incl. the local comparator (3 tiers) |
 | StageLayers commit | §2.5 part 2 — names kept. `ResNet34BackCertifiedTie` → `Architectures/ConvBackCertifiedTie` (imports `BatchedStages` + `BackwardMaps` only). New `Foundation/BatchedStageLayers`: MNv2's relu6 stages + `projLayer` and R34's relu / strided-relu / strided-projection stages, each with `_at` VJP, backward graph and `CertLayer` — `ResNet34BackB0` stops importing `MobileNetV2BackB0`, which stops importing `EfficientNetBackB0`. `CertLayer.comp_ok_of` → `CertifiedChain`; `r34PoolLayer` + `R34PoolSmoothAt` → `HeadLayers` (which drops `EfficientNetChainClose` for `BatchedStages`); the batched pool backward (`maxPool3s2FlatBackB`, `den_maxPool3s2BackB_eq_flatBackB`) → `BackwardMaps`; `R34FullBSeal`'s nine stage lemmas (`projB_zero_const`, `sealProj*`, `cbReluStridedB_eq`, four `*_continuous`) → `BatchSealKit`. Also yaml: `softmaxCE_grad`'s file (stale since `4530a0df`) |
 | SyncKit commit | §2.5 part 3 — the sync-BN kit, names kept. New `Foundation/DataParallelSyncKit`: `ResNet34SyncB`'s index cast / non-BN shard lemmas / BN sync site, `ResNet34SyncStepTieB`'s per-op homogeneity, shard, P4, per-parameter `*Sync` + `_of_scaled` and divisor lemmas, and all of `MBConvSyncTieB` (deleted). MNv2's, MNv4's and ENet's sync forward twins and MNv2's / ENet's step twins now import the kit, not ResNet-34's sync files. The P4 proof written 7× more → one `shard_sum` tactic macro in `DataParallelSync` (8 uses) |
+| SgdNodes commit | §2.5 part 4, closes §2.5 — names kept. New `Foundation/SgdNodes`: the per-example fused-SGD node lemmas (`Cifar8PoC.denseW/B_den` out of `MlpTrainStep`, `CifarPoC.convW/B_den` out of `CifarFold`, all of `CifarBnFold` — deleted); `ViTFold` / `ConvNeXtStepTie` drop `MlpTrainStep`. New `Foundation/IndexCast` (`castIdx`, `den_castIdx`, `laAssoc`); `den_cast` deleted (`den_reassocS`/`den_unassocS` go through `den_castIdx`); ConvNeXt's two renderers' private casts are `castIdx` — artifacts byte-identical. The Vec-level `reassocB` / `reassocFwd` / `reassocBack` stay (functions, not graph transports); `IndexCast`'s header maps all of them |
 
 Each gated: `lake build Certs LeanMlir Apps`, AuditAxioms 1,597/1,597, `docstring-checkrefs`,
 `verified_mlir/` byte-clean; `a745b694` also `CertsHeavy` + AuditAxiomsHeavy 62/62 and the three
@@ -78,7 +79,7 @@ certificate or root file moves and `tests/comparator/run.sh` when anything leave
    generic f32 `*GradB_den` lemmas now in `ResNet34FoldB` / `ConvNeXtFoldGB` / `EfficientNetFoldG` /
    `ViTFoldGB`; keep full names (0 pins move). Then `Foundation/DataParallelNode` and
    `Bf16GradNodes` stop importing nets.
-3. ◐ **§2.5 batched back-link kit** (parts 1–2: stages, stage layers, back links, leaf ties, pool/head layers, seal pieces; part 3: the sync kit; left: the small-net kit, the `c·h·w` seam's other spellings) — `EnetTiePoC`'s `reassocB`/`cInB`/`bnBackB`/… (in the retired
+3. ✅ **§2.5 batched back-link kit** (parts 1–4 landed: stages, stage layers, back links, leaf ties, pool/head layers, seal pieces, the sync kit, the per-example SGD nodes, `IndexCast`) — `EnetTiePoC`'s `reassocB`/`cInB`/`bnBackB`/… (in the retired
    fused ENet tie) + `ResNet34StepTieB`'s `reluMaskB`/`rowB`/`unrowB` + the batched `*_faithful` in
    `EfficientNetBackB0` → one `Foundation/BatchedBackLinks.lean`; `batchMap_has_vjp` & co. →
    `BatchMapVJPAt`; the `c·h·w` seam (five spellings) → one leaf. ⚠ overlaps
@@ -95,7 +96,7 @@ certificate or root file moves and `tests/comparator/run.sh` when anything leave
    Gaussian integrability ~45, smoothing q ≤ p ~40), seals' continuity via `@[fun_prop]` (~250),
    ENet MBConv twins (~50), relu6-style small collapses.
 
-Also open, smaller: the remaining history-first headers (`ResNet50BackB0`, `MobileNetV4BackB0`,
+Also open, smaller: `StableHLO.lean`'s bnGammaSgd comment still says `CifarBnFold` (now `SgdNodes`) — fix with the next root-file batch; the remaining history-first headers (`ResNet50BackB0`, `MobileNetV4BackB0`,
 `EfficientNetStepTie`, `EfficientNetBackB0`); file:line cites into `jax/` and `VerifiedTrain`; the
 four `@[simp]` lemmas with no named use; the `.train`-arm hazard in the eval chains; MNv2 legacy
 imports (move `IVPos` first). ⚠ Auditor claims were wrong 3× this round — verify before editing.

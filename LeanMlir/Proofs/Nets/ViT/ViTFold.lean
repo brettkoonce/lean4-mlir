@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Nets.ViT.ViTClose
 import LeanMlir.Proofs.Nets.ViT.ViTVecLN
-import LeanMlir.Proofs.Nets.Small.MlpTrainStep
+import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # ViT-Tiny §1 fold — each emitted param-SGD op `den`otes the certified loss-descent step
 

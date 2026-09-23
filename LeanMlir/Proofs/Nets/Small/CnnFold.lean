@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Codegen.CnnRender
+import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # PoC: the MNIST-CNN train step, proof-tied to the certified SGD step
 

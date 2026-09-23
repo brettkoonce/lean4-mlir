@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Codegen.MlpRender
 import LeanMlir.Proofs.Nets.Small.LinearFold
+import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # PoC: the MNIST-MLP train step, proof-tied to the certified SGD step
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Foundation.IndexCast
 
 /-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)
 
@@ -271,11 +271,11 @@ closed form at rel 0, the incumbent `.bnF` control fires at rel 0.82, and the tr
 **free** (Δ 0.00 ms on 16.1 ms of whole-net LN — XLA folds a transpose into the consumer's layout).
 
 ⚠ **`Nat` multiplication is not definitionally associative**, and the ambient index here is
-`c*h*h = (c*h)*h` while the transpose needs `c*(h*h)`. `reassoc`/`unassoc` transport along
+`c*h*h = (c*h)*h` while the transpose needs `c*(h*h)`. `reassoc`/`unassoc` are `castIdx` along
 `Nat.mul_assoc`; they are casts on the index, not on the value, so `pretty` walks the same tree. -/
 
-private def reassoc {c h : Nat} (e : SHlo (c*h*h)) : SHlo (c*(h*h)) := (Nat.mul_assoc c h h) ▸ e
-private def unassoc {c h : Nat} (e : SHlo (c*(h*h))) : SHlo (c*h*h) := (Nat.mul_assoc c h h).symm ▸ e
+private def reassoc {c h : Nat} (e : SHlo (c*h*h)) : SHlo (c*(h*h)) := castIdx (Nat.mul_assoc c h h) e
+private def unassoc {c h : Nat} (e : SHlo (c*(h*h))) : SHlo (c*h*h) := castIdx (Nat.mul_assoc c h h).symm e
 
 /-- The `%one`/`%zero` constants the channel-LN chain binds `lnRowF`/`lnRowBack`'s SCALAR γ/β to —
     the real per-channel affine is `rowScaleF`/`rowBiasF` downstream, exactly as ViT does it.
