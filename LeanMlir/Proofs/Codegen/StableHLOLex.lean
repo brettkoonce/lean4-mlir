@@ -42,8 +42,7 @@ Three sub-problems remain above this keystone; the planning doc
    a later op's line. But `toToks (skel g)` *contains* operand tokens and `parse`
    *consumes* them. So the doc's step-2 target `lex (pretty g) = toToks (skel g)`
    is **false as written**: `lex` must *regenerate* operand tokens from operand
-   references (distinguishing leaf names from fresh `%v{k}` results — `fresh` at
-   `StableHLO.lean:2138`). The correct end target is the composite
+   references (distinguishing leaf names from fresh `%v{k}` results — `StableHLO.fresh`). The correct end target is the composite
    `parse (lex (pretty g)) = some (skel g)`.
 3. **The `ty`-string parser.** `ty dims = "tensor<" ++ intercalate "x" (…) ++ ">"`
    inverts to a `List Char` splitter on `'x'` + `parseNat` per field — needs a

@@ -56,7 +56,7 @@ namespace Proofs.StableHLO
 
 /-- A trainable parameter: emitted name (no `%`), its un-fused gradient SSA name, and its shape.
     The AdamW tail is a fold over this list, so the θ/m/v output order cannot drift from the
-    signature order. (The `ResNet34RenderB` peer of the same name is `private` to that file.) -/
+    signature order. (Field-for-field the same as `ResNet34RenderB`'s `PGrad`.) -/
 structure PGradM where
   nm   : String
   grad : String

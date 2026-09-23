@@ -51,7 +51,7 @@ runs at. Read off the Conv-M table ([`jax/MainMobilenetV4.lean`](https://github.
 
 ⚠⚠ **ACTIVATION IS PLAIN `relu`, NOT `relu6`.** MobileNetV2's blocks use relu6 and this file sits
 next to that renderer, so the wrong one is one keystroke away. Read off the baseline emitter
-(`MlirCodegen.lean:6357`, "Plain ReLU throughout").
+(`MlirCodegen.emitTrainStepBody`'s `.uib` case, "Plain ReLU throughout").
 
 ⚠ **A pre/post-DW swap is invisible to every count.** Same `k`, same channels ⇒ same parameter
 shapes, so `uib-layout-tie` passes on a renderer that swaps them, and so does any arity or op-count
@@ -60,7 +60,7 @@ which is why the four families are `if`s that the compiler cannot check. Only a 
 the reference on shared weights pins the order. Same class as R50's stride-on-the-3×3.
 
 ⚠ The baseline drops the stride entirely for a stride-2 FFN block (no depthwise to carry it,
-`MlirCodegen.lean:6364`). No such block exists in the table; this file has no function for that
+`MlirCodegen.emitTrainStepBody`'s `.uib` case). No such block exists in the table; this file has no function for that
 shape, so the case is absent rather than silently wrong.
 -/
 
@@ -502,10 +502,10 @@ deriving Inhabited
 
     **Activations, and they are not uniform** — each read off the emitter that produced the number,
     not assumed:
-    * stem and head `.convBn` → **relu** (`MlirCodegen.lean:5852`, `emitConvBnTrain … useRelu := true`)
+    * stem and head `.convBn` → **relu** (`MlirCodegen.emitConvBnTrain … useRelu := true`)
     * the fused stage → **swish** (`jax/Jax/Codegen.lean:1031`) — a deliberate paper deviation, see
       `fusedMbConvFwdStridedB`
-    * every UIB block → **relu** (`MlirCodegen.lean:6357`, "Plain ReLU throughout")
+    * every UIB block → **relu** (`MlirCodegen.emitTrainStepBody`'s `.uib` case, "Plain ReLU throughout")
 
     Returns the full forward RECORD, not just `(code, logits)`: the train step needs every saved
     activation the backward reads, and the alternative — a second copy of the chain inside the

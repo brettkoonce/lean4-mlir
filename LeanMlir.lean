@@ -124,13 +124,17 @@ denotes the certified descent step.
 * MobileNetV4-Conv-M — [`mnv4_net_tiedB`](find/#doc/Proofs.Mnv4TieB.mnv4_net_tiedB);
   [`MobileNetV4FullBSeal`](LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullBSeal.html)
 * EfficientNet-B0 (chapter 7) —
-  [`efficientnet_net_tied`](find/#doc/Proofs.EnetTiePoC.efficientnet_net_tied)
+  [`efficientnet_net_tiedG`](find/#doc/Proofs.EnetTiePoCG.efficientnet_net_tiedG)
 * ConvNeXt-T (chapter 8) — [`cnx_net_tiedGB`](find/#doc/Proofs.CnxTiePoCGB.cnx_net_tiedGB)
 * ViT-Tiny (chapter 9) — [`vit_net_tiedGB`](find/#doc/Proofs.ViTTiePoCGB.vit_net_tiedGB)
 
-The per-net trees under `LeanMlir.Proofs.Nets` repeat the linear pattern in a fixed vocabulary:
-`*Render` (forward = math), `*Close` (parameter gradients), `*Fold` / `*StepTie` (the whole train
-step), `*Seal` (a non-zero-Jacobian witness).
+The per-net trees under `LeanMlir.Proofs.Nets` repeat the linear pattern. The four conv nets share
+one file chain — `*BackB0` (block backward graphs) → `*FullB` (forward + T2 graph) → `*FullBVJP`
+(T1 VJP) → `*FullBSeal` (non-degeneracy) → `*StepTieB` (T3 train-step tie) →
+`*WholeBackCertifiedTieB` (T6 whole-net backward; ResNet-34's is `ResNet34BackCertifiedTieB`) →
+`*SyncB` / `*SyncStepTieB` (data-parallel). EfficientNet, ConvNeXt and ViT spell the same tiers
+with other suffixes; the table and the suffix legend are in the
+[proofs README](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/README.md).
 
 ## Around the ties
 

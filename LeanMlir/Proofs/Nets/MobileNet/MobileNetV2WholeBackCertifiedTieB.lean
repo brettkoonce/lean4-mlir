@@ -47,8 +47,8 @@ carries `≠ 0 ∧ ≠ 6`. ⛔ MobileNetV2's two clauses per block are the expan
 depthwise relu6, both INSIDE the body — not ResNet-34's mid-relu and post-residual outer relu.
 Those are 4.2b's bundles, reused verbatim; this file adds no hypothesis of its own.
 
-⛔ **What this does NOT reach.** Every gradient node in `mobilenetv2in_rmsdp64` is followed by an
-all-reduce emitted as text outside the AST, so this is at the per-replica gradient (§4d). And it
+⛔ **What this does NOT reach.** Every gradient node in `mobilenetv2in_rmsdp64` feeds an
+`allReduceMeanF` node, and this is at the per-replica gradient before it (§4d). And it
 is about the INPUT gradient; the parameter gradients are `MobileNetV2StepTieB.lean`'s tie (§4.2c).
 -/
 

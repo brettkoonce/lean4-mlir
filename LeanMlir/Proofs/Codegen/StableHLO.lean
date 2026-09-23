@@ -28,38 +28,33 @@ import LeanMlir.Proofs.Codegen.DropPath
 -- transitively, so it adds no cycle. `planning/archive/rsb_a3_r50_verified.md` §4b.
 import LeanMlir.Proofs.Architectures.MaxPool3s2
 
-/-! # R4 — printer faithfulness, Stage A (Chapter 1: the linear classifier)
+/-! # StableHLO — the emitted-graph AST, its ℝ semantics, and its printer
 
-The seed of `planning/archive/validated_codegen_book.md`'s `Proofs/Hlo/{Syntax,Denote}`.
+Every verified artifact in `verified_mlir/` is `pretty` of a term of one typed AST, `SHlo`. This
+file holds that AST and both of its readings:
 
-`IR.lean` gives the backward/forward IR a denotation in `ℝ` and proves it equals
-the Mathlib-`fderiv` math. The remaining trusted link — **R4** — is that the
-StableHLO **text** the printer emits means the same function. This file closes
-R4 for Chapter 1, *both halves*, over a single typed AST `SHlo`:
+* **Semantic** — `den : SHlo n → Vec n`, the ℝ denotation in StableHLO-spec terms (explicit
+  contraction / reduce / divide). The `*_faithful` / `*_den` theorems say `den (graph) = <proven
+  math>`; every train-step tie in `Nets/` is stated about `den`.
+* **Syntactic** — `pretty` renders the same term to StableHLO text. SSA names are annotations `den`
+  ignores, so the rendered program and the denoted one are one object. The path is
+  `skel` (erase values) → `Tok` stream → `emitTok` (text per op).
 
-* **Semantic half** (`den`, load-bearing): a denotation in StableHLO-spec terms
-  (explicit contraction / reduce / divide), and faithfulness theorems
-  `den (emit …) = <proven math>` for every piece of the linear train step —
-  forward logits, dense input-VJP, softmax-CE cotangent (to the proven
-  ∂CE/∂logits), the weight/bias parameter Jacobians, **and the SGD update**
-  (`θ' = θ − lr·∇`, now proven rather than trusted).
+Layout, in file order:
 
-* **Syntactic half** (`pretty`): the same `SHlo` carries SSA-name annotations
-  (denotation-irrelevant — `den` ignores them) so it renders to real StableHLO
-  text. The emitted modules — including the **whole `@linear_train_step`** —
-  are `pretty (emit g)` (the doc's "Step 0 consolidation": one AST, both
-  denotable and renderable).
+| part | where |
+|---|---|
+| the batched lift (`batchMap`, `batchSlice`, `bnBatchLA`) — ℝ vocabulary the nets use | top |
+| `inductive SHlo` (≈215 constructors; suffixes: `F` forward/optimizer op, `B`/`Batched` batched index, `Grad`/`GradB` raw gradient node, `Sgd`/`SgdB` fused `θ − lr·g`, `Bf16`/`F8` reduced precision) | § StableHLO-subset AST |
+| `den`, the `denStep`/`denStepApp` dsimprocs, the per-op `*_faithful` lemmas | after the AST |
+| chapter graphs and their faithfulness (linear, MLP, CNN, CIFAR) and the optimizer/clip ops | § Chapter 1–3, § Param gradients, § Global-norm clipping |
+| `skel`, `Tok`, `emitTok`, `pretty` — the printer | § Syntactic half |
+| `*ModuleV` renderers and the chapter-1 `#eval` writers | end |
 
-**All together (the R4 chain for ch 1):**
-`render text = pretty (emit g)` (syntactic, by construction);
-`den (emit g) = Mathlib fderiv` (semantic, the theorems below).
-
-**Scope / residue.** Per-example semantics (`Vec`/`Mat`): the batch axis is an
-outer map, a printer concern (the doc's "D1 shortcut"). `pretty`'s lexical
-conformance to the StableHLO spec is the audited/validated residue (the doc's
-"4b": cross-checked by `iree-compile` + execution — the verified-rendered train
-step trains MNIST to ~92%), not a verified `parse` round-trip ("4a"). Everything
-here closes under `[propext, Classical.choice, Quot.sound]` ([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)).
+**Trusted residue.** `pretty`'s lexical conformance to the StableHLO spec is checked by execution
+(`iree-compile` / PJRT) and by the `StableHLOParse` round-trip, not proved; `den` is over ℝ, so the
+ℝ→Float32 gap stays trusted. Everything here closes under `[propext, Classical.choice,
+Quot.sound]` ([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)).
 -/
 
 open Finset BigOperators

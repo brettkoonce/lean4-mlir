@@ -5,24 +5,23 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Architectures.SE
 
-/-! # A denoted StableHLO-subset IR — Phase 0a/0b spike
+/-! # The small-net backward IR — `Back` / `Fwd` and their denotations
 
-Spike for `planning/archive/typed_ir.md`: give the *emitted backward graph* a
-denotational semantics `⟦·⟧` landing in the proofs' own `Vec` type, then
-prove the emitted graph denotes the proven `HasVJP.backward`. This turns
-the per-op proof↔codegen correspondence from a comment into a theorem.
+A backward graph as an expression tree rooted at the cotangent (`Back`, `Back3`) and a forward
+graph (`Fwd`), each with a denotation `⟦·⟧` in the proofs' own `Vec` type, plus the bridges
+proving each emitted graph denotes the proven `HasVJP.backward`:
 
-This file is the **scaffolding probe**, not the full ladder:
+* `dense_back_bridge` — dense's input gradient is one `dot_general`, so the bridge is
+  definitional.
+* `relu_back_bridge` — `compare(x > 0)` + `select`; off the kink it denotes the canonical
+  `pdiv`-derived ReLU backward (via `relu_codegen_matches_canonical`), which is exactly the
+  codegen trust boundary.
+* the conv / maxpool / loss-cotangent bridges the Chapter 2–4 folds use (`MlpTrainStep`,
+  `CnnChainClose`, `CifarFold`), and `emitLossCot`, which `StableHLO`'s linear cotangent
+  graph is proved against.
 
-* **Phase 0a (dense)** — `dense_back_bridge`. Dense's input-gradient is a
-  single `dot_general`, so the bridge is definitional; its job is to pin
-  the `Back` / `denote` plumbing.
-* **Phase 0b (relu, smooth point)** — `relu_back_bridge`. The ReLU
-  backward graph is `compare(x > 0)` + `select`; at a point off the kink
-  it denotes the canonical `pdiv`-derived ReLU backward. This is the real
-  content: it is *conditional on smoothness* and reuses the existing
-  `relu_codegen_matches_canonical`, exactly matching the codegen trust
-  boundary.
+This is the IR the small nets' ties are stated in. ResNet onward states its ties about
+`StableHLO`'s `SHlo`, which grew out of this file (`planning/archive/typed_ir.md`).
 
 Design notes (see `planning/archive/typed_ir.md`): the backward is modelled as an
 expression tree rooted at the cotangent — SSA/sharing is a

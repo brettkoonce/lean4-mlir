@@ -3,12 +3,13 @@ import LeanMlir.Proofs.Foundation.Tensor
 /-! # Data parallelism: the gradient mean, and what function trained
 
 Every `*dp*` artifact in `verified_mlir/` is ONE program run on `R` replicas. Per parameter,
-after the gradient node and before the optimizer tail, `emitGradAllReduce` emits
-`stablehlo.all_reduce(add)` over `replica_groups = [[0..R-1]]` followed by a divide by `R`.
-That text is emitted OUTSIDE the `SHlo` AST and is a declared trusted carve-out, so every tie
-in the repo — `r34_net_tiedB`, `mnv2_net_tiedB`, `efficientnet_net_tiedG` — is stated at the
-PER-REPLICA gradient node and says so in its own header. This file is the ℝ-level half of
-closing that disclaimer: piece 1 of `planning/archive/proofs_tier_to_paper_nets.md` §4d.
+after the gradient node and before the optimizer tail, the render emits
+`stablehlo.all_reduce(add)` over `replica_groups = [[0..R-1]]` followed by a divide by `R` — the
+`SHlo.allReduceMeanF` node (`DataParallelNode.lean`, piece 2; until 2026-09-07 it was emitted text
+outside the AST). The train-step ties — `r34_net_tiedB`, `mnv2_net_tiedB`,
+`efficientnet_net_tiedG` — are stated at the PER-REPLICA gradient node that collective averages.
+This file is the ℝ-level half: what the average is a gradient OF (piece 1 of
+`planning/archive/proofs_tier_to_paper_nets.md` §4d).
 
 ## What is proved
 

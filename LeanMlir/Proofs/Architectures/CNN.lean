@@ -1234,7 +1234,7 @@ for the mutual-inverse proofs. -/
         d_b0      = conv2d_bias_grad W₀ b₀ x d_h₀pre              [conv2d_bias_grad_has_vjp]
 
     Each line of the backward pass corresponds to a single line in
-    `hand_cnn_train_step.mlir` (lines 134–272). The backward pass is just
+    the historical hand-written hand_cnn_train_step.mlir (under historical/mlir_poc). The backward pass is just
     the forward layers walked in reverse, replacing each forward operation
     with its VJP. The MLIR is the literal compiled-down version of this
     derivation.

@@ -2,8 +2,6 @@ import LeanMlir.Proofs.Architectures.CNN
 
 /-! # `maxPool3s2` — the 3×3 stride-2 max pool of He et al.'s ResNet stem
 
-**Written 2026-08-03.** `planning/archive/rsb_a3_r50_verified.md` / the stem-pool finding.
-
 The verified path's only pooling op is `maxPool2` — 2×2, stride 2, **non-overlapping**. Every
 ResNet in He et al. (18/34/50/101/152) specifies a **3×3 stride-2** pool after the stem conv, so
 `resnet34Verified` has been pooling a different function from the paper *and* from the reference
@@ -50,9 +48,9 @@ collapses to ≤4. The generic route (`maxPool2LocalReindex` → `reindexCLM` �
 indifferent: at a smooth point the pool is locally a reindexing map, and overlap only makes that
 map non-injective, which `reindexCLM`'s adjoint already handles by summing over preimages.
 
-⚠ **This file is the DEFINITIONAL layer.** The `HasVJPAt3` witness mirrors
-`maxPool2_has_vjp_at3` (33 declarations in `CNN.lean`) and is not built here yet. Nothing
-downstream references these definitions, so nothing renders or moves. -/
+The witness is `maxPool3s2_has_vjp_at3` (mirroring `maxPool2_has_vjp_at3` in `CNN.lean`), with
+its flat form `maxPool3s2Flat_has_vjp_at`; the ResNet-34/50 stems, their seals and the float
+stem bridge build on it. -/
 
 namespace Proofs
 

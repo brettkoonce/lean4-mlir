@@ -47,8 +47,8 @@ So `smoothTarget` does not appear here and the render emits three ops where CE e
 `pretty` of an AST node (the §5 carve-out), and nothing here is about those lines. What is proved
 is about the COTANGENT chain, which is on the gradient path and is `pretty(provenGraph)`.
 
-⚠ **One replica**, as everywhere: under `*dp*` each gradient node is followed by
-`all_reduce(add)/R` outside the AST (`DataParallel.lean`, §4d).
+⚠ **One replica**, as everywhere: under `*dp*` each gradient node feeds the
+`allReduceMeanF` node (`DataParallelNode.lean`), which composes this with the replica mean.
 -/
 
 open Finset BigOperators

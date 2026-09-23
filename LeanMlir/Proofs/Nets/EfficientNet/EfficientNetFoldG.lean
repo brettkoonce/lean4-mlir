@@ -43,8 +43,9 @@ the artifact. (`denseBiasGradB` is restated rather than delegated only to widen 
   Pinning each to the emitted backward subgraph is the §1a tie (`EfficientNetStepTie.lean`), and
   re-pointing that capstone at these nodes needs the smoothed-target loss cotangent, which is
   scoped with r34's batched tie.
-* The all-reduce in the `*dp*` artifacts is emitted text outside the AST, so these lemmas are about
-  the per-replica gradient node.
+* In the `*dp*` artifacts the all-reduce is its own `allReduceMeanF` node after each
+  gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
+  it averages.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

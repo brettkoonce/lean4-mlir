@@ -14,25 +14,28 @@ import Mathlib.Analysis.Calculus.Deriv.Basic
 import Mathlib.Analysis.Calculus.Deriv.Comp
 
 /-!
-# Tensor Algebra for VJP Proofs
+# Tensor algebra and the VJP framework — the root of the proof suite
 
-Vectors, matrices, and operations over `ℝ`, using Mathlib's `Finset.sum`.
-
-Partial derivatives (`pdiv`) and their composition rules (chain rule,
-linearity, product rule) are now **defined and proved** from Mathlib's
-Fréchet derivative `fderiv`. The post-foundation-flip definition is
+`Vec n := Fin n → ℝ`, `Mat m n`, `Tensor3 c h w`, and the backward-pass calculus over them,
+grounded in Mathlib's Fréchet derivative:
 
   `pdiv f x i j := fderiv ℝ f x (basisVec i) j`
 
-and every former axiom (`pdiv_id`, `pdiv_const`, `pdiv_reindex`,
-`pdiv_add`, `pdiv_comp`, `pdiv_mul`) is now a theorem proved against
-Mathlib's API. The bilinear rules carry `Differentiable` hypotheses
-that propagate through every downstream chapter.
+Every structural rule is a theorem against Mathlib's API; the bilinear ones carry
+`Differentiable` hypotheses that propagate through every downstream chapter.
 
-The post-flip path: every claim downstream of this file is either a
-definition Lean unfolds or a theorem typechecked against Mathlib —
-no project axioms remain. `#print axioms vit_full_has_vjp` lists only
-Lean core (`propext`, `Classical.choice`, `Quot.sound`).
+Contents, in file order:
+
+| section | what |
+|---|---|
+| Types, Matrix Operations | `Vec`, `Mat`, `Mat.mulVec`/`mul`/`transpose`/`outer`, `basisVec` |
+| Differentiation | `pdiv` and its rules (`pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_reindex`, …); the linear-map kits `pdiv_clm` / `pdiv_of_affine` / `pdiv_of_linear`, `pdiv_elementwise`, `pdiv_finset_sum`, `pdiv_const_smul` |
+| VJP Framework, Pointwise VJP | `HasVJP` (global) and `HasVJPAt` (at a point), `canonical`, `backward_unique`, `vjp_comp` / `vjp_comp_at` / `vjp_comp_diff_at` and their `_backward` peels, `biPath` |
+| flattening | `Mat.flatten` / `unflatten` with `_apply` and `@[simp]` round-trips, `sum_finProdFinEquiv` |
+| Matrix-level | `pdivMat`, `HasVJPMat`, `vjpMat_comp`, row-independence (`pdivMat_rowIndep*`, `rowwise_has_vjp_mat`), column slabs, `HasVJPMat3`, and the matmul / scale / transpose VJPs attention uses |
+| 3D tensors | `Tensor3`, `pdiv3`, `HasVJP3` / `HasVJPAt3` and `hasVJP3_to_hasVJP` — nets compose at `Vec` through it |
+
+Zero project axioms: everything closes under `propext`, `Classical.choice`, `Quot.sound`.
 -/
 
 open Finset BigOperators
@@ -181,7 +184,7 @@ theorem pdiv_const_smul {m n : Nat} (c : ℝ) (f : Vec m → Vec n) (x : Vec m)
   ring
 
 -- ════════════════════════════════════════════════════════════════
--- § The mean the collective computes
+-- § Linear-map and elementwise kits, the finite-sum rule, the scalar-multiple rule
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Elementwise rule** — a scalar function applied to every coordinate has a diagonal

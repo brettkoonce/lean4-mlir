@@ -70,7 +70,7 @@ namespace Proofs
     VJP math this doesn't matter — `gamma` and `beta` still just scale and
     shift the normalized output pointwise.
 
-    MLIR (`MlirCodegen.lean` `emitLayerNormForward` around line 652):
+    MLIR (`MlirCodegen.emitLayerNormForward`):
     identical reduction structure to BN, just across a different axis. -/
 noncomputable def layerNormForward (n : Nat) (ε : ℝ) (γ β : ℝ)
     (x : Vec n) : Vec n :=

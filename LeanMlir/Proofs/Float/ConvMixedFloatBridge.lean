@@ -1,5 +1,9 @@
-/-
-**Mixed-precision CONVOLUTION forward error** — the accuracy half of the bf16 conv ops in
+import LeanMlir.Proofs.Float.FloatBridge
+import LeanMlir.Proofs.Architectures.CNN
+
+/-! # Mixed-precision convolution forward error
+
+The accuracy half of the bf16 conv ops in
 `Proofs.StableHLO` (`BatchableOp.convBf16`, `flatConvFBf16`, and the dgrad/wgrad twins).
 
 `FloatBridge` stops at dense: it has `dot_close_mixed` / `dense_close_mixed` and no conv peer,
@@ -32,8 +36,6 @@ layer. Set the accumulate to bf16 as well and `((1+u)^(n+1) − 1)` at n=4608 is
 bound that says nothing at all. That contrast is the whole argument for bf16-mixed over bf16:
 the `1/u` fan-in wall sits at the ACCUMULATE precision, which stays fp32.
 -/
-import LeanMlir.Proofs.Float.FloatBridge
-import LeanMlir.Proofs.Architectures.CNN
 
 open Finset BigOperators
 namespace Proofs

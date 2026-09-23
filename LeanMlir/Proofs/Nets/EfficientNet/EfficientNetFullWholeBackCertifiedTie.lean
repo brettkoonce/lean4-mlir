@@ -33,18 +33,13 @@ there is no smooth point: swish and the SE sigmoid are differentiable everywhere
    witnesses for one map have one backward, so the tactic-built whole-net witness never has to
    be unfolded. ⭐ That is what the representative's file could not do — it stopped at a
    `▸`-transported `_committed` witness that the kernel could not reduce through — and the
-   difference is not depth but `backward_unique`, which was proved for ConvNeXt-T's tie.
+   difference is not depth but `HasVJP.backward_unique` (`Tensor.lean`).
    `efficientnetInputGradB_full_correct` then reads the result through
    `efficientnetForwardB_full_has_vjp_correct`, whose proof IS the shape check
    `efficientnetForwardB_full_eq_chain`: the hand-written chain is the `pdiv`-contracted
    Jacobian of `efficientnetForwardB_full` at every input, every cotangent and every pixel.
 
-⭐ **General `N`.** `bnBatchLA_has_vjp` exists at every batch size, so the tie does; this is
-the certified chain's property, not the float chain's (`EfficientNetBackFloatBudget.lean`'s
-number is at `N = 1` for a reason that does not apply here).
-
-⛔ **No backward number at sixteen blocks.** `b0_full_back_chain`'s certified window at the
-shipped leaves is `9.112·10²⁶⁴⁸`; the float file this imports says why it is not written down.
+⭐ **General `N`.** `bnBatchLA_has_vjp` exists at every batch size, so the tie does.
 -/
 
 namespace Proofs

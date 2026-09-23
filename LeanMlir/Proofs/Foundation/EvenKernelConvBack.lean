@@ -19,14 +19,14 @@ padding convention.) Every other net is all-odd: R34 7×7/3×3/1×1, MobileNetV2
 EfficientNet-B0 1×1/3×3/5×5.
 
 ⚠⚠ **The codegen tier already knew.** `StableHLO.lean`'s `.convStridedBack` emitter pads
-ASYMMETRICALLY, `[[kH-1-pH, pH]]`, in both the per-example (:6120) and the batched (:8248) arms,
+ASYMMETRICALLY, `[[kH-1-pH, pH]]`, in both its per-example (`.convStridedBack`) and batched (`.convStridedBackBatched`) arms,
 and the batched one says so in as many words — *"The symmetric `[[p,p],[p,p]]` this emitted AGREES
 at every odd kernel and is WRONG at even ones (kH=2 ⇒ `[[0,0]]` where the VJP needs `[[1,0]]`) …
 Found by the whole-net backward tie"*. Its `den` is `(flatConvStride2_has_vjp W b).backward`, the
 certified VJP, so the EMITTED ConvNeXt backward is correct and nothing trained is affected. What
 was never carried across is the third spelling of the same map — `BackwardMaps.lean`'s
 `flatConvStride2Back` / `flatConvStride4Back`, which are `convFlatBack ∘ scatter` at the SYMMETRIC
-pad. ⭐ That is `imagenet_specs_drift_from_twins` in its "a fix landed on one tier and its twin
+pad. ⭐ That is the recurring twin-drift pattern in its "a fix landed on one tier and its twin
 kept the old spelling" form, for the third time
 (`planning/archive/float_budget_numbers_log.md` §3.10's pool and §3.16's head LayerNorm were the first two) —
 and here the fix landed on TWO tiers and missed the third.

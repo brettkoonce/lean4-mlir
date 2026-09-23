@@ -3,11 +3,13 @@ import LeanMlir.Spec
 
 set_option maxRecDepth 2000
 
-/-! MLIR (StableHLO) code generator: emit MLIR modules from `NetSpec`.
+/-! MLIR (StableHLO) code generator for the REFERENCE path: emit MLIR modules from a `NetSpec`
+    at run time. Unverified — the verified path renders `verified_mlir/` from the proof side
+    (`LeanMlir/Proofs/Codegen/`) instead.
 
-    Supports MLPs (`.dense`) and CNNs (`.conv2d`, `.maxPool`, `.flatten`).
-    Walks layers tracking the current activation shape. For CNNs with a flat
-    input, emits a reshape to (batch, ic, imageH, imageW) at the head.
+    Covers every `Layer` constructor (dense, conv, BN, depthwise, MBConv/SE, UIB, attention,
+    …). Walks layers tracking the current activation shape; for a flat input it emits a reshape
+    to (batch, ic, imageH, imageW) at the head.
 
     Layout: NCHW tensors, OIHW kernels (matches the JAX codegen convention).
     Params are interleaved as (W0, b0, W1, b1, ...) in the function signature,

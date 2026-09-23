@@ -22,21 +22,22 @@ require «doc-gen4» from git
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4" @ "v4.34.0"
 
--- The everything-root: codegen + IREE FFI + trainers' shared modules +
--- the proof suite, all pulled in transitively via `LeanMlir.lean`.
--- `lake build LeanMlir` type-checks the whole repo.
+-- The umbrella root: codegen + runtime FFI + trainers' shared modules + the part of the
+-- proof suite `LeanMlir.lean` imports (the per-chapter headline modules — ~90 of the 261
+-- `LeanMlir/` modules). NOT the whole repo: `Certs` below is the full proof corpus, `Apps`
+-- the entry points.
 lean_lib «LeanMlir» where
   roots := #[`LeanMlir]
 
 -- Scoped targets, so CI and contributors can build one slice without the
--- rest. `LeanMlir` above is all-or-nothing; these split it along the same
--- seam the codebase already has (the proof suite imports only Mathlib —
--- never the codegen — so `Proofs` skips Types/Spec/MlirCodegen/Train).
+-- rest, along the seam between the proof suite and the program side. `Proofs` reaches no
+-- program module. `Certs` does reach seven (VerifiedSpec/VerifiedNets/VerifiedTrain and the
+-- runtime under them), through `Foundation/SpecVJP`, the executable-spec ↔ proof bridge.
 
 /-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
     every demo's import cone actually reaches (StableHLO/IR + the per-net
     op/VJP modules the proven renderers are built on) plus every renderer the
-    CI drift guard re-elaborates. 23 roots, builds in minutes. The
+    CI drift guard re-elaborates. 22 roots, builds in minutes. The
     certificate corpus lives in `Certs` below and is checked by its own
     workflow (.github/workflows/certs.yml: proof-path pushes + nightly cron),
     so demo/book/engine pushes stop paying the multi-hour corpus tail.
@@ -68,8 +69,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ViTRender,
              `LeanMlir.Proofs.Codegen.ViTRenderB]
 
-/-- **`lake build Certs`** — the certificate corpus (195 roots reaching 229 modules,
-    ~135k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
+/-- **`lake build Certs`** — the certificate corpus (192 roots reaching 223 proof modules,
+    ~133k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
     Muon, the float model, …): the VJP proof suite's apex modules; their transitive
     imports cover every proof file (they subsume the `Proofs` roots above, so
     building `Certs` builds everything the axiom audit needs). Built +
@@ -279,8 +280,11 @@ lean_lib «Certs» where
     gets its OWN workflow (.github/workflows/certs-heavy.yml: weekly cron +
     on-demand + pushes touching these files) so it can never break the core.
     Results (all 3-axiom, audited by tests/AuditAxiomsHeavy.lean): L2 capped
-    σ≤2 92/100 @ ε=0.1 → LipSDP 93/100 = the PGD bound (sandwich closed);
-    IBP pixel-L∞ 92/88/69/24 per 100 at ε = 1/2/4/8 /255 (PGD 93/93/92/88). -/
+    σ≤2 92/100 @ ε=0.1; IBP pixel-L∞ 92/88/69/24 per 100 at ε = 1/2/4/8 /255
+    (PGD 93/93/92/88). ⚠ The full-input LipSDP files (`LipschitzCertScorecardSDPFull{,Uncon}`,
+    93/100 = the PGD bound) are NOT roots here: their linarith PSD witnesses OOM the runners
+    (planning/archive/certs_heavy_psd_memory.md), so no lib builds them and their audit lines
+    are commented out. -/
 lean_lib «CertsHeavy» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Certificates.LipschitzCertScorecardFull,
@@ -301,8 +305,10 @@ lean_lib «ProofsMinimal» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Nets.Small.LinearFold, `LeanMlir.Proofs.Training.SgdDescentLinear]
 
-/-- **`lake build Codegen`** — the Lean→MLIR codegen + spec core, no proofs.
-    The half that actually emits StableHLO and runs on device. -/
+/-- **`lake build Codegen`** — the REFERENCE path's codegen + spec core, no proofs:
+    `MlirCodegen` (NetSpec → MLIR at run time, unverified) and the modules around it. It does
+    not build the verified path (`VerifiedSpec`/`VerifiedNets`/`VerifiedTrain`, which load
+    `verified_mlir/`) or anything in `LeanMlir/Proofs/Codegen/`, and no CI job uses it. -/
 lean_lib «Codegen» where
   srcDir := "."
   roots := #[`LeanMlir.MlirCodegen, `LeanMlir.Train, `LeanMlir.Spec,

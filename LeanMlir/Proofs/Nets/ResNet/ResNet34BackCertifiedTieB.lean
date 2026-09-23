@@ -548,7 +548,7 @@ theorem r34InputGradB_correct (N : Nat) {nCls : Nat}
     one statement the kernel checks.
 
     It goes through `resnet34ForwardB_full_eq_chain` (4.1d) for the depth-16 half and then unfolds
-    the named prefixes; the MobileNetV2 peer is `mobilenetv2ForwardPaper_eq_slots`. -/
+    the named prefixes. -/
 theorem resnet34ForwardB_full_eq_slots (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
     resnet34ForwardB_full N w x

@@ -7,7 +7,7 @@ import LeanMlir.E4M3Quant
 
 Every `Main*Verified.lean` trains a network on **pre-rendered, audited** StableHLO
 (`verified_mlir/<slug>_{train_step,fwd}.mlir`, emitted offline by `tests/Test*` from
-the proof stack) through the IREE FFI. Unlike the reference `NetSpec`/`Train.lean`
+the proof stack) through the runtime FFI (PJRT by default, IREE optionally). Unlike the reference `NetSpec`/`Train.lean`
 path — which *generates* the MLIR at runtime — the verified path consumes a fixed
 codegen artifact, so a verified "model definition" is just:
 
@@ -22,8 +22,9 @@ boilerplate (compile → sessions → load → init → train/eval loop) that ev
 used to copy. A trainer is now a `VerifiedNet` value + a `VerifiedConfig` + a one-line
 `main`, mirroring the shape of `MainResnetTrain.lean`.
 
-NB the learning rate is **baked into the rendered train-step MLIR** — `VerifiedConfig.lr`
-is for the banner only; changing it does not change training (re-render to change lr).
+NB `VerifiedConfig.lr` is for the banner only. The SGD-inline train steps bake the learning rate
+into the rendered MLIR (re-render to change it); the Adam-family steps take it as a runtime operand,
+from `trainAdamSched`'s own `baseLR` argument and schedule.
 -/
 
 /-- Which dataset a verified trainer runs on. Picks the loader, the eval-split name,
@@ -51,8 +52,8 @@ inductive VerifiedData where
       transform is still single-definition — it is generated from the same `TrainConfig` the
       reference trainer runs — but WHICH definition is now a property of the net.
 
-      The VAL split IS preloaded (49,920 imgs after tfds `drop_remainder` ⇒ 30 GB, which fits), so
-      the eval loop is unchanged. 49,920 is the same count the reference run reported. -/
+      The VAL split is streamed per pass too (`spawnValStream`); 49,920 images after tfds
+      `drop_remainder`, the same count the reference run reported. -/
   | imagenet
 deriving BEq, Repr
 
@@ -175,8 +176,8 @@ structure VerifiedConfig where
       this buys ~2 h over 300 epochs — not the hours the reference's tfds pipeline rebuild cost.
       `LEAN_MLIR_VAL_EVERY=<n>` overrides it at launch, like `LEAN_MLIR_MAX_EPOCHS`. -/
   valEveryEpochs : Nat := 1
-  /-- Learning rate. DISPLAY ONLY — baked into `<slug>_train_step.mlir`; changing it
-      here does not change training (re-render the MLIR to change lr). -/
+  /-- Learning rate. DISPLAY ONLY — SGD-inline steps bake it into `<slug>_train_step.mlir`;
+      `trainAdamSched` takes its own `baseLR`. Changing it here does not change training. -/
   lr        : Float := 0.1
   /-- timm/DeiT ViT weight init — the verified peer of `TrainConfig.vitInit`, i.e. of the
       `deit-init` recipe the phase-2 reference run used (blueprint §9.6). Every weight at

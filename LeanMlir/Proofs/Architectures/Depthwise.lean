@@ -310,7 +310,7 @@ dims of `dy` become the kernel dims. The only difference is that
 `feature_group_count` is set so the conv stays per-channel.
 
 MLIR (the depthwise variant of the transpose trick is in
-`emitDepthwiseConvBnBackward` around line 1855):
+`MlirCodegen.emitDepthwiseConvBnBackward`):
 
     "For depthwise: dW[c,1,kH,kW] = sum_b input[b,c,:,:] conv grad[b,c,:,:]"
 

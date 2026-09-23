@@ -48,9 +48,9 @@ namespace Proofs.StableHLO
 --
 -- What comes across is exactly what the INFERENCE forward needs, plus the two things other files
 -- read: `bnSite`/`R34Bn` (`ResNet50RenderB` shares the train/eval switch) and the signature lists
--- (`r34SigList` is the single source for the arg order of every r34 artifact). ⭐ `bnSite` keeps
--- BOTH modes: `.train` is dead for ResNet-34 now and live for ResNet-50, whose bottleneck forward
--- is the same switch one net over.
+-- (`r34SigList` is the single source for the arg order of every r34 artifact). ⚠ `bnSite`'s `.train`
+-- arm is dead for BOTH nets: every caller passes `.eval` (ResNet50RenderB says so at `r50FwdChain`),
+-- and `.train` would emit per-example BatchNorm. Kept only until the eval chains drop the mode.
 --
 -- ⚠ The eval forward does NOT move onto the batched chain, and could not meaningfully: frozen
 -- per-channel statistics reduce nothing, so `bnPerChannelEvalF` is BatchNorm-world-agnostic and

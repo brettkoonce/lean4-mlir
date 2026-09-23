@@ -72,8 +72,9 @@ them, and MobileNetV2 is the TF-origin net.
   and `MobileNetV2FullBVJP.lean` (§4.2b) closed that the same day. Either way a
   `den = certified gradient` fold is about one op and its free cotangent, and says nothing about
   which whole-net forward produced that cotangent.
-* `mobilenetv2in_*dp*` is four replicas: the all-reduce is emitted text outside the AST, so these
-  lemmas are about the per-replica gradient node.
+* `mobilenetv2in_*dp*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
+  gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
+  it averages.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR

@@ -19,7 +19,7 @@ The famous result we'll derive: the input gradient collapses to a single
 **three-term closed form** that doesn't expose the individual contributions
 from `mean` and `variance`. This is the "consolidated" BN backward formula
 that every ML framework hard-codes (because deriving it on the fly is a
-pain). It's what `MlirCodegen.lean` emits at line 799:
+pain). It's what `MlirCodegen.emitConvBnBackward` emits:
 
     %cbg_t5 = istd * (N * d_xhat - sum(d_xhat) - xhat * sum(d_xhat * xhat))
     %cbg_dconv = (1/N) * %cbg_t5
@@ -187,7 +187,7 @@ noncomputable def bnXhat (n : Nat) (ε : ℝ) (x : Vec n) : Vec n :=
     Without them, BN would force every layer's output to have mean 0,
     variance 1 — too constraining.
 
-    MLIR (`MlirCodegen.lean` lines 723–728):
+    MLIR (`MlirCodegen.emitConvBnTrain`):
       %cbn_g_bc  = broadcast %g
       %cbn_gn    = multiply %cbn_norm, %cbn_g_bc
       %cbn_bt_bc = broadcast %bt
@@ -230,7 +230,7 @@ theorem bnForward_const {n : Nat} (hn : 0 < n) (ε γ β c : ℝ) :
     This is just an inner product of `dy` with `x̂` — no mean/variance
     chain-rule trickery, because γ doesn't enter the reduction.
 
-    MLIR (`MlirCodegen.lean` lines 766–768):
+    MLIR (`MlirCodegen.emitConvBnBackward`):
       %cbg_gn = multiply %effGrad, %cbn_norm
       %d_g    = reduce add %cbg_gn across dimensions = [0, 2, 3]
 -/
@@ -242,7 +242,7 @@ noncomputable def bn_grad_gamma (n : Nat) (ε : ℝ) (x : Vec n) (dy : Vec n) : 
     `β` is added to every output, so `∂yᵢ/∂β = 1` and the gradient is
     just the sum of the output cotangents. Even simpler than dγ.
 
-    MLIR (line 770):
+    MLIR (same function):
       %d_bt = reduce add %effGrad across dimensions = [0, 2, 3]
 -/
 noncomputable def bn_grad_beta (n : Nat) (dy : Vec n) : ℝ := ∑ i : Fin n, dy i
@@ -312,7 +312,7 @@ instead of O(N²). And it's exactly what the MLIR emits.
     where `dx̂ᵢ = γ · dyᵢ` (gradient pulled back through the affine
     layer first).
 
-    This matches `MlirCodegen.lean` lines 794–801:
+    This matches `MlirCodegen.emitConvBnBackward`'s `%cbg_t*` chain:
       %cbg_t1 = N * d_xhat
       %cbg_t2 = %cbg_t1 - sum(d_xhat)              -- subtract mean
       %cbg_t3 = xhat * sum(xhat * d_xhat)
@@ -826,8 +826,8 @@ noncomputable def bnNormalize_has_vjp (n : Nat) (ε : ℝ) (hε : 0 < ε) :
         dxᵢ = (1/N · istd) · (N · dx̂ᵢ − …)     (from bnNormalize_has_vjp)
 
     The composition is exactly the two-step backward pass that the
-    MLIR emits: lines 773 (`d_norm = grad * gamma_bc`) followed by
-    lines 794–801 (the consolidated three-term formula).
+    MLIR emits (`MlirCodegen.emitConvBnBackward`): `d_norm = grad * gamma_bc` followed by
+    the consolidated three-term formula.
 -/
 noncomputable def bn_has_vjp (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     HasVJP (bnForward n ε γ β) := by

@@ -414,7 +414,7 @@ noncomputable def rowSoftmax_has_vjp_mat' (m n : Nat) :
 
     `sdpa Q K V = softmax_row(Q * K^T / sqrt(d)) * V`
 
-    MLIR (`emitMHSAForward`, lines 754-781):
+    MLIR (`MlirCodegen.emitMHSAForward`):
       %mh_sc   = dot_general %mh_q, %mh_k, contracting_dims = [3] x [3]
       %mh_ss   = multiply %mh_sc, broadcast(1/sqrt(d))
       %mh_sm   = softmax(%mh_ss) -- via reduce max, shift, exp, reduce sum, divide
@@ -1335,7 +1335,7 @@ noncomputable def gelu_per_token_has_vjp_mat (N D : Nat) :
 
 /-! ## A transformer encoder block
 
-From `emitTransformerBlockForward` (line 796 of MlirCodegen.lean):
+From `MlirCodegen.emitTransformerBlockForward`:
 
     block(x) = h1 + MLP(LN2(h1))       where h1 = x + MHSA(LN1(x))
 

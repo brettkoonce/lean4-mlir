@@ -1,9 +1,8 @@
-/-! Lean FFI bindings for the IREE runtime.
+/-! Lean FFI bindings for the lowerer runtime — PJRT/XLA by default, IREE optionally
+    (`LowererSession` is lowerer-agnostic).
 
-    Links to `libiree_ffi.so` (thin wrapper) + IREE runtime via the Lean shim
-    in `ffi/iree_lean_ffi.c`. Exposes:
-      - `LowererSession.create` — load a .vmfb, bind to CUDA device
-      - `LowererSession.mlpForward` — MLP-specific forward pass (MNIST shape) -/
+    Links through the Lean shim in `ffi/`. Also holds the verified nets' parameter-layout
+    tables (`*Layout`), which the trainers and `VerifiedSpec` read. -/
 
 /-- Opaque handle to an IREE runtime session (module + device). -/
 private opaque LowererSessionPointed : NonemptyType

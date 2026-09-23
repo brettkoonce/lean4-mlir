@@ -43,8 +43,8 @@ instantiating a tie of this shape at the concrete blocks is a KERNEL determinist
 witnesses are `HasVJPAt` carrying a saved activation. B0 takes that step only because swish has no
 kink. The shape check is what replaces it.
 
-⛔ **What this does NOT reach.** `resnet50in160_lambaccdp8x64bce` all-reduces every gradient as text
-outside the AST, so this is at the per-replica gradient (§4d). And it is about the INPUT gradient;
+⛔ **What this does NOT reach.** `resnet50in160_lambaccdp8x64bce` all-reduces every gradient
+(`allReduceMeanF`), and this is at the per-replica gradient before it (§4d). And it is about the INPUT gradient;
 the 161 parameter gradients are `ResNet50StepTieB.lean`'s tie (§3.5c).
 -/
 

@@ -21,7 +21,7 @@ r34 uses **relu** (one kink, at 0): its VJP is only the *pointwise*
 pre-activation — simpler than relu6's two-sided `x k ≠ 0 ∧ x k ≠ 6`, but the same
 `_at` machinery (`vjp_comp_at` + `HasVJP.toHasVJPAt`). Its per-op backward token
 is `.selectPos` (the mask `if x>0 then dy else 0`), whose denotation faithfulness
-is the already-proven (`rfl`) `selectPos_faithful` (`StableHLO.lean:782`).
+is the already-proven (`rfl`) `StableHLO.selectPos_faithful`.
 
 Because there are TWO relu kinks (the body's mid-relu AND the outer post-residual
 relu), the whole-block VJP and its backward-graph faithfulness are `_at` /

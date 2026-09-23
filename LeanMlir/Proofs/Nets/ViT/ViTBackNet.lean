@@ -3,26 +3,10 @@ import LeanMlir.Proofs.Nets.ViT.ViTBackB0
 
 /-! # ViT folded — the last net onto `CertLayer`, and the first one folded END TO END
 
-`BackNetFolds.lean` deliberately left ViT out (*"its blocks are per-token `Mat`-shaped with a
-different backward vocabulary … a separate sitting"*). This file is that sitting.
-
-## ⚠⚠ FIRST, A CORRECTION TO THE LEDGER — ViT was never the LEAST folded net, it was the MOST
-
-`CertifiedChain.lean`'s header says *"Measured before writing this file: **nothing** in
-`LeanMlir/Proofs/` folds those blocks into a stage or a net"*. That is **wrong**, and ViT is the
-counterexample:
-`ViTBackB0.lean` has carried the depth-`k` tower backward graph `vitBodyBackGraphKMHV` and the
-whole-net graph `vitNetBackGraph` (patchEmbed → tower → final vec-LN → classifier, at **every**
-depth) since before either file existed; this file's `vitNetBackGraph_faithful`, which ties the
-whole-net graph to the whole-net VJP, is in
-[`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean).
-
-So the accurate statement of what the other six nets have is *block capstones*; ViT alone had a concrete whole-net backward graph tied to the whole-net VJP,
-stem and head included. What ViT lacked was not the fold — it was the **generic** fold: its tower
-was a bespoke induction that no other net could reuse and that reused nothing.
-
-⭐ **This file closes that, and the closing is a THEOREM, not a re-implementation.**
-`vitTrunkV_graph` proves the generic `CertLayer` chain produces the hand-written
+ViT's whole-net backward graph `vitNetBackGraph` (patchEmbed → tower → final vec-LN →
+classifier, at every depth) predates `CertifiedChain`; what it lacked was the **generic** fold —
+its tower was a bespoke induction no other net could reuse. This file derives it from the generic
+one: `vitTrunkV_graph` proves the `CertLayer` chain produces the hand-written
 `vitBodyBackGraphKMHV` **term for term**, and `vitTrunkV_fwd` proves its forward is the shipped
 `vitBodyKVFlat`. So the bespoke induction is not replaced and not trusted alongside the generic
 one — it is *derived* from it.
@@ -44,12 +28,11 @@ constant. The two sublayers now compose as subgraphs, and so do successive block
 attention arm, not between blocks, so it does not block composition — but it is the next thing to
 generalize if the graphs are ever to be emitted rather than only denoted.
 
-## ⭐⭐ AND THE FOLD RUNS IMAGE → LOGITS — the first one in the repo that does
+## ⭐⭐ The fold runs image → logits
 
-No conv net's fold runs that far. §8b records why for R50: the stem is blocked on a **proof** gap (no den-level faithfulness for the batched `maxPool3s2BackB`
-graph — a pool is kinked wherever a window ties), and the head is simply unbuilt. ViT has neither
-obstacle, because its stem is an affine patchify conv and its head is a CLS slice plus a dense —
-both linear, so both backward graphs are activation-independent.
+ViT's stem is an affine patchify conv and its head is a CLS slice plus a dense — both linear, so
+both backward graphs are activation-independent. (ResNet-34/50 now fold image → logits too, as
+`r34NetLayer` / `r50NetLayer`, stem pool included; ViT was first.)
 
 So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head` is one `CertLayer`, assembled by `comp` alone,
 and `vitNetBackGraph_faithful` (the whole-net capstone) follows from it —
@@ -179,15 +162,11 @@ theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
 -- § ⭐⭐ THE STEM AND THE HEAD — so the fold runs IMAGE → LOGITS
 -- ════════════════════════════════════════════════════════════════
 
-/-! No other net has this: §8b records R50's stem as blocked on a **proof** gap (no den-level faithfulness for the
-batched `maxPool3s2BackB` graph — a pool is kinked wherever a window ties), and the head is
-simply unbuilt. ViT has neither obstacle: its stem is an affine patchify conv and its head is
-GAP-free (a CLS slice + dense), so both are linear and their backward graphs are
-activation-independent. -/
+/-! ViT's stem is an affine patchify conv and its head is GAP-free (a CLS slice + dense), so both
+are linear and their backward graphs are activation-independent. -/
 
 /-- **The patch-embedding stem as a `CertLayer`.** ⭐ Its `graph` ignores the saved activation
-    entirely — patchEmbed is affine, so the input-VJP is the same linear map everywhere. That is
-    exactly why ViT's stem is free where R50's is blocked on a maxpool. -/
+    entirely — patchEmbed is affine, so the input-VJP is the same linear map everywhere. -/
 noncomputable def vitPatchEmbedLayer (ic H W patchSize N D : Nat)
     (Wc : Kernel4 D ic patchSize patchSize) (bc cls : Vec D) (pos : Mat (N + 1) D) :
     CertLayer (ic * H * W) ((N + 1) * D) where

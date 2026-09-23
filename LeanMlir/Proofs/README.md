@@ -16,11 +16,11 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 
 | directory | what lives there |
 |---|---|
-| [`Foundation/`](Foundation/) | generic infrastructure: pdiv/HasVJP kit, `Tensor`, `MLP`, `IR`, `SpecVJP`, `CertifiedChain`, `OpaquePrefix`, `BackwardMaps`, the batched-VJP and data-parallel calculus, interval/CROWN bounds |
+| [`Foundation/`](Foundation/) | the roots (`Tensor`: pdiv/HasVJP kit; `MLP`; `DataParallel`; `OpaquePrefix`; `GramQ`, `ListDot`, `Muon*`) plus cross-net kits that sit *above* some nets (`IR`, `CertifiedChain`, `HeadLayers`, `BackwardMaps`, the batched-VJP and data-parallel-sync calculus, `Bf16GradNodes`, interval/CROWN bounds). Directories are by content, not import order: several Foundation files import net files. `SpecVJP` is an apex (the executable-spec ↔ proof bridge), not a starting point |
 | [`Architectures/`](Architectures/) | generic ops: `Attention`, `CNN`, `BatchNorm`, `LayerNorm`, `Depthwise`, `SE`, `Residual`, `MaxPool3s2`, the channel-LN and depthwise backward ties |
 | [`Nets/`](Nets/) | one directory per net family — `Small/` (MNIST linear/MLP/CNN, CIFAR), `ResNet/`, `MobileNet/`, `EfficientNet/`, `ConvNeXt/`, `ViT/`: each net's forward, VJP, folds, step ties and whole-net backward ties |
 | [`Float/`](Float/) | the rounding model: `FloatBridge`, `Binary32Instance`, bf16/E4M3, the ResNet-34 float chain |
-| [`Codegen/`](Codegen/) | proof↔IR bridges, `*Render`, `IRPrint`, `StableHLO` |
+| [`Codegen/`](Codegen/) | `StableHLO` (the `SHlo` AST, its `den` semantics, the printer), the per-net `*Render*` artifact writers, `IRPrint` (a scratch-only execution oracle), and — for now — the ℝ optimizer specs (`AdamStep`, `Lamb`, `GradClip`, …) |
 | [`Certificates/`](Certificates/) | Lipschitz + smoothing scorecards — **machine-emitted**, see its README |
 | [`Training/`](Training/) | `SgdDescent*`, Jacobian seals, trained witnesses |
 
@@ -29,14 +29,14 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 The files here are not one homogeneous suite; they split along the seam
 the lakefile's libs encode (rationale: `planning/archive/repo_shape_deletion_audit.md`):
 
-* **The engine slice — `lake build Proofs`** (~19 files, the default target):
+* **The engine slice — `lake build Proofs`** (22 roots reaching 43 modules, the default target):
   the IR/render layer every demo exe's import cone actually reaches —
   `StableHLO`/`IR`/`Tensor`, the per-net op+VJP modules the proven renderers
   are built on (`Attention`, `CNN`, `MLP`, `BatchNorm`, `MobileNetV2`, …),
   and the renderers CI's drift guard re-elaborates (`*Render`). If you're
   here to understand how "verified trainer" works, this slice is the whole
   story.
-* **The certificate corpus — `lake build Certs`** (201 roots reaching 235 modules, ~153k lines):
+* **The certificate corpus — `lake build Certs`** (192 roots reaching 223 proof modules, ~133k lines):
   research results *about* the engine that no demo imports — the float model (`FloatClose`),
   the §1a tie certificates (`*Fold`/`*StepTie`), trained-net seals, SGD-descent
   capstones, the Lipschitz/LipSDP robustness scorecards, Muon geometry, the
@@ -55,9 +55,9 @@ proved for each net, and the **Linear classifier** shows both in ~650 lines tota
 
 Read these three, in order:
 
-1. [`LinearTrainStep.lean`](Nets/Small/LinearTrainStep.lean) (~250 L) — the linear train-step spec + ops.
-2. [`LinearFold.lean`](Nets/Small/LinearFold.lean) (~145 L) — **capstone**: emitted step = certified math.
-3. [`SgdDescentLinear.lean`](Training/SgdDescentLinear.lean) (~255 L) — **capstone**: that step decreases the loss.
+1. [`LinearTrainStep.lean`](Nets/Small/LinearTrainStep.lean) (~170 L) — the linear train-step spec + ops.
+2. [`LinearFold.lean`](Nets/Small/LinearFold.lean) (~110 L) — **capstone**: emitted step = certified math.
+3. [`SgdDescentLinear.lean`](Training/SgdDescentLinear.lean) (~370 L) — **capstone**: that step decreases the loss.
 
 Build *just* this slice (Linear + the shared foundation it needs, nothing else):
 
@@ -67,19 +67,58 @@ lake build ProofsMinimal
 
 **Foundation (read once; shared by every net — big because reusable, not per-net work):**
 `Tensor.lean` (chain rule / `fderiv`), `StableHLO.lean` (the AST + `den` denotation),
-`FloatBridge.lean`, `IR`/`IRPrint.lean`, `SpecVJP.lean`.
+`FloatBridge.lean`, `IR.lean` (the small-net backward IR; ResNet onward uses `StableHLO`'s `SHlo`).
 
-**Per-net chapters** repeat the Linear pattern in small files (MLP → CIFAR-CNN → ResNet34
-→ MobileNetV2 → EfficientNet → ConvNeXt → ViT), each following a fixed stage vocabulary:
-`*BackB0` (block backward) → `*ChainClose` (pin through depth) → `*Render`/`*RenderPC`
-(forward = math) → `*Close` (param grads) → `*Fold` / `*StepTie` (whole train step)
-→ `*Seal` (nonzero-Jacobian witness; `ResNet34FullBSeal` is one on the full-width batched net).
+### The per-net file chain
 
-**Don't start with the big files:** `SgdDescentCnn.lean` (~6.8k), `Attention.lean` (~3.8k),
-`ViTBackB0.lean` (~2.1k), or the `StableHLO.lean` denotation internals. You do not need any
-of them to understand the approach — `StableHLO.lean` is one big file by design (its `den`
-embeds the whole layer library), so read the small per-net `*Render` files, which specialize
-it, rather than the monolith.
+The four conv nets (ResNet-34, ResNet-50, MobileNetV2, MobileNetV4) share one chain; learn it on
+one and the others read the same:
+
+`*BackB0` → `*FullB` → `*FullBVJP` → `*FullBSeal` → `*StepTieB` → `*BackChains` +
+`*WholeBackCertifiedTieB` → `*SyncB` / `*SyncStepTieB`
+
+| tier | R34 | R50 | MNv2 | MNv4 | ENet-B0 | ConvNeXt-T | ViT-Tiny |
+|---|---|---|---|---|---|---|---|
+| block backward graphs | BackB0 | BackB0 | BackB0 | BackB0 | BackB0 + BackNet | BackB0 (per-example) | BackB0 + BackNet |
+| forward + **T2** graph | FullB | FullB | FullB | FullB | FullB0 | FullT | DepthK (+ VecLN, MultiHead, FwdGraph) |
+| **T1** VJP | FullBVJP | FullBVJP | FullBVJP | FullBVJP | in FullB0 | in FullT | in DepthK |
+| non-degeneracy seal | FullBSeal | FullBSeal | FullBSeal | FullBSeal | — | — | — |
+| **T3** fold (un-fused, batched) | FoldB | R34's | FoldPaperG | the others' | FoldG | FoldGB | FoldGB |
+| **T3** train-step tie | StepTieB | StepTieB | StepTieB | StepTieB | StepTieG | StepTieGB | StepTieGB |
+| **T6** whole-net backward | BackCertifiedTieB | WholeBackCertifiedTieB | WholeBackCertifiedTieB | WholeBackCertifiedTieB | FullWholeBackCertifiedTie | WholeBackCertifiedTieB | WholeBackCertifiedTieB |
+| data-parallel (sync BN) | SyncB / SyncStepTieB | same | same | same | SyncB / SyncStepTieG | — | — |
+
+**Tiers.** T1 = the whole-net VJP exists (`*_has_vjp_at`); T2 = the emitted forward graph denotes
+the net's forward (`*FwdGraph*_faithful`); T3 = every emitted parameter-update node denotes the
+certified gradient step (`*_net_tied*`); T6 = the emitted whole-net backward denotes the net's VJP.
+
+**Suffixes** (what they mean today; several are historical):
+
+| suffix | meaning |
+|---|---|
+| `B` | batched index (`Vec (N * …)`), and for conv nets batch-statistics BatchNorm |
+| `G` | tied at the RAW gradient node (`*GradB`) that every optimizer tail consumes, not the fused `θ − lr·g` node |
+| `GB` | both. ⚠ `B`, `G`, `GB` and `PaperG` all name the same T3 tier — each records which axis differed from that net's first version (R34's `FoldB` is also un-fused; ENet's `FoldG` is also batched) |
+| `B0` | in `*BackB0`: "block backward", a name inherited from the EfficientNet-B0 spike. In `EfficientNetFullB0`: the B0 model |
+| `PC` / `Eval` | per-channel per-example BN / frozen running statistics |
+| `Full` / `Paper` / `T` | paper depth / MobileNetV2's [t,c,n,s] table / ConvNeXt-T |
+| `V`, `MH`, `K` | vector-`[D]` LayerNorm / multi-head / depth-`k` (ViT) |
+| `Xla` | XLA-`SAME` (asymmetric) padding |
+
+Declaration suffixes: `_faithful` / `_den` / `_eq_vjp` all say "this graph denotes that math", at
+graph, gradient-node and backward-chain granularity; `_certified` / `_tied*` are ties to a
+certified step; `…Tied*` are the per-node clause `Prop`s a tie is a conjunction of.
+
+**Namespaces do not follow file names**, for history: `ResNet34FoldB` → `ResNet34PoCB`,
+`ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTiePoCGB`, `ViTStepTieGB` →
+`ViTTiePoCGB`, `EfficientNetStepTieG` → `EnetTiePoCG`, `MobileNetV4StepTieB` → `Mnv4TieB`. The
+`PoC*` namespaces are the production tier. Several kits every net uses live in the file of the
+net that needed them first — `ResNet34PoCB` (the batched gradient-node lemmas), `EnetTiePoC`
+(`reassocB`, `cInB`, the backward link definitions), `ResNet34SyncStepTieB` (the sync-BN twin kit).
+
+**Don't start with the big files:** `SgdDescentCnn.lean` (~6.8k), `Attention.lean` (~2.3k), the
+`StableHLO.lean` denotation internals, or the per-net `*Render*` files (1–2k lines each of
+string assembly, no theorems). Start from a `*FullB` file — the net's forward, stated once.
 
 ## Foundation: Mathlib's `fderiv`
 
@@ -317,15 +356,16 @@ end-to-end oracles in `tests/vjp_oracle/` cover the codegen-emitted
 formula at the kinks.
 
 **Two emit paths.** The kink discussion above is about `MlirCodegen.lean`
-(~7500 lines, zero theorems) — the path the full-recipe `*-train` trainers behind
+(~10,400 lines, zero theorems) — the path the full-recipe `*-train` trainers behind
 the headline accuracy numbers use. The `*-verified` trainers instead consume the
 StableHLO-subset render (the `SHlo` AST + its `den : SHlo n → Vec n` denotation),
 and there the proof↔emitted link is a **theorem**, not just a numerical check:
 for all 12 chapter nets the §1a whole-net ties (`LinearFold`'s
 `poc_train_step_tail_certified` up through `r34_net_tiedB`,
-`mnv2_net_tiedB`, `efficientnet_net_tied`, `cnx_net_tiedGB`, `vit_net_tiedGB` —
-the last two at the gradient nodes every shipped ConvNeXt / ViT artifact emits,
-with `cnx_net_tied_certified` / `vit_net_tied_certified` their SGD-inline forms)
+`mnv2_net_tiedB`, `efficientnet_net_tiedG`, `cnx_net_tiedGB`, `vit_net_tiedGB` —
+the last three at the gradient nodes every shipped EfficientNet / ConvNeXt / ViT artifact emits,
+with `efficientnet_net_tied` / `cnx_net_tied_certified` / `vit_net_tied_certified` their
+SGD-inline forms)
 prove every emitted parameter-update node's `den` equals the certified
 `fderiv`-derived loss-descent step (or its gradient), with the cotangent threaded
 through the **real** forward and the proven per-block VJP backward (residual

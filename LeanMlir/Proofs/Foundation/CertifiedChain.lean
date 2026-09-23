@@ -2,24 +2,11 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # `CertLayer` — composing certified backward graphs, so a NET is one object
 
-Every **conv** net's `*BackB0` file stops at a **block** capstone: `r34DownBlockBackBatchedGraph_-
-faithful`, `mnv2ResidBlockBackBatchedGraph_faithful`, `mbResidBlockBackBatchedGraph_faithful`,
-`cnxDownChBackGraph_faithful`, and (2026-08-10) R50's three. So "the whole-net composed backward"
-as §8 of `planning/archive/mnv4_verified.md` uses the phrase means *block* capstones — which is real, and
-is not a net.
-
-⛔ **CORRECTION (2026-08-10).** An earlier version of this paragraph said *"Measured before
-writing this file: nothing in `LeanMlir/Proofs/` folds those blocks into a stage or a net."*
-**That was wrong, and ViT is the counterexample.** `ViTBackB0.lean` carried a depth-`k` reverse
-fold of the block backward graph (by induction on `k`) and a direct proof of
-`vitNetBackGraph_faithful` (patchEmbed → tower → final vec-LN → classifier, at every depth) the
-whole time, both pinned in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean). The measurement that produced that
-sentence swept the conv nets and generalised — the same inference-by-analogy the MNv4 planning doc
-records being wrong three times.
-
-What ViT genuinely lacked was not a fold but a **reusable** one: its tower was a bespoke induction
-that no other net could use and that reused nothing. `ViTBackNet.lean` closes that, and proves the
-generic chain reproduces the bespoke tower term for term rather than replacing it.
+A `CertLayer` is a layer that carries its own proof that its backward graph denotes its VJP, and
+`CertLayer.comp` composes two of them into a third. Every net's whole backward is built this way
+now: `r34NetLayer` / `r50NetLayer` (stem pool to logits), the MobileNet and EfficientNet chains,
+and ViT's tower (`ViTBackNet`, which proves the generic chain reproduces ViT's earlier bespoke
+induction term for term). The head layers shared across nets are in `HeadLayers`.
 
 ⭐ **The obstacle was never the mathematics; it was that the chaining was open-coded.** Look at any
 `<body>BackBatchedGraph_faithful`: it builds `G₁ x (G₂ (f₁ x) e)`, rewrites with the two component

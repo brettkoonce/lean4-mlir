@@ -17,7 +17,7 @@ the spec). The correspondence, per node:
     .reluBack p n      .selectPos p        relu_at_bridge       (= if p>0 then · else 0)
     .input "%dy"       .cotangent          —
 
-So `emitMlpHlo` below mirrors `IR.emitMlpBack`, whose denotation is proven
+So `mlpHlo` below mirrors `IR.emitMlpBack`, whose denotation is proven
 equal to `mlp_has_vjp_at.backward` (`IR.mlp_whole_bridge`). The printed text
 is therefore the rendering of a proof-backed computation — up to the printer
 (this file, trusted), IREE, and float. (Phase 1: feed the output to IREE.)

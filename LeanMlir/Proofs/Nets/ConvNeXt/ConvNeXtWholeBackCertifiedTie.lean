@@ -18,12 +18,12 @@ all-odd (R34 7×7/3×3/1×1, MobileNetV2 and EfficientNet-B0 1×1/3×3/5×5), an
 embed never routes through `conv2d` at all.
 
 ⚠ **Nothing trained is affected, and the codegen tier already knew.** `StableHLO.lean`'s
-`.convStridedBack` pads ASYMMETRICALLY, `[[kH-1-pH, pH]]`, in both the per-example (:6120) and the
-batched (:8248) arms, and its `den` is the certified VJP; the batched comment names the same
+`.convStridedBack` pads ASYMMETRICALLY, `[[kH-1-pH, pH]]`, in both the per-example (`.convStridedBack`) and the
+batched (`.convStridedBackBatched`) arms, and its `den` is the certified VJP; the batched comment names the same
 quantity — *"the symmetric `[[p,p],[p,p]]` … AGREES at every odd kernel and is WRONG at even ones
 (kH=2 ⇒ `[[0,0]]` where the VJP needs `[[1,0]]`)"*. The fix landed on TWO tiers and never reached
 the third: `BackwardMaps.lean`'s `flatConvStride2Back` / `flatConvStride4Back`, which are
-`convFlatBack ∘ scatter` at the SYMMETRIC pad. ⭐ That is `imagenet_specs_drift_from_twins` in its
+`convFlatBack ∘ scatter` at the SYMMETRIC pad. ⭐ That is the recurring twin-drift pattern in its
 *"a fix landed on one tier and its twin kept the old spelling"* form, for the third time (§3.10's
 pool and §3.16's head LayerNorm were the first two).
 

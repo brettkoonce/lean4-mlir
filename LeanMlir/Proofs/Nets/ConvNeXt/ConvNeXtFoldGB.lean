@@ -60,8 +60,9 @@ node, and `convnextin_adamdpwxclipdrop`, whose accuracy the book quotes, is one 
   `convnext_train_step.mlir`, which stays on the per-example chain (the batched traversal has no
   fused-SGD arm). Re-pointing it at these nodes with `SmoothedLossCot` is 4b's ConvNeXt capstone,
   which this file is the prerequisite for.
-* `convnextin_adamdp*` is four replicas: the all-reduce is emitted text outside the AST, so these
-  lemmas are about the per-replica gradient node (4d).
+* `convnextin_adamdp*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
+  gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
+  it averages (4d).
 * ⛔ SYMMETRIC padding at the three 2×2/s2 downsamples and the 4×4/s4 stem (`flatConvStride2`,
   `flatConvStride4`); ConvNeXt is PyTorch-origin and has no XLA-`SAME` site.
 -/

@@ -18,8 +18,7 @@ Unlike swish (smooth everywhere, GLOBAL `swish_has_vjp`), relu6 has a TWO-SIDED 
 (at 0 and at 6), so its VJP is only the *pointwise* `relu6_has_vjp_at`, conditioned
 on the smoothness hypothesis `∀ k, x k ≠ 0 ∧ x k ≠ 6` at the pre-activation. Its
 per-op backward token is `.selectMid` (the mask `if 0<x<6 then dy else 0`), whose
-denotation faithfulness is the already-proven (`rfl`) `selectMid_faithful`
-(`StableHLO.lean:794`).
+denotation faithfulness is the already-proven (`rfl`) `StableHLO.selectMid_faithful`.
 
 Because relu6's VJP is `_at`, the whole MobileNetV2 stage/body VJP and its backward-
 graph faithfulness are stated in the **`_at` / hypothesis-threaded** form (via
@@ -43,8 +42,7 @@ through; the bn/conv/depthwise pieces stay activation-independent (linear) or gl
   equal, which is right there but wrong one level up: the paper ladder's `b11`
   (64 → 96) and `b17` (160 → 320) are stride-1 bodies with `ic ≠ oc`, and
   `MobileNetV2FullB.lean`'s `mnv2ExpOnlyB` is exactly that shape. Generalising
-  changed no proof — `mnv2DownBodyB` already had this shape, and every existing
-  call site (`BackNetFolds.lean`) is at `ic = oc` and infers it.
+  changed no proof — the downsample body (`mnv2DownBodyB_has_vjp_at`) already had this shape.
 * `mnv2ResidBlockBackBatchedGraph_faithful` — the **CAPSTONE**: the whole batched
   MobileNetV2 inverted-residual block backward graph (body + identity skip) denotes
   the proven `residual_has_vjp_at` of the SE-less body. Mirrors the EfficientNet

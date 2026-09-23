@@ -1,20 +1,25 @@
 import LeanMlir.Proofs.Foundation.MLP
 
-/-! # ℝ → Float32 bridge, Tier 1: standard-model rounding bounds
+/-! # ℝ → Float32 bridge: standard-model rounding bounds (the float tier's root)
 
 Every theorem in `LeanMlir/Proofs/` is over exact reals; the executed kernels
-are binary32. This file is the first bite at that gap, for the toy nets only
-(linear, MLP — the Tier-1 ladder): a **standard-model** formalization of
-rounded arithmetic and forward error bounds for the same `dense`/`relu`
-compositions the train-step proofs certify.
+are binary32. This file is the root of the float tier: a **standard-model**
+formalization of rounded arithmetic, forward error bounds for the `dense`/`relu`
+compositions the train-step proofs certify, and the MLP's float SGD steps
+(`mlp_w2_step_float_close`, …).
+
+The tier, in import order: this file (`FloatModel`, per-op `*_close`) →
+`FloatSubnormalBridge` (`FaithfulFloatModel`, the subnormal-honest superset) →
+`FloatComposeBridge` (`FloatClose`, the one closeness form, and `.comp`) → the per-layer
+bridges (`BnFloatBridge`, `ConvMixedFloatBridge`, `DepthwiseFloatBridge`, the ResNet-34 block) →
+`Binary32Instance` / `RndP` (binary32, bf16, E4M3 as instances).
 
 The model is *hypothesis-style*, like the suite's `0 < ε` / off-the-kink
 hypotheses: a `FloatModel` is any rounding operator `rnd` with relative error
 `u` (`|rnd x − x| ≤ u·|x|`). No project axioms — IEEE-754 binary32
 round-to-nearest satisfies the interface with `u = 2⁻²⁴` **in the normal
 range** (Higham, *Accuracy and Stability*, §2.2; the standard model without
-underflow — the subnormal absolute-error term is future work, as is the
-gradient half). `exactModel` (`rnd = id`, `u = 0`) shows the interface is
+underflow — the subnormal absolute-error term is `FloatSubnormalBridge`'s). `exactModel` (`rnd = id`, `u = 0`) shows the interface is
 inhabited and collapses every bound to `0`.
 
 Design notes, in suite style:

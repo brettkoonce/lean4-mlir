@@ -53,7 +53,7 @@ noncomputable def residual {n : Nat} (f : Vec n → Vec n) : Vec n → Vec n :=
     are easier to train: the gradient floor is `dy` itself, so it can
     never get smaller than the loss gradient at this layer.
 
-    MLIR (`MlirCodegen.lean` residual block backward, around line 1107):
+    MLIR (`MlirCodegen.lean`, the residual-block case of the backward walk):
       The "skip grad" is added to the first convBn of the block — exactly
       `f.back(x, dy) + dy_skip`, where `dy_skip = dy` here.
 

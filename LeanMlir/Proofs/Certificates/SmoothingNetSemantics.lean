@@ -15,7 +15,7 @@ headers. This file closes it:
 * `isOpen_strictRegion` — strict decision regions of continuous logits are
   open;
 * `stdGaussian` full support — `IsOpenPosMeasure` instances for
-  `gaussianReal 0 1` (from `stdGaussian_Ioo_pos`) and for the multivariate
+  `gaussianReal 0 1` (from `gaussianReal_absolutelyContinuous'`) and for the multivariate
   `stdGaussian E` (pushforward of the pi-Gaussian under the surjective
   continuous basis sum; `pi.isOpenPosMeasure` does the product);
 * `argmaxNet_smoothProb_mem_Ioo` — **the `hp` discharge**: ONE strict-argmax
