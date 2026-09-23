@@ -39,8 +39,6 @@ def phiScanNum : List ℕ := [999715201775, 999713473513, 999711739540, 99970999
 /-- The scan literal: the ℕ numerators over `10¹²`. -/
 def phiScanLit : List ℚ := phiScanNum.map (fun n => (n:ℚ)/1000000000000)
 
-set_option maxRecDepth 20000 in
-set_option maxHeartbeats 16000000 in
 /-- The whole grid scan against the flat literal (chunks reassembled;
     the final decide is literal-vs-literal, no panel arithmetic). -/
 lemma phiScanLit_eq : phiScanRev (1/1000) 3300 = phiScanLit := by

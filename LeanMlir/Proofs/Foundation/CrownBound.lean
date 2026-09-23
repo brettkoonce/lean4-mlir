@@ -264,7 +264,7 @@ theorem crown_margin_ge {h k : ℕ} (W2 : Fin k → Fin h → ℝ) (y j : Fin k)
   rw [← Finset.sum_add_distrib, ← Finset.sum_sub_distrib]
   refine Finset.sum_le_sum fun t _ => ?_
   have := hr t (z t) (hz t).1 (hz t).2
-  nlinarith [this]
+  linarith [this]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The capstone

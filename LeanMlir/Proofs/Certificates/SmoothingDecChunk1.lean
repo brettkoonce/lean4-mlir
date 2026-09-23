@@ -11,7 +11,6 @@ processes cap the worst chunk at ~5 GB. -/
 
 namespace Proofs
 
-set_option maxRecDepth 20000 in
 /-- Grid values 550…0 (descending) as NUMERATORS over the common
     denominator `10¹²` (every grid value is `1/2 + Σ (1/1000)·(k/10⁹)`).
     ℕ literals elaborate in ~1 s where flat `ℚ` division literals price
@@ -21,8 +20,6 @@ def phiChunkNum1 : List ℕ := [708868303207, 708525170842, 708181850217, 707838
 
 def phiChunkLit1 : List ℚ := phiChunkNum1.map (fun n => (n:ℚ)/1000000000000)
 
-set_option maxRecDepth 20000 in
-set_option maxHeartbeats 16000000 in
 /-- Chunk 1: grid panels 0…550, kernel-evaluated. -/
 lemma phiScanEq550 : phiScanRev (1/1000) 550 = phiChunkLit1 := by
   decide +kernel

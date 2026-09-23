@@ -214,7 +214,8 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
     A("instead of dying to IBP's per-row `‖·‖₁`.")
     A("")
     A("**Theorem vs. measurement.** Soundness is in the ENGINE")
-    A("(`Foundation/CrownBound.lean`), proved once. The counts above are")
+    A("([`Foundation/CrownBound.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/"
+      "LeanMlir/Proofs/Foundation/CrownBound.lean)), proved once. The counts above are")
     A(f"exact-rational MEASUREMENTS over the first {N_IMG} images; the first")
     A(f"{N_EMIT} certifying images at each radius carry a `CertifiedAtLinf`")
     A("THEOREM, and the aggregate below states only those. Each such image is")
@@ -457,7 +458,7 @@ if __name__ == "__main__":
            "TF": {"e1": 95, "e2": 92, "e4": 85, "e8": 36}}
     emit("SF", *nets["SF"], Xraw, yte, OUTDIR / "LipschitzCertScorecardCrown.lean",
          IBP["SF"], PGD["SF"], "spectrally-capped σ≤2 net (`mlpSF`)",
-         "LipschitzCertScorecardIBP")
+         "LipschitzCertScorecardIBPData")
     emit("TF", *nets["TF"], Xraw, yte, OUTDIR / "LipschitzCertScorecardCrownUncon.lean",
          IBP["TF"], PGD["TF"], "unconstrained net (`mlpTF`)",
-         "LipschitzCertScorecardIBPUncon")
+         "LipschitzCertScorecardIBPData")

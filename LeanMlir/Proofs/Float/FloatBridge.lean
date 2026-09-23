@@ -156,7 +156,7 @@ private theorem step_bound {u st pt S p A C r : ℝ}
   have hfin : (u * u + 2 * u) * |p| ≤ (C * (1 + u) - 1) * |p| := by
     have h4 : (1 + u) * (1 + u) ≤ C * (1 + u) :=
       mul_le_mul_of_nonneg_right h1uC (by linarith)
-    have h5 : u * u + 2 * u ≤ C * (1 + u) - 1 := by nlinarith
+    have h5 : u * u + 2 * u ≤ C * (1 + u) - 1 := by linarith
     exact mul_le_mul_of_nonneg_right h5 hp0
   calc |r - (S + p)|
       ≤ u * |st + pt| + (|st - S| + |pt - p|) := by linarith
@@ -178,8 +178,8 @@ private theorem dense_step_bound {u r dt dxt d bb Sxt SE L e C : ℝ}
   have hb0 : 0 ≤ |bb| := abs_nonneg bb
   have hCu' : (0 : ℝ) ≤ (C - 1) * (1 + u) :=
     mul_nonneg (by linarith) (by linarith)
-  have hC1 : 0 ≤ C * (1 + u) - 1 := by nlinarith [hCu']
-  have hCu : u ≤ C * (1 + u) - 1 := by nlinarith [hCu']
+  have hC1 : 0 ≤ C * (1 + u) - 1 := by linarith [hCu']
+  have hCu : u ≤ C * (1 + u) - 1 := by linarith [hCu']
   have hdtb : |dt| ≤ C * Sxt := by
     have h1 : |dt| ≤ |dt - dxt| + |dxt| := by simpa using abs_sub_le dt dxt 0
     linarith
@@ -317,7 +317,7 @@ theorem dot_close_mixed_uniform (L : FloatModel) {n : ℕ} (x y : Vec n) :
       _ = (1 + L.u) ^ 2 * (|x i| * |y i|) := by ring
   have hsum0 : (0:ℝ) ≤ ∑ i, |x i * y i| :=
     Finset.sum_nonneg fun i _ => abs_nonneg _
-  nlinarith [mul_le_mul_of_nonneg_left hmag hγ0, hsum0]
+  linarith [mul_le_mul_of_nonneg_left hmag hγ0, hsum0]
 
 /-- **Mixed-precision dense layer** — leaf precision `L` on the matmul (the
     `dotMixed`), accumulate precision `M` on the bias add. The deployed
@@ -501,7 +501,7 @@ theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
   have h1 : (1 - x) * Real.exp x ≤ 1 := by
     nlinarith [Real.add_one_le_exp (-x), hp]
   rw [le_div_iff₀ (by linarith : (0:ℝ) < 1 - x)]
-  nlinarith [h1]
+  linarith [h1]
 
 /-- **The classical `γₖ` bound**: for `k·u < 1`,
     `(1+u)^k − 1 ≤ k·u/(1 − k·u)`. Turns the compounded budgets into plain
@@ -523,7 +523,7 @@ private theorem div_one_sub_mono {x y : ℝ} (hxy : x ≤ y)
   have h1 : 0 < 1 - x := by linarith
   have h2 : 0 < 1 - y := by linarith
   rw [div_le_div_iff₀ h1 h2]
-  nlinarith
+  linarith
 
 -- ════════════════════════════════════════════════════════════════
 -- § Uniform-magnitude budgets (closed forms in dims and norms)
@@ -776,7 +776,7 @@ theorem mul_close {xt x yt y ea ec A C : ℝ}
     calc |xt * yt - x * y| = |xt * (yt - y) + y * (xt - x)| := by rw [h1]
       _ ≤ |xt * (yt - y)| + |y * (xt - x)| := abs_add_le _ _
       _ = |xt| * |yt - y| + |y| * |xt - x| := by rw [abs_mul, abs_mul]
-      _ ≤ A * ec + ea * C + ea * ec := by nlinarith
+      _ ≤ A * ec + ea * C + ea * ec := by linarith
   have habs : |xt * yt| ≤ (A + ea) * (C + ec) := by
     rw [abs_mul]
     exact mul_le_mul hxt hyt (abs_nonneg _) (by linarith)
@@ -1486,9 +1486,9 @@ theorem softmaxF_close (fexp : ℝ → ℝ) {eexp : ℝ} {n : ℕ} (z : Vec n)
     sub_nonneg.mpr (M.one_le_pow_one_add_u (n + 1))
   -- numerator sandwich
   have hN_ub : fexp (z k) ≤ (1 + eexp) * Real.exp (z k) := by
-    nlinarith [abs_le.mp (hfexp (z k))]
+    linarith [abs_le.mp (hfexp (z k))]
   have hN_lb : (1 - eexp) * Real.exp (z k) ≤ fexp (z k) := by
-    nlinarith [abs_le.mp (hfexp (z k))]
+    linarith [abs_le.mp (hfexp (z k))]
   have hN0 : 0 ≤ fexp (z k) :=
     le_trans (mul_nonneg (by linarith) (Real.exp_pos _).le) hN_lb
   -- denominator sandwich
@@ -1497,7 +1497,7 @@ theorem softmaxF_close (fexp : ℝ → ℝ) {eexp : ℝ} {n : ℕ} (z : Vec n)
     have h2 : |fexp (z j)| ≤ |fexp (z j) - Real.exp (z j)| + |Real.exp (z j)| := by
       simpa using abs_sub_le (fexp (z j)) (Real.exp (z j)) 0
     rw [abs_of_pos (Real.exp_pos _)] at h2
-    nlinarith [hfexp (z j)]
+    linarith [hfexp (z j)]
   have hSv_err : |(∑ j, fexp (z j)) - ∑ j, Real.exp (z j)| ≤
       eexp * ∑ j, Real.exp (z j) := by
     rw [← Finset.sum_sub_distrib, Finset.mul_sum]
@@ -1519,10 +1519,10 @@ theorem softmaxF_close (fexp : ℝ → ℝ) {eexp : ℝ} {n : ℕ} (z : Vec n)
           simp only [smRho]; ring
   have hS_lb : (1 - smRho M.u eexp n) * (∑ j, Real.exp (z j)) ≤
       M.sum (fun j => fexp (z j)) := by
-    have := abs_le.mp hS_err; nlinarith
+    have := abs_le.mp hS_err; linarith
   have hS_ub : M.sum (fun j => fexp (z j)) ≤
       (1 + smRho M.u eexp n) * ∑ j, Real.exp (z j) := by
-    have := abs_le.mp hS_err; nlinarith
+    have := abs_le.mp hS_err; linarith
   have hSden_pos : 0 < (1 - smRho M.u eexp n) * ∑ j, Real.exp (z j) :=
     mul_pos (by linarith) hD
   have hS_pos : 0 < M.sum (fun j => fexp (z j)) :=
@@ -1573,7 +1573,7 @@ theorem softmaxF_close (fexp : ℝ → ℝ) {eexp : ℝ} {n : ℕ} (z : Vec n)
           mul_le_mul_of_nonneg_left (by linarith) hκ0
         linarith [hκdef]
       rw [le_div_iff₀ (by linarith)]
-      nlinarith [hκρ]
+      linarith [hκρ]
     calc (1 - smKappa M.u eexp n) * softmax n z k
         ≤ ((1 - eexp) / (1 + smRho M.u eexp n)) * softmax n z k :=
           mul_le_mul_of_nonneg_right h3 hs0
@@ -1629,7 +1629,7 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
     linarith
   have hsm0 : 0 ≤ smErr M.u eexp δ n := by
     simp only [smErr]
-    nlinarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp n)]
+    linarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp n)]
   have hy := abs_softmax_sub_oneHot_le_one z label k
   -- the final rounded subtract
   have hsFy : |M.softmaxF fexp zt k - oneHot n label k| ≤ 1 + smErr M.u eexp δ n := by
@@ -1665,14 +1665,14 @@ theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
     sub_nonneg.mpr (M.one_le_pow_one_add_u (10 + 1))
   have hρ : smRho M.u eexp 10 ≤ 18/10000000 := by
     simp only [smRho]
-    nlinarith [mul_le_mul hg11 (by linarith : 1 + eexp ≤ 1 + 1/1000000)
+    linarith [mul_le_mul hg11 (by linarith : 1 + eexp ≤ 1 + 1/1000000)
       (by linarith : (0:ℝ) ≤ 1 + eexp) (by norm_num : (0:ℝ) ≤ 7/10000000)]
   have hρ0 : 0 ≤ smRho M.u eexp 10 := M.smRho_nonneg heexp0
   have hρ1 : smRho M.u eexp 10 < 1 := lt_of_le_of_lt hρ (by norm_num)
   have hκ : smKappa M.u eexp 10 ≤ 3/1000000 := by
     simp only [smKappa]
     rw [div_le_iff₀ (by linarith)]
-    nlinarith
+    linarith
   have hκ0 : 0 ≤ smKappa M.u eexp 10 :=
     div_nonneg (by linarith) (by linarith)
   have hexp : Real.exp (2 * (1/100 : ℝ)) - 1 ≤ 1/49 := by
@@ -1690,7 +1690,7 @@ theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
     simp only [smErr]
     have hexp1 : 1 ≤ Real.exp (2 * (1/100 : ℝ)) := by
       have := Real.add_one_le_exp (2 * (1/100 : ℝ)); linarith
-    nlinarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp 10)]
+    linarith [mul_nonneg hu (by linarith : (0:ℝ) ≤ 1 + smKappa M.u eexp 10)]
   refine (M.softmax_ce_cot_close fexp zt z label heexp0 (by linarith) hfexp
     hρ1 hz k).trans ?_
   simp only [cotErr]
@@ -1760,7 +1760,7 @@ theorem dense_close_mixed_uniform_budget (L : FloatModel) {m n : ℕ}
     have h1 : (0 : ℝ) ≤ (1 + M.u) ^ (m + 1) - 1 :=
       sub_nonneg.mpr (one_le_pow₀ (by linarith))
     have h3 : (0 : ℝ) ≤ 2 * L.u + L.u ^ 2 := by
-      have := L.u_nonneg; nlinarith [sq_nonneg L.u]
+      have := L.u_nonneg; linarith [sq_nonneg L.u]
     rw [hbr]; exact add_nonneg (mul_nonneg h1 (sq_nonneg _)) h3
   have h1u : (0 : ℝ) ≤ 1 + M.u := by linarith
   have step1 : M.u * (S + |b j|) ≤ M.u * ((m : ℝ) * w * a + β) :=
@@ -1807,11 +1807,11 @@ theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
   -- a clean coarse accumulate bound keeps the assembly out of 2⁻²⁴-land
   have hu6 : M.u ≤ 1 / 1000000 := hMu.trans (by norm_num [u32])
   -- the two flat E4M3 leaf pieces at u_leaf ≤ 1/16 (prove these BEFORE hγ:
-  -- nlinarith ring-normalizes every in-scope hypothesis, so a concrete
+  -- linarith ring-normalizes every in-scope hypothesis, so a concrete
   -- `(1+M.u)^785` in context would blow up the 785-fold npow)
   have hprodhint : (0 : ℝ) ≤ L.u * (1 / 16 - L.u) := mul_nonneg hLu0 (by linarith)
-  have hsq : (1 + L.u) ^ 2 ≤ 289 / 256 := by nlinarith [hLu, hLu0, hprodhint]
-  have hleaf : 2 * L.u + L.u ^ 2 ≤ 33 / 256 := by nlinarith [hLu, hLu0, hprodhint]
+  have hsq : (1 + L.u) ^ 2 ≤ 289 / 256 := by linarith [hLu, hLu0, hprodhint]
+  have hleaf : 2 * L.u + L.u ^ 2 ≤ 33 / 256 := by linarith [hLu, hLu0, hprodhint]
   -- the fan-in γ at 784 (cheap via gamma_num; no big-power evaluation)
   have hγ : (1 + M.u) ^ (784 + 1) - 1 ≤ 5 / 100000 :=
     M.gamma_num (k := 784 + 1) hMu (by norm_num [u32]) (by norm_num [u32])

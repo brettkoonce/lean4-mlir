@@ -1,7 +1,4 @@
-import LeanMlir.Proofs.Foundation.IntervalBound
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPData
 
 /-! # IBP L∞ scorecard, full 784-dim input — unconstrained net (`mlpTF`)
 
@@ -35,130 +32,6 @@ namespace Proofs
 namespace LipschitzCertDemo
 
 open scoped BigOperators
-
--- ════════ per-row ℓ1 norms: one kernel `absSumZ` fact each ════════
-
-theorem azTF0 : absSumZ w1zTF0 = 19274 := by decide +kernel
-theorem azTF1 : absSumZ w1zTF1 = 16583 := by decide +kernel
-theorem azTF2 : absSumZ w1zTF2 = 19113 := by decide +kernel
-theorem azTF3 : absSumZ w1zTF3 = 20576 := by decide +kernel
-theorem azTF4 : absSumZ w1zTF4 = 15304 := by decide +kernel
-theorem azTF5 : absSumZ w1zTF5 = 19965 := by decide +kernel
-theorem azTF6 : absSumZ w1zTF6 = 18602 := by decide +kernel
-theorem azTF7 : absSumZ w1zTF7 = 16745 := by decide +kernel
-theorem azTF8 : absSumZ w1zTF8 = 18074 := by decide +kernel
-theorem azTF9 : absSumZ w1zTF9 = 16950 := by decide +kernel
-theorem azTF10 : absSumZ w1zTF10 = 19491 := by decide +kernel
-theorem azTF11 : absSumZ w1zTF11 = 18284 := by decide +kernel
-theorem azTF12 : absSumZ w1zTF12 = 16888 := by decide +kernel
-theorem azTF13 : absSumZ w1zTF13 = 20232 := by decide +kernel
-theorem azTF14 : absSumZ w1zTF14 = 19106 := by decide +kernel
-theorem azTF15 : absSumZ w1zTF15 = 17907 := by decide +kernel
-
-/-- `absrTF t = ‖row t of W1TF‖₁` (data, verified below). -/
-noncomputable def absrTF : Fin 16 → ℝ :=
-  ![((19274 : ℝ)/256), ((16583 : ℝ)/256), ((19113 : ℝ)/256), ((20576 : ℝ)/256), ((15304 : ℝ)/256), ((19965 : ℝ)/256), ((18602 : ℝ)/256), ((16745 : ℝ)/256), ((18074 : ℝ)/256), ((16950 : ℝ)/256), ((19491 : ℝ)/256), ((18284 : ℝ)/256), ((16888 : ℝ)/256), ((20232 : ℝ)/256), ((19106 : ℝ)/256), ((17907 : ℝ)/256)]
-
-theorem absrowTF_0 : (∑ j, |W1TF 0 j|) = absrTF 0 := by
-  rw [show absrTF 0 = ((19274 : ℝ)/256) from rfl, W1TFr0]
-  simp only [w1rTF0]
-  rw [sum_getD_abs_div w1zTF0_len azTF0 (by norm_num)]
-  norm_num
-
-theorem absrowTF_1 : (∑ j, |W1TF 1 j|) = absrTF 1 := by
-  rw [show absrTF 1 = ((16583 : ℝ)/256) from rfl, W1TFr1]
-  simp only [w1rTF1]
-  rw [sum_getD_abs_div w1zTF1_len azTF1 (by norm_num)]
-  norm_num
-
-theorem absrowTF_2 : (∑ j, |W1TF 2 j|) = absrTF 2 := by
-  rw [show absrTF 2 = ((19113 : ℝ)/256) from rfl, W1TFr2]
-  simp only [w1rTF2]
-  rw [sum_getD_abs_div w1zTF2_len azTF2 (by norm_num)]
-  norm_num
-
-theorem absrowTF_3 : (∑ j, |W1TF 3 j|) = absrTF 3 := by
-  rw [show absrTF 3 = ((20576 : ℝ)/256) from rfl, W1TFr3]
-  simp only [w1rTF3]
-  rw [sum_getD_abs_div w1zTF3_len azTF3 (by norm_num)]
-  norm_num
-
-theorem absrowTF_4 : (∑ j, |W1TF 4 j|) = absrTF 4 := by
-  rw [show absrTF 4 = ((15304 : ℝ)/256) from rfl, W1TFr4]
-  simp only [w1rTF4]
-  rw [sum_getD_abs_div w1zTF4_len azTF4 (by norm_num)]
-  norm_num
-
-theorem absrowTF_5 : (∑ j, |W1TF 5 j|) = absrTF 5 := by
-  rw [show absrTF 5 = ((19965 : ℝ)/256) from rfl, W1TFr5]
-  simp only [w1rTF5]
-  rw [sum_getD_abs_div w1zTF5_len azTF5 (by norm_num)]
-  norm_num
-
-theorem absrowTF_6 : (∑ j, |W1TF 6 j|) = absrTF 6 := by
-  rw [show absrTF 6 = ((18602 : ℝ)/256) from rfl, W1TFr6]
-  simp only [w1rTF6]
-  rw [sum_getD_abs_div w1zTF6_len azTF6 (by norm_num)]
-  norm_num
-
-theorem absrowTF_7 : (∑ j, |W1TF 7 j|) = absrTF 7 := by
-  rw [show absrTF 7 = ((16745 : ℝ)/256) from rfl, W1TFr7]
-  simp only [w1rTF7]
-  rw [sum_getD_abs_div w1zTF7_len azTF7 (by norm_num)]
-  norm_num
-
-theorem absrowTF_8 : (∑ j, |W1TF 8 j|) = absrTF 8 := by
-  rw [show absrTF 8 = ((18074 : ℝ)/256) from rfl, W1TFr8]
-  simp only [w1rTF8]
-  rw [sum_getD_abs_div w1zTF8_len azTF8 (by norm_num)]
-  norm_num
-
-theorem absrowTF_9 : (∑ j, |W1TF 9 j|) = absrTF 9 := by
-  rw [show absrTF 9 = ((16950 : ℝ)/256) from rfl, W1TFr9]
-  simp only [w1rTF9]
-  rw [sum_getD_abs_div w1zTF9_len azTF9 (by norm_num)]
-  norm_num
-
-theorem absrowTF_10 : (∑ j, |W1TF 10 j|) = absrTF 10 := by
-  rw [show absrTF 10 = ((19491 : ℝ)/256) from rfl, W1TFr10]
-  simp only [w1rTF10]
-  rw [sum_getD_abs_div w1zTF10_len azTF10 (by norm_num)]
-  norm_num
-
-theorem absrowTF_11 : (∑ j, |W1TF 11 j|) = absrTF 11 := by
-  rw [show absrTF 11 = ((18284 : ℝ)/256) from rfl, W1TFr11]
-  simp only [w1rTF11]
-  rw [sum_getD_abs_div w1zTF11_len azTF11 (by norm_num)]
-  norm_num
-
-theorem absrowTF_12 : (∑ j, |W1TF 12 j|) = absrTF 12 := by
-  rw [show absrTF 12 = ((16888 : ℝ)/256) from rfl, W1TFr12]
-  simp only [w1rTF12]
-  rw [sum_getD_abs_div w1zTF12_len azTF12 (by norm_num)]
-  norm_num
-
-theorem absrowTF_13 : (∑ j, |W1TF 13 j|) = absrTF 13 := by
-  rw [show absrTF 13 = ((20232 : ℝ)/256) from rfl, W1TFr13]
-  simp only [w1rTF13]
-  rw [sum_getD_abs_div w1zTF13_len azTF13 (by norm_num)]
-  norm_num
-
-theorem absrowTF_14 : (∑ j, |W1TF 14 j|) = absrTF 14 := by
-  rw [show absrTF 14 = ((19106 : ℝ)/256) from rfl, W1TFr14]
-  simp only [w1rTF14]
-  rw [sum_getD_abs_div w1zTF14_len azTF14 (by norm_num)]
-  norm_num
-
-theorem absrowTF_15 : (∑ j, |W1TF 15 j|) = absrTF 15 := by
-  rw [show absrTF 15 = ((17907 : ℝ)/256) from rfl, W1TFr15]
-  simp only [w1rTF15]
-  rw [sum_getD_abs_div w1zTF15_len azTF15 (by norm_num)]
-  norm_num
-
-theorem absrowTF : ∀ t, (∑ j, |W1TF t j|) = absrTF t := by
-  intro t
-  fin_cases t <;>
-    [ exact absrowTF_0; exact absrowTF_1; exact absrowTF_2; exact absrowTF_3; exact absrowTF_4; exact absrowTF_5; exact absrowTF_6; exact absrowTF_7; exact absrowTF_8; exact absrowTF_9; exact absrowTF_10; exact absrowTF_11; exact absrowTF_12; exact absrowTF_13; exact absrowTF_14; exact absrowTF_15 ]
 
 -- ════════ per-image certificates ════════
 
@@ -714,17 +587,6 @@ theorem certIBPTFe2_10 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpTF (imgF10 + δ) j < mlpTF (imgF10 + δ) 0 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_10 δ hδ
 
-/-- MNIST test image #11 (digit 6), exact pixels k/255. -/
-def imgz11 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 204, 253, 176, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 150, 252, 252, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 117, 252, 186, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 141, 252, 118, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 154, 247, 50, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 253, 196, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 150, 253, 196, 0, 0, 0, 0, 0, 0, 0, 57, 85, 85, 38, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 225, 253, 96, 0, 0, 0, 0, 0, 151, 226, 243, 252, 252, 238, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 10, 229, 226, 0, 0, 0, 4, 54, 229, 253, 255, 234, 175, 225, 255, 228, 31, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 110, 252, 150, 0, 0, 26, 128, 252, 252, 227, 134, 28, 0, 0, 178, 252, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 159, 252, 113, 0, 0, 150, 253, 252, 186, 43, 0, 0, 0, 0, 141, 252, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 185, 252, 113, 0, 38, 237, 253, 151, 6, 0, 0, 0, 0, 0, 141, 202, 6, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 198, 253, 114, 0, 147, 253, 163, 0, 0, 0, 0, 0, 0, 0, 154, 197, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 197, 252, 113, 0, 172, 252, 188, 0, 0, 0, 0, 0, 0, 26, 253, 171, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 197, 252, 113, 0, 19, 231, 247, 122, 19, 0, 0, 0, 0, 200, 244, 56, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 26, 222, 252, 113, 0, 0, 25, 203, 252, 193, 13, 0, 76, 200, 249, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 185, 253, 179, 10, 0, 0, 0, 76, 35, 29, 154, 253, 244, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 28, 209, 253, 196, 82, 57, 57, 131, 197, 252, 253, 214, 81, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 25, 216, 252, 252, 252, 253, 252, 252, 252, 156, 19, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 103, 139, 240, 140, 139, 139, 40, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-theorem imgz11_len : (imgz11).length = 784 := by decide +kernel
-
-noncomputable def imgv11 : Fin 784 → ℝ := fun j => ((imgz11).getD j 0 : ℝ)/255
-
-noncomputable def imgF11 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv11
-
-theorem imgF11_apply : ∀ j, imgF11 j = ((imgz11).getD j 0 : ℝ)/255 := fun _ => rfl
-
 -- net TF pre-activations for #11 (not in the base L2-certified set)
 theorem pzITF_11_0 : dotZ w1zTF0 imgz11 = 14040 := by decide +kernel
 theorem pzITF_11_1 : dotZ w1zTF1 imgz11 = -530694 := by decide +kernel
@@ -1053,17 +915,6 @@ theorem certIBPTFe2_13 (δ : EuclideanSpace ℝ (Fin 784))
     ∀ j, j ≠ 0 → mlpTF (imgF13 + δ) j < mlpTF (imgF13 + δ) 0 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_13 δ hδ
 
-/-- MNIST test image #19 (digit 4), exact pixels k/255. -/
-def imgz19 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 168, 91, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2, 234, 126, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 51, 254, 126, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 38, 178, 31, 0, 0, 0, 0, 0, 51, 254, 81, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 94, 254, 83, 0, 0, 0, 0, 0, 87, 254, 54, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 160, 254, 56, 0, 0, 0, 0, 0, 189, 238, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 227, 168, 2, 0, 0, 0, 0, 0, 194, 236, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 55, 254, 114, 0, 0, 0, 0, 0, 16, 235, 167, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 115, 254, 50, 0, 0, 0, 0, 0, 103, 254, 105, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 221, 236, 75, 156, 180, 190, 252, 252, 253, 254, 114, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 15, 254, 254, 254, 252, 211, 179, 179, 179, 246, 254, 247, 94, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 8, 217, 239, 117, 22, 0, 0, 0, 0, 226, 254, 242, 197, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 14, 18, 0, 0, 0, 0, 0, 27, 243, 207, 46, 37, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 99, 254, 132, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 254, 67, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 254, 61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 116, 254, 61, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 174, 255, 100, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 187, 254, 83, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 115, 176, 10, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-theorem imgz19_len : (imgz19).length = 784 := by decide +kernel
-
-noncomputable def imgv19 : Fin 784 → ℝ := fun j => ((imgz19).getD j 0 : ℝ)/255
-
-noncomputable def imgF19 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv19
-
-theorem imgF19_apply : ∀ j, imgF19 j = ((imgz19).getD j 0 : ℝ)/255 := fun _ => rfl
-
 -- net TF pre-activations for #19 (not in the base L2-certified set)
 theorem pzITF_19_0 : dotZ w1zTF0 imgz19 = -35247 := by decide +kernel
 theorem pzITF_19_1 : dotZ w1zTF1 imgz19 = 69574 := by decide +kernel
@@ -1391,17 +1242,6 @@ theorem certIBPTFe2_21 (δ : EuclideanSpace ℝ (Fin 784))
     (hδ : ∀ q, |δ q| ≤ ((2 : ℝ)/255)) :
     ∀ j, j ≠ 6 → mlpTF (imgF21 + δ) j < mlpTF (imgF21 + δ) 6 :=
   ibp2_certified_at_eps W1TF W2TF hbTFe2_21 δ hδ
-
-/-- MNIST test image #23 (digit 5), exact pixels k/255. -/
-def imgz23 : List ℤ := [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 69, 152, 237, 254, 254, 255, 254, 252, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 87, 164, 237, 253, 254, 218, 138, 83, 39, 154, 254, 135, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 138, 246, 253, 254, 216, 167, 54, 5, 0, 0, 0, 100, 191, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 233, 254, 169, 53, 6, 0, 0, 0, 0, 0, 0, 35, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 174, 254, 94, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 38, 245, 221, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 142, 254, 149, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 151, 254, 112, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 226, 242, 32, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 12, 240, 203, 44, 44, 44, 44, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 70, 254, 254, 254, 254, 254, 254, 205, 85, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 37, 184, 169, 133, 133, 162, 212, 254, 254, 166, 8, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 9, 51, 177, 254, 125, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 27, 209, 254, 104, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 63, 209, 254, 194, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 6, 0, 10, 137, 244, 254, 198, 52, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 13, 87, 122, 147, 223, 254, 247, 127, 13, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 118, 250, 210, 248, 254, 252, 199, 49, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 138, 254, 254, 254, 250, 201, 72, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 79, 167, 197, 87, 7, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
-
-theorem imgz23_len : (imgz23).length = 784 := by decide +kernel
-
-noncomputable def imgv23 : Fin 784 → ℝ := fun j => ((imgz23).getD j 0 : ℝ)/255
-
-noncomputable def imgF23 : EuclideanSpace ℝ (Fin 784) := WithLp.toLp 2 imgv23
-
-theorem imgF23_apply : ∀ j, imgF23 j = ((imgz23).getD j 0 : ℝ)/255 := fun _ => rfl
 
 -- net TF pre-activations for #23 (not in the base L2-certified set)
 theorem pzITF_23_0 : dotZ w1zTF0 imgz23 = 117335 := by decide +kernel

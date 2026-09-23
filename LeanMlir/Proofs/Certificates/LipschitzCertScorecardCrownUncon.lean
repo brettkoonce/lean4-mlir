@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.CrownBound
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon
+import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPData
 
 /-! # CROWN-IBP L∞ scorecard, full 784-dim input — unconstrained net (`mlpTF`)
 

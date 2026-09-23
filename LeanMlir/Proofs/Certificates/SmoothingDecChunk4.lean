@@ -11,7 +11,6 @@ processes cap the worst chunk at ~5 GB. -/
 
 namespace Proofs
 
-set_option maxRecDepth 20000 in
 /-- Grid values 2200…1650 (descending) as NUMERATORS over the common
     denominator `10¹²` (every grid value is `1/2 + Σ (1/1000)·(k/10⁹)`).
     ℕ literals elaborate in ~1 s where flat `ℚ` division literals price
@@ -26,8 +25,6 @@ lemma phiCp1650 : phiGridUB (1/1000) 1650 = 950676870825/1000000000000 := by
   rw [← phiScanRev_headI (1/1000) 1650, phiScanEq1650]
   decide +kernel
 
-set_option maxRecDepth 20000 in
-set_option maxHeartbeats 16000000 in
 /-- Chunk 4: panels 1650…2200, kernel-evaluated FROM the checkpoint. -/
 lemma phiChunkEq4 :
     phiScanRevFrom (1/1000) 1650 (950676870825/1000000000000) 550 = phiChunkLit4 := by

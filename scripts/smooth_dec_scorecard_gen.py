@@ -182,7 +182,6 @@ def main() -> None:
         C.append("")
         C.append("namespace Proofs")
         C.append("")
-        C.append("set_option maxRecDepth 20000 in")
         C.append(f"/-- Grid values {kc}…{k} (descending) as NUMERATORS over the common")
         C.append("    denominator `10¹²` (every grid value is `1/2 + Σ (1/1000)·(k/10⁹)`).")
         C.append("    ℕ literals elaborate in ~1 s where flat `ℚ` division literals price")
@@ -194,8 +193,6 @@ def main() -> None:
                  f"phiChunkNum{c}.map (fun n => (n:ℚ)/1000000000000)")
         C.append("")
         if c == 1:
-            C.append("set_option maxRecDepth 20000 in")
-            C.append("set_option maxHeartbeats 16000000 in")
             C.append(f"/-- Chunk 1: grid panels 0…{kc}, kernel-evaluated. -/")
             C.append(f"lemma phiScanEq{kc} : phiScanRev (1/1000) {kc} = phiChunkLit1 := by")
             C.append("  decide +kernel")
@@ -206,8 +203,6 @@ def main() -> None:
             C.append(f"  rw [← phiScanRev_headI (1/1000) {k}, phiScanEq{k}]")
             C.append("  decide +kernel")
             C.append("")
-            C.append("set_option maxRecDepth 20000 in")
-            C.append("set_option maxHeartbeats 16000000 in")
             C.append(f"/-- Chunk {c}: panels {k}…{kc}, kernel-evaluated FROM the checkpoint. -/")
             C.append(f"lemma phiChunkEq{c} :")
             C.append(f"    phiScanRevFrom (1/1000) {k} ({v}) {kc - k} = phiChunkLit{c} := by")
@@ -225,6 +220,7 @@ def main() -> None:
         Path(CHUNK_OUT.format(c=c)).write_text("\n".join(C) + "\n")
 
     nums = [num_of(q) for q in reversed(scan)]
+    # The 3300-entry list literal is the one declaration past the default recursion depth.
     L.append("set_option maxRecDepth 20000 in")
     L.append(f"/-- The FULL scan literal's numerators: entry `i` is `phiGridUB (1/1000)")
     L.append(f"    ({N_GRID} − i)` (descending) over `10¹²`. -/")
@@ -233,8 +229,6 @@ def main() -> None:
     L.append("/-- The scan literal: the ℕ numerators over `10¹²`. -/")
     L.append("def phiScanLit : List ℚ := phiScanNum.map (fun n => (n:ℚ)/1000000000000)")
     L.append("")
-    L.append("set_option maxRecDepth 20000 in")
-    L.append("set_option maxHeartbeats 16000000 in")
     L.append("/-- The whole grid scan against the flat literal (chunks reassembled;")
     L.append("    the final decide is literal-vs-literal, no panel arithmetic). -/")
     L.append(f"lemma phiScanLit_eq : phiScanRev (1/1000) {N_GRID} = phiScanLit := by")
