@@ -98,7 +98,7 @@ jobs:
           test -x "$HOME/.elan/bin/elan" || { echo "::error::elan install failed after 3 attempts"; exit 1; }
           echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
 
-      - name: Cache .lake/packages + doc-gen4 output (stable — moves only on `lake update`)
+      - name: Cache .lake/packages (stable — moves only on `lake update`)
         uses: actions/cache@v4
         with:
           path: |
@@ -106,13 +106,21 @@ jobs:
             .lake/build/doc
             .lake/build/doc-data
           # Keyed on manifest + toolchain because that is exactly when THIS content moves: the
-          # Mathlib checkout + oleans and the locally-rebuilt Mathlib doc-gen4 HTML (gigabytes).
-          # An exact-key hit makes actions/cache skip the save, which is correct for this content
+          # Mathlib checkout + oleans and the doc-gen4 toolchain's own build products. An
+          # exact-key hit makes actions/cache skip the save, which is correct for this content
           # and was WRONG for the build products this step used to carry as well: from 2026-08-28
           # to 2026-09-09 the old whole-`.lake` entry hit exactly on every run, never re-saved,
           # and every run rebuilt everything since 08-28 from source (~25 min) before doc-gen4
           # started. cache-prune.yml's "LRU eviction" theory did not survive `gh cache list`: the
-          # entry was read daily. Our own oleans now live in the rolling cache below.
+          # entry was read daily. Our own oleans live in the rolling cache below.
+          # ⭐ So does the doc-gen4 corpus (2026-09-23). The two `.lake/build/doc*` paths date
+          # from doc-gen4 rendering one HTML file per Mathlib module; doc-gen4 v4.34.0 (toolchain
+          # bump 2026-09-18) writes every module's doc data into ONE SQLite file,
+          # `.lake/build/api-docs.db`, with a marker per module under `doc-data/`, and that moves
+          # every run — it lives in the rolling entry, which restores second and overwrites the
+          # stale copy this entry still holds. The paths stay listed anyway: the `path` list is
+          # part of actions/cache's entry VERSION, so editing it makes every existing entry
+          # unreachable and the next run fully cold.
           # -v3: new path layout (the -v2 whole-tree entry is a valid warm start, so it stays a
           # restore fallback until it ages out).
           key: lake-v3-${{ runner.os }}-${{ hashFiles('lake-manifest.json', 'lean-toolchain') }}
@@ -120,7 +128,7 @@ jobs:
             lake-v3-${{ runner.os }}-
             lake-v2-${{ runner.os }}-
 
-      - name: Cache .lake/build (rolling — our oleans, warm from the corpus workflows)
+      - name: Cache .lake/build (rolling — our oleans + the doc-gen4 corpus, warm from the corpus workflows)
         uses: actions/cache@v4
         with:
           path: |
@@ -131,6 +139,13 @@ jobs:
           # built. Restores its own namespace first, then certs.yml's `lake-certs-`: `lake build
           # LeanMlir Certs` here is a superset of `lake build Certs` there, so a certs entry is a
           # warm start, never a wrong corpus. Deliberately NOT `lake-heavy-` or `lake-proofs-`.
+          # ⚠ The two `!` lines are inert, and that is what keeps the site fast (2026-09-23):
+          # actions/cache resolves a bare directory pattern as ONE entry and tar recurses into it,
+          # so the exclusions never see `doc/` or `doc-data/`. This entry therefore carries
+          # `.lake/build/api-docs.db`, the `doc-data/` markers and the rendered HTML from the
+          # previous run — the whole doc-gen4 corpus — and the doc step below replays it in 2–3
+          # min. Leave the list exactly as it is: it is part of the entry version, and certs.yml
+          # uses the same list, which is what makes the `lake-certs-` fallback reachable at all.
           key: lake-blueprint-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
           restore-keys: |
             lake-blueprint-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
@@ -239,36 +254,36 @@ jobs:
           pip install leanblueprint
 
       - name: Build Lean API docs (doc-gen4)
-        # First run after re-enabling takes ~25 min (builds HTML for all
-        # transitive Mathlib declarations). Subsequent runs hit the .lake
-        # cache above and finish in minutes — only our own declarations
-        # rebuild, since Mathlib doc-state doesn't change unless we
-        # `lake update` (which we don't do in CI).
+        # doc-gen4 v4.34.0 (toolchain bump 2026-09-18) is the database architecture: a `docInfo`
+        # facet per module inserts its declarations into `.lake/build/api-docs.db` and drops an
+        # empty marker under `.lake/build/doc-data/`; `LeanMlir:docs` / `Certs:docs` then render
+        # the HTML for the root modules' closure from the db in one `fromDb` pass, gated by a
+        # `<lib>--library.docs_built` marker. The db and markers ride in the rolling cache above,
+        # so a normal run re-inserts only the modules whose oleans moved: 2–3 min. doc-gen4 has
+        # no external-refs-to-hosted-Mathlib-docs, so Mathlib is in the db too (the compromise
+        # Carleson, PNT and FLT make): 3,526 Mathlib + ~260 aesop/batteries/Qq/… modules, ~55 min
+        # on the 4-core runner when they all re-insert.
         #
-        # doc-gen4 doesn't yet support external-refs-to-hosted-Mathlib-docs,
-        # so we have to rebuild Mathlib docs locally. This is the same
-        # compromise Mathlib-adjacent projects (Carleson, PNT, FLT) make.
+        # ⭐ What re-inserted them all (2026-09-23; runs of 47–59 min on 09-22/23): every
+        # `docInfo` trace hashes the doc-gen4 EXE's bytes, and the exe's bytes depended on the
+        # runner image. UnicodeBasic's lakefile builds `libunicodeclib.a` from
+        # `(pkg.dir / "UnicodeCLib").readDir` — unsorted, and Lake mixes the four object traces
+        # in that order — so a new runner image (fresh filesystem, new readdir order) re-archived
+        # it in the other order; `UnicodeBasic:shared` → BibtexQuery → DocGen4.Output →
+        # `doc-gen4:exe` re-linked with different bytes, and the whole db was stale. Image
+        # 20260907: archive replayed in 26/26 runs. Image 20260920 (rolling out from 09-22
+        # 18:00): rebuilt in 3/3. The hour was paid on exactly the runs whose image differed from
+        # the previous run's (18:01, 01:06, 03:59). The `sed` below sorts the loop before Lake
+        # elaborates it (`-R`); the first run after it pays one last re-insert (a third exe
+        # hash), then the step is image-independent. Upstream: fgdorais/lean4-unicode-basic —
+        # the pin (0e569d08b6) and main are both unsorted as of 09-23; when a pin bump brings a
+        # sorted loop the `sed` is a no-op and the `grep` guard stays green.
         #
-        # CRITICAL: nuke .lake/build/doc/LeanMlir/ before rebuilding.
-        # Otherwise doc-gen4 sees the cached HTML from the previous run
-        # (restored from actions/cache above, keyed on lake-manifest.json
-        # + lean-toolchain — both unchanged across our typical commits)
-        # and skips regenerating, leaving stale axiom/theorem labels and
-        # source-link commit hashes on the deployed site even though the
-        # workflow reports success. Mathlib doc HTML stays cached.
-        #
-        # Note: do NOT delete .lake/build/doc/declarations/ — that
-        # directory holds the global declaration-data.bmp index that
-        # /find/ reads, and `lake build LeanMlir:docs` does NOT
-        # regenerate it (only doc-gen4 full builds do). Deleting it
-        # leaves the deployed find/ page broken.
-        #
-        # Also nuke .lake/build/doc-data/LeanMlir--library.docs_built*
-        # — these are lake's task-tracking markers. Deleting just the
-        # output HTML directory isn't enough: lake sees the marker and
-        # "Replays" the target instead of "Builds" it (no-op). The
-        # marker plus the HTML directory must both go for the build
-        # message to flip from "Replayed" to "Built".
+        # The two `rm` lines force the `fromDb` HTML pass every run (~3 min). Its trace is the
+        # exe plus the root modules' EMPTY marker files, whose hashes never move, so without them
+        # Lake replays the pass and ships last run's HTML — stale axiom/theorem labels and
+        # source-link commit hashes with the workflow green. The HTML directory goes too so a
+        # renamed module leaves no orphan page.
         #
         # ⭐ `Certs:docs` TOO (2026-09-22). `LeanMlir:docs` renders what `LeanMlir.lean` imports,
         # and the blueprint's whole-net ladder — the folds, step ties, seals, sync-BN twins and
@@ -279,6 +294,16 @@ jobs:
         # doc-data, so find/ sees both libraries. (CertsHeavy stays out: its oleans are not built
         # here, and the blueprint cites nothing in it — checkdecls would refuse otherwise.)
         run: |
+          # Materialise the `env=dev` dependencies without building (a cold run has no
+          # .lake/packages/UnicodeBasic yet), then pin the archive's member order — see above.
+          lake -R -Kenv=dev env true
+          ub=.lake/packages/UnicodeBasic/lakefile.lean
+          sed -i 's|(← (pkg.dir / "UnicodeCLib").readDir) do|(← (pkg.dir / "UnicodeCLib").readDir).qsort (·.fileName < ·.fileName) do|' "$ub"
+          if grep -q 'readDir) do' "$ub"; then
+            echo "::error::$ub still iterates readDir unsorted — the UnicodeBasic pin moved; re-derive the archive-order fix"
+            exit 1
+          fi
+          grep -n 'readDir' "$ub"
           rm -rf .lake/build/doc/LeanMlir/ .lake/build/doc/LeanMlir.html
           rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
           lake -R -Kenv=dev build LeanMlir:docs Certs:docs

@@ -30,6 +30,11 @@ name: Prune stale Actions caches
 # — a frozen 2026-08-28 snapshot, read daily, that every run rebuilt from. blueprint.yml now
 # splits it into a stable part (packages + doc-gen4 output) and a rolling `lake-blueprint-` part.
 #
+# ⚠ Third cause (2026-09-23): the 47–79 min blueprint runs of 09-22/23 were neither. A runner-image
+# rollout changed readdir order, UnicodeBasic's unsorted static archive re-linked doc-gen4 with
+# different bytes, and every Mathlib doc entry keyed on that exe re-inserted. See the doc-gen4 step
+# in blueprint.yml; the caches were doing exactly what they should.
+#
 # ▶ This keeps only the NEWEST entry per key-group, where a group is the key with its
 # trailing numeric run-id stripped. That preserves the rolling-cache behaviour exactly —
 # each run still writes a fresh entry and restores from the prefix — while bounding total
