@@ -147,7 +147,6 @@ import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Nets.Small.CifarBnFold
-import LeanMlir.Proofs.Nets.Small.Cifar8Fold
 import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
 import LeanMlir.Proofs.Nets.ViT.ViTFold

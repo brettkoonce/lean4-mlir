@@ -910,26 +910,9 @@ theorem mhsa_g_flat_diff (n d : Nat) :
 noncomputable def mhsa_proj_c {n d : Nat} (c : Fin 3) (slab : Mat n (3 * d)) : Mat n d :=
   fun r j => slab r (finProdFinEquiv (c, j))
 
-theorem mhsa_proj_c_flat_diff (n d : Nat) (c : Fin 3) :
-    Differentiable ℝ (fun v : Vec (n * (3 * d)) =>
-      Mat.flatten ((mhsa_proj_c c) (Mat.unflatten v) : Mat n d)) := by
-  unfold mhsa_proj_c Mat.flatten Mat.unflatten
-  fun_prop
-
-/-- The flat form of the column projection `mhsa_proj_c c` is exactly the
-    `reindexCLM` `σ_c idx = fPF((decode idx).1, fPF(c, (decode idx).2))`. -/
-noncomputable def mhsa_proj_c_CLM (n d : Nat) (c : Fin 3) :
-    Vec (n * (3 * d)) →L[ℝ] Vec (n * d) :=
-  reindexCLM (fun idx : Fin (n * d) =>
-    finProdFinEquiv ((finProdFinEquiv.symm idx).1,
-                     finProdFinEquiv (c, (finProdFinEquiv.symm idx).2)))
-
-theorem mhsa_proj_c_eq_CLM (n d : Nat) (c : Fin 3) (v : Vec (n * (3 * d))) :
-    Mat.flatten ((mhsa_proj_c c) (Mat.unflatten v) : Mat n d) = mhsa_proj_c_CLM n d c v := rfl
-
 /-- "Lift to slab third c": embeds `Vec (n * d)` into `Vec (n * (3 * d))` by
     placing `u` in the c-th column third and zero elsewhere. Linear, hence
-    a CLM. The dual of `mhsa_proj_c_CLM`. Constructed from per-coord CLMs
+    a CLM. Constructed from per-coord CLMs
     via `ContinuousLinearMap.pi`: each output coord is either a projection
     (if the index is in the c-third) or zero. -/
 noncomputable def mhsa_lift_c_CLM (n d : Nat) (c : Fin 3) :

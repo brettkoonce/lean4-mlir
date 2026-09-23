@@ -16,20 +16,11 @@ is now a named, axiom-audited certified quantity — no residual `den`-of-graph,
 trusted optimizer step. This is the *denotation* half of milestone M1 for `linear`
 (what the emitted train step computes).
 
-Two things are deliberately NOT done here, and are tracked in
-`planning/archive/verified_train_step.md`:
-
-* **The chain-rule fold.** The two-factor sum below is, by `pdiv_comp`, the single
-  gradient `∂/∂θ (crossEntropy ∘ mnistLinear)` — i.e. literally one step of gradient
-  descent on the loss. Stating it in folded form needs `DifferentiableAt` for
-  `crossEntropy` (no such lemma exists yet) and for the dense-wrt-flattened-weights
-  map; left as the next proof step. The unfolded form here carries the same content
-  with no smoothness obligation.
-* **The rendering half.** `den`/`SHlo` is a single-example semantics with no
-  constructors for the batched weight-grad `dot_general`, bias-grad `reduce`, or SGD
-  `multiply`/`subtract`; that tail of `verified_mlir/linear_train_step.mlir` is still
-  hand-written string concat. Closing `emitted text = render(provenGraph)` needs the
-  batched multi-output AST (Stage 1 of the plan).
+The chain-rule fold is here too: by `pdiv_comp`, the two-factor sum is the single
+gradient `∂/∂θ (crossEntropy ∘ mnistLinear)`, so the weight update is literally one step
+of gradient descent on the loss (`sgdW_descends_loss_gradient`, using
+`crossEntropy_differentiable`). The rendering half — that the emitted text is `pretty`
+of these graphs — is `linTrainStepFaithfulV` and `LinearFold`.
 -/
 
 namespace Proofs.StableHLO
@@ -136,86 +127,18 @@ theorem sgdW_descends_loss_gradient (lr : ℝ) (label : Fin n) (i : Fin m) (j : 
   rw [sgdW_descends_softmaxCE_grad W b x lr label i j, lossWeightGrad_eq_sum W b x label i j]
 
 -- ════════════════════════════════════════════════════════════════
--- § The rendering half: `renderModuleN` / `denN` — a denotable, renderable
---   MULTI-OUTPUT train-step module. The forward/loss cotangent is an `SHlo`
---   rendered ONCE (shared `%dy`, exactly as real MLIR SSA); the updated-parameter
---   outputs carry both an MLIR render template and an ℝ denotation. Faithfulness
---   ties `denN` to the certified SGD step (M1). The single-dense `linear` instance
---   below is the template; deeper nets reuse the same structures with a larger
---   cotangent subgraph and one (weightOut, biasOut) pair per layer — mechanical.
+-- § The two outputs' denotations. The emitted linear train step
+--   (`linTrainStepFaithfulV`, tied in `LinearFold`) has two updated-parameter outputs;
+--   these are their ℝ values, each the certified SGD step (M1).
 -- ════════════════════════════════════════════════════════════════
 
-/-- One updated-parameter output of a multi-result module: its MLIR result type,
-    the SSA name it binds, and the lines computing it from the rendered cotangent
-    `%dy`. Renderable (computable); the `ℝ`-valued denotation lives separately. -/
-structure TrainOut where
-  tyStr  : String
-  result : String
-  emit   : String → String
-
-/-- A multi-output train-step module: the forward+loss cotangent subgraph (an
-    `SHlo`, rendered ONCE → shared `%dy`) plus the updated-parameter outputs. The
-    multi-result generalization of `renderModule`. -/
-structure TrainStepModule (B : Nat) where
-  fname  : String
-  argSig : String
-  cotLen : Nat
-  cot    : SHlo cotLen
-  outs   : List TrainOut
-
-/-- **`renderModuleN`** — render a multi-output module: cotangent once (shared
-    `%dy`), each output's lines, then a tuple `return`. -/
-def renderModuleN {B : Nat} (M : TrainStepModule B) : String :=
-  let (cotBody, dy) := (pretty B M.cot).run' (0, [])
-  let retSig := String.intercalate ", " (M.outs.map (·.tyStr))
-  let tail   := String.join (M.outs.map (fun o => o.emit dy))
-  let rets   := String.intercalate ", " (M.outs.map (·.result))
-  "module @m {\n" ++ s!"  func.func @{M.fname}({M.argSig}) -> ({retSig}) " ++ "{\n" ++
-    cotBody ++ tail ++ s!"    return {rets} : {retSig}\n" ++ "  }\n}\n"
-
 section LinearModule
-variable (B : Nat) (lr : ℝ) (lrStr : String) (label : Fin n)
-
-/-- Weight output `W0' = W0 − lr·dot_general(x, dy)` (batch-contracting outer
-    product), rendered. -/
-def linWeightOut : TrainOut where
-  tyStr  := ty [m, n]
-  result := "%W0n"
-  emit   := fun dy =>
-    s!"    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-    s!"    %dW0 = stablehlo.dot_general %x, {dy}, contracting_dims = [0] x [0], precision = [DEFAULT, DEFAULT] : ({ty [B,m]}, {ty [B,n]}) -> {ty [m,n]}\n" ++
-    s!"    %lW0 = stablehlo.constant dense<{lrStr}> : {ty [m,n]}\n" ++
-    s!"    %sW0 = stablehlo.multiply %dW0, %lW0 : {ty [m,n]}\n" ++
-    s!"    %W0n = stablehlo.subtract %W0, %sW0 : {ty [m,n]}\n"
-
-/-- Bias output `b0' = b0 − lr·reduce(dy)` (batch-sum), rendered. -/
-def linBiasOut : TrainOut where
-  tyStr  := ty [n]
-  result := "%b0n"
-  emit   := fun dy =>
-    s!"    %db0 = stablehlo.reduce({dy} init: %sc) applies stablehlo.add across dimensions = [0] : ({ty [B,n]}, tensor<f32>) -> {ty [n]}\n" ++
-    s!"    %lb0 = stablehlo.constant dense<{lrStr}> : {ty [n]}\n" ++
-    s!"    %sb0 = stablehlo.multiply %db0, %lb0 : {ty [n]}\n" ++
-    s!"    %b0n = stablehlo.subtract %b0, %sb0 : {ty [n]}\n"
-
-/-- The linear train-step module (renderable; the `%onehot` value is a runtime
-    input that `pretty` ignores, so the placeholder cotangent renders identically
-    to the live one). Structural peer of `linearTrainStepModuleV`. -/
-def linTrainStepModule : TrainStepModule B where
-  fname  := "linear_train_step"
-  argSig := s!"%x: {ty [B,m]}, %W0: {ty [m,n]}, %b0: {ty [n]}, %onehot: {ty [B,n]}"
-  cotLen := n
-  cot    := lossCotGraph W b x (fun _ => 0)
-  outs   := [linWeightOut (m := m) (n := n) B lrStr, linBiasOut (n := n) B lrStr]
+variable (lr : ℝ) (label : Fin n)
 
 /-- The two outputs' `ℝ` denotations: the flattened certified weight update and
     the certified bias update. -/
 noncomputable def linWeightDen : Vec (m * n) := Mat.flatten (sgdW W b x lr label)
 noncomputable def linBiasDen   : Vec n       := sgdB W b x lr label
-
-/-- `denN` — the tuple of per-example output denotations the module computes. -/
-noncomputable def linTrainStepDenN : List (Σ k, Vec k) :=
-  [⟨m * n, linWeightDen W b x lr label⟩, ⟨n, linBiasDen W b x lr label⟩]
 
 /-- **Faithfulness, output 0 (weights).** The rendered weight output denotes
     *literally* `W − lr·∂(softmax-CE loss)/∂W` (M1 `sgdW_descends_loss_gradient`). -/

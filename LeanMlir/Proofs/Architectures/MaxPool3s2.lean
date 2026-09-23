@@ -207,15 +207,6 @@ theorem maxPool3s2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2 * h) (2 * 
   obtain ⟨hr, hs⟩ := hinj ci _ _ _ _ hval
   exact hne (Prod.ext_iff.mpr ⟨hr, hs⟩)
 
-/-- Input `(ci, hi_in, wi_in)` attains the max of the window at output `(ho, wo)`.
-    ⚠ Unlike `MaxPool2IsArgmax` this takes the OUTPUT position explicitly: with overlapping
-    windows an input has no single owning window, which is the whole difference. -/
-def MaxPool3s2IsArgmaxAt {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
-    (ci : Fin c) (ho : Fin h) (wo : Fin w)
-    (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w)) : Prop :=
-  (∃ ab : Fin 3 × Fin 3, win3RowInv ho ab.1 = hi_in ∧ win3ColInv wo ab.2 = wi_in) ∧
-  x ci hi_in wi_in = maxPool3s2 x ci ho wo
-
 /-- ⭐ **The overlap fact, stated rather than assumed**: an input row lies in at most TWO windows —
     `p/2` and `(p+1)/2`. With symmetric padding the shared cell is at ODD `p` (window `(p−1)/2`
     takes it at offset 2, window `(p+1)/2` at offset 0); even `p` lies in exactly one. So an input

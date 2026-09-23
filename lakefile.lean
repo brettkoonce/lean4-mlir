@@ -221,7 +221,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.Small.CnnFold,
              `LeanMlir.Proofs.Nets.Small.CifarFold,
              `LeanMlir.Proofs.Nets.Small.CifarBnFold,
-             `LeanMlir.Proofs.Nets.Small.Cifar8Fold,
              `LeanMlir.Proofs.Nets.Small.Cifar8StepTie,
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34Fold,

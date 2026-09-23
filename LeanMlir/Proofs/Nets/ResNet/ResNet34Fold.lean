@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
-import LeanMlir.Proofs.Nets.Small.Cifar8Fold
+import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Nets.Small.CifarBnFold
 
 /-! # PoC: the ResNet-34 (Chapter 5) train step, proof-tied to the certified SGD step

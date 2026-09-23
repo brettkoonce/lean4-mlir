@@ -290,9 +290,6 @@ theorem sealCTStrided_eq (N : Nat) (s : UibSpec) (hd : s.postDWk ≠ 0)
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The clause bundle — ⭐⭐ weight-only, and proved GENERICALLY IN THE ROW
 -- ════════════════════════════════════════════════════════════════
-theorem comp_ok {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n p) (v : Vec m)
-    (h₁ : L₁.ok v) (h₂ : L₂.ok (L₁.fwd v)) : (L₁.comp L₂).ok v := ⟨h₁, h₂⟩
-
 /-- ⭐ **Every clause of a UIB body, at every input.** The `k = 0` slots contribute `True` and the
     rest are relus on BatchNorm outputs, so the discharge never looks at the activation and holds
     for the centre-tap rows and the zeroed rows alike. -/
@@ -860,9 +857,6 @@ theorem Ah1_continuous : Continuous Ah1 :=
 
 theorem Zh2_continuous : Continuous Zh2 :=
   (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Ah1_continuous
-
-theorem Ah2_continuous : Continuous Ah2 :=
-  (bnBatchLA_differentiable 2 1280 7 7 1 one_pos _ _).continuous.comp Zh2_continuous
 
 -- ════════════════════════════════════════════════════════════════
 -- § 12. `Rr` — the fifteen post-swish BatchNorm factors

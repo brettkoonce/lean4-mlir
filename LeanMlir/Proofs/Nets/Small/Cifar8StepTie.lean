@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Nets.Small.Cifar8Fold
+import LeanMlir.Proofs.Nets.Small.CifarFold
 
 /-! # PoC: the cifar8 (Chapter 4 deeper, 8-conv no-BN) §1a TIE — tied through the real forward
 
@@ -10,6 +10,11 @@ last, then `cifarChainCotW2`'s cross-pool move) and the first conv is the conv-b
 `cnnChainCotW1` / `cifarChainCotW2`) at the 4-stage dims — no new constructor, no new ops, no new
 bridges. The conv ties are `CifarPoC.convW_den`/`convB_den` (generic in the cotangent); the dense head
 + loss-cot mirror cifar.
+
+**No per-net fold file.** cifar8 needs zero new core ops and zero new fold lemmas: every conv
+layer is the generic `CifarPoC.convW_den`/`convB_den` (dim- and cotangent-generic, so they certify
+W₁…W₈ by instantiation), and the three dense layers are the generic `Cifar8PoC.denseW_den`/
+`denseB_den` (`MlpTrainStep.lean`, free in activation, weight, bias and cotangent).
 
 Spatial bookkeeping (the 2-stage `(h,w)` convention nested two levels deeper): final pooled `(h,w)`;
 stage 4 (conv₇/conv₈) at `(2h,2w)`; stage 3 (conv₅/conv₆) at `(2(2h),2(2w))`; stage 2 (conv₃/conv₄) at

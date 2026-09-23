@@ -262,10 +262,6 @@ theorem denseBiasGradB_smul {N c : Nat} (cotN : String) (cot : Vec (N * c)) (s :
 -- § 2. Sharding — every link of the chain, on a replica, is the shard of the global link
 -- ════════════════════════════════════════════════════════════════
 
-theorem reluMaskB_shard {R N n : Nat} (PRE DY : Vec ((R * N) * n)) (r : Fin R) :
-    reluMaskB (N * n) (batchShard R N n PRE r) (batchShard R N n DY r)
-      = batchShard R N n (reluMaskB ((R * N) * n) PRE DY) r := rfl
-
 theorem cInB_shard {R N : Nat} {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (DY : Vec ((R * N) * (oc * h * w))) (r : Fin R) :
     cInB N (h := h) (w := w) W b (batchShard R N (oc * h * w) DY r)

@@ -965,15 +965,6 @@ theorem maxPool2_eq_at_max {c h w : Nat}
       rw [winRowInv_one, winColInv_one]
       exact le_max_of_le_right (le_max_right _ _)
 
-theorem maxPool2_eq_argmax_value {c h w : Nat}
-    (x : Tensor3 c (2 * h) (2 * w))
-    (co : Fin c) (ho : Fin h) (wo : Fin w) :
-    maxPool2 x co ho wo =
-      x co (winRowInv ho (maxPool2Argmax x co ho wo).1)
-            (winColInv wo (maxPool2Argmax x co ho wo).2) :=
-  maxPool2_eq_at_max x co ho wo _ _ (fun a' b' =>
-    maxPool2Argmax_max x co ho wo (a', b'))
-
 /-- Under smoothness, the argmax of any window is unique: two positions
     that both dominate the window coincide. -/
 theorem maxPool2_argmax_unique {c h w : Nat}
@@ -1376,21 +1367,6 @@ noncomputable def flatChannel (c h w : Nat) (idx : Fin (c * h * w)) : Fin c :=
   (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1
 
 -- Rewrite GAP as a single Finset sum over (hi, wi) ∈ univ of scaled reindex maps.
-theorem globalAvgPoolFlat_as_sum (c h w : Nat) :
-    (globalAvgPoolFlat c h w) =
-    (fun (u : Vec (c * h * w)) (k : Fin c) =>
-      ∑ p : Fin h × Fin w,
-        (1 / (h * w : ℝ)) *
-        u (finProdFinEquiv (finProdFinEquiv (k, p.1), p.2))) := by
-  funext u k
-  show globalAvgPool (Tensor3.unflatten u) k = _
-  unfold globalAvgPool Tensor3.unflatten
-  rw [← Finset.sum_product']
-  rw [div_eq_mul_inv, Finset.sum_mul]
-  apply Finset.sum_congr rfl
-  intro p _
-  rw [one_div, mul_comm]
-
 theorem pdiv_globalAvgPoolFlat (c h w : Nat) (v : Vec (c * h * w))
     (idx : Fin (c * h * w)) (ci : Fin c) :
     pdiv (globalAvgPoolFlat c h w) v idx ci =

@@ -872,12 +872,6 @@ theorem MaxPool2MarginQ.poolBack_close {c h w : Nat} {δ : ℝ}
 theorem t3Idx_def {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
     finProdFinEquiv (finProdFinEquiv (ci, hi), wi) = t3Idx ci hi wi := rfl
 
-/-- `t3Idx` is injective componentwise. -/
-theorem t3Idx_inj {c h w : Nat} {ci ci' : Fin c} {hi hi' : Fin h}
-    {wi wi' : Fin w} (hEq : t3Idx ci hi wi = t3Idx ci' hi' wi') :
-    ci = ci' ∧ hi = hi' ∧ wi = wi' := by
-  simpa [and_assoc] using hEq
-
 /-- The 3-dense head `CE ∘ d₅ ∘ relu ∘ d₄ ∘ relu ∘ d₃` is differentiable
     at any point whose two ReLU pre-activations are off the kinks. -/
 theorem ce_head3_differentiableAt {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
@@ -3184,17 +3178,6 @@ theorem sum_swap_triple_triple {α β γ δ ε ζ : Type*} [Fintype α] [Fintype
           simp only [Fintype.sum_prod_type]
     _ = ∑ q : δ × ε × ζ, ∑ p : α × β × γ, f p.1 p.2.1 p.2.2 q.1 q.2.1 q.2.2 := Finset.sum_comm
     _ = _ := by simp only [Fintype.sum_prod_type]
-
-/-- Triangle inequality for a difference of triple sums. -/
-theorem abs_triple_sum_sub_le {α β γ : Type*}
-    [Fintype α] [Fintype β] [Fintype γ] (f g : α → β → γ → ℝ) :
-    |(∑ a : α, ∑ b : β, ∑ c : γ, f a b c) -
-        ∑ a : α, ∑ b : β, ∑ c : γ, g a b c| ≤
-      ∑ a : α, ∑ b : β, ∑ c : γ, |f a b c - g a b c| := by
-  simp only [← Finset.sum_sub_distrib]
-  exact (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun a _ =>
-    (Finset.abs_sum_le_sum_abs _ _).trans (Finset.sum_le_sum fun b _ =>
-      Finset.abs_sum_le_sum_abs _ _))
 
 /-- The kernel tap that multiplies input entry `(ci,hi,wi)` in output
     entry `(co,ho,wo)` — the input-side Jacobian entry of `conv2d`.

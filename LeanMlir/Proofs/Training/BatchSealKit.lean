@@ -86,11 +86,6 @@ theorem bcell_bfrom {N c h w : Nat} (f : Fin N → Tensor3 c h w) (n : Fin N) :
   simp only [bcell, bfrom]
   rw [h, Tensor3.unflatten_flatten]
 
-/-- The flattened slab is the `Mat` row — the form every per-example op consumes. -/
-theorem flatten_bcell {N c h w : Nat} (v : Vec (N * (c * h * w))) (n : Fin N) :
-    Tensor3.flatten (bcell v n) = Mat.unflatten v n := by
-  simp only [bcell, Tensor3.flatten_unflatten]
-
 theorem bcell_add {N c h w : Nat} (u v : Vec (N * (c * h * w))) (n : Fin N)
     (ci : Fin c) (i : Fin h) (j : Fin w) :
     bcell (u + v) n ci i j = bcell u n ci i j + bcell v n ci i j := rfl
@@ -566,16 +561,6 @@ theorem bcell_dwS2Xla_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (
           ⟨2 * j.val + 1, by have := j.isLt; omega⟩ := by
   rw [bcell_batchMap]
   exact depthwiseStride2FlatXla_ctDW hkH hkW s b _ ch i j
-
-/-- A zeroed depthwise (zero kernel, zero bias) sends everything to the constant `0` — the
-    residual bodies of an inverted-residual net. ⛔ No strided peer is needed: a net's strided
-    blocks change channels, so they are on the carrier and never carry a zeroed kernel. -/
-theorem batchMap_depthwiseFlat_zero {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (hW : ∀ ch kh kw, W ch kh kw = 0) (hb : ∀ ch, b ch = 0) (x : Vec (N * (c * h * w))) :
-    StableHLO.batchMap N (depthwiseFlat (h := h) (w := w) W b) x = fun _ => (0 : ℝ) := by
-  funext k
-  show depthwiseFlat (h := h) (w := w) W b (fun i => x _) _ = 0
-  rw [depthwiseFlat_eq_zero W b hW hb]
 
 /-- **Cellwise ⇒ flatwise.** A property of every cell `(n, c, i, j)` holds at every flat index —
     the bridge from the `bcell` view back to the `∀ k` shape every clause is stated in. -/

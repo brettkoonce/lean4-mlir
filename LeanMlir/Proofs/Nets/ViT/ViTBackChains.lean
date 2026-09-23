@@ -14,9 +14,8 @@ from the attention core outwards:
 * the full MHSA input-gradient backward `mhsaBackFlat` — output-projection backward, the three
   cores, the three projection backwards fanning in at `X` (`mhsaBackFlat_eq_mhsa_vjp` ties it to
   `mhsa_has_vjp_mat`);
-* the encoder-block backward, in two spellings: `vitBlockBack` (one shared LN map per site)
-  and `vitBlockBackV` (the vector-`[D]` LayerNorm the shipped net runs, with
-  `rowLNVecFlatBack` in both LN slots, tied by `vitBlockBackV_eq_transformerBlockV_vjp`);
+* the encoder-block backward `vitBlockBackV` (the vector-`[D]` LayerNorm the shipped net runs,
+  with `rowLNVecFlatBack` in both LN slots, tied by `vitBlockBackV_eq_transformerBlockV_vjp`);
 * `vitBlockBackVAt`, `vitTowerBackK` (the head-first depth-`k` tower fold), the two saved
   prefixes and the whole-net chain `vitInputGradK` — the reverse of `vitForwardKV`, tied by
   `vitInputGradK_eq_vitForwardKV_vjp` (`ViTWholeBackCertifiedTie.lean`);
@@ -101,27 +100,8 @@ noncomputable def mhsaBackFlat (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Ma
     ∘ perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wo) (0 : Vec (h * dh)))
 
 -- ════════════════════════════════════════════════════════════════
--- § The encoder-block backward, in its three spellings
+-- § The encoder-block backward
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The ViT encoder-block input-gradient backward** — the reverse of `LN → MHSA → +x → LN → MLP → +x`.
-    The block is `mlpResidual ∘ attnSub` (forward), so the backward is `attnSubBack ∘ mlpResidualBack`:
-
-    * **MLP-residual backward** (per token): `residual (LN₂-back ∘ dense W₁ᵀ ∘ geluBack ∘ dense W₂ᵀ)`
-      — the reverse of `dense W₂ ∘ gelu ∘ dense W₁ ∘ LN₂`, lifted over the sequence (`perRowFlat`);
-    * **attention-sublayer backward**: `residual (LN₁-back ∘ mhsaBackFlat)` — the residual skip's
-      cotangent flows both through the MHSA backward and directly to `x`.
-
-    The LN backwards (`lnB₁`/`lnB₂`) are supplied as one shared map per site; `geluBack` is the
-    saved-derivative `diagBack`. -/
-noncomputable def vitBlockBack {dff : Nat} (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh))
-    (lnB₁ : Vec (h * dh) → Vec (h * dh)) (W₁ : Mat (h * dh) dff) (W₂ : Mat dff (h * dh))
-    (sgelu : Vec dff) (lnB₂ : Vec (h * dh) → Vec (h * dh)) :
-    Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
-  Proofs.residual (perRowFlat N (h * dh) lnB₁ ∘ mhsaBackFlat Wq Wk Wv Wo Q K V)
-    ∘ perRowFlat N (h * dh) (Proofs.residual
-        (lnB₂ ∘ Proofs.dense (Mat.transpose W₁) (0 : Vec (h * dh)) ∘ diagBack sgelu
-          ∘ Proofs.dense (Mat.transpose W₂) (0 : Vec dff)))
 
 /-- **The vector-LayerNorm ViT encoder-block input-gradient backward.** `rowLNVecFlatBack` in
     both LN slots at the site's flat saved input, per-token GELU slopes in the MLP sublayer's

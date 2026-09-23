@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.Small.CifarBnFold
-import LeanMlir.Proofs.Nets.Small.Cifar8Fold
+import LeanMlir.Proofs.Nets.Small.CifarFold
 
 /-! # PoC: the cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) §1a TIE
 

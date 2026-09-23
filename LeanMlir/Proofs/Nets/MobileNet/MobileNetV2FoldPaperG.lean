@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
-import LeanMlir.Proofs.Nets.Small.Cifar8Fold
+import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Nets.Small.CifarBnFold
 
 /-! # T3 §1 fold for MobileNetV2 at 17 blocks, UN-FUSED and BATCHED — the Adam artifact's op set

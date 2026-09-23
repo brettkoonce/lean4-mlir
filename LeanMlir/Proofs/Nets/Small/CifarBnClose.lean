@@ -26,10 +26,6 @@ open scoped BigOperators
 -- `bnPerChannel_grad_gamma` / `bnPerChannel_grad_beta` moved to `PerChannelBN.lean`
 -- (so the `bnGammaSgd`/`bnBetaSgd` `SHlo` ops' `den` can reference them upstream).
 
-/-- Channel index of a flat position `(c, s) ↦ c`. -/
-private noncomputable def chanOf (oc m : Nat) (k : Fin (oc * m)) : Fin oc :=
-  (finProdFinEquiv.symm k).1
-
 /-- per-channel BN, as a function of γ (β, v fixed), written affinely:
     `γ' ↦ fun k => x̂_k · γ'(chan k) + β(chan k)`. -/
 private theorem bnPerChannelFlat_gamma_affine (oc m : Nat) (ε : ℝ) (β : Vec oc) (v : Vec (oc * m)) :
