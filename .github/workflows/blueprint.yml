@@ -381,6 +381,11 @@ jobs:
           done
           if [ $status -ne 0 ]; then
             echo "::warning::PDF build failed (status $status); web version still ships."
+          else
+            # LaTeX wraps its log at 79 columns, splitting "Output written on …print.pdf (N pages)"
+            # across lines — join before matching.
+            pages="$(cat blueprint/print/*.log 2>/dev/null | tr -d '\n' | grep -oE 'Output written on [^(]*\([0-9]+ pages' | grep -oE '[0-9]+ pages' | tail -1)"
+            echo "::notice title=Blueprint PDF::${pages:-page count not found in the LaTeX log}"
           fi
           exit 0
 
@@ -525,7 +530,8 @@ jobs:
                        "$RUNNER_TEMP/docstring-checkrefs.log" 2>/dev/null \
                      | sed -E 's/docstring citations checked: ([0-9]+) across ([0-9]+) file\(s\); file citations checked: ([0-9]+)/\1 identifiers across \2 files, \3 file links/')"
           if [ -f public/blueprint.pdf ]; then
-            pages="$(grep -ahoE 'Output written on [^ ]+ \([0-9]+ pages' blueprint/print/*.log 2>/dev/null | grep -oE '[0-9]+ pages' | tail -1)"
+            # LaTeX wraps its log at 79 columns (the path splits mid-line), so join first.
+            pages="$(cat blueprint/print/*.log 2>/dev/null | tr -d '\n' | grep -oE 'Output written on [^(]*\([0-9]+ pages' | grep -oE '[0-9]+ pages' | tail -1)"
             pdf="✅ ${pages:-built} ($(du -h public/blueprint.pdf | cut -f1))"
           else
             pdf="⚠️ not built — the web version still ships; see \`public/build-logs/\`"

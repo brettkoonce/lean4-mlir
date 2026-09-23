@@ -7056,9 +7056,10 @@ See \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}.
   \leanok
   \uses{ax:conv2d, ax:conv2d_bias_grad_has_vjp, ax:conv2d_has_vjp3,
       ax:conv2d_weight_grad_has_vjp, ax:depthwiseConv2d, ax:depthwise_bias_grad_has_vjp,
-      ax:depthwise_has_vjp3, ax:depthwise_weight_grad_has_vjp3, ax:pdiv,
-      ax:pdiv_reindex, def:hasvjp, def:hasvjp3, thm:dense_bias_grad_correct,
-      thm:dense_weight_grad_correct, thm:vjp_comp}
+      ax:depthwise_has_vjp3, ax:depthwise_weight_grad_has_vjp3, ax:pdiv, ax:pdiv_const,
+      ax:pdiv_mul, ax:pdiv_reindex, ax:softmaxCE_grad, def:hasvjp, def:hasvjp3,
+      thm:dense_bias_grad_correct, thm:dense_weight_grad_correct, thm:pdiv_finset_sum,
+      thm:vjp_comp}
   \Prove{} all 158 emitted parameter gradients of the batched MobileNetV2
   step (\texttt{mobilenetv2\_adam\_train\_step.mlir} at \(N = 32\),
   \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) are tied at a loss
