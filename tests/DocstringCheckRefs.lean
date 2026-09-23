@@ -30,7 +30,7 @@ needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
 3. it is a dotted suffix of a declaration's name, with a `private` declaration read by its
    user name (`lnFwdSite`);
 4. it is `File.decl`, where `decl` is declared in the module whose name ends in `File`
-   (`ResNet34FoldB.denseWGradB_den`);
+   (`GradNodesB.denseWGradB_den`);
 5. it names a module (`ViTRenderB`) or a namespace (`Mnv2FullBSeal`) by a suffix of its
    components, or a scanned file outside the environment by its basename
    (`TestMnv4FwdSmoke` for `tests/TestMnv4FwdSmoke.lean`);

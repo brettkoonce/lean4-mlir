@@ -70,14 +70,12 @@ import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
+import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldG
 import LeanMlir.Proofs.Nets.ViT.ViTFoldG
 import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Foundation.Bf16GradNodes
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FoldPaperG
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
@@ -1830,7 +1828,7 @@ open Proofs
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at_correct
 #print axioms Proofs.resnet34ForwardB_full_differentiableAt
 
--- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (ResNet34FoldB.lean, 2026-09-06)
+-- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (Foundation/GradNodesB.lean)
 #print axioms Proofs.ResNet34PoCB.convWGradB_den
 #print axioms Proofs.ResNet34PoCB.convBGradB_den
 #print axioms Proofs.ResNet34PoCB.convStridedWGradB_den
@@ -1841,9 +1839,6 @@ open Proofs
 #print axioms Proofs.ResNet34PoCB.denseBGradB_den
 
 -- 4b.1 EfficientNet-B0
-#print axioms Proofs.EnetPoCG.convWGradB_den
-#print axioms Proofs.EnetPoCG.bnBetaGradB_den
-#print axioms Proofs.EnetPoCG.denseWGradB_den
 #print axioms Proofs.EnetPoCG.denseBGradB_den
 #print axioms Proofs.EnetPoCG.convStridedXlaWGradB_den
 #print axioms Proofs.EnetPoCG.depthwiseWGradB_den
@@ -1872,19 +1867,9 @@ open Proofs
 
 -- 4c leg 3 ConvNeXt-T
 #print axioms Proofs.CnxPoCGB.layerScaleChGammaGradB_den
-#print axioms Proofs.CnxPoCGB.convWGradB_den
-#print axioms Proofs.CnxPoCGB.convBGradB_den
-#print axioms Proofs.CnxPoCGB.depthwiseWGradB_den
-#print axioms Proofs.CnxPoCGB.depthwiseBGradB_den
-#print axioms Proofs.CnxPoCGB.convStridedWGradB_den
-#print axioms Proofs.CnxPoCGB.convStridedBGradB_den
 #print axioms Proofs.CnxPoCGB.psWGradB_den
 #print axioms Proofs.CnxPoCGB.chanLnGammaGradB_den
 #print axioms Proofs.CnxPoCGB.chanLnBetaGradB_den
-#print axioms Proofs.CnxPoCGB.headLnGammaGradB_den
-#print axioms Proofs.CnxPoCGB.headLnBetaGradB_den
-#print axioms Proofs.CnxPoCGB.headWGradB_den
-#print axioms Proofs.CnxPoCGB.headBGradB_den
 -- The bf16 gradient nodes, folded ONCE for every net (Bf16GradNodes.lean)
 #print axioms Proofs.Bf16PoC.convWGradBBf16_den
 #print axioms Proofs.Bf16PoC.convStridedWGradBBf16_den

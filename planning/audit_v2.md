@@ -29,6 +29,8 @@ the "where is X?" problem. The fix is mostly *moves with names kept* — no pinn
 | `4530a0df` | §2.3 root batch 1/2 (moves, names kept): relu6 → MLP, sigmoid/SE gate → SE, layerScale → LayerNorm, softmax Jacobian → new `Softmax.lean`, multi-head slab kit + `HasVJPMat3` → Attention. StableHLO imports no net; IR imports Softmax only. ⚠ `pdivMat_transpose`/`scalarScale` + the matmul/scale/transpose VJPs must STAY in Tensor (the architecture-free comparator tier cites them) — the first cut took them and the comparator caught it |
 | `134894bc` | §6 root batch 2/2: `pdiv_of_hasFDerivAt_mask` (relu + relu6), `relu_apply_eq_max`/`relu_nonneg`/`relu_entry_lipschitz` in MLP, `mlp_has_vjp_at` on `vjp_comp_diff_at`, `pdiv_lift_sum`, `bnMean_eq_expect`; three more ResNet34 imports gone. Gated incl. the local comparator (3 tiers okay). `sum_finProdFinEquiv₃` skipped (≈0 lines) |
 | `62cca9ef` | §3 docs: the Proofs/README chain table + suffix legend + tier glossary, new `Codegen/README.md`, Certificates family map, lakefile claims, ENet headline, the all-reduce headers, history-first module docs → contents, 21 file:line cites → names, 8 dangling refs |
+| `bcb18000` | §0.1 — MBConv SE width `ic/4` everywhere via `Spec.mbConvSeMid`; `Train.lean` sizes from the buffer and throws if `totalParams` disagrees |
+| GradNodesB commit | §2.4 — `Foundation/GradNodesB.lean`: `ResNet34FoldB` + `EfficientNetFoldG` + `MobileNetV2FoldPaperG` (all three deleted) + `CnxPoCGB.psWGradB_den`, names kept; the 13 forwarders deleted (ConvNeXtFoldGB 10, EfficientNetFoldG 3) and their callers + pins moved to the canonical names (AuditAxioms 1,597 → 1,584). `Bf16GradNodes` imports `GradNodesB` + `ViTClose` (not `ConvNeXtFoldGB`). ⚠ the ViT row-dense / vector-LN nodes stay in `ViTFoldGB` — their per-example bridges are in `Nets/ViT/ViTClose`/`ViTVecLN`; moving them needs those bridges in Architectures first |
 
 Each gated: `lake build Certs LeanMlir Apps`, AuditAxioms 1,597/1,597, `docstring-checkrefs`,
 `verified_mlir/` byte-clean; `a745b694` also `CertsHeavy` + AuditAxiomsHeavy 62/62 and the three
@@ -62,14 +64,14 @@ certificate or root file moves and `tests/comparator/run.sh` when anything leave
      `MlirCodegen`'s SE emitter, which still use `mid/4`). Fix those, size `Train.lean` from
      `heInitParams`, assert `totalParams` agrees; CPU-probe `efficientnet-train`. The gw-detect
      B0 arm becomes true B0 (5.3M, not 7.1M).
-   - Cut: the 14 forwarding grad-node aliases (with §2.4), `resnet34_has_vjp_at` + its ~160 lines,
+   - Cut: the forwarding grad-node aliases (with §2.4; 13 on inspection — ENet's `denseBGradB_den` widens R34's witness, not a forwarder), `resnet34_has_vjp_at` + its ~160 lines,
      the 3 IBP residue pins, the 3 orphan `*_correct` contracts (cited nowhere — the comparator
      checks the non-`_at` `residual_has_vjp_correct`).
    - Retire: the MNv2 per-channel legacy chain (move `IVPos` first), `tests/Audit*` + `AUDIT_REPORT*`,
      the rank-3 kit (drop its 2 blueprint nodes); rename `lean_lib «Codegen»` → `«Reference»`.
    - Keep: `SgdDescentCnn`'s margin instances (they are the descent proof's stages); no optional
      renames; `pdiv_finset_sum`'s binder untouched.
-2. **§2.4 grad-node home** — `GradNodesB.lean` beside `Foundation/Bf16GradNodes.lean` for the ~25
+2. ✅ **§2.4 grad-node home** (staged, see Status) — `GradNodesB.lean` beside `Foundation/Bf16GradNodes.lean` for the ~25
    generic f32 `*GradB_den` lemmas now in `ResNet34FoldB` / `ConvNeXtFoldGB` / `EfficientNetFoldG` /
    `ViTFoldGB`; keep full names (0 pins move). Then `Foundation/DataParallelNode` and
    `Bf16GradNodes` stop importing nets.

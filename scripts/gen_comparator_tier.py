@@ -90,7 +90,7 @@ MODULES = [
     "LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBSeal",
     "LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB",
     "LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB",
-    "LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB",
+    "LeanMlir.Proofs.Foundation.GradNodesB",
     "LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP",
     "LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB",
     "LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB",

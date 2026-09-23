@@ -175,14 +175,14 @@ theorem cnx_block_ch_tiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : Strin
   unfold cnxBlockChTiedGB
   intro γlsB dB nlB gB pB cotPB cotEB cotNB cotDB
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact CnxPoCGB.depthwiseWGradB_den xN cotN bdw xin Wdw cotDB idx
-  · intro o;   exact CnxPoCGB.depthwiseBGradB_den cotN Wdw xin bdw cotDB o
+  · intro idx; exact EnetPoCG.depthwiseWGradB_den xN cotN bdw xin Wdw cotDB idx
+  · intro o;   exact Mnv2PaperPoCG.depthwiseBGradB_den cotN Wdw xin bdw cotDB o
   · intro k;   exact CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε nbt dB ng cotNB k
   · intro k;   exact CnxPoCGB.chanLnBetaGradB_den cotN ε ng dB nbt cotNB k
-  · intro idx; exact CnxPoCGB.convWGradB_den xN cotN bex nlB Wex cotEB idx
-  · intro o;   exact CnxPoCGB.convBGradB_den cotN Wex nlB bex cotEB o
-  · intro idx; exact CnxPoCGB.convWGradB_den xN cotN bpr gB Wpr cotPB idx
-  · intro o;   exact CnxPoCGB.convBGradB_den cotN Wpr gB bpr cotPB o
+  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bex nlB Wex cotEB idx
+  · intro o;   exact ResNet34PoCB.convBGradB_den cotN Wex nlB bex cotEB o
+  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bpr gB Wpr cotPB idx
+  · intro o;   exact ResNet34PoCB.convBGradB_den cotN Wpr gB bpr cotPB o
   · intro cc;  exact CnxPoCGB.layerScaleChGammaGradB_den xN cotN pB lg dyOut cc
 
 /-! ## Downsample — channel-LN → 2×2/s2 conv, all 4 gradient nodes, batched -/
@@ -208,8 +208,8 @@ theorem cnx_down_ch_tiedGB (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String)
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro k;   exact CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε dnbt xin dng cotNB k
   · intro k;   exact CnxPoCGB.chanLnBetaGradB_den cotN ε dng xin dnbt cotNB k
-  · intro idx; exact CnxPoCGB.convStridedWGradB_den xN cotN bd nB Wd dyOut idx
-  · intro o;   exact CnxPoCGB.convStridedBGradB_den cotN Wd nB bd dyOut o
+  · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN bd nB Wd dyOut idx
+  · intro o;   exact ResNet34PoCB.convStridedBGradB_den cotN Wd nB bd dyOut o
 
 /-! ## Stem — 4×4/s4 patchify conv → channel-LN, all 4 gradient nodes, batched
 
@@ -252,7 +252,7 @@ theorem cnx_stem_ch_tiedGB (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε
   refine ⟨?_, ?_, ?_, ?_⟩
   · intro k;   exact CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε psnbt patchB psng dyStem k
   · intro k;   exact CnxPoCGB.chanLnBetaGradB_den cotN ε psng patchB psnbt dyStem k
-  · intro o;   exact CnxPoCGB.convBGradB_den cotN Wst xstem psb cotPatchB o
+  · intro o;   exact ResNet34PoCB.convBGradB_den cotN Wst xstem psb cotPatchB o
   · intro idx; exact CnxPoCGB.psWGradB_den xN cotN psb x Wst cotPatchB idx
 
 /-! ## Head — GAP → vector-LN at one row → dense, all 4 gradient nodes, batched
@@ -262,7 +262,7 @@ Stated at the LITERAL 768 for the fused file's reason: `1 * m` does not reduce a
 
 /-- **Head, tied at the batched gradient nodes.** The head-LN γ/β at the pooled row, the
     classifier weight at the LN output, the classifier bias PER EXAMPLE (`biasGradB` is the
-    identity on its operand; the batch reduce is emitted text — `CnxPoCGB.headBGradB_den`). -/
+    identity on its operand; the batch reduce is emitted text — `ViTPoCGB.headBGradB_den`). -/
 def cnxHeadChTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC)
     (xhead : Vec (N * (768*h*w))) (g : Vec (N * nC)) : Prop :=
@@ -290,12 +290,12 @@ theorem cnx_head_ch_tiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String)
   unfold cnxHeadChTiedGB
   intro gapB hnB cotHnB
   refine ⟨?_, ?_, ?_, ?_⟩
-  · intro k;   exact CnxPoCGB.headLnGammaGradB_den xN epsStr cotN ε hnbt gapB hng cotHnB k
+  · intro k;   exact ViTPoCGB.veclnGammaGradB_den xN epsStr cotN ε hnbt gapB hng cotHnB k
   · intro k;
-    exact CnxPoCGB.headLnBetaGradB_den cotN ε hng
+    exact ViTPoCGB.rowDenseBiasGradB_den_lnbeta cotN ε hng
       (fun n => Mat.unflatten (batchSlice N (1*768) gapB n)) hnbt cotHnB k
-  · intro i j; exact CnxPoCGB.headWGradB_den dN cotN hnB Wfc bfc g i j
-  · intro n i; exact CnxPoCGB.headBGradB_den cotN Wfc (batchSlice N 768 hnB n) bfc g n i
+  · intro i j; exact ViTPoCGB.headWGradB_den dN cotN hnB Wfc bfc g i j
+  · intro n i; exact ViTPoCGB.headBGradB_den cotN Wfc (batchSlice N 768 hnB n) bfc g n i
 
 /-! ## `@[irreducible]` wrappers — keep the 22-deep capstone thread opaque (the r34/mnv2 heartbeat lesson) -/
 

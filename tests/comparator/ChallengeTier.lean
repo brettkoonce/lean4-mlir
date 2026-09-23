@@ -16,7 +16,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
+import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB

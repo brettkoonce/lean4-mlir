@@ -107,7 +107,7 @@ status:
     #
     # --- Train-step ties (T3): the fold at every gradient node, then the cotangent pinned ---
     # the fold, stated per op kind at the un-fused *GradB node all optimizer tails consume (r34's file is the template)
-    - {declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34FoldB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.ResNet34PoCB.convStridedWGradB_den", file: "LeanMlir/Proofs/Foundation/GradNodesB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the emitted six-op cotangent IS the label-smoothed loss's gradient at a general target (mixup/cutmix)
     - {declaration: "Proofs.smoothedCE_grad", file: "LeanMlir/Proofs/Foundation/SmoothedLossCot.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a batched capstone: ResNet-50's 161 nodes at their chain cotangent; N, q and the LOSS (CE or BCE) binders; one replica

@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.Small.CifarFold
 /-! # PoC: the per-channel BatchNorm γ/β ops, proof-tied
 
 The per-channel-BatchNorm peer of `CifarFold`'s conv and dense folds, used by the cifar8-BN
-tie (`Cifar8BnStepTie`), `ResNet34Fold` and `MobileNetV2FoldPaperG`.
+tie (`Cifar8BnStepTie`), `ResNet34Fold` and `GradNodesB`.
 
 **The BN scale/shift ops.** The per-channel γ/β updates use the core
 ops `bnGammaSgd`/`bnBetaSgd`, whose `den` is `γ − lr·bnPerChannel_grad_gamma` /

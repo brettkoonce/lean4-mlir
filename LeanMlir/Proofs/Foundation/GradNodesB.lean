@@ -1,44 +1,35 @@
 import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Nets.Small.CifarBnClose
 import LeanMlir.Proofs.Nets.Small.CnnTrainStep
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
-import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 
-/-! # T3 §1 fold for ResNet-34 at TRUE BATCH-NORM — the UN-FUSED gradient ops
+/-! # The batched f32 gradient nodes — one `*GradB_den` per op kind, shared by every conv net
 
-`ResNet34Fold.lean` makes every parameter output of the per-example SGD train step
-`den`-faithful. This is its batched peer, and one thing about it is different in kind.
+Every batched train step the suite renders emits the RAW gradient (`*GradB`) and hands it to an
+optimizer tail (SGD, heavy-ball, Adam/AdamW, RMSProp, EMA, the data-parallel all-reduce), so one
+lemma per op kind — "this node denotes the certified `Σ_n` gradient" — certifies every optimizer
+variant of every net at once. Each proof is `Finset.sum_congr rfl` over the batch and then the
+per-example VJP at `batchSlice n`. The bf16 kinds (`*GradBBf16`) are a different real number and
+are folded in `Bf16GradNodes`; the fused `*SgdB` ops are these through
+`StableHLO.lean`'s `*SgdB_eq_grad` family (`rfl`).
 
-⛔ **r34's batched render emits `*GradB`, not `*SgdB`.** Every batched ResNet-34 train step —
-`resnet34_sgd_train_step`, the Adam family, `resnet34in_mom256` and its data-parallel peers —
-emits the RAW gradient and hands it to an optimizer tail (`adamMNextF`/`adamVNextF`, heavy-ball,
-plain SGD). The fused `θ − lr·∂Loss/∂θ` op only appears in renders whose optimizer is SGD-inline,
-which EfficientNet's is and r34's batched one is not. Every `den = certified` lemma in the repo
-before this file is stated at the fused form, so none of them applies here.
+Namespaces are the net that first needed the op (kept so that every citation keeps its name):
 
-⭐ **That makes this tier better, not worse.** A statement about the gradient covers every
-optimizer variant at once: `sgd`, `mom`, `momdp64`, `adam` and `adamdp128` all consume the same
-`*GradB` node, so one lemma per op kind certifies the whole family. ⚠ The bf16 twins do NOT: a
-bf16 render emits `*GradBBf16`, its own kind, folded in [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean). It is also the
-form ConvNeXt's `psW` carve-out already had to take for a different reason (a hand-written SGD
-wrap).
+| op kinds | namespace | emitted by |
+|---|---|---|
+| conv / strided-conv (symmetric) W and b, BN γ/β, dense W/b, the `*TiedB` clause Props | `ResNet34PoCB` | every conv net |
+| XLA-`SAME` strided conv W, depthwise W, symmetric strided depthwise W, rectangular dense b | `EnetPoCG` | EfficientNet-B0, MobileNetV2/V4, ConvNeXt |
+| XLA-`SAME` strided conv b, depthwise b, XLA-`SAME` strided depthwise W and b | `Mnv2PaperPoCG` | MobileNetV2, ConvNeXt |
+| stride-4 patchify conv W | `CnxPoCGB` | ConvNeXt |
 
-⭐ **And no new mathematics: the `*SgdB` peers were already proven, and the fusion is `rfl`.**
-`StableHLO.lean`'s `*SgdB_eq_grad` family (`convWeightSgdB_eq_grad`, …) says each fused op IS
-`θ − lr·` applied to the un-fused one, all by `rfl`, and its own docstring says it exists to
-"unblock a batched `resnet34_adam_train_step` rendered from `Proofs/` — the blocker was the fusion,
-never Adam." So the eight lemmas below are the per-example VJP bridge under `Σ_n` with no
-`θ − lr·` wrapper, and `EfficientNetFold.lean`'s fused lemmas are them through `*SgdB_eq_grad`.
+The per-token dense and vector-LayerNorm nodes (`ViTPoCGB`) live in `ViTFoldGB`, beside
+the per-example bridges they fold; ConvNeXt's channel-LN and layer-scale nodes in
+`ConvNeXtFoldGB`.
 
-⚠ **Symmetric padding, not XLA-`SAME`.** The strided lemmas here are about `convStridedWeightGradB`
-/ `convStridedBiasGradB`, whose `den` is `flatConvStride2_*`; B0's peers are about the
-`convStridedXla*` ops and `flatConvStride2Xla_*`. The two op families have identical types and
-identical emitted shapes, so nothing but the certificate distinguishes them — and r34 is the
-PyTorch-origin net, so symmetric is the shipped phase.
+⚠ Padding is invisible in the types: the symmetric and XLA-`SAME` strided kinds have identical
+types and identical emitted shapes, and only the certificate tells them apart.
 
-## Honest residual (the boundary every fold carries)
-* The cotangents are free variables `cot` — each lemma is `∀ cot`, so it holds at the actual
-  backward-chain cotangent without naming it. Pinning each to the emitted residual-backward
-  subgraph is the §1a tie, and is `ResNet34StepTieB.lean`.
+Every lemma is `∀ cot`; pinning each cotangent to the emitted backward subgraph is each net's
+`*StepTie*` file.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -324,3 +315,201 @@ def DenseBTiedB (N : Nat) {a c : Nat} (cotN : String) (W : Mat a c) (x : Vec a) 
           pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k
 
 end Proofs.ResNet34PoCB
+
+namespace Proofs.EnetPoCG
+
+open scoped BigOperators
+
+/-- **Batched dense bias GRADIENT denotes the certified `Σ_n` cotangent sum.** r34's peer at a
+    RECTANGULAR witness `Mat a c`, which the SE's `c → r` squeeze needs; the gradient is the
+    channel sum and depends on neither `W` nor `x`, so the widening is free. -/
+theorem denseBGradB_den {N a c : Nat}
+    (cotN : String) (W : Mat a c) (x : Vec a) (b : Vec c) (cot : Vec (N * c)) (j : Fin c) :
+    den (SHlo.denseBiasGradB (N := N) (.operand cotN cot)) j
+      = ∑ n : Fin N, ∑ k : Fin c,
+          pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact dense_bias_grad_correct W b x (batchSlice N c cot n) j
+
+-- ════════════════════════════════════════════════════════════════
+-- § New: the XLA-`SAME` strided stem
+--   ⚠ `flatConvStride2Xla`, NOT r34's symmetric `flatConvStride2`. Identical types.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Batched XLA-`SAME` strided conv weight GRADIENT denotes the certified `Σ_n` weight
+    gradient.** B0's 3×3/s2 stem, the net's one XLA-phase site. `Σ_n` of
+    `flatConvStride2Xla_weight_grad_has_vjp.correct` — the odd-phase weight VJP, so the certified
+    gradient is the gradient of the net that ships. -/
+theorem convStridedXlaWGradB_den {N ic oc h w kH kW : Nat}
+    (xN cotN : String) (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
+    (W : Kernel4 oc ic kH kW) (cot : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
+    den (SHlo.convStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+                  flatConvStride2Xla (Kernel4.unflatten v') b
+                    (batchSlice N (ic * (2 * h) * (2 * w)) x n))
+               (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact (flatConvStride2Xla_weight_grad_has_vjp b
+    (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
+    (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
+
+-- ════════════════════════════════════════════════════════════════
+-- § New: the MBConv depthwise kernels (3×3 and 5×5), stride 1 and stride 2
+--   ⚠ SYMMETRIC padding at the strided sites — the render's forward is `.depthwiseStrided` too.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Batched stride-1 depthwise weight GRADIENT denotes the certified `Σ_n` weight gradient.**
+    `Σ_n` of the flattened `depthwise_weight_grad_has_vjp3.correct`. Generic in the kernel size, so
+    the one lemma covers every 3×3 and every 5×5 depthwise. -/
+theorem depthwiseWGradB_den {N c h w kH kW : Nat}
+    (xN cotN : String) (b : Vec c) (x : Vec (N * (c * h * w)))
+    (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)) :
+    den (SHlo.depthwiseWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun v' : Vec (c * kH * kW) =>
+                  Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
+                    (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
+               (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b
+      (Tensor3.unflatten (batchSlice N (c * h * w) x n)))).correct
+      (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx]
+  simp only [hasVJP3_to_hasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
+
+/-- **Batched strided depthwise weight GRADIENT denotes the certified `Σ_n` weight gradient.** The
+    strided VJP is already flat, so this is `Σ_n` of
+    `depthwiseStride2_weight_grad_has_vjp.correct`. -/
+theorem depthwiseStridedWGradB_den {N c h w kH kW : Nat}
+    (xN cotN : String) (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w))))
+    (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)) :
+    den (SHlo.depthwiseStridedWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun v' : Vec (c * kH * kW) =>
+                  depthwiseStride2Flat (Tensor3.unflatten v') b
+                    (batchSlice N (c * (2 * h) * (2 * w)) x n))
+               (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact (depthwiseStride2_weight_grad_has_vjp b
+    (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct
+    (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx
+
+end Proofs.EnetPoCG
+
+namespace Proofs.Mnv2PaperPoCG
+
+open scoped BigOperators
+
+-- ════════════════════════════════════════════════════════════════
+-- § The four new op kinds
+--   ⚠ XLA-`SAME` at every strided site.
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Batched XLA-`SAME` strided conv bias GRADIENT denotes the certified `Σ_n` bias gradient.**
+    The stem's bias slot, at `convBias := true`. Same `reduce` text as the stride-1 bias grad; the
+    `den` is the odd-phase bias VJP. -/
+theorem convStridedXlaBGradB_den {N ic oc h w kH kW : Nat} (cotN : String)
+    (W : Kernel4 oc ic kH kW) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (b : Vec oc)
+    (cot : Vec (N * (oc * h * w))) (o : Fin oc) :
+    den (SHlo.convStridedXlaBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun b' : Vec oc =>
+                  flatConvStride2Xla W b' (batchSlice N (ic * (2 * h) * (2 * w)) x n))
+               b o j * batchSlice N (oc * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact (flatConvStride2Xla_bias_grad_has_vjp W
+    (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct b (batchSlice N (oc * h * w) cot n) o
+
+/-- **Batched stride-1 depthwise bias GRADIENT denotes the certified `Σ_n` bias gradient.** The
+    depthwise bias slots at `convBias := true`. EfficientNet has no instance of this op — its
+    depthwise convs are followed by BatchNorm, so their bias is always folded. -/
+theorem depthwiseBGradB_den {N c h w kH kW : Nat} (cotN : String)
+    (W : DepthwiseKernel c kH kW) (x : Vec (N * (c * h * w))) (b : Vec c)
+    (cot : Vec (N * (c * h * w))) (o : Fin c) :
+    den (SHlo.depthwiseBiasGradB W x b (.operand cotN cot)) o
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun b' : Vec c =>
+                  Tensor3.flatten (depthwiseConv2d W b'
+                    (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
+               b o j * batchSlice N (c * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact (depthwise_bias_grad_has_vjp W
+    (Tensor3.unflatten (batchSlice N (c * h * w) x n))).correct b
+    (batchSlice N (c * h * w) cot n) o
+
+/-- **Batched XLA-`SAME` strided depthwise weight GRADIENT denotes the certified `Σ_n` weight
+    gradient.** The four stride-2 depthwises (b2/b4/b7/b14). ⚠ This is the `Xla` op — its
+    weight-grad correlation keeps the `[p−1, p+1]` pad, the opposite asymmetry from the input-grad,
+    and that asymmetry is the whole content of the variant. B0's strided depthwise is the
+    SYMMETRIC op, so the two nets do not share this certificate. -/
+theorem depthwiseStridedXlaWGradB_den {N c h w kH kW : Nat} (xN cotN : String)
+    (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)) :
+    den (SHlo.depthwiseStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun v' : Vec (c * kH * kW) =>
+                  depthwiseStride2FlatXla (Tensor3.unflatten v') b
+                    (batchSlice N (c * (2 * h) * (2 * w)) x n))
+               (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact (depthwiseStride2Xla_weight_grad_has_vjp b
+    (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct
+    (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx
+
+/-- **Batched XLA-`SAME` strided depthwise bias GRADIENT denotes the certified `Σ_n` bias
+    gradient.** At `convBias := true`. -/
+theorem depthwiseStridedXlaBGradB_den {N c h w kH kW : Nat} (cotN : String)
+    (W : DepthwiseKernel c kH kW) (x : Vec (N * (c * (2 * h) * (2 * w)))) (b : Vec c)
+    (cot : Vec (N * (c * h * w))) (o : Fin c) :
+    den (SHlo.depthwiseStridedXlaBiasGradB (h := h) (w := w) W x b (.operand cotN cot)) o
+      = ∑ n : Fin N, ∑ j : Fin (c * h * w),
+          pdiv (fun b' : Vec c =>
+                  depthwiseStride2FlatXla W b' (batchSlice N (c * (2 * h) * (2 * w)) x n))
+               b o j * batchSlice N (c * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact (depthwiseStride2Xla_bias_grad_has_vjp W
+    (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct b
+    (batchSlice N (c * h * w) cot n) o
+
+end Proofs.Mnv2PaperPoCG
+
+namespace Proofs.CnxPoCGB
+
+open scoped BigOperators
+
+/-- **Batched patchify-stem weight GRADIENT denotes the certified `Σ_n` weight gradient.**
+    ⚠ The emitted convolution contracts the batch axis itself (the transpose trick), so the outer
+    sum is inside one op rather than across `N` of them — same as the strided ops. -/
+theorem psWGradB_den {N ic oc h w kH kW : Nat} (xN cotN : String)
+    (b : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (W : Kernel4 oc ic kH kW)
+    (cot : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
+    den (SHlo.convStride4WeightGradB xN b x W (.operand cotN cot)) idx
+      = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
+          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
+                  flatConvStride4 (Kernel4.unflatten v') b
+                    (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n))
+               (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
+  simp only [denStep, denStepApp]
+  apply Finset.sum_congr rfl
+  intro n _
+  exact (flatConvStride4_weight_grad_has_vjp b
+    (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n)).correct
+    (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
+
+end Proofs.CnxPoCGB

@@ -1,12 +1,11 @@
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
+import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
 
 /-! # ResNet-34's T3 §1a TIE at TRUE BATCH-NORM — the un-fused, batched whole-net thread
 
-`ResNet34FoldB.lean` (4.1e) makes every parameter GRADIENT node of the batched ResNet-34
+`GradNodesB` (4.1e) makes every parameter GRADIENT node of the batched ResNet-34
 train step `den`-faithful for an arbitrary cotangent. This file removes the "arbitrary": each
 cotangent is pinned to the one the emitted backward chain delivers, so the whole train step is
 `den`-composed forward → loss → backward with no free activation and no symbolic cotangent.
@@ -320,7 +319,7 @@ noncomputable def r34StemCotC (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 
 -- § The per-block-type tie bundles — every parameter node at its chain cotangent
 -- ════════════════════════════════════════════════════════════════
 
-/-! Each conjunct is `ResNet34FoldB`'s `∀ cot` fold instantiated at the cotangent the
+/-! Each conjunct is `GradNodesB`'s `∀ cot` fold instantiated at the cotangent the
 render's chain delivers, so nothing here is a new proof: the bundles are the §1 fold with the
 freedom removed. `reassocB` bridges the conv/relu index `N·(c·h·w)` to the BatchNorm parameter
 ops' `N·(c·(h·w))`.

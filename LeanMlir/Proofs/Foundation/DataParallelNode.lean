@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.DataParallel
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
+import LeanMlir.Proofs.Foundation.GradNodesB
 
 /-! # Data parallelism, piece 2: the collective as an AST node
 

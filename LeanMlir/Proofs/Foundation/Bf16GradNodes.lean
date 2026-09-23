@@ -1,4 +1,5 @@
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
+import LeanMlir.Proofs.Foundation.GradNodesB
+import LeanMlir.Proofs.Nets.ViT.ViTClose
 
 /-! # The bf16 gradient nodes — every `*GradBBf16` kind the suite emits, folded once
 

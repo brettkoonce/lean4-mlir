@@ -36,7 +36,7 @@ why the byte tie cannot see it and `den_rowDenseBiasGradB_at_one` exists to argu
 | `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` | `ViTPoC.headW_den` / `headB_den` |
 
 ⭐ **No new mathematics: every proof is `Finset.sum_congr rfl` over the batch and then the
-per-example bridge at `batchSlice n`.** That is `ResNet34FoldB.denseWGradB_den`'s shape, and
+per-example bridge at `batchSlice n`.** That is `ResNet34PoCB.denseWGradB_den`'s shape, and
 it is available because each batched `den` arm is literally `∑_batch` of the per-example one — the
 constructors were written that way (`StableHLO.lean`'s own comment on `veclnGammaGradB`: *"TWO-LEVEL:
 the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example"*).

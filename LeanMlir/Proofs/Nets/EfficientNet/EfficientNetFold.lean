@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
+import LeanMlir.Proofs.Foundation.GradNodesB
 
 /-! # PoC: the full-16 (262-param) EfficientNet-B0 train step, proof-tied (the §1 fold, den)
 

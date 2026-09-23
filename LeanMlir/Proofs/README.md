@@ -16,7 +16,7 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 
 | directory | what lives there |
 |---|---|
-| [`Foundation/`](Foundation/) | the roots (`Tensor`: pdiv/HasVJP kit; `MLP`; `DataParallel`; `OpaquePrefix`; `GramQ`, `ListDot`, `Muon*`) plus cross-net kits that sit *above* some nets (`IR`, `CertifiedChain`, `HeadLayers`, `BackwardMaps`, the batched-VJP and data-parallel-sync calculus, `Bf16GradNodes`, interval/CROWN bounds). Directories are by content, not import order: several Foundation files import net files. `SpecVJP` is an apex (the executable-spec ↔ proof bridge), not a starting point |
+| [`Foundation/`](Foundation/) | the roots (`Tensor`: pdiv/HasVJP kit; `MLP`; `DataParallel`; `OpaquePrefix`; `GradNodesB`, the batched f32 gradient nodes; `GramQ`, `ListDot`, `Muon*`) plus cross-net kits that sit *above* some nets (`IR`, `CertifiedChain`, `HeadLayers`, `BackwardMaps`, the batched-VJP and data-parallel-sync calculus, `Bf16GradNodes`, interval/CROWN bounds). Directories are by content, not import order: several Foundation files import net files. `SpecVJP` is an apex (the executable-spec ↔ proof bridge), not a starting point |
 | [`Architectures/`](Architectures/) | generic ops: `Attention`, `CNN`, `BatchNorm`, `LayerNorm`, `Depthwise`, `SE`, `Residual`, `MaxPool3s2`, the channel-LN and depthwise backward ties |
 | [`Nets/`](Nets/) | one directory per net family — `Small/` (MNIST linear/MLP/CNN, CIFAR), `ResNet/`, `MobileNet/`, `EfficientNet/`, `ConvNeXt/`, `ViT/`: each net's forward, VJP, folds, step ties and whole-net backward ties |
 | [`Float/`](Float/) | the rounding model: `FloatBridge`, `Binary32Instance`, bf16/E4M3, the ResNet-34 float chain |
@@ -109,11 +109,12 @@ Declaration suffixes: `_faithful` / `_den` / `_eq_vjp` all say "this graph denot
 graph, gradient-node and backward-chain granularity; `_certified` / `_tied*` are ties to a
 certified step; `…Tied*` are the per-node clause `Prop`s a tie is a conjunction of.
 
-**Namespaces do not follow file names**, for history: `ResNet34FoldB` → `ResNet34PoCB`,
-`ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTiePoCGB`, `ViTStepTieGB` →
+**Namespaces do not follow file names**, for history: `GradNodesB` holds `ResNet34PoCB`,
+`EnetPoCG`, `Mnv2PaperPoCG` and `CnxPoCGB` (the batched f32 gradient-node lemmas, named for the net
+that first needed each op), `ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTiePoCGB`, `ViTStepTieGB` →
 `ViTTiePoCGB`, `EfficientNetStepTieG` → `EnetTiePoCG`, `MobileNetV4StepTieB` → `Mnv4TieB`. The
 `PoC*` namespaces are the production tier. Several kits every net uses live in the file of the
-net that needed them first — `ResNet34PoCB` (the batched gradient-node lemmas), `EnetTiePoC`
+net that needed them first — `EnetTiePoC`
 (`reassocB`, `cInB`, the backward link definitions), `ResNet34SyncStepTieB` (the sync-BN twin kit).
 
 **Don't start with the big files:** `SgdDescentCnn.lean` (~6.8k), `Attention.lean` (~2.3k), the

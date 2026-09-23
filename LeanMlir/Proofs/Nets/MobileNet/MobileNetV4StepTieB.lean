@@ -1,5 +1,4 @@
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FoldB
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFoldG
+import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
