@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.CNN
+import LeanMlir.Proofs.Architectures.ConvIndex
 
 /-! # IBP at conv depth — a compositional interval-bound engine
 
@@ -189,18 +189,12 @@ theorem unflatten_add_const {c h w : Nat} (T : Tensor3 c h w) (ε : ℝ) :
 -- § Convolution (`Proofs.conv2d`, SAME padding)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The padded input lookup `conv2d` performs, factored out verbatim: the tap
-    at kernel offset `(kh, kw)` for output position `(hi, wi)`, or `0` where the
-    window falls off the image. -/
+/-- The padded input lookup `conv2d` performs: the tap at kernel offset `(kh, kw)` for output
+    position `(hi, wi)`, or `0` where the window falls off the image. `convPad` (`ConvIndex`)
+    with the kernel extent implicit. -/
 noncomputable def convTap {ic h w kH kW : Nat} (x : Tensor3 ic h w)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hi : Fin h) (wi : Fin w) : ℝ :=
-  let pH := (kH - 1) / 2
-  let pW := (kW - 1) / 2
-  let hh := kh.val + hi.val
-  let ww := kw.val + wi.val
-  if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-    x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-  else 0
+  convPad kH kW x c kh kw hi wi
 
 /-- `conv2d` in tap form — definitional, so the engine below is talking about
     the repo's convolution and not a re-modelled one. -/
@@ -218,7 +212,7 @@ theorem convTap_mono {ic h w kH kW : Nat} {lo hi u : Tensor3 ic h w}
     (hI : Fin h) (wI : Fin w) :
     convTap lo c kh kw hI wI ≤ convTap u c kh kw hI wI ∧
       convTap u c kh kw hI wI ≤ convTap hi c kh kw hI wI := by
-  unfold convTap
+  unfold convTap convPad
   by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
       (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
   · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]
@@ -469,7 +463,7 @@ theorem convTap_uniform_lo {ic h w kH kW : Nat} (x : Tensor3 ic h w) (ε : ℝ)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hI : Fin h) (wI : Fin w) :
     convTap (fun a b d => x a b d - ε) c kh kw hI wI
       = convTap x c kh kw hI wI - ε * convTap (onesT ic h w) c kh kw hI wI := by
-  unfold convTap onesT
+  unfold convTap convPad onesT
   by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
       (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
   · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]; ring
@@ -480,7 +474,7 @@ theorem convTap_uniform_hi {ic h w kH kW : Nat} (x : Tensor3 ic h w) (ε : ℝ)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hI : Fin h) (wI : Fin w) :
     convTap (fun a b d => x a b d + ε) c kh kw hI wI
       = convTap x c kh kw hI wI + ε * convTap (onesT ic h w) c kh kw hI wI := by
-  unfold convTap onesT
+  unfold convTap convPad onesT
   by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
       (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
   · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]; ring

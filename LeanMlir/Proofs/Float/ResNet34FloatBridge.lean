@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Training.SgdDescentCnn
+import LeanMlir.Proofs.Float.ConvFloat
 import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Float.BnFloatBridge
 import LeanMlir.Proofs.Foundation.PerChannelBN
@@ -30,16 +30,6 @@ variable (M : FloatModel)
 -- ════════════════════════════════════════════════════════════════
 -- § Residual additive fan-in
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Rounded addition with inherited operand errors.** `fl(xt ⊕ yt)` is within
-    `u·(|x| + ex + |y| + ey) + (ex + ey)` of the exact `x + y`, given
-    `|xt − x| ≤ ex` and `|yt − y| ≤ ey`. The additive peer of `mul_close`; the
-    residual fan-in's float budget. -/
-theorem add_close {xt x yt y ex ey : ℝ} (hx : |xt - x| ≤ ex) (hy : |yt - y| ≤ ey) :
-    |M.add xt yt - (x + y)| ≤ M.u * (|x| + ex + |y| + ey) + (ex + ey) := by
-  refine M.rnd_close (by rw [add_sub_add_comm]; exact (abs_add_le _ _).trans (add_le_add hx hy))
-    ((abs_add_le _ _).trans ?_)
-  linarith [abs_sub_abs_le_abs_sub xt x, abs_sub_abs_le_abs_sub yt y]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Global average pool  (a per-channel mean)

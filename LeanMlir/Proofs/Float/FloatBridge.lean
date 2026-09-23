@@ -785,6 +785,16 @@ theorem mul_close {xt x yt y ea ec A C : ℝ}
     exact mul_le_mul hxt hyt (abs_nonneg _) (by linarith)
   exact M.rnd_close hprod habs
 
+/-- **Rounded addition with inherited operand errors.** `fl(xt ⊕ yt)` is within
+    `u·(|x| + ex + |y| + ey) + (ex + ey)` of the exact `x + y`, given
+    `|xt − x| ≤ ex` and `|yt − y| ≤ ey`. The additive peer of `mul_close`; the
+    residual fan-in's float budget. -/
+theorem add_close {xt x yt y ex ey : ℝ} (hx : |xt - x| ≤ ex) (hy : |yt - y| ≤ ey) :
+    |M.add xt yt - (x + y)| ≤ M.u * (|x| + ex + |y| + ey) + (ex + ey) := by
+  refine M.rnd_close (by rw [add_sub_add_comm]; exact (abs_add_le _ _).trans (add_le_add hx hy))
+    ((abs_add_le _ _).trans ?_)
+  linarith [abs_sub_abs_le_abs_sub xt x, abs_sub_abs_le_abs_sub yt y]
+
 /-- **Rounded SGD update**: `fl(θ − fl(lr·gt))` is within `sgdErr` of the
     real step `θ − lr·g`. Two roundings plus the inherited gradient error. -/
 theorem sgd_step_close (θ : ℝ) {gt g lr G eg : ℝ}

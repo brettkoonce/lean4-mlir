@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Float.FloatBridge
-import LeanMlir.Proofs.Architectures.CNN
+import LeanMlir.Proofs.Architectures.ConvIndex
 
 /-! # Mixed-precision convolution forward error
 
@@ -54,28 +54,13 @@ theorem Tensor3.flatten_mul {c h w : Nat} (A B : Tensor3 c h w) (k : Fin (c*h*w)
     Tensor3.flatten A k * Tensor3.flatten B k
       = Tensor3.flatten (fun i j l => A i j l * B i j l) k := rfl
 
-/-- The `kH × kW` receptive field `conv2d` reads at output pixel `(hi, wi)`, zero outside —
-    `conv2d`'s own `if hpad …` branch, lifted out so the conv's fan-in is a `Tensor3`.
-
-    ⚠⚠ **The `3` suffix is NOT decoration — it is what makes this file importable.**
-    `SgdDescentCnn.lean` already declares `Proofs.convWindow` for the SAME receptive field at
-    the FLAT type `Vec (ic*kH*kW)`. Two constants cannot share a full name, so while this one
-    was also called `convWindow` the two could not coexist in one environment: `lake build
-    LeanMlir` failed outright at
-    `import … ConvMixedFloatBridge failed, environment already contains 'Proofs.convWindow'`,
-    which is exactly the import a whole-net bound has to make. ▶ The `Tensor3` shape is
-    deliberate and stays — `conv2d_eq_flat_dot` needs `Tensor3.sum_flatten` — so the name
-    moved rather than the type. -/
+/-- The `kH × kW` receptive field `conv2d` reads at output pixel `(hi, wi)`, zero outside:
+    `convPad` (`ConvIndex`) as a `Tensor3`, so the conv's fan-in can be summed with
+    `Tensor3.sum_flatten` (`conv2d_eq_flat_dot`). `convWindow` (`ConvFloat`) is the same read at
+    the flat type `Vec (ic*kH*kW)`. -/
 noncomputable def convWindow3 {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
     (hi : Fin h) (wi : Fin w) : Tensor3 ic kH kW :=
-  fun c kh kw =>
-    let pH := (kH - 1) / 2
-    let pW := (kW - 1) / 2
-    let hh := kh.val + hi.val
-    let ww := kw.val + wi.val
-    if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-      x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-    else 0
+  fun c kh kw => convPad kH kW x c kh kw hi wi
 
 /-- The output channel's kernel slice, as a `Tensor3`. -/
 noncomputable def convSlice {ic oc kH kW : Nat} (W : Kernel4 oc ic kH kW) (o : Fin oc) :

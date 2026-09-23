@@ -68,7 +68,7 @@ def convTapQ {ic h w kH kW : Nat} (x : Fin ic → Fin h → Fin w → ℚ)
 theorem convTapQ_cast {ic h w kH kW : Nat} (x : Fin ic → Fin h → Fin w → ℚ)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hi : Fin h) (wi : Fin w) :
     ((convTapQ x c kh kw hi wi : ℚ) : ℝ) = convTap (castT x) c kh kw hi wi := by
-  unfold convTapQ convTap
+  unfold convTapQ convTap convPad
   dsimp only
   split_ifs <;> simp [castT]
 

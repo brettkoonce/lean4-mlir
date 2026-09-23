@@ -64,7 +64,7 @@ theorem convWindow3_abs_le {ic h w kH kW : Nat} {x : Tensor3 ic h w} {A : ℝ}
     (hA : 0 ≤ A) (hx : ∀ c i j, |x c i j| ≤ A) (hi : Fin h) (wi : Fin w) :
     ∀ c kh kw, |convWindow3 kH kW x hi wi c kh kw| ≤ A := by
   intro c kh kw
-  simp only [convWindow3]
+  simp only [convWindow3, convPad]
   split
   · exact hx _ _ _
   · simpa using hA
@@ -76,7 +76,7 @@ theorem convWindow3_sub_abs_le {ic h w kH kW : Nat} {xt xa : Tensor3 ic h w} {E 
     ∀ c kh kw, |convWindow3 kH kW xt hi wi c kh kw
                  - convWindow3 kH kW xa hi wi c kh kw| ≤ E := by
   intro c kh kw
-  simp only [convWindow3]
+  simp only [convWindow3, convPad]
   split
   · exact hd _ _ _
   · simpa using hE
