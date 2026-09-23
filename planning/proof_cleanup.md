@@ -22,7 +22,7 @@ were measured say so.
 * Lemmas for `Foundation/Tensor.lean`, `Codegen/StableHLO.lean` or `Codegen/Lamb.lean` rebuild
   240–420 modules: park them in the leaf that needs them and move them as a batch.
 
-## ▶ Start here (state at 2026-09-23, origin/main `714dd89b`)
+## ▶ Start here (state at 2026-09-23, origin/main `1fe29cf3`)
 
 Everything in §1 is on main. Work is done on local branch `proof-cleanup` and landed by: commit
 → fetch → rebase onto `origin/main` → re-run the gates → fast-forward `main` → push (no merge
@@ -71,8 +71,12 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 * `trace.profiler` allocates: a heartbeat bump sized without it can fail under it (§1(g):
   `emitTok` at 400k).
 
-**Next:** §3.5 and §3.6 are done; what is left is listed under each (§3.1–§3.6) and in §4.
-§3.3's matrix-level `G1` lemma and §3.2's printer split are optional (~20 s / ~45 s).
+**Next session, in order** (§3.1–§3.7 are done; §5 has the detail):
+
+1. §5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape — the main remaining proof-cleanup item.
+
+Parked (low payoff): `IsShardwise` for the `_shard` family (§3.6), the StableHLO printer split
+(§3.2, ~45 s), FullNets' matrix-level `G1` lemma (§3.3, ~20 s).
 
 ## 1. Done
 
@@ -95,6 +99,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 | (o) | §3.6 statement ports. EfficientNet: `B0Weights.EpsPos` (with `MBW.EpsPos`, `MBWNoExp.EpsPos`) replaces the 49 `0 < ε` binders in 7 statements. MobileNetV2 on V4's shape: `MNV2PosB` + `MNV2SmoothAtB` replace the apex's 38 binders, built on `vjp_comp_diff_at`, which also yields the new `mobilenetv2ForwardB_full_differentiableAt` (the seal's 45-line `sealDiffAt` is one term); `mnv2_net_tiedB` takes `g` free; `mnv2_net_syncTiedB` is the free-`G`/`hgs` form over a named `mnv2NetSyncTiedB` Prop, with `_smoothedCE` restoring the old instantiated statement. Tier regenerated (`mnv2_net_syncTiedB` and both EfficientNet entries), blueprint entries mirror V4's | the local comparator run: all three configs "Your solution is okay!" (5 min); ports + (n) together −558 lines |
 | (p) | §3.6 `_smul` kit: `IsHomog` (an `abbrev`, so `rw [h]`/`h s v` see the equation) + `IsHomog.comp` in DataParallelSync; 128 `X_smul` lemmas across 6 sync files restated `IsHomog (X …)` under the same name, `batchMap_smul` / `batchMapAux_smul` lift `IsHomog`, one-term delegates η-reduce (`batchMap_smul _ (HasVJP.backward_smul _ _)`); 21 explicit `… dy s` call sites swapped to `… s dy`. EfficientNetSyncStepTieG (the only sync file without them) got `variable` sections, `include hN hh hw` where the shard proofs need them | `IsHomog`: −55 lines. Sections: +21 lines but −6% of the file's bytes (97.1 → 90.9 kB) — the survey's "~300 lines from `variable`s" does not hold at this file's shape |
 | (q) | §3.5 training files. The conv2d / depthwise input-VJP proofs (CNN.lean, Depthwise.lean) share `sum_fin_ite_add_eq` + `padTap_indicator`: `simp` rewrites every Kronecker to "`c = ci` and the tap lands", collapses `(c, kh, kw)`, and `split_ifs` closes — the 25-line `show (let …)` restatements, the 55-line injectivity blocks and the triple `sum_eq_single`s are gone (−288 lines). `stepRadius` (SgdDescent) + nine named losses (`cnnConv2KernelLoss`, …, `linearLoss`, `cifar8LastConvLoss`) state the 16 `*_sgd_descends` rungs; each proof opens `simp only [stepRadius] at *; unfold <loss> at *` and is otherwise unchanged (`simp only [loss]` misses the partial application `gradAt (loss …)`; `unfold` does not). `TrainedLinearDescent`'s generator unfolds `linearLoss` after its `refine` (byte-reproducible before the edit). `Conv2Slot.loss_grad_lipschitz`: `set δ` for the drift constant (17 copies), `gcongr` for the 7-deep `mul_le_mul_of_nonneg_left` chain; margin3/4 the same | −763 lines net; CNN 5.9 → 6.2 s, SgdDescentCnn 20 s → 20 s — the audit's "statement elaboration is the 95 s" guess does not hold locally |
+| (s) | §5.1 generator paths. `trained_cnn_{witness,seal}.py` and `lipschitz_cert_{witness_s8,rationalize,power_iter}.py` read `data/` and write under this repo's root (`trained_linear_descent.py`'s `ROOT`); the three Lipschitz scratch snippets go to `SNIPPET_DIR` (default: the system temp dir) instead of a dead scratchpad path. Hand edits ported back so both witnesses and the seal regenerate byte-identically: `ite_eq_left`/`ite_eq_right`/`ite_true` (CNN seal, MLP witness), MLP witness's reduced-model banner, `norm_num [hpreVals]` and §1(i)'s `…Q, castM` simp set. Then `TrainedCnnSeal`'s `open Classical` out through the generator (§3.7's last). `xla_pad_op_check.py` / `mnv2_forward_tie.py` keep the sibling venv's `iree-compile` (a tool binary, env-overridable, never written to) | MNIST in `data/` is byte-identical to the sibling's; `../lean4-jax` has no modified files after every run; TrainedCnnSeal 37 s under lake, audit clean |
 | (r) | Polish. `MaxPool2IsArgmax.decidable` (CNN.lean) retires the 28 `open scoped Classical in` of §1(l); file-scope `open Classical` is out of IR, MLP, EvenKernelConvBack and the R34/ConvNeXt×2 ties (nothing else needed it). MobileNetV4's apex on `vjp_comp_diff_at` exports `mobilenetv4ForwardB_full_differentiableAt`, so its `sealDiffAt` is one term. The eight float rungs state their radius as `stepRadius … lr (budget)` (37 sites); the TrainedLinearDescent generator unfolds it | −221 lines; full corpus + comparator green |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
@@ -199,11 +204,7 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 
 ### 3.7 Small, any time — DONE as §1(l)
 
-Left over (after §1(r)): `TrainedCnnSeal`'s `open Classical`. ⛔ Its generator
-`scripts/trained_cnn_seal.py` (and the `trained_cnn_witness.py` it `exec`s) hard-code their input
-and OUTPUT paths into the sibling checkout `../lean4-jax/`, and the committed Lean file has since been
-hand-edited (`if_pos` → `ite_eq_left`), so the generator no longer reproduces it. Repoint and
-resync the generator before touching the file.
+`TrainedCnnSeal`'s `open Classical` (the last one) went out through its generator in §1(s).
 
 ## 4. Checked and set aside
 
@@ -217,3 +218,32 @@ resync the generator before touching the file.
 * CROWN/IBP are NOT slower after (j) despite the extra `castM` in their simp sets: CrownUncon
   standalone 237 s → 213 s. Parallel `lake build` numbers are inflated by contention; compare
   standalone.
+
+## 5. Next session
+
+### 5.1 Generator paths — DONE as §1(s)
+
+### 5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape (the main item)
+
+Template: §1(o) for MobileNetV2 and `MobileNetV4FullBVJP` for the chain. Both apexes
+(`resnet34ForwardB_full_has_vjp_at`, `resnet50ForwardB_full_has_vjp_at`) take 38–40 positional
+binders (`hsε`, one `R34IdPos`/`R34DownPos` per block, stem/pool clauses, one smoothness bundle per
+block at `r34PreK`).
+
+* Bundle them: `R34PosB w` / `R34SmoothAtB N w x` (R50: also `q hq0`), as `MNV2PosB` / `MNV2SmoothAtB`.
+* Build the apex on `vjp_comp_diff_at` (private chain, apex = `.fst`) and export
+  `…_differentiableAt` (= `.snd`); each seal's `sealDiffAt` (~40 lines) becomes one term and
+  `sealVJP`'s 38-argument call becomes `(sealPos) (sealX t) (sealSmooth nCls t)`.
+* ⚠ Statement changes: both apexes + `_correct` (AuditAxioms, blueprint `\lean{}` names), and the R50
+  apex appears inside a comparator-tier statement → regenerate `ChallengeTier`/`SolutionTier`
+  (`scripts/gen_comparator_tier.py`) and run `tests/comparator/run.sh` locally (~5 min, see memory).
+* ⛔ Tried 2026-09-23 WITHOUT bundling and reverted: the chain def and the export each restate all
+  40 binders, +99 lines. Bundle first.
+* Measure before quoting a saving: this session's survey estimates (`variable` sections ~300,
+  `IsHomog` ~200, statement elaboration = the 95 s) came in 2–5× high or not at all.
+
+### 5.3 Housekeeping
+
+* `planning/next_session_book_audit.md` (untracked) is the 2026-09-13 book-audit handoff; that pass
+  finished 2026-09-13 — archive to `planning/archive/` or delete (ask).
+

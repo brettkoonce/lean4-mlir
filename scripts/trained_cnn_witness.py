@@ -22,11 +22,12 @@ SAME zero padding pH=pW=1). The witness search enforces the h_mp condition
 (relu zeros collide, so each window may contain at most one negative conv2
 pre-activation, and the positive values must be pairwise distinct exactly).
 """
-import numpy as np, struct, sys
+import numpy as np, os, struct, sys
 from fractions import Fraction
 
-D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
-OUT = "/home/skoonce/lean/klawd_max_power/lean4-jax/LeanMlir/Proofs/Training/TrainedCnnWitness.lean"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+D = os.path.join(ROOT, "data") + os.sep
+OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedCnnWitness.lean")
 DEN_W = 128          # weight rationalization grid
 DEN_X = 4080         # 16 * 255 exact pooled-pixel denominator
 C = 2                # conv channels

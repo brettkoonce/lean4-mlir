@@ -1,9 +1,12 @@
-import numpy as np, struct
+import numpy as np, os, struct, tempfile
 from fractions import Fraction
 from math import isqrt, ceil
 
 rng = np.random.default_rng(0)
-D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+D = os.path.join(ROOT, "data") + os.sep
+# scratch snippets (hand-merged, not committed) go to SNIPPET_DIR, default the system temp dir
+SNIPPET_DIR = os.environ.get("SNIPPET_DIR", tempfile.gettempdir())
 
 def load_images(fn):
     with open(fn, "rb") as f:
@@ -190,7 +193,7 @@ A(f"    ∀ j, j ≠ {i0} → mlpT (xt + δ) j < mlpT (xt + δ) {i0} :=")
 A("  lipschitz_margin_certified_radius mlpT_lip (by norm_num) xt_margin hδ")
 
 snippet = "\n".join(lines) + "\n"
-out = "/tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax/8f48005c-0a69-42db-9283-1fd4bbae3fe3/scratchpad/trained_snippet.lean"
+out = os.path.join(SNIPPET_DIR, "trained_snippet.lean")
 with open(out, "w") as f:
     f.write(snippet)
 print("wrote", out, len(snippet), "bytes")

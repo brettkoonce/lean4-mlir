@@ -1,9 +1,12 @@
-import numpy as np, struct
+import numpy as np, os, struct, tempfile
 from fractions import Fraction
 from math import ceil
 
 rng = np.random.default_rng(0)
-D = "/home/skoonce/lean/klawd_max_power/lean4-jax/data/"
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+D = os.path.join(ROOT, "data") + os.sep
+# scratch snippets (hand-merged, not committed) go to SNIPPET_DIR, default the system temp dir
+SNIPPET_DIR = os.environ.get("SNIPPET_DIR", tempfile.gettempdir())
 
 def load_images(fn):
     with open(fn, "rb") as f:
@@ -139,7 +142,7 @@ A("theorem trained_demo_certified_gram2 (δ : EuclideanSpace ℝ (Fin 49))")
 A(f"    (hδ : ‖δ‖ < {frac(m)} / (Real.sqrt 2 * {frac(LL)})) :")
 A("    ∀ j, j ≠ 2 → mlpT (xt + δ) j < mlpT (xt + δ) 2 :=")
 A("  lipschitz_margin_certified_radius mlpT_lip_gram2 (by norm_num) xt_margin hδ")
-open("/tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax/8f48005c-0a69-42db-9283-1fd4bbae3fe3/scratchpad/s8_snippet.lean", "w").write("\n".join(L) + "\n")
+open(os.path.join(SNIPPET_DIR, "s8_snippet.lean"), "w").write("\n".join(L) + "\n")
 
 # ═══ emit trained-weight VJP witness file ═══
 W = []
@@ -149,6 +152,11 @@ A("import LeanMlir.Proofs.Training.JacobianSeal")
 A("import LeanMlir.Proofs.Certificates.LipschitzCertInstance")
 A("")
 A("/-! # Trained-weight whole-network VJP witness (MLP rung)")
+A("")
+A("**REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim")
+A("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical")
+A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
+A("arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
 A("")
 A("The audit's \"live witnesses use synthetic weights\" gap, closed at the MLP rung:")
 A("the SAME trained, /128-rationalized 49→8→10 pooled-MNIST network certified in")
@@ -203,9 +211,7 @@ A("    training. -/")
 A("theorem preact_ne : ∀ k, dense W1V b8 xtV k ≠ 0 := by")
 A("  intro k")
 A("  rw [preact_eq]")
-A("  fin_cases k <;>")
-A("    · simp [hpreVals]")
-A("      norm_num")
+A("  fin_cases k <;> norm_num [hpreVals]")
 A("")
 A("/-- **Level 1: the trained-weight whole-net VJP witness** — `HasVJPAt fwd xtV`,")
 A("    every hypothesis discharged (dense layers globally smooth, ReLU off-kink by")
@@ -262,8 +268,8 @@ A("        (if m = k then W1V j m * (if hpreVals m > 0 then (1:ℝ) else 0) else
 A("      intro m")
 A("      rw [pdiv_dense, pdiv_relu 8 _ preact_ne, preact_eq]")
 A("      by_cases hmk : m = k")
-A("      · rw [if_pos hmk, if_pos hmk]")
-A("      · rw [if_neg hmk, if_neg hmk, mul_zero]")
+A("      · rw [ite_eq_left hmk, ite_eq_left hmk]")
+A("      · rw [ite_eq_right hmk, ite_eq_right hmk, mul_zero]")
 A("    rw [Finset.sum_congr rfl fun m _ => hterm m,")
 A("        Finset.sum_ite_eq' Finset.univ k")
 A("          (fun m => W1V j m * (if hpreVals m > 0 then (1:ℝ) else 0))]")
@@ -276,7 +282,7 @@ A("")
 A(f"/-- The Jacobian entry `(∂ logit_{c0} / ∂ x_{j0})` at the witness, exactly. -/")
 A(f"theorem pdiv_fwd_val : pdiv fwd xtV {j0} {c0} = {frac(pv)} := by")
 A(f"  rw [pdiv_fwd]")
-A("  simp [W1V, W2V, W1t, W2t, hpreVals, Fin.sum_univ_succ]")
+A("  simp [W1V, W2V, W1t, W1tQ, W2t, W2tQ, hpreVals, Fin.sum_univ_succ, castM]")
 A("  norm_num")
 A("")
 A(f"theorem pdiv_fwd_ne : pdiv fwd xtV {j0} {c0} ≠ 0 := by")
@@ -307,5 +313,5 @@ A("  exact (hasFDerivAt_const (fwd xtV) xtV).fderiv")
 A("")
 A("end TrainedMlp")
 A("end Proofs")
-open("/tmp/claude-1000/-home-skoonce-lean-klawd-max-power-lean4-jax/8f48005c-0a69-42db-9283-1fd4bbae3fe3/scratchpad/TrainedMlpWitness.lean", "w").write("\n".join(W) + "\n")
+open(os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedMlpWitness.lean"), "w").write("\n".join(W) + "\n")
 print("wrote both")
