@@ -261,7 +261,7 @@ def book(chapters, nums, nodes, edges, tex, textwidth_pt=460.0, textheight_pt=38
         out.append('  \\draw[->, >=stealth, %s, line width=%.2fpt] %s%s;' % (style, (0.3 + 0.28 * math.log(c)) * max(s, 0.6), ' '.join(segs), (' -- ' + P(end)) if end else ''))
     out.append('\\end{tikzpicture}')
     cited = {u: sum(c for (a, b), c in count.items() if a == u) for u in ambient}
-    return '\n'.join(out), (x1 - x0) * s, (y1 - y0) * s, BASE * s, dict(count), dict(size), {lines(u)[0]: cited[u] for u in ambient}
+    return '\n'.join(out), (x1 - x0) * s, (y1 - y0) * s, BASE * s, dict(count), dict(size), {ref(u): cited[u] for u in ambient}
 
 
 # Figure 1.1: the five chapter networks' whole-network certificates and what each stands
@@ -332,7 +332,12 @@ if __name__ == '__main__':
     stikz, sw, sh, sfont, spine_info = spines(chapters, nums, nodes, edges, tex)
     open('%s/spines.tex' % outdir, 'w').write('\\begin{center}\n' + stikz + '\n\\end{center}\n')
     print('%-26s the chapter nets\' certificates and the chapters each stands on  %5.0f x %5.0f pt  font %.1f  %s' % ('spines', sw, sh, sfont, spine_info))
-    open('%s/book.tex' % outdir, 'w').write('\\begin{center}\n' + tikz + '\n\\end{center}\n')
+    # The caption's numbers come from here, not by hand: \depgraphCitations and one
+    # \depgraphCites<Chapter> per double-bordered chapter (chap:tensor -> Tensor).
+    macros = '\\gdef\\depgraphCitations{%d}\n' % sum(count.values())
+    for lab, c in sorted(cited.items()):
+        macros += '\\gdef\\depgraphCites%s{%d}\n' % (lab.split(':', 1)[1].title().replace('_', ''), c)
+    open('%s/book.tex' % outdir, 'w').write(macros + '\\begin{center}\n' + tikz + '\n\\end{center}\n')
     print('%-26s the book at chapter scale: %d boxes, %d arrows, %d citations  %5.0f x %5.0f pt  font %.1f  double-bordered: %s' % ('book', len(size), len(count), sum(count.values()), w, h, font, cited))
     k = 0; alls = units(nodes, edges)
     slug = lambda s: re.sub(r'[^a-z0-9]+', '_', s.lower()).strip('_')

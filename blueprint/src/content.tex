@@ -468,13 +468,11 @@ subset $+$ Ch~\ref{chap:layernorm}. Adds GELU and LayerNorm as new
 operator primitives, both proved from Ch~1 foundation rules.
 
 \textbf{Target: Attention / ViT (Ch~\ref{chap:attention}).}
-Everything above plus Ch~\ref{chap:attention}. This is the only
-chapter that needs matrix-level machinery, meaning matmul Jacobians and
-VJPs in both factor positions, transpose, scalar-scale, row-wise
-lifting, and 3D extensions. They're gathered in
-\S\ref{sec:matrix_machinery} at the start of Ch~\ref{chap:attention},
-just before the attention proofs that use them. Every earlier
-chapter routes around the matrix kit entirely.
+Everything above plus Ch~\ref{chap:attention}, which proves the
+matrix-level machinery --- matmul Jacobians and VJPs in both factor
+positions, transpose, scalar-scale, row-wise lifting, and 3D extensions
+--- in \S\ref{sec:matrix_machinery}, just before the attention proofs
+that use it.
 
 If you're unsure: read Ch~1 carefully (it's short), pick an
 architecture target that fits your interest, follow the chapter
@@ -2010,9 +2008,7 @@ real rows, so a test set whose size is not a multiple of the batch size
 is fully scored rather than silently truncated. Ten thousand images and
 a batch of 128 would otherwise drop the last 16. The
 forward-only render is a separate artifact rather than a branch inside
-the training graph, which matters more in Chapter~\ref{chap:bn} where
-BatchNorm has to use running statistics at inference and per-batch
-estimates during training.
+the training graph, which matters more from Chapter~\ref{chap:bn} on.
 
 That is the whole function. The reason it is short is that everything
 heavyweight lives in one compiled graph on the GPU. Lean's job here is
@@ -3947,8 +3943,8 @@ at every training step.
 The third step, \(\gamma \hat{x} + \beta\), is structurally a
 dense layer applied per-channel. Its Jacobian
 \(\partial(\gamma v + \beta)/\partial v_i = \gamma \delta_{ij}\) is
-exactly the dense-Jacobian computation from
-Chapter~\ref{chap:mlp}, just lifted to a tensor shape and
+exactly the dense-Jacobian computation of
+Theorem~\ref{ax:pdiv_dense}, just lifted to a tensor shape and
 broadcast across spatial dimensions. Theorem
 \ref{ax:pdiv_bnAffine} and Theorem \ref{thm:bnAffine_has_vjp}
 are essentially corollaries of the dense theorems. The new content
@@ -4770,9 +4766,7 @@ AdamW          & fp32 & 74.75 & 75.08 & 73.90 & 73.98 & 74.48 & 74.48 \\
 smaller than the spread within the corresponding fp32 row --- $1.89$,
 $0.75$ and $1.18$ --- so on this net, at this scale, the number format is
 not measurable against the noise of rerunning the same configuration.
-Thirty arm-runs, no \texttt{NaN}, nothing collapsed to chance. That is the
-result Chapter~\ref{chap:residual} was going to assume, and it no longer
-has to.
+Thirty arm-runs, no \texttt{NaN}, nothing collapsed to chance.
 
 \medskip\noindent The un-normalized net answers differently, and the
 difference is the interesting part. Run the same comparison there (the
@@ -5675,9 +5669,7 @@ Chapters~\ref{chap:cnn} and~\ref{chap:bn}. Only the fan-in is new here.
 
 Six ingredients first appear here, none of which are layers. They
 all live in \texttt{TrainConfig} or training code. They don't touch
-the network, but they're what moves a scratch-trained model from
-$83.20 \pm 1.57$ (momentum at a constant rate and nothing else, the
-\texttt{bare} arm of \S\ref{sec:r34_ablation}) to $89.99 \pm 0.32$.
+the network; what each one is worth is measured in \S\ref{sec:r34_ablation}.
 
 \textbf{Adam} (Kingma \& Ba, 2014,
 \href{https://arxiv.org/abs/1412.6980}{arXiv:1412.6980}). Replaces
@@ -5936,9 +5928,10 @@ The recipe in full: SGD with momentum $0.9$ at batch 256, cosine LR with a
 random-resized-crop (sampling $8$--$100\%$ of the image area at a
 $\frac{3}{4}$--$\frac{4}{3}$ aspect ratio, then resizing to
 $224\times224$) plus a horizontal flip, and $\ell_2$ weight decay
-$10^{-4}$. Every one of those is either the original paper or the ``bag of
-tricks'' polish that became standard after 2018, and
-\S\ref{sec:r50_a3_vs_2018} is the table that says which is which.
+$10^{-4}$. SGD with momentum and the weight decay are the original paper's;
+the cosine schedule, the warmup, the label smoothing and the
+random-resized-crop are the ``bag of tricks'' polish that became standard
+after 2018.
 
 \prosesection{The reference (JAX)}
 
@@ -6094,13 +6087,15 @@ variant, the per-replica batch and the feed setting --- and
 \hline
 GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (CUDA) & bf16 & $\sim$14.6 min & 90 & $\sim$22.2 hr & $\mathbf{74.06\%}$ & $\mathbf{91.75\%}$ \\
+4$\times$ 3060 (CUDA) & bf16 & $\sim$15.8 min & 90 & $\sim$23.7 hr & $\mathbf{74.17\%}$ & $\mathbf{91.89\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
 \noindent Global batch 256 as $4 \times 64$ replicas, bf16 matmul and
-convolution as on the reference, scored over the same $50{,}000$ images.
+convolution as on the reference, BatchNorm statistics all-reduced across
+the four replicas, scored over the same $50{,}000$ images. One attempt, no
+restarts.
 
 \medskip\noindent\textbf{The lowerer underneath is interchangeable.} Run
 from the same initialization on the same box, the IREE and XLA lowerings of
@@ -6119,18 +6114,18 @@ at ImageNet scale''.
 lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step  & yes                      & none \\
 box                 & 4$\times$ 4060\,Ti       & 4$\times$ 3060 \\
-BN statistic group  & 256 (global)             & 64 (per replica) \\
-per epoch           & $\sim$8.8 min            & $\sim$14.6 min \\
-total               & $\sim$14.8 hr            & $\sim$22.2 hr \\
+per epoch           & $\sim$8.8 min            & $\sim$15.8 min \\
+total               & $\sim$14.8 hr            & $\sim$23.7 hr \\
 \hline
 precision           & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
 global batch        & 256 ($4\times64$)        & 256 ($4\times64$) \\
+BN statistic group  & 256 (global)             & 256 (global) \\
 steps/epoch         & 5{,}004                  & 5{,}004 \\
 optimizer           & SGD, momentum $0.9$      & SGD, momentum $0.9$ \\
 schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
 \hline
-\textbf{val top-1}  & $\mathbf{74.16\%}$       & $\mathbf{74.06\%}$ \\
-\textbf{val top-5}  & $\mathbf{91.92\%}$       & $\mathbf{91.75\%}$ \\
+\textbf{val top-1}  & $\mathbf{74.16\%}$       & $\mathbf{74.17\%}$ \\
+\textbf{val top-5}  & $\mathbf{91.92\%}$       & $\mathbf{91.89\%}$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -6141,30 +6136,31 @@ reference ran on four 4060\,Ti and the verified path on four 3060, the
 arrangement \S\ref{sec:r50_pjrt}'s grid keeps. Rows above the first rule
 differ; rows between the rules are held equal by construction.
 
-\medskip\noindent\textbf{The two paths agree to $0.10$ points on top-1 and
-$0.17$ on top-5}, and that is well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson
+\medskip\noindent\textbf{The two paths agree to $0.01$ points on top-1 and
+$0.03$ on top-5}, and that is well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson
 interval of Chapter~\ref{chap:tensor} is $\pm0.38$ points on either top-1
---- $[73.77, 74.54]$ for the reference, $[73.68, 74.45]$ for the verified
+--- $[73.77, 74.54]$ for the reference, $[73.78, 74.55]$ for the verified
 path --- so the gap in the table is a fraction of the interval, and
 at this scale a gap under about $0.4$ points is not yet a result in either
 direction. That is the floor every side-by-side table in this book is read
 against.
 
 \medskip\noindent The pair is not one-variable, and the table says where:
-the verified run is on four 3060 where the reference is on four 4060\,Ti,
-and its BatchNorm normalizes over each replica's $64$ where the reference's
-\texttt{@jit} mesh reduces the statistics over the global $256$. The $0.10$
-bounds the two together. \S\ref{sec:mnv2_phase4} is the same comparison on
-one box, with the BatchNorm group left as the only asymmetry.
-
-\globalbntodo
+the verified run is on four 3060 where the reference is on four 4060\,Ti.
+The BatchNorm group is held equal, and that took work the table does not
+show: the reference's \texttt{@jit} mesh reduces the batch statistics over
+the global $256$ for free, and the verified render only matches it because
+every one of its 36 BatchNorms all-reduces its mean and variance across the
+four replicas --- the render Theorem~\ref{thm:resnet34_sync_tie} ties to one
+device's step at $256$.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The middle of the schedule is noisy on both paths --- at peak
 learning rate SGD moves top-1 by several points between consecutive
-epochs, in both directions, seven at the worst on either path --- so the row
-is read for its ends. Over the last fifteen epochs the two average within
-$0.04$ of each other:
+epochs, in both directions, seven at the worst on the reference and six on
+the verified path --- so the row is read for its ends. Over the last fifteen
+epochs the two average within $0.09$ of each other on top-1 and $0.01$ on
+top-5:
 
 \begin{center}
 \begin{tabular}{@{}l r r r r r r r@{}}
@@ -6172,8 +6168,8 @@ $0.04$ of each other:
 epoch & 5 & 15 & 30 & 45 & 60 & 75 & 90 \\
 \hline
 reference (JAX)       & 35.85 & 44.94 & 47.01 & 51.30 & 59.47 & 68.71 & 74.16 \\
-verified path (PJRT)  & 30.06 & 44.32 & 48.70 & 53.34 & 60.72 & 68.54 & 74.06 \\
-$\Delta$              & $-5.79$ & $-0.62$ & $+1.69$ & $+2.04$ & $+1.25$ & $-0.17$ & $-0.10$ \\
+verified path (PJRT)  & 32.04 & 42.76 & 49.09 & 53.92 & 58.11 & 68.57 & 74.17 \\
+$\Delta$              & $-3.81$ & $-2.18$ & $+2.08$ & $+2.62$ & $-1.36$ & $-0.14$ & $+0.01$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -6198,7 +6194,7 @@ $\Delta$              & $-5.79$ & $-0.62$ & $+1.69$ & $+2.04$ & $+1.25$ & $-0.17
 };
 \addlegendentry{reference (JAX)}
 \addplot[red, dashed] coordinates {
-(1,8.70) (2,17.34) (3,25.78) (4,33.29) (5,30.06) (6,32.50) (7,40.35) (8,40.42) (9,37.95) (10,44.64) (11,43.02) (12,41.01) (13,43.50) (14,42.27) (15,44.32) (16,41.56) (17,41.19) (18,48.75) (19,45.40) (20,46.14) (21,43.96) (22,45.61) (23,47.07) (24,44.61) (25,48.23) (26,47.12) (27,47.14) (28,47.71) (29,49.06) (30,48.70) (31,50.76) (32,49.48) (33,49.92) (34,50.87) (35,45.04) (36,49.85) (37,51.51) (38,49.34) (39,52.37) (40,48.84) (41,52.12) (42,51.94) (43,52.54) (44,53.34) (45,53.34) (46,53.55) (47,53.95) (48,55.02) (49,54.30) (50,56.34) (51,55.95) (52,53.80) (53,57.11) (54,56.81) (55,58.26) (56,59.13) (57,56.06) (58,57.57) (59,59.86) (60,60.72) (61,59.12) (62,61.55) (63,61.54) (64,62.14) (65,58.11) (66,62.46) (67,63.99) (68,64.53) (69,63.40) (70,65.45) (71,66.20) (72,67.16) (73,67.61) (74,67.28) (75,68.54) (76,69.73) (77,69.57) (78,70.41) (79,70.62) (80,71.56) (81,71.61) (82,72.37) (83,72.70) (84,73.04) (85,73.42) (86,73.72) (87,73.90) (88,73.97) (89,74.06) (90,74.06)
+(1,9.41) (2,18.96) (3,27.78) (4,33.25) (5,32.04) (6,33.52) (7,37.74) (8,41.38) (9,39.87) (10,45.31) (11,43.41) (12,43.03) (13,44.17) (14,41.47) (15,42.76) (16,44.51) (17,41.08) (18,46.10) (19,43.69) (20,43.36) (21,41.06) (22,42.83) (23,46.98) (24,48.05) (25,43.39) (26,48.80) (27,47.97) (28,48.87) (29,48.43) (30,49.09) (31,49.21) (32,47.68) (33,51.10) (34,47.35) (35,49.50) (36,49.21) (37,51.51) (38,48.92) (39,50.29) (40,47.71) (41,53.44) (42,50.69) (43,51.08) (44,52.56) (45,53.92) (46,54.38) (47,54.00) (48,54.24) (49,57.21) (50,54.38) (51,55.81) (52,53.81) (53,56.65) (54,57.94) (55,56.15) (56,58.07) (57,58.79) (58,56.90) (59,57.68) (60,58.11) (61,60.54) (62,60.61) (63,61.98) (64,62.09) (65,60.61) (66,60.95) (67,63.19) (68,64.03) (69,65.38) (70,65.86) (71,66.75) (72,66.91) (73,66.59) (74,67.14) (75,68.57) (76,68.82) (77,69.54) (78,70.21) (79,71.04) (80,71.40) (81,71.96) (82,72.36) (83,72.98) (84,73.24) (85,73.43) (86,73.94) (87,74.08) (88,74.15) (89,74.14) (90,74.17)
 };
 \addlegendentry{verified path (PJRT)}
 \end{axis}
@@ -6519,7 +6515,7 @@ A3 is the cheap tier. The other two are recipes --- \texttt{a2-accum} and
 \hline
 tier & epochs & train res & verified render & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run (\S\ref{sec:r50_a3_vs_2018}) & $\mathbf{77.98\%}$ \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run (\S\ref{sec:r50_pjrt}) & $\mathbf{77.98\%}$ \\
 A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $79.8\%$ (paper) \\
 A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $80.4\%$ (paper) \\
 \hline
@@ -6671,8 +6667,8 @@ Eighty epochs at about 26 seconds each, thirty-five minutes in total, and
 3,925-image validation split. The best epoch reached $89.32\%$. Set that
 against Chapter~\ref{chap:residual}, which ran the same data, the same
 recipe and the same number of epochs through a network with
-$9.5\times$ the parameters and averages $89.99 \pm 0.32$ top-1 and
-$98.46\%$ top-5 over five seeds. MobileNetV2 gives up three quarters of
+$9.5\times$ the parameters and averages $89.99 \pm 0.32$ top-1 over five
+seeds. MobileNetV2 gives up three quarters of
 a point of top-1 --- less than one run's own $\pm 0.97$ interval --- picks
 up a fifth of a point of top-5, and does it in thirty-five minutes
 against forty-seven.
@@ -6951,7 +6947,7 @@ depthwise has no cross-channel mixing, so the channel of every
 
 \begin{proof}
 \leanok
-Same three steps as the conv2d bias VJP
+The same argument as the conv2d bias VJP
 (Theorem~\ref{ax:conv2d_bias_grad_has_vjp}), with input channel
 \(=\) output channel throughout:
 \begin{enumerate}
@@ -7741,23 +7737,21 @@ between the rules are held equal by construction.
 \medskip\noindent\textbf{The two paths agree to $0.01$ points on top-1 and
 $0.11$ on top-5}, inside the floor \S\ref{sec:r34_pjrt} set ($\pm0.39$ at
 $72\%$ on $50{,}000$ images), at one seed each. Precision is held equal
-here where ResNet-34's pair did not, so the one asymmetry left above the
+as on ResNet-34's pair, so the one asymmetry left above the
 rule is the BatchNorm group, and this is the pair that isolates it.
 
 \medskip\noindent\textbf{What the BatchNorm group is.} MobileNetV2 has
 BatchNorm in every block. The verified path runs four replicas of $64$ with
 no collective touching the batch statistics, so it normalizes over groups
 of $64$; the reference under a \texttt{NamedSharding} mesh reduces
-globally, so it normalizes over $256$. The ResNet-34 pair of
-\S\ref{sec:r34_pjrt}, which carries the same fourfold difference and a
-box difference besides, landed $0.10$ apart at convergence, inside the
-floor; the $+0.01$ here is smaller still. So the claim is that the two paths agree
-to within the BatchNorm-group effect --- not that the path has been shown
-neutral. Separating those takes a verified render that all-reduces the
-batch statistics, and when this pair trained none did: the only node in
-the graph language that saw across replicas was the gradient collective,
-and every BatchNorm node consumed a single expression. Every BatchNorm pair
-in this book was trained under that asymmetry.
+globally, so it normalizes over $256$. So the claim is that the two paths
+agree to within the BatchNorm-group effect --- not that the path has been
+shown neutral. Separating those takes a verified render that all-reduces
+the batch statistics, and when this pair trained none did: the only node
+in the graph language that saw across replicas was the gradient
+collective, and every BatchNorm node consumed a single expression. Every
+BatchNorm pair in this book but ResNet-34's was trained under that
+asymmetry.
 
 \globalbntodo
 
@@ -7915,7 +7909,7 @@ EMA           & none                   & decay $0.9999$, warmup-corrected & weig
 \end{tabular}
 \end{center}
 
-\noindent The direction of travel matches the recipe tables closing
+\noindent The direction of travel matches the recipe tables of
 Chapters~\ref{chap:se} and~\ref{chap:layernorm}: by 2024 the mobile
 lineage has converged on the same transformer-era training
 recipe as everything else (AdamW at large effective batch,
@@ -8008,7 +8002,7 @@ running the faithful Conv-Medium. The phase-4 peer exists as of this
 writing, and it renders the same network.
 
 The spec is built the way \S\ref{sec:mnv2_phase4} built MobileNetV2's
-and the way Chapter~\ref{chap:residual} built ResNet-50's. The trunk is
+and the way \S\ref{sec:r34_pjrt} built ResNet-34's. The trunk is
 copied unchanged from the Imagenette spec, a \texttt{\#guard} pins every
 parameter shape but the head against it, and the head moves
 $1280{\times}10 \to 1280{\times}1000$, taking the count from
@@ -8235,8 +8229,8 @@ the input with a side branch:
 
 where the gate \(g\) is built from the saved input \(x\) via two
 dense layers and a sigmoid. We already proved the VJP of an
-elementwise product (Chapter~\ref{chap:tensor}). We already
-proved the VJP of dense (Chapter~\ref{chap:mlp}). We already
+elementwise product (Theorem~\ref{thm:elemwiseProduct_has_vjp}). We already
+proved the VJP of dense (Theorem~\ref{thm:dense_has_vjp}). We already
 proved the VJP of identity, and an additive fan-in collapses to
 the same product-rule structure as elementwise. Theorem
 \ref{thm:seBlock_has_vjp} is one line of composition, and it
@@ -8605,9 +8599,8 @@ convolution.
 
 Every SE block multiplies the input by the sigmoid output of its
 two-layer MLP: that is exactly Theorem~\ref{thm:seBlock_has_vjp} composed
-with Theorem~\ref{thm:elemwiseProduct_has_vjp} and the already-proved dense
-VJPs
-from Chapter~\ref{chap:mlp}. No new math in this chapter beyond the SE
+with Theorem~\ref{thm:elemwiseProduct_has_vjp} and the dense VJP
+(Theorem~\ref{thm:dense_has_vjp}). No new math in this chapter beyond the SE
 block itself.
 
 \subsection*{Results}
@@ -9063,8 +9056,8 @@ unmeasured.} As in \S\ref{sec:mnv2_phase4}, precision is held equal, so the
 one numerical asymmetry above the rule is the BatchNorm group: each
 replica's $64$ against the reference's global $256$, for the reason given
 there --- the render this pair trained on normalizes each replica's shard
-on its own. The two pairs that carry the same fourfold difference landed
-$0.10$ and $0.01$ apart, and MobileNetV2 has as much BatchNorm as this net
+on its own. MobileNetV2's pair, which carries the same fourfold difference,
+landed $0.01$ apart, and it has as much BatchNorm as this net
 ($52$ layers to $49$), so the count of normalization layers does not by
 itself explain a $0.3$. What this recipe adds is that evaluation scores an
 EMA of the BatchNorm buffers in place of the live statistics, and whether
@@ -9134,7 +9127,7 @@ polish (cosine schedule, warmup, label smoothing,
 random-resized-crop). The 350-epoch run above is the 2019
 EfficientNet recipe (Tan \& Le), reproduced end to end.
 Chapter~\ref{chap:residual}'s RSB-A3 side quest shows what 2021 does
-to the 2018 baseline, and Chapter~\ref{chap:layernorm} closes with
+to the 2018 baseline, and Chapter~\ref{chap:layernorm}'s recipe table is
 2022's version. This table is the 2019 rung of the same ladder. The
 \texttt{trainAdamSched} entry point is identical in both columns, and
 every row is a one-line change to the \texttt{VerifiedNetSpec}, the
@@ -9214,8 +9207,8 @@ depthwise $k\times k$ with a single regular $k\times k$ convolution ---
 more FLOPs, less wall clock, because depthwise convolution is cheap in
 arithmetic and expensive in memory traffic, and at low resolution the
 traffic dominates. The fused block is already in
-the kit as \texttt{.fusedMbConvNB} (\S\ref{sec:mnv4_side_quest}) --- it is
-MobileNetV4's stage 0 --- so V2 needs no new primitive, only a spec.
+the kit as \texttt{.fusedMbConvNB} --- it is MobileNetV4's stage 0
+(\S\ref{sec:mnv4_side_quest}) --- so V2 needs no new primitive, only a spec.
 
 \chapter{ConvNeXt}
 \label{chap:layernorm}
@@ -10455,9 +10448,8 @@ Eighty epochs at about 18 seconds each, twenty-four minutes in total,
 and \textbf{68.74\%} top-1 with \textbf{90.42\%} top-5 on Imagenette's
 3,925-image validation split. The best epoch reached $68.92\%$. That is
 the fastest network in this book's Imagenette column by a wide margin
-and also the least accurate one in it, and
-\S\ref{sec:attention_vit_example} is about why both halves of that
-sentence are the same fact.
+and also the least accurate one in it
+(\S\ref{sec:attention_vit_example}).
 
 \medskip\noindent\textbf{Two compile lines, and the second one is the
 whole eval story.} Like ConvNeXt, and unlike the three chapters whose
@@ -10608,8 +10600,8 @@ below is the matrix lift of a vector-level theorem from Ch
 \ref{chap:tensor}, proved by composing the vector version with the
 row-projection \(\mathrm{ContinuousLinearMap}\). The Lean proofs all
 live in \texttt{Proofs/Foundation/Tensor.lean} alongside their vector
-counterparts. We collect them here because Ch~\ref{chap:attention}
-is the first and only chapter to use them.
+counterparts. We collect them here, where the attention proofs need
+all of them at once.
 
 \begin{definition}[Matrix VJP record]
   \label{def:hasvjpmat}
@@ -11945,9 +11937,8 @@ width sweep is where this book first had to take run-to-run spread
 seriously, so this number was measured three times before being printed,
 and all three passes came back bit-identical on three different
 cards: the same $68.738854\%$ and $90.420382\%$ at epoch 80, and the same
-160 epoch lines the whole way down. That makes ViT the first network since
-the dense-only graphs of Chapter~\ref{chap:mlp} to reproduce exactly, and
-for the same reason. XLA selects convolution algorithms per process, which
+160 epoch lines the whole way down. The reason is the graph's shape. XLA
+selects convolution algorithms per process, which
 is what moves the convnet chapters' numbers by a point or two between
 runs. This graph holds 435 \texttt{dot\_general}s and two
 convolutions, so there is almost nothing for that selection to vary.
@@ -13169,7 +13160,7 @@ Lean~$\to$~StableHLO~$\to$~JAX pipeline reaches \textbf{76.66\% top-1
 paper's $78.1\%$.
 
 \subsubsection*{WRN (Wide ResNet) (\texttt{Bestiary/WRN.lean})}
-\emph{Zero} new primitives --- same \texttt{.residualBlock} as
+\emph{Zero} new primitives --- the residual block of
 Chapter~\ref{chap:residual}, just widened. Zagoruyko \& Komodakis
 2016 (\href{https://arxiv.org/abs/1605.07146}{arXiv:1605.07146})
 take the ResNet block and turn the depth knob in (40 layers down
@@ -15616,11 +15607,11 @@ $Q$-function. Three things change relative to the CIFAR demo:
     agree on one PSD. The search statistic then maximises over the window
     and the $\pm 10$\,ms inter-detector delay, exactly as a search must, and
     the CNN, which sees no time, is compared to that.
-  \item \textbf{The network is Chapter~\ref{chap:bn}'s CIFAR net, unchanged.}
-    \texttt{CIFAR-CNN8-wide-BN} as that chapter spells it: eight
-    convolutions in four conv-conv-pool stages at 16, 16, 32, 32 channels
-    into the $2 \times 512$ head, $0.83$\,M parameters. The two edits are
-    the two-channel stem and the two-way output. The input is a
+  \item \textbf{The network is Chapter~\ref{chap:bn}'s CIFAR net.}
+    \texttt{CIFAR-CNN8-wide-BN}: eight convolutions in four conv-conv-pool
+    stages at 16, 16, 32, 32 channels into the $2 \times 512$ head. The two
+    edits are the two-channel stem and the two-way output, $0.83$\,M
+    parameters at this input. The input is a
     $2 \times 64 \times 128$ image, each channel a constant-Q spectrogram
     of one detector's whitened window (64 log-spaced bands over
     20--500\,Hz, 128 frames); the ordinary train step with integer labels,
@@ -16909,9 +16900,9 @@ themselves.
 \caption{The same fact at the scale of chapters. Each box is a chapter and
 the number of statements it proves; an arrow from one box to another means
 the second's proofs cite the first's, and its width grows with the count,
-622 citations in all. The two double-bordered boxes are cited by every
-chapter after them --- Chapter~\ref{chap:tensor} 308 times, for \(\pdiv\)
-and its rules; Chapter~\ref{chap:cnn} 109 times, for \texttt{conv2d} ---
+\depgraphCitations{} citations in all. The two double-bordered boxes are cited by every
+chapter after them --- Chapter~\ref{chap:tensor} \depgraphCitesTensor{} times, for \(\pdiv\)
+and its rules; Chapter~\ref{chap:cnn} \depgraphCitesCnn{} times, for \texttt{conv2d} ---
 so their arrows are left out. The matrix-level machinery of
 \S\ref{sec:matrix_machinery} is proved in Chapter~\ref{chap:attention}
 and sits where it is first used, between Chapters~\ref{chap:bn}

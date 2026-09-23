@@ -972,7 +972,7 @@ it through `scripts/supervise.sh`). ⚠ ares carries the box-wide stall
 
 | order | net | job | variant | verified side | what it retires |
 |---|---|---|---|---|---|
-| 1 | ResNet-34 | `scripts/jobs/r34-default-bf16-4gpu.conf` | `momdp64bf16` | ~22 h | `content.tex:5671` `BN statistic group` row |
+| ✅ 1 | ResNet-34 | `scripts/jobs/r34-default-bf16-4gpu.conf` | `momdp64bf16` | 23.7 h, landed 2026-09-23 (`runs/2026-09-22-r34-syncbn-bf16-90ep/`, 74.168 / 91.894) | §5.7 rewritten: BN row moved below the rule, `\globalbntodo` gone, §6.5/§7 cross-refs follow |
 | 2 | MobileNetV2 | `scripts/jobs/mnv2-default-4gpu.conf` | `rmsdp64bf16` | ~51 h | `:7059` row + §6's `[TODO: global BN.]` |
 | 3 | EfficientNet-B0 | `scripts/jobs/enet-default-4gpu.conf` | `emarmsdp64dropdobf16` | ~73 h | `:8266` row |
 | 1 | ResNet-50 2018 | `r50-2018-bf16-4gpu.conf` | `momdp64bf16` | ~31 h (30.7 h on the 3060 box + 3 %) | `:5935` 2018 column's `BN group` |
