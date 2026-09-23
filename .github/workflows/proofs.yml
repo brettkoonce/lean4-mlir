@@ -9,6 +9,7 @@ on:
     # the build config. A docs/demo/jax-only push used to pay 13–30 min of Lean here for nothing.
     paths:
       - 'LeanMlir/**'
+      - 'LeanMlir.lean'   # the root module: `LeanMlir/**` does not match it
       - 'Bestiary/**'
       - 'verified_mlir/**'
       - 'tests/**'
@@ -23,6 +24,7 @@ on:
   pull_request:
     paths:
       - 'LeanMlir/**'
+      - 'LeanMlir.lean'   # the root module: `LeanMlir/**` does not match it
       - 'Bestiary/**'
       - 'verified_mlir/**'
       - 'tests/**'

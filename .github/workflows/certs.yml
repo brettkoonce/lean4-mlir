@@ -14,6 +14,7 @@ on:
     branches: [main]
     paths:
       - 'LeanMlir/Proofs/**'
+      - 'LeanMlir.lean'   # the root module: every lib imports it, `LeanMlir/**` does not match it
       - 'tests/AuditAxioms.lean'
       - 'lakefile.lean'
       - 'lean-toolchain'
@@ -39,6 +40,7 @@ on:
   pull_request:
     paths:
       - 'LeanMlir/Proofs/**'
+      - 'LeanMlir.lean'   # the root module: every lib imports it, `LeanMlir/**` does not match it
       - 'tests/AuditAxioms.lean'
       - 'lakefile.lean'
       - 'lean-toolchain'

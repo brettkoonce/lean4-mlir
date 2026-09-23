@@ -47,6 +47,7 @@ on:
     # can change what the kernel re-checks.
     paths:
       - 'LeanMlir/Proofs/**'
+      - 'LeanMlir.lean'   # the root module: `LeanMlir/**` does not match it
       - 'tests/comparator/**'
       - '.github/workflows/comparator.yml'
       # Both are inputs to the `--check` step: the generator writes the tier pair, and the
@@ -59,6 +60,7 @@ on:
   pull_request:
     paths:
       - 'LeanMlir/Proofs/**'
+      - 'LeanMlir.lean'   # the root module: `LeanMlir/**` does not match it
       - 'tests/comparator/**'
       - '.github/workflows/comparator.yml'
       # Both are inputs to the `--check` step: the generator writes the tier pair, and the
