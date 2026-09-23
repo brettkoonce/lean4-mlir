@@ -10,11 +10,11 @@ its text is `pretty` of an `SHlo` term. The theorems about what that term *means
 | `StableHLOLex.lean`, `StableHLOParse.lean` | the syntactic round-trip (`parse (lex (pretty g)) = some (skel g)`) |
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
 | `MlpRender`, `CnnRender` | chapter 2–4 train steps (MLP, MNIST CNN, CIFAR, the cifar8 family) |
+| `MlpArtifacts`, `CnnArtifacts` | their `#eval` artifact writers — leaf modules, imported by nothing, so building a proof never rewrites `verified_mlir/` |
 | `ResNet34RenderB`, `ResNet50RenderB`, `MobileNetV2RenderB`, `MobileNetV4RenderB`, `EfficientNetRender`, `ConvNeXtRender(B)`, `ViTRender(B)` | per-net ImageNet/Imagenette train steps (batched index, batch BN) |
-| `*RenderPC`, `*RenderPCEval` | per-channel / eval-mode stage definitions — ⚠ they render nothing (the batched stages other nets use, `cbsB`, `projB`, …, are in `Foundation/BatchedStages`) |
+| `EfficientNetRenderPC`, `EfficientNetRenderPCEval` | EfficientNet's batched block forwards + typed graphs, and their eval-mode twins — ⚠ they write no artifact (the batched stages other nets use, `cbsB`, `projB`, …, are in `Foundation/BatchedStages`; MobileNetV2's per-channel stages are `Nets/MobileNet/MobileNetV2StagesPC`) |
 | `IRPrint.lean` | a scratch-only execution oracle for the small-net `IR`, not an artifact writer |
-| `AdamStep`, `SgdMomentumStep`, `RmsPropStep`, `Lamb`, `LambTriple`, `GradClip`, `DropPath` | the ℝ optimizer / regulariser specs the optimizer ops denote |
-| `MatBridge.lean` | `Mat` ↔ Mathlib `Matrix` bridge (no importers) |
+| `LambTriple.lean` | the LAMB `(θ', m', v')` triple's faithfulness — the ℝ optimizer specs the optimizer ops denote are in `Training/Optim/` (`AdamStep`, `SgdMomentumStep`, `RmsPropStep`, `Lamb`, `GradClip`), drop-path in `Training/DropPath` |
 
 ## From a net to its theorems
 

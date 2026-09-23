@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.Codegen.GradClip
-import LeanMlir.Proofs.Codegen.SgdMomentumStep
+import LeanMlir.Proofs.Training.Optim.GradClip
+import LeanMlir.Proofs.Training.Optim.SgdMomentumStep
 
 /-! # LAMB over ℝ — RSB-A3's optimizer, and the one item `rsb_a3_r50_verified.md` §2.3 ESTIMATED
 

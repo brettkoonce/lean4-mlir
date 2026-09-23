@@ -343,7 +343,7 @@ fidelity:
 
     5. The suite works over its own `Proofs.Mat m n := Fin m -> Fin n -> R` (definitionally
        Mathlib's `Matrix (Fin m) (Fin n) R`), bridged opt-in to Mathlib's `Matrix` namespace by
-       `LeanMlir/Proofs/Codegen/MatBridge.lean`.
+       `LeanMlir/Proofs/Foundation/MatBridge.lean`.
 
     6. NOT PROVED -- empirically validated only: that the nets train to good ImageNet accuracy,
        that StableHLO/XLA compilation is faithful, that the JAX pipeline agrees numerically, and

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPCEval
 
 /-! # The PAPER-SPEC MobileNetV2 at INFERENCE — all 17 bottlenecks, forward + graph + faithfulness
 
@@ -11,7 +11,7 @@ typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, t
 budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —
 `planning/archive/proofs_tier_to_paper_nets.md` 3.2(e).)
 
-Pure enumeration and chaining of `MobileNetV2RenderPCEval.lean`'s four inference stage
+Pure enumeration and chaining of `MobileNetV2StagesPCEval.lean`'s four inference stage
 abbreviations (`ivExpandPCEval` / `ivDepthwisePCEval` / `ivDepthwiseStridedPCEval` /
 `ivProjectPCEval`) and its two bodies, generic in the class count. No new mathematics and no new
 tokens: every BatchNorm node's `den` is `bnPerChannelEvalTensor3`, proved once.

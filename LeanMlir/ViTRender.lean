@@ -513,7 +513,7 @@ def vitTinyConfig (b _depth : Nat) : ViTConfig :=
 -- ════════════════════════════════════════════════════════════════
 -- § AdamW optimizer render (Phase 3b of vit_train_to_vit_verified.md)
 -- The proven-fragment-side analogue of `MlirCodegen.emitAdamUpdate`; its ℝ
--- spec is `Proofs.adamWParam` (LeanMlir/Proofs/Codegen/AdamStep.lean). Scalar
+-- spec is `Proofs.adamWParam` (LeanMlir/Proofs/Training/Optim/AdamStep.lean). Scalar
 -- hyperparameters arrive as `tensor<f32>` function args.
 -- ════════════════════════════════════════════════════════════════
 

@@ -1503,7 +1503,7 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
   -- reads only lr + v, so this driver is shared verbatim). β1/β2 still drive the (unused-by-mom)
   -- bias-correction scalars; the cosine+warmup lr schedule is identical.
   --
-  -- "rms" = the RMSProp-with-momentum render (`Proofs/Codegen/RmsPropStep.lean`), which reuses the
+  -- "rms" = the RMSProp-with-momentum render (`Proofs/Training/Optim/RmsPropStep.lean`), which reuses the
   -- SAME packed slots with `m` = the momentum BUFFER and `v` = the running MEAN-SQUARE — the
   -- signature is byte-identical to the net's AdamW peer apart from the entry name, and `%bc1`/`%bc2`
   -- ride through unread. So the only thing this driver owes it is the INITIAL STATE, below.

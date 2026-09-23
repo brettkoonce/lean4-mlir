@@ -558,8 +558,8 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
   #   grep -rl 'IO.FS.writeFile "verified_mlir/' --include='*.lean' LeanMlir/Proofs/Codegen/
   for m in \
     LeanMlir.Proofs.Codegen.StableHLO \
-    LeanMlir.Proofs.Codegen.MlpRender \
-    LeanMlir.Proofs.Codegen.CnnRender \
+    LeanMlir.Proofs.Codegen.MlpArtifacts \
+    LeanMlir.Proofs.Codegen.CnnArtifacts \
     LeanMlir.Proofs.Codegen.ResNet34RenderB \
     LeanMlir.Proofs.Codegen.ResNet50RenderB \
     LeanMlir.Proofs.Codegen.MobileNetV2RenderB \

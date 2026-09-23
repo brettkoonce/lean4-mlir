@@ -8,20 +8,20 @@ import LeanMlir.Proofs.Architectures.SE
 import LeanMlir.Proofs.Architectures.Attention
 -- The ℝ AdamW spec (`adamMNext`/`adamVNext`/`adamWParam`), so the optimizer ops can denote it.
 -- AdamStep only imports Foundation.Tensor + Mathlib, so this adds no cycle.
-import LeanMlir.Proofs.Codegen.AdamStep
+import LeanMlir.Proofs.Training.Optim.AdamStep
 -- The ℝ global-norm clip spec (`gradSumSq`/`clipFactor`/`clipScale`), so the four clip ops can
 -- denote it. GradClip imports only AdamStep, so this adds no cycle either.
-import LeanMlir.Proofs.Codegen.GradClip
+import LeanMlir.Proofs.Training.Optim.GradClip
 -- LAMB (`lambDir`/`lambTrust`/`lambScale`), RSB-A3's optimizer. Imports GradClip for `scalarOf`
 -- and `gradSumSq` — the per-leaf squared norm is SHARED with the clip rather than re-derived, so
 -- the two features cannot drift on what a norm is.
-import LeanMlir.Proofs.Codegen.Lamb
-import LeanMlir.Proofs.Codegen.SgdMomentumStep
+import LeanMlir.Proofs.Training.Optim.Lamb
+import LeanMlir.Proofs.Training.Optim.SgdMomentumStep
 -- RmsPropStep imports only the two above, so this adds no cycle either.
-import LeanMlir.Proofs.Codegen.RmsPropStep
+import LeanMlir.Proofs.Training.Optim.RmsPropStep
 -- DropPath imports only Architectures.LayerNorm (for `layerScale`, which this file already has in
 -- scope), so it adds no cycle either. `planning/archive/stochastic_depth.md`.
-import LeanMlir.Proofs.Codegen.DropPath
+import LeanMlir.Proofs.Training.DropPath
 -- He et al.'s 3×3/s2 stem pool (`maxPool3s2Flat` + its VJP witness), so the stem-pool ops can
 -- denote it. MaxPool3s2 imports only Architectures.CNN, which this file already has in scope
 -- transitively, so it adds no cycle. `planning/archive/rsb_a3_r50_verified.md` §4b.

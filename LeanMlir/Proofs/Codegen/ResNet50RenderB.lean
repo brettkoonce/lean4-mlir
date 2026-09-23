@@ -1663,7 +1663,7 @@ end Proofs.StableHLO
 --      So this is a REGION-LAYOUT limitation, and lifting it means a fifth region in the driver's
 --      pack/unpack and in every optimizer's return list — not a flag.
 --      ⚠ A3 did not hit this because A3's own recipe sets `useEMA := false`. A2 and A1 both set it.
---   ⛔ **STOCHASTIC DEPTH (`dropPath := 0.05`).** `LeanMlir/Proofs/Codegen/DropPath.lean` exists and
+--   ⛔ **STOCHASTIC DEPTH (`dropPath := 0.05`).** `LeanMlir/Proofs/Training/DropPath.lean` exists and
 --      EfficientNet and ConvNeXt render `drop` variants off it, but neither `ResNet34RenderB` nor
 --      `ResNet50RenderB` imports it (0 hits in both), and `r34AdamVariant` has no `drop` marker to
 --      ask for it with. That is renderer work on the residual family, not a flag.

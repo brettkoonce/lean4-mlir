@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 import LeanMlir.ViTRender
 import LeanMlir.Types
 

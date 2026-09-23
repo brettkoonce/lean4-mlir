@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 
 /-! # MobileNetV2's bottleneck weight records
 

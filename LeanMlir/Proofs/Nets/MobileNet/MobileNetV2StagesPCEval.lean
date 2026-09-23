@@ -1,8 +1,8 @@
-import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 
 /-! # MobileNetV2 — the inference (frozen-statistics) stage vocabulary
 
-The eval twins of `MobileNetV2RenderPC.lean`'s per-channel stage abbreviations: `ivExpandPCEval` /
+The eval twins of `MobileNetV2StagesPC.lean`'s per-channel stage abbreviations: `ivExpandPCEval` /
 `ivDepthwisePCEval` / `ivDepthwiseStridedPCEval` / `ivProjectPCEval` and the two bodies
 (`invresBodyPCEval`, `invresBodyStridedPCEval`), every BN site at `bnPerChannelEvalTensor3`
 (frozen running mean and variance). `MobileNetV2FullPaperEval` builds the shipped seventeen-block

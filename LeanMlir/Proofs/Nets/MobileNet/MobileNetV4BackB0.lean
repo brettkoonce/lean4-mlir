@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 import LeanMlir.Proofs.Foundation.HeadLayers
-import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 
 /-! # MobileNetV4 — the batched UIB backward, and the four families as ONE chain
 
@@ -424,7 +424,7 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
   | _, 0 => .convNeXtLike
   | _, _ => .extraDW
 
--- ⭐⭐ THE TABLE GUARDS. `MobileNetV4RenderB`'s docstring states the family sequence and the
+-- ⭐⭐ THE TABLE GUARDS. `mnv4Blocks`'s docstring (`MobileNetV4Spec`) states the family sequence and the
 -- dispatch counts in PROSE; these turn that prose into checks. A wrong `preDWk` is exactly §3's
 -- silent defect — same ops, same channel counts, same types, different net — and it now fails at
 -- `lake env lean`.

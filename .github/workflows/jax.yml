@@ -45,7 +45,7 @@ on:
       # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
       # the same omission the six convention divergences got in through.
       - 'LeanMlir/Proofs/Codegen/ResNet34RenderB.lean'
-      - 'LeanMlir/Proofs/Codegen/GradClip.lean'
+      - 'LeanMlir/Proofs/Training/Optim/GradClip.lean'
       - 'tests/TestOptStepFixtures.lean'
       - 'scripts/opt_step_tie.py'
       # The two tools the `build`/`convention` jobs run that nothing above watched.
@@ -74,7 +74,7 @@ on:
       # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
       # the same omission the six convention divergences got in through.
       - 'LeanMlir/Proofs/Codegen/ResNet34RenderB.lean'
-      - 'LeanMlir/Proofs/Codegen/GradClip.lean'
+      - 'LeanMlir/Proofs/Training/Optim/GradClip.lean'
       - 'tests/TestOptStepFixtures.lean'
       - 'scripts/opt_step_tie.py'
       # The two tools the `build`/`convention` jobs run that nothing above watched.

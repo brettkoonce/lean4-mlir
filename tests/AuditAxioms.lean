@@ -29,7 +29,7 @@ import LeanMlir.Proofs.Nets.Small.CnnTrainStep
 import LeanMlir.Proofs.Nets.Small.CifarBnClose
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
-import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
@@ -62,7 +62,7 @@ import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
 import LeanMlir.Proofs.Float.DepthwiseFloatBridge
-import LeanMlir.Proofs.Codegen.MobileNetV2RenderPCEval
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPCEval
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
@@ -119,7 +119,7 @@ import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
 import LeanMlir.Proofs.Training.SgdDescentMlp
-import LeanMlir.Proofs.Codegen.AdamStep
+import LeanMlir.Proofs.Training.Optim.AdamStep
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0

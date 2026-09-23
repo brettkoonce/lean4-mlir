@@ -9,7 +9,7 @@ step is a DAG with shared intermediates — the backward `select`s read the forw
 pre-activations, the parameter gradients read the activations and per-layer cotangents — so
 the renderer threads names: each piece is rendered once via `pretty`, capturing its fresh
 result SSA, and later pieces reference the captured names. `MlpFold` proves each output's
-`den` is the certified loss-descent step.
+`den` is the certified loss-descent step. The artifact's `#eval` writer is `MlpArtifacts.lean`.
 -/
 
 namespace Proofs.StableHLO
@@ -90,11 +90,5 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   lossCode ++
   s!"    return {nW0}, {nb0}, {nW1}, {nb1}, {nW2}, {nb2}, %loss : {ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}, tensor<f32>\n" ++
   "  }\n}\n"
-
--- Regenerate `verified_mlir/mlp_train_step.mlir` (what MainMnistMlpVerified trains on)
--- from the faithful renderer; the den-certified proofs live in MlpFold.lean.
-#eval IO.FS.writeFile "verified_mlir/mlp_train_step.mlir"
-  (mlpTrainStepFaithfulV 128 784 512 512 10 "0.00078125"
-    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0) (fun _ => 0))
 
 end Proofs.StableHLO
