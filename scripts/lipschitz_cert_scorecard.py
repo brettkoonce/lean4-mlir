@@ -424,18 +424,8 @@ def wrap(items, per_line, first, rest):
     return out
 
 
-# The mechanized aggregate. `CertifiedAt` is DEFINED here — it is the predicate
-# every certificate tier in the repo states its scorecard in — so this block is
-# engine, not exhibit, and must survive regeneration untouched.
-A("/-- `f` is *certified at radius ε* on input `x` with class `i`: every")
-A("    perturbation of L2 norm `< ε` leaves `i` the strict argmax. This is the")
-A("    (undecidable — it quantifies over real `δ`) per-image certificate that")
-A("    each `certifiedC<i>`/`certifiedU<i>` theorem proves. -/")
-A("def CertifiedAt {n k : ℕ} (f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k))")
-A("    (ε : ℝ) (x : EuclideanSpace ℝ (Fin n)) (i : Fin k) : Prop :=")
-A("  ∀ δ : EuclideanSpace ℝ (Fin n), ‖δ‖ < ε →")
-A("    ∀ j, j ≠ i → f (x + δ) j < f (x + δ) i")
-A("")
+# The mechanized aggregate, stated in `CertifiedAt` (defined in `DenseEuclid`, the engine every
+# certificate tier's scorecard is stated in).
 A("/-- The capped-net certificate witnesses: `(subset index, image, class)`,")
 A("    one triple per `certifiedC<i>` theorem, in index order. -/")
 A("noncomputable def cappedCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=")

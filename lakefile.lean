@@ -32,7 +32,7 @@ lean_lib «LeanMlir» where
 -- Scoped targets, so CI and contributors can build one slice without the
 -- rest, along the seam between the proof suite and the program side. `Proofs` reaches no
 -- program module. `Certs` does reach seven (VerifiedSpec/VerifiedNets/VerifiedTrain and the
--- runtime under them), through `Foundation/SpecVJP`, the executable-spec ↔ proof bridge.
+-- runtime under them), through `SpecVJP`, the executable-spec ↔ proof bridge.
 
 /-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
     every demo's import cone actually reaches (StableHLO/IR + the per-net
@@ -53,8 +53,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNet,
              `LeanMlir.Proofs.Nets.Small.MnistCNN,
-             `LeanMlir.Proofs.Foundation.StridedConv,
-             `LeanMlir.Proofs.Foundation.PerChannelBN,
+             `LeanMlir.Proofs.Architectures.StridedConv,
+             `LeanMlir.Proofs.Architectures.PerChannelBN,
              `LeanMlir.Proofs.Foundation.IR,
              `LeanMlir.Proofs.Codegen.StableHLO,
              `LeanMlir.Proofs.Codegen.MlpRender,
@@ -86,9 +86,9 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNet,
              `LeanMlir.Proofs.Nets.Small.MnistCNN,
              `LeanMlir.Proofs.Training.JacobianSeal,
-             `LeanMlir.Proofs.Foundation.StridedConv,
+             `LeanMlir.Proofs.Architectures.StridedConv,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34,
-             `LeanMlir.Proofs.Foundation.PerChannelBN,
+             `LeanMlir.Proofs.Architectures.PerChannelBN,
              `LeanMlir.Proofs.Codegen.MatBridge,
              `LeanMlir.Proofs.Foundation.IR,
              `LeanMlir.Proofs.Codegen.StableHLO,
@@ -189,7 +189,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTieB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50WholeBackCertifiedTieB,
-             `LeanMlir.Proofs.Foundation.EvenKernelConvBack,
+             `LeanMlir.Proofs.Architectures.EvenKernelConvBack,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTieB,
              `LeanMlir.Proofs.Nets.ViT.ViTBackChains,
@@ -207,7 +207,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0,
              `LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0,
              `LeanMlir.Proofs.Foundation.CertifiedChain,
-             `LeanMlir.Proofs.Foundation.BackNetFolds,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet,
              `LeanMlir.Proofs.Nets.ViT.ViTBackNet,
@@ -262,7 +261,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Training.TrainedCnnWitness,
              `LeanMlir.Proofs.Training.TrainedCnnSeal,
              `LeanMlir.Proofs.Certificates.LipschitzCertFloat,
-             `LeanMlir.Proofs.Foundation.SpecVJP,
+             `LeanMlir.Proofs.SpecVJP,
              `LeanMlir.Proofs.Nets.Small.MlpCanonical,
              `LeanMlir.Proofs.Codegen.ResNet34RenderB,
              `LeanMlir.Proofs.Codegen.ResNet50RenderB,

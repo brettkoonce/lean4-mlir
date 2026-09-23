@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Certificates.SmoothingCP
-import LeanMlir.Proofs.Certificates.LipschitzCertInstance
+import LeanMlir.Proofs.Certificates.DenseEuclid
 
 /-! # Net semantics for the smoothing chain — the classifier becomes a NET
 
@@ -25,9 +25,9 @@ headers. This file closes it:
 * `smoothing_cp_certified_net` — the capstone: CERTIFY's guarantee with the
   classifier INSTANTIATED as `argmaxNet f`, measurability and `hp` both
   discharged from continuity + witnesses;
-* `mlpT_logit_continuous` — the trained /128-rationalized pooled-MNIST MLP's
-  logits are continuous (the concrete instantiation lives in the generated
-  `SmoothingNetWitness.lean`).
+* the concrete instantiation — the trained pooled-MNIST MLP, whose logit continuity
+  (`mlpT_logit_continuous`) sits beside `mlpT` in `LipschitzCertInstance` — lives in the
+  generated `SmoothingNetWitness.lean`.
 
 All results are `propext / Classical.choice / Quot.sound`-clean. -/
 
@@ -128,23 +128,6 @@ lemma isOpen_strictRegion {E : Type*} [TopologicalSpace E] {k : ℕ}
     IsOpen {x | ∀ j, j ≠ c → f x j < f x c} := by
   simp only [Set.ofPred_forall]
   exact isOpen_iInter_of_finite fun j => isOpen_iInter_of_finite fun _ => isOpen_lt (hf j) (hf c)
-
--- ════════ § stdGaussian has full support ════════
-
-/-- `N(0,1)` charges every nonempty open set (the pdf is everywhere positive) —
-    packaged as the Mathlib `IsOpenPosMeasure` class. -/
-instance : (gaussianReal 0 1).IsOpenPosMeasure :=
-  (gaussianReal_absolutelyContinuous' 0 one_ne_zero).isOpenPosMeasure
-
-/-- The standard Gaussian on a finite-dimensional inner-product space charges
-    every nonempty open set: it is the pushforward of the pi-Gaussian (open-pos
-    by `pi.isOpenPosMeasure`) under the surjective continuous basis sum. -/
-instance stdGaussian.instIsOpenPosMeasure {E : Type*} [NormedAddCommGroup E]
-    [InnerProductSpace ℝ E] [FiniteDimensional ℝ E] [MeasurableSpace E]
-    [BorelSpace E] : (stdGaussian E).IsOpenPosMeasure := by
-  refine Continuous.isOpenPosMeasure_map (by fun_prop) fun e => ?_
-  exact ⟨fun i => (stdOrthonormalBasis ℝ E).repr e i,
-    by simpa using (stdOrthonormalBasis ℝ E).sum_repr e⟩
 
 -- ════════ § the hp discharge: witnesses ⇒ interior class probabilities ════════
 
@@ -255,17 +238,3 @@ theorem smoothing_cp_certified_net {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
 
 end Proofs
 
-namespace Proofs.LipschitzCertDemo
-
-/-- Each logit of the trained pooled-MNIST MLP is continuous: the coordinate
-    formula `∑ k, W2ⱼₖ·max(∑ l, W1ₖₗ·xₗ, 0)` is definitional. -/
-theorem mlpT_logit_continuous : ∀ j : Fin 10, Continuous fun x => mlpT x j := by
-  intro j
-  show Continuous fun x : EuclideanSpace ℝ (Fin 49) =>
-    ∑ k : Fin 8, W2t j k * max (∑ l, W1t k l * x l) 0
-  refine continuous_finsetSum _ fun k _ => continuous_const.mul ?_
-  refine Continuous.max ?_ continuous_const
-  exact continuous_finsetSum _ fun l _ =>
-    continuous_const.mul (EuclideanSpace.proj l).continuous
-
-end Proofs.LipschitzCertDemo

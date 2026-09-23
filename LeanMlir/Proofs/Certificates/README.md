@@ -4,10 +4,11 @@ The scorecard, instance and witness files in this directory are **generated**
 by a script in `scripts/` (`lipschitz_cert_*.py`, `crown_ibp_*.py`,
 `ibp_conv_scorecard.py`, `smooth_*scorecard*_gen.py`,
 `smoothing_net_witness_gen.py`) and then checked by Lean like any other
-proof: same kernel, zero `sorry`s, three-axiom audit. Eight files are
+proof: same kernel, zero `sorry`s, three-axiom audit. Ten files are
 hand-written — the engines the generated files instantiate and the trained
-weight instance: `LipschitzCert.lean`, `LipschitzCertInstance.lean`,
-`LipschitzCertPairSDP.lean`, `SmoothingCP.lean`, `SmoothingGaussian.lean`,
+weight instance: `LipschitzCert.lean`, `DenseEuclid.lean` (the dense / ReLU layers, their L2
+bounds and `CertifiedAt`), `LipschitzCertInstance.lean`, `LipschitzCertPairSDP.lean`,
+`GaussianQuantile.lean` (Φ, Φ⁻¹, full support), `SmoothingCP.lean`, `SmoothingGaussian.lean`,
 `SmoothingMC.lean`, `SmoothingNetSemantics.lean` and `SmoothingPhiBounds.lean`.
 
 That provenance explains their shape: thousands of short, structurally
@@ -33,7 +34,7 @@ engines live in `Foundation/` (`IntervalBound`, `IntervalBoundConv`, `IntervalBo
 
 | family | ℝ theorem (engine) | check → ℝ bridge | data (generated) | generator (`scripts/`) |
 |---|---|---|---|---|
-| L2, pooled 49-d | `lipschitz_margin_certified_radius`, `certified_at_eps` | per-entry `simp; norm_num`; Gram via `gram_eq_of_check` | `LipschitzCertInstance` (data half, hand-merged), `LipschitzCertScorecard` | `lipschitz_cert_{rationalize,power_iter,witness_s8}.py` (snippets to merge), `lipschitz_cert_scorecard.py` |
+| L2, pooled 49-d | `lipschitz_margin_certified_radius`, `certified_at_eps` (`DenseEuclid`) | per-entry `simp; norm_num`; Gram via `gram_eq_of_check` | `LipschitzCertInstance` (data half, hand-merged), `LipschitzCertScorecard` | `lipschitz_cert_{rationalize,power_iter,witness_s8}.py` (snippets to merge), `lipschitz_cert_scorecard.py` |
 | L2, full 784-d | same | `ListDot.dotZ` | `LipschitzCertScorecardFull{,Nets,ImgsA,ImgsB}` | `lipschitz_cert_scorecard_full.py` |
 | LipSDP | `pair_sq_bound`, `certified_at_eps_pair` | `linarith` over LDLᵀ column squares | `LipschitzCertScorecardSDP{,Uncon}`; `…SDPFull{,Uncon}` (built by no lib — OOM) | `lipschitz_cert_pair_sdp{,_full}.py` |
 | float tier | `FloatBridge` | — | `LipschitzCertFloat` | `lipschitz_cert_float.py` |

@@ -618,15 +618,6 @@ theorem certifiedU82 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : 
 -- certMarginC 98 6 885545287/267386880
 -- certMarginU 82 2 726202319/66846720
 
-/-- `f` is *certified at radius ε* on input `x` with class `i`: every
-    perturbation of L2 norm `< ε` leaves `i` the strict argmax. This is the
-    (undecidable — it quantifies over real `δ`) per-image certificate that
-    each `certifiedC<i>`/`certifiedU<i>` theorem proves. -/
-def CertifiedAt {n k : ℕ} (f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k))
-    (ε : ℝ) (x : EuclideanSpace ℝ (Fin n)) (i : Fin k) : Prop :=
-  ∀ δ : EuclideanSpace ℝ (Fin n), ‖δ‖ < ε →
-    ∀ j, j ≠ i → f (x + δ) j < f (x + δ) i
-
 /-- The capped-net certificate witnesses: `(subset index, image, class)`,
     one triple per `certifiedC<i>` theorem, in index order. -/
 noncomputable def cappedCerts : List (ℕ × EuclideanSpace ℝ (Fin 49) × Fin 10) :=

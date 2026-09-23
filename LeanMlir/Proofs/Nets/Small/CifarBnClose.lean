@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.PerChannelBN
+import LeanMlir.Proofs.Architectures.PerChannelBN
 
 /-! # Closing the per-channel BN render — the BN parameter-gradient bridges (dγ, dβ certified)
 

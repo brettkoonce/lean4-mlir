@@ -17,13 +17,13 @@ import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.StableHLOParse
 import LeanMlir.Proofs.Codegen.StableHLOLex
-import LeanMlir.Proofs.Foundation.StridedConv
+import LeanMlir.Proofs.Architectures.StridedConv
 import LeanMlir.Proofs.Nets.ResNet.ResNet34
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBSeal
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBSeal
-import LeanMlir.Proofs.Foundation.PerChannelBN
+import LeanMlir.Proofs.Architectures.PerChannelBN
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Nets.Small.CnnTrainStep
@@ -113,7 +113,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50WholeBackCertifiedTieB
-import LeanMlir.Proofs.Foundation.EvenKernelConvBack
+import LeanMlir.Proofs.Architectures.EvenKernelConvBack
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTieB
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
@@ -133,7 +133,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTie
 import LeanMlir.Proofs.Nets.ViT.ViTBackB0
 import LeanMlir.Proofs.Nets.ViT.ViTBackNet
 import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
-import LeanMlir.Proofs.Foundation.BackNetFolds
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB
@@ -175,7 +175,7 @@ import LeanMlir.Proofs.Float.Binary32Instance
 import LeanMlir.Proofs.Training.TrainedLinearDescent
 import LeanMlir.Proofs.Foundation.MuonGeometry
 import LeanMlir.Proofs.Foundation.MuonNewtonSchulz
-import LeanMlir.Proofs.Foundation.SpecVJP
+import LeanMlir.Proofs.SpecVJP
 import LeanMlir.Proofs.Nets.Small.MlpCanonical
 import LeanMlir.Proofs.Foundation.SgdNodes
 
@@ -378,7 +378,7 @@ open Proofs
 #print axioms StableHLO.sgdW_descends_softmaxCE_grad
 #print axioms StableHLO.sgdB_descends_softmaxCE_grad
 -- M1 chain-rule fold: the SGD step is literally θ − lr·∂Loss/∂θ.
-#print axioms StableHLO.crossEntropy_differentiable
+#print axioms Proofs.crossEntropy_differentiable
 #print axioms StableHLO.denseWeightMap_differentiable
 #print axioms StableHLO.lossWeightGrad_eq_sum
 #print axioms StableHLO.sgdW_descends_loss_gradient

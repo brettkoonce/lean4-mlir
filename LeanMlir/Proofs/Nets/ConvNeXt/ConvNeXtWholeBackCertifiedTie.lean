@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.EvenKernelConvBack
+import LeanMlir.Proofs.Architectures.EvenKernelConvBack
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 
 /-! # ConvNeXt-T's whole-net backward tie — the stage fold, and ⛔ what the tie FOUND

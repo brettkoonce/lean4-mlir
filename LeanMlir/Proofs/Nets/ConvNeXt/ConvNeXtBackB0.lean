@@ -1,3 +1,4 @@
+import LeanMlir.Proofs.Foundation.CertifiedChain
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Codegen.StableHLO
@@ -192,5 +193,19 @@ theorem cnxDownChBackGraph_faithful (h w : Nat) {cin cout : Nat}
   rw [chanLNBackGraph_eq_vjp (β := p.β) (hε := hε), convStridedBack_faithful]
   simp only [cnxDownChW_has_vjp]
   rfl
+
+/-- ⭐ The **channel-LN** ConvNeXt block as a `CertLayer` — the form the *shipped* net's stages are
+    actually built from (`cnxResidBlockChBackGraph_faithful` is described in `ConvNeXtBackB0` as
+    "the capstone the shipped net was missing"). This is the one to chain for a real ConvNeXt
+    stage. -/
+noncomputable def cnxBlockChLayer {c cExp h w kH kW : Nat}
+    (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
+    CertLayer (c * h * w) (c * h * w) where
+  fwd := cnxBlockChW p
+  ok := fun _ => True
+  diff := fun x _ => (cnxBlockChW_diff p hε) x
+  vjp := fun x _ => (cnxBlockChW_has_vjp p hε).toHasVJPAt x
+  graph := fun x e => cnxResidBlockChBackGraph p x e
+  faithful := fun x _ e => cnxResidBlockChBackGraph_faithful p hε x e
 
 end Proofs.StableHLO

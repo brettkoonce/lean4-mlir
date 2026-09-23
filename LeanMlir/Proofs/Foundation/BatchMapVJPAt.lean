@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Foundation.Batched
 
 /-! # `batchMap` at a POINT — the pointwise peer of `batchMap_has_vjp`
 

@@ -58,7 +58,7 @@ import LeanMlir.Proofs.Foundation.IR
 -- Spec→math ties (rungs B/C/E). Also a Certs root + audited in
 -- tests/AuditAxioms.lean since 2026-07-07: it rotted while orphaned
 -- from every target (the mnv2 6→17-block spec promotion broke its rfl tie).
-import LeanMlir.Proofs.Foundation.SpecVJP
+import LeanMlir.Proofs.SpecVJP
 
 /-! # Verified Deep Learning with Lean 4 — the API docs
 

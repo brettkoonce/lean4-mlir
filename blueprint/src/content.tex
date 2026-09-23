@@ -1696,7 +1696,7 @@ seed. From Chapter~\ref{chap:mlp} onward the He(fan-in) in code
 That binding is why the type exists. The spec lives in
 \texttt{LeanMlir/VerifiedNets.lean} rather than beside the trainer,
 because the theorem and the program have to name the same object. In
-\texttt{LeanMlir/Proofs/Foundation/SpecVJP.lean}:
+\texttt{LeanMlir/Proofs/SpecVJP.lean}:
 
 \begin{verbatim}
 noncomputable def linearVerified_has_vjp (W : Mat 784 10) (b : Vec 10) :
@@ -2534,7 +2534,7 @@ is still a layer: it holds a position in the list because the
 render needs it in order, not because the optimizer does.
 
 The tie back to the proofs has the same shape as before. In
-\texttt{LeanMlir/Proofs/Foundation/SpecVJP.lean}:
+\texttt{LeanMlir/Proofs/SpecVJP.lean}:
 
 \begin{verbatim}
 noncomputable def mlpVerified_has_vjp (W0 b0 W1 b1 W2 b2) :

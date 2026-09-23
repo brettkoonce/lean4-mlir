@@ -12,7 +12,7 @@ proven faithful to the Mathlib `fderiv` math (`cnnFwdGraph_faithful`,
 audited 3-axiom-clean. The conv weight grad is the transpose-trick render.
 
 The model is the `cnnVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`) — the same
-readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/Foundation/SpecVJP.lean`
+readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/SpecVJP.lean`
 (`cnnVerified_has_vjp_at`, folded through conv→relu→conv→relu→maxpool→dense→…). It trains
 through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, He-init, 4-D kernels).
 The spec stays in `VerifiedNets` on purpose: the trainer and the theorem must name

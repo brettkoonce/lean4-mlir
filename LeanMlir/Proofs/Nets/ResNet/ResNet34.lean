@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.CNN
 import LeanMlir.Proofs.Nets.Small.MnistCNN
-import LeanMlir.Proofs.Foundation.StridedConv
+import LeanMlir.Proofs.Architectures.StridedConv
 
 /-! # Toward real ResNet-34 — the deep-block chain (Chapter 5 Milestone B4)
 

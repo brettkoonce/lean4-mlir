@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Architectures.Depthwise
-import LeanMlir.Proofs.Foundation.StridedConv
+import LeanMlir.Proofs.Architectures.StridedConv
 import LeanMlir.Proofs.Nets.Small.CnnTrainStep
 import LeanMlir.Proofs.Nets.Small.CifarBnClose
 

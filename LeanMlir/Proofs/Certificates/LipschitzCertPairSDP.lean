@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Certificates.LipschitzCertInstance
+import LeanMlir.Proofs.Certificates.DenseEuclid
 
 /-! # Per-pair LipSDP certificates (Fazlyab–Robey–Hassani–Morari–Pappas 2019)
 

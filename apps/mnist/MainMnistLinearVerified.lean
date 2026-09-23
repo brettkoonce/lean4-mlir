@@ -20,7 +20,7 @@ not a different program, which is exactly what the G2 gate asserts.
 
 The model is expressed as a `VerifiedNetSpec` (a single dense layer) — the same
 readable layer list whose **math VJP is proven** in
-`LeanMlir/Proofs/Foundation/SpecVJP.lean` (`linearVerified_has_vjp`). The spec
+`LeanMlir/Proofs/SpecVJP.lean` (`linearVerified_has_vjp`). The spec
 itself lives in `LeanMlir.VerifiedNets` rather than here, deliberately: the
 trainer and the theorem must name the *same* object, or the proof would be about
 a different network than the one that runs.

@@ -226,4 +226,16 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   field_simp
   ring
 
+/-- **`crossEntropy` is differentiable in the logits.** The standalone form of the
+    differentiability infrastructure inside `softmaxCE_grad`: `softmax > 0` lets
+    `Real.log` (hence `crossEntropy = -log(softmax · label)`) inherit smoothness. -/
+@[fun_prop]
+theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
+    Differentiable ℝ (fun z : Vec c => crossEntropy c z label) := by
+  cases c with
+  | zero => exact label.elim0
+  | succ c' =>
+    unfold crossEntropy softmax; simp only [div_eq_mul_inv]
+    fun_prop (disch := intro z; positivity)
+
 end Proofs

@@ -106,20 +106,6 @@ theorem mc_mean_lower_bound (ν : Measure E) [IsProbabilityMeasure ν]
 end MCBound
 
 -- ════════════════════════════════════════════════════════════════
--- § The quantile below zero: junk value, vacuous certificate
--- ════════════════════════════════════════════════════════════════
-
-/-- Below `0` the quantile's defining set is empty (`Φ > 0` everywhere), so
-    `Φ⁻¹` takes the junk value `sSup ∅ = 0` — and the radius `σ·Φ⁻¹(p̂−t)`
-    certifies vacuously. -/
-lemma stdNormalQuantile_of_nonpos {q : ℝ} (hq : q ≤ 0) : stdNormalQuantile q = 0 := by
-  have hset : {s : ℝ | stdNormalCDF s < q} = ∅ := by
-    ext s
-    simp only [Set.mem_ofPred_eq, Set.mem_empty_iff_false, iff_false, not_lt]
-    exact hq.trans (stdNormalCDF_pos s).le
-  rw [stdNormalQuantile, hset, Real.sSup_empty]
-
--- ════════════════════════════════════════════════════════════════
 -- § The composed guarantee: Cohen's CERTIFY, end to end
 -- ════════════════════════════════════════════════════════════════
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.BackNetFolds
+import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 import LeanMlir.Proofs.Foundation.HeadLayers
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 

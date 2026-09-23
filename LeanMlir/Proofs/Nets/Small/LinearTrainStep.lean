@@ -69,18 +69,6 @@ theorem sgdB_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (j : Fin n) :
 -- `softmaxCE_grad` proof) and for the dense-wrt-flattened-weights map.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **`crossEntropy` is differentiable in the logits.** The standalone form of the
-    differentiability infrastructure inside `softmaxCE_grad`: `softmax > 0` lets
-    `Real.log` (hence `crossEntropy = -log(softmax · label)`) inherit smoothness. -/
-@[fun_prop]
-theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
-    Differentiable ℝ (fun z : Vec c => crossEntropy c z label) := by
-  cases c with
-  | zero => exact label.elim0
-  | succ c' =>
-    unfold crossEntropy softmax; simp only [div_eq_mul_inv]
-    fun_prop (disch := intro z; positivity)
-
 /-- **The dense layer is differentiable in its (flattened) weights.** The map
     `v ↦ dense (unflatten v) b x` is affine — a finite sum of coordinate
     evaluations scaled by `x`, plus the constant bias. -/

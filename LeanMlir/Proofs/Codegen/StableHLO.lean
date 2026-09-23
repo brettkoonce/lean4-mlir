@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.Nets.Small.CifarCNN
-import LeanMlir.Proofs.Foundation.StridedConv
-import LeanMlir.Proofs.Foundation.PerChannelBN
+import LeanMlir.Proofs.Architectures.StridedConv
+import LeanMlir.Proofs.Foundation.Batched
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Architectures.LayerNorm
 import LeanMlir.Proofs.Architectures.SE
@@ -71,51 +71,6 @@ namespace StableHLO
 -- The arm-count rule from §0.8 still holds for `rfl` through `den`: *parametric arms are
 -- affordable; fixed-index arms (no `{n : Nat}` binder) are not.*
 
--- ════════════════════════════════════════════════════════════════
--- § Batched lift (EfficientNet) — per-example block-apply over N examples,
---   plus the one genuinely batch-coupled op (true batch-norm).
--- ════════════════════════════════════════════════════════════════
-
-/-- **Per-example block-apply.** Lift a per-example map `f : Vec a → Vec b` to a
-    batch of `N` examples laid out row-major `[N, a] ↦ [N, b]` (the network's
-    `[N,C,H,W]`-style flattening): example `n` occupies the `finProdFinEquiv`
-    block `{(n, ·)}`. Every spatial/channel op in EfficientNet is batch-separable
-    and lifts this way; only true batch-norm (`bnBatchTensor4`) couples the batch. -/
-noncomputable def batchMap (N : Nat) {a b : Nat} (f : Vec a → Vec b) :
-    Vec (N * a) → Vec (N * b) :=
-  fun x idx =>
-    let p := finProdFinEquiv.symm idx
-    f (fun i : Fin a => x (finProdFinEquiv (p.1, i))) p.2
-
-/-- The `n`-th example's slice of a batch laid out row-major `[N, a]`. A shared
-    weight's batched gradient is the sum over `n` of the per-example gradient on
-    `batchSlice n` — the form the batched param-SGD dens take (so the §1 fold closes
-    via the per-example cert + sum-linearity). -/
-def batchSlice (N a : Nat) (v : Vec (N * a)) (n : Fin N) : Vec a :=
-  fun i => v (finProdFinEquiv (n, i))
-
-/-- `batchSlice` of a `batchMap` is the lifted function at the slice — the lemma that peels a
-    per-example lift back off at one example. -/
-theorem batchSlice_batchMap {N a b : Nat} (f : Vec a → Vec b) (x : Vec (N * a))
-    (n : Fin N) :
-    batchSlice N b (batchMap N f x) n = f (batchSlice N a x n) :=
-  congrFun (Mat.unflatten_flatten fun n => f (batchSlice N a x n)) n
-
-/-- **Per-example block-apply with per-example AUXILIARY data.** `batchMap` lifts one *fixed*
-    function across the batch; this lifts a family indexed by each example's own saved value —
-    example `n` is handed `batchSlice n aux`, not the whole `aux` and not example 0's.
-
-    Every batched backward that recomputes from a saved forward activation has this shape, and
-    that is exactly why such ops cannot be `BatchableOp` descriptors: a descriptor's
-    `batchMap N (denOp op)` would apply ONE example's saved value to all `N`. Cf. `swishBackB`,
-    `sigmoidBackB`, `selectPosB` (pointwise, so they take the whole-batch `x` directly) and
-    `seBackBatched` (which inlines this shape). -/
-noncomputable def batchMapAux (N : Nat) {s a b : Nat} (f : Vec s → Vec a → Vec b)
-    (aux : Vec (N * s)) : Vec (N * a) → Vec (N * b) :=
-  fun x idx =>
-    let p := finProdFinEquiv.symm idx
-    f (batchSlice N s aux p.1) (batchSlice N a x p.1) p.2
-
 /-- **A batch-separable EfficientNet op**, shape-indexed by per-example in/out
     length. The descriptor carried by `SHlo.batchOp`; its `denOp` is the proven
     per-example forward, lifted by `batchMap`.
@@ -169,7 +124,7 @@ inductive BatchableOp : Nat → Nat → Type where
   --
   -- `den` is `flatConvStride2Xla` = `decimateOddFlat ∘ flatConv` — the SAME stride-1 conv, read at
   -- the odd phase. So this adds no proof obligation: the forward, input-VJP, weight-VJP and
-  -- bias-VJP are all `vjp_comp`s of results already proven (`Foundation/StridedConv.lean`).
+  -- bias-VJP are all `vjp_comp`s of results already proven (`Architectures/StridedConv.lean`).
   | convStridedXla {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
   -- ⭐ bf16 peer of `convStridedXla` — MobileNetV2's stem. Same asymmetric `((k-2)/2, k/2)` pad;
@@ -490,7 +445,7 @@ inductive SHlo : Nat → Type where
   -- `dγ_c = Σ_{b,h,w} dy·x̂` (x̂ recomputed from the saved BN input `v` = conv output,
   -- `den` = `cifar_bn_render_gamma_certified` via `reassocFwd`); `bnBetaSgd`: `β − lr·dβ`,
   -- `dβ_c = Σ_{b,h,w} dy`. `gName`/`bName`/`vName` are the γ/β/conv-output SSA names;
-  -- `epsStr` the ε literal. CifarBnFold proves both `den`s = the certified step.
+  -- `epsStr` the ε literal. `SgdNodes` proves both `den`s = the certified step.
   | bnGammaSgd {oc h w : Nat} (gName vName epsStr lrStr : String) (ε : ℝ) (γ : Vec oc)
       (v : Vec (oc*h*w)) (lr : ℝ)                          : SHlo (oc*h*w) → SHlo oc
   | bnBetaSgd  {oc h w : Nat} (bName lrStr : String) (β : Vec oc) (lr : ℝ)
@@ -1817,17 +1772,6 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .headSlice (N := N) (heads := heads) (d := d) h => headSliceFlat N heads d h
   | _, _, .headPad (N := N) (heads := heads) (d := d) h => headPadFlat N heads d h
 
-/-- **True batch-norm at the network's left-assoc `[N,C,H,W]` flat index.** The
-    proven `bnBatchTensor4` (typed at `N·(oc·(h·w))`) conjugated by the `mul_assoc`
-    reindex so it slots into the `N·(oc·h·w)` batched composition (where conv/etc.
-    produce `oc·h·w = (oc·h)·w`). Reindex only — the function IS `bnBatchTensor4`. -/
-noncomputable def bnBatchLA (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
-    Vec (N * (oc * h * w)) → Vec (N * (oc * h * w)) :=
-  fun v =>
-    (fun y => y ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))
-      (bnBatchTensor4 N oc h w ε γ β
-        (v ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm))
-
 /-- Which BatchNorm a forward chain emits — the batched-index peer of `ResNet34RenderB.R34Bn`,
     shared by the EfficientNet and MobileNetV2 renders so one traversal can produce both the
     training forward and its frozen-stats eval partner.
@@ -2468,16 +2412,6 @@ theorem convertF_faithful {n : Nat} (rnd : ℝ → ℝ) (e : SHlo n) :
     den (.batchOp (N := N) op e) = batchMap N (denOp op) (den e) := rfl
 
 attribute [simp] denOp
-
-/-- **Pointwise maps are `batchMap`-free.** Lifting an elementwise map across `N` examples IS the
-    elementwise map at the batched index `N·n`. This is why moving the pointwise nodes onto
-    descriptors was denotation-preserving, and it is the half of that claim the artifact cannot
-    witness: the render is value-independent, so a descriptor with the wrong `den` emits the same
-    bytes. Cf. `swishBackB`/`sigmoidBackB`, which are NOT descriptors precisely because their
-    backward is not of this shape — it reads a per-example saved activation. -/
-theorem batchMap_pointwise {N n : Nat} (g : ℝ → ℝ) (v : Vec (N * n)) :
-    batchMap N (fun (x : Vec n) i => g (x i)) v = fun idx => g (v idx) :=
-  congrArg (fun w idx => g (w idx)) (Mat.flatten_unflatten v)
 
 /-- The descriptor form of swish denotes exactly what the descriptor-less `swishF` denoted at the
     same index — the batched graph computes the same function, only the emit width now travels
