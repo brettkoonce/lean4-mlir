@@ -499,7 +499,7 @@ theorem exp_sub_one_le {x : ℝ} (hx1 : x < 1) :
   have hprod : Real.exp x * Real.exp (-x) = 1 := by
     rw [← Real.exp_add]; simp
   have h1 : (1 - x) * Real.exp x ≤ 1 := by
-    nlinarith [Real.add_one_le_exp (-x), hp]
+    nlinarith only [Real.add_one_le_exp (-x), hp, hprod]
   rw [le_div_iff₀ (by linarith : (0:ℝ) < 1 - x)]
   linarith [h1]
 
@@ -810,7 +810,7 @@ private theorem mulErr_nonneg {u A C ea ec : ℝ} (hu : 0 ≤ u) (hA : 0 ≤ A)
     (hC : 0 ≤ C) (hea : 0 ≤ ea) (hec : 0 ≤ ec) : 0 ≤ mulErr u A C ea ec :=
   add_nonneg
     (mul_nonneg hu (mul_nonneg (by linarith) (by linarith)))
-    (by nlinarith)
+    (by positivity)
 
 private theorem mulErr_mono {u u' A C ea ea' ec : ℝ}
     (hu : 0 ≤ u) (huu : u ≤ u') (hA : 0 ≤ A) (hC : 0 ≤ C)
@@ -1412,11 +1412,11 @@ theorem softmax_perturb {n : ℕ} (zt z : Vec n) {δ : ℝ}
   have hprod : Real.exp (2 * δ) * Real.exp (-(2 * δ)) = 1 := by
     rw [← Real.exp_add]; simp
   have hsum2 : 2 ≤ Real.exp (2 * δ) + Real.exp (-(2 * δ)) := by
-    nlinarith [sq_nonneg (Real.exp (2 * δ) - 1), Real.exp_pos (2 * δ)]
+    nlinarith only [sq_nonneg (Real.exp (2 * δ) - 1), Real.exp_pos (2 * δ), hprod]
   rw [abs_le]
   constructor
-  · nlinarith [hlb, hs1, hs0]
-  · nlinarith [hub, hs1, hs0]
+  · nlinarith only [hlb, hs1, hs0, hexp1, hsum2]
+  · nlinarith only [hub, hs1, hs0, hexp1]
 
 /-- Denominator perturbation of the float softmax: rounded-sum compounding
     on `exp`-inaccurate terms. -/
@@ -1583,8 +1583,8 @@ theorem softmaxF_close (fexp : ℝ → ℝ) {eexp : ℝ} {n : ℕ} (z : Vec n)
       smKappa M.u eexp n := by
     rw [abs_le]
     constructor
-    · nlinarith [hQlb, hs0, hs1, hκ0]
-    · nlinarith [hQub, hs0, hs1, hκ0]
+    · nlinarith only [hQlb, hs0, hs1, hκ0]
+    · nlinarith only [hQub, hs0, hs1, hκ0]
   have hQabs : |fexp (z k) / M.sum (fun j => fexp (z j))| ≤
       1 + smKappa M.u eexp n := by
     have h1 : |fexp (z k) / M.sum (fun j => fexp (z j))| ≤

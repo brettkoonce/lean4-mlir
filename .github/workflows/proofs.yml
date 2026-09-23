@@ -474,7 +474,7 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "## Zero axiom declarations" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ **No \`axiom\` declarations anywhere in the repo's Lean sources — the former IEEE rounding axioms are discharged by the constructed \`rndP\` operator (\`Binary32Instance.lean\`), audited in the main 3-axiom closure.**" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **No \`axiom\` declarations anywhere in the repo's Lean sources — the former IEEE rounding axioms are discharged by the constructed \`rndP\` operator (\`RndP.lean\`), audited in the main 3-axiom closure.**" >> $GITHUB_STEP_SUMMARY
 
       # ── The SCORING gates. Pure host arithmetic, no GPU, milliseconds — there is no reason
       #    for these not to be here, and they were not until 2026-08-05.

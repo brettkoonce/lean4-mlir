@@ -38,7 +38,7 @@ clarity, this file works on a single 1D `Vec n` (think of `n` as
 indexing changes when you go to 4D.
 -/
 
-open Finset BigOperators Classical
+open Finset BigOperators
 
 namespace Proofs
 

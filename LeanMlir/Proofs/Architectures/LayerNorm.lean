@@ -46,7 +46,7 @@ Derivative is messier but it's still just a number you compute and
 multiply. One more `pdiv_*` theorem, one more `HasVJP` instance.
 -/
 
-open Finset BigOperators Classical
+open Finset BigOperators
 
 namespace Proofs
 
@@ -142,11 +142,12 @@ noncomputable def gelu (n : Nat) (x : Vec n) : Vec n :=
 noncomputable def geluScalarDeriv (x : ℝ) : ℝ :=
   deriv geluScalar x
 
-/-- **Real.tanh is differentiable everywhere** — bridge via
+/-- **`Real.tanh` is differentiable everywhere** — bridge via
     `Real.tanh_eq_sinh_div_cosh` and `Real.cosh_pos`. Tagged for
-    `fun_prop` so downstream gelu-style smoothness goals dispatch. -/
+    `fun_prop` so downstream gelu-style smoothness goals dispatch.
+    (Mathlib has neither this nor `hasDerivAt_tanh` below for `Real.tanh`.) -/
 @[fun_prop]
-theorem Real.differentiable_tanh : Differentiable ℝ Real.tanh := by
+theorem differentiable_tanh : Differentiable ℝ Real.tanh := by
   have h_eq : Real.tanh = (fun x : ℝ => Real.sinh x / Real.cosh x) :=
     funext Real.tanh_eq_sinh_div_cosh
   rw [h_eq]
@@ -156,10 +157,9 @@ theorem Real.differentiable_tanh : Differentiable ℝ Real.tanh := by
           (Real.cosh_pos x).ne'
 
 /-- **Derivative of `Real.tanh`** — `tanh'(y) = 1 − tanh²(y)`, built from
-    `tanh = sinh/cosh` via the quotient rule and `cosh² − sinh² = 1`.
-    (Mathlib has `Real.differentiable_tanh` but no `HasDerivAt` form, so we
-    derive it here for the GELU closed-form derivative `geluScalarDeriv_eq`.) -/
-theorem Real.hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^ 2) y := by
+    `tanh = sinh/cosh` via the quotient rule and `cosh² − sinh² = 1`, for the
+    GELU closed-form derivative `geluScalarDeriv_eq`. -/
+theorem hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^ 2) y := by
   have h : Real.tanh = fun z => Real.sinh z / Real.cosh z := funext Real.tanh_eq_sinh_div_cosh
   rw [h]
   have hd := (Real.hasDerivAt_sinh y).div (Real.hasDerivAt_cosh y) (Real.cosh_pos y).ne'
@@ -175,7 +175,7 @@ theorem Real.hasDerivAt_tanh (y : ℝ) : HasDerivAt Real.tanh (1 - Real.tanh y ^
     renders — so the emitted backward text is certified equal to `deriv geluScalar`
     (`swishScalarDeriv_eq` does the same for swish).
     Proof: assemble `HasDerivAt` for the polynomial inner, `tanh` via
-    `Real.hasDerivAt_tanh`, and the outer product, then `HasDerivAt.deriv`. -/
+    `hasDerivAt_tanh`, and the outer product, then `HasDerivAt.deriv`. -/
 theorem geluScalarDeriv_eq (x : ℝ) :
     geluScalarDeriv x =
       0.5 * (1 + Real.tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3)))
@@ -190,7 +190,7 @@ theorem geluScalarDeriv_eq (x : ℝ) :
   have hu : HasDerivAt (fun z : ℝ => Real.sqrt (2 / Real.pi) * (z + 0.044715 * z^3))
               (Real.sqrt (2 / Real.pi) * (1 + 0.044715 * (3 * x^2))) x :=
     hpoly.const_mul _
-  have ht := (Real.hasDerivAt_tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3))).comp x hu
+  have ht := (hasDerivAt_tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3))).comp x hu
   have h1pt := ht.const_add 1
   have hhalfx : HasDerivAt (fun z : ℝ => 0.5 * z) 0.5 x := by
     simpa using (hasDerivAt_id x).const_mul (0.5 : ℝ)

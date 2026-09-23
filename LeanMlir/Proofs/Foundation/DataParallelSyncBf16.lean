@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.DataParallelSync
-import LeanMlir.Proofs.Float.Binary32Instance
+import LeanMlir.Proofs.Float.RndP
 
 /-! # Data parallelism at bf16 — every node shards exactly but the conv weight gradient
 
@@ -39,7 +39,7 @@ the repo's rounding model at every power of two — so for bf16 (`rndP 7`) at `R
 
 ⚠ No whole-net statement: there is no single-device bf16 chain for either net to tie a twin to,
 here or in the f32 tier. These are the per-node cases a bf16 twin would walk its chain with.
-⚠ `rndP` has an unbounded exponent (`Binary32Instance.lean`): bf16 overflow and subnormals are
+⚠ `rndP` has an unbounded exponent (`RndP.lean`): bf16 overflow and subnormals are
 outside it, where scaling by 4 can move a value across the format's boundary.
 -/
 

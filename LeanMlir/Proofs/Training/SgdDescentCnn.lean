@@ -59,7 +59,7 @@ dense head — now has a proven descent statement. -/
 
 namespace Proofs
 
-open StableHLO Classical
+open StableHLO
 
 -- ════════════════════════════════════════════════════════════════
 -- § Max is Lipschitz: the 2×2 window max moves no more than its cells
@@ -845,6 +845,7 @@ theorem conv2d_kernel_drift_sum {ic oc h w kH kW : Nat} (b : Vec oc)
   rw [sum_abs_k4]
   simp [Finset.mul_sum, mul_assoc]
 
+open scoped Classical in
 /-- **Float pool-backward closeness** (Increment 1 keystone). Under the pool
     margin the float post-relu argmax matches the real one
     (`isArgmax_iff`), so the pool's backward selector
@@ -956,6 +957,7 @@ theorem pool_head_differentiableAt {c h w d₃ d₄ nC : Nat}
     exact maxPoolFlat_differentiableAt _ hmp hc hh hw
   fun_prop (disch := assumption)
 
+open scoped Classical in
 /-- **Loss input-gradient at the conv output** — the key glue of the conv
     rung. The chain `pdiv`s through the relu (mask) and the pool (frozen
     selector): at a smooth point the sum over pooled coordinates collapses
@@ -1353,6 +1355,7 @@ theorem gradAt_comp_t3 {P c h w : Nat} (Z : Vec P → Vec (c * h * w))
   rw [gradAt_eq_pdiv (fun v' => G (Z v')) v ((differentiableAt_pi.mp hG 0).comp v hZ) idx]
   exact (pdiv_comp Z (fun y => fun _ : Fin 1 => G y) v hZ hG idx 0).trans (sum_t3 _)
 
+open scoped Classical in
 /-- **Closed form of the conv2 loss gradient** at any four-margin point —
     the chain rule through the conv weight map (`gradAt_comp_t3`)
     with the pool-collapsed head gradient
@@ -1459,6 +1462,7 @@ theorem head3_cot_reluMask {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃) (b₃ : Ve
   simp_rw [reluMask_dense_transpose_eq]
   rw [dense_transpose_eq]
 
+open scoped Classical in
 /-- **The certified conv-2 loss gradient, head restated in `dense`/`reluMask`
     form** — the conv peer of `mlp_input_loss_gradAt_reluMask` (Increment 1
     keystone). The two head `Wᵀ` contractions (under the d₄/d₃ ReLU masks)
@@ -1576,6 +1580,7 @@ theorem FloatModel.dot_perturbed_close {n : ℕ} (M : FloatModel)
     _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * (a * Ct)) +
           (n : ℝ) * (a * eB) := add_le_add h1' h3
 
+open scoped Classical in
 /-- **The binary32 conv-2 weight gradient the rendered trainer computes** — the
     conv peer of `mlpInputFloatGrad`. At kernel entry `(o,cc,kh,kw)` it is the
     float dot of the (exact) padded-input window `convPadWin` against the float
@@ -1615,6 +1620,7 @@ noncomputable def FloatModel.cnnConv2FloatGrad {c h w d₃ d₄ nC kH kW : Nat}
               (t3Idx ci (winRow hi) (winCol wi))
             else 0)) o)
 
+open scoped Classical in
 @[simp] theorem FloatModel.cnnConv2FloatGrad_apply {c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
@@ -1737,6 +1743,7 @@ theorem FloatModel.cnnConv2CotBudget_nonneg (M : FloatModel) {c h w d₃ d₄ nC
               (layerBudget_nonneg hu hw₂ hβ₂ haX2 heX2)))) hρ1)))
 
 open FloatModel in
+open scoped Classical in
 /-- **The conv-2-output cotangent is float-close at a float conv-2 input**
     (Increment 4 keystone) — Increment 2's conv-2 cotangent chain, factored to
     take the conv-2 input `(X2, X2F)` with `|X2F − X2| ≤ eX2`, `|X2| ≤ aX2`. The
@@ -1950,6 +1957,7 @@ theorem cnn_conv2_cot_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
     hpb ecvnn
 
 open FloatModel in
+open scoped Classical in
 /-- **The real conv-2-output cotangent is magnitude-bounded** by `cnnConv2CotMag`
     — the `aX2`/`eX2`-independent ℓ∞ bound (the conv-2 ReLU mask and pool
     selector only shrink, the head cotangent is in `[−1,1]`, the two masked `Wᵀ`
@@ -2025,6 +2033,7 @@ theorem abs_le_of_close {a b e C : ℝ} (h1 : |a - b| ≤ e) (h2 : |b| ≤ C) :
   linarith
 
 open FloatModel in
+open scoped Classical in
 /-- **The binary32 conv-2 weight gradient is within an explicit budget of the
     certified one** (Increment 2 capstone) — the conv-layer peer of
     `mlp_w0_grad_close`, the project's deepest float-backward grad-close. With
@@ -2523,6 +2532,7 @@ theorem head3_sum_drift {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
 
 namespace Conv2Slot
 
+open scoped Classical in
 /-- **Segment-Lipschitz gradient for a conv2-slot loss, explicit constant.** For a
     parameter map `Z` into conv2's pre-activation with per-entry drift `ρ·‖e‖₁` (`hZ`) and
     `ℓ1` drift `(2h)·(2w)·ρ·‖e‖₁` (`hZ1`), whose loss gradient at every off-kink point is a
@@ -3833,6 +3843,7 @@ theorem margin4_keeps_offkink {P c h w d₃ d₄ kH kW : Nat}
     (fun v e => (z2_l1_drift Z W₂ b₂ hZ1 hw₂ hW₂ v e).trans_eq (by ring))
     hw₃ hW₃ hw₄ hW₄ v e he (fun q => lt_of_eq_of_lt (by ring) (hm q)) t ht0 ht1 q
 
+open scoped Classical in
 /-- **Segment-Lipschitz gradient for a conv1-slot loss, explicit constant.** For a
     parameter map `Z` into conv1's pre-activation with per-entry drift `ρ·‖e‖₁` (`hZ`) and
     `ℓ1` drift `(2h)·(2w)·ρ·‖e‖₁` (`hZ1`), whose loss gradient at every off-kink point is a
@@ -4170,6 +4181,7 @@ theorem cnn1_pool_head_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
     (f := fun y : Vec (c * (2*h) * (2*w)) => Tensor3.flatten (conv2d W₂ b₂
       (Tensor3.unflatten (relu (c * (2*h) * (2*w)) y)))) z₁ (by fun_prop (disch := assumption))
 
+open scoped Classical in
 /-- **Loss input-gradient at the conv1 output** — the conv1 peer of
     `pool_relu_input_grad`. One more relu mask and one conv-as-input
     crossing: the chain picks up `relu'(z₁)` and contracts the point-free
@@ -4349,6 +4361,7 @@ theorem cnn_conv1_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
     hc hh hw _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun u' : Vec (c * ic * kH * kW) =>
       Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)) u ((conv2d_weight_differentiable b₁ x₀) u)
 
+open scoped Classical in
 /-- **Closed form of the conv1 loss gradient** at any five-margin point —
     the same chain rule, contracted with the conv1 head gradient
     (`cnn1_pool_head_input_grad`): the conv1 weight Jacobian
@@ -4448,6 +4461,7 @@ theorem cnn_conv1_loss_gradAt {ic c h w d₃ d₄ nC kH kW : Nat}
   rw [conv2d_weight_pdiv b₁ x₀ _ o cc kh kw ci hi wi,
     cnn1_pool_head_input_grad W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label _ hz1 hz2 hmp hz3 hz4 ci hi wi]
 
+open scoped Classical in
 /-- **The certified conv-1 loss gradient, head restated in `dense`/`reluMask`
     form** — the conv-1 peer of `cnn_conv2_loss_gradAt_reluMask` (Increment 4
     keystone). One conv-backward deeper than conv-2: the conv-1-output
@@ -4541,6 +4555,7 @@ theorem cnn_conv1_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
   simp only [ite_mul, zero_mul, Finset.sum_ite_irrel, Finset.sum_const_zero, Finset.sum_ite_eq',
     Finset.mem_univ, ite_true]
 
+open scoped Classical in
 /-- **The binary32 conv-1 weight gradient the rendered trainer computes** — the
     conv-1 peer of `cnnConv2FloatGrad`, one conv-backward deeper. At kernel
     entry `(o,cc,kh,kw)` it is the float dot of the (exact) padded-input window
@@ -4597,6 +4612,7 @@ noncomputable def FloatModel.cnnConv1FloatGrad {ic c h w d₃ d₄ nC kH kW : Na
                     (t3Idx co (winRow ho) (winCol wo))
                   else 0)))) o)
 
+open scoped Classical in
 @[simp] theorem FloatModel.cnnConv1FloatGrad_apply {ic c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w))
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -4754,6 +4770,7 @@ theorem convTap_back_abs_le {c h w kH kW : Nat}
     Finset.abs_sum_le_sum_abs _ _).trans hbound
 
 open FloatModel in
+open scoped Classical in
 /-- **The binary32 conv-1 weight gradient is within an explicit budget of the
     certified one** (Increment 4 capstone) — the conv-1 peer of
     `cnn_conv2_grad_close`, one conv-backward deeper. With `x₀` exact, the
@@ -5666,6 +5683,7 @@ theorem cnn_conv2_bias_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
     hz2 hmp hz3 hz4) 0).comp (f := fun b' : Vec c =>
       Tensor3.flatten (conv2d W₂ b' x₁)) b ((conv2d_bias_differentiable W₂ x₁) b)
 
+open scoped Classical in
 /-- **Closed form of the conv2 bias loss gradient** at any four-margin
     point — the chain rule through the conv bias map (`gradAt_comp_t3`)
     with the pool-collapsed head gradient (`pool_relu_input_grad`, reused
@@ -6110,6 +6128,7 @@ theorem cnn_conv1_bias_loss_differentiableAt {ic c h w d₃ d₄ nC kH kW : Nat}
     hc hh hw _ hz1 hz2 hmp hz3 hz4) 0).comp (f := fun b' : Vec c =>
       Tensor3.flatten (conv2d W₁ b' x₀)) b ((conv2d_bias_differentiable W₁ x₀) b)
 
+open scoped Classical in
 /-- **Closed form of the conv1 bias loss gradient** at any five-margin
     point — the chain rule through conv1's bias map, contracted with the conv1 head
     gradient (`cnn1_pool_head_input_grad`, reused verbatim): the
@@ -6480,6 +6499,7 @@ theorem FloatModel.sum_perturbed_close {n : ℕ} (M : FloatModel)
       ≤ |M.sum Bt - ∑ i, Bt i| + |(∑ i, Bt i) - ∑ i, B i| := abs_sub_le _ _ _
     _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) + (n : ℝ) * eB := add_le_add h1' h3
 
+open scoped Classical in
 /-- **The binary32 conv-2 bias gradient the rendered trainer computes** — the
     bias peer of `cnnConv2FloatGrad`: at output channel `o` it is the float SUM
     `M.sum (cotWin c̃Conv o)` of the same float conv-2-output cotangent slab
@@ -6511,6 +6531,7 @@ noncomputable def FloatModel.cnnConv2BiasFloatGrad {c h w d₃ d₄ nC kH kW : N
             (t3Idx ci (winRow hi) (winCol wi))
           else 0)) o)
 
+open scoped Classical in
 /-- **The certified conv-2 BIAS loss gradient, restated as the spatial SUM of
     the `reluMask`-form cotangent** — the bias peer of
     `cnn_conv2_loss_gradAt_reluMask`. The 3-dense head collapses via
@@ -6581,6 +6602,7 @@ noncomputable def FloatModel.cnnConv2BiasGradBudget (M : FloatModel)
     (((2 * h) * (2 * w) : ℕ) * CotBudget)
 
 open FloatModel in
+open scoped Classical in
 /-- **The binary32 conv-2 BIAS gradient is within an explicit budget of the
     certified one** — the bias peer of `cnn_conv2_grad_close`, built on the
     factored conv-2 cotangent chain at the exact conv-2 input `x₁`
@@ -6834,6 +6856,7 @@ theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (M.cnnConv2BiasFloatGrad W₂ b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅ fexp label)
     hc hh hw hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ hlr hη0 hgh hm2 hmq hm3 hm4 hsmall h1 h2
 
+open scoped Classical in
 noncomputable def FloatModel.cnnConv1BiasFloatGrad {ic c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -6879,6 +6902,7 @@ noncomputable def FloatModel.cnnConv1BiasFloatGrad {ic c h w d₃ d₄ nC kH kW 
                     (t3Idx co (winRow ho) (winCol wo))
                   else 0)))) o)
 
+open scoped Classical in
 /-- **The certified conv-1 BIAS loss gradient, restated as the spatial SUM of
     the `reluMask`-form cotangent** — the bias peer of
     `cnn_conv1_loss_gradAt_reluMask`, one conv-backward deeper. The head
@@ -6988,6 +7012,7 @@ noncomputable def FloatModel.cnnConv1BiasGradBudget (M : FloatModel)
     (((2 * h) * (2 * w) : ℕ) * eback)
 
 open FloatModel in
+open scoped Classical in
 /-- **The binary32 conv-1 BIAS gradient is within an explicit budget of the
     certified one** — the bias peer of `cnn_conv1_grad_close`, built on the
     factored conv-2 cotangent chain at the FLOAT conv-2 input `relu(z̃₁)`

@@ -52,7 +52,7 @@ earlier chapters.
 5. **Final commentary** — why the taxonomy is complete.
 -/
 
-open Finset BigOperators Classical
+open Finset BigOperators
 
 namespace Proofs
 
@@ -99,7 +99,7 @@ lemma dense_per_token_flat_diff {N inD outD : Nat}
 
 /-- Differentiability of the flattened per-token GELU map.
     `geluScalar = 0.5 · x · (1 + tanh(√(2/π)(x + 0.044715·x³)))`. With
-    `Real.differentiable_tanh` available to `fun_prop`, the proof
+    `differentiable_tanh` available to `fun_prop`, the proof
     discharges automatically. -/
 theorem gelu_per_token_flat_diff (N D : Nat) :
     Differentiable ℝ (fun v : Vec (N * D) =>
@@ -1388,7 +1388,7 @@ noncomputable def transformerMlp (N D mlpDim : Nat)
   (fun X : Mat N D      => fun n => dense Wfc1 bfc1 (X n))
 
 /-- Differentiability of the flattened `transformerMlp` — `dense ∘ gelu ∘ dense` per token,
-    all smooth (`Real.differentiable_tanh` is tagged for `fun_prop`). -/
+    all smooth (`differentiable_tanh` is tagged for `fun_prop`). -/
 lemma transformerMlp_flat_diff (N D mlpDim : Nat)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :

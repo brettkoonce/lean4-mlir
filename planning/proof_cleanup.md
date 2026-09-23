@@ -22,6 +22,55 @@ were measured say so.
 * Lemmas for `Foundation/Tensor.lean`, `Codegen/StableHLO.lean` or `Codegen/Lamb.lean` rebuild
   240–420 modules: park them in the leaf that needs them and move them as a batch.
 
+## ▶ Start here (state at 2026-09-23, origin/main `714dd89b`)
+
+Everything in §1 is on main. Work is done on local branch `proof-cleanup` and landed by: commit
+→ fetch → rebase onto `origin/main` → re-run the gates → fast-forward `main` → push (no merge
+commits; the user says "commit" and "push" separately). Gates run before each landing: `lake
+build`, `lake build Certs CertsHeavy Proofs` (+ `Apps Codegen` when Codegen changed),
+`tests/AuditAxioms.lean`, `tests/AuditAxiomsHeavy.lean` (both: no `sorry`, core three axioms
+only), `lake exe docstring-checkrefs`, `scripts/blueprint_uses.py --check`,
+`scripts/gen_comparator_tier.py --check`, and `git status verified_mlir` unchanged.
+
+**Method that found every win in §1(f)–(k): profile before guessing.**
+`lake env lean -Dtrace.profiler=true -Dtrace.profiler.threshold=2000 <file>` names the
+declaration and the step (`-Dprofiler=true` gives category totals only). Two readings:
+
+* hundreds of proofs at the SAME time ⇒ they wait on one shared step (StableHLO: `den.eq_def`,
+  233 s) or on the kernel, which checks `decide +kernel` aux declarations one at a time (FullNets:
+  ~272 `dotZ` facts, ~0.1 s each isolated, all reported at ~274 s);
+* one proof dominating ⇒ look at its tactic: every other slow proof in §1(h)–(j) was
+  `fin_cases … <;> simp [literal]; norm_num` over ℝ matrix/tensor literals.
+
+**The three fixes that recur.**
+
+1. *ℝ literals → ℚ data + one kernel check.* Emit the data as `ℚ`, DEFINE the `ℝ` object as its
+   cast (`castM`, `castT`, …), prove the property once over variables from a `Bool` checker, and
+   close each instance with `decide +kernel`. Kits: `Foundation/GramQ.lean` (Gram identities,
+   entrywise bounds), `Foundation/IntervalBoundConvQ.lean` (conv IBP box). Consumers' `simp` sets
+   that unfold the object gain `<name>Q, castM`.
+2. *Never let `simp` name a big structural-recursion def* — it realizes the equation lemmas
+   (`den`: 233 s). Use a `dsimproc` that unfolds one constructor by smart unfolding
+   (`denStep`/`denStepApp`, needs `withDefault`, and a second pattern for the over-applied form).
+3. *Whole-net ties: peel with a lemma proved at VARIABLE stages/shapes, instantiated by `rw`*
+   (§1(f)); never a closing `rfl` through the concrete chain.
+
+**Traps met this session.**
+
+* Bridging an existing ℝ literal to its ℚ copy entry by entry costs exactly the indexing the
+  reflection removes (15–18 s a matrix, over budget) — convert the definition instead.
+* `List.getD` inside a kernel check is linear per lookup: a 16×16×784 ℚ Gram check timed out at
+  52 GB. Keep wide rows on `dotZ` over `List ℤ`.
+* Some generators PARSE committed Lean files (`smoothing_net_witness_gen.py`,
+  `lipschitz_cert_float.py`, `crown_ibp_scorecard.py`): change the data's spelling and their
+  parsers break first.
+* `LipschitzCertScorecardSDPFull`/`…Uncon` are in no lib — build them by name after a regen (§3.3).
+* `trace.profiler` allocates: a heartbeat bump sized without it can fail under it (§1(g):
+  `emitTok` at 400k).
+
+**Next, recommended order:** §3.4 (one corpus rebuild) → §3.5 → §3.6.
+§3.3's matrix-level `G1` lemma and §3.2's printer split are optional (~20 s / ~45 s).
+
 ## 1. Done
 
 | commit | what | measured |
@@ -31,12 +80,13 @@ were measured say so.
 | `6f4d5716` (c) | SmoothingDec generator: six of seven bumps out (the 3300-entry literal keeps `maxRecDepth`) | 7 modules green; regeneration byte-identical before the edit |
 | `6f4d5716` (d) | `nlinarith` → `linarith` where it closes: 21 of 28 in FloatBridge, 1 of 4 in CrownBound | FloatBridge 7.4 s → 5.3 s |
 | `6f4d5716` (e) | IBP/CROWN scorecards: shared prelude (per-row ℓ1 facts, fallback images) → new `LipschitzCertScorecardIBPData`; IBP, IBPUncon, Crown, CrownUncon import it and not each other; both generators now emit the doc links the committed files carried by hand | local: data 6 s, then IBP 165 / IBPUncon 158 / Crown 254 / CrownUncon 302 in parallel — the tail after FullImgsA was IBP → IBPUncon → CrownUncon ≈ 625 s serial |
-| pending (f) | §3.1 ResNet-34 apex: nested apex body, `r34B_full_has_vjp_at_backward` (the peel, `rfl` at variable stages) and `r34StemB_has_vjp_at_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
+| `3a545713` (f) | §3.1 ResNet-34 apex: nested apex body, `r34B_full_has_vjp_at_backward` (the peel, `rfl` at variable stages) and `r34StemB_has_vjp_at_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
 | `bb38c790` (g) | §3.2 `den.eq_def` never built: `denStep`/`denStepApp` dsimprocs (smart unfolding, one constructor) replace `den` in all 118 `simp only` sets (29 files); StableHLO's file-wide `maxHeartbeats 4000000` and `cnnBackGraph_faithful`'s 2M out, `emitTok` alone keeps 1M (its compile needs ~2×; tracing trips 400k) | `den.eq_def` was 233 s on StableHLO's critical path (profiler); StableHLO 343 s → 83 s standalone, 91 s under lake; full `Proofs Certs` rebuild 2 m 20 s |
 | `7fe1f006` (h) | §3.3 conv IBP scorecard by reflection: new `Foundation/IntervalBoundConvQ.lean` (the layers over ℚ, cast lemmas, `convNetCheckQ` + `convNetCheckQ_sound`); the generator emits ℚ data, the ℝ net as its cast, and one `decide +kernel` per image — the intermediate tensors and their ~900 goals per image are gone (−1,640 lines); statements and the aggregate unchanged | profiled first: all simp (box ~250 s, conv eval ~180 s per image); ImgsA–D each 281 s / 9.9 GB → 11 s / 3.6 GB; generator byte-reproducible before the edit |
 | `d9356c38` (i) | §3.3 Gram identities by one kernel check: new `Foundation/GramQ.lean` (`castM`, `gram_eq_of_check`, `abs_le_of_check`); Instance, base Scorecard (generator), Float (generator) emit ℚ data with the ℝ matrices as `castM` of it; the 8 `G*_eq`/`H*_eq` and the two entrywise `|W| ≤ c` bounds become `decide +kernel` checks and their 1.6M–16M heartbeat bumps go; consumers' simp sets gain `…Q, castM` (SmoothingNetWitness, pair-SDP, TrainedMlpWitness) | profiled first: Instance's `G1t_eq` 139 s, Float's `W1sV_abs_le` 110 s; LipschitzCertInstance 145 s → 17 s, LipschitzCertFloat 113 s → 4.5 s, LipschitzCertScorecard 26 s under lake; generators byte-reproducible before the edit (pair-SDP: 7.6 min) |
 | `3f22bb47` (j) | §3.3 FullNets on the (i) shape: `W2`/`G1`/`H1`/`G2`/`H2` for both nets as ℚ data + `castM`, `H1`/`G2`/`H2` identities by `gram_eq_of_check` (their 12.8M bumps out); `G1` keeps its per-entry `dotZ` proofs, each entry value now `rfl` on the ℚ side + `norm_num`; the 784-wide `W1` untouched; `…Q, castM` added in the IBP, pair-SDP-full and CROWN generators (the CROWN one also parses the ℚ block) | FullNets 326 s / 8.8 GB → 61 s / 5.5 GB standalone (73 s under lake); CrownUncon standalone 237 s → 213 s (not slower); four generators byte-reproducible before the edit (pair-SDP-full 11 min) |
-| pending (k) | §3.3 strip-and-compile across the Lipschitz tier: the shared `HEADER_OPTS` (`maxRecDepth 100000` / `maxHeartbeats 3200000` in 9 modules), CROWN's header, FullNets' 12.8M `_lip` bumps, the pair-SDP 1.6M–64M bumps (incl. the 64M `hS*`) and the float tier's per-image 8M — 281 option lines out of 14 modules. Kept: IBP/IBPUncon's per-decl 6.4M (32 + 18 `whnf` timeouts without them; their file header was dead) | every stripped module compiled standalone before the generators changed; the regenerated diff is deletions only |
+| `714dd89b` (k) | §3.3 strip-and-compile across the Lipschitz tier: the shared `HEADER_OPTS` (`maxRecDepth 100000` / `maxHeartbeats 3200000` in 9 modules), CROWN's header, FullNets' 12.8M `_lip` bumps, the pair-SDP 1.6M–64M bumps (incl. the 64M `hS*`) and the float tier's per-image 8M — 281 option lines out of 14 modules. Kept: IBP/IBPUncon's per-decl 6.4M (32 + 18 `whnf` timeouts without them; their file header was dead) | every stripped module compiled standalone before the generators changed; the regenerated diff is deletions only |
+| (l) | §3.7: `rndP`/`rndP_zero`/`rndP_err` → leaf `Float/RndP.lean` (Mathlib only), so `DataParallelSyncBf16` no longer imports `Binary32Instance` → FloatBridge, SgdDescentLinear; the three `#print axioms` out of `Binary32Instance` (already in `tests/AuditAxioms.lean`); `Proofs.Real.differentiable_tanh`/`…hasDerivAt_tanh` → `Proofs.differentiable_tanh`/`hasDerivAt_tanh` (Mathlib has neither; the docstring said it had one); file-scope `Classical` out of the audit's six files: four need nothing, CNN's three maxpool decls and SgdDescentCnn's 25 get `open scoped Classical in` (all for `if MaxPool2IsArgmax`, which has no `Decidable` instance); the ten `nlinarith` → `nlinarith only […]` (one → `positivity`) | RndP 1.2 s; DataParallelSyncBf16 12 s; FloatBridge 5.3 s → 5.0 s |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -46,7 +96,7 @@ were measured say so.
 | `IbpConvScorecardImgsA/B/C/D` | 470–550 each (~11 local after (h)) | generated |
 | `SmoothingCPScorecard` | 392 (→ ~90 est. after (a)) | generated |
 | `LipschitzCertInstance` | 100–383 (17 local after (i)) | hand-maintained data |
-| `LipschitzCertScorecard*` | 70–300 each | generated |
+| `LipschitzCertScorecard*` | 70–300 each (local after (i)–(k): FullNets 61, Crown/Uncon ~210–240, IBP/Uncon ~85–95, SDP ~70) | generated |
 | `ResNet34BackCertifiedTieB` | 102 (43 local; 3 after (f)) | hand-written — §3.1, done |
 | `SgdDescentCnn` | 95 | hand-written — §3.5 |
 
@@ -137,15 +187,13 @@ with `rw` in the ties.
 * EfficientNet: `variable` sections + `[NeZero …]` in `EfficientNetSyncStepTieG` (the 49 `0 < ε`
   binders → a `B0Weights.EpsPos` structure).
 
-### 3.7 Small, any time
+### 3.7 Small, any time — DONE as §1(l)
 
-* 10 remaining `nlinarith` in FloatBridge/CrownBound are genuine products — `nlinarith only [...]`.
-* `Real.hasDerivAt_tanh` / `Real.differentiable_tanh` declared inside `namespace Proofs`
-  (LayerNorm.lean:149/162) — rename; the docstring's Mathlib claim is wrong.
-* File-scope `open Classical` in 6 Architectures/Training files.
-* `#print axioms` in `Binary32Instance.lean` → `tests/AuditAxioms.lean`.
-* `DataParallelSyncBf16.lean` imports `Float.Binary32Instance` (→ FloatBridge, SgdDescentLinear)
-  for `rndP` only — move `rndP` + its two lemmas to a leaf `Float/RndP.lean`.
+Left over: file-scope `open Classical` in seven more files the audit did not list (Foundation
+`IR`/`MLP`/`EvenKernelConvBack`, `TrainedCnnSeal`, the ResNet-34 and both ConvNeXt `…BackCertifiedTie`s).
+The `if MaxPool2IsArgmax` sites are the reason CNN/SgdDescentCnn need classical at all; a
+`Decidable (MaxPool2IsArgmax …)` instance (a `∀` over `Fin 2 × Fin 2` of real `≤`) would retire
+them but re-elaborates those `if`s in IR/StableHLO (241 dependents) — a §3.4-style batch item.
 
 ## 4. Checked and set aside
 
@@ -154,3 +202,8 @@ with `rw` in the ties.
 * `FloatBridge`'s `nlinarith` → `linarith` is idiom, not speed (−2 s).
 * A plain (non-tail) recursive loop for the binomial tail hits `(kernel) deep recursion` at 4,835
   steps; so does a `Nat.rec` fold. Tail-recursive with accumulator arguments is what works.
+* §3.3's matrix-level `G1` lemma for FullNets: the kernel still has to evaluate the same ~272 dot
+  products, so it saves ~20 s of 61 s at best. Deferred, not rejected.
+* CROWN/IBP are NOT slower after (j) despite the extra `castM` in their simp sets: CrownUncon
+  standalone 237 s → 213 s. Parallel `lake build` numbers are inflated by contention; compare
+  standalone.

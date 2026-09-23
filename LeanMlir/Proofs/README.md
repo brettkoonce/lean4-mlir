@@ -257,7 +257,7 @@ over `elemwiseProduct_has_vjp` + `dense_has_vjp` + `identity_has_vjp`.
 > theorem proved via `fderiv_apply` + chain rule with
 > `geluScalar ∘ ContinuousLinearMap.proj j`, then
 > `fderiv_eq_smul_deriv` to convert scalar `fderiv` ↔ `deriv`. A
-> new `Real.differentiable_tanh` `@[fun_prop]` lemma (derived from
+> new `Proofs.differentiable_tanh` `@[fun_prop]` lemma (derived from
 > `Real.tanh_eq_sinh_div_cosh` + `Real.cosh_pos`) carries the
 > smoothness through. `layerNorm_has_vjp` reuses the BN proof
 > template on a different axis.

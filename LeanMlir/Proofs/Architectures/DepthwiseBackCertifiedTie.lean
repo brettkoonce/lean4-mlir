@@ -24,8 +24,6 @@ The §B certified-VJP ties for the three CNNs (convnext / mnv2 / efficientnet) a
 
 namespace Proofs
 
-open Classical
-
 /-- **The depthwise conv-adjoint identity (odd kernels), all dims.** The emitted reversed-kernel
     forward depthwise conv `depthwiseConv2d (dwReverse W) 0` equals the certified depthwise
     input-gradient `depthwiseConv2d_input_grad_formula W`, for arbitrary `c h w kH kW` with odd

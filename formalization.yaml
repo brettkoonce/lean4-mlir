@@ -266,7 +266,7 @@ fidelity:
 
        THE MODEL. `FloatModel` is any rounding operator with relative error `u`; `binary32`
        (`u = 2^-24`) and `fp8E4M3` (`u = 2^-4`) are CONSTRUCTED as round-to-nearest on a p-bit
-       grid with the standard model proved (`rndP_err`, `Binary32Instance.lean`) -- no hardware
+       grid with the standard model proved (`rndP_err`, `RndP.lean`) -- no hardware
        axiom. `FloatClose A B f fF L` is the one closeness form: a magnitude window `A -> B` with
        an input-error -> output-error modulus `L`, composing by `FloatClose.comp` and through the
        additive skip by `floatClose_residual`; the per-operator `floatClose_*` lemmas, the CIFAR

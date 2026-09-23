@@ -105,8 +105,8 @@ theorem certified_of_marginPos {n k : ℕ}
 theorem relu_lower_envelope {α z : ℝ} (h0 : 0 ≤ α) (h1 : α ≤ 1) :
     α * z ≤ max z 0 := by
   by_cases hz : z ≤ 0
-  · rw [max_eq_right hz]; nlinarith
-  · rw [max_eq_left (le_of_not_ge hz)]; nlinarith [le_of_not_ge hz]
+  · rw [max_eq_right hz]; nlinarith only [h0, hz]
+  · rw [max_eq_left (le_of_not_ge hz)]; nlinarith only [h1, le_of_not_ge hz]
 
 /-- **Upper envelope.** On `[l, u]` with `l ≤ 0`, any nonneg `s` at or above the
     chord slope dominates `relu`. The chord condition is stated as
@@ -123,8 +123,9 @@ theorem relu_upper_envelope {l u s z : ℝ} (hl : l ≤ 0) (hlz : l ≤ z) (hzu 
     exact mul_nonneg hs0 (by linarith)
   · have hz0 : 0 ≤ z := le_of_not_ge hz
     rw [max_eq_left hz0]
-    nlinarith [mul_nonneg (sub_nonneg.mpr hzu) (mul_nonneg hs0 (neg_nonneg.mpr hl)),
-               mul_nonneg hz0 (sub_nonneg.mpr hs)]
+    nlinarith only [lt_of_not_ge hz, hzu, hs0, hl, hs,
+      mul_nonneg (sub_nonneg.mpr hzu) (mul_nonneg hs0 (neg_nonneg.mpr hl)),
+      mul_nonneg hz0 (sub_nonneg.mpr hs)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-neuron relaxation
