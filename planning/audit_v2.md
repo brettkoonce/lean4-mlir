@@ -20,12 +20,14 @@ kits sit in whichever file first needed them** (ResNet-34, EfficientNet, StableH
 descent file), and that single cause drives most of the wrong-way imports, the rebuild fan-out, and
 the "where is X?" problem. The fix is mostly *moves with names kept* — no pinned statement changes.
 
-## Status (2026-09-23, branch `proof-cleanup`, not pushed)
+## Status (2026-09-23, landed on main)
 
 | commit | what landed |
 |---|---|
 | `a745b694` | §0.2 — `sigmoidScalarDeriv_eq` restored; it and `swishScalarDeriv_eq` pinned. §1 — the verified import drops (`LipschitzCert` off `Tensor`; 7 renderers off `LeanMlir.ViTRender`; `SgdDescentCnn` off `MobileNetV2Close`; ENet whole-net tie; `PairSDP`). ⚠ `ViTFold` → `Cifar8Fold` was NOT free — it now imports `MlpTrainStep` (the lemmas' home) instead |
 | `d3688f85` | §4 unpinned dead code (−894): ResNet34 strided family + helpers, the three `*Structured` renderers, `mobilenetv2FwdGraph`, LinearTrainStep's render scaffold, 14 small decls, `Cifar8Fold.lean` (hub) |
+| `4530a0df` | §2.3 root batch 1/2 (moves, names kept): relu6 → MLP, sigmoid/SE gate → SE, layerScale → LayerNorm, softmax Jacobian → new `Softmax.lean`, multi-head slab kit + `HasVJPMat3` → Attention. StableHLO imports no net; IR imports Softmax only. ⚠ `pdivMat_transpose`/`scalarScale` + the matmul/scale/transpose VJPs must STAY in Tensor (the architecture-free comparator tier cites them) — the first cut took them and the comparator caught it |
+| `134894bc` | §6 root batch 2/2: `pdiv_of_hasFDerivAt_mask` (relu + relu6), `relu_apply_eq_max`/`relu_nonneg`/`relu_entry_lipschitz` in MLP, `mlp_has_vjp_at` on `vjp_comp_diff_at`, `pdiv_lift_sum`, `bnMean_eq_expect`; three more ResNet34 imports gone. Gated incl. the local comparator (3 tiers okay). `sum_finProdFinEquiv₃` skipped (≈0 lines) |
 | `62cca9ef` | §3 docs: the Proofs/README chain table + suffix legend + tier glossary, new `Codegen/README.md`, Certificates family map, lakefile claims, ENet headline, the all-reduce headers, history-first module docs → contents, 21 file:line cites → names, 8 dangling refs |
 
 Each gated: `lake build Certs LeanMlir Apps`, AuditAxioms 1,597/1,597, `docstring-checkrefs`,
@@ -38,8 +40,7 @@ tie test exes; `d3688f85` also `check_render_coverage.py`.
 wording was off; `ViTFold`'s import (above).
 
 **Still open, in §7 order:** §0.1 (`totalParams` SE width — your call, then a CPU probe);
-§1's `ResNet34` edges from `BatchSealKit` / `BackwardMaps` (need `relu_nonneg` moved first) and the
-MNv2 legacy-chain imports (need `IVPos` moved); §3.3's remaining history-first headers
+§1's MNv2 legacy-chain imports (need `IVPos` moved); §3.3's remaining history-first headers
 (`ResNet50BackB0`, `MobileNetV4BackB0`, `EfficientNetStepTie`, `EfficientNetBackB0`) and the
 `jax/` / `VerifiedTrain` file:line cites; §4's pinned items (§8) plus: the three operator-contract
 `*_correct` theorems with no user (`residual{,Proj}_has_vjp_at_correct`,
@@ -47,6 +48,44 @@ MNv2 legacy-chain imports (need `IVPos` moved); §3.3's remaining history-first 
 four `@[simp]` lemmas with no named use (`win3RowInv_val`, `win3ColInv_val`, `zk_apply`,
 `dzk_apply` — need a build without them), `MnistData.lean` (kept: `historical/` imports it), the
 `.train`-arm hazard; §5 program dedup; §2 moves; §6 proof reuse.
+
+## ▶ Next session — start here
+
+Everything in the Status table is on main. Pick up in this order; each is its own gated commit
+(gate = `lake build Certs LeanMlir Apps`, `tests/AuditAxioms.lean` via the certs.yml check,
+`lake exe docstring-checkrefs`, `git status verified_mlir/` clean, plus `CertsHeavy` when a
+certificate or root file moves and `tests/comparator/run.sh` when anything leaves `Tensor.lean`).
+
+1. **Owner decisions first** (one AskUserQuestion): the SE width `totalParams` should use (§0.1,
+   then a one-step CPU probe of `efficientnet-train`); §8's pinned cuts (14 forwarding grad-node
+   aliases, `SgdDescentCnn`'s 19 margin instances, `resnet34_has_vjp_at`, IBP residue pins); the
+   three orphan `*_correct` contracts (`residual{,Proj}_has_vjp_at_correct`,
+   `depthwiseStride2FlatXla_has_vjp_correct` — pin or cut; the book's contracts table counts them).
+2. **§2.4 grad-node home** — `GradNodesB.lean` beside `Foundation/Bf16GradNodes.lean` for the ~25
+   generic f32 `*GradB_den` lemmas now in `ResNet34FoldB` / `ConvNeXtFoldGB` / `EfficientNetFoldG` /
+   `ViTFoldGB`; keep full names (0 pins move). Then `Foundation/DataParallelNode` and
+   `Bf16GradNodes` stop importing nets.
+3. **§2.5 batched back-link kit** — `EnetTiePoC`'s `reassocB`/`cInB`/`bnBackB`/… (in the retired
+   fused ENet tie) + `ResNet34StepTieB`'s `reluMaskB`/`rowB`/`unrowB` + the batched `*_faithful` in
+   `EfficientNetBackB0` → one `Foundation/BatchedBackLinks.lean`; `batchMap_has_vjp` & co. →
+   `BatchMapVJPAt`; the `c·h·w` seam (five spellings) → one leaf. ⚠ overlaps
+   `planning/certlayer_nets.md` for the CertLayer rows — read it first.
+4. **§2.1 float/conv vocabulary out of `SgdDescentCnn`** — `Float/FloatClose.lean`,
+   `Architectures/ConvIndex.lean`, `Float/ConvFloat.lean`; then the file splits (`SgdDescentCnnFloat`).
+5. **§2.2 / §2.6 remaining moves** — `Foundation/Batched.lean` out of StableHLO (verified to compile
+   standalone), `Certificates/DenseEuclid.lean` + `GaussianQuantile.lean`, the ℝ optimizer specs
+   out of `Codegen/`, `SpecVJP` out of Foundation (and `Certs` stops building the trainer).
+6. **§5 program dedup** — `Codegen/RenderKit.lean` (optOne/PGrad/packedTrainSig/dropMaskSig), then the
+   bf16 smart constructors, then `emitForwardEvalSig` (the 210-spec harness is in the crosscut notes),
+   then the NetSpec layout (after step 1's SE decision). Byte-identity is the gate.
+7. **§6 leftover proof reuse** — the certificate items (Schatten/Frobenius shared lemmas ~150,
+   Gaussian integrability ~45, smoothing q ≤ p ~40), seals' continuity via `@[fun_prop]` (~250),
+   ENet MBConv twins (~50), relu6-style small collapses.
+
+Also open, smaller: the remaining history-first headers (`ResNet50BackB0`, `MobileNetV4BackB0`,
+`EfficientNetStepTie`, `EfficientNetBackB0`); file:line cites into `jax/` and `VerifiedTrain`; the
+four `@[simp]` lemmas with no named use; the `.train`-arm hazard in the eval chains; MNv2 legacy
+imports (move `IVPos` first). ⚠ Auditor claims were wrong 3× this round — verify before editing.
 
 ---
 
