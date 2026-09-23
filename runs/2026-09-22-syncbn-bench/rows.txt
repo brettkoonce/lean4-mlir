@@ -1,0 +1,3 @@
+r50_2018|resnet50-imagenet-verified|momdp64|momdp64bf16|64|LEAN_MLIR_RECIPE=2018 LEAN_MLIR_BASE_LR_U=100000 LEAN_MLIR_EPOCHS=90
+r50a3|resnet50-imagenet-verified|lambaccdp4x128wxclipbce|lambaccdp4x128wxclipbcebf16|128|LEAN_MLIR_RES=160 LEAN_MLIR_G2_STEPS=2500 LEAN_MLIR_BASE_LR_U=8000
+r34|resnet34-imagenet-verified|momdp64|momdp64bf16|64|LEAN_MLIR_BASE_LR_U=100000 LEAN_MLIR_EPOCHS=90 SHIM_WORKERS=4

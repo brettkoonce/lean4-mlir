@@ -1,0 +1,7 @@
+net	variant	prec	arm	bs	workers	med_ms	min_ms	p90_ms	mean_ms	wait_ms	steps_ep	elapsed_s	note
+r50_2018	momdp64bf16	bf16	fed	64	8	238	236	239	237	2	5004	228	
+r50_2018	momdp64bf16	bf16	synth	64	8	235	233	236	234	2	5004	205	
+r50a3	lambaccdp4x128wxclipbcebf16	bf16	fed	128	8	300	276	313	300	24	2500	281	
+r50a3	lambaccdp4x128wxclipbcebf16	bf16	synth	128	8	244	241	244	243	3	2500	218	
+r34	momdp64bf16	bf16	fed	64	4	174	155	184	173	19	5004	149	
+r34	momdp64bf16	bf16	synth	64	4	148	146	148	147	2	5004	124	

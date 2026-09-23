@@ -1,0 +1,20 @@
+  ▶ r50_2018/bf16/fed (variant momdp64bf16, bs 64, workers 8) ...
+    → 238 ms/step (min 236, wait 2 ms, 5004 steps/ep, 228s)
+  ▶ r50_2018/bf16/synth (variant momdp64bf16, bs 64, workers 8) ...
+    → 235 ms/step (min 233, wait 2 ms, 5004 steps/ep, 205s)
+  ▶ r50a3/bf16/fed (variant lambaccdp4x128wxclipbcebf16, bs 128, workers 8) ...
+    → 300 ms/step (min 276, wait 24 ms, 2500 steps/ep, 281s)
+  ▶ r50a3/bf16/synth (variant lambaccdp4x128wxclipbcebf16, bs 128, workers 8) ...
+    → 244 ms/step (min 241, wait 3 ms, 2500 steps/ep, 218s)
+  ▶ r34/bf16/fed (variant momdp64bf16, bs 64, workers 4) ...
+    → 174 ms/step (min 155, wait 19 ms, 5004 steps/ep, 149s)
+  ▶ r34/bf16/synth (variant momdp64bf16, bs 64, workers 4) ...
+    → 148 ms/step (min 146, wait 2 ms, 5004 steps/ep, 124s)
+ALL DONE -> runs/2026-09-22-syncbn-bench/probe.tsv
+net       variant                      prec  arm    bs   workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+r50_2018  momdp64bf16                  bf16  fed    64   8        238     236     239     237      2        5004      228        
+r50_2018  momdp64bf16                  bf16  synth  64   8        235     233     236     234      2        5004      205        
+r50a3     lambaccdp4x128wxclipbcebf16  bf16  fed    128  8        300     276     313     300      24       2500      281        
+r50a3     lambaccdp4x128wxclipbcebf16  bf16  synth  128  8        244     241     244     243      3        2500      218        
+r34       momdp64bf16                  bf16  fed    64   4        174     155     184     173      19       5004      149        
+r34       momdp64bf16                  bf16  synth  64   4        148     146     148     147      2        5004      124        
