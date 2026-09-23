@@ -1012,6 +1012,80 @@ theorem EDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (
 def BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (v : Vec (2 * (c * h * w))) : Prop :=
   ∀ (n : Fin 2) (ci : Fin c) (i : Fin h) (j : Fin w), bcell v n ci i j = a n ci
 
+-- ════════════════════════════════════════════════════════════════
+-- § One carrier stage: a centre-tap op at scale 1, bias 0, then its BatchNorm at ε = 1
+--   The per-net seals walk the carrier through ~45 of these; each is the op's `EDiff`, fed to
+--   `EDiff_bn` with `γ = kv γ0`. `Z` is the BN input as the net spells it (`hZ` by `rfl`).
+-- ════════════════════════════════════════════════════════════════
+
+/-- A centre-tap 1×1 (or `kH×kW`) conv, then its BatchNorm: the carrier is channel `c₀`'s offset
+    times `γ0 · istd`, at every output channel. -/
+theorem EDiff_convBn {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0) (hkH : 0 < kH)
+    (hkW : 0 < kW) (γ0 β0 : ℝ) (Z : Vec (2 * (oc * h * w))) {δ : Fin ic → ℝ}
+    {δ' : Fin oc → ℝ} {v : Vec (2 * (ic * h * w))} (hv : EDiff δ v)
+    (hZ : Z = StableHLO.batchMap 2 (flatConv (h := h) (w := w) (ctK oc ic kH kW 1) (kv oc 0)) v)
+    (hδ : ∀ ci, δ' ci = γ0 * δ c₀ * bnIstd (2 * (h * w)) (bnRowLA 2 oc h w Z ci) 1) :
+    EDiff δ' (StableHLO.bnBatchLA 2 oc h w 1 (kv oc γ0) (kv oc β0) Z) := by
+  subst hZ
+  refine EDiff_bn oc h w 1 (kv oc γ0) (kv oc β0) (fun _ => 1 * δ c₀) δ' _
+    (EDiff_conv c₀ hc₀ hkH hkW 1 (kv oc 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  rw [hδ ci, kv_apply]
+  ring
+
+/-- The strided peer of `EDiff_convBn`. -/
+theorem EDiff_convS2Bn {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0) (hkH : 0 < kH)
+    (hkW : 0 < kW) (γ0 β0 : ℝ) (Z : Vec (2 * (oc * h * w))) {δ : Fin ic → ℝ}
+    {δ' : Fin oc → ℝ} {v : Vec (2 * (ic * (2 * h) * (2 * w)))} (hv : EDiff δ v)
+    (hZ : Z = StableHLO.batchMap 2
+      (flatConvStride2 (h := h) (w := w) (ctK oc ic kH kW 1) (kv oc 0)) v)
+    (hδ : ∀ ci, δ' ci = γ0 * δ c₀ * bnIstd (2 * (h * w)) (bnRowLA 2 oc h w Z ci) 1) :
+    EDiff δ' (StableHLO.bnBatchLA 2 oc h w 1 (kv oc γ0) (kv oc β0) Z) := by
+  subst hZ
+  refine EDiff_bn oc h w 1 (kv oc γ0) (kv oc β0) (fun _ => 1 * δ c₀) δ' _
+    (EDiff_convS2 c₀ hc₀ hkH hkW 1 (kv oc 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  rw [hδ ci, kv_apply]
+  ring
+
+/-- A centre-tap depthwise conv, then its BatchNorm: channel by channel, `δ ci · γ0 · istd`. -/
+theorem EDiff_dwBn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
+    (Z : Vec (2 * (c * h * w))) {δ δ' : Fin c → ℝ} {v : Vec (2 * (c * h * w))} (hv : EDiff δ v)
+    (hZ : Z = StableHLO.batchMap 2 (depthwiseFlat (h := h) (w := w) (ctDW c kH kW 1) (kv c 0)) v)
+    (hδ : ∀ ci, δ' ci = γ0 * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 c h w Z ci) 1) :
+    EDiff δ' (StableHLO.bnBatchLA 2 c h w 1 (kv c γ0) (kv c β0) Z) := by
+  subst hZ
+  refine EDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
+    (EDiff_dw hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  rw [hδ ci, kv_apply]
+  ring
+
+/-- The strided peer of `EDiff_dwBn`. -/
+theorem EDiff_dwS2Bn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
+    (Z : Vec (2 * (c * h * w))) {δ δ' : Fin c → ℝ} {v : Vec (2 * (c * (2 * h) * (2 * w)))}
+    (hv : EDiff δ v)
+    (hZ : Z = StableHLO.batchMap 2
+      (depthwiseStride2Flat (h := h) (w := w) (ctDW c kH kW 1) (kv c 0)) v)
+    (hδ : ∀ ci, δ' ci = γ0 * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 c h w Z ci) 1) :
+    EDiff δ' (StableHLO.bnBatchLA 2 c h w 1 (kv c γ0) (kv c β0) Z) := by
+  subst hZ
+  refine EDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
+    (EDiff_dwS2 hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  rw [hδ ci, kv_apply]
+  ring
+
+/-- The XLA-`SAME` strided peer of `EDiff_dwBn`. -/
+theorem EDiff_dwS2XlaBn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
+    (Z : Vec (2 * (c * h * w))) {δ δ' : Fin c → ℝ} {v : Vec (2 * (c * (2 * h) * (2 * w)))}
+    (hv : EDiff δ v)
+    (hZ : Z = StableHLO.batchMap 2
+      (depthwiseStride2FlatXla (h := h) (w := w) (ctDW c kH kW 1) (kv c 0)) v)
+    (hδ : ∀ ci, δ' ci = γ0 * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 c h w Z ci) 1) :
+    EDiff δ' (StableHLO.bnBatchLA 2 c h w 1 (kv c γ0) (kv c β0) Z) := by
+  subst hZ
+  refine EDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
+    (EDiff_dwS2Xla hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  rw [hδ ci, kv_apply]
+  ring
+
 theorem EDiff_of_BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (δ : Fin c → ℝ)
     (v : Vec (2 * (c * h * w))) (hv : BUnif (h := h) (w := w) a v)
     (hδ : ∀ ci, δ ci = a 0 ci - a 1 ci) : EDiff δ v := by

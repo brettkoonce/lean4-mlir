@@ -841,13 +841,8 @@ theorem ed1 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
   rw [pc1 q hq0 hq nCls t]
   refine EDiff_shift _ _ 1 ?_
   rw [sealProj1_apply]
-  refine EDiff_bn 256 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 1 (kv 256 1) (kv 256 160) (fun _ => 1 * dS q t 0) (dP1 q nCls t)
-    (Zp1 q nCls t) ?_ ?_
-  · exact EDiff_conv (kH := 1) (kW := 1) (0 : Fin 64) rfl (by norm_num) (by norm_num) 1 (kv 256 0)
-      (dS q t) _ (r50Pre0 2 q (sealW nCls) (sealX q t)) (ed0 q hq nCls t) (fun o => rfl)
-  · intro ci
-    simp only [dP1, kv_apply]
-    ring
+  exact EDiff_convBn (kH := 1) (kW := 1) (0 : Fin 64) rfl (by norm_num) (by norm_num) 1 160
+    (Zp1 q nCls t) (ed0 q hq nCls t) rfl (fun ci => by simp only [dP1]; ring)
 
 theorem ed2 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     EDiff (dP1 q nCls t) (r50Pre2 2 q (sealW nCls) (sealX q t)) := by
@@ -864,14 +859,9 @@ theorem ed4 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
   rw [pc4 q hq0 hq nCls t]
   refine EDiff_shift _ _ 1 ?_
   rw [R34FullBSeal.sealProj_apply]
-  refine EDiff_bn 512 (2 * (2 * q)) (2 * (2 * q)) 1 (kv 512 1) (kv 512 160) (fun _ => 1 * dP1 q nCls t 0) (dP2 q nCls t)
-    (Zp2 q nCls t) ?_ ?_
-  · exact EDiff_convS2 (h := (2 * (2 * q))) (w := (2 * (2 * q))) (kH := 1) (kW := 1) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1
-      (kv 512 0)
-      (dP1 q nCls t) _ (r50Pre3 2 q (sealW nCls) (sealX q t)) (ed3 q hq0 hq nCls t) (fun o => rfl)
-  · intro ci
-    simp only [dP2, kv_apply]
-    ring
+  exact EDiff_convS2Bn (h := (2 * (2 * q))) (w := (2 * (2 * q))) (kH := 1) (kW := 1) (0 : Fin 256)
+    rfl (by norm_num) (by norm_num) 1 160 (Zp2 q nCls t) (ed3 q hq0 hq nCls t) rfl
+    (fun ci => by simp only [dP2]; ring)
 
 theorem ed5 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     EDiff (dP2 q nCls t) (r50Pre5 2 q (sealW nCls) (sealX q t)) := by
@@ -893,14 +883,8 @@ theorem ed8 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
   rw [pc8 q hq0 hq nCls t]
   refine EDiff_shift _ _ 1 ?_
   rw [R34FullBSeal.sealProj_apply]
-  refine EDiff_bn 1024 (2 * q) (2 * q) 1 (kv 1024 1) (kv 1024 160) (fun _ => 1 * dP2 q nCls t 0) (dP3 q nCls t)
-    (Zp3 q nCls t) ?_ ?_
-  · exact EDiff_convS2 (h := (2 * q)) (w := (2 * q)) (0 : Fin 512) rfl (by norm_num) (by norm_num) 1
-      (kv 1024 0)
-      (dP2 q nCls t) _ (r50Pre7 2 q (sealW nCls) (sealX q t)) (ed7 q hq0 hq nCls t) (fun o => rfl)
-  · intro ci
-    simp only [dP3, kv_apply]
-    ring
+  exact EDiff_convS2Bn (h := (2 * q)) (w := (2 * q)) (0 : Fin 512) rfl (by norm_num) (by norm_num) 1
+    160 (Zp3 q nCls t) (ed7 q hq0 hq nCls t) rfl (fun ci => by simp only [dP3]; ring)
 
 theorem ed9 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     EDiff (dP3 q nCls t) (r50Pre9 2 q (sealW nCls) (sealX q t)) := by
@@ -932,14 +916,9 @@ theorem ed14 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
   rw [pc14 q hq0 hq nCls t]
   refine EDiff_shift _ _ 1 ?_
   rw [R34FullBSeal.sealProj_apply]
-  refine EDiff_bn 2048 q q 1 (kv 2048 1) (kv 2048 160) (fun _ => 1 * dP3 q nCls t 0) (dP4 q nCls t)
-    (Zp4 q nCls t) ?_ ?_
-  · exact EDiff_convS2 (h := q) (w := q) (kH := 1) (kW := 1) (0 : Fin 1024) rfl (by norm_num) (by norm_num) 1
-      (kv 2048 0)
-      (dP3 q nCls t) _ (r50Pre13 2 q (sealW nCls) (sealX q t)) (ed13 q hq0 hq nCls t) (fun o => rfl)
-  · intro ci
-    simp only [dP4, kv_apply]
-    ring
+  exact EDiff_convS2Bn (h := q) (w := q) (kH := 1) (kW := 1) (0 : Fin 1024) rfl (by norm_num)
+    (by norm_num) 1 160 (Zp4 q nCls t) (ed13 q hq0 hq nCls t) rfl
+    (fun ci => by simp only [dP4]; ring)
 
 theorem ed15 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     EDiff (dP4 q nCls t) (r50Pre15 2 q (sealW nCls) (sealX q t)) := by
@@ -1123,33 +1102,16 @@ theorem Rr_continuous (q : Nat) (hq0 : 0 < q) (nCls : Nat) : Continuous (Rr q nC
     structural weights is NOT constant in its input, at either shipped resolution. -/
 theorem sealX_nonconstant (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (hn : 0 < nCls) :
     resnet50ForwardB_full 2 q (sealW nCls) (sealX q 1)
-      ≠ resnet50ForwardB_full 2 q (sealW nCls) (sealX q 0) := by
-  intro heq
-  have h1 := gd_ray q hq0 hq nCls hn 1
-  have h0 := gd_ray q hq0 hq nCls hn 0
-  rw [heq] at h1
-  have hz : (1 : ℝ) * Rr q nCls 1 = 0 * Rr q nCls 0 := by rw [← h1, ← h0]
-  rw [one_mul, zero_mul] at hz
-  linarith [Rr_pos q nCls 1]
+      ≠ resnet50ForwardB_full 2 q (sealW nCls) (sealX q 0) :=
+  ne_of_ray_readout _ (sealX q) _ _ (gd_ray q hq0 hq nCls hn) (by simpa using (Rr_pos q nCls 1).ne')
 
 /-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat)
     (hn : 0 < nCls) :
-    fderiv ℝ (resnet50ForwardB_full 2 q (sealW nCls)) (sealX q 0) ≠ 0 := by
-  refine fderiv_ne_zero_of_ray (sealV q) (sealDiffAt q hq0 hq nCls 0)
-    (fun y => y (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - y (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))) (by fun_prop)
-    (Rr_pos q nCls 0).ne' ?_
-  have heq : (fun t : ℝ => resnet50ForwardB_full 2 q (sealW nCls) (sealX q 0 + t • sealV q)
-        (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - resnet50ForwardB_full 2 q (sealW nCls) (sealX q 0 + t • sealV q)
-        (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls))))
-      = fun t : ℝ => t * Rr q nCls t := by
-    funext t
-    rw [sealX_zero_add]
-    exact gd_ray q hq0 hq nCls hn t
-  rw [heq]
-  exact hasDerivAt_mul_self_zero (Rr_continuous q hq0 nCls).continuousAt
+    fderiv ℝ (resnet50ForwardB_full 2 q (sealW nCls)) (sealX q 0) ≠ 0 :=
+  fderiv_ne_zero_of_ray_readout _ (sealX q) (sealV q) (sealX_zero_add q) _ _
+    (gd_ray q hq0 hq nCls hn) (sealDiffAt q hq0 hq nCls 0) (Rr_pos q nCls 0).ne'
+    (hasDerivAt_mul_self_zero (Rr_continuous q hq0 nCls).continuousAt)
 
 /-- ⭐⭐ **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
     [3,4,6,3]-bottleneck** ResNet-50 — `resnet50ForwardB_full`, at BOTH shipped resolutions —

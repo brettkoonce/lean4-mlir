@@ -7052,7 +7052,7 @@ See \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}.
 
 \begin{theorem}[Emitted MobileNetV2 step is the certified step]
   \label{thm:mobilenetv2_step_tie}
-  \lean{Proofs.MobileNetV2TieB.mnv2_net_tiedB}
+  \lean{Proofs.MobileNetV2TieB.mnv2_net_tiedB, Proofs.MobileNetV2TieB.mnv2_lossCot_is_smoothedCE_grad}
   \leanok
   \uses{ax:conv2d, ax:conv2d_bias_grad_has_vjp, ax:conv2d_has_vjp3,
       ax:conv2d_weight_grad_has_vjp, ax:depthwiseConv2d, ax:depthwise_bias_grad_has_vjp,
@@ -7061,9 +7061,10 @@ See \leandocref{Proofs.mnv4InputGradB\_eq\_mnv4B\_full\_vjp}.
       thm:dense_weight_grad_correct, thm:vjp_comp}
   \Prove{} all 158 emitted parameter gradients of the batched MobileNetV2
   step (\texttt{mobilenetv2\_adam\_train\_step.mlir} at \(N = 32\),
-  \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) are tied at the chain
-  cotangent of the label-smoothed cross-entropy: each gradient node denotes
-  the certified batch gradient, generic in \(N\).
+  \texttt{mobilenetv2in\_rmsdp64} at \(N = 64\)) are tied at a loss
+  cotangent that is a binder: each gradient node denotes the certified batch
+  gradient, generic in \(N\); \texttt{mnv2\_lossCot\_is\_smoothedCE\_grad}
+  instantiates it at the label-smoothed cross-entropy.
 \end{theorem}
 
 \begin{proof}
@@ -7132,17 +7133,18 @@ See \leandocref{Proofs.Mnv4FullBSeal.sealX\_backward\_nontrivial}.
 
 \begin{theorem}[MobileNetV2 data-parallel step is one device's step at \(R \cdot N\)]
   \label{thm:mobilenetv2_sync_tie}
-  \lean{Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB}
+  \lean{Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB, Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB_smoothedCE}
   \leanok
   \uses{ax:conv2d, ax:conv2d_has_vjp3, ax:conv2d_weight_grad_has_vjp,
       ax:depthwiseConv2d, ax:depthwise_has_vjp3, ax:depthwise_weight_grad_has_vjp3,
       ax:pdiv, ax:pdiv_reindex, def:hasvjp, def:hasvjp3, thm:vjp_comp}
   With \(R\) replicas of \(N\) images each and every BatchNorm synchronised:
   \Prove{} the mean over replicas of each of the 158 all-reduced gradient nodes
-  of \texttt{mobilenetv2in\_rmsdp64} at \(\texttt{replicas} > 1\) (loss
-  \(\div B\) per replica) equals the single-device node of
-  Theorem~\ref{thm:mobilenetv2_step_tie} at batch \(R \cdot N\) with loss
-  \(\div (R \cdot B)\).
+  of \texttt{mobilenetv2in\_rmsdp64} at \(\texttt{replicas} > 1\) equals the
+  single-device node of Theorem~\ref{thm:mobilenetv2_step_tie} at batch
+  \(R \cdot N\), given that the shards' cotangents are the scaled slices of one
+  global cotangent; discharged at the label-smoothed cross-entropy (loss
+  \(\div B\) per replica, \(\div (R \cdot B)\) on one device).
 \end{theorem}
 
 \begin{proof}

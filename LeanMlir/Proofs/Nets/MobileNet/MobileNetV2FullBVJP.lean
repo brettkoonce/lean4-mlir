@@ -292,12 +292,128 @@ noncomputable def mnv2PreB17 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
   mnv2ExpOnlyB N 7 7 w.b17 ∘ mnv2PreB16 N w
 
 -- ════════════════════════════════════════════════════════════════
+-- § The whole hypothesis budget, in two structures
+-- ════════════════════════════════════════════════════════════════
+
+/-- Every BatchNorm `ε` of the net is positive: the stem's, the head's, and each block's bundle. -/
+structure MNV2PosB {nCls : Nat} (w : MNV2BWeights nCls) : Prop where
+  s : 0 < w.sε
+  h : 0 < w.hε
+  b1 : IVNoExpPos w.b1
+  b2 : IVPos w.b2
+  b3 : IVPos w.b3
+  b4 : IVPos w.b4
+  b5 : IVPos w.b5
+  b6 : IVPos w.b6
+  b7 : IVPos w.b7
+  b8 : IVPos w.b8
+  b9 : IVPos w.b9
+  b10 : IVPos w.b10
+  b11 : IVPos w.b11
+  b12 : IVPos w.b12
+  b13 : IVPos w.b13
+  b14 : IVPos w.b14
+  b15 : IVPos w.b15
+  b16 : IVPos w.b16
+  b17 : IVPos w.b17
+
+/-- ⭐ **Every relu6 is away from its kinks, each at the activation its block actually sees**: the
+    stem's clauses at the image, block `k`'s at `mnv2PreB(k-1)`, the head's at the trunk's output. -/
+structure MNV2SmoothAtB (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) : Prop where
+  stem : MNV2StemSmoothAtB N 112 112 w.sW w.sb w.sε w.sγ w.sβ x
+  b1 : IVNoExpSmoothAtB N 112 112 w.b1 (mnv2PreB0 N w x)
+  b2 : IVStridedSmoothAtB N 56 56 w.b2 (mnv2PreB1 N w x)
+  b3 : IVSmoothAtB N 56 56 w.b3 (mnv2PreB2 N w x)
+  b4 : IVStridedSmoothAtB N 28 28 w.b4 (mnv2PreB3 N w x)
+  b5 : IVSmoothAtB N 28 28 w.b5 (mnv2PreB4 N w x)
+  b6 : IVSmoothAtB N 28 28 w.b6 (mnv2PreB5 N w x)
+  b7 : IVStridedSmoothAtB N 14 14 w.b7 (mnv2PreB6 N w x)
+  b8 : IVSmoothAtB N 14 14 w.b8 (mnv2PreB7 N w x)
+  b9 : IVSmoothAtB N 14 14 w.b9 (mnv2PreB8 N w x)
+  b10 : IVSmoothAtB N 14 14 w.b10 (mnv2PreB9 N w x)
+  b11 : IVSmoothAtB N 14 14 w.b11 (mnv2PreB10 N w x)
+  b12 : IVSmoothAtB N 14 14 w.b12 (mnv2PreB11 N w x)
+  b13 : IVSmoothAtB N 14 14 w.b13 (mnv2PreB12 N w x)
+  b14 : IVStridedSmoothAtB N 7 7 w.b14 (mnv2PreB13 N w x)
+  b15 : IVSmoothAtB N 7 7 w.b15 (mnv2PreB14 N w x)
+  b16 : IVSmoothAtB N 7 7 w.b16 (mnv2PreB15 N w x)
+  b17 : IVSmoothAtB N 7 7 w.b17 (mnv2PreB16 N w x)
+  head : MNV2HeadSmoothAtB N 7 7 w.hW w.hb w.hε w.hγ w.hβ (mnv2PreB17 N w x)
+
+-- ════════════════════════════════════════════════════════════════
 -- § The apex
 -- ════════════════════════════════════════════════════════════════
 
+/-- The chain's VJP and its differentiability together, one `vjp_comp_diff_at` per block: the
+    apex is `.fst`, `mobilenetv2ForwardB_full_differentiableAt` is `.snd`. -/
+private noncomputable def mnv2ChainB (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) :
+    PProd (HasVJPAt (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x)
+      (DifferentiableAt ℝ (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w)
+        x) :=
+  let p0 : PProd (HasVJPAt (mnv2PreB0 N w) x) (DifferentiableAt ℝ (mnv2PreB0 N w) x) :=
+    ⟨mnv2StemB_has_vjp_at N 112 112 w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem,
+      mnv2StemB_differentiableAt N 112 112 w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem⟩
+  let p1 : PProd (HasVJPAt (mnv2PreB1 N w) x) (DifferentiableAt ℝ (mnv2PreB1 N w) x) :=
+    vjp_comp_diff_at _ _ x p0 ⟨mnv2NoExpB_has_vjp_at N 112 112 w.b1 hq.b1 _ hx.b1,
+      mnv2NoExpB_differentiableAt N 112 112 w.b1 hq.b1 _ hx.b1⟩
+  let p2 : PProd (HasVJPAt (mnv2PreB2 N w) x) (DifferentiableAt ℝ (mnv2PreB2 N w) x) :=
+    vjp_comp_diff_at _ _ x p1 ⟨mnv2StridedB_has_vjp_at N 56 56 w.b2 hq.b2 _ hx.b2,
+      mnv2StridedB_differentiableAt N 56 56 w.b2 hq.b2 _ hx.b2⟩
+  let p3 : PProd (HasVJPAt (mnv2PreB3 N w) x) (DifferentiableAt ℝ (mnv2PreB3 N w) x) :=
+    vjp_comp_diff_at _ _ x p2 ⟨mnv2ResidB_has_vjp_at N 56 56 w.b3 hq.b3 _ hx.b3,
+      mnv2ResidB_differentiableAt N 56 56 w.b3 hq.b3 _ hx.b3⟩
+  let p4 : PProd (HasVJPAt (mnv2PreB4 N w) x) (DifferentiableAt ℝ (mnv2PreB4 N w) x) :=
+    vjp_comp_diff_at _ _ x p3 ⟨mnv2StridedB_has_vjp_at N 28 28 w.b4 hq.b4 _ hx.b4,
+      mnv2StridedB_differentiableAt N 28 28 w.b4 hq.b4 _ hx.b4⟩
+  let p5 : PProd (HasVJPAt (mnv2PreB5 N w) x) (DifferentiableAt ℝ (mnv2PreB5 N w) x) :=
+    vjp_comp_diff_at _ _ x p4 ⟨mnv2ResidB_has_vjp_at N 28 28 w.b5 hq.b5 _ hx.b5,
+      mnv2ResidB_differentiableAt N 28 28 w.b5 hq.b5 _ hx.b5⟩
+  let p6 : PProd (HasVJPAt (mnv2PreB6 N w) x) (DifferentiableAt ℝ (mnv2PreB6 N w) x) :=
+    vjp_comp_diff_at _ _ x p5 ⟨mnv2ResidB_has_vjp_at N 28 28 w.b6 hq.b6 _ hx.b6,
+      mnv2ResidB_differentiableAt N 28 28 w.b6 hq.b6 _ hx.b6⟩
+  let p7 : PProd (HasVJPAt (mnv2PreB7 N w) x) (DifferentiableAt ℝ (mnv2PreB7 N w) x) :=
+    vjp_comp_diff_at _ _ x p6 ⟨mnv2StridedB_has_vjp_at N 14 14 w.b7 hq.b7 _ hx.b7,
+      mnv2StridedB_differentiableAt N 14 14 w.b7 hq.b7 _ hx.b7⟩
+  let p8 : PProd (HasVJPAt (mnv2PreB8 N w) x) (DifferentiableAt ℝ (mnv2PreB8 N w) x) :=
+    vjp_comp_diff_at _ _ x p7 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b8 hq.b8 _ hx.b8,
+      mnv2ResidB_differentiableAt N 14 14 w.b8 hq.b8 _ hx.b8⟩
+  let p9 : PProd (HasVJPAt (mnv2PreB9 N w) x) (DifferentiableAt ℝ (mnv2PreB9 N w) x) :=
+    vjp_comp_diff_at _ _ x p8 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b9 hq.b9 _ hx.b9,
+      mnv2ResidB_differentiableAt N 14 14 w.b9 hq.b9 _ hx.b9⟩
+  let p10 : PProd (HasVJPAt (mnv2PreB10 N w) x) (DifferentiableAt ℝ (mnv2PreB10 N w) x) :=
+    vjp_comp_diff_at _ _ x p9 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b10 hq.b10 _ hx.b10,
+      mnv2ResidB_differentiableAt N 14 14 w.b10 hq.b10 _ hx.b10⟩
+  let p11 : PProd (HasVJPAt (mnv2PreB11 N w) x) (DifferentiableAt ℝ (mnv2PreB11 N w) x) :=
+    vjp_comp_diff_at _ _ x p10 ⟨mnv2ExpOnlyB_has_vjp_at N 14 14 w.b11 hq.b11 _ hx.b11,
+      mnv2ExpOnlyB_differentiableAt N 14 14 w.b11 hq.b11 _ hx.b11⟩
+  let p12 : PProd (HasVJPAt (mnv2PreB12 N w) x) (DifferentiableAt ℝ (mnv2PreB12 N w) x) :=
+    vjp_comp_diff_at _ _ x p11 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b12 hq.b12 _ hx.b12,
+      mnv2ResidB_differentiableAt N 14 14 w.b12 hq.b12 _ hx.b12⟩
+  let p13 : PProd (HasVJPAt (mnv2PreB13 N w) x) (DifferentiableAt ℝ (mnv2PreB13 N w) x) :=
+    vjp_comp_diff_at _ _ x p12 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b13 hq.b13 _ hx.b13,
+      mnv2ResidB_differentiableAt N 14 14 w.b13 hq.b13 _ hx.b13⟩
+  let p14 : PProd (HasVJPAt (mnv2PreB14 N w) x) (DifferentiableAt ℝ (mnv2PreB14 N w) x) :=
+    vjp_comp_diff_at _ _ x p13 ⟨mnv2StridedB_has_vjp_at N 7 7 w.b14 hq.b14 _ hx.b14,
+      mnv2StridedB_differentiableAt N 7 7 w.b14 hq.b14 _ hx.b14⟩
+  let p15 : PProd (HasVJPAt (mnv2PreB15 N w) x) (DifferentiableAt ℝ (mnv2PreB15 N w) x) :=
+    vjp_comp_diff_at _ _ x p14 ⟨mnv2ResidB_has_vjp_at N 7 7 w.b15 hq.b15 _ hx.b15,
+      mnv2ResidB_differentiableAt N 7 7 w.b15 hq.b15 _ hx.b15⟩
+  let p16 : PProd (HasVJPAt (mnv2PreB16 N w) x) (DifferentiableAt ℝ (mnv2PreB16 N w) x) :=
+    vjp_comp_diff_at _ _ x p15 ⟨mnv2ResidB_has_vjp_at N 7 7 w.b16 hq.b16 _ hx.b16,
+      mnv2ResidB_differentiableAt N 7 7 w.b16 hq.b16 _ hx.b16⟩
+  let p17 : PProd (HasVJPAt (mnv2PreB17 N w) x) (DifferentiableAt ℝ (mnv2PreB17 N w) x) :=
+    vjp_comp_diff_at _ _ x p16 ⟨mnv2ExpOnlyB_has_vjp_at N 7 7 w.b17 hq.b17 _ hx.b17,
+      mnv2ExpOnlyB_differentiableAt N 7 7 w.b17 hq.b17 _ hx.b17⟩
+  vjp_comp_diff_at _ _ x p17
+    ⟨mnv2HeadB_has_vjp_at N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head,
+      mnv2HeadB_differentiableAt N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head⟩
+
 /-- ⭐⭐ **MobileNetV2 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all
-    seventeen bottlenecks.** Chains stem → the `[t,c,n,s]` ladder → head with `vjp_comp_at`, one
-    positivity bundle and one smoothness bundle per block. T1's VJP half for
+    seventeen bottlenecks.** Chains stem → the `[t,c,n,s]` ladder → head with `vjp_comp_diff_at`
+    under two hypotheses: `MNV2PosB` (every `ε > 0`) and `MNV2SmoothAtB` (every relu6 clause, each
+    at its block's own input). T1's VJP half for
     `formalization.yaml` 4e's port (the per-example fold it was the batched peer of was retired
     2026-09-19).
 
@@ -311,123 +427,10 @@ noncomputable def mnv2PreB17 (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls) :
 
     ⭐ `N` is a variable: this tier carries no numerals. -/
 noncomputable def mobilenetv2ForwardB_full_has_vjp_at (N : Nat) {nCls : Nat}
-    (w : MNV2BWeights nCls)
-    (hsε : 0 < w.sε) (hhε : 0 < w.hε)
-    (qb1 : IVNoExpPos w.b1)
-    (qb2 : IVPos w.b2)
-    (qb3 : IVPos w.b3)
-    (qb4 : IVPos w.b4)
-    (qb5 : IVPos w.b5)
-    (qb6 : IVPos w.b6)
-    (qb7 : IVPos w.b7)
-    (qb8 : IVPos w.b8)
-    (qb9 : IVPos w.b9)
-    (qb10 : IVPos w.b10)
-    (qb11 : IVPos w.b11)
-    (qb12 : IVPos w.b12)
-    (qb13 : IVPos w.b13)
-    (qb14 : IVPos w.b14)
-    (qb15 : IVPos w.b15)
-    (qb16 : IVPos w.b16)
-    (qb17 : IVPos w.b17)
-    (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
-    (h_stem : MNV2StemSmoothAtB N 112 112 w.sW w.sb w.sε w.sγ w.sβ x)
-    (sb1 : IVNoExpSmoothAtB N 112 112 w.b1 (mnv2PreB0 N w x))
-    (sb2 : IVStridedSmoothAtB N 56 56 w.b2 (mnv2PreB1 N w x))
-    (sb3 : IVSmoothAtB N 56 56 w.b3 (mnv2PreB2 N w x))
-    (sb4 : IVStridedSmoothAtB N 28 28 w.b4 (mnv2PreB3 N w x))
-    (sb5 : IVSmoothAtB N 28 28 w.b5 (mnv2PreB4 N w x))
-    (sb6 : IVSmoothAtB N 28 28 w.b6 (mnv2PreB5 N w x))
-    (sb7 : IVStridedSmoothAtB N 14 14 w.b7 (mnv2PreB6 N w x))
-    (sb8 : IVSmoothAtB N 14 14 w.b8 (mnv2PreB7 N w x))
-    (sb9 : IVSmoothAtB N 14 14 w.b9 (mnv2PreB8 N w x))
-    (sb10 : IVSmoothAtB N 14 14 w.b10 (mnv2PreB9 N w x))
-    (sb11 : IVSmoothAtB N 14 14 w.b11 (mnv2PreB10 N w x))
-    (sb12 : IVSmoothAtB N 14 14 w.b12 (mnv2PreB11 N w x))
-    (sb13 : IVSmoothAtB N 14 14 w.b13 (mnv2PreB12 N w x))
-    (sb14 : IVStridedSmoothAtB N 7 7 w.b14 (mnv2PreB13 N w x))
-    (sb15 : IVSmoothAtB N 7 7 w.b15 (mnv2PreB14 N w x))
-    (sb16 : IVSmoothAtB N 7 7 w.b16 (mnv2PreB15 N w x))
-    (sb17 : IVSmoothAtB N 7 7 w.b17 (mnv2PreB16 N w x))
-    (h_head : MNV2HeadSmoothAtB N 7 7 w.hW w.hb w.hε w.hγ w.hβ (mnv2PreB17 N w x))
-    :
-    HasVJPAt (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x := by
-  have dS : DifferentiableAt ℝ (mnv2PreB0 N w) x :=
-    mnv2StemB_differentiableAt N 112 112 w.sW w.sb w.sε hsε w.sγ w.sβ x h_stem
-  have vS : HasVJPAt (mnv2PreB0 N w) x :=
-    mnv2StemB_has_vjp_at N 112 112 w.sW w.sb w.sε hsε w.sγ w.sβ x h_stem
-  have d1 := mnv2NoExpB_differentiableAt N 112 112 w.b1 qb1 _ sb1
-  have e1 : HasVJPAt (mnv2PreB1 N w) x :=
-    vjp_comp_at _ _ x dS d1 vS (mnv2NoExpB_has_vjp_at N 112 112 w.b1 qb1 _ sb1)
-  have f1 : DifferentiableAt ℝ (mnv2PreB1 N w) x := d1.comp x dS
-  have d2 := mnv2StridedB_differentiableAt N 56 56 w.b2 qb2 _ sb2
-  have e2 : HasVJPAt (mnv2PreB2 N w) x :=
-    vjp_comp_at _ _ x f1 d2 e1 (mnv2StridedB_has_vjp_at N 56 56 w.b2 qb2 _ sb2)
-  have f2 : DifferentiableAt ℝ (mnv2PreB2 N w) x := d2.comp x f1
-  have d3 := mnv2ResidB_differentiableAt N 56 56 w.b3 qb3 _ sb3
-  have e3 : HasVJPAt (mnv2PreB3 N w) x :=
-    vjp_comp_at _ _ x f2 d3 e2 (mnv2ResidB_has_vjp_at N 56 56 w.b3 qb3 _ sb3)
-  have f3 : DifferentiableAt ℝ (mnv2PreB3 N w) x := d3.comp x f2
-  have d4 := mnv2StridedB_differentiableAt N 28 28 w.b4 qb4 _ sb4
-  have e4 : HasVJPAt (mnv2PreB4 N w) x :=
-    vjp_comp_at _ _ x f3 d4 e3 (mnv2StridedB_has_vjp_at N 28 28 w.b4 qb4 _ sb4)
-  have f4 : DifferentiableAt ℝ (mnv2PreB4 N w) x := d4.comp x f3
-  have d5 := mnv2ResidB_differentiableAt N 28 28 w.b5 qb5 _ sb5
-  have e5 : HasVJPAt (mnv2PreB5 N w) x :=
-    vjp_comp_at _ _ x f4 d5 e4 (mnv2ResidB_has_vjp_at N 28 28 w.b5 qb5 _ sb5)
-  have f5 : DifferentiableAt ℝ (mnv2PreB5 N w) x := d5.comp x f4
-  have d6 := mnv2ResidB_differentiableAt N 28 28 w.b6 qb6 _ sb6
-  have e6 : HasVJPAt (mnv2PreB6 N w) x :=
-    vjp_comp_at _ _ x f5 d6 e5 (mnv2ResidB_has_vjp_at N 28 28 w.b6 qb6 _ sb6)
-  have f6 : DifferentiableAt ℝ (mnv2PreB6 N w) x := d6.comp x f5
-  have d7 := mnv2StridedB_differentiableAt N 14 14 w.b7 qb7 _ sb7
-  have e7 : HasVJPAt (mnv2PreB7 N w) x :=
-    vjp_comp_at _ _ x f6 d7 e6 (mnv2StridedB_has_vjp_at N 14 14 w.b7 qb7 _ sb7)
-  have f7 : DifferentiableAt ℝ (mnv2PreB7 N w) x := d7.comp x f6
-  have d8 := mnv2ResidB_differentiableAt N 14 14 w.b8 qb8 _ sb8
-  have e8 : HasVJPAt (mnv2PreB8 N w) x :=
-    vjp_comp_at _ _ x f7 d8 e7 (mnv2ResidB_has_vjp_at N 14 14 w.b8 qb8 _ sb8)
-  have f8 : DifferentiableAt ℝ (mnv2PreB8 N w) x := d8.comp x f7
-  have d9 := mnv2ResidB_differentiableAt N 14 14 w.b9 qb9 _ sb9
-  have e9 : HasVJPAt (mnv2PreB9 N w) x :=
-    vjp_comp_at _ _ x f8 d9 e8 (mnv2ResidB_has_vjp_at N 14 14 w.b9 qb9 _ sb9)
-  have f9 : DifferentiableAt ℝ (mnv2PreB9 N w) x := d9.comp x f8
-  have d10 := mnv2ResidB_differentiableAt N 14 14 w.b10 qb10 _ sb10
-  have e10 : HasVJPAt (mnv2PreB10 N w) x :=
-    vjp_comp_at _ _ x f9 d10 e9 (mnv2ResidB_has_vjp_at N 14 14 w.b10 qb10 _ sb10)
-  have f10 : DifferentiableAt ℝ (mnv2PreB10 N w) x := d10.comp x f9
-  have d11 := mnv2ExpOnlyB_differentiableAt N 14 14 w.b11 qb11 _ sb11
-  have e11 : HasVJPAt (mnv2PreB11 N w) x :=
-    vjp_comp_at _ _ x f10 d11 e10 (mnv2ExpOnlyB_has_vjp_at N 14 14 w.b11 qb11 _ sb11)
-  have f11 : DifferentiableAt ℝ (mnv2PreB11 N w) x := d11.comp x f10
-  have d12 := mnv2ResidB_differentiableAt N 14 14 w.b12 qb12 _ sb12
-  have e12 : HasVJPAt (mnv2PreB12 N w) x :=
-    vjp_comp_at _ _ x f11 d12 e11 (mnv2ResidB_has_vjp_at N 14 14 w.b12 qb12 _ sb12)
-  have f12 : DifferentiableAt ℝ (mnv2PreB12 N w) x := d12.comp x f11
-  have d13 := mnv2ResidB_differentiableAt N 14 14 w.b13 qb13 _ sb13
-  have e13 : HasVJPAt (mnv2PreB13 N w) x :=
-    vjp_comp_at _ _ x f12 d13 e12 (mnv2ResidB_has_vjp_at N 14 14 w.b13 qb13 _ sb13)
-  have f13 : DifferentiableAt ℝ (mnv2PreB13 N w) x := d13.comp x f12
-  have d14 := mnv2StridedB_differentiableAt N 7 7 w.b14 qb14 _ sb14
-  have e14 : HasVJPAt (mnv2PreB14 N w) x :=
-    vjp_comp_at _ _ x f13 d14 e13 (mnv2StridedB_has_vjp_at N 7 7 w.b14 qb14 _ sb14)
-  have f14 : DifferentiableAt ℝ (mnv2PreB14 N w) x := d14.comp x f13
-  have d15 := mnv2ResidB_differentiableAt N 7 7 w.b15 qb15 _ sb15
-  have e15 : HasVJPAt (mnv2PreB15 N w) x :=
-    vjp_comp_at _ _ x f14 d15 e14 (mnv2ResidB_has_vjp_at N 7 7 w.b15 qb15 _ sb15)
-  have f15 : DifferentiableAt ℝ (mnv2PreB15 N w) x := d15.comp x f14
-  have d16 := mnv2ResidB_differentiableAt N 7 7 w.b16 qb16 _ sb16
-  have e16 : HasVJPAt (mnv2PreB16 N w) x :=
-    vjp_comp_at _ _ x f15 d16 e15 (mnv2ResidB_has_vjp_at N 7 7 w.b16 qb16 _ sb16)
-  have f16 : DifferentiableAt ℝ (mnv2PreB16 N w) x := d16.comp x f15
-  have d17 := mnv2ExpOnlyB_differentiableAt N 7 7 w.b17 qb17 _ sb17
-  have e17 : HasVJPAt (mnv2PreB17 N w) x :=
-    vjp_comp_at _ _ x f16 d17 e16 (mnv2ExpOnlyB_has_vjp_at N 7 7 w.b17 qb17 _ sb17)
-  have f17 : DifferentiableAt ℝ (mnv2PreB17 N w) x := d17.comp x f16
-  exact vjp_comp_at _ (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb) x f17
-    (mnv2HeadB_differentiableAt N 7 7 w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb _ h_head) e17
-    (mnv2HeadB_has_vjp_at N 7 7 w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb _ h_head)
-
+    (w : MNV2BWeights nCls) (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
+    (hx : MNV2SmoothAtB N w x) :
+    HasVJPAt (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x :=
+  (mnv2ChainB N w hq x hx).fst
 
 -- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `mnv2PreBK` form IS the committed forward
@@ -526,51 +529,23 @@ theorem mobilenetv2ForwardB_full_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeigh
     `mobilenetv2FwdGraphB_full_faithful` proves the typed graph denotes — not of the layered chain
     the VJP is assembled on. Tied back through `mobilenetv2ForwardB_full_eq_chain`. -/
 theorem mobilenetv2ForwardB_full_has_vjp_at_correct (N : Nat) {nCls : Nat}
-    (w : MNV2BWeights nCls)
-    (hsε : 0 < w.sε) (hhε : 0 < w.hε)
-    (qb1 : IVNoExpPos w.b1)
-    (qb2 : IVPos w.b2)
-    (qb3 : IVPos w.b3)
-    (qb4 : IVPos w.b4)
-    (qb5 : IVPos w.b5)
-    (qb6 : IVPos w.b6)
-    (qb7 : IVPos w.b7)
-    (qb8 : IVPos w.b8)
-    (qb9 : IVPos w.b9)
-    (qb10 : IVPos w.b10)
-    (qb11 : IVPos w.b11)
-    (qb12 : IVPos w.b12)
-    (qb13 : IVPos w.b13)
-    (qb14 : IVPos w.b14)
-    (qb15 : IVPos w.b15)
-    (qb16 : IVPos w.b16)
-    (qb17 : IVPos w.b17)
-    (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
-    (h_stem : MNV2StemSmoothAtB N 112 112 w.sW w.sb w.sε w.sγ w.sβ x)
-    (sb1 : IVNoExpSmoothAtB N 112 112 w.b1 (mnv2PreB0 N w x))
-    (sb2 : IVStridedSmoothAtB N 56 56 w.b2 (mnv2PreB1 N w x))
-    (sb3 : IVSmoothAtB N 56 56 w.b3 (mnv2PreB2 N w x))
-    (sb4 : IVStridedSmoothAtB N 28 28 w.b4 (mnv2PreB3 N w x))
-    (sb5 : IVSmoothAtB N 28 28 w.b5 (mnv2PreB4 N w x))
-    (sb6 : IVSmoothAtB N 28 28 w.b6 (mnv2PreB5 N w x))
-    (sb7 : IVStridedSmoothAtB N 14 14 w.b7 (mnv2PreB6 N w x))
-    (sb8 : IVSmoothAtB N 14 14 w.b8 (mnv2PreB7 N w x))
-    (sb9 : IVSmoothAtB N 14 14 w.b9 (mnv2PreB8 N w x))
-    (sb10 : IVSmoothAtB N 14 14 w.b10 (mnv2PreB9 N w x))
-    (sb11 : IVSmoothAtB N 14 14 w.b11 (mnv2PreB10 N w x))
-    (sb12 : IVSmoothAtB N 14 14 w.b12 (mnv2PreB11 N w x))
-    (sb13 : IVSmoothAtB N 14 14 w.b13 (mnv2PreB12 N w x))
-    (sb14 : IVStridedSmoothAtB N 7 7 w.b14 (mnv2PreB13 N w x))
-    (sb15 : IVSmoothAtB N 7 7 w.b15 (mnv2PreB14 N w x))
-    (sb16 : IVSmoothAtB N 7 7 w.b16 (mnv2PreB15 N w x))
-    (sb17 : IVSmoothAtB N 7 7 w.b17 (mnv2PreB16 N w x))
-    (h_head : MNV2HeadSmoothAtB N 7 7 w.hW w.hb w.hε w.hγ w.hβ (mnv2PreB17 N w x))
-    (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * 112) * (2 * 112)))) :
-    (mobilenetv2ForwardB_full_has_vjp_at N w hsε hhε qb1 qb2 qb3 qb4 qb5 qb6 qb7 qb8 qb9 qb10 qb11 qb12 qb13 qb14 qb15 qb16 qb17 x h_stem sb1 sb2 sb3 sb4 sb5 sb6 sb7 sb8 sb9 sb10 sb11 sb12 sb13 sb14 sb15 sb16 sb17 h_head).backward dy i =
+    (w : MNV2BWeights nCls) (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
+    (hx : MNV2SmoothAtB N w x) (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * 112) * (2 * 112)))) :
+    (mobilenetv2ForwardB_full_has_vjp_at N w hq x hx).backward dy i =
       ∑ j : Fin (N * nCls), pdiv (mobilenetv2ForwardB_full N w) x i j * dy j := by
-  have h := (mobilenetv2ForwardB_full_has_vjp_at N w hsε hhε qb1 qb2 qb3 qb4 qb5 qb6 qb7 qb8 qb9 qb10 qb11 qb12 qb13 qb14 qb15 qb16 qb17 x h_stem sb1 sb2 sb3 sb4 sb5 sb6 sb7 sb8 sb9 sb10 sb11 sb12 sb13 sb14 sb15 sb16 sb17 h_head).correct dy i
+  have h := (mobilenetv2ForwardB_full_has_vjp_at N w hq x hx).correct dy i
   rwa [show mobilenetv2ForwardB_full N w
       = mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w
     from funext (mobilenetv2ForwardB_full_eq_chain N w)]
+
+/-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`, read
+    back through `mobilenetv2ForwardB_full_eq_chain`. What the seal's `sealDiffAt` needs. -/
+theorem mobilenetv2ForwardB_full_differentiableAt (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) :
+    DifferentiableAt ℝ (mobilenetv2ForwardB_full N w) x := by
+  rw [show mobilenetv2ForwardB_full N w
+      = mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w
+    from funext (mobilenetv2ForwardB_full_eq_chain N w)]
+  exact (mnv2ChainB N w hq x hx).snd
 
 end Proofs

@@ -78,32 +78,31 @@ section IdSmul
 variable (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (xin dy : Vec (N * (oc * h * w)))
   (s : ℝ)
 
-theorem r50IdCotA_smul :
-    r50IdCotA N h w p xin (fun i => s * dy i) = fun i => s * r50IdCotA N h w p xin dy i :=
-  reluMaskB_smul _ _ _ s
+theorem r50IdCotA_smul : IsHomog (r50IdCotA N h w p xin) :=
+  reluMaskB_smul _ _
 
-theorem r50IdCotC3_smul :
-    r50IdCotC3 N h w p xin (fun i => s * dy i) = fun i => s * r50IdCotC3 N h w p xin dy i := by
+theorem r50IdCotC3_smul : IsHomog (r50IdCotC3 N h w p xin) := by
+  intro s dy
   unfold r50IdCotC3; rw [r50IdCotA_smul, bnInB_smul]
 
-theorem r50IdCotN2_smul :
-    r50IdCotN2 N h w p xin (fun i => s * dy i) = fun i => s * r50IdCotN2 N h w p xin dy i := by
+theorem r50IdCotN2_smul : IsHomog (r50IdCotN2 N h w p xin) := by
+  intro s dy
   unfold r50IdCotN2; rw [r50IdCotC3_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50IdCotC2_smul :
-    r50IdCotC2 N h w p xin (fun i => s * dy i) = fun i => s * r50IdCotC2 N h w p xin dy i := by
+theorem r50IdCotC2_smul : IsHomog (r50IdCotC2 N h w p xin) := by
+  intro s dy
   unfold r50IdCotC2; rw [r50IdCotN2_smul, bnInB_smul]
 
-theorem r50IdCotN1_smul :
-    r50IdCotN1 N h w p xin (fun i => s * dy i) = fun i => s * r50IdCotN1 N h w p xin dy i := by
+theorem r50IdCotN1_smul : IsHomog (r50IdCotN1 N h w p xin) := by
+  intro s dy
   unfold r50IdCotN1; rw [r50IdCotC2_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50IdCotC1_smul :
-    r50IdCotC1 N h w p xin (fun i => s * dy i) = fun i => s * r50IdCotC1 N h w p xin dy i := by
+theorem r50IdCotC1_smul : IsHomog (r50IdCotC1 N h w p xin) := by
+  intro s dy
   unfold r50IdCotC1; rw [r50IdCotN1_smul, bnInB_smul]
 
-theorem r50IdCotIn_smul :
-    r50IdCotIn N h w p xin (fun i => s * dy i) = fun i => s * r50IdCotIn N h w p xin dy i := by
+theorem r50IdCotIn_smul : IsHomog (r50IdCotIn N h w p xin) := by
+  intro s dy
   unfold r50IdCotIn
   rw [r50IdCotC1_smul, cInB_smul, r50IdCotA_smul]
   funext i
@@ -116,36 +115,35 @@ section ProjSmul
 variable (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc) (xin : Vec (N * (ic * h * w)))
   (dy : Vec (N * (oc * h * w))) (s : ℝ)
 
-theorem r50ProjCotA_smul :
-    r50ProjCotA N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotA N h w p xin dy i :=
-  reluMaskB_smul _ _ _ s
+theorem r50ProjCotA_smul : IsHomog (r50ProjCotA N h w p xin) :=
+  reluMaskB_smul _ _
 
-theorem r50ProjCotC3_smul :
-    r50ProjCotC3 N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotC3 N h w p xin dy i := by
+theorem r50ProjCotC3_smul : IsHomog (r50ProjCotC3 N h w p xin) := by
+  intro s dy
   unfold r50ProjCotC3; rw [r50ProjCotA_smul, bnInB_smul]
 
-theorem r50ProjCotN2_smul :
-    r50ProjCotN2 N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotN2 N h w p xin dy i := by
+theorem r50ProjCotN2_smul : IsHomog (r50ProjCotN2 N h w p xin) := by
+  intro s dy
   unfold r50ProjCotN2; rw [r50ProjCotC3_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50ProjCotC2_smul :
-    r50ProjCotC2 N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotC2 N h w p xin dy i := by
+theorem r50ProjCotC2_smul : IsHomog (r50ProjCotC2 N h w p xin) := by
+  intro s dy
   unfold r50ProjCotC2; rw [r50ProjCotN2_smul, bnInB_smul]
 
-theorem r50ProjCotN1_smul :
-    r50ProjCotN1 N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotN1 N h w p xin dy i := by
+theorem r50ProjCotN1_smul : IsHomog (r50ProjCotN1 N h w p xin) := by
+  intro s dy
   unfold r50ProjCotN1; rw [r50ProjCotC2_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50ProjCotC1_smul :
-    r50ProjCotC1 N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotC1 N h w p xin dy i := by
+theorem r50ProjCotC1_smul : IsHomog (r50ProjCotC1 N h w p xin) := by
+  intro s dy
   unfold r50ProjCotC1; rw [r50ProjCotN1_smul, bnInB_smul]
 
-theorem r50ProjCotCp_smul :
-    r50ProjCotCp N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotCp N h w p xin dy i := by
+theorem r50ProjCotCp_smul : IsHomog (r50ProjCotCp N h w p xin) := by
+  intro s dy
   unfold r50ProjCotCp; rw [r50ProjCotA_smul, bnInB_smul]
 
-theorem r50ProjCotIn_smul :
-    r50ProjCotIn N h w p xin (fun i => s * dy i) = fun i => s * r50ProjCotIn N h w p xin dy i := by
+theorem r50ProjCotIn_smul : IsHomog (r50ProjCotIn N h w p xin) := by
+  intro s dy
   unfold r50ProjCotIn
   rw [r50ProjCotC1_smul, cInB_smul, r50ProjCotCp_smul, cInB_smul]
   funext i
@@ -158,37 +156,36 @@ section DownSmul
 variable (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
   (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ)
 
-theorem r50DownCotA_smul :
-    r50DownCotA N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotA N h w p xin dy i :=
-  reluMaskB_smul _ _ _ s
+theorem r50DownCotA_smul : IsHomog (r50DownCotA N h w p xin) :=
+  reluMaskB_smul _ _
 
-theorem r50DownCotC3_smul :
-    r50DownCotC3 N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotC3 N h w p xin dy i := by
+theorem r50DownCotC3_smul : IsHomog (r50DownCotC3 N h w p xin) := by
+  intro s dy
   unfold r50DownCotC3; rw [r50DownCotA_smul, bnInB_smul]
 
-theorem r50DownCotN2_smul :
-    r50DownCotN2 N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotN2 N h w p xin dy i := by
+theorem r50DownCotN2_smul : IsHomog (r50DownCotN2 N h w p xin) := by
+  intro s dy
   unfold r50DownCotN2; rw [r50DownCotC3_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50DownCotC2_smul :
-    r50DownCotC2 N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotC2 N h w p xin dy i := by
+theorem r50DownCotC2_smul : IsHomog (r50DownCotC2 N h w p xin) := by
+  intro s dy
   unfold r50DownCotC2; rw [r50DownCotN2_smul, bnInB_smul]
 
 /-- ⚠ The strided 3×3's input-VJP carries the cotangent from `h × w` up to bn₁'s `2h × 2w`. -/
-theorem r50DownCotN1_smul :
-    r50DownCotN1 N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotN1 N h w p xin dy i := by
+theorem r50DownCotN1_smul : IsHomog (r50DownCotN1 N h w p xin) := by
+  intro s dy
   unfold r50DownCotN1; rw [r50DownCotC2_smul, cStridedInB_smul, reluMaskB_smul]
 
-theorem r50DownCotC1_smul :
-    r50DownCotC1 N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotC1 N h w p xin dy i := by
+theorem r50DownCotC1_smul : IsHomog (r50DownCotC1 N h w p xin) := by
+  intro s dy
   unfold r50DownCotC1; rw [r50DownCotN1_smul, bnInB_smul]
 
-theorem r50DownCotCp_smul :
-    r50DownCotCp N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotCp N h w p xin dy i := by
+theorem r50DownCotCp_smul : IsHomog (r50DownCotCp N h w p xin) := by
+  intro s dy
   unfold r50DownCotCp; rw [r50DownCotA_smul, bnInB_smul]
 
-theorem r50DownCotIn_smul :
-    r50DownCotIn N h w p xin (fun i => s * dy i) = fun i => s * r50DownCotIn N h w p xin dy i := by
+theorem r50DownCotIn_smul : IsHomog (r50DownCotIn N h w p xin) := by
+  intro s dy
   unfold r50DownCotIn
   rw [r50DownCotC1_smul, cInB_smul, r50DownCotCp_smul, cStridedInB_smul]
   funext i

@@ -102,6 +102,30 @@ theorem fderiv_ne_zero_of_ray {m n : Nat} {f : Vec m → Vec n} {x : Vec m} (v :
   simp only [ContinuousLinearMap.comp_zero, zero_apply] at h0
   exact hc (hg.unique h0)
 
+/-- **A readout that moves along the ray makes the forward non-constant.** `g` is what the
+    difference of two output coordinates is along `X`; if it differs at `1` and `0`, so does `f`. -/
+theorem ne_of_ray_readout {m n : Nat} (f : Vec m → Vec n) (X : ℝ → Vec m) (i₀ i₁ : Fin n)
+    {g : ℝ → ℝ} (hg : ∀ t, f (X t) i₀ - f (X t) i₁ = g t) (h10 : g 1 ≠ g 0) :
+    f (X 1) ≠ f (X 0) := by
+  intro heq
+  exact h10 (by rw [← hg, ← hg, heq])
+
+/-- **`fderiv_ne_zero_of_ray` at a two-coordinate readout.** The per-net seals all read the
+    difference `y i₀ − y i₁` of two outputs along the affine ray `X t = X 0 + t • v`; given its
+    closed form `g` and a nonzero slope of `g` at `0`, the Jacobian at `X 0` is not zero. -/
+theorem fderiv_ne_zero_of_ray_readout {m n : Nat} (f : Vec m → Vec n) (X : ℝ → Vec m)
+    (v : Vec m) (hX : ∀ t, X 0 + t • v = X t) (i₀ i₁ : Fin n) {g : ℝ → ℝ}
+    (hg : ∀ t, f (X t) i₀ - f (X t) i₁ = g t) (hf : DifferentiableAt ℝ f (X 0)) {c : ℝ}
+    (hc0 : c ≠ 0) (hc : HasDerivAt g c 0) :
+    fderiv ℝ f (X 0) ≠ 0 := by
+  refine fderiv_ne_zero_of_ray v hf (fun y => y i₀ - y i₁) (by fun_prop) hc0 ?_
+  have hfun : (fun t : ℝ => f (X 0 + t • v) i₀ - f (X 0 + t • v) i₁) = g := by
+    funext t
+    rw [hX]
+    exact hg t
+  rw [hfun]
+  exact hc
+
 /-- **`t · Q t` has derivative `Q 0` at `0`** for any `Q` continuous there — the
     product-rule cross-term carries the factor `t`, so no derivative of `Q` is needed
     (its slope at `0` is `Q` itself). -/

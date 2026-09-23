@@ -694,125 +694,65 @@ noncomputable def dh1 (t : ℝ) : Fin 960 → ℝ :=
 noncomputable def dh2 (t : ℝ) : Fin 1280 → ℝ :=
   fun o => dh1 t 0 * rf (2 * (7 * 7)) (bnRowLA 2 1280 7 7 (Zh2 t) o)
 
-theorem ed1p (t : ℝ) : EDiff (d1p t) (A1p t) := by
-  refine EDiff_bn 48 56 56 1 (kv 48 1) (kv 48 0) (fun _ => 1 * dSw t 0) (d1p t) (Z1p t) ?_ ?_
-  · exact EDiff_conv (h := 56) (w := 56) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1
-      (kv 48 0) (dSw t) _ (Sw t) (ed_Sw t) (fun o => rfl)
-  · intro ci
-    simp only [d1p, rf, kv_apply]
-    ring
+theorem ed1p (t : ℝ) : EDiff (d1p t) (A1p t) :=
+  EDiff_convBn (h := 56) (w := 56) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1 0 (Z1p t)
+    (ed_Sw t) rfl (fun ci => by simp only [d1p, dSw, rf]; ring)
 
-theorem edaq (t : ℝ) : EDiff (daq t) (Aaq t) := by
-  refine EDiff_bn 48 28 28 1 (kv 48 1) (kv 48 160) (fun ch => 1 * d1p t ch) (daq t) (Zaq t) ?_ ?_
-  · exact EDiff_dwS2 (h := 28) (w := 28) (by norm_num) (by norm_num) 1
-      (kv 48 0) (d1p t) _ (A1p t) (ed1p t) (fun ch => rfl)
-  · intro ci
-    simp only [daq, rf, kv_apply]
-    ring
+theorem edaq (t : ℝ) : EDiff (daq t) (Aaq t) :=
+  EDiff_dwS2Bn (h := 28) (w := 28) (by norm_num) (by norm_num) 1 160 (Zaq t) (ed1p t) rfl
+    (fun ci => by simp only [daq, rf]; ring)
 
-theorem edae (t : ℝ) : EDiff (dae t) (Aae t) := by
-  refine EDiff_bn 192 28 28 1 (kv 192 1) (kv 192 160) (fun _ => 1 * daq t 0) (dae t) (Zae t) ?_ ?_
-  · exact EDiff_conv (h := 28) (w := 28) (0 : Fin 48) rfl (by norm_num) (by norm_num) 1
-      (kv 192 0) (daq t) _ (Aaq t) (edaq t) (fun o => rfl)
-  · intro ci
-    simp only [dae, rf, kv_apply]
-    ring
+theorem edae (t : ℝ) : EDiff (dae t) (Aae t) :=
+  EDiff_convBn (h := 28) (w := 28) (0 : Fin 48) rfl (by norm_num) (by norm_num) 1 160 (Zae t)
+    (edaq t) rfl (fun ci => by simp only [dae, rf]; ring)
 
-theorem edad (t : ℝ) : EDiff (dad t) (Aad t) := by
-  refine EDiff_bn 192 28 28 1 (kv 192 1) (kv 192 160) (fun ch => 1 * dae t ch) (dad t) (Zad t) ?_ ?_
-  · exact EDiff_dw (h := 28) (w := 28) (by norm_num) (by norm_num) 1
-      (kv 192 0) (dae t) _ (Aae t) (edae t) (fun ch => rfl)
-  · intro ci
-    simp only [dad, rf, kv_apply]
-    ring
+theorem edad (t : ℝ) : EDiff (dad t) (Aad t) :=
+  EDiff_dwBn (h := 28) (w := 28) (by norm_num) (by norm_num) 1 160 (Zad t) (edae t) rfl
+    (fun ci => by simp only [dad, rf]; ring)
 
-theorem edaz (t : ℝ) : EDiff (daz t) (Aaz t) := by
-  refine EDiff_bn 80 28 28 1 (kv 80 1) (kv 80 0) (fun _ => 1 * dad t 0) (daz t) (Zaz t) ?_ ?_
-  · exact EDiff_conv (h := 28) (w := 28) (0 : Fin 192) rfl (by norm_num) (by norm_num) 1
-      (kv 80 0) (dad t) _ (Aad t) (edad t) (fun o => rfl)
-  · intro ci
-    simp only [daz, rf, kv_apply]
-    ring
+theorem edaz (t : ℝ) : EDiff (daz t) (Aaz t) :=
+  EDiff_convBn (h := 28) (w := 28) (0 : Fin 192) rfl (by norm_num) (by norm_num) 1 0 (Zaz t)
+    (edad t) rfl (fun ci => by simp only [daz, rf]; ring)
 
-theorem edbq (t : ℝ) : EDiff (dbq t) (Abq t) := by
-  refine EDiff_bn 80 14 14 1 (kv 80 1) (kv 80 160) (fun ch => 1 * daz t ch) (dbq t) (Zbq t) ?_ ?_
-  · exact EDiff_dwS2 (h := 14) (w := 14) (by norm_num) (by norm_num) 1
-      (kv 80 0) (daz t) _ (Aaz t) (edaz t) (fun ch => rfl)
-  · intro ci
-    simp only [dbq, rf, kv_apply]
-    ring
+theorem edbq (t : ℝ) : EDiff (dbq t) (Abq t) :=
+  EDiff_dwS2Bn (h := 14) (w := 14) (by norm_num) (by norm_num) 1 160 (Zbq t) (edaz t) rfl
+    (fun ci => by simp only [dbq, rf]; ring)
 
-theorem edbe (t : ℝ) : EDiff (dbe t) (Abe t) := by
-  refine EDiff_bn 480 14 14 1 (kv 480 1) (kv 480 160) (fun _ => 1 * dbq t 0) (dbe t) (Zbe t) ?_ ?_
-  · exact EDiff_conv (h := 14) (w := 14) (0 : Fin 80) rfl (by norm_num) (by norm_num) 1
-      (kv 480 0) (dbq t) _ (Abq t) (edbq t) (fun o => rfl)
-  · intro ci
-    simp only [dbe, rf, kv_apply]
-    ring
+theorem edbe (t : ℝ) : EDiff (dbe t) (Abe t) :=
+  EDiff_convBn (h := 14) (w := 14) (0 : Fin 80) rfl (by norm_num) (by norm_num) 1 160 (Zbe t)
+    (edbq t) rfl (fun ci => by simp only [dbe, rf]; ring)
 
-theorem edbd (t : ℝ) : EDiff (dbd t) (Abd t) := by
-  refine EDiff_bn 480 14 14 1 (kv 480 1) (kv 480 160) (fun ch => 1 * dbe t ch) (dbd t) (Zbd t) ?_ ?_
-  · exact EDiff_dw (h := 14) (w := 14) (by norm_num) (by norm_num) 1
-      (kv 480 0) (dbe t) _ (Abe t) (edbe t) (fun ch => rfl)
-  · intro ci
-    simp only [dbd, rf, kv_apply]
-    ring
+theorem edbd (t : ℝ) : EDiff (dbd t) (Abd t) :=
+  EDiff_dwBn (h := 14) (w := 14) (by norm_num) (by norm_num) 1 160 (Zbd t) (edbe t) rfl
+    (fun ci => by simp only [dbd, rf]; ring)
 
-theorem edbz (t : ℝ) : EDiff (dbz t) (Abz t) := by
-  refine EDiff_bn 160 14 14 1 (kv 160 1) (kv 160 0) (fun _ => 1 * dbd t 0) (dbz t) (Zbz t) ?_ ?_
-  · exact EDiff_conv (h := 14) (w := 14) (0 : Fin 480) rfl (by norm_num) (by norm_num) 1
-      (kv 160 0) (dbd t) _ (Abd t) (edbd t) (fun o => rfl)
-  · intro ci
-    simp only [dbz, rf, kv_apply]
-    ring
+theorem edbz (t : ℝ) : EDiff (dbz t) (Abz t) :=
+  EDiff_convBn (h := 14) (w := 14) (0 : Fin 480) rfl (by norm_num) (by norm_num) 1 0 (Zbz t)
+    (edbd t) rfl (fun ci => by simp only [dbz, rf]; ring)
 
-theorem edcq (t : ℝ) : EDiff (dcq t) (Acq t) := by
-  refine EDiff_bn 160 7 7 1 (kv 160 1) (kv 160 160) (fun ch => 1 * dbz t ch) (dcq t) (Zcq t) ?_ ?_
-  · exact EDiff_dwS2 (h := 7) (w := 7) (by norm_num) (by norm_num) 1
-      (kv 160 0) (dbz t) _ (Abz t) (edbz t) (fun ch => rfl)
-  · intro ci
-    simp only [dcq, rf, kv_apply]
-    ring
+theorem edcq (t : ℝ) : EDiff (dcq t) (Acq t) :=
+  EDiff_dwS2Bn (h := 7) (w := 7) (by norm_num) (by norm_num) 1 160 (Zcq t) (edbz t) rfl
+    (fun ci => by simp only [dcq, rf]; ring)
 
-theorem edce (t : ℝ) : EDiff (dce t) (Ace t) := by
-  refine EDiff_bn 960 7 7 1 (kv 960 1) (kv 960 160) (fun _ => 1 * dcq t 0) (dce t) (Zce t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 160) rfl (by norm_num) (by norm_num) 1
-      (kv 960 0) (dcq t) _ (Acq t) (edcq t) (fun o => rfl)
-  · intro ci
-    simp only [dce, rf, kv_apply]
-    ring
+theorem edce (t : ℝ) : EDiff (dce t) (Ace t) :=
+  EDiff_convBn (h := 7) (w := 7) (0 : Fin 160) rfl (by norm_num) (by norm_num) 1 160 (Zce t)
+    (edcq t) rfl (fun ci => by simp only [dce, rf]; ring)
 
-theorem edcd (t : ℝ) : EDiff (dcd t) (Acd t) := by
-  refine EDiff_bn 960 7 7 1 (kv 960 1) (kv 960 160) (fun ch => 1 * dce t ch) (dcd t) (Zcd t) ?_ ?_
-  · exact EDiff_dw (h := 7) (w := 7) (by norm_num) (by norm_num) 1
-      (kv 960 0) (dce t) _ (Ace t) (edce t) (fun ch => rfl)
-  · intro ci
-    simp only [dcd, rf, kv_apply]
-    ring
+theorem edcd (t : ℝ) : EDiff (dcd t) (Acd t) :=
+  EDiff_dwBn (h := 7) (w := 7) (by norm_num) (by norm_num) 1 160 (Zcd t) (edce t) rfl
+    (fun ci => by simp only [dcd, rf]; ring)
 
-theorem edcz (t : ℝ) : EDiff (dcz t) (Acz t) := by
-  refine EDiff_bn 256 7 7 1 (kv 256 1) (kv 256 0) (fun _ => 1 * dcd t 0) (dcz t) (Zcz t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1
-      (kv 256 0) (dcd t) _ (Acd t) (edcd t) (fun o => rfl)
-  · intro ci
-    simp only [dcz, rf, kv_apply]
-    ring
+theorem edcz (t : ℝ) : EDiff (dcz t) (Acz t) :=
+  EDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1 0 (Zcz t)
+    (edcd t) rfl (fun ci => by simp only [dcz, rf]; ring)
 
-theorem edh1 (t : ℝ) : EDiff (dh1 t) (Ah1 t) := by
-  refine EDiff_bn 960 7 7 1 (kv 960 1) (kv 960 160) (fun _ => 1 * dcz t 0) (dh1 t) (Zh1 t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1
-      (kv 960 0) (dcz t) _ (Acz t) (edcz t) (fun o => rfl)
-  · intro ci
-    simp only [dh1, rf, kv_apply]
-    ring
+theorem edh1 (t : ℝ) : EDiff (dh1 t) (Ah1 t) :=
+  EDiff_convBn (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1 160 (Zh1 t)
+    (edcz t) rfl (fun ci => by simp only [dh1, rf]; ring)
 
-theorem edh2 (t : ℝ) : EDiff (dh2 t) (Ah2 t) := by
-  refine EDiff_bn 1280 7 7 1 (kv 1280 1) (kv 1280 160) (fun _ => 1 * dh1 t 0) (dh2 t) (Zh2 t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1
-      (kv 1280 0) (dh1 t) _ (Ah1 t) (edh1 t) (fun o => rfl)
-  · intro ci
-    simp only [dh2, rf, kv_apply]
-    ring
+theorem edh2 (t : ℝ) : EDiff (dh2 t) (Ah2 t) :=
+  EDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1 160 (Zh2 t)
+    (edh1 t) rfl (fun ci => by simp only [dh2, rf]; ring)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. Continuity along the ray — what `Rr` needs and nothing more
@@ -1219,32 +1159,14 @@ theorem sealDiffAt (nCls : Nat) (t : ℝ) :
     the structural weights is NOT constant in its input. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
     mobilenetv4ForwardB_full 2 (sealW nCls) (sealX 1)
-      ≠ mobilenetv4ForwardB_full 2 (sealW nCls) (sealX 0) := by
-  intro heq
-  have h1 := gd_ray nCls hn 1
-  have h0 := gd_ray nCls hn 0
-  rw [heq] at h1
-  have hz : swishGap 160 (uF 1 0) * Rr 1 = swishGap 160 (uF 0 0) * Rr 0 := by rw [← h1, ← h0]
-  rw [gd_zero, zero_mul] at hz
-  linarith [gd_one_pos]
+      ≠ mobilenetv4ForwardB_full 2 (sealW nCls) (sealX 0) :=
+  ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa [gd_zero] using gd_one_pos.ne')
 
 /-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
-    fderiv ℝ (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 := by
-  refine fderiv_ne_zero_of_ray sealV (sealDiffAt nCls 0)
-    (fun y => y (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - y (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))) (by fun_prop)
-    gd_slope_ne ?_
-  have heq : (fun t : ℝ => mobilenetv4ForwardB_full 2 (sealW nCls) (sealX 0 + t • sealV)
-        (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - mobilenetv4ForwardB_full 2 (sealW nCls) (sealX 0 + t • sealV)
-        (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls))))
-      = fun t : ℝ => swishGap 160 (uF t 0) * Rr t := by
-    funext t
-    rw [sealX_zero_add]
-    exact gd_ray nCls hn t
-  rw [heq]
-  exact hasDerivAt_gd
+    fderiv ℝ (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 :=
+  fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
+    (sealDiffAt nCls 0) gd_slope_ne hasDerivAt_gd
 
 /-- ⭐⭐ **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
     21-block, 224×224 MobileNetV4-Conv-M — `mobilenetv4ForwardB_full`, the forward every

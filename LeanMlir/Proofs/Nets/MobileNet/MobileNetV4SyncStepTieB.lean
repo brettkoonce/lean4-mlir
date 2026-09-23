@@ -102,46 +102,45 @@ open Proofs.Mnv4TieB
 two `if`s are T3's table dispatch; they split on both sides at once. -/
 
 theorem mnv4CotPc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4CotPc N s p xin (fun i => a * dy i) = fun i => a * mnv4CotPc N s p xin dy i :=
-  bnInB_smul _ _ _ _ _ _ _ _ a
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotPc N s p xin) :=
+  bnInB_smul _ _ _ _ _ _ _
 
 theorem mnv4CotDn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4CotDn N s p xin (fun i => a * dy i) = fun i => a * mnv4CotDn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotDn N s p xin) := by
+  intro a dy
   unfold mnv4CotDn; rw [mnv4CotPc_smul, cInB_smul, reluMaskB_smul]
 
 theorem mnv4CotDc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4CotDc N s p xin (fun i => a * dy i) = fun i => a * mnv4CotDc N s p xin dy i := by
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotDc N s p xin) := by
+  intro a dy
   unfold mnv4CotDc; rw [mnv4CotDn_smul, bnInB_smul]
 
 theorem mnv4CotEn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4CotEn N s p xin (fun i => a * dy i) = fun i => a * mnv4CotEn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotEn N s p xin) := by
+  intro a dy
   unfold mnv4CotEn
   split_ifs
   · rw [mnv4CotPc_smul, cInB_smul, reluMaskB_smul]
   · rw [mnv4CotDc_smul, dInB_smul, reluMaskB_smul]
 
 theorem mnv4CotEc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4CotEc N s p xin (fun i => a * dy i) = fun i => a * mnv4CotEc N s p xin dy i := by
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotEc N s p xin) := by
+  intro a dy
   unfold mnv4CotEc; rw [mnv4CotEn_smul, bnInB_smul]
 
 theorem mnv4CotQn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4CotQn N s p xin (fun i => a * dy i) = fun i => a * mnv4CotQn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotQn N s p xin) := by
+  intro a dy
   unfold mnv4CotQn; rw [mnv4CotEc_smul, cInB_smul, reluMaskB_smul]
 
 theorem mnv4CotQc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4CotQc N s p xin (fun i => a * dy i) = fun i => a * mnv4CotQc N s p xin dy i := by
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotQc N s p xin) := by
+  intro a dy
   unfold mnv4CotQc; rw [mnv4CotQn_smul, bnInB_smul]
 
 theorem mnv4BodyCotIn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * s.h * s.h))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4BodyCotIn N s p xin (fun i => a * dy i) = fun i => a * mnv4BodyCotIn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4BodyCotIn N s p xin) := by
+  intro a dy
   unfold mnv4BodyCotIn
   split_ifs
   · rw [mnv4CotEc_smul, cInB_smul]
@@ -150,131 +149,117 @@ theorem mnv4BodyCotIn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
 /-! The pre-strided block (rows 1, 3, 11). -/
 
 theorem mnv4SCotPc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SCotPc N s p xin (fun i => a * dy i) = fun i => a * mnv4SCotPc N s p xin dy i :=
-  bnInB_smul _ _ _ _ _ _ _ _ a
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotPc N s p xin) :=
+  bnInB_smul _ _ _ _ _ _ _
 
 theorem mnv4SCotDn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SCotDn N s p xin (fun i => a * dy i) = fun i => a * mnv4SCotDn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotDn N s p xin) := by
+  intro a dy
   unfold mnv4SCotDn; rw [mnv4SCotPc_smul, cInB_smul, reluMaskB_smul]
 
 theorem mnv4SCotDc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SCotDc N s p xin (fun i => a * dy i) = fun i => a * mnv4SCotDc N s p xin dy i := by
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotDc N s p xin) := by
+  intro a dy
   unfold mnv4SCotDc; rw [mnv4SCotDn_smul, bnInB_smul]
 
 theorem mnv4SCotEn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SCotEn N s p xin (fun i => a * dy i) = fun i => a * mnv4SCotEn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotEn N s p xin) := by
+  intro a dy
   unfold mnv4SCotEn; rw [mnv4SCotDc_smul, dInB_smul, reluMaskB_smul]
 
 theorem mnv4SCotEc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SCotEc N s p xin (fun i => a * dy i) = fun i => a * mnv4SCotEc N s p xin dy i := by
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotEc N s p xin) := by
+  intro a dy
   unfold mnv4SCotEc; rw [mnv4SCotEn_smul, bnInB_smul]
 
 theorem mnv4SCotQn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SCotQn N s p xin (fun i => a * dy i) = fun i => a * mnv4SCotQn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotQn N s p xin) := by
+  intro a dy
   unfold mnv4SCotQn; rw [mnv4SCotEc_smul, cInB_smul, reluMaskB_smul]
 
 theorem mnv4SCotQc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SCotQc N s p xin (fun i => a * dy i) = fun i => a * mnv4SCotQc N s p xin dy i := by
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotQc N s p xin) := by
+  intro a dy
   unfold mnv4SCotQc; rw [mnv4SCotQn_smul, bnInB_smul]
 
 theorem mnv4SBodyCotIn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
-    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dy : Vec (N * (s.oc * s.h * s.h))) (a : ℝ) :
-    mnv4SBodyCotIn N s p xin (fun i => a * dy i) = fun i => a * mnv4SBodyCotIn N s p xin dy i := by
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SBodyCotIn N s p xin) := by
+  intro a dy
   unfold mnv4SBodyCotIn; rw [mnv4SCotQc_smul, dStridedInB_smul]
 
 /-! The stem, the fused stage (swish, no mask) and the two-conv head. -/
 
-theorem mnv4StemCotN_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW)
-    (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (a : ℝ) :
-    mnv4StemCotN N h w Ws bs εs γs βs x (fun i => a * dy i)
-      = fun i => a * mnv4StemCotN N h w Ws bs εs γs βs x dy i :=
-  reluMaskB_smul _ _ _ a
+theorem mnv4StemCotN_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
+    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv4StemCotN N h w Ws bs εs γs βs x) :=
+  reluMaskB_smul _ _
 
-theorem mnv4StemCotC_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW)
-    (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (a : ℝ) :
-    mnv4StemCotC N h w Ws bs εs γs βs x (fun i => a * dy i)
-      = fun i => a * mnv4StemCotC N h w Ws bs εs γs βs x dy i := by
+theorem mnv4StemCotC_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
+    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv4StemCotC N h w Ws bs εs γs βs x) := by
+  intro a dy
   unfold mnv4StemCotC; rw [mnv4StemCotN_smul, bnInB_smul]
 
 theorem mnv4FusedCotPc_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
-    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w)))
-    (a : ℝ) :
-    mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin (fun i => a * dy i)
-      = fun i => a * mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin dy i :=
-  bnInB_smul _ _ _ _ _ _ _ _ a
+    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin) :=
+  bnInB_smul _ _ _ _ _ _ _
 
 theorem mnv4FusedCotN_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
-    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w)))
-    (a : ℝ) :
-    mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin (fun i => a * dy i)
-      = fun i => a * mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin dy i := by
+    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin) := by
+  intro a dy
   unfold mnv4FusedCotN; rw [mnv4FusedCotPc_smul, cInB_smul]; exact HasVJP.backward_smul _ _ a _
 
 theorem mnv4FusedCotC_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
-    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w)))
-    (a : ℝ) :
-    mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin (fun i => a * dy i)
-      = fun i => a * mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin dy i := by
+    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin) := by
+  intro a dy
   unfold mnv4FusedCotC; rw [mnv4FusedCotN_smul, bnInB_smul]
 
 theorem mnv4FusedCotIn_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
-    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w)))
-    (a : ℝ) :
-    mnv4FusedCotIn N h w Wc bc εc γc βc Wp bp εp γp βp xin (fun i => a * dy i)
-      = fun i => a * mnv4FusedCotIn N h w Wc bc εc γc βc Wp bp εp γp βp xin dy i := by
+    (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv4FusedCotIn N h w Wc bc εc γc βc Wp bp εp γp βp xin) := by
+  intro a dy
   unfold mnv4FusedCotIn; rw [mnv4FusedCotC_smul, cStridedInB_smul]
 
-theorem mnv4HeadCotHn_smul (N h w : Nat) {c mid oc nCls : Nat}
-    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
-    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) (a : ℝ) :
-    mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin (fun i => a * g i)
-      = fun i => a * mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g i := by
+theorem mnv4HeadCotHn_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+    (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
+    (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
+    IsHomog (mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
+  intro a g
   unfold mnv4HeadCotHn; rw [r34HeadCotBlk_smul, reluMaskB_smul]
 
-theorem mnv4HeadCotHc_smul (N h w : Nat) {c mid oc nCls : Nat}
-    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
-    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) (a : ℝ) :
-    mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin (fun i => a * g i)
-      = fun i => a * mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g i := by
+theorem mnv4HeadCotHc_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+    (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
+    (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
+    IsHomog (mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
+  intro a g
   unfold mnv4HeadCotHc; rw [mnv4HeadCotHn_smul, bnInB_smul]
 
-theorem mnv4HeadCotH1n_smul (N h w : Nat) {c mid oc nCls : Nat}
-    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
-    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) (a : ℝ) :
-    mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin (fun i => a * g i)
-      = fun i => a * mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g i := by
+theorem mnv4HeadCotH1n_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+    (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
+    (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
+    IsHomog (mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
+  intro a g
   unfold mnv4HeadCotH1n; rw [mnv4HeadCotHc_smul, cInB_smul, reluMaskB_smul]
 
-theorem mnv4HeadCotH1c_smul (N h w : Nat) {c mid oc nCls : Nat}
-    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
-    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) (a : ℝ) :
-    mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin (fun i => a * g i)
-      = fun i => a * mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g i := by
+theorem mnv4HeadCotH1c_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+    (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
+    (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
+    IsHomog (mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
+  intro a g
   unfold mnv4HeadCotH1c; rw [mnv4HeadCotH1n_smul, bnInB_smul]
 
-theorem mnv4HeadCotIn_smul (N h w : Nat) {c mid oc nCls : Nat}
-    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
-    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) (a : ℝ) :
-    mnv4HeadCotIn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin (fun i => a * g i)
-      = fun i => a * mnv4HeadCotIn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g i := by
+theorem mnv4HeadCotIn_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+    (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
+    (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
+    IsHomog (mnv4HeadCotIn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
+  intro a g
   unfold mnv4HeadCotIn; rw [mnv4HeadCotH1c_smul, cInB_smul]
 
 -- ════════════════════════════════════════════════════════════════

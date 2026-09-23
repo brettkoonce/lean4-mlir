@@ -483,6 +483,20 @@ theorem scHead (nCls : Nat) (t : ℝ) :
       (sealW nCls).hβ (mnv2PreB17 2 (sealW nCls) (sealX t)) :=
   sealHeadSmooth 2 7 7 _ _ (margin192 _ (by norm_num)) _
 
+/-- Every `ε` of the witness is `1`. -/
+theorem sealPos (nCls : Nat) : MNV2PosB (sealW nCls) :=
+  ⟨one_pos, one_pos, sealNoExpPos 32 16, sealIVPos 16 96 24, sealResPos 24 144,
+    sealIVPos 24 144 32, sealResPos 32 192, sealResPos 32 192, sealIVPos 32 192 64,
+    sealResPos 64 384, sealResPos 64 384, sealResPos 64 384, sealIVPos 64 384 96,
+    sealResPos 96 576, sealResPos 96 576, sealIVPos 96 576 160, sealResPos 160 960,
+    sealResPos 160 960, sealIVPos 160 960 320⟩
+
+/-- The nineteen bundles above, as the apex's one smoothness hypothesis. -/
+theorem sealSmooth (nCls : Nat) (t : ℝ) : MNV2SmoothAtB 2 (sealW nCls) (sealX t) :=
+  ⟨scStem nCls t, sc1 nCls t, sc2 nCls t, sc3 nCls t, sc4 nCls t, sc5 nCls t, sc6 nCls t,
+    sc7 nCls t, sc8 nCls t, sc9 nCls t, sc10 nCls t, sc11 nCls t, sc12 nCls t, sc13 nCls t,
+    sc14 nCls t, sc15 nCls t, sc16 nCls t, sc17 nCls t, scHead nCls t⟩
+
 /-- ⭐⭐ **The whole-net VJP at the witness** — all 19 bundles discharged, on
     `mobilenetv2ForwardB_full` itself (through `mobilenetv2ForwardB_full_eq_chain`). -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
@@ -491,11 +505,8 @@ noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
       = mnv2HeadB 2 7 7 (sealW nCls).hW (sealW nCls).hb (sealW nCls).hε (sealW nCls).hγ
           (sealW nCls).hβ (sealW nCls).fcW (sealW nCls).fcb ∘ mnv2PreB17 2 (sealW nCls)
       from funext (mobilenetv2ForwardB_full_eq_chain 2 (sealW nCls))]
-  exact mobilenetv2ForwardB_full_has_vjp_at 2 (sealW nCls) one_pos one_pos
-    (sealNoExpPos 32 16) (sealIVPos 16 96 24) (sealResPos 24 144) (sealIVPos 24 144 32) (sealResPos 32 192) (sealResPos 32 192) (sealIVPos 32 192 64) (sealResPos 64 384) (sealResPos 64 384) (sealResPos 64 384) (sealIVPos 64 384 96) (sealResPos 96 576) (sealResPos 96 576) (sealIVPos 96 576 160) (sealResPos 160 960) (sealResPos 160 960) (sealIVPos 160 960 320)
-    (sealX t) (scStem nCls t)
-    (sc1 nCls t) (sc2 nCls t) (sc3 nCls t) (sc4 nCls t) (sc5 nCls t) (sc6 nCls t) (sc7 nCls t) (sc8 nCls t) (sc9 nCls t) (sc10 nCls t) (sc11 nCls t) (sc12 nCls t) (sc13 nCls t) (sc14 nCls t) (sc15 nCls t) (sc16 nCls t) (sc17 nCls t)
-    (scHead nCls t)
+  exact mobilenetv2ForwardB_full_has_vjp_at 2 (sealW nCls) (sealPos nCls) (sealX t)
+    (sealSmooth nCls t)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. The 22 pre-BatchNorm activations on the carrier's path
@@ -802,87 +813,47 @@ theorem ed0 (nCls : Nat) (t : ℝ) : EDiff (dS t) (mnv2PreB0 2 (sealW nCls) (sea
     simp only [dS, rf, kv_apply]
     ring
 
-theorem ed1d (nCls : Nat) (t : ℝ) : EDiff (d1d nCls t) (A1d nCls t) := by
-  refine EDiff_bn 32 112 112 1 (kv 32 (1 / 64)) (kv 32 3) (fun ch => 1 * dS t ch) (d1d nCls t)
-    (Z1d nCls t) ?_ ?_
-  · exact EDiff_dw (by norm_num) (by norm_num) 1 (kv 32 0) (dS t) _
-      (mnv2PreB0 2 (sealW nCls) (sealX t)) (ed0 nCls t) (fun ch => rfl)
-  · intro ci
-    simp only [d1d, rf, kv_apply]
-    ring
+theorem ed1d (nCls : Nat) (t : ℝ) : EDiff (d1d nCls t) (A1d nCls t) :=
+  EDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z1d nCls t) (ed0 nCls t) rfl
+    (fun ci => by simp only [d1d, rf]; ring)
 
 theorem ed1 (nCls : Nat) (t : ℝ) : EDiff (d1p nCls t) (mnv2PreB1 2 (sealW nCls) (sealX t)) := by
   rw [pc1]
-  refine EDiff_bn 16 112 112 1 (kv 16 (1 / 64)) (kv 16 0) (fun _ => 1 * d1d nCls t 0)
-    (d1p nCls t) (Z1p nCls t) ?_ ?_
-  · exact EDiff_conv (h := 112) (w := 112) (0 : Fin 32) rfl (by norm_num) (by norm_num) 1
-      (kv 16 0) (d1d nCls t) _ (A1d nCls t) (ed1d nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d1p, rf, kv_apply]
-    ring
+  exact EDiff_convBn (h := 112) (w := 112) (0 : Fin 32) rfl (by norm_num) (by norm_num) (1 / 64) 0
+    (Z1p nCls t) (ed1d nCls t) rfl (fun ci => by simp only [d1p, rf]; ring)
 
-theorem ed2e (nCls : Nat) (t : ℝ) : EDiff (d2e nCls t) (A2e nCls t) := by
-  refine EDiff_bn 96 (2 * 56) (2 * 56) 1 (kv 96 (1 / 64)) (kv 96 3) (fun _ => 1 * d1p nCls t 0)
-    (d2e nCls t) (Z2e nCls t) ?_ ?_
-  · exact EDiff_conv (h := (2 * 56)) (w := (2 * 56)) (0 : Fin 16) rfl (by norm_num) (by norm_num) 1
-      (kv 96 0) (d1p nCls t) _ (mnv2PreB1 2 (sealW nCls) (sealX t)) (ed1 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d2e, rf, kv_apply]
-    ring
+theorem ed2e (nCls : Nat) (t : ℝ) : EDiff (d2e nCls t) (A2e nCls t) :=
+  EDiff_convBn (h := (2 * 56)) (w := (2 * 56)) (0 : Fin 16) rfl (by norm_num) (by norm_num)
+    (1 / 64) 3 (Z2e nCls t) (ed1 nCls t) rfl (fun ci => by simp only [d2e, rf]; ring)
 
-theorem ed2d (nCls : Nat) (t : ℝ) : EDiff (d2d nCls t) (A2d nCls t) := by
-  refine EDiff_bn 96 56 56 1 (kv 96 (1 / 64)) (kv 96 3) (fun ch => 1 * d2e nCls t ch)
-    (d2d nCls t) (Z2d nCls t) ?_ ?_
-  · exact EDiff_dwS2Xla (by norm_num) (by norm_num) 1 (kv 96 0) (d2e nCls t) _
-      (A2e nCls t) (ed2e nCls t) (fun ch => rfl)
-  · intro ci
-    simp only [d2d, rf, kv_apply]
-    ring
+theorem ed2d (nCls : Nat) (t : ℝ) : EDiff (d2d nCls t) (A2d nCls t) :=
+  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z2d nCls t) (ed2e nCls t) rfl
+    (fun ci => by simp only [d2d, rf]; ring)
 
 theorem ed2 (nCls : Nat) (t : ℝ) :
     EDiff (d2p nCls t) (mnv2PreB2 2 (sealW nCls) (sealX t)) := by
   rw [pc2]
-  refine EDiff_bn 24 56 56 1 (kv 24 (1 / 64)) (kv 24 0) (fun _ => 1 * d2d nCls t 0)
-    (d2p nCls t) (Z2p nCls t) ?_ ?_
-  · exact EDiff_conv (h := 56) (w := 56) (0 : Fin 96) rfl (by norm_num) (by norm_num) 1
-      (kv 24 0) (d2d nCls t) _ (A2d nCls t) (ed2d nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d2p, rf, kv_apply]
-    ring
+  exact EDiff_convBn (h := 56) (w := 56) (0 : Fin 96) rfl (by norm_num) (by norm_num) (1 / 64) 0
+    (Z2p nCls t) (ed2d nCls t) rfl (fun ci => by simp only [d2p, rf]; ring)
 
 theorem ed3 (nCls : Nat) (t : ℝ) :
     EDiff (d2p nCls t) (mnv2PreB3 2 (sealW nCls) (sealX t)) := by
   rw [pc3]
   exact ed2 nCls t
 
-theorem ed4e (nCls : Nat) (t : ℝ) : EDiff (d4e nCls t) (A4e nCls t) := by
-  refine EDiff_bn 144 (2 * 28) (2 * 28) 1 (kv 144 (1 / 64)) (kv 144 3) (fun _ => 1 * d2p nCls t 0)
-    (d4e nCls t) (Z4e nCls t) ?_ ?_
-  · exact EDiff_conv (h := (2 * 28)) (w := (2 * 28)) (0 : Fin 24) rfl (by norm_num) (by norm_num) 1
-      (kv 144 0) (d2p nCls t) _ (mnv2PreB3 2 (sealW nCls) (sealX t)) (ed3 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d4e, rf, kv_apply]
-    ring
+theorem ed4e (nCls : Nat) (t : ℝ) : EDiff (d4e nCls t) (A4e nCls t) :=
+  EDiff_convBn (h := (2 * 28)) (w := (2 * 28)) (0 : Fin 24) rfl (by norm_num) (by norm_num)
+    (1 / 64) 3 (Z4e nCls t) (ed3 nCls t) rfl (fun ci => by simp only [d4e, rf]; ring)
 
-theorem ed4d (nCls : Nat) (t : ℝ) : EDiff (d4d nCls t) (A4d nCls t) := by
-  refine EDiff_bn 144 28 28 1 (kv 144 (1 / 64)) (kv 144 3) (fun ch => 1 * d4e nCls t ch)
-    (d4d nCls t) (Z4d nCls t) ?_ ?_
-  · exact EDiff_dwS2Xla (by norm_num) (by norm_num) 1 (kv 144 0) (d4e nCls t) _
-      (A4e nCls t) (ed4e nCls t) (fun ch => rfl)
-  · intro ci
-    simp only [d4d, rf, kv_apply]
-    ring
+theorem ed4d (nCls : Nat) (t : ℝ) : EDiff (d4d nCls t) (A4d nCls t) :=
+  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z4d nCls t) (ed4e nCls t) rfl
+    (fun ci => by simp only [d4d, rf]; ring)
 
 theorem ed4 (nCls : Nat) (t : ℝ) :
     EDiff (d4p nCls t) (mnv2PreB4 2 (sealW nCls) (sealX t)) := by
   rw [pc4]
-  refine EDiff_bn 32 28 28 1 (kv 32 (1 / 64)) (kv 32 0) (fun _ => 1 * d4d nCls t 0)
-    (d4p nCls t) (Z4p nCls t) ?_ ?_
-  · exact EDiff_conv (h := 28) (w := 28) (0 : Fin 144) rfl (by norm_num) (by norm_num) 1
-      (kv 32 0) (d4d nCls t) _ (A4d nCls t) (ed4d nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d4p, rf, kv_apply]
-    ring
+  exact EDiff_convBn (h := 28) (w := 28) (0 : Fin 144) rfl (by norm_num) (by norm_num) (1 / 64) 0
+    (Z4p nCls t) (ed4d nCls t) rfl (fun ci => by simp only [d4p, rf]; ring)
 
 theorem ed5 (nCls : Nat) (t : ℝ) :
     EDiff (d4p nCls t) (mnv2PreB5 2 (sealW nCls) (sealX t)) := by
@@ -894,34 +865,19 @@ theorem ed6 (nCls : Nat) (t : ℝ) :
   rw [pc6]
   exact ed5 nCls t
 
-theorem ed7e (nCls : Nat) (t : ℝ) : EDiff (d7e nCls t) (A7e nCls t) := by
-  refine EDiff_bn 192 (2 * 14) (2 * 14) 1 (kv 192 (1 / 64)) (kv 192 3) (fun _ => 1 * d4p nCls t 0)
-    (d7e nCls t) (Z7e nCls t) ?_ ?_
-  · exact EDiff_conv (h := (2 * 14)) (w := (2 * 14)) (0 : Fin 32) rfl (by norm_num) (by norm_num) 1
-      (kv 192 0) (d4p nCls t) _ (mnv2PreB6 2 (sealW nCls) (sealX t)) (ed6 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d7e, rf, kv_apply]
-    ring
+theorem ed7e (nCls : Nat) (t : ℝ) : EDiff (d7e nCls t) (A7e nCls t) :=
+  EDiff_convBn (h := (2 * 14)) (w := (2 * 14)) (0 : Fin 32) rfl (by norm_num) (by norm_num)
+    (1 / 64) 3 (Z7e nCls t) (ed6 nCls t) rfl (fun ci => by simp only [d7e, rf]; ring)
 
-theorem ed7d (nCls : Nat) (t : ℝ) : EDiff (d7d nCls t) (A7d nCls t) := by
-  refine EDiff_bn 192 14 14 1 (kv 192 (1 / 64)) (kv 192 3) (fun ch => 1 * d7e nCls t ch)
-    (d7d nCls t) (Z7d nCls t) ?_ ?_
-  · exact EDiff_dwS2Xla (by norm_num) (by norm_num) 1 (kv 192 0) (d7e nCls t) _
-      (A7e nCls t) (ed7e nCls t) (fun ch => rfl)
-  · intro ci
-    simp only [d7d, rf, kv_apply]
-    ring
+theorem ed7d (nCls : Nat) (t : ℝ) : EDiff (d7d nCls t) (A7d nCls t) :=
+  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z7d nCls t) (ed7e nCls t) rfl
+    (fun ci => by simp only [d7d, rf]; ring)
 
 theorem ed7 (nCls : Nat) (t : ℝ) :
     EDiff (d7p nCls t) (mnv2PreB7 2 (sealW nCls) (sealX t)) := by
   rw [pc7]
-  refine EDiff_bn 64 14 14 1 (kv 64 (1 / 64)) (kv 64 0) (fun _ => 1 * d7d nCls t 0)
-    (d7p nCls t) (Z7p nCls t) ?_ ?_
-  · exact EDiff_conv (h := 14) (w := 14) (0 : Fin 192) rfl (by norm_num) (by norm_num) 1
-      (kv 64 0) (d7d nCls t) _ (A7d nCls t) (ed7d nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d7p, rf, kv_apply]
-    ring
+  exact EDiff_convBn (h := 14) (w := 14) (0 : Fin 192) rfl (by norm_num) (by norm_num) (1 / 64) 0
+    (Z7p nCls t) (ed7d nCls t) rfl (fun ci => by simp only [d7p, rf]; ring)
 
 theorem ed8 (nCls : Nat) (t : ℝ) :
     EDiff (d7p nCls t) (mnv2PreB8 2 (sealW nCls) (sealX t)) := by
@@ -938,34 +894,19 @@ theorem ed10 (nCls : Nat) (t : ℝ) :
   rw [pc10]
   exact ed9 nCls t
 
-theorem ed11e (nCls : Nat) (t : ℝ) : EDiff (d11e nCls t) (A11e nCls t) := by
-  refine EDiff_bn 384 14 14 1 (kv 384 (1 / 64)) (kv 384 3) (fun _ => 1 * d7p nCls t 0)
-    (d11e nCls t) (Z11e nCls t) ?_ ?_
-  · exact EDiff_conv (h := 14) (w := 14) (0 : Fin 64) rfl (by norm_num) (by norm_num) 1
-      (kv 384 0) (d7p nCls t) _ (mnv2PreB10 2 (sealW nCls) (sealX t)) (ed10 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d11e, rf, kv_apply]
-    ring
+theorem ed11e (nCls : Nat) (t : ℝ) : EDiff (d11e nCls t) (A11e nCls t) :=
+  EDiff_convBn (h := 14) (w := 14) (0 : Fin 64) rfl (by norm_num) (by norm_num) (1 / 64) 3
+    (Z11e nCls t) (ed10 nCls t) rfl (fun ci => by simp only [d11e, rf]; ring)
 
-theorem ed11d (nCls : Nat) (t : ℝ) : EDiff (d11d nCls t) (A11d nCls t) := by
-  refine EDiff_bn 384 14 14 1 (kv 384 (1 / 64)) (kv 384 3) (fun ch => 1 * d11e nCls t ch)
-    (d11d nCls t) (Z11d nCls t) ?_ ?_
-  · exact EDiff_dw (by norm_num) (by norm_num) 1 (kv 384 0) (d11e nCls t) _
-      (A11e nCls t) (ed11e nCls t) (fun ch => rfl)
-  · intro ci
-    simp only [d11d, rf, kv_apply]
-    ring
+theorem ed11d (nCls : Nat) (t : ℝ) : EDiff (d11d nCls t) (A11d nCls t) :=
+  EDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z11d nCls t) (ed11e nCls t) rfl
+    (fun ci => by simp only [d11d, rf]; ring)
 
 theorem ed11 (nCls : Nat) (t : ℝ) :
     EDiff (d11p nCls t) (mnv2PreB11 2 (sealW nCls) (sealX t)) := by
   rw [pc11]
-  refine EDiff_bn 96 14 14 1 (kv 96 (1 / 64)) (kv 96 0) (fun _ => 1 * d11d nCls t 0)
-    (d11p nCls t) (Z11p nCls t) ?_ ?_
-  · exact EDiff_conv (h := 14) (w := 14) (0 : Fin 384) rfl (by norm_num) (by norm_num) 1
-      (kv 96 0) (d11d nCls t) _ (A11d nCls t) (ed11d nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d11p, rf, kv_apply]
-    ring
+  exact EDiff_convBn (h := 14) (w := 14) (0 : Fin 384) rfl (by norm_num) (by norm_num) (1 / 64) 0
+    (Z11p nCls t) (ed11d nCls t) rfl (fun ci => by simp only [d11p, rf]; ring)
 
 theorem ed12 (nCls : Nat) (t : ℝ) :
     EDiff (d11p nCls t) (mnv2PreB12 2 (sealW nCls) (sealX t)) := by
@@ -977,34 +918,19 @@ theorem ed13 (nCls : Nat) (t : ℝ) :
   rw [pc13]
   exact ed12 nCls t
 
-theorem ed14e (nCls : Nat) (t : ℝ) : EDiff (d14e nCls t) (A14e nCls t) := by
-  refine EDiff_bn 576 (2 * 7) (2 * 7) 1 (kv 576 (1 / 64)) (kv 576 3) (fun _ => 1 * d11p nCls t 0)
-    (d14e nCls t) (Z14e nCls t) ?_ ?_
-  · exact EDiff_conv (h := (2 * 7)) (w := (2 * 7)) (0 : Fin 96) rfl (by norm_num) (by norm_num) 1
-      (kv 576 0) (d11p nCls t) _ (mnv2PreB13 2 (sealW nCls) (sealX t)) (ed13 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d14e, rf, kv_apply]
-    ring
+theorem ed14e (nCls : Nat) (t : ℝ) : EDiff (d14e nCls t) (A14e nCls t) :=
+  EDiff_convBn (h := (2 * 7)) (w := (2 * 7)) (0 : Fin 96) rfl (by norm_num) (by norm_num)
+    (1 / 64) 3 (Z14e nCls t) (ed13 nCls t) rfl (fun ci => by simp only [d14e, rf]; ring)
 
-theorem ed14d (nCls : Nat) (t : ℝ) : EDiff (d14d nCls t) (A14d nCls t) := by
-  refine EDiff_bn 576 7 7 1 (kv 576 (1 / 64)) (kv 576 3) (fun ch => 1 * d14e nCls t ch)
-    (d14d nCls t) (Z14d nCls t) ?_ ?_
-  · exact EDiff_dwS2Xla (by norm_num) (by norm_num) 1 (kv 576 0) (d14e nCls t) _
-      (A14e nCls t) (ed14e nCls t) (fun ch => rfl)
-  · intro ci
-    simp only [d14d, rf, kv_apply]
-    ring
+theorem ed14d (nCls : Nat) (t : ℝ) : EDiff (d14d nCls t) (A14d nCls t) :=
+  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z14d nCls t) (ed14e nCls t) rfl
+    (fun ci => by simp only [d14d, rf]; ring)
 
 theorem ed14 (nCls : Nat) (t : ℝ) :
     EDiff (d14p nCls t) (mnv2PreB14 2 (sealW nCls) (sealX t)) := by
   rw [pc14]
-  refine EDiff_bn 160 7 7 1 (kv 160 (1 / 64)) (kv 160 0) (fun _ => 1 * d14d nCls t 0)
-    (d14p nCls t) (Z14p nCls t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 576) rfl (by norm_num) (by norm_num) 1
-      (kv 160 0) (d14d nCls t) _ (A14d nCls t) (ed14d nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d14p, rf, kv_apply]
-    ring
+  exact EDiff_convBn (h := 7) (w := 7) (0 : Fin 576) rfl (by norm_num) (by norm_num) (1 / 64) 0
+    (Z14p nCls t) (ed14d nCls t) rfl (fun ci => by simp only [d14p, rf]; ring)
 
 theorem ed15 (nCls : Nat) (t : ℝ) :
     EDiff (d14p nCls t) (mnv2PreB15 2 (sealW nCls) (sealX t)) := by
@@ -1016,44 +942,23 @@ theorem ed16 (nCls : Nat) (t : ℝ) :
   rw [pc16]
   exact ed15 nCls t
 
-theorem ed17e (nCls : Nat) (t : ℝ) : EDiff (d17e nCls t) (A17e nCls t) := by
-  refine EDiff_bn 960 7 7 1 (kv 960 (1 / 64)) (kv 960 3) (fun _ => 1 * d14p nCls t 0)
-    (d17e nCls t) (Z17e nCls t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 160) rfl (by norm_num) (by norm_num) 1
-      (kv 960 0) (d14p nCls t) _ (mnv2PreB16 2 (sealW nCls) (sealX t)) (ed16 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d17e, rf, kv_apply]
-    ring
+theorem ed17e (nCls : Nat) (t : ℝ) : EDiff (d17e nCls t) (A17e nCls t) :=
+  EDiff_convBn (h := 7) (w := 7) (0 : Fin 160) rfl (by norm_num) (by norm_num) (1 / 64) 3
+    (Z17e nCls t) (ed16 nCls t) rfl (fun ci => by simp only [d17e, rf]; ring)
 
-theorem ed17d (nCls : Nat) (t : ℝ) : EDiff (d17d nCls t) (A17d nCls t) := by
-  refine EDiff_bn 960 7 7 1 (kv 960 (1 / 64)) (kv 960 3) (fun ch => 1 * d17e nCls t ch)
-    (d17d nCls t) (Z17d nCls t) ?_ ?_
-  · exact EDiff_dw (by norm_num) (by norm_num) 1 (kv 960 0) (d17e nCls t) _
-      (A17e nCls t) (ed17e nCls t) (fun ch => rfl)
-  · intro ci
-    simp only [d17d, rf, kv_apply]
-    ring
+theorem ed17d (nCls : Nat) (t : ℝ) : EDiff (d17d nCls t) (A17d nCls t) :=
+  EDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z17d nCls t) (ed17e nCls t) rfl
+    (fun ci => by simp only [d17d, rf]; ring)
 
 theorem ed17 (nCls : Nat) (t : ℝ) :
     EDiff (d17p nCls t) (mnv2PreB17 2 (sealW nCls) (sealX t)) := by
   rw [pc17]
-  refine EDiff_bn 320 7 7 1 (kv 320 (1 / 64)) (kv 320 0) (fun _ => 1 * d17d nCls t 0)
-    (d17p nCls t) (Z17p nCls t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1
-      (kv 320 0) (d17d nCls t) _ (A17d nCls t) (ed17d nCls t) (fun o => rfl)
-  · intro ci
-    simp only [d17p, rf, kv_apply]
-    ring
+  exact EDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) (1 / 64) 0
+    (Z17p nCls t) (ed17d nCls t) rfl (fun ci => by simp only [d17p, rf]; ring)
 
-theorem edH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) := by
-  refine EDiff_bn 1280 7 7 1 (kv 1280 (1 / 64)) (kv 1280 3) (fun _ => 1 * d17p nCls t 0)
-    (dH nCls t) (Zh nCls t) ?_ ?_
-  · exact EDiff_conv (h := 7) (w := 7) (0 : Fin 320) rfl (by norm_num) (by norm_num) 1
-      (kv 1280 0) (d17p nCls t) _ (mnv2PreB17 2 (sealW nCls) (sealX t)) (ed17 nCls t)
-      (fun o => rfl)
-  · intro ci
-    simp only [dH, rf, kv_apply]
-    ring
+theorem edH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) :=
+  EDiff_convBn (h := 7) (w := 7) (0 : Fin 320) rfl (by norm_num) (by norm_num) (1 / 64) 3
+    (Zh nCls t) (ed17 nCls t) rfl (fun ci => by simp only [dH, rf]; ring)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 14. Continuity of the trunk and of every carrier activation
@@ -1330,80 +1235,23 @@ theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
 -- § 17. The seal
 -- ════════════════════════════════════════════════════════════════
 theorem sealDiffAt (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (mobilenetv2ForwardB_full 2 (sealW nCls)) (sealX t) := by
-  rw [show mobilenetv2ForwardB_full 2 (sealW nCls)
-      = mnv2HeadB 2 7 7 (sealW nCls).hW (sealW nCls).hb (sealW nCls).hε (sealW nCls).hγ
-          (sealW nCls).hβ (sealW nCls).fcW (sealW nCls).fcb ∘ mnv2PreB17 2 (sealW nCls)
-      from funext (mobilenetv2ForwardB_full_eq_chain 2 (sealW nCls))]
-  have f0 : DifferentiableAt ℝ (mnv2PreB0 2 (sealW nCls)) (sealX t) :=
-    mnv2StemB_differentiableAt 2 112 112 _ _ _ one_pos _ _ (sealX t) (scStem nCls t)
-  have f1 : DifferentiableAt ℝ (mnv2PreB1 2 (sealW nCls)) (sealX t) :=
-    (mnv2NoExpB_differentiableAt 2 112 112 (sealW nCls).b1 (sealNoExpPos 32 16) _ (sc1 nCls t)).comp (sealX t) f0
-  have f2 : DifferentiableAt ℝ (mnv2PreB2 2 (sealW nCls)) (sealX t) :=
-    (mnv2StridedB_differentiableAt 2 56 56 (sealW nCls).b2 (sealIVPos 16 96 24) _ (sc2 nCls t)).comp (sealX t) f1
-  have f3 : DifferentiableAt ℝ (mnv2PreB3 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 56 56 (sealW nCls).b3 (sealResPos 24 144) _ (sc3 nCls t)).comp (sealX t) f2
-  have f4 : DifferentiableAt ℝ (mnv2PreB4 2 (sealW nCls)) (sealX t) :=
-    (mnv2StridedB_differentiableAt 2 28 28 (sealW nCls).b4 (sealIVPos 24 144 32) _ (sc4 nCls t)).comp (sealX t) f3
-  have f5 : DifferentiableAt ℝ (mnv2PreB5 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 28 28 (sealW nCls).b5 (sealResPos 32 192) _ (sc5 nCls t)).comp (sealX t) f4
-  have f6 : DifferentiableAt ℝ (mnv2PreB6 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 28 28 (sealW nCls).b6 (sealResPos 32 192) _ (sc6 nCls t)).comp (sealX t) f5
-  have f7 : DifferentiableAt ℝ (mnv2PreB7 2 (sealW nCls)) (sealX t) :=
-    (mnv2StridedB_differentiableAt 2 14 14 (sealW nCls).b7 (sealIVPos 32 192 64) _ (sc7 nCls t)).comp (sealX t) f6
-  have f8 : DifferentiableAt ℝ (mnv2PreB8 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 14 14 (sealW nCls).b8 (sealResPos 64 384) _ (sc8 nCls t)).comp (sealX t) f7
-  have f9 : DifferentiableAt ℝ (mnv2PreB9 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 14 14 (sealW nCls).b9 (sealResPos 64 384) _ (sc9 nCls t)).comp (sealX t) f8
-  have f10 : DifferentiableAt ℝ (mnv2PreB10 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 14 14 (sealW nCls).b10 (sealResPos 64 384) _ (sc10 nCls t)).comp (sealX t) f9
-  have f11 : DifferentiableAt ℝ (mnv2PreB11 2 (sealW nCls)) (sealX t) :=
-    (mnv2ExpOnlyB_differentiableAt 2 14 14 (sealW nCls).b11 (sealIVPos 64 384 96) _ (sc11 nCls t)).comp (sealX t) f10
-  have f12 : DifferentiableAt ℝ (mnv2PreB12 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 14 14 (sealW nCls).b12 (sealResPos 96 576) _ (sc12 nCls t)).comp (sealX t) f11
-  have f13 : DifferentiableAt ℝ (mnv2PreB13 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 14 14 (sealW nCls).b13 (sealResPos 96 576) _ (sc13 nCls t)).comp (sealX t) f12
-  have f14 : DifferentiableAt ℝ (mnv2PreB14 2 (sealW nCls)) (sealX t) :=
-    (mnv2StridedB_differentiableAt 2 7 7 (sealW nCls).b14 (sealIVPos 96 576 160) _ (sc14 nCls t)).comp (sealX t) f13
-  have f15 : DifferentiableAt ℝ (mnv2PreB15 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 7 7 (sealW nCls).b15 (sealResPos 160 960) _ (sc15 nCls t)).comp (sealX t) f14
-  have f16 : DifferentiableAt ℝ (mnv2PreB16 2 (sealW nCls)) (sealX t) :=
-    (mnv2ResidB_differentiableAt 2 7 7 (sealW nCls).b16 (sealResPos 160 960) _ (sc16 nCls t)).comp (sealX t) f15
-  have f17 : DifferentiableAt ℝ (mnv2PreB17 2 (sealW nCls)) (sealX t) :=
-    (mnv2ExpOnlyB_differentiableAt 2 7 7 (sealW nCls).b17 (sealIVPos 160 960 320) _ (sc17 nCls t)).comp (sealX t) f16
-  exact (mnv2HeadB_differentiableAt 2 7 7 _ _ _ one_pos _ _ _ _ _ (scHead nCls t)).comp
-    (sealX t) f17
+    DifferentiableAt ℝ (mobilenetv2ForwardB_full 2 (sealW nCls)) (sealX t) :=
+  mobilenetv2ForwardB_full_differentiableAt 2 (sealW nCls) (sealPos nCls) (sealX t)
+    (sealSmooth nCls t)
 
 /-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV2 at the
     structural weights is NOT constant in its input. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
     mobilenetv2ForwardB_full 2 (sealW nCls) (sealX 1)
-      ≠ mobilenetv2ForwardB_full 2 (sealW nCls) (sealX 0) := by
-  intro heq
-  have h1 := gd_ray nCls hn 1
-  have h0 := gd_ray nCls hn 0
-  rw [heq] at h1
-  have hz : (1 : ℝ) * Rr nCls 1 = 0 * Rr nCls 0 := by rw [← h1, ← h0]
-  rw [one_mul, zero_mul] at hz
-  linarith [Rr_pos nCls 1]
+      ≠ mobilenetv2ForwardB_full 2 (sealW nCls) (sealX 0) :=
+  ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos nCls 1).ne')
 
 /-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
-    fderiv ℝ (mobilenetv2ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 := by
-  refine fderiv_ne_zero_of_ray sealV (sealDiffAt nCls 0)
-    (fun y => y (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - y (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))) (by fun_prop)
-    (Rr_pos nCls 0).ne' ?_
-  have heq : (fun t : ℝ => mobilenetv2ForwardB_full 2 (sealW nCls) (sealX 0 + t • sealV)
-        (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - mobilenetv2ForwardB_full 2 (sealW nCls) (sealX 0 + t • sealV)
-        (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls))))
-      = fun t : ℝ => t * Rr nCls t := by
-    funext t
-    rw [sealX_zero_add]
-    exact gd_ray nCls hn t
-  rw [heq]
-  exact hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt
+    fderiv ℝ (mobilenetv2ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 :=
+  fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
+    (sealDiffAt nCls 0) (Rr_pos nCls 0).ne'
+    (hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt)
 
 /-- ⭐⭐ **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
     seventeen-bottleneck, 224×224 MobileNetV2 — `mobilenetv2ForwardB_full`, the forward every

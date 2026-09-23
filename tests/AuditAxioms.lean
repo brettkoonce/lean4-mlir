@@ -1931,6 +1931,7 @@ open Proofs
 #print axioms Proofs.mobilenetv2ForwardB_full_has_vjp_at
 #print axioms Proofs.mobilenetv2ForwardB_full_eq_chain
 #print axioms Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct
+#print axioms Proofs.mobilenetv2ForwardB_full_differentiableAt
 
 -- 4.2c: MOBILENETV2'S T3 §1a TIE AT BATCH BN, UN-FUSED (MobileNetV2StepTieB.lean, 2026-09-06)
 #print axioms Proofs.MobileNetV2TieB.mnv2NoExpBackGraph_faithful
@@ -2118,6 +2119,7 @@ open Proofs
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2HeadSyncCotBlk_shard
 #print axioms Proofs.MobileNetV2SyncTieB.den_allReduceMeanF_depthwiseStridedXlaWeightGradB_shard
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB
+#print axioms Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB_smoothedCE
 
 -- 4d PIECE 3 AT EFFICIENTNET-B0: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
 -- (EfficientNetSyncB.lean + EfficientNetSyncStepTieG.lean, planning/global_bn_verified.md §3.3, 2026-09-21)

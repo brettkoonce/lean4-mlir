@@ -755,14 +755,8 @@ theorem ed4 (nCls : Nat) (t : ℝ) : EDiff (dP2 nCls t) (r34Pre4 2 (sealW nCls) 
   rw [pc4]
   refine EDiff_shift _ _ 1 ?_
   rw [sealProj_apply]
-  refine EDiff_bn 128 28 28 1 (kv 128 1) (kv 128 160) (fun _ => 1 * dS t 0) (dP2 nCls t)
-    (Zp2 nCls t) ?_ ?_
-  · exact EDiff_convS2 (h := 28) (w := 28) (0 : Fin 64) rfl (by norm_num) (by norm_num) 1
-      (kv 128 0) (dS t)
-      _ (r34Pre3 2 (sealW nCls) (sealX t)) (ed3 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [dP2, kv_apply]
-    ring
+  exact EDiff_convS2Bn (h := 28) (w := 28) (0 : Fin 64) rfl (by norm_num) (by norm_num) 1 160
+    (Zp2 nCls t) (ed3 nCls t) rfl (fun ci => by simp only [dP2]; ring)
 
 theorem ed5 (nCls : Nat) (t : ℝ) : EDiff (dP2 nCls t) (r34Pre5 2 (sealW nCls) (sealX t)) := by
   rw [pc5]
@@ -780,14 +774,8 @@ theorem ed8 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre8 2 (sealW nCls) 
   rw [pc8]
   refine EDiff_shift _ _ 1 ?_
   rw [sealProj_apply]
-  refine EDiff_bn 256 14 14 1 (kv 256 1) (kv 256 160) (fun _ => 1 * dP2 nCls t 0) (dP3 nCls t)
-    (Zp3 nCls t) ?_ ?_
-  · exact EDiff_convS2 (h := 14) (w := 14) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1
-      (kv 256 0) (dP2 nCls t)
-      _ (r34Pre7 2 (sealW nCls) (sealX t)) (ed7 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [dP3, kv_apply]
-    ring
+  exact EDiff_convS2Bn (h := 14) (w := 14) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1 160
+    (Zp3 nCls t) (ed7 nCls t) rfl (fun ci => by simp only [dP3]; ring)
 
 theorem ed9 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre9 2 (sealW nCls) (sealX t)) := by
   rw [pc9]
@@ -813,14 +801,8 @@ theorem ed14 (nCls : Nat) (t : ℝ) : EDiff (dP4 nCls t) (r34Pre14 2 (sealW nCls
   rw [pc14]
   refine EDiff_shift _ _ 1 ?_
   rw [sealProj_apply]
-  refine EDiff_bn 512 7 7 1 (kv 512 1) (kv 512 160) (fun _ => 1 * dP3 nCls t 0) (dP4 nCls t)
-    (Zp4 nCls t) ?_ ?_
-  · exact EDiff_convS2 (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1
-      (kv 512 0) (dP3 nCls t)
-      _ (r34Pre13 2 (sealW nCls) (sealX t)) (ed13 nCls t) (fun o => rfl)
-  · intro ci
-    simp only [dP4, kv_apply]
-    ring
+  exact EDiff_convS2Bn (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1 160
+    (Zp4 nCls t) (ed13 nCls t) rfl (fun ci => by simp only [dP4]; ring)
 
 theorem ed15 (nCls : Nat) (t : ℝ) : EDiff (dP4 nCls t) (r34Pre15 2 (sealW nCls) (sealX t)) := by
   rw [pc15]
@@ -1015,34 +997,17 @@ theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
     between the two examples is `R 1 > 0` at `t = 1` and `0` at the base. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
     resnet34ForwardB_full 2 (sealW nCls) (sealX 1)
-      ≠ resnet34ForwardB_full 2 (sealW nCls) (sealX 0) := by
-  intro heq
-  have h1 := gd_ray nCls hn 1
-  have h0 := gd_ray nCls hn 0
-  rw [heq] at h1
-  have hz : (1 : ℝ) * Rr nCls 1 = 0 * Rr nCls 0 := by rw [← h1, ← h0]
-  rw [one_mul, zero_mul] at hz
-  linarith [Rr_pos nCls 1]
+      ≠ resnet34ForwardB_full 2 (sealW nCls) (sealX 0) :=
+  ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos nCls 1).ne')
 
 /-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** `fderiv_ne_zero_of_ray` at
     the readout "example 0's class 0 minus example 1's class 0": along the ray it is `t · R t` with
     `R` continuous and `R 0 > 0`, so its derivative at `0` is `R 0 ≠ 0`. -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
-    fderiv ℝ (resnet34ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 := by
-  refine fderiv_ne_zero_of_ray sealV (sealDiffAt nCls 0)
-    (fun y => y (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - y (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))) (by fun_prop)
-    (Rr_pos nCls 0).ne' ?_
-  have heq : (fun t : ℝ => resnet34ForwardB_full 2 (sealW nCls) (sealX 0 + t • sealV)
-        (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - resnet34ForwardB_full 2 (sealW nCls) (sealX 0 + t • sealV)
-        (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls))))
-      = fun t : ℝ => t * Rr nCls t := by
-    funext t
-    rw [sealX_zero_add]
-    exact gd_ray nCls hn t
-  rw [heq]
-  exact hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt
+    fderiv ℝ (resnet34ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 :=
+  fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
+    (sealDiffAt nCls 0) (Rr_pos nCls 0).ne'
+    (hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt)
 
 /-- ⭐⭐ **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
     `[3,4,6,3]`, 224×224** ResNet-34 — `resnet34ForwardB_full`, the forward the ImageNet artifacts

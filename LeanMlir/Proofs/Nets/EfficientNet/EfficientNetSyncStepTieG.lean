@@ -106,116 +106,112 @@ structure EnTail (mid oc rd : Nat) where
 /-! The tail's forward activations, from the depthwise conv output `dc` — `enetExpTiedG`'s `dn`,
 `dr`, `s`, `e1`, `z`, `e2`, `se`, `pc`, definitionally. -/
 
-noncomputable def tDn (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * (mid * h * w)) :=
+section
+variable (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
+
+noncomputable def tDn (dc : Vec (N * (mid * h * w))) : Vec (N * (mid * h * w)) :=
   bnBatchLA N mid h w t.dε t.dγ t.dβ dc
 
-noncomputable def tDr (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def tDr (dc : Vec (N * (mid * h * w))) : Vec (N * (mid * h * w)) :=
   swish (N * (mid * h * w)) (tDn N h w t dc)
 
-noncomputable def tS (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * mid) :=
+noncomputable def tS (dc : Vec (N * (mid * h * w))) : Vec (N * mid) :=
   batchMap N (globalAvgPoolFlat mid h w) (tDr N h w t dc)
 
-noncomputable def tE1 (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * rd) :=
+noncomputable def tE1 (dc : Vec (N * (mid * h * w))) : Vec (N * rd) :=
   batchMap N (dense t.z1 t.zb1) (tS N h w t dc)
 
-noncomputable def tZ (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * rd) :=
+noncomputable def tZ (dc : Vec (N * (mid * h * w))) : Vec (N * rd) :=
   swish (N * rd) (tE1 N h w t dc)
 
-noncomputable def tE2 (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * mid) :=
+noncomputable def tE2 (dc : Vec (N * (mid * h * w))) : Vec (N * mid) :=
   batchMap N (dense t.z2 t.zb2) (tZ N h w t dc)
 
-noncomputable def tSe (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def tSe (dc : Vec (N * (mid * h * w))) : Vec (N * (mid * h * w)) :=
   seB N (h := h) (w := w) t.z1 t.zb1 t.z2 t.zb2 (tDr N h w t dc)
 
-noncomputable def tPc (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
-    (dc : Vec (N * (mid * h * w))) : Vec (N * (oc * h * w)) :=
+noncomputable def tPc (dc : Vec (N * (mid * h * w))) : Vec (N * (oc * h * w)) :=
   batchMap N (flatConv t.pW t.pb) (tSe N h w t dc)
 
 /-! The tail's backward chain from the block-output cotangent `dy` — `enetExpTiedG`'s `cotPbn` …
 `cotDc`, definitionally. -/
 
-noncomputable def tCotPbn (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
+noncomputable def tCotPbn (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
   bnBackB N oc h w t.pε hp t.pγ t.pβ (tPc N h w t dc) dy
 
-noncomputable def tCotSeOut (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def tCotSeOut (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
   cInB N (h := h) (w := w) t.pW t.pb (tCotPbn N h w t hp dc dy)
 
-noncomputable def tDgate (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * mid) :=
+noncomputable def tDgate (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) : Vec (N * mid) :=
   gateCotB N mid h w (tDr N h w t dc) (tCotSeOut N h w t hp dc dy)
 
-noncomputable def tCotE2 (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * mid) :=
+noncomputable def tCotE2 (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) : Vec (N * mid) :=
   sigBackB (N * mid) (tE2 N h w t dc) (tDgate N h w t hp dc dy)
 
-noncomputable def tCotZ (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * rd) :=
+noncomputable def tCotZ (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) :
+    Vec (N * rd) :=
   rowDenseBackFlat N rd mid t.z2 (tCotE2 N h w t hp dc dy)
 
-noncomputable def tCotE1 (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * rd) :=
+noncomputable def tCotE1 (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) : Vec (N * rd) :=
   swBackB (N * rd) (tE1 N h w t dc) (tCotZ N h w t hp dc dy)
 
-noncomputable def tCotDxSe (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def tCotDxSe (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
   seInB N (h := h) (w := w) t.z1 t.zb1 t.z2 t.zb2 (tDr N h w t dc) (tCotSeOut N h w t hp dc dy)
 
-noncomputable def tCotDn (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def tCotDn (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
   swBackB (N * (mid * h * w)) (tDn N h w t dc) (tCotDxSe N h w t hp dc dy)
 
-noncomputable def tCotDc (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hd : 0 < t.dε)
-    (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) :
+noncomputable def tCotDc (hd : 0 < t.dε) (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+    (dy : Vec (N * (oc * h * w))) :
     Vec (N * (mid * h * w)) :=
   bnBackB N mid h w t.dε hd t.dγ t.dβ dc (tCotDn N h w t hp dc dy)
 
+end
+
 /-! The stride-1 expand front (b3, b5, …, and the widenings b9 / b16). -/
 
-noncomputable def xEc (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
+section
+variable (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+
+noncomputable def xEc (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
   batchMap N (flatConv p.eW p.eb) xin
 
-noncomputable def xEn (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def xEn (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
   bnBatchLA N mid h w p.eε p.eγ p.eβ (xEc N h w p xin)
 
-noncomputable def xEr (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def xEr (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
   swish (N * (mid * h * w)) (xEn N h w p xin)
 
-noncomputable def xDc (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def xDc (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :=
   batchMap N (depthwiseFlat p.dW p.db) (xEr N h w p xin)
 
-noncomputable def xCotEr (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
+noncomputable def xCotEr (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
+    (dy : Vec (N * (oc * h * w))) :
     Vec (N * (mid * h * w)) :=
   dInB N p.dW p.db (tCotDc N h w (tailOf p) hd hp (xDc N h w p xin) dy)
 
-noncomputable def xCotEn (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
+noncomputable def xCotEn (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
+    (dy : Vec (N * (oc * h * w))) :
     Vec (N * (mid * h * w)) :=
   swBackB (N * (mid * h * w)) (xEn N h w p xin) (xCotEr N h w p hd hp xin dy)
 
-noncomputable def xCotEc (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
-    (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
+noncomputable def xCotEc (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
   bnBackB N mid h w p.eε he p.eγ p.eβ (xEc N h w p xin) (xCotEn N h w p hd hp xin dy)
 
 /-- The widening block's input cotangent — the expand conv's input-VJP. -/
-noncomputable def xCotIn (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
-    (dy : Vec (N * (oc * h * w))) : Vec (N * (ic * h * w)) :=
+noncomputable def xCotIn (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) : Vec (N * (ic * h * w)) :=
   cInB N (h := h) (w := w) p.eW p.eb (xCotEc N h w p he hd hp xin dy)
+
+end
 
 /-- The residual block's input cotangent — the body's, plus the identity skip. -/
 noncomputable def rCotIn (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
@@ -225,42 +221,44 @@ noncomputable def rCotIn (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c r
 
 /-! The strided front (b2, b4, b6, b12): expand at the input grid `2h×2w`. -/
 
-noncomputable def sEc (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+section
+variable (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+
+noncomputable def sEc (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    Vec (N * (mid * (2 * h) * (2 * w))) :=
   batchMap N (flatConv p.eW p.eb) xin
 
-noncomputable def sEn (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+noncomputable def sEn (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    Vec (N * (mid * (2 * h) * (2 * w))) :=
   bnBatchLA N mid (2 * h) (2 * w) p.eε p.eγ p.eβ (sEc N h w p xin)
 
-noncomputable def sEr (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+noncomputable def sEr (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    Vec (N * (mid * (2 * h) * (2 * w))) :=
   swish (N * (mid * (2 * h) * (2 * w))) (sEn N h w p xin)
 
-noncomputable def sDc (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (mid * h * w)) :=
+noncomputable def sDc (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (mid * h * w)) :=
   batchMap N (depthwiseStride2Flat p.dW p.db) (sEr N h w p xin)
 
-noncomputable def sCotEr (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
+noncomputable def sCotEr (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
   dStridedInB N p.dW p.db (tCotDc N h w (tailOf p) hd hp (sDc N h w p xin) dy)
 
-noncomputable def sCotEn (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
+noncomputable def sCotEn (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
   swBackB (N * (mid * (2 * h) * (2 * w))) (sEn N h w p xin) (sCotEr N h w p hd hp xin dy)
 
-noncomputable def sCotEc (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+noncomputable def sCotEc (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) :
+    Vec (N * (mid * (2 * h) * (2 * w))) :=
   bnBackB N mid (2 * h) (2 * w) p.eε he p.eγ p.eβ (sEc N h w p xin) (sCotEn N h w p hd hp xin dy)
 
 /-- The strided block's input cotangent. -/
-noncomputable def sCotIn (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) : Vec (N * (ic * (2 * h) * (2 * w))) :=
+noncomputable def sCotIn (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) :
+    Vec (N * (ic * (2 * h) * (2 * w))) :=
   cInB N (h := 2 * h) (w := 2 * w) p.eW p.eb (sCotEc N h w p he hd hp xin dy)
+
+end
 
 /-! The MBConv1 front (b1): the depthwise runs on the block input. -/
 
@@ -276,56 +274,64 @@ noncomputable def nCotIn (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic o
 
 /-! The stem (`enetStemTiedG`'s chain) and the head (`enetHeadTiedG`'s). -/
 
-noncomputable def stStc (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
-    (bs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) :=
+section
+variable (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs) (bs : Vec oc)
+
+noncomputable def stStc (x : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (oc * h * w)) :=
   batchMap N (flatConvStride2Xla Ws bs) x
 
-noncomputable def stStn (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
-    (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
+noncomputable def stStn (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
     Vec (N * (oc * h * w)) :=
   bnBatchLA N oc h w εs γs βs (stStc N h w Ws bs x)
 
-noncomputable def stCotBnS (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
-    (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
+noncomputable def stCotBnS (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
   swBackB (N * (oc * h * w)) (stStn N h w Ws bs εs γs βs x) dy
 
-noncomputable def stCotStc (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
-    (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
+noncomputable def stCotStc (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) :
+    Vec (N * (oc * h * w)) :=
   bnBackB N oc h w εs hεs γs βs (stStc N h w Ws bs x) (stCotBnS N h w Ws bs εs γs βs x dy)
 
-noncomputable def hdHc (N h w : Nat) {c oc : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (xin : Vec (N * (c * h * w))) : Vec (N * (oc * h * w)) :=
+end
+
+section
+variable (N h w : Nat) {c oc : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
+
+noncomputable def hdHc (xin : Vec (N * (c * h * w))) : Vec (N * (oc * h * w)) :=
   batchMap N (flatConv Wh bh) xin
 
-noncomputable def hdHn (N h w : Nat) {c oc : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
-    (γh βh : Vec oc) (xin : Vec (N * (c * h * w))) : Vec (N * (oc * h * w)) :=
+noncomputable def hdHn (εh : ℝ) (γh βh : Vec oc) (xin : Vec (N * (c * h * w))) :
+    Vec (N * (oc * h * w)) :=
   bnBatchLA N oc h w εh γh βh (hdHc N h w Wh bh xin)
 
-noncomputable def hdGap (N h w : Nat) {c oc : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
-    (γh βh : Vec oc) (xin : Vec (N * (c * h * w))) : Vec (N * oc) :=
+noncomputable def hdGap (εh : ℝ) (γh βh : Vec oc) (xin : Vec (N * (c * h * w))) : Vec (N * oc) :=
   batchMap N (globalAvgPoolFlat oc h w) (swish (N * (oc * h * w)) (hdHn N h w Wh bh εh γh βh xin))
+
+end
 
 noncomputable def hdCotHr (N h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC) (g : Vec (N * nC)) :
     Vec (N * (oc * h * w)) :=
   gapInB N oc h w (rowDenseBackFlat N oc nC Wfc g)
 
-noncomputable def hdCotHsw (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
+section
+variable (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
+
+noncomputable def hdCotHsw (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w)))
+    (g : Vec (N * nC)) :
     Vec (N * (oc * h * w)) :=
   swBackB (N * (oc * h * w)) (hdHn N h w Wh bh εh γh βh xin) (hdCotHr N h w Wfc g)
 
-noncomputable def hdCotHbn (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w)))
-    (g : Vec (N * nC)) : Vec (N * (oc * h * w)) :=
+noncomputable def hdCotHbn (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) : Vec (N * (oc * h * w)) :=
   bnBackB N oc h w εh hεh γh βh (hdHc N h w Wh bh xin) (hdCotHsw N h w Wh bh εh γh βh Wfc xin g)
 
 /-- The head's input cotangent — the 1×1 conv's input-VJP. -/
-noncomputable def hdCotIn (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w)))
-    (g : Vec (N * nC)) : Vec (N * (c * h * w)) :=
+noncomputable def hdCotIn (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) : Vec (N * (c * h * w)) :=
   cInB N (h := h) (w := w) Wh bh (hdCotHbn N h w Wh bh εh hεh γh βh Wfc xin g)
+
+end
 
 /-! ### The stage backwards, written out
 
@@ -493,27 +499,23 @@ theorem hdCotIn_eq_vjp (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh
 -- ════════════════════════════════════════════════════════════════
 
 theorem bnBackB_smul (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
-    (x dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    bnBackB N oc h w ε hε γ β x (fun i => s * dy i) = fun i => s * bnBackB N oc h w ε hε γ β x dy i :=
-  HasVJP.backward_smul _ _ s dy
+    (x : Vec (N * (oc * h * w))) : IsHomog (bnBackB N oc h w ε hε γ β x) :=
+  HasVJP.backward_smul _ _
 
-theorem swBackB_smul (n : Nat) (x dy : Vec n) (s : ℝ) :
-    swBackB n x (fun i => s * dy i) = fun i => s * swBackB n x dy i :=
-  HasVJP.backward_smul _ _ s dy
+theorem swBackB_smul (n : Nat) (x : Vec n) : IsHomog (swBackB n x) :=
+  HasVJP.backward_smul _ _
 
-theorem sigBackB_smul (n : Nat) (x dy : Vec n) (s : ℝ) :
-    sigBackB n x (fun i => s * dy i) = fun i => s * sigBackB n x dy i :=
-  HasVJP.backward_smul _ _ s dy
+theorem sigBackB_smul (n : Nat) (x : Vec n) : IsHomog (sigBackB n x) :=
+  HasVJP.backward_smul _ _
 
 theorem seInB_smul (N : Nat) {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd) (W₂ : Mat rd c)
-    (b₂ : Vec c) (x dy : Vec (N * (c * h * w))) (s : ℝ) :
-    seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x (fun i => s * dy i)
-      = fun i => s * seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x dy i :=
-  HasVJP.backward_smul _ _ s dy
+    (b₂ : Vec c) (x : Vec (N * (c * h * w))) : IsHomog (seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x) :=
+  HasVJP.backward_smul _ _
 
 /-- The SE gate cotangent `Σ_{h,w} x ⊙ dy` is linear in `dy`. -/
-theorem gateCotB_smul (N c h w : Nat) (x dy : Vec (N * (c * h * w))) (s : ℝ) :
-    gateCotB N c h w x (fun i => s * dy i) = fun i => s * gateCotB N c h w x dy i := by
+theorem gateCotB_smul (N c h w : Nat) (x : Vec (N * (c * h * w))) :
+    IsHomog (gateCotB N c h w x) := by
+  intro s dy
   funext idx
   simp only [gateCotB, batchSlice, Finset.mul_sum]
   refine Finset.sum_congr rfl (fun _ _ => ?_)
@@ -576,119 +578,122 @@ theorem bnSyncInB_shard_bnBackB (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N 
 -- § 4. The single-device chain is linear in the block-output cotangent
 -- ════════════════════════════════════════════════════════════════
 
-theorem tCotPbn_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotPbn N h w t hp dc (fun i => s * dy i) = fun i => s * tCotPbn N h w t hp dc dy i :=
-  bnBackB_smul _ _ _ _ _ _ _ _ _ _ s
+section
+variable (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd)
 
-theorem tCotSeOut_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotSeOut N h w t hp dc (fun i => s * dy i) = fun i => s * tCotSeOut N h w t hp dc dy i := by
+section
+variable (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w)))
+
+theorem tCotPbn_smul :
+    IsHomog (tCotPbn N h w t hp dc) :=
+  bnBackB_smul _ _ _ _ _ _ _ _ _
+
+theorem tCotSeOut_smul :
+    IsHomog (tCotSeOut N h w t hp dc) := by
+  intro s dy
   unfold tCotSeOut; rw [tCotPbn_smul, cInB_smul]
 
-theorem tDgate_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tDgate N h w t hp dc (fun i => s * dy i) = fun i => s * tDgate N h w t hp dc dy i := by
+theorem tDgate_smul :
+    IsHomog (tDgate N h w t hp dc) := by
+  intro s dy
   unfold tDgate; rw [tCotSeOut_smul, gateCotB_smul]
 
-theorem tCotE2_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotE2 N h w t hp dc (fun i => s * dy i) = fun i => s * tCotE2 N h w t hp dc dy i := by
+theorem tCotE2_smul :
+    IsHomog (tCotE2 N h w t hp dc) := by
+  intro s dy
   unfold tCotE2; rw [tDgate_smul, sigBackB_smul]
 
-theorem tCotZ_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotZ N h w t hp dc (fun i => s * dy i) = fun i => s * tCotZ N h w t hp dc dy i := by
+theorem tCotZ_smul :
+    IsHomog (tCotZ N h w t hp dc) := by
+  intro s dy
   unfold tCotZ; rw [tCotE2_smul, rowDenseBackFlat_smul]
 
-theorem tCotE1_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotE1 N h w t hp dc (fun i => s * dy i) = fun i => s * tCotE1 N h w t hp dc dy i := by
+theorem tCotE1_smul :
+    IsHomog (tCotE1 N h w t hp dc) := by
+  intro s dy
   unfold tCotE1; rw [tCotZ_smul, swBackB_smul]
 
-theorem tCotDxSe_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotDxSe N h w t hp dc (fun i => s * dy i) = fun i => s * tCotDxSe N h w t hp dc dy i := by
+theorem tCotDxSe_smul :
+    IsHomog (tCotDxSe N h w t hp dc) := by
+  intro s dy
   unfold tCotDxSe; rw [tCotSeOut_smul, seInB_smul]
 
-theorem tCotDn_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotDn N h w t hp dc (fun i => s * dy i) = fun i => s * tCotDn N h w t hp dc dy i := by
+theorem tCotDn_smul :
+    IsHomog (tCotDn N h w t hp dc) := by
+  intro s dy
   unfold tCotDn; rw [tCotDxSe_smul, swBackB_smul]
 
-theorem tCotDc_smul (N h w : Nat) {mid oc rd : Nat} (t : EnTail mid oc rd) (hd : 0 < t.dε)
-    (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    tCotDc N h w t hd hp dc (fun i => s * dy i) = fun i => s * tCotDc N h w t hd hp dc dy i := by
+end
+
+theorem tCotDc_smul (hd : 0 < t.dε) (hp : 0 < t.pε) (dc : Vec (N * (mid * h * w))) :
+    IsHomog (tCotDc N h w t hd hp dc) := by
+  intro s dy
   unfold tCotDc; rw [tCotDn_smul, bnBackB_smul]
 
-theorem xCotEr_smul (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w)))
-    (s : ℝ) :
-    xCotEr N h w p hd hp xin (fun i => s * dy i) = fun i => s * xCotEr N h w p hd hp xin dy i := by
+end
+
+section
+variable (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+
+theorem xCotEr_smul (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) :
+    IsHomog (xCotEr N h w p hd hp xin) := by
+  intro s dy
   unfold xCotEr; rw [tCotDc_smul, dInB_smul]
 
-theorem xCotEn_smul (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w)))
-    (s : ℝ) :
-    xCotEn N h w p hd hp xin (fun i => s * dy i) = fun i => s * xCotEn N h w p hd hp xin dy i := by
+theorem xCotEn_smul (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) :
+    IsHomog (xCotEn N h w p hd hp xin) := by
+  intro s dy
   unfold xCotEn; rw [xCotEr_smul, swBackB_smul]
 
-theorem xCotEc_smul (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    xCotEc N h w p he hd hp xin (fun i => s * dy i)
-      = fun i => s * xCotEc N h w p he hd hp xin dy i := by
+theorem xCotEc_smul (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) :
+    IsHomog (xCotEc N h w p he hd hp xin) := by
+  intro s dy
   unfold xCotEc; rw [xCotEn_smul, bnBackB_smul]
 
-theorem sCotEr_smul (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    sCotEr N h w p hd hp xin (fun i => s * dy i) = fun i => s * sCotEr N h w p hd hp xin dy i := by
+theorem sCotEr_smul (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (sCotEr N h w p hd hp xin) := by
+  intro s dy
   unfold sCotEr; rw [tCotDc_smul, dStridedInB_smul]
 
-theorem sCotEn_smul (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    sCotEn N h w p hd hp xin (fun i => s * dy i) = fun i => s * sCotEn N h w p hd hp xin dy i := by
+theorem sCotEn_smul (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (sCotEn N h w p hd hp xin) := by
+  intro s dy
   unfold sCotEn; rw [sCotEr_smul, swBackB_smul]
 
-theorem sCotEc_smul (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    sCotEc N h w p he hd hp xin (fun i => s * dy i)
-      = fun i => s * sCotEc N h w p he hd hp xin dy i := by
+theorem sCotEc_smul (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (sCotEc N h w p he hd hp xin) := by
+  intro s dy
   unfold sCotEc; rw [sCotEn_smul, bnBackB_smul]
 
-theorem stCotBnS_smul (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
-    (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    stCotBnS N h w Ws bs εs γs βs x (fun i => s * dy i)
-      = fun i => s * stCotBnS N h w Ws bs εs γs βs x dy i :=
-  swBackB_smul _ _ _ s
+end
 
-theorem stCotStc_smul (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
-    (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    stCotStc N h w Ws bs εs hεs γs βs x (fun i => s * dy i)
-      = fun i => s * stCotStc N h w Ws bs εs hεs γs βs x dy i := by
+theorem stCotBnS_smul (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs) (bs : Vec oc)
+    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (stCotBnS N h w Ws bs εs γs βs x) :=
+  swBackB_smul _ _
+
+theorem stCotStc_smul (N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs) (bs : Vec oc)
+    (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (stCotStc N h w Ws bs εs hεs γs βs x) := by
+  intro s dy
   unfold stCotStc; rw [stCotBnS_smul, bnBackB_smul]
 
-theorem hdCotHr_smul (N h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC) (g : Vec (N * nC)) (s : ℝ) :
-    hdCotHr N h w Wfc (fun i => s * g i) = fun i => s * hdCotHr N h w Wfc g i := by
+theorem hdCotHr_smul (N h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC) :
+    IsHomog (hdCotHr N h w Wfc) := by
+  intro s g
   unfold hdCotHr; rw [rowDenseBackFlat_smul, gapInB_smul]
 
-theorem hdCotHsw_smul (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w))) (g : Vec (N * nC))
-    (s : ℝ) :
-    hdCotHsw N h w Wh bh εh γh βh Wfc xin (fun i => s * g i)
-      = fun i => s * hdCotHsw N h w Wh bh εh γh βh Wfc xin g i := by
+theorem hdCotHsw_smul (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w))) :
+    IsHomog (hdCotHsw N h w Wh bh εh γh βh Wfc xin) := by
+  intro s g
   unfold hdCotHsw; rw [hdCotHr_smul, swBackB_smul]
 
-theorem hdCotHbn_smul (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
-    (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w)))
-    (g : Vec (N * nC)) (s : ℝ) :
-    hdCotHbn N h w Wh bh εh hεh γh βh Wfc xin (fun i => s * g i)
-      = fun i => s * hdCotHbn N h w Wh bh εh hεh γh βh Wfc xin g i := by
+theorem hdCotHbn_smul (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
+    (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (xin : Vec (N * (c * h * w))) :
+    IsHomog (hdCotHbn N h w Wh bh εh hεh γh βh Wfc xin) := by
+  intro s g
   unfold hdCotHbn; rw [hdCotHsw_smul, bnBackB_smul]
 
 -- ════════════════════════════════════════════════════════════════
@@ -701,209 +706,202 @@ theorem hdCotHbn_smul (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh 
 
 /-! ### The tail, on the replicas -/
 
-noncomputable def tsCotPbn (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * (oc * h * w)) :=
+section
+variable (R : Nat) (hR : 0 < R) (N h w : Nat)
+
+noncomputable def tsCotPbn {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w t.pε t.pγ (fun r => batchShard R N (oc * h * w) (tPc (R * N) h w t DC) r)
     dys r
 
-noncomputable def tsCotSeOut (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * (mid * h * w)) :=
+noncomputable def tsCotSeOut {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (mid * h * w)) :=
   cInB N (h := h) (w := w) t.pW t.pb (tsCotPbn R hR N h w t DC dys r)
 
-noncomputable def tsDgate (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * mid) :=
+noncomputable def tsDgate {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * mid) :=
   gateCotB N mid h w (batchShard R N (mid * h * w) (tDr (R * N) h w t DC) r)
     (tsCotSeOut R hR N h w t DC dys r)
 
-noncomputable def tsCotE2 (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * mid) :=
+noncomputable def tsCotE2 {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * mid) :=
   sigBackB (N * mid) (batchShard R N mid (tE2 (R * N) h w t DC) r) (tsDgate R hR N h w t DC dys r)
 
-noncomputable def tsCotZ (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * rd) :=
+noncomputable def tsCotZ {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * rd) :=
   rowDenseBackFlat N rd mid t.z2 (tsCotE2 R hR N h w t DC dys r)
 
-noncomputable def tsCotE1 (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * rd) :=
+noncomputable def tsCotE1 {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * rd) :=
   swBackB (N * rd) (batchShard R N rd (tE1 (R * N) h w t DC) r) (tsCotZ R hR N h w t DC dys r)
 
-noncomputable def tsCotDxSe (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * (mid * h * w)) :=
+noncomputable def tsCotDxSe {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (mid * h * w)) :=
   seInB N (h := h) (w := w) t.z1 t.zb1 t.z2 t.zb2
     (batchShard R N (mid * h * w) (tDr (R * N) h w t DC) r) (tsCotSeOut R hR N h w t DC dys r)
 
-noncomputable def tsCotDn (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * (mid * h * w)) :=
+noncomputable def tsCotDn {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (mid * h * w)) :=
   swBackB (N * (mid * h * w)) (batchShard R N (mid * h * w) (tDn (R * N) h w t DC) r)
     (tsCotDxSe R hR N h w t DC dys r)
 
-noncomputable def tsCotDc (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
-    (t : EnTail mid oc rd) (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (r : Fin R) : Vec (N * (mid * h * w)) :=
+noncomputable def tsCotDc {mid oc rd : Nat} (t : EnTail mid oc rd)
+    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w t.dε t.dγ (fun r => batchShard R N (mid * h * w) DC r)
     (tsCotDn R hR N h w t DC dys) r
 
-theorem tsCotPbn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+section
+variable {mid oc rd : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd)
+include hN hh hw
+
+theorem tsCotPbn_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotPbn R hR N h w t DC dys r = batchShard R N (oc * h * w) (tCotPbn (R * N) h w t hp DC DY) r :=
   bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw)
     (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) t.pε hp t.pγ t.pβ _ dys _ DY (fun _ => rfl) hdys r
 
-theorem tsCotSeOut_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsCotSeOut_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotSeOut R hR N h w t DC dys r
       = batchShard R N (mid * h * w) (tCotSeOut (R * N) h w t hp DC DY) r := by
   unfold tsCotSeOut
   rw [tsCotPbn_shard R hR N h w hN hh hw t hp DC dys DY hdys r, cInB_shard]
   rfl
 
-theorem tsDgate_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsDgate_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsDgate R hR N h w t DC dys r = batchShard R N mid (tDgate (R * N) h w t hp DC DY) r := by
   unfold tsDgate
   rw [tsCotSeOut_shard R hR N h w hN hh hw t hp DC dys DY hdys r, gateCotB_shard]
   rfl
 
-theorem tsCotE2_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsCotE2_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotE2 R hR N h w t DC dys r = batchShard R N mid (tCotE2 (R * N) h w t hp DC DY) r := by
   unfold tsCotE2
   rw [tsDgate_shard R hR N h w hN hh hw t hp DC dys DY hdys r, sigBackB_shard]
   rfl
 
-theorem tsCotZ_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsCotZ_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotZ R hR N h w t DC dys r = batchShard R N rd (tCotZ (R * N) h w t hp DC DY) r := by
   unfold tsCotZ
   rw [tsCotE2_shard R hR N h w hN hh hw t hp DC dys DY hdys r, rowDenseBackFlat_shard]
   rfl
 
-theorem tsCotE1_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsCotE1_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotE1 R hR N h w t DC dys r = batchShard R N rd (tCotE1 (R * N) h w t hp DC DY) r := by
   unfold tsCotE1
   rw [tsCotZ_shard R hR N h w hN hh hw t hp DC dys DY hdys r, swBackB_shard]
   rfl
 
-theorem tsCotDxSe_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsCotDxSe_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotDxSe R hR N h w t DC dys r
       = batchShard R N (mid * h * w) (tCotDxSe (R * N) h w t hp DC DY) r := by
   unfold tsCotDxSe
   rw [tsCotSeOut_shard R hR N h w hN hh hw t hp DC dys DY hdys r, seInB_shard]
   rfl
 
-theorem tsCotDn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsCotDn_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotDn R hR N h w t DC dys r = batchShard R N (mid * h * w) (tCotDn (R * N) h w t hp DC DY) r := by
   unfold tsCotDn
   rw [tsCotDxSe_shard R hR N h w hN hh hw t hp DC dys DY hdys r, swBackB_shard]
   rfl
 
-theorem tsCotDc_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (t : EnTail mid oc rd) (hd : 0 < t.dε) (hp : 0 < t.pε)
-    (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem tsCotDc_shard (hd : 0 < t.dε) (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotDc R hR N h w t DC dys r
       = batchShard R N (mid * h * w) (tCotDc (R * N) h w t hd hp DC DY) r :=
   bnSyncInB_shard_bnBackB R hR N mid h w (nhw_ne_zero hN hh hw)
     (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) t.dε hd t.dγ t.dβ _ _ DC _ (fun _ => rfl)
     (tsCotDn_shard R hR N h w hN hh hw t hp DC dys DY hdys) r
 
+end
+
 /-! ### The fronts, on the replicas -/
 
-noncomputable def xsCotEr (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * h * w)))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (mid * h * w)) :=
+noncomputable def xsCotEr {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (mid * h * w)) :=
   dInB N p.dW p.db (tsCotDc R hR N h w (tailOf p) (xDc (R * N) h w p XIN) dys r)
 
-noncomputable def xsCotEn (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * h * w)))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (mid * h * w)) :=
+noncomputable def xsCotEn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (mid * h * w)) :=
   swBackB (N * (mid * h * w)) (batchShard R N (mid * h * w) (xEn (R * N) h w p XIN) r)
     (xsCotEr R hR N h w p XIN dys r)
 
-noncomputable def xsCotEc (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * h * w)))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (mid * h * w)) :=
+noncomputable def xsCotEc {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w p.eε p.eγ (fun r => batchShard R N (mid * h * w) (xEc (R * N) h w p XIN) r)
     (xsCotEn R hR N h w p XIN dys) r
 
 /-- A replica's input cotangent at a widening block (b9, b16). -/
-noncomputable def xsCotIn (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * h * w)))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (ic * h * w)) :=
+noncomputable def xsCotIn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (ic * h * w)) :=
   cInB N (h := h) (w := w) p.eW p.eb (xsCotEc R hR N h w p XIN dys r)
 
 /-- A replica's input cotangent at a residual block — the body's plus the skip's. -/
-noncomputable def rsCotIn (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid rd kh kw : Nat}
-    (p : MBW c mid c rd kh kw) (XIN : Vec ((R * N) * (c * h * w)))
-    (dys : Fin R → Vec (N * (c * h * w))) (r : Fin R) : Vec (N * (c * h * w)) :=
+noncomputable def rsCotIn {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
+    (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w))) (r : Fin R) :
+    Vec (N * (c * h * w)) :=
   fun i => xsCotIn R hR N h w p XIN dys r i + dys r i
 
-noncomputable def ssCotEr (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+noncomputable def ssCotEr {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
   dStridedInB N p.dW p.db (tsCotDc R hR N h w (tailOf p) (sDc (R * N) h w p XIN) dys r)
 
-noncomputable def ssCotEn (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+noncomputable def ssCotEn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
   swBackB (N * (mid * (2 * h) * (2 * w)))
     (batchShard R N (mid * (2 * h) * (2 * w)) (sEn (R * N) h w p XIN) r)
     (ssCotEr R hR N h w p XIN dys r)
 
-noncomputable def ssCotEc (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+noncomputable def ssCotEc {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
   bnSyncInB R hR N mid (2 * h) (2 * w) p.eε p.eγ
     (fun r => batchShard R N (mid * (2 * h) * (2 * w)) (sEc (R * N) h w p XIN) r)
     (ssCotEn R hR N h w p XIN dys) r
 
 /-- A replica's input cotangent at a strided block (b2, b4, b6, b12). -/
-noncomputable def ssCotIn (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (p : MBW ic mid oc rd kh kw) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (ic * (2 * h) * (2 * w))) :=
+noncomputable def ssCotIn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (r : Fin R) : Vec (N * (ic * (2 * h) * (2 * w))) :=
   cInB N (h := 2 * h) (w := 2 * w) p.eW p.eb (ssCotEc R hR N h w p XIN dys r)
 
 /-- A replica's input cotangent at the MBConv1 block (b1). -/
-noncomputable def nsCotIn (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat}
-    (p : MBWNoExp ic oc rd kh kw) (XIN : Vec ((R * N) * (ic * h * w)))
-    (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (ic * h * w)) :=
+noncomputable def nsCotIn {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc rd kh kw)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
+    Vec (N * (ic * h * w)) :=
   dInB N p.dW p.db (tsCotDc R hR N h w (tailOfNoExp p) (nDc (R * N) h w p XIN) dys r)
+
+end
 
 noncomputable def stsCotBnS (R N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
     (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
@@ -924,45 +922,48 @@ noncomputable def hdsCotHsw (R N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1
   swBackB (N * (oc * h * w)) (batchShard R N (oc * h * w) (hdHn (R * N) h w Wh bh εh γh βh XIN) r)
     (hdCotHr N h w Wfc (gs r))
 
-noncomputable def hdsCotHbn (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat}
-    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC)
-    (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (r : Fin R) :
+section
+variable (R : Nat) (hR : 0 < R) (N h w : Nat)
+
+noncomputable def hdsCotHbn {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
+    (gs : Fin R → Vec (N * nC)) (r : Fin R) :
     Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w εh γh (fun r => batchShard R N (oc * h * w) (hdHc (R * N) h w Wh bh XIN) r)
     (hdsCotHsw R N h w Wh bh εh γh βh Wfc XIN gs) r
 
 /-- A replica's input cotangent at the head. -/
-noncomputable def hdsCotIn (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat}
-    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wfc : Mat oc nC)
-    (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (r : Fin R) :
+noncomputable def hdsCotIn {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ)
+    (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
+    (gs : Fin R → Vec (N * nC)) (r : Fin R) :
     Vec (N * (c * h * w)) :=
   cInB N (h := h) (w := w) Wh bh (hdsCotHbn R hR N h w Wh bh εh γh βh Wfc XIN gs r)
 
-theorem xsCotEr_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
-    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+section
+variable {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBW ic mid oc rd kh kw)
+include hN hh hw
+
+theorem xsCotEr_shard (hd : 0 < p.dε) (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     xsCotEr R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (xCotEr (R * N) h w p hd hp XIN DY) r := by
   unfold xsCotEr
   rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys DY hdys r, dInB_shard]
   rfl
 
-theorem xsCotEn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
-    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
-    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
-    (r : Fin R) :
+theorem xsCotEn_shard (hd : 0 < p.dε) (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w)))
+    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     xsCotEn R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (xCotEn (R * N) h w p hd hp XIN DY) r := by
   unfold xsCotEn
   rw [xsCotEr_shard R hR N h w hN hh hw p hd hp XIN dys DY hdys r, swBackB_shard]
   rfl
 
-theorem xsCotEc_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+theorem xsCotEc_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
     (r : Fin R) :
     xsCotEc R hR N h w p XIN dys r
@@ -971,9 +972,8 @@ theorem xsCotEc_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw :
     (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) p.eε he p.eγ p.eβ _ _ _ _ (fun _ => rfl)
     (xsCotEn_shard R hR N h w hN hh hw p hd hp XIN dys DY hdys) r
 
-theorem xsCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+theorem xsCotIn_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
     (r : Fin R) :
     xsCotIn R hR N h w p XIN dys r
@@ -982,9 +982,11 @@ theorem xsCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw :
   rw [xsCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys DY hdys r, cInB_shard]
   rfl
 
-theorem rsCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW c mid c rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
+end
+
+theorem rsCotIn_shard {c mid rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBW c mid c rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
     (DY : Vec ((R * N) * (c * h * w))) (hdys : ∀ r, dys r = batchShard R N (c * h * w) DY r)
     (r : Fin R) :
     rsCotIn R hR N h w p XIN dys r
@@ -993,8 +995,12 @@ theorem rsCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid rd kh kw : Nat
   rw [xsCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys DY hdys r, hdys r]
   rfl
 
-theorem ssCotEr_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+section
+variable {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBW ic mid oc rd kh kw)
+include hN hh hw
+
+theorem ssCotEr_shard (hd : 0 < p.dε) (hp : 0 < p.pε)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
     (r : Fin R) :
@@ -1004,8 +1010,7 @@ theorem ssCotEr_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw :
   rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys DY hdys r, dStridedInB_shard]
   rfl
 
-theorem ssCotEn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+theorem ssCotEn_shard (hd : 0 < p.dε) (hp : 0 < p.pε)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
     (r : Fin R) :
@@ -1015,11 +1020,10 @@ theorem ssCotEn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw :
   rw [ssCotEr_shard R hR N h w hN hh hw p hd hp XIN dys DY hdys r, swBackB_shard]
   rfl
 
-theorem ssCotEc_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
-    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
+theorem ssCotEc_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
+    (r : Fin R) :
     ssCotEc R hR N h w p XIN dys r
       = batchShard R N (mid * (2 * h) * (2 * w)) (sCotEc (R * N) h w p he hd hp XIN DY) r :=
   bnSyncInB_shard_bnBackB R hR N mid (2 * h) (2 * w)
@@ -1028,19 +1032,20 @@ theorem ssCotEc_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw :
     p.eε he p.eγ p.eβ _ _ _ _ (fun _ => rfl)
     (ssCotEn_shard R hR N h w hN hh hw p hd hp XIN dys DY hdys) r
 
-theorem ssCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
-    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
+theorem ssCotIn_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
+    (r : Fin R) :
     ssCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * (2 * h) * (2 * w)) (sCotIn (R * N) h w p he hd hp XIN DY) r := by
   unfold ssCotIn
   rw [ssCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys DY hdys r, cInB_shard]
   rfl
 
-theorem nsCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (p : MBWNoExp ic oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+end
+
+theorem nsCotIn_shard {ic oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBWNoExp ic oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
     (r : Fin R) :
@@ -1049,6 +1054,8 @@ theorem nsCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat
   unfold nsCotIn
   rw [tsCotDc_shard R hR N h w hN hh hw (tailOfNoExp p) hd hp _ dys DY hdys r, dInB_shard]
   rfl
+
+end
 
 theorem stsCotBnS_shard (R N h w : Nat) {ic oc kHs kWs : Nat} (Ws : Kernel4 oc ic kHs kWs)
     (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
@@ -1088,10 +1095,12 @@ theorem hdsCotHsw_shard (R N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) 
   rw [hgs r, hdCotHr_shard, swBackB_shard]
   rfl
 
-theorem hdsCotHbn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
-    (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
+section
+variable (R : Nat) (hR : 0 < R) (N h w : Nat)
+
+theorem hdsCotHbn_shard {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
     (hgs : ∀ r, gs r = batchShard R N nC G r) (r : Fin R) :
     hdsCotHbn R hR N h w Wh bh εh γh βh Wfc XIN gs r
       = batchShard R N (oc * h * w) (hdCotHbn (R * N) h w Wh bh εh hεh γh βh Wfc XIN G) r :=
@@ -1099,10 +1108,9 @@ theorem hdsCotHbn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN
     (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) εh hεh γh βh _ _ _ _ (fun _ => rfl)
     (hdsCotHsw_shard R N h w Wh bh εh γh βh Wfc XIN gs G hgs) r
 
-theorem hdsCotIn_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (XIN : Vec ((R * N) * (c * h * w)))
-    (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
+theorem hdsCotIn_shard {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
     (hgs : ∀ r, gs r = batchShard R N nC G r) (r : Fin R) :
     hdsCotIn R hR N h w Wh bh εh γh βh Wfc XIN gs r
       = batchShard R N (c * h * w) (hdCotIn (R * N) h w Wh bh εh hεh γh βh Wfc XIN G) r := by
@@ -1116,10 +1124,10 @@ Replicas at `R ×` the shards of the single-device block-output cotangent `DY` h
 up `R ×` the shards of T3's own `.backward` — sharding, then the explicit chain IS the VJP (§ 0),
 then `HasVJP.backward_smul`. -/
 
-theorem xsCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w)))
-    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+theorem xsCotIn_scaled {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     xsCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * h * w)
@@ -1127,10 +1135,10 @@ theorem xsCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw 
   rw [xsCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, ← xCotIn_eq_vjp,
     HasVJP.backward_smul]
 
-theorem rsCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid rd kh kw : Nat}
-    (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (p : MBW c mid c rd kh kw) (he : 0 < p.eε)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (XIN : Vec ((R * N) * (c * h * w)))
-    (dys : Fin R → Vec (N * (c * h * w))) (DY : Vec ((R * N) * (c * h * w)))
+theorem rsCotIn_scaled {c mid rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBW c mid c rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
+    (DY : Vec ((R * N) * (c * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (c * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     rsCotIn R hR N h w p XIN dys r
       = batchShard R N (c * h * w)
@@ -1138,10 +1146,10 @@ theorem rsCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid rd kh kw : Na
   rw [rsCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, ← rCotIn_eq_vjp,
     HasVJP.backward_smul]
 
-theorem ssCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
-    (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
-    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+theorem ssCotIn_scaled {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     ssCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * (2 * h) * (2 * w))
@@ -1149,10 +1157,10 @@ theorem ssCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw 
   rw [ssCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, ← sCotIn_eq_vjp,
     HasVJP.backward_smul]
 
-theorem nsCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat}
-    (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (p : MBWNoExp ic oc rd kh kw) (hd : 0 < p.dε)
-    (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w)))
-    (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
+theorem nsCotIn_scaled {ic oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (p : MBWNoExp ic oc rd kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
+    (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
+    (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     nsCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * h * w)
@@ -1160,17 +1168,19 @@ theorem nsCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Na
   rw [nsCotIn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, ← nCotIn_eq_vjp,
     HasVJP.backward_smul]
 
-theorem hdsCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN : 0 < N)
-    (hh : 0 < h) (hw : 0 < w) (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh)
-    (γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC) (XIN : Vec ((R * N) * (c * h * w)))
-    (gs : Fin R → Vec (N * nC)) (G : Vec ((R * N) * nC))
-    (hgs : ∀ r, gs r = batchShard R N nC (fun i => (R : ℝ) * G i) r) (r : Fin R) :
+theorem hdsCotIn_scaled {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
+    (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
+    (bfc : Vec nC) (XIN : Vec ((R * N) * (c * h * w))) (gs : Fin R → Vec (N * nC))
+    (G : Vec ((R * N) * nC)) (hgs : ∀ r, gs r = batchShard R N nC (fun i => (R : ℝ) * G i) r)
+    (r : Fin R) :
     hdsCotIn R hR N h w Wh bh εh γh βh Wfc XIN gs r
       = batchShard R N (c * h * w) (fun i => (R : ℝ) *
           (headFwdB_has_vjp (R * N) (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc).backward XIN G i)
           r := by
   rw [hdsCotIn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc XIN gs _ hgs r,
     ← hdCotIn_eq_vjp (bfc := bfc), HasVJP.backward_smul]
+
+end
 
 -- ════════════════════════════════════════════════════════════════
 -- § 6. The per-block DP ties — every parameter collective the render emits
@@ -1381,24 +1391,7 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
     swish / head links, each replica's own loss cotangent. -/
 theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (xN vN epsStr cotN dN : String) (w : B0Weights)
-    (hsε : 0 < w.sε)
-    (hb1d : 0 < w.b1.dε) (hb1p : 0 < w.b1.pε)
-    (hb2e : 0 < w.b2.eε) (hb2d : 0 < w.b2.dε) (hb2p : 0 < w.b2.pε)
-    (hb3e : 0 < w.b3.eε) (hb3d : 0 < w.b3.dε) (hb3p : 0 < w.b3.pε)
-    (hb4e : 0 < w.b4.eε) (hb4d : 0 < w.b4.dε) (hb4p : 0 < w.b4.pε)
-    (hb5e : 0 < w.b5.eε) (hb5d : 0 < w.b5.dε) (hb5p : 0 < w.b5.pε)
-    (hb6e : 0 < w.b6.eε) (hb6d : 0 < w.b6.dε) (hb6p : 0 < w.b6.pε)
-    (hb7e : 0 < w.b7.eε) (hb7d : 0 < w.b7.dε) (hb7p : 0 < w.b7.pε)
-    (hb8e : 0 < w.b8.eε) (hb8d : 0 < w.b8.dε) (hb8p : 0 < w.b8.pε)
-    (hb9e : 0 < w.b9.eε) (hb9d : 0 < w.b9.dε) (hb9p : 0 < w.b9.pε)
-    (hb10e : 0 < w.b10.eε) (hb10d : 0 < w.b10.dε) (hb10p : 0 < w.b10.pε)
-    (hb11e : 0 < w.b11.eε) (hb11d : 0 < w.b11.dε) (hb11p : 0 < w.b11.pε)
-    (hb12e : 0 < w.b12.eε) (hb12d : 0 < w.b12.dε) (hb12p : 0 < w.b12.pε)
-    (hb13e : 0 < w.b13.eε) (hb13d : 0 < w.b13.dε) (hb13p : 0 < w.b13.pε)
-    (hb14e : 0 < w.b14.eε) (hb14d : 0 < w.b14.dε) (hb14p : 0 < w.b14.pε)
-    (hb15e : 0 < w.b15.eε) (hb15d : 0 < w.b15.dε) (hb15p : 0 < w.b15.pε)
-    (hb16e : 0 < w.b16.eε) (hb16d : 0 < w.b16.dε) (hb16p : 0 < w.b16.pε)
-    (hhε : 0 < w.hε)
+    (hεw : w.EpsPos)
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * 10))) :
     -- ── the single-device step at the global batch `R·N`, loss divided by `R·B`: T3's chain ──
@@ -1425,39 +1418,39 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
         ohN (rowB (R * N) 10
           (headFwdB (R * N) (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
     let dy16 : Vec ((R * N) * (320 * 7 * 7))   := (headFwdB_has_vjp (R * N) (h := 7) (w := 7)
-      w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb).backward a16 g
+      w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
     let dy15 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbExpW_has_vjp (R * N) 7 7 w.b16 hb16e hb16d hb16p).backward a15 dy16
+      (mbExpW_has_vjp (R * N) 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
     let dy14 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbResidW_has_vjp (R * N) 7 7 w.b15 hb15e hb15d hb15p).backward a14 dy15
+      (mbResidW_has_vjp (R * N) 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
     let dy13 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbResidW_has_vjp (R * N) 7 7 w.b14 hb14e hb14d hb14p).backward a13 dy14
+      (mbResidW_has_vjp (R * N) 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
     let dy12 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbResidW_has_vjp (R * N) 7 7 w.b13 hb13e hb13d hb13p).backward a12 dy13
+      (mbResidW_has_vjp (R * N) 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
     let dy11 : Vec ((R * N) * (112 * 14 * 14)) :=
-      (mbStridedW_has_vjp (R * N) 7 7 w.b12 hb12e hb12d hb12p).backward a11 dy12
+      (mbStridedW_has_vjp (R * N) 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
     let dy10 : Vec ((R * N) * (112 * 14 * 14)) :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b11 hb11e hb11d hb11p).backward a10 dy11
+      (mbResidW_has_vjp (R * N) 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
     let dy9  : Vec ((R * N) * (112 * 14 * 14)) :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b10 hb10e hb10d hb10p).backward a9 dy10
+      (mbResidW_has_vjp (R * N) 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
     let dy8  : Vec ((R * N) * (80 * 14 * 14))  :=
-      (mbExpW_has_vjp (R * N) 14 14 w.b9 hb9e hb9d hb9p).backward a8 dy9
+      (mbExpW_has_vjp (R * N) 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
     let dy7  : Vec ((R * N) * (80 * 14 * 14))  :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b8 hb8e hb8d hb8p).backward a7 dy8
+      (mbResidW_has_vjp (R * N) 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
     let dy6  : Vec ((R * N) * (80 * 14 * 14))  :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b7 hb7e hb7d hb7p).backward a6 dy7
+      (mbResidW_has_vjp (R * N) 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
     let dy5  : Vec ((R * N) * (40 * 28 * 28))  :=
-      (mbStridedW_has_vjp (R * N) 14 14 w.b6 hb6e hb6d hb6p).backward a5 dy6
+      (mbStridedW_has_vjp (R * N) 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
     let dy4  : Vec ((R * N) * (40 * 28 * 28))  :=
-      (mbResidW_has_vjp (R * N) 28 28 w.b5 hb5e hb5d hb5p).backward a4 dy5
+      (mbResidW_has_vjp (R * N) 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
     let dy3  : Vec ((R * N) * (24 * 56 * 56))  :=
-      (mbStridedW_has_vjp (R * N) 28 28 w.b4 hb4e hb4d hb4p).backward a3 dy4
+      (mbStridedW_has_vjp (R * N) 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
     let dy2  : Vec ((R * N) * (24 * 56 * 56))  :=
-      (mbResidW_has_vjp (R * N) 56 56 w.b3 hb3e hb3d hb3p).backward a2 dy3
+      (mbResidW_has_vjp (R * N) 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
     let dy1  : Vec ((R * N) * (16 * 112 * 112)) :=
-      (mbStridedW_has_vjp (R * N) 56 56 w.b2 hb2e hb2d hb2p).backward a1 dy2
+      (mbStridedW_has_vjp (R * N) 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
     let dy0  : Vec ((R * N) * (32 * 112 * 112)) :=
-      (mbNoExpW_has_vjp (R * N) 112 112 w.b1 hb1d hb1p).backward a0 dy1
+      (mbNoExpW_has_vjp (R * N) 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
     -- ── replica `r`, loss divided by `B`, its own sync-BN chain ──
     let gs : Fin R → Vec (N * 10) := fun r =>
       unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
@@ -1482,24 +1475,24 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     let e1  := ssCotIn R hR N 56 56 w.b2 a1 e2
     let e0  := nsCotIn R hR N 112 112 w.b1 a0 e1
     -- ── every collective the render emits IS the single-device node ──
-    stemSyncTiedG R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε hsε w.sγ w.sβ x e0 dy0
-    ∧ noExpSyncTiedG R hR N 112 112 "b1" xN cotN vN epsStr w.b1 hb1d hb1p a0 e1 dy1
-    ∧ stridedSyncTiedG R hR N 56 56 "b2" xN cotN vN epsStr w.b2 hb2e hb2d hb2p a1 e2 dy2
-    ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hb3e hb3d hb3p a2 e3 dy3
-    ∧ stridedSyncTiedG R hR N 28 28 "b4" xN cotN vN epsStr w.b4 hb4e hb4d hb4p a3 e4 dy4
-    ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hb5e hb5d hb5p a4 e5 dy5
-    ∧ stridedSyncTiedG R hR N 14 14 "b6" xN cotN vN epsStr w.b6 hb6e hb6d hb6p a5 e6 dy6
-    ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hb7e hb7d hb7p a6 e7 dy7
-    ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hb8e hb8d hb8p a7 e8 dy8
-    ∧ expSyncTiedG R hR N 14 14 "b9" xN cotN vN epsStr w.b9 hb9e hb9d hb9p a8 e9 dy9
-    ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hb10e hb10d hb10p a9 e10 dy10
-    ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hb11e hb11d hb11p a10 e11 dy11
-    ∧ stridedSyncTiedG R hR N 7 7 "b12" xN cotN vN epsStr w.b12 hb12e hb12d hb12p a11 e12 dy12
-    ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hb13e hb13d hb13p a12 e13 dy13
-    ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hb14e hb14d hb14p a13 e14 dy14
-    ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hb15e hb15d hb15p a14 e15 dy15
-    ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hb16e hb16d hb16p a15 e16 dy16
-    ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW a16 gs g := by
+    stemSyncTiedG R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ x e0 dy0
+    ∧ noExpSyncTiedG R hR N 112 112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1
+    ∧ stridedSyncTiedG R hR N 56 56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2
+    ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3
+    ∧ stridedSyncTiedG R hR N 28 28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4
+    ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5
+    ∧ stridedSyncTiedG R hR N 14 14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6
+    ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7
+    ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8
+    ∧ expSyncTiedG R hR N 14 14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9
+    ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10
+    ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11
+    ∧ stridedSyncTiedG R hR N 7 7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12
+    ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13
+    ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14
+    ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15
+    ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16
+    ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16 gs g := by
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
     g dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
     gs e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 e0
@@ -1512,45 +1505,45 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
   have sG : ∀ r, gs r = batchShard R N 10 (fun i => (R : ℝ) * g i) r :=
     fun r => replicaLossCot_eq R N 10 hR α B aStr negAK bStr logN ohN _ t r
   -- the scaled-shard invariant, block by block down the chain
-  have s16 := hdsCotIn_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb a16 gs g sG
-  have s15 := xsCotIn_scaled R hR N 7 7 hN h7 h7 w.b16 hb16e hb16d hb16p a15 e16 dy16 s16
-  have s14 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b15 hb15e hb15d hb15p a14 e15 dy15 s15
-  have s13 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b14 hb14e hb14d hb14p a13 e14 dy14 s14
-  have s12 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b13 hb13e hb13d hb13p a12 e13 dy13 s13
-  have s11 := ssCotIn_scaled R hR N 7 7 hN h7 h7 w.b12 hb12e hb12d hb12p a11 e12 dy12 s12
-  have s10 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b11 hb11e hb11d hb11p a10 e11 dy11 s11
-  have s9 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b10 hb10e hb10d hb10p a9 e10 dy10 s10
-  have s8 := xsCotIn_scaled R hR N 14 14 hN h14 h14 w.b9 hb9e hb9d hb9p a8 e9 dy9 s9
-  have s7 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b8 hb8e hb8d hb8p a7 e8 dy8 s8
-  have s6 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b7 hb7e hb7d hb7p a6 e7 dy7 s7
-  have s5 := ssCotIn_scaled R hR N 14 14 hN h14 h14 w.b6 hb6e hb6d hb6p a5 e6 dy6 s6
-  have s4 := rsCotIn_scaled R hR N 28 28 hN h28 h28 w.b5 hb5e hb5d hb5p a4 e5 dy5 s5
-  have s3 := ssCotIn_scaled R hR N 28 28 hN h28 h28 w.b4 hb4e hb4d hb4p a3 e4 dy4 s4
-  have s2 := rsCotIn_scaled R hR N 56 56 hN h56 h56 w.b3 hb3e hb3d hb3p a2 e3 dy3 s3
-  have s1 := ssCotIn_scaled R hR N 56 56 hN h56 h56 w.b2 hb2e hb2d hb2p a1 e2 dy2 s2
-  have s0 := nsCotIn_scaled R hR N 112 112 hN h112 h112 w.b1 hb1d hb1p a0 e1 dy1 s1
-  exact ⟨stem_syncTiedG R hR N 112 112 hN h112 h112 xN cotN vN epsStr w.sW w.sb w.sε hsε w.sγ w.sβ
+  have s16 := hdsCotIn_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb a16 gs g sG
+  have s15 := xsCotIn_scaled R hR N 7 7 hN h7 h7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 s16
+  have s14 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 s15
+  have s13 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 s14
+  have s12 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13 s13
+  have s11 := ssCotIn_scaled R hR N 7 7 hN h7 h7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12 s12
+  have s10 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11 s11
+  have s9 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10 s10
+  have s8 := xsCotIn_scaled R hR N 14 14 hN h14 h14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9 s9
+  have s7 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8 s8
+  have s6 := rsCotIn_scaled R hR N 14 14 hN h14 h14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7 s7
+  have s5 := ssCotIn_scaled R hR N 14 14 hN h14 h14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6 s6
+  have s4 := rsCotIn_scaled R hR N 28 28 hN h28 h28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5 s5
+  have s3 := ssCotIn_scaled R hR N 28 28 hN h28 h28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4 s4
+  have s2 := rsCotIn_scaled R hR N 56 56 hN h56 h56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3 s3
+  have s1 := ssCotIn_scaled R hR N 56 56 hN h56 h56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2 s2
+  have s0 := nsCotIn_scaled R hR N 112 112 hN h112 h112 w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1 s1
+  exact ⟨stem_syncTiedG R hR N 112 112 hN h112 h112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ
       x e0 dy0 s0,
-    noExp_syncTiedG R hR N 112 112 hN h112 h112 "b1" xN cotN vN epsStr w.b1 hb1d hb1p a0 e1 dy1 s1,
-    strided_syncTiedG R hR N 56 56 hN h56 h56 "b2" xN cotN vN epsStr w.b2 hb2e hb2d hb2p a1 e2 dy2 s2,
-    exp_syncTiedG R hR N 56 56 hN h56 h56 "b3" xN cotN vN epsStr w.b3 hb3e hb3d hb3p a2 e3 dy3 s3,
-    strided_syncTiedG R hR N 28 28 hN h28 h28 "b4" xN cotN vN epsStr w.b4 hb4e hb4d hb4p a3 e4 dy4 s4,
-    exp_syncTiedG R hR N 28 28 hN h28 h28 "b5" xN cotN vN epsStr w.b5 hb5e hb5d hb5p a4 e5 dy5 s5,
-    strided_syncTiedG R hR N 14 14 hN h14 h14 "b6" xN cotN vN epsStr w.b6 hb6e hb6d hb6p a5 e6 dy6 s6,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b7" xN cotN vN epsStr w.b7 hb7e hb7d hb7p a6 e7 dy7 s7,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b8" xN cotN vN epsStr w.b8 hb8e hb8d hb8p a7 e8 dy8 s8,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b9" xN cotN vN epsStr w.b9 hb9e hb9d hb9p a8 e9 dy9 s9,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b10" xN cotN vN epsStr w.b10 hb10e hb10d hb10p a9 e10
+    noExp_syncTiedG R hR N 112 112 hN h112 h112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1 s1,
+    strided_syncTiedG R hR N 56 56 hN h56 h56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2 s2,
+    exp_syncTiedG R hR N 56 56 hN h56 h56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3 s3,
+    strided_syncTiedG R hR N 28 28 hN h28 h28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4 s4,
+    exp_syncTiedG R hR N 28 28 hN h28 h28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5 s5,
+    strided_syncTiedG R hR N 14 14 hN h14 h14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6 s6,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7 s7,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8 s8,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9 s9,
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10
       dy10 s10,
-    exp_syncTiedG R hR N 14 14 hN h14 h14 "b11" xN cotN vN epsStr w.b11 hb11e hb11d hb11p a10 e11
+    exp_syncTiedG R hR N 14 14 hN h14 h14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11
       dy11 s11,
-    strided_syncTiedG R hR N 7 7 hN h7 h7 "b12" xN cotN vN epsStr w.b12 hb12e hb12d hb12p a11 e12
+    strided_syncTiedG R hR N 7 7 hN h7 h7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12
       dy12 s12,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b13" xN cotN vN epsStr w.b13 hb13e hb13d hb13p a12 e13 dy13 s13,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b14" xN cotN vN epsStr w.b14 hb14e hb14d hb14p a13 e14 dy14 s14,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b15" xN cotN vN epsStr w.b15 hb15e hb15d hb15p a14 e15 dy15 s15,
-    exp_syncTiedG R hR N 7 7 hN h7 h7 "b16" xN cotN vN epsStr w.b16 hb16e hb16d hb16p a15 e16 dy16 s16,
-    head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW a16
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13 s13,
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 s14,
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 s15,
+    exp_syncTiedG R hR N 7 7 hN h7 h7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 s16,
+    head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16
       gs g sG⟩
 
 end Proofs.EnetSyncTieG

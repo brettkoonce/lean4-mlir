@@ -30,26 +30,21 @@ open Proofs.ResNet34SyncTieB
 -- § 1. Homogeneity — linear in the cotangent
 -- ════════════════════════════════════════════════════════════════
 
-theorem dInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (dy : Vec (N * (c * h * w))) (s : ℝ) :
-    dInB N (h := h) (w := w) W b (fun i => s * dy i)
-      = fun i => s * dInB N (h := h) (w := w) W b dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
+theorem dInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    IsHomog (dInB N (h := h) (w := w) W b) :=
+  batchMap_smul _ (HasVJP.backward_smul _ _)
 
-theorem dStridedInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (dy : Vec (N * (c * h * w))) (s : ℝ) :
-    dStridedInB N (h := h) (w := w) W b (fun i => s * dy i)
-      = fun i => s * dStridedInB N (h := h) (w := w) W b dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
+theorem dStridedInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    IsHomog (dStridedInB N (h := h) (w := w) W b) :=
+  batchMap_smul _ (HasVJP.backward_smul _ _)
 
-theorem gapInB_smul (N c h w : Nat) (dy : Vec (N * c)) (s : ℝ) :
-    gapInB N c h w (fun i => s * dy i) = fun i => s * gapInB N c h w dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
+theorem gapInB_smul (N c h w : Nat) : IsHomog (gapInB N c h w) :=
+  batchMap_smul _ (HasVJP.backward_smul _ _)
 
 /-- The row-wise input-VJP `dX = W·dy` (the classifier's, and the SE excite dense's) is linear in
     `dy`. -/
-theorem rowDenseBackFlat_smul (N a c : Nat) (W : Mat a c) (dy : Vec (N * c)) (s : ℝ) :
-    rowDenseBackFlat N a c W (fun i => s * dy i) = fun i => s * rowDenseBackFlat N a c W dy i := by
+theorem rowDenseBackFlat_smul (N a c : Nat) (W : Mat a c) : IsHomog (rowDenseBackFlat N a c W) := by
+  intro s dy
   funext idx
   simp only [rowDenseBackFlat, Mat.flatten, Mat.unflatten, Mat.mulVec, Finset.mul_sum]
   exact Finset.sum_congr rfl (fun _ _ => by ring)

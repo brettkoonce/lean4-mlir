@@ -485,24 +485,7 @@ theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
     MBConv blocks, the conv-bn-swish head, and the dense head all denote the certified batched Σ_n
     loss-descent step. -/
 theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) (w : B0Weights)
-    (hsε : 0 < w.sε)
-    (hb1d : 0 < w.b1.dε) (hb1p : 0 < w.b1.pε)
-    (hb2e : 0 < w.b2.eε) (hb2d : 0 < w.b2.dε) (hb2p : 0 < w.b2.pε)
-    (hb3e : 0 < w.b3.eε) (hb3d : 0 < w.b3.dε) (hb3p : 0 < w.b3.pε)
-    (hb4e : 0 < w.b4.eε) (hb4d : 0 < w.b4.dε) (hb4p : 0 < w.b4.pε)
-    (hb5e : 0 < w.b5.eε) (hb5d : 0 < w.b5.dε) (hb5p : 0 < w.b5.pε)
-    (hb6e : 0 < w.b6.eε) (hb6d : 0 < w.b6.dε) (hb6p : 0 < w.b6.pε)
-    (hb7e : 0 < w.b7.eε) (hb7d : 0 < w.b7.dε) (hb7p : 0 < w.b7.pε)
-    (hb8e : 0 < w.b8.eε) (hb8d : 0 < w.b8.dε) (hb8p : 0 < w.b8.pε)
-    (hb9e : 0 < w.b9.eε) (hb9d : 0 < w.b9.dε) (hb9p : 0 < w.b9.pε)
-    (hb10e : 0 < w.b10.eε) (hb10d : 0 < w.b10.dε) (hb10p : 0 < w.b10.pε)
-    (hb11e : 0 < w.b11.eε) (hb11d : 0 < w.b11.dε) (hb11p : 0 < w.b11.pε)
-    (hb12e : 0 < w.b12.eε) (hb12d : 0 < w.b12.dε) (hb12p : 0 < w.b12.pε)
-    (hb13e : 0 < w.b13.eε) (hb13d : 0 < w.b13.dε) (hb13p : 0 < w.b13.pε)
-    (hb14e : 0 < w.b14.eε) (hb14d : 0 < w.b14.dε) (hb14p : 0 < w.b14.pε)
-    (hb15e : 0 < w.b15.eε) (hb15d : 0 < w.b15.dε) (hb15p : 0 < w.b15.pε)
-    (hb16e : 0 < w.b16.eε) (hb16d : 0 < w.b16.dε) (hb16p : 0 < w.b16.pε)
-    (hhε : 0 < w.hε)
+    (hεw : w.EpsPos)
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * 10))) :
     -- forward block inputs (the prefixes of efficientnetForwardB_full)
@@ -528,62 +511,62 @@ theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) (w : B0
       Proofs.ResNet34TieB.unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
         (Proofs.ResNet34TieB.rowB N 10
           (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
-    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdB_has_vjp N (h := 7) (w := 7) w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb).backward a16 g
-    let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpW_has_vjp N 7 7 w.b16 hb16e hb16d hb16p).backward a15 dy16
-    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b15 hb15e hb15d hb15p).backward a14 dy15
-    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b14 hb14e hb14d hb14p).backward a13 dy14
-    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b13 hb13e hb13d hb13p).backward a12 dy13
-    let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedW_has_vjp N 7 7 w.b12 hb12e hb12d hb12p).backward a11 dy12
-    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b11 hb11e hb11d hb11p).backward a10 dy11
-    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b10 hb10e hb10d hb10p).backward a9 dy10
-    let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpW_has_vjp N 14 14 w.b9 hb9e hb9d hb9p).backward a8 dy9
-    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b8 hb8e hb8d hb8p).backward a7 dy8
-    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b7 hb7e hb7d hb7p).backward a6 dy7
-    let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedW_has_vjp N 14 14 w.b6 hb6e hb6d hb6p).backward a5 dy6
-    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidW_has_vjp N 28 28 w.b5 hb5e hb5d hb5p).backward a4 dy5
-    let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedW_has_vjp N 28 28 w.b4 hb4e hb4d hb4p).backward a3 dy4
-    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidW_has_vjp N 56 56 w.b3 hb3e hb3d hb3p).backward a2 dy3
-    let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedW_has_vjp N 56 56 w.b2 hb2e hb2d hb2p).backward a1 dy2
-    let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpW_has_vjp N 112 112 w.b1 hb1d hb1p).backward a0 dy1
+    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdB_has_vjp N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
+    let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpW_has_vjp N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
+    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+    let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedW_has_vjp N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
+    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+    let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpW_has_vjp N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
+    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+    let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedW_has_vjp N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
+    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidW_has_vjp N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+    let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedW_has_vjp N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
+    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidW_has_vjp N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+    let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedW_has_vjp N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
+    let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpW_has_vjp N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
     -- every block + stem + head tied at its real input + threaded output cotangent
-    enetStemTiedG xN vN epsStr cotN w.sε hsε w.sW w.sb w.sγ w.sβ x dy0
-  ∧ enetNoExpTiedGAt xN vN epsStr cotN 112 112 w.b1 hb1d hb1p a0 dy1
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 56 56 w.b2 hb2e hb2d hb2p a1 dy2
-  ∧ enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hb3e hb3d hb3p a2 dy3
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 28 28 w.b4 hb4e hb4d hb4p a3 dy4
-  ∧ enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hb5e hb5d hb5p a4 dy5
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 14 14 w.b6 hb6e hb6d hb6p a5 dy6
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hb7e hb7d hb7p a6 dy7
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hb8e hb8d hb8p a7 dy8
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b9 hb9e hb9d hb9p a8 dy9
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hb10e hb10d hb10p a9 dy10
-  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hb11e hb11d hb11p a10 dy11
-  ∧ enetStridedTiedGAt xN vN epsStr cotN 7 7 w.b12 hb12e hb12d hb12p a11 dy12
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hb13e hb13d hb13p a12 dy13
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hb14e hb14d hb14p a13 dy14
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hb15e hb15d hb15p a14 dy15
-  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b16 hb16e hb16d hb16p a15 dy16
-  ∧ enetHeadTiedG xN vN epsStr cotN dN w.hε hhε w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g := by
+    enetStemTiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ x dy0
+  ∧ enetNoExpTiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p a0 dy1
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 dy2
+  ∧ enetExpTiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 dy3
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 dy4
+  ∧ enetExpTiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 dy5
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 dy6
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 dy7
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 dy8
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 dy9
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 dy10
+  ∧ enetExpTiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 dy11
+  ∧ enetStridedTiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 dy12
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 dy13
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 dy14
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 dy15
+  ∧ enetExpTiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 dy16
+  ∧ enetHeadTiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g := by
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
         g dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact enet_stem_tiedG xN vN epsStr cotN w.sε hsε w.sW w.sb w.sγ w.sβ x dy0
-  · exact enet_noexp_tiedGAt xN vN epsStr cotN 112 112 w.b1 hb1d hb1p a0 dy1
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 56 56 w.b2 hb2e hb2d hb2p a1 dy2
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 56 56 w.b3 hb3e hb3d hb3p a2 dy3
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 28 28 w.b4 hb4e hb4d hb4p a3 dy4
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 28 28 w.b5 hb5e hb5d hb5p a4 dy5
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 14 14 w.b6 hb6e hb6d hb6p a5 dy6
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b7 hb7e hb7d hb7p a6 dy7
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b8 hb8e hb8d hb8p a7 dy8
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b9 hb9e hb9d hb9p a8 dy9
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b10 hb10e hb10d hb10p a9 dy10
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b11 hb11e hb11d hb11p a10 dy11
-  · exact enet_strided_tiedGAt xN vN epsStr cotN 7 7 w.b12 hb12e hb12d hb12p a11 dy12
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b13 hb13e hb13d hb13p a12 dy13
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b14 hb14e hb14d hb14p a13 dy14
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b15 hb15e hb15d hb15p a14 dy15
-  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b16 hb16e hb16d hb16p a15 dy16
-  · exact enet_head_tiedG xN vN epsStr cotN dN w.hε hhε w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g
+  · exact enet_stem_tiedG xN vN epsStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ x dy0
+  · exact enet_noexp_tiedGAt xN vN epsStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p a0 dy1
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 dy2
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 dy3
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 dy4
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 dy5
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 dy6
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 dy7
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 dy8
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 dy9
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 dy10
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 dy11
+  · exact enet_strided_tiedGAt xN vN epsStr cotN 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 dy12
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 dy13
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 dy14
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 dy15
+  · exact enet_exp_tiedGAt xN vN epsStr cotN 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 dy16
+  · exact enet_head_tiedG xN vN epsStr cotN dN w.hε hεw.h w.hW w.hb w.hγ w.hβ w.fcW w.fcb a16 g
 
 end Proofs.EnetTiePoCG

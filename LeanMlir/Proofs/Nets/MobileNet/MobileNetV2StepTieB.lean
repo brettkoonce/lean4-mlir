@@ -671,11 +671,15 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
 -- ════════════════════════════════════════════════════════════════
 
 /-- ⭐⭐ **The whole batch-BN MobileNetV2 train step, tied.** Threading
-    `mobilenetv2ForwardB_full`'s own prefixes as the block inputs and the label-smoothed loss
-    cotangent down through the head chain and the seventeen certified block backwards, every
-    parameter GRADIENT node of the net — stem 4, `b1` 8, sixteen blocks x 12, head 4, dense 2 —
-    denotes the certified batched `Σ_n` gradient. No free activation and no symbolic cotangent.
+    `mobilenetv2ForwardB_full`'s own prefixes as the block inputs and an arbitrary loss cotangent
+    `g` down through the head chain and the seventeen certified block backwards, every parameter
+    GRADIENT node of the net — stem 4, `b1` 8, sixteen blocks x 12, head 4, dense 2 — denotes the
+    certified batched `Σ_n` gradient. No free activation and no symbolic cotangent below the loss.
     With 4.2b this is MobileNetV2's T3 complete at batch BatchNorm.
+
+    ⭐⭐ **`g` IS A BINDER.** The loss chain is not part of this statement;
+    `mnv2_lossCot_is_smoothedCE_grad` instantiates it at the label-smoothed softmax cotangent the
+    artifacts actually emit.
 
     ⭐ **`N` is a binder and there is no smoothness hypothesis.** The folds are `∀ cot` statements
     instantiated at explicitly-constructed cotangents, so the capstone needs neither `0 < ε` nor a
@@ -691,12 +695,7 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
     node since 4d piece 2; `MobileNetV2SyncTieB.mnv2_net_syncTiedB` is the data-parallel step, and
     its right-hand sides are this theorem's nodes at `N := R·N`. -/
 theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
-    (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)
-    (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (t : Vec (N * (1 * nCls))) :
-    -- the label-smoothed loss cotangent at the real logits and a general target
-    let g : Vec (N * nCls) :=
-      unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (mobilenetv2ForwardB_full N w x)) t))
+    (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (g : Vec (N * nCls)) :
     -- the backward chain: the head's own four nodes, then the seventeen certified block backwards
     let dy17 := mnv2HeadCotBlk N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 N w x) g
     let dy16 := mnv2CotInBody N 7 7 w.b17 (mnv2PreB16 N w x) dy17
@@ -736,7 +735,7 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   ∧ mnv2Stride1TiedB N 7 7 xN cotN vN epsStr w.b17 (mnv2PreB16 N w x) dy17
   ∧ mnv2HeadTiedB N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
       (mnv2PreB17 N w x) g := by
-  intro g dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
+  intro dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
   exact ⟨mnv2_stem_tiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ x cotStem,
     mnv2_noexp_tiedB N 112 112 xN cotN vN epsStr w.b1 (mnv2PreB0 N w x) dy1,
     mnv2_stride2_tiedB N 56 56 xN cotN vN epsStr w.b2 (mnv2PreB1 N w x) dy2,
@@ -759,9 +758,10 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
       (mnv2PreB17 N w x) g⟩
 
 
-/-- ⭐ **And the cotangent the capstone threads is the smoothed loss's gradient.** Row by row: the
-    `g` above is, at example `n` and class `j`, `(1/B)·∂/∂logits` of soft-target cross-entropy
-    against the SMOOTHED target `(1−α)·t + α/K`, at that example's real logits. The only hypothesis
+/-- ⭐ **And the cotangent the artifacts feed the capstone is the smoothed loss's gradient.** Row by
+    row: `g := unrowB (den (smoothedLossCotGraph …))` at the real logits is, at example `n` and
+    class `j`, `(1/B)·∂/∂logits` of soft-target cross-entropy against the SMOOTHED target
+    `(1−α)·t + α/K`, at that example's real logits. The only hypothesis
     is that the example's target sums to 1 — a one-hot, or mixup's convex combination of two.
     Together with the capstone this closes the top of the chain: every parameter node denotes the
     certified gradient at the cotangent of the loss the trainer actually minimises. Shared with

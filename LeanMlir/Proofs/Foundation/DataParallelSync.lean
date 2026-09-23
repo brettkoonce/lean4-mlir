@@ -303,13 +303,22 @@ theorem den_allReduceMeanF_bnBetaGradB_shard {N oc h w : Nat} (R : Nat) (hR : 0 
 -- § The divisor step
 -- ════════════════════════════════════════════════════════════════
 
+/-- **`f` scales with its argument**: `f (s • v) = s • f v`, spelled pointwise. The statement of
+    every cotangent-chain `_smul` lemma; an `abbrev`, so `rw [h]` and `h s v` see the equation. -/
+abbrev IsHomog {a b : Nat} (f : Vec a → Vec b) : Prop :=
+  ∀ (s : ℝ) (v : Vec a), f (fun i => s * v i) = fun i => s * f v i
+
+theorem IsHomog.comp {a b c : Nat} {g : Vec b → Vec c} {f : Vec a → Vec b} (hg : IsHomog g)
+    (hf : IsHomog f) : IsHomog (g ∘ f) := fun s v => by
+  simp only [Function.comp_apply, hf s v, hg s]
+
 /-- **A VJP backward is linear in its cotangent** — read off `HasVJP.correct`. This is the one
     step that reconciles a DP render's `divConstB N` with the batch-`R·N` step's `divConstB (R·N)`:
     the per-replica cotangent is `R ·` the shard of the global one, so every per-replica
     gradient is `R ·` its shard contribution, and the collective's `1/R` cancels it. -/
-theorem HasVJP.backward_smul {m n : Nat} {f : Vec m → Vec n} (hf : HasVJP f) (x : Vec m)
-    (a : ℝ) (dy : Vec n) :
-    hf.backward x (fun j => a * dy j) = fun i => a * hf.backward x dy i := by
+theorem HasVJP.backward_smul {m n : Nat} {f : Vec m → Vec n} (hf : HasVJP f) (x : Vec m) :
+    IsHomog (hf.backward x) := by
+  intro a dy
   funext i
   rw [hf.correct, hf.correct, Finset.mul_sum]
   exact Finset.sum_congr rfl (fun j _ => by ring)

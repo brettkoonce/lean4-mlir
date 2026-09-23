@@ -58,15 +58,15 @@ open Proofs.ResNet34TieB
 -- § 1. Homogeneity — the single-device chain is linear in its cotangent
 -- ════════════════════════════════════════════════════════════════
 
-theorem reluMaskB_smul (n : Nat) (pre dy : Vec n) (s : ℝ) :
-    reluMaskB n pre (fun i => s * dy i) = fun i => s * reluMaskB n pre dy i := by
+theorem reluMaskB_smul (n : Nat) (pre : Vec n) : IsHomog (reluMaskB n pre) := by
+  intro s dy
   funext i
   unfold reluMaskB
   split_ifs <;> simp
 
 /-- The three-term BatchNorm input-gradient is linear in `dy` — both its reductions are. -/
-theorem bn_grad_input_smul (n : Nat) (ε γ : ℝ) (x dy : Vec n) (s : ℝ) :
-    bn_grad_input n ε γ x (fun i => s * dy i) = fun i => s * bn_grad_input n ε γ x dy i := by
+theorem bn_grad_input_smul (n : Nat) (ε γ : ℝ) (x : Vec n) : IsHomog (bn_grad_input n ε γ x) := by
+  intro s dy
   funext i
   have h1 : ∑ j : Fin n, γ * (s * dy j) = s * ∑ j : Fin n, γ * dy j := by
     rw [Finset.mul_sum]; exact Finset.sum_congr rfl (fun _ _ => by ring)
@@ -76,97 +76,84 @@ theorem bn_grad_input_smul (n : Nat) (ε γ : ℝ) (x dy : Vec n) (s : ℝ) :
   simp only [bn_grad_input, h1, h2]
   ring
 
-theorem bnPerChannel_grad_input_smul (oc m : Nat) (ε : ℝ) (γ : Vec oc) (x dy : Vec (oc * m))
-    (s : ℝ) :
-    bnPerChannel_grad_input oc m ε γ x (fun i => s * dy i)
-      = fun i => s * bnPerChannel_grad_input oc m ε γ x dy i := by
+theorem bnPerChannel_grad_input_smul (oc m : Nat) (ε : ℝ) (γ : Vec oc) (x : Vec (oc * m)) :
+    IsHomog (bnPerChannel_grad_input oc m ε γ x) := by
+  intro s dy
   funext idx
-  exact congrFun (bn_grad_input_smul m ε _ _ (Mat.unflatten dy (finProdFinEquiv.symm idx).1) s) _
+  exact congrFun (bn_grad_input_smul m ε _ _ s (Mat.unflatten dy (finProdFinEquiv.symm idx).1)) _
 
 theorem bnBatchTensor4_grad_input_smul (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
-    (x dy : Vec (N * (oc * (h * w)))) (s : ℝ) :
-    bnBatchTensor4_grad_input N oc h w ε γ x (fun i => s * dy i)
-      = fun i => s * bnBatchTensor4_grad_input N oc h w ε γ x dy i := by
+    (x : Vec (N * (oc * (h * w)))) : IsHomog (bnBatchTensor4_grad_input N oc h w ε γ x) := by
+  intro s dy
   funext i
-  exact congrFun (bnPerChannel_grad_input_smul oc (N * (h * w)) ε γ _ (bnchwFwd N oc h w dy) s) _
+  exact congrFun (bnPerChannel_grad_input_smul oc (N * (h * w)) ε γ _ s (bnchwFwd N oc h w dy)) _
 
-theorem bnInB_smul (N oc h w : Nat) (ε : ℝ) (γ : Vec oc) (x dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    bnInB N oc h w ε γ x (fun i => s * dy i) = fun i => s * bnInB N oc h w ε γ x dy i := by
+theorem bnInB_smul (N oc h w : Nat) (ε : ℝ) (γ : Vec oc) (x : Vec (N * (oc * h * w))) :
+    IsHomog (bnInB N oc h w ε γ x) := by
+  intro s dy
   rw [bnInB_eq_den_bnBatchBack, bnInB_eq_den_bnBatchBack]
   funext i
-  exact congrFun (bnBatchTensor4_grad_input_smul N oc h w ε γ _ (reassocB N oc h w dy) s) _
+  exact congrFun (bnBatchTensor4_grad_input_smul N oc h w ε γ _ s (reassocB N oc h w dy)) _
 
-theorem batchMap_smul {N a b : Nat} (f : Vec a → Vec b)
-    (hf : ∀ (s : ℝ) (v : Vec a), f (fun i => s * v i) = fun i => s * f v i) (s : ℝ)
-    (X : Vec (N * a)) :
-    batchMap N f (fun i => s * X i) = fun i => s * batchMap N f X i := by
+theorem batchMap_smul {N a b : Nat} (f : Vec a → Vec b) (hf : IsHomog f) :
+    IsHomog (batchMap N f) := fun s X => by
   funext idx
   exact congrFun (hf s _) _
 
-theorem batchMapAux_smul {N t a b : Nat} (f : Vec t → Vec a → Vec b)
-    (hf : ∀ (s : ℝ) (x : Vec t) (v : Vec a), f x (fun i => s * v i) = fun i => s * f x v i)
-    (s : ℝ) (aux : Vec (N * t)) (X : Vec (N * a)) :
-    batchMapAux N f aux (fun i => s * X i) = fun i => s * batchMapAux N f aux X i := by
+theorem batchMapAux_smul {N t a b : Nat} (f : Vec t → Vec a → Vec b) (hf : ∀ x, IsHomog (f x))
+    (aux : Vec (N * t)) : IsHomog (batchMapAux N f aux) := fun s X => by
   funext idx
-  exact congrFun (hf s _ _) _
+  exact congrFun (hf _ s _) _
 
-theorem cInB_smul (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    cInB N (h := h) (w := w) W b (fun i => s * dy i)
-      = fun i => s * cInB N (h := h) (w := w) W b dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
+theorem cInB_smul (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    IsHomog (cInB N (h := h) (w := w) W b) :=
+  batchMap_smul _ (HasVJP.backward_smul _ _)
 
-theorem cStridedInB_smul (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
-    (b : Vec oc) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    cStridedInB N (h := h) (w := w) W b (fun i => s * dy i)
-      = fun i => s * cStridedInB N (h := h) (w := w) W b dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
+theorem cStridedInB_smul (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    IsHomog (cStridedInB N (h := h) (w := w) W b) :=
+  batchMap_smul _ (HasVJP.backward_smul _ _)
 
 /-- The 3×3/s2 pool's `select_and_scatter` is linear in the cotangent it scatters. -/
-theorem maxPool3s2BackFlat_smul (c h w : Nat) (xv : Vec (c * (2 * h) * (2 * w)))
-    (dyv : Vec (c * h * w)) (s : ℝ) :
-    maxPool3s2BackFlat c h w xv (fun i => s * dyv i)
-      = fun i => s * maxPool3s2BackFlat c h w xv dyv i := by
+theorem maxPool3s2BackFlat_smul (c h w : Nat) (xv : Vec (c * (2 * h) * (2 * w))) :
+    IsHomog (maxPool3s2BackFlat c h w xv) := by
+  intro s dyv
   funext idx
   simp only [maxPool3s2BackFlat, Tensor3.unflatten, Finset.mul_sum]
   refine Finset.sum_congr rfl (fun _ _ => Finset.sum_congr rfl (fun _ _ =>
     Finset.sum_congr rfl (fun _ _ => by ring)))
 
-theorem mpInB_smul (N c h w : Nat) (x : Vec (N * (c * (2 * h) * (2 * w))))
-    (dy : Vec (N * (c * h * w))) (s : ℝ) :
-    mpInB N c h w x (fun i => s * dy i) = fun i => s * mpInB N c h w x dy i :=
-  batchMapAux_smul _ (fun s x v => maxPool3s2BackFlat_smul c h w x v s) s x dy
+theorem mpInB_smul (N c h w : Nat) (x : Vec (N * (c * (2 * h) * (2 * w)))) :
+    IsHomog (mpInB N c h w x) :=
+  batchMapAux_smul _ (maxPool3s2BackFlat_smul c h w) x
 
 theorem r34HeadCotBlk_smul (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
-    (xin : Vec (N * (c * h * w))) (dy : Vec (N * nCls)) (s : ℝ) :
-    r34HeadCotBlk N h w Wd bd xin (fun i => s * dy i)
-      = fun i => s * r34HeadCotBlk N h w Wd bd xin dy i :=
-  HasVJP.backward_smul _ _ s dy
+    (xin : Vec (N * (c * h * w))) : IsHomog (r34HeadCotBlk N h w Wd bd xin) :=
+  HasVJP.backward_smul _ _
 
 /-! The block cotangents, each one line from the previous link's. -/
 
-theorem r34IdCotA_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin dy : Vec (N * (c * h * w)))
-    (s : ℝ) : r34IdCotA N h w p xin (fun i => s * dy i) = fun i => s * r34IdCotA N h w p xin dy i :=
-  reluMaskB_smul _ _ _ s
+theorem r34IdCotA_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+    IsHomog (r34IdCotA N h w p xin) :=
+  reluMaskB_smul _ _
 
-theorem r34IdCotC2_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin dy : Vec (N * (c * h * w)))
-    (s : ℝ) :
-    r34IdCotC2 N h w p xin (fun i => s * dy i) = fun i => s * r34IdCotC2 N h w p xin dy i := by
+theorem r34IdCotC2_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+    IsHomog (r34IdCotC2 N h w p xin) := by
+  intro s dy
   unfold r34IdCotC2; rw [r34IdCotA_smul, bnInB_smul]
 
-theorem r34IdCotN1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin dy : Vec (N * (c * h * w)))
-    (s : ℝ) :
-    r34IdCotN1 N h w p xin (fun i => s * dy i) = fun i => s * r34IdCotN1 N h w p xin dy i := by
+theorem r34IdCotN1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+    IsHomog (r34IdCotN1 N h w p xin) := by
+  intro s dy
   unfold r34IdCotN1; rw [r34IdCotC2_smul, cInB_smul, reluMaskB_smul]
 
-theorem r34IdCotC1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin dy : Vec (N * (c * h * w)))
-    (s : ℝ) :
-    r34IdCotC1 N h w p xin (fun i => s * dy i) = fun i => s * r34IdCotC1 N h w p xin dy i := by
+theorem r34IdCotC1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+    IsHomog (r34IdCotC1 N h w p xin) := by
+  intro s dy
   unfold r34IdCotC1; rw [r34IdCotN1_smul, bnInB_smul]
 
-theorem r34IdCotIn_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin dy : Vec (N * (c * h * w)))
-    (s : ℝ) :
-    r34IdCotIn N h w p xin (fun i => s * dy i) = fun i => s * r34IdCotIn N h w p xin dy i := by
+theorem r34IdCotIn_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+    IsHomog (r34IdCotIn N h w p xin) := by
+  intro s dy
   unfold r34IdCotIn
   rw [r34IdCotC1_smul, cInB_smul, r34IdCotA_smul]
   funext i
@@ -174,58 +161,53 @@ theorem r34IdCotIn_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin dy : Vec (N 
   ring
 
 theorem r34DownCotA_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34DownCotA N h w p xin (fun i => s * dy i) = fun i => s * r34DownCotA N h w p xin dy i :=
-  reluMaskB_smul _ _ _ s
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotA N h w p xin) :=
+  reluMaskB_smul _ _
 
 theorem r34DownCotC2_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34DownCotC2 N h w p xin (fun i => s * dy i) = fun i => s * r34DownCotC2 N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotC2 N h w p xin) := by
+  intro s dy
   unfold r34DownCotC2; rw [r34DownCotA_smul, bnInB_smul]
 
 theorem r34DownCotN1_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34DownCotN1 N h w p xin (fun i => s * dy i) = fun i => s * r34DownCotN1 N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotN1 N h w p xin) := by
+  intro s dy
   unfold r34DownCotN1; rw [r34DownCotC2_smul, cInB_smul, reluMaskB_smul]
 
 theorem r34DownCotC1_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34DownCotC1 N h w p xin (fun i => s * dy i) = fun i => s * r34DownCotC1 N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotC1 N h w p xin) := by
+  intro s dy
   unfold r34DownCotC1; rw [r34DownCotN1_smul, bnInB_smul]
 
 theorem r34DownCotCp_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34DownCotCp N h w p xin (fun i => s * dy i) = fun i => s * r34DownCotCp N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotCp N h w p xin) := by
+  intro s dy
   unfold r34DownCotCp; rw [r34DownCotA_smul, bnInB_smul]
 
 theorem r34DownCotIn_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34DownCotIn N h w p xin (fun i => s * dy i) = fun i => s * r34DownCotIn N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotIn N h w p xin) := by
+  intro s dy
   unfold r34DownCotIn
   rw [r34DownCotC1_smul, cStridedInB_smul, r34DownCotCp_smul, cStridedInB_smul]
   funext i
   beta_reduce
   ring
 
-theorem r34StemCotP_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
-    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34StemCotP N h w Ws bs εs γs βs x (fun i => s * dy i)
-      = fun i => s * r34StemCotP N h w Ws bs εs γs βs x dy i :=
-  mpInB_smul _ _ _ _ _ _ s
+theorem r34StemCotP_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
+    IsHomog (r34StemCotP N h w Ws bs εs γs βs x) :=
+  mpInB_smul _ _ _ _ _
 
-theorem r34StemCotN_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
-    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34StemCotN N h w Ws bs εs γs βs x (fun i => s * dy i)
-      = fun i => s * r34StemCotN N h w Ws bs εs γs βs x dy i := by
+theorem r34StemCotN_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
+    IsHomog (r34StemCotN N h w Ws bs εs γs βs x) := by
+  intro s dy
   unfold r34StemCotN; rw [r34StemCotP_smul, reluMaskB_smul]
 
-theorem r34StemCotC_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
-    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    r34StemCotC N h w Ws bs εs γs βs x (fun i => s * dy i)
-      = fun i => s * r34StemCotC N h w Ws bs εs γs βs x dy i := by
+theorem r34StemCotC_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+    (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
+    IsHomog (r34StemCotC N h w Ws bs εs γs βs x) := by
+  intro s dy
   unfold r34StemCotC; rw [r34StemCotN_smul, bnInB_smul]
 
 /-! The gradient nodes. -/

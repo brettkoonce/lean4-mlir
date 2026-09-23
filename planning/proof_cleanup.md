@@ -71,7 +71,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 * `trace.profiler` allocates: a heartbeat bump sized without it can fail under it (§1(g):
   `emitTok` at 400k).
 
-**Next, recommended order:** §3.5 → §3.6.
+**Next, recommended order:** §3.5; §3.6's leftovers are listed there.
 §3.3's matrix-level `G1` lemma and §3.2's printer split are optional (~20 s / ~45 s).
 
 ## 1. Done
@@ -91,6 +91,9 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 | `714dd89b` (k) | §3.3 strip-and-compile across the Lipschitz tier: the shared `HEADER_OPTS` (`maxRecDepth 100000` / `maxHeartbeats 3200000` in 9 modules), CROWN's header, FullNets' 12.8M `_lip` bumps, the pair-SDP 1.6M–64M bumps (incl. the 64M `hS*`) and the float tier's per-image 8M — 281 option lines out of 14 modules. Kept: IBP/IBPUncon's per-decl 6.4M (32 + 18 `whnf` timeouts without them; their file header was dead) | every stripped module compiled standalone before the generators changed; the regenerated diff is deletions only |
 | (l) | §3.7: `rndP`/`rndP_zero`/`rndP_err` → leaf `Float/RndP.lean` (Mathlib only), so `DataParallelSyncBf16` no longer imports `Binary32Instance` → FloatBridge, SgdDescentLinear; the three `#print axioms` out of `Binary32Instance` (already in `tests/AuditAxioms.lean`); `Proofs.Real.differentiable_tanh`/`…hasDerivAt_tanh` → `Proofs.differentiable_tanh`/`hasDerivAt_tanh` (Mathlib has neither; the docstring said it had one); file-scope `Classical` out of the audit's six files: four need nothing, CNN's three maxpool decls and SgdDescentCnn's 25 get `open scoped Classical in` (all for `if MaxPool2IsArgmax`, which has no `Decidable` instance); the ten `nlinarith` → `nlinarith only […]` (one → `positivity`) | RndP 1.2 s; DataParallelSyncBf16 12 s; FloatBridge 5.3 s → 5.0 s |
 | (m) | §3.4 root batch, one corpus rebuild. `Tensor.lean`: `Mat`/`Tensor3` `flatten` bodies without `let`s, `flatten_apply`/`unflatten_apply` for both, the four round-trips `@[simp]`, `vjp_comp_backward`/`vjp_comp_at_backward`, and `vjp_comp_diff_at` + `vjp_comp_diff_at_fst_backward` moved in from `ResNet34.lean` / ConvNeXt's tie (the §3.1 leftover). Leaves: `softmax_apply`/`oneHot_apply`/`crossEntropy_def` (MLP), `bnchwFwd_apply` (PerChannelBN), `residual_apply`/`residual_differentiableAt` (Residual). Sites: PerChannelBN's two nested-`.backward` `show`s → `unfold; rw [vjp_comp_backward, …]` and two `bnchwFwd` `show`s; Attention's four softmax/CE/oneHot `show`s; seven residual `show`/`unfold` sites; the 27 `simp only [… vjp_comp(_at) …]` peels → the `_backward` lemmas, where 9 turned out dead (the proof closes by `rfl` once the outer builder unfolds) and EfficientNet's two conv sites keep `vjp_comp` (defeq-typed witness, see traps) | the `@[simp]` round-trips and `let`-free bodies broke nothing in the 4,175-job corpus |
+| (n) | §3.6 seal kits: `ne_of_ray_readout` / `fderiv_ne_zero_of_ray_readout` (JacobianSeal) make the four nets' `sealX_nonconstant` / `sealX_jacobian_nonzero` one term each; `EDiff_convBn` / `convS2Bn` / `dwBn` / `dwS2Bn` / `dwS2XlaBn` (BatchSealKit) fuse op + BatchNorm, so 43 of the 46 carrier steps are one call (the three stems keep their own shape) | −176 lines net; the four seals build in ~3 s each |
+| (o) | §3.6 statement ports. EfficientNet: `B0Weights.EpsPos` (with `MBW.EpsPos`, `MBWNoExp.EpsPos`) replaces the 49 `0 < ε` binders in 7 statements. MobileNetV2 on V4's shape: `MNV2PosB` + `MNV2SmoothAtB` replace the apex's 38 binders, built on `vjp_comp_diff_at`, which also yields the new `mobilenetv2ForwardB_full_differentiableAt` (the seal's 45-line `sealDiffAt` is one term); `mnv2_net_tiedB` takes `g` free; `mnv2_net_syncTiedB` is the free-`G`/`hgs` form over a named `mnv2NetSyncTiedB` Prop, with `_smoothedCE` restoring the old instantiated statement. Tier regenerated (`mnv2_net_syncTiedB` and both EfficientNet entries), blueprint entries mirror V4's | the local comparator run: all three configs "Your solution is okay!" (5 min); ports + (n) together −558 lines |
+| (p) | §3.6 `_smul` kit: `IsHomog` (an `abbrev`, so `rw [h]`/`h s v` see the equation) + `IsHomog.comp` in DataParallelSync; 128 `X_smul` lemmas across 6 sync files restated `IsHomog (X …)` under the same name, `batchMap_smul` / `batchMapAux_smul` lift `IsHomog`, one-term delegates η-reduce (`batchMap_smul _ (HasVJP.backward_smul _ _)`); 21 explicit `… dy s` call sites swapped to `… s dy`. EfficientNetSyncStepTieG (the only sync file without them) got `variable` sections, `include hN hh hw` where the shard proofs need them | `IsHomog`: −55 lines. Sections: +21 lines but −6% of the file's bytes (97.1 → 90.9 kB) — the survey's "~300 lines from `variable`s" does not hold at this file's shape |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -182,18 +185,16 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 * CNN.lean:266–412 and Depthwise.lean:236–370 are one proof twice (~290 lines); Attention.lean
   2123–2140 already does it the short way.
 
-### 3.6 Repetition kits (largest line-count payoff, most design)
+### 3.6 Repetition kits — DONE as §1(n)–(p), with these left
 
-* `_smul` homogeneity lemmas: ~150 across 12 files, spelled `fun i => s * v i` — a
-  composable `IsHomog`/`IsShardwise` predicate with `.comp`, or `→ₗ[ℝ]` cotangent maps.
-* `EDiff` seal steps: 46 sites → `EDiff_ctConvBn` / `EDiff_ctDwBn` in `Training/BatchSealKit.lean`.
-* Seal tail (non-constant / Jacobian nonzero / backward nontrivial): 4 copies → one lemma in
-  `Training/JacobianSeal.lean`; export each apex's `*ForwardB_full_differentiableAt` so
-  `sealDiffAt` is one line.
-* MobileNetV2 → V4's shape (hypothesis structure, free-cotangent capstones, one generic apply
-  lemma): 9 findings in audit_mobilenet.md reduce to this port.
-* EfficientNet: `variable` sections + `[NeZero …]` in `EfficientNetSyncStepTieG` (the 49 `0 < ε`
-  binders → a `B0Weights.EpsPos` structure).
+* MobileNetV2 `eq_slots` / the 18 `mnv2PreB*_apply` lemmas stay: a generic 21-stage apply lemma is
+  longer than what it replaces, and its closing `rfl` would have the kernel compare the concrete
+  chain (the timeout `comp3_assoc`'s comment records). The `simp only` over the prefix defs is fast.
+* `sealDiffAt` for R34/R50/V4 is still a hand chain; the MNv2 route (the apex built on
+  `vjp_comp_diff_at`, `.snd` exported) is the template.
+* The `_shard` family (~130 lemmas) has the same shape as `_smul`; an `IsShardwise` predicate was not
+  built. `[NeZero N]` for the `hN hh hw` threading was not done (it changes every caller's arguments).
+* The weight-gradient `den` `_smul` lemmas (pointwise, scalar-valued) keep their form.
 
 ### 3.7 Small, any time — DONE as §1(l)
 

@@ -1147,136 +1147,11 @@ theorem chk_mobilenetv2FwdGraphSync_full_shard :
 theorem chk_mnv2_net_syncTiedB :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ {nCls : ℕ} (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : Proofs.MNV2BWeights nCls)
+        ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.MNV2BWeights nCls)
           (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ)))))
-          (T : Proofs.Vec (R * N * ((1 : ℕ) * nCls))),
-          have G :=
-            Proofs.ResNet34TieB.unrowB (R * N) nCls
-              (Proofs.StableHLO.den
-                (Proofs.smoothedLossCotGraph (R * N) nCls α (↑R * B) aStr negAK bStr logN ohN
-                  (Proofs.ResNet34TieB.rowB (R * N) nCls (Proofs.mobilenetv2ForwardB_full (R * N) w X)) T));
-          have dy17 :=
-            Proofs.MobileNetV2TieB.mnv2HeadCotBlk (R * N) (7 : ℕ) (7 : ℕ) w.hW w.hb w.hε w.hγ w.hβ w.fcW
-              (Proofs.mnv2PreB17 (R * N) w X) G;
-          have dy16 :=
-            Proofs.MobileNetV2TieB.mnv2CotInBody (R * N) (7 : ℕ) (7 : ℕ) w.b17 (Proofs.mnv2PreB16 (R * N) w X) dy17;
-          have dy15 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (7 : ℕ) (7 : ℕ) w.b16 (Proofs.mnv2PreB15 (R * N) w X) dy16;
-          have dy14 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (7 : ℕ) (7 : ℕ) w.b15 (Proofs.mnv2PreB14 (R * N) w X) dy15;
-          have dy13 :=
-            Proofs.MobileNetV2TieB.mnv2StridedCotIn (R * N) (7 : ℕ) (7 : ℕ) w.b14 (Proofs.mnv2PreB13 (R * N) w X) dy14;
-          have dy12 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (14 : ℕ) (14 : ℕ) w.b13 (Proofs.mnv2PreB12 (R * N) w X) dy13;
-          have dy11 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (14 : ℕ) (14 : ℕ) w.b12 (Proofs.mnv2PreB11 (R * N) w X) dy12;
-          have dy10 :=
-            Proofs.MobileNetV2TieB.mnv2CotInBody (R * N) (14 : ℕ) (14 : ℕ) w.b11 (Proofs.mnv2PreB10 (R * N) w X) dy11;
-          have dy9 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (14 : ℕ) (14 : ℕ) w.b10 (Proofs.mnv2PreB9 (R * N) w X) dy10;
-          have dy8 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (14 : ℕ) (14 : ℕ) w.b9 (Proofs.mnv2PreB8 (R * N) w X) dy9;
-          have dy7 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (14 : ℕ) (14 : ℕ) w.b8 (Proofs.mnv2PreB7 (R * N) w X) dy8;
-          have dy6 :=
-            Proofs.MobileNetV2TieB.mnv2StridedCotIn (R * N) (14 : ℕ) (14 : ℕ) w.b7 (Proofs.mnv2PreB6 (R * N) w X) dy7;
-          have dy5 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b6 (Proofs.mnv2PreB5 (R * N) w X) dy6;
-          have dy4 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b5 (Proofs.mnv2PreB4 (R * N) w X) dy5;
-          have dy3 :=
-            Proofs.MobileNetV2TieB.mnv2StridedCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b4 (Proofs.mnv2PreB3 (R * N) w X) dy4;
-          have dy2 :=
-            Proofs.MobileNetV2TieB.mnv2ResidCotIn (R * N) (56 : ℕ) (56 : ℕ) w.b3 (Proofs.mnv2PreB2 (R * N) w X) dy3;
-          have dy1 :=
-            Proofs.MobileNetV2TieB.mnv2StridedCotIn (R * N) (56 : ℕ) (56 : ℕ) w.b2 (Proofs.mnv2PreB1 (R * N) w X) dy2;
-          have cotStem :=
-            Proofs.MobileNetV2TieB.mnv2NoExpCotIn (R * N) (112 : ℕ) (112 : ℕ) w.b1 (Proofs.mnv2PreB0 (R * N) w X) dy1;
-          have g : Fin R → Proofs.Vec (N * nCls) := fun (r : Fin R) =>
-            Proofs.ResNet34TieB.unrowB N nCls
-              (Proofs.StableHLO.den
-                (Proofs.smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-                  (Proofs.ResNet34TieB.rowB N nCls
-                    (Proofs.batchShard R N nCls (Proofs.mobilenetv2ForwardB_full (R * N) w X) r))
-                  (Proofs.batchShard R N ((1 : ℕ) * nCls) T r)));
-          have e17 :=
-            Proofs.MobileNetV2SyncTieB.mnv2HeadSyncCotBlk R hR N (7 : ℕ) (7 : ℕ) w.hW w.hb w.hε w.hγ w.hβ w.fcW
-              (Proofs.mnv2PreB17 (R * N) w X) g;
-          have e16 :=
-            Proofs.MobileNetV2SyncTieB.mnv2SyncCotInBody R hR N (7 : ℕ) (7 : ℕ) w.b17 (Proofs.mnv2PreB16 (R * N) w X) e17;
-          have e15 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.b16 (Proofs.mnv2PreB15 (R * N) w X) e16;
-          have e14 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.b15 (Proofs.mnv2PreB14 (R * N) w X) e15;
-          have e13 :=
-            Proofs.MobileNetV2SyncTieB.mnv2StridedSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.b14 (Proofs.mnv2PreB13 (R * N) w X)
-              e14;
-          have e12 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.b13 (Proofs.mnv2PreB12 (R * N) w X)
-              e13;
-          have e11 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.b12 (Proofs.mnv2PreB11 (R * N) w X)
-              e12;
-          have e10 :=
-            Proofs.MobileNetV2SyncTieB.mnv2SyncCotInBody R hR N (14 : ℕ) (14 : ℕ) w.b11 (Proofs.mnv2PreB10 (R * N) w X) e11;
-          have e9 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.b10 (Proofs.mnv2PreB9 (R * N) w X) e10;
-          have e8 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.b9 (Proofs.mnv2PreB8 (R * N) w X) e9;
-          have e7 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.b8 (Proofs.mnv2PreB7 (R * N) w X) e8;
-          have e6 :=
-            Proofs.MobileNetV2SyncTieB.mnv2StridedSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.b7 (Proofs.mnv2PreB6 (R * N) w X) e7;
-          have e5 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b6 (Proofs.mnv2PreB5 (R * N) w X) e6;
-          have e4 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b5 (Proofs.mnv2PreB4 (R * N) w X) e5;
-          have e3 :=
-            Proofs.MobileNetV2SyncTieB.mnv2StridedSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b4 (Proofs.mnv2PreB3 (R * N) w X) e4;
-          have e2 :=
-            Proofs.MobileNetV2SyncTieB.mnv2ResidSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.b3 (Proofs.mnv2PreB2 (R * N) w X) e3;
-          have e1 :=
-            Proofs.MobileNetV2SyncTieB.mnv2StridedSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.b2 (Proofs.mnv2PreB1 (R * N) w X) e2;
-          have eStem :=
-            Proofs.MobileNetV2SyncTieB.mnv2NoExpSyncCotIn R hR N (112 : ℕ) (112 : ℕ) w.b1 (Proofs.mnv2PreB0 (R * N) w X) e1;
-          Proofs.MobileNetV2SyncTieB.mnv2StemSyncTiedB R hR N (112 : ℕ) (112 : ℕ) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ
-              X eStem cotStem ∧
-            Proofs.MobileNetV2SyncTieB.mnv2NoExpSyncTiedB R hR N (112 : ℕ) (112 : ℕ) "1" xN cotN vN epsStr w.b1
-                (Proofs.mnv2PreB0 (R * N) w X) e1 dy1 ∧
-              Proofs.MobileNetV2SyncTieB.mnv2Stride2SyncTiedB R hR N (56 : ℕ) (56 : ℕ) "2" xN cotN vN epsStr w.b2
-                  (Proofs.mnv2PreB1 (R * N) w X) e2 dy2 ∧
-                Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (56 : ℕ) (56 : ℕ) "3" xN cotN vN epsStr w.b3
-                    (Proofs.mnv2PreB2 (R * N) w X) e3 dy3 ∧
-                  Proofs.MobileNetV2SyncTieB.mnv2Stride2SyncTiedB R hR N (28 : ℕ) (28 : ℕ) "4" xN cotN vN epsStr w.b4
-                      (Proofs.mnv2PreB3 (R * N) w X) e4 dy4 ∧
-                    Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (28 : ℕ) (28 : ℕ) "5" xN cotN vN epsStr w.b5
-                        (Proofs.mnv2PreB4 (R * N) w X) e5 dy5 ∧
-                      Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (28 : ℕ) (28 : ℕ) "6" xN cotN vN epsStr w.b6
-                          (Proofs.mnv2PreB5 (R * N) w X) e6 dy6 ∧
-                        Proofs.MobileNetV2SyncTieB.mnv2Stride2SyncTiedB R hR N (14 : ℕ) (14 : ℕ) "7" xN cotN vN epsStr w.b7
-                            (Proofs.mnv2PreB6 (R * N) w X) e7 dy7 ∧
-                          Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (14 : ℕ) (14 : ℕ) "8" xN cotN vN epsStr
-                              w.b8 (Proofs.mnv2PreB7 (R * N) w X) e8 dy8 ∧
-                            Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (14 : ℕ) (14 : ℕ) "9" xN cotN vN epsStr
-                                w.b9 (Proofs.mnv2PreB8 (R * N) w X) e9 dy9 ∧
-                              Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (14 : ℕ) (14 : ℕ) "10" xN cotN vN
-                                  epsStr w.b10 (Proofs.mnv2PreB9 (R * N) w X) e10 dy10 ∧
-                                Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (14 : ℕ) (14 : ℕ) "11" xN cotN vN
-                                    epsStr w.b11 (Proofs.mnv2PreB10 (R * N) w X) e11 dy11 ∧
-                                  Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (14 : ℕ) (14 : ℕ) "12" xN cotN vN
-                                      epsStr w.b12 (Proofs.mnv2PreB11 (R * N) w X) e12 dy12 ∧
-                                    Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (14 : ℕ) (14 : ℕ) "13" xN cotN vN
-                                        epsStr w.b13 (Proofs.mnv2PreB12 (R * N) w X) e13 dy13 ∧
-                                      Proofs.MobileNetV2SyncTieB.mnv2Stride2SyncTiedB R hR N (7 : ℕ) (7 : ℕ) "14" xN cotN vN
-                                          epsStr w.b14 (Proofs.mnv2PreB13 (R * N) w X) e14 dy14 ∧
-                                        Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (7 : ℕ) (7 : ℕ) "15" xN cotN
-                                            vN epsStr w.b15 (Proofs.mnv2PreB14 (R * N) w X) e15 dy15 ∧
-                                          Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (7 : ℕ) (7 : ℕ) "16" xN
-                                              cotN vN epsStr w.b16 (Proofs.mnv2PreB15 (R * N) w X) e16 dy16 ∧
-                                            Proofs.MobileNetV2SyncTieB.mnv2Stride1SyncTiedB R hR N (7 : ℕ) (7 : ℕ) "17" xN
-                                                cotN vN epsStr w.b17 (Proofs.mnv2PreB16 (R * N) w X) e17 dy17 ∧
-                                              Proofs.MobileNetV2SyncTieB.mnv2HeadSyncTiedB R hR N (7 : ℕ) (7 : ℕ) xN cotN vN
-                                                epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW (Proofs.mnv2PreB17 (R * N) w X) g G :=
+          (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
+          (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
+            Proofs.MobileNetV2SyncTieB.mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X G gs :=
   Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB
 
 /-- `Proofs.StableHLO.efficientnetFwdGraphSync_full_shard` -/
@@ -1296,21 +1171,8 @@ theorem chk_efficientnetFwdGraphSync_full_shard :
 theorem chk_efficientnet_net_syncTiedG :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ (xN vN epsStr cotN dN : String) (w : Proofs.B0Weights) (hsε : (0 : ℝ) < w.sε) (hb1d : (0 : ℝ) < w.b1.dε)
-          (hb1p : (0 : ℝ) < w.b1.pε) (hb2e : (0 : ℝ) < w.b2.eε) (hb2d : (0 : ℝ) < w.b2.dε) (hb2p : (0 : ℝ) < w.b2.pε)
-          (hb3e : (0 : ℝ) < w.b3.eε) (hb3d : (0 : ℝ) < w.b3.dε) (hb3p : (0 : ℝ) < w.b3.pε) (hb4e : (0 : ℝ) < w.b4.eε)
-          (hb4d : (0 : ℝ) < w.b4.dε) (hb4p : (0 : ℝ) < w.b4.pε) (hb5e : (0 : ℝ) < w.b5.eε) (hb5d : (0 : ℝ) < w.b5.dε)
-          (hb5p : (0 : ℝ) < w.b5.pε) (hb6e : (0 : ℝ) < w.b6.eε) (hb6d : (0 : ℝ) < w.b6.dε) (hb6p : (0 : ℝ) < w.b6.pε)
-          (hb7e : (0 : ℝ) < w.b7.eε) (hb7d : (0 : ℝ) < w.b7.dε) (hb7p : (0 : ℝ) < w.b7.pε) (hb8e : (0 : ℝ) < w.b8.eε)
-          (hb8d : (0 : ℝ) < w.b8.dε) (hb8p : (0 : ℝ) < w.b8.pε) (hb9e : (0 : ℝ) < w.b9.eε) (hb9d : (0 : ℝ) < w.b9.dε)
-          (hb9p : (0 : ℝ) < w.b9.pε) (hb10e : (0 : ℝ) < w.b10.eε) (hb10d : (0 : ℝ) < w.b10.dε) (hb10p : (0 : ℝ) < w.b10.pε)
-          (hb11e : (0 : ℝ) < w.b11.eε) (hb11d : (0 : ℝ) < w.b11.dε) (hb11p : (0 : ℝ) < w.b11.pε)
-          (hb12e : (0 : ℝ) < w.b12.eε) (hb12d : (0 : ℝ) < w.b12.dε) (hb12p : (0 : ℝ) < w.b12.pε)
-          (hb13e : (0 : ℝ) < w.b13.eε) (hb13d : (0 : ℝ) < w.b13.dε) (hb13p : (0 : ℝ) < w.b13.pε)
-          (hb14e : (0 : ℝ) < w.b14.eε) (hb14d : (0 : ℝ) < w.b14.dε) (hb14p : (0 : ℝ) < w.b14.pε)
-          (hb15e : (0 : ℝ) < w.b15.eε) (hb15d : (0 : ℝ) < w.b15.dε) (hb15p : (0 : ℝ) < w.b15.pε)
-          (hb16e : (0 : ℝ) < w.b16.eε) (hb16d : (0 : ℝ) < w.b16.dε) (hb16p : (0 : ℝ) < w.b16.pε) (hhε : (0 : ℝ) < w.hε)
-          (aStr negAK bStr logN ohN : String) (α B : ℝ) (x : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
+        ∀ (xN vN epsStr cotN dN : String) (w : Proofs.B0Weights) (hεw : w.EpsPos) (aStr negAK bStr logN ohN : String)
+          (α B : ℝ) (x : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
           (t : Proofs.Vec (R * N * ((1 : ℕ) * (10 : ℕ)))),
           have a0 : Proofs.Vec (R * N * ((32 : ℕ) * (112 : ℕ) * (112 : ℕ))) :=
             Proofs.stemB (R * N) w.sW w.sb w.sε w.sγ w.sβ x;
@@ -1339,33 +1201,53 @@ theorem chk_efficientnet_net_syncTiedG :
                   t));
           have dy16 :=
             Proofs.HasVJP.backward (f := Proofs.headFwdB (R * N) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb)
-              (Proofs.headFwdB_has_vjp (R * N) w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW w.fcb) a16 g;
+              (Proofs.headFwdB_has_vjp (R * N) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb) a16 g;
           have dy15 :=
-            Proofs.HasVJP.backward (Proofs.mbExpW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b16 hb16e hb16d hb16p) a15 dy16;
+            Proofs.HasVJP.backward (Proofs.mbExpW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b16 hεw.b16.e hεw.b16.d hεw.b16.p) a15
+              dy16;
           have dy14 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b15 hb15e hb15d hb15p) a14 dy15;
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b15 hεw.b15.e hεw.b15.d hεw.b15.p) a14
+              dy15;
           have dy13 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b14 hb14e hb14d hb14p) a13 dy14;
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b14 hεw.b14.e hεw.b14.d hεw.b14.p) a13
+              dy14;
           have dy12 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b13 hb13e hb13d hb13p) a12 dy13;
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b13 hεw.b13.e hεw.b13.d hεw.b13.p) a12
+              dy13;
           have dy11 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b12 hb12e hb12d hb12p) a11 dy12;
+            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b12 hεw.b12.e hεw.b12.d hεw.b12.p)
+              a11 dy12;
           have dy10 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b11 hb11e hb11d hb11p) a10 dy11;
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b11 hεw.b11.e hεw.b11.d hεw.b11.p)
+              a10 dy11;
           have dy9 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b10 hb10e hb10d hb10p) a9 dy10;
-          have dy8 := Proofs.HasVJP.backward (Proofs.mbExpW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b9 hb9e hb9d hb9p) a8 dy9;
-          have dy7 := Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b8 hb8e hb8d hb8p) a7 dy8;
-          have dy6 := Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b7 hb7e hb7d hb7p) a6 dy7;
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b10 hεw.b10.e hεw.b10.d hεw.b10.p)
+              a9 dy10;
+          have dy8 :=
+            Proofs.HasVJP.backward (Proofs.mbExpW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b9 hεw.b9.e hεw.b9.d hεw.b9.p) a8 dy9;
+          have dy7 :=
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b8 hεw.b8.e hεw.b8.d hεw.b8.p) a7
+              dy8;
+          have dy6 :=
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b7 hεw.b7.e hεw.b7.d hεw.b7.p) a6
+              dy7;
           have dy5 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b6 hb6e hb6d hb6p) a5 dy6;
-          have dy4 := Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (28 : ℕ) (28 : ℕ) w.b5 hb5e hb5d hb5p) a4 dy5;
+            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b6 hεw.b6.e hεw.b6.d hεw.b6.p) a5
+              dy6;
+          have dy4 :=
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (28 : ℕ) (28 : ℕ) w.b5 hεw.b5.e hεw.b5.d hεw.b5.p) a4
+              dy5;
           have dy3 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (28 : ℕ) (28 : ℕ) w.b4 hb4e hb4d hb4p) a3 dy4;
-          have dy2 := Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (56 : ℕ) (56 : ℕ) w.b3 hb3e hb3d hb3p) a2 dy3;
+            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (28 : ℕ) (28 : ℕ) w.b4 hεw.b4.e hεw.b4.d hεw.b4.p) a3
+              dy4;
+          have dy2 :=
+            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (56 : ℕ) (56 : ℕ) w.b3 hεw.b3.e hεw.b3.d hεw.b3.p) a2
+              dy3;
           have dy1 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (56 : ℕ) (56 : ℕ) w.b2 hb2e hb2d hb2p) a1 dy2;
-          have dy0 := Proofs.HasVJP.backward (Proofs.mbNoExpW_has_vjp (R * N) (112 : ℕ) (112 : ℕ) w.b1 hb1d hb1p) a0 dy1;
+            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (56 : ℕ) (56 : ℕ) w.b2 hεw.b2.e hεw.b2.d hεw.b2.p) a1
+              dy2;
+          have dy0 :=
+            Proofs.HasVJP.backward (Proofs.mbNoExpW_has_vjp (R * N) (112 : ℕ) (112 : ℕ) w.b1 hεw.b1.d hεw.b1.p) a0 dy1;
           have gs : Fin R → Proofs.Vec (N * (10 : ℕ)) := fun (r : Fin R) =>
             Proofs.ResNet34TieB.unrowB N (10 : ℕ)
               (Proofs.StableHLO.den
@@ -1390,41 +1272,42 @@ theorem chk_efficientnet_net_syncTiedG :
           have e2 := Proofs.EnetSyncTieG.rsCotIn R hR N (56 : ℕ) (56 : ℕ) w.b3 a2 e3;
           have e1 := Proofs.EnetSyncTieG.ssCotIn R hR N (56 : ℕ) (56 : ℕ) w.b2 a1 e2;
           have e0 := Proofs.EnetSyncTieG.nsCotIn R hR N (112 : ℕ) (112 : ℕ) w.b1 a0 e1;
-          Proofs.EnetSyncTieG.stemSyncTiedG R hR N (112 : ℕ) (112 : ℕ) xN cotN vN epsStr w.sW w.sb w.sε hsε w.sγ w.sβ x e0
+          Proofs.EnetSyncTieG.stemSyncTiedG R hR N (112 : ℕ) (112 : ℕ) xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ x e0
               dy0 ∧
-            Proofs.EnetSyncTieG.noExpSyncTiedG R hR N (112 : ℕ) (112 : ℕ) "b1" xN cotN vN epsStr w.b1 hb1d hb1p a0 e1 dy1 ∧
-              Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (56 : ℕ) (56 : ℕ) "b2" xN cotN vN epsStr w.b2 hb2e hb2d hb2p a1 e2
-                  dy2 ∧
-                Proofs.EnetSyncTieG.expSyncTiedG R hR N (56 : ℕ) (56 : ℕ) "b3" xN cotN vN epsStr w.b3 hb3e hb3d hb3p a2 e3
-                    dy3 ∧
-                  Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (28 : ℕ) (28 : ℕ) "b4" xN cotN vN epsStr w.b4 hb4e hb4d hb4p
-                      a3 e4 dy4 ∧
-                    Proofs.EnetSyncTieG.expSyncTiedG R hR N (28 : ℕ) (28 : ℕ) "b5" xN cotN vN epsStr w.b5 hb5e hb5d hb5p a4
-                        e5 dy5 ∧
-                      Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b6" xN cotN vN epsStr w.b6 hb6e hb6d
-                          hb6p a5 e6 dy6 ∧
-                        Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b7" xN cotN vN epsStr w.b7 hb7e hb7d hb7p
-                            a6 e7 dy7 ∧
-                          Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b8" xN cotN vN epsStr w.b8 hb8e hb8d
-                              hb8p a7 e8 dy8 ∧
-                            Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b9" xN cotN vN epsStr w.b9 hb9e hb9d
-                                hb9p a8 e9 dy9 ∧
-                              Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b10" xN cotN vN epsStr w.b10 hb10e
-                                  hb10d hb10p a9 e10 dy10 ∧
+            Proofs.EnetSyncTieG.noExpSyncTiedG R hR N (112 : ℕ) (112 : ℕ) "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0
+                e1 dy1 ∧
+              Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (56 : ℕ) (56 : ℕ) "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d
+                  hεw.b2.p a1 e2 dy2 ∧
+                Proofs.EnetSyncTieG.expSyncTiedG R hR N (56 : ℕ) (56 : ℕ) "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d
+                    hεw.b3.p a2 e3 dy3 ∧
+                  Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (28 : ℕ) (28 : ℕ) "b4" xN cotN vN epsStr w.b4 hεw.b4.e
+                      hεw.b4.d hεw.b4.p a3 e4 dy4 ∧
+                    Proofs.EnetSyncTieG.expSyncTiedG R hR N (28 : ℕ) (28 : ℕ) "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d
+                        hεw.b5.p a4 e5 dy5 ∧
+                      Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b6" xN cotN vN epsStr w.b6 hεw.b6.e
+                          hεw.b6.d hεw.b6.p a5 e6 dy6 ∧
+                        Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b7" xN cotN vN epsStr w.b7 hεw.b7.e
+                            hεw.b7.d hεw.b7.p a6 e7 dy7 ∧
+                          Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b8" xN cotN vN epsStr w.b8 hεw.b8.e
+                              hεw.b8.d hεw.b8.p a7 e8 dy8 ∧
+                            Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b9" xN cotN vN epsStr w.b9 hεw.b9.e
+                                hεw.b9.d hεw.b9.p a8 e9 dy9 ∧
+                              Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b10" xN cotN vN epsStr w.b10
+                                  hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10 ∧
                                 Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b11" xN cotN vN epsStr w.b11
-                                    hb11e hb11d hb11p a10 e11 dy11 ∧
+                                    hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11 ∧
                                   Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b12" xN cotN vN epsStr w.b12
-                                      hb12e hb12d hb12p a11 e12 dy12 ∧
+                                      hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12 ∧
                                     Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b13" xN cotN vN epsStr w.b13
-                                        hb13e hb13d hb13p a12 e13 dy13 ∧
+                                        hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13 ∧
                                       Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b14" xN cotN vN epsStr w.b14
-                                          hb14e hb14d hb14p a13 e14 dy14 ∧
+                                          hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 ∧
                                         Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b15" xN cotN vN epsStr
-                                            w.b15 hb15e hb15d hb15p a14 e15 dy15 ∧
+                                            w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 ∧
                                           Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b16" xN cotN vN epsStr
-                                              w.b16 hb16e hb16d hb16p a15 e16 dy16 ∧
+                                              w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 ∧
                                             Proofs.EnetSyncTieG.headSyncTiedG R hR N (7 : ℕ) (7 : ℕ) xN cotN vN epsStr dN
-                                              w.hW w.hb w.hε hhε w.hγ w.hβ w.fcW a16 gs g :=
+                                              w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16 gs g :=
   Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
 
 /-- `Proofs.StableHLO.resnet50FwdGraphSync_full_shard` -/
@@ -1641,30 +1524,18 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
 
 /-- `Proofs.efficientnetInputGradB_full_correct` -/
 theorem chk_efficientnetInputGradB_full_correct :
-    ∀ (N : ℕ) (w : Proofs.B0Weights) (hsε : (0 : ℝ) < w.sε)
-      (hb1d : (0 : ℝ) < w.b1.dε) (hb1p : (0 : ℝ) < w.b1.pε) (hb2e : (0 : ℝ) < w.b2.eε) (hb2d : (0 : ℝ) < w.b2.dε)
-      (hb2p : (0 : ℝ) < w.b2.pε) (hb3e : (0 : ℝ) < w.b3.eε) (hb3d : (0 : ℝ) < w.b3.dε) (hb3p : (0 : ℝ) < w.b3.pε)
-      (hb4e : (0 : ℝ) < w.b4.eε) (hb4d : (0 : ℝ) < w.b4.dε) (hb4p : (0 : ℝ) < w.b4.pε) (hb5e : (0 : ℝ) < w.b5.eε)
-      (hb5d : (0 : ℝ) < w.b5.dε) (hb5p : (0 : ℝ) < w.b5.pε) (hb6e : (0 : ℝ) < w.b6.eε) (hb6d : (0 : ℝ) < w.b6.dε)
-      (hb6p : (0 : ℝ) < w.b6.pε) (hb7e : (0 : ℝ) < w.b7.eε) (hb7d : (0 : ℝ) < w.b7.dε) (hb7p : (0 : ℝ) < w.b7.pε)
-      (hb8e : (0 : ℝ) < w.b8.eε) (hb8d : (0 : ℝ) < w.b8.dε) (hb8p : (0 : ℝ) < w.b8.pε) (hb9e : (0 : ℝ) < w.b9.eε)
-      (hb9d : (0 : ℝ) < w.b9.dε) (hb9p : (0 : ℝ) < w.b9.pε) (hb10e : (0 : ℝ) < w.b10.eε) (hb10d : (0 : ℝ) < w.b10.dε)
-      (hb10p : (0 : ℝ) < w.b10.pε) (hb11e : (0 : ℝ) < w.b11.eε) (hb11d : (0 : ℝ) < w.b11.dε) (hb11p : (0 : ℝ) < w.b11.pε)
-      (hb12e : (0 : ℝ) < w.b12.eε) (hb12d : (0 : ℝ) < w.b12.dε) (hb12p : (0 : ℝ) < w.b12.pε) (hb13e : (0 : ℝ) < w.b13.eε)
-      (hb13d : (0 : ℝ) < w.b13.dε) (hb13p : (0 : ℝ) < w.b13.pε) (hb14e : (0 : ℝ) < w.b14.eε) (hb14d : (0 : ℝ) < w.b14.dε)
-      (hb14p : (0 : ℝ) < w.b14.pε) (hb15e : (0 : ℝ) < w.b15.eε) (hb15d : (0 : ℝ) < w.b15.dε) (hb15p : (0 : ℝ) < w.b15.pε)
-      (hb16e : (0 : ℝ) < w.b16.eε) (hb16d : (0 : ℝ) < w.b16.dε) (hb16p : (0 : ℝ) < w.b16.pε) (hhε : (0 : ℝ) < w.hε)
+    ∀ (N : ℕ) (w : Proofs.B0Weights) (hεw : w.EpsPos)
       (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (dy : Proofs.Vec (N * (10 : ℕ)))
       (i : Fin (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
       Proofs.efficientnetInputGradB_full N w.sW w.hW w.fcW
           (Proofs.HasVJP.backward (f := Proofs.StableHLO.bnBatchLA N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε w.sγ w.sβ)
-            (Proofs.bnBatchLA_has_vjp N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε hsε w.sγ w.sβ)
+            (Proofs.bnBatchLA_has_vjp N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε hεw.s w.sγ w.sβ)
             (Proofs.StableHLO.batchMap N (Proofs.flatConvStride2Xla w.sW w.sb) x))
           (Proofs.HasVJP.backward (Proofs.swish_has_vjp (N * ((32 : ℕ) * (112 : ℕ) * (112 : ℕ))))
             (Proofs.StableHLO.bnBatchLA N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε w.sγ w.sβ
               (Proofs.StableHLO.batchMap N (Proofs.flatConvStride2Xla w.sW w.sb) x)))
           (Proofs.HasVJP.backward (f := Proofs.StableHLO.bnBatchLA N (1280 : ℕ) (7 : ℕ) (7 : ℕ) w.hε w.hγ w.hβ)
-            (Proofs.bnBatchLA_has_vjp N (1280 : ℕ) (7 : ℕ) (7 : ℕ) w.hε hhε w.hγ w.hβ)
+            (Proofs.bnBatchLA_has_vjp N (1280 : ℕ) (7 : ℕ) (7 : ℕ) w.hε hεw.h w.hγ w.hβ)
             (Proofs.StableHLO.batchMap N (Proofs.flatConv w.hW w.hb)
               (Proofs.opaqueA16 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
                 (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
@@ -1687,61 +1558,61 @@ theorem chk_efficientnetInputGradB_full_correct :
                   (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13)
                   (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b14) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b15)
                   (Proofs.mbExpW N (7 : ℕ) (7 : ℕ) w.b16) x))))
-          ((Proofs.mbNoExpW_has_vjp N (112 : ℕ) (112 : ℕ) w.b1 hb1d hb1p).backward
+          ((Proofs.mbNoExpW_has_vjp N (112 : ℕ) (112 : ℕ) w.b1 hεw.b1.d hεw.b1.p).backward
             (Proofs.opaqueA0 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) x))
-          ((Proofs.mbStridedW_has_vjp N (56 : ℕ) (56 : ℕ) w.b2 hb2e hb2d hb2p).backward
+          ((Proofs.mbStridedW_has_vjp N (56 : ℕ) (56 : ℕ) w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward
             (Proofs.opaqueA1 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1) x))
-          ((Proofs.mbResidW_has_vjp N (56 : ℕ) (56 : ℕ) w.b3 hb3e hb3d hb3p).backward
+          ((Proofs.mbResidW_has_vjp N (56 : ℕ) (56 : ℕ) w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward
             (Proofs.opaqueA2 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) x))
-          ((Proofs.mbStridedW_has_vjp N (28 : ℕ) (28 : ℕ) w.b4 hb4e hb4d hb4p).backward
+          ((Proofs.mbStridedW_has_vjp N (28 : ℕ) (28 : ℕ) w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward
             (Proofs.opaqueA3 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3) x))
-          ((Proofs.mbResidW_has_vjp N (28 : ℕ) (28 : ℕ) w.b5 hb5e hb5d hb5p).backward
+          ((Proofs.mbResidW_has_vjp N (28 : ℕ) (28 : ℕ) w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward
             (Proofs.opaqueA4 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) x))
-          ((Proofs.mbStridedW_has_vjp N (14 : ℕ) (14 : ℕ) w.b6 hb6e hb6d hb6p).backward
+          ((Proofs.mbStridedW_has_vjp N (14 : ℕ) (14 : ℕ) w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward
             (Proofs.opaqueA5 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b7 hb7e hb7d hb7p).backward
+          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward
             (Proofs.opaqueA6 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b8 hb8e hb8d hb8p).backward
+          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward
             (Proofs.opaqueA7 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7) x))
-          ((Proofs.mbExpW_has_vjp N (14 : ℕ) (14 : ℕ) w.b9 hb9e hb9d hb9p).backward
+          ((Proofs.mbExpW_has_vjp N (14 : ℕ) (14 : ℕ) w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward
             (Proofs.opaqueA8 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b10 hb10e hb10d hb10p).backward
+          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward
             (Proofs.opaqueA9 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b11 hb11e hb11d hb11p).backward
+          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward
             (Proofs.opaqueA10 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) x))
-          ((Proofs.mbStridedW_has_vjp N (7 : ℕ) (7 : ℕ) w.b12 hb12e hb12d hb12p).backward
+          ((Proofs.mbStridedW_has_vjp N (7 : ℕ) (7 : ℕ) w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward
             (Proofs.opaqueA11 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11) x))
-          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b13 hb13e hb13d hb13p).backward
+          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward
             (Proofs.opaqueA12 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
@@ -1749,7 +1620,7 @@ theorem chk_efficientnetInputGradB_full_correct :
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11)
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) x))
-          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b14 hb14e hb14d hb14p).backward
+          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward
             (Proofs.opaqueA13 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
@@ -1757,7 +1628,7 @@ theorem chk_efficientnetInputGradB_full_correct :
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11)
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13) x))
-          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b15 hb15e hb15d hb15p).backward
+          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward
             (Proofs.opaqueA14 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
@@ -1766,7 +1637,7 @@ theorem chk_efficientnetInputGradB_full_correct :
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11)
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13)
               (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b14) x))
-          ((Proofs.mbExpW_has_vjp N (7 : ℕ) (7 : ℕ) w.b16 hb16e hb16d hb16p).backward
+          ((Proofs.mbExpW_has_vjp N (7 : ℕ) (7 : ℕ) w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward
             (Proofs.opaqueA15 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)

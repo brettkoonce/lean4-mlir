@@ -73,147 +73,135 @@ open Proofs.MobileNetV2TieB
 -- ════════════════════════════════════════════════════════════════
 
 /-- The two-sided relu6 mask is linear in the cotangent it gates. -/
-theorem relu6MaskB_smul (n : Nat) (pre dy : Vec n) (s : ℝ) :
-    relu6MaskB n pre (fun i => s * dy i) = fun i => s * relu6MaskB n pre dy i := by
+theorem relu6MaskB_smul (n : Nat) (pre : Vec n) : IsHomog (relu6MaskB n pre) := by
+  intro s dy
   funext i
   unfold relu6MaskB
   split_ifs <;> simp
 
-theorem dStridedXlaInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
-    (b : Vec c) (dy : Vec (N * (c * h * w))) (s : ℝ) :
-    dStridedXlaInB N (h := h) (w := w) W b (fun i => s * dy i)
-      = fun i => s * dStridedXlaInB N (h := h) (w := w) W b dy i :=
-  batchMap_smul _ (fun s v => HasVJP.backward_smul _ _ s v) s dy
+theorem dStridedXlaInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    : IsHomog (dStridedXlaInB N (h := h) (w := w) W b) :=
+  batchMap_smul _ (HasVJP.backward_smul _ _)
 
 /-! The block cotangents, each one line from the previous link's. -/
 
 theorem mnv2NoExpCotPc_smul (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2NoExpCotPc N h w p xin (fun i => s * dy i) = fun i => s * mnv2NoExpCotPc N h w p xin dy i :=
-  bnInB_smul _ _ _ _ _ _ _ _ s
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2NoExpCotPc N h w p xin) :=
+  bnInB_smul _ _ _ _ _ _ _
 
 theorem mnv2NoExpCotDn_smul (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2NoExpCotDn N h w p xin (fun i => s * dy i) = fun i => s * mnv2NoExpCotDn N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2NoExpCotDn N h w p xin) := by
+  intro s dy
   unfold mnv2NoExpCotDn; rw [mnv2NoExpCotPc_smul, cInB_smul, relu6MaskB_smul]
 
 theorem mnv2NoExpCotDc_smul (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2NoExpCotDc N h w p xin (fun i => s * dy i) = fun i => s * mnv2NoExpCotDc N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2NoExpCotDc N h w p xin) := by
+  intro s dy
   unfold mnv2NoExpCotDc; rw [mnv2NoExpCotDn_smul, bnInB_smul]
 
 theorem mnv2NoExpCotIn_smul (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2NoExpCotIn N h w p xin (fun i => s * dy i) = fun i => s * mnv2NoExpCotIn N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2NoExpCotIn N h w p xin) := by
+  intro s dy
   unfold mnv2NoExpCotIn; rw [mnv2NoExpCotDc_smul, dInB_smul]
 
 theorem mnv2CotPc_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2CotPc N h w p xin (fun i => s * dy i) = fun i => s * mnv2CotPc N h w p xin dy i :=
-  bnInB_smul _ _ _ _ _ _ _ _ s
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2CotPc N h w p xin) :=
+  bnInB_smul _ _ _ _ _ _ _
 
 theorem mnv2CotDn_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2CotDn N h w p xin (fun i => s * dy i) = fun i => s * mnv2CotDn N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2CotDn N h w p xin) := by
+  intro s dy
   unfold mnv2CotDn; rw [mnv2CotPc_smul, cInB_smul, relu6MaskB_smul]
 
 theorem mnv2CotDc_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2CotDc N h w p xin (fun i => s * dy i) = fun i => s * mnv2CotDc N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2CotDc N h w p xin) := by
+  intro s dy
   unfold mnv2CotDc; rw [mnv2CotDn_smul, bnInB_smul]
 
 theorem mnv2CotEn_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2CotEn N h w p xin (fun i => s * dy i) = fun i => s * mnv2CotEn N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2CotEn N h w p xin) := by
+  intro s dy
   unfold mnv2CotEn; rw [mnv2CotDc_smul, dInB_smul, relu6MaskB_smul]
 
 theorem mnv2CotEc_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2CotEc N h w p xin (fun i => s * dy i) = fun i => s * mnv2CotEc N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2CotEc N h w p xin) := by
+  intro s dy
   unfold mnv2CotEc; rw [mnv2CotEn_smul, bnInB_smul]
 
 theorem mnv2CotInBody_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2CotInBody N h w p xin (fun i => s * dy i) = fun i => s * mnv2CotInBody N h w p xin dy i := by
+    (xin : Vec (N * (ic * h * w))) : IsHomog (mnv2CotInBody N h w p xin) := by
+  intro s dy
   unfold mnv2CotInBody; rw [mnv2CotEc_smul, cInB_smul]
 
 theorem mnv2ResidCotIn_smul (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
-    (xin dy : Vec (N * (c * h * w))) (s : ℝ) :
-    mnv2ResidCotIn N h w p xin (fun i => s * dy i) = fun i => s * mnv2ResidCotIn N h w p xin dy i := by
+    (xin : Vec (N * (c * h * w))) : IsHomog (mnv2ResidCotIn N h w p xin) := by
+  intro s dy
   unfold mnv2ResidCotIn
   rw [mnv2CotInBody_smul]
   funext i
   ring
 
 theorem mnv2SCotPc_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2SCotPc N h w p xin (fun i => s * dy i) = fun i => s * mnv2SCotPc N h w p xin dy i :=
-  bnInB_smul _ _ _ _ _ _ _ _ s
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (mnv2SCotPc N h w p xin) :=
+  bnInB_smul _ _ _ _ _ _ _
 
 theorem mnv2SCotDn_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2SCotDn N h w p xin (fun i => s * dy i) = fun i => s * mnv2SCotDn N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (mnv2SCotDn N h w p xin) := by
+  intro s dy
   unfold mnv2SCotDn; rw [mnv2SCotPc_smul, cInB_smul, relu6MaskB_smul]
 
 theorem mnv2SCotDc_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2SCotDc N h w p xin (fun i => s * dy i) = fun i => s * mnv2SCotDc N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (mnv2SCotDc N h w p xin) := by
+  intro s dy
   unfold mnv2SCotDc; rw [mnv2SCotDn_smul, bnInB_smul]
 
 theorem mnv2SCotEn_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2SCotEn N h w p xin (fun i => s * dy i) = fun i => s * mnv2SCotEn N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (mnv2SCotEn N h w p xin) := by
+  intro s dy
   unfold mnv2SCotEn; rw [mnv2SCotDc_smul, dStridedXlaInB_smul, relu6MaskB_smul]
 
 theorem mnv2SCotEc_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2SCotEc N h w p xin (fun i => s * dy i) = fun i => s * mnv2SCotEc N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (mnv2SCotEc N h w p xin) := by
+  intro s dy
   unfold mnv2SCotEc; rw [mnv2SCotEn_smul, bnInB_smul]
 
 theorem mnv2StridedCotIn_smul (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2StridedCotIn N h w p xin (fun i => s * dy i)
-      = fun i => s * mnv2StridedCotIn N h w p xin dy i := by
+    (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (mnv2StridedCotIn N h w p xin) := by
+  intro s dy
   unfold mnv2StridedCotIn; rw [mnv2SCotEc_smul, cInB_smul]
 
-theorem mnv2StemCotN_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW)
-    (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2StemCotN N h w Ws bs εs γs βs x (fun i => s * dy i)
-      = fun i => s * mnv2StemCotN N h w Ws bs εs γs βs x dy i :=
-  relu6MaskB_smul _ _ _ s
+theorem mnv2StemCotN_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
+    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv2StemCotN N h w Ws bs εs γs βs x) :=
+  relu6MaskB_smul _ _
 
-theorem mnv2StemCotC_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW)
-    (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dy : Vec (N * (oc * h * w))) (s : ℝ) :
-    mnv2StemCotC N h w Ws bs εs γs βs x (fun i => s * dy i)
-      = fun i => s * mnv2StemCotC N h w Ws bs εs γs βs x dy i := by
+theorem mnv2StemCotC_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
+    (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    IsHomog (mnv2StemCotC N h w Ws bs εs γs βs x) := by
+  intro s dy
   unfold mnv2StemCotC; rw [mnv2StemCotN_smul, bnInB_smul]
 
-theorem mnv2HeadCotHr_smul (N h w : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (g : Vec (N * nCls))
-    (s : ℝ) :
-    mnv2HeadCotHr N h w Wd (fun i => s * g i) = fun i => s * mnv2HeadCotHr N h w Wd g i := by
+theorem mnv2HeadCotHr_smul (N h w : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) :
+    IsHomog (mnv2HeadCotHr N h w Wd) := by
+  intro s g
   unfold mnv2HeadCotHr mnv2HeadCotGapIn; rw [rowDenseBackFlat_smul, gapInB_smul]
 
-theorem mnv2HeadCotHn_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
-    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w)))
-    (g : Vec (N * nCls)) (s : ℝ) :
-    mnv2HeadCotHn N h w Wh bh εh γh βh Wd xin (fun i => s * g i)
-      = fun i => s * mnv2HeadCotHn N h w Wh bh εh γh βh Wd xin g i := by
+theorem mnv2HeadCotHn_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
+    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w))) :
+    IsHomog (mnv2HeadCotHn N h w Wh bh εh γh βh Wd xin) := by
+  intro s g
   unfold mnv2HeadCotHn; rw [mnv2HeadCotHr_smul, relu6MaskB_smul]
 
-theorem mnv2HeadCotHc_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
-    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w)))
-    (g : Vec (N * nCls)) (s : ℝ) :
-    mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin (fun i => s * g i)
-      = fun i => s * mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin g i := by
+theorem mnv2HeadCotHc_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
+    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w))) :
+    IsHomog (mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin) := by
+  intro s g
   unfold mnv2HeadCotHc; rw [mnv2HeadCotHn_smul, bnInB_smul]
 
-theorem mnv2HeadCotBlk_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
-    (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w)))
-    (g : Vec (N * nCls)) (s : ℝ) :
-    mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin (fun i => s * g i)
-      = fun i => s * mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin g i := by
+theorem mnv2HeadCotBlk_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
+    (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls) (xin : Vec (N * (ic * h * w))) :
+    IsHomog (mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin) := by
+  intro s g
   unfold mnv2HeadCotBlk; rw [mnv2HeadCotHc_smul, cInB_smul]
 
 /-! The gradient nodes MobileNetV2 adds to the ResNet-34 kit. -/
@@ -922,113 +910,116 @@ theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : N
 -- § 7. The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The whole-net statement, named** — so the capstone (cotangents bound) and its smoothed-CE
+    corollary (cotangents instantiated) state exactly one thing. The first 18 `let`s are
+    `mnv2_net_tiedB`'s chain at `N := R·N`, driven by the global cotangent `G`; the next 18 are the
+    replicas' sync-BN chain, driven by the family `gs`; the 19 conjuncts are one per stage, every
+    emitted parameter collective against T3's node at the global batch. -/
+def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
+    (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
+    (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
+  -- ── the single-device chain at the global batch `R·N` (T3's), driven by `G` ──
+  let dy17 := mnv2HeadCotBlk (R * N) 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 (R * N) w X) G
+  let dy16 := mnv2CotInBody (R * N) 7 7 w.b17 (mnv2PreB16 (R * N) w X) dy17
+  let dy15 := mnv2ResidCotIn (R * N) 7 7 w.b16 (mnv2PreB15 (R * N) w X) dy16
+  let dy14 := mnv2ResidCotIn (R * N) 7 7 w.b15 (mnv2PreB14 (R * N) w X) dy15
+  let dy13 := mnv2StridedCotIn (R * N) 7 7 w.b14 (mnv2PreB13 (R * N) w X) dy14
+  let dy12 := mnv2ResidCotIn (R * N) 14 14 w.b13 (mnv2PreB12 (R * N) w X) dy13
+  let dy11 := mnv2ResidCotIn (R * N) 14 14 w.b12 (mnv2PreB11 (R * N) w X) dy12
+  let dy10 := mnv2CotInBody (R * N) 14 14 w.b11 (mnv2PreB10 (R * N) w X) dy11
+  let dy9 := mnv2ResidCotIn (R * N) 14 14 w.b10 (mnv2PreB9 (R * N) w X) dy10
+  let dy8 := mnv2ResidCotIn (R * N) 14 14 w.b9 (mnv2PreB8 (R * N) w X) dy9
+  let dy7 := mnv2ResidCotIn (R * N) 14 14 w.b8 (mnv2PreB7 (R * N) w X) dy8
+  let dy6 := mnv2StridedCotIn (R * N) 14 14 w.b7 (mnv2PreB6 (R * N) w X) dy7
+  let dy5 := mnv2ResidCotIn (R * N) 28 28 w.b6 (mnv2PreB5 (R * N) w X) dy6
+  let dy4 := mnv2ResidCotIn (R * N) 28 28 w.b5 (mnv2PreB4 (R * N) w X) dy5
+  let dy3 := mnv2StridedCotIn (R * N) 28 28 w.b4 (mnv2PreB3 (R * N) w X) dy4
+  let dy2 := mnv2ResidCotIn (R * N) 56 56 w.b3 (mnv2PreB2 (R * N) w X) dy3
+  let dy1 := mnv2StridedCotIn (R * N) 56 56 w.b2 (mnv2PreB1 (R * N) w X) dy2
+  let cotStem := mnv2NoExpCotIn (R * N) 112 112 w.b1 (mnv2PreB0 (R * N) w X) dy1
+  -- ── the replicas' sync-BN chain, driven by the family `gs` ──
+  let e17 := mnv2HeadSyncCotBlk R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW
+    (mnv2PreB17 (R * N) w X) gs
+  let e16 := mnv2SyncCotInBody R hR N 7 7 w.b17 (mnv2PreB16 (R * N) w X) e17
+  let e15 := mnv2ResidSyncCotIn R hR N 7 7 w.b16 (mnv2PreB15 (R * N) w X) e16
+  let e14 := mnv2ResidSyncCotIn R hR N 7 7 w.b15 (mnv2PreB14 (R * N) w X) e15
+  let e13 := mnv2StridedSyncCotIn R hR N 7 7 w.b14 (mnv2PreB13 (R * N) w X) e14
+  let e12 := mnv2ResidSyncCotIn R hR N 14 14 w.b13 (mnv2PreB12 (R * N) w X) e13
+  let e11 := mnv2ResidSyncCotIn R hR N 14 14 w.b12 (mnv2PreB11 (R * N) w X) e12
+  let e10 := mnv2SyncCotInBody R hR N 14 14 w.b11 (mnv2PreB10 (R * N) w X) e11
+  let e9 := mnv2ResidSyncCotIn R hR N 14 14 w.b10 (mnv2PreB9 (R * N) w X) e10
+  let e8 := mnv2ResidSyncCotIn R hR N 14 14 w.b9 (mnv2PreB8 (R * N) w X) e9
+  let e7 := mnv2ResidSyncCotIn R hR N 14 14 w.b8 (mnv2PreB7 (R * N) w X) e8
+  let e6 := mnv2StridedSyncCotIn R hR N 14 14 w.b7 (mnv2PreB6 (R * N) w X) e7
+  let e5 := mnv2ResidSyncCotIn R hR N 28 28 w.b6 (mnv2PreB5 (R * N) w X) e6
+  let e4 := mnv2ResidSyncCotIn R hR N 28 28 w.b5 (mnv2PreB4 (R * N) w X) e5
+  let e3 := mnv2StridedSyncCotIn R hR N 28 28 w.b4 (mnv2PreB3 (R * N) w X) e4
+  let e2 := mnv2ResidSyncCotIn R hR N 56 56 w.b3 (mnv2PreB2 (R * N) w X) e3
+  let e1 := mnv2StridedSyncCotIn R hR N 56 56 w.b2 (mnv2PreB1 (R * N) w X) e2
+  let eStem := mnv2NoExpSyncCotIn R hR N 112 112 w.b1 (mnv2PreB0 (R * N) w X) e1
+  mnv2StemSyncTiedB R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X eStem cotStem
+  ∧ mnv2NoExpSyncTiedB R hR N 112 112 "1" xN cotN vN epsStr w.b1 (mnv2PreB0 (R * N) w X) e1 dy1
+  ∧ mnv2Stride2SyncTiedB R hR N 56 56 "2" xN cotN vN epsStr w.b2 (mnv2PreB1 (R * N) w X) e2 dy2
+  ∧ mnv2Stride1SyncTiedB R hR N 56 56 "3" xN cotN vN epsStr w.b3 (mnv2PreB2 (R * N) w X) e3 dy3
+  ∧ mnv2Stride2SyncTiedB R hR N 28 28 "4" xN cotN vN epsStr w.b4 (mnv2PreB3 (R * N) w X) e4 dy4
+  ∧ mnv2Stride1SyncTiedB R hR N 28 28 "5" xN cotN vN epsStr w.b5 (mnv2PreB4 (R * N) w X) e5 dy5
+  ∧ mnv2Stride1SyncTiedB R hR N 28 28 "6" xN cotN vN epsStr w.b6 (mnv2PreB5 (R * N) w X) e6 dy6
+  ∧ mnv2Stride2SyncTiedB R hR N 14 14 "7" xN cotN vN epsStr w.b7 (mnv2PreB6 (R * N) w X) e7 dy7
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "8" xN cotN vN epsStr w.b8 (mnv2PreB7 (R * N) w X) e8 dy8
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "9" xN cotN vN epsStr w.b9 (mnv2PreB8 (R * N) w X) e9 dy9
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "10" xN cotN vN epsStr w.b10 (mnv2PreB9 (R * N) w X)
+      e10 dy10
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "11" xN cotN vN epsStr w.b11 (mnv2PreB10 (R * N) w X)
+      e11 dy11
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "12" xN cotN vN epsStr w.b12 (mnv2PreB11 (R * N) w X)
+      e12 dy12
+  ∧ mnv2Stride1SyncTiedB R hR N 14 14 "13" xN cotN vN epsStr w.b13 (mnv2PreB12 (R * N) w X)
+      e13 dy13
+  ∧ mnv2Stride2SyncTiedB R hR N 7 7 "14" xN cotN vN epsStr w.b14 (mnv2PreB13 (R * N) w X)
+      e14 dy14
+  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "15" xN cotN vN epsStr w.b15 (mnv2PreB14 (R * N) w X)
+      e15 dy15
+  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "16" xN cotN vN epsStr w.b16 (mnv2PreB15 (R * N) w X)
+      e16 dy16
+  ∧ mnv2Stride1SyncTiedB R hR N 7 7 "17" xN cotN vN epsStr w.b17 (mnv2PreB16 (R * N) w X)
+      e17 dy17
+  ∧ mnv2HeadSyncTiedB R hR N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW
+      (mnv2PreB17 (R * N) w X) gs G
+
 /-- ⭐⭐⭐ **The synchronised-BN data-parallel MobileNetV2 step IS the single-device step at the
-    global batch.** `R` replicas at batch `N`, each dividing its loss by `B`, each running the
-    render's sync-BN backward chain from its own label-smoothed cotangent; every parameter's
-    all-reduced mean gradient — stem 3, `b1` 6, sixteen blocks × 9, head 3, dense 2: the 158 the
-    render emits — equals the single-device batch-BN gradient node at batch `R·N`, loss divided
-    by `R·B`, at the cotangent T3's chain delivers there.
+    global batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from
+    its own cotangent `gs r`, with `gs r` the `R`-scaled shard of a global cotangent `G`; every
+    parameter's all-reduced mean gradient — stem 3, `b1` 6, sixteen blocks × 9, head 3, dense 2:
+    the 158 the render emits — equals the single-device batch-BN gradient node at batch `R·N`, at
+    the cotangent T3's chain delivers there from `G`.
 
     ⭐ The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per
-    BN layer), per-example conv / depthwise / relu6 / GAP / dense links, each replica's own loss
-    cotangent. The right-hand chain is `mnv2_net_tiedB`'s at `N := R·N`, `B := R·B`, whose nodes
-    that capstone ties to the certified gradient — so this and it together say the DP step's
-    update is the certified gradient of the mean loss over all `R·N` examples.
+    BN layer), per-example conv / depthwise / relu6 / GAP / dense links. The right-hand chain is
+    `mnv2_net_tiedB`'s at `N := R·N` with `g := G`, whose nodes that capstone ties to the certified
+    gradient — so this and it together say the DP step's update is the certified gradient of the
+    global-batch step. `mnv2_net_syncTiedB_smoothedCE` discharges the hypothesis for the
+    label-smoothed chain the artifacts emit.
 
     ⛔ Before the render's sync-BN swap the DP render normalised per replica and this statement
     was false: `DataParallel.dpMeanGrad_ne_globalBatchGrad` is the witness, and stays as the
     statement of what those runs did. -/
 theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
-    (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
-    (w : MNV2BWeights nCls)
-    (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112)))) (T : Vec ((R * N) * (1 * nCls))) :
-    -- ── the single-device step at the global batch `R·N`, loss divided by `R·B` ──
-    let G : Vec ((R * N) * nCls) :=
-      unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK bStr
-        logN ohN (rowB (R * N) nCls (mobilenetv2ForwardB_full (R * N) w X)) T))
-    let dy17 := mnv2HeadCotBlk (R * N) 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW (mnv2PreB17 (R * N) w X) G
-    let dy16 := mnv2CotInBody (R * N) 7 7 w.b17 (mnv2PreB16 (R * N) w X) dy17
-    let dy15 := mnv2ResidCotIn (R * N) 7 7 w.b16 (mnv2PreB15 (R * N) w X) dy16
-    let dy14 := mnv2ResidCotIn (R * N) 7 7 w.b15 (mnv2PreB14 (R * N) w X) dy15
-    let dy13 := mnv2StridedCotIn (R * N) 7 7 w.b14 (mnv2PreB13 (R * N) w X) dy14
-    let dy12 := mnv2ResidCotIn (R * N) 14 14 w.b13 (mnv2PreB12 (R * N) w X) dy13
-    let dy11 := mnv2ResidCotIn (R * N) 14 14 w.b12 (mnv2PreB11 (R * N) w X) dy12
-    let dy10 := mnv2CotInBody (R * N) 14 14 w.b11 (mnv2PreB10 (R * N) w X) dy11
-    let dy9 := mnv2ResidCotIn (R * N) 14 14 w.b10 (mnv2PreB9 (R * N) w X) dy10
-    let dy8 := mnv2ResidCotIn (R * N) 14 14 w.b9 (mnv2PreB8 (R * N) w X) dy9
-    let dy7 := mnv2ResidCotIn (R * N) 14 14 w.b8 (mnv2PreB7 (R * N) w X) dy8
-    let dy6 := mnv2StridedCotIn (R * N) 14 14 w.b7 (mnv2PreB6 (R * N) w X) dy7
-    let dy5 := mnv2ResidCotIn (R * N) 28 28 w.b6 (mnv2PreB5 (R * N) w X) dy6
-    let dy4 := mnv2ResidCotIn (R * N) 28 28 w.b5 (mnv2PreB4 (R * N) w X) dy5
-    let dy3 := mnv2StridedCotIn (R * N) 28 28 w.b4 (mnv2PreB3 (R * N) w X) dy4
-    let dy2 := mnv2ResidCotIn (R * N) 56 56 w.b3 (mnv2PreB2 (R * N) w X) dy3
-    let dy1 := mnv2StridedCotIn (R * N) 56 56 w.b2 (mnv2PreB1 (R * N) w X) dy2
-    let cotStem := mnv2NoExpCotIn (R * N) 112 112 w.b1 (mnv2PreB0 (R * N) w X) dy1
-    -- ── replica `r`, loss divided by `B`, its own sync-BN chain ──
-    let g : Fin R → Vec (N * nCls) := fun r =>
-      unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (mobilenetv2ForwardB_full (R * N) w X) r))
-        (batchShard R N (1 * nCls) T r)))
-    let e17 := mnv2HeadSyncCotBlk R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW
-      (mnv2PreB17 (R * N) w X) g
-    let e16 := mnv2SyncCotInBody R hR N 7 7 w.b17 (mnv2PreB16 (R * N) w X) e17
-    let e15 := mnv2ResidSyncCotIn R hR N 7 7 w.b16 (mnv2PreB15 (R * N) w X) e16
-    let e14 := mnv2ResidSyncCotIn R hR N 7 7 w.b15 (mnv2PreB14 (R * N) w X) e15
-    let e13 := mnv2StridedSyncCotIn R hR N 7 7 w.b14 (mnv2PreB13 (R * N) w X) e14
-    let e12 := mnv2ResidSyncCotIn R hR N 14 14 w.b13 (mnv2PreB12 (R * N) w X) e13
-    let e11 := mnv2ResidSyncCotIn R hR N 14 14 w.b12 (mnv2PreB11 (R * N) w X) e12
-    let e10 := mnv2SyncCotInBody R hR N 14 14 w.b11 (mnv2PreB10 (R * N) w X) e11
-    let e9 := mnv2ResidSyncCotIn R hR N 14 14 w.b10 (mnv2PreB9 (R * N) w X) e10
-    let e8 := mnv2ResidSyncCotIn R hR N 14 14 w.b9 (mnv2PreB8 (R * N) w X) e9
-    let e7 := mnv2ResidSyncCotIn R hR N 14 14 w.b8 (mnv2PreB7 (R * N) w X) e8
-    let e6 := mnv2StridedSyncCotIn R hR N 14 14 w.b7 (mnv2PreB6 (R * N) w X) e7
-    let e5 := mnv2ResidSyncCotIn R hR N 28 28 w.b6 (mnv2PreB5 (R * N) w X) e6
-    let e4 := mnv2ResidSyncCotIn R hR N 28 28 w.b5 (mnv2PreB4 (R * N) w X) e5
-    let e3 := mnv2StridedSyncCotIn R hR N 28 28 w.b4 (mnv2PreB3 (R * N) w X) e4
-    let e2 := mnv2ResidSyncCotIn R hR N 56 56 w.b3 (mnv2PreB2 (R * N) w X) e3
-    let e1 := mnv2StridedSyncCotIn R hR N 56 56 w.b2 (mnv2PreB1 (R * N) w X) e2
-    let eStem := mnv2NoExpSyncCotIn R hR N 112 112 w.b1 (mnv2PreB0 (R * N) w X) e1
-    mnv2StemSyncTiedB R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X eStem cotStem
-    ∧ mnv2NoExpSyncTiedB R hR N 112 112 "1" xN cotN vN epsStr w.b1 (mnv2PreB0 (R * N) w X) e1 dy1
-    ∧ mnv2Stride2SyncTiedB R hR N 56 56 "2" xN cotN vN epsStr w.b2 (mnv2PreB1 (R * N) w X) e2 dy2
-    ∧ mnv2Stride1SyncTiedB R hR N 56 56 "3" xN cotN vN epsStr w.b3 (mnv2PreB2 (R * N) w X) e3 dy3
-    ∧ mnv2Stride2SyncTiedB R hR N 28 28 "4" xN cotN vN epsStr w.b4 (mnv2PreB3 (R * N) w X) e4 dy4
-    ∧ mnv2Stride1SyncTiedB R hR N 28 28 "5" xN cotN vN epsStr w.b5 (mnv2PreB4 (R * N) w X) e5 dy5
-    ∧ mnv2Stride1SyncTiedB R hR N 28 28 "6" xN cotN vN epsStr w.b6 (mnv2PreB5 (R * N) w X) e6 dy6
-    ∧ mnv2Stride2SyncTiedB R hR N 14 14 "7" xN cotN vN epsStr w.b7 (mnv2PreB6 (R * N) w X) e7 dy7
-    ∧ mnv2Stride1SyncTiedB R hR N 14 14 "8" xN cotN vN epsStr w.b8 (mnv2PreB7 (R * N) w X) e8 dy8
-    ∧ mnv2Stride1SyncTiedB R hR N 14 14 "9" xN cotN vN epsStr w.b9 (mnv2PreB8 (R * N) w X) e9 dy9
-    ∧ mnv2Stride1SyncTiedB R hR N 14 14 "10" xN cotN vN epsStr w.b10 (mnv2PreB9 (R * N) w X)
-        e10 dy10
-    ∧ mnv2Stride1SyncTiedB R hR N 14 14 "11" xN cotN vN epsStr w.b11 (mnv2PreB10 (R * N) w X)
-        e11 dy11
-    ∧ mnv2Stride1SyncTiedB R hR N 14 14 "12" xN cotN vN epsStr w.b12 (mnv2PreB11 (R * N) w X)
-        e12 dy12
-    ∧ mnv2Stride1SyncTiedB R hR N 14 14 "13" xN cotN vN epsStr w.b13 (mnv2PreB12 (R * N) w X)
-        e13 dy13
-    ∧ mnv2Stride2SyncTiedB R hR N 7 7 "14" xN cotN vN epsStr w.b14 (mnv2PreB13 (R * N) w X)
-        e14 dy14
-    ∧ mnv2Stride1SyncTiedB R hR N 7 7 "15" xN cotN vN epsStr w.b15 (mnv2PreB14 (R * N) w X)
-        e15 dy15
-    ∧ mnv2Stride1SyncTiedB R hR N 7 7 "16" xN cotN vN epsStr w.b16 (mnv2PreB15 (R * N) w X)
-        e16 dy16
-    ∧ mnv2Stride1SyncTiedB R hR N 7 7 "17" xN cotN vN epsStr w.b17 (mnv2PreB16 (R * N) w X)
-        e17 dy17
-    ∧ mnv2HeadSyncTiedB R hR N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW
-        (mnv2PreB17 (R * N) w X) g G := by
-  intro G dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
-    g e17 e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 eStem
+    (xN cotN vN epsStr : String) (w : MNV2BWeights nCls)
+    (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112)))) (G : Vec ((R * N) * nCls))
+    (gs : Fin R → Vec (N * nCls))
+    (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
+    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X G gs := by
+  unfold mnv2NetSyncTiedB
+  intro dy17 dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 cotStem
+    e17 e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 eStem
   have h112 : 0 < 112 := by norm_num
   have h56 : 0 < 56 := by norm_num
   have h28 : 0 < 28 := by norm_num
   have h14 : 0 < 14 := by norm_num
   have h7 : 0 < 7 := by norm_num
-  -- the divisor: each replica's loss cotangent is `R ×` its shard of `G`
-  have sG : ∀ r, g r = batchShard R N nCls (fun i => (R : ℝ) * G i) r :=
-    fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r
   -- the scaled-shard invariant, block by block down the chain
   have s17 := mnv2HeadSyncCotBlk_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε w.hγ w.hβ w.fcW
-    (mnv2PreB17 (R * N) w X) g G sG
+    (mnv2PreB17 (R * N) w X) gs G hgs
   have s16 := mnv2SyncCotInBody_scaled R hR N 7 7 hN h7 h7 w.b17 (mnv2PreB16 (R * N) w X)
     e17 dy17 s17
   have s15 := mnv2ResidSyncCotIn_scaled R hR N 7 7 hN h7 h7 w.b16 (mnv2PreB15 (R * N) w X)
@@ -1100,6 +1091,24 @@ theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
     mnv2_stride1_syncTiedB R hR N 7 7 hN h7 h7 "17" xN cotN vN epsStr w.b17
       (mnv2PreB16 (R * N) w X) e17 dy17 s17,
     mnv2_head_syncTiedB R hR N 7 7 hN h7 h7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW
-      (mnv2PreB17 (R * N) w X) g G sG⟩
+      (mnv2PreB17 (R * N) w X) gs G hgs⟩
+
+/-- ⭐⭐ **…and at the loss the artifacts emit.** `mnv2_net_syncTiedB` with its cotangent hypothesis
+    discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
+    (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
+    single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
+    gradient the DP render emits IS the single-device node at batch `R·N`, loss divided by `R·B`. -/
+theorem mnv2_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
+    (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
+    (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
+    (T : Vec ((R * N) * (1 * nCls))) :
+    mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X
+      (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
+        bStr logN ohN (rowB (R * N) nCls (mobilenetv2ForwardB_full (R * N) w X)) T)))
+      (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
+        (rowB N nCls (batchShard R N nCls (mobilenetv2ForwardB_full (R * N) w X) r))
+        (batchShard R N (1 * nCls) T r)))) :=
+  mnv2_net_syncTiedB R hR N hN xN cotN vN epsStr w X _ _
+    (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
 
 end Proofs.MobileNetV2SyncTieB
