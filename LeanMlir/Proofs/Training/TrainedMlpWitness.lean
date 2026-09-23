@@ -133,7 +133,7 @@ theorem pdiv_fwd (j : Fin 49) (c : Fin 10) :
 /-- The Jacobian entry `(∂ logit_1 / ∂ x_23)` at the witness, exactly. -/
 theorem pdiv_fwd_val : pdiv fwd xtV 23 1 = ((-85017 : ℝ)/8192) := by
   rw [pdiv_fwd]
-  simp [W1V, W2V, W1t, W2t, hpreVals, Fin.sum_univ_succ]
+  simp [W1V, W2V, W1t, W1tQ, W2t, W2tQ, hpreVals, Fin.sum_univ_succ, castM]
   norm_num
 
 theorem pdiv_fwd_ne : pdiv fwd xtV 23 1 ≠ 0 := by

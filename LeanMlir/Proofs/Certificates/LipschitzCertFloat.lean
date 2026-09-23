@@ -149,17 +149,15 @@ noncomputable def W2sV : Mat 8 10 := fun k c => W2s c k
 noncomputable def zb8 : Vec 8 := fun _ => 0
 noncomputable def zb10 : Vec 10 := fun _ => 0
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem W1sV_abs_le : ∀ (i : Fin 49) (j : Fin 8), |W1sV i j| ≤ ((475 : ℝ)/256) := by
+  have h := abs_le_of_check (fun i j => W1sQ j i) ((475 : ℚ)/256) (by decide +kernel)
   intro i j
-  fin_cases i <;> fin_cases j <;> (simp [W1sV, W1s]; try norm_num)
+  simpa [W1sV, W1s, castM] using h i j
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem W2sV_abs_le : ∀ (i : Fin 8) (j : Fin 10), |W2sV i j| ≤ ((129 : ℝ)/64) := by
+  have h := abs_le_of_check (fun i j => W2sQ j i) ((129 : ℚ)/64) (by decide +kernel)
   intro i j
-  fin_cases i <;> fin_cases j <;> (simp [W2sV, W2s]; try norm_num)
+  simpa [W2sV, W2s, castM] using h i j
 
 theorem zb8_abs_le : ∀ j : Fin 8, |zb8 j| ≤ 0 := fun j => by norm_num [zb8]
 theorem zb10_abs_le : ∀ j : Fin 10, |zb10 j| ≤ 0 := fun j => by norm_num [zb10]

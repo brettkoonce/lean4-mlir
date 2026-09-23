@@ -34,7 +34,7 @@ noncomputable def netWpre0 : Fin 8 → ℝ :=
 theorem netW0_pre : ∀ k : Fin 8, denseE W1t netW0 k = netWpre0 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW0, netWpre0, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW0, netWpre0, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-0 witness. -/
@@ -46,7 +46,7 @@ theorem netW0_strict : ∀ j : Fin 10, j ≠ 0 → mlpT netW0 j < mlpT netW0 0 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre0, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre0, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-1 witness: pooled test image #3231 (label 1); exact logit
@@ -61,7 +61,7 @@ noncomputable def netWpre1 : Fin 8 → ℝ :=
 theorem netW1_pre : ∀ k : Fin 8, denseE W1t netW1 k = netWpre1 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW1, netWpre1, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW1, netWpre1, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-1 witness. -/
@@ -73,7 +73,7 @@ theorem netW1_strict : ∀ j : Fin 10, j ≠ 1 → mlpT netW1 j < mlpT netW1 1 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre1, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre1, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-2 witness: pooled test image #1895 (label 2); exact logit
@@ -88,7 +88,7 @@ noncomputable def netWpre2 : Fin 8 → ℝ :=
 theorem netW2_pre : ∀ k : Fin 8, denseE W1t netW2 k = netWpre2 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW2, netWpre2, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW2, netWpre2, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-2 witness. -/
@@ -100,7 +100,7 @@ theorem netW2_strict : ∀ j : Fin 10, j ≠ 2 → mlpT netW2 j < mlpT netW2 2 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre2, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre2, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-3 witness: pooled test image #1845 (label 3); exact logit
@@ -115,7 +115,7 @@ noncomputable def netWpre3 : Fin 8 → ℝ :=
 theorem netW3_pre : ∀ k : Fin 8, denseE W1t netW3 k = netWpre3 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW3, netWpre3, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW3, netWpre3, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-3 witness. -/
@@ -127,7 +127,7 @@ theorem netW3_strict : ∀ j : Fin 10, j ≠ 3 → mlpT netW3 j < mlpT netW3 3 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre3, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre3, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-4 witness: pooled test image #8000 (label 4); exact logit
@@ -142,7 +142,7 @@ noncomputable def netWpre4 : Fin 8 → ℝ :=
 theorem netW4_pre : ∀ k : Fin 8, denseE W1t netW4 k = netWpre4 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW4, netWpre4, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW4, netWpre4, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-4 witness. -/
@@ -154,7 +154,7 @@ theorem netW4_strict : ∀ j : Fin 10, j ≠ 4 → mlpT netW4 j < mlpT netW4 4 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre4, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre4, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-5 witness: pooled test image #6908 (label 5); exact logit
@@ -169,7 +169,7 @@ noncomputable def netWpre5 : Fin 8 → ℝ :=
 theorem netW5_pre : ∀ k : Fin 8, denseE W1t netW5 k = netWpre5 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW5, netWpre5, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW5, netWpre5, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-5 witness. -/
@@ -181,7 +181,7 @@ theorem netW5_strict : ∀ j : Fin 10, j ≠ 5 → mlpT netW5 j < mlpT netW5 5 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre5, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre5, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-6 witness: pooled test image #7843 (label 6); exact logit
@@ -196,7 +196,7 @@ noncomputable def netWpre6 : Fin 8 → ℝ :=
 theorem netW6_pre : ∀ k : Fin 8, denseE W1t netW6 k = netWpre6 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW6, netWpre6, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW6, netWpre6, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-6 witness. -/
@@ -208,7 +208,7 @@ theorem netW6_strict : ∀ j : Fin 10, j ≠ 6 → mlpT netW6 j < mlpT netW6 6 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre6, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre6, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-7 witness: pooled test image #5297 (label 7); exact logit
@@ -223,7 +223,7 @@ noncomputable def netWpre7 : Fin 8 → ℝ :=
 theorem netW7_pre : ∀ k : Fin 8, denseE W1t netW7 k = netWpre7 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW7, netWpre7, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW7, netWpre7, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-7 witness. -/
@@ -235,7 +235,7 @@ theorem netW7_strict : ∀ j : Fin 10, j ≠ 7 → mlpT netW7 j < mlpT netW7 7 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre7, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre7, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-8 witness: pooled test image #7919 (label 8); exact logit
@@ -250,7 +250,7 @@ noncomputable def netWpre8 : Fin 8 → ℝ :=
 theorem netW8_pre : ∀ k : Fin 8, denseE W1t netW8 k = netWpre8 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW8, netWpre8, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW8, netWpre8, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-8 witness. -/
@@ -262,7 +262,7 @@ theorem netW8_strict : ∀ j : Fin 10, j ≠ 8 → mlpT netW8 j < mlpT netW8 8 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre8, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre8, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- Class-9 witness: pooled test image #2478 (label 9); exact logit
@@ -277,7 +277,7 @@ noncomputable def netWpre9 : Fin 8 → ℝ :=
 theorem netW9_pre : ∀ k : Fin 8, denseE W1t netW9 k = netWpre9 k := by
   intro k
   fin_cases k <;>
-    · simp [denseE_apply, W1t, netW9, netWpre9, Fin.sum_univ_succ]
+    · simp [denseE_apply, W1t, W1tQ, castM, netW9, netWpre9, Fin.sum_univ_succ]
       norm_num
 
 /-- In-kernel STRICT argmax at the class-9 witness. -/
@@ -289,7 +289,7 @@ theorem netW9_strict : ∀ j : Fin 10, j ≠ 9 → mlpT netW9 j < mlpT netW9 9 :
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2t, netWpre9, Fin.sum_univ_succ, max_def]
+        simp [W2t, W2tQ, castM, netWpre9, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- The witness bundle: one strict-argmax point per class. -/

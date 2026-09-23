@@ -47,15 +47,16 @@ def load_labels(fn):
 
 
 def parse_weights(name: str, rows: int, cols: int) -> list[list[int]]:
-    """Parse `def <name> ... := ![![((n : ℝ)/128), ...], ...]` numerators."""
+    """Parse `def <name>Q ... := ![![((n : ℚ)/128), ...], ...]` numerators (the ℝ
+    `<name>` is `castM <name>Q`)."""
     src = SRC.read_text()
-    m = re.search(rf"def {name} : Fin {rows} → Fin {cols} → ℝ :=\n(.*?)\n\n",
+    m = re.search(rf"def {name}Q : Fin {rows} → Fin {cols} → ℚ :=\n(.*?)\n\n",
                   src, re.S)
     assert m, f"could not find {name}"
     body = m.group(1)
     out = []
-    for rowm in re.finditer(r"!\[((?:\(\((-?\d+) : ℝ\)/128\)(?:, )?)+)\]", body):
-        nums = [int(v) for v in re.findall(r"\(\((-?\d+) : ℝ\)/128\)", rowm.group(1))]
+    for rowm in re.finditer(r"!\[((?:\(\((-?\d+) : ℚ\)/128\)(?:, )?)+)\]", body):
+        nums = [int(v) for v in re.findall(r"\(\((-?\d+) : ℚ\)/128\)", rowm.group(1))]
         assert len(nums) == cols, (name, len(nums))
         out.append(nums)
     assert len(out) == rows, (name, len(out))
@@ -128,7 +129,7 @@ def main() -> None:
         A(f"theorem netW{c}_pre : ∀ k : Fin 8, denseE W1t netW{c} k = netWpre{c} k := by")
         A("  intro k")
         A("  fin_cases k <;>")
-        A(f"    · simp [denseE_apply, W1t, netW{c}, netWpre{c}, Fin.sum_univ_succ]")
+        A(f"    · simp [denseE_apply, W1t, W1tQ, castM, netW{c}, netWpre{c}, Fin.sum_univ_succ]")
         A("      norm_num")
         A("")
         A(f"/-- In-kernel STRICT argmax at the class-{c} witness. -/")
@@ -141,7 +142,7 @@ def main() -> None:
         A("    first")
         A("    | exact absurd rfl hj")
         A("    | · rw [hout, hout]")
-        A(f"        simp [W2t, netWpre{c}, Fin.sum_univ_succ, max_def]")
+        A(f"        simp [W2t, W2tQ, castM, netWpre{c}, Fin.sum_univ_succ, max_def]")
         A("        norm_num")
         A("")
     A("/-- The witness bundle: one strict-argmax point per class. -/")
