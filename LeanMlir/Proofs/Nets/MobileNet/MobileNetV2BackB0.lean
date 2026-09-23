@@ -195,7 +195,7 @@ theorem cbrBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   rw [cbrBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [cbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [cbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- Batched **depthwise → bn → relu6** stage backward graph (MobileNetV2 depthwise). -/
@@ -216,7 +216,7 @@ theorem dwbrBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbrBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [dwbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [dwbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- Batched **STRIDE-2 depthwise → bn → relu6** stage backward graph (MobileNetV2
@@ -242,7 +242,7 @@ theorem dwbrBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbrBstridedBackBatchedGraph, depthwiseStridedXlaBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [dwbrBstrided_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [dwbrBstrided_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════

@@ -146,7 +146,7 @@ theorem cbReluBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   rw [cbReluBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [cbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [cbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The conv → bn → relu stage as a `CertLayer`, certified where its pre-relu activation misses 0.
@@ -320,7 +320,7 @@ theorem cbReluStridedBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
   rw [cbReluStridedBackBatchedGraph, convStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [cbReluStridedB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [cbReluStridedB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The strided conv → bn → relu stage as a `CertLayer` — `cbReluLayer` with `flatConvStride2`. -/
@@ -375,7 +375,7 @@ theorem projStridedBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
       = (projStridedB_has_vjp N W b ε hε γ β).backward x (den e) := by
   rw [projStridedBackBatchedGraph, convStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε)]
-  simp only [projStridedB_has_vjp, bnStage_has_vjp, vjp_comp]
+  simp only [projStridedB_has_vjp, bnStage_has_vjp, vjp_comp_backward]
 
 /-- The strided conv → bn projection skip as a `CertLayer` — `projLayer` with `flatConvStride2`,
     globally certified. -/

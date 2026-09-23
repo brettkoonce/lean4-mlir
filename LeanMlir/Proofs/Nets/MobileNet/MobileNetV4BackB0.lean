@@ -157,7 +157,7 @@ theorem dwbReluBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbReluBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [dwbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [dwbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The strided depthwise-relu stage's backward graph. -/
@@ -179,7 +179,7 @@ theorem dwbReluBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
   rw [dwbReluBstridedBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [dwbReluBstrided_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [dwbReluBstrided_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
@@ -339,7 +339,7 @@ theorem stemBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
       = (fusedConvB_has_vjp N W b ε hε γ β).backward x (den e) := by
   rw [stemBackBatchedGraph, convStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [fusedConvB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [fusedConvB_has_vjp, bnSwishStage_has_vjp, vjp_comp_backward, Function.comp_apply]
 
 /-- The fused stage's **k×k strided conv → bn → swish** as a `CertLayer`. ⚠ Globally certified
     (`ok = True`) — swish has no kink, so unlike every UIB stage this one carries no hypothesis. -/

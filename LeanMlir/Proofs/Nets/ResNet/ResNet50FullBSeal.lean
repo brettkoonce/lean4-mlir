@@ -196,8 +196,7 @@ theorem sealIdB_eq (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (oc
           StableHLO.cbReluB N (h := h) (w := w) (sealIdW mid oc).W₁ (sealIdW mid oc).b₁
             (sealIdW mid oc).ε₁ (sealIdW mid oc).γ₁ (sealIdW mid oc).β₁) v k = v k + 1 := by
     intro k
-    show _ + v k = v k + 1
-    rw [hbody]
+    rw [residual_apply, hbody]
     ring
   funext k
   show relu (N * (oc * h * w)) (residual _ v) k = v k + 1

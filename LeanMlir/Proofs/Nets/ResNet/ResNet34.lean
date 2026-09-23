@@ -69,15 +69,6 @@ noncomputable def chain_vjp_diff_at {n : Nat} (x : Vec n) :
 -- § The whole ResNet-34 network VJP
 -- ════════════════════════════════════════════════════════════════
 
-/-- Compose two `HasVJPAt`-with-`DifferentiableAt` pairs (carried as `PProd` so the
-    `DifferentiableAt` `Prop` is allowed). The fold step for the whole net. -/
-noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
-    (x : Vec m)
-    (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
-    (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) :
-    PProd (HasVJPAt (g ∘ f) x) (DifferentiableAt ℝ (g ∘ f) x) :=
-  ⟨vjp_comp_at f g x hf.snd hg.snd hf.fst hg.fst, hg.snd.comp x hf.snd⟩
-
 /-- **Whole-network ResNet-34 VJP.** The conditional VJP of a real ResNet-34-shaped
     network at an input `x`:
 

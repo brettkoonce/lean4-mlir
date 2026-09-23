@@ -409,6 +409,39 @@ noncomputable def vjp_comp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Ve
   correct x :=
     (vjp_comp_at f g x (hf_diff x) (hg_diff (f x)) (hf.toHasVJPAt x) (hg.toHasVJPAt (f x))).correct
 
+/-- `vjp_comp_at`'s backward: `g`'s, then `f`'s. Definitional; stated so a chain peels by `rw`.
+    ⛔ Not by `simp only` in a whole-net tie: simp uses an `rfl` lemma as a `dsimp` step and the
+    kernel re-derives the unfolding. -/
+theorem vjp_comp_at_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p) (x : Vec m)
+    (hf_diff : DifferentiableAt ℝ f x) (hg_diff : DifferentiableAt ℝ g (f x))
+    (hf : HasVJPAt f x) (hg : HasVJPAt g (f x)) (dy : Vec p) :
+    (vjp_comp_at f g x hf_diff hg_diff hf hg).backward dy = hf.backward (hg.backward dy) := rfl
+
+/-- `vjp_comp`'s backward: `g`'s at `f x`, then `f`'s. Definitional, for `rw`. -/
+theorem vjp_comp_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+    (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
+    (hf : HasVJP f) (hg : HasVJP g) (x : Vec m) (dy : Vec p) :
+    (vjp_comp f g hf_diff hg_diff hf hg).backward x dy = hf.backward x (hg.backward (f x) dy) :=
+  rfl
+
+/-- Compose two `HasVJPAt`-with-`DifferentiableAt` pairs (carried as `PProd` so the
+    `DifferentiableAt` `Prop` is allowed). The fold step of every whole-net apex. -/
+noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+    (x : Vec m)
+    (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
+    (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) :
+    PProd (HasVJPAt (g ∘ f) x) (DifferentiableAt ℝ (g ∘ f) x) :=
+  ⟨vjp_comp_at f g x hf.snd hg.snd hf.fst hg.fst, hg.snd.comp x hf.snd⟩
+
+/-- One `vjp_comp_diff_at` level's backward, unfolded: the composite runs `g`'s backward, then
+    `f`'s. Definitional, stated so that a chain of levels peels by `rw` rather than by a
+    `rfl` that has to find the same unfolding through concrete witnesses. ⛔ Not by
+    `simp only`: simp would use it as a `dsimp` step and record nothing for the kernel to replay. -/
+theorem vjp_comp_diff_at_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+    (x : Vec m) (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
+    (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) (dy : Vec p) :
+    (vjp_comp_diff_at f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
+
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix ↔ Vector flattening (row-major)
 -- ════════════════════════════════════════════════════════════════
@@ -435,19 +468,25 @@ namespace Mat
 /-- Row-major flatten: `Mat m n → Vec (m * n)`. Uses Mathlib's
     `finProdFinEquiv : Fin m × Fin n ≃ Fin (m * n)`. -/
 noncomputable def flatten {m n : Nat} (A : Mat m n) : Vec (m * n) :=
-  fun k => let p := finProdFinEquiv.symm k; A p.1 p.2
+  fun k => A (finProdFinEquiv.symm k).1 (finProdFinEquiv.symm k).2
 
 /-- Row-major unflatten: `Vec (m * n) → Mat m n`. -/
 noncomputable def unflatten {m n : Nat} (v : Vec (m * n)) : Mat m n :=
   fun i j => v (finProdFinEquiv (i, j))
 
+theorem flatten_apply {m n : Nat} (A : Mat m n) (k : Fin (m * n)) :
+    flatten A k = A (finProdFinEquiv.symm k).1 (finProdFinEquiv.symm k).2 := rfl
+
+theorem unflatten_apply {m n : Nat} (v : Vec (m * n)) (i : Fin m) (j : Fin n) :
+    unflatten v i j = v (finProdFinEquiv (i, j)) := rfl
+
 /-- Unflatten is a left inverse of flatten. -/
-theorem unflatten_flatten {m n : Nat} (A : Mat m n) :
+@[simp] theorem unflatten_flatten {m n : Nat} (A : Mat m n) :
     unflatten (flatten A) = A := by
   funext i j; simp [unflatten, flatten]
 
 /-- Flatten is a left inverse of unflatten. -/
-theorem flatten_unflatten {m n : Nat} (v : Vec (m * n)) :
+@[simp] theorem flatten_unflatten {m n : Nat} (v : Vec (m * n)) :
     flatten (unflatten v) = v := by
   funext k; exact congrArg v (finProdFinEquiv.apply_symm_apply k)
 
@@ -976,20 +1015,26 @@ namespace Tensor3
     `finProdFinEquiv` calls: first bundle `(ci, hi)` into `Fin (c*h)`,
     then bundle with `wi` into `Fin ((c*h)*w) = Fin (c*h*w)`. -/
 noncomputable def flatten {c h w : Nat} (T : Tensor3 c h w) : Vec (c * h * w) :=
-  fun k =>
-    let ch_w := finProdFinEquiv.symm k      -- : Fin (c*h) × Fin w
-    let c_h := finProdFinEquiv.symm ch_w.1  -- : Fin c × Fin h
-    T c_h.1 c_h.2 ch_w.2
+  fun k => T (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1
+    (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).2 (finProdFinEquiv.symm k).2
 
 /-- Row-major unflatten: inverse of `flatten`. -/
 noncomputable def unflatten {c h w : Nat} (v : Vec (c * h * w)) : Tensor3 c h w :=
   fun ci hi wi => v (finProdFinEquiv (finProdFinEquiv (ci, hi), wi))
 
-theorem unflatten_flatten {c h w : Nat} (T : Tensor3 c h w) :
+theorem flatten_apply {c h w : Nat} (T : Tensor3 c h w) (k : Fin (c * h * w)) :
+    flatten T k = T (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1
+      (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).2 (finProdFinEquiv.symm k).2 := rfl
+
+theorem unflatten_apply {c h w : Nat} (v : Vec (c * h * w)) (ci : Fin c) (hi : Fin h)
+    (wi : Fin w) : unflatten v ci hi wi = v (finProdFinEquiv (finProdFinEquiv (ci, hi), wi)) :=
+  rfl
+
+@[simp] theorem unflatten_flatten {c h w : Nat} (T : Tensor3 c h w) :
     unflatten (flatten T) = T := by
   funext ci hi wi; simp [unflatten, flatten]
 
-theorem flatten_unflatten {c h w : Nat} (v : Vec (c * h * w)) :
+@[simp] theorem flatten_unflatten {c h w : Nat} (v : Vec (c * h * w)) :
     flatten (unflatten v) = v := by
   funext k; simp only [flatten, unflatten, Prod.mk.eta, Equiv.apply_symm_apply]
 

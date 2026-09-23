@@ -272,6 +272,15 @@ noncomputable def oneHot (c : Nat) (label : Fin c) : Vec c :=
 noncomputable def crossEntropy (c : Nat) (logits : Vec c) (label : Fin c) : ℝ :=
   -(Real.log (softmax c logits label))
 
+theorem softmax_apply (c : Nat) (z : Vec c) (j : Fin c) :
+    softmax c z j = Real.exp (z j) / ∑ k : Fin c, Real.exp (z k) := rfl
+
+theorem oneHot_apply (c : Nat) (label j : Fin c) :
+    oneHot c label j = if j = label then 1 else 0 := rfl
+
+theorem crossEntropy_def (c : Nat) (logits : Vec c) (label : Fin c) :
+    crossEntropy c logits label = -(Real.log (softmax c logits label)) := rfl
+
 -- `softmaxCE_grad` is proved in `Attention.lean` (after `pdiv_softmax` is
 -- available). Its statement and proof live there; this file keeps only
 -- `softmax`, `oneHot`, and `crossEntropy` definitions used downstream.

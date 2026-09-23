@@ -179,8 +179,7 @@ noncomputable def mnv2ResidB_has_vjp_at (N h w : Nat) {c mid : Nat} (p : IVW c m
 theorem mnv2ResidB_differentiableAt (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
     (hq : IVPos p) (v : Vec (N * (c * h * w))) (hs : IVSmoothAtB N h w p v) :
     DifferentiableAt ℝ (mnv2ResidB N h w p) v := by
-  show DifferentiableAt ℝ (biPath _ (fun y => y)) v
-  exact (mnv2ExpOnlyB_differentiableAt N h w p hq v hs).add differentiable_id.differentiableAt
+  exact residual_differentiableAt (mnv2ExpOnlyB_differentiableAt N h w p hq v hs)
 
 /-- Stride-2 downsampling bottleneck VJP — `mnv2DownBodyB_has_vjp_at` at the bundle's fields. -/
 noncomputable def mnv2StridedB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)

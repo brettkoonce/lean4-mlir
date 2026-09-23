@@ -139,8 +139,8 @@ theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
           Wdw bdw Wex bex Wpr bpr γls).backward x (den e) := by
   unfold cnxBlockBodyChBackGraph
   rw [depthwiseBack_faithful, chanLNBackGraph_eq_vjp (β := βn) (hε := hεn)]
-  simp only [cnxBodyWith_has_vjp, vjp_comp, convBack_faithful, geluBack_faithful,
-    layerScaleF_faithful, Function.comp_apply]
+  simp only [cnxBodyWith_has_vjp, convBack_faithful, geluBack_faithful,
+    layerScaleF_faithful]
   rfl
 
 /-- The whole channel-LN residual block backward graph (block body + identity skip). -/
@@ -190,7 +190,7 @@ theorem cnxDownChBackGraph_faithful (h w : Nat) {cin cout : Nat}
     den (cnxDownChBackGraph h w p x e) = (cnxDownChW_has_vjp h w p hε).backward x (den e) := by
   unfold cnxDownChBackGraph
   rw [chanLNBackGraph_eq_vjp (β := p.β) (hε := hε), convStridedBack_faithful]
-  simp only [cnxDownChW_has_vjp, vjp_comp]
+  simp only [cnxDownChW_has_vjp]
   rfl
 
 end Proofs.StableHLO

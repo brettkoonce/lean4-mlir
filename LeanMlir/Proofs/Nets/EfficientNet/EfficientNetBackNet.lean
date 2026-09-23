@@ -60,7 +60,7 @@ theorem mbNoExpBackBatchedGraph_faithful {N ic oc h w kHd kWd r : Nat}
           Wp bp εp hεp γp βp).backward x (den e) := by
   rw [mbNoExpBackBatchedGraph, dwbsBackBatchedGraph_faithful (hε := hεd),
       seBackBatched_faithful, projBackBatchedGraph_faithful (hε := hεp)]
-  simp only [mbNoExpFwdB_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [mbNoExpFwdB_has_vjp, Function.comp_apply]
   rfl
 
 /-- **`headFwdB`'s backward graph** — genuinely new: `cbsB⁻¹ ∘ GAP⁻¹ ∘ dense⁻¹`. The EfficientNet
@@ -80,7 +80,7 @@ theorem headBackBatchedGraph_faithful {N c oc h w nC : Nat}
     den (headBackBatchedGraph Wh bh εh γh βh Wfc bfc x e)
       = (headFwdB_has_vjp N Wh bh εh hεh γh βh Wfc bfc).backward x (den e) := by
   rw [headBackBatchedGraph, cbsBackBatchedGraph_faithful (hε := hεh)]
-  simp only [headFwdB_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [headFwdB_has_vjp]
   rfl
 
 end Proofs.StableHLO

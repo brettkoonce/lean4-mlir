@@ -363,11 +363,9 @@ theorem bnPerChannelTensor3_has_vjp_backward_eq (oc h w : Nat) (ε : ℝ) (hε :
       reassocBack oc h w
         ((bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward
           (reassocFwd oc h w x) (reassocFwd oc h w dy)) := by
-  show (reassocFwd_has_vjp oc h w).backward x
-        ((bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward (reassocFwd oc h w x)
-          ((reassocBack_has_vjp oc h w).backward
-            ((bnPerChannelFlat oc (h * w) ε γ β ∘ reassocFwd oc h w) x) dy)) = _
-  rw [reassocBack_has_vjp_backward_eq, reassocFwd_has_vjp_backward_eq]
+  unfold bnPerChannelTensor3_has_vjp
+  rw [vjp_comp_backward, vjp_comp_backward, reassocBack_has_vjp_backward_eq,
+    reassocFwd_has_vjp_backward_eq]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Renderable closed-form backward in the Tensor3 layout (B8b's `den` target)
@@ -445,6 +443,9 @@ theorem bnchwBackIdx_bnchwFwdIdx (N oc h w : Nat) (mIdx : Fin (oc * (N * (h * w)
 noncomputable def bnchwFwd (N oc h w : Nat) :
     Vec (N * (oc * (h * w))) → Vec (oc * (N * (h * w))) :=
   fun y k => y (bnchwFwdIdx N oc h w k)
+
+theorem bnchwFwd_apply (N oc h w : Nat) (y : Vec (N * (oc * (h * w))))
+    (k : Fin (oc * (N * (h * w)))) : bnchwFwd N oc h w y k = y (bnchwFwdIdx N oc h w k) := rfl
 
 /-- **[C,N·H·W] → [N,C,H,W]** reindex (the inverse relabeling). -/
 noncomputable def bnchwBack (N oc h w : Nat) :
@@ -541,8 +542,7 @@ theorem bnSyncTensor4_apply (N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Vec oc)
   simp only [Function.comp_apply, bnchwBack]
   rw [bnPerChannelEvalFlat_apply]
   have hz : bnchwFwd N oc h w x (bnchwBackIdx N oc h w t) = x t := by
-    show x (bnchwFwdIdx N oc h w (bnchwBackIdx N oc h w t)) = x t
-    rw [bnchwFwdIdx_bnchwBackIdx]
+    rw [bnchwFwd_apply, bnchwFwdIdx_bnchwBackIdx]
   have hc : (finProdFinEquiv.symm (bnchwBackIdx N oc h w t)).1 = bnchwChan N oc h w t := by
     unfold bnchwBackIdx bnchwChan
     simp only [Equiv.symm_apply_apply]
@@ -748,11 +748,9 @@ theorem bnBatchTensor4_has_vjp_backward_eq (N oc h w : Nat) (ε : ℝ) (hε : 0 
       bnchwBack N oc h w
         ((bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β).backward
           (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy)) := by
-  show (bnchwFwd_has_vjp N oc h w).backward x
-        ((bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β).backward (bnchwFwd N oc h w x)
-          ((bnchwBack_has_vjp N oc h w).backward
-            ((bnPerChannelFlat oc (N * (h * w)) ε γ β ∘ bnchwFwd N oc h w) x) dy)) = _
-  rw [bnchwBack_has_vjp_backward_eq, bnchwFwd_has_vjp_backward_eq]
+  unfold bnBatchTensor4_has_vjp
+  rw [vjp_comp_backward, vjp_comp_backward, bnchwBack_has_vjp_backward_eq,
+    bnchwFwd_has_vjp_backward_eq]
 
 /-- **Renderable batch-norm backward on the `[N,C,H,W]` layout** — relabel to the
     per-channel Mat, run the consolidated three-term `bnPerChannel_grad_input` over the
@@ -869,8 +867,7 @@ theorem bnSyncTensor4_grad_input_apply (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy
   simp only [bnchwBack]
   rw [bnSyncPerChannel_grad_input_apply]
   have hx : bnchwFwd N oc h w x (bnchwBackIdx N oc h w t) = x t := by
-    show x (bnchwFwdIdx N oc h w (bnchwBackIdx N oc h w t)) = x t
-    rw [bnchwFwdIdx_bnchwBackIdx]
+    rw [bnchwFwd_apply, bnchwFwdIdx_bnchwBackIdx]
   have hd : bnchwFwd N oc h w dy (bnchwBackIdx N oc h w t) = dy t := by
     show dy (bnchwFwdIdx N oc h w (bnchwBackIdx N oc h w t)) = dy t
     rw [bnchwFwdIdx_bnchwBackIdx]

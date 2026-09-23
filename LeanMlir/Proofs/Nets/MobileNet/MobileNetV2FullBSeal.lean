@@ -211,8 +211,7 @@ theorem sealResBody (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c 
 theorem sealResB_eq (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
     mnv2ResidB N h w (sealResW c mid) v = v := by
   funext k
-  show mnv2ExpOnlyB N h w (sealResW c mid) v k + v k = v k
-  rw [congrFun (sealResBody N h w c mid hn v) k]
+  rw [mnv2ResidB, residual_apply, congrFun (sealResBody N h w c mid hn v) k]
   ring
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The three channel-changing block collapses

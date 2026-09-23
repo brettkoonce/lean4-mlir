@@ -65,10 +65,13 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
   `lipschitz_cert_float.py`, `crown_ibp_scorecard.py`): change the data's spelling and their
   parsers break first.
 * `LipschitzCertScorecardSDPFull`/`…Uncon` are in no lib — build them by name after a regen (§3.3).
+* A peel lemma's pattern does not instantiate when a witness is typed at a function only
+  DEFEQ to the one in the lemma (EfficientNet's `convBn_has_vjp`: `fun v => (conv2d W b
+  (unflatten v)).flatten` vs `flatConv W b`) — there `simp only [vjp_comp]` stays (§1(m)).
 * `trace.profiler` allocates: a heartbeat bump sized without it can fail under it (§1(g):
   `emitTok` at 400k).
 
-**Next, recommended order:** §3.4 (one corpus rebuild) → §3.5 → §3.6.
+**Next, recommended order:** §3.5 → §3.6.
 §3.3's matrix-level `G1` lemma and §3.2's printer split are optional (~20 s / ~45 s).
 
 ## 1. Done
@@ -87,6 +90,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 | `3f22bb47` (j) | §3.3 FullNets on the (i) shape: `W2`/`G1`/`H1`/`G2`/`H2` for both nets as ℚ data + `castM`, `H1`/`G2`/`H2` identities by `gram_eq_of_check` (their 12.8M bumps out); `G1` keeps its per-entry `dotZ` proofs, each entry value now `rfl` on the ℚ side + `norm_num`; the 784-wide `W1` untouched; `…Q, castM` added in the IBP, pair-SDP-full and CROWN generators (the CROWN one also parses the ℚ block) | FullNets 326 s / 8.8 GB → 61 s / 5.5 GB standalone (73 s under lake); CrownUncon standalone 237 s → 213 s (not slower); four generators byte-reproducible before the edit (pair-SDP-full 11 min) |
 | `714dd89b` (k) | §3.3 strip-and-compile across the Lipschitz tier: the shared `HEADER_OPTS` (`maxRecDepth 100000` / `maxHeartbeats 3200000` in 9 modules), CROWN's header, FullNets' 12.8M `_lip` bumps, the pair-SDP 1.6M–64M bumps (incl. the 64M `hS*`) and the float tier's per-image 8M — 281 option lines out of 14 modules. Kept: IBP/IBPUncon's per-decl 6.4M (32 + 18 `whnf` timeouts without them; their file header was dead) | every stripped module compiled standalone before the generators changed; the regenerated diff is deletions only |
 | (l) | §3.7: `rndP`/`rndP_zero`/`rndP_err` → leaf `Float/RndP.lean` (Mathlib only), so `DataParallelSyncBf16` no longer imports `Binary32Instance` → FloatBridge, SgdDescentLinear; the three `#print axioms` out of `Binary32Instance` (already in `tests/AuditAxioms.lean`); `Proofs.Real.differentiable_tanh`/`…hasDerivAt_tanh` → `Proofs.differentiable_tanh`/`hasDerivAt_tanh` (Mathlib has neither; the docstring said it had one); file-scope `Classical` out of the audit's six files: four need nothing, CNN's three maxpool decls and SgdDescentCnn's 25 get `open scoped Classical in` (all for `if MaxPool2IsArgmax`, which has no `Decidable` instance); the ten `nlinarith` → `nlinarith only […]` (one → `positivity`) | RndP 1.2 s; DataParallelSyncBf16 12 s; FloatBridge 5.3 s → 5.0 s |
+| (m) | §3.4 root batch, one corpus rebuild. `Tensor.lean`: `Mat`/`Tensor3` `flatten` bodies without `let`s, `flatten_apply`/`unflatten_apply` for both, the four round-trips `@[simp]`, `vjp_comp_backward`/`vjp_comp_at_backward`, and `vjp_comp_diff_at` + `vjp_comp_diff_at_fst_backward` moved in from `ResNet34.lean` / ConvNeXt's tie (the §3.1 leftover). Leaves: `softmax_apply`/`oneHot_apply`/`crossEntropy_def` (MLP), `bnchwFwd_apply` (PerChannelBN), `residual_apply`/`residual_differentiableAt` (Residual). Sites: PerChannelBN's two nested-`.backward` `show`s → `unfold; rw [vjp_comp_backward, …]` and two `bnchwFwd` `show`s; Attention's four softmax/CE/oneHot `show`s; seven residual `show`/`unfold` sites; the 27 `simp only [… vjp_comp(_at) …]` peels → the `_backward` lemmas, where 9 turned out dead (the proof closes by `rfl` once the outer builder unfolds) and EfficientNet's two conv sites keep `vjp_comp` (defeq-typed witness, see traps) | the `@[simp]` round-trips and `let`-free bodies broke nothing in the 4,175-job corpus |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -120,8 +124,8 @@ the tie's closing `rfl` hit `maxRecDepth` there at the net's numerals, so it get
 lemma at variable widths, used by `rw`.
 
 Still open from the old plan, independent of speed: retire the `r34PreK` + `_apply` vocabulary
-(audit_resnet_small_convnext.md findings 1 and 3), and move `vjp_comp_diff_at` (now in per-net
-`ResNet34.lean`) and ConvNeXt's `vjp_comp_diff_at_fst_backward` to `Foundation/OpaquePrefix.lean`.
+(audit_resnet_small_convnext.md findings 1 and 3). (`vjp_comp_diff_at` and its `_fst_backward`
+peel moved to `Tensor.lean` in §1(m).)
 
 ### 3.2 `Codegen/StableHLO.lean` — the slow part DONE as §1(g); the split is optional now
 
@@ -158,12 +162,16 @@ cheap half. `deriving DecidableEq` on `Raw`/`Tok` has no users (grep) but was no
   (`lake build LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPFull …SDPFullUncon`, ~5 min,
   13.5 GB each).
 
-### 3.4 Root-file API batch (one corpus rebuild)
+### 3.4 Root-file API batch — DONE as §1(m)
 
-`Mat.flatten_apply`/`unflatten_apply` and the `Tensor3` pair (+ `@[simp]` round-trips) in
-`Tensor.lean` — ~265 sites unfold these by name; `softmax`/`crossEntropy`/`oneHot` unfolding
-lemmas; `vjp_comp_backward`/`vjp_comp_at_backward`; `bnchwFwd_apply`; `residual_apply`. Use them
-with `rw` in the ties.
+Not done, deliberately: moving the ~250 generic `simp [Mat.flatten, Mat.unflatten]` /
+`Tensor3.(un)flatten` sites to `…_apply`. The audit's case for it was the `let`/zeta residue each
+unfold left and the round-trips cited by hand (201×); the bodies are now `let`-free and the
+round-trips `@[simp]`, so an unfold gives what `flatten_apply` gives. What remains is insurance
+against a change to `flatten`'s body — use the `_apply` lemmas in new code and in `rw` ties, and
+switch a site when it is touched anyway. Also left: `EfficientNet.lean`'s `unfold residual biPath;
+fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `meanLoss_apply` /
+`dpMean_apply` / `lossGrad_apply` trio in DataParallel (a leaf; §3.6 territory).
 
 ### 3.5 Training files (mainstream-Mathlib idiom, the likeliest Mathlib-bump breakage)
 

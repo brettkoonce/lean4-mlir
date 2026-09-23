@@ -197,8 +197,7 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
   rw [show (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) =
          (fun z' => Real.exp (z' j) * (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹) from by
     funext z'
-    show Real.exp (z' j) / (∑ k : Fin (c' + 1), Real.exp (z' k)) = _
-    rw [div_eq_mul_inv]]
+    rw [softmax_apply, div_eq_mul_inv]]
   set S : ℝ := ∑ k : Fin (c' + 1), Real.exp (z k) with hS_def
   have hS_pos : (0 : ℝ) < S :=
     Finset.sum_pos (fun k _ => Real.exp_pos _) Finset.univ_nonempty
@@ -318,7 +317,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
       (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label) := by
     rw [differentiable_pi]
     intro _
-    show Differentiable ℝ (fun z => -(Real.log (softmax (c' + 1) z label)))
+    simp only [crossEntropy_def]
     exact h_log_diff.neg
   unfold pdiv
   -- Step 1: extract the single (0-th) coord of the Vec 1-valued function.
@@ -340,7 +339,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
       (fun z : Vec (c' + 1) => crossEntropy (c' + 1) z label)
       (-((softmax (c' + 1) logits label)⁻¹ •
           fderiv ℝ (fun z => softmax (c' + 1) z label) logits)) logits := by
-    show HasFDerivAt (fun z => -(Real.log (softmax (c' + 1) z label))) _ logits
+    simp only [crossEntropy_def]
     exact h_log_at.neg
   rw [h_ce_at.fderiv]
   -- Step 3: simplify CLM application at basisVec j.
@@ -352,10 +351,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
     rw [fderiv_apply ((softmax_diff (c' + 1)) logits) label]; rfl]
   rw [pdiv_softmax]
   -- Step 5: oneHot unfolds to `if j = label then 1 else 0`; algebra cancels p[label].
-  show -((softmax (c' + 1) logits label)⁻¹ *
-        (softmax (c' + 1) logits label *
-          ((if j = label then (1 : ℝ) else 0) - softmax (c' + 1) logits j))) =
-       softmax (c' + 1) logits j - (if j = label then (1 : ℝ) else 0)
+  rw [oneHot_apply]
   field_simp
   ring
 

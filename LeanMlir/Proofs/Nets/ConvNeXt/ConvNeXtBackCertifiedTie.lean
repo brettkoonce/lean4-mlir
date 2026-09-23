@@ -104,7 +104,7 @@ theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) 
     (x : Vec (c * h * w)) :
     chanLNTensor3Back c h w ε γ x = (chanLNTensor3_has_vjp c h w ε γ β hε).backward x := by
   funext dy
-  simp only [chanLNTensor3_has_vjp, vjp_comp]
+  simp only [chanLNTensor3_has_vjp, vjp_comp_backward]
   rw [reassocBack_has_vjp_backward_eq, transposeFlat_has_vjp_backward_eq,
       rowLNVecFlat_has_vjp_backward_eq (β := β) ε hε,
       transposeFlat_has_vjp_backward_eq, reassocFwd_has_vjp_backward_eq]

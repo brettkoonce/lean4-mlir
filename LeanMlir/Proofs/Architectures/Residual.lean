@@ -179,6 +179,13 @@ noncomputable def residual_has_vjp_at {n : Nat}
     hf_diff differentiable_id.differentiableAt
     hf ((identity_has_vjp n).toHasVJPAt x)
 
+theorem residual_apply {n : Nat} (f : Vec n → Vec n) (v : Vec n) (k : Fin n) :
+    residual f v k = f v k + v k := rfl
+
+theorem residual_differentiableAt {n : Nat} {f : Vec n → Vec n} {x : Vec n}
+    (hf : DifferentiableAt ℝ f x) : DifferentiableAt ℝ (residual f) x :=
+  hf.add differentiable_id.differentiableAt
+
 /-- **Projected residual VJP at a point**: both paths carry smooth-point
     hypotheses (the 1×1 stride-2 projection is linear, but stated at-point
     for uniformity with the composition). -/

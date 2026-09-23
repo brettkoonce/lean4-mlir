@@ -313,8 +313,7 @@ theorem invresSkip_differentiableAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
   have hF_diff : DifferentiableAt ℝ
       (invresBody (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v :=
     invresBody_differentiableAt We be εe γe βe hεe Wd bd εd γd βd hεd Wp bp εp γp βp hεp v h_se h_sd
-  show DifferentiableAt ℝ (biPath _ (fun x => x)) v
-  exact DifferentiableAt.add hF_diff differentiable_id.differentiableAt
+  exact residual_differentiableAt hF_diff
 
 -- ════════════════════════════════════════════════════════════════
 -- § End-to-end representative MobileNetV2

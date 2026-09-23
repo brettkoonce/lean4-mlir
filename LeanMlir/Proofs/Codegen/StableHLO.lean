@@ -3114,7 +3114,7 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
     den (mlpBackGraph W₀ W₁ W₂ (dense W₀ b₀ x)
           (dense W₁ b₁ (relu e₁ (dense W₀ b₀ x))) dy)
       = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
-  simp only [mlpBackGraph, denStep, denStepApp, mlp_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
+  simp only [mlpBackGraph, denStep, denStepApp, mlp_has_vjp_at, dense_has_vjp, relu_has_vjp_at,
              HasVJP.toHasVJPAt, Mat.mulVec, Function.comp_apply]
   rfl
 
@@ -4235,7 +4235,7 @@ theorem cnnBackGraph_faithful
       = (mnistCnnNoBn_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
           hc hh hw x h1 h2 h_mp h3 h4).backward dy := by
   simp only [cnnBackGraph, denStep, denStepApp, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at,
-    denseRelu_has_vjp_at, vjp_comp_at, dense_has_vjp, relu_has_vjp_at,
+    denseRelu_has_vjp_at, vjp_comp_at_backward, dense_has_vjp, relu_has_vjp_at,
     hasVJP3_to_hasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]
   rw [HasVJPAt.backward_unique _ (maxPoolFlat_has_vjp_at'
         ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)

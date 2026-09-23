@@ -613,9 +613,7 @@ noncomputable def resblock_has_vjp_at {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     resblock_body_has_vjp_at W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
   have hres : HasVJPAt (residual F) v :=
     residual_has_vjp_at F v hF_diff hF
-  have hres_diff : DifferentiableAt ℝ (residual F) v := by
-    show DifferentiableAt ℝ (biPath F (fun x => x)) v
-    exact DifferentiableAt.add hF_diff differentiable_id.differentiableAt
+  have hres_diff : DifferentiableAt ℝ (residual F) v := residual_differentiableAt hF_diff
   have h_smooth_res : ∀ k, residual F v k ≠ 0 := h_smooth_out
   exact vjp_comp_at (residual F) (relu (c * h * w)) v
     hres_diff

@@ -273,8 +273,8 @@ theorem mnv2ResidGraphB_faithful (pfx epsStr : String) (N h w : Nat) {c mid : Na
     den (mnv2ResidGraphB pfx epsStr N h w p e) = mnv2ResidB N h w p (den e) := by
   unfold mnv2ResidGraphB mnv2ResidB
   simp only [den_addVB, mnv2ExpOnlyGraphB_faithful]
-  unfold residual biPath
-  rfl
+  funext k
+  rw [residual_apply]
 
 /-- Stride-2 downsampling bottleneck graph: expand at `2h x 2w`, XLA-`SAME` strided depthwise,
     project at `h x w`. -/

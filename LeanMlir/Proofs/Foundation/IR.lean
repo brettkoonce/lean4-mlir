@@ -417,7 +417,7 @@ theorem bn_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) 
   have h : (bn_has_vjp n ε γ β hε).backward x dy
          = (bnNormalize_has_vjp n ε hε).backward x
              ((bnAffine_has_vjp n γ β).backward (bnNormalize n ε x) dy) := by
-    simp only [bn_has_vjp, vjp_comp, eq_mpr_eq_cast]; rfl
+    simp only [bn_has_vjp, eq_mpr_eq_cast]; rfl
   rw [h]
   funext i
   simp only [bnNormalizeBackOf, Back.denote, bnNormalize_has_vjp, bnAffine_has_vjp]
@@ -664,7 +664,7 @@ theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
     (emitMlpBack W₀ W₁ W₂ (dense W₀ b₀ x)
         (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote dy
       = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy := by
-  simp only [emitMlpBack, denote_subst, mlp_has_vjp_at, vjp_comp_at, Back.denote,
+  simp only [emitMlpBack, denote_subst, mlp_has_vjp_at, Back.denote,
              emitDenseBack, emitReluBack, HasVJP.toHasVJPAt, dense_has_vjp, relu_has_vjp_at,
              Function.comp_apply]
   rfl

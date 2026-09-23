@@ -150,6 +150,9 @@ theorem convBnSwishBackGraph_faithful {ic oc h w kH kW : Nat}
     (x : Vec (ic * h * w)) (e : SHlo (oc * h * w)) :
     den (convBnSwishBackGraph W b ε γ β x e)
       = (convBnSwish_has_vjp W b ε γ β hε).backward x (den e) := by
+  -- `vjp_comp` itself, not `vjp_comp_backward`: `convBn_has_vjp`'s conv witness is typed at
+  -- `fun v => (conv2d W b (Tensor3.unflatten v)).flatten`, only defeq to `flatConv W b`, so the
+  -- backward lemma's pattern does not instantiate.
   simp only [convBnSwishBackGraph, convBnSwish_has_vjp, convBn_has_vjp, vjp_comp,
     convBack_faithful, swishBack_faithful, bnBack_faithful_fn (β := β) (hε := hε),
     Function.comp_apply]
@@ -167,7 +170,7 @@ theorem dwBnSwishBackGraph_faithful {c h w kH kW : Nat}
     (x : Vec (c * h * w)) (e : SHlo (c * h * w)) :
     den (dwBnSwishBackGraph W b ε γ β x e)
       = (dwBnSwish_has_vjp W b ε γ β hε).backward x (den e) := by
-  simp only [dwBnSwishBackGraph, dwBnSwish_has_vjp, vjp_comp,
+  simp only [dwBnSwishBackGraph, dwBnSwish_has_vjp, vjp_comp_backward,
     depthwiseBack_faithful, swishBack_faithful, bnBack_faithful_fn (β := β) (hε := hε),
     Function.comp_apply]
 
@@ -183,8 +186,8 @@ theorem convBnBackGraph_faithful {ic oc h w kH kW : Nat}
     (x : Vec (ic * h * w)) (e : SHlo (oc * h * w)) :
     den (convBnBackGraph W b ε γ β x e)
       = (convBn_has_vjp W b ε γ β hε).backward x (den e) := by
-  simp only [convBnBackGraph, convBn_has_vjp, vjp_comp,
-    convBack_faithful, bnBack_faithful_fn (β := β) (hε := hε)]
+  simp only [convBnBackGraph, convBn_has_vjp, vjp_comp, convBack_faithful,
+    bnBack_faithful_fn (β := β) (hε := hε)]  -- `vjp_comp`: see `convBnSwishBackGraph_faithful`
 
 -- ════════════════════════════════════════════════════════════════
 -- § SE, subgraph-cotangent form (for mid-chain use inside the block)
@@ -419,7 +422,7 @@ theorem bnBatchLA_back_conj {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (hε : 
     rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β,
         ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β]
   rw [hb]
-  simp only [bnBatchLA_has_vjp, vjp_comp, eq_mpr_eq_cast]
+  simp only [bnBatchLA_has_vjp, eq_mpr_eq_cast]
   rfl
 
 /-- **`bnBatchLABack` (network-layout true batch-norm backward) faithfulness.**
@@ -470,7 +473,7 @@ theorem cbsBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
       = (cbsB_has_vjp N W b ε hε γ β).backward x (den e) := by
   rw [cbsBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [cbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [cbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp_backward, Function.comp_apply]
 
 /-- Batched **depthwise → bn → swish** stage backward graph (MBConv depthwise). -/
 noncomputable def dwbsBackBatchedGraph {N c h w kH kW : Nat}
@@ -487,7 +490,7 @@ theorem dwbsBackBatchedGraph_faithful {N c h w kH kW : Nat}
       = (dwbsB_has_vjp N W b ε hε γ β).backward x (den e) := by
   rw [dwbsBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [dwbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [dwbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp_backward, Function.comp_apply]
 
 /-- Batched **STRIDE-2 depthwise → bn → swish** stage backward graph (the
     EfficientNet downsample MBConv's depthwise). The stride-2 analogue of
@@ -509,7 +512,7 @@ theorem dwbsSBackBatchedGraph_faithful {N c h w kH kW : Nat}
       = (dwbsSB_has_vjp N W b ε hε γ β).backward x (den e) := by
   rw [dwbsSBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [dwbsSB_has_vjp, bnSwishStage_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [dwbsSB_has_vjp, bnSwishStage_has_vjp, vjp_comp_backward, Function.comp_apply]
 
 /-- Batched **conv → bn** stage backward graph (MBConv project, no swish). -/
 noncomputable def projBackBatchedGraph {N ic oc h w kH kW : Nat}
@@ -525,7 +528,7 @@ theorem projBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
       = (projB_has_vjp N W b ε hε γ β).backward x (den e) := by
   rw [projBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε)]
-  simp only [projB_has_vjp, bnStage_has_vjp, vjp_comp]
+  simp only [projB_has_vjp, bnStage_has_vjp, vjp_comp_backward]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Capstone: the whole batched MBConv residual block
@@ -578,7 +581,7 @@ theorem mbBodyBackBatchedGraph_faithful {N c mid h w kHd kWd r : Nat}
   rw [mbBodyBackBatchedGraph, cbsBackBatchedGraph_faithful (hε := hεe),
       dwbsBackBatchedGraph_faithful (hε := hεd), seBackBatched_faithful,
       projBackBatchedGraph_faithful (hε := hεp)]
-  simp only [mbBodyB_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [mbBodyB_has_vjp, vjp_comp_backward, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Capstone: the batched DOWNSAMPLE MBConv body (strided depthwise, NO residual)
@@ -646,7 +649,7 @@ theorem mbDownBodyBackBatchedGraph_faithful {N ic mid oc h w kHd kWd r : Nat}
   rw [mbDownBodyBackBatchedGraph, cbsBackBatchedGraph_faithful (hε := hεe),
       dwbsSBackBatchedGraph_faithful (hε := hεd), seBackBatched_faithful,
       projBackBatchedGraph_faithful (hε := hεp)]
-  simp only [mbDownBodyB_has_vjp, vjp_comp, Function.comp_apply]
+  simp only [mbDownBodyB_has_vjp, vjp_comp_backward, Function.comp_apply]
 
 /-- The whole batched MBConv residual block backward graph (body + identity skip). -/
 noncomputable def mbResidBlockBackBatchedGraph {N c mid h w kHd kWd r : Nat}

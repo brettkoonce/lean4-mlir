@@ -387,15 +387,6 @@ noncomputable def convNextForwardTChB_has_vjp_at (B : Nat) {nC : Nat} (w : CnxTW
     ⟨cnxDenseB_at B w (cnxSavedB10 B w x),
      batchMap_differentiableAt _ _ (fun _ => (dense_differentiable w.Wd w.bd).differentiableAt)⟩).fst
 
-/-- One `vjp_comp_diff_at` level's backward, unfolded: the composite runs `g`'s backward, then
-    `f`'s. Definitional, stated so that a chain of eleven levels peels by `rw` rather than by a
-    `rfl` that has to find the same unfolding through twelve concrete witnesses. ⛔ Not by
-    `simp only`: simp would use it as a `dsimp` step and record nothing for the kernel to replay. -/
-theorem vjp_comp_diff_at_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
-    (x : Vec m) (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
-    (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) (dy : Vec p) :
-    (vjp_comp_diff_at f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
-
 /-- ⭐⭐ **THE BATCHED TIE.** `convnextInputGradB` with every slot the per-example slot at the
     batched saved activation IS the batched apex's backward. Twelve leaf rewrites, the chain's
     eleven `∘`s applied, then the eleven composition levels peeled by
