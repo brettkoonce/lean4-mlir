@@ -162,7 +162,7 @@ Tensor.lean                    ← pdiv (def via fderiv) + VJP framework
   │
   ├── MLP.lean                 dense (proved both sides) + ReLU (pdiv_relu proved,
   │                            relu/mlp _has_vjp = canonical-witness defs)
-  │                            + softmax CE (proved, lives in Attention.lean)
+  │                            + relu6; softmax CE is proved in Softmax.lean
   │
   ├── CNN.lean                 conv2d (def) + maxPool (def) + weight/bias grads (theorems)
   │                            conv2d_has_vjp3 (theorem); maxPool2_has_vjp3
@@ -252,8 +252,8 @@ hypothesis on the per-row function.
 > `pdiv_dense`, `pdiv_dense_W`, `dense_weight_grad_correct`,
 > `dense_bias_grad_correct`, and `pdiv_relu` are theorems.
 > `relu_has_vjp` and `mlp_has_vjp` are `def`s over the canonical
-> pdiv-derived witness. `softmaxCE_grad` is a theorem (relocated to
-> `Attention.lean` next to `pdiv_softmax`).
+> pdiv-derived witness. `softmaxCE_grad` is a theorem (in `Softmax.lean`, next to
+> `pdiv_softmax`).
 
 **CNN.lean** — convolution and pooling: **0 axioms.**
 

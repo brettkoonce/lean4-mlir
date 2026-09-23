@@ -11,7 +11,7 @@ the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
 
 ## What's new here
 
-* **`relu6`** — the clamped activation `min (max x 0) 6`. Unlike `relu`,
+* **`relu6`** (defined in `MLP.lean`, beside `relu`) — the clamped activation `min (max x 0) 6`. Unlike `relu`,
   the saturated branch is the *constant* 6 (not linear-through-origin),
   so the local-linearization trick matches `relu6` against an *affine*
   surrogate `g` (proj on the active region, constant 0 below, constant 6
@@ -43,88 +43,6 @@ Quot.sound]`.
 
 namespace Proofs
 open Finset BigOperators
-
--- ════════════════════════════════════════════════════════════════
--- § ReLU6  y = min(max(x,0), 6)   (MobileNetV2 activation)
--- ════════════════════════════════════════════════════════════════
-
-noncomputable def relu6 (n : Nat) (x : Vec n) : Vec n :=
-  fun i => min (max (x i) 0) 6
-
-/-- ReLU6's local linear part at a smooth point: projects to `y k` when
-    `0 < x k < 6`, otherwise zero. -/
-noncomputable def relu6LinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n :=
-  ContinuousLinearMap.pi fun k =>
-    if 0 < x k ∧ x k < 6 then ContinuousLinearMap.proj k else (0 : Vec n →L[ℝ] ℝ)
-
-@[simp] theorem relu6LinearPart_apply (n : Nat) (x y : Vec n) (k : Fin n) :
-    relu6LinearPart n x y k = if 0 < x k ∧ x k < 6 then y k else 0 := by
-  show (ContinuousLinearMap.pi (fun k' =>
-          if 0 < x k' ∧ x k' < 6 then ContinuousLinearMap.proj k'
-                      else (0 : Vec n →L[ℝ] ℝ))) y k = _
-  rw [ContinuousLinearMap.pi_apply]
-  by_cases hxk : 0 < x k ∧ x k < 6
-  · rw [ite_eq_left hxk, ite_eq_left hxk]; rfl
-  · rw [ite_eq_right hxk, ite_eq_right hxk]; rfl
-
-theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
-    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) :
-    HasFDerivAt (relu6 n) (relu6LinearPart n x) x := by
-  unfold relu6LinearPart
-  rw [hasFDerivAt_pi]
-  intro k
-  -- Each coordinate is locally constant 0, the identity, or constant 6: `x k` sits strictly
-  -- inside one of the three pieces and `y k` stays there for `y` near `x`.
-  have ht := (continuous_apply k).continuousAt.tendsto (x := x)
-  rcases (h_smooth k).1.lt_or_gt with h0 | h0
-  · rw [ite_eq_right fun h => h0.not_gt h.1]
-    refine (hasFDerivAt_const 0 x).congr_of_eventuallyEq ?_
-    filter_upwards [ht.eventually (eventually_lt_nhds h0)] with y hy
-    simp [relu6, hy.le]
-  rcases (h_smooth k).2.lt_or_gt with h6 | h6
-  · rw [ite_eq_left ⟨h0, h6⟩]
-    refine (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).hasFDerivAt.congr_of_eventuallyEq ?_
-    filter_upwards [ht.eventually (eventually_gt_nhds h0), ht.eventually (eventually_lt_nhds h6)]
-      with y hy0 hy6
-    simp [relu6, hy0.le, hy6.le]
-  · rw [ite_eq_right fun h => h6.not_gt h.2]
-    refine (hasFDerivAt_const 6 x).congr_of_eventuallyEq ?_
-    filter_upwards [ht.eventually (eventually_gt_nhds h6)] with y hy
-    simp [relu6, hy.le, ((show (0 : ℝ) < 6 by norm_num).trans hy).le]
-
-@[fun_prop]
-theorem relu6_differentiableAt_of_smooth (n : Nat) (x : Vec n)
-    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : DifferentiableAt ℝ (relu6 n) x :=
-  (relu6_hasFDerivAt n x h_smooth).differentiableAt
-
-theorem pdiv_relu6 (n : Nat) (x : Vec n)
-    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) (i j : Fin n) :
-    pdiv (relu6 n) x i j =
-      if i = j then (if 0 < x i ∧ x i < 6 then 1 else 0) else 0 := by
-  rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
-  · subst hn0; exact i.elim0
-  unfold pdiv
-  rw [(relu6_hasFDerivAt n x h_smooth).fderiv, relu6LinearPart_apply, basisVec_apply]
-  by_cases hij : i = j
-  · subst hij; rw [ite_eq_left rfl, ite_eq_left rfl]
-  · rw [ite_eq_right (fun h : j = i => hij h.symm), ite_eq_right hij]
-    by_cases hxj : 0 < x j ∧ x j < 6
-    · rw [ite_eq_left hxj]
-    · rw [ite_eq_right hxj]
-
-noncomputable def relu6_has_vjp_at (n : Nat) (x : Vec n)
-    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : HasVJPAt (relu6 n) x where
-  backward dy i := if 0 < x i ∧ x i < 6 then dy i else 0
-  correct := by
-    intro dy i
-    simp_rw [pdiv_relu6 n x h_smooth]
-    rw [Finset.sum_eq_single i
-        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
-        (fun h => absurd (Finset.mem_univ i) h)]
-    rw [ite_eq_left rfl]
-    by_cases hxi : 0 < x i ∧ x i < 6
-    · rw [ite_eq_left hxi, ite_eq_left hxi]; ring
-    · rw [ite_eq_right hxi, ite_eq_right hxi]; ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § Conv/Depthwise + BN + ReLU6 blocks (flat Vec space)
@@ -508,38 +426,5 @@ theorem mobilenetv2_has_vjp_at_correct
       We₁ be₁ e₁ ge₁ be1 he₁ Wd₁ bd₁ d₁ gd₁ bd1 hd₁ Wp₁ bp₁ p₁ gp₁ bp1 hp₁
       We₂ be₂ e₂ ge₂ be2 he₂ Wd₂ bd₂ d₂ gd₂ bd2 hd₂ Wp₂ bp₂ p₂ gp₂ bp2 hp₂ Wh bh
       x h_stem h_b1e h_b1d h_b2e h_b2d).correct dy i
-
--- ════════════════════════════════════════════════════════════════
--- § relu6 and depthwise facts the structural witnesses build on
---
---   ⭐ These three outlived `Mnv2Live`, the 2-channel per-example proxy that carried MobileNetV2's
---   levels 2 and 3 until 2026-09-20. Both levels are now stated on `mobilenetv2ForwardB_full`
---   itself — full width, seventeen bottlenecks, batch BatchNorm, 224×224 — and these are what
---   that seal's block collapses and its ray argument are made of. The proxy, its three seal
---   files and the `n ≤ 8` window lemma they needed are gone.
--- ════════════════════════════════════════════════════════════════
-
-/-- A depthwise conv with everywhere-zero kernel and bias maps anything to `0`. -/
-theorem depthwiseFlat_eq_zero {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (hW : ∀ ch kh kw, W ch kh kw = 0) (hb : ∀ ch, b ch = 0) (v : Vec (c * h * w)) :
-    depthwiseFlat (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
-  funext k; simp [depthwiseFlat, depthwiseConv2d, Tensor3.flatten, hW, hb]
-
-/-- **ReLU6 is the identity inside its window.** Wherever every coordinate is strictly inside
-    `(0,6)`, `min (max · 0) 6` does nothing — the step every structural witness takes to collapse a
-    relu6 stage to its BatchNorm. ⭐ Stated at the top level rather than inside a witness namespace:
-    it is a fact about the op, and `BatchSeal`'s consumers outlive any one witness. -/
-theorem relu6_id_window (n : Nat) (y : Vec n) (hy : ∀ k, 0 < y k ∧ y k < 6) :
-    relu6 n y = y := by
-  funext k
-  simp only [relu6]
-  obtain ⟨h0, h6⟩ := hy k
-  rw [max_eq_left (le_of_lt h0), min_eq_left (le_of_lt h6)]
-
-/-- **ReLU6 is continuous** — `min (max · 0) 6` coordinatewise. The peer of
-    `BatchSeal.relu_continuous`, for the ray argument of a relu6 net's seal. -/
-theorem relu6_continuous (n : Nat) : Continuous (relu6 n) := by
-  refine continuous_pi (fun k => ?_)
-  exact ((continuous_apply k).max continuous_const).min continuous_const
 
 end Proofs

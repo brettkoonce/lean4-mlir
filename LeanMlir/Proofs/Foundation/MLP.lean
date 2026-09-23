@@ -281,9 +281,8 @@ theorem oneHot_apply (c : Nat) (label j : Fin c) :
 theorem crossEntropy_def (c : Nat) (logits : Vec c) (label : Fin c) :
     crossEntropy c logits label = -(Real.log (softmax c logits label)) := rfl
 
--- `softmaxCE_grad` is proved in `Attention.lean` (after `pdiv_softmax` is
--- available). Its statement and proof live there; this file keeps only
--- `softmax`, `oneHot`, and `crossEntropy` definitions used downstream.
+-- `softmaxCE_grad` (and `pdiv_softmax`, `softmax_has_vjp`) are in `Softmax.lean`, which
+-- imports this file; this file keeps the `softmax`, `oneHot` and `crossEntropy` definitions.
 
 -- ════════════════════════════════════════════════════════════════
 -- § MLP Composition
@@ -418,5 +417,104 @@ theorem mlp_has_vjp_at_correct {d₀ d₁ d₂ d₃ : Nat}
     (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy i =
     ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
   (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).correct dy i
+
+-- ════════════════════════════════════════════════════════════════
+-- § ReLU6  y = min(max(x,0), 6)   (MobileNetV2 activation)
+-- ════════════════════════════════════════════════════════════════
+
+noncomputable def relu6 (n : Nat) (x : Vec n) : Vec n :=
+  fun i => min (max (x i) 0) 6
+
+/-- ReLU6's local linear part at a smooth point: projects to `y k` when
+    `0 < x k < 6`, otherwise zero. -/
+noncomputable def relu6LinearPart (n : Nat) (x : Vec n) : Vec n →L[ℝ] Vec n :=
+  ContinuousLinearMap.pi fun k =>
+    if 0 < x k ∧ x k < 6 then ContinuousLinearMap.proj k else (0 : Vec n →L[ℝ] ℝ)
+
+@[simp] theorem relu6LinearPart_apply (n : Nat) (x y : Vec n) (k : Fin n) :
+    relu6LinearPart n x y k = if 0 < x k ∧ x k < 6 then y k else 0 := by
+  show (ContinuousLinearMap.pi (fun k' =>
+          if 0 < x k' ∧ x k' < 6 then ContinuousLinearMap.proj k'
+                      else (0 : Vec n →L[ℝ] ℝ))) y k = _
+  rw [ContinuousLinearMap.pi_apply]
+  by_cases hxk : 0 < x k ∧ x k < 6
+  · rw [ite_eq_left hxk, ite_eq_left hxk]; rfl
+  · rw [ite_eq_right hxk, ite_eq_right hxk]; rfl
+
+theorem relu6_hasFDerivAt (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) :
+    HasFDerivAt (relu6 n) (relu6LinearPart n x) x := by
+  unfold relu6LinearPart
+  rw [hasFDerivAt_pi]
+  intro k
+  -- Each coordinate is locally constant 0, the identity, or constant 6: `x k` sits strictly
+  -- inside one of the three pieces and `y k` stays there for `y` near `x`.
+  have ht := (continuous_apply k).continuousAt.tendsto (x := x)
+  rcases (h_smooth k).1.lt_or_gt with h0 | h0
+  · rw [ite_eq_right fun h => h0.not_gt h.1]
+    refine (hasFDerivAt_const 0 x).congr_of_eventuallyEq ?_
+    filter_upwards [ht.eventually (eventually_lt_nhds h0)] with y hy
+    simp [relu6, hy.le]
+  rcases (h_smooth k).2.lt_or_gt with h6 | h6
+  · rw [ite_eq_left ⟨h0, h6⟩]
+    refine (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).hasFDerivAt.congr_of_eventuallyEq ?_
+    filter_upwards [ht.eventually (eventually_gt_nhds h0), ht.eventually (eventually_lt_nhds h6)]
+      with y hy0 hy6
+    simp [relu6, hy0.le, hy6.le]
+  · rw [ite_eq_right fun h => h6.not_gt h.2]
+    refine (hasFDerivAt_const 6 x).congr_of_eventuallyEq ?_
+    filter_upwards [ht.eventually (eventually_gt_nhds h6)] with y hy
+    simp [relu6, hy.le, ((show (0 : ℝ) < 6 by norm_num).trans hy).le]
+
+@[fun_prop]
+theorem relu6_differentiableAt_of_smooth (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : DifferentiableAt ℝ (relu6 n) x :=
+  (relu6_hasFDerivAt n x h_smooth).differentiableAt
+
+theorem pdiv_relu6 (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) (i j : Fin n) :
+    pdiv (relu6 n) x i j =
+      if i = j then (if 0 < x i ∧ x i < 6 then 1 else 0) else 0 := by
+  rcases Nat.eq_zero_or_pos n with hn0 | hn_pos
+  · subst hn0; exact i.elim0
+  unfold pdiv
+  rw [(relu6_hasFDerivAt n x h_smooth).fderiv, relu6LinearPart_apply, basisVec_apply]
+  by_cases hij : i = j
+  · subst hij; rw [ite_eq_left rfl, ite_eq_left rfl]
+  · rw [ite_eq_right (fun h : j = i => hij h.symm), ite_eq_right hij]
+    by_cases hxj : 0 < x j ∧ x j < 6
+    · rw [ite_eq_left hxj]
+    · rw [ite_eq_right hxj]
+
+noncomputable def relu6_has_vjp_at (n : Nat) (x : Vec n)
+    (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : HasVJPAt (relu6 n) x where
+  backward dy i := if 0 < x i ∧ x i < 6 then dy i else 0
+  correct := by
+    intro dy i
+    simp_rw [pdiv_relu6 n x h_smooth]
+    rw [Finset.sum_eq_single i
+        (fun j _ hne => by rw [ite_eq_right (Ne.symm hne)]; ring)
+        (fun h => absurd (Finset.mem_univ i) h)]
+    rw [ite_eq_left rfl]
+    by_cases hxi : 0 < x i ∧ x i < 6
+    · rw [ite_eq_left hxi, ite_eq_left hxi]; ring
+    · rw [ite_eq_right hxi, ite_eq_right hxi]; ring
+
+/-- **ReLU6 is the identity inside its window.** Wherever every coordinate is strictly inside
+    `(0,6)`, `min (max · 0) 6` does nothing — the step every structural witness takes to collapse a
+    relu6 stage to its BatchNorm. ⭐ Stated at the top level rather than inside a witness namespace:
+    it is a fact about the op, and `BatchSeal`'s consumers outlive any one witness. -/
+theorem relu6_id_window (n : Nat) (y : Vec n) (hy : ∀ k, 0 < y k ∧ y k < 6) :
+    relu6 n y = y := by
+  funext k
+  simp only [relu6]
+  obtain ⟨h0, h6⟩ := hy k
+  rw [max_eq_left (le_of_lt h0), min_eq_left (le_of_lt h6)]
+
+/-- **ReLU6 is continuous** — `min (max · 0) 6` coordinatewise. The peer of
+    `BatchSeal.relu_continuous`, for the ray argument of a relu6 net's seal. -/
+theorem relu6_continuous (n : Nat) : Continuous (relu6 n) := by
+  refine continuous_pi (fun k => ?_)
+  exact ((continuous_apply k).max continuous_const).min continuous_const
 
 end Proofs

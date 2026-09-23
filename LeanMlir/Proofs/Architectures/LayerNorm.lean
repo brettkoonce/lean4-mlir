@@ -347,4 +347,41 @@ theorem swish_has_vjp_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
     ∑ j : Fin n, pdiv (swish n) x i j * dy j :=
   (swish_has_vjp n).correct x dy i
 
+-- ════════════════════════════════════════════════════════════════
+-- § Layer scale (per-channel learnable elementwise scale)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Layer scale** — per-channel learnable elementwise multiply by `γ`.
+    `layerScale γ x i = γ i * x i`. A diagonal linear map. -/
+noncomputable def layerScale {n : Nat} (γ : Vec n) (x : Vec n) : Vec n :=
+  fun i => γ i * x i
+
+/-- `layerScale γ` is differentiable everywhere (diagonal linear). -/
+theorem layerScale_differentiable {n : Nat} (γ : Vec n) :
+    Differentiable ℝ (layerScale γ) := by
+  unfold layerScale; fun_prop
+
+/-- **Jacobian of `layerScale`** — `∂(γ_j x_j)/∂x_i = γ_i δ_{ij}`. -/
+theorem pdiv_layerScale {n : Nat} (γ : Vec n) (x : Vec n) (i j : Fin n) :
+    pdiv (layerScale γ) x i j = if i = j then γ i else 0 := by
+  rw [pdiv_of_linear _ (fun _ _ => by funext; simp [layerScale, mul_add])
+    (fun _ _ => by funext; simp [layerScale, mul_left_comm])]
+  rcases eq_or_ne i j with rfl | h
+  · simp [layerScale]
+  · simp [layerScale, h, Ne.symm h]
+
+/-- **Layer scale VJP**: `back(x, dy)_i = γ i * dy i`. -/
+noncomputable def layerScale_has_vjp {n : Nat} (γ : Vec n) :
+    HasVJP (layerScale γ) where
+  backward := fun _x dy i => γ i * dy i
+  correct := by
+    intro x dy i
+    simp [pdiv_layerScale]
+
+theorem layerScale_has_vjp_correct {n : Nat} (γ : Vec n)
+    (x dy : Vec n) (i : Fin n) :
+    (layerScale_has_vjp γ).backward x dy i =
+    ∑ j : Fin n, pdiv (layerScale γ) x i j * dy j :=
+  (layerScale_has_vjp γ).correct x dy i
+
 end Proofs

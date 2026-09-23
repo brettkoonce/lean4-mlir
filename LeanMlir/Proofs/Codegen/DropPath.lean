@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
+import LeanMlir.Proofs.Architectures.LayerNorm
 
 /-! # Stochastic depth (drop-path) over ℝ — the per-example branch scale
 

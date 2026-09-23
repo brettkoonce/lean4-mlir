@@ -754,4 +754,10 @@ noncomputable def depthwiseStridedXlaBiasSgdDen {c h w kH kW : Nat}
     Vec c :=
   fun o => b o - lr * (depthwiseStride2Xla_bias_grad_has_vjp W x).backward b dy o
 
+/-- A depthwise conv with everywhere-zero kernel and bias maps anything to `0`. -/
+theorem depthwiseFlat_eq_zero {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (hW : ∀ ch kh kw, W ch kh kw = 0) (hb : ∀ ch, b ch = 0) (v : Vec (c * h * w)) :
+    depthwiseFlat (h := h) (w := w) W b v = (fun _ => (0:ℝ)) := by
+  funext k; simp [depthwiseFlat, depthwiseConv2d, Tensor3.flatten, hW, hb]
+
 end Proofs

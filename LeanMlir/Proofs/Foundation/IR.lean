@@ -1,8 +1,7 @@
 import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.Architectures.CNN
 import LeanMlir.Proofs.Architectures.LayerNorm
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
-import LeanMlir.Proofs.Architectures.Attention
+import LeanMlir.Proofs.Architectures.Softmax
 import LeanMlir.Proofs.Architectures.SE
 
 /-! # The small-net backward IR — `Back` / `Fwd` and their denotations

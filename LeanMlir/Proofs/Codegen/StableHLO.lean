@@ -3,10 +3,9 @@ import LeanMlir.Proofs.Nets.Small.CifarCNN
 import LeanMlir.Proofs.Foundation.StridedConv
 import LeanMlir.Proofs.Foundation.PerChannelBN
 import LeanMlir.Proofs.Architectures.Depthwise
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
 import LeanMlir.Proofs.Architectures.LayerNorm
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
+import LeanMlir.Proofs.Architectures.SE
+import LeanMlir.Proofs.Architectures.Attention
 -- The ℝ AdamW spec (`adamMNext`/`adamVNext`/`adamWParam`), so the optimizer ops can denote it.
 -- AdamStep only imports Foundation.Tensor + Mathlib, so this adds no cycle.
 import LeanMlir.Proofs.Codegen.AdamStep
@@ -20,7 +19,7 @@ import LeanMlir.Proofs.Codegen.Lamb
 import LeanMlir.Proofs.Codegen.SgdMomentumStep
 -- RmsPropStep imports only the two above, so this adds no cycle either.
 import LeanMlir.Proofs.Codegen.RmsPropStep
--- DropPath imports only Nets.ConvNeXt.ConvNeXt (for `layerScale`, which this file already has in
+-- DropPath imports only Architectures.LayerNorm (for `layerScale`, which this file already has in
 -- scope), so it adds no cycle either. `planning/archive/stochastic_depth.md`.
 import LeanMlir.Proofs.Codegen.DropPath
 -- He et al.'s 3×3/s2 stem pool (`maxPool3s2Flat` + its VJP witness), so the stem-pool ops can
@@ -691,7 +690,7 @@ inductive SHlo : Nat → Type where
   -- gate's output nonlinearity) and its input-VJP (`dy · σ(x)·(1−σ(x))`). Like swish,
   -- SMOOTH everywhere (no kink, NO smoothness hyp — GLOBAL `sigmoid_has_vjp`, not `_at`).
   -- `sigmoidBack`'s `xName`/`x` is the saved pre-activation. `den` via the proven
-  -- `sigmoid` / `sigmoid_has_vjp` (EfficientNet.lean).
+  -- `sigmoid` / `sigmoid_has_vjp` (SE.lean).
   | sigmoidF     {n : Nat}                                      : SHlo n → SHlo n
   | sigmoidBack  {n : Nat} (xName : String) (x : Vec n)         : SHlo n → SHlo n
   -- The BATCHED peers of `swishBack`/`sigmoidBack`. Identical `den` — the SAME
@@ -900,7 +899,7 @@ inductive SHlo : Nat → Type where
   | geluF      {n : Nat}                                        : SHlo n → SHlo n
   | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
   -- Chapter 8 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
-  -- over the flattened `c·h·w` map). `den` via the proven `layerScale` (ConvNeXt.lean).
+  -- over the flattened `c·h·w` map). `den` via the proven `layerScale` (LayerNorm.lean).
   | layerScaleF {n : Nat} (γName : String) (γ : Vec n)          : SHlo n → SHlo n
   -- Per-CHANNEL layer-scale (the paper's form, the committed full-T render's
   -- `tensor<c>` γ): `den` = the proven `layerScale` at the channel-expanded
@@ -2993,7 +2992,7 @@ theorem selectPosB_faithful {N n : Nat} (s : String) (x : Vec (N*n)) (hx : ∀ i
     den (.selectPosB s x e) = (relu_has_vjp_at (N*n) x hx).backward (den e) := rfl
 
 /-- **ReLU6 forward faithfulness.** `min(max(·,0),6)` denotes the proven `relu6`
-    (MobileNetV2.lean). (`rfl` — `relu6` is defined as exactly this clamp.) -/
+    (MLP.lean). (`rfl` — `relu6` is defined as exactly this clamp.) -/
 @[simp] theorem relu6F_faithful {k : Nat} (e : SHlo k) :
     den (.relu6F e) = relu6 k (den e) := rfl
 
@@ -3759,7 +3758,7 @@ theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     den (.swishBack xN x e) = (swish_has_vjp n).backward x (den e) := rfl
 
 /-- **Sigmoid forward faithfulness.** The `stablehlo.logistic(x)` graph denotes the
-    proven `sigmoid` (= σ(x), EfficientNet.lean) — the SE gate's output nonlinearity.
+    proven `sigmoid` (= σ(x), SE.lean) — the SE gate's output nonlinearity.
     Smooth everywhere. (`rfl`, so kept out of the axiom audit — `roundtrip` covers it.) -/
 @[simp] theorem sigmoidF_faithful {n : Nat} (e : SHlo n) :
     den (.sigmoidF e) = sigmoid n (den e) := rfl
@@ -3779,7 +3778,7 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
     den (.geluF e) = gelu n (den e) := rfl
 
 /-- **Layer-scale faithfulness.** The per-element multiply `γ ⊙ x` denotes the proven
-    `layerScale` (ConvNeXt.lean). (`rfl`.) -/
+    `layerScale` (LayerNorm.lean). (`rfl`.) -/
 @[simp] theorem layerScaleF_faithful {n : Nat} (γN : String) (γ : Vec n) (e : SHlo n) :
     den (.layerScaleF γN γ e) = layerScale γ (den e) := rfl
 

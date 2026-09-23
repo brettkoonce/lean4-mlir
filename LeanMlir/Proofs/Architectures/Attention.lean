@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Foundation.Tensor
 import LeanMlir.Proofs.Foundation.MLP
+import LeanMlir.Proofs.Architectures.Softmax
 import LeanMlir.Proofs.Architectures.CNN          -- needed for Kernel4 in patchEmbed
 import LeanMlir.Proofs.Architectures.Residual
 import LeanMlir.Proofs.Architectures.SE
@@ -34,7 +35,7 @@ the same input `X`. Every piece is something we already have:
 | `V = X Wv`            | `MLP.lean`         | dense backward           |
 | `Q * K^T`             | (matmul = dense)   | chain rule               |
 | `/ sqrt(d)`           | (scalar)           | chain rule + scale       |
-| **`softmax(...)`**    | **this file**      | **closed-form collapse** |
+| **`softmax(...)`**    | **`Softmax.lean`** | **closed-form collapse** |
 | `... * V`             | (matmul = dense)   | chain rule               |
 | three-way fan-in at X | `Residual.lean`    | `biPath_has_vjp`         |
 
@@ -45,7 +46,10 @@ earlier chapters.
 
 ## Structure of this file
 
-1. **Standalone softmax VJP** — the last closed-form trick.
+0. **The multi-head matrix kit** — column-slab independence (`pdivMat_colIndep`,
+   `colSlabwise_has_vjp_mat`) and the ternary matrix VJP `HasVJPMat3`; then the
+   differentiability helpers.
+1. The standalone softmax VJP is in `Softmax.lean` (imported here).
 2. **Scaled dot-product attention** — SDPA as a composition.
 3. **Multi-head wrapper** — reshape/transpose boilerplate, no new math.
 4. **Transformer block** — LN -> MHSA -> + -> LN -> MLP -> +, pure composition.
@@ -55,6 +59,144 @@ earlier chapters.
 open Finset BigOperators
 
 namespace Proofs
+
+-- ════════════════════════════════════════════════════════════════
+-- § Column-slab independence (vmap over a column-axis partition)
+-- ════════════════════════════════════════════════════════════════
+
+/-! ## Per-head / per-slab column independence
+
+Multi-head attention applies the same per-head function to each of `heads`
+column slabs of width `d_in` from a `Mat n (heads * d_in)` input. The
+column-slab analog of `rowwise_has_vjp_mat` factors that vmap-over-heads
+structure: each head's output depends only on its own slab of the input,
+so the matrix Jacobian is block-diagonal across the head axis. -/
+
+/-- Apply `g : Mat n d_in → Mat n d_out` to each of the `heads` column
+    slabs of width `d_in` in a `Mat n (heads * d_in)` input, producing
+    a `Mat n (heads * d_out)` output. Output column `(h, j_out)` is
+    column `j_out` of `g (slab h M)`, where `slab h M` extracts the
+    `d_in`-wide column block at head index `h`. -/
+noncomputable def colSlabApply {n heads d_in d_out : Nat}
+    (g : Mat n d_in → Mat n d_out) : Mat n (heads * d_in) → Mat n (heads * d_out) :=
+  fun M => fun r hj =>
+    g (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
+      r (finProdFinEquiv.symm hj).2
+
+/-- **Column-slab independence Jacobian** — column-axis analog of
+    `pdivMat_rowIndep`. For a slab-applied function `colSlabApply g`,
+    the Jacobian is block-diagonal across the `heads` axis: zero unless
+    the input slab `h_j` matches the output slab `h_l`, otherwise equal
+    to `pdivMat g` on that slab.
+
+    Requires `Differentiable ℝ (flat g)` for the same reason as
+    `pdivMat_rowIndep`: the Pi-valued flat form must be differentiable
+    everywhere so `fderiv` doesn't fall back to junk-default 0. -/
+theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_out)
+    (h_g_diff : Differentiable ℝ
+                  (fun v : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten v))))
+    (A : Mat n (heads * d_in))
+    (i : Fin n) (h_j : Fin heads) (j' : Fin d_in)
+    (k : Fin n) (h_l : Fin heads) (j'' : Fin d_out) :
+    pdivMat (colSlabApply g) A
+            i (finProdFinEquiv (h_j, j'))
+            k (finProdFinEquiv (h_l, j'')) =
+    (if h_j = h_l then
+      pdivMat g (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) i j' k j''
+     else 0) := by
+  -- `slab h` reads head `h`'s columns out of the flat input; output coordinate `(r, (h, c))` is
+  -- `g`'s flat coordinate `(r, c)` read after `slab h`, whose derivative is `D r h c`.
+  let slab : Fin heads → (Vec (n * (heads * d_in)) →L[ℝ] Vec (n * d_in)) := fun h =>
+    reindexCLM fun idx => finProdFinEquiv ((finProdFinEquiv.symm idx).1,
+      finProdFinEquiv (h, (finProdFinEquiv.symm idx).2))
+  let G := fun w : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten w))
+  let D : Fin n → Fin heads → Fin d_out → (Vec (n * (heads * d_in)) →L[ℝ] ℝ) := fun r h c =>
+    (ContinuousLinearMap.proj (finProdFinEquiv (r, c)) : Vec (n * d_out) →L[ℝ] ℝ).comp
+      ((fderiv ℝ G (slab h (Mat.flatten A))).comp (slab h))
+  have hF : HasFDerivAt (fun v => Mat.flatten (colSlabApply g (Mat.unflatten v)))
+      (ContinuousLinearMap.pi fun idx => D (finProdFinEquiv.symm idx).1
+        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1
+        (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2) (Mat.flatten A) :=
+    hasFDerivAt_pi.2 fun idx => by
+      obtain ⟨⟨r, hc⟩, rfl⟩ := finProdFinEquiv.surjective idx
+      obtain ⟨⟨h, c⟩, rfl⟩ := finProdFinEquiv.surjective hc
+      rw [show (fun v : Vec (n * (heads * d_in)) => Mat.flatten (colSlabApply g (Mat.unflatten v))
+          (finProdFinEquiv (r, finProdFinEquiv (h, c)))) = fun v => G (slab h v)
+          (finProdFinEquiv (r, c)) by
+        funext v; simp only [G, slab, reindexCLM_apply]
+        unfold Mat.flatten Mat.unflatten colSlabApply; simp only [Equiv.symm_apply_apply]]
+      simp only [Equiv.symm_apply_apply]
+      exact hasFDerivAt_pi'.1 ((h_g_diff _).hasFDerivAt.comp _ (slab h).hasFDerivAt) _
+  have hslab : slab h_l (Mat.flatten A) =
+      Mat.flatten (fun r' j_in => A r' (finProdFinEquiv (h_l, j_in))) := by
+    funext; simp only [slab, Mat.flatten, reindexCLM_apply, Equiv.symm_apply_apply]
+  have hb : slab h_l (basisVec (finProdFinEquiv (i, finProdFinEquiv (h_j, j')))) =
+      if h_j = h_l then basisVec (finProdFinEquiv (i, j')) else 0 := by
+    funext idx; obtain ⟨⟨r, c⟩, rfl⟩ := finProdFinEquiv.surjective idx
+    simp only [slab, reindexCLM_apply, Equiv.symm_apply_apply, basisVec_apply,
+      EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq]
+    rcases eq_or_ne h_j h_l with rfl | hne
+    · simp
+    · simp [hne, hne.symm]
+  rw [pdivMat, pdiv, hF.fderiv]
+  simp only [ContinuousLinearMap.pi_apply, Equiv.symm_apply_apply, D,
+    ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply, hslab, hb]
+  split_ifs <;> simp [G, pdivMat, pdiv]
+
+/-- **Lift `HasVJPMat g` to column-slab vmap** — column-axis analog of
+    `rowwise_has_vjp_mat`. Given `g : Mat n d_in → Mat n d_out` with a
+    matrix VJP, applying `g` independently to each of `heads`-many column
+    slabs gives a `HasVJPMat` for `colSlabApply g`. The backward applies
+    `g.backward` per slab. -/
+noncomputable def colSlabwise_has_vjp_mat {n heads d_in d_out : Nat}
+    {g : Mat n d_in → Mat n d_out}
+    (hg : HasVJPMat g)
+    (hg_diff : Differentiable ℝ
+                 (fun v : Vec (n * d_in) => Mat.flatten (g (Mat.unflatten v)))) :
+    HasVJPMat (colSlabApply g (heads := heads)) where
+  backward := fun M dY r hj =>
+    hg.backward (fun r' j_in => M r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_in)))
+                (fun r' j_out => dY r' (finProdFinEquiv ((finProdFinEquiv.symm hj).1, j_out)))
+                r (finProdFinEquiv.symm hj).2
+  correct := by
+    intro M dY i jj
+    obtain ⟨⟨h, j'⟩, rfl⟩ := finProdFinEquiv.surjective jj
+    simp only [Equiv.symm_apply_apply, sum_finProdFinEquiv (m := heads),
+      pdivMat_colIndep g hg_diff]
+    simp [hg.correct]
+
+-- ════════════════════════════════════════════════════════════════
+-- § Ternary VJP for matrix functions (HasVJPMat3)
+-- ════════════════════════════════════════════════════════════════
+
+/-! ## Ternary matrix VJP
+
+For ternary-input functions like SDPA `(Q, K, V) ↦ out`, package the
+three per-input VJPs as a single structure analogous to `HasVJPMat`.
+The backward returns the triple of per-input gradients; correctness
+holds independently for each input (with the others fixed). -/
+
+/-- VJP structure for `Mat × Mat × Mat → Mat` functions where all
+    three inputs share the same shape `Mat n d_in` and the output is
+    `Mat n d_out`. Backward returns the triple of per-input gradients;
+    `correct_{1,2,3}` ensure each gradient matches the partial derivative
+    treating the other two inputs as constants. -/
+structure HasVJPMat3 {n d_in d_out : Nat}
+    (F : Mat n d_in → Mat n d_in → Mat n d_in → Mat n d_out) where
+  backward : Mat n d_in → Mat n d_in → Mat n d_in → Mat n d_out →
+             (Mat n d_in × Mat n d_in × Mat n d_in)
+  correct_1 : ∀ A B C dY i j,
+    (backward A B C dY).1 i j =
+    ∑ k : Fin n, ∑ l : Fin d_out,
+      pdivMat (fun A' => F A' B C) A i j k l * dY k l
+  correct_2 : ∀ A B C dY i j,
+    (backward A B C dY).2.1 i j =
+    ∑ k : Fin n, ∑ l : Fin d_out,
+      pdivMat (fun B' => F A B' C) B i j k l * dY k l
+  correct_3 : ∀ A B C dY i j,
+    (backward A B C dY).2.2 i j =
+    ∑ k : Fin n, ∑ l : Fin d_out,
+      pdivMat (fun C' => F A B C') C i j k l * dY k l
 
 -- ════════════════════════════════════════════════════════════════
 -- § 0. Differentiable helpers for the matrix-VJP building blocks
@@ -111,15 +253,6 @@ theorem gelu_per_token_flat_diff (N D : Nat) :
 lemma dense_diff {m n : Nat} (W : Mat m n) (b : Vec n) :
     Differentiable ℝ (dense W b) := dense_differentiable W b
 
-/-- Differentiability of `softmax c`: each coordinate is `exp(z k) · (Σ_j exp(z j))⁻¹`, and the
-    denominator is positive. -/
-lemma softmax_diff (c : Nat) : Differentiable ℝ (softmax c) := by
-  match c with
-  | 0 => rw [Subsingleton.elim (softmax 0) fun _ => 0]; exact differentiable_const _
-  | c + 1 =>
-    unfold softmax; simp only [div_eq_mul_inv]
-    fun_prop (disch := intro z; positivity)
-
 /-- Differentiability of `layerNormForward D ε γ β` — it is `bnForward` (definitionally),
     differentiable when `ε > 0`. Tagged for `fun_prop`. -/
 @[fun_prop]
@@ -149,211 +282,6 @@ lemma flat_diff_comp {a b c d e f : Nat} {F : Mat a b → Mat c d} {G : Mat c d 
     (hG : Differentiable ℝ (fun u : Vec (c * d) => Mat.flatten (G (Mat.unflatten u)))) :
     Differentiable ℝ (fun v : Vec (a * b) => Mat.flatten ((G ∘ F) (Mat.unflatten v))) := by
   simpa [Function.comp_def, Mat.unflatten_flatten] using hG.comp hF
-
--- ════════════════════════════════════════════════════════════════
--- § 1. Standalone Softmax VJP
--- ════════════════════════════════════════════════════════════════
-
-/-! ## The softmax Jacobian
-
-For `p = softmax(z)` with `p_j = exp(z_j) / sum_k exp(z_k)`, the quotient
-rule gives:
-
-    dp_j/dz_i = p_j * (delta_{ij} - p_i)
-
-This is the famous "diag minus outer product" form:
-
-    J = diag(p) - p * p^T
-
-Dense (every output depends on every input), but **rank-1 correction
-to a diagonal** — which means the VJP has a closed-form collapse, just
-like BatchNorm did.
--/
-
-/-- **Partial derivative of softmax** (quotient rule on the exponentials).
-
-    `d(softmax(z))_j/dz_i = softmax(z)_j * (delta_{ij} - softmax(z)_i)`
-
-    Proved (was an axiom). The j-th coord of `softmax c z` is
-    `Real.exp (z j) / S` with `S := Σ_k Real.exp (z k) > 0`, so the j-th
-    output coord function `z' ↦ exp(z' j) * (Σ_k exp(z' k))⁻¹` has
-    `HasFDerivAt` derivative built from `HasFDerivAt.exp`,
-    `HasFDerivAt.fun_sum`, `(hasDerivAt_inv ·).comp_hasFDerivAt`, and
-    `HasFDerivAt.mul`. Evaluating that CLM at `basisVec i` and
-    collapsing `Σ_k exp(z k) · δ_{ki} = exp(z i)` gives the formula. -/
-theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
-    pdiv (softmax c) z i j =
-    softmax c z j * ((if i = j then 1 else 0) - softmax c z i) := by
-  cases c with
-  | zero => exact j.elim0
-  | succ c' =>
-  unfold pdiv
-  -- Convert (fderiv ℝ softmax z) (basisVec i) j → fderiv of the j-th coord function.
-  have h_swap : fderiv ℝ (softmax (c' + 1)) z (basisVec i) j =
-                fderiv ℝ (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) z (basisVec i) := by
-    rw [fderiv_apply (softmax_diff (c' + 1) z) j]
-    rfl
-  rw [h_swap]
-  rw [show (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) =
-         (fun z' => Real.exp (z' j) * (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹) from by
-    funext z'
-    rw [softmax_apply, div_eq_mul_inv]]
-  set S : ℝ := ∑ k : Fin (c' + 1), Real.exp (z k) with hS_def
-  have hS_pos : (0 : ℝ) < S :=
-    Finset.sum_pos (fun k _ => Real.exp_pos _) Finset.univ_nonempty
-  have hS_ne : S ≠ 0 := hS_pos.ne'
-  -- HasFDerivAt building blocks
-  have h_proj : ∀ k : Fin (c' + 1),
-      HasFDerivAt (fun z' : Vec (c' + 1) => z' k)
-                  (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ) z :=
-    fun k => (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ).hasFDerivAt
-  have h_exp : ∀ k : Fin (c' + 1),
-      HasFDerivAt (fun z' : Vec (c' + 1) => Real.exp (z' k))
-                  (Real.exp (z k) • (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ)) z :=
-    fun k => (h_proj k).exp
-  have h_sum : HasFDerivAt
-      (fun z' : Vec (c' + 1) => ∑ k : Fin (c' + 1), Real.exp (z' k))
-      (∑ k : Fin (c' + 1), Real.exp (z k) •
-          (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ)) z :=
-    HasFDerivAt.fun_sum (fun k _ => h_exp k)
-  have h_inv : HasFDerivAt
-      (fun z' : Vec (c' + 1) => (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹)
-      ((-(S ^ 2)⁻¹) • (∑ k : Fin (c' + 1), Real.exp (z k) •
-          (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ))) z :=
-    (hasDerivAt_inv hS_ne).comp_hasFDerivAt z h_sum
-  have h_mul : HasFDerivAt
-      (fun z' : Vec (c' + 1) =>
-          Real.exp (z' j) * (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹)
-      (Real.exp (z j) • ((-(S ^ 2)⁻¹) • (∑ k : Fin (c' + 1), Real.exp (z k) •
-            (ContinuousLinearMap.proj k : Vec (c' + 1) →L[ℝ] ℝ))) +
-       S⁻¹ • (Real.exp (z j) • (ContinuousLinearMap.proj j : Vec (c' + 1) →L[ℝ] ℝ))) z :=
-    (h_exp j).mul h_inv
-  rw [h_mul.fderiv]
-  -- Evaluate the resulting CLM at basisVec i and simplify.
-  simp only [add_apply, smul_apply, smul_eq_mul,
-             _root_.sum_apply, ContinuousLinearMap.proj_apply, basisVec_apply]
-  -- Collapse the Kronecker sum: Σ_k exp(z k) * (if k = i then 1 else 0) = exp(z i).
-  rw [show (∑ k : Fin (c' + 1), Real.exp (z k) * (if k = i then (1 : ℝ) else 0)) =
-        Real.exp (z i) from by simp]
-  -- Unfold softmax on the RHS and convert `if j = i` to `if i = j`.
-  show Real.exp (z j) * (-(S ^ 2)⁻¹ * Real.exp (z i)) +
-       S⁻¹ * (Real.exp (z j) * (if j = i then (1 : ℝ) else 0)) =
-       (Real.exp (z j) / S) * ((if i = j then (1 : ℝ) else 0) - Real.exp (z i) / S)
-  simp only [@eq_comm _ j i]
-  field_simp
-  ring
-
-/-- **Softmax VJP — the closed-form collapse.**
-
-    `back(z, dy)_i = p_i * (dy_i - <p, dy>)`
-
-    where `p = softmax(z)` and `<p, dy> = sum_j p_j * dy_j` is one scalar.
-
-    **Read this carefully.** The naive VJP would be:
-      dz_i = sum_j J_{ji} * dy_j = sum_j (p_j * (delta_{ij} - p_i)) * dy_j
-
-    That's O(c) per entry, O(c^2) total. But expanding:
-      dz_i = p_i * dy_i - p_i * sum_j p_j * dy_j
-           = p_i * (dy_i - <p, dy>)
-
-    The rank-1 correction lets you **precompute one scalar** (`<p, dy>`)
-    and apply it to every entry. **Total work: O(c).** Same optimization
-    pattern as BN (one reduction + a broadcast) and max-pool (one
-    comparison + a select).
-
-    **Interpretation.** Softmax outputs a probability distribution. Its
-    backward subtracts the "weighted average of the incoming gradient
-    under that distribution" from each entry, then scales by the
-    entry's probability. Entries with low probability get small
-    gradients (because the softmax flattened them in the forward);
-    entries with high probability get gradients proportional to how
-    much they deviate from the weighted-average cotangent.
-
-    This is the one place where "softmax means softly select one thing"
-    maps directly to "softmax backward selectively amplifies the
-    gradient for the winning class." -/
-noncomputable def softmax_has_vjp (c : Nat) : HasVJP (softmax c) where
-  backward := fun z dy =>
-    let p : Vec c := softmax c z
-    let s : ℝ := ∑ j : Fin c, p j * dy j  -- <p, dy>
-    fun i => p i * (dy i - s)
-  correct := by
-    intro z dy i
-    -- `Σ_j p_j (δ_ij - p_i) dy_j`: the Kronecker term collapses to `p_i dy_i`.
-    simp only [pdiv_softmax, mul_sub, sub_mul, Finset.sum_sub_distrib, mul_ite, ite_mul, mul_one,
-      mul_zero, zero_mul, Finset.sum_ite_eq, Finset.mem_univ, ite_true, Finset.mul_sum]
-    exact congrArg _ (Finset.sum_congr rfl fun j _ => by ring)
-
-/-- **Softmax cross-entropy scalar gradient** — proved (was an axiom in
-    MLP.lean; relocated here to use `pdiv_softmax`).
-
-    `∂(-log softmax(z)[label])/∂z_j = softmax(z)_j - onehot(label)_j`
-
-    Stated using `pdiv` on a `Vec 1`-valued wrapper (cross-entropy is
-    naturally scalar, but `pdiv` is defined for `Vec → Vec`; we just
-    take the only output index). Proof: `fderiv_apply` extracts the
-    only coord, then `HasFDerivAt.log` (with `softmax z label > 0`)
-    composed with `softmax_diff` gives the derivative of the inner
-    `Real.log`. Negating and evaluating at `basisVec j` reduces via
-    `pdiv_softmax` to the expected formula. -/
-theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
-    pdiv (fun (z : Vec c) (_ : Fin 1) => crossEntropy c z label) logits j 0
-    = softmax c logits j - oneHot c label j := by
-  cases c with
-  | zero => exact label.elim0
-  | succ c' =>
-  have h_softmax_pos : ∀ z : Vec (c' + 1), 0 < softmax (c' + 1) z label := fun z =>
-    div_pos (Real.exp_pos _)
-      (Finset.sum_pos (fun k _ => Real.exp_pos _) Finset.univ_nonempty)
-  have hp_ne : softmax (c' + 1) logits label ≠ 0 := (h_softmax_pos logits).ne'
-  -- Differentiability infrastructure.
-  have h_softmax_label_diff : Differentiable ℝ
-      (fun z : Vec (c' + 1) => softmax (c' + 1) z label) :=
-    fun z => differentiableAt_pi.mp ((softmax_diff (c' + 1)) z) label
-  have h_log_diff : Differentiable ℝ
-      (fun z : Vec (c' + 1) => Real.log (softmax (c' + 1) z label)) :=
-    fun z => (h_softmax_label_diff z).log (h_softmax_pos z).ne'
-  have h_ce_pi_diff : Differentiable ℝ
-      (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label) := by
-    rw [differentiable_pi]
-    intro _
-    simp only [crossEntropy_def]
-    exact h_log_diff.neg
-  unfold pdiv
-  -- Step 1: extract the single (0-th) coord of the Vec 1-valued function.
-  rw [show fderiv ℝ (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label)
-                  logits (basisVec j) 0
-        = fderiv ℝ (fun z : Vec (c' + 1) => crossEntropy (c' + 1) z label)
-                  logits (basisVec j) from by
-    rw [fderiv_apply (h_ce_pi_diff logits) 0]; rfl]
-  -- Step 2: HasFDerivAt chain for crossEntropy = -log ∘ softmax_label.
-  have h_softmax_at : HasFDerivAt (fun z : Vec (c' + 1) => softmax (c' + 1) z label)
-      (fderiv ℝ (fun z => softmax (c' + 1) z label) logits) logits :=
-    (h_softmax_label_diff logits).hasFDerivAt
-  have h_log_at : HasFDerivAt
-      (fun z : Vec (c' + 1) => Real.log (softmax (c' + 1) z label))
-      ((softmax (c' + 1) logits label)⁻¹ •
-        fderiv ℝ (fun z => softmax (c' + 1) z label) logits) logits :=
-    h_softmax_at.log hp_ne
-  have h_ce_at : HasFDerivAt
-      (fun z : Vec (c' + 1) => crossEntropy (c' + 1) z label)
-      (-((softmax (c' + 1) logits label)⁻¹ •
-          fderiv ℝ (fun z => softmax (c' + 1) z label) logits)) logits := by
-    simp only [crossEntropy_def]
-    exact h_log_at.neg
-  rw [h_ce_at.fderiv]
-  -- Step 3: simplify CLM application at basisVec j.
-  simp only [neg_apply, smul_apply, smul_eq_mul]
-  -- Step 4: rewrite fderiv of `softmax z label` (in z) as pdiv softmax, then apply pdiv_softmax.
-  rw [show fderiv ℝ (fun z : Vec (c' + 1) => softmax (c' + 1) z label) logits (basisVec j)
-        = pdiv (softmax (c' + 1)) logits j label from by
-    show _ = fderiv ℝ (softmax (c' + 1)) logits (basisVec j) label
-    rw [fderiv_apply ((softmax_diff (c' + 1)) logits) label]; rfl]
-  rw [pdiv_softmax]
-  -- Step 5: oneHot unfolds to `if j = label then 1 else 0`; algebra cancels p[label].
-  rw [oneHot_apply]
-  field_simp
-  ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. Scaled Dot-Product Attention
