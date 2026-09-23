@@ -64,10 +64,11 @@ def load_nets():
         W1 = np.array([_parse_int_list(
             src.split(f"def w1z{tag}{k} : List ℤ := [")[1].split("]")[0]) for k in range(H)],
             dtype=object)
-        blk = src.split(f"noncomputable def W2{tag} : Fin {K} → Fin {H} → ℝ")[1]
+        # the ℝ `W2{tag}` is `castM W2{tag}Q`; the data is the ℚ block
+        blk = src.split(f"def W2{tag}Q : Fin {K} → Fin {H} → ℚ")[1]
         rows = []
         for ln in blk.splitlines():
-            nums = re.findall(rf"\((-?\d+) : ℝ\)/{DEN}", ln)
+            nums = re.findall(rf"\((-?\d+) : ℚ\)/{DEN}", ln)
             if len(nums) == H:
                 rows.append([int(v) for v in nums])
             if len(rows) == K:
@@ -345,7 +346,7 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
             A(f"  refine (hrx{st} t (W2{tag} {y} t - W2{tag} {j} t)).congr ?_ ?_ <;>")
             A("    fin_cases t <;>")
             A(f"      simp [acr{st}_{j}, ccr{st}_{j}, acz{st}_{j}, ccz{st}_{j}, relaxA, relaxC,")
-            A(f"        lo{st}, hi{st}, al{st}, sl{st}, W2{tag}] <;>")
+            A(f"        lo{st}, hi{st}, al{st}, sl{st}, W2{tag}, W2{tag}Q, castM] <;>")
             A("      norm_num")
         A("")
         A(f"theorem hrel{st} : ∀ j : Fin {K}, j ≠ {y} → ∀ t : Fin {H},")

@@ -52,7 +52,7 @@ theorem hbSFe1_0 : ∀ j : Fin 10, j ≠ 7 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #0 (digit 7): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -73,7 +73,7 @@ theorem hbSFe2_0 : ∀ j : Fin 10, j ≠ 7 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #0 (digit 7): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -94,7 +94,7 @@ theorem hbSFe4_0 : ∀ j : Fin 10, j ≠ 7 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #0 (digit 7): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -115,7 +115,7 @@ theorem hbSFe8_0 : ∀ j : Fin 10, j ≠ 7 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF0, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #0 (digit 7): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -141,7 +141,7 @@ theorem hbSFe1_1 : ∀ j : Fin 10, j ≠ 2 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF1, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF1, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #1 (digit 2): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -162,7 +162,7 @@ theorem hbSFe2_1 : ∀ j : Fin 10, j ≠ 2 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF1, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF1, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #1 (digit 2): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -183,7 +183,7 @@ theorem hbSFe4_1 : ∀ j : Fin 10, j ≠ 2 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF1, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF1, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #1 (digit 2): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -209,7 +209,7 @@ theorem hbSFe1_2 : ∀ j : Fin 10, j ≠ 1 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF2, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF2, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #2 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -230,7 +230,7 @@ theorem hbSFe2_2 : ∀ j : Fin 10, j ≠ 1 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF2, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF2, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #2 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -251,7 +251,7 @@ theorem hbSFe4_2 : ∀ j : Fin 10, j ≠ 1 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF2, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF2, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #2 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -277,7 +277,7 @@ theorem hbSFe1_3 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #3 (digit 0): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -298,7 +298,7 @@ theorem hbSFe2_3 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #3 (digit 0): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -319,7 +319,7 @@ theorem hbSFe4_3 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #3 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -340,7 +340,7 @@ theorem hbSFe8_3 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF3, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #3 (digit 0): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -366,7 +366,7 @@ theorem hbSFe1_4 : ∀ j : Fin 10, j ≠ 4 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF4, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF4, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #4 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -387,7 +387,7 @@ theorem hbSFe2_4 : ∀ j : Fin 10, j ≠ 4 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF4, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF4, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #4 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -408,7 +408,7 @@ theorem hbSFe4_4 : ∀ j : Fin 10, j ≠ 4 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF4, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF4, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #4 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -434,7 +434,7 @@ theorem hbSFe1_5 : ∀ j : Fin 10, j ≠ 1 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF5, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF5, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #5 (digit 1): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -455,7 +455,7 @@ theorem hbSFe2_5 : ∀ j : Fin 10, j ≠ 1 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF5, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF5, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #5 (digit 1): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -476,7 +476,7 @@ theorem hbSFe4_5 : ∀ j : Fin 10, j ≠ 1 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF5, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF5, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #5 (digit 1): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -502,7 +502,7 @@ theorem hbSFe1_6 : ∀ j : Fin 10, j ≠ 4 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF6, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF6, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #6 (digit 4): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -523,7 +523,7 @@ theorem hbSFe2_6 : ∀ j : Fin 10, j ≠ 4 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF6, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF6, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #6 (digit 4): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -544,7 +544,7 @@ theorem hbSFe4_6 : ∀ j : Fin 10, j ≠ 4 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF6, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF6, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #6 (digit 4): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -570,7 +570,7 @@ theorem hbSFe1_7 : ∀ j : Fin 10, j ≠ 9 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF7, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF7, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #7 (digit 9): IBP-certified at pixel-L∞ ε = 1/255. -/
@@ -591,7 +591,7 @@ theorem hbSFe2_7 : ∀ j : Fin 10, j ≠ 9 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF7, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF7, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #7 (digit 9): IBP-certified at pixel-L∞ ε = 2/255. -/
@@ -755,7 +755,7 @@ theorem hbSFe4_10 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreISF10, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreISF10, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #10 (digit 0): IBP-certified at pixel-L∞ ε = 4/255. -/
@@ -919,7 +919,7 @@ theorem hbSFe8_13 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreISF13, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreISF13, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #13 (digit 0): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1083,7 +1083,7 @@ theorem hbSFe8_14 : ∀ j : Fin 10, j ≠ 1 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreISF14, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreISF14, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #14 (digit 1): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1247,7 +1247,7 @@ theorem hbSFe8_17 : ∀ j : Fin 10, j ≠ 7 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreISF17, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreISF17, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #17 (digit 7): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1411,7 +1411,7 @@ theorem hbSFe8_21 : ∀ j : Fin 10, j ≠ 6 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreISF21, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreISF21, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #21 (digit 6): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1437,7 +1437,7 @@ theorem hbSFe8_25 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreSF25, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreSF25, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #25 (digit 0): IBP-certified at pixel-L∞ ε = 8/255. -/
@@ -1601,7 +1601,7 @@ theorem hbSFe8_28 : ∀ j : Fin 10, j ≠ 0 →
   fin_cases j <;>
     first
     | exact absurd rfl hj
-    | · simp [W2SF, hpreISF28, absrSF, Fin.sum_univ_succ, max_def]
+    | · simp [W2SF, W2SFQ, castM, hpreISF28, absrSF, Fin.sum_univ_succ, max_def]
         try norm_num
 
 /-- Test #28 (digit 0): IBP-certified at pixel-L∞ ε = 8/255. -/

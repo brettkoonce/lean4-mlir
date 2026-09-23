@@ -173,7 +173,7 @@ theorem marginSF71 : ∀ j : Fin 10, j ≠ 0 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF71, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF71, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 71: hidden pre-activations by kernel dotZ, then the margin
@@ -324,7 +324,7 @@ theorem marginTF71 : ∀ j : Fin 10, j ≠ 0 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF71, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF71, Fin.sum_univ_succ, max_def]
         norm_num
 
 end LipschitzCertDemo

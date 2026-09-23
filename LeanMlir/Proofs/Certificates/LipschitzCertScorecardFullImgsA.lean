@@ -173,7 +173,7 @@ theorem marginSF0 : ∀ j : Fin 10, j ≠ 7 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF0, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF0, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 0: hidden pre-activations by kernel dotZ, then the margin
@@ -324,7 +324,7 @@ theorem marginTF0 : ∀ j : Fin 10, j ≠ 7 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF0, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF0, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #1 (digit 2), exact pixels k/255. -/
@@ -486,7 +486,7 @@ theorem marginSF1 : ∀ j : Fin 10, j ≠ 2 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF1, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF1, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #2 (digit 1), exact pixels k/255. -/
@@ -648,7 +648,7 @@ theorem marginSF2 : ∀ j : Fin 10, j ≠ 1 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF2, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF2, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 2: hidden pre-activations by kernel dotZ, then the margin
@@ -799,7 +799,7 @@ theorem marginTF2 : ∀ j : Fin 10, j ≠ 1 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF2, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF2, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #3 (digit 0), exact pixels k/255. -/
@@ -961,7 +961,7 @@ theorem marginSF3 : ∀ j : Fin 10, j ≠ 0 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF3, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF3, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 3: hidden pre-activations by kernel dotZ, then the margin
@@ -1112,7 +1112,7 @@ theorem marginTF3 : ∀ j : Fin 10, j ≠ 0 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF3, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF3, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #4 (digit 4), exact pixels k/255. -/
@@ -1274,7 +1274,7 @@ theorem marginSF4 : ∀ j : Fin 10, j ≠ 4 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF4, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF4, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 4: hidden pre-activations by kernel dotZ, then the margin
@@ -1425,7 +1425,7 @@ theorem marginTF4 : ∀ j : Fin 10, j ≠ 4 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF4, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF4, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #5 (digit 1), exact pixels k/255. -/
@@ -1587,7 +1587,7 @@ theorem marginSF5 : ∀ j : Fin 10, j ≠ 1 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF5, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF5, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 5: hidden pre-activations by kernel dotZ, then the margin
@@ -1738,7 +1738,7 @@ theorem marginTF5 : ∀ j : Fin 10, j ≠ 1 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF5, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF5, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #6 (digit 4), exact pixels k/255. -/
@@ -1900,7 +1900,7 @@ theorem marginSF6 : ∀ j : Fin 10, j ≠ 4 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF6, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF6, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 6: hidden pre-activations by kernel dotZ, then the margin
@@ -2051,7 +2051,7 @@ theorem marginTF6 : ∀ j : Fin 10, j ≠ 4 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF6, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF6, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #7 (digit 9), exact pixels k/255. -/
@@ -2213,7 +2213,7 @@ theorem marginSF7 : ∀ j : Fin 10, j ≠ 9 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF7, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF7, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 7: hidden pre-activations by kernel dotZ, then the margin
@@ -2364,7 +2364,7 @@ theorem marginTF7 : ∀ j : Fin 10, j ≠ 9 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF7, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF7, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #9 (digit 9), exact pixels k/255. -/
@@ -2526,7 +2526,7 @@ theorem marginSF9 : ∀ j : Fin 10, j ≠ 9 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF9, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF9, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 9: hidden pre-activations by kernel dotZ, then the margin
@@ -2677,7 +2677,7 @@ theorem marginTF9 : ∀ j : Fin 10, j ≠ 9 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF9, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF9, Fin.sum_univ_succ, max_def]
         norm_num
 
 /-- MNIST test image #25 (digit 0), exact pixels k/255. -/
@@ -2839,7 +2839,7 @@ theorem marginSF25 : ∀ j : Fin 10, j ≠ 0 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2SF, hpreSF25, Fin.sum_univ_succ, max_def]
+        simp [W2SF, W2SFQ, castM, hpreSF25, Fin.sum_univ_succ, max_def]
         norm_num
 
 -- net TF on image 25: hidden pre-activations by kernel dotZ, then the margin
@@ -2990,7 +2990,7 @@ theorem marginTF25 : ∀ j : Fin 10, j ≠ 0 →
     first
     | exact absurd rfl hj
     | · rw [hout, hout]
-        simp [W2TF, hpreTF25, Fin.sum_univ_succ, max_def]
+        simp [W2TF, W2TFQ, castM, hpreTF25, Fin.sum_univ_succ, max_def]
         norm_num
 
 end LipschitzCertDemo

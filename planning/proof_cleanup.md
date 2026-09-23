@@ -34,7 +34,8 @@ were measured say so.
 | pending (f) | §3.1 ResNet-34 apex: nested apex body, `r34B_full_has_vjp_at_backward` (the peel, `rfl` at variable stages) and `r34StemB_has_vjp_at_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
 | `bb38c790` (g) | §3.2 `den.eq_def` never built: `denStep`/`denStepApp` dsimprocs (smart unfolding, one constructor) replace `den` in all 118 `simp only` sets (29 files); StableHLO's file-wide `maxHeartbeats 4000000` and `cnnBackGraph_faithful`'s 2M out, `emitTok` alone keeps 1M (its compile needs ~2×; tracing trips 400k) | `den.eq_def` was 233 s on StableHLO's critical path (profiler); StableHLO 343 s → 83 s standalone, 91 s under lake; full `Proofs Certs` rebuild 2 m 20 s |
 | `7fe1f006` (h) | §3.3 conv IBP scorecard by reflection: new `Foundation/IntervalBoundConvQ.lean` (the layers over ℚ, cast lemmas, `convNetCheckQ` + `convNetCheckQ_sound`); the generator emits ℚ data, the ℝ net as its cast, and one `decide +kernel` per image — the intermediate tensors and their ~900 goals per image are gone (−1,640 lines); statements and the aggregate unchanged | profiled first: all simp (box ~250 s, conv eval ~180 s per image); ImgsA–D each 281 s / 9.9 GB → 11 s / 3.6 GB; generator byte-reproducible before the edit |
-| pending (i) | §3.3 Gram identities by one kernel check: new `Foundation/GramQ.lean` (`castM`, `gram_eq_of_check`, `abs_le_of_check`); Instance, base Scorecard (generator), Float (generator) emit ℚ data with the ℝ matrices as `castM` of it; the 8 `G*_eq`/`H*_eq` and the two entrywise `|W| ≤ c` bounds become `decide +kernel` checks and their 1.6M–16M heartbeat bumps go; consumers' simp sets gain `…Q, castM` (SmoothingNetWitness, pair-SDP, TrainedMlpWitness) | profiled first: Instance's `G1t_eq` 139 s, Float's `W1sV_abs_le` 110 s; LipschitzCertInstance 145 s → 17 s, LipschitzCertFloat 113 s → 4.5 s, LipschitzCertScorecard 26 s under lake; generators byte-reproducible before the edit (pair-SDP: 7.6 min) |
+| `d9356c38` (i) | §3.3 Gram identities by one kernel check: new `Foundation/GramQ.lean` (`castM`, `gram_eq_of_check`, `abs_le_of_check`); Instance, base Scorecard (generator), Float (generator) emit ℚ data with the ℝ matrices as `castM` of it; the 8 `G*_eq`/`H*_eq` and the two entrywise `|W| ≤ c` bounds become `decide +kernel` checks and their 1.6M–16M heartbeat bumps go; consumers' simp sets gain `…Q, castM` (SmoothingNetWitness, pair-SDP, TrainedMlpWitness) | profiled first: Instance's `G1t_eq` 139 s, Float's `W1sV_abs_le` 110 s; LipschitzCertInstance 145 s → 17 s, LipschitzCertFloat 113 s → 4.5 s, LipschitzCertScorecard 26 s under lake; generators byte-reproducible before the edit (pair-SDP: 7.6 min) |
+| pending (j) | §3.3 FullNets on the (i) shape: `W2`/`G1`/`H1`/`G2`/`H2` for both nets as ℚ data + `castM`, `H1`/`G2`/`H2` identities by `gram_eq_of_check` (their 12.8M bumps out); `G1` keeps its per-entry `dotZ` proofs, each entry value now `rfl` on the ℚ side + `norm_num`; the 784-wide `W1` untouched; `…Q, castM` added in the IBP, pair-SDP-full and CROWN generators (the CROWN one also parses the ℚ block) | FullNets 326 s / 8.8 GB → 61 s / 5.5 GB standalone (73 s under lake); CrownUncon standalone 237 s → 213 s (not slower); four generators byte-reproducible before the edit (pair-SDP-full 11 min) |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -93,13 +94,10 @@ cheap half. `deriving DecidableEq` on `Raw`/`Tok` has no users (grep) but was no
   module (the split was a memory bound); left as four to keep certs-heavy.yml and the audit as-is.
 * `LipschitzCertInstance.lean` — its 145 s was the Gram identities, now 17 s (§1(i)); the
   `LipschitzDense.lean` split would save little now.
-* `LipschitzCertScorecardFullNets` (326 s local; `H1SF_eq` 270 s, `H1TF_eq` 246 s — the same
-  Gram shape) — NOT converted: `W2SF/W2TF` and `G1SF/G1TF` are unfolded by seven downstream
-  modules (IBP, IBPUncon, Crown, CrownUncon, SDPFull, SDPFullUncon, FullImgsA/B), so it means the
-  same `…Q, castM` edit in `lipschitz_cert_scorecard_ibp.py`, `lipschitz_cert_pair_sdp_full.py`
-  and the full generator. ⛔ Bridging instead (`W2SF = castM W2SFQ` entrywise) costs the ℝ-literal
-  indexing it removes (15–18 s a matrix, over the default budget); ⛔ reflecting the 784-wide `G1`
-  over ℚ via `List.getD` hit a kernel timeout at 52 GB — layer 1 stays on its `dotZ` facts.
+* ~~`LipschitzCertScorecardFullNets`~~ — done as §1(j). ⛔ Bridging instead (`W2SF = castM W2SFQ`
+  entrywise) costs the ℝ-literal indexing it removes (15–18 s a matrix, over the default budget);
+  ⛔ reflecting the 784-wide `G1` over ℚ via `List.getD` hit a kernel timeout at 52 GB — layer 1
+  stays on its `dotZ` facts.
 * `lipschitz_cert_scorecard_full.py`: 512 per-entry `gSF_a_b` real-arithmetic theorems → one
   matrix-level lemma + one kernel check per matrix.
 * `HEADER_OPTS` (file-wide `maxRecDepth 100000` / `maxHeartbeats 3200000` in every Lipschitz

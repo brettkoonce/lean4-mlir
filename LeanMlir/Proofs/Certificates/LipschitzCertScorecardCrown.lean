@@ -185,7 +185,7 @@ theorem hrelSFe8_0_0 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 0 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_0, ccrSFe8_0_0, aczSFe8_0_0, cczSFe8_0_0, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_1 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 1 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -194,7 +194,7 @@ theorem hrelSFe8_0_1 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 1 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_1, ccrSFe8_0_1, aczSFe8_0_1, cczSFe8_0_1, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_2 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 2 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -203,7 +203,7 @@ theorem hrelSFe8_0_2 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 2 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_2, ccrSFe8_0_2, aczSFe8_0_2, cczSFe8_0_2, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_3 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 3 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -212,7 +212,7 @@ theorem hrelSFe8_0_3 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_3, ccrSFe8_0_3, aczSFe8_0_3, cczSFe8_0_3, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_4 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 4 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -221,7 +221,7 @@ theorem hrelSFe8_0_4 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 4 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_4, ccrSFe8_0_4, aczSFe8_0_4, cczSFe8_0_4, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_5 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 5 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -230,7 +230,7 @@ theorem hrelSFe8_0_5 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_5, ccrSFe8_0_5, aczSFe8_0_5, cczSFe8_0_5, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_6 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 6 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -239,7 +239,7 @@ theorem hrelSFe8_0_6 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_6, ccrSFe8_0_6, aczSFe8_0_6, cczSFe8_0_6, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_8 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 8 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -248,7 +248,7 @@ theorem hrelSFe8_0_8 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_8, ccrSFe8_0_8, aczSFe8_0_8, cczSFe8_0_8, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_0_9 : ∀ t : Fin 16,
     ReluLB (W2SF 7 t - W2SF 9 t) (loSFe8_0 t) (hiSFe8_0 t)
@@ -257,7 +257,7 @@ theorem hrelSFe8_0_9 : ∀ t : Fin 16,
   refine (hrxSFe8_0 t (W2SF 7 t - W2SF 9 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_0_9, ccrSFe8_0_9, aczSFe8_0_9, cczSFe8_0_9, relaxA, relaxC,
-        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF] <;>
+        loSFe8_0, hiSFe8_0, alSFe8_0, slSFe8_0, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_0 : ∀ j : Fin 10, j ≠ 7 → ∀ t : Fin 16,
@@ -534,7 +534,7 @@ theorem hrelSFe8_1_0 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 0 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_0, ccrSFe8_1_0, aczSFe8_1_0, cczSFe8_1_0, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_1 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 1 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -543,7 +543,7 @@ theorem hrelSFe8_1_1 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 1 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_1, ccrSFe8_1_1, aczSFe8_1_1, cczSFe8_1_1, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_3 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 3 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -552,7 +552,7 @@ theorem hrelSFe8_1_3 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_3, ccrSFe8_1_3, aczSFe8_1_3, cczSFe8_1_3, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_4 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 4 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -561,7 +561,7 @@ theorem hrelSFe8_1_4 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 4 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_4, ccrSFe8_1_4, aczSFe8_1_4, cczSFe8_1_4, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_5 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 5 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -570,7 +570,7 @@ theorem hrelSFe8_1_5 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_5, ccrSFe8_1_5, aczSFe8_1_5, cczSFe8_1_5, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_6 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 6 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -579,7 +579,7 @@ theorem hrelSFe8_1_6 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_6, ccrSFe8_1_6, aczSFe8_1_6, cczSFe8_1_6, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_7 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 7 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -588,7 +588,7 @@ theorem hrelSFe8_1_7 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 7 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_7, ccrSFe8_1_7, aczSFe8_1_7, cczSFe8_1_7, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_8 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 8 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -597,7 +597,7 @@ theorem hrelSFe8_1_8 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_8, ccrSFe8_1_8, aczSFe8_1_8, cczSFe8_1_8, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_1_9 : ∀ t : Fin 16,
     ReluLB (W2SF 2 t - W2SF 9 t) (loSFe8_1 t) (hiSFe8_1 t)
@@ -606,7 +606,7 @@ theorem hrelSFe8_1_9 : ∀ t : Fin 16,
   refine (hrxSFe8_1 t (W2SF 2 t - W2SF 9 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_1_9, ccrSFe8_1_9, aczSFe8_1_9, cczSFe8_1_9, relaxA, relaxC,
-        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF] <;>
+        loSFe8_1, hiSFe8_1, alSFe8_1, slSFe8_1, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_1 : ∀ j : Fin 10, j ≠ 2 → ∀ t : Fin 16,
@@ -883,7 +883,7 @@ theorem hrelSFe8_2_0 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 0 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_0, ccrSFe8_2_0, aczSFe8_2_0, cczSFe8_2_0, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_2 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 2 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -892,7 +892,7 @@ theorem hrelSFe8_2_2 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 2 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_2, ccrSFe8_2_2, aczSFe8_2_2, cczSFe8_2_2, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_3 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 3 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -901,7 +901,7 @@ theorem hrelSFe8_2_3 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_3, ccrSFe8_2_3, aczSFe8_2_3, cczSFe8_2_3, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_4 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 4 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -910,7 +910,7 @@ theorem hrelSFe8_2_4 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 4 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_4, ccrSFe8_2_4, aczSFe8_2_4, cczSFe8_2_4, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_5 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 5 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -919,7 +919,7 @@ theorem hrelSFe8_2_5 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_5, ccrSFe8_2_5, aczSFe8_2_5, cczSFe8_2_5, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_6 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 6 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -928,7 +928,7 @@ theorem hrelSFe8_2_6 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_6, ccrSFe8_2_6, aczSFe8_2_6, cczSFe8_2_6, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_7 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 7 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -937,7 +937,7 @@ theorem hrelSFe8_2_7 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 7 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_7, ccrSFe8_2_7, aczSFe8_2_7, cczSFe8_2_7, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_8 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 8 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -946,7 +946,7 @@ theorem hrelSFe8_2_8 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_8, ccrSFe8_2_8, aczSFe8_2_8, cczSFe8_2_8, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_2_9 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 9 t) (loSFe8_2 t) (hiSFe8_2 t)
@@ -955,7 +955,7 @@ theorem hrelSFe8_2_9 : ∀ t : Fin 16,
   refine (hrxSFe8_2 t (W2SF 1 t - W2SF 9 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_2_9, ccrSFe8_2_9, aczSFe8_2_9, cczSFe8_2_9, relaxA, relaxC,
-        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF] <;>
+        loSFe8_2, hiSFe8_2, alSFe8_2, slSFe8_2, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_2 : ∀ j : Fin 10, j ≠ 1 → ∀ t : Fin 16,
@@ -1232,7 +1232,7 @@ theorem hrelSFe8_3_1 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 1 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_1, ccrSFe8_3_1, aczSFe8_3_1, cczSFe8_3_1, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_2 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 2 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1241,7 +1241,7 @@ theorem hrelSFe8_3_2 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 2 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_2, ccrSFe8_3_2, aczSFe8_3_2, cczSFe8_3_2, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_3 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 3 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1250,7 +1250,7 @@ theorem hrelSFe8_3_3 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_3, ccrSFe8_3_3, aczSFe8_3_3, cczSFe8_3_3, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_4 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 4 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1259,7 +1259,7 @@ theorem hrelSFe8_3_4 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 4 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_4, ccrSFe8_3_4, aczSFe8_3_4, cczSFe8_3_4, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_5 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 5 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1268,7 +1268,7 @@ theorem hrelSFe8_3_5 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_5, ccrSFe8_3_5, aczSFe8_3_5, cczSFe8_3_5, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_6 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 6 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1277,7 +1277,7 @@ theorem hrelSFe8_3_6 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_6, ccrSFe8_3_6, aczSFe8_3_6, cczSFe8_3_6, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_7 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 7 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1286,7 +1286,7 @@ theorem hrelSFe8_3_7 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 7 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_7, ccrSFe8_3_7, aczSFe8_3_7, cczSFe8_3_7, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_8 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 8 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1295,7 +1295,7 @@ theorem hrelSFe8_3_8 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_8, ccrSFe8_3_8, aczSFe8_3_8, cczSFe8_3_8, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_3_9 : ∀ t : Fin 16,
     ReluLB (W2SF 0 t - W2SF 9 t) (loSFe8_3 t) (hiSFe8_3 t)
@@ -1304,7 +1304,7 @@ theorem hrelSFe8_3_9 : ∀ t : Fin 16,
   refine (hrxSFe8_3 t (W2SF 0 t - W2SF 9 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_3_9, ccrSFe8_3_9, aczSFe8_3_9, cczSFe8_3_9, relaxA, relaxC,
-        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF] <;>
+        loSFe8_3, hiSFe8_3, alSFe8_3, slSFe8_3, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_3 : ∀ j : Fin 10, j ≠ 0 → ∀ t : Fin 16,
@@ -1581,7 +1581,7 @@ theorem hrelSFe8_4_0 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 0 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_0, ccrSFe8_4_0, aczSFe8_4_0, cczSFe8_4_0, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_1 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 1 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1590,7 +1590,7 @@ theorem hrelSFe8_4_1 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 1 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_1, ccrSFe8_4_1, aczSFe8_4_1, cczSFe8_4_1, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_2 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 2 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1599,7 +1599,7 @@ theorem hrelSFe8_4_2 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 2 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_2, ccrSFe8_4_2, aczSFe8_4_2, cczSFe8_4_2, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_3 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 3 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1608,7 +1608,7 @@ theorem hrelSFe8_4_3 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_3, ccrSFe8_4_3, aczSFe8_4_3, cczSFe8_4_3, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_5 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 5 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1617,7 +1617,7 @@ theorem hrelSFe8_4_5 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_5, ccrSFe8_4_5, aczSFe8_4_5, cczSFe8_4_5, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_6 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 6 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1626,7 +1626,7 @@ theorem hrelSFe8_4_6 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_6, ccrSFe8_4_6, aczSFe8_4_6, cczSFe8_4_6, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_7 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 7 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1635,7 +1635,7 @@ theorem hrelSFe8_4_7 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 7 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_7, ccrSFe8_4_7, aczSFe8_4_7, cczSFe8_4_7, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_8 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 8 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1644,7 +1644,7 @@ theorem hrelSFe8_4_8 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_8, ccrSFe8_4_8, aczSFe8_4_8, cczSFe8_4_8, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_4_9 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 9 t) (loSFe8_4 t) (hiSFe8_4 t)
@@ -1653,7 +1653,7 @@ theorem hrelSFe8_4_9 : ∀ t : Fin 16,
   refine (hrxSFe8_4 t (W2SF 4 t - W2SF 9 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_4_9, ccrSFe8_4_9, aczSFe8_4_9, cczSFe8_4_9, relaxA, relaxC,
-        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF] <;>
+        loSFe8_4, hiSFe8_4, alSFe8_4, slSFe8_4, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_4 : ∀ j : Fin 10, j ≠ 4 → ∀ t : Fin 16,
@@ -1930,7 +1930,7 @@ theorem hrelSFe8_5_0 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 0 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_0, ccrSFe8_5_0, aczSFe8_5_0, cczSFe8_5_0, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_2 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 2 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -1939,7 +1939,7 @@ theorem hrelSFe8_5_2 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 2 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_2, ccrSFe8_5_2, aczSFe8_5_2, cczSFe8_5_2, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_3 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 3 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -1948,7 +1948,7 @@ theorem hrelSFe8_5_3 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_3, ccrSFe8_5_3, aczSFe8_5_3, cczSFe8_5_3, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_4 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 4 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -1957,7 +1957,7 @@ theorem hrelSFe8_5_4 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 4 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_4, ccrSFe8_5_4, aczSFe8_5_4, cczSFe8_5_4, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_5 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 5 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -1966,7 +1966,7 @@ theorem hrelSFe8_5_5 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_5, ccrSFe8_5_5, aczSFe8_5_5, cczSFe8_5_5, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_6 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 6 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -1975,7 +1975,7 @@ theorem hrelSFe8_5_6 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_6, ccrSFe8_5_6, aczSFe8_5_6, cczSFe8_5_6, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_7 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 7 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -1984,7 +1984,7 @@ theorem hrelSFe8_5_7 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 7 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_7, ccrSFe8_5_7, aczSFe8_5_7, cczSFe8_5_7, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_8 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 8 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -1993,7 +1993,7 @@ theorem hrelSFe8_5_8 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_8, ccrSFe8_5_8, aczSFe8_5_8, cczSFe8_5_8, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_5_9 : ∀ t : Fin 16,
     ReluLB (W2SF 1 t - W2SF 9 t) (loSFe8_5 t) (hiSFe8_5 t)
@@ -2002,7 +2002,7 @@ theorem hrelSFe8_5_9 : ∀ t : Fin 16,
   refine (hrxSFe8_5 t (W2SF 1 t - W2SF 9 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_5_9, ccrSFe8_5_9, aczSFe8_5_9, cczSFe8_5_9, relaxA, relaxC,
-        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF] <;>
+        loSFe8_5, hiSFe8_5, alSFe8_5, slSFe8_5, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_5 : ∀ j : Fin 10, j ≠ 1 → ∀ t : Fin 16,
@@ -2279,7 +2279,7 @@ theorem hrelSFe8_6_0 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 0 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_0, ccrSFe8_6_0, aczSFe8_6_0, cczSFe8_6_0, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_1 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 1 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2288,7 +2288,7 @@ theorem hrelSFe8_6_1 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 1 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_1, ccrSFe8_6_1, aczSFe8_6_1, cczSFe8_6_1, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_2 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 2 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2297,7 +2297,7 @@ theorem hrelSFe8_6_2 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 2 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_2, ccrSFe8_6_2, aczSFe8_6_2, cczSFe8_6_2, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_3 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 3 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2306,7 +2306,7 @@ theorem hrelSFe8_6_3 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_3, ccrSFe8_6_3, aczSFe8_6_3, cczSFe8_6_3, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_5 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 5 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2315,7 +2315,7 @@ theorem hrelSFe8_6_5 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_5, ccrSFe8_6_5, aczSFe8_6_5, cczSFe8_6_5, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_6 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 6 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2324,7 +2324,7 @@ theorem hrelSFe8_6_6 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_6, ccrSFe8_6_6, aczSFe8_6_6, cczSFe8_6_6, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_7 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 7 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2333,7 +2333,7 @@ theorem hrelSFe8_6_7 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 7 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_7, ccrSFe8_6_7, aczSFe8_6_7, cczSFe8_6_7, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_8 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 8 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2342,7 +2342,7 @@ theorem hrelSFe8_6_8 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_8, ccrSFe8_6_8, aczSFe8_6_8, cczSFe8_6_8, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_6_9 : ∀ t : Fin 16,
     ReluLB (W2SF 4 t - W2SF 9 t) (loSFe8_6 t) (hiSFe8_6 t)
@@ -2351,7 +2351,7 @@ theorem hrelSFe8_6_9 : ∀ t : Fin 16,
   refine (hrxSFe8_6 t (W2SF 4 t - W2SF 9 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_6_9, ccrSFe8_6_9, aczSFe8_6_9, cczSFe8_6_9, relaxA, relaxC,
-        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF] <;>
+        loSFe8_6, hiSFe8_6, alSFe8_6, slSFe8_6, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_6 : ∀ j : Fin 10, j ≠ 4 → ∀ t : Fin 16,
@@ -2628,7 +2628,7 @@ theorem hrelSFe8_7_0 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 0 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_0, ccrSFe8_7_0, aczSFe8_7_0, cczSFe8_7_0, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_1 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 1 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2637,7 +2637,7 @@ theorem hrelSFe8_7_1 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 1 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_1, ccrSFe8_7_1, aczSFe8_7_1, cczSFe8_7_1, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_2 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 2 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2646,7 +2646,7 @@ theorem hrelSFe8_7_2 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 2 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_2, ccrSFe8_7_2, aczSFe8_7_2, cczSFe8_7_2, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_3 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 3 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2655,7 +2655,7 @@ theorem hrelSFe8_7_3 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 3 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_3, ccrSFe8_7_3, aczSFe8_7_3, cczSFe8_7_3, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_4 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 4 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2664,7 +2664,7 @@ theorem hrelSFe8_7_4 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 4 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_4, ccrSFe8_7_4, aczSFe8_7_4, cczSFe8_7_4, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_5 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 5 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2673,7 +2673,7 @@ theorem hrelSFe8_7_5 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 5 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_5, ccrSFe8_7_5, aczSFe8_7_5, cczSFe8_7_5, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_6 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 6 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2682,7 +2682,7 @@ theorem hrelSFe8_7_6 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 6 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_6, ccrSFe8_7_6, aczSFe8_7_6, cczSFe8_7_6, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_7 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 7 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2691,7 +2691,7 @@ theorem hrelSFe8_7_7 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 7 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_7, ccrSFe8_7_7, aczSFe8_7_7, cczSFe8_7_7, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 theorem hrelSFe8_7_8 : ∀ t : Fin 16,
     ReluLB (W2SF 9 t - W2SF 8 t) (loSFe8_7 t) (hiSFe8_7 t)
@@ -2700,7 +2700,7 @@ theorem hrelSFe8_7_8 : ∀ t : Fin 16,
   refine (hrxSFe8_7 t (W2SF 9 t - W2SF 8 t)).congr ?_ ?_ <;>
     fin_cases t <;>
       simp [acrSFe8_7_8, ccrSFe8_7_8, aczSFe8_7_8, cczSFe8_7_8, relaxA, relaxC,
-        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF] <;>
+        loSFe8_7, hiSFe8_7, alSFe8_7, slSFe8_7, W2SF, W2SFQ, castM] <;>
       norm_num
 
 theorem hrelSFe8_7 : ∀ j : Fin 10, j ≠ 9 → ∀ t : Fin 16,
