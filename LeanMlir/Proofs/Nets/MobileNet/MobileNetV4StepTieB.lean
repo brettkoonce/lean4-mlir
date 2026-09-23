@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
+import LeanMlir.Proofs.Foundation.BatchedBackLinks
 
 /-! # T3 §1a tie for MobileNetV4-Conv-M — every gradient node at its CHAIN cotangent
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Foundation.BatchedStages
 
 /-! # The BATCHED EfficientNet-B0 block forwards and graphs (true batch-norm, matches the render)
 
@@ -29,53 +29,6 @@ so `EfficientNetFullB0` chains the sixteen-block net without the kernel reducing
 namespace Proofs
 
 open scoped BigOperators
-
--- ════════════════════════════════════════════════════════════════
--- § Batched stage abbreviations (ℝ-forward), all at the batched index `N·(c·h·w)`.
---   Each is `batchMap N` of a proven per-example op (+ true batch-norm + pointwise swish).
--- ════════════════════════════════════════════════════════════════
-
-/-- Batched conv → bn → swish (1×1 expand / generic stride-1 conv). -/
-@[reducible] noncomputable def cbsB (N : Nat) {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) :
-    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
-  swish (N * (oc * h * w)) ∘ StableHLO.bnBatchLA N oc h w ε γ β ∘ StableHLO.batchMap N (flatConv W b)
-
-/-- Batched strided (3×3 s2) stem conv → bn → swish (halves spatial). ⚠ At the XLA-`SAME` phase
-    (`flatConvStride2Xla` = `decimateOddFlat ∘ flatConv`): the TF-origin B0 pads its stem `(0,1)`,
-    and the shipped render has emitted `convStridedXla` there since 2026-08-08. The symmetric
-    `flatConvStride2` has the same type and output shape; nothing structural would notice the
-    wrong one (re-spelled 2026-09-05, `planning/archive/xla_same_respell_and_blueprint_audit.md`). -/
-noncomputable def stemB (N : Nat) {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) :
-    Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
-  swish (N * (oc * h * w)) ∘ StableHLO.bnBatchLA N oc h w ε γ β ∘
-    StableHLO.batchMap N (flatConvStride2Xla W b)
-
-/-- Batched depthwise (stride-1, k×k) → bn → swish. -/
-@[reducible] noncomputable def dwbsB (N : Nat) {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c) :
-    Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
-  swish (N * (c * h * w)) ∘ StableHLO.bnBatchLA N c h w ε γ β ∘ StableHLO.batchMap N (depthwiseFlat W b)
-
-/-- Batched depthwise (stride-2 downsample, k×k) → bn → swish. -/
-@[reducible] noncomputable def dwbsSB (N : Nat) {c h w kH kW : Nat}
-    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c) :
-    Vec (N * (c * (2 * h) * (2 * w))) → Vec (N * (c * h * w)) :=
-  swish (N * (c * h * w)) ∘ StableHLO.bnBatchLA N c h w ε γ β ∘
-    StableHLO.batchMap N (depthwiseStride2Flat W b)
-
-/-- Batched squeeze-excite block `x ⊙ gate(x)` (the proven `seBlockFull`, per example). -/
-@[reducible] noncomputable def seB (N : Nat) {c h w r : Nat}
-    (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
-    Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
-  StableHLO.batchMap N (seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂)
-
-/-- Batched project: 1×1 conv → bn (no swish — the linear bottleneck). -/
-@[reducible] noncomputable def projB (N : Nat) {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) :
-    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
-  StableHLO.bnBatchLA N oc h w ε γ β ∘ StableHLO.batchMap N (flatConv W b)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Block ℝ-forwards: MBConv (no-expand / strided / residual) + head, all batched.

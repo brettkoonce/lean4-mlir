@@ -113,9 +113,10 @@ certified step; `…Tied*` are the per-node clause `Prop`s a tie is a conjunctio
 `EnetPoCG`, `Mnv2PaperPoCG` and `CnxPoCGB` (the batched f32 gradient-node lemmas, named for the net
 that first needed each op), `ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTiePoCGB`, `ViTStepTieGB` →
 `ViTTiePoCGB`, `EfficientNetStepTieG` → `EnetTiePoCG`, `MobileNetV4StepTieB` → `Mnv4TieB`. The
-`PoC*` namespaces are the production tier. Several kits every net uses live in the file of the
-net that needed them first — `EnetTiePoC`
-(`reassocB`, `cInB`, the backward link definitions), `ResNet34SyncStepTieB` (the sync-BN twin kit).
+`PoC*` namespaces are the production tier. The batched stages and their VJPs are in
+`Foundation/BatchedStages`, the batched backward graphs and cotangent steps (`reassocB`, `cInB`,
+`reluMaskB`, …, in namespaces `EnetTiePoC` / `ResNet34TieB`) in `Foundation/BatchedBackLinks`. The
+sync-BN twin kit still lives in `ResNet34SyncStepTieB`.
 
 **Don't start with the big files:** `SgdDescentCnn.lean` (~6.8k), `Attention.lean` (~2.3k), the
 `StableHLO.lean` denotation internals, or the per-net `*Render*` files (1–2k lines each of

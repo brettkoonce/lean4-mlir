@@ -29,7 +29,7 @@ ResNet-34's four (`ResNet34SyncStepTieB.lean`), and one B0 needs because of how 
 0. **The block VJP is the chain** (§ 0). T3 threads each block's input cotangent as a certified
    VJP's `.backward`; a replica computes its own by the explicit chain, and only the explicit
    chain can be sharded. `xCotIn_eq_vjp` and its four peers say the two agree — the
-   `EfficientNetBackB0` stage graphs, read at an `.operand` leaf, with `bnBatchLABack_faithful`
+   `BatchedBackLinks` stage graphs, read at an `.operand` leaf, with `bnBatchLABack_faithful`
    turning the one non-`rfl` link into `bnBackB`.
 1. **Sharding** (§§ 2, 5). Every non-BN link is per-example — conv, depthwise and strided
    depthwise input-VJPs, swish and sigmoid masks, and the squeeze-excite backward: the gate
@@ -335,7 +335,7 @@ end
 
 /-! ### The stage backwards, written out
 
-Each is the `EfficientNetBackB0` stage graph's faithfulness read at an `.operand` leaf: the graph's
+Each is the `BatchedBackLinks` stage graph's faithfulness read at an `.operand` leaf: the graph's
 `den` IS the chain above node for node, except the BatchNorm link, which `bnBatchLABack_faithful`
 turns into `bnBackB`. -/
 

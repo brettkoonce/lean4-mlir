@@ -25,7 +25,7 @@ net's.
 ## What is new here, and what is not
 
 ⭐⭐ **Nothing about the blocks is new.** `MobileNetV2BackB0.lean` already carries the batched
-relu6 stages (`cbrB`, `dwbrB`, `dwbrBstrided`, and `projB` from `EfficientNetRenderPC.lean`), their
+relu6 stages (`cbrB`, `dwbrB`, `dwbrBstrided`, and `projB` from `BatchedStages`), their
 `_at` VJPs and their backward-graph faithfulness, all at `bnBatchLA`. What was missing is the level
 above: a net-level ℝ forward, a net-level forward graph, and the faithfulness tying them. This file
 is that enumeration.

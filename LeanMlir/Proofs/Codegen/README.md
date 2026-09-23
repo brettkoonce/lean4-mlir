@@ -11,7 +11,7 @@ its text is `pretty` of an `SHlo` term. The theorems about what that term *means
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
 | `MlpRender`, `CnnRender` | chapter 2–4 train steps (MLP, MNIST CNN, CIFAR, the cifar8 family) |
 | `ResNet34RenderB`, `ResNet50RenderB`, `MobileNetV2RenderB`, `MobileNetV4RenderB`, `EfficientNetRender`, `ConvNeXtRender(B)`, `ViTRender(B)` | per-net ImageNet/Imagenette train steps (batched index, batch BN) |
-| `*RenderPC`, `*RenderPCEval` | per-channel / eval-mode stage definitions — ⚠ they render nothing; `EfficientNetRenderPC` also holds batched stages (`cbsB`, `projB`, …) other nets use |
+| `*RenderPC`, `*RenderPCEval` | per-channel / eval-mode stage definitions — ⚠ they render nothing (the batched stages other nets use, `cbsB`, `projB`, …, are in `Foundation/BatchedStages`) |
 | `IRPrint.lean` | a scratch-only execution oracle for the small-net `IR`, not an artifact writer |
 | `AdamStep`, `SgdMomentumStep`, `RmsPropStep`, `Lamb`, `LambTriple`, `GradClip`, `DropPath` | the ℝ optimizer / regulariser specs the optimizer ops denote |
 | `MatBridge.lean` | `Mat` ↔ Mathlib `Matrix` bridge (no importers) |

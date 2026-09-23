@@ -113,4 +113,78 @@ theorem batchMap_comp (B : Nat) {a b c : Nat} (f : Vec a → Vec b) (g : Vec b �
         (finProdFinEquiv.symm idx).2
   rw [StableHLO.batchSlice_batchMap]
 
+-- ════════════════════════════════════════════════════════════════
+-- § `batchMap` is differentiable, and its VJP is block-diagonal (the per-example VJP, batched)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **`batchMap N f` is the flattened row-wise application of `f`.** Reading the output at flat index
+    `idx` (decoding to example `m`, coord `c`) gives `f (row m of the input) c` on both sides — the
+    `Mat.flatten`/`unflatten` row-major convention is exactly `batchMap`'s `finProdFinEquiv` split. -/
+theorem batchMap_eq_rowwiseFlat {N a b : Nat} (f : Vec a → Vec b) :
+    StableHLO.batchMap N f
+      = fun v : Vec (N * a) => Mat.flatten ((fun A : Mat N a => fun r => f (A r)) (Mat.unflatten v)) := by
+  funext v idx
+  rfl
+
+/-- **`batchMap N f` is differentiable** when `f` is — it is `f` applied independently per example. -/
+@[fun_prop]
+theorem batchMap_differentiable {N a b : Nat} (f : Vec a → Vec b) (hf : Differentiable ℝ f) :
+    Differentiable ℝ (StableHLO.batchMap N f) := by
+  unfold StableHLO.batchMap; fun_prop
+
+/-- **`batchMap N f` VJP — block-diagonal (the genuinely-new lemma).** A batch-separable op's VJP
+    applies `f`'s proven VJP independently per example. The backward, like the forward, reshapes to
+    `[N, ·]` and runs `f.backward` row-wise. Reuses `rowwise_has_vjp_mat` + `hasVJPMat_to_hasVJP`. This
+    is `seBlockFull_has_vjp` / the conv-depthwise-dense VJPs "lifted by batchMap" to the whole batch. -/
+noncomputable def batchMap_has_vjp {N a b : Nat} (f : Vec a → Vec b)
+    (hf : HasVJP f) (hf_diff : Differentiable ℝ f) :
+    HasVJP (StableHLO.batchMap N f) :=
+  (batchMap_eq_rowwiseFlat f).symm ▸ hasVJPMat_to_hasVJP (rowwise_has_vjp_mat hf hf_diff)
+
+-- ════════════════════════════════════════════════════════════════
+-- § True batch-norm `bnBatchLA` VJP — the proven `bnBatchTensor4`, reindex-conjugated
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Generic reindex VJP.** `reindexCLM σ` (gather `y ↦ y ∘ σ`) is linear; its backward scatters each
+    output cotangent back to the inputs that map to it (the adjoint). Generalizes the manual reindex
+    VJPs (`broadcastFlat_has_vjp`, `bnchwFwd/Back_has_vjp`). -/
+noncomputable def reindex_has_vjp {a b : Nat} (σ : Fin b → Fin a) :
+    HasVJP (reindexCLM σ) where
+  backward := fun _v dy => fun i => ∑ k : Fin b, (if i = σ k then dy k else 0)
+  correct := by
+    intro v dy i
+    show (∑ k : Fin b, if i = σ k then dy k else 0)
+        = ∑ j : Fin b, pdiv (reindexCLM σ) v i j * dy j
+    have hpd : ∀ j : Fin b, pdiv (reindexCLM σ) v i j = if i = σ j then 1 else 0 := by
+      intro j; exact pdiv_reindex σ v i j
+    simp only [hpd, ite_mul, one_mul, zero_mul]
+
+/-- **`bnBatchLA` is the proven `bnBatchTensor4`, conjugated by the `mul_assoc` reindex.** Both reindex
+    maps are `reindexCLM (Fin.cast …)`; the middle is the genuinely batch-coupled true batch-norm. -/
+theorem bnBatchLA_eq_comp (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
+    StableHLO.bnBatchLA N oc h w ε γ β
+      = (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))) ∘
+          bnBatchTensor4 N oc h w ε γ β ∘
+          (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm)) := by
+  rfl
+
+@[fun_prop]
+theorem bnBatchLA_differentiable (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Differentiable ℝ (StableHLO.bnBatchLA N oc h w ε γ β) := by
+  rw [bnBatchLA_eq_comp]
+  exact (reindexCLM _).differentiable.comp
+    ((bnBatchTensor4_differentiable N oc h w ε hε γ β).comp (reindexCLM _).differentiable)
+
+/-- **True batch-norm VJP at the network's flat index.** `bnBatchLA`'s backward is the proven
+    `bnBatchTensor4` VJP (batch-coupled — NOT a `batchMap`), conjugated by the reindex isos. -/
+noncomputable def bnBatchLA_has_vjp (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    HasVJP (StableHLO.bnBatchLA N oc h w ε γ β) := by
+  rw [bnBatchLA_eq_comp]
+  exact vjp_comp _ _
+    ((bnBatchTensor4_differentiable N oc h w ε hε γ β).comp (reindexCLM _).differentiable)
+    (reindexCLM _).differentiable
+    (vjp_comp _ _ (reindexCLM _).differentiable (bnBatchTensor4_differentiable N oc h w ε hε γ β)
+      (reindex_has_vjp _) (bnBatchTensor4_has_vjp N oc h w ε hε γ β))
+    (reindex_has_vjp _)
+
 end Proofs

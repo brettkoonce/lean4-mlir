@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
-import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 
 /-! # EfficientNet-B0's T3 §1a TIE at the UN-FUSED gradient and the SMOOTHED loss
 
