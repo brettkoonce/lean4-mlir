@@ -828,10 +828,7 @@ theorem mlp_output_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatMode
     (hρ1 : FloatModel.smRho M.u eexp d₃ < 1)
     (hδ : ∀ k', |M.dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) k' -
         dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) k'| ≤ δ)
-    (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
-        (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
-        (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
-          FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))) < 1)
+    (hsmall : 2 * (a * (stepRadius (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label) (Mat.flatten W₂) lr (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))) < 1)
     (h1 : lr * (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)) *
         (∑ idx, |gradAt
           (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
@@ -839,14 +836,8 @@ theorem mlp_output_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatMode
       lr * (∑ idx, gradAt
         (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
         (Mat.flatten W₂) idx ^ 2) / 4)
-    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
-          (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
-          (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
-            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))))) *
-        (lr * ((∑ idx, |gradAt
-          (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
-          (Mat.flatten W₂) idx|) + ((d₂ * d₃ : ℕ) : ℝ) *
-            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃))) ^ 2 ≤
+    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (stepRadius (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label) (Mat.flatten W₂) lr (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃)))))) *
+        (stepRadius (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label) (Mat.flatten W₂) lr (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ d₃))) ^ 2 ≤
       lr * (∑ idx, gradAt
         (mlpOutputLoss W₀ b₀ W₁ b₁ b₂ x label)
         (Mat.flatten W₂) idx ^ 2) / 4) :
@@ -1050,25 +1041,9 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
     (hW₂ : ∀ i j, |W₂ i j| ≤ w₂) (hb₂ : ∀ j, |b₂ j| ≤ β₂)
     (hmargin_round : ∀ j', FloatModel.layerBudget M.u d₁ w₁ β₁ a 0 <
       |dense W₁ b₁ a₀ j'|)
-    (hmargin_step : ∀ j, a * (lr * ((∑ idx, |gradAt
-        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
-        (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
-          FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
-            (FloatModel.layerBudget M.u d₃ w₂ 0 1
-              (FloatModel.cotErr M.u eexp
-                (FloatModel.layerBudget M.u d₂ w₂ β₂
-                  (FloatModel.layerAct d₁ w₁ β₁ a)
-                  (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) <
+    (hmargin_step : ∀ j, a * (stepRadius (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0 (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a) (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) <
       |dense W₁ b₁ a₀ j|)
-    (hsmall : 2 * (w₂ * (a * (lr * ((∑ idx, |gradAt
-        (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
-        (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
-          FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
-            (FloatModel.layerBudget M.u d₃ w₂ 0 1
-              (FloatModel.cotErr M.u eexp
-                (FloatModel.layerBudget M.u d₂ w₂ β₂
-                  (FloatModel.layerAct d₁ w₁ β₁ a)
-                  (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))))) < 1)
+    (hsmall : 2 * (w₂ * (a * (stepRadius (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0 (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a) (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))))) < 1)
     (h1 : lr * (FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
           (FloatModel.layerBudget M.u d₃ w₂ 0 1
             (FloatModel.cotErr M.u eexp
@@ -1090,14 +1065,7 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
                     (FloatModel.layerBudget M.u d₂ w₂ β₂
                       (FloatModel.layerAct d₁ w₁ β₁ a)
                       (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))))))) *
-        (lr * ((∑ idx, |gradAt (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
-          (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) *
-            FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0
-              (FloatModel.layerBudget M.u d₃ w₂ 0 1
-                (FloatModel.cotErr M.u eexp
-                  (FloatModel.layerBudget M.u d₂ w₂ β₂
-                    (FloatModel.layerAct d₁ w₁ β₁ a)
-                    (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) ^ 2 ≤
+        (stepRadius (mlpHiddenLoss b₁ W₂ b₂ a₀ label) (Mat.flatten W₁) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₃ w₂ 0 1) 0 (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ a) (FloatModel.layerBudget M.u d₁ w₁ β₁ a 0)) d₃)))) ^ 2 ≤
       lr * (∑ idx, gradAt
         (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
         (Mat.flatten W₁) idx ^ 2) / 4) :
@@ -1107,6 +1075,7 @@ theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
         lr * (∑ idx, gradAt
           (mlpHiddenLoss b₁ W₂ b₂ a₀ label)
           (Mat.flatten W₁) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
   unfold mlpHiddenLoss at *
   have hu := M.u_nonneg
   -- the proven accuracy budget η of `mlp_w1_grad_close`
@@ -1437,53 +1406,11 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
         (FloatModel.layerAct d₀ w₀ β₀ a)
         (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0) <
       |dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) l'|)
-    (hmargin0_step : ∀ j, a * (lr * ((∑ idx, |gradAt
-        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
-        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
-          FloatModel.mulErr M.u a
-            (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
-            (FloatModel.layerBudget M.u d₂ w₁ 0
-                (FloatModel.layerAct d₃ w₂ 0 1)
-              (FloatModel.layerBudget M.u d₃ w₂ 0 1
-                (FloatModel.cotErr M.u eexp
-                  (FloatModel.layerBudget M.u d₂ w₂ β₂
-                    (FloatModel.layerAct d₁ w₁ β₁
-                      (FloatModel.layerAct d₀ w₀ β₀ a))
-                    (FloatModel.layerBudget M.u d₁ w₁ β₁
-                      (FloatModel.layerAct d₀ w₀ β₀ a)
-                      (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) <
+    (hmargin0_step : ∀ j, a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0 (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)) (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a) (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) <
       |dense W₀ b₀ x j|)
-    (hmargin1_step : ∀ l, w₁ * (a * (lr * ((∑ idx, |gradAt
-        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
-        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
-          FloatModel.mulErr M.u a
-            (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
-            (FloatModel.layerBudget M.u d₂ w₁ 0
-                (FloatModel.layerAct d₃ w₂ 0 1)
-              (FloatModel.layerBudget M.u d₃ w₂ 0 1
-                (FloatModel.cotErr M.u eexp
-                  (FloatModel.layerBudget M.u d₂ w₂ β₂
-                    (FloatModel.layerAct d₁ w₁ β₁
-                      (FloatModel.layerAct d₀ w₀ β₀ a))
-                    (FloatModel.layerBudget M.u d₁ w₁ β₁
-                      (FloatModel.layerAct d₀ w₀ β₀ a)
-                      (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))))) <
+    (hmargin1_step : ∀ l, w₁ * (a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0 (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)) (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a) (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃)))))) <
       |dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) l|)
-    (hsmall : 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
-        (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
-        (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
-          FloatModel.mulErr M.u a
-            (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
-            (FloatModel.layerBudget M.u d₂ w₁ 0
-                (FloatModel.layerAct d₃ w₂ 0 1)
-              (FloatModel.layerBudget M.u d₃ w₂ 0 1
-                (FloatModel.cotErr M.u eexp
-                  (FloatModel.layerBudget M.u d₂ w₂ β₂
-                    (FloatModel.layerAct d₁ w₁ β₁
-                      (FloatModel.layerAct d₀ w₀ β₀ a))
-                    (FloatModel.layerBudget M.u d₁ w₁ β₁
-                      (FloatModel.layerAct d₀ w₀ β₀ a)
-                      (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))))))) < 1)
+    (hsmall : 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0 (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)) (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a) (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))))))) < 1)
     (h1 : lr * (FloatModel.mulErr M.u a
           (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
           (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)
@@ -1501,36 +1428,8 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
         (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx ^ 2) / 4)
     (h2 : (2 * (d₃ : ℝ) * (d₂ : ℝ) ^ 2 * w₁ ^ 2 * w₂ ^ 2 * a ^ 2 /
-        (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx, |gradAt
-          (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
-          (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
-            FloatModel.mulErr M.u a
-              (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
-              (FloatModel.layerBudget M.u d₂ w₁ 0
-                  (FloatModel.layerAct d₃ w₂ 0 1)
-                (FloatModel.layerBudget M.u d₃ w₂ 0 1
-                  (FloatModel.cotErr M.u eexp
-                    (FloatModel.layerBudget M.u d₂ w₂ β₂
-                      (FloatModel.layerAct d₁ w₁ β₁
-                        (FloatModel.layerAct d₀ w₀ β₀ a))
-                      (FloatModel.layerBudget M.u d₁ w₁ β₁
-                        (FloatModel.layerAct d₀ w₀ β₀ a)
-                        (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))))))))) *
-        (lr * ((∑ idx, |gradAt
-          (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
-          (Mat.flatten W₀) idx|) + ((d₀ * d₁ : ℕ) : ℝ) *
-            FloatModel.mulErr M.u a
-              (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0
-              (FloatModel.layerBudget M.u d₂ w₁ 0
-                  (FloatModel.layerAct d₃ w₂ 0 1)
-                (FloatModel.layerBudget M.u d₃ w₂ 0 1
-                  (FloatModel.cotErr M.u eexp
-                    (FloatModel.layerBudget M.u d₂ w₂ β₂
-                      (FloatModel.layerAct d₁ w₁ β₁
-                        (FloatModel.layerAct d₀ w₀ β₀ a))
-                      (FloatModel.layerBudget M.u d₁ w₁ β₁
-                        (FloatModel.layerAct d₀ w₀ β₀ a)
-                        (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) ^ 2 ≤
+        (1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0 (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)) (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a) (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))))))))) *
+        (stepRadius (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label) (Mat.flatten W₀) lr (FloatModel.mulErr M.u a (FloatModel.layerAct d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1)) 0 (FloatModel.layerBudget M.u d₂ w₁ 0 (FloatModel.layerAct d₃ w₂ 0 1) (FloatModel.layerBudget M.u d₃ w₂ 0 1 (FloatModel.cotErr M.u eexp (FloatModel.layerBudget M.u d₂ w₂ β₂ (FloatModel.layerAct d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a)) (FloatModel.layerBudget M.u d₁ w₁ β₁ (FloatModel.layerAct d₀ w₀ β₀ a) (FloatModel.layerBudget M.u d₀ w₀ β₀ a 0))) d₃))))) ^ 2 ≤
       lr * (∑ idx, gradAt
         (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
         (Mat.flatten W₀) idx ^ 2) / 4) :
@@ -1540,6 +1439,7 @@ theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel
         lr * (∑ idx, gradAt
           (mlpInputLoss b₀ W₁ b₁ W₂ b₂ x label)
           (Mat.flatten W₀) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
   unfold mlpInputLoss at *
   have hu := M.u_nonneg
   -- the proven accuracy budget η of `mlp_w0_grad_close`

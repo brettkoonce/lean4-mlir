@@ -1368,6 +1368,7 @@ open Proofs
 -- MNv4's NET level (T1, T2)
 #print axioms StableHLO.mobilenetv4ForwardB_full_has_vjp_at
 #print axioms StableHLO.mobilenetv4ForwardB_full_has_vjp_at_correct
+#print axioms StableHLO.mobilenetv4ForwardB_full_differentiableAt
 #print axioms StableHLO.mnv4FwdGraphB_full_faithful
 #print axioms StableHLO.mnv4ExtraDWBodyGraphB_faithful
 #print axioms StableHLO.mnv4ConvNeXtBodyGraphB_faithful

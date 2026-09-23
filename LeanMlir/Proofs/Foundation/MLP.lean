@@ -9,7 +9,7 @@ Formal VJP correctness for the layers of a 3-layer MLP.
 All definitions over `ℝ`, proofs use Mathlib's `Finset.sum`.
 -/
 
-open Finset BigOperators Classical
+open Finset BigOperators
 
 namespace Proofs
 

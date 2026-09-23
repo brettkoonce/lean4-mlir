@@ -98,7 +98,6 @@ and it is the net the hole first bit.
 
 namespace Proofs
 
-open Classical
 
 -- ════════════════════════════════════════════════════════════════
 -- § The stage-boundary downsample

@@ -328,10 +328,7 @@ theorem linear_float_sgd_descends {m n : Nat} (M : FloatModel) (W : Mat m n)
     (hfexp : ∀ t, |fexp t - Real.exp t| ≤ eexp * Real.exp t)
     (hρ1 : FloatModel.smRho M.u eexp n < 1)
     (hδ : ∀ k', |M.dense W b x k' - dense W b x k'| ≤ δ)
-    (hsmall : 2 * (a * (lr * ((∑ idx, |gradAt
-        (linearLoss b x label)
-        (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
-          FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))) < 1)
+    (hsmall : 2 * (a * (stepRadius (linearLoss b x label) (Mat.flatten W) lr (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))) < 1)
     (h1 : lr * (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)) *
         (∑ idx, |gradAt
           (linearLoss b x label)
@@ -339,14 +336,8 @@ theorem linear_float_sgd_descends {m n : Nat} (M : FloatModel) (W : Mat m n)
       lr * (∑ idx, gradAt
         (linearLoss b x label)
         (Mat.flatten W) idx ^ 2) / 4)
-    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt
-          (linearLoss b x label)
-          (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
-            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))))) *
-        (lr * ((∑ idx, |gradAt
-          (linearLoss b x label)
-          (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) *
-            FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n))) ^ 2 ≤
+    (h2 : (2 * a ^ 2 / (1 - 2 * (a * (stepRadius (linearLoss b x label) (Mat.flatten W) lr (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n)))))) *
+        (stepRadius (linearLoss b x label) (Mat.flatten W) lr (FloatModel.mulErr M.u a 1 0 (FloatModel.cotErr M.u eexp δ n))) ^ 2 ≤
       lr * (∑ idx, gradAt
         (linearLoss b x label)
         (Mat.flatten W) idx ^ 2) / 4) :
@@ -356,6 +347,7 @@ theorem linear_float_sgd_descends {m n : Nat} (M : FloatModel) (W : Mat m n)
         lr * (∑ idx, gradAt
           (linearLoss b x label)
           (Mat.flatten W) idx ^ 2) / 2 := by
+  simp only [stepRadius] at *
   unfold linearLoss at *
   -- the head budget is nonnegative (it bounds an absolute value)
   have hu := M.u_nonneg

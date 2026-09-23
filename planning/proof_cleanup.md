@@ -95,6 +95,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 | (o) | §3.6 statement ports. EfficientNet: `B0Weights.EpsPos` (with `MBW.EpsPos`, `MBWNoExp.EpsPos`) replaces the 49 `0 < ε` binders in 7 statements. MobileNetV2 on V4's shape: `MNV2PosB` + `MNV2SmoothAtB` replace the apex's 38 binders, built on `vjp_comp_diff_at`, which also yields the new `mobilenetv2ForwardB_full_differentiableAt` (the seal's 45-line `sealDiffAt` is one term); `mnv2_net_tiedB` takes `g` free; `mnv2_net_syncTiedB` is the free-`G`/`hgs` form over a named `mnv2NetSyncTiedB` Prop, with `_smoothedCE` restoring the old instantiated statement. Tier regenerated (`mnv2_net_syncTiedB` and both EfficientNet entries), blueprint entries mirror V4's | the local comparator run: all three configs "Your solution is okay!" (5 min); ports + (n) together −558 lines |
 | (p) | §3.6 `_smul` kit: `IsHomog` (an `abbrev`, so `rw [h]`/`h s v` see the equation) + `IsHomog.comp` in DataParallelSync; 128 `X_smul` lemmas across 6 sync files restated `IsHomog (X …)` under the same name, `batchMap_smul` / `batchMapAux_smul` lift `IsHomog`, one-term delegates η-reduce (`batchMap_smul _ (HasVJP.backward_smul _ _)`); 21 explicit `… dy s` call sites swapped to `… s dy`. EfficientNetSyncStepTieG (the only sync file without them) got `variable` sections, `include hN hh hw` where the shard proofs need them | `IsHomog`: −55 lines. Sections: +21 lines but −6% of the file's bytes (97.1 → 90.9 kB) — the survey's "~300 lines from `variable`s" does not hold at this file's shape |
 | (q) | §3.5 training files. The conv2d / depthwise input-VJP proofs (CNN.lean, Depthwise.lean) share `sum_fin_ite_add_eq` + `padTap_indicator`: `simp` rewrites every Kronecker to "`c = ci` and the tap lands", collapses `(c, kh, kw)`, and `split_ifs` closes — the 25-line `show (let …)` restatements, the 55-line injectivity blocks and the triple `sum_eq_single`s are gone (−288 lines). `stepRadius` (SgdDescent) + nine named losses (`cnnConv2KernelLoss`, …, `linearLoss`, `cifar8LastConvLoss`) state the 16 `*_sgd_descends` rungs; each proof opens `simp only [stepRadius] at *; unfold <loss> at *` and is otherwise unchanged (`simp only [loss]` misses the partial application `gradAt (loss …)`; `unfold` does not). `TrainedLinearDescent`'s generator unfolds `linearLoss` after its `refine` (byte-reproducible before the edit). `Conv2Slot.loss_grad_lipschitz`: `set δ` for the drift constant (17 copies), `gcongr` for the 7-deep `mul_le_mul_of_nonneg_left` chain; margin3/4 the same | −763 lines net; CNN 5.9 → 6.2 s, SgdDescentCnn 20 s → 20 s — the audit's "statement elaboration is the 95 s" guess does not hold locally |
+| (r) | Polish. `MaxPool2IsArgmax.decidable` (CNN.lean) retires the 28 `open scoped Classical in` of §1(l); file-scope `open Classical` is out of IR, MLP, EvenKernelConvBack and the R34/ConvNeXt×2 ties (nothing else needed it). MobileNetV4's apex on `vjp_comp_diff_at` exports `mobilenetv4ForwardB_full_differentiableAt`, so its `sealDiffAt` is one term. The eight float rungs state their radius as `stepRadius … lr (budget)` (37 sites); the TrainedLinearDescent generator unfolds it | −221 lines; full corpus + comparator green |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -181,27 +182,28 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 
 * `positivity` cannot use hypotheses (`0 ≤ w₅`) for variable atoms, so the `mul_nonneg` chains over
   the weight bounds stay; only the nested `mul_le_mul_of_nonneg_left` chains went to `gcongr`.
-* The float rungs' radius (with `cnnConv2GradBudget …` / `mulErr …` for `η`) and the Cifar rung's
-  conclusion are still spelled out; the Mlp/Cnn non-rung lemmas keep their closures.
+* The Cifar rung's conclusion is still spelled out; the Mlp/Cnn non-rung lemmas keep their closures.
 
 ### 3.6 Repetition kits — DONE as §1(n)–(p), with these left
 
 * MobileNetV2 `eq_slots` / the 18 `mnv2PreB*_apply` lemmas stay: a generic 21-stage apply lemma is
   longer than what it replaces, and its closing `rfl` would have the kernel compare the concrete
   chain (the timeout `comp3_assoc`'s comment records). The `simp only` over the prefix defs is fast.
-* `sealDiffAt` for R34/R50/V4 is still a hand chain; the MNv2 route (the apex built on
-  `vjp_comp_diff_at`, `.snd` exported) is the template.
+* `sealDiffAt` for R34/R50 is still a hand chain. Tried the MNv2/V4 route (§1(r)) and reverted:
+  their apexes take 38–40 positional binders, which the chain def and the exported
+  `…_differentiableAt` each restate, so it is +99 lines unless the hypotheses are bundled first
+  (an apex statement change; the R50 apex appears inside a comparator-tier statement).
 * The `_shard` family (~130 lemmas) has the same shape as `_smul`; an `IsShardwise` predicate was not
   built. `[NeZero N]` for the `hN hh hw` threading was not done (it changes every caller's arguments).
 * The weight-gradient `den` `_smul` lemmas (pointwise, scalar-valued) keep their form.
 
 ### 3.7 Small, any time — DONE as §1(l)
 
-Left over: file-scope `open Classical` in seven more files the audit did not list (Foundation
-`IR`/`MLP`/`EvenKernelConvBack`, `TrainedCnnSeal`, the ResNet-34 and both ConvNeXt `…BackCertifiedTie`s).
-The `if MaxPool2IsArgmax` sites are the reason CNN/SgdDescentCnn need classical at all; a
-`Decidable (MaxPool2IsArgmax …)` instance (a `∀` over `Fin 2 × Fin 2` of real `≤`) would retire
-them but re-elaborates those `if`s in IR/StableHLO (241 dependents) — a §3.4-style batch item.
+Left over (after §1(r)): `TrainedCnnSeal`'s `open Classical`. ⛔ Its generator
+`scripts/trained_cnn_seal.py` (and the `trained_cnn_witness.py` it `exec`s) hard-code their input
+and OUTPUT paths into the sibling checkout `../lean4-jax/`, and the committed Lean file has since been
+hand-edited (`if_pos` → `ite_eq_left`), so the generator no longer reproduces it. Repoint and
+resync the generator before touching the file.
 
 ## 4. Checked and set aside
 

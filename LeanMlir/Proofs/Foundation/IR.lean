@@ -41,7 +41,6 @@ namespace IR
 -- needs the classical decidability instance `CNN.lean` uses (it `open`s
 -- `Classical`). Low priority, so it doesn't disturb the `Nat`/`ℝ`-order
 -- decidability the dense/relu/conv bridges already rely on.
-open Classical
 
 /-- A backward subgraph, rooted at the cotangent `dy : Vec inp`, producing
     a `Vec out`. Saved forward data (weights `A`, the ReLU pre-activation

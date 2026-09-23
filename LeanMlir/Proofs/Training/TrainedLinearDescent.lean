@@ -304,6 +304,7 @@ theorem trained_linear_sgd_descends_concrete :
     (lr := ((1 : ℝ)/8192)) (a := 1) (eexp := 0) (δ := ((1 : ℝ)/25000))
     (by norm_num) xd_le_one (by norm_num) le_rfl (by norm_num) (by norm_num)
     hfexp hrho hdelta ?_ ?_ ?_
+  all_goals try simp only [stepRadius]
   all_goals unfold linearLoss
   · -- hsmall
     push_cast

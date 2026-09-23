@@ -412,12 +412,15 @@ theorem scHead (nCls : Nat) (t : ℝ) :
     (mnv4HeadStack 2 (sealW nCls)).ok (mnv4Pre6 2 (sealW nCls) (sealX t)) :=
   ⟨bne 2 960 7 7 (by norm_num) _, bne 2 1280 7 7 (by norm_num) _, trivial, trivial⟩
 
+/-- The eight group conditions above, as the apex's one smoothness hypothesis. -/
+theorem sealSmooth (nCls : Nat) (t : ℝ) : Mnv4SmoothAt 2 (sealW nCls) (sealX t) :=
+  ⟨scStem nCls t, scFused nCls t, sc28 nCls t, sc14a nCls t, sc14b nCls t, sc7a nCls t,
+    sc7b nCls t, scHead nCls t⟩
+
 /-- ⭐⭐ **The whole-net VJP at the witness** — all eight bundles discharged. -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
     HasVJPAt (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX t) :=
-  mobilenetv4ForwardB_full_has_vjp_at 2 (sealW nCls) (sealX t)
-    ⟨scStem nCls t, scFused nCls t, sc28 nCls t, sc14a nCls t, sc14b nCls t, sc7a nCls t,
-      sc7b nCls t, scHead nCls t⟩
+  mobilenetv4ForwardB_full_has_vjp_at 2 (sealW nCls) (sealX t) (sealSmooth nCls t)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 8. ⭐⭐ Across the SWISH — the one stage a carrier cannot cross by the identity
@@ -1138,22 +1141,8 @@ theorem gd_one_pos : 0 < swishGap 160 (uF 1 0) * Rr 1 := by
   exact mul_pos (swishGap_pos hu hub) (Rr_pos 1)
 
 theorem sealDiffAt (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX t) := by
-  have d0 : DifferentiableAt ℝ (mnv4Pre0 2 (sealW nCls)) (sealX t) :=
-    mnv4StemB_differentiableAt 2 112 112 _ _ _ one_pos _ _ (sealX t) (scStem nCls t)
-  have d1 : DifferentiableAt ℝ (mnv4Pre1 2 (sealW nCls)) (sealX t) :=
-    ((mnv4FusedStack 2 (sealW nCls)).diff _ (scFused nCls t)).comp (sealX t) d0
-  have d2 : DifferentiableAt ℝ (mnv4Pre2 2 (sealW nCls)) (sealX t) :=
-    ((mnv4Res28Layer 2 (sealW nCls)).diff _ (sc28 nCls t)).comp (sealX t) d1
-  have d3 : DifferentiableAt ℝ (mnv4Pre3 2 (sealW nCls)) (sealX t) :=
-    ((mnv4Res14aLayer 2 (sealW nCls)).diff _ (sc14a nCls t)).comp (sealX t) d2
-  have d4 : DifferentiableAt ℝ (mnv4Pre4 2 (sealW nCls)) (sealX t) :=
-    ((mnv4Res14bLayer 2 (sealW nCls)).diff _ (sc14b nCls t)).comp (sealX t) d3
-  have d5 : DifferentiableAt ℝ (mnv4Pre5 2 (sealW nCls)) (sealX t) :=
-    ((mnv4Res7aLayer 2 (sealW nCls)).diff _ (sc7a nCls t)).comp (sealX t) d4
-  have d6 : DifferentiableAt ℝ (mnv4Pre6 2 (sealW nCls)) (sealX t) :=
-    ((mnv4Res7bLayer 2 (sealW nCls)).diff _ (sc7b nCls t)).comp (sealX t) d5
-  exact ((mnv4HeadStack 2 (sealW nCls)).diff _ (scHead nCls t)).comp (sealX t) d6
+    DifferentiableAt ℝ (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX t) :=
+  mobilenetv4ForwardB_full_differentiableAt 2 (sealW nCls) (sealX t) (sealSmooth nCls t)
 
 /-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV4-Conv-M at
     the structural weights is NOT constant in its input. -/

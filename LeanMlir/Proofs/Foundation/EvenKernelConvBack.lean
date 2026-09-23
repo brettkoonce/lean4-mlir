@@ -47,7 +47,6 @@ entries are `0`), so every magnitude hypothesis transfers unchanged.
 
 namespace Proofs
 
-open Classical
 
 -- ════════════════════════════════════════════════════════════════
 -- § The zero-extension, and the forward it does not change

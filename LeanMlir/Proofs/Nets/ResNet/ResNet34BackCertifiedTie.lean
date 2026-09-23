@@ -32,7 +32,6 @@ runs. -/
 
 namespace Proofs
 
-open Classical
 
 /-- **Conv input-VJP leaf tie.** The backward map `convFlatBack W` (= reversed-kernel forward
     conv) IS the certified conv input-VJP `(flatConv_has_vjp W b).backward x` (conv is linear,

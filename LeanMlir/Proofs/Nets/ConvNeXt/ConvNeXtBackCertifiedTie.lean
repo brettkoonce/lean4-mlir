@@ -25,7 +25,6 @@ b1-free: the per-example body is the non-batched object the chain reverses, so t
 
 namespace Proofs
 
-open Classical
 
 -- ════════════════════════════════════════════════════════════════
 -- § §B at ConvNeXt's REAL channel LayerNorm (§2n) — the LN op itself

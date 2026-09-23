@@ -899,6 +899,13 @@ def MaxPool2IsArgmax {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
     x ci (winRowInv (winRow hi_in) a) (winColInv (winCol wi_in) b) ≤
     x ci hi_in wi_in
 
+/-- A finite `∀` over the window of real `≤`: decidable (classically, as every `ℝ` order is),
+    so an `if MaxPool2IsArgmax …` elaborates without `open Classical`. -/
+noncomputable instance MaxPool2IsArgmax.decidable {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
+    (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w)) :
+    Decidable (MaxPool2IsArgmax x ci hi_in wi_in) := by
+  unfold MaxPool2IsArgmax; infer_instance
+
 -- Argmax extractor + window-max characterization -----------------
 
 /-- A (not necessarily unique) argmax of the 2×2 window at output
@@ -1054,7 +1061,6 @@ theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
   funext k_out
   exact maxPool2_eq_at_max (Tensor3.unflatten y) _ _ _ _ _ (hy _ _ _)
 
-open scoped Classical in
 /-- **MaxPool2 smooth-point Jacobian.** At a smooth point, `pdiv3` of
     `maxPool2` is a sparse 0/1 indicator: 1 exactly when the output
     `(co, ho, wo)` is the window of the input `(ci, hi_in, wi_in)` AND
@@ -1133,7 +1139,6 @@ theorem pdiv3_maxPool2_smooth {c h w : Nat}
                           winColInv (winCol wi_in) (winColMod wi_in)) = _
     rw [winRowInv_winRow, winColInv_winCol]
 
-open scoped Classical in
 /-- **Bridge: `maxPool2_has_vjp3`'s canonical backward matches the
     codegen formula at smooth points.**
 
@@ -1158,7 +1163,6 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
   simp_rw [pdiv3_maxPool2_smooth x h_smooth ci hi_in wi_in]
   simp [ite_and, Finset.sum_ite_eq']
 
-open scoped Classical in
 /-- **MaxPool2 pointwise VJP — no canonical-witness escape.**
 
     `HasVJPAt3 maxPool2 x` under `MaxPool2Smooth x`. The backward is
