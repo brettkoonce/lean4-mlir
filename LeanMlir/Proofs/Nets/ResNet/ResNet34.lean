@@ -13,8 +13,8 @@ This file proves the generic enabler: if every map in a list is differentiable
 and has a VJP at its running activation, their composition (`chainComp`) does too —
 by induction chaining `vjp_comp_at` (`chain_vjp_diff_at`). That turns "16 blocks
 deep" into a `List.length`, no per-block boilerplate. `resnet34_has_vjp_at` is the
-resulting parametric skeleton (abstract stem / downsample / blocks / head, kept for the
-axiom audit); the shipped ResNet-34 is the batched chain in `ResNet34FullB` /
+resulting parametric skeleton (abstract stem / downsample / blocks / head, pinned in
+`AuditAxioms`); the shipped ResNet-34 is the batched chain in `ResNet34FullB` /
 `ResNet34FullBVJP`, which does not build on this file.
 
 Closes under `[propext, Classical.choice, Quot.sound]`.
