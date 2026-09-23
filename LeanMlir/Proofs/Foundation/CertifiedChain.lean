@@ -191,6 +191,16 @@ peel itself is a kernel deterministic timeout by `rfl` / `Function.comp_apply` /
 theorem comp_fwd_apply {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n p) (v : Vec m) :
     (L₁.comp L₂).fwd v = L₂.fwd (L₁.fwd v) := rfl
 
+/-- `comp`'s `ok`, with the intermediate activation NAMED. A whole-net chain whose hypotheses are
+    stated at named prefixes proves its `.ok` one `refine` per block through this, so the goal
+    stays at the prefix; one anonymous constructor for the whole chain instead makes every
+    prefix a defeq check against the nested layer forwards, and that exceeds `maxRecDepth` by the
+    fifth block. ⚠ Discharge `hy` by `rw` at literal widths, not `rfl` (`r34SmoothAtB_ok`). -/
+theorem comp_ok_of {m n k : Nat} {L₁ : CertLayer m n}
+    {L₂ : CertLayer n k} {x : Vec m} (h₁ : L₁.ok x) (y : Vec n) (hy : L₁.fwd x = y)
+    (h₂ : L₂.ok y) : (L₁.comp L₂).ok x :=
+  ⟨h₁, hy ▸ h₂⟩
+
 end CertLayer
 
 end Proofs.StableHLO

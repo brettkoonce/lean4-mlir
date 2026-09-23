@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
-import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
+import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains
 
 /-! # EfficientNet-B0's stem and head endpoint ties

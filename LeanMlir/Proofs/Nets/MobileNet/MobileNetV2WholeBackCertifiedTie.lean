@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackCertifiedTie
-import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
+import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderPC
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullVJP

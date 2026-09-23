@@ -90,12 +90,6 @@ def R34StemSmoothAt (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : V
   ∀ k, StableHLO.bnBatchLA N oc (2 * h) (2 * w) εs γs βs
     (StableHLO.batchMap N (flatConvStride2 Ws bs) x) k ≠ 0
 
-/-- The stem pool has no argmax tie, **per example**: a tie is a property of one image's 3×3
-    window, so the condition is stated on each row of the batched activation. This is the shape
-    `batchMap_has_vjp_at` consumes. -/
-def R34PoolSmoothAt (N h w : Nat) {oc : Nat} (v : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
-  ∀ r : Fin N,
-    MaxPool3s2Smooth (Tensor3.unflatten (Mat.unflatten v r) : Tensor3 oc (2 * h) (2 * w))
 
 -- ════════════════════════════════════════════════════════════════
 -- § Block, stem and head bundle lemmas (delegation)
@@ -184,19 +178,6 @@ theorem r34DownLayer_fwd (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc) (hq : 
 -- § Stem and head as `CertLayer`s — shared with ResNet-50, whose stem and head are these
 -- ════════════════════════════════════════════════════════════════
 
-/-- The batched 3×3/s2 stem pool as a `CertLayer`, certified where no example's window ties. Its
-    backward graph is the render's `maxPool3s2BackB`, and it denotes `batchMap_has_vjp_at`'s
-    backward definitionally once the two spellings of the scatter are identified. -/
-noncomputable def r34PoolLayer (N : Nat) {c h w : Nat} (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
-    StableHLO.CertLayer (N * (c * (2 * h) * (2 * w))) (N * (c * h * w)) where
-  fwd := StableHLO.batchMap N (maxPool3s2Flat c h w)
-  ok := R34PoolSmoothAt N h w
-  diff := fun v hv => batchMap_differentiableAt _ _
-    (fun r => maxPool3s2Flat_differentiableAt_vec _ (hv r) hc hh hw)
-  vjp := fun v hv => batchMap_has_vjp_at _ _ (fun r => maxPool3s2Flat_has_vjp_at_vec _ (hv r))
-    (fun r => maxPool3s2Flat_differentiableAt_vec _ (hv r) hc hh hw)
-  graph := fun v e => .maxPool3s2BackB "%stemR" v e
-  faithful := fun v _ e => by rw [den_maxPool3s2BackB_eq_flatBackB]; rfl
 
 /-- The stem, 7×7/s2 conv-bn-relu then the 3×3/s2 pool, as a `CertLayer`. Its `ok` is exactly
     `R34StemSmoothAt ∧ R34PoolSmoothAt` at the conv's output. -/
@@ -218,15 +199,6 @@ noncomputable def r34HeadLayer (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (b
 theorem r34HeadLayer_fwd (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls) :
     (r34HeadLayer N h w Wd bd).fwd = r34HeadB N h w Wd bd := rfl
 
-/-- `comp`'s `ok`, with the intermediate activation NAMED. A whole-net chain whose hypotheses are
-    stated at named prefixes proves its `.ok` one `refine` per block through this, so the goal
-    stays at the prefix; one anonymous constructor for the whole chain instead makes every
-    prefix a defeq check against the nested layer forwards, and that exceeds `maxRecDepth` by the
-    fifth block. ⚠ Discharge `hy` by `rw` at literal widths, not `rfl` (`r34SmoothAtB_ok`). -/
-theorem StableHLO.CertLayer.comp_ok_of {m n k : Nat} {L₁ : StableHLO.CertLayer m n}
-    {L₂ : StableHLO.CertLayer n k} {x : Vec m} (h₁ : L₁.ok x) (y : Vec n) (hy : L₁.fwd x = y)
-    (h₂ : L₂.ok y) : (L₁.comp L₂).ok x :=
-  ⟨h₁, hy ▸ h₂⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The running activations — `r34PreK` = the net truncated after block `K`

@@ -133,17 +133,6 @@ noncomputable def sealW (nCls : Nat) : R34BWeights nCls where
 -- `h = 16`). At variables the same proof is instant, and instantiating a proved lemma is
 -- substitution — no defeq at all. Same lesson as `maxPool3s2`'s header records for `rfl`.
 
-/-- **A zeroed final conv makes a body the constant `β₂`** — `projB` at a zero kernel is
-    `bnBatchLA` of the constant `0`, which is `β₂` (variance 0). Used for both block kinds. -/
-theorem projB_zero_const {N ic oc h w kH kW : Nat} (hn : 0 < N * (h * w))
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (hW : ∀ o c kh kw, W o c kh kw = 0) (hb : ∀ o, b o = 0)
-    (ε : ℝ) (γ β : Vec oc) (bb : ℝ) (hβ : ∀ ci, β ci = bb) (u : Vec (N * (ic * h * w))) :
-    projB N (h := h) (w := w) W b ε γ β u = fun _ => bb := by
-  funext k
-  show StableHLO.bnBatchLA N oc h w ε γ β (StableHLO.batchMap N (flatConv W b) u) k = bb
-  rw [batchMap_flatConv_zero W b hW hb]
-  exact bnBatchLA_const hn ε γ β bb 0 hβ k
-
 /-- The identity block's body is the constant `1`, at every input. -/
 theorem sealIdBody (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
     (projB N (h := h) (w := w) (sealIdW c).W₂ (sealIdW c).b₂ (sealIdW c).ε₂
@@ -179,18 +168,6 @@ theorem sealIdB_eq (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h *
   show relu (N * (c * h * w)) (residual _ v) k = v k + 1
   rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [hv i]), hres k]
 
-/-- The structural downsample's collapsed form: its centre-tap projection. -/
-noncomputable def sealProj (N h w ic oc : Nat) :
-    Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
-  StableHLO.projStridedB N (h := h) (w := w) (ctK oc ic 1 1 1) (kv oc 0) 1 (kv oc 1) (kv oc 160)
-
-/-- The projection is strictly positive at every input (the `β = 160` margin). -/
-theorem sealProj_pos (N h w ic oc : Nat)
-    (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
-    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (k : Fin (N * (oc * h * w))) :
-    0 < sealProj N h w ic oc v k :=
-  bnBatchLA_pos 1 one_pos (kv oc 1) (kv oc 160) 1 160 (fun _ => rfl) (fun _ => rfl) hm _ k
-
 /-- ⭐ **The structural downsample is its projection plus one**: the body is the constant `1` and
     the post-residual relu is off (`proj > 0`). -/
 theorem sealDnB_eq (N h w ic oc : Nat) (hn : 0 < N * (h * w))
@@ -213,15 +190,6 @@ theorem sealDnB_eq (N h w ic oc : Nat) (hn : 0 < N * (h * w))
   show relu (N * (oc * h * w)) (residualProj _ _ v) k = sealProj N h w ic oc v k + 1
   rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [sealProj_pos N h w ic oc hm v i]),
     hres k]
-
-/-- A strided conv-bn-relu stage whose BN is everywhere positive has no relu left. -/
-theorem cbReluStridedB_eq {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (γ β : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hp : ∀ k, 0 < StableHLO.bnBatchLA N oc h w ε γ β
-      (StableHLO.batchMap N (flatConvStride2 W b) x) k) :
-    StableHLO.cbReluStridedB N (h := h) (w := w) W b ε γ β x
-      = StableHLO.bnBatchLA N oc h w ε γ β (StableHLO.batchMap N (flatConvStride2 W b) x) :=
-  relu_id_of_pos hp
 
 /-- ⭐ **The stem with its relu removed**: pool ∘ bn ∘ strided conv. The pool stays — it is the
     net's only remaining kink, and the carrier crosses it by `BatchSeal.maxPool3s2_shift`. -/
@@ -661,12 +629,6 @@ theorem sealDiffAt (nCls : Nat) (t : ℝ) :
 --   `EDiff` takes only four distinct values down the whole trunk.
 -- ════════════════════════════════════════════════════════════════
 
-/-- `sealProj`, unfolded — bn of the centre-tap strided conv. -/
-theorem sealProj_apply (N h w ic oc : Nat) (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
-    sealProj N h w ic oc v
-      = StableHLO.bnBatchLA N oc h w 1 (kv oc 1) (kv oc 160)
-          (StableHLO.batchMap N (flatConvStride2 (ctK oc ic 1 1 1) (kv oc 0)) v) := rfl
-
 /-- The three projections' pre-BN activations, on the carrier's path. -/
 noncomputable def Zp2 (nCls : Nat) (t : ℝ) : Vec (2 * (128 * 28 * 28)) :=
   StableHLO.batchMap 2 (flatConvStride2 (ctK 128 64 1 1 1) (kv 128 0))
@@ -840,28 +802,6 @@ theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
 
 theorem sealX_continuous : Continuous sealX :=
   continuous_const.add (continuous_id.smul continuous_const)
-
-theorem projB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (projB N (h := h) (w := w) W b ε γ β) :=
-  (bnBatchLA_differentiable N oc h w ε hε γ β).continuous.comp
-    (batchMap_continuous _ (flatConv_differentiable W b).continuous)
-
-theorem cbReluB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (StableHLO.cbReluB N (h := h) (w := w) W b ε γ β) :=
-  (relu_continuous _).comp (projB_continuous N W b ε hε γ β)
-
-theorem projStridedB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
-    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (StableHLO.projStridedB N (h := h) (w := w) W b ε γ β) :=
-  (bnBatchLA_differentiable N oc h w ε hε γ β).continuous.comp
-    (batchMap_continuous _ (flatConvStride2_differentiable W b).continuous)
-
-theorem cbReluStridedB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
-    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (StableHLO.cbReluStridedB N (h := h) (w := w) W b ε γ β) :=
-  (relu_continuous _).comp (projStridedB_continuous N W b ε hε γ β)
 
 theorem r34IdB_continuous (N h w c : Nat) (p : R34IdW c) (h1 : 0 < p.ε₁) (h2 : 0 < p.ε₂) :
     Continuous (r34IdB N h w p) :=

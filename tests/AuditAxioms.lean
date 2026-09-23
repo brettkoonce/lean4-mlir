@@ -106,7 +106,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackChains
 import LeanMlir.Proofs.Nets.ViT.ViTBackChains
-import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
+import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie

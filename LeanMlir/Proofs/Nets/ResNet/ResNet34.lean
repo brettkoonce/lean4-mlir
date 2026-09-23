@@ -88,7 +88,7 @@ noncomputable def chain_vjp_diff_at {n : Nat} (x : Vec n) :
     non-degeneracy witness now discharges the clauses of the **batched, full-width**
     `resnet34ForwardB_full_has_vjp_at` instead, which is the one the ImageNet artifacts' tier is
     built on (`ResNet34FullBSeal`). This form survives as the audited parametric skeleton — depth
-    as a `List.length` — and as the fold target of `ResNet34BackCertifiedTie`. -/
+    as a `List.length`. -/
 noncomputable def resnet34_has_vjp_at
     {s0 s1 s2 s3 s4 s5 s6 s7 : Nat}
     (stem : Vec s0 → Vec s1) (mp : Vec s1 → Vec s2)

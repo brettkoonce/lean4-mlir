@@ -104,7 +104,7 @@ noncomputable def vitApexVJP
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls
 
 /-- The four-factor composition the apex is stated at IS the committed `vitForwardKV`. The shape
-    check `ResNet34BackCertifiedTie.lean` lacked and ConvNeXt wrote before anyone needed it. -/
+    check the retired per-example ResNet-34 tie lacked and ConvNeXt wrote before anyone needed it. -/
 theorem vitForwardKV_eq_chain
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)

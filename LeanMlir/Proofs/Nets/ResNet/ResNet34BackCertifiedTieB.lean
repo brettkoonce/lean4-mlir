@@ -1,11 +1,11 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
 import LeanMlir.Proofs.Foundation.OpaquePrefix
-import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie
+import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 
 /-! # ⭐⭐ `r34InputGradB` IS the certified whole-net ResNet-34 gradient AT BATCH BATCH-NORM
 
-The per-example net's tie (retired 2026-09-19 with `ResNet34RenderPC.lean`; `ResNet34BackCertifiedTie.lean`
+The per-example net's tie (retired 2026-09-19 with `ResNet34RenderPC.lean`; `ConvBackCertifiedTie`
 keeps its leaf ties) closed this for the forward the retired `ResNet34Render.lean` emitted. This file closes it
 for the net the shipped trainers run: `resnet34ForwardB_full`, the [3,4,6,3] ladder at
 **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of

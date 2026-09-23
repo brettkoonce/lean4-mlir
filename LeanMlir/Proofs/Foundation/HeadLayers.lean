@@ -1,11 +1,13 @@
 import LeanMlir.Proofs.Foundation.CertifiedChain
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
+import LeanMlir.Proofs.Foundation.BatchedStages
+import LeanMlir.Proofs.Foundation.BackwardMaps
 
-/-! # The classifier head as `CertLayer`s — batched GAP and the dense classifier
+/-! # Shared stem-pool and head `CertLayer`s — batched GAP, the dense classifier, the 3×3/s2 pool
 
 Every conv net in the suite ends in global average pooling and a dense classifier, and both are
 globally certified (GAP is linear, dense is affine), so `ok := True`. Written once here and shared
-by MobileNetV4, ResNet-34 and ResNet-50.
+by MobileNetV4, ResNet-34 and ResNet-50. The ResNets' 3×3/s2 stem pool (`r34PoolLayer`) is here
+too; it is certified where no example's window ties (`R34PoolSmoothAt`).
 
 ⭐ **Both backward graphs tie by `rfl`.** `den` of `.gapBackBatched` is definitionally the row-wise
 GAP VJP, and `den` of `.denseRowBack` is `rowDenseBackFlat`, which is what `batchMap_has_vjp`
@@ -50,3 +52,28 @@ theorem denseLayer_fwd_apply (N : Nat) {a nC : Nat} (W : Mat a nC) (b : Vec nC)
     (denseLayer N W b).fwd v = StableHLO.batchMap N (Proofs.dense W b) v := rfl
 
 end Proofs.StableHLO
+
+namespace Proofs
+
+/-- The stem pool has no argmax tie, **per example**: a tie is a property of one image's 3×3
+    window, so the condition is stated on each row of the batched activation. This is the shape
+    `batchMap_has_vjp_at` consumes. -/
+def R34PoolSmoothAt (N h w : Nat) {oc : Nat} (v : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
+  ∀ r : Fin N,
+    MaxPool3s2Smooth (Tensor3.unflatten (Mat.unflatten v r) : Tensor3 oc (2 * h) (2 * w))
+
+/-- The batched 3×3/s2 stem pool as a `CertLayer`, certified where no example's window ties. Its
+    backward graph is the render's `maxPool3s2BackB`, and it denotes `batchMap_has_vjp_at`'s
+    backward definitionally once the two spellings of the scatter are identified. -/
+noncomputable def r34PoolLayer (N : Nat) {c h w : Nat} (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+    StableHLO.CertLayer (N * (c * (2 * h) * (2 * w))) (N * (c * h * w)) where
+  fwd := StableHLO.batchMap N (maxPool3s2Flat c h w)
+  ok := R34PoolSmoothAt N h w
+  diff := fun v hv => batchMap_differentiableAt _ _
+    (fun r => maxPool3s2Flat_differentiableAt_vec _ (hv r) hc hh hw)
+  vjp := fun v hv => batchMap_has_vjp_at _ _ (fun r => maxPool3s2Flat_has_vjp_at_vec _ (hv r))
+    (fun r => maxPool3s2Flat_differentiableAt_vec _ (hv r) hc hh hw)
+  graph := fun v e => .maxPool3s2BackB "%stemR" v e
+  faithful := fun v _ e => by rw [den_maxPool3s2BackB_eq_flatBackB]; rfl
+
+end Proofs

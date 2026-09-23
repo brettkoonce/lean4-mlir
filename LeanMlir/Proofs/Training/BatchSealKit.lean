@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Architectures.MaxPool3s2
+import LeanMlir.Proofs.Foundation.BatchedStageLayers
 
 /-!
 # The batch-BatchNorm seal kit — non-degeneracy machinery for the full-width nets
@@ -1211,4 +1212,77 @@ theorem bnIstd_le_one {n : Nat} (z : Vec n) : bnIstd n z 1 ≤ 1 := by
   exact h1
 
 end BatchSeal
+namespace R34FullBSeal
+
+/-! ### Stage facts first needed by ResNet-34's seal, shared by every conv-net seal
+
+The zero-kernel collapse, the relu-free strided stage, the centre-tap projection witness
+(`sealProj`) and the stage continuity lemmas. The namespace is ResNet-34's, kept so that every
+citation keeps its name. -/
+
+open scoped BigOperators
+open BatchSeal
+
+/-- **A zeroed final conv makes a body the constant `β₂`** — `projB` at a zero kernel is
+    `bnBatchLA` of the constant `0`, which is `β₂` (variance 0). Used for both block kinds. -/
+theorem projB_zero_const {N ic oc h w kH kW : Nat} (hn : 0 < N * (h * w))
+    (W : Kernel4 oc ic kH kW) (b : Vec oc) (hW : ∀ o c kh kw, W o c kh kw = 0) (hb : ∀ o, b o = 0)
+    (ε : ℝ) (γ β : Vec oc) (bb : ℝ) (hβ : ∀ ci, β ci = bb) (u : Vec (N * (ic * h * w))) :
+    projB N (h := h) (w := w) W b ε γ β u = fun _ => bb := by
+  funext k
+  show StableHLO.bnBatchLA N oc h w ε γ β (StableHLO.batchMap N (flatConv W b) u) k = bb
+  rw [batchMap_flatConv_zero W b hW hb]
+  exact bnBatchLA_const hn ε γ β bb 0 hβ k
+
+/-- The structural downsample's collapsed form: its centre-tap projection. -/
+noncomputable def sealProj (N h w ic oc : Nat) :
+    Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
+  StableHLO.projStridedB N (h := h) (w := w) (ctK oc ic 1 1 1) (kv oc 0) 1 (kv oc 1) (kv oc 160)
+
+/-- The projection is strictly positive at every input (the `β = 160` margin). -/
+theorem sealProj_pos (N h w ic oc : Nat)
+    (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
+    (v : Vec (N * (ic * (2 * h) * (2 * w)))) (k : Fin (N * (oc * h * w))) :
+    0 < sealProj N h w ic oc v k :=
+  bnBatchLA_pos 1 one_pos (kv oc 1) (kv oc 160) 1 160 (fun _ => rfl) (fun _ => rfl) hm _ k
+
+/-- A strided conv-bn-relu stage whose BN is everywhere positive has no relu left. -/
+theorem cbReluStridedB_eq {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
+    (hp : ∀ k, 0 < StableHLO.bnBatchLA N oc h w ε γ β
+      (StableHLO.batchMap N (flatConvStride2 W b) x) k) :
+    StableHLO.cbReluStridedB N (h := h) (w := w) W b ε γ β x
+      = StableHLO.bnBatchLA N oc h w ε γ β (StableHLO.batchMap N (flatConvStride2 W b) x) :=
+  relu_id_of_pos hp
+
+/-- `sealProj`, unfolded — bn of the centre-tap strided conv. -/
+theorem sealProj_apply (N h w ic oc : Nat) (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
+    sealProj N h w ic oc v
+      = StableHLO.bnBatchLA N oc h w 1 (kv oc 1) (kv oc 160)
+          (StableHLO.batchMap N (flatConvStride2 (ctK oc ic 1 1 1) (kv oc 0)) v) := rfl
+
+theorem projB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Continuous (projB N (h := h) (w := w) W b ε γ β) :=
+  (bnBatchLA_differentiable N oc h w ε hε γ β).continuous.comp
+    (batchMap_continuous _ (flatConv_differentiable W b).continuous)
+
+theorem cbReluB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Continuous (StableHLO.cbReluB N (h := h) (w := w) W b ε γ β) :=
+  (relu_continuous _).comp (projB_continuous N W b ε hε γ β)
+
+theorem projStridedB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Continuous (StableHLO.projStridedB N (h := h) (w := w) W b ε γ β) :=
+  (bnBatchLA_differentiable N oc h w ε hε γ β).continuous.comp
+    (batchMap_continuous _ (flatConvStride2_differentiable W b).continuous)
+
+theorem cbReluStridedB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Continuous (StableHLO.cbReluStridedB N (h := h) (w := w) W b ε γ β) :=
+  (relu_continuous _).comp (projStridedB_continuous N W b ε hε γ β)
+
+end R34FullBSeal
+
 end Proofs

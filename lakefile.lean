@@ -182,7 +182,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackChains,
              `LeanMlir.Proofs.Float.ConvMixedComposeBridge,
              `LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge,
-             `LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTie,
+             `LeanMlir.Proofs.Architectures.ConvBackCertifiedTie,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2WholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullWholeBackCertifiedTie,

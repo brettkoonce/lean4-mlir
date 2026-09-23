@@ -1,34 +1,22 @@
-import LeanMlir.Proofs.Nets.Small.CifarCNN
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
+import LeanMlir.Proofs.Foundation.BatchedStages
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
-import LeanMlir.Proofs.Foundation.IR
 
-/-! # The ResNet leaf ties — the per-op backward maps ARE the certified VJPs
+/-! # Conv / dense / GAP leaf ties — each per-op backward map IS the certified VJP
 
-The hand-composed backward chains of `ResNetBackChains.lean` are written in the per-op backward
-maps of `BackwardMaps.lean`. This file ties each ResNet leaf to its certified VJP, so that the
-whole-net ties (`ResNet34BackCertifiedTieB`, `ResNet50WholeBackCertifiedTieB`) close on named
-maps rather than on re-spellings:
+The hand-composed backward chains (`ResNetBackChains`, the MobileNetV2 / EfficientNet / ConvNeXt /
+ViT whole-back ties) are written in the per-op backward maps of `BackwardMaps`. This file ties each
+conv-family leaf to its certified VJP, so the whole-net ties close on named maps:
 
-* `convFlatBack_eq_vjp_backward` — the conv leaf: `convFlatBack W` (reversed-kernel conv) IS the
-  certified conv input-VJP, via the general odd-kernel `IR.convBackDenote_eq_input_grad_formula`;
-* `flatConvStride2Back_eq_vjp_backward` / `flatConvStride2XlaBack_eq_vjp_backward` — the two
-  stride-2 leaves (symmetric padding, and the XLA-`SAME` twin the TF-origin stems take), each the
-  conv leaf plus the `decimateBack` `rfl`;
-* `dense_transpose_eq_vjp_backward` (the dense head, `Wᵀ·dy` = certified `Mat.mulVec W`) and
-  `gapBack_eq_vjp_backward` (GAP broadcast-÷, `rfl`) — the endpoints.
+| leaf | theorem |
+|---|---|
+| conv (odd kernel), reversed-kernel conv = input-VJP | `convFlatBack_eq_vjp_backward` |
+| stride-2 conv, symmetric padding / XLA-`SAME` | `flatConvStride2Back_eq_vjp_backward` / `flatConvStride2XlaBack_eq_vjp_backward` |
+| dense, `Wᵀ·dy` | `dense_transpose_eq_vjp_backward` |
+| global average pool, broadcast ÷ | `gapBack_eq_vjp_backward` |
 
-The 3×3/s2 stem pool's leaf is `maxPool3s2FlatBack_eq_vjp_backward` (`BackwardMaps.lean`), and
-`ResNetBackChains.lean` equates the render's scatter with the chain's.
-
-History: this file also held the per-example ResNet-34 tier — the per-channel-BN block VJPs, the
-stem leaf and the whole-net fold of the per-example chain onto `resnet34_has_vjp_at`'s backward
-(closed 2026-09-03, at the forward the retired `ResNet34Render.lean` emitted). That tie is what
-found the pool drift: the chain reversed the 2×2 pool while the committed forward pooled 3×3/s2,
-and the missing leaf became `maxPool3s2FlatBack`. The tier was retired on 2026-09-19 once
-`ResNet34BackCertifiedTieB` stated the same result at the batch-BN net every shipped artifact
-runs. -/
+The depthwise twins are in `DepthwiseBackCertifiedTie`, the even-kernel conv in
+`EvenKernelConvBack`, the 3×3/s2 max-pool leaf (`maxPool3s2FlatBack_eq_vjp_backward`) in
+`BackwardMaps`. -/
 
 namespace Proofs
 

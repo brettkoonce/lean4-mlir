@@ -89,7 +89,7 @@ status:
     # batch-norm's three-term backward (layer-norm is the same lemma at one row)
     - {declaration: "Proofs.bn_input_grad_correct", file: "LeanMlir/Proofs/Architectures/BatchNorm.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # softmax cross-entropy
-    - {declaration: "Proofs.softmaxCE_grad", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
+    - {declaration: "Proofs.softmaxCE_grad", file: "LeanMlir/Proofs/Architectures/Softmax.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
     # multi-head self-attention
     - {declaration: "Proofs.mhsa_has_vjp_mat_correct", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
     #
