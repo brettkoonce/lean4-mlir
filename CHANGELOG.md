@@ -3,6 +3,84 @@
 Release history for *Lean 4 → MLIR → GPU*. The README keeps only the current
 version; older entries live here.
 
+## v0.7.1 — The verified path runs the paper recipes
+
+The verified path runs the paper recipes to the end. Six of the seven chapter
+nets now train on ImageNet-1k through the certified render, in bf16 on 4× RTX
+3060, and land beside their JAX references: ResNet-34 **74.06%** (reference
+74.16), ResNet-50 **77.98%** on RSB-A3 (78.26; and 77.07 on the 2018 recipe,
+ahead of its 76.95), MobileNetV2 **71.91%** (71.90), EfficientNet-B0 **76.88%**
+(77.15), ConvNeXt-T **81.30%** (81.51 — McNemar against the reference's raw arm,
+p = 0.10, not separable) and ViT-Tiny **72.35%** (72.31). Every ImageNet chapter
+prints the two paths side by side; MobileNetV4-Conv-M's 75.48% stays the
+reference's until its run. Getting there found what only a paired run could —
+the ConvNeXt pair's two arms did not share a weight init, and its layer scale
+started at one where the paper says 10⁻⁶ — and rebuilt the trainer's plumbing:
+ImageNet validation streamed per pass instead of held as 30 GB, evaluated on
+every replica (101 → 29 s per ConvNeXt epoch) and every N epochs as the
+reference does, BN running statistics checkpointed atomically beside the blob,
+shim loaders replaced every N epochs, the host-memory "leak" traced to mimalloc
+and the p90 tail to a stale shim, and every job's ms/step re-measured to find
+the feed is the constraint. The data-parallel render is synchronised BatchNorm:
+a sync-BN kit of four StableHLO ops with Chan's variance, and the proof that the
+R-replica step IS the single-device step at the global batch, for ResNet-34 and
+-50, MobileNetV2 and V4 and EfficientNet-B0, with the bf16 sharding gates beside
+it. Every kinked net gets its non-degeneracy seal on the full-width batched net
+it ships — ResNet-34, ResNet-50 at both shipped resolutions, MobileNetV2,
+MobileNetV4 — and the two-channel proxies retire. Lean 4.34.0.
+
+The proof corpus is 11% lighter and says the same things. A Mathlib-reuse
+audit and a census of what the book cites took `LeanMlir/Proofs/` from 172k to
+153k lines: fourteen Jacobians of affine maps fall to one `pdiv_of_affine`,
+`fun_prop` closes what 31 hand differentiability proofs did, one generic
+batched-lift lemma replaces 32 per-op ones, 182 tie clauses fold into per-node
+Props and the BN γ/β pairs into one, the SgdDescentCnn slots and the CertLayer
+block composites each collapse a family, and the superseded tiers — the
+per-example ResNet-34 and MobileNetV2, the scalar-LN ViT, the audit-only
+restatements, some three hundred pinned declarations — retire. Three findings
+came out of the census rather than the sweep: the emitted `bnBatchBack` node and
+the ties' `bnBatchLABack` denote one map, the two spellings of the stem-pool
+scatter are one map, and the MLP train-step tie now states all six parameter
+ops. Compile time followed — SmoothingCP's tail check 97 → 22 s, 57 dead
+heartbeat bumps out, the IBP/CROWN scorecards built in parallel. The comparator
+re-checks **73** theorems (was 52), the tie, faithfulness and certificate tier
+included; `docstring-checkrefs` resolves private, `File.decl`, module and
+namespace citations and demands that a cited file be a real link, and the three
+test defects the audit turned up are fixed — `parseFloat` read `abc` as 5451.0,
+so a mistyped-learning-rate guard never fired. The blueprint's ladder is 38
+whole-net nodes across chapters 2–9 with its `\uses` generated from the Lean
+dependency walk and gated, the dependency graph is drawn in chapter order with
+portal nodes, and the Certs modules render into the API docs so every `\lean`
+link resolves.
+
+Chapter 10 gains seven demos, three with a theorem for a ceiling, and the front
+door takes the book's shape. The VisDrone detector runs unchanged on NEU-DET
+steel defects — mAP@0.5 **0.623**, where the single 14×14 grid gets 0.607
+against its 0.0391 on the drones, which is when multi-scale detection pays;
+chapter 4's CNN on Arabic sign-language letters scores **98.62%** under the
+published random split and **77.94%** once each hand's frames stay together;
+chapter 6's ResNet-34 reaches PlantVillage's **99.57%** in the lab and
+**17.80%** on PlantDoc's field leaves, with the CAM, an exact two-player Shapley
+value and the counterfactuals as the diagnosis; a Double DQN through the DDPM
+MSE block agrees with blackjack's exact policy on **188 of 200** decision
+states; a flow-matching Boltzmann generator on Müller–Brown, reweighted by its
+own density, returns the quadrature's well populations to the last digit; the
+chapter-4 CNN on LIGO O3a strain reaches half detection at network SNR **6.91**
+where the matched filter, scored against its own closed form, needs 10.32 in
+real noise; and a GPT wavefunction lands within **3.3 × 10⁻⁶** of the Ising
+chain's exact ground-state energy. The chapter splits at DQN — recognition,
+then beyond it. The book's shape is now two generated figures (the six
+certificates by chapter, the chapter citation graph), 239 stress italics are
+gone, and the site is at lean.brettkoonce.com with a 404 page, a sitemap and a
+robots.txt that ended 48 GB of overnight crawler traffic. This release puts
+that shape on the front door: the README and the home page quote the verified
+path's numbers, their demo tables follow Chapter 10's order with a link into
+each section, `demos/README.md` is reordered the same way under the chapter's
+figures with the missing signal-processing entry written, and the API docs no
+longer open on doc-gen4's bare index — `LeanMlir.lean`'s module docstring is
+the proofs map, gated like every other docstring, and CI makes its page the
+landing.
+
 ## v0.7.0 — The paper nets, tied at the artifact that trains
 
 The verified path reaches ImageNet-1k at the paper recipes. ResNet-50 arrives

@@ -17,7 +17,7 @@ Nature) as the follow-up to
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
 
-**Current version: `v0.7.0`.** Release history in [CHANGELOG.md](CHANGELOG.md).
+**Current version: `v0.7.1`.** Release history in [CHANGELOG.md](CHANGELOG.md).
 
 ## The tour
 
@@ -122,7 +122,7 @@ run` tier has an `-iree` twin. Building it is [historical/IREE_BUILD.md](histori
   title   = {Verified Deep Learning with Lean 4: Formal Backpropagation from MLP to Attention, via MLIR},
   url     = {https://github.com/brettkoonce/lean4-mlir},
   doi     = {10.5281/zenodo.20402133},
-  version = {0.7.0},
+  version = {0.7.1},
   year    = {2026},
 }
 ```
