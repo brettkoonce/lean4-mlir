@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
-import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
+import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # MobileNetV4-Conv-M's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 

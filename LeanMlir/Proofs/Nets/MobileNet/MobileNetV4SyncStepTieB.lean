@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
-import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
+import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncB
 
 /-! # MobileNetV4-Conv-M's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
@@ -33,7 +33,7 @@ single-device step by `R·B`.
 `ResNet34SyncStepTieB.lean` is the template, and everything net-agnostic is imported from it: the
 replica BN link `bnSyncInB` and its shard lemma, the `ConvWSync` / `ConvStridedWSync` / `BnSync` /
 `DenseSync` statements and their `*_of_scaled` closers, and the homogeneity of `bnInB`, `cInB`,
-`cStridedInB` and the head. The MBConv pieces come from `MBConvSyncTieB.lean` — the depthwise and
+`cStridedInB` and the head. The MBConv pieces come from `DataParallelSyncKit` — the depthwise and
 SYMMETRIC strided-depthwise input-VJPs and weight collectives, and the XLA-`SAME` stem collective.
 Swish's backward is a certified VJP's `.backward`, so its homogeneity is `HasVJP.backward_smul`
 and its sharding is definitional.

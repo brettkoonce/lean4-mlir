@@ -1,7 +1,6 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTieG
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
-import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
-import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
+import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB
 
 /-! # EfficientNet-B0's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
@@ -37,7 +36,7 @@ ResNet-34's four (`ResNet34SyncStepTieB.lean`), and one B0 needs because of how 
    both read one example at a time, so they shard like ResNet-34's pool backward. The BN link is
    `bnSyncInB`, P2 on the graph, read through `bnInB_eq_bnBackB` onto T3's `bnBackB`.
 2. **The collectives.** ResNet-34's conv, dense and BatchNorm ones, plus the depthwise,
-   strided-depthwise and XLA-`SAME` stem conv weights from `MBConvSyncTieB.lean`, which also
+   strided-depthwise and XLA-`SAME` stem conv weights from `DataParallelSyncKit`, which also
    holds the depthwise, GAP and dense links of steps 1 and 3 that MobileNetV2 shares (§ 3 moved
    there).
 3. **Homogeneity** (§§ 1, 4). Every link is linear in its cotangent; most are a certified VJP's

@@ -260,12 +260,22 @@ theorem den_bnStatsVarB_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
   funext c
   simp only [den_bnStatsVarB, den_syncStats_right R hR hm t t' ds ds' x X hx]
 
+/-- Closes a P4 collective once `den` has been unfolded on both sides: splits the global batch
+    sum `Σ_{m : R·N}` into `Σ_r Σ_n` and reads each replica's shard back as a slice of the global
+    tensor. `rw`, not `simp`, for the slices: in the conv kinds the `x` slice sits inside a VJP whose
+    TYPE depends on it, and simp has no congruence through a dependent argument. -/
+macro "shard_sum" : tactic => `(tactic| (
+  rw [sum_finProdFinEquiv]
+  apply Finset.sum_congr rfl; intro _ _
+  apply Finset.sum_congr rfl; intro _ _
+  repeat rw [batchSlice_batchShard]))
+
 /-- ⭐⭐ **P4 for the `Σ_n`-shaped gradients, at the conv weight.** The collective over the
     replicas' `convWeightGradB`, each on its shard at the shard-`r` block of the global
     cotangent, is `1/R` of the batch-`R·N` node at that cotangent. `den_allReduceMeanF_convWeightGradB`
     (piece 2) is the same collective with NO relation between the replicas' inputs; this is what
     it becomes once P1–P3 relate them. Every other `Σ_n` gradient (`denseWeightGradB`,
-    `denseBiasGradB`, the strided / depthwise / bias kinds) composes by the same three lines. -/
+    `denseBiasGradB`, the strided / depthwise / bias kinds) closes by the same `shard_sum`. -/
 theorem den_allReduceMeanF_convWeightGradB_shard {N ic oc h w kH kW : Nat} (R : Nat)
     (hR : 0 < R) (t xN cotN : String) (ds : List Nat) (b : Vec oc) (W : Kernel4 oc ic kH kW)
     (X : Vec ((R * N) * (ic * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
@@ -277,12 +287,7 @@ theorem den_allReduceMeanF_convWeightGradB_shard {N ic oc h w kH kW : Nat} (R : 
   simp only [den_allReduceMeanF]
   congr 1
   simp only [denStep, denStepApp, hdy]
-  rw [sum_finProdFinEquiv]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro n _
-  -- ⚠ `rw`, not `simp`: the `x` slice sits inside `conv2d_weight_grad_has_vjp b x`, whose TYPE
-  -- depends on it, and simp has no congruence through a dependent argument.
-  rw [batchSlice_batchShard, batchSlice_batchShard]
+  shard_sum
 
 /-- **P4 at the BN β gradient**: `Σ dy` over each shard's channel row, averaged, is `1/R` of the
     global row's `Σ dy`. β reads no statistic, so this is the row split alone. -/

@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
-import LeanMlir.Proofs.Foundation.DataParallelSync
+import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # ResNet-34's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
@@ -51,97 +51,10 @@ open scoped BigOperators
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § The index cast, and sharding through it
--- ════════════════════════════════════════════════════════════════
-
-/-- **Relabel an AST value's index along a proved equality.** `h ▸ e`: the same graph, typed at
-    `m` instead of `n`. The emitted text does not change, because `skel` erases indices. -/
-def castIdx {n m : Nat} (h : n = m) (e : SHlo n) : SHlo m := h ▸ e
-
-theorem den_castIdx {n m : Nat} (h : n = m) (e : SHlo n) :
-    den (castIdx h e) = fun i => den e (Fin.cast h.symm i) := by
-  subst h; rfl
-
-/-- The `mul_assoc` relabelling under `N * ·` — the seam between the network's left-assoc
-    `N·(c·h·w)` and the BatchNorm ops' `N·(c·(h·w))`. -/
-theorem laAssoc (N oc h w : Nat) : N * (oc * h * w) = N * (oc * (h * w)) :=
-  congrArg (N * ·) (Nat.mul_assoc oc h w)
-
-/-- **Sharding commutes with relabelling the per-example index.** The batch axis is outside the
-    per-example one, so relabelling within an example and cutting the batch do not interact. -/
-theorem batchShard_castIdx {R N a b : Nat} (hab : a = b) (X : Vec ((R * N) * a)) (r : Fin R) :
-    batchShard R N b (fun i => X (Fin.cast (congrArg ((R * N) * ·) hab).symm i)) r
-      = fun i => batchShard R N a X r (Fin.cast (congrArg (N * ·) hab).symm i) := by
-  subst hab; rfl
-
--- ════════════════════════════════════════════════════════════════
--- § The non-BN nodes: sharding commutes with every per-example lift
--- ════════════════════════════════════════════════════════════════
-
-/-- A per-example node on every replica denotes the shard of the same node on the global batch. -/
-theorem den_batchOp_shard {R N a b : Nat} (op : BatchableOp a b) (e : Fin R → SHlo (N * a))
-    (X : Vec ((R * N) * a)) (he : ∀ r, den (e r) = batchShard R N a X r) (r : Fin R) :
-    den (.batchOp (N := N) op (e r)) = batchShard R N b (batchMap (R * N) (denOp op) X) r := by
-  rw [den_batchOp, he, batchShard_batchMap]
-
-/-- …stated for relu at the whole-batch `relu`, the form the committed forward is written in. -/
-theorem den_relu_shard {R N n : Nat} (e : Fin R → SHlo (N * n)) (X : Vec ((R * N) * n))
-    (he : ∀ r, den (e r) = batchShard R N n X r) (r : Fin R) :
-    den (.batchOp (N := N) (.relu (n := n)) (e r)) = batchShard R N n (relu ((R * N) * n) X) r := by
-  rw [den_batchOp_relu_eq_reluF, reluF_faithful, he]
-  rfl
-
-/-- The residual fan-in on every replica is the shard of the global one. -/
-theorem den_addVB_shard {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B : Vec ((R * N) * n))
-    (ha : ∀ r, den (a r) = batchShard R N n A r) (hb : ∀ r, den (b r) = batchShard R N n B r)
-    (r : Fin R) :
-    den (.addVB (a r) (b r)) = batchShard R N n (fun j => A j + B j) r := by
-  rw [den_addVB, ha, hb]
-  rfl
-
--- ════════════════════════════════════════════════════════════════
--- § The BatchNorm site
--- ════════════════════════════════════════════════════════════════
-
-/-- **One sync-BN forward site, at the network index, on replica `r`** — `bnFwdSite`'s
-    `replicas > 1` branch: `bnSyncF` of this replica's operand, reading `syncStats` over all `R`
-    replicas' operands (the mean collective `t`, then Chan's variance collective `t'`), with the
-    `mul_assoc` relabelling on the way in and out. -/
-def bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) (hR : 0 < R)
-    {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (x : Fin R → SHlo (N * (oc * h * w))) (r : Fin R) :
-    SHlo (N * (oc * h * w)) :=
-  castIdx (laAssoc N oc h w).symm
-    (.bnSyncF gN bN es ε γ β (castIdx (laAssoc N oc h w) (x r))
-      (syncStats R hR t t' ds ds' (fun r' => castIdx (laAssoc N oc h w) (x r'))))
-
-/-- ⭐⭐ **The sync-BN site on replica `r` is shard `r` of the global-batch BatchNorm.**
-    `den_bnSyncF_allReduce` (P1 on the graph), carried across the `mul_assoc` seam: the right-hand
-    side is `bnBatchLA` — what `bnBatchF` denotes — at `N := R·N`. -/
-theorem den_bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) (hR : 0 < R)
-    {N oc h w : Nat} (hm : N * (h * w) ≠ 0) (hM : (R * N) * (h * w) ≠ 0) (ε : ℝ) (γ β : Vec oc)
-    (x : Fin R → SHlo (N * (oc * h * w))) (X : Vec ((R * N) * (oc * h * w)))
-    (hx : ∀ r, den (x r) = batchShard R N (oc * h * w) X r) (r : Fin R) :
-    den (bnSyncSiteLA gN bN es t t' ds ds' R hR ε γ β x r)
-      = batchShard R N (oc * h * w) (bnBatchLA (R * N) oc h w ε γ β X) r := by
-  have hx' : ∀ r, den (castIdx (laAssoc N oc h w) (x r))
-      = batchShard R N (oc * (h * w))
-          (fun i => X (Fin.cast (congrArg ((R * N) * ·) (Nat.mul_assoc oc h w)).symm i)) r := by
-    intro r
-    rw [den_castIdx, hx]
-    exact (batchShard_castIdx (Nat.mul_assoc oc h w) X r).symm
-  unfold bnSyncSiteLA
-  rw [den_castIdx, den_bnSyncF_allReduce R hR hm hM gN bN es t t' ds ds' ε γ β _ _ hx' r]
-  exact (batchShard_castIdx (Nat.mul_assoc oc h w).symm _ r).symm
-
--- ════════════════════════════════════════════════════════════════
 -- § Per-block replica families + their shard lemmas
 --   Names and tags are `ResNet34RenderB`'s: BN site `{p}g1` gathers `%arsum{p}g1mu` /
 --   `%armean{p}g1var`, each over a `[c]` statistic.
 -- ════════════════════════════════════════════════════════════════
-
-/-- The reduction width a BatchNorm site needs nonzero, from the three positive dimensions. -/
-theorem nhw_ne_zero {N h w : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) : N * (h * w) ≠ 0 :=
-  Nat.pos_iff_ne_zero.mp (Nat.mul_pos hN (Nat.mul_pos hh hw))
 
 /-- Identity basic block at sync-BN, over the replica family: `relu(addV(bn₂(conv₂(relu(bn₁(conv₁
     e)))), e))` with both BatchNorms `bnSyncSiteLA`. -/

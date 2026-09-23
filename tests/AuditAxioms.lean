@@ -88,7 +88,7 @@ import LeanMlir.Proofs.Foundation.DataParallelSync
 import LeanMlir.Proofs.Foundation.DataParallelSyncBf16
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
-import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
+import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG
 import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB

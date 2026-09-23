@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
-import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
+import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # EfficientNet-B0's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 

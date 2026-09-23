@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
-import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
-import LeanMlir.Proofs.Nets.EfficientNet.MBConvSyncTieB
+import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB
 
 /-! # MobileNetV2's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
@@ -25,7 +24,7 @@ rather than restated: the replica BN link `bnSyncInB` and its shard lemma, the `
 `BnSync` / `DenseSync` statements and their `*_of_scaled` closers, the divisor step
 `replicaLossCot_eq`, and the homogeneity of `bnInB` and `cInB`. The inverted-residual pieces it
 shares with EfficientNet-B0 — the depthwise, GAP and dense input-VJPs, the depthwise and
-XLA-`SAME` stem weight collectives — come from `MBConvSyncTieB.lean`.
+XLA-`SAME` stem weight collectives — come from `DataParallelSyncKit`.
 
 1. **Sharding** — each replica's backward chain, handed its shard of a global cotangent, computes
    the shard of the global chain. The relu6 mask is pointwise (`relu6MaskB_shard`, by `rfl`); the
@@ -632,10 +631,7 @@ theorem den_allReduceMeanF_depthwiseStridedXlaWeightGradB_shard {N c h w kH kW :
   simp only [den_allReduceMeanF]
   congr 1
   simp only [denStep, denStepApp, hdy]
-  rw [sum_finProdFinEquiv]
-  apply Finset.sum_congr rfl; intro r _
-  apply Finset.sum_congr rfl; intro n _
-  rw [batchSlice_batchShard, batchSlice_batchShard]
+  shard_sum
 
 -- ════════════════════════════════════════════════════════════════
 -- § 5. Per-parameter DP ties for the new kinds
