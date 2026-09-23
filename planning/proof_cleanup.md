@@ -28,9 +28,10 @@ were measured say so.
 |---|---|---|
 | `c2e5467a` (a) | `binomTailNumFast` — tail-recursive Horner loop carrying `C(N,i)` and `b^i`, `binomTailNumFast_eq` to the `binomTailNum` spec; `binomTail_le_of_kernel_check` checks the fast form | SmoothingCPScorecard 97 s → 22 s (93 s was kernel `decide`); worst entry 2.2 s → 0.4 s |
 | `c2e5467a` (b) | 57 `maxHeartbeats`/`maxRecDepth` bumps out of 32 Nets/Training files, incl. the three file-wide ones | all 32 green without them, most ~3 s; the 16M ViT capstone elaborates + kernel-checks in 0.2 s |
-| pending (c) | SmoothingDec generator: six of seven bumps out (the 3300-entry literal keeps `maxRecDepth`) | 7 modules green; regeneration byte-identical before the edit |
-| pending (d) | `nlinarith` → `linarith` where it closes: 21 of 28 in FloatBridge, 1 of 4 in CrownBound | FloatBridge 7.4 s → 5.3 s |
-| pending (e) | IBP/CROWN scorecards: shared prelude (per-row ℓ1 facts, fallback images) → new `LipschitzCertScorecardIBPData`; IBP, IBPUncon, Crown, CrownUncon import it and not each other; both generators now emit the doc links the committed files carried by hand | local: data 6 s, then IBP 165 / IBPUncon 158 / Crown 254 / CrownUncon 302 in parallel — the tail after FullImgsA was IBP → IBPUncon → CrownUncon ≈ 625 s serial |
+| `6f4d5716` (c) | SmoothingDec generator: six of seven bumps out (the 3300-entry literal keeps `maxRecDepth`) | 7 modules green; regeneration byte-identical before the edit |
+| `6f4d5716` (d) | `nlinarith` → `linarith` where it closes: 21 of 28 in FloatBridge, 1 of 4 in CrownBound | FloatBridge 7.4 s → 5.3 s |
+| `6f4d5716` (e) | IBP/CROWN scorecards: shared prelude (per-row ℓ1 facts, fallback images) → new `LipschitzCertScorecardIBPData`; IBP, IBPUncon, Crown, CrownUncon import it and not each other; both generators now emit the doc links the committed files carried by hand | local: data 6 s, then IBP 165 / IBPUncon 158 / Crown 254 / CrownUncon 302 in parallel — the tail after FullImgsA was IBP → IBPUncon → CrownUncon ≈ 625 s serial |
+| pending (f) | §3.1 ResNet-34 apex: nested apex body, `r34B_full_has_vjp_at_backward` (the peel, `rfl` at variable stages) and `r34StemB_has_vjp_at_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -41,7 +42,7 @@ were measured say so.
 | `SmoothingCPScorecard` | 392 (→ ~90 est. after (a)) | generated |
 | `LipschitzCertInstance` | 100–383 | generated (header says so) |
 | `LipschitzCertScorecard*` | 70–300 each | generated |
-| `ResNet34BackCertifiedTieB` | 102 (43 local) | hand-written — §3.1 |
+| `ResNet34BackCertifiedTieB` | 102 (43 local; 3 after (f)) | hand-written — §3.1, done |
 | `SgdDescentCnn` | 95 | hand-written — §3.5 |
 
 Critical path before (e): `Tensor → LipschitzCert → Instance → Scorecard → FullNets → FullImgsA →
@@ -52,27 +53,20 @@ rebuilding IBPUncon and both CROWN files.
 
 ## 3. Next, in order
 
-### 3.1 ResNet-34 apex re-spelling (the one slow hand-written tie)
+### 3.1 ResNet-34 apex re-spelling — DONE as §1(f), without the re-spelling
 
-`r34InputGradB_eq_r34B_full_vjp` closes with one `rfl` through seventeen `vjp_comp_diff_at`s and
-keeps `maxRecDepth 800000` / `maxHeartbeats 1000000` (the only hand-written bumps left in Nets).
-ConvNeXt's fix (`vjp_comp_diff_at_fst_backward`, `ConvNeXtWholeBackCertifiedTieB.lean:398`,
-peeled by `repeat rw`) does NOT port as-is — tried 2026-09-22 on a scratch copy:
+The plan below (restate the witnesses at point-free `r34SavedB_k` abbrevs) was not needed and
+would have changed the tie's statement. What worked: keep every statement, change proofs only.
+The apex body nests its seventeen `vjp_comp_diff_at`s (no `let`s); a generic peel lemma over
+VARIABLE stages closes by `rfl`, since there each witness's `opaqueA` point is the same term on
+both sides; the tie instantiates it by `rw`, where the witnesses' `opaqueA` types match on the
+nose. The remaining gap was the stem (`r34StemB_has_vjp_at` is `vjp_comp_at` of stage + pool):
+the tie's closing `rfl` hit `maxRecDepth` there at the net's numerals, so it gets its own `rfl`
+lemma at variable widths, used by `rw`.
 
-* nested apex term (no `let`s) + `repeat rw [peel]`: the rewrite never matches. Each witness
-  `hbₖ` is typed at `opaqueA(k-1) … x` (a plain `def`), the apex's inner map is the spelled chain
-  `bₖ₋₁ ∘ … ∘ stem`, and `rw`'s keyed matching only unfolds reducible constants;
-* `erw`: max recursion depth unifying the two spellings (the header's "two spellings" wall);
-* `attribute [local reducible] opaqueA*`: rejected by 4.34 for another module's defs.
-
-What ConvNeXt has and R34 lacks: saved prefixes as point-free `abbrev`s that are BOTH the apex's
-inner maps and the witnesses' points. Plan: define `r34SavedB_k` abbrevs (point-free,
-`bₖ ∘ r34SavedB_{k-1}`), restate `r34B_full_has_vjp_at`'s witnesses at `r34SavedB_{k-1} … x`,
-nest the apex, peel with `rw`, drop both bumps. Ripple: the tie's statement (witness types) and
-its consumers in Nets/ResNet; R50 reuses the stem/head. It also retires the second prefix
-vocabulary (`r34PreK` + `_apply`, 34 decls) — audit_resnet_small_convnext.md findings 1 and 3.
-Move the peel lemma and `vjp_comp_diff_at` itself (now in per-net `ResNet34.lean`) to
-`Foundation/OpaquePrefix.lean` in the same change.
+Still open from the old plan, independent of speed: retire the `r34PreK` + `_apply` vocabulary
+(audit_resnet_small_convnext.md findings 1 and 3), and move `vjp_comp_diff_at` (now in per-net
+`ResNet34.lean`) and ConvNeXt's `vjp_comp_diff_at_fst_backward` to `Foundation/OpaquePrefix.lean`.
 
 ### 3.2 `Codegen/StableHLO.lean` split
 

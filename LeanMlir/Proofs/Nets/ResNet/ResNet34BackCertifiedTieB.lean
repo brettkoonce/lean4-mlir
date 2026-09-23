@@ -15,9 +15,8 @@ for the net the shipped trainers run: `resnet34ForwardB_full`, the [3,4,6,3] lad
 Nothing here is new mathematics. Two endpoint stage ties (stem and head) and one pool tie, then
 the sixteen basic blocks stay **opaque** — they enter as the `_at` VJP witnesses 4.1d's apex
 already takes, and the reverse chain's block slots are pinned to their `.backward` — so the
-composition is checked between variables. ⚠ It still costs **~60 s**, an order more than the
-other four nets' ties: the `rfl` is against a seventeen-deep `let` chain of `vjp_comp_diff_at`s
-whose `PProd` projections do not share.
+composition is checked between variables. The chain is peeled by `rw` with a lemma proved over
+variable stages (piece 2), so the whole module checks in a few seconds with no budget raised.
 
 ## The four pieces
 
@@ -29,8 +28,11 @@ whose `PProd` projections do not share.
    the lift's `.backward` are the same term. It also closes the one seam §4.2a left open — that
    file could thread the pool backward only as the emitted `den`.
 2. `r34B_full_has_vjp_at` — the generic eighteen-stage apex `head ∘ b16 ∘ … ∘ b1 ∘ stem`,
-   seventeen `vjp_comp_diff_at`s and nothing else, over `opaqueA0 … A16`, one prefix `def` per
-   running activation.
+   seventeen nested `vjp_comp_diff_at`s and nothing else, over `opaqueA0 … A16`, one prefix `def`
+   per running activation — and `r34B_full_has_vjp_at_backward`, its backward peeled into the
+   eighteen stage backwards, `rfl` at variable stages. ⛔ Not a closing `rfl` in the tie itself:
+   written as seventeen `let`s and closed that way, the tie cost ~45 s and 8 GB under
+   `maxRecDepth 800000`.
 3. `r34InputGradB_eq_r34B_full_vjp` and `r34InputGradB_correct` — the tie, and its reading as
    `∑ pdiv … * dy`: the chain IS the Jacobian-transpose of the eighteen-stage composition.
 4. `resnet34ForwardB_full_eq_slots` — the shape check: those eighteen stages ARE
@@ -128,6 +130,22 @@ theorem r34HeadBBack_eq_vjp_backward {N c nCls h w : Nat}
   rw [dense_transpose_eq_vjp_backward Wd bd (fun _ => 0)]
   rfl
 
+/-- The stem's backward is the pool's, then the conv-BN-relu stage's. `rfl` at variable widths;
+    the tie rewrites with it rather than leaving this step to its closing `rfl`, which reaches
+    `maxRecDepth` at the net's numerals. -/
+theorem r34StemB_has_vjp_at_backward (N h w : Nat) {ic oc : Nat}
+    (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
+    (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
+    (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
+    (hrelu : R34StemSmoothAt N h w Ws bs εs γs βs x)
+    (hpool : R34PoolSmoothAt N h w
+      (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
+    (v : Vec (N * (oc * h * w))) :
+    (r34StemB_has_vjp_at N h w Ws bs εs hεs γs βs hc hh hw x hrelu hpool).backward v
+      = (StableHLO.cbReluStridedB_has_vjp_at N Ws bs εs hεs γs βs x hrelu).backward
+          (maxPool3s2FlatBackB N oc h w
+            (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x) v) := rfl
+
 -- The opaque running activations `opaqueA0 … opaqueA16` are `Foundation/OpaquePrefix.lean`'s.
 
 -- ════════════════════════════════════════════════════════════════
@@ -198,37 +216,132 @@ noncomputable def r34B_full_has_vjp_at {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s1
     (hhead : PProd (HasVJPAt head (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
                    (DifferentiableAt ℝ head (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
     : HasVJPAt (head ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) x :=
-  let p1 := vjp_comp_diff_at (stem) b1 x hstem hb1
-  let p2 := vjp_comp_diff_at (b1 ∘ stem) b2 x p1 hb2
-  let p3 := vjp_comp_diff_at (b2 ∘ b1 ∘ stem) b3 x p2 hb3
-  let p4 := vjp_comp_diff_at (b3 ∘ b2 ∘ b1 ∘ stem) b4 x p3 hb4
-  let p5 := vjp_comp_diff_at (b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b5 x p4 hb5
-  let p6 := vjp_comp_diff_at (b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b6 x p5 hb6
-  let p7 := vjp_comp_diff_at (b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b7 x p6 hb7
-  let p8 := vjp_comp_diff_at (b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b8 x p7 hb8
-  let p9 := vjp_comp_diff_at (b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b9 x p8 hb9
-  let p10 := vjp_comp_diff_at (b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b10 x p9 hb10
-  let p11 := vjp_comp_diff_at (b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b11 x p10 hb11
-  let p12 := vjp_comp_diff_at (b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b12 x p11 hb12
-  let p13 := vjp_comp_diff_at (b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b13 x p12 hb13
-  let p14 := vjp_comp_diff_at (b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b14 x p13 hb14
-  let p15 := vjp_comp_diff_at (b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b15 x p14 hb15
-  let p16 := vjp_comp_diff_at (b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b16 x p15 hb16
-  let p17 := vjp_comp_diff_at (b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) head x p16 hhead
-  p17.fst
+  (vjp_comp_diff_at (b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) head x
+    (vjp_comp_diff_at (b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b16 x
+      (vjp_comp_diff_at (b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b15 x
+        (vjp_comp_diff_at (b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b14 x
+          (vjp_comp_diff_at (b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b13 x
+            (vjp_comp_diff_at (b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b12 x
+              (vjp_comp_diff_at (b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b11 x
+                (vjp_comp_diff_at (b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b10 x
+                  (vjp_comp_diff_at (b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b9 x
+                    (vjp_comp_diff_at (b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b8 x
+                      (vjp_comp_diff_at (b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b7 x
+                        (vjp_comp_diff_at (b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b6 x
+                          (vjp_comp_diff_at (b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b5 x
+                            (vjp_comp_diff_at (b3 ∘ b2 ∘ b1 ∘ stem) b4 x
+                              (vjp_comp_diff_at (b2 ∘ b1 ∘ stem) b3 x
+                                (vjp_comp_diff_at (b1 ∘ stem) b2 x
+                                  (vjp_comp_diff_at stem b1 x
+                                    hstem hb1)
+                                  hb2)
+                                hb3)
+                              hb4)
+                            hb5)
+                          hb6)
+                        hb7)
+                      hb8)
+                    hb9)
+                  hb10)
+                hb11)
+              hb12)
+            hb13)
+          hb14)
+        hb15)
+      hb16)
+    hhead).fst
 
+
+
+/-- **The apex's backward, peeled** — the head's backward, then each block's, then the stem's.
+    `rfl` over VARIABLE stages, where every witness sits at the same `opaqueA` point on both
+    sides; the tie below instantiates it by `rw`, so the kernel never re-derives the chain. -/
+theorem r34B_full_has_vjp_at_backward {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 : Nat}
+    (stem : Vec s0 → Vec s1)
+    (b1 : Vec s1 → Vec s2)
+    (b2 : Vec s2 → Vec s3)
+    (b3 : Vec s3 → Vec s4)
+    (b4 : Vec s4 → Vec s5)
+    (b5 : Vec s5 → Vec s6)
+    (b6 : Vec s6 → Vec s7)
+    (b7 : Vec s7 → Vec s8)
+    (b8 : Vec s8 → Vec s9)
+    (b9 : Vec s9 → Vec s10)
+    (b10 : Vec s10 → Vec s11)
+    (b11 : Vec s11 → Vec s12)
+    (b12 : Vec s12 → Vec s13)
+    (b13 : Vec s13 → Vec s14)
+    (b14 : Vec s14 → Vec s15)
+    (b15 : Vec s15 → Vec s16)
+    (b16 : Vec s16 → Vec s17)
+    (head : Vec s17 → Vec s18)
+    (x : Vec s0)
+    (hstem : PProd (HasVJPAt stem x) (DifferentiableAt ℝ stem x))
+    (hb1 : PProd (HasVJPAt b1 (opaqueA0 stem x))
+                 (DifferentiableAt ℝ b1 (opaqueA0 stem x)))
+    (hb2 : PProd (HasVJPAt b2 (opaqueA1 stem b1 x))
+                 (DifferentiableAt ℝ b2 (opaqueA1 stem b1 x)))
+    (hb3 : PProd (HasVJPAt b3 (opaqueA2 stem b1 b2 x))
+                 (DifferentiableAt ℝ b3 (opaqueA2 stem b1 b2 x)))
+    (hb4 : PProd (HasVJPAt b4 (opaqueA3 stem b1 b2 b3 x))
+                 (DifferentiableAt ℝ b4 (opaqueA3 stem b1 b2 b3 x)))
+    (hb5 : PProd (HasVJPAt b5 (opaqueA4 stem b1 b2 b3 b4 x))
+                 (DifferentiableAt ℝ b5 (opaqueA4 stem b1 b2 b3 b4 x)))
+    (hb6 : PProd (HasVJPAt b6 (opaqueA5 stem b1 b2 b3 b4 b5 x))
+                 (DifferentiableAt ℝ b6 (opaqueA5 stem b1 b2 b3 b4 b5 x)))
+    (hb7 : PProd (HasVJPAt b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x))
+                 (DifferentiableAt ℝ b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x)))
+    (hb8 : PProd (HasVJPAt b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
+                 (DifferentiableAt ℝ b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)))
+    (hb9 : PProd (HasVJPAt b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
+                 (DifferentiableAt ℝ b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)))
+    (hb10 : PProd (HasVJPAt b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+                 (DifferentiableAt ℝ b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
+    (hb11 : PProd (HasVJPAt b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+                 (DifferentiableAt ℝ b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
+    (hb12 : PProd (HasVJPAt b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+                 (DifferentiableAt ℝ b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
+    (hb13 : PProd (HasVJPAt b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+                 (DifferentiableAt ℝ b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
+    (hb14 : PProd (HasVJPAt b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+                 (DifferentiableAt ℝ b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
+    (hb15 : PProd (HasVJPAt b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+                 (DifferentiableAt ℝ b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
+    (hb16 : PProd (HasVJPAt b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+                 (DifferentiableAt ℝ b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
+    (hhead : PProd (HasVJPAt head (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
+                   (DifferentiableAt ℝ head (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
+    (dy : Vec s18) :
+    (r34B_full_has_vjp_at stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 head x hstem hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hhead).backward dy
+      = hstem.fst.backward
+          (hb1.fst.backward
+            (hb2.fst.backward
+              (hb3.fst.backward
+                (hb4.fst.backward
+                  (hb5.fst.backward
+                    (hb6.fst.backward
+                      (hb7.fst.backward
+                        (hb8.fst.backward
+                          (hb9.fst.backward
+                            (hb10.fst.backward
+                              (hb11.fst.backward
+                                (hb12.fst.backward
+                                  (hb13.fst.backward
+                                    (hb14.fst.backward
+                                      (hb15.fst.backward
+                                        (hb16.fst.backward
+                                          (hhead.fst.backward dy))))))))))))))))) := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE TIE — stem, pool and head concrete, the sixteen blocks opaque
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 1000000 in
 /-- ⭐⭐ **`r34InputGradB` IS the certified whole-net batch-BN ResNet-34 gradient.** The committed
     backward chain, with its stem BatchNorm and relu-mask slots filled by the certified per-op
     backwards, its saved pool activation the stem's own, and its sixteen basic blocks left OPAQUE,
-    equals the backward of `r34B_full_has_vjp_at` at those eighteen stages. `unfold`, two `rw`s,
-    `rfl` — the blocks are variables on both sides, so the kernel never looks inside one. -/
+    equals the backward of `r34B_full_has_vjp_at` at those eighteen stages. `unfold`, the two
+    endpoint `rw`s, the apex and stem peels, then `rfl` between identical block backwards — the
+    blocks are variables on both sides, so the kernel never looks inside one. -/
 theorem r34InputGradB_eq_r34B_full_vjp (N : Nat) {nCls : Nat}
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 64)
     (Wd : Mat 512 nCls) (bd : Vec nCls)
@@ -318,11 +431,12 @@ theorem r34InputGradB_eq_r34B_full_vjp (N : Nat) {nCls : Nat}
   unfold r34InputGradB
   rw [cbReluStridedBBack_eq_vjp_backward (by decide) (by decide) Ws bs εs hεs γs βs x h_stem,
       r34HeadBBack_eq_vjp_backward Wd bd (opaqueA16 (r34StemB N 56 56 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
+  funext dy
+  rw [r34B_full_has_vjp_at_backward, r34StemB_has_vjp_at_backward]
+  repeat rw [Function.comp_apply]
   rfl
 
 
-set_option maxRecDepth 800000 in
-set_option maxHeartbeats 1000000 in
 /-- ⭐⭐ **The batched chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at
     every batch size, every input, every loss cotangent and every input pixel. The tie above read
     through the apex's own `.correct`. `resnet34ForwardB_full_eq_slots` below is what says those
