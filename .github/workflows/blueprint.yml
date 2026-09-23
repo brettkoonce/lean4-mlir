@@ -278,7 +278,7 @@ jobs:
         # doc-data, so find/ sees both libraries. (CertsHeavy stays out: its oleans are not built
         # here, and the blueprint cites nothing in it — checkdecls would refuse otherwise.)
         run: |
-          rm -rf .lake/build/doc/LeanMlir/
+          rm -rf .lake/build/doc/LeanMlir/ .lake/build/doc/LeanMlir.html
           rm -f .lake/build/doc-data/LeanMlir--library.docs_built* .lake/build/doc-data/Certs--library.docs_built*
           lake -R -Kenv=dev build LeanMlir:docs Certs:docs
 
@@ -381,6 +381,20 @@ jobs:
           # template. Idempotent — see scripts/inject_umami.sh.
           if [ -x scripts/inject_umami.sh ] && [ -d public/docs ]; then
             scripts/inject_umami.sh public/docs
+          fi
+          # ⭐ The docs landing is the proofs map (2026-09-23). doc-gen4's index.html is
+          # hard-coded — "Welcome to the documentation page … This was built using Lean 4
+          # 4.34.0" (DocGen4/Output/Index.lean) — and that is what the home page's "API docs"
+          # door and every /docs/ visitor landed on. The map lives in LeanMlir.lean's module
+          # docstring, so doc-gen4 renders it with every declaration and module name linked
+          # and `docstring-checkrefs` gates the names, and its page becomes index.html. Both
+          # sit at the docs root, so every relative link in it holds; the copy happens before
+          # the declaration-index versioning below so the landing gets that too.
+          if [ -f public/docs/LeanMlir.html ]; then
+            cp public/docs/LeanMlir.html public/docs/index.html
+            echo "docs landing: index.html is LeanMlir.html (the proofs map)"
+          else
+            echo "::warning::public/docs/LeanMlir.html missing; docs/ keeps doc-gen4's bare index"
           fi
           # ⭐ Version the declaration index's URL (2026-09-22). doc-gen4's find/ page and every
           # page's search box fetch declarations/declaration-data.bmp — a 36 MB JSON that changes

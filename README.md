@@ -40,17 +40,25 @@ lake exe cache get && ./download_mnist.sh && lake run mnist                     
 | 1 | `lake run mnist` | linear, MLP and CNN on MNIST, 12 epochs each (~1 min) | 92.10 · 97.81 · 98.77 % | [1](https://lean.brettkoonce.com/blueprint/chap-tensor.html) · [2](https://lean.brettkoonce.com/blueprint/chap-mlp.html) · [3](https://lean.brettkoonce.com/blueprint/chap-cnn.html) |
 | 2 | `lake run cifar` | the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~19 min) | 76.3 % — BN + momentum, median of five | [4](https://lean.brettkoonce.com/blueprint/chap-bn.html) |
 | 3 | `lake run imagenette` | seven nets on Imagenette at 224², 80 epochs AdamW, book order (~9 h) | R34 89.50 · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 % | [5](https://lean.brettkoonce.com/blueprint/chap-residual.html) · [6](https://lean.brettkoonce.com/blueprint/chap-depthwise.html) · [7](https://lean.brettkoonce.com/blueprint/chap-se.html) · [8](https://lean.brettkoonce.com/blueprint/chap-layernorm.html) · [9](https://lean.brettkoonce.com/blueprint/chap-attention.html) |
-| 4 | `lake run imagenet` | the same nets on ImageNet-1k, 4× 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, `start` runs it | R34 74.16 · R50 (RSB-A3) 78.26 · MNv2 71.90 · MNv4-Conv-M 75.48 · B0 77.15 · ConvNeXt-T 81.53 · ViT-Tiny 72.31 % | [Track 4](https://lean.brettkoonce.com/blueprint/app-getting_started.html) |
+| 4 | `lake run imagenet` | the same nets on ImageNet-1k at the paper recipes, 4× 3060 / 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, `start` runs it | R34 74.06 · R50 (RSB-A3) 77.98 · MNv2 71.91 · B0 76.88 · ConvNeXt-T 81.30 · ViT-Tiny 72.35 % on the verified path, each within 0.3 of its JAX reference; MNv4-Conv-M's 75.48 is the reference, its verified run still to come | [Track 4](https://lean.brettkoonce.com/blueprint/app-getting_started.html) |
 
-The demos ride on the chapter nets; [demos/README.md](demos/README.md) has the command, the
-figure and the reasoning for each.
+The demos ride on the chapter nets, in the order Chapter 10 meets them — recognition, then
+beyond it; [demos/README.md](demos/README.md) has the command, the figure and the reasoning for
+each.
 
-| demo | command | the number |
-|---|---|---|
-| segmentation | `lake exe unet-brats-r34`, then `brats-predict` | BraTS mIoU 0.742 — a ResNet-34 encoder under a UNet |
-| detection | `lake exe yolov1-visdrone-fpn` | VisDrone mAP@0.5 0.2363 — ResNet-34 + FPN at 448 |
-| diffusion | `lake exe mnist-ddpm-train`, then `mnist-ddpm-sample` | the sample grid |
-| language | `lake exe tinygpt-shakespeare` (also `bigram-shakespeare`, `tinystories`) | 2.28 bits/char held-out |
+| demo | command | the number | book |
+|---|---|---|---|
+| object detection | `lake exe yolov1-visdrone-fpn` | VisDrone mAP@0.5 0.2363 — ResNet-34 + FPN at 448 | [10.2.2](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_detection) |
+| industrial inspection | `lake exe yolov1-neudet-fpn` (and `yolov1-neudet448`) | NEU-DET mAP@0.5 0.623 with the VisDrone detector unchanged; the single 14×14 grid gets 0.607 here and 0.0391 on the drones | [10.2.3](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_inspection) |
+| people watching | `lake exe arasl-signs` | ArASL 98.62 % under the published random split, 77.94 % once each hand's frames stay together | [10.2.4](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_people) |
+| agriculture | `lake exe plant-leaf` | PlantVillage 99.57 % on lab leaves, 17.80 % on PlantDoc's field leaves — the CAM and an exact Shapley value say why | [10.2.5](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_agriculture) |
+| segmentation | `lake exe unet-brats-r34`, then `brats-predict` | BraTS mIoU 0.740 — a ResNet-34 encoder under a UNet | [10.2.6](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_segmentation) |
+| reinforcement learning | `lake exe blackjack-dqn` (environments: `blackjack-env`, `pong-env`) | Double DQN agrees with the exact blackjack policy on 188 of 200 decision states | [10.3.1](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_rl) |
+| language | `lake exe tinygpt-shakespeare` (also `bigram-shakespeare`, `tinystories`) | 2.28 bits/char held-out | [10.3.2](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_nlp) |
+| diffusion | `lake exe mnist-ddpm-train`, then `mnist-ddpm-sample` | energy distance to MNIST 0.0067 at 50 network evaluations — ancestral DDIM, ahead of the deterministic sampler at 200 | [10.3.4](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_diffusion) |
+| physics | `lake exe diffusion-2d muller_brown flow` | a flow-matching Boltzmann generator on Müller–Brown; reweighted by its own density it returns the exact well populations to the last digit | [10.3.5](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_boltzmann) |
+| signal processing | `lake exe gw-detect` | LIGO O3a strain: the chapter-4 CNN reaches half detection at network SNR 6.91 (false-alarm rate 10⁻²), where the matched filter needs 10.32 | [10.3.6](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_signal) |
+| beyond vision | `lake exe nqs-ising gpt` | the transverse-field Ising ground state at N = 12: a GPT wavefunction within 3.3 × 10⁻⁶ of the exact energy | [10.3.7](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_beyond) |
 
 Everything else in the repository is the lab — `apps/baselines/`, the ablation and robustness
 exes, the tests, the Bestiary — the evidence behind these numbers, one level down. `lakefile.lean`
@@ -67,7 +75,8 @@ exactly those bytes. What stays trusted is the ℝ→Float32 numerics, the per-o
 the lowerer with its runtime. The book's
 [On Verification](https://lean.brettkoonce.com/blueprint/app-verification.html)
 appendix is the full argument, gap by gap; [LeanMlir/Proofs/README.md](LeanMlir/Proofs/README.md)
-is the file-level map.
+is the file-level map, and the [API docs](https://lean.brettkoonce.com/docs/) open on the same map
+with every name linked.
 
 Check them without a GPU:
 
@@ -92,8 +101,8 @@ run` tier has an `-iree` twin. Building it is [historical/IREE_BUILD.md](histori
 
 - `LeanMlir/Proofs/` — the proofs, chapter by chapter; `verified_mlir/` — the committed renders
   the tiers train on
-- `apps/` — one `Main` per exe, by tier; `demos/` — the demos; `Bestiary/` — 41 read-only
-  `NetSpec` catalogue entries, Part 2 of the book
+- `apps/` — one `Main` per exe, by tier; `demos/` — Chapter 10's eleven demos, in its order;
+  `Bestiary/` — 45 read-only `NetSpec` catalogue entries, Part 2 of the book
 - `jax/` — the JAX reference implementations the ImageNet path is ported from, and the oracle's
   ground truth
 - `scripts/jobs/` and `scripts/supervise.sh` — the ImageNet jobs (`lake run <job>` runs one);

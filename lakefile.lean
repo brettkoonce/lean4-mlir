@@ -666,7 +666,7 @@ lean_exe «vit-b-imagenet-verified» where
   root := `apps.imagenette.MainViTBImagenet
   moreLinkArgs := lowererLink
 
--- ─── Demos — `lake exe <name>`: segmentation, detection, diffusion, language (demos/README.md) ───
+-- ─── Demos — `lake exe <name>`, in chapter 10's order: detection, inspection, people, agriculture, segmentation; RL, language, diffusion, physics, signal, beyond vision (demos/README.md) ───
 
 lean_exe «unet-brats-train» where
   root := `demos.MainUnetBratsTrain

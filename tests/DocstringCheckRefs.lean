@@ -331,7 +331,10 @@ def pathCiteProblem (env : Environment) (s : String) (url? : Option String) :
 
 /-- Directories scanned. `LeanMlir` is the proof + codegen corpus; `lakefile.lean` is
     included because it carries 200+ target docstrings and is where two of the stale
-    citations that motivated this gate were found. -/
+    citations that motivated this gate were found. The root `LeanMlir.lean` is scanned too
+    (2026-09-23): its module docstring is the API docs' landing page — blueprint.yml copies
+    its rendered page over doc-gen4's `index.html` — so it is the one docstring every
+    visitor reads, and it is rendered, so its file citations obey the link rule below. -/
 def scanRoots : List System.FilePath := ["LeanMlir", "tests", "apps", "demos"]
 
 unsafe def main (args : List String) : IO UInt32 := do
@@ -381,7 +384,7 @@ unsafe def main (args : List String) : IO UInt32 := do
       nsSet := nsSet.insert p
       p := p.getPrefix
 
-  let mut files : Array System.FilePath := #["lakefile.lean"]
+  let mut files : Array System.FilePath := #["lakefile.lean", "LeanMlir.lean"]
   for r in scanRoots do
     if ← r.pathExists then files := files ++ (← leanFiles r)
   -- ⚠ This file is excluded from its own scan, and the reason is not vanity: its header
@@ -404,7 +407,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   for f in files do
     let src ← IO.FS.readFile f
     -- the file-citation rule applies to the tree doc-gen4 renders and nowhere else
-    let rendered := f.toString.startsWith "LeanMlir/"
+    let rendered := f.toString.startsWith "LeanMlir/" || f.toString == "LeanMlir.lean"
     for body in docBodies src do
       for ref in backtickRefs body do
         if skipRef ref || !checkWorthy ref then continue

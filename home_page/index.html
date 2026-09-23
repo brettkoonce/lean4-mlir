@@ -59,7 +59,7 @@ over the reals.</p>
 <nav class="doors">
   <a href="blueprint/">The book<span>web blueprint, every theorem linked to its Lean</span></a>
   <a href="blueprint.pdf">The PDF<span>the same text, typeset</span></a>
-  <a href="docs/">API docs<span>doc-gen4 for every module</span></a>
+  <a href="docs/">API docs<span>doc-gen4 for every module, opening on the proofs map</span></a>
   <a href="https://github.com/brettkoonce/lean4-mlir">The code<span>github.com/brettkoonce/lean4-mlir</span></a>
 </nav>
 
@@ -96,27 +96,52 @@ lake exe cache get &amp;&amp; ./download_mnist.sh &amp;&amp; lake run mnist     
       <td>R34 89.50 · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 %</td>
       <td class="num"><a href="blueprint/chap-residual.html">5</a> · <a href="blueprint/chap-depthwise.html">6</a> · <a href="blueprint/chap-se.html">7</a> · <a href="blueprint/chap-layernorm.html">8</a> · <a href="blueprint/chap-attention.html">9</a></td></tr>
   <tr><td>4</td><td><code>lake run imagenet</code></td>
-      <td>the same nets on ImageNet-1k, 4× 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, <code>start</code> runs it</td>
-      <td>R34 74.16 · R50 (RSB-A3) 78.26 · MNv2 71.90 · MNv4-Conv-M 75.48 · B0 77.15 · ConvNeXt-T 81.53 · ViT-Tiny 72.31 %</td>
+      <td>the same nets on ImageNet-1k at the paper recipes, 4× 3060 / 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, <code>start</code> runs it</td>
+      <td>R34 74.06 · R50 (RSB-A3) 77.98 · MNv2 71.91 · B0 76.88 · ConvNeXt-T 81.30 · ViT-Tiny 72.35 % on the verified path, each within 0.3 of its JAX reference; MNv4-Conv-M's 75.48 is the reference, its verified run still to come</td>
       <td class="num"><a href="blueprint/app-getting_started.html">Track 4</a></td></tr>
 </table>
 </div>
 
-<p>The demos ride on the chapter nets;
+<p>The demos ride on the chapter nets, in the order Chapter 10 meets them — recognition, then beyond it;
 <a href="https://github.com/brettkoonce/lean4-mlir/blob/main/demos/README.md">demos/README.md</a> has the
 command, the figure and the reasoning for each.</p>
 
 <div class="tablewrap">
 <table>
-  <tr><th>demo</th><th>command</th><th>the number</th></tr>
+  <tr><th>demo</th><th>command</th><th>the number</th><th>book</th></tr>
+  <tr><td>object detection</td><td><code>lake exe yolov1-visdrone-fpn</code></td>
+      <td>VisDrone mAP@0.5 0.2363 — ResNet-34 + FPN at 448</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_detection">10.2.2</a></td></tr>
+  <tr><td>industrial inspection</td><td><code>lake exe yolov1-neudet-fpn</code> (and <code>yolov1-neudet448</code>)</td>
+      <td>NEU-DET mAP@0.5 0.623 with the VisDrone detector unchanged; the single 14×14 grid gets 0.607 here and 0.0391 on the drones</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_inspection">10.2.3</a></td></tr>
+  <tr><td>people watching</td><td><code>lake exe arasl-signs</code></td>
+      <td>ArASL 98.62 % under the published random split, 77.94 % once each hand's frames stay together</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_people">10.2.4</a></td></tr>
+  <tr><td>agriculture</td><td><code>lake exe plant-leaf</code></td>
+      <td>PlantVillage 99.57 % on lab leaves, 17.80 % on PlantDoc's field leaves — the CAM and an exact Shapley value say why</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_agriculture">10.2.5</a></td></tr>
   <tr><td>segmentation</td><td><code>lake exe unet-brats-r34</code>, then <code>brats-predict</code></td>
-      <td>BraTS mIoU 0.742 — a ResNet-34 encoder under a UNet</td></tr>
-  <tr><td>detection</td><td><code>lake exe yolov1-visdrone-fpn</code></td>
-      <td>VisDrone mAP@0.5 0.2363 — ResNet-34 + FPN at 448</td></tr>
-  <tr><td>diffusion</td><td><code>lake exe mnist-ddpm-train</code>, then <code>mnist-ddpm-sample</code></td>
-      <td>the sample grid</td></tr>
+      <td>BraTS mIoU 0.740 — a ResNet-34 encoder under a UNet</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_segmentation">10.2.6</a></td></tr>
+  <tr><td>reinforcement learning</td><td><code>lake exe blackjack-dqn</code> (environments: <code>blackjack-env</code>, <code>pong-env</code>)</td>
+      <td>Double DQN agrees with the exact blackjack policy on 188 of 200 decision states</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_rl">10.3.1</a></td></tr>
   <tr><td>language</td><td><code>lake exe tinygpt-shakespeare</code> (also <code>bigram-shakespeare</code>, <code>tinystories</code>)</td>
-      <td>2.28 bits/char held-out</td></tr>
+      <td>2.28 bits/char held-out</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_nlp">10.3.2</a></td></tr>
+  <tr><td>diffusion</td><td><code>lake exe mnist-ddpm-train</code>, then <code>mnist-ddpm-sample</code></td>
+      <td>energy distance to MNIST 0.0067 at 50 network evaluations — ancestral DDIM, ahead of the deterministic sampler at 200</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_diffusion">10.3.4</a></td></tr>
+  <tr><td>physics</td><td><code>lake exe diffusion-2d muller_brown flow</code></td>
+      <td>a flow-matching Boltzmann generator on Müller–Brown; reweighted by its own density it returns the exact well populations to the last digit</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_boltzmann">10.3.5</a></td></tr>
+  <tr><td>signal processing</td><td><code>lake exe gw-detect</code></td>
+      <td>LIGO O3a strain: the chapter-4 CNN reaches half detection at network SNR 6.91 (false-alarm rate 10⁻²), where the matched filter needs 10.32</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_signal">10.3.6</a></td></tr>
+  <tr><td>beyond vision</td><td><code>lake exe nqs-ising gpt</code></td>
+      <td>the transverse-field Ising ground state at N = 12: a GPT wavefunction within 3.3 × 10⁻⁶ of the exact energy</td>
+      <td class="num"><a href="blueprint/chap-bestiary.html#sec:bestiary_beyond">10.3.7</a></td></tr>
 </table>
 </div>
 
@@ -135,7 +160,7 @@ runtime. The book's <a href="blueprint/app-verification.html">On Verification</a
 argument, gap by gap; <a href="blueprint/dep_graph_document.html">the dependency graph</a> is the same
 suite as a clickable DAG, and
 <a href="https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/README.md">LeanMlir/Proofs/README.md</a>
-is the file-level map.</p>
+is the file-level map, and the <a href="docs/">API docs</a> open on the same map with every name linked.</p>
 
 <p>Check them without a GPU:</p>
 

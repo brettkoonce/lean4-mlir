@@ -1,73 +1,19 @@
 # Demos
 
-Trainers and inference exes that ride on top of the chapter-aligned
-classification stack. Top-level `Main*Train.lean` files are the
-chapters themselves (MLP, CNN, ResNet, MobileNet, EfficientNet,
-ConvNeXt, ViT); these demos extend the framework into adjacent
-domains — segmentation, generative models, language modeling,
-explainability — without changing the underlying codegen path.
+Trainers and inference exes that ride on the chapter nets. The top-level `Main*Train.lean` files
+are the chapters themselves (MLP, CNN, ResNet, MobileNet, EfficientNet, ConvNeXt, ViT); these
+extend the same codegen path into the domains Chapter 10 of the book walks — recognition first
+(detection, industrial inspection, people, agriculture, segmentation), then beyond it
+(reinforcement learning, language, diffusion, physics, signal processing, a quantum ground state)
+— in the chapter's order, each under the chapter's figure. Nothing here changes the codegen: every
+demo is the ordinary train step on a new input, loss or host loop.
 
-Build any of these with `lake exe <name>` after the relevant
-chapter trainer has produced its checkpoint.
-
----
-
-## ResNet-34 UNet — brain-tumour segmentation (BraTS)
-
-The segmentation demo. A ResNet-34 encoder (the Ch-5 architecture, reused
-verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
-224×224 axial slices, 4 co-registered MRI modalities (FLAIR / T1w / T1gd / T2w)
-→ 4 tumour classes. 24.5M params, plain per-pixel CE, 10 epochs.
-
-`MainUnetBratsR34.lean`, `MainBratsPredict.lean`. See
-`planning/archive/r34_brats_retrain.md`.
-
-```bash
-./download_brats.sh
-python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
-        --size 224 --seed 0            # same patient split as data/brats
-./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU
-lake exe brats-predict net=r34 arm=scratch,r34 out.ppm
-```
-
-| arm | mIoU | WT | TC | ET |
-|---|---|---|---|---|
-| `r34` (ImageNet bootstrap) | 0.742 | 0.911 | 0.870 | 0.858 |
-| `scratch` (He-init) | 0.740 | 0.910 | 0.869 | 0.856 |
-
-![R34 UNet transfer on BraTS](figures/brats_r34_skip_transfer.png)
-
-`T1gd | ground truth | +scratch | +r34`. Edema green, non-enhancing/necrotic
-core red, enhancing tumour yellow — the yellow rim around a red core is a
-textbook ring-enhancing glioblastoma.
-
-**Two things this demo measures, and they are not the same size.**
-
-*Skips are worth ~10 points.* Same backbone and schedule, decoder with and
-without the encoder concat: **0.635 → 0.740 mIoU**, the largest gain on ET
-(+0.12), the thinnest structure — a skipless decoder has to rebuild every
-boundary from a 7×7 bottleneck. Run the ablation with `noskip`.
-
-*Transfer buys one epoch, not a better model.* The two arms differ in exactly
-one field (`bootstrapBackboneRange`), so 86.8% of params start pretrained vs
-random and everything else is identical. At **epoch 1** the bootstrapped arm is
-already at ET Dice 0.818 while the control sits at 0.184, still collapsed on
-the hard classes. By epoch 2 the control has caught up, and the peaks above are
-a tie (+0.002, noise at n=1). The honest claim is sample-efficiency: same
-quality, one epoch sooner. Transfer's payoff scales inversely with dataset
-size, and 14,415 slices is a lot — a data-fraction sweep is the experiment that
-would show it properly.
-
-The backbone is `.lake/build/jax_r34_imagenet.bin`, trained by this stack on
-ImageNet to 72% top-1. Nothing is downloaded. Its stem is 3-channel RGB and
-BraTS needs 4, so the transferable weights are not a prefix — hence
-`bootstrapBackboneRange`, which patches a byte *range* and leaves the fresh
-stem He-init. It self-checks on every run: the patched window must be
-byte-equal to the checkpoint and the stem must be untouched, or it throws.
+Build any of these with `lake exe <name>`; the ImageNet-bootstrapped ones need the relevant
+chapter trainer's checkpoint first.
 
 ---
 
-## FPN detector — object detection on VisDrone
+## Object detection — R34+FPN on VisDrone
 
 Multi-scale detection on real drone-altitude imagery, and the best demo in this
 repo for showing what the stack does end to end: a ResNet-34 backbone **trained
@@ -118,7 +64,12 @@ Knobs: `FPN_BACKBONE` (`r34`/`r50`), `FPN_AUG`, `FPN_AFFINE` (percent probabilit
 of the box-aware scale/translate transform), `FPN_CLSW`, `FPN_CLSFOCAL`,
 `FPN_EPOCHS`, `FPN_TOWER`, `FPN_NOBOOTSTRAP`.
 
-![VisDrone FPN detection](figures/visdrone_fpn.png)
+![The detector on four VisDrone validation frames](figures/visdrone_fpn.jpg)
+
+Ground truth above, the R34+FPN's boxes below, at the top row of the table (30 epochs, scale
+augmentation, mAP@0.5 0.2363). Box colour is the class, keyed along the bottom edge, and each
+frame's box count sits in its corner. The night market and the street market are where the misses
+live — the small and the rare, exactly what the per-class spread predicts.
 
 Truth on top, prediction below, on four val frames. **mAP@0.5 = 0.2363**
 (recall 0.769, class-agnostic AP 0.487) at 30 epochs, and 65 fps on one RTX
@@ -381,7 +332,185 @@ here, the laboratory was.
 
 ---
 
-## DDPM — diffusion generative models
+## Semantic segmentation — a ResNet-34 UNet on BraTS
+
+The segmentation demo. A ResNet-34 encoder (the Ch-5 architecture, reused
+verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
+224×224 axial slices, 4 co-registered MRI modalities (FLAIR / T1w / T1gd / T2w)
+→ 4 tumour classes. 24.5M params, plain per-pixel CE, 10 epochs.
+
+`MainUnetBratsR34.lean`, `MainBratsPredict.lean`. See
+`planning/archive/r34_brats_retrain.md`.
+
+```bash
+./download_brats.sh
+python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
+        --size 224 --seed 0            # same patient split as data/brats
+./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU
+lake exe brats-predict net=r34 arm=scratch,r34 out.ppm
+```
+
+| arm | mIoU | WT | TC | ET |
+|---|---|---|---|---|
+| `r34` (ImageNet bootstrap) | 0.742 | 0.911 | 0.870 | 0.858 |
+| `scratch` (He-init) | 0.740 | 0.910 | 0.869 | 0.856 |
+
+![The ResNet-34 UNet on four held-out BraTS patients](figures/brats_r34_unet.png)
+
+One patient per row: the T1gd slice, the ground truth, the prediction. Green is the edema that
+bounds the whole tumour, red the necrotic and non-enhancing core, yellow the enhancing tumour.
+Background is 97% of the voxels, which is why this picture carries more than the pixel accuracy
+does.
+
+![R34 UNet transfer on BraTS](figures/brats_r34_skip_transfer.png)
+
+`T1gd | ground truth | +scratch | +r34`. Edema green, non-enhancing/necrotic
+core red, enhancing tumour yellow — the yellow rim around a red core is a
+textbook ring-enhancing glioblastoma.
+
+**Two things this demo measures, and they are not the same size.**
+
+*Skips are worth ~10 points.* Same backbone and schedule, decoder with and
+without the encoder concat: **0.635 → 0.740 mIoU**, the largest gain on ET
+(+0.12), the thinnest structure — a skipless decoder has to rebuild every
+boundary from a 7×7 bottleneck. Run the ablation with `noskip`.
+
+*Transfer buys one epoch, not a better model.* The two arms differ in exactly
+one field (`bootstrapBackboneRange`), so 86.8% of params start pretrained vs
+random and everything else is identical. At **epoch 1** the bootstrapped arm is
+already at ET Dice 0.818 while the control sits at 0.184, still collapsed on
+the hard classes. By epoch 2 the control has caught up, and the peaks above are
+a tie (+0.002, noise at n=1). The honest claim is sample-efficiency: same
+quality, one epoch sooner. Transfer's payoff scales inversely with dataset
+size, and 14,415 slices is a lot — a data-fraction sweep is the experiment that
+would show it properly.
+
+The backbone is `.lake/build/jax_r34_imagenet.bin`, trained by this stack on
+ImageNet to 72% top-1. Nothing is downloaded. Its stem is 3-channel RGB and
+BraTS needs 4, so the transferable weights are not a prefix — hence
+`bootstrapBackboneRange`, which patches a byte *range* and leaves the fresh
+stem He-init. It self-checks on every run: the patched window must be
+byte-equal to the checkpoint and the stem must be untouched, or it throws.
+
+---
+
+## Reinforcement learning — blackjack from tabular Q to DQN, and the Pong environment
+
+Two games written in Lean, no FFI, each with its own exact instrument. They are
+rungs 1 and 3 of the reinforcement-learning ladder in
+`planning/blackjack_dqn_demo.md` and `planning/pong_dqn_demo.md`; rung 2 is the
+blackjack DQN, trained through the stack on the rank-2 DDPM MSE block.
+
+```bash
+lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
+lake exe blackjack-env play 7 hs          # replay a hand from a seed with the DP's exact Q-values
+lake exe blackjack-dqn 200000 1 double    # updates, seed; flags: double, lrdecay, tag=<name>
+lake exe pong-env 100                     # games per baseline arm
+```
+
+The environment, the DP instrument and tabular Q live in
+`LeanMlir/Blackjack.lean`, shared by both blackjack exes. It follows
+Gymnasium's Blackjack-v1 with `sab=True` (the Sutton & Barto rules). A value iteration over the 200 decision states gives the
+exact optimum, **−0.0431 per hand**, and the exact value of any policy, so
+every arm is scored without sampling error; the Monte Carlo column is the
+cross-check that the environment and the DP describe the same game.
+
+| arm | exact value / hand | agrees with optimum |
+|---|---|---|
+| random | −0.394 | 110 / 200 |
+| threshold heuristic | −0.240 | 164 / 200 |
+| the old demo's published table | −0.097 | 162 / 200 |
+| tabular Q, 10⁷ hands, step max(0.001, 1/(1+N)) | −0.044 | 195 / 200 |
+| DQN, Double, 200k updates (`blackjack-dqn`) | −0.048 | 188 / 200 |
+| exact optimum | −0.043 | 200 / 200 |
+
+`MainBlackjackDqn.lean` is the 6,210-parameter dense net on a 29-float one-hot,
+XLA backend, one GPU, about ten minutes for 200k updates. The host writes the
+Bellman target into the taken action's slot of the net's own prediction and
+hands that to the DDPM MSE train step, so the untaken slot's gradient is zero;
+the greedy policy is read off the net every 50 updates for acting and scored
+exactly every 1000. Run logs, curves and the figure script's inputs are in
+`runs/2026-09-11-blackjack-dqn/`; `scripts/blackjack_figure.py` draws the
+book's chart.
+
+![The exact hit/stick policy for blackjack, and where the learners disagree](figures/blackjack_chart.png)
+
+The exact hit/stick policy under the Sutton & Barto rules, player total against the dealer's
+showing card, hard hands and soft. Rings mark the twelve cells where the trained DQN disagrees
+with the theorem, dots the eight where tabular Q does. Both learners miss on the knife edges:
+hard 12 against a 4, where hitting and sticking differ by a quarter of a cent a hand, and the
+soft-18 row, where the casino card is wrong too.
+
+The DP's hit/stick chart is Sutton & Barto's Figure 5.2. The published table
+from the old Swift demo is a casino-rules chart whose rows for 10 and 11 are a
+doubling table transcribed as "stand"; the instrument found that on its first
+run.
+
+`MainPongEnv.lean` is Pong in ~150 lines: 84×84 render, frame skip 4, a scripted
+opponent with a speed and a reaction-delay knob, deterministic from a seed, five
+million raw frames per second single-threaded. Random scores −17.9 per game, a
+reactive tracker +11.2 against the default opponent; the frame strip the
+network will see is written to `.lake/build/pong_stack.pgm`.
+
+## Natural language processing — TinyGPT on Shakespeare
+
+Char-level transformer on Karpathy's tinyshakespeare. Three new
+codegen primitives shipped to support it:
+
+- `tokenPositionEmbed` (one-hot → embed + learnable position)
+- `lmHead` (per-position dense + reshape into `useSeg` loss path)
+- `causalMask` flag on `transformerEncoder`
+
+212K params (T=64, D=64, 4 layers, 2 heads). 10K Adam steps take ~3 min on
+one RTX 4060 Ti through XLA, compile included, and reach 2.28 bits/char on
+the held-out split (bigram baseline 3.56, uniform 6.02). Workings in
+`runs/2026-09-09-tinygpt-nano-xla/`; plan in `planning/archive/tinygpt_demo_v2.md`.
+
+```bash
+./download_shakespeare.sh             # downloads tinyshakespeare.txt
+python3 preprocess_shakespeare.py     # builds train.bin / val.bin / vocab.txt
+lake exe tinygpt-shakespeare train nano 10000                    # 10K Adam steps, saves params
+lake exe tinygpt-shakespeare sample nano 600 80 0 100 1 "ROMEO:"  # 600 chars, temp 0.8, seed 1
+```
+
+Sample output after 10K steps (val 2.28 bits/char, train 1.99):
+
+```text
+ROMEO:
+O heaven farewell, upon thy hands.
+
+NORTHUMBERLAND:
+Then with clearing too forpully of his,
+You are would not we love I have,
+Which of you have I do foeble thy true king with odds
+To desire her furrow'd the victory,
+Hence that speak to be weak the way deal is.
+
+EDWARD:
+What, worse speed have more in himself inger's and thousand.
+God come to Romeo
+A sentence comfort to your throlds,
+I think of thy souls to the merrolk, his life,
+Some no paper brother hands than the tent up never
+'Tis grace, O, blest thy headst jewel denied
+To creass thy breaks wind to live:
+And then to dark the you kin our par
+```
+
+Real Shakespeare character names (NORTHUMBERLAND and EDWARD here;
+QUEEN MARGARET, MERCUTIO, JULIET, BRUTUS across the fixed-prompt suite
+in `blueprint/src/figures/tinygpt/prompt_suite_nano.txt`), a Romeo
+named inside another speaker's line, coherent multi-line dialog with
+proper cadence and punctuation. Semantic coherence drops past the 64-char
+context window — exactly what the planning doc predicted.
+
+A `bigram-shakespeare` baseline (single dense V→V predicting next
+char given current char) also lives here as a smoke test that the
+data pipeline + sampler work end-to-end without the transformer.
+
+---
+
+## Diffusion — DDPM on MNIST
 
 Denoising diffusion on MNIST. A tiny UNet predicts the noise
 ε(x_t, t) that was added to an image; sampling runs that prediction backwards.
@@ -433,7 +562,7 @@ and the image resolves late.
 
 ---
 
-## Flow matching — a Boltzmann generator on the Müller-Brown surface
+## Physics — a flow-matching Boltzmann generator on the Müller-Brown surface
 
 The second half of the diffusion demo, and the one whose ground truth is a
 formula. The target is the density exp(−U/kT) on Müller-Brown's three-well
@@ -482,7 +611,70 @@ coupling: 233×). Numbers, gates and every artifact in
 
 ---
 
-## Neural quantum states — the transverse-field Ising chain
+## Signal processing — gravitational-wave detection on LIGO strain
+
+A chapter-4 CNN against the detector its field already has. Advanced LIGO's strain is a time
+series at audio rates; a binary-black-hole merger is a chirp sweeping from 25 Hz to a few hundred
+in under a second; and the detector to beat is the matched filter, whose detection probability in
+stationary Gaussian noise is a closed form (a Marcum Q-function). So, like blackjack's value
+iteration and the Boltzmann generator's quadrature, this demo has a theorem for a ceiling.
+
+`MainGwDetect.lean` (`gw-detect`). The net is `CIFAR-CNN8-wide-BN` from chapter 4 with a
+two-channel stem and a two-way head, 0.83M parameters, on a 2 × 64 × 128 input: one constant-Q
+spectrogram per detector (64 log-spaced bands over 20–500 Hz, 128 frames) of a whitened 2 s
+window. Adam at 10⁻³ with one warm-up epoch and cosine decay, batch 64, six epochs — under two
+minutes on one card. Zero new codegen: the ordinary train step with integer labels, the
+blackjack/2-D pattern of a host loop around it. See `planning/gw_detection_demo.md`.
+
+```bash
+python3 preprocess_gw.py --pairs=26 --val-pairs=6 --out=data/gw    # O3a H1+L1 from GWOSC, whitened; IMRPhenomD chirps injected at SNR 4–20
+lake exe gw-detect arm=real  net=cifar8w epochs=6 tag=real          # trained on the real strain
+lake exe gw-detect arm=gauss net=cifar8w epochs=6 tag=gauss         # trained on Gaussian noise coloured by the same PSD
+python3 scripts/gw_metrics.py table --gate                          # the matched filter against its closed form (Gate 1)
+python3 scripts/gw_metrics.py matrix gauss=<prefix> real=<prefix>   # the 2 × 2 of trained-on × tested-on
+python3 scripts/gw_figure.py <table_val.json> gw_detect.png --cnn-real=<table_val.json> --net=CNN
+```
+
+![A chapter-4 CNN against the matched filter on LIGO strain](figures/gw_detect.png)
+
+(a) A whitened 2 s H1 window from the validation set with its injected chirp overlaid; (b) the
+spectrograms the CNN sees, a noise-only window and the injected one; (c) detection probability
+against injected network SNR in Gaussian noise — the closed form at the search's own threshold,
+PyCBC's coherent matched-filter search on the same windows, and the CNN; (d) the same in real O3a
+noise.
+
+**The data is real detector noise with the signal we chose.** Twenty-six file pairs of O3a strain
+from H1 and L1, science-mode and free of hardware injections, cut into 2 s windows and whitened by
+each file's own median-Welch PSD over 20–500 Hz. Half the windows carry an IMRPhenomD chirp from
+PyCBC, masses uniform in [10, 50] M☉, random sky position, projected onto both detectors and
+scaled to a network SNR uniform in [4, 20]. Two noise sets share every window and every injection:
+Gaussian noise coloured by the same PSD, the theorem's regime, and the strain itself. 40,760
+training and 12,228 validation windows.
+
+**The instrument is a closed form, and the filter is checked against it first.** PyCBC's matched
+filter with the injected template at the known arrival time reproduces Q₁(ρ, ρ*) on the Gaussian
+set to within binomial error in every SNR bin — half detection at SNR 4.68 against the theorem's
+4.75 for H1 at a false-alarm rate of 10⁻² per window — so the injection's SNR and the whitening
+agree on one PSD. The search statistic then maximises over the window and the ±10 ms
+inter-detector delay, exactly as a search must, and the CNN, which sees no time, is compared to
+that. Every row's threshold is set empirically on the split's noise-only windows so that exactly
+the stated fraction of them exceeds it.
+
+| trained on | ρ½ tested on Gaussian, FAR 10⁻² | ρ½ tested on real, 10⁻² | ρ½ tested on real, 10⁻³ |
+|---|---|---|---|
+| CNN, Gaussian noise | 6.80 | 7.17 | 18.7 |
+| CNN, real O3a strain | 6.65 | **6.91** | **7.52** |
+| PyCBC coherent search | **5.27** | 10.32 | — |
+
+ρ½ is the injected network SNR at which half the injections are detected. Each network is best on
+the noise it trained on, by a few tenths, and in Gaussian noise the filter is the optimum it is
+supposed to be. **Real noise costs the filter, not the network:** the filter loses five units of
+SNR to glitches at 10⁻², and at 10⁻³ its threshold is 417 — eight validation windows hold a glitch
+that loud, and without a veto the filter has no row — while the network trained on real strain
+still reaches half detection at 7.5. Training on the real detector is what teaches the glitch
+tail. Runs and the figure script's inputs are under `runs/2026-09-11-gw-*/`.
+
+## Beyond vision — neural quantum states on the transverse-field Ising chain
 
 The science demo. The network *is* the wavefunction: ψ_θ(σ) maps a spin
 configuration to a log-amplitude, the loss is the energy ⟨ψ|H|ψ⟩/⟨ψ|ψ⟩ of the
@@ -582,117 +774,9 @@ draw. Numbers, gates, every arm's log and the h = 0.8 investigation are in
 
 ---
 
-## TinyGPT — character-level language model
-
-Char-level transformer on Karpathy's tinyshakespeare. Three new
-codegen primitives shipped to support it:
-
-- `tokenPositionEmbed` (one-hot → embed + learnable position)
-- `lmHead` (per-position dense + reshape into `useSeg` loss path)
-- `causalMask` flag on `transformerEncoder`
-
-212K params (T=64, D=64, 4 layers, 2 heads). 10K Adam steps take ~3 min on
-one RTX 4060 Ti through XLA, compile included, and reach 2.28 bits/char on
-the held-out split (bigram baseline 3.56, uniform 6.02). Workings in
-`runs/2026-09-09-tinygpt-nano-xla/`; plan in `planning/archive/tinygpt_demo_v2.md`.
-
-```bash
-./download_shakespeare.sh             # downloads tinyshakespeare.txt
-python3 preprocess_shakespeare.py     # builds train.bin / val.bin / vocab.txt
-lake exe tinygpt-shakespeare train nano 10000                    # 10K Adam steps, saves params
-lake exe tinygpt-shakespeare sample nano 600 80 0 100 1 "ROMEO:"  # 600 chars, temp 0.8, seed 1
-```
-
-Sample output after 10K steps (val 2.28 bits/char, train 1.99):
-
-```text
-ROMEO:
-O heaven farewell, upon thy hands.
-
-NORTHUMBERLAND:
-Then with clearing too forpully of his,
-You are would not we love I have,
-Which of you have I do foeble thy true king with odds
-To desire her furrow'd the victory,
-Hence that speak to be weak the way deal is.
-
-EDWARD:
-What, worse speed have more in himself inger's and thousand.
-God come to Romeo
-A sentence comfort to your throlds,
-I think of thy souls to the merrolk, his life,
-Some no paper brother hands than the tent up never
-'Tis grace, O, blest thy headst jewel denied
-To creass thy breaks wind to live:
-And then to dark the you kin our par
-```
-
-Real Shakespeare character names (NORTHUMBERLAND and EDWARD here;
-QUEEN MARGARET, MERCUTIO, JULIET, BRUTUS across the fixed-prompt suite
-in `blueprint/src/figures/tinygpt/prompt_suite_nano.txt`), a Romeo
-named inside another speaker's line, coherent multi-line dialog with
-proper cadence and punctuation. Semantic coherence drops past the 64-char
-context window — exactly what the planning doc predicted.
-
-A `bigram-shakespeare` baseline (single dense V→V predicting next
-char given current char) also lives here as a smoke test that the
-data pipeline + sampler work end-to-end without the transformer.
-
----
-
-## RL — blackjack from tabular Q to DQN, and the Pong environment
-
-Two games written in Lean, no FFI, each with its own exact instrument. They are
-rungs 1 and 3 of the reinforcement-learning ladder in
-`planning/blackjack_dqn_demo.md` and `planning/pong_dqn_demo.md`; rung 2 is the
-blackjack DQN, trained through the stack on the rank-2 DDPM MSE block.
-
-```bash
-lake exe blackjack-env 1000000 10000000   # Monte Carlo hands, tabular-Q hands
-lake exe blackjack-env play 7 hs          # replay a hand from a seed with the DP's exact Q-values
-lake exe blackjack-dqn 200000 1 double    # updates, seed; flags: double, lrdecay, tag=<name>
-lake exe pong-env 100                     # games per baseline arm
-```
-
-The environment, the DP instrument and tabular Q live in
-`LeanMlir/Blackjack.lean`, shared by both blackjack exes. It follows
-Gymnasium's Blackjack-v1 with `sab=True` (the Sutton & Barto rules). A value iteration over the 200 decision states gives the
-exact optimum, **−0.0431 per hand**, and the exact value of any policy, so
-every arm is scored without sampling error; the Monte Carlo column is the
-cross-check that the environment and the DP describe the same game.
-
-| arm | exact value / hand | agrees with optimum |
-|---|---|---|
-| random | −0.394 | 110 / 200 |
-| threshold heuristic | −0.240 | 164 / 200 |
-| the old demo's published table | −0.097 | 162 / 200 |
-| tabular Q, 10⁷ hands, step max(0.001, 1/(1+N)) | −0.044 | 195 / 200 |
-| DQN, Double, 200k updates (`blackjack-dqn`) | −0.048 | 188 / 200 |
-| exact optimum | −0.043 | 200 / 200 |
-
-`MainBlackjackDqn.lean` is the 6,210-parameter dense net on a 29-float one-hot,
-XLA backend, one GPU, about ten minutes for 200k updates. The host writes the
-Bellman target into the taken action's slot of the net's own prediction and
-hands that to the DDPM MSE train step, so the untaken slot's gradient is zero;
-the greedy policy is read off the net every 50 updates for acting and scored
-exactly every 1000. Run logs, curves and the figure script's inputs are in
-`runs/2026-09-11-blackjack-dqn/`; `scripts/blackjack_figure.py` draws the
-book's chart.
-
-The DP's hit/stick chart is Sutton & Barto's Figure 5.2. The published table
-from the old Swift demo is a casino-rules chart whose rows for 10 and 11 are a
-doubling table transcribed as "stand"; the instrument found that on its first
-run.
-
-`MainPongEnv.lean` is Pong in ~150 lines: 84×84 render, frame skip 4, a scripted
-opponent with a speed and a reaction-delay knob, deterministic from a seed, five
-million raw frames per second single-threaded. Random scores −17.9 per game, a
-reactive tracker +11.2 against the default opponent; the frame strip the
-network will see is written to `.lake/build/pong_stack.pgm`.
-
 ## Layout
 
-The four demos above are the maintained set. Everything else lives in one of two
+The demos above are the maintained set. Everything else lives in one of two
 subfolders — moving a file does **not** change its executable name, so every
 `lake exe <name>` in this repo, in `scripts/` and in CI still works unchanged.
 
@@ -701,7 +785,7 @@ demos/
 ├── README.md                              # this file
 ├── figures/                               # rendered outputs for the README
 │
-│   # ── the four demos ──
+│   # ── the demos, in chapter 10's order ──
 ├── MainUnetBratsR34.lean                  # R34-UNet on BraTS (segmentation)
 ├── MainUnetBratsTrain.lean                # from-scratch UNet on BraTS
 ├── MainBratsPredict.lean                  # render predicted masks from a checkpoint
@@ -713,6 +797,7 @@ demos/
 ├── MainMnistDdpmTrain.lean / Sample       # DDPM on MNIST (Sample also writes the
 │                                          #   two-row trajectory figure)
 ├── MainDiffusion2d.lean                   # 2-D diffusion + flow matching: the Boltzmann generator
+├── MainGwDetect.lean                      # chapter-4 CNN vs the matched filter on LIGO O3a strain (signal processing)
 ├── MainNqsIsing.lean                      # neural quantum states: MLP/ViT/GPT wavefunctions on the Ising chain
 ├── MainTinyGptShakespeare.lean            # char-level transformer
 ├── MainBigramShakespeare.lean             # bigram baseline (validates the data pipeline)

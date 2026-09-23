@@ -13568,6 +13568,7 @@ def swinT : NetSpec where
 \end{verbatim}
 
 \subsection{Object detection --- demo: R34+FPN on VisDrone}
+\label{sec:bestiary_detection}
 
 Localize and classify. Detection heads are where the linear
 \texttt{NetSpec} shape starts to creak: multi-scale FPN outputs need a
@@ -13773,6 +13774,7 @@ def detrR50 : NetSpec where
 \end{verbatim}
 
 \subsection{Industrial inspection --- demo: the same detector on NEU-DET steel defects}
+\label{sec:bestiary_inspection}
 
 The detector of the previous section, unchanged --- backbone, neck, heads,
 loss, ImageNet bootstrap, scorer --- on the dataset the industrial-inspection
@@ -14653,6 +14655,7 @@ def muZeroGoPredictionValue : NetSpec where
 \end{verbatim}
 
 \subsection{Natural language processing --- demo: TinyGPT on Shakespeare}
+\label{sec:bestiary_nlp}
 
 The architectures here all consume a sequence of token IDs and emit
 either a sequence of next-token logits (decoder-only: GPT) or a single
