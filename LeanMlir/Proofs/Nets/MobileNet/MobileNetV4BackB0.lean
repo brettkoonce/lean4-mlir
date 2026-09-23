@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.BackNetFolds
+import LeanMlir.Proofs.Foundation.HeadLayers
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 
 /-! # MobileNetV4 — the batched UIB backward, and the four families as ONE chain
@@ -366,51 +367,9 @@ noncomputable def mnv4FusedStage (N : Nat) {ic mid oc h w : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-! MNv4's head is `1×1 conv (256 → 1280) → BN → relu → GAP(7×7) → dense`. The conv stage is
-`cbReluLayer` again (conv-bn-relu is conv-bn-relu, and the kernel extent is a binder), so only
-GAP and the classifier are new.
+`cbReluLayer` again (conv-bn-relu is conv-bn-relu, and the kernel extent is a binder); GAP and the
+classifier are the shared `StableHLO.gapLayer` / `StableHLO.denseLayer`. -/
 
-⭐ **Both tie by `rfl`.** `den` of `.gapBackBatched` is *definitionally* the row-wise GAP VJP, and
-`den` of `.denseRowBack` is `rowDenseBackFlat` — which is what `batchMap_has_vjp` reduces to. The
-`batchMap_has_vjp` route goes through a transported equality (`batchMap_eq_rowwiseFlat ▸ …`), so
-this was worth probing rather than assuming; it discharges definitionally.
-
-⚠ **GAP's VJP is input-independent** and `den .gapBackBatched` exploits that — it evaluates the
-backward at the point `fun _ => 0`. That is sound because GAP is linear, and it is why the tie holds
-for *any* `x`. A stage whose VJP did depend on its input could not be rendered this way. -/
-
-/-- Batched **global average pool** as a `CertLayer`. Globally certified — GAP is linear. -/
-noncomputable def mnv4GapLayer (N : Nat) {c h w : Nat} :
-    CertLayer (N * (c * h * w)) (N * c) where
-  fwd := batchMap N (globalAvgPoolFlat c h w)
-  ok := fun _ => True
-  diff := fun x _ => (batchMap_differentiable (globalAvgPoolFlat c h w)
-    (globalAvgPoolFlat_differentiable c h w)) x
-  vjp := fun x _ => (batchMap_has_vjp (N := N) (globalAvgPoolFlat c h w)
-    (globalAvgPoolFlat_has_vjp c h w) (globalAvgPoolFlat_differentiable c h w)).toHasVJPAt x
-  graph := fun _ e => .gapBackBatched (N := N) (c := c) (h := h) (w := w) e
-  faithful := fun _ _ _ => rfl
-
-
-/-- The GAP layer's forward is the batched global average pool. -/
-theorem mnv4GapLayer_fwd_apply (N : Nat) {c h w : Nat} (v : Vec (N * (c * h * w))) :
-    (mnv4GapLayer N (c := c) (h := h) (w := w)).fwd v
-      = StableHLO.batchMap N (globalAvgPoolFlat c h w) v := rfl
-/-- Batched **dense classifier** as a `CertLayer`. Globally certified — dense is affine. -/
-noncomputable def mnv4DenseLayer (N : Nat) {a nC : Nat} (W : Mat a nC) (b : Vec nC) :
-    CertLayer (N * a) (N * nC) where
-  fwd := batchMap N (dense W b)
-  ok := fun _ => True
-  diff := fun x _ => (batchMap_differentiable (dense W b) (dense_differentiable W b)) x
-  vjp := fun x _ => (batchMap_has_vjp (N := N) (dense W b) (dense_has_vjp W b)
-    (dense_differentiable W b)).toHasVJPAt x
-  graph := fun _ e => .denseRowBack (N := N) (a := a) (c := nC) "%Wd" W e
-  faithful := fun _ _ _ => rfl
-
-
-/-- The classifier layer's forward is the batched dense. -/
-theorem mnv4DenseLayer_fwd_apply (N : Nat) {a nC : Nat} (W : Mat a nC) (b : Vec nC)
-    (v : Vec (N * a)) :
-    (mnv4DenseLayer N W b).fwd v = StableHLO.batchMap N (Proofs.dense W b) v := rfl
 /-- ⭐ **MNv4's head**: the 1×1 conv-bn-relu, then GAP, then the classifier.
 
     ⚠ Only the conv stage carries a smoothness condition (its relu); GAP and dense are global. So

@@ -294,7 +294,7 @@ noncomputable def mnv4HeadStack (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) :
     CertLayer (N * (256 * 7 * 7)) (N * nCls) :=
   (cbReluLayer (h := 7) (w := 7) N w.h1W w.h1b w.h1E w.hh1E w.h1g w.h1bt).comp
     (mnv4Head N (cbReluLayer (h := 7) (w := 7) N w.hW w.hb w.hE w.hhE w.hg w.hbt)
-      (mnv4GapLayer N (c := 1280) (h := 7) (w := 7)) (mnv4DenseLayer N w.Wd w.bd))
+      (gapLayer N (c := 1280) (h := 7) (w := 7)) (denseLayer N w.Wd w.bd))
 
 /-! ⚠⚠ **The trunk is built in GROUPS, and that is a proof-engineering requirement.** One 24-stage
 `CertLayer` elaborates fine — it is the T2 faithfulness proof over it that does not: the whole-net
@@ -658,9 +658,9 @@ theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid oc nCls :
     den (mnv4HeadGraphB epsStr N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd e)
       = ((cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1).comp
           (mnv4Head N (cbReluLayer (h := h) (w := w) N W2 b2 ε2 hε2 γ2 β2)
-            (mnv4GapLayer N (c := oc) (h := h) (w := w)) (mnv4DenseLayer N Wd bd))).fwd (den e) := by
-  simp only [mnv4HeadGraphB, mnv4Head, cbReluLayer, mnv4GapLayer,
-    mnv4DenseLayer, CertLayer.comp_fwd, cbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
+            (gapLayer N (c := oc) (h := h) (w := w)) (denseLayer N Wd bd))).fwd (den e) := by
+  simp only [mnv4HeadGraphB, mnv4Head, cbReluLayer, gapLayer,
+    denseLayer, CertLayer.comp_fwd, cbReluB, ↓den_batchOp_relu_eq_reluF, reluF_faithful,
     den_batchOp, denOp, den_bnBatchF, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════

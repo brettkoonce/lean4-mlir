@@ -1024,7 +1024,7 @@ theorem headStack_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
             (StableHLO.cbReluB N (h := 7) (w := 7) w.hW w.hb w.hE w.hg w.hbt
               (StableHLO.cbReluB N (h := 7) (w := 7) w.h1W w.h1b w.h1E w.h1g w.h1bt v))) := by
   simp only [mnv4HeadStack, mnv4Head, CertLayer.comp_fwd_apply, cbReluLayer_fwd_apply,
-    mnv4GapLayer_fwd_apply, mnv4DenseLayer_fwd_apply]
+    gapLayer_fwd_apply, denseLayer_fwd_apply]
 
 theorem headA (nCls : Nat) (t : ℝ) :
     mobilenetv4ForwardB_full 2 (sealW nCls) (sealX t)

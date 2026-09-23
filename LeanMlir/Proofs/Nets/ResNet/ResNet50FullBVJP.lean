@@ -12,7 +12,7 @@ Proofs tier (`planning/archive/proofs_tier_to_paper_nets.md` §3.5(a)).
 Every block VJP is already proven at `bnBatchLA`: `r50BottleneckB_has_vjp_at`,
 `r50ProjBlockB_has_vjp_at` and `r50DownBlockB_has_vjp_at` (`ResNet50BackB0.lean`) are exactly the
 three shapes `r50IdB` / `r50ProjB` / `r50DownB` unfold to. The bundle lemmas below are delegations
-in `ResNet34FullBVJP.lean`'s style.
+in `ResNet34FullBVJP.lean`'s style, and the whole net is those blocks' `CertLayer`s composed.
 
 ⭐ **And unlike ResNet-34's, this file needed no new `Foundation` lemma.** r34's T1 was blocked on
 `batchMap_has_vjp_at` (4.1c) for its stem pool. ResNet-50 has the same stem — and reuses
@@ -125,13 +125,6 @@ noncomputable def r50IdB_has_vjp_at (N h w : Nat) {mid oc : Nat} (p : R50IdW mid
   StableHLO.r50BottleneckB_has_vjp_at N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2 hs.hout
 
-theorem r50IdB_differentiableAt (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
-    (hq : R50IdPos p) (v : Vec (N * (oc * h * w))) (hs : R50IdSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r50IdB N h w p) v :=
-  (StableHLO.r50BottleneckLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃).diff v
-    ⟨⟨⟨hs.hm1, hs.hm2⟩, trivial⟩, hs.hout⟩
-
 /-- Stride-1 projection bottleneck VJP — `r50ProjBlockB_has_vjp_at` at the bundle's fields. -/
 noncomputable def r50ProjB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (v : Vec (N * (ic * h * w))) (hs : R50ProjSmoothAt N h w p v) :
@@ -139,13 +132,6 @@ noncomputable def r50ProjB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50Pr
   StableHLO.r50ProjBlockB_has_vjp_at N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
     p.Wp p.bp p.εp hq.hp p.γp p.βp v hs.hm1 hs.hm2 hs.hout
-
-theorem r50ProjB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
-    (hq : R50ProjPos p) (v : Vec (N * (ic * h * w))) (hs : R50ProjSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r50ProjB N h w p) v :=
-  (StableHLO.r50ProjBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
-    p.Wp p.bp p.εp hq.hp p.γp p.βp).diff v ⟨⟨trivial, ⟨hs.hm1, hs.hm2⟩, trivial⟩, hs.hout⟩
 
 /-- Strided projection bottleneck VJP — `r50DownBlockB_has_vjp_at` at the bundle's fields. -/
 noncomputable def r50DownB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
@@ -156,13 +142,30 @@ noncomputable def r50DownB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50Pr
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
     p.Wp p.bp p.εp hq.hp p.γp p.βp v hs.hm1 hs.hm2 hs.hout
 
-theorem r50DownB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
-    (hq : R50ProjPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hs : R50DownSmoothAt N h w p v) :
-    DifferentiableAt ℝ (r50DownB N h w p) v :=
-  (StableHLO.r50DownBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+/-- The identity bottleneck as a `CertLayer`, at its weight record. -/
+noncomputable def r50IdLayer (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (hq : R50IdPos p) :
+    StableHLO.CertLayer (N * (oc * h * w)) (N * (oc * h * w)) :=
+  StableHLO.r50BottleneckLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
-    p.Wp p.bp p.εp hq.hp p.γp p.βp).diff v ⟨⟨trivial, ⟨hs.hm1, hs.hm2⟩, trivial⟩, hs.hout⟩
+
+/-- The stride-1 projection bottleneck as a `CertLayer`, at its weight record. -/
+noncomputable def r50ProjLayer (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+    (hq : R50ProjPos p) : StableHLO.CertLayer (N * (ic * h * w)) (N * (oc * h * w)) :=
+  StableHLO.r50ProjBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ p.Wp p.bp p.εp hq.hp p.γp p.βp
+
+/-- The strided projection bottleneck as a `CertLayer`, at its weight record. -/
+noncomputable def r50DownLayer (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+    (hq : R50ProjPos p) : StableHLO.CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
+  StableHLO.r50DownBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ p.Wp p.bp p.εp hq.hp p.γp p.βp
+
+theorem r50IdLayer_fwd (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (hq : R50IdPos p) :
+    (r50IdLayer N h w p hq).fwd = r50IdB N h w p := rfl
+theorem r50ProjLayer_fwd (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+    (hq : R50ProjPos p) : (r50ProjLayer N h w p hq).fwd = r50ProjB N h w p := rfl
+theorem r50DownLayer_fwd (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+    (hq : R50ProjPos p) : (r50DownLayer N h w p hq).fwd = r50DownB N h w p := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § The running activations — `r50PreK` = the net truncated after block `K`
@@ -271,91 +274,6 @@ structure R50SmoothAtB (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec 
   s4b2 : R50IdSmoothAt N q q w.s4b2 (r50Pre15 N q w x)
 
 -- ════════════════════════════════════════════════════════════════
--- § The apex
--- ════════════════════════════════════════════════════════════════
-
-/-- The chain's VJP and its differentiability together, one `vjp_comp_diff_at` per block: the
-    apex is `.fst`, `resnet50ForwardB_full_differentiableAt` is `.snd`. -/
-private noncomputable def r50ChainB (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
-    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
-    (hx : R50SmoothAtB N q w x) :
-    PProd (HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x)
-      (DifferentiableAt ℝ (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x) :=
-  let p0 : PProd (HasVJPAt (r50Pre0 N q w) x) (DifferentiableAt ℝ (r50Pre0 N q w) x) :=
-    ⟨r34StemB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε hp.s w.sγ w.sβ
-        (by norm_num) (by omega) (by omega) x hx.stem hx.pool,
-      r34StemB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε hp.s w.sγ w.sβ
-        (by norm_num) (by omega) (by omega) x hx.stem hx.pool⟩
-  let p1 : PProd (HasVJPAt (r50Pre1 N q w) x) (DifferentiableAt ℝ (r50Pre1 N q w) x) :=
-    vjp_comp_diff_at _ _ x p0 ⟨r50ProjB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 hp.s1b0 _ hx.s1b0,
-      r50ProjB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 hp.s1b0 _ hx.s1b0⟩
-  let p2 : PProd (HasVJPAt (r50Pre2 N q w) x) (DifferentiableAt ℝ (r50Pre2 N q w) x) :=
-    vjp_comp_diff_at _ _ x p1 ⟨r50IdB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 hp.s1b1 _ hx.s1b1,
-      r50IdB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 hp.s1b1 _ hx.s1b1⟩
-  let p3 : PProd (HasVJPAt (r50Pre3 N q w) x) (DifferentiableAt ℝ (r50Pre3 N q w) x) :=
-    vjp_comp_diff_at _ _ x p2 ⟨r50IdB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 hp.s1b2 _ hx.s1b2,
-      r50IdB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 hp.s1b2 _ hx.s1b2⟩
-  let p4 : PProd (HasVJPAt (r50Pre4 N q w) x) (DifferentiableAt ℝ (r50Pre4 N q w) x) :=
-    vjp_comp_diff_at _ _ x p3 ⟨r50DownB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 hp.s2b0 _ hx.s2b0,
-      r50DownB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 hp.s2b0 _ hx.s2b0⟩
-  let p5 : PProd (HasVJPAt (r50Pre5 N q w) x) (DifferentiableAt ℝ (r50Pre5 N q w) x) :=
-    vjp_comp_diff_at _ _ x p4 ⟨r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 hp.s2b1 _ hx.s2b1,
-      r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 hp.s2b1 _ hx.s2b1⟩
-  let p6 : PProd (HasVJPAt (r50Pre6 N q w) x) (DifferentiableAt ℝ (r50Pre6 N q w) x) :=
-    vjp_comp_diff_at _ _ x p5 ⟨r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 hp.s2b2 _ hx.s2b2,
-      r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 hp.s2b2 _ hx.s2b2⟩
-  let p7 : PProd (HasVJPAt (r50Pre7 N q w) x) (DifferentiableAt ℝ (r50Pre7 N q w) x) :=
-    vjp_comp_diff_at _ _ x p6 ⟨r50IdB_has_vjp_at N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 hp.s2b3 _ hx.s2b3,
-      r50IdB_differentiableAt N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 hp.s2b3 _ hx.s2b3⟩
-  let p8 : PProd (HasVJPAt (r50Pre8 N q w) x) (DifferentiableAt ℝ (r50Pre8 N q w) x) :=
-    vjp_comp_diff_at _ _ x p7 ⟨r50DownB_has_vjp_at N (2 * q) (2 * q) w.s3b0 hp.s3b0 _ hx.s3b0,
-      r50DownB_differentiableAt N (2 * q) (2 * q) w.s3b0 hp.s3b0 _ hx.s3b0⟩
-  let p9 : PProd (HasVJPAt (r50Pre9 N q w) x) (DifferentiableAt ℝ (r50Pre9 N q w) x) :=
-    vjp_comp_diff_at _ _ x p8 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b1 hp.s3b1 _ hx.s3b1,
-      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b1 hp.s3b1 _ hx.s3b1⟩
-  let p10 : PProd (HasVJPAt (r50Pre10 N q w) x) (DifferentiableAt ℝ (r50Pre10 N q w) x) :=
-    vjp_comp_diff_at _ _ x p9 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b2 hp.s3b2 _ hx.s3b2,
-      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b2 hp.s3b2 _ hx.s3b2⟩
-  let p11 : PProd (HasVJPAt (r50Pre11 N q w) x) (DifferentiableAt ℝ (r50Pre11 N q w) x) :=
-    vjp_comp_diff_at _ _ x p10 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b3 hp.s3b3 _ hx.s3b3,
-      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b3 hp.s3b3 _ hx.s3b3⟩
-  let p12 : PProd (HasVJPAt (r50Pre12 N q w) x) (DifferentiableAt ℝ (r50Pre12 N q w) x) :=
-    vjp_comp_diff_at _ _ x p11 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b4 hp.s3b4 _ hx.s3b4,
-      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b4 hp.s3b4 _ hx.s3b4⟩
-  let p13 : PProd (HasVJPAt (r50Pre13 N q w) x) (DifferentiableAt ℝ (r50Pre13 N q w) x) :=
-    vjp_comp_diff_at _ _ x p12 ⟨r50IdB_has_vjp_at N (2 * q) (2 * q) w.s3b5 hp.s3b5 _ hx.s3b5,
-      r50IdB_differentiableAt N (2 * q) (2 * q) w.s3b5 hp.s3b5 _ hx.s3b5⟩
-  let p14 : PProd (HasVJPAt (r50Pre14 N q w) x) (DifferentiableAt ℝ (r50Pre14 N q w) x) :=
-    vjp_comp_diff_at _ _ x p13 ⟨r50DownB_has_vjp_at N q q w.s4b0 hp.s4b0 _ hx.s4b0,
-      r50DownB_differentiableAt N q q w.s4b0 hp.s4b0 _ hx.s4b0⟩
-  let p15 : PProd (HasVJPAt (r50Pre15 N q w) x) (DifferentiableAt ℝ (r50Pre15 N q w) x) :=
-    vjp_comp_diff_at _ _ x p14 ⟨r50IdB_has_vjp_at N q q w.s4b1 hp.s4b1 _ hx.s4b1,
-      r50IdB_differentiableAt N q q w.s4b1 hp.s4b1 _ hx.s4b1⟩
-  let p16 : PProd (HasVJPAt (r50Pre16 N q w) x) (DifferentiableAt ℝ (r50Pre16 N q w) x) :=
-    vjp_comp_diff_at _ _ x p15 ⟨r50IdB_has_vjp_at N q q w.s4b2 hp.s4b2 _ hx.s4b2,
-      r50IdB_differentiableAt N q q w.s4b2 hp.s4b2 _ hx.s4b2⟩
-  vjp_comp_diff_at _ _ x p16
-    ⟨(r34HeadB_has_vjp N q q w.Wd w.bd).toHasVJPAt _, r34HeadB_differentiable N q q w.Wd w.bd _⟩
-
-/-- ⭐⭐ **ResNet-50 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
-    bottlenecks.** Chains stem → the [3,4,6,3] ladder → head with `vjp_comp_diff_at` under two
-    hypotheses: `R50PosB` (every `ε > 0`) and `R50SmoothAtB` (every relu clause and the pool's
-    no-tie, each at its block's own input). T1's VJP half, and the first tier ResNet-50 has ever
-    had at the net level.
-
-    ⚠ Pointwise, and necessarily: relu is kinked. ⛔ Each block contributes THREE clauses — the
-    two interior relus and the post-residual OUTER relu — where ResNet-34's basic block
-    contributes two and EfficientNet's MBConv none.
-
-    ⭐ The head takes no hypothesis at all, and `N` and `q` are both variables, so this covers the
-    224-px and 160-px artifacts at every batch size. ⛔ `0 < q` is needed for the stem pool. -/
-noncomputable def resnet50ForwardB_full_has_vjp_at (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
-    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
-    (hx : R50SmoothAtB N q w x) :
-    HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x :=
-  (r50ChainB N q hq0 w hp x hx).fst
-
--- ════════════════════════════════════════════════════════════════
 -- § The chain equation — the layered `r50PreK` form IS the committed forward
 --   ⚠ Peeled one layer at a time through `*_apply`, as ResNet-34's is: a one-step `rfl` against a
 --   sixteen-deep nested application takes a kernel deterministic timeout.
@@ -422,6 +340,93 @@ theorem resnet50ForwardB_full_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights
   rw [resnet50ForwardB_full, Function.comp_apply, r50Pre16_apply, r50Pre15_apply, r50Pre14_apply, r50Pre13_apply, r50Pre12_apply, r50Pre11_apply, r50Pre10_apply, r50Pre9_apply, r50Pre8_apply, r50Pre7_apply, r50Pre6_apply, r50Pre5_apply, r50Pre4_apply, r50Pre3_apply, r50Pre2_apply, r50Pre1_apply, r50Pre0_apply]
 
 
+-- ════════════════════════════════════════════════════════════════
+-- § The apex — the whole net as ONE `CertLayer`
+--   Stem, the sixteen bottlenecks and the head composed with `CertLayer.comp`, so the VJP, its
+--   differentiability and the backward-graph faithfulness are the layer's fields. At the binder
+--   `q` every width is the same syntactic `2 * (…)` nest on both sides of each `comp`, which is
+--   what keeps the peel below cheap (`planning/certlayer_nets.md` §6).
+-- ════════════════════════════════════════════════════════════════
+
+/-- ⭐ **ResNet-50 as one certified layer**, at every batch size and resolution. Its `.faithful`
+    is a whole-net backward graph, stem pool included, proven to denote the VJP. -/
+noncomputable def r50NetLayer (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) :
+    StableHLO.CertLayer (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))) (N * nCls) :=
+  (r34StemLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (by norm_num) (by omega) (by omega)
+      w.sW w.sb w.sε hp.s w.sγ w.sβ).comp <|
+  (r50ProjLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 hp.s1b0).comp <|
+  (r50IdLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 hp.s1b1).comp <|
+  (r50IdLayer N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b2 hp.s1b2).comp <|
+  (r50DownLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b0 hp.s2b0).comp <|
+  (r50IdLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b1 hp.s2b1).comp <|
+  (r50IdLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b2 hp.s2b2).comp <|
+  (r50IdLayer N (2 * (2 * q)) (2 * (2 * q)) w.s2b3 hp.s2b3).comp <|
+  (r50DownLayer N (2 * q) (2 * q) w.s3b0 hp.s3b0).comp <|
+  (r50IdLayer N (2 * q) (2 * q) w.s3b1 hp.s3b1).comp <|
+  (r50IdLayer N (2 * q) (2 * q) w.s3b2 hp.s3b2).comp <|
+  (r50IdLayer N (2 * q) (2 * q) w.s3b3 hp.s3b3).comp <|
+  (r50IdLayer N (2 * q) (2 * q) w.s3b4 hp.s3b4).comp <|
+  (r50IdLayer N (2 * q) (2 * q) w.s3b5 hp.s3b5).comp <|
+  (r50DownLayer N q q w.s4b0 hp.s4b0).comp <|
+  (r50IdLayer N q q w.s4b1 hp.s4b1).comp <|
+  (r50IdLayer N q q w.s4b2 hp.s4b2).comp <|
+  r34HeadLayer N q q w.Wd w.bd
+
+/-- The composed layer's forward IS the committed nested-application forward: peeled one `comp`
+    at a time, then each layer's forward by its `rfl` lemma. -/
+theorem r50NetLayer_fwd_apply (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
+    (r50NetLayer N q hq0 w hp).fwd x = resnet50ForwardB_full N q w x := by
+  rw [r50NetLayer]
+  repeat rw [StableHLO.CertLayer.comp_fwd_apply]
+  rw [r34StemLayer_fwd, r50ProjLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50DownLayer_fwd,
+    r50IdLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50DownLayer_fwd, r50IdLayer_fwd,
+    r50IdLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50DownLayer_fwd,
+    r50IdLayer_fwd, r50IdLayer_fwd, r34HeadLayer_fwd, resnet50ForwardB_full]
+
+/-- `R50SmoothAtB` is the layer's `.ok`: one `comp_ok_of` per block, each naming its block's
+    input `r50PreK`, so every step is a one-level `rfl`. -/
+theorem r50SmoothAtB_ok (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtB N q w x) : (r50NetLayer N q hq0 w hp).ok x := by
+  refine StableHLO.CertLayer.comp_ok_of ⟨hx.stem, hx.pool⟩ (r50Pre0 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨trivial, ⟨hx.s1b0.hm1, hx.s1b0.hm2⟩, trivial⟩, hx.s1b0.hout⟩ (r50Pre1 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s1b1.hm1, hx.s1b1.hm2⟩, trivial⟩, hx.s1b1.hout⟩ (r50Pre2 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s1b2.hm1, hx.s1b2.hm2⟩, trivial⟩, hx.s1b2.hout⟩ (r50Pre3 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨trivial, ⟨hx.s2b0.hm1, hx.s2b0.hm2⟩, trivial⟩, hx.s2b0.hout⟩ (r50Pre4 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s2b1.hm1, hx.s2b1.hm2⟩, trivial⟩, hx.s2b1.hout⟩ (r50Pre5 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s2b2.hm1, hx.s2b2.hm2⟩, trivial⟩, hx.s2b2.hout⟩ (r50Pre6 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s2b3.hm1, hx.s2b3.hm2⟩, trivial⟩, hx.s2b3.hout⟩ (r50Pre7 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨trivial, ⟨hx.s3b0.hm1, hx.s3b0.hm2⟩, trivial⟩, hx.s3b0.hout⟩ (r50Pre8 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s3b1.hm1, hx.s3b1.hm2⟩, trivial⟩, hx.s3b1.hout⟩ (r50Pre9 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s3b2.hm1, hx.s3b2.hm2⟩, trivial⟩, hx.s3b2.hout⟩ (r50Pre10 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s3b3.hm1, hx.s3b3.hm2⟩, trivial⟩, hx.s3b3.hout⟩ (r50Pre11 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s3b4.hm1, hx.s3b4.hm2⟩, trivial⟩, hx.s3b4.hout⟩ (r50Pre12 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s3b5.hm1, hx.s3b5.hm2⟩, trivial⟩, hx.s3b5.hout⟩ (r50Pre13 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨trivial, ⟨hx.s4b0.hm1, hx.s4b0.hm2⟩, trivial⟩, hx.s4b0.hout⟩ (r50Pre14 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s4b1.hm1, hx.s4b1.hm2⟩, trivial⟩, hx.s4b1.hout⟩ (r50Pre15 N q w x) rfl ?_
+  refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s4b2.hm1, hx.s4b2.hm2⟩, trivial⟩, hx.s4b2.hout⟩ (r50Pre16 N q w x) rfl ?_
+  exact ⟨trivial, trivial⟩
+
+/-- ⭐⭐ **ResNet-50 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
+    bottlenecks.** `r50NetLayer`'s `.vjp`, read at the layered chain, under two hypotheses: `R50PosB` (every `ε > 0`) and `R50SmoothAtB` (every relu clause and the pool's
+    no-tie, each at its block's own input). T1's VJP half, and the first tier ResNet-50 has ever
+    had at the net level.
+
+    ⚠ Pointwise, and necessarily: relu is kinked. ⛔ Each block contributes THREE clauses — the
+    two interior relus and the post-residual OUTER relu — where ResNet-34's basic block
+    contributes two and EfficientNet's MBConv none.
+
+    ⭐ The head takes no hypothesis at all, and `N` and `q` are both variables, so this covers the
+    224-px and 160-px artifacts at every batch size. ⛔ `0 < q` is needed for the stem pool. -/
+noncomputable def resnet50ForwardB_full_has_vjp_at (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
+    (hx : R50SmoothAtB N q w x) :
+    HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x :=
+  (funext fun v => (r50NetLayer_fwd_apply N q hq0 w hp v).trans (resnet50ForwardB_full_eq_chain N q w v)
+    : (r50NetLayer N q hq0 w hp).fwd = _) ▸ (r50NetLayer N q hq0 w hp).vjp x (r50SmoothAtB_ok N q hq0 w hp x hx)
+
 /-- ⭐⭐ **Public correctness theorem**: the sixteen-bottleneck batch-BN backward equals the
     `pdiv`-contracted Jacobian of `resnet50ForwardB_full` ITSELF — the committed
     nested-application forward `ResNet50FullB.lean` defines — not of the layered chain the VJP is
@@ -436,14 +441,13 @@ theorem resnet50ForwardB_full_has_vjp_at_correct (N q : Nat) (hq0 : 0 < q) {nCls
   rwa [show resnet50ForwardB_full N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
       from funext (resnet50ForwardB_full_eq_chain N q w)]
 
-/-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`, read
-    back through `resnet50ForwardB_full_eq_chain`. What the seal's `sealDiffAt` needs. -/
+/-- ⭐ The committed forward is differentiable at every smooth point — the layer's `.diff`. What
+    the seal's `sealDiffAt` needs. -/
 theorem resnet50ForwardB_full_differentiableAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) :
     DifferentiableAt ℝ (resnet50ForwardB_full N q w) x := by
-  rw [show resnet50ForwardB_full N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
-      from funext (resnet50ForwardB_full_eq_chain N q w)]
-  exact (r50ChainB N q hq0 w hp x hx).snd
+  rw [← funext (r50NetLayer_fwd_apply N q hq0 w hp)]
+  exact (r50NetLayer N q hq0 w hp).diff x (r50SmoothAtB_ok N q hq0 w hp x hx)
 
 end Proofs

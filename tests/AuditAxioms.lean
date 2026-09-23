@@ -1815,7 +1815,13 @@ open Proofs
 #print axioms Proofs.r34IdB_has_vjp_at
 #print axioms Proofs.r34DownB_has_vjp_at
 #print axioms Proofs.r34StemB_has_vjp_at
+#print axioms Proofs.r34PoolLayer
+#print axioms Proofs.r34StemLayer
+#print axioms Proofs.r34HeadLayer
 #print axioms Proofs.r34HeadB_has_vjp
+#print axioms Proofs.r34NetLayer
+#print axioms Proofs.r34NetLayer_fwd_apply
+#print axioms Proofs.r34SmoothAtB_ok
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at
 #print axioms Proofs.resnet34ForwardB_full_eq_chain
 #print axioms Proofs.resnet34ForwardB_full_has_vjp_at_correct
@@ -2252,11 +2258,11 @@ open Proofs
 -- §3.5(a)+(b): RESNET-50's T1 AND T2 AT BATCH BATCHNORM (ResNet50FullB{,VJP}.lean, 2026-09-06)
 #print axioms Proofs.resnet50ForwardB_full
 #print axioms Proofs.r50IdB_has_vjp_at
-#print axioms Proofs.r50IdB_differentiableAt
 #print axioms Proofs.r50ProjB_has_vjp_at
-#print axioms Proofs.r50ProjB_differentiableAt
 #print axioms Proofs.r50DownB_has_vjp_at
-#print axioms Proofs.r50DownB_differentiableAt
+#print axioms Proofs.r50NetLayer
+#print axioms Proofs.r50NetLayer_fwd_apply
+#print axioms Proofs.r50SmoothAtB_ok
 #print axioms Proofs.resnet50ForwardB_full_has_vjp_at
 #print axioms Proofs.resnet50ForwardB_full_eq_chain
 #print axioms Proofs.resnet50ForwardB_full_has_vjp_at_correct

@@ -431,8 +431,8 @@ theorem mnv4HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
       = batchShard R N nCls
           (((cbReluLayer (h := h) (w := w) (R * N) W1 b1 ε1 hε1 γ1 β1).comp
             (mnv4Head (R * N) (cbReluLayer (h := h) (w := w) (R * N) W2 b2 ε2 hε2 γ2 β2)
-              (mnv4GapLayer (R * N) (c := oc) (h := h) (w := w))
-              (mnv4DenseLayer (R * N) Wd bd))).fwd X) r := by
+              (gapLayer (R * N) (c := oc) (h := h) (w := w))
+              (denseLayer (R * N) Wd bd))).fwd X) r := by
   have hm := nhw_ne_zero hN hh hw
   have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hc1 := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1) e X he

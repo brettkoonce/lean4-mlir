@@ -169,3 +169,27 @@ Open decision before §4.2: whether retiring the prefix vocabulary is worth rest
 seal statements over layer activations (a comparator-tier change), or whether §4.2 should be
 re-scoped to "one CertLayer per net + shared head/stem layers" and keep the prefixes as public
 names.
+
+### 2026-09-23 — §4.2 built for R34 + R50: green, but +90 lines (fails the "only if smaller" gate)
+
+| file | lines | what changed |
+|---|---|---|
+| `Foundation/HeadLayers.lean` (new) | +52 | `gapLayer` / `denseLayer`, moved out of MNv4 |
+| `MobileNetV4BackB0.lean` (+4 renames) | −41 | uses the shared GAP / dense |
+| `ResNet34FullBVJP.lean` | +70 | shared `r34PoolLayer` / `r34StemLayer` / `r34HeadLayer` / `comp_ok_of` (+58); `r34NetLayer` replaces `r34ChainB` and two `_differentiableAt` delegations (+12) |
+| `ResNet50FullBVJP.lean` | +5 | `r50NetLayer` replaces `r50ChainB` and three `_differentiableAt` delegations |
+| `tests/AuditAxioms.lean` | +6 | new names in, removed names out |
+
+Both FullBVJP files take ~3 s standalone, as before; the slowest declaration is the `ok` bridge
+(0.18 s R34, 0.31 s R50). No bumps, and no statement changes: `gen_comparator_tier.py --check`
+passes and `blueprint_uses.py --check` is in sync (149 blocks, 798 edges). All landing gates pass.
+
+⛔ **New trap at literal widths:** in R34's `ok` bridge the activation step
+`Lₖ.fwd (r34Pre(k-1) N w x) = r34PreK N w x` by `rfl` is a KERNEL deep recursion already at block 1
+(elaboration is fine). At R50's binder `q` the same `rfl` passes. `rw [r34IdLayer_fwd, r34PreK_apply]`
+fixes it; the block `ok` itself can stay an anonymous constructor. Bisected: the error follows the
+`rfl`, not the `ok` term and not the stride joins.
+
+What it buys: both apexes are the `.vjp` of one layer; each whole net has a backward graph, stem pool
+included, proven to denote its VJP; GAP / dense exist once. What it costs: 90 lines. So the
+line-count premise of this thread doesn't hold for the ResNets, and MNv2 would not change that.
