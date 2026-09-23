@@ -195,10 +195,7 @@ def qrow(vals, den):
 def qmat(M, den):
     return "![" + ",\n    ".join(qrow(r, den) for r in M) + "]"
 
-HEADER_OPTS = """set_option maxRecDepth 100000
-set_option maxHeartbeats 3200000
-
-namespace Proofs
+HEADER_OPTS = """namespace Proofs
 namespace LipschitzCertDemo
 
 open scoped BigOperators
@@ -283,7 +280,6 @@ def emit_net(A, tag, W1q, W2q, B1, B2, L):
     A(f"theorem H1{tag}_eq : ∀ a b, H1{tag} a b = ∑ c, G1{tag} c a * G1{tag} c b :=")
     A(f"  gram_eq_of_check H1{tag}Q (fun a c => G1{tag}Q c a) (by decide +kernel)")
     A("")
-    A("set_option maxHeartbeats 12800000 in")
     A(f"/-- Schatten-8 bound for {tag} layer 1: B₁ = {B1}. -/")
     A(f"theorem W1{tag}_lip : LipschitzL2 {frac(B1)} (denseE W1{tag}) := by")
     A(f"  refine denseE_lipschitzL2_gram2 W1{tag} G1{tag} H1{tag} (by norm_num) G1{tag}_eq H1{tag}_eq ?_")
@@ -307,7 +303,6 @@ def emit_net(A, tag, W1q, W2q, B1, B2, L):
     A(f"theorem H2{tag}_eq : ∀ a b, H2{tag} a b = ∑ c, G2{tag} c a * G2{tag} c b :=")
     A(f"  gram_eq_of_check H2{tag}Q (fun a c => G2{tag}Q c a) (by decide +kernel)")
     A("")
-    A("set_option maxHeartbeats 12800000 in")
     A(f"theorem W2{tag}_lip : LipschitzL2 {frac(B2)} (denseE W2{tag}) := by")
     A(f"  refine denseE_lipschitzL2_gram2 W2{tag} G2{tag} H2{tag} (by norm_num) G2{tag}_eq H2{tag}_eq ?_")
     A(f"  simp [H2{tag}, H2{tag}Q, castM, Fin.sum_univ_succ]")

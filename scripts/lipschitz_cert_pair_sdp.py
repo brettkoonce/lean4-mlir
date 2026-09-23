@@ -323,7 +323,6 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
                 for r in range(H) if c["L"][r][col] != 0)
             if terms:
                 hints.append(f"sq_nonneg ({terms})")
-        A("set_option maxHeartbeats 3200000 in")
         A(f"theorem hS{nm} : ∀ z : Fin 8 → ℝ,")
         A(f"    (∑ k, vP{nm} k * z k) ^ 2")
         A(f"      + (1/{frac(c['rho'])}) * (∑ a, ∑ b, (tP{nm} a * z a) * ({g1name} a b * (tP{nm} b * z b)))")
@@ -383,7 +382,6 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
         A(f"noncomputable def {lg} : Fin 10 → ℝ :=")
         A("  " + row_int(logit, den_l))
         A("")
-        A("set_option maxHeartbeats 1600000 in")
         A(f"theorem {lg}_eval : ∀ jj : Fin 10, {mlpname} {img} jj = {lg} jj := by")
         A(f"  have hout : ∀ jj : Fin 10, {mlpname} {img} jj = ∑ k, {w2name} jj k * max ({hpre} k) 0 :=")
         A(f"    mlp_out_eq {w1name} {w2name} {hpre}_eval")
@@ -393,7 +391,6 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
         A(f"    · simp [{w2name}, {w2name}Q, castM, {hpre}, {lg}, Fin.sum_univ_succ, max_def]")
         A("      try norm_num")
         A("")
-        A("set_option maxHeartbeats 1600000 in")
         A(f"/-- Test #{i} (digit {y}): LipSDP-per-pair certified at ε = {EPS} — each")
         A(f"    of the 9 margins clears its own `Lp·ε`. -/")
         A(f"theorem certifiedS{tag}{i} (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < {frac(EPS)}) :")

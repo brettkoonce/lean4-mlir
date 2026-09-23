@@ -119,9 +119,7 @@ def lit(fr):
 img_blocks = []
 for k in emitted:
     lab = labels[k]
-    img_blocks.append(f"""set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
-theorem img{k}_abs_le : ∀ c : Fin 49, |img{k} c| ≤ 1 := by
+    img_blocks.append(f"""theorem img{k}_abs_le : ∀ c : Fin 49, |img{k} c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img{k}]; try norm_num)
 

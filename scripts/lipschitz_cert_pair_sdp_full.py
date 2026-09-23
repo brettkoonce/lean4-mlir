@@ -265,7 +265,6 @@ def emit_net(tag, W1q, W2q, out_path):
                 for r in range(H) if c["L"][r][col] != 0)
             if terms:
                 hints.append(f"sq_nonneg ({terms})")
-        A("set_option maxHeartbeats 64000000 in")
         A(f"theorem hS{nm} : ∀ z : Fin {H} → ℝ,")
         A(f"    (∑ k, vP{nm} k * z k) ^ 2")
         A(f"      + (1/{frac(c['rho'])}) * (∑ a, ∑ b, (tP{nm} a * z a) * (G1{tag} a b * (tP{nm} b * z b)))")
@@ -327,7 +326,6 @@ def emit_net(tag, W1q, W2q, out_path):
         A(f"noncomputable def {lg} : Fin {K} → ℝ :=")
         A("  " + rrow(logit, den_l))
         A("")
-        A("set_option maxHeartbeats 3200000 in")
         A(f"theorem {lg}_eval : ∀ jj : Fin {K}, mlp{tag} imgF{i} jj = {lg} jj := by")
         A(f"  have hout : ∀ jj : Fin {K}, mlp{tag} imgF{i} jj = ∑ k, W2{tag} jj k * max (hpre{tag}{i} k) 0 :=")
         A(f"    mlp_out_eq W1{tag} W2{tag} hpre{tag}{i}_eval")
@@ -340,7 +338,6 @@ def emit_net(tag, W1q, W2q, out_path):
         for epsname, eps, certs in (("10", EPS10, cert10), ("30", EPS30, cert30)):
             if i not in certs:
                 continue
-            A("set_option maxHeartbeats 3200000 in")
             A(f"/-- Test #{i} (digit {y}): LipSDP-per-pair certified at ε = {eps} — each")
             A("    of the 9 margins clears its own `Lp·ε`. -/")
             A(f"theorem certifiedS{tag}{epsname}_{i} (δ : EuclideanSpace ℝ (Fin {DIM})) (hδ : ‖δ‖ < {frac(eps)}) :")

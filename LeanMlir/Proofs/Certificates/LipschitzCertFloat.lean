@@ -258,8 +258,6 @@ theorem certifiedFloat_of_margin (M : FloatModel) (hMu : M.u ≤ u32)
 -- § The float-certified images
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img0_abs_le : ∀ c : Fin 49, |img0 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img0]; try norm_num)
@@ -274,8 +272,6 @@ theorem certifiedC0_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 7 :=
   certifiedFloat_of_margin M hMu img0 img0_abs_le marginC0
     (by norm_num) δ hδ y hy
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img3_abs_le : ∀ c : Fin 49, |img3 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img3]; try norm_num)
@@ -290,8 +286,6 @@ theorem certifiedC3_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 0 :=
   certifiedFloat_of_margin M hMu img3 img3_abs_le marginC3
     (by norm_num) δ hδ y hy
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img5_abs_le : ∀ c : Fin 49, |img5 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img5]; try norm_num)
@@ -306,8 +300,6 @@ theorem certifiedC5_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 1 :=
   certifiedFloat_of_margin M hMu img5 img5_abs_le marginC5
     (by norm_num) δ hδ y hy
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img10_abs_le : ∀ c : Fin 49, |img10 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img10]; try norm_num)
@@ -322,8 +314,6 @@ theorem certifiedC10_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 0 :=
   certifiedFloat_of_margin M hMu img10 img10_abs_le marginC10
     (by norm_num) δ hδ y hy
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img13_abs_le : ∀ c : Fin 49, |img13 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img13]; try norm_num)
@@ -338,8 +328,6 @@ theorem certifiedC13_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 0 :=
   certifiedFloat_of_margin M hMu img13 img13_abs_le marginC13
     (by norm_num) δ hδ y hy
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img14_abs_le : ∀ c : Fin 49, |img14 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img14]; try norm_num)
@@ -354,8 +342,6 @@ theorem certifiedC14_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 1 :=
   certifiedFloat_of_margin M hMu img14 img14_abs_le marginC14
     (by norm_num) δ hδ y hy
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img17_abs_le : ∀ c : Fin 49, |img17 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img17]; try norm_num)
@@ -370,8 +356,6 @@ theorem certifiedC17_float (M : FloatModel) (hMu : M.u ≤ u32)
       M.mlp2F W1sV zb8 W2sV zb10 y j < M.mlp2F W1sV zb8 W2sV zb10 y 7 :=
   certifiedFloat_of_margin M hMu img17 img17_abs_le marginC17
     (by norm_num) δ hδ y hy
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem img25_abs_le : ∀ c : Fin 49, |img25 c| ≤ 1 := by
   intro c
   fin_cases c <;> (simp [img25]; try norm_num)

@@ -35,7 +35,8 @@ were measured say so.
 | `bb38c790` (g) | §3.2 `den.eq_def` never built: `denStep`/`denStepApp` dsimprocs (smart unfolding, one constructor) replace `den` in all 118 `simp only` sets (29 files); StableHLO's file-wide `maxHeartbeats 4000000` and `cnnBackGraph_faithful`'s 2M out, `emitTok` alone keeps 1M (its compile needs ~2×; tracing trips 400k) | `den.eq_def` was 233 s on StableHLO's critical path (profiler); StableHLO 343 s → 83 s standalone, 91 s under lake; full `Proofs Certs` rebuild 2 m 20 s |
 | `7fe1f006` (h) | §3.3 conv IBP scorecard by reflection: new `Foundation/IntervalBoundConvQ.lean` (the layers over ℚ, cast lemmas, `convNetCheckQ` + `convNetCheckQ_sound`); the generator emits ℚ data, the ℝ net as its cast, and one `decide +kernel` per image — the intermediate tensors and their ~900 goals per image are gone (−1,640 lines); statements and the aggregate unchanged | profiled first: all simp (box ~250 s, conv eval ~180 s per image); ImgsA–D each 281 s / 9.9 GB → 11 s / 3.6 GB; generator byte-reproducible before the edit |
 | `d9356c38` (i) | §3.3 Gram identities by one kernel check: new `Foundation/GramQ.lean` (`castM`, `gram_eq_of_check`, `abs_le_of_check`); Instance, base Scorecard (generator), Float (generator) emit ℚ data with the ℝ matrices as `castM` of it; the 8 `G*_eq`/`H*_eq` and the two entrywise `|W| ≤ c` bounds become `decide +kernel` checks and their 1.6M–16M heartbeat bumps go; consumers' simp sets gain `…Q, castM` (SmoothingNetWitness, pair-SDP, TrainedMlpWitness) | profiled first: Instance's `G1t_eq` 139 s, Float's `W1sV_abs_le` 110 s; LipschitzCertInstance 145 s → 17 s, LipschitzCertFloat 113 s → 4.5 s, LipschitzCertScorecard 26 s under lake; generators byte-reproducible before the edit (pair-SDP: 7.6 min) |
-| pending (j) | §3.3 FullNets on the (i) shape: `W2`/`G1`/`H1`/`G2`/`H2` for both nets as ℚ data + `castM`, `H1`/`G2`/`H2` identities by `gram_eq_of_check` (their 12.8M bumps out); `G1` keeps its per-entry `dotZ` proofs, each entry value now `rfl` on the ℚ side + `norm_num`; the 784-wide `W1` untouched; `…Q, castM` added in the IBP, pair-SDP-full and CROWN generators (the CROWN one also parses the ℚ block) | FullNets 326 s / 8.8 GB → 61 s / 5.5 GB standalone (73 s under lake); CrownUncon standalone 237 s → 213 s (not slower); four generators byte-reproducible before the edit (pair-SDP-full 11 min) |
+| `3f22bb47` (j) | §3.3 FullNets on the (i) shape: `W2`/`G1`/`H1`/`G2`/`H2` for both nets as ℚ data + `castM`, `H1`/`G2`/`H2` identities by `gram_eq_of_check` (their 12.8M bumps out); `G1` keeps its per-entry `dotZ` proofs, each entry value now `rfl` on the ℚ side + `norm_num`; the 784-wide `W1` untouched; `…Q, castM` added in the IBP, pair-SDP-full and CROWN generators (the CROWN one also parses the ℚ block) | FullNets 326 s / 8.8 GB → 61 s / 5.5 GB standalone (73 s under lake); CrownUncon standalone 237 s → 213 s (not slower); four generators byte-reproducible before the edit (pair-SDP-full 11 min) |
+| pending (k) | §3.3 strip-and-compile across the Lipschitz tier: the shared `HEADER_OPTS` (`maxRecDepth 100000` / `maxHeartbeats 3200000` in 9 modules), CROWN's header, FullNets' 12.8M `_lip` bumps, the pair-SDP 1.6M–64M bumps (incl. the 64M `hS*`) and the float tier's per-image 8M — 281 option lines out of 14 modules. Kept: IBP/IBPUncon's per-decl 6.4M (32 + 18 `whnf` timeouts without them; their file header was dead) | every stripped module compiled standalone before the generators changed; the regenerated diff is deletions only |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -98,12 +99,14 @@ cheap half. `deriving DecidableEq` on `Raw`/`Tok` has no users (grep) but was no
   entrywise) costs the ℝ-literal indexing it removes (15–18 s a matrix, over the default budget);
   ⛔ reflecting the 784-wide `G1` over ℚ via `List.getD` hit a kernel timeout at 52 GB — layer 1
   stays on its `dotZ` facts.
-* `lipschitz_cert_scorecard_full.py`: 512 per-entry `gSF_a_b` real-arithmetic theorems → one
-  matrix-level lemma + one kernel check per matrix.
-* `HEADER_OPTS` (file-wide `maxRecDepth 100000` / `maxHeartbeats 3200000` in every Lipschitz
-  scorecard): strip-and-compile test, as in §1(b).
-* `lipschitz_cert_pair_sdp*.py` (64M heartbeats, 90-digit LDLᵀ `linarith`): lower priority, the
-  per-pair modules are already out of CertsHeavy.
+* `lipschitz_cert_scorecard_full.py`: 512 per-entry `g*_a_b` theorems → one matrix-level lemma.
+  Now worth ~20 s at most: FullNets' remaining 61 s is mostly the serialized kernel queue of its
+  ~272 `dotZ` facts, which a matrix-level lemma still has to evaluate.
+* ~~`HEADER_OPTS` / pair-SDP bumps~~ — done as §1(k).
+* ⚠ `LipschitzCertScorecardSDPFull` / `…SDPFullUncon` are in NO lib (disabled per-pair tier), so no
+  `lake build` target compiles them: after regenerating, build them by name
+  (`lake build LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPFull …SDPFullUncon`, ~5 min,
+  13.5 GB each).
 
 ### 3.4 Root-file API batch (one corpus rebuild)
 

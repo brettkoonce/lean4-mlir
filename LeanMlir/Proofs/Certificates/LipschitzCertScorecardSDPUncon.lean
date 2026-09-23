@@ -58,7 +58,6 @@ theorem tP01U_nonneg : ∀ k, 0 ≤ tP01U k := by
     · simp [tP01U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS01U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP01U k * z k) ^ 2
       + (1/((1389652491 : ℝ)/1000000)) * (∑ a, ∑ b, (tP01U a * z a) * (G1t a b * (tP01U b * z b)))
@@ -97,7 +96,6 @@ theorem tP02U_nonneg : ∀ k, 0 ≤ tP02U k := by
     · simp [tP02U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS02U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP02U k * z k) ^ 2
       + (1/((363448733 : ℝ)/500000)) * (∑ a, ∑ b, (tP02U a * z a) * (G1t a b * (tP02U b * z b)))
@@ -136,7 +134,6 @@ theorem tP03U_nonneg : ∀ k, 0 ≤ tP03U k := by
     · simp [tP03U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS03U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP03U k * z k) ^ 2
       + (1/((123584079 : ℝ)/250000)) * (∑ a, ∑ b, (tP03U a * z a) * (G1t a b * (tP03U b * z b)))
@@ -175,7 +172,6 @@ theorem tP04U_nonneg : ∀ k, 0 ≤ tP04U k := by
     · simp [tP04U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS04U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP04U k * z k) ^ 2
       + (1/((892519569 : ℝ)/500000)) * (∑ a, ∑ b, (tP04U a * z a) * (G1t a b * (tP04U b * z b)))
@@ -214,7 +210,6 @@ theorem tP05U_nonneg : ∀ k, 0 ≤ tP05U k := by
     · simp [tP05U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS05U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP05U k * z k) ^ 2
       + (1/((89323009 : ℝ)/200000)) * (∑ a, ∑ b, (tP05U a * z a) * (G1t a b * (tP05U b * z b)))
@@ -253,7 +248,6 @@ theorem tP06U_nonneg : ∀ k, 0 ≤ tP06U k := by
     · simp [tP06U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS06U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP06U k * z k) ^ 2
       + (1/((680007581 : ℝ)/500000)) * (∑ a, ∑ b, (tP06U a * z a) * (G1t a b * (tP06U b * z b)))
@@ -292,7 +286,6 @@ theorem tP07U_nonneg : ∀ k, 0 ≤ tP07U k := by
     · simp [tP07U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS07U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP07U k * z k) ^ 2
       + (1/((1215933471 : ℝ)/1000000)) * (∑ a, ∑ b, (tP07U a * z a) * (G1t a b * (tP07U b * z b)))
@@ -331,7 +324,6 @@ theorem tP08U_nonneg : ∀ k, 0 ≤ tP08U k := by
     · simp [tP08U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS08U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP08U k * z k) ^ 2
       + (1/((275263221 : ℝ)/500000)) * (∑ a, ∑ b, (tP08U a * z a) * (G1t a b * (tP08U b * z b)))
@@ -370,7 +362,6 @@ theorem tP09U_nonneg : ∀ k, 0 ≤ tP09U k := by
     · simp [tP09U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS09U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP09U k * z k) ^ 2
       + (1/((68370991 : ℝ)/50000)) * (∑ a, ∑ b, (tP09U a * z a) * (G1t a b * (tP09U b * z b)))
@@ -409,7 +400,6 @@ theorem tP12U_nonneg : ∀ k, 0 ≤ tP12U k := by
     · simp [tP12U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS12U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP12U k * z k) ^ 2
       + (1/((1012860851 : ℝ)/1000000)) * (∑ a, ∑ b, (tP12U a * z a) * (G1t a b * (tP12U b * z b)))
@@ -448,7 +438,6 @@ theorem tP13U_nonneg : ∀ k, 0 ≤ tP13U k := by
     · simp [tP13U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS13U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP13U k * z k) ^ 2
       + (1/((1085593567 : ℝ)/1000000)) * (∑ a, ∑ b, (tP13U a * z a) * (G1t a b * (tP13U b * z b)))
@@ -487,7 +476,6 @@ theorem tP14U_nonneg : ∀ k, 0 ≤ tP14U k := by
     · simp [tP14U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS14U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP14U k * z k) ^ 2
       + (1/((206713291 : ℝ)/125000)) * (∑ a, ∑ b, (tP14U a * z a) * (G1t a b * (tP14U b * z b)))
@@ -526,7 +514,6 @@ theorem tP15U_nonneg : ∀ k, 0 ≤ tP15U k := by
     · simp [tP15U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS15U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP15U k * z k) ^ 2
       + (1/((107108431 : ℝ)/100000)) * (∑ a, ∑ b, (tP15U a * z a) * (G1t a b * (tP15U b * z b)))
@@ -565,7 +552,6 @@ theorem tP16U_nonneg : ∀ k, 0 ≤ tP16U k := by
     · simp [tP16U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS16U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP16U k * z k) ^ 2
       + (1/((592364409 : ℝ)/500000)) * (∑ a, ∑ b, (tP16U a * z a) * (G1t a b * (tP16U b * z b)))
@@ -604,7 +590,6 @@ theorem tP17U_nonneg : ∀ k, 0 ≤ tP17U k := by
     · simp [tP17U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS17U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP17U k * z k) ^ 2
       + (1/((373811483 : ℝ)/200000)) * (∑ a, ∑ b, (tP17U a * z a) * (G1t a b * (tP17U b * z b)))
@@ -643,7 +628,6 @@ theorem tP18U_nonneg : ∀ k, 0 ≤ tP18U k := by
     · simp [tP18U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS18U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP18U k * z k) ^ 2
       + (1/((425185151 : ℝ)/500000)) * (∑ a, ∑ b, (tP18U a * z a) * (G1t a b * (tP18U b * z b)))
@@ -682,7 +666,6 @@ theorem tP19U_nonneg : ∀ k, 0 ≤ tP19U k := by
     · simp [tP19U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS19U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP19U k * z k) ^ 2
       + (1/((95710089 : ℝ)/50000)) * (∑ a, ∑ b, (tP19U a * z a) * (G1t a b * (tP19U b * z b)))
@@ -721,7 +704,6 @@ theorem tP24U_nonneg : ∀ k, 0 ≤ tP24U k := by
     · simp [tP24U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS24U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP24U k * z k) ^ 2
       + (1/((1027117507 : ℝ)/500000)) * (∑ a, ∑ b, (tP24U a * z a) * (G1t a b * (tP24U b * z b)))
@@ -760,7 +742,6 @@ theorem tP26U_nonneg : ∀ k, 0 ≤ tP26U k := by
     · simp [tP26U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS26U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP26U k * z k) ^ 2
       + (1/((225324373 : ℝ)/200000)) * (∑ a, ∑ b, (tP26U a * z a) * (G1t a b * (tP26U b * z b)))
@@ -799,7 +780,6 @@ theorem tP27U_nonneg : ∀ k, 0 ≤ tP27U k := by
     · simp [tP27U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS27U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP27U k * z k) ^ 2
       + (1/((1988400511 : ℝ)/1000000)) * (∑ a, ∑ b, (tP27U a * z a) * (G1t a b * (tP27U b * z b)))
@@ -838,7 +818,6 @@ theorem tP34U_nonneg : ∀ k, 0 ≤ tP34U k := by
     · simp [tP34U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS34U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP34U k * z k) ^ 2
       + (1/((473158719 : ℝ)/250000)) * (∑ a, ∑ b, (tP34U a * z a) * (G1t a b * (tP34U b * z b)))
@@ -877,7 +856,6 @@ theorem tP36U_nonneg : ∀ k, 0 ≤ tP36U k := by
     · simp [tP36U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS36U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP36U k * z k) ^ 2
       + (1/((1972115633 : ℝ)/1000000)) * (∑ a, ∑ b, (tP36U a * z a) * (G1t a b * (tP36U b * z b)))
@@ -916,7 +894,6 @@ theorem tP37U_nonneg : ∀ k, 0 ≤ tP37U k := by
     · simp [tP37U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS37U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP37U k * z k) ^ 2
       + (1/((1120711457 : ℝ)/1000000)) * (∑ a, ∑ b, (tP37U a * z a) * (G1t a b * (tP37U b * z b)))
@@ -955,7 +932,6 @@ theorem tP45U_nonneg : ∀ k, 0 ≤ tP45U k := by
     · simp [tP45U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS45U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP45U k * z k) ^ 2
       + (1/((16815449 : ℝ)/10000)) * (∑ a, ∑ b, (tP45U a * z a) * (G1t a b * (tP45U b * z b)))
@@ -994,7 +970,6 @@ theorem tP46U_nonneg : ∀ k, 0 ≤ tP46U k := by
     · simp [tP46U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS46U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP46U k * z k) ^ 2
       + (1/((1231060917 : ℝ)/1000000)) * (∑ a, ∑ b, (tP46U a * z a) * (G1t a b * (tP46U b * z b)))
@@ -1033,7 +1008,6 @@ theorem tP47U_nonneg : ∀ k, 0 ≤ tP47U k := by
     · simp [tP47U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS47U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP47U k * z k) ^ 2
       + (1/((897695409 : ℝ)/500000)) * (∑ a, ∑ b, (tP47U a * z a) * (G1t a b * (tP47U b * z b)))
@@ -1072,7 +1046,6 @@ theorem tP48U_nonneg : ∀ k, 0 ≤ tP48U k := by
     · simp [tP48U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS48U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP48U k * z k) ^ 2
       + (1/((1227146101 : ℝ)/1000000)) * (∑ a, ∑ b, (tP48U a * z a) * (G1t a b * (tP48U b * z b)))
@@ -1111,7 +1084,6 @@ theorem tP49U_nonneg : ∀ k, 0 ≤ tP49U k := by
     · simp [tP49U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS49U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP49U k * z k) ^ 2
       + (1/((495183309 : ℝ)/500000)) * (∑ a, ∑ b, (tP49U a * z a) * (G1t a b * (tP49U b * z b)))
@@ -1150,7 +1122,6 @@ theorem tP56U_nonneg : ∀ k, 0 ≤ tP56U k := by
     · simp [tP56U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS56U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP56U k * z k) ^ 2
       + (1/((1528119211 : ℝ)/1000000)) * (∑ a, ∑ b, (tP56U a * z a) * (G1t a b * (tP56U b * z b)))
@@ -1189,7 +1160,6 @@ theorem tP57U_nonneg : ∀ k, 0 ≤ tP57U k := by
     · simp [tP57U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS57U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP57U k * z k) ^ 2
       + (1/((697243359 : ℝ)/500000)) * (∑ a, ∑ b, (tP57U a * z a) * (G1t a b * (tP57U b * z b)))
@@ -1228,7 +1198,6 @@ theorem tP67U_nonneg : ∀ k, 0 ≤ tP67U k := by
     · simp [tP67U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS67U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP67U k * z k) ^ 2
       + (1/((1325366677 : ℝ)/500000)) * (∑ a, ∑ b, (tP67U a * z a) * (G1t a b * (tP67U b * z b)))
@@ -1267,7 +1236,6 @@ theorem tP68U_nonneg : ∀ k, 0 ≤ tP68U k := by
     · simp [tP68U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS68U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP68U k * z k) ^ 2
       + (1/((1532226297 : ℝ)/1000000)) * (∑ a, ∑ b, (tP68U a * z a) * (G1t a b * (tP68U b * z b)))
@@ -1306,7 +1274,6 @@ theorem tP69U_nonneg : ∀ k, 0 ≤ tP69U k := by
     · simp [tP69U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS69U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP69U k * z k) ^ 2
       + (1/((2632402727 : ℝ)/1000000)) * (∑ a, ∑ b, (tP69U a * z a) * (G1t a b * (tP69U b * z b)))
@@ -1345,7 +1312,6 @@ theorem tP78U_nonneg : ∀ k, 0 ≤ tP78U k := by
     · simp [tP78U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS78U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP78U k * z k) ^ 2
       + (1/((290633259 : ℝ)/250000)) * (∑ a, ∑ b, (tP78U a * z a) * (G1t a b * (tP78U b * z b)))
@@ -1384,7 +1350,6 @@ theorem tP79U_nonneg : ∀ k, 0 ≤ tP79U k := by
     · simp [tP79U]
       try norm_num
 
-set_option maxHeartbeats 3200000 in
 theorem hS79U : ∀ z : Fin 8 → ℝ,
     (∑ k, vP79U k * z k) ^ 2
       + (1/((558285667 : ℝ)/1000000)) * (∑ a, ∑ b, (tP79U a * z a) * (G1t a b * (tP79U b * z b)))
@@ -1512,7 +1477,6 @@ theorem hpreSU0_eval : ∀ k : Fin 8, denseE W1t img0 k = hpreSU0 k := by
 noncomputable def logitU0 : Fin 10 → ℝ :=
   ![((197040570 : ℝ)/66846720), ((-605353992 : ℝ)/66846720), ((-219074738 : ℝ)/66846720), ((326640626 : ℝ)/66846720), ((-286828128 : ℝ)/66846720), ((241386094 : ℝ)/66846720), ((-582555024 : ℝ)/66846720), ((772793982 : ℝ)/66846720), ((69610024 : ℝ)/66846720), ((365023812 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU0_eval : ∀ jj : Fin 10, mlpT img0 jj = logitU0 jj := by
   have hout : ∀ jj : Fin 10, mlpT img0 jj = ∑ k, W2t jj k * max (hpreSU0 k) 0 :=
     mlp_out_eq W1t W2t hpreSU0_eval
@@ -1522,7 +1486,6 @@ theorem logitU0_eval : ∀ jj : Fin 10, mlpT img0 jj = logitU0 jj := by
     · simp [W2t, W2tQ, castM, hpreSU0, logitU0, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #0 (digit 7): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU0 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
@@ -1592,7 +1555,6 @@ theorem hpreSU2_eval : ∀ k : Fin 8, denseE W1t imgU2 k = hpreSU2 k := by
 noncomputable def logitU2 : Fin 10 → ℝ :=
   ![((-254598359 : ℝ)/66846720), ((371481483 : ℝ)/66846720), ((75186508 : ℝ)/66846720), ((82090669 : ℝ)/66846720), ((-15825047 : ℝ)/66846720), ((34816073 : ℝ)/66846720), ((96089724 : ℝ)/66846720), ((-40819637 : ℝ)/66846720), ((153046389 : ℝ)/66846720), ((-44419204 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU2_eval : ∀ jj : Fin 10, mlpT imgU2 jj = logitU2 jj := by
   have hout : ∀ jj : Fin 10, mlpT imgU2 jj = ∑ k, W2t jj k * max (hpreSU2 k) 0 :=
     mlp_out_eq W1t W2t hpreSU2_eval
@@ -1602,7 +1564,6 @@ theorem logitU2_eval : ∀ jj : Fin 10, mlpT imgU2 jj = logitU2 jj := by
     · simp [W2t, W2tQ, castM, hpreSU2, logitU2, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #2 (digit 1): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU2 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
@@ -1668,7 +1629,6 @@ theorem hpreSU3_eval : ∀ k : Fin 8, denseE W1t img3 k = hpreSU3 k := by
 noncomputable def logitU3 : Fin 10 → ℝ :=
   ![((859133185 : ℝ)/66846720), ((-1296690947 : ℝ)/66846720), ((314068923 : ℝ)/66846720), ((109523921 : ℝ)/66846720), ((-471620904 : ℝ)/66846720), ((299134352 : ℝ)/66846720), ((293380089 : ℝ)/66846720), ((257843342 : ℝ)/66846720), ((280841072 : ℝ)/66846720), ((-25315782 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU3_eval : ∀ jj : Fin 10, mlpT img3 jj = logitU3 jj := by
   have hout : ∀ jj : Fin 10, mlpT img3 jj = ∑ k, W2t jj k * max (hpreSU3 k) 0 :=
     mlp_out_eq W1t W2t hpreSU3_eval
@@ -1678,7 +1638,6 @@ theorem logitU3_eval : ∀ jj : Fin 10, mlpT img3 jj = logitU3 jj := by
     · simp [W2t, W2tQ, castM, hpreSU3, logitU3, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #3 (digit 0): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU3 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
@@ -1748,7 +1707,6 @@ theorem hpreSU4_eval : ∀ k : Fin 8, denseE W1t imgU4 k = hpreSU4 k := by
 noncomputable def logitU4 : Fin 10 → ℝ :=
   ![((110395094 : ℝ)/66846720), ((-692208581 : ℝ)/66846720), ((22689129 : ℝ)/66846720), ((-115260271 : ℝ)/66846720), ((403654543 : ℝ)/66846720), ((-13354085 : ℝ)/66846720), ((156157130 : ℝ)/66846720), ((-18410669 : ℝ)/66846720), ((87782028 : ℝ)/66846720), ((149884245 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU4_eval : ∀ jj : Fin 10, mlpT imgU4 jj = logitU4 jj := by
   have hout : ∀ jj : Fin 10, mlpT imgU4 jj = ∑ k, W2t jj k * max (hpreSU4 k) 0 :=
     mlp_out_eq W1t W2t hpreSU4_eval
@@ -1758,7 +1716,6 @@ theorem logitU4_eval : ∀ jj : Fin 10, mlpT imgU4 jj = logitU4 jj := by
     · simp [W2t, W2tQ, castM, hpreSU4, logitU4, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #4 (digit 4): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU4 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
@@ -1824,7 +1781,6 @@ theorem hpreSU5_eval : ∀ k : Fin 8, denseE W1t img5 k = hpreSU5 k := by
 noncomputable def logitU5 : Fin 10 → ℝ :=
   ![((-381431257 : ℝ)/66846720), ((474654739 : ℝ)/66846720), ((45083778 : ℝ)/66846720), ((122016710 : ℝ)/66846720), ((4820196 : ℝ)/66846720), ((16648051 : ℝ)/66846720), ((-19626938 : ℝ)/66846720), ((63400841 : ℝ)/66846720), ((180152276 : ℝ)/66846720), ((21951179 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU5_eval : ∀ jj : Fin 10, mlpT img5 jj = logitU5 jj := by
   have hout : ∀ jj : Fin 10, mlpT img5 jj = ∑ k, W2t jj k * max (hpreSU5 k) 0 :=
     mlp_out_eq W1t W2t hpreSU5_eval
@@ -1834,7 +1790,6 @@ theorem logitU5_eval : ∀ jj : Fin 10, mlpT img5 jj = logitU5 jj := by
     · simp [W2t, W2tQ, castM, hpreSU5, logitU5, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #5 (digit 1): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU5 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
@@ -1904,7 +1859,6 @@ theorem hpreSU6_eval : ∀ k : Fin 8, denseE W1t imgU6 k = hpreSU6 k := by
 noncomputable def logitU6 : Fin 10 → ℝ :=
   ![((-169950069 : ℝ)/66846720), ((-465874784 : ℝ)/66846720), ((-308559214 : ℝ)/66846720), ((13875185 : ℝ)/66846720), ((601042132 : ℝ)/66846720), ((251111290 : ℝ)/66846720), ((119670914 : ℝ)/66846720), ((23823375 : ℝ)/66846720), ((180152081 : ℝ)/66846720), ((318774582 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU6_eval : ∀ jj : Fin 10, mlpT imgU6 jj = logitU6 jj := by
   have hout : ∀ jj : Fin 10, mlpT imgU6 jj = ∑ k, W2t jj k * max (hpreSU6 k) 0 :=
     mlp_out_eq W1t W2t hpreSU6_eval
@@ -1914,7 +1868,6 @@ theorem logitU6_eval : ∀ jj : Fin 10, mlpT imgU6 jj = logitU6 jj := by
     · simp [W2t, W2tQ, castM, hpreSU6, logitU6, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #6 (digit 4): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU6 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
@@ -1980,7 +1933,6 @@ theorem hpreSU10_eval : ∀ k : Fin 8, denseE W1t img10 k = hpreSU10 k := by
 noncomputable def logitU10 : Fin 10 → ℝ :=
   ![((949133416 : ℝ)/66846720), ((-880760020 : ℝ)/66846720), ((458055874 : ℝ)/66846720), ((338019979 : ℝ)/66846720), ((-892209118 : ℝ)/66846720), ((665963968 : ℝ)/66846720), ((204228193 : ℝ)/66846720), ((-218388969 : ℝ)/66846720), ((442772783 : ℝ)/66846720), ((-405582204 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU10_eval : ∀ jj : Fin 10, mlpT img10 jj = logitU10 jj := by
   have hout : ∀ jj : Fin 10, mlpT img10 jj = ∑ k, W2t jj k * max (hpreSU10 k) 0 :=
     mlp_out_eq W1t W2t hpreSU10_eval
@@ -1990,7 +1942,6 @@ theorem logitU10_eval : ∀ jj : Fin 10, mlpT img10 jj = logitU10 jj := by
     · simp [W2t, W2tQ, castM, hpreSU10, logitU10, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #10 (digit 0): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU10 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
@@ -2060,7 +2011,6 @@ theorem hpreSU11_eval : ∀ k : Fin 8, denseE W1t imgU11 k = hpreSU11 k := by
 noncomputable def logitU11 : Fin 10 → ℝ :=
   ![((75574039 : ℝ)/66846720), ((-282223680 : ℝ)/66846720), ((232671124 : ℝ)/66846720), ((-68819323 : ℝ)/66846720), ((154147706 : ℝ)/66846720), ((208698422 : ℝ)/66846720), ((536690194 : ℝ)/66846720), ((-305353734 : ℝ)/66846720), ((238158176 : ℝ)/66846720), ((-293093929 : ℝ)/66846720)]
 
-set_option maxHeartbeats 1600000 in
 theorem logitU11_eval : ∀ jj : Fin 10, mlpT imgU11 jj = logitU11 jj := by
   have hout : ∀ jj : Fin 10, mlpT imgU11 jj = ∑ k, W2t jj k * max (hpreSU11 k) 0 :=
     mlp_out_eq W1t W2t hpreSU11_eval
@@ -2070,7 +2020,6 @@ theorem logitU11_eval : ∀ jj : Fin 10, mlpT imgU11 jj = logitU11 jj := by
     · simp [W2t, W2tQ, castM, hpreSU11, logitU11, Fin.sum_univ_succ, max_def]
       try norm_num
 
-set_option maxHeartbeats 1600000 in
 /-- Test #11 (digit 6): LipSDP-per-pair certified at ε = 1/10 — each
     of the 9 margins clears its own `Lp·ε`. -/
 theorem certifiedSU11 (δ : EuclideanSpace ℝ (Fin 49)) (hδ : ‖δ‖ < ((1 : ℝ)/10)) :
