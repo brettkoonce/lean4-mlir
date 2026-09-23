@@ -76,7 +76,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 No main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
 [`certlayer_nets.md`](certlayer_nets.md): whole nets as one `CertLayer`, which would retire the
 `r34PreK`/`r50PreK`/`mnv2PreBK` chains and bundles outright (§3.1's vocabulary item folds into it).
-Also open, none measured: §3.6's `IsShardwise`; §5.3's housekeeping question.
+Also open, not measured: §3.6's `IsShardwise`.
 
 Parked (low payoff): `IsShardwise` for the `_shard` family (§3.6), the StableHLO printer split
 (§3.2, ~45 s), FullNets' matrix-level `G1` lemma (§3.3, ~20 s).
@@ -226,8 +226,6 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 
 ### 5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape — DONE as §1(t)
 
-### 5.3 Housekeeping
+### 5.3 Housekeeping — DONE
 
-* `planning/next_session_book_audit.md` (untracked) is the 2026-09-13 book-audit handoff; that pass
-  finished 2026-09-13 — archive to `planning/archive/` or delete (ask).
-
+* `planning/next_session_book_audit.md` (the finished 2026-09-13 book-audit handoff) deleted 2026-09-23.

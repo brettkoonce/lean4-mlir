@@ -2,7 +2,9 @@
 
 Started 2026-09-23, after `proof_cleanup.md` §1(t). That thread cut lines and compile time; this one
 is about COMPLEXITY: the same composition argument is restated once per net, at that net's shapes.
-Nothing below has been built or measured yet — every "replaces" is a prediction to test.
+⚠ **Re-scoped 2026-09-23** after the §4.1 prototype (§6): whole-net CertLayers are cheap, but the
+prefix vocabulary they would retire is named by public statements, so the thread is cut down to the
+no-statement-change part (§4.2). Everything else is parked.
 
 ## 0. Rules for this thread
 
@@ -85,29 +87,27 @@ In a scratch module (not wired into any lib):
 Go/no-go: all of 4.1 within a few seconds per declaration, no bumps. If it fails, record where
 (which peel, which decl) in §6 and stop — do not try MNv4-style workarounds before understanding it.
 
-### 4.2 If 4.1 holds: R34 and MNv2 at binder resolutions
+### 4.2 Re-scoped: one CertLayer per net, prefixes kept (no statement changes)
 
-* Restate `resnet34ForwardB_full` / `mobilenetv2ForwardB_full` over a resolution binder (as R50's
-  `q`), with the 224-px net as the instance. ⚠ This touches renders' faithfulness statements and
-  every `…_full` consumer — survey consumers first (`grep -rn`), as §1(t) did.
-* Then repeat 4.1 for each. Expected to retire `r34Pre*`, `mnv2PreB*`, their `_apply` lemmas and
-  the chain equations.
+Only if it comes out smaller, measured per net; the prototype says R50 alone is about line-neutral.
 
-### 4.3 Positivity in one place
+1. Move the generic layers to one shared file: the stem pool (new), GAP and dense (today's
+   `mnv4GapLayer` / `mnv4DenseLayer`), and the ResNet stem and head built from them. MNv4 switches
+   to the shared GAP / dense.
+2. R50: `r50NetLayer` replaces `r50ChainB` and the six block delegation lemmas. The apex
+   keeps its name and type, and `R50SmoothAtB → .ok` goes through `comp_ok_of'`, one `refine` per
+   block. `R50PosB`, `R50SmoothAtB`, `r50PreK`, their `_apply` lemmas and `…_eq_chain` stay: T3,
+   sync-T3, the whole-back tie and the seal name them.
+3. R34 the same way (same stem and head). Survey its consumers first.
+4. Do not change `ChallengeTier.lean`. Run `gen_comparator_tier.py --check` to confirm it still matches.
 
-Pick MNv4's convention everywhere: `0 < ε` carried by the weight records, so `R34PosB` / `R50PosB`
-/ `MNV2PosB` and every block `…Pos` disappear from statements. Mechanical, but a statement change
-across the tier. Independent of 4.1; could go first as a warm-up, but it collides with 4.2's
-statement changes — do them in one tier regeneration.
+### 4.3 Parked
 
-### 4.4 Later, only if 4.1–4.2 land
-
-* **Sync / DP ties as one theorem over a CertLayer chain.** The five `SyncB` + four
-  `SyncStepTieB` files look like one proof shape over "a chain of per-example layers". Unverified —
-  read two side by side before planning.
-* **Suffix tiers (`B`, `G`, `GB`, `B0`, `full`).** Audit which are still cited from the book,
-  `formalization.yaml`, the comparator tier or the blueprint; retire tiers cited only by their
-  successors. Unverified guess that some exist.
+* **Retiring the prefixes:** restating T3 / sync-T3 / seal over layer activations. This is a
+  comparator-tier change, and the only thing that would make §2's prediction come true.
+* **Binder resolutions for R34 / MNv2** (the old §4.2), **positivity in the weight records** (the old
+  §4.3), **sync / DP ties over a chain** and **the suffix-tier audit** (the old §4.4). None of them is
+  needed for 4.2.
 
 ## 5. Where things are
 
@@ -121,4 +121,51 @@ statement changes — do them in one tier regeneration.
 
 ## 6. Log
 
-(empty — record each measurement here with its commit)
+### 2026-09-23 — §4.1 R50 prototype: GO on cost, SMALLER payoff than §2 predicted (at 52dceb3e)
+
+Scratch module (outside the repo), importing `ResNet50WholeBackCertifiedTieB`; `lake env lean
+-Dtrace.profiler=true`, threshold 100 ms.
+
+| what | result |
+|---|---|
+| `r50NetLayer N q hq0 w hp` — stem (`cbReluStridedLayer.comp` a new pool layer) `.comp` 16 blocks `.comp` head (GAP + dense layers) | elaborates, < 100 ms |
+| pool layer's `faithful` — the batched `maxPool3s2BackB` | `rw [den_maxPool3s2BackB_eq_flatBackB]; rfl`, 2 lines (the stem is no longer outside the chain) |
+| `(r50NetLayer …).fwd x = resnet50ForwardB_full N q w x` — `rw [comp_fwd_apply]` ×18 then the per-block `_fwd` (`rfl` at variable shapes) | < 100 ms |
+| `_has_vjp_at_correct`, `_differentiableAt`, whole-net backward-graph faithfulness | one-line projections, < 100 ms each |
+| `R50SmoothAtB → (r50NetLayer …).ok` (keeps the comparator tier fixed) | 0.16 s, see ⚠ below |
+| the same peel at the LITERAL `q = 7`, and the theorems at `q = 7` / `q = 5` | < 100 ms; no timeout |
+| whole file, including import load | 2.8 s wall, 2.8 GB — same as today's `ResNet50FullBVJP.lean` (3.2 s) |
+| bumps | none |
+
+⚠ **The `ok` bridge fails as one anonymous constructor** (`maximum recursion depth` at block 5):
+matching `hx.s2b1 : … (r50Pre4 N q w x)` against the nested layer forwards is a defeq check whose
+depth grows with the block index. It works as one `refine` per block through
+`comp_ok_of' (h₁) (y := r50PreK N q w x) rfl ?_`, which names the intermediate activation so the goal
+stays flat. Any long chain whose hypothesis is stated at named prefixes needs this.
+
+**§3's hypothesis, refined.** R50 at `q = 7` never hits MNv4's failure, even at the literal: its
+widths stay syntactic `2 * (2 * (2 * 7))` on both sides of every `comp`. MNv4's types agree only up
+to numeral evaluation (`2 * 28` vs `56`), and its timeout was in T2 (forward-graph `den`), which a
+CertLayer does not touch. So the risk is literal widths that must be unified by arithmetic, not
+numerals themselves.
+
+**⛔ The payoff §2 predicted is wrong for R50.** `r50Pre0…16` are not only `FullBVJP` scaffolding:
+they name activations in public statements. `ResNet50StepTieB` (T3, in `ChallengeTier.lean`),
+`ResNet50SyncStepTieB`, `ResNet50WholeBackCertifiedTieB` and the seal's `nnK` positivity lemmas all
+use them, and the seal also uses the `_apply` lemmas and `resnet50ForwardB_full_eq_chain`. So
+`R50SmoothAtB`, `R50PosB`, the prefixes and their `_apply` lemmas **stay**. What goes is `r50ChainB`
+(~60 lines) and the six block delegation lemmas (~45 lines); what comes in is the generic pool / GAP
+/ dense / stem / head layers, the three record-level block layers and the bridge (~90 lines).
+That's roughly line-neutral for R50 alone. The generic layers are ResNet-34's too (same stem and
+head), and GAP / dense duplicate MNv4's `mnv4GapLayer` / `mnv4DenseLayer`, which should move to a
+shared file.
+
+**What is new rather than smaller:** a whole-net ResNet-50 backward graph *including the stem pool*,
+proven to denote the VJP. `ViTBackNet.lean` records the stem as blocked on exactly that pool proof.
+⚠ It is a CertLayer graph (SSA names such as `%psW` / `%stemR`), not the render's emitted backward,
+so it does not replace T6.
+
+Open decision before §4.2: whether retiring the prefix vocabulary is worth restating T3 / sync-T3 /
+seal statements over layer activations (a comparator-tier change), or whether §4.2 should be
+re-scoped to "one CertLayer per net + shared head/stem layers" and keep the prefixes as public
+names.
