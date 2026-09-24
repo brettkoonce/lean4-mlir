@@ -17,30 +17,24 @@ set_option maxRecDepth 2000
 
 namespace MlirCodegen
 
-/-- Total flat input size: for CNN, ic * imageH * imageW; for MLP, first
-    dense layer's fanIn. -/
-def inputFlatDim (spec : NetSpec) : Nat :=
-  match spec.layers.head? with
-  | some (.dense fanIn _ _) => fanIn
-  | some (.conv2d ic _ _ _ _) => ic * spec.imageH * spec.imageW
-  | some (.convBn ic _ _ _ _) => ic * spec.imageH * spec.imageW
-  | some (.invertedResidual ic _ _ _ _) => ic * spec.imageH * spec.imageW
-  | some (.mbConv ic _ _ _ _ _ _) => ic * spec.imageH * spec.imageW
-  | some (.patchEmbed ic _ _ _) => ic * spec.imageH * spec.imageW
-  | some (.unetDown ic _) => ic * spec.imageH * spec.imageW
-  | some (.tokenPositionEmbed v t _ ids gather _) => if ids || gather then t else v * t
-  | _ => spec.imageH * spec.imageW
-
-/-- If the first layer is conv/convBn, returns the NCHW input channels. -/
+/-- The NCHW input channels when the first layer takes an image (a conv or a conv block);
+    `none` for a flat input. -/
 def inputChannels (spec : NetSpec) : Option Nat :=
   match spec.layers.head? with
-  | some (.conv2d ic _ _ _ _) => some ic
-  | some (.convBn ic _ _ _ _) => some ic
-  | some (.invertedResidual ic _ _ _ _) => some ic
-  | some (.mbConv ic _ _ _ _ _ _) => some ic
-  | some (.patchEmbed ic _ _ _) => some ic
+  | some (.conv2d ic ..) | some (.convBn ic ..) | some (.invertedResidual ic ..)
+  | some (.mbConv ic ..) | some (.fusedMbConv ic ..) | some (.mbConvV3 ic ..) | some (.uib ic ..)
+  | some (.residualBlock ic ..) | some (.bottleneckBlock ic ..) | some (.patchEmbed ic ..)
   | some (.unetDown ic _) => some ic
   | _ => none
+
+/-- Total flat input size: `ic · imageH · imageW` for an image input (`inputChannels`); otherwise
+    the first dense layer's fanIn, a token model's sequence (or one-hot) width, or `imageH · imageW`. -/
+def inputFlatDim (spec : NetSpec) : Nat :=
+  match inputChannels spec, spec.layers.head? with
+  | some ic, _ => ic * spec.imageH * spec.imageW
+  | none, some (.dense fanIn _ _) => fanIn
+  | none, some (.tokenPositionEmbed v t _ ids gather _) => if ids || gather then t else v * t
+  | none, _ => spec.imageH * spec.imageW
 
 /-- Render tensor type: `tensor<128x1x28x28xf32>`. -/
 private def tensorTy (dims : List Nat) : String :=
@@ -2621,16 +2615,18 @@ private def fwdSigParts (spec : NetSpec) (batchSize : Nat) : String × List Nat 
     | [b, _, h, w] => [b, oc, h, w]
     | sh => sh
   for l in spec.layers do
-    -- ⚠ The block layers' parameters are emitted only while the activation is rank 4 — a block
-    -- stacked on a flat input loses them here (the train signature keeps them). Kept verbatim.
-    let rank4Only := match l with
+    -- A conv block needs an image-shaped activation; one after a `flatten` / `dense` has no
+    -- lowering (the forward body skips it), so refuse the spec rather than render a signature
+    -- that disagrees with the train step's.
+    let convBlock := match l with
       | .residualBlock .. | .bottleneckBlock .. | .invertedResidual .. | .mbConv ..
       | .fusedMbConv .. | .mbConvV3 .. | .uib .. => true
       | _ => false
-    if !rank4Only || curShape.length == 4 then
-      let (a, p') := fwdLayerArgs l p
-      params := params ++ a
-      p := p'
+    if convBlock && curShape.length != 4 then
+      return panic! s!"MlirCodegen: {spec.name}: a conv block on a rank-{curShape.length} activation {curShape}"
+    let (a, p') := fwdLayerArgs l p
+    params := params ++ a
+    p := p'
     match l with
     | .dense _ fanOut _ => curShape := [batchSize, fanOut]
     | .conv2d _ oc _ _ _ => curShape := withCh oc curShape
@@ -8087,29 +8083,26 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
                    else "\n    // ================ SGD+MOMENTUM UPDATES ================\n")
   let wdActive := weightDecay > 0.0
   -- The trained tensors, read off `Layer.paramSlots` in signature order (`trainSigArgs`), so the
-  -- updated θ / m / v come back in the order they came in: each with its index, whether it trains
-  -- at the head LR (a `.dense` layer), and whether its gradient enters the clip norm (conv2d /
-  -- dense / fpnDetect layers and every conv-BN group).
-  let mut slots : Array (ParamSlot × Nat × Bool × Bool) := #[]
+  -- updated θ / m / v come back in the order they came in: each with its index and whether it
+  -- trains at the head LR (a `.dense` layer).
+  let mut slots : Array (ParamSlot × Nat × Bool) := #[]
   let mut pNext : Nat := 0
   for l in spec.layers do
     match l with
     | .layerNorm _ | .convNextStem .. => pure ()  -- no lowering here (JAX-side layers)
     | _ =>
       let head := match l with | .dense .. => true | _ => false
-      let clipLayer := match l with | .conv2d .. | .dense .. | .fpnDetect .. => true | _ => false
       for grp in slotGroups (l.paramSlots.getD []) do
-        let clip := clipLayer || grp.any (·.nm == "g")
         for sl in grp do
-          slots := slots.push (sl, pNext, head, clip)
+          slots := slots.push (sl, pNext, head)
         pNext := pNext + 1
   -- ─── Optional global-norm gradient clipping ───
-  -- Compute scale = min(1, clipNorm / (‖g‖₂ + ε)) over the clip-norm gradients, then each
+  -- Compute scale = min(1, clipNorm / (‖g‖₂ + ε)) over every trained tensor's gradient, then each
   -- optimizer update pre-scales its gradient by it. ‖g‖₂ = sqrt(Σ_params Σ g²).
   -- gradClipNorm = 0 ⇒ this whole block is skipped and clipScale stays none (no IR change).
   let mut clipScale : Option String := none
   if gradClipNorm > 0.0 then
-    let gradList := (slots.filter (·.2.2.2)).map fun (sl, p, _) => (s!"%d_{sl.nm}{p}", sl.shape)
+    let gradList := slots.map fun (sl, p, _) => (s!"%d_{sl.nm}{p}", sl.shape)
     if gradList.size > 0 then
       code := code ++ "\n    // ================ GRADIENT CLIP (global L2 norm) ================\n"
       let mut ssNames : Array String := #[]
@@ -8151,7 +8144,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   let mut mRetNames : Array String := #[]
   let mut vRetNames : Array String := #[]
   let mut pTys : Array String := #[]
-  for (sl, p, head, _) in slots do
+  for (sl, p, head) in slots do
     let (pS, gS, mS, vS) := (s!"%{sl.nm}{p}", s!"%d_{sl.nm}{p}", s!"%m_{sl.nm}{p}", s!"%v_{sl.nm}{p}")
     let (shape, tag, wd) := (sl.shape, s!"{sl.nm}{p}", wdActive && sl.decay)
     let lrSSA := if head then headLrSSA else "%lr"
