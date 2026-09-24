@@ -3024,9 +3024,7 @@ private structure FwdRec where
   inShape   : List Nat     -- input shape
   outShape  : List Nat     -- output shape
   -- convBn intermediates for backward
-  convOutSSA : String := ""   -- raw conv output before inst norm
   normSSA    : String := ""   -- (x - mean) * istd
-  meanBcSSA  : String := ""   -- broadcast mean (B, OC, oH, oW)
   istdBcSSA  : String := ""   -- broadcast istd (B, OC, oH, oW)
   hasRelu    : Bool := true
   hasRelu6   : Bool := false  -- ReLU6 activation (MobileNet)
@@ -3050,7 +3048,6 @@ private structure FwdRec where
   seRswSSA   : String := ""  -- reduce swish out (B, seMid)
   seEbSSA    : String := ""  -- expand-conv + bias (B, mid) — pre-sigmoid
   seSigSSA   : String := ""  -- sigmoid result (B, mid)
-  seOutSSA   : String := ""  -- x * broadcast(sig) (B, mid, H, W)
   -- SE variant: if true, SE block uses ReLU + h-sigmoid (MobileNetV3);
   -- otherwise swish + sigmoid (EfficientNet).
   seVariant  : Bool := false
@@ -3062,7 +3059,6 @@ private structure FwdRec where
   peClsPidx    : Nat := 0   -- pidx for cls token (stored as W{pidx})
   pePosPidx    : Nat := 0   -- pidx for positional embedding
   pePSize      : Nat := 0
-  pePIc        : Nat := 0
   pePDim       : Nat := 0
   pePNp        : Nat := 0
   -- Transformer block fields (layer marked with isTransformerBlock)
@@ -3070,14 +3066,10 @@ private structure FwdRec where
   tbBasePidx     : Nat := 0  -- starting pidx for this block's 8 param pairs
   tbHeads        : Nat := 0
   tbMlpDim       : Nat := 0
-  tbDim          : Nat := 0
   -- Saved intermediates for each block's backward:
-  tbLn1XSSA      : String := ""  -- input to LN1 (block input)
   tbLn1OutSSA    : String := ""
   tbLn1NormSSA   : String := ""
   tbLn1IstdSSA   : String := ""
-  tbMhsaOutSSA   : String := ""
-  tbR1SSA        : String := ""  -- after first residual (block input)
   tbLn2OutSSA    : String := ""
   tbLn2NormSSA   : String := ""
   tbLn2IstdSSA   : String := ""
@@ -3097,12 +3089,9 @@ private structure FwdRec where
   finalLnPidx     : Nat := 0
   finalLnNormSSA  : String := ""
   finalLnIstdSSA  : String := ""
-  finalLnInSSA    : String := ""
-  finalLnOutSSA   : String := ""
   -- CLS slice record (between final LN and classifier dense)
   isClsSlice      : Bool := false
   clsInShape      : List Nat := []
-  clsInSSA        : String := ""
   -- ═════════ ConvNeXt block intermediates ═════════
   -- One FwdRec per ConvNeXt block with `isConvNextBlock := true`. Five
   -- pidx slots from `cnbBasePidx`: DW (W,b), norm (γ,β), expand (W,b),
@@ -3114,14 +3103,12 @@ private structure FwdRec where
   cnbAct          : Activation := .gelu
   cnbNorm         : Normalization := .ln
   cnbBlockInSSA   : String := ""    -- input to the block (residual root)
-  cnbDwOutSSA     : String := ""    -- DW + bias output, pre-norm
   -- LN-mode (norm-axis = channels, transposed view): see emitLayerNormForwardNCHW
   cnbLnNormSSA    : String := ""    -- normalized [b, h*w, c]
   cnbLnIstdSSA    : String := ""    -- 1/σ on shape [b, h*w]
   cnbLnOutSSA     : String := ""    -- post-LN, into 1×1 expand (NCHW)
   -- BN-mode (per-channel stats over batch+spatial; tensors stay NCHW)
   cnbBnNormSSA    : String := ""    -- normalized [b, c, h, w]
-  cnbBnMeanBcSSA  : String := ""    -- broadcast mean [b, c, h, w]
   cnbBnIstdBcSSA  : String := ""    -- broadcast istd [b, c, h, w]
   cnbExpandOutSSA : String := ""    -- pre-activation (channels = 4c)
   cnbActOutSSA    : String := ""    -- post-activation, into project
@@ -3133,12 +3120,10 @@ private structure FwdRec where
   cndIc           : Nat := 0
   cndOc           : Nat := 0
   cndNorm         : Normalization := .ln
-  cndInSSA        : String := ""    -- pre-norm
   cndLnNormSSA    : String := ""    -- LN-mode: [b, h*w, ic]
   cndLnIstdSSA    : String := ""    -- LN-mode: [b, h*w]
   cndLnOutSSA     : String := ""    -- post-norm, into 2×2 stride-2 conv (NCHW)
   cndBnNormSSA    : String := ""    -- BN-mode: [b, ic, h, w]
-  cndBnMeanBcSSA  : String := ""    -- BN-mode: [b, ic, h, w]
   cndBnIstdBcSSA  : String := ""    -- BN-mode: [b, ic, h, w]
   -- ═════════ UNet decoder concat-split marker ═════════
   -- One per `unetUp`, pushed between bilinearUpsample and the two convBns.
@@ -3159,9 +3144,6 @@ private structure FwdRec where
   --   tpeBtv  = SSA name of the [B, T, V] one-hot reshape (used for d_W backward)
   isTokenPosEmbed : Bool := false
   tpePidx         : Nat := 0
-  tpeV            : Nat := 0
-  tpeT            : Nat := 0
-  tpeD            : Nat := 0
   -- One-hot path: SSA of the [B, T, V] one-hot (for dW = onehotᵀ·d_out).
   -- Gather path: SSA of the [B, T, 1] i32 index tensor (for scatter-add dW).
   tpeBtvSSA       : String := ""
@@ -3172,19 +3154,14 @@ private structure FwdRec where
   --   lmhBtv  = SSA name of the post-dense [B, T, V] tensor (pre-transpose)
   isLmHead        : Bool := false
   lmhPidx         : Nat := 0
-  lmhD            : Nat := 0
-  lmhV            : Nat := 0
-  lmhT            : Nat := 0
-  lmhBtvSSA       : String := ""
   -- ═════════ FPN multi-scale detector (planning/archive/yolo_fpn.md bite 7) ═════════
-  -- One record per `.fpnDetect` layer (isFpnDetect := true, pidx := base of its
+  -- One record per `.fpnDetect` layer (pidx := base of its
   -- 9 params — 6 weights + 3 head biases). Stores the 3 backbone taps C3/C4/C5 and the 3 neck
   -- outputs P3/P4/P5 (the pyramid feature SSAs) so the backward can call
   -- `emitFpnDetectBackward` (neck dW needs C_n, head dW needs P_n). The neck's
   -- backbone-tap cotangents dc3/dc4 are injected at the C3/C4 residualBlock
   -- stage markers via `fpnTapGrad` (set on those marker records at forward emit);
   -- C5's cotangent flows through the normal gradSSA seed.
-  isFpnDetect     : Bool := false
   fpnTapGrad      : String := ""   -- on a residualBlock marker: add this dc_n before its skip-add backward
   fpnC3SSA        : String := ""
   fpnC4SSA        : String := ""
@@ -3260,9 +3237,7 @@ private def emitConvBnTrain (pidx pos : Nat) (curSSA : String) (curShape : List 
       pidx := some pidx, pos
       inputSSA := curSSA, preActSSA := preSSA, outputSSA := outSSA
       inShape := curShape, outShape
-      convOutSSA := s!"%cbn{pidx}"
       normSSA := s!"%cbn_norm{pidx}"
-      meanBcSSA := s!"%cbn_mean_bc{pidx}"
       istdBcSSA := s!"%cbn_istd_bc{pidx}"
       hasRelu := relu
       ic := ic, kSize := kSize, stride := stride
@@ -3350,9 +3325,7 @@ private def emitDepthwiseConvBnTrain (pidx pos : Nat) (curSSA : String) (curShap
       pidx := some pidx, pos
       inputSSA := curSSA, preActSSA := preSSA, outputSSA := s!"%cbn_out{pidx}"
       inShape := curShape, outShape
-      convOutSSA := s!"%cbn{pidx}"
       normSSA := s!"%cbn_norm{pidx}"
-      meanBcSSA := s!"%cbn_mean_bc{pidx}"
       istdBcSSA := s!"%cbn_istd_bc{pidx}"
       hasRelu := useRelu
       hasRelu6 := !useSwish && !useHSwish && !useRelu
@@ -3422,9 +3395,7 @@ private def emitConvBnTrainRelu6 (pidx pos : Nat) (curSSA : String) (curShape : 
       pidx := some pidx, pos
       inputSSA := curSSA, preActSSA := preSSA, outputSSA := s!"%cbn_out{pidx}"
       inShape := curShape, outShape
-      convOutSSA := s!"%cbn{pidx}"
       normSSA := s!"%cbn_norm{pidx}"
-      meanBcSSA := s!"%cbn_mean_bc{pidx}"
       istdBcSSA := s!"%cbn_istd_bc{pidx}"
       hasRelu := false, hasRelu6 := true, isDepthwise := false
       ic := ic, kSize := kSize, stride := stride
@@ -3488,9 +3459,7 @@ private def emitConvBnTrainSwish (pidx pos : Nat) (curSSA : String) (curShape : 
       pidx := some pidx, pos
       inputSSA := curSSA, preActSSA := preSSA, outputSSA := s!"%cbn_out{pidx}"
       inShape := curShape, outShape
-      convOutSSA := s!"%cbn{pidx}"
       normSSA := s!"%cbn_norm{pidx}"
-      meanBcSSA := s!"%cbn_mean_bc{pidx}"
       istdBcSSA := s!"%cbn_istd_bc{pidx}"
       hasRelu := false, hasRelu6 := false, hasSwish := true, isDepthwise := false
       ic := ic, kSize := kSize, stride := stride
@@ -3560,9 +3529,7 @@ private def emitConvBnTrainHSwish (pidx pos : Nat) (curSSA : String) (curShape :
       pidx := some pidx, pos
       inputSSA := curSSA, preActSSA := preSSA, outputSSA := s!"%cbn_out{pidx}"
       inShape := curShape, outShape
-      convOutSSA := s!"%cbn{pidx}"
       normSSA := s!"%cbn_norm{pidx}"
-      meanBcSSA := s!"%cbn_mean_bc{pidx}"
       istdBcSSA := s!"%cbn_istd_bc{pidx}"
       hasRelu := false, hasRelu6 := false, hasSwish := false, hasHSwish := true
       isDepthwise := false
@@ -4240,42 +4207,6 @@ private def emitShampooUpdate (paramSSA gradSSA mSSA vSSA : String) (shape : Lis
     s := s ++ s!"    %shnew_{tag} = stablehlo.subtract %shsub_{tag}, %shwdp_{tag} : {ty}\n"
   -- L' → m-slot, R' → v-slot (both [n,n]; arity unchanged)
   return (s, if applyWeightDecay then s!"%shnew_{tag}" else s!"%shsub_{tag}", s!"%shLnew_{tag}", s!"%shRnew_{tag}")
-
-/-- Emit Adam update for a convBn layer (W, gamma, beta). -/
-private def emitConvBnAdam (p ic oc kSize : Nat) (applyWeightDecay : Bool := true)
-    (clipScale : Option String := none) : String × Array String × Array String := Id.run do
-  let wShape := [oc, ic, kSize, kSize]
-  let bShape := [oc]
-  let mut s := ""
-  let (s1, wNew, mwNew, vwNew) := emitAdamUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := applyWeightDecay) (clipScale := clipScale)
-  s := s ++ s1
-  let (s2, gNew, mgNew, vgNew) := emitAdamUpdate s!"%g{p}" s!"%d_g{p}" s!"%m_g{p}" s!"%v_g{p}" bShape s!"g{p}" (clipScale := clipScale)
-  s := s ++ s2
-  let (s3, btNew, mbtNew, vbtNew) := emitAdamUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%m_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}" (clipScale := clipScale)
-  s := s ++ s3
-  let retNames := #[wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
-  let retTypes := #[tensorTy wShape, tensorTy bShape, tensorTy bShape,
-                    tensorTy wShape, tensorTy bShape, tensorTy bShape,
-                    tensorTy wShape, tensorTy bShape, tensorTy bShape]
-  return (s, retNames, retTypes)
-
-/-- Emit SGD+momentum update for a convBn layer (W, gamma, beta). -/
-private def emitConvBnMomentum (p ic oc kSize : Nat) (applyWeightDecay : Bool := false)
-    (clipScale : Option String := none) : String × Array String × Array String := Id.run do
-  let wShape := [oc, ic, kSize, kSize]
-  let bShape := [oc]
-  let mut s := ""
-  let (s1, wNew, mwNew, vwNew) := emitMomentumUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"W{p}" (applyWeightDecay := applyWeightDecay) (clipScale := clipScale)
-  s := s ++ s1
-  let (s2, gNew, mgNew, vgNew) := emitMomentumUpdate s!"%g{p}" s!"%d_g{p}" s!"%m_g{p}" s!"%v_g{p}" bShape s!"g{p}" (clipScale := clipScale)
-  s := s ++ s2
-  let (s3, btNew, mbtNew, vbtNew) := emitMomentumUpdate s!"%bt{p}" s!"%d_bt{p}" s!"%m_bt{p}" s!"%v_bt{p}" bShape s!"bt{p}" (clipScale := clipScale)
-  s := s ++ s3
-  let retNames := #[wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
-  let retTypes := #[tensorTy wShape, tensorTy bShape, tensorTy bShape,
-                    tensorTy wShape, tensorTy bShape, tensorTy bShape,
-                    tensorTy wShape, tensorTy bShape, tensorTy bShape]
-  return (s, retNames, retTypes)
 
 /-- Emit the per-pixel softmax-CE block for segmentation. Logits
     are `(B, NC, H, W)` (curShape at the point of call), labels are
@@ -5630,7 +5561,6 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
               seRswSSA := s!"%se_rsw{tag}"
               seEbSSA := s!"%se_eb{tag}"
               seSigSSA := s!"%se_sig{tag}"
-              seOutSSA := curSSA
             }
             pidx := pidx + 2
           | _ => pure ()
@@ -5731,7 +5661,6 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
               seRswSSA := s!"%se_rsw{tag}"
               seEbSSA := s!"%se_eb{tag}"
               seSigSSA := s!"%se_sig{tag}"
-              seOutSSA := curSSA
             }
             pidx := pidx + 2
           | _ => pure ()
@@ -5848,7 +5777,6 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
             seRswSSA := s!"%se_rsw{tag}"
             seEbSSA := s!"%se_eb{tag}"
             seSigSSA := s!"%se_sig{tag}"
-            seOutSSA := curSSA
             seVariant := true
           }
           pidx := pidx + 2
@@ -6020,9 +5948,9 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let mut cnRec : FwdRec := default
           cnRec := { cnRec with layer := l, pidx := none, pos, inputSSA := blockIn, outputSSA := blockOut, inShape := blockShape, outShape := blockShape }
           cnRec := { cnRec with isConvNextBlock := true, cnbBasePidx := basePidx, cnbChannels := c, cnbAct := act, cnbNorm := norm }
-          cnRec := { cnRec with cnbBlockInSSA := blockIn, cnbDwOutSSA := dwOut, cnbLnOutSSA := lnOut }
+          cnRec := { cnRec with cnbBlockInSSA := blockIn, cnbLnOutSSA := lnOut }
           cnRec := { cnRec with cnbLnNormSSA := lnNorm, cnbLnIstdSSA := lnIstd }
-          cnRec := { cnRec with cnbBnNormSSA := lnNorm, cnbBnMeanBcSSA := bnMeanBc, cnbBnIstdBcSSA := bnIstdBc }
+          cnRec := { cnRec with cnbBnNormSSA := lnNorm, cnbBnIstdBcSSA := bnIstdBc }
           cnRec := { cnRec with cnbExpandOutSSA := expandOut, cnbActOutSSA := actOut, cnbActTanhSSA := actTanh, cnbProjectOutSSA := projectOut }
           records := records.push cnRec
         | _ => pure ()
@@ -6067,9 +5995,9 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let mut cnRec : FwdRec := default
         cnRec := { cnRec with layer := l, pidx := none, pos, inputSSA := inSSA0, outputSSA := dsOut, inShape := inSh, outShape := outShape }
         cnRec := { cnRec with isConvNextDs := true, cndBasePidx := basePidx, cndIc := ic, cndOc := oc, cndNorm := norm }
-        cnRec := { cnRec with cndInSSA := inSSA0, cndLnOutSSA := lnOut }
+        cnRec := { cnRec with cndLnOutSSA := lnOut }
         cnRec := { cnRec with cndLnNormSSA := lnNorm, cndLnIstdSSA := lnIstd }
-        cnRec := { cnRec with cndBnNormSSA := lnNorm, cndBnMeanBcSSA := bnMeanBc, cndBnIstdBcSSA := bnIstdBc }
+        cnRec := { cnRec with cndBnNormSSA := lnNorm, cndBnIstdBcSSA := bnIstdBc }
         records := records.push cnRec
       | _ => pure ()
 
@@ -6087,7 +6015,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       let mut peRec : FwdRec := default
       peRec := { peRec with layer := l, pidx := none, pos, inputSSA := inSSA, outputSSA := newSSA, inShape := curShape, outShape := newShape }
       peRec := { peRec with isPatchEmbed := true, pePWPidx := pWIdx, pePBPidx := pBIdx, peClsPidx := pClsIdx, pePosPidx := pPosIdx }
-      peRec := { peRec with pePSize := pSize, pePIc := ic, pePDim := dim, pePNp := nP }
+      peRec := { peRec with pePSize := pSize, pePDim := dim, pePNp := nP }
       records := records.push peRec
       curSSA := newSSA
       curShape := newShape
@@ -6136,9 +6064,8 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         -- Record block
         let mut tbRec : FwdRec := default
         tbRec := { tbRec with layer := l, pidx := none, pos, inputSSA := blockIn, outputSSA := blockOut, inShape := blockShape, outShape := blockShape }
-        tbRec := { tbRec with isTransformerBlock := true, tbBasePidx := basePidx, tbHeads := heads, tbMlpDim := mlpDim, tbDim := dim }
-        tbRec := { tbRec with tbLn1XSSA := blockIn, tbLn1OutSSA := ln1Out, tbLn1NormSSA := ln1Norm, tbLn1IstdSSA := ln1Istd }
-        tbRec := { tbRec with tbMhsaOutSSA := mhOut, tbR1SSA := r1 }
+        tbRec := { tbRec with isTransformerBlock := true, tbBasePidx := basePidx, tbHeads := heads, tbMlpDim := mlpDim }
+        tbRec := { tbRec with tbLn1OutSSA := ln1Out, tbLn1NormSSA := ln1Norm, tbLn1IstdSSA := ln1Istd }
         tbRec := { tbRec with tbLn2OutSSA := ln2Out, tbLn2NormSSA := ln2Norm, tbLn2IstdSSA := ln2Istd }
         tbRec := { tbRec with tbMhQSSA := mhQ, tbMhKSSA := mhK, tbMhVSSA := mhV, tbMhSmSSA := mhSmLse, tbMhPpSSA := mhPp, tbMhFlash := flashAttn, tbMhOSSA := mhAvO, tbMhRope := rope }
         tbRec := { tbRec with tbFc1OutSSA := fc1Out, tbGeluTSSA := geT, tbGeluOutSSA := geOut }
@@ -6152,7 +6079,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       pidx := pidx + 1
       let mut flnRec : FwdRec := default
       flnRec := { flnRec with layer := l, pidx := none, pos, inputSSA := curSSA, outputSSA := lnfOut, inShape := curShape, outShape := curShape }
-      flnRec := { flnRec with isFinalLn := true, finalLnPidx := finalLnPidxV, finalLnNormSSA := lnfNorm, finalLnIstdSSA := lnfIstd, finalLnInSSA := curSSA, finalLnOutSSA := lnfOut }
+      flnRec := { flnRec with isFinalLn := true, finalLnPidx := finalLnPidxV, finalLnNormSSA := lnfNorm, finalLnIstdSSA := lnfIstd }
       records := records.push flnRec
       curSSA := lnfOut
       if !causalMask && !keepSequence then
@@ -6166,7 +6093,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           let clsOut := s!"%te_out{pos}"
           let mut csRec : FwdRec := default
           csRec := { csRec with layer := l, pidx := none, pos, inputSSA := curSSA, outputSSA := clsOut, inShape := curShape, outShape := outShape }
-          csRec := { csRec with isClsSlice := true, clsInShape := curShape, clsInSSA := curSSA }
+          csRec := { csRec with isClsSlice := true, clsInShape := curShape }
           records := records.push csRec
           curSSA := clsOut
           curShape := outShape
@@ -6210,7 +6137,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
           code := code ++ s!"    %tpe_out{pos} = stablehlo.add %tpe_emb{pos}, %tpe_pbc{pos} : {tensorTy btd}\n"
         let mut tpeRec : FwdRec := default
         tpeRec := { tpeRec with layer := l, pidx := none, pos, inputSSA := inSSA, outputSSA := outSSA, inShape := curShape, outShape := btd }
-        tpeRec := { tpeRec with isTokenPosEmbed := true, tpePidx := pidx, tpeV := v, tpeT := t, tpeD := d, tpeBtvSSA := bwdSSA, tpeGather := gather, tpePosEmb := posEmb }
+        tpeRec := { tpeRec with isTokenPosEmbed := true, tpePidx := pidx, tpeBtvSSA := bwdSSA, tpeGather := gather, tpePosEmb := posEmb }
         records := records.push tpeRec
         curSSA := outSSA
         curShape := btd
@@ -6268,7 +6195,7 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         let outSSA := s!"%lmh_out{pos}"
         let mut lmhRec : FwdRec := default
         lmhRec := { lmhRec with layer := l, pidx := none, pos, inputSSA := inSSA, outputSSA := outSSA, inShape := inShape, outShape := bvt1 }
-        lmhRec := { lmhRec with isLmHead := true, lmhPidx := pidx, lmhD := d, lmhV := v, lmhT := t, lmhBtvSSA := s!"%lmh_btv{pos}" }
+        lmhRec := { lmhRec with isLmHead := true, lmhPidx := pidx }
         records := records.push lmhRec
         curSSA := outSSA
         curShape := bvt1
@@ -6466,7 +6393,6 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
         fdRec := { fdRec with layer := l, pidx := some base, pos := pos }
         fdRec := { fdRec with inputSSA := c5SSA, outputSSA := concat }
         fdRec := { fdRec with inShape := [B, c5, g5, g5], outShape := [B, Ntot] }
-        fdRec := { fdRec with isFpnDetect := true }
         fdRec := { fdRec with fpnC3SSA := c3SSA, fpnC4SSA := c4SSA, fpnC5SSA := c5SSA }
         fdRec := { fdRec with fpnP3SSA := p3, fpnP4SSA := p4, fpnP5SSA := p5 }
         fdRec := { fdRec with fpnTowerTaps := towerTaps }
@@ -8160,32 +8086,30 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   code := code ++ (if useAdam then "\n    // ================ ADAM UPDATES ================\n"
                    else "\n    // ================ SGD+MOMENTUM UPDATES ================\n")
   let wdActive := weightDecay > 0.0
+  -- The trained tensors, read off `Layer.paramSlots` in signature order (`trainSigArgs`), so the
+  -- updated θ / m / v come back in the order they came in: each with its index, whether it trains
+  -- at the head LR (a `.dense` layer), and whether its gradient enters the clip norm (conv2d /
+  -- dense / fpnDetect layers and every conv-BN group).
+  let mut slots : Array (ParamSlot × Nat × Bool × Bool) := #[]
+  let mut pNext : Nat := 0
+  for l in spec.layers do
+    match l with
+    | .layerNorm _ | .convNextStem .. => pure ()  -- no lowering here (JAX-side layers)
+    | _ =>
+      let head := match l with | .dense .. => true | _ => false
+      let clipLayer := match l with | .conv2d .. | .dense .. | .fpnDetect .. => true | _ => false
+      for grp in slotGroups (l.paramSlots.getD []) do
+        let clip := clipLayer || grp.any (·.nm == "g")
+        for sl in grp do
+          slots := slots.push (sl, pNext, head, clip)
+        pNext := pNext + 1
   -- ─── Optional global-norm gradient clipping ───
-  -- Compute scale = min(1, clipNorm / (‖g‖₂ + ε)) over ALL gradients, then each
+  -- Compute scale = min(1, clipNorm / (‖g‖₂ + ε)) over the clip-norm gradients, then each
   -- optimizer update pre-scales its gradient by it. ‖g‖₂ = sqrt(Σ_params Σ g²).
-  -- Covers the standard param layers (conv2d/dense/convBn) — i.e. the CNN family
-  -- that trains on the IREE path (ResNet/ConvNeXt + heads). gradClipNorm = 0 ⇒
-  -- this whole block is skipped and clipScale stays none (no IR change).
+  -- gradClipNorm = 0 ⇒ this whole block is skipped and clipScale stays none (no IR change).
   let mut clipScale : Option String := none
   if gradClipNorm > 0.0 then
-    let mut gradList : Array (String × List Nat) := #[]
-    for r in records do
-      match r.pidx with
-      | some p =>
-        match r.layer with
-        | .conv2d ic oc kSize _ _ =>
-          gradList := gradList.push (s!"%d_W{p}", [oc, ic, kSize, kSize]) |>.push (s!"%d_b{p}", [oc])
-        | .dense fanIn fanOut _ =>
-          gradList := gradList.push (s!"%d_W{p}", [fanIn, fanOut]) |>.push (s!"%d_b{p}", [fanOut])
-        | .convBn ic oc kSize _ _ =>
-          let effIc := if r.isDepthwise then 1 else ic
-          gradList := gradList.push (s!"%d_W{p}", [oc, effIc, kSize, kSize])
-                              |>.push (s!"%d_g{p}", [oc]) |>.push (s!"%d_bt{p}", [oc])
-        | .fpnDetect oc c3 c4 c5 _ A tower =>
-          for (sh, i) in (fpnDetectParamShapes oc c3 c4 c5 A tower).zipIdx do
-            gradList := gradList.push (s!"%d_W{p + i}", sh)
-        | _ => pure ()
-      | none => pure ()
+    let gradList := (slots.filter (·.2.2.2)).map fun (sl, p, _) => (s!"%d_{sl.nm}{p}", sl.shape)
     if gradList.size > 0 then
       code := code ++ "\n    // ================ GRADIENT CLIP (global L2 norm) ================\n"
       let mut ssNames : Array String := #[]
@@ -8213,350 +8137,39 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       clipScale := some "%gcscale"
   -- ─── Per-group LR for the from-scratch dense head ───
   -- The head trains at headLrMult × base LR (backbone keeps the base LR). Only
-  -- the .dense case below uses headLrSSA; everything else stays on %lr, so
+  -- `.dense` layers use headLrSSA; everything else stays on %lr, so
   -- headLrMult = 1.0 emits identical IR. See TrainConfig.headLrMult.
   let headLrSSA : String := if headLrMult != 1.0 then "%lr_head" else "%lr"
   if headLrMult != 1.0 then
     code := code ++ s!"    %lr_headmult = stablehlo.constant dense<{headLrMult}> : tensor<f32>\n"
     code := code ++ s!"    %lr_head = stablehlo.multiply %lr, %lr_headmult : tensor<f32>\n"
+  -- One update per tensor. With useShampoo a SQUARE 2D weight (≥ 16) is updated by Shampoo;
+  -- with useMuon every 2D weight with both dims ≥ 16 by Muon (the small classifier head /
+  -- embeddings stay on AdamW — Muon's canonical exclusion); everything else by Adam(W), or
+  -- SGD+momentum when no Adam-family optimizer is on. Weight decay: `ParamSlot.decay`.
   let mut paramRetNames : Array String := #[]
-  let mut paramRetTypes : Array String := #[]
   let mut mRetNames : Array String := #[]
-  let mut mRetTypes : Array String := #[]
   let mut vRetNames : Array String := #[]
-  let mut vRetTypes : Array String := #[]
-  let mut processedPidx : Array Nat := #[]
-  -- Helper: choose the per-parameter update. With useMuon, every 2D weight matrix
-  -- (both dims ≥ 16, so the small classifier head / embeddings stay on AdamW — Muon's
-  -- canonical exclusion) is updated by Muon; all other params fall back to AdamW.
-  -- Otherwise the original Adam/momentum dispatch is unchanged.
-  let emitUpdate := fun (paramSSA gradSSA mSSA vSSA : String) (shape : List Nat) (tag : String) (applyWd : Bool) =>
+  let mut pTys : Array String := #[]
+  for (sl, p, head, _) in slots do
+    let (pS, gS, mS, vS) := (s!"%{sl.nm}{p}", s!"%d_{sl.nm}{p}", s!"%m_{sl.nm}{p}", s!"%v_{sl.nm}{p}")
+    let (shape, tag, wd) := (sl.shape, s!"{sl.nm}{p}", wdActive && sl.decay)
+    let lrSSA := if head then headLrSSA else "%lr"
     let is2DMuon : Bool := match shape with | [a, b] => decide (16 ≤ Nat.min a b) | _ => false
-    -- Shampoo demo scope: only SQUARE 2D weights (L[n,n],R[n,n] reuse the m/v slots).
     let is2DSquareShampoo : Bool := match shape with | [a, b] => decide (a == b ∧ 16 ≤ a) | _ => false
-    if useShampoo && is2DSquareShampoo then emitShampooUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
-    else if useMuon && is2DMuon then emitMuonUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
-    else if useAdam || useMuon || useShampoo then emitAdamUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
-    else emitMomentumUpdate paramSSA gradSSA mSSA vSSA shape tag (applyWeightDecay := applyWd) (clipScale := clipScale)
-  for r in records do
-    match r.pidx with
-    | some p =>
-      if processedPidx.contains p then
-        pure ()
-      else
-        processedPidx := processedPidx.push p
-        match r.layer with
-        | .conv2d ic oc kSize _ _ =>
-          let wShape := [oc, ic, kSize, kSize]; let bShape := [oc]
-          let (s1, wN, mwN, vwN) := emitUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"cW{p}" wdActive
-          let (s2, bN, mbN, vbN) := emitUpdate s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"cb{p}" false
-          code := code ++ s1 ++ s2
-          paramRetNames := paramRetNames.push wN |>.push bN
-          paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          mRetNames := mRetNames.push mwN |>.push mbN
-          mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          vRetNames := vRetNames.push vwN |>.push vbN
-          vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-        | .dense fanIn fanOut _ =>
-          let wShape := [fanIn, fanOut]; let bShape := [fanOut]
-          -- Head dense layer: use the per-group head LR (headLrSSA). The W update
-          -- also honours the matrix optimizers when engaged: a SQUARE dense weight
-          -- routes to Shampoo, a large 2D one to Muon (both at the head LR). Small /
-          -- non-square heads (e.g. ViT's 192×10 classifier) fall through to Adam, so
-          -- default behaviour is unchanged.
-          let is2DMuon : Bool := match wShape with | [a, b] => decide (16 ≤ Nat.min a b) | _ => false
-          let is2DSquareShampoo : Bool := match wShape with | [a, b] => decide (a == b ∧ 16 ≤ a) | _ => false
-          let headWUpd := fun (pS gS mS vS : String) (sh : List Nat) (tg : String) (wd : Bool) =>
-            if useShampoo && is2DSquareShampoo then emitShampooUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
-            else if useMuon && is2DMuon then emitMuonUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
-            else if useAdam || useMuon || useShampoo then emitAdamUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
-            else emitMomentumUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
-          let headUpd := fun (pS gS mS vS : String) (sh : List Nat) (tg : String) (wd : Bool) =>
-            if useAdam then emitAdamUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
-            else emitMomentumUpdate pS gS mS vS sh tg (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := headLrSSA)
-          let (s1, wN, mwN, vwN) := headWUpd s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"dW{p}" wdActive
-          let (s2, bN, mbN, vbN) := headUpd s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"db{p}" false
-          code := code ++ s1 ++ s2
-          paramRetNames := paramRetNames.push wN |>.push bN
-          paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          mRetNames := mRetNames.push mwN |>.push mbN
-          mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          vRetNames := vRetNames.push vwN |>.push vbN
-          vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-        | .convBn ic oc kSize _ _ =>
-          -- For depthwise convBn, weight shape is [channels, 1, kSize, kSize]
-          let effIc := if r.isDepthwise then 1 else ic
-          let (optCode, optNames, optTypes) :=
-            if useAdam then emitConvBnAdam p effIc oc kSize (applyWeightDecay := wdActive) (clipScale := clipScale)
-            else emitConvBnMomentum p effIc oc kSize (applyWeightDecay := wdActive) (clipScale := clipScale)
-          code := code ++ optCode
-          -- returns [wNew, gNew, btNew, mwNew, mgNew, mbtNew, vwNew, vgNew, vbtNew]
-          paramRetNames := paramRetNames ++ optNames[:3]
-          paramRetTypes := paramRetTypes ++ optTypes[:3]
-          mRetNames := mRetNames ++ optNames[3:6]
-          mRetTypes := mRetTypes ++ optTypes[3:6]
-          vRetNames := vRetNames ++ optNames[6:]
-          vRetTypes := vRetTypes ++ optTypes[6:]
-        | .timeCondAdd c nFreq =>
-          -- Plain dense update: W [2·nFreq, c] + b [c] (no head LR, wd on W).
-          let wShape := [2 * nFreq, c]; let bShape := [c]
-          let (s1, wN, mwN, vwN) := emitUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" wShape s!"tcW{p}" wdActive
-          let (s2, bN, mbN, vbN) := emitUpdate s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" bShape s!"tcb{p}" false
-          code := code ++ s1 ++ s2
-          paramRetNames := paramRetNames.push wN |>.push bN
-          paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          mRetNames := mRetNames.push mwN |>.push mbN
-          mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          vRetNames := vRetNames.push vwN |>.push vbN
-          vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-        | .fpnDetect oc c3 c4 c5 _ A tower =>
-          -- Canonical order via fpnDetectParamShapes (base = p). All params ride
-          -- the %W names — a [ap] bias is just a rank-1 tensor to the
-          -- shape-generic emitUpdate. RANK-1 params (the tower biases [oc] and
-          -- head biases [ap]) take NO weight decay: decaying the head bias would
-          -- drag the RetinaNet prior back toward 0, which is the exact offset we
-          -- install it to hold, and biases are conventionally excluded anyway.
-          let wshapes := fpnDetectParamShapes oc c3 c4 c5 A tower
-          for (wsh, i) in wshapes.zipIdx do
-            let pi := p + i
-            let (su, wN, mwN, vwN) := emitUpdate s!"%W{pi}" s!"%d_W{pi}" s!"%m_W{pi}" s!"%v_W{pi}" wsh s!"fpn{pi}" (wdActive && wsh.length > 1)
-            code := code ++ su
-            paramRetNames := paramRetNames.push wN
-            paramRetTypes := paramRetTypes.push (tensorTy wsh)
-            mRetNames := mRetNames.push mwN
-            mRetTypes := mRetTypes.push (tensorTy wsh)
-            vRetNames := vRetNames.push vwN
-            vRetTypes := vRetTypes.push (tensorTy wsh)
-        | _ => pure ()
-    | none =>
-      -- SE records (marker layer = globalAvgPool, isSE := true) carry 2 conv2d-style param
-      -- pidxes (reduce, expand). Emit optimizer updates for them inline.
-      if r.isSE then
-        let mid := r.seMidFull
-        let seMid := r.seMid
-        let pRed := r.sePidxRed
-        let pExp := r.sePidxExp
-        -- Reduce: W shape [seMid, mid, 1, 1], b shape [seMid]
-        let wShapeR := [seMid, mid, 1, 1]; let bShapeR := [seMid]
-        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pRed}" s!"%d_W{pRed}" s!"%m_W{pRed}" s!"%v_W{pRed}" wShapeR s!"seRW{pRed}" wdActive
-        let (sa2, bN, mbN, vbN) := emitUpdate s!"%b{pRed}" s!"%d_b{pRed}" s!"%m_b{pRed}" s!"%v_b{pRed}" bShapeR s!"seRb{pRed}" false
-        code := code ++ sa1 ++ sa2
-        paramRetNames := paramRetNames.push wN |>.push bN
-        paramRetTypes := paramRetTypes.push (tensorTy wShapeR) |>.push (tensorTy bShapeR)
-        mRetNames := mRetNames.push mwN |>.push mbN
-        mRetTypes := mRetTypes.push (tensorTy wShapeR) |>.push (tensorTy bShapeR)
-        vRetNames := vRetNames.push vwN |>.push vbN
-        vRetTypes := vRetTypes.push (tensorTy wShapeR) |>.push (tensorTy bShapeR)
-        -- Expand: W shape [mid, seMid, 1, 1], b shape [mid]
-        let wShapeE := [mid, seMid, 1, 1]; let bShapeE := [mid]
-        let (sa3, wN2, mwN2, vwN2) := emitUpdate s!"%W{pExp}" s!"%d_W{pExp}" s!"%m_W{pExp}" s!"%v_W{pExp}" wShapeE s!"seEW{pExp}" wdActive
-        let (sa4, bN2, mbN2, vbN2) := emitUpdate s!"%b{pExp}" s!"%d_b{pExp}" s!"%m_b{pExp}" s!"%v_b{pExp}" bShapeE s!"seEb{pExp}" false
-        code := code ++ sa3 ++ sa4
-        paramRetNames := paramRetNames.push wN2 |>.push bN2
-        paramRetTypes := paramRetTypes.push (tensorTy wShapeE) |>.push (tensorTy bShapeE)
-        mRetNames := mRetNames.push mwN2 |>.push mbN2
-        mRetTypes := mRetTypes.push (tensorTy wShapeE) |>.push (tensorTy bShapeE)
-        vRetNames := vRetNames.push vwN2 |>.push vbN2
-        vRetTypes := vRetTypes.push (tensorTy wShapeE) |>.push (tensorTy bShapeE)
-      -- ViT patch embedding: 3 param tensors
-      if r.isPatchEmbed then
-        let dim := r.pePDim
-        let ic := r.pePIc
-        let pSize := r.pePSize
-        let nP := r.pePNp
-        let pW := r.pePWPidx
-        let pB := r.pePBPidx
-        let pCls := r.peClsPidx
-        let pPos := r.pePosPidx
-        let wShape := [dim, ic, pSize, pSize]
-        let bShape := [dim]
-        let clsShape := [dim]
-        let posShape := [nP + 1, dim]
-        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pW}" s!"%d_W{pW}" s!"%m_W{pW}" s!"%v_W{pW}" wShape s!"peW{pW}" wdActive
-        let (sa2, bN, mbN, vbN) := emitUpdate s!"%b{pB}" s!"%d_b{pB}" s!"%m_b{pB}" s!"%v_b{pB}" bShape s!"peb{pB}" false
-        let (sa3, clsN, mclsN, vclsN) := emitUpdate s!"%W{pCls}" s!"%d_W{pCls}" s!"%m_W{pCls}" s!"%v_W{pCls}" clsShape s!"peCls{pCls}" false
-        let (sa4, posN, mposN, vposN) := emitUpdate s!"%W{pPos}" s!"%d_W{pPos}" s!"%m_W{pPos}" s!"%v_W{pPos}" posShape s!"pePos{pPos}" false
-        code := code ++ sa1 ++ sa2 ++ sa3 ++ sa4
-        paramRetNames := paramRetNames.push wN |>.push bN |>.push clsN |>.push posN
-        paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape) |>.push (tensorTy clsShape) |>.push (tensorTy posShape)
-        mRetNames := mRetNames.push mwN |>.push mbN |>.push mclsN |>.push mposN
-        mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape) |>.push (tensorTy clsShape) |>.push (tensorTy posShape)
-        vRetNames := vRetNames.push vwN |>.push vbN |>.push vclsN |>.push vposN
-        vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape) |>.push (tensorTy clsShape) |>.push (tensorTy posShape)
-      -- ViT transformer block: 8 param pairs (each W + b)
-      if r.isTransformerBlock then
-        let dim := r.tbDim
-        let mlpDim := r.tbMlpDim
-        let basePidx := r.tbBasePidx
-        -- Shapes for each param pair:
-        -- LN1: (dim,), (dim,); Wq,Wk,Wv,Wo: (dim, dim), (dim,); LN2: (dim,), (dim,); Wfc1: (dim, mlpDim), (mlpDim,); Wfc2: (mlpDim, dim), (dim,)
-        let paramShapes : Array (List Nat × List Nat) := #[
-          ([dim], [dim]),            -- LN1
-          ([dim, dim], [dim]),       -- Wq
-          ([dim, dim], [dim]),       -- Wk
-          ([dim, dim], [dim]),       -- Wv
-          ([dim, dim], [dim]),       -- Wo
-          ([dim], [dim]),            -- LN2
-          ([dim, mlpDim], [mlpDim]), -- Wfc1
-          ([mlpDim, dim], [dim])     -- Wfc2
-        ]
-        let decayW : Array Bool := #[false, true, true, true, true, false, true, true]
-        for i in [:8] do
-          let pp := basePidx + i
-          let (wShape, bShape) := paramShapes[i]!
-          let decay := decayW[i]! && wdActive
-          let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pp}" s!"%d_W{pp}" s!"%m_W{pp}" s!"%v_W{pp}" wShape s!"tb_w{pp}" decay
-          let (sa2, bN, mbN, vbN) := emitUpdate s!"%b{pp}" s!"%d_b{pp}" s!"%m_b{pp}" s!"%v_b{pp}" bShape s!"tb_b{pp}" false
-          code := code ++ sa1 ++ sa2
-          paramRetNames := paramRetNames.push wN |>.push bN
-          paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          mRetNames := mRetNames.push mwN |>.push mbN
-          mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-          vRetNames := vRetNames.push vwN |>.push vbN
-          vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-      -- ViT final LN (after all transformer blocks)
-      if r.isFinalLn then
-        let dim := r.inShape[2]!
-        let p := r.finalLnPidx
-        let shape := [dim]
-        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{p}" s!"%d_W{p}" s!"%m_W{p}" s!"%v_W{p}" shape s!"fln_w{p}" false
-        let (sa2, bN, mbN, vbN) := emitUpdate s!"%b{p}" s!"%d_b{p}" s!"%m_b{p}" s!"%v_b{p}" shape s!"fln_b{p}" false
-        code := code ++ sa1 ++ sa2
-        paramRetNames := paramRetNames.push wN |>.push bN
-        paramRetTypes := paramRetTypes.push (tensorTy shape) |>.push (tensorTy shape)
-        mRetNames := mRetNames.push mwN |>.push mbN
-        mRetTypes := mRetTypes.push (tensorTy shape) |>.push (tensorTy shape)
-        vRetNames := vRetNames.push vwN |>.push vbN
-        vRetTypes := vRetTypes.push (tensorTy shape) |>.push (tensorTy shape)
-      -- ConvNeXt block: 5 pidx slots (DW, LN, expand, project, LayerScale)
-      if r.isConvNextBlock then
-        let basePidx := r.cnbBasePidx
-        let c := r.cnbChannels
-        let cShape : List Nat := [c]
-        let dwShape : List Nat := [c, 1, 7, 7]
-        let exShape : List Nat := [4*c, c, 1, 1]; let exB : List Nat := [4*c]
-        let pjShape : List Nat := [c, 4*c, 1, 1]
-        -- DW (W, b)
-        let pDw := basePidx
-        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pDw}" s!"%d_W{pDw}" s!"%m_W{pDw}" s!"%v_W{pDw}" dwShape s!"cnbDw{pDw}" wdActive
-        let (sa2, bN, mbN, vbN) := emitUpdate s!"%b{pDw}" s!"%d_b{pDw}" s!"%m_b{pDw}" s!"%v_b{pDw}" cShape s!"cnbDwb{pDw}" false
-        code := code ++ sa1 ++ sa2
-        paramRetNames := paramRetNames.push wN |>.push bN
-        paramRetTypes := paramRetTypes.push (tensorTy dwShape) |>.push (tensorTy cShape)
-        mRetNames := mRetNames.push mwN |>.push mbN
-        mRetTypes := mRetTypes.push (tensorTy dwShape) |>.push (tensorTy cShape)
-        vRetNames := vRetNames.push vwN |>.push vbN
-        vRetTypes := vRetTypes.push (tensorTy dwShape) |>.push (tensorTy cShape)
-        -- LN (γ, β) — no weight decay on γ/β
-        let pLn := basePidx + 1
-        let (sa3, gN, mgN, vgN) := emitUpdate s!"%W{pLn}" s!"%d_W{pLn}" s!"%m_W{pLn}" s!"%v_W{pLn}" cShape s!"cnbLng{pLn}" false
-        let (sa4, betaN, mbetaN, vbetaN) := emitUpdate s!"%b{pLn}" s!"%d_b{pLn}" s!"%m_b{pLn}" s!"%v_b{pLn}" cShape s!"cnbLnb{pLn}" false
-        code := code ++ sa3 ++ sa4
-        paramRetNames := paramRetNames.push gN |>.push betaN
-        paramRetTypes := paramRetTypes.push (tensorTy cShape) |>.push (tensorTy cShape)
-        mRetNames := mRetNames.push mgN |>.push mbetaN
-        mRetTypes := mRetTypes.push (tensorTy cShape) |>.push (tensorTy cShape)
-        vRetNames := vRetNames.push vgN |>.push vbetaN
-        vRetTypes := vRetTypes.push (tensorTy cShape) |>.push (tensorTy cShape)
-        -- Expand (W, b)
-        let pEx := basePidx + 2
-        let (sa5, wEx, mwEx, vwEx) := emitUpdate s!"%W{pEx}" s!"%d_W{pEx}" s!"%m_W{pEx}" s!"%v_W{pEx}" exShape s!"cnbEx{pEx}" wdActive
-        let (sa6, bEx, mbEx, vbEx) := emitUpdate s!"%b{pEx}" s!"%d_b{pEx}" s!"%m_b{pEx}" s!"%v_b{pEx}" exB s!"cnbExb{pEx}" false
-        code := code ++ sa5 ++ sa6
-        paramRetNames := paramRetNames.push wEx |>.push bEx
-        paramRetTypes := paramRetTypes.push (tensorTy exShape) |>.push (tensorTy exB)
-        mRetNames := mRetNames.push mwEx |>.push mbEx
-        mRetTypes := mRetTypes.push (tensorTy exShape) |>.push (tensorTy exB)
-        vRetNames := vRetNames.push vwEx |>.push vbEx
-        vRetTypes := vRetTypes.push (tensorTy exShape) |>.push (tensorTy exB)
-        -- Project (W, b)
-        let pPj := basePidx + 3
-        let (sa7, wPj, mwPj, vwPj) := emitUpdate s!"%W{pPj}" s!"%d_W{pPj}" s!"%m_W{pPj}" s!"%v_W{pPj}" pjShape s!"cnbPj{pPj}" wdActive
-        let (sa8, bPj, mbPj, vbPj) := emitUpdate s!"%b{pPj}" s!"%d_b{pPj}" s!"%m_b{pPj}" s!"%v_b{pPj}" cShape s!"cnbPjb{pPj}" false
-        code := code ++ sa7 ++ sa8
-        paramRetNames := paramRetNames.push wPj |>.push bPj
-        paramRetTypes := paramRetTypes.push (tensorTy pjShape) |>.push (tensorTy cShape)
-        mRetNames := mRetNames.push mwPj |>.push mbPj
-        mRetTypes := mRetTypes.push (tensorTy pjShape) |>.push (tensorTy cShape)
-        vRetNames := vRetNames.push vwPj |>.push vbPj
-        vRetTypes := vRetTypes.push (tensorTy pjShape) |>.push (tensorTy cShape)
-        -- LayerScale γ — no weight decay
-        let pLs := basePidx + 4
-        let (sa9, lsN, mlsN, vlsN) := emitUpdate s!"%W{pLs}" s!"%d_W{pLs}" s!"%m_W{pLs}" s!"%v_W{pLs}" cShape s!"cnbLs{pLs}" false
-        code := code ++ sa9
-        paramRetNames := paramRetNames.push lsN
-        paramRetTypes := paramRetTypes.push (tensorTy cShape)
-        mRetNames := mRetNames.push mlsN
-        mRetTypes := mRetTypes.push (tensorTy cShape)
-        vRetNames := vRetNames.push vlsN
-        vRetTypes := vRetTypes.push (tensorTy cShape)
-      -- ConvNeXt downsample: 2 pidx slots (LN, conv)
-      if r.isConvNextDs then
-        let basePidx := r.cndBasePidx
-        let ic := r.cndIc
-        let oc := r.cndOc
-        let icShape : List Nat := [ic]
-        let ocShape : List Nat := [oc]
-        let cvShape : List Nat := [oc, ic, 2, 2]
-        let pLn := basePidx
-        let pCv := basePidx + 1
-        let (sa1, gN, mgN, vgN) := emitUpdate s!"%W{pLn}" s!"%d_W{pLn}" s!"%m_W{pLn}" s!"%v_W{pLn}" icShape s!"cndLng{pLn}" false
-        let (sa2, betaN, mbetaN, vbetaN) := emitUpdate s!"%b{pLn}" s!"%d_b{pLn}" s!"%m_b{pLn}" s!"%v_b{pLn}" icShape s!"cndLnb{pLn}" false
-        code := code ++ sa1 ++ sa2
-        paramRetNames := paramRetNames.push gN |>.push betaN
-        paramRetTypes := paramRetTypes.push (tensorTy icShape) |>.push (tensorTy icShape)
-        mRetNames := mRetNames.push mgN |>.push mbetaN
-        mRetTypes := mRetTypes.push (tensorTy icShape) |>.push (tensorTy icShape)
-        vRetNames := vRetNames.push vgN |>.push vbetaN
-        vRetTypes := vRetTypes.push (tensorTy icShape) |>.push (tensorTy icShape)
-        let (sa3, wN, mwN, vwN) := emitUpdate s!"%W{pCv}" s!"%d_W{pCv}" s!"%m_W{pCv}" s!"%v_W{pCv}" cvShape s!"cndCv{pCv}" wdActive
-        let (sa4, bN, mbN, vbN) := emitUpdate s!"%b{pCv}" s!"%d_b{pCv}" s!"%m_b{pCv}" s!"%v_b{pCv}" ocShape s!"cndCvb{pCv}" false
-        code := code ++ sa3 ++ sa4
-        paramRetNames := paramRetNames.push wN |>.push bN
-        paramRetTypes := paramRetTypes.push (tensorTy cvShape) |>.push (tensorTy ocShape)
-        mRetNames := mRetNames.push mwN |>.push mbN
-        mRetTypes := mRetTypes.push (tensorTy cvShape) |>.push (tensorTy ocShape)
-        vRetNames := vRetNames.push vwN |>.push vbN
-        vRetTypes := vRetTypes.push (tensorTy cvShape) |>.push (tensorTy ocShape)
-      -- tinyGPT token+position embedding: 2 param tensors, no biases.
-      if r.isTokenPosEmbed then
-        let pIdx := r.tpePidx
-        let v := r.tpeV; let t := r.tpeT; let d := r.tpeD
-        let wShape := [v, d]; let posShape := [t, d]
-        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pIdx}" s!"%d_W{pIdx}" s!"%m_W{pIdx}" s!"%v_W{pIdx}" wShape s!"tpeW{pIdx}" wdActive
-        code := code ++ sa1
-        paramRetNames := paramRetNames.push wN
-        paramRetTypes := paramRetTypes.push (tensorTy wShape)
-        mRetNames := mRetNames.push mwN
-        mRetTypes := mRetTypes.push (tensorTy wShape)
-        vRetNames := vRetNames.push vwN
-        vRetTypes := vRetTypes.push (tensorTy wShape)
-        if r.tpePosEmb then
-          let (sa2, posN, mposN, vposN) := emitUpdate s!"%W{pIdx + 1}" s!"%d_W{pIdx + 1}" s!"%m_W{pIdx + 1}" s!"%v_W{pIdx + 1}" posShape s!"tpePos{pIdx}" false
-          code := code ++ sa2
-          paramRetNames := paramRetNames.push posN
-          paramRetTypes := paramRetTypes.push (tensorTy posShape)
-          mRetNames := mRetNames.push mposN
-          mRetTypes := mRetTypes.push (tensorTy posShape)
-          vRetNames := vRetNames.push vposN
-          vRetTypes := vRetTypes.push (tensorTy posShape)
-      -- tinyGPT LM head: 1 dense pair (W [D, V], b [V]).
-      if r.isLmHead then
-        let pIdx := r.lmhPidx
-        let d := r.lmhD; let v := r.lmhV
-        let wShape := [d, v]; let bShape := [v]
-        let (sa1, wN, mwN, vwN) := emitUpdate s!"%W{pIdx}" s!"%d_W{pIdx}" s!"%m_W{pIdx}" s!"%v_W{pIdx}" wShape s!"lmhW{pIdx}" wdActive
-        let (sa2, bN, mbN, vbN) := emitUpdate s!"%b{pIdx}" s!"%d_b{pIdx}" s!"%m_b{pIdx}" s!"%v_b{pIdx}" bShape s!"lmhb{pIdx}" false
-        code := code ++ sa1 ++ sa2
-        paramRetNames := paramRetNames.push wN |>.push bN
-        paramRetTypes := paramRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-        mRetNames := mRetNames.push mwN |>.push mbN
-        mRetTypes := mRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
-        vRetNames := vRetNames.push vwN |>.push vbN
-        vRetTypes := vRetTypes.push (tensorTy wShape) |>.push (tensorTy bShape)
+    let (s, pN, mN, vN) :=
+      if useShampoo && is2DSquareShampoo then emitShampooUpdate pS gS mS vS shape tag (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := lrSSA)
+      else if useMuon && is2DMuon then emitMuonUpdate pS gS mS vS shape tag (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := lrSSA)
+      else if useAdam || useMuon || useShampoo then emitAdamUpdate pS gS mS vS shape tag (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := lrSSA)
+      else emitMomentumUpdate pS gS mS vS shape tag (applyWeightDecay := wd) (clipScale := clipScale) (lrSSA := lrSSA)
+    code := code ++ s
+    paramRetNames := paramRetNames.push pN
+    mRetNames := mRetNames.push mN
+    vRetNames := vRetNames.push vN
+    pTys := pTys.push (tensorTy shape)
   -- Return order: params, m, v, loss, then BN stats (mean0, var0, mean1, var1, ...)
   let mut retNames := paramRetNames ++ mRetNames ++ vRetNames |>.push "%loss"
-  let mut retTypes := paramRetTypes ++ mRetTypes ++ vRetTypes |>.push "tensor<f32>"
+  let mut retTypes := pTys ++ pTys ++ pTys |>.push "tensor<f32>"
 
   -- Append BN mean/var for each BN layer (computed during forward)
   let bnLayers := collectBnLayers spec
