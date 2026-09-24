@@ -33,7 +33,7 @@ private def main : IO Unit := do
 LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.ViTRender` first")
   IO.println s!"iree-compile smoke on the COMMITTED {path} (this file does not re-render it)"
   let cargs ← ireeCompileArgs path ".lake/build/vit_train_step_v.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+  let r ← IO.Process.output { cmd := (← findIreeCompile), args := cargs }
   if r.exitCode != 0 then
     IO.eprintln s!"[depth-12] iree-compile FAILED:\n{r.stderr.take 3000}"
   else

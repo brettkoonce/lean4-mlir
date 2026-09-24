@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Types
 
 /-! # ConvNeXt-T render CAPSTONE — proof-rendered full [3,3,9,3] train step at the
@@ -375,7 +375,7 @@ def main : IO Unit := do
   IO.FS.createDirAll "/tmp/cnxtpc"
   IO.FS.writeFile "/tmp/cnxtpc/train_step.mlir" mlir
   let cargs ← ireeCompileArgs "/tmp/cnxtpc/train_step.mlir" "/tmp/cnxtpc/train_step.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+  let r ← IO.Process.output { cmd := (← findIreeCompile), args := cargs }
   if r.exitCode != 0 then
     IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 5000}"
   else

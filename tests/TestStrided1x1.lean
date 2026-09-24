@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.VerifiedTrain
 import LeanMlir.Types
 
@@ -198,7 +198,7 @@ private def renderProbe (K : Nat) (zk : Kernel4 OC IC K K) : IO Bool := do
   let path := s!".lake/build/strided_k{K}.mlir"
   IO.FS.writeFile path mlir
   let cargs ← ireeCompileArgs path s!".lake/build/strided_k{K}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+  let r ← IO.Process.output { cmd := (← findIreeCompile), args := cargs }
   if r.exitCode != 0 then
     IO.println s!"  ⛔ iree-compile FAILED at k={K}:\n{r.stderr.take 2500}"
     pure false

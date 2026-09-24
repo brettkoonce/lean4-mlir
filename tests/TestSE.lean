@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Types
 
 /-! # E3 — squeeze-excite module renderer (fwd + 2-path backward) + iree

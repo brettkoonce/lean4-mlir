@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # ch10 ViT — verified-faithful StableHLO render fragments (shared library)
 

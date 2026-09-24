@@ -1,12 +1,13 @@
 # Codegen/ — the emitted-graph AST, its semantics, and the artifact writers
 
-Every file in `verified_mlir/` is written by an `#eval` in one of the `*Render*` files here, and
+Every file in `verified_mlir/` is written by an `#eval` in `StableHLOPretty` or a `*Render*` / `*Artifacts` file here, and
 its text is `pretty` of an `SHlo` term. The theorems about what that term *means* are stated about
 `den`, mostly in `Nets/`.
 
 | file | role |
 |---|---|
-| `StableHLO.lean` | the `SHlo` AST, `den` (its ℝ semantics), the per-op `*_faithful` lemmas, the printer (`skel` → `Tok` → `emitTok` → `pretty`), the chapter 1–3 graphs. Header has a table of contents |
+| `StableHLO.lean` | the `SHlo` AST, `den` (its ℝ semantics), the per-op `*_faithful` lemmas, the chapter 1–3 graphs. A module that only states `den` facts imports this alone. Header has a table of contents |
+| `StableHLOPretty.lean` | the printer (`skel` → `Tok` → `emitTok` → `pretty`), the chapter 1–3 `*ModuleV` renderers and their `#eval` writers. Every renderer imports it |
 | `StableHLOLex.lean`, `StableHLOParse.lean` | the syntactic round-trip (`parse (lex (pretty g)) = some (skel g)`) |
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
 | `RenderKit.lean` | the renderers' shared optimizer tail: `PGrad` and the per-parameter steps `adamOne`, `rmsOne`, `adamOneEma` (ResNet's multi-optimizer `optOne` stays in `ResNet34RenderB`) |

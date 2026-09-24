@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Types
 
 /-! Standalone render + `iree-compile` validation for the Chapter-7 C2 ReLU6 SHlo

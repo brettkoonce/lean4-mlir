@@ -21,7 +21,7 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 | [`Architectures/`](Architectures/) | generic ops: `Attention`, `CNN`, `BatchNorm`, `LayerNorm`, `Depthwise`, `SE`, `Residual`, `MaxPool3s2`, the channel-LN and depthwise backward ties, and the per-op parameter-gradient bridges (`ConvGrad`, `PerChannelBNGrad`, `TokenParamGrad`) |
 | [`Nets/`](Nets/) | one directory per net family — `Small/` (MNIST linear/MLP/CNN, CIFAR), `ResNet/`, `MobileNet/`, `EfficientNet/`, `ConvNeXt/`, `ViT/`: each net's forward, VJP, folds, step ties and whole-net backward ties |
 | [`Float/`](Float/) | the rounding model: `FloatBridge`, `Binary32Instance`, bf16/E4M3, the ResNet-34 float chain |
-| [`Codegen/`](Codegen/) | `StableHLO` (the `SHlo` AST, its `den` semantics, the printer), the per-net `*Render*` artifact writers, `IRPrint` (a scratch-only execution oracle) |
+| [`Codegen/`](Codegen/) | `StableHLO` (the `SHlo` AST and its `den` semantics), `StableHLOPretty` (the printer), the per-net `*Render*` artifact writers, `IRPrint` (a scratch-only execution oracle) |
 | [`Certificates/`](Certificates/) | Lipschitz + smoothing scorecards — **machine-emitted**, see its README |
 | [`Training/`](Training/) | `SgdDescent*`, Jacobian seals, trained witnesses; `Optim/` — the ℝ optimizer specs the emitted optimizer ops denote (`AdamStep`, `SgdMomentumStep`, `RmsPropStep`, `Lamb`, `GradClip`); `DropPath` |
 

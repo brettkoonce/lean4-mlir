@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # MLP render half — the train-step text as `pretty` of proven graphs
 

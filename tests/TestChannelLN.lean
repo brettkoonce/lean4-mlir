@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.VerifiedTrain
 
 /-! # §2m ConvNeXt — can the existing ops spell a **channel** LayerNorm, and do they?

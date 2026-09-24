@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # The three BatchNorm emit sites every batch-BN renderer shares — batch BN or SYNCHRONISED BN
 

@@ -178,8 +178,7 @@ def main (args : List String) : IO Unit := do
     -- the runtime loads. Mirrors `Train.lean`'s `runIreeCached` guard.
     if (← LowererSession.backendName) == "xla" then return true
     let args ← ireeCompileArgs mlirPath outPath
-    let compiler ← if (← System.FilePath.pathExists ".venv/bin/iree-compile")
-                   then pure ".venv/bin/iree-compile" else pure "iree-compile"
+    let compiler ← findIreeCompile
     let r ← IO.Process.output { cmd := compiler, args := args }
     if r.exitCode != 0 then
       IO.eprintln s!"iree-compile failed: {r.stderr.take 3000}"

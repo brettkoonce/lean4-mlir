@@ -5752,29 +5752,12 @@ private def emitOptimizerUpdates (spec : NetSpec) (weightDecay : Float) (useAdam
   code := code ++ s!"      : {String.intercalate ", " retTypes.toList}\n"
   code
 
-/-- Emit the full train step (forward + loss + backward + SGD). -/
-private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : String)
-    (labelSmoothing : Float := 0.1) (weightDecay : Float := 0.0001) (useAdam : Bool := true)
-    (useSoftLabels : Bool := false)
-    (useFocal : Bool := false) (focalGamma : Float := 2.0)
-    (useSeg : Bool := false)
-    (useDdpm : Bool := false)
-    (useYolov1 : Bool := false)
-    (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
-    (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
-    (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
-    (useMuon : Bool := false)
-    (useShampoo : Bool := false)
-    (segLoss : SegLoss := .ce)
-    (useDiouBox : Bool := false)
-    (yoloAnchors : List (Float × Float) := [])
-    (fpnScales : List (Nat × List (Float × Float)) := [])
-    (yoloClsWeights : List Float := [])
-    (yoloClsFocalGamma : Float := 0.0)
-    : String := Id.run do
-  let B := batchSize
+/-- The train step's forward walk: one block of StableHLO per layer, from the input reshape to the
+    logits. Returns the text, the logits' SSA name and shape, and one `FwdRec` per layer — the
+    names and shapes `emitTrainBackward` reads back. -/
+private def emitTrainForward (spec : NetSpec) (B : Nat)
+    : String × String × List Nat × Array FwdRec := Id.run do
   let mut code : String := ""
-  code := code ++ emitTrainConstants useAdam useMuon useShampoo weightDecay
 
   -- ═══════════════ FORWARD PASS ═══════════════
   code := code ++ "    // ======================== FORWARD ========================\n"
@@ -7033,13 +7016,17 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
 
     | _ => code := code ++ "    // UNSUPPORTED\n"
     pos := pos + 1
+  return (code, curSSA, curShape, records)
 
-  let (lossCode, gradSSA₀, gradShape₀) := emitTrainLoss spec B curSSA curShape labelSmoothing
-    useSoftLabels useFocal focalGamma useSeg useDdpm useYolov1 yoloGridH yoloGridW yoloNumBoxes
-    yoloNumClasses segLoss useDiouBox yoloAnchors fpnScales yoloClsWeights yoloClsFocalGamma
-  code := code ++ lossCode
+/-- The train step's backward walk: the `FwdRec`s in reverse, each layer's VJP from the cotangent
+    `gradSSA₀ : gradShape₀` the loss seeds, writing `%d_W{p}` / `%d_b{p}` (and the other parameter
+    gradients) that `emitOptimizerUpdates` reads. -/
+private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : String)
+    (gradShape₀ : List Nat) : String := Id.run do
+  let mut code : String := ""
   let mut gradSSA := gradSSA₀
   let mut gradShape := gradShape₀
+
 
   let nRec := records.size
   -- Track projection pidx values whose backward was emitted inline during skip-add handling
@@ -8205,9 +8192,37 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
       gradShape := [B, c5, g5, g5]
 
     | _ => pure ()
+  return code
 
-  code := code ++ emitOptimizerUpdates spec weightDecay useAdam gradClipNorm headLrMult useMuon useShampoo
-  pure code
+/-- Emit the full train step: constants, `emitTrainForward`, `emitTrainLoss`, `emitTrainBackward`,
+    `emitOptimizerUpdates`. -/
+private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : String)
+    (labelSmoothing : Float := 0.1) (weightDecay : Float := 0.0001) (useAdam : Bool := true)
+    (useSoftLabels : Bool := false)
+    (useFocal : Bool := false) (focalGamma : Float := 2.0)
+    (useSeg : Bool := false)
+    (useDdpm : Bool := false)
+    (useYolov1 : Bool := false)
+    (yoloGridH : Nat := 7) (yoloGridW : Nat := 7)
+    (yoloNumBoxes : Nat := 2) (yoloNumClasses : Nat := 20)
+    (gradClipNorm : Float := 0.0) (headLrMult : Float := 1.0)
+    (useMuon : Bool := false)
+    (useShampoo : Bool := false)
+    (segLoss : SegLoss := .ce)
+    (useDiouBox : Bool := false)
+    (yoloAnchors : List (Float × Float) := [])
+    (fpnScales : List (Nat × List (Float × Float)) := [])
+    (yoloClsWeights : List Float := [])
+    (yoloClsFocalGamma : Float := 0.0)
+    : String :=
+  let B := batchSize
+  let (fwd, logitsSSA, logitsShape, records) := emitTrainForward spec B
+  let (lossCode, gradSSA, gradShape) := emitTrainLoss spec B logitsSSA logitsShape labelSmoothing
+    useSoftLabels useFocal focalGamma useSeg useDdpm useYolov1 yoloGridH yoloGridW yoloNumBoxes
+    yoloNumClasses segLoss useDiouBox yoloAnchors fpnScales yoloClsWeights yoloClsFocalGamma
+  emitTrainConstants useAdam useMuon useShampoo weightDecay ++ fwd ++ lossCode
+    ++ emitTrainBackward B records gradSSA gradShape
+    ++ emitOptimizerUpdates spec weightDecay useAdam gradClipNorm headLrMult useMuon useShampoo
 
 /-- The train step's parameter arguments with prefix `pfx` (`""` θ, `"m_"`, `"v_"`), one line per
     group, and the parameter types in order — read off `Layer.paramSlots`. Two layers keep their own

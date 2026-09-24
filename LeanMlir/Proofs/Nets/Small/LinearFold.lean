@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # PoC: the MNIST-linear train step, proof-tied to the certified SGD step
 

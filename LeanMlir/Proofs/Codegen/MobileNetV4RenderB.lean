@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Proofs.Codegen.SyncBnSites
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 import LeanMlir.Proofs.Codegen.RenderKit

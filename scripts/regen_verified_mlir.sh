@@ -557,7 +557,7 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
   # 113 an emitter change actually touched (found 2026-08-29). Cross-check with:
   #   grep -rl 'IO.FS.writeFile "verified_mlir/' --include='*.lean' LeanMlir/Proofs/Codegen/
   for m in \
-    LeanMlir.Proofs.Codegen.StableHLO \
+    LeanMlir.Proofs.Codegen.StableHLOPretty \
     LeanMlir.Proofs.Codegen.MlpArtifacts \
     LeanMlir.Proofs.Codegen.CnnArtifacts \
     LeanMlir.Proofs.Codegen.ResNet34RenderB \

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # The batched pointwise/row forms emit exactly what their per-example peers emit
 

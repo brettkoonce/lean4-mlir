@@ -65,6 +65,7 @@ the "where is X?" problem. The fix is mostly *moves with names kept* — no pinn
 | `bce4cb1a` | v1 §10: the four hand-rolled `iree-compile` smokes → `compileCheck` / `tryCompile` (the two representative train steps now land in `.lake/build/`, not `/tmp`); `findIreeCompile` (`.venv` first, then PATH) → `Types`, used by Train + 3 copies. ⚠ `compileCheck` / `tryCompile` / `compileVmfb` still use the PATH compiler. All four smokes compile under iree-compile 3.12 (llvm-cpu; binary at `../lean4-jax/.venv/bin`) |
 | `91737514` | §5 `emitTok`, −411 lines: `emitContract` renders a convolution / dot at f32, bf16 or fp8 (operand converts, low-typed op, convert back — or f32 result for the accumulator dot); `lowOf tag`; 24 `.batched` families match `"x" \| "xBf16" \| "xF8"`, 27 twin cases gone; `emitFlatConv` / `dotInOp` / `emitMatmul` for the top-level pairs. Gate: old `emitTok` copied into a scratch module vs new on every tag × B∈{1,3} × 2 stacks = 560 cases, 0 mismatches (corrupted control caught); regen proofs → `verified_mlir/` unchanged; emit ties; Certs/CertsHeavy; comparator 3 tiers; AuditAxioms 1,573 |
 | `db38ec97` | §5 `emitTrainStepBody` 3,094 → 2,456 lines: `emitTrainConstants`, `emitTrainLoss` (all five loss branches + seed → `(text, gradSSA, gradShape)`), `emitOptimizerUpdates` split out. Gate: main harness byte-identical + 281 specs × 15 loss paths hash-identical |
+| (this session) | §5 judgement calls, 2026-09-24. `emitTrainStepBody` → `emitTrainForward` (spec, B ↦ text, logits SSA/shape, `FwdRec`s) + `emitTrainBackward` (B, records, seed cotangent ↦ text) + a 6-line composition — the backward reads nothing of the forward but `records`, so no design change was needed; 288 specs × 6 optimizers + 15 loss paths byte-identical. Printer → `Codegen/StableHLOPretty` (names kept, namespace `Proofs.StableHLO`): `skel`/`Tok`/`emitTok`/`pretty`, the `*ModuleV` renderers and the ch 1–3 `#eval` writers; `biasName` stays in `StableHLO` (T2 graphs build names with it). 34 of 70 direct importers and every module reaching `StableHLO` only through them stop depending on the printer (StableHLO ~85 → ~40 s); 40 importers repointed; Proofs/Certs roots, regen list, proofs.yml, `validate_linear_faithful.sh` follow. `iree-compile`: every site resolves through `findIreeCompile` (3 library helpers, 5 tests, 7 demos). `ReferenceNets.unetPets` / `.autoencoderPets` (4 + 3 copies, identical modulo comments → 1 each; Bestiary UNet prints them). CI: blueprint builds `Reference` (checkdecls imports its roots; `ReferenceNets` is in no `LeanMlir` import cone — the post-`d9b15213` red); jax job name loses "(§5)". ⛔ SHlo constructor regroup declined (below). Gated: full build, AuditAxioms 1,573 + Heavy 62/62, docstring-checkrefs, comparator tier --check, audit/render coverage, regen check, checkdecls + uses, local comparator 3 tiers, the three text-tie tests |
 
 Each gated: `lake build Certs LeanMlir Apps`, AuditAxioms 1,597/1,597, `docstring-checkrefs`,
 `verified_mlir/` byte-clean; `a745b694` also `CertsHeavy` + AuditAxiomsHeavy 62/62 and the three
@@ -79,12 +80,12 @@ wording was off; `ViTFold`'s import (above).
 
 ## ▶ Next session — start here
 
-State (2026-09-24, night): `proof-cleanup` is 10 commits ahead of `origin/main` (`3e654e95`), NOT
-pushed — `544e61f9` … `db38ec97` + this planning commit. Done: §0–§4, §6, §8, and §5 (rows above).
-⭐ No Foundation file imports a net or a certificate; `StableHLO` imports no net; `Certs` reaches
+State (2026-09-24, late): `proof-cleanup` == `origin/main` (`779f83af`) + this session's §5
+judgement-call work (row above), staged/committed per the user's approvals. Done: §0–§6, §8.
+⭐ No Foundation file imports a net or a certificate, except `DataParallelNode` → `StableHLOPretty`
+(its SPMD lemma is about `skel`); `StableHLO` imports no net and holds no printer; `Certs` reaches
 four pure-data program modules; the renderers share `Codegen/RenderKit`; the reference codegen's
-parameter layout — shapes, init, counts, both signatures AND the optimizer updates — is one table,
-`Spec.Layer.paramSlots`; `emitTok` renders every precision of a contraction through
+parameter layout is one table, `Spec.Layer.paramSlots`; `emitTok` renders every precision through
 `emitContract`. AuditAxioms: 1,573.
 
 **The gate, every commit** (the user approves each commit; commit ≠ push):
@@ -143,16 +144,30 @@ before the commit.
 - Python regexes over Lean source: a docstring-optional prefix `(/--…-/)?` with a lazy body can
   match from the top of the file (one ate 256 KB) — anchor on line indices instead.
 - `lake` rebuilds on content hashes: `touch` rebuilds nothing, so it cannot time a cycle.
+- A module split is invisible to a name grep for TRANSITIVE users: `MlpRender`, `LinearFold`,
+  `DataParallelNode` reached the printer through a proof file. Scan every file's names against its
+  transitive imports (or build), not just the direct importers.
+- `lake build Apps` covers `apps/` + `demos/` only. `tests/` and `Bestiary/` modules build by
+  `+module`; the `lake env lean` tests run `#eval main` (often `iree-compile`), so type-check a copy
+  with the `#eval` lines stripped. The codegen harness's module list needs `LeanMlir.ReferenceNets`,
+  and it dumps every `NetSpec` in scope, so compare dumps per (module, constant) block.
 
-### 1. §5 — what is left (judgement, not dedup)
-- `emitTrainStepBody`'s forward and backward walks (still 2,456 lines together): they share ~25
-  mutable locals through `records` (`FwdRec`), so a split is a design change.
-- `SHlo` constructors grouped by delivery increment → by family; printer → `StableHLOPretty.lean`
-  (§3.2 of proof_cleanup parked it for build time).
-- Emitted forward ↔ proven T2 graph linked only by prose → one `#guard` per net (lead).
-- `compileCheck` / `tryCompile` / `compileVmfb` run the PATH `iree-compile`, Train / GradCAM / the
-  DDPM sampler / the UNet test prefer `.venv` (`findIreeCompile`) — one rule, if wanted.
-- UNet-Pets: the Bestiary gallery and `TestUnetForward` each spell it (gallery has its own `main`).
+### 1. §5 — decided 2026-09-24
+- Done: the forward/backward split, the printer split, one `iree-compile` rule, UNet-Pets (row above).
+- ⛔ **`SHlo` constructors regrouped by family — declined.** Constructor order carries no meaning
+  (every match is by name; the comparator imports `SHlo`, it does not restate it), so a regroup is
+  a ~1,100-line permutation for reading order alone, and `den` / `skel` / `emitTok` would keep their
+  own arm orders anyway. Readers find a constructor by name; the header's suffix legend is the map.
+- ▶ **Emitted forward ↔ T2 graph: per-block `#guard`s — prototyped, not landed.** A whole-net
+  `pretty (T2 graph) == chain text` cannot work: `pretty` has no CSE and the T2 graphs repeat the
+  block input at every skip (≈2^16 re-emits for R34). Per block it works: ResNet-34's `idFwdB`
+  (`sync := false`, f32, `convBias := false`) and `pretty (r34IdGraphB … (.operand x 0))` from the
+  same `EmitS` start print the same 5,422 bytes (scratch copy of `idFwdB`, which is `private`).
+  To land: make the per-block emitters public, a leaf module importing renderer + `*FullB` with one
+  `#guard` per block kind (R34 id/down/stem/head; R50 bottleneck id/down; MNv2 / MNv4 / ENet block
+  kinds), built by a CI-built lib so the guard gates. ConvNeXt / ViT need a hop: their T2 graphs are
+  per-example with other constructors (`denseF`, `chanLNGraph`, …). The block→chain composition stays
+  a name-threading argument in prose.
 
 ### 2. Found in §6 — open
 - GramQ `rowDotQ`/`castM` ≡ IBP `sumQ`/`castV`, and the dense uniform boxes — skipped (reasons in

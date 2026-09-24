@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! Forward-only smoke test for the new `unetDown` / `unetUp` codegen.
 
@@ -10,24 +11,6 @@ Only validates the **forward** path. Train-step backward (with
 skip-grad slots) is the next session.
 
 Usage: `IREE_BACKEND=rocm IREE_CHIP=gfx1100 lake exe test-unet-forward` -/
-
-def unetPets : NetSpec where
-  name := "UNet (Pets, 224×224 RGB → 3-class trimap)"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .unetDown 3   32,
-    .unetDown 32  64,
-    .unetDown 64  128,
-    .unetDown 128 256,
-    .convBn 256 512 3 1 .same,
-    .convBn 512 512 3 1 .same,
-    .unetUp 512 256,
-    .unetUp 256 128,
-    .unetUp 128 64,
-    .unetUp 64  32,
-    .conv2d 32 3 1 .same .identity
-  ]
 
 private def compileOne (label mlir mlirPath vmfbPath : String) : IO Unit := do
   IO.FS.writeFile mlirPath mlir
@@ -43,10 +26,10 @@ private def compileOne (label mlir mlirPath vmfbPath : String) : IO Unit := do
 
 def main : IO Unit := do
   IO.FS.createDirAll ".lake/build"
-  let fwd := MlirCodegen.generate unetPets 2
+  let fwd := MlirCodegen.generate ReferenceNets.unetPets 2
   compileOne "forward" fwd
     ".lake/build/test_unet_forward.mlir" ".lake/build/test_unet_forward.vmfb"
-  let train := MlirCodegen.generateTrainStep unetPets 2 "jit_test_unet_train_step"
+  let train := MlirCodegen.generateTrainStep ReferenceNets.unetPets 2 "jit_test_unet_train_step"
     (useAdam := true) (useSeg := true)
   compileOne "train-step" train
     ".lake/build/test_unet_train.mlir" ".lake/build/test_unet_train.vmfb"

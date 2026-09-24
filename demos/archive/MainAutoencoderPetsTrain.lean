@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! Skipless autoencoder on Oxford-IIIT Pets — UNet demo Phase 1 smoke test.
 
@@ -10,28 +11,11 @@ import LeanMlir
 
     Architecture: 224×224 RGB → 14×14 (4×maxPool) → 224×224 (4×bilinear
     upsample) → 1×1 conv to 3 classes. ~5.5M params. Mirrors
-    `Bestiary.UNet.autoencoderPets`.
+    `ReferenceNets.autoencoderPets`.
 
     Usage:
       lake exe autoencoder-pets-train [data/pets]
 -/
-
-def autoencoderPets : NetSpec where
-  name := "Autoencoder (Pets, 224×224 RGB → 3-class trimap, skipless)"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3   64  3 1 .same, .maxPool 2 2,
-    .convBn 64  128 3 1 .same, .maxPool 2 2,
-    .convBn 128 256 3 1 .same, .maxPool 2 2,
-    .convBn 256 512 3 1 .same, .maxPool 2 2,
-    .convBn 512 512 3 1 .same,
-    .bilinearUpsample 2, .convBn 512 256 3 1 .same,
-    .bilinearUpsample 2, .convBn 256 128 3 1 .same,
-    .bilinearUpsample 2, .convBn 128 64  3 1 .same,
-    .bilinearUpsample 2, .convBn 64  64  3 1 .same,
-    .conv2d 64 3 1 .same .identity
-  ]
 
 def autoencoderPetsConfig : TrainConfig where
   learningRate := 0.001
@@ -47,5 +31,5 @@ def main (args : List String) : IO Unit := do
   -- Optional 2nd arg overrides epochs (matched-budget skip ablation vs
   -- unet-pets-train). See planning/archive/unet_demo_v2.md Workstream B.
   let epochs := (args[1]?.bind String.toNat?).getD autoencoderPetsConfig.epochs
-  autoencoderPets.train { autoencoderPetsConfig with epochs }
+  ReferenceNets.autoencoderPets.train { autoencoderPetsConfig with epochs }
     (args.head?.getD "data/pets") .pets

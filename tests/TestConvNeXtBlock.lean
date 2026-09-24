@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Types
 
 /-! # ch9 N2+N4 — one ConvNeXt block (fwd + backward) render + iree-compile
@@ -274,7 +274,7 @@ def main : IO Unit := do
   let path := ".lake/build/convnext_block.mlir"
   IO.FS.writeFile path mlir
   let cargs ← ireeCompileArgs path ".lake/build/convnext_block.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+  let r ← IO.Process.output { cmd := (← findIreeCompile), args := cargs }
   if r.exitCode != 0 then
     IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
   else

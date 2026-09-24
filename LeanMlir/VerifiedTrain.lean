@@ -379,7 +379,7 @@ def compileVmfb (mlirPath outPath : String) : IO Unit := do
       return
   let cargs ← ireeCompileArgs mlirPath outPath
   IO.println s!"  iree-compile {mlirPath}"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+  let r ← IO.Process.output { cmd := (← findIreeCompile), args := cargs }
   if r.exitCode != 0 then
     throw (IO.userError s!"iree-compile failed:\n{r.stderr.take 2000}")
 

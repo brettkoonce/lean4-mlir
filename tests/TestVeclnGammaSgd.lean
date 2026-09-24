@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! Standalone iree-validation of the new `veclnGammaSgd` core op (ViT vector-[D] LayerNorm γ SGD).
     Renders a one-op module at the real ViT-Tiny shapes (B=32, N=197 tokens, D=192) and writes it to

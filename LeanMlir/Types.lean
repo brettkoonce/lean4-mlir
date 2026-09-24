@@ -1113,8 +1113,7 @@ def ireeCompileArgs (mlirPath outPath : String) : IO (Array String) := do
   return baseArgs ++ chipArgs ++ extraArgs ++ userArgs ++ #["-o", outPath]
 
 /-- The `iree-compile` to run: `.venv/bin/iree-compile` when present (local dev), else the one on
-    `PATH` (Docker, system install). ⚠ `compileCheckB`, `tryCompile` and `VerifiedTrain.compileVmfb`
-    run the `PATH` one. -/
+    `PATH` (Docker, system install). Every compile in the repo resolves its compiler here. -/
 def findIreeCompile : IO String := do
   if ← System.FilePath.pathExists ".venv/bin/iree-compile" then
     return ".venv/bin/iree-compile"
@@ -1131,7 +1130,7 @@ def compileCheckB (name body : String) (stderrTake : Nat := 3000) : IO Bool := d
   let path := s!".lake/build/{name}.mlir"
   IO.FS.writeFile path body
   let cargs ← ireeCompileArgs path s!".lake/build/{name}.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+  let r ← IO.Process.output { cmd := (← findIreeCompile), args := cargs }
   if r.exitCode != 0 then
     IO.eprintln s!"[{name}] iree-compile FAILED:\n{r.stderr.take stderrTake}"; return false
   else
@@ -1147,7 +1146,7 @@ def compileCheck (name body : String) (stderrTake : Nat := 3000) : IO Unit :=
 def tryCompile (src dst label : String) (stderrTake : Nat := 3000) : IO Unit := do
   try
     let cargs ← ireeCompileArgs src dst
-    let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
+    let r ← IO.Process.output { cmd := (← findIreeCompile), args := cargs }
     if r.exitCode != 0 then
       IO.eprintln s!"iree-compile ({label}) FAILED:\n{r.stderr.take stderrTake}"
     else IO.println s!"{label} iree-compile OK → {src}"

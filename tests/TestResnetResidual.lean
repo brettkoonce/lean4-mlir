@@ -8,10 +8,7 @@ import LeanMlir.ReferenceNets
 
 def compile (src out : String) : IO Bool := do
   let args ← ireeCompileArgs src out
-  let r ← IO.Process.output {
-    cmd := ".venv/bin/iree-compile"
-    args := args
-  }
+  let r ← IO.Process.output { cmd := (← findIreeCompile), args := args }
   if r.exitCode != 0 then
     IO.eprintln s!"Compile FAILED:\n{r.stderr.take 3000}"
     return false

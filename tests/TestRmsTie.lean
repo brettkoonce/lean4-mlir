@@ -1,7 +1,7 @@
 import LeanMlir.VerifiedNets
 -- for `mnv2RmsHyper` / `enetRmsHyper` — the SAME records `rmsConstsBlock` emits the graph
 -- constants from, so this gate reads its ρ/ε/wd from the render's own source rather than a copy.
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # The RMSProp render, numerically certified — recipe_gaps v1.2's gate
 

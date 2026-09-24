@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! Render predictions from a trained Pets segmentation checkpoint.
 
@@ -14,41 +15,6 @@ Usage:
     lake exe pets-predict [unet|autoencoder] [out.ppm]
 
 Defaults to the UNet checkpoint and `runs/<latest>/pets_pred.ppm`. -/
-
-def unetPets : NetSpec where
-  name := "UNet (Pets, 224×224 RGB → 3-class trimap)"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .unetDown 3   32,
-    .unetDown 32  64,
-    .unetDown 64  128,
-    .unetDown 128 256,
-    .convBn 256 512 3 1 .same,
-    .convBn 512 512 3 1 .same,
-    .unetUp 512 256,
-    .unetUp 256 128,
-    .unetUp 128 64,
-    .unetUp 64  32,
-    .conv2d 32 3 1 .same .identity
-  ]
-
-def autoencoderPets : NetSpec where
-  name := "Autoencoder (Pets, 224×224 RGB → 3-class trimap, skipless)"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3   64  3 1 .same, .maxPool 2 2,
-    .convBn 64  128 3 1 .same, .maxPool 2 2,
-    .convBn 128 256 3 1 .same, .maxPool 2 2,
-    .convBn 256 512 3 1 .same, .maxPool 2 2,
-    .convBn 512 512 3 1 .same,
-    .bilinearUpsample 2, .convBn 512 256 3 1 .same,
-    .bilinearUpsample 2, .convBn 256 128 3 1 .same,
-    .bilinearUpsample 2, .convBn 128 64  3 1 .same,
-    .bilinearUpsample 2, .convBn 64  64  3 1 .same,
-    .conv2d 64 3 1 .same .identity
-  ]
 
 /-- ImageNet de-normalization. Channel `c ∈ {0, 1, 2}`, normalized
     value `v` → uint8 in `[0, 255]`. -/
@@ -85,8 +51,8 @@ private def argmaxChannel3 (logits : ByteArray) (b h w : Nat) (H W : Nat)
 def main (args : List String) : IO Unit := do
   let which := args.head?.getD "unet"
   let spec : NetSpec := match which with
-    | "autoencoder" => autoencoderPets
-    | _             => unetPets
+    | "autoencoder" => ReferenceNets.autoencoderPets
+    | _             => ReferenceNets.unetPets
   let outPath := match args with
     | _ :: out :: _ => out
     | _ => "runs/2026-05-06-unet-pets-phase2/pets_pred.ppm"
