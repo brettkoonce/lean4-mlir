@@ -13,7 +13,7 @@ Three counts per (net, eps):
   crown      -- CROWN-IBP: relax each unstable ReLU linearly, back-substitute
                 v through W1 to one row A, concretize once: <A,x0> - eps*||A||_1.
 """
-import re, struct
+import re, sys
 from pathlib import Path
 import numpy as np
 
@@ -21,6 +21,8 @@ import numpy as np
 REPO = Path(__file__).resolve().parent.parent
 NETS = REPO / "LeanMlir/Proofs/Certificates/LipschitzCertScorecardFullNets.lean"
 DATA = REPO / "data"
+sys.path.insert(0, str(REPO / "scripts"))
+from _mnist_io import mnist  # noqa: E402
 H, K, DIM, DEN, PIX, N_IMG = 16, 10, 784, 256, 255, 100
 EPS_GRID = [1, 2, 4, 8]
 
@@ -43,11 +45,11 @@ def load_nets():
         W1 = np.array([parse_int_list(
             src.split(f"def w1z{tag}{k} : List ℤ := [")[1].split("]")[0])
             for k in range(H)], dtype=np.int64)
-        # W2 is emitted as a rational matrix, not a List ℤ -- pull the /256 numerators.
-        blk = src.split(f"noncomputable def W2{tag} : Fin {K} → Fin {H} → ℝ")[1]
+        # W2 is emitted as a ℚ matrix (`W2<tag>Q`, cast to ℝ by `castM`) -- pull the /256 numerators.
+        blk = src.split(f"def W2{tag}Q : Fin {K} → Fin {H} → ℚ")[1]
         rows = []
         for ln in blk.splitlines():
-            nums = re.findall(rf"\((-?\d+) : ℝ\)/{DEN}", ln)
+            nums = re.findall(rf"\((-?\d+) : ℚ\)/{DEN}", ln)
             if len(nums) == H:
                 rows.append([int(v) for v in nums])
             if len(rows) == K:
@@ -59,12 +61,7 @@ def load_nets():
 
 
 def load_mnist():
-    with open(DATA / "t10k-images-idx3-ubyte", "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        X = np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r * c)
-    with open(DATA / "t10k-labels-idx1-ubyte", "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        y = np.frombuffer(f.read(), dtype=np.uint8)
+    X, y = mnist("test", flat=True, data=DATA)
     return X[:N_IMG].astype(np.int64), y[:N_IMG].astype(int)
 
 

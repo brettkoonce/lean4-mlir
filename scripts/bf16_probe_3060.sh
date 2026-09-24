@@ -35,12 +35,7 @@ cd "$(dirname "$0")/.." || exit 1
 
 OUT="${1:?usage: scripts/bf16_probe_3060.sh <out.tsv> [net ...]}"; shift || true
 
-# Box detect, as the confs do: the repo .venv's xla_cuda12 plugin where it exists, else the 3060
-# box's .venv-cuda (xla_cuda13), whose repo .venv/bin/python cannot run the shim.
-ARES_PLUG=".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so"
-if [ -f "$ARES_PLUG" ]; then BOX_PLUG="$ARES_PLUG"; BOX_PY=".venv/bin/python3"
-else BOX_PLUG="/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so"
-     BOX_PY="/home/skoonce/.venv-cuda/bin/python3"; fi
+. scripts/jobs/_box.sh   # BOX_PLUG, BOX_PY (the confs' box detect)
 PLUG="${PJRT_PLUGIN:-$BOX_PLUG}"
 PY="${SHIM_PYTHON:-$BOX_PY}"
 DEVS="${DEVS:-0,1,2,3}"

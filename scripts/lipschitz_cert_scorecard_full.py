@@ -26,14 +26,15 @@ does not have. Regenerate by hand and confirm the committed Lean comes back byte
 """
 import hashlib
 import inspect
-import numpy as np, os, struct
+import numpy as np, os, sys
 from fractions import Fraction
 from math import ceil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-D = ROOT / "data"
 OUTDIR = ROOT / "LeanMlir" / "Proofs" / "Certificates"
+sys.path.insert(0, str(ROOT / "scripts"))
+from _mnist_io import mnist, train_mlp  # noqa: E402
 N_IMG = 100                 # images the COUNTS are measured over (exact rationals, no Lean)
 # How many of the certifying images carry a per-image `CertifiedAt` THEOREM.
 # Soundness is in the engine (LipschitzCert.lean), proved once — kernel-checking
@@ -57,38 +58,11 @@ CAP, EP_CAP, EP_UNC = 2.0, 36, 12
 EPS10, EPS30 = Fraction(1, 10), Fraction(3, 10)
 SQRT2_UB = Fraction(14143, 10000)   # >= sqrt 2; the factor certified_at_eps uses
 
-def load_images(fn):
-    with open(fn, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r * c)
-
-def load_labels(fn):
-    with open(fn, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(), dtype=np.uint8)
-
-Xtr_raw = load_images(D / "train-images-idx3-ubyte"); ytr = load_labels(D / "train-labels-idx1-ubyte")
-Xte_raw = load_images(D / "t10k-images-idx3-ubyte"); yte = load_labels(D / "t10k-labels-idx1-ubyte")
+Xtr_raw, ytr = mnist("train", flat=True); Xte_raw, yte = mnist("test", flat=True)
 Xtr = Xtr_raw / 255.0; Xte = Xte_raw / 255.0
 
 def train(cap, epochs, seed=0):
-    rng = np.random.default_rng(seed)
-    W1 = rng.normal(0, np.sqrt(2.0 / DIM), (H, DIM))
-    W2 = rng.normal(0, np.sqrt(2.0 / H), (K, H))
-    for _ in range(epochs):
-        idx = rng.permutation(len(Xtr))
-        for b in range(0, len(Xtr), BS):
-            xb = Xtr[idx[b:b+BS]]; yb = ytr[idx[b:b+BS]]
-            hp = xb @ W1.T; hr = np.maximum(hp, 0); z = hr @ W2.T
-            z -= z.max(1, keepdims=True); p = np.exp(z); p /= p.sum(1, keepdims=True)
-            g = p.copy(); g[np.arange(len(yb)), yb] -= 1; g /= len(yb)
-            W1 -= LR * ((g @ W2) * (hp > 0)).T @ xb; W2 -= LR * g.T @ hr
-            if cap is not None:
-                s1 = np.linalg.svd(W1, compute_uv=False)[0]
-                s2 = np.linalg.svd(W2, compute_uv=False)[0]
-                if s1 > cap: W1 *= cap / s1
-                if s2 > cap: W2 *= cap / s2
-    return W1, W2
+    return train_mlp(Xtr, ytr, H, K, epochs=epochs, lr=LR, bs=BS, cap=cap, seed=seed)
 
 def s8_B(Wq, den):
     """rational B with B^8 >= tr((Wq Wq^T)^4)/den^8, i.e. B >= Schatten-8 >= sigma_1."""
@@ -151,7 +125,8 @@ def cache_key(*parts) -> str:
 
 
 # ── nets (cached: training is deterministic, PGD/margins cheap to redo) ──
-W_KEY = cache_key(inspect.getsource(train), H, CAP, EP_CAP, EP_UNC, BS, LR)
+W_KEY = cache_key(inspect.getsource(train), inspect.getsource(train_mlp), H, CAP, EP_CAP, EP_UNC,
+                  BS, LR)
 CACHE = Path("/tmp") / f"lipschitz_full_w_{W_KEY}.npz"
 if CACHE.exists():
     z = np.load(CACHE)
@@ -188,29 +163,8 @@ for tag, (W1q, W2q) in nets.items():
           f"cert@0.1={len(cert10)} cert@0.3={len(cert30)} PGD@0.1={pgd10} PGD@0.3={pgd30}",
           flush=True)
 
-# ═══ Lean emission helpers ═══
-def zlit(x):
-    x = int(x)
-    return str(x) if x >= 0 else f"Int.negSucc {-x - 1}"
-
-def zlist(vals):
-    return "[" + ", ".join(zlit(v) for v in vals) + "]"
-
-def frac(q):
-    q = Fraction(q)
-    return f"(({q.numerator} : ℝ)/{q.denominator})" if q.denominator != 1 else f"({q.numerator} : ℝ)"
-
-def rrow(vals, den):
-    return "![" + ", ".join(f"(({int(v)} : ℝ)/{den})" for v in vals) + "]"
-
-def rmat(M, den):
-    return "![" + ",\n    ".join(rrow(r, den) for r in M) + "]"
-
-def qrow(vals, den):
-    return "![" + ", ".join(f"(({int(v)} : ℚ)/{den})" for v in vals) + "]"
-
-def qmat(M, den):
-    return "![" + ",\n    ".join(qrow(r, den) for r in M) + "]"
+# ═══ Lean emission helpers: scripts/_leanlit.py ═══
+from _leanlit import frac, qmat, rrow, zlist  # noqa: E402  (rrow, zlist also read as base.*)
 
 HEADER_OPTS = """namespace Proofs
 namespace LipschitzCertDemo

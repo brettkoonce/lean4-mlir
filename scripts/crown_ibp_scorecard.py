@@ -29,13 +29,15 @@ does not have. Regenerate by hand and confirm the committed Lean comes back byte
 """
 import os
 import re
-import struct
+import sys
 from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+from _mnist_io import mnist  # noqa: E402
 OUTDIR = ROOT / "LeanMlir" / "Proofs" / "Certificates"
 NETS = OUTDIR / "LipschitzCertScorecardFullNets.lean"
 
@@ -97,13 +99,7 @@ def available_images(tag):
 
 
 def load_mnist():
-    d = ROOT / "data"
-    with open(d / "t10k-images-idx3-ubyte", "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        X = np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r * c)
-    with open(d / "t10k-labels-idx1-ubyte", "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        y = np.frombuffer(f.read(), dtype=np.uint8)
+    X, y = mnist("test", flat=True)
     return X[:N_IMG].astype(object), y[:N_IMG].astype(int)
 
 
@@ -165,8 +161,7 @@ def frac_lit(numer, denom):
     return f"(({numer} : ℝ)/{denom})"
 
 
-def zlist(xs):
-    return "[" + ", ".join(str(v) if v >= 0 else f"Int.negSucc {-v - 1}" for v in xs) + "]"
+from _leanlit import zlist  # noqa: E402
 
 
 def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_import):

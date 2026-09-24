@@ -1,44 +1,25 @@
 # Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
 # does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
-import numpy as np, os, struct, tempfile
+import numpy as np, os, sys, tempfile
 from fractions import Fraction
 from math import ceil
 
-rng = np.random.default_rng(0)
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-D = os.path.join(ROOT, "data") + os.sep
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from _mnist_io import mnist, pool_sums, train_mlp  # noqa: E402
 # scratch snippets (hand-merged, not committed) go to SNIPPET_DIR, default the system temp dir
 SNIPPET_DIR = os.environ.get("SNIPPET_DIR", tempfile.gettempdir())
 
-def load_images(fn):
-    with open(fn, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r, c)
-
-def load_labels(fn):
-    with open(fn, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(), dtype=np.uint8)
-
-Xtr_raw = load_images(D + "train-images-idx3-ubyte"); ytr = load_labels(D + "train-labels-idx1-ubyte")
-Str = Xtr_raw.reshape(-1, 7, 4, 7, 4).astype(np.int64).sum(axis=(2, 4)).reshape(-1, 49)
+Xtr_raw, ytr = mnist("train")
+Str = pool_sums(Xtr_raw)
 Xtr = Str / 4080.0
 H, K, DIM = 8, 10, 49
-W1 = rng.normal(0, np.sqrt(2.0 / DIM), (H, DIM)); W2 = rng.normal(0, np.sqrt(2.0 / H), (K, H))
-lr, bs = 0.15, 64
-for ep in range(12):
-    idx = rng.permutation(len(Xtr))
-    for b in range(0, len(Xtr), bs):
-        xb = Xtr[idx[b:b+bs]]; yb = ytr[idx[b:b+bs]]
-        h = xb @ W1.T; hr = np.maximum(h, 0); z = hr @ W2.T
-        z -= z.max(1, keepdims=True); p = np.exp(z); p /= p.sum(1, keepdims=True)
-        g = p.copy(); g[np.arange(len(yb)), yb] -= 1; g /= len(yb)
-        W1 -= lr * ((g @ W2) * (h > 0)).T @ xb; W2 -= lr * g.T @ hr
+W1, W2 = train_mlp(Xtr, ytr, H, K)
 W1q = np.round(W1 * 128).astype(np.int64); W2q = np.round(W2 * 128).astype(np.int64)
 
 # preacts at test sample #1895 (same as committed hpreVals)
-Xte_raw = load_images(D + "t10k-images-idx3-ubyte")
-Ste = Xte_raw.reshape(-1, 7, 4, 7, 4).astype(np.int64).sum(axis=(2, 4)).reshape(-1, 49)
+Xte_raw, _ = mnist("test")
+Ste = pool_sums(Xte_raw)
 s = [int(v) for v in Ste[1895]]
 pre_num = [sum(int(W1q[k, j]) * s[j] for j in range(DIM)) for k in range(H)]
 mask = [1 if n > 0 else 0 for n in pre_num]
@@ -83,9 +64,7 @@ print(f"B1'={B1}={float(B1)}, B2'={B2}={float(B2)}, L={LL}={float(LL):.4f}")
 print(f"s8 radius = {float(m)/(2**0.5*float(LL)):.5f}  (s4 was 0.11063, frobenius 0.04635)")
 print(f"max |H1| numerator digits: {max(len(str(abs(x))) for r in H1 for x in r)}")
 
-def frac(q):
-    q = Fraction(q)
-    return f"(({q.numerator} : ℝ)/{q.denominator})" if q.denominator != 1 else f"({q.numerator} : ℝ)"
+from _leanlit import frac  # noqa: E402
 
 def hrow(vals):
     return "![" + ", ".join(f"(({int(x)} : ℝ)/268435456)" for x in vals) + "]"

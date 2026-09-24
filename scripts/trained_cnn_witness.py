@@ -25,11 +25,12 @@ pre-activation, and the positive values must be pairwise distinct exactly).
 Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
 does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
-import numpy as np, os, struct, sys
+import numpy as np, os, sys
 from fractions import Fraction
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-D = os.path.join(ROOT, "data") + os.sep
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from _mnist_io import mnist  # noqa: E402
 OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedCnnWitness.lean")
 DEN_W = 128          # weight rationalization grid
 DEN_X = 4080         # 16 * 255 exact pooled-pixel denominator
@@ -37,18 +38,7 @@ C = 2                # conv channels
 D1 = 8               # dense width
 NC = 10
 
-def load_images(fn):
-    with open(fn, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r, c)
-
-def load_labels(fn):
-    with open(fn, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(), dtype=np.uint8)
-
-Xtr_raw = load_images(D + "train-images-idx3-ubyte"); ytr = load_labels(D + "train-labels-idx1-ubyte")
-Xte_raw = load_images(D + "t10k-images-idx3-ubyte"); yte = load_labels(D + "t10k-labels-idx1-ubyte")
+Xtr_raw, ytr = mnist("train"); Xte_raw, yte = mnist("test")
 
 def pool6_sums(X):
     """center-crop 28->24 (rows/cols 2..26), 4x4 block sums -> (N,6,6) ints 0..4080."""

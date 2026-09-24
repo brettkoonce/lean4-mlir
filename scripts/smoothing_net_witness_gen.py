@@ -22,34 +22,19 @@ writing. Not in CI: it reads the MNIST test set from data/, which CI does not ha
 """
 
 import re
-import struct
 import sys
 from fractions import Fraction
 from pathlib import Path
 
-import numpy as np
-
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 import _gencheck  # noqa: E402
+from _mnist_io import mnist, pool_sums  # noqa: E402
 
-D = str(ROOT / "data") + "/"
 SRC = ROOT / "LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean"
 OUT = ROOT / "LeanMlir/Proofs/Certificates/SmoothingNetWitness.lean"
 H, K, DIM = 8, 10, 49
 DEN_X, DEN_W = 4080, 128
-
-
-def load_images(fn):
-    with open(fn, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r, c)
-
-
-def load_labels(fn):
-    with open(fn, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(), dtype=np.uint8)
 
 
 def parse_weights(name: str, rows: int, cols: int) -> list[list[int]]:
@@ -72,10 +57,8 @@ def parse_weights(name: str, rows: int, cols: int) -> list[list[int]]:
 def main() -> None:
     W1 = parse_weights("W1t", H, DIM)   # numerators over 128
     W2 = parse_weights("W2t", K, H)
-    Xte_raw = load_images(D + "t10k-images-idx3-ubyte")
-    yte = load_labels(D + "t10k-labels-idx1-ubyte")
-    Ste = Xte_raw.reshape(-1, 7, 4, 7, 4).astype(np.int64).sum(axis=(2, 4)) \
-        .reshape(-1, DIM)   # integer pooled sums, x_j = s_j/4080
+    Xte_raw, yte = mnist("test")
+    Ste = pool_sums(Xte_raw)   # integer pooled sums, x_j = s_j/4080
 
     # exact integer forward: logits share denominator 128*128*4080
     best = {}   # class -> (margin_fraction, img_idx, s, pre_nums, logit_nums)

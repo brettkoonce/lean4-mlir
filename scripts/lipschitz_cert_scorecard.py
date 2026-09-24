@@ -23,12 +23,11 @@ the cert <= TRUE <= PGD sandwich table.
 Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
 does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
-import numpy as np, os, struct
+import numpy as np, os, sys
 from fractions import Fraction
 from math import ceil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-D = os.path.join(ROOT, "data") + os.sep
 OUT = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")
 N_IMG = 100
 # How many of the certified images carry per-image THEOREMS (hpre/margin/
@@ -44,44 +43,17 @@ SQRT2_UB = Fraction(14143, 10000)   # >= sqrt 2; the factor the Lean proof uses
 CAP, EPOCHS, LR, BS = 4.0, 36, 0.15, 64
 DEN_U, DEN_C = 128, 256
 
-def load_images(fn):
-    with open(fn, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r, c)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _mnist_io import mnist, pool_sums, train_mlp  # noqa: E402
 
-def load_labels(fn):
-    with open(fn, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(), dtype=np.uint8)
-
-Xtr_raw = load_images(D + "train-images-idx3-ubyte"); ytr = load_labels(D + "train-labels-idx1-ubyte")
-Xte_raw = load_images(D + "t10k-images-idx3-ubyte"); yte = load_labels(D + "t10k-labels-idx1-ubyte")
-
-def pool_sums(X):
-    return X.reshape(-1, 7, 4, 7, 4).astype(np.int64).sum(axis=(2, 4)).reshape(-1, 49)
+Xtr_raw, ytr = mnist("train"); Xte_raw, yte = mnist("test")
 
 Str = pool_sums(Xtr_raw); Ste = pool_sums(Xte_raw)
 Xtr = Str / 4080.0; Xte = Ste / 4080.0
 H, K, DIM = 8, 10, 49
 
 def train(cap=None, epochs=12, lr=LR, seed=0):
-    rng = np.random.default_rng(seed)
-    W1 = rng.normal(0, np.sqrt(2.0 / DIM), (H, DIM))
-    W2 = rng.normal(0, np.sqrt(2.0 / H), (K, H))
-    for ep in range(epochs):
-        idx = rng.permutation(len(Xtr))
-        for b in range(0, len(Xtr), BS):
-            xb = Xtr[idx[b:b+BS]]; yb = ytr[idx[b:b+BS]]
-            h = xb @ W1.T; hr = np.maximum(h, 0); z = hr @ W2.T
-            z -= z.max(1, keepdims=True); p = np.exp(z); p /= p.sum(1, keepdims=True)
-            g = p.copy(); g[np.arange(len(yb)), yb] -= 1; g /= len(yb)
-            W1 -= lr * ((g @ W2) * (h > 0)).T @ xb; W2 -= lr * g.T @ hr
-            if cap is not None:
-                s1 = np.linalg.svd(W1, compute_uv=False)[0]
-                s2 = np.linalg.svd(W2, compute_uv=False)[0]
-                if s1 > cap: W1 *= cap / s1
-                if s2 > cap: W2 *= cap / s2
-    return W1, W2
+    return train_mlp(Xtr, ytr, H, K, epochs=epochs, lr=lr, bs=BS, cap=cap, seed=seed)
 
 def acc_of(W1f, W2f):
     return (np.argmax(np.maximum(Xte @ W1f.T, 0) @ W2f.T, 1) == yte).mean()
@@ -176,12 +148,7 @@ pgd_c = pgd_robust(W1cq / DEN_C, W2cq / DEN_C, float(EPS))
 print(f"PGD-robust at eps={float(EPS)}: uncon {pgd_u}/{N_IMG}, capped {pgd_c}/{N_IMG}")
 
 # ═══ emit Lean ═══
-def frac(q):
-    q = Fraction(q)
-    return f"(({q.numerator} : ℝ)/{q.denominator})" if q.denominator != 1 else f"({q.numerator} : ℝ)"
-
-def row(vals, den):
-    return "![" + ", ".join(f"(({int(v)} : ℝ)/{den})" for v in vals) + "]"
+from _leanlit import frac, rrow as row  # noqa: E402
 
 def mat(M, den):
     return "![" + ",\n    ".join(row(r, den) for r in M) + "]"

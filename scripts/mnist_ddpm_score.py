@@ -34,8 +34,13 @@ most confident are a d, so coverage and per-class quality read off one figure.
 
 Usage: python3 scripts/mnist_ddpm_score.py [outdir]
 """
+import os
 import sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _stats import energy_distance  # noqa: E402
+from _mnist_io import mnist  # noqa: E402
 
 OUT = sys.argv[1] if len(sys.argv) > 1 else ".lake/build"
 B   = ".lake/build"
@@ -46,23 +51,12 @@ real_l  = np.fromfile(f"{B}/mnist_ddpm_logits_real.bin",  dtype=np.float32).resh
 noise_l = np.fromfile(f"{B}/mnist_ddpm_logits_noise.bin", dtype=np.float32).reshape(-1, NC)
 real_y  = np.fromfile(f"{B}/mnist_ddpm_labels_real.bin",  dtype=np.int32)
 samp    = np.fromfile(f"{B}/mnist_ddpm_samples.bin",      dtype=np.float32).reshape(-1, PIX)
-real_px = np.fromfile("data/t10k-images-idx3-ubyte", dtype=np.uint8)[16:]
-real_px = real_px.astype(np.float32).reshape(-1, PIX) / 255.0
+real_px = mnist("test", flat=True)[0].astype(np.float32).reshape(-1, PIX) / 255.0
 
 
 def softmax(z):
     e = np.exp(z - z.max(1, keepdims=True))
     return e / e.sum(1, keepdims=True)
-
-
-def energy_distance(x, y, cap=2048, seed=0):
-    """The 2-D demo's own statistic (scripts/toy2d_metrics.py), applied to the
-    classifier's output instead of a point in the plane."""
-    rng = np.random.default_rng(seed)
-    if len(x) > cap: x = x[rng.choice(len(x), cap, replace=False)]
-    if len(y) > cap: y = y[rng.choice(len(y), cap, replace=False)]
-    d = lambda a, b: np.sqrt(((a[:, None, :] - b[None, :, :]) ** 2).sum(-1))
-    return float(2 * d(x, y).mean() - d(x, x).mean() - d(y, y).mean())
 
 
 gp, rp, np_ = softmax(gen_l), softmax(real_l), softmax(noise_l)

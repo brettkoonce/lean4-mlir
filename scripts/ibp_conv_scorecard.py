@@ -27,7 +27,6 @@ Emits LeanMlir/Proofs/Certificates/IbpConvScorecard.lean.
 Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
 does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
-import struct
 import sys
 from fractions import Fraction
 from pathlib import Path
@@ -36,6 +35,8 @@ import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data"
+sys.path.insert(0, str(ROOT / "scripts"))
+from _mnist_io import mnist  # noqa: E402
 OUT = ROOT / "LeanMlir" / "Proofs" / "Certificates" / "IbpConvScorecard.lean"
 
 C = 4                      # conv output channels
@@ -60,15 +61,7 @@ SEED = 0
 # ────────────────────────────── data ──────────────────────────────
 
 def load(split):
-    img_f = "train-images-idx3-ubyte" if split == "train" else "t10k-images-idx3-ubyte"
-    lab_f = "train-labels-idx1-ubyte" if split == "train" else "t10k-labels-idx1-ubyte"
-    with open(DATA / img_f, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        x = np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r, c)
-    with open(DATA / lab_f, "rb") as f:
-        struct.unpack(">II", f.read(8))
-        y = np.frombuffer(f.read(), dtype=np.uint8)
-    return x, y
+    return mnist(split, data=DATA)
 
 
 def pool_int(x):

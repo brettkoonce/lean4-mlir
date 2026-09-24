@@ -18,28 +18,16 @@ distance there and at 64×64). Prints:
 """
 import argparse
 import json
-import math
 import os
+import sys
 
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _stats import wilson, acc_str  # noqa: E402
+
 N_CLASSES = 32
 LEAK_THR = 6.0
-
-
-def wilson(k, n, z=1.959964):
-    if n == 0:
-        return (0.0, 0.0)
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = (z / d) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    return (max(0.0, c - h) * 100, min(1.0, c + h) * 100)
-
-
-def acc_str(k, n):
-    lo, hi = wilson(k, n)
-    return f"{100 * k / n:6.2f}% [{lo:.2f}, {hi:.2f}]"
 
 
 def main():

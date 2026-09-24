@@ -24,30 +24,17 @@ proof discharges.
 Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
 does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
-import numpy as np, os, struct
+import numpy as np, os, sys
 from fractions import Fraction
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-D = os.path.join(ROOT, "data") + os.sep
+sys.path.insert(0, os.path.join(ROOT, "scripts"))
+from _mnist_io import mnist, pool_sums  # noqa: E402
 OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedLinearDescent.lean")
 K, DIM = 10, 49
 LR = Fraction(1, 8192)
 
-def load_images(fn):
-    with open(fn, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r, c)
-
-def load_labels(fn):
-    with open(fn, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(), dtype=np.uint8)
-
-Xtr_raw = load_images(D + "train-images-idx3-ubyte"); ytr = load_labels(D + "train-labels-idx1-ubyte")
-Xte_raw = load_images(D + "t10k-images-idx3-ubyte"); yte = load_labels(D + "t10k-labels-idx1-ubyte")
-
-def pool_sums(X):
-    return X.reshape(-1, 7, 4, 7, 4).astype(np.int64).sum(axis=(2, 4)).reshape(-1, 49)
+Xtr_raw, ytr = mnist("train"); Xte_raw, yte = mnist("test")
 
 Str = pool_sums(Xtr_raw); Ste = pool_sums(Xte_raw)
 Xtr = Str / 4080.0; Xte = Ste / 4080.0
@@ -108,12 +95,7 @@ print(f"δ0={DEL} E_ub={EUB} η_ub={ETA} lr={LR}")
 print(f"hsmall={hsmall_ok} h1={h1_ok} h2={h2_ok} (h2 margin {h2_margin:.2f}x)")
 assert hsmall_ok and h1_ok and h2_ok and h2_margin >= 2.0
 
-def frac(q):
-    q = Fraction(q)
-    return f"(({q.numerator} : ℝ)/{q.denominator})" if q.denominator != 1 else f"({q.numerator} : ℝ)"
-
-def row(vals, den):
-    return "![" + ", ".join(f"(({int(v)} : ℝ)/{den})" for v in vals) + "]"
+from _leanlit import frac, rrow as row  # noqa: E402
 
 FR_LR, FR_DEL, FR_ETA, FR_A, FR_B = frac(LR), frac(DEL), frac(ETA), frac(A), frac(B)
 GRAD = "gradAt (fun w => crossEntropy 10 (dense (Mat.unflatten w) bd xd) lblD)\n        (Mat.flatten Wd)"

@@ -23,8 +23,11 @@ Also writes a side-by-side PPM scatter (no matplotlib in the pinned venv).
 Usage: python3 scripts/toy2d_metrics.py [--target=NAME] [samples.bin] [outdir]
        NAME in eight_gaussians (default) | spiral | two_moons | checkerboard
 """
-import json, sys
+import json, os, sys
 import numpy as np
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _stats import energy_distance  # noqa: E402
 
 args   = [a for a in sys.argv[1:] if not a.startswith("--")]
 flags  = [a for a in sys.argv[1:] if a.startswith("--")]
@@ -72,15 +75,6 @@ GATE_ED = {
     "two_moons":       0.05,
     "checkerboard":    0.05,
 }
-
-
-def energy_distance(x, y, cap=2048, seed=0):
-    """2E|X-Y| - E|X-X'| - E|Y-Y'|. O(n^2); subsample so it stays in ms."""
-    rng = np.random.default_rng(seed)
-    if len(x) > cap: x = x[rng.choice(len(x), cap, replace=False)]
-    if len(y) > cap: y = y[rng.choice(len(y), cap, replace=False)]
-    d = lambda a, b: np.sqrt(((a[:, None, :] - b[None, :, :]) ** 2).sum(-1))
-    return float(2 * d(x, y).mean() - d(x, x).mean() - d(y, y).mean())
 
 
 def cell_stats_points(pts):

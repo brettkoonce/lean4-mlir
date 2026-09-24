@@ -23,7 +23,7 @@ scorecard_trim.md). Run from repo root: python3 scripts/lipschitz_cert_pair_sdp.
 Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
 does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
-import numpy as np, struct
+import numpy as np, sys
 from fractions import Fraction
 from math import ceil, sqrt
 from scipy.linalg import sqrtm
@@ -32,7 +32,6 @@ from scipy.optimize import minimize
 import os
 import re
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-D = os.path.join(ROOT, "data") + os.sep
 OUT_C = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean")
 OUT_U = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDPUncon.lean")
 N_IMG = 100
@@ -65,43 +64,16 @@ assert EXISTING_IMGS, "could not read img<i> defs from the base scorecard"
 print(f"base scorecard provides {len(EXISTING_IMGS)} img defs, "
       f"{len(EXISTING_HPRE_C)} hpreC, {len(EXISTING_HPRE_U)} hpreU", flush=True)
 
-def load_images(fn):
-    with open(fn, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(), dtype=np.uint8).reshape(n, r, c)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _mnist_io import mnist, pool_sums, train_mlp  # noqa: E402
 
-def load_labels(fn):
-    with open(fn, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(), dtype=np.uint8)
-
-Xtr_raw = load_images(D + "train-images-idx3-ubyte"); ytr = load_labels(D + "train-labels-idx1-ubyte")
-Xte_raw = load_images(D + "t10k-images-idx3-ubyte"); yte = load_labels(D + "t10k-labels-idx1-ubyte")
-
-def pool_sums(X):
-    return X.reshape(-1, 7, 4, 7, 4).astype(np.int64).sum(axis=(2, 4)).reshape(-1, 49)
+Xtr_raw, ytr = mnist("train"); Xte_raw, yte = mnist("test")
 
 Str = pool_sums(Xtr_raw); Ste = pool_sums(Xte_raw)
 Xtr = Str / 4080.0
 
 def train(cap=None, epochs=12, lr=LR, seed=0):
-    rng = np.random.default_rng(seed)
-    W1 = rng.normal(0, np.sqrt(2.0 / DIM), (H, DIM))
-    W2 = rng.normal(0, np.sqrt(2.0 / H), (K, H))
-    for ep in range(epochs):
-        idx = rng.permutation(len(Xtr))
-        for b in range(0, len(Xtr), BS):
-            xb = Xtr[idx[b:b+BS]]; yb = ytr[idx[b:b+BS]]
-            h = xb @ W1.T; hr = np.maximum(h, 0); z = hr @ W2.T
-            z -= z.max(1, keepdims=True); p = np.exp(z); p /= p.sum(1, keepdims=True)
-            g = p.copy(); g[np.arange(len(yb)), yb] -= 1; g /= len(yb)
-            W1 -= lr * ((g @ W2) * (h > 0)).T @ xb; W2 -= lr * g.T @ hr
-            if cap is not None:
-                s1 = np.linalg.svd(W1, compute_uv=False)[0]
-                s2 = np.linalg.svd(W2, compute_uv=False)[0]
-                if s1 > cap: W1 *= cap / s1
-                if s2 > cap: W2 *= cap / s2
-    return W1, W2
+    return train_mlp(Xtr, ytr, H, K, epochs=epochs, lr=lr, bs=BS, cap=cap, seed=seed)
 
 W1u, W2u = train(cap=None, epochs=12)
 W1q = np.round(W1u * DEN_U).astype(np.int64); W2q = np.round(W2u * DEN_U).astype(np.int64)
@@ -196,9 +168,7 @@ def rational_cert(a, b, W2z, G1q, den):
     return dict(rho=rhoQ, T=TQ, v=vQ, L=Lm, d=dm, Lp=LpQ)
 
 # ── Lean emission helpers ──
-def frac(q):
-    q = Fraction(q)
-    return f"(({q.numerator} : ℝ)/{q.denominator})" if q.denominator != 1 else f"({q.numerator} : ℝ)"
+from _leanlit import frac  # noqa: E402
 
 def vec(vals):
     return "![" + ", ".join(frac(v) for v in vals) + "]"

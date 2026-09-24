@@ -38,6 +38,9 @@ numpy only.
 import json, os, sys
 import numpy as np
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _stats import energy_distance  # noqa: E402
+
 np.seterr(over="ignore", invalid="ignore")
 
 DATA = "data/boltzmann"
@@ -102,15 +105,6 @@ to_z = lambda P: (P - CEN) / SC
 
 def load(path):
     return np.fromfile(path, dtype=np.float32).reshape(-1, 2)
-
-
-def energy_distance(x, y, cap=2048, seed=0):
-    """O(n^2); subsample so it stays in ms. Same statistic as toy2d_metrics.py."""
-    rng = np.random.default_rng(seed)
-    if len(x) > cap: x = x[rng.choice(len(x), cap, replace=False)]
-    if len(y) > cap: y = y[rng.choice(len(y), cap, replace=False)]
-    d = lambda p, q: np.sqrt(((p[:, None, :] - q[None, :, :]) ** 2).sum(-1))
-    return float(2 * d(x, y).mean() - d(x, x).mean() - d(y, y).mean())
 
 
 REF = load(f"{DATA}/mb_kT20_ref.bin")

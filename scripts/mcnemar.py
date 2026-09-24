@@ -41,18 +41,11 @@ during scoring. Mismatched lengths are refused rather than truncated.
     LEAN_MLIR_DUMP_CORRECT=/tmp/b .lake/build/bin/... --score   # model B
     scripts/mcnemar.py /tmp/a.bin /tmp/b.bin
 """
-import argparse, math, sys
+import argparse, math, os, sys
 import numpy as np
 
-
-def wilson(k, n, z=1.959964):
-    if n == 0:
-        return (0.0, 0.0)
-    p = k / n
-    d = 1 + z * z / n
-    c = (p + z * z / (2 * n)) / d
-    h = (z / d) * math.sqrt(p * (1 - p) / n + z * z / (4 * n * n))
-    return (max(0.0, c - h) * 100, min(1.0, c + h) * 100)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _stats import wilson  # noqa: E402
 
 
 def main():

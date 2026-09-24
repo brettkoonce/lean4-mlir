@@ -257,6 +257,29 @@ Also: `smooth_scorecard_gen.py:33`, `smooth_dec_scorecard_gen.py:47-48`,
 | `scripts/lib/gpu.sh` | det-shim build-or-reuse ×4 (3 different dirs), idle-GPU check ×3, work-queue packing ×3 |
 | (import) | FPN neck oracle ×2 (`fpn_neck_probe_check` ← `fpn_neck_check`), anchor loaders ×6 (← `yolo_map_visdrone`/`visdrone_anchors`), CROWN/IBP helpers ×2, `SHIM_HASH` parse ×2, `read_part` ×2 |
 
+### §6 status (2026-09-24)
+
+* `scripts/_mnist_io.py` — `images`/`labels`/`mnist(split)`, `pool_sums`, `train_mlp` (the seed-0
+  ReLU MLP). Replaces 12 idx-reader copies (+4 inline ones), 5 pooling copies and 4 copies of the
+  training loop (49→8→10 ×3 and the 784→16→10 full scorecard, whose weight-cache key now also
+  hashes `train_mlp`'s source). Users: the Lipschitz/IBP/CROWN/SDP scorecards,
+  `lipschitz_cert_witness_s8`, `trained_{linear_descent,cnn_witness}`, `smoothing_net_witness_gen`,
+  `margin_probe`, both `mnist_e4m3_*`, `crown_ibp_probe`, `mnist_ddpm_score`.
+* `scripts/_leanlit.py` — `zlit`/`zlist`/`frac`/`rrow`/`rmat`/`qrow`/`qmat` (7 printer copies).
+* `scripts/_stats.py` — `wilson` ×3, `acc_str` ×2, `energy_distance` ×3 (99 old-vs-new calls equal).
+* `scripts/jobs/_box.sh` — the box-detect block of 18 confs + the two probe launchers; every conf
+  sources to the identical variable set, both branches exercised, supervise dry run identical.
+* Proof of no drift: all eleven MNIST generators (both pair-SDP tiers, 11 min each) + the
+  smoothing witness `--check` regenerate every committed Lean file byte-identically after
+  `_mnist_io` (the full scorecard retrained cold) and again after `_leanlit`; the four probes'
+  stdout is identical before/after.
+* Found on the way: `crown_ibp_probe.py` had been dead since the W2 → `W2<tag>Q : ℚ` + `castM`
+  change; parser fixed, reproduces its documented 92/88/69/24 and the "k = 8 rounding costs zero"
+  claim `CrownBound.lean` cites.
+* Not done: `lean_graph.py` (the `audit_census/run.sh` heredoc; `check_audit_coverage` already has
+  one `lib_roots` since §2), `lib/gpu.sh` (det-shim ×4, idle-GPU ×3, work-queue ×3 — shell, three
+  different launch paths), and the import-only row (FPN oracle, anchor loaders, SHIM_HASH, read_part).
+
 ## 7. Docs
 
 `bf16_probe_3060.sh:2,8-10` (box is 4× 4060 Ti; pins 0,1,2,3); `streamed_val_gate.sh:7` (goldens need a pre-8182b6e1 build); `yolo_map_visdrone.py:13` ("a copy

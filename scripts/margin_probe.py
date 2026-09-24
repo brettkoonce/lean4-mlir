@@ -25,26 +25,20 @@ worst-case 3/4); cotangent dev 2.2e-6 (vs 21/1000); W2 step dev 7.5e-9;
 ReLU flips 0/29.5M per layer; trained max|W| = 0.52 (the numeric capstones
 use |W| <= 3/5 to cover it).
 """
-import pathlib, struct, sys
+import pathlib, sys
 import numpy as np
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+from _mnist_io import images as load_images, labels as load_labels  # noqa: E402
 
 DATA = sys.argv[1] if len(sys.argv) > 1 else \
     str(pathlib.Path(__file__).resolve().parent.parent / "data")
 
-def load_idx_images(path):
-    with open(path, "rb") as f:
-        _, n, r, c = struct.unpack(">IIII", f.read(16))
-        return np.frombuffer(f.read(n*r*c), dtype=np.uint8).reshape(n, r*c)
 
-def load_idx_labels(path):
-    with open(path, "rb") as f:
-        _, n = struct.unpack(">II", f.read(8))
-        return np.frombuffer(f.read(n), dtype=np.uint8)
-
-Xtr = (load_idx_images(f"{DATA}/train-images-idx3-ubyte") / 255.0).astype(np.float32)
-ytr = load_idx_labels(f"{DATA}/train-labels-idx1-ubyte").astype(np.int64)
-Xte = (load_idx_images(f"{DATA}/t10k-images-idx3-ubyte") / 255.0).astype(np.float32)
-yte = load_idx_labels(f"{DATA}/t10k-labels-idx1-ubyte").astype(np.int64)
+Xtr = (load_images(f"{DATA}/train-images-idx3-ubyte", flat=True) / 255.0).astype(np.float32)
+ytr = load_labels(f"{DATA}/train-labels-idx1-ubyte").astype(np.int64)
+Xte = (load_images(f"{DATA}/t10k-images-idx3-ubyte", flat=True) / 255.0).astype(np.float32)
+yte = load_labels(f"{DATA}/t10k-labels-idx1-ubyte").astype(np.int64)
 
 rng = np.random.default_rng(0)
 D0, D1, D2, D3 = 784, 512, 512, 10
