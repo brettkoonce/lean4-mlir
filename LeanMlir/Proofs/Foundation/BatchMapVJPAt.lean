@@ -95,6 +95,28 @@ noncomputable def batchMap_has_vjp_at {N a b : Nat} (f : Vec a → Vec b) (v : V
       ite_true]
     exact (hf _).correct _ _
 
+/-- **A batched backward tie from the per-example one.** If `g` is each row's certified backward,
+    `batchMapAux N g v` IS the lifted witness's backward: both read example `r`'s row of `v` and
+    `dy`, so the two agree index by index once the rows do. -/
+theorem batchMapAux_eq_batchMap_has_vjp_at {N a b : Nat} (f : Vec a → Vec b)
+    (g : Vec a → Vec b → Vec a) (v : Vec (N * a))
+    (hf : ∀ r : Fin N, HasVJPAt f (Mat.unflatten v r))
+    (hf_diff : ∀ r : Fin N, DifferentiableAt ℝ f (Mat.unflatten v r))
+    (hg : ∀ r : Fin N, g (Mat.unflatten v r) = (hf r).backward) :
+    StableHLO.batchMapAux N g v = (batchMap_has_vjp_at f v hf hf_diff).backward := by
+  funext dy idx
+  exact congrFun (congrFun (hg _) _) _
+
+/-- The linear-backward form of `batchMapAux_eq_batchMap_has_vjp_at`: a backward that ignores the
+    saved input lifts by `batchMap`. -/
+theorem batchMap_eq_batchMap_has_vjp_at {N a b : Nat} (f : Vec a → Vec b) (g : Vec b → Vec a)
+    (v : Vec (N * a)) (hf : ∀ r : Fin N, HasVJPAt f (Mat.unflatten v r))
+    (hf_diff : ∀ r : Fin N, DifferentiableAt ℝ f (Mat.unflatten v r))
+    (hg : ∀ r : Fin N, g = (hf r).backward) :
+    StableHLO.batchMap N g = (batchMap_has_vjp_at f v hf hf_diff).backward := by
+  funext dy idx
+  exact congrFun (congrFun (hg _) _) _
+
 -- ════════════════════════════════════════════════════════════════
 -- § `batchMap` distributes over composition
 -- ════════════════════════════════════════════════════════════════

@@ -95,8 +95,7 @@ theorem attnSubFlatTieV (ε : ℝ) (hε : 0 < ε) (γ1 β1 : Vec (h * dh))
   simp only [Proofs.residual, biPath, Function.comp_apply, Mat.flatten]
   rw [rowLNVecFlatBack_eq_vecLN_vjp (β := β1) N (h * dh) ε hε, Mat.unflatten_flatten]
   have hw : Mat.unflatten w (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 = w idx := by
-    show w (finProdFinEquiv ((finProdFinEquiv.symm idx).1, (finProdFinEquiv.symm idx).2)) = w idx
-    rw [Prod.mk.eta, Equiv.apply_symm_apply]
+    rw [Mat.unflatten_apply, Prod.mk.eta, Equiv.apply_symm_apply]
   rw [hw]
   exact add_comm _ _
 
@@ -125,8 +124,7 @@ theorem mlpSubFlatTieV (dff : Nat) (ε : ℝ) (hε : 0 < ε) (γ2 β2 : Vec (h *
       Mat.unflatten_flatten]
   simp only [Mat.flatten]
   have hv : Mat.unflatten v (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 = v idx := by
-    show v (finProdFinEquiv ((finProdFinEquiv.symm idx).1, (finProdFinEquiv.symm idx).2)) = v idx
-    rw [Prod.mk.eta, Equiv.apply_symm_apply]
+    rw [Mat.unflatten_apply, Prod.mk.eta, Equiv.apply_symm_apply]
   rw [hv]
   exact add_comm _ _
 

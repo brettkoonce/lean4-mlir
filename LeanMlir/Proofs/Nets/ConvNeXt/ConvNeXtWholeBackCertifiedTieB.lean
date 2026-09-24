@@ -30,13 +30,12 @@ hypothesis anywhere, only the 23 LayerNorm positivities the per-example tie alre
    `HasVJP` at each row — at the dimension spellings the per-example tie normalised (`cnxDn1`,
    `cnxLNh`, `cnxSavedA0`: `ConvNeXtWholeBackCertifiedTie.lean`'s "two spellings of one numeral"
    rule holds one batch index over).
-3. The batched leaf ties. GAP's is `rfl` (its per-example tie is); the others are `funext` to one
-   example, one rewrite of the per-example leaf tie at that example's row, then `rfl` —
-   `batchMapAux`'s slice and the lift's `.backward` row are the same term. ⚠ The channel-LN and
-   downsample leaves are proven at VARIABLE dims (`cnxChanLNBackB_eq_vjp`, `cnxDownBackB_eq_vjp`)
-   and instantiated by term: at the literal `96 56 56` the same `rfl` recurses past
-   `maxRecDepth 100000` on the numerals, the batched form of the per-example tie's "two spellings
-   of one numeral" rule.
+3. The batched leaf ties. GAP's is `rfl` (its per-example tie is); the others are
+   `batchMapAux_eq_batchMap_has_vjp_at` (or its `batchMap` form for the linear leaves) over the
+   per-example leaf tie at each row. ⚠ The channel-LN and downsample leaves are proven at VARIABLE
+   dims (`cnxChanLNBackB_eq_vjp`, `cnxDownBackB_eq_vjp`) and instantiated by term: when these
+   closed by `rfl`, the literal `96 56 56` recursed past `maxRecDepth 100000` on the numerals, the
+   batched form of the per-example tie's "two spellings of one numeral" rule.
 4. `convNextForwardTChB_has_vjp_at` — the twelve-stage apex, eleven `vjp_comp_diff_at`s over the
    batched stage witnesses, level `k`'s inner map named `cnxSavedB_k B w` — and
    `convnextInputGradB_eq_convNextForwardTChB_vjp`, the tie: twelve leaf rewrites, then the eleven
@@ -200,29 +199,21 @@ noncomputable def cnxDenseB_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : 
 theorem cnxStemBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (B * (3 * 224 * 224))) :
     StableHLO.batchMap B (flatConvStride4Back (h := 56) (w := 56) (padOdd w.sW))
-      = (cnxStemB_at B w x).backward := by
-  funext dy idx
-  show flatConvStride4Back (h := 56) (w := 56) (padOdd w.sW)
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [flatConvStride4Back_padOdd_eq_vjp_backward (h := 56) (w := 56) (by norm_num) (by norm_num)
-        w.sW w.sb (Mat.unflatten x (finProdFinEquiv.symm idx).1)]
-  rfl
+      = (cnxStemB_at B w x).backward :=
+  batchMap_eq_batchMap_has_vjp_at _ _ x _ _ fun _ =>
+    flatConvStride4Back_padOdd_eq_vjp_backward (h := 56) (w := 56) (by norm_num) (by norm_num)
+      w.sW w.sb _
 
 /-- **The batched channel-LayerNorm tie**, at any `c h w` — `chanLNTensor3Back_eq_chanLN_vjp` at
-    one example's row. ⚠ Generic on purpose: stated at the literal `96 56 56` the closing `rfl`
-    recurses past `maxRecDepth 100000` on the numerals; at variables it is ViT's `vitLNBackB_eq_vjp`
-    and closes at once. The stem instance below is a term. -/
+    each row. ⚠ Generic on purpose: when it closed by `rfl`, the literal `96 56 56` recursed past
+    `maxRecDepth 100000` on the numerals; at variables it is ViT's `vitLNBackB_eq_vjp`. The stem
+    instance below is a term. -/
 theorem cnxChanLNBackB_eq_vjp (B c h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (v : Vec (B * (c * h * w))) :
     StableHLO.batchMapAux B (chanLNTensor3Back c h w ε γ) v
-      = (cnxChanLNB_at B c h w ε hε γ β v).backward := by
-  funext dy idx
-  show chanLNTensor3Back c h w ε γ (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [chanLNTensor3Back_eq_chanLN_vjp (β := β) ε hε γ]
-  rfl
+      = (cnxChanLNB_at B c h w ε hε γ β v).backward :=
+  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ =>
+    chanLNTensor3Back_eq_chanLN_vjp (β := β) ε hε γ _
 
 /-- **The batched stem-LayerNorm tie** — `cnxChanLNBackB_eq_vjp` at `96 56 56`. -/
 theorem cnxStemLNBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε)
@@ -236,13 +227,8 @@ theorem cnxStageBackB_eq_vjp (B : Nat) {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
     (k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kHd kWd) (hε : ∀ i, 0 < (ps i).εn)
     (v : Vec (B * (c * h * w))) :
-    StableHLO.batchMapAux B (cnxStageChKBack k ps) v = (cnxStageB_at B k ps hε v).backward := by
-  funext dy idx
-  show cnxStageChKBack k ps (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [cnxStageChKBack_eq_vjp hkHd hkWd k ps hε]
-  rfl
+    StableHLO.batchMapAux B (cnxStageChKBack k ps) v = (cnxStageB_at B k ps hε v).backward :=
+  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ => cnxStageChKBack_eq_vjp hkHd hkWd k ps hε _
 
 /-- **The batched downsample tie**, at any resolution — `cnxDownChBack_eq_vjp` at one example's
     row. Generic for the same reason as `cnxChanLNBackB_eq_vjp`; the three instances below are
@@ -253,14 +239,8 @@ theorem cnxDownBackB_eq_vjp (B h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh 
     (hε : 0 < p.ε) (v : Vec (B * (cin * (2 * h) * (2 * w)))) :
     StableHLO.batchMapAux B (fun u => cnxDownBack (h := h) (w := w) (padOdd p.W)
         (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ u)) v
-      = (cnxDownB_at B h w p hε v).backward := by
-  funext dy idx
-  show cnxDownBack (h := h) (w := w) (padOdd p.W)
-      (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ (Mat.unflatten v (finProdFinEquiv.symm idx).1))
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [cnxDownChBack_eq_vjp (h := h) (w := w) p hε]
-  rfl
+      = (cnxDownB_at B h w p hε v).backward :=
+  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ => cnxDownChBack_eq_vjp (h := h) (w := w) p hε _
 
 /-- **The batched downsample-1 tie** — `cnxDownBackB_eq_vjp` at `28 28`. -/
 theorem cnxDn1BackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 < w.d1.ε)
@@ -294,25 +274,16 @@ theorem cnxGapBackB_eq_vjp (B : Nat) (v : Vec (B * (768 * 7 * 7))) :
 theorem cnxLNhBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε)
     (v : Vec (B * 768)) :
     StableHLO.batchMapAux B (rowLNVecFlatBack 1 768 w.hε w.hγ) v
-      = (cnxLNhB_at B w hhε v).backward := by
-  funext dy idx
-  show rowLNVecFlatBack 1 768 w.hε w.hγ (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [cnxLNhBack_eq_vjp w hhε]
-  rfl
+      = (cnxLNhB_at B w hhε v).backward :=
+  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ => cnxLNhBack_eq_vjp w hhε _
 
 /-- **The batched classifier tie** — `dense_transpose_eq_vjp_backward` at one example's row (the
     head is linear, so the saved `v` is free). -/
 theorem cnxDenseBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : Vec (B * 768)) :
     StableHLO.batchMap B (dense (Mat.transpose w.Wd) (0 : Vec 768))
-      = (cnxDenseB_at B w v).backward := by
-  funext dy idx
-  show dense (Mat.transpose w.Wd) (0 : Vec 768)
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [dense_transpose_eq_vjp_backward w.Wd w.bd (Mat.unflatten v (finProdFinEquiv.symm idx).1)]
-  rfl
+      = (cnxDenseB_at B w v).backward :=
+  batchMap_eq_batchMap_has_vjp_at _ _ v _ _ fun r =>
+    dense_transpose_eq_vjp_backward w.Wd w.bd (Mat.unflatten v r)
 
 -- ═════════════════════════════════════════════════
 -- § The batched apex, the tie, and the shape check

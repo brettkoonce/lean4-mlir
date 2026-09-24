@@ -473,7 +473,7 @@ theorem batchShard_zipWith {R N a : Nat} (φ : ℝ → ℝ → ℝ) (X Y : Vec (
     nothing. -/
 theorem dpMean_const_mul {R : Nat} (hR : (R : ℝ) ≠ 0) (K : ℝ) :
     (1 / (R : ℝ)) * ∑ _r : Fin R, K = K := by
-  simp only [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  simp only [Fin.sum_const, nsmul_eq_mul]
   field_simp
 
 -- ════════════════════════════════════════════════════════════════

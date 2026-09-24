@@ -155,10 +155,10 @@ theorem mnv2NoExpBackGraph_faithful {N ic oc h w : Nat} (p : IVWNoExp ic oc) (hq
 /-- ⭐⭐ **The emitted `t = 1` chain IS the certified block VJP's backward.** -/
 theorem mnv2NoExpCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
-    (hs : IVNoExpSmoothAtB N h w p xin) (cotN : String) :
+    (hs : IVNoExpSmoothAtB N h w p xin) :
     mnv2NoExpCotIn N h w p xin dyOut = (mnv2NoExpB_has_vjp_at N h w p hq xin hs).backward dyOut := by
-  have h := mnv2NoExpBackGraph_faithful p hq xin (.operand cotN dyOut) hs
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+  have h := mnv2NoExpBackGraph_faithful p hq xin (.operand "" dyOut) hs
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [← h]
   rfl
@@ -239,13 +239,13 @@ noncomputable def mnv2CotInBody (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid 
     `_eq_vjp`, straight from `mnv2BodyBackBatchedGraph_faithful`. -/
 theorem mnv2ExpOnlyCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc) (hq : IVPos p)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
-    (hs : IVSmoothAtB N h w p xin) (cotN : String) :
+    (hs : IVSmoothAtB N h w p xin) :
     mnv2CotInBody N h w p xin dyOut
       = (mnv2ExpOnlyB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := mnv2BodyBackBatchedGraph_faithful (N := N) p.eW p.eb p.eε hq.he p.eγ p.eβ
-    p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand cotN dyOut)
+    p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand "" dyOut)
     hs.he hs.hd
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [mnv2ExpOnlyB_has_vjp_at, ← h]
   rfl
@@ -261,13 +261,13 @@ noncomputable def mnv2ResidCotIn (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
     downsample block: the render emits `addVB(body, %dy)` and `residualBackGraph` builds the fan-in
     in the same order. -/
 theorem mnv2ResidCotIn_eq_vjp (N h w : Nat) {c mid : Nat} (p : IVW c mid c) (hq : IVPos p)
-    (xin dyOut : Vec (N * (c * h * w))) (hs : IVSmoothAtB N h w p xin) (cotN : String) :
+    (xin dyOut : Vec (N * (c * h * w))) (hs : IVSmoothAtB N h w p xin) :
     mnv2ResidCotIn N h w p xin dyOut
       = (mnv2ResidB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := mnv2ResidBlockBackBatchedGraph_faithful (N := N) p.eW p.eb p.eε hq.he p.eγ p.eβ
-    p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand cotN dyOut)
+    p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand "" dyOut)
     hs.he hs.hd
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   -- ⚠ `rw [← h]` cannot close this one: `mnv2ResidB_has_vjp_at` unfolds to `residual_has_vjp_at`
   -- at `mnv2ExpOnlyB`, while the graph lemma states it at that abbreviation's own unfolding. The
@@ -340,13 +340,13 @@ noncomputable def mnv2StridedCotIn (N h w : Nat) {ic mid oc : Nat} (p : IVW ic m
 /-- ⭐⭐ **The emitted stride-2 chain IS the certified downsample-body VJP's backward.** -/
 theorem mnv2StridedCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc) (hq : IVPos p)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w)))
-    (hs : IVStridedSmoothAtB N h w p xin) (cotN : String) :
+    (hs : IVStridedSmoothAtB N h w p xin) :
     mnv2StridedCotIn N h w p xin dyOut
       = (mnv2StridedB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := mnv2DownBodyBackBatchedGraph_faithful (N := N) p.eW p.eb p.eε hq.he p.eγ p.eβ
-    p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand cotN dyOut)
+    p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand "" dyOut)
     hs.he hs.hd
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [mnv2StridedB_has_vjp_at, ← h]
   rfl

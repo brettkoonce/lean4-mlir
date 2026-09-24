@@ -1790,6 +1790,8 @@ open Proofs
 #print axioms Proofs.batchMap_differentiableAt
 #print axioms Proofs.pdiv_batchMap_at
 #print axioms Proofs.batchMap_has_vjp_at
+#print axioms Proofs.batchMapAux_eq_batchMap_has_vjp_at
+#print axioms Proofs.batchMap_eq_batchMap_has_vjp_at
 #print axioms Proofs.batchMap_comp
 #print axioms Proofs.HasVJPAt.backward_unique_of_eq
 
@@ -1925,6 +1927,7 @@ open Proofs
 #print axioms Proofs.MobileNetV2TieB.mnv2_lossCot_is_smoothedCE_grad
 
 -- 4b's CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetStepTieG.lean, 2026-09-06)
+#print axioms Proofs.EnetTiePoCG.convBBetaTiedB_holds
 #print axioms Proofs.EnetTiePoCG.enet_exp_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_strided_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_noexp_tiedG

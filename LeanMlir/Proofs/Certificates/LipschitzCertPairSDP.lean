@@ -163,12 +163,8 @@ theorem mlp_gap_eq {n h k : ℕ} (W1 : Fin h → Fin n → ℝ)
     (W2 : Fin k → Fin h → ℝ) (i j : Fin k) (x : EuclideanSpace ℝ (Fin n)) :
     (denseE W2 ∘ reluE ∘ denseE W1) x i - (denseE W2 ∘ reluE ∘ denseE W1) x j
       = ∑ t, (W2 i t - W2 j t) * max (denseE W1 x t) 0 := by
-  show (∑ t, W2 i t * (reluE (denseE W1 x)) t)
-      - (∑ t, W2 j t * (reluE (denseE W1 x)) t) = _
-  rw [← Finset.sum_sub_distrib]
-  refine Finset.sum_congr rfl fun t _ => ?_
-  rw [reluE_apply]
-  ring
+  rw [mlp_out_eq W1 W2 (fun _ => rfl), mlp_out_eq W1 W2 (fun _ => rfl), ← Finset.sum_sub_distrib]
+  exact Finset.sum_congr rfl fun t _ => (sub_mul _ _ _).symm
 
 /-- **`pair_sq_bound` on the net's own logits.** The gap `f · i − f · j` of
     `f = denseE W2 ∘ reluE ∘ denseE W1`, with `v` the row difference `W2 i − W2 j`, satisfies the

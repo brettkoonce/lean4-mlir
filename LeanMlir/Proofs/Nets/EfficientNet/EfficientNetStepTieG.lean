@@ -55,6 +55,22 @@ open scoped BigOperators
 open Proofs.EnetTiePoC (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
   gateCotB)
 
+/-- **A conv or depthwise bias, tied.** A bias gradient is the channel sum of the conv-output
+    cotangent `cot` (network layout), which is what the emitted `bnBetaGradB` node computes; the
+    right side states it as a per-channel BatchNorm's β-Jacobian, at the `γ` and activation (both
+    zero here) that β's gradient ignores. -/
+def ConvBBetaTiedB (N h w : Nat) {oc : Nat} (cotN : String) (ε : ℝ) (b : Vec oc)
+    (cot : Vec (N * (oc * h * w))) : Prop :=
+  ∀ o : Fin oc,
+    den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (reassocB N oc h w cot))) o
+      = ∑ j : Fin (oc * (N * (h * w))),
+          pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε (fun _ => 0) β' (fun _ => 0))
+               b o j * bnchwFwd N oc h w (reassocB N oc h w cot) j
+
+theorem convBBetaTiedB_holds {N h w oc : Nat} (cotN : String) (ε : ℝ) (b : Vec oc)
+    (cot : Vec (N * (oc * h * w))) : ConvBBetaTiedB N h w cotN ε b cot := fun o =>
+  ResNet34PoCB.bnBetaGradB_den cotN ε (fun _ => 0) b (fun _ => 0) (reassocB N oc h w cot) o
+
 def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
     (xN vN epsStr cotN : String)
     (εe : ℝ) (hεe : 0 < εe) (εd : ℝ) (hεd : 0 < εd) (εp : ℝ) (hεp : 0 < εp)
@@ -91,20 +107,12 @@ def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
   let cotEc : Vec (N * (mid * h * w)) := bnBackB N mid h w εe hεe γe βe ec cotEn
   -- expand 1×1 conv (c → mid), cot = cotEc
   ResNet34PoCB.ConvWTiedB N h w xN cotN be xin We cotEc
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w) (.operand cotN (reassocB N mid h w cotEc))) o
-          = ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εe (fun _ => 0) β' (fun _ => 0))
-                   be o j * bnchwFwd N mid h w (reassocB N mid h w cotEc) j)
+  ∧ ConvBBetaTiedB N h w cotN εe be cotEc
   ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εe γe βe (reassocB N mid h w ec)
         (reassocB N mid h w cotEn)
   -- depthwise (stride-1, kHd×kWd), cot = cotDc
   ∧ ResNet34PoCB.DepthwiseWTiedB N h w xN cotN bd er Wd cotDc
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w) (.operand cotN (reassocB N mid h w cotDc))) o
-          = ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
-                   bd o j * bnchwFwd N mid h w (reassocB N mid h w cotDc) j)
+  ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
   ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
   -- SE reduce dense W₁/b₁ (mid → r), cot = cotE1; excite dense W₂/b₂ (r → mid), cot = cotE2
@@ -114,11 +122,7 @@ def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
   ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
   -- project 1×1 conv (mid → oc), cot = cotPbn
   ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (reassocB N oc h w cotPbn))) o
-          = ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
-                   bp o j * bnchwFwd N oc h w (reassocB N oc h w cotPbn) j)
+  ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
   ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
@@ -137,11 +141,11 @@ theorem enet_exp_tiedG {N ic mid oc h w r kHd kWd : Nat}
         cotDxSe cotDn cotDc cotEr cotEn cotEc
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN be xin We cotEc idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εe (fun _ => 0) be (fun _ => 0) (reassocB N mid h w cotEc) o
+  · exact convBBetaTiedB_holds cotN εe be cotEc
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εe γe βe (reassocB N mid h w ec)
           (reassocB N mid h w cotEn)
   · intro idx; exact EnetPoCG.depthwiseWGradB_den xN cotN bd er Wd cotDc idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εd (fun _ => 0) bd (fun _ => 0) (reassocB N mid h w cotDc) o
+  · exact convBBetaTiedB_holds cotN εd bd cotDc
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εd γd βd (reassocB N mid h w dc)
           (reassocB N mid h w cotDn)
   · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN s Wz1 bz1 cotE1 i j
@@ -149,7 +153,7 @@ theorem enet_exp_tiedG {N ic mid oc h w r kHd kWd : Nat}
   · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN z Wz2 bz2 cotE2 i j
   · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 j
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bp se Wp cotPbn idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εp (fun _ => 0) bp (fun _ => 0) (reassocB N oc h w cotPbn) o
+  · exact convBBetaTiedB_holds cotN εp bp cotPbn
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εp γp βp (reassocB N oc h w pc)
           (reassocB N oc h w dyOut)
 
@@ -197,20 +201,12 @@ def enetStridedTiedG {N ic mid oc h w r kHd kWd : Nat}
   let cotEc : Vec (N * (mid * (2 * h) * (2 * w))) := bnBackB N mid (2 * h) (2 * w) εe hεe γe βe ec cotEn
   -- expand 1×1 conv (ic → mid, at 2h×2w), cot = cotEc
   ResNet34PoCB.ConvWTiedB N (2 * h) (2 * w) xN cotN be xin We cotEc
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := (2 * h)) (w := (2 * w)) (.operand cotN (reassocB N mid (2 * h) (2 * w) cotEc))) o
-          = ∑ j : Fin (mid * (N * ((2 * h) * (2 * w)))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * ((2 * h) * (2 * w))) εe (fun _ => 0) β' (fun _ => 0))
-                   be o j * bnchwFwd N mid (2 * h) (2 * w) (reassocB N mid (2 * h) (2 * w) cotEc) j)
+  ∧ ConvBBetaTiedB N (2 * h) (2 * w) cotN εe be cotEc
   ∧ ResNet34PoCB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN εe γe βe
         (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn)
   -- strided depthwise (kHd×kWd, 2h→h), cot = cotDc
   ∧ ResNet34PoCB.DepthwiseStridedWTiedB N h w xN cotN bd er Wd cotDc
-  ∧ (∀ o : Fin mid,
-        den (SHlo.bnBetaGradB (N := N) (oc := mid) (h := h) (w := w) (.operand cotN (reassocB N mid h w cotDc))) o
-          = ∑ j : Fin (mid * (N * (h * w))),
-              pdiv (fun β' : Vec mid => bnPerChannelFlat mid (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
-                   bd o j * bnchwFwd N mid h w (reassocB N mid h w cotDc) j)
+  ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
   ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
   -- SE reduce/excite dense (mid → r → mid)
@@ -220,11 +216,7 @@ def enetStridedTiedG {N ic mid oc h w r kHd kWd : Nat}
   ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
   -- project 1×1 conv (mid → oc), cot = cotPbn
   ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (reassocB N oc h w cotPbn))) o
-          = ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
-                   bp o j * bnchwFwd N oc h w (reassocB N oc h w cotPbn) j)
+  ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
   ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
@@ -243,11 +235,11 @@ theorem enet_strided_tiedG {N ic mid oc h w r kHd kWd : Nat}
         cotDxSe cotDn cotDc cotEr cotEn cotEc
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN be xin We cotEc idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εe (fun _ => 0) be (fun _ => 0) (reassocB N mid (2 * h) (2 * w) cotEc) o
+  · exact convBBetaTiedB_holds cotN εe be cotEc
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εe γe βe
           (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn)
   · intro idx; exact EnetPoCG.depthwiseStridedWGradB_den xN cotN bd er Wd cotDc idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εd (fun _ => 0) bd (fun _ => 0) (reassocB N mid h w cotDc) o
+  · exact convBBetaTiedB_holds cotN εd bd cotDc
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εd γd βd (reassocB N mid h w dc)
           (reassocB N mid h w cotDn)
   · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN s Wz1 bz1 cotE1 i j
@@ -255,7 +247,7 @@ theorem enet_strided_tiedG {N ic mid oc h w r kHd kWd : Nat}
   · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN z Wz2 bz2 cotE2 i j
   · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 j
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bp se Wp cotPbn idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εp (fun _ => 0) bp (fun _ => 0) (reassocB N oc h w cotPbn) o
+  · exact convBBetaTiedB_holds cotN εp bp cotPbn
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εp γp βp (reassocB N oc h w pc)
           (reassocB N oc h w dyOut)
 
@@ -294,11 +286,7 @@ def enetNoExpTiedG {N ic oc h w r kHd kWd : Nat}
   let cotDc : Vec (N * (ic * h * w)) := bnBackB N ic h w εd hεd γd βd dc cotDn
   -- depthwise (stride-1, kHd×kWd, on ic), cot = cotDc
   ResNet34PoCB.DepthwiseWTiedB N h w xN cotN bd xin Wd cotDc
-  ∧ (∀ o : Fin ic,
-        den (SHlo.bnBetaGradB (N := N) (oc := ic) (h := h) (w := w) (.operand cotN (reassocB N ic h w cotDc))) o
-          = ∑ j : Fin (ic * (N * (h * w))),
-              pdiv (fun β' : Vec ic => bnPerChannelFlat ic (N * (h * w)) εd (fun _ => 0) β' (fun _ => 0))
-                   bd o j * bnchwFwd N ic h w (reassocB N ic h w cotDc) j)
+  ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
   ∧ ResNet34PoCB.BnPairTiedB N ic h w vN epsStr cotN εd γd βd (reassocB N ic h w dc)
         (reassocB N ic h w cotDn)
   -- SE reduce/excite dense (ic → r → ic)
@@ -308,11 +296,7 @@ def enetNoExpTiedG {N ic oc h w r kHd kWd : Nat}
   ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2
   -- project 1×1 conv (ic → oc), cot = cotPbn
   ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (reassocB N oc h w cotPbn))) o
-          = ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εp (fun _ => 0) β' (fun _ => 0))
-                   bp o j * bnchwFwd N oc h w (reassocB N oc h w cotPbn) j)
+  ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
   ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
@@ -329,7 +313,7 @@ theorem enet_noexp_tiedG {N ic oc h w r kHd kWd : Nat}
   intro dc dn dr s e1 z e2 se pc cotPbn cotSeOut dgate cotE2 cotZ cotE1 cotDxSe cotDn cotDc
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact EnetPoCG.depthwiseWGradB_den xN cotN bd xin Wd cotDc idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εd (fun _ => 0) bd (fun _ => 0) (reassocB N ic h w cotDc) o
+  · exact convBBetaTiedB_holds cotN εd bd cotDc
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εd γd βd (reassocB N ic h w dc)
           (reassocB N ic h w cotDn)
   · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN s Wz1 bz1 cotE1 i j
@@ -337,7 +321,7 @@ theorem enet_noexp_tiedG {N ic oc h w r kHd kWd : Nat}
   · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN z Wz2 bz2 cotE2 i j
   · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2 j
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bp se Wp cotPbn idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εp (fun _ => 0) bp (fun _ => 0) (reassocB N oc h w cotPbn) o
+  · exact convBBetaTiedB_holds cotN εp bp cotPbn
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εp γp βp (reassocB N oc h w pc)
           (reassocB N oc h w dyOut)
 
@@ -359,11 +343,7 @@ def enetStemTiedG {N ic oc h w kHs kWs : Nat}
   let cotBnS : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) stn dyStem
   let cotStc : Vec (N * (oc * h * w)) := bnBackB N oc h w εs hεs γs βs stc cotBnS
   ResNet34PoCB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotStc
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (reassocB N oc h w cotStc))) o
-          = ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εs (fun _ => 0) β' (fun _ => 0))
-                   bs o j * bnchwFwd N oc h w (reassocB N oc h w cotStc) j)
+  ∧ ConvBBetaTiedB N h w cotN εs bs cotStc
   ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w stc)
         (reassocB N oc h w cotBnS)
 
@@ -376,7 +356,7 @@ theorem enet_stem_tiedG {N ic oc h w kHs kWs : Nat}
   intro stc stn cotBnS cotStc
   refine ⟨?_, ?_, ?_⟩
   · intro idx; exact EnetPoCG.convStridedXlaWGradB_den xN cotN bs x Ws cotStc idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εs (fun _ => 0) bs (fun _ => 0) (reassocB N oc h w cotStc) o
+  · exact convBBetaTiedB_holds cotN εs bs cotStc
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εs γs βs (reassocB N oc h w stc)
           (reassocB N oc h w cotBnS)
 
@@ -405,11 +385,7 @@ def enetHeadTiedG {N c oc h w nC : Nat}
   let cotHbn : Vec (N * (oc * h * w)) := bnBackB N oc h w εh hεh γh βh hc cotHsw
   -- head 1×1 conv (c → oc), cot = cotHbn
   ResNet34PoCB.ConvWTiedB N h w xN cotN bh xhead Wh cotHbn
-  ∧ (∀ o : Fin oc,
-        den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (reassocB N oc h w cotHbn))) o
-          = ∑ j : Fin (oc * (N * (h * w))),
-              pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) εh (fun _ => 0) β' (fun _ => 0))
-                   bh o j * bnchwFwd N oc h w (reassocB N oc h w cotHbn) j)
+  ∧ ConvBBetaTiedB N h w cotN εh bh cotHbn
   ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εh γh βh (reassocB N oc h w hc)
         (reassocB N oc h w cotHsw)
   -- dense classifier (oc → nC), cot = g (the batched softmax-CE gradient)
@@ -425,7 +401,7 @@ theorem enet_head_tiedG {N c oc h w nC : Nat}
   intro hc hn hr a_gap _logits cotGapIn cotHr cotHsw cotHbn
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bh xhead Wh cotHbn idx
-  · intro o;   exact ResNet34PoCB.bnBetaGradB_den cotN εh (fun _ => 0) bh (fun _ => 0) (reassocB N oc h w cotHbn) o
+  · exact convBBetaTiedB_holds cotN εh bh cotHbn
   · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εh γh βh (reassocB N oc h w hc)
           (reassocB N oc h w cotHsw)
   · intro i j; exact ResNet34PoCB.denseWGradB_den dN cotN a_gap Wfc bfc g i j

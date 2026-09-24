@@ -335,8 +335,7 @@ theorem mhsaClean_backward_collapseMH (N heads d : Nat)
     simp only [mhsa_proj_c_qkv_slab, G, Matrix.cons_val_zero, Matrix.cons_val_one,
       Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
   rw [hdz, qkv_back_fanin_MH]
-  simp only [G, sdpaBackSel, ite_true, show (1 : Fin 3) ≠ 0 from by decide,
-    show (2 : Fin 3) ≠ 0 from by decide, show (2 : Fin 3) ≠ 1 from by decide, ite_false]
+  simp only [G, sdpaBackSel, ite_true, Fin.reduceEq, ite_false]
   rfl
 
 /-- The proven MHSA VJP's backward at general `heads` IS the per-head collapse. -/

@@ -126,12 +126,12 @@ noncomputable def r34IdCotIn (N h w : Nat) {c : Nat} (p : R34IdW c)
     `r34BasicBlockBackBatchedGraph_faithful` read in this file's vocabulary. This is what makes the
     cross-block thread a composition of certified VJPs. -/
 theorem r34IdCotIn_eq_vjp (N h w : Nat) {c : Nat} (p : R34IdW c) (hq : R34IdPos p)
-    (xin dyOut : Vec (N * (c * h * w))) (hs : R34IdSmoothAt N h w p xin) (cotN : String) :
+    (xin dyOut : Vec (N * (c * h * w))) (hs : R34IdSmoothAt N h w p xin) :
     r34IdCotIn N h w p xin dyOut
       = (r34IdB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := r34BasicBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ xin (.operand cotN dyOut) hs.hmid hs.hout
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ xin (.operand "" dyOut) hs.hmid hs.hout
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [r34IdB_has_vjp_at, ← h]
   rfl
@@ -212,13 +212,13 @@ noncomputable def r34DownCotIn (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     Same vector, and the emitted order is the one this file threads. -/
 theorem r34DownCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc) (hq : R34DownPos p)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w)))
-    (hs : R34DownSmoothAt N h w p xin) (cotN : String) :
+    (hs : R34DownSmoothAt N h w p xin) :
     r34DownCotIn N h w p xin dyOut
       = (r34DownB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := r34DownBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand cotN dyOut)
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand "" dyOut)
     hs.hmid hs.hout
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [r34DownB_has_vjp_at, ← h]
   funext i

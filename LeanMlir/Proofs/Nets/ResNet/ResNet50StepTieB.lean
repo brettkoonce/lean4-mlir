@@ -137,13 +137,13 @@ noncomputable def r50IdCotIn (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
 /-- ⭐⭐ **The emitted fan-in IS the certified bottleneck VJP's backward.** `rfl` after the graph
     lemma: the render's ten-node backward subgraph denotes `(r50IdB_has_vjp_at …).backward dyOut`. -/
 theorem r50IdCotIn_eq_vjp (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (hq : R50IdPos p)
-    (xin dyOut : Vec (N * (oc * h * w))) (hs : R50IdSmoothAt N h w p xin) (cotN : String) :
+    (xin dyOut : Vec (N * (oc * h * w))) (hs : R50IdSmoothAt N h w p xin) :
     r50IdCotIn N h w p xin dyOut
       = (r50IdB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := r50BottleneckBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
-    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ xin (.operand cotN dyOut)
+    p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ xin (.operand "" dyOut)
     hs.hm1 hs.hm2 hs.hout
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [r50IdB_has_vjp_at, ← h]
   rfl
@@ -222,13 +222,13 @@ noncomputable def r50ProjCotIn (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic 
     `addV(projection, body)`. -/
 theorem r50ProjCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
-    (hs : R50ProjSmoothAt N h w p xin) (cotN : String) :
+    (hs : R50ProjSmoothAt N h w p xin) :
     r50ProjCotIn N h w p xin dyOut
       = (r50ProjB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := r50ProjBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
-    p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand cotN dyOut) hs.hm1 hs.hm2 hs.hout
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+    p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand "" dyOut) hs.hm1 hs.hm2 hs.hout
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [r50ProjB_has_vjp_at, ← h]
   funext i
@@ -313,13 +313,13 @@ noncomputable def r50DownCotIn (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic 
     stride-1 projection's is. -/
 theorem r50DownCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
-    (dyOut : Vec (N * (oc * h * w))) (hs : R50DownSmoothAt N h w p xin) (cotN : String) :
+    (dyOut : Vec (N * (oc * h * w))) (hs : R50DownSmoothAt N h w p xin) :
     r50DownCotIn N h w p xin dyOut
       = (r50DownB_has_vjp_at N h w p hq xin hs).backward dyOut := by
   have h := r50DownBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
-    p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand cotN dyOut) hs.hm1 hs.hm2 hs.hout
-  have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
+    p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand "" dyOut) hs.hm1 hs.hm2 hs.hout
+  have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
   rw [r50DownB_has_vjp_at, ← h]
   funext i

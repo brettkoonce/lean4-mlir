@@ -166,9 +166,8 @@ theorem bnVar_shard_chan {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
         + bnMean (R * m) x * bnMean (R * m) x := by
     intro r; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring
   simp only [hpt]
-  rw [Finset.sum_add_distrib, Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ,
-      Fintype.card_fin, nsmul_eq_mul, ← Finset.mul_sum, hS1, hS2,
-      bnVar_eq_bnMeanSq_sub_sq _ hM]
+  rw [Finset.sum_add_distrib, Finset.sum_sub_distrib, Fin.sum_const, nsmul_eq_mul,
+      ← Finset.mul_sum, hS1, hS2, bnVar_eq_bnMeanSq_sub_sq _ hM]
   field_simp
   ring
 
@@ -564,7 +563,7 @@ theorem bnCenterCLM_basisVec (n : Nat) (k i : Fin n) :
 theorem sum_sub_bnMean (n : Nat) (hn : n ≠ 0) (x : Vec n) :
     ∑ k : Fin n, (x k - bnMean n x) = 0 := by
   have hnR : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn
-  rw [Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+  rw [Finset.sum_sub_distrib, Fin.sum_const, nsmul_eq_mul,
     bnMean]
   field_simp
   ring

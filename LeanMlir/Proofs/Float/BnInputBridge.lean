@@ -81,8 +81,7 @@ theorem bnVar_input_close {n : ℕ} (x y : Vec n) {A : ℝ} (hn : 0 < n)
     calc ∑ i, |(x i - μx) * (x i - μx) - (y i - μy) * (y i - μy)|
         ≤ ∑ i, (|x i - y i| + δ) * (4 * A) := Finset.sum_le_sum fun i _ => hterm i
       _ = (∑ i, |x i - y i|) * (4 * A) + ((n:ℝ) * δ) * (4 * A) := by
-          rw [← Finset.sum_mul, Finset.sum_add_distrib, Finset.sum_const, Finset.card_univ,
-            Fintype.card_fin, nsmul_eq_mul]; ring
+          rw [← Finset.sum_mul, Finset.sum_add_distrib, Fin.sum_const, nsmul_eq_mul]; ring
       _ = 8 * A * (∑ i, |x i - y i|) := by
           rw [hδ]; field_simp; ring
   calc |bnVar n x - bnVar n y|

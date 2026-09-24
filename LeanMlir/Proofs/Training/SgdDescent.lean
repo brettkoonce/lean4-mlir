@@ -134,8 +134,7 @@ theorem sgd_step_l1_le {m : Nat} (g gh : Vec m) {lr η : ℝ} (hlr : 0 ≤ lr)
     _ ≤ ∑ j, lr * (|g j| + η) := Finset.sum_le_sum fun j _ =>
         mul_le_mul_of_nonneg_left (by linarith [abs_sub_abs_le_abs_sub (gh j) (g j), hgh j]) hlr
     _ = lr * ((∑ j, |g j|) + m * η) := by
-        rw [← Finset.mul_sum, Finset.sum_add_distrib, Finset.sum_const,
-          Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+        rw [← Finset.mul_sum, Finset.sum_add_distrib, Fin.sum_const, nsmul_eq_mul]
 
 /-- **One inexact SGD step, explicit quadratic bound.** With a gradient
     oracle `gh` within `η` of `∇f(x)` coordinatewise, step `x − lr·gh`, and

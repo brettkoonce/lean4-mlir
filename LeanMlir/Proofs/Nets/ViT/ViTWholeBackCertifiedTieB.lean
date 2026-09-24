@@ -23,10 +23,9 @@ smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
    chain saves its activations stage by stage: the two spellings agree only up to
    `finProdFinEquiv.symm_apply_apply`, which is not `rfl`.
 2. The batched leaf ties. The patch-embed stage needs none (its backward is `rfl`); the other
-   three are `funext` to one example, one rewrite of the per-example tie at that
-   example's row (`vitTowerBackK_eq_vjp`, `vitFinalLNBack_eq_vjp`,
-   `vitHeadBack_eq_classifier_vjp`), then `rfl` — `batchMapAux`'s slice and the lift's
-   `.backward` row are the same term, as r34's pool endpoint found.
+   three are `batchMapAux_eq_batchMap_has_vjp_at` (the head: its `batchMap` form, after
+   `batchMap_comp`) over the per-example tie at each row (`vitTowerBackK_eq_vjp`,
+   `vitFinalLNBack_eq_vjp`, `vitHeadBack_eq_classifier_vjp`).
 3. `vitKVB_has_vjp_at` — the four-stage apex, three `vjp_comp_diff_at`s over the batched stage
    witnesses — and `vitInputGradKB_eq_vitKVB_vjp`, the tie: three leaf rewrites, then `rfl`.
 4. `vitForwardKVB_eq_chain` — the shape check: the four batched stages compose to
@@ -87,31 +86,21 @@ noncomputable def vitHeadB_at (B N D nClasses : Nat) (Wcls : Mat D nClasses)
     (fun _ => (classifier_flat_diff N D nClasses Wcls bcls).differentiableAt)
 
 /-- **The batched tower tie.** `batchMapAux B` of the depth-`k` tower backward at the batched
-    saved input IS the lift's backward: one example, one rewrite of `vitTowerBackK_eq_vjp` at
-    that example's row, `rfl`. -/
+    saved input IS the lift's backward: `vitTowerBackK_eq_vjp` at each row. -/
 theorem vitTowerBackB_eq_vjp (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) (v : Vec (B * (Np1 * (heads * d_head)))) :
     StableHLO.batchMapAux B (vitTowerBackK Np1 heads d_head mlpDim ε k ps) v
-      = (vitTowerB_at B Np1 heads d_head mlpDim ε hε k ps v).backward := by
-  funext dy idx
-  show vitTowerBackK Np1 heads d_head mlpDim ε k ps (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [vitTowerBackK_eq_vjp Np1 heads d_head mlpDim ε hε k ps]
-  rfl
+      = (vitTowerB_at B Np1 heads d_head mlpDim ε hε k ps v).backward :=
+  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ =>
+    vitTowerBackK_eq_vjp Np1 heads d_head mlpDim ε hε k ps _
 
 /-- **The batched final-LayerNorm tie.** `batchMapAux B` of `rowLNVecFlatBack` at the batched
     tower output IS the lift's backward — `vitFinalLNBack_eq_vjp` at one example's row. -/
 theorem vitLNBackB_eq_vjp (B n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
     (v : Vec (B * (n * D))) :
     StableHLO.batchMapAux B (rowLNVecFlatBack n D ε γF) v
-      = (vitLNB_at B n D ε hε γF βF v).backward := by
-  funext dy idx
-  show rowLNVecFlatBack n D ε γF (Mat.unflatten v (finProdFinEquiv.symm idx).1)
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [vitFinalLNBack_eq_vjp n D ε hε γF βF]
-  rfl
+      = (vitLNB_at B n D ε hε γF βF v).backward :=
+  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ => vitFinalLNBack_eq_vjp n D ε hε γF βF _
 
 /-- **The batched head tie.** `batchMap B` of the CLS scatter after `batchMap B` of the free dense
     backward IS the lift's backward at any saved `v` (the head is linear): fuse the two lifts by
@@ -122,13 +111,8 @@ theorem vitHeadBackB_eq_vjp (B N D nClasses : Nat) (Wcls : Mat D nClasses)
         ∘ StableHLO.batchMap B (Proofs.dense (Mat.transpose Wcls) (0 : Vec D))
       = (vitHeadB_at B N D nClasses Wcls bcls v).backward := by
   rw [← batchMap_comp]
-  funext dy idx
-  show (clsScatter N D ∘ Proofs.dense (Mat.transpose Wcls) (0 : Vec D))
-      (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
-      (finProdFinEquiv.symm idx).2 = _
-  rw [vitHeadBack_eq_classifier_vjp N D nClasses Wcls bcls
-        (Mat.unflatten v (finProdFinEquiv.symm idx).1)]
-  rfl
+  exact batchMap_eq_batchMap_has_vjp_at _ _ v _ _ fun _ =>
+    vitHeadBack_eq_classifier_vjp N D nClasses Wcls bcls _
 
 -- ═════════════════════════════════════════════════
 -- § The batched apex, the tie, and the shape check

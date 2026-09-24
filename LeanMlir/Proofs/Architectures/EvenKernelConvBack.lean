@@ -92,30 +92,11 @@ theorem conv2d_padOdd_eq {ic oc h w kH kW : Nat}
   congr 1
   refine Finset.sum_congr rfl (fun c _ => ?_)
   rw [Fin.sum_univ_succ]
-  -- the `kh = 0` row of `padOdd` is zero, so its whole inner sum vanishes
-  have hrow : (∑ kw : Fin (kW + 1), padOdd W o c 0 kw *
-      (let pH := (kH + 1 - 1) / 2
-       let pW := (kW + 1 - 1) / 2
-       let hh := (0 : Fin (kH + 1)).val + hi.val
-       let ww := kw.val + wi.val
-       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-         x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-       else 0)) = 0 := by
-    refine Finset.sum_eq_zero (fun kw _ => ?_)
-    rw [padOdd_zero_row, zero_mul]
-  rw [hrow, zero_add]
+  -- the `kh = 0` row and the `kw = 0` column of `padOdd` are zero
+  simp only [padOdd_zero_row, zero_mul, Finset.sum_const_zero, zero_add]
   refine Finset.sum_congr rfl (fun kh _ => ?_)
   rw [Fin.sum_univ_succ]
-  have hcol : padOdd W o c kh.succ 0 *
-      (let pH := (kH + 1 - 1) / 2
-       let pW := (kW + 1 - 1) / 2
-       let hh := (kh.succ).val + hi.val
-       let ww := (0 : Fin (kW + 1)).val + wi.val
-       if hpad : pH ≤ hh ∧ hh - pH < h ∧ pW ≤ ww ∧ ww - pW < w then
-         x c ⟨hh - pH, hpad.2.1⟩ ⟨ww - pW, hpad.2.2.2⟩
-       else 0) = 0 := by
-    rw [padOdd_zero_col, zero_mul]
-  rw [hcol, zero_add]
+  simp only [padOdd_zero_col, zero_mul, zero_add]
   refine Finset.sum_congr rfl (fun kw _ => ?_)
   rw [padOdd_succ]
   congr 1

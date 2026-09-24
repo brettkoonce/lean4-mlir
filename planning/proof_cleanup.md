@@ -22,7 +22,7 @@ were measured say so.
 * Lemmas for `Foundation/Tensor.lean`, `Codegen/StableHLO.lean` or `Codegen/Lamb.lean` rebuild
   240–420 modules: park them in the leaf that needs them and move them as a batch.
 
-## ▶ Start here (state at 2026-09-23, origin/main `1fe29cf3`)
+## ▶ Start here (state at 2026-09-24, origin/main `3af1cc9c`; §6 on branch `proof-cleanup`)
 
 Everything in §1 is on main. Work is done on local branch `proof-cleanup` and landed by: commit
 → fetch → rebase onto `origin/main` → re-run the gates → fast-forward `main` → push (no merge
@@ -73,10 +73,12 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 
 **Next session, in order** (§3.1–§3.7 are done; §5 has the detail):
 
-§6 (re-audit 2026-09-24): §6.2–§6.4 done. Before §6 there was no main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
-[`certlayer_nets.md`](certlayer_nets.md): whole nets as one `CertLayer`, which would retire the
-`r34PreK`/`r50PreK`/`mnv2PreBK` chains and bundles outright (§3.1's vocabulary item folds into it).
-Also open, not measured: §3.6's `IsShardwise`.
+§6 (re-audit 2026-09-24): §6.2–§6.4 and §6.6 done. [`certlayer_nets.md`](certlayer_nets.md) landed
+as far as it pays (6778f8c9); retiring the `r34PreK`/`r50PreK`/`mnv2PreBK` vocabulary is a
+comparator-tier change, parked there. What is left is the medium tier of
+`proof_cleanup_audits/reaudit_2026_09_24_open_findings.md` (the `*TiedB` Props that restate their
+`_den` lemmas, ConvNeXt's `@[irreducible]` wrappers, FloatBridge's repeated cotangent blocks) and
+its codegen report. Also open, not measured: §3.6's `IsShardwise`.
 
 Parked (low payoff): `IsShardwise` for the `_shard` family (§3.6), the StableHLO printer split
 (§3.2, ~45 s), FullNets' matrix-level `G1` lemma (§3.3, ~20 s).
@@ -361,3 +363,38 @@ the existing weight records; R34/EffNet sync apexes onto the free-`G` shape (tie
 * Bumps get copied unmeasured: strip-and-compile after any refactor of the guarded decl, and in
   every generator change. Keep `set_option … in` directly above the target's docstring — one
   separated by a banner drifts onto whatever is inserted between.
+
+### 6.6 Batch 3 — the report's remaining small items (2026-09-24)
+
+Result, statements unchanged except where noted (−88 lines net, 24 files):
+
+* The 14 `simpa [hf] using` in the SGD rungs (Linear, Mlp, Cnn) are `exact`: `f` is `set`-bound,
+  so the goal is already in its terms; the seven `with hf` went with them. Compile time unchanged
+  (Cnn 19.8 → 19.5 s) — idiom, not speed.
+* `conv2d_padOdd_eq`: the two `have`s that restated `conv2d`'s `let` body are one
+  `simp only [padOdd_zero_row/col, zero_mul, …]` each (−22 lines).
+* SgdDescentCnn's two γ₇₈₅ blocks pass `gamma_num`'s side conditions inline, as every other
+  caller does.
+* `Fin.sum_const` for the `Finset.sum_const, card_univ, Fintype.card_fin` triple (13 sites).
+* ViT: `Mat.unflatten_apply` for two bare `show`s (VecLN tie), `Fin.reduceEq` for the three
+  `show (… : Fin 3) ≠ … from by decide`, ViTStepTie's `unusedSimpArgs` silencer out with the
+  unused `denStep` it hid.
+* The unused `cotN : String` binder is out of all nine `*CotIn_eq_vjp` (MNv2 ×4, and per §6.5
+  the siblings R34 ×2, R50 ×3). Statement change; none has a caller or a tier entry.
+* `ConvBBetaTiedB` + `convBBetaTiedB_holds` (EfficientNetStepTieG) replace the 10 spelled-out
+  conv-bias clauses and their `intro o; exact bnBetaGradB_den …` proofs. Statement spelling
+  change inside the `enet*TiedG` Props.
+* `batchMapAux_eq_batchMap_has_vjp_at` / `batchMap_eq_batchMap_has_vjp_at` (BatchMapVJPAt):
+  the nine batched leaf ties (ConvNeXt ×6, ViT ×3) are one term each; their 4-line
+  `show … batchMapAux layout` blocks are gone.
+* `mlp_gap_eq` via `mlp_out_eq`; `mlpT_logit_continuous`'s `show` → `simp only [mlpT, …]`.
+
+Not done:
+
+* `rndP_mul_four`'s `norm_num at this; exact this`: `simpa` does not evaluate `2 ^ 2` on ℝ.
+* `simpa using abs_sub_le a b 0` (6 sites): Mathlib has no `|a| ≤ |a - b| + |b|` by name.
+* EfficientNetSyncStepTieG's five `show X (den (bnBatchLABack …))`: each exposes the one BN
+  node of a graph whose faithfulness it reads; a `rfl` lemma per graph would restate the graph.
+* The medium items (`*TiedB` Props restating `_den` lemmas, ConvNeXt's `@[irreducible]`
+  wrappers, FloatBridge's cotangent blocks, MuonGeometry) and the codegen report stay listed in
+  `…_open_findings.md`.

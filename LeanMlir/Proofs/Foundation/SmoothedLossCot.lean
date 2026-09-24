@@ -105,8 +105,7 @@ theorem smoothTarget_sum (K : Nat) (hK : 0 < K) (α : ℝ) (t : Vec K) (ht : ∑
     ∑ k : Fin K, smoothTarget K α t k = 1 := by
   have hKR : (K : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hK.ne'
   simp only [smoothTarget]
-  rw [Finset.sum_add_distrib, ← Finset.mul_sum, ht, mul_one, Finset.sum_const,
-    Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+  rw [Finset.sum_add_distrib, ← Finset.mul_sum, ht, mul_one, Fin.sum_const, nsmul_eq_mul]
   field_simp
   ring
 

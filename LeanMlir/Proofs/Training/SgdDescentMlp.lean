@@ -254,7 +254,7 @@ theorem loss_grad_lipschitz {P d₂ d₃ : Nat} (Z : Vec P → Vec d₂) (W₂ :
     refine mul_le_mul_of_nonneg_left (le_trans (mul_le_of_le_one_left (abs_nonneg _)
       (by split_ifs <;> simp)) ?_) (abs_nonneg _)
     refine (Finset.abs_sum_le_sum_abs _ _).trans ((Finset.sum_le_sum fun k _ => ?_).trans
-      (by rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]))
+      (by rw [Fin.sum_const, nsmul_eq_mul]))
     rw [← mul_sub, sub_sub_sub_cancel_right, abs_mul]
     exact mul_le_mul (hW₂ l k) (hS k) (abs_nonneg _) hw₂
   rw [← Finset.sum_sub_distrib]
@@ -437,7 +437,7 @@ theorem mlp_hidden_sgd_descends {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
   unfold mlpHiddenLoss at *
   set f : Vec (d₁ * d₂) → ℝ :=
     fun w => crossEntropy d₃
-      (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label with hf
+      (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label
   have hden : (0:ℝ) < 1 - 2 * (w₂ * (a * (lr * ((∑ idx,
       |gradAt f (Mat.flatten W₁) idx|) + ((d₁ * d₂ : ℕ) : ℝ) * η)))) := by
     linarith
@@ -463,9 +463,9 @@ theorem mlp_hidden_sgd_descends {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
     (fun t ht idx => by
       have := mlp_hidden_loss_grad_lipschitz b₁ W₂ b₂ a₀ label ha hx hw₂
         hW₂ (Mat.flatten W₁) (-(lr • gh)) hD hmargin' hsmall t ht idx
-      simpa [hf] using this)
+      exact this)
     h1 h2
-  simpa [hf] using hmain
+  exact hmain
 
 -- ════════════════════════════════════════════════════════════════
 -- § Input layer W₀: two frozen masks
@@ -659,7 +659,7 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
   have hJ : ∑ l, |x i * ((if dense (Mat.unflatten v) b₀ x j > 0 then (1:ℝ) else 0) *
       W₁ j l)| ≤ (d₂ : ℝ) * (w₁ * a) := by
     refine (Finset.sum_le_sum fun l _ => ?_).trans_eq
-      (by rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul])
+      (by rw [Fin.sum_const, nsmul_eq_mul])
     rw [abs_mul, abs_mul, mul_comm w₁ a]
     exact mul_le_mul (hx i) ((mul_le_of_le_one_left (abs_nonneg _)
       (by split_ifs <;> simp)).trans (hW₁ j l)) (by positivity) ha
@@ -669,7 +669,7 @@ theorem mlp_input_loss_grad_lipschitz {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d�
     (fun v e l => (mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l).trans_eq (by ring))
     (fun v e => (Finset.sum_le_sum fun l _ =>
       mlp_hidden_logit_drift b₀ W₁ b₁ x hx hw₁ hW₁ v e l).trans_eq (by
-        rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]; ring))
+        rw [Fin.sum_const, nsmul_eq_mul]; ring))
     hw₂ hW₂ _ hJ _
     (fun v' => ∀ k, dense (Mat.unflatten v') b₀ x k ≠ 0 ∧
       (0 < dense (Mat.unflatten v') b₀ x k ↔ 0 < dense (Mat.unflatten v) b₀ x k))
@@ -738,7 +738,7 @@ theorem mlp_input_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁
   unfold mlpInputLoss at *
   set f : Vec (d₀ * d₁) → ℝ :=
     fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂
-      (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label with hf
+      (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label
   have hden : (0:ℝ) < 1 - 2 * (w₂ * ((d₂ : ℝ) * (w₁ * (a * (lr * ((∑ idx,
       |gradAt f (Mat.flatten W₀) idx|) +
         ((d₀ * d₁ : ℕ) : ℝ) * η)))))) := by
@@ -775,9 +775,9 @@ theorem mlp_input_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁
       have := mlp_input_loss_grad_lipschitz b₀ W₁ b₁ W₂ b₂ x label ha hx
         hw₁ hW₁ hw₂ hW₂ (Mat.flatten W₀) (-(lr • gh)) hD hmargin0'
         hmargin1' hsmall t ht idx
-      simpa [hf] using this)
+      exact this)
     h1 h2
-  simpa [hf] using hmain
+  exact hmain
 
 -- ════════════════════════════════════════════════════════════════
 -- § Output layer η-composition: feed the FloatBridge budget into the

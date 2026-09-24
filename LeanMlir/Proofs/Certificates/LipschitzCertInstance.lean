@@ -395,8 +395,7 @@ theorem trained_demo_certified_gram2 (δ : EuclideanSpace ℝ (Fin 49))
     formula `∑ k, W2ⱼₖ·max(∑ l, W1ₖₗ·xₗ, 0)` is definitional. -/
 theorem mlpT_logit_continuous : ∀ j : Fin 10, Continuous fun x => mlpT x j := by
   intro j
-  show Continuous fun x : EuclideanSpace ℝ (Fin 49) =>
-    ∑ k : Fin 8, W2t j k * max (∑ l, W1t k l * x l) 0
+  simp only [mlpT, Function.comp_apply, denseE_apply, reluE_apply]
   refine continuous_finsetSum _ fun k _ => continuous_const.mul ?_
   refine Continuous.max ?_ continuous_const
   exact continuous_finsetSum _ fun l _ =>

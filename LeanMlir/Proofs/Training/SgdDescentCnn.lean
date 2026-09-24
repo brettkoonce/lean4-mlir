@@ -681,11 +681,8 @@ theorem FloatModel.mnist_cnn_convW_step_float_budget (M : FloatModel)
     (by norm_num : (0:ℝ) ≤ 1/10)
   refine hstep.trans ?_
   -- eg ≤ (47/10⁶)·784·a·g  (γ₇₈₅ × the summed gradient mass)
-  have hk1 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 < 1 := by norm_num [u32]
-  have hk2 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 / (1 - ((28 * 28 + 1 : ℕ) : ℝ) * u32)
-      ≤ 47/1000000 := by norm_num [u32]
   have hhigham : (1 + M.u) ^ (28 * 28 + 1) - 1 ≤ 47/1000000 :=
-    M.gamma_num hMu hk1 hk2
+    M.gamma_num hMu (by norm_num [u32]) (by norm_num [u32])
   have hhigham0 : 0 ≤ (1 + M.u) ^ (28 * 28 + 1) - 1 :=
     sub_nonneg.mpr (one_le_pow₀ (by linarith))
   have hsum0 : 0 ≤ ∑ s, |convPadWin 3 3 act cc kh kw s * cotWin cot o s| :=
@@ -736,11 +733,8 @@ theorem FloatModel.mnist_cnn_convb_step_float_budget (M : FloatModel)
   have hstep := M.cnn_convb_step_float_close b cot o hG (by norm_num : (0:ℝ) ≤ 1/10)
   refine hstep.trans ?_
   -- eg ≤ (47/10⁶)·784·g  (γ₇₈₅ × the summed gradient mass)
-  have hk1 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 < 1 := by norm_num [u32]
-  have hk2 : ((28 * 28 + 1 : ℕ) : ℝ) * u32 / (1 - ((28 * 28 + 1 : ℕ) : ℝ) * u32)
-      ≤ 47/1000000 := by norm_num [u32]
   have hhigham : (1 + M.u) ^ (28 * 28 + 1) - 1 ≤ 47/1000000 :=
-    M.gamma_num hMu hk1 hk2
+    M.gamma_num hMu (by norm_num [u32]) (by norm_num [u32])
   have hhigham0 : 0 ≤ (1 + M.u) ^ (28 * 28 + 1) - 1 :=
     sub_nonneg.mpr (one_le_pow₀ (by linarith))
   have hsum0 : 0 ≤ ∑ s, |cotWin cot o s| :=
@@ -2386,7 +2380,7 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
         (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
           (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
-        label with hf
+        label
   have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
       (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx,
         |gradAt f (Kernel4.flatten W₂) idx|) +
@@ -2452,9 +2446,9 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
       have h := cnn_conv2_loss_grad_lipschitz b₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
         label hh hw ha hx hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ (Kernel4.flatten W₂)
         (-(lr • gh)) hD hm2' hmq' hm3' hm4' hsmall t ht idx
-      simpa [hf] using h)
+      exact h)
     h1 h2
-  simpa [hf] using hmain
+  exact hmain
 
 open FloatModel in
 /-- **One binary32 SGD step on the CNN's second conv kernel provably decreases
@@ -4380,7 +4374,6 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
           (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
             (relu (c * (2*h) * (2*w)) (Tensor3.flatten
               (conv2d (Kernel4.unflatten u') b₁ x₀))))))))))))) label
-    with hf
   have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt f (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η))))))))))) := by linarith
   have hC0 : (0:ℝ) ≤ 2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 * a ^ 2 / (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (a * (lr * ((∑ idx, |gradAt f (Kernel4.flatten W₁) idx|) + ((c * ic * kH * kW : ℕ) : ℝ) * η)))))))))))) :=
     div_nonneg (by positivity) hden.le
@@ -4444,9 +4437,9 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
         W₅ b₅ label hh hw ha hx hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅
         (Kernel4.flatten W₁) (-(lr • gh)) hD hm1' hm2' hmq' hm3' hm4'
         hsmall t ht idx
-      simpa [hf] using hlip)
+      exact hlip)
     h1 h2
-  simpa [hf] using hmain
+  exact hmain
 
 open FloatModel in
 /-- **One binary32 SGD step on the CNN's FIRST conv kernel provably decreases
@@ -4995,7 +4988,7 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     fun b' : Vec c =>
       crossEntropy nC (dense W₅ b₅ (relu d₄ (dense W₄ b₄ (relu d₃
         (dense W₃ b₃ (maxPoolFlat c h w (relu (c * (2*h) * (2*w))
-          (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label with hf
+          (Tensor3.flatten (conv2d W₂ b' x₁))))))))) label
   have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ *
       (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ o, |gradAt f b₂ o|) +
         (c : ℝ) * η)))))))) := by
@@ -5025,9 +5018,9 @@ theorem cnn_conv2_bias_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
       have h := cnn_conv2_bias_loss_grad_lipschitz W₂ x₁ W₃ b₃ W₄ b₄ W₅ b₅
         label hh hw hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b₂
         (-(lr • gh)) hD hm2 hmq hm3 hm4 hsmall t ht o
-      simpa [hf] using h)
+      exact h)
     h1 h2
-  simpa [hf] using hmain
+  exact hmain
 
 -- ════════════════════════════════════════════════════════════════
 -- § conv1-bias margins freeze every routing decision along the segment
@@ -5473,7 +5466,6 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
           (Tensor3.flatten (conv2d W₂ b₂ (Tensor3.unflatten
             (relu (c * (2*h) * (2*w)) (Tensor3.flatten
               (conv2d W₁ b' x₀))))))))))))) label
-    with hf
   have hden : (0:ℝ) < 1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ idx, |gradAt f b₁ idx|) + (c : ℝ) * η)))))))))) := by linarith
   have hC0 : (0:ℝ) ≤ 2 * (nC : ℝ) * ((2*h * (2*w) : ℕ) : ℝ) ^ 2 * ((c * kH * kW : ℕ) : ℝ) ^ 2 * (d₃ : ℝ) ^ 2 * (d₄ : ℝ) ^ 2 * w₂ ^ 2 * w₃ ^ 2 * w₄ ^ 2 * w₅ ^ 2 / (1 - 2 * (w₅ * ((d₄ : ℝ) * (w₄ * ((d₃ : ℝ) * (w₃ * (((c * kH * kW : ℕ) : ℝ) * (w₂ * (((2*h * (2*w) : ℕ) : ℝ) * (lr * ((∑ idx, |gradAt f b₁ idx|) + (c : ℝ) * η))))))))))) :=
     div_nonneg (by positivity) hden.le
@@ -5496,9 +5488,9 @@ theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
       have hlip := cnn_conv1_bias_loss_grad_lipschitz W₁ x₀ W₂ b₂ W₃ b₃
         W₄ b₄ W₅ b₅ label hh hw hw₂ hW₂ hw₃ hW₃ hw₄ hW₄ hw₅ hW₅ b₁
         (-(lr • gh)) hD hm1 hm2 hmq hm3 hm4 hsmall t ht o
-      simpa [hf] using hlip)
+      exact hlip)
     h1 h2
-  simpa [hf] using hmain
+  exact hmain
 
 -- ════════════════════════════════════════════════════════════════
 -- § Increment 5 — the conv BIASES (the last descent rung)

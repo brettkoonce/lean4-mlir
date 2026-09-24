@@ -207,7 +207,7 @@ theorem FloatModel.bnMean_close_of {n : ℕ} (M : FloatModel) {fsum : Vec n → 
   have hsumabs : ∑ i, |x i| ≤ (n:ℝ) * A := by
     calc ∑ i, |x i| ≤ ∑ _i : Fin n, A := Finset.sum_le_sum fun i _ => hA i
       _ = (n:ℝ) * A := by
-          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul]
+          rw [Fin.sum_const, nsmul_eq_mul]
   -- |Σx| ≤ Σ|x|, hence |fsum x| ≤ (γn+1)·Σ|x|
   have hSabs : |fsum x| ≤ (γn + 1) * ((n:ℝ) * A) := by
     have htri := abs_sub_le (fsum x) (∑ i, x i) 0
@@ -296,7 +296,7 @@ theorem FloatModel.bnVar_close {n : ℕ} (M : FloatModel) (x : Vec n) {fμ emean
         ≤ ∑ i, |fsq i - (x i - μ) * (x i - μ)| := Finset.abs_sum_le_sum_abs _ _
       _ ≤ ∑ _i : Fin n, esq := Finset.sum_le_sum fun i _ => hsqerr i
       _ = esq * (n:ℝ) := by
-          rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul, mul_comm]
+          rw [Fin.sum_const, nsmul_eq_mul, mul_comm]
   calc |M.div (M.sum fsq) (n:ℝ) - bnVar n x|
       ≤ |M.div (M.sum fsq) (n:ℝ) - bnMean n fsq| + |bnMean n fsq - bnVar n x| :=
         abs_sub_le _ _ _

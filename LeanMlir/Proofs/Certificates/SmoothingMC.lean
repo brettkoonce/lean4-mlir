@@ -72,7 +72,7 @@ theorem mc_mean_lower_bound (ν : Measure E) [IsProbabilityMeasure ν]
   -- the exponent simplifies to −2Nt²
   have hexp : -(N * t) ^ 2 / (2 * ∑ _i : Fin N, (((1 : ℝ≥0) / 2) ^ 2 : ℝ≥0))
       = -2 * N * t ^ 2 := by
-    rw [Finset.sum_const, Finset.card_univ, Fintype.card_fin]
+    rw [Fin.sum_const]
     push_cast
     have hN' : (0 : ℝ) < N := by exact_mod_cast hN
     field_simp

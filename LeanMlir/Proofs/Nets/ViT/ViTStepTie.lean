@@ -193,7 +193,6 @@ delegation to the §1-fold generics (`ViTPoC.*_den`), with the cls op (`denseBia
 `vit_net_tied_certified` threads the REAL forward + loss-driven backward and bundles all 200 params. -/
 
 -- cls-param op den at the committed ViT-Tiny dims
-set_option linter.unusedSimpArgs false in
 theorem vit_cls_den (clsN lrStr cotN : String)
     (Wc : Kernel4 192 3 16 16) (bc cls : Vec 192) (pos : Mat 197 192)
     (img : Vec (3 * 224 * 224)) (dyEmbed : Vec (197 * 192)) (lr : ℝ) (i : Fin 192) :
@@ -205,7 +204,7 @@ theorem vit_cls_den (clsN lrStr cotN : String)
   have hstep : den (SHlo.denseBiasSgdB (N := 1) (c := 192) clsN lrStr cls lr
             (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i
       = cls i - lr * cls_token_grad dyEmbed i := by
-    simp only [denStep, denStepApp, batchSlice, clsSliceFlat, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
+    simp only [denStepApp, batchSlice, clsSliceFlat, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
   rw [hstep, vit_render_cls_certified Wc bc cls pos img dyEmbed lr i]
 
 /-- Final vector-LN γF/βF tied at the classifier-back cot `vitCotFl`. -/

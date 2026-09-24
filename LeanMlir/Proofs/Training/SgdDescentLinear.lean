@@ -229,7 +229,7 @@ theorem linear_sgd_descends {m n : Nat} (W : Mat m n) (b : Vec n)
   simp only [stepRadius] at *
   unfold linearLoss at *
   set f : Vec (m * n) → ℝ :=
-    fun w => crossEntropy n (dense (Mat.unflatten w) b x) label with hf
+    fun w => crossEntropy n (dense (Mat.unflatten w) b x) label
   -- the Lipschitz constant at the step radius
   have hC0 : (0:ℝ) ≤ 2 * a ^ 2 / (1 - 2 * (a * (lr * ((∑ idx, |gradAt f
       (Mat.flatten W) idx|) + ((m * n : ℕ) : ℝ) * η)))) := by
@@ -248,9 +248,9 @@ theorem linear_sgd_descends {m n : Nat} (W : Mat m n) (b : Vec n)
     (fun t ht idx => by
       have := linear_loss_grad_lipschitz b x label ha hx (Mat.flatten W)
         (-(lr • gh)) hD hsmall t ht idx
-      simpa [hf] using this)
+      exact this)
     h1 h2
-  simpa [hf] using hmain
+  exact hmain
 
 -- ════════════════════════════════════════════════════════════════
 -- § Item D: the η-composition — feed the FloatBridge budget into the

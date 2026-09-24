@@ -1730,8 +1730,7 @@ theorem globalAvgPool_shift {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (x y : Tenso
     globalAvgPool x ci = globalAvgPool y ci + δ := by
   have hh' : ((h : ℝ)) ≠ 0 := Nat.cast_ne_zero.mpr hh.ne'
   have hw' : ((w : ℝ)) ≠ 0 := Nat.cast_ne_zero.mpr hw.ne'
-  simp only [globalAvgPool, hxy, Finset.sum_add_distrib, Finset.sum_const, Finset.card_univ,
-    Fintype.card_fin, nsmul_eq_mul]
+  simp only [globalAvgPool, hxy, Finset.sum_add_distrib, Fin.sum_const, nsmul_eq_mul]
   field_simp
 
 end Proofs
