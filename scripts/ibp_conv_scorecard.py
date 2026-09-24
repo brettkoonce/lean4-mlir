@@ -23,6 +23,9 @@ what gets evaluated, certified, and emitted — so the certified network is the
 deployed one, not a nearby real-valued idealization.
 
 Emits LeanMlir/Proofs/Certificates/IbpConvScorecard.lean.
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import struct
 import sys

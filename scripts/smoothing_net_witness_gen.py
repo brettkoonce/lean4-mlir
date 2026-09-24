@@ -17,19 +17,25 @@ MLP (`mlpT` in LipschitzCertInstance.lean):
     (re-proved in-kernel), the witness bundle netW/netW_strict, and the
     INSTANTIATED capstone smoothing_cp_certified_mlpT + a deployed-scale demo.
 
-Output: LeanMlir/Proofs/Certificates/SmoothingNetWitness.lean
+Output: LeanMlir/Proofs/Certificates/SmoothingNetWitness.lean. `--check` compares instead of
+writing. Not in CI: it reads the MNIST test set from data/, which CI does not have.
 """
 
 import re
 import struct
+import sys
 from fractions import Fraction
 from pathlib import Path
 
 import numpy as np
 
-D = "data/"
-SRC = Path("LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean")
-OUT = Path("LeanMlir/Proofs/Certificates/SmoothingNetWitness.lean")
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+import _gencheck  # noqa: E402
+
+D = str(ROOT / "data") + "/"
+SRC = ROOT / "LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean"
+OUT = ROOT / "LeanMlir/Proofs/Certificates/SmoothingNetWitness.lean"
 H, K, DIM = 8, 10, 49
 DEN_X, DEN_W = 4080, 128
 
@@ -205,11 +211,11 @@ def main() -> None:
     A("      (by norm_num) (by decide +kernel))")
     A("")
     A("end Proofs.LipschitzCertDemo")
-    OUT.write_text("\n".join(L) + "\n")
     for c in range(K):
         margin, idx, _, _, _ = best[c]
         print(f"class {c}: test image #{idx}, margin {float(Fraction(margin, 66846720)):.4f}")
-    print(f"wrote {OUT}")
+    _gencheck.emit(OUT, "\n".join(L) + "\n")
+    _gencheck.finish()
 
 
 if __name__ == "__main__":

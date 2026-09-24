@@ -23,20 +23,26 @@ from pathlib import Path
 ALPHA_INV = 1000          # alpha = 1/1000
 D = 10000                 # q0 denominator (4 decimals)
 NETS = [("mlp", "MNIST-MLP"), ("cnn", "MNIST-CNN"), ("cifar", "CIFAR-CNN")]
-RUNS = Path("runs")
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "scripts"))
+import _gencheck  # noqa: E402
+
+RUNS = ROOT / "runs"
 # The launcher writes runs/smooth_<slug>_scorecard.csv, but only the CURATED
 # copies under the dated run directory are committed — so on a clean checkout
 # `RUNS` alone is empty and this corpus looks unreproducible (the old error
 # message sent you off to re-run a ~25 min 2-GPU job for data that is already
 # in the repo). Prefer a fresh run if one is present, else the archive.
-RUNS_ARCHIVE = Path("runs/2026-07-12-smooth-scorecard")
-OUT = Path("LeanMlir/Proofs/Certificates/SmoothingCPScorecard.lean")
+RUNS_ARCHIVE = ROOT / "runs/2026-07-12-smooth-scorecard"
+OUT = ROOT / "LeanMlir/Proofs/Certificates/SmoothingCPScorecard.lean"
 
 
 def csv_path(slug: str) -> Path:
-    """The fixed-protocol CSV for `slug`: fresh run first, then the archive."""
+    """The fixed-protocol CSV for `slug`: fresh run first, then the archive. `--check` reads the
+    archive only — the committed Lean is generated from it, and a local run must not change the
+    verdict."""
     fresh = RUNS / f"smooth_{slug}_scorecard.csv"
-    if fresh.exists():
+    if fresh.exists() and not _gencheck.CHECK:
         return fresh
     archived = RUNS_ARCHIVE / f"smooth_{slug}_scorecard.csv"
     if archived.exists():
@@ -189,8 +195,8 @@ def main() -> None:
                 L.append(f"{prefix}{chunk}{suffix}")
         L.append("")
     L.append("end Proofs")
-    OUT.write_text("\n".join(L) + "\n")
-    print(f"wrote {OUT}")
+    _gencheck.emit(OUT, "\n".join(L) + "\n")
+    _gencheck.finish()
 
 
 if __name__ == "__main__":

@@ -20,6 +20,9 @@ column by norm_num (incl. the exact (1+2^-24)^51 power); the exp(2δ)-1 term
 inside cotErr is bounded by the repo's γ-form exp_sub_one_le. Window margins
 are asserted here with exact Fractions in EXACTLY the bound-forms the Lean
 proof discharges.
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import numpy as np, os, struct
 from fractions import Fraction

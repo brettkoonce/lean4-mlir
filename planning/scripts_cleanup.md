@@ -228,6 +228,22 @@ The data-dependent ones (MNIST retraining) stay manual; record that in their hea
 Also: `smooth_scorecard_gen.py:33`, `smooth_dec_scorecard_gen.py:47-48`,
 `smoothing_net_witness_gen.py:30-32`, both `emit_*_tikz.py` use cwd-relative paths — anchor on `ROOT`.
 
+### §5 status (2026-09-24)
+
+* `scripts/_gencheck.py`: `emit(path, text)` + `finish()` — writes, or under `--check` writes
+  nothing and exits 1 naming each drifted file.
+* On it, ROOT-anchored, byte-reproducible before and after: `lipschitz_cert_float.py` (1 file),
+  `smooth_scorecard_gen.py` (1), `smooth_dec_scorecard_gen.py` (scorecard + 6 chunks). `--check`
+  passes from an unrelated cwd; controls: one appended line in each output → rc 1 naming it; a
+  fake fresh `runs/smooth_mlp_scorecard.csv` does not change the verdict (`--check` reads the
+  committed 2026-07-12 archive only). Standard library only (runs under `python3 -I`).
+* CI: proofs.yml "Certificate generators reproduce their committed Lean" after the manifest check
+  (no Lean, ~2 min); path filters for the scripts, `_gencheck.py` and the archive CSVs.
+* `smoothing_net_witness_gen.py`: ROOT-anchored + `--check`, but reads MNIST → manual.
+* Manual by necessity, now said in each header: the eleven MNIST-reading generators
+  (Lipschitz/IBP/CROWN/SDP scorecards, `lipschitz_cert_witness_s8`, `trained_*`).
+* Not done: `ffi/pjrt_compile_options.h` and `blueprint/src/figures/depgraph/*` generators.
+
 ## 6. Duplication → shared modules
 
 | module | replaces |

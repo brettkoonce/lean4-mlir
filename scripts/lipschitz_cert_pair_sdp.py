@@ -19,6 +19,9 @@ images): capped 34 -> 69/100, unconstrained 1 -> 63/100 (PGD bracket:
 72 / 69). Those counts are MEASURED in exact rationals over all 100 images;
 only the first N_EMIT certifying images carry a Lean theorem (planning/archive/
 scorecard_trim.md). Run from repo root: python3 scripts/lipschitz_cert_pair_sdp.py
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import numpy as np, struct
 from fractions import Fraction

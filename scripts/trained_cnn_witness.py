@@ -21,6 +21,9 @@ conv2d semantics mirrored from LeanMlir/Proofs/Architectures/CNN.lean:130 (cross
 SAME zero padding pH=pW=1). The witness search enforces the h_mp condition
 (relu zeros collide, so each window may contain at most one negative conv2
 pre-activation, and the positive values must be pairwise distinct exactly).
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import numpy as np, os, struct, sys
 from fractions import Fraction

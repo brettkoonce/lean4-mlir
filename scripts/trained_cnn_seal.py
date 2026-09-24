@@ -21,6 +21,9 @@ the exact theorem set TrainedMlpWitness carries, now for the conv net.
 Runs scripts/trained_cnn_witness.py first (deterministic) to reproduce the
 trained weights and forward tables, without letting it write its own file;
 weights/input are DATA here.
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import os
 import numpy as np

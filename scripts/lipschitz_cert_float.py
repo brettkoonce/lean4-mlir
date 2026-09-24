@@ -19,6 +19,7 @@ LipschitzCertScorecard.lean (the source of truth) — no retraining.
 """
 import os
 import re
+import sys
 from fractions import Fraction
 
 # How many of the float-certified images carry a per-image THEOREM. Soundness is
@@ -400,6 +401,8 @@ end LipschitzCertDemo
 end Proofs
 '''
 
-with open(OUT, "w") as f:
-    f.write(body)
-print(f"wrote {OUT}", flush=True)
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _gencheck  # noqa: E402
+
+_gencheck.emit(OUT, body)
+_gencheck.finish()

@@ -29,6 +29,9 @@ tier affordable at all (planning/archive/certs_heavy_psd_memory.md).
 
 Reuses the base generator's trained nets/caches by importing it (the import
 computes `nets`/`info`/`need` and writes nothing; only the base's `__main__` writes).
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import numpy as np
 from fractions import Fraction

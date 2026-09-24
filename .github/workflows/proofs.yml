@@ -18,6 +18,11 @@ on:
       - 'scripts/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
       - 'scripts/gen_mlir_manifest.py'
+      - 'scripts/_gencheck.py'
+      - 'scripts/lipschitz_cert_float.py'
+      - 'scripts/smooth_scorecard_gen.py'
+      - 'scripts/smooth_dec_scorecard_gen.py'
+      - 'runs/2026-07-12-smooth-scorecard/*.csv'
       - 'lakefile.lean'
       - 'lean-toolchain'
       - 'lake-manifest.json'
@@ -34,6 +39,11 @@ on:
       - 'scripts/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
       - 'scripts/gen_mlir_manifest.py'
+      - 'scripts/_gencheck.py'
+      - 'scripts/lipschitz_cert_float.py'
+      - 'scripts/smooth_scorecard_gen.py'
+      - 'scripts/smooth_dec_scorecard_gen.py'
+      - 'runs/2026-07-12-smooth-scorecard/*.csv'
       - 'lakefile.lean'
       - 'lean-toolchain'
       - 'lake-manifest.json'
@@ -86,6 +96,18 @@ jobs:
         # stale unnoticed when the chapter 1–4 writers moved to ChapterArtifacts, because nothing
         # ran --check.
         run: python3 scripts/gen_mlir_manifest.py --check
+
+      - name: Certificate generators reproduce their committed Lean
+        # Three generators whose inputs are all committed (LipschitzCertScorecard.lean, the
+        # 2026-07-12 smoothing CSVs), so CI can re-run them: the Lipschitz float certificate, the
+        # smoothing CP scorecard and the decimal-radius scorecard + its six chunks. `--check`
+        # writes nothing and fails on any byte of drift. The MNIST-retraining generators stay
+        # manual (they need data/). ~2 min of Python, no Lean.
+        run: |
+          set -e
+          python3 scripts/lipschitz_cert_float.py --check
+          python3 scripts/smooth_scorecard_gen.py --check
+          python3 scripts/smooth_dec_scorecard_gen.py --check
 
       - name: Install elan
         run: |

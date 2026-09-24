@@ -31,8 +31,9 @@ import sys
 from fractions import Fraction
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from smooth_scorecard_gen import NETS, csv_path, largest_a, phi_inv  # noqa: E402
+import _gencheck  # noqa: E402
 
 D = 10000                 # q0 denominator (4 decimals)
 H = Fraction(1, 1000)     # grid step
@@ -44,8 +45,9 @@ D12 = 10**12              # common denominator of every grid value
 # lean process (a 6-chunk single file still peaked 12.9 GB) — so each
 # chunk gets its OWN MODULE/process (heaviest: chunk 6 at ~5.2 GB).
 CHUNKS = [550, 1100, 1650, 2200, 2750, 3300]
-CHUNK_OUT = "LeanMlir/Proofs/Certificates/SmoothingDecChunk{c}.lean"
-OUT = Path("LeanMlir/Proofs/Certificates/SmoothingDecScorecard.lean")
+CERTS = Path(__file__).resolve().parent.parent / "LeanMlir/Proofs/Certificates"
+CHUNK_OUT = str(CERTS / "SmoothingDecChunk{c}.lean")
+OUT = CERTS / "SmoothingDecScorecard.lean"
 
 
 # ── exact mirror of the SmoothingPhiBounds.lean kernel functions ──
@@ -217,7 +219,7 @@ def main() -> None:
             acc = f"phiChunkLit{c} ++ ({acc}).tail"
         C.append("")
         C.append("end Proofs")
-        Path(CHUNK_OUT.format(c=c)).write_text("\n".join(C) + "\n")
+        _gencheck.emit(CHUNK_OUT.format(c=c), "\n".join(C) + "\n")
 
     nums = [num_of(q) for q in reversed(scan)]
     # The 3300-entry list literal is the one declaration past the default recursion depth.
@@ -275,8 +277,8 @@ def main() -> None:
                 L.append(f"{prefix}{chunk}{suffix}")
         L.append("")
     L.append("end Proofs")
-    OUT.write_text("\n".join(L) + "\n")
-    print(f"wrote {OUT}")
+    _gencheck.emit(OUT, "\n".join(L) + "\n")
+    _gencheck.finish()
 
 
 if __name__ == "__main__":

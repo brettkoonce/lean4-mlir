@@ -20,6 +20,9 @@ Neg-elaboration tax.
 
 Also runs L2-PGD (empirical, not proof) on both nets at both eps for the
 cert <= TRUE <= PGD sandwich.
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import hashlib
 import inspect

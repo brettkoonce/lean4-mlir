@@ -1,3 +1,5 @@
+# Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+# does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 import numpy as np, os, struct, tempfile
 from fractions import Fraction
 from math import ceil

@@ -19,6 +19,9 @@ L can never prove an image UNcertifiable.
 
 Also runs an L2-PGD attack (empirical, not proof) on both quantized nets for
 the cert <= TRUE <= PGD sandwich table.
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import numpy as np, os, struct
 from fractions import Fraction

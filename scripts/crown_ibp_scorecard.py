@@ -23,6 +23,9 @@ Reuse (nothing re-derived):
 Rational sizes: the upper-envelope slope is rounded UP to a /2^8 grid, which
 crown_ibp_probe.py measures as costing zero images. Coefficients therefore live
 at /2^16 and A at /2^24 -- nowhere near the LipSDP tier's ~230-digit regime.
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import os
 import re

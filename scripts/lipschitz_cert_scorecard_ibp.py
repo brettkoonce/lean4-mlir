@@ -21,6 +21,9 @@ reuse — the per-row l1 facts (`absr*`, `absrow*`) for both nets and the fallba
 images the capped base doesn't carry — and the two certificate modules import
 only it. The CROWN scorecards import it too, so none of the four waits on
 another's certificates.
+
+Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
+does not have. Regenerate by hand and confirm the committed Lean comes back byte-identical.
 """
 import inspect
 import numpy as np
