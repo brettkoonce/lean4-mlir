@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # ViT-Tiny train step rendered from the verified AST (the §1 render) — FORWARD portion
 
@@ -589,54 +590,6 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
 -- § The certified AdamW train step (handoff §2a-quinquies follow-on, step 2b)
 -- ════════════════════════════════════════════════════════════════
 
-/-- `(θ', m', v')` for one parameter from its un-fused gradient — the proven
-    `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
-    into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
-    runtime `tensor<f32>` args, so one render serves the whole cosine+warmup schedule. Mirrors
-    `ResNet34RenderB.optOne`, minus the replica collective (ViT has no DP render yet). -/
-private def vitAdamOne (bs : Nat) (nm : String) (ds : List Nat) (gradSSA : String) (replicas : Nat)
-    (ema : Bool := false) (wdName : String := "%wd") (preAvg : Bool := false) :
-    StateM Proofs.StableHLO.EmitS (String × String × String × String × String) := do
-  let n := ds.foldl (· * ·) 1
-  let z : Vec n := fun _ => 0
-  -- ⚠ `preAvg` says the caller has ALREADY averaged (and clipped) this gradient, so the collective
-  -- must not be emitted a second time. It exists because **under data parallelism the clip has to
-  -- come AFTER the `all_reduce`**: the reference clips the whole, already-combined gradient, so
-  -- clipping per replica clips 200 PARTIAL gradients — a different function that compiles, trains,
-  -- descends, and that no structural check sees (`planning/archive/grad_clip.md` §4). The clip needs every
-  -- gradient at once, and this op is per parameter, so at `clip := true` the caller hoists both the
-  -- collective and the clip above the loop and passes the result here.
-  let replicas := if preAvg then 1 else replicas
-  -- At `replicas > 1` the gradient is averaged across devices first, by `prettyAllReduceMean` —
-  -- `pretty` of the `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean
-  -- of the per-replica gradient nodes. Until then this was `ViTRender.emitGradAllReduce`, emitted
-  -- text and a declared TRUSTED CARVE-OUT outside every faithfulness theorem; the node re-emits
-  -- that text verbatim. The `den` side does not shift: the AdamW triple consumes the averaged
-  -- gradient as an `.operand` just as it consumed the raw one. What stays trusted is the lowerer's
-  -- `all_reduce`, as every op's lowering is. At `replicas ≤ 1` this emits NOTHING, which is the cheap self-check that the
-  -- insertion is inert (the single-device render re-renders byte-identical).
-  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
-  let (cA, nT, nM, nV) ← prettyAdamW bs nm ds gAvg wdName
-  -- ▶ THE EMA SHADOW, and as on ConvNeXt/EfficientNet it needs NO new op:
-  -- `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the reference's `ema_update`
-  -- (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so `adamMNextF` renders it and
-  -- `adamMNextF_faithful` closes the denotation side by `rfl`. Fourth net, same reading.
-  --
-  -- ⚠ It consumes `nT`, the UPDATED parameter, not the gradient — the shadow averages WEIGHTS. It
-  -- therefore sits downstream of the whole AdamW triple, and (at `replicas > 1`) downstream of the
-  -- collective, which is why the shadow and the all_reduce cannot interact.
-  -- ⚠ `%emad`/`%oemad` are function ARGS, not constants, because the reference's decay is
-  -- TIME-VARYING: `d = min(decay, (1+t)/(10+t))`, TF's warmup-corrected form. `planning/archive/ema.md` §2
-  -- has the reference's own measurement of dropping it — a shadow holding 12.8% of the random init
-  -- and scoring 0.00% top-1 while the live weights scored 70.48%.
-  --
-  -- At `ema := false` NO `pretty` call happens, so the fresh-name counter does not move and all
-  -- TEN committed `vit*`/`vitin*` artifacts re-render byte-identically. Gate 1's strong form, free.
-  let (cE, nE) ← if ema then
-      pretty bs (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
-    else pure ("", "")
-  pure (arS ++ cA ++ cE, nT, nM, nV, nE)
-
 /-- The driver's **variant slug** for a (per-device batch, replica count, EMA) triple: the artifact
     is `verified_mlir/vit_<variant>_train_step.mlir`, the entry point is `@vit_<variant>_train_step`
     and `LEAN_MLIR_VARIANT=<variant>` selects it at run time.
@@ -769,7 +722,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     -- ⚠⚠ THE ORDER IS THE SEMANTICS, TWICE OVER:
     --   1. the norm is GLOBAL — one scalar folded from every parameter, so the fold must run to
     --      completion before any parameter is scaled. That is why it is hoisted out of the loop.
-    --   2. under DP the clip goes AFTER the `all_reduce`. `vitAdamOne` normally emits the collective
+    --   2. under DP the clip goes AFTER the `all_reduce`. `adamOneEma` normally emits the collective
     --      per parameter, which is downstream of where the clip has to be, so at `clip := true`
     --      the collective is hoisted here too and the loop is told (`preAvg`) not to repeat it.
     --
@@ -825,7 +778,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
       -- and nothing in the arity, the types or the prefix audit would notice.
       let wdN := if wdExclude && !vitWdDecays nm ds then "%wdz" else "%wd"
       let gSSA := if clip then clipped[i]! else gradNames[i]!
-      let (c, nT, nM, nV, nE) ← vitAdamOne bs nm ds gSSA replicas ema wdN clip
+      let (c, nT, nM, nV, nE) ← adamOneEma bs replicas ⟨nm, gSSA, ds⟩ ema wdN clip
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]

@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.SyncBnSites
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # EfficientNet-B0 train step rendered ENTIRELY from the verified AST (batched)
 
@@ -1060,64 +1061,6 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
 -- § The AdamW tail — one proven triple per parameter, folded in signature order
 -- ════════════════════════════════════════════════════════════════
 
-/-- `(θ', m', v')` for one parameter, from its un-fused gradient. The three ops are the proven
-    `adamMNextF`/`adamVNextF`/`adamWParamF` (`adamW_triple_faithful` bundles their `den`s into
-    `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are runtime
-    `tensor<f32>` args, so one render serves the whole cosine+warmup schedule.
-
-    At `replicas > 1` the gradient is first averaged across devices by
-    `prettyAllReduceMean` — `pretty` of the `allReduceMeanF` node (4d piece 2, 2026-09-07), whose
-    `den` is the replica mean of the per-replica gradient nodes (`DataParallelNode.lean`). Until
-    then it was `ViTRender.emitGradAllReduce`, emitted text outside every faithfulness theorem and
-    a declared TRUSTED CARVE-OUT; the node re-emits that text verbatim, so the committed `*dp*`
-    artifacts did not move. The AdamW triple consumes the averaged gradient as an `.operand`
-    exactly as it consumed the raw one. What stays trusted is the lowerer's `all_reduce`, as every
-    op's lowering is.
-
-    At `replicas ≤ 1` this emits **nothing** and threads the raw gradient, so the single-device
-    render stays byte-identical — the cheap self-check that the insertion is inert.
-
-    Mirrors `ResNet34RenderB.optOne` and `ViTRender.vitAdamOne`. -/
-private def enetAdamOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
-    (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
-  let (c, nT, nM, nV) ← prettyAdamW B nm ds gAvg
-  pure (arS ++ c, nT, nM, nV)
-
-/-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `enetAdamOne` peer, and
-    the same four-op composition `MobileNetV2RenderB.rmsOneM` uses:
-
-    | reference ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), `.rmsprop`) | emitted here |
-    |---|---|
-    | `grads = g + WD * p` | `momVNextF` at `(μ := wd, v := θ)` — `Proofs.momVNext_as_coupled_l2` |
-    | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ`** — `Proofs.rmsSqNext_eq_adamVNext` |
-    | `buf = MOMENTUM*b + g/sqrt(sq+EPS)` | `rmsBufNextF` — ε INSIDE the root |
-    | `params = p - lr*buf` | `sgdParamF` on the buffer's SSA |
-
-    ⚠ **EfficientNet's ε is 1e-3, where MobileNetV2's is 1.0** — and that is the placement's
-    sensitive end: at a collapsed mean-square the textbook spelling takes a step **31.6×** larger
-    (`Proofs.rmsBufNext_eps_placement_at_zero`). The JAX config says this in as many words —
-    *"vanilla diverges/erodes at the paper LR, the TF form trains stably"* — and it is why the
-    reference could drop its gradient clipping. **A green mnv2 tie does not license this render**;
-    `rms-tie efficientnet` is its own gate.
-
-    Slots: packed `[θ|m|v]` reused with `m` = momentum buffer, `v` = mean-square, so the interface
-    is byte-identical to the AdamW render's apart from the entry name and `%bc1`/`%bc2` ride
-    through unread. -/
-private def enetRmsOne (B : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
-    (replicas : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let n := ds.foldl (· * ·) 1
-  let z : Vec n := fun _ => 0
-  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
-  let (cW, nW) ← pretty B (.momVNextF s!"%{nm}" "%wd" ds 0 z (.operand gAvg z))
-  let gr : SHlo n := .operand nW z
-  let (cS, nS) ← pretty B (.adamVNextF s!"%{nm}v" "%rho" "%orho" ds 0 z gr)
-  let (cB, nB) ← pretty B (.rmsBufNextF s!"%{nm}v" s!"%{nm}m" "%rho" "%orho" "%mu" "%eps"
-                    ds 0 0 0 z z gr)
-  -- θ' threads b' by SSA NAME, not by re-nesting: `pretty` has no CSE (§4).
-  let (cT, nT) ← pretty B (.sgdParamF s!"%{nm}" "%lr" ds 0 z (.operand nB z))
-  pure (arS ++ cW ++ cS ++ cB ++ cT, nT, nB, nS)
-
 /-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
     `verified_mlir/efficientnet_<variant>_train_step.mlir`, the entry point is
     `@efficientnet_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it.
@@ -1269,8 +1212,8 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     for i in [0:sigList.length] do
       let (nm, ds) := sigList[i]!
       let (c, nT, nM, nV) ← match opt with
-        | .adamw   => enetAdamOne B nm ds (gradNames[i]!) replicas
-        | .rmsprop => enetRmsOne  B nm ds (gradNames[i]!) replicas
+        | .adamw   => adamOne B replicas ⟨nm, gradNames[i]!, ds⟩
+        | .rmsprop => rmsOne  B replicas ⟨nm, gradNames[i]!, ds⟩
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       -- ▶ THE EMA SHADOW (`planning/archive/ema.md`), emitted HERE rather than inside the two `*One`

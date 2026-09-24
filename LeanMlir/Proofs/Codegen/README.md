@@ -9,6 +9,7 @@ its text is `pretty` of an `SHlo` term. The theorems about what that term *means
 | `StableHLO.lean` | the `SHlo` AST, `den` (its ℝ semantics), the per-op `*_faithful` lemmas, the printer (`skel` → `Tok` → `emitTok` → `pretty`), the chapter 1–3 graphs. Header has a table of contents |
 | `StableHLOLex.lean`, `StableHLOParse.lean` | the syntactic round-trip (`parse (lex (pretty g)) = some (skel g)`) |
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
+| `RenderKit.lean` | the renderers' shared optimizer tail: `PGrad` and the per-parameter steps `adamOne`, `rmsOne`, `adamOneEma` (ResNet's multi-optimizer `optOne` stays in `ResNet34RenderB`) |
 | `MlpRender`, `CnnRender` | chapter 2–4 train steps (MLP, MNIST CNN, CIFAR, the cifar8 family) |
 | `MlpArtifacts`, `CnnArtifacts` | their `#eval` artifact writers — leaf modules, imported by nothing, so building a proof never rewrites `verified_mlir/` |
 | `ResNet34RenderB`, `ResNet50RenderB`, `MobileNetV2RenderB`, `MobileNetV4RenderB`, `EfficientNetRender`, `ConvNeXtRender(B)`, `ViTRender(B)` | per-net ImageNet/Imagenette train steps (batched index, batch BN) |

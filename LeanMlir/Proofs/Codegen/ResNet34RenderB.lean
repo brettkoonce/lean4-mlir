@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.SyncBnSites
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # ResNet-34 AdamW train step rendered from the verified AST, at the BATCHED index
 
@@ -296,14 +297,6 @@ def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
-
-/-- A trainable parameter: emitted name (no `%`), gradient SSA name, and shape. The AdamW tail is
-    a fold over this list, so the θ/m/v output order cannot drift from the signature order. -/
-structure PGrad where
-  nm   : String          -- parameter name without `%` (`%{nm}`, `%{nm}m`, `%{nm}v` are the args)
-  grad : String          -- SSA name of its un-fused gradient
-  ds   : List Nat        -- parameter shape, for the emitted Adam ops
-deriving Inhabited
 
 /-- Saved forward SSA names a block's backward + gradient passes reference. -/
 structure BFwdB where
@@ -610,7 +603,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- once while this function is per parameter, and under DP the clip must come AFTER the
     -- `all_reduce` (the reference clips the combined gradient; clipping per replica clips 161
     -- PARTIAL gradients — a different function that still trains and still descends). So at
-    -- `gradClip := true` the caller hoists both and sets this. `ConvNeXtRender.convnextAdamOne`
+    -- `gradClip := true` the caller hoists both and sets this. `RenderKit.adamOneEma`
     -- carries the identical flag for the identical reason; `planning/archive/grad_clip.md` §4.
     -- ⭐ It needs no interface change beyond the flag: `emitGradAllReduce` at `replicas ≤ 1` emits
     -- NOTHING and threads its input name straight through, so forcing 1 here is exactly "skip it".
@@ -638,7 +631,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- at `(b := %emad, ob := %oemad, m := e, g := θ')` denotes exactly the exponential moving
     -- average, which is the same reading `.adamwAccum`'s accumulator takes of `momVNextF`. So the
     -- faithfulness theorems carry over untouched and this costs none of the ten-site surgery an
-    -- added op does. `ViTRender.vitAdamOne` has emitted the identical line since `ema.md`.
+    -- added op does. `RenderKit.adamOneEma` has emitted the identical line since `ema.md`.
     --
     -- ⚠⚠ **IT READS `nT`, THE UPDATED PARAMETER — NOT `%<p>`.** The reference EMAs the weights
     -- AFTER the optimizer moves them (`ema_params = ema_update(ema_params, params, step)` follows

@@ -1052,7 +1052,7 @@ end Proofs.StableHLO
 -- The **DATA-PARALLEL** render (handoff §2h-quater), selected at run time by
 -- `LEAN_MLIR_VARIANT=adamdp`. ConvNeXt was the last large net with no DP path at all — its renderer
 -- took no `replicas` and emitted no collective, so unlike mnv2's (§2h-bis, one `#eval`) this needed
--- the parameter threaded through `convnextAdamOne` first.
+-- the parameter threaded through `adamOneEma` first.
 --
 -- Same graph, plus one `all_reduce(add)/N` per parameter gradient between the certified gradient
 -- and the certified AdamW triple: *certified gradient → trusted collective → certified AdamW*. The

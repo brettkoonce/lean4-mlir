@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Foundation.IndexCast
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)
 
@@ -842,58 +843,6 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
 -- § The AdamW tail — one proven triple per parameter, folded in signature order
 -- ════════════════════════════════════════════════════════════════
 
-/-- `(θ', m', v')` for one parameter from its un-fused gradient — the proven
-    `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
-    into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked literals; `%lr`/`%bc1`/`%bc2` are
-    runtime `tensor<f32>` args, so one render serves the whole schedule. Mirrors
-    `ResNet34RenderB.optOne` / `MobileNetV2RenderB.adamOneM`.
-
-    At `replicas > 1` the gradient is first averaged by `prettyAllReduceMean` — `pretty` of the
-    `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean of the
-    per-replica gradient nodes; until then `ViTRender.emitGradAllReduce`, emitted text and a
-    declared carve-out, which the node re-emits verbatim. The AdamW triple consumes the averaged
-    gradient as an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
-    `replicas ≤ 1` this emits nothing and threads the raw gradient, so the single-device render
-    stays byte-identical — the cheap self-check that the insertion is inert.
-
-    ⚠ **A claim this docstring carried is now FALSE and is retired.** It said *"ConvNeXt is the
-    first net whose collectives include RANK-0 operands — its 44 scalar LayerNorm γ/β params have
-    `ds = []`"*. That was true of the scalar-LN render; §2m's channel LN makes every LN γ/β a
-    `Vec c`, so **0 of the 180 collectives are rank-0** (measured on the re-rendered artifact:
-    the LN ones are `tensor<96xf32>` … `tensor<768xf32>`). The rank-0 `all_reduce` path this
-    render used to be the only exerciser of is no longer exercised anywhere in the repo. -/
-private def convnextAdamOne (cBS : Nat) (replicas : Nat) (nm : String) (ds : List Nat) (gradSSA : String)
-    (ema : Bool := false) (wdName : String := "%wd") (preAvg : Bool := false) :
-    StateM Proofs.StableHLO.EmitS (String × String × String × String × String) := do
-  let n := ds.foldl (· * ·) 1
-  let z : Vec n := fun _ => 0
-  -- ⚠ `preAvg` — the caller has already averaged AND clipped this gradient, so the collective must
-  -- not be emitted twice. Under DP the clip must come AFTER the `all_reduce` (the reference clips
-  -- the combined gradient; clipping per replica clips 180 PARTIAL gradients, a different function
-  -- that trains and descends), and the clip needs every gradient at once while this op is per
-  -- parameter — so at `clip := true` the caller hoists both. `planning/archive/grad_clip.md` §4.
-  let replicas := if preAvg then 1 else replicas
-  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean gradSSA ds nm replicas
-  let (cA, nT, nM, nV) ← prettyAdamW cBS nm ds gAvg wdName
-  -- ▶ THE EMA SHADOW, and it needs NO new op: `Proofs.adamMNext β₁ m g = β₁·m + (1−β₁)·g` IS the
-  -- reference's `ema_update` (`jax/Jax/Codegen.lean:2459`) at `(β₁ := d, m := ema, g := θ')`, so
-  -- `adamMNextF` renders it and `adamMNextF_faithful` closes the denotation side by `rfl`. Third
-  -- time this reading has paid — `momVNextF` at `(μ := wd, v := θ)` is the coupled L2 (§2k) and
-  -- `adamVNextF` at `β₂ := ρ` is RMSProp's mean-square (recipe_gaps v1.2).
-  --
-  -- ⚠ It consumes `nT`, the UPDATED parameter, not the gradient — the shadow averages weights.
-  -- ⚠ `%emad`/`%oemad` are function ARGS, not constants, because the reference's decay is
-  -- TIME-VARYING: `d = min(decay, (1+t)/(10+t))`, TF's warmup-corrected form. That correction is
-  -- required at our scale rather than optional — see `planning/archive/ema.md` §2, where the reference's
-  -- own measurement has a shadow holding 12.8% of the random init and scoring 0.00% top-1.
-  --
-  -- At `ema := false` NO `pretty` call happens, so the fresh-name counter does not move and every
-  -- committed artifact re-renders byte-identically. That is gate 1 in its strong form, for free.
-  let (cE, nE) ← if ema then
-      pretty cBS (.adamMNextF s!"%{nm}e" "%emad" "%oemad" ds 0 z (.operand nT z))
-    else pure ("", "")
-  pure (arS ++ cA ++ cE, nT, nM, nV, nE)
-
 /-- The driver's **variant slug** for a given replica count: the artifact is
     `verified_mlir/convnext_<variant>_train_step.mlir`, the entry point is
     `@convnext_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it. All three must agree —
@@ -987,7 +936,7 @@ set_option maxRecDepth 8000 in
     and artifact path via `cnxAdamVariant`, so producing it can never clobber the one the trainer
     runs. The only difference is one `all_reduce(add)/N` per parameter gradient, between the
     certified gradient and the certified AdamW triple: *certified gradient → trusted collective →
-    certified AdamW*. See `convnextAdamOne` for the carve-out. -/
+    certified AdamW*. See `adamOneEma` for the carve-out. -/
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false)
@@ -1090,7 +1039,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
       let g := if clip then (clipped.lookup nm).getD g0 else g0
       -- The wd operand comes from the SAME `allParams` entry that names the site (§2e's slot rule).
       let wdN := if wdExclude && !cnxWdDecays nm ds then "%wdz" else "%wd"
-      let (c, nT, nM, nV, nE) ← convnextAdamOne cBS replicas nm ds g ema wdN clip
+      let (c, nT, nM, nV, nE) ← adamOneEma cBS replicas ⟨nm, g, ds⟩ ema wdN clip
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       if ema then eN := eN ++ [nE]

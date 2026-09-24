@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.SyncBnSites
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/archive/mnv4_verified.md` phase 3)
 
@@ -582,21 +583,12 @@ def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
 --    because the UIB bottleneck is LINEAR — no activation after project, none after the skip add)
 -- ════════════════════════════════════════════════════════════════
 
-/-- A trainable parameter: emitted name (no `%`), its un-fused gradient SSA name, and its shape.
-    The AdamW tail is a fold over this list, so the θ/m/v output order cannot drift from the
-    signature order. (`MobileNetV2RenderB`/`ResNet34RenderB` carry same-shaped peers.) -/
-private structure PGradV4 where
-  nm   : String
-  grad : String
-  ds   : List Nat
-deriving Inhabited
-
 /-- Backward result: code, the dx cotangent to the previous block, and the block's parameter
     gradients in func-arg order. -/
 private structure UibBackB where
   code : String
   dx : String
-  ps : List PGradV4
+  ps : List PGrad
 
 /-- Pair a block's `uibSig`/`fusedSig` slice with the gradient SSA names its backward produced, in
     the same order.
@@ -606,7 +598,7 @@ private structure UibBackB where
     the list the func header is built from is literally the list the AdamW tail folds over, so a
     parameter cannot be one shape in the signature and another in the optimizer. The `k = 0`
     dispatch is then written once, in `uibSig`, instead of once per family per direction. -/
-private def zipPs (sig : List (String × List Nat)) (grads : List String) : List PGradV4 :=
+private def zipPs (sig : List (String × List Nat)) (grads : List String) : List PGrad :=
   -- `nm` is the emitted name WITHOUT the leading `%`, because the AdamW tail spells `%{nm}m` /
   -- `%{nm}v` off it. (`String.drop` returns a `String.Slice` on this toolchain.)
   (sig.zip grads).map (fun ((n, ds), g) => ⟨String.ofList n.toList.tail, g, ds⟩)
@@ -911,23 +903,6 @@ private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
 -- § The AdamW tail — one proven triple per parameter, folded in signature order
 -- ════════════════════════════════════════════════════════════════
 
-/-- `(θ', m', v')` for one parameter, from its un-fused gradient: the proven
-    `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
-    into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked; `%lr`/`%bc1`/`%bc2` are runtime
-    `tensor<f32>` args, so one render serves a whole LR schedule.
-
-    At `replicas > 1` the gradient is first averaged by `prettyAllReduceMean` — `pretty` of the
-    `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean of the
-    per-replica gradient nodes; until then `ViTRender.emitGradAllReduce`, emitted text and a
-    declared carve-out, re-emitted verbatim; the AdamW triple consumes the averaged gradient as an
-    `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
-    `replicas ≤ 1` it emits nothing and the single-device render stays byte-identical. -/
-private def adamOne4 (B : Nat) (replicas : Nat) (g : PGradV4) :
-    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
-  let (c, nT, nM, nV) ← prettyAdamW B g.nm g.ds gAvg
-  pure (arS ++ c, nT, nM, nV)
-
 /-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
     `verified_mlir/mnv4_<variant>_train_step.mlir`, the entry point is
     `@mnv4_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it. All three must agree — the
@@ -1047,7 +1022,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     forward used, so a family can never be differentiated as a different family ═══
     let mut dy := nDh1x
     let mut gcode := ""
-    let mut blockPs : List (List PGradV4) := []
+    let mut blockPs : List (List PGrad) := []
     for (b, f, xin) in (mnv4Blocks.zip (fwd.blocks.zip fwd.inputs)).reverse.map
         (fun (b, f, xin) => (b, f, xin)) do
       let g ← uibBackDispatch B b epsStr xin f dy bf16 replicas sync
@@ -1111,20 +1086,20 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cQh1, qh1) ← bnStat 960 7 nH1c fwd.h1st
     let (cQh, qh) ← bnStat 1280 7 nHc fwd.hst
     -- ═══ the 233 parameter gradients in func-arg order ═══
-    let stemPs : List PGradV4 :=
+    let stemPs : List PGrad :=
       [⟨"sW", nsW, [32,3,3,3]⟩, ⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
-    let headPs : List PGradV4 :=
+    let headPs : List PGrad :=
       [⟨"h1W", nH1W, [960,256,1,1]⟩, ⟨"h1g", nH1g, [960]⟩, ⟨"h1bt", nH1t, [960]⟩,
        ⟨"hW", nHW, [1280,960,1,1]⟩, ⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
        ⟨"Wd", nWdg, [1280, nClasses]⟩, ⟨"bd", nbdg, [nClasses]⟩]
-    let allPs : List PGradV4 := stemPs ++ g0.ps ++ blockPs.flatten ++ headPs
+    let allPs : List PGrad := stemPs ++ g0.ps ++ blockPs.flatten ++ headPs
     -- ═══ AdamW: one proven triple per parameter ═══
     let mut adamCode := ""
     let mut thetaN : List String := []
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
-      let (c, nT, nM, nV) ← adamOne4 B replicas g
+      let (c, nT, nM, nV) ← adamOne B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]

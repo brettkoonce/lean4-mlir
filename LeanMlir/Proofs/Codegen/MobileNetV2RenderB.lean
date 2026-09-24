@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Codegen.SyncBnSites
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # MobileNetV2 rendered from the verified AST, at the BATCHED index — the SOLE renderer
 
@@ -54,15 +55,6 @@ open Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-/-- A trainable parameter: emitted name (no `%`), its un-fused gradient SSA name, and its shape.
-    The AdamW tail is a fold over this list, so the θ/m/v output order cannot drift from the
-    signature order. (Field-for-field the same as `ResNet34RenderB`'s `PGrad`.) -/
-structure PGradM where
-  nm   : String
-  grad : String
-  ds   : List Nat
-deriving Inhabited
-
 /-- Saved forward SSA names a block's backward + gradient passes reference. `ec`/`en`/`er` are the
     block input for the no-expand block (b1), which has no expand conv. -/
 structure MBFwdB where
@@ -87,7 +79,7 @@ deriving Inhabited
 structure MBBackB where
   code : String
   dx : String
-  ps : List PGradM
+  ps : List PGrad
 
 -- ════════════════════════════════════════════════════════════════
 -- § Block forward (batch BN), all at `N := B`
@@ -493,58 +485,6 @@ def mnv2StatSigList : List (String × String) :=
 -- § The AdamW tail — one proven triple per parameter, folded in signature order
 -- ════════════════════════════════════════════════════════════════
 
-/-- `(θ', m', v')` for one parameter, from its un-fused gradient: the proven
-    `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`adamW_triple_faithful` bundles their `den`s
-    into `Proofs.adamWStep` by `rfl`). β₁/β₂/ε/wd are baked; `%lr`/`%bc1`/`%bc2` are runtime
-    `tensor<f32>` args, so one render serves a whole LR schedule.
-
-    At `replicas > 1` the gradient is first averaged by `prettyAllReduceMean` — `pretty` of the
-    `allReduceMeanF` node (4d piece 2, 2026-09-07), whose `den` is the replica mean of the
-    per-replica gradient nodes; until then `ViTRender.emitGradAllReduce`, emitted text and a
-    declared carve-out, which the node re-emits verbatim. The AdamW triple consumes the averaged
-    gradient as an `.operand` exactly as it consumed the raw one, so the `den` side does not shift. At
-    `replicas ≤ 1` this emits nothing and threads the raw gradient, so the single-device render
-    stays byte-identical — the cheap self-check that the insertion is inert. -/
-private def adamOneM (B : Nat) (replicas : Nat) (g : PGradM) :
-    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
-  let (c, nT, nM, nV) ← prettyAdamW B g.nm g.ds gAvg
-  pure (arS ++ c, nT, nM, nV)
-
-/-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `adamOneM` peer.
-
-    Only ONE of the four ops is new. Reading the reference
-    ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), the `.rmsprop` branch) top to bottom:
-
-    | reference line | emitted here |
-    |---|---|
-    | `grads = g + WD * p` | `momVNextF` at `(μ := wd, v := θ)` — `Proofs.momVNext_as_coupled_l2` |
-    | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ`** — `Proofs.rmsSqNext_eq_adamVNext` |
-    | `buf = MOMENTUM*b + g/sqrt(sq+EPS)` | `rmsBufNextF` — the new op, ε INSIDE the root |
-    | `params = p - lr*buf` | `sgdParamF` on the buffer's SSA |
-
-    ⚠ **The weight decay is COUPLED and goes FIRST**, so the accumulator sees the decayed gradient.
-    Reversing that order — decaying after the accumulator, AdamW-style — is a different optimizer
-    and would not show up as an arity or type error anywhere.
-
-    Slot mapping: the packed `[θ|m|v]` signature is reused verbatim with **`m` carrying the
-    momentum buffer and `v` the running mean-square**, the same slot reinterpretation the Nesterov
-    render does for its velocity. That is why the driver and the interface do not move. -/
-private def rmsOneM (B : Nat) (replicas : Nat) (g : PGradM) :
-    StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
-  let n := g.ds.foldl (· * ·) 1
-  let z : Vec n := fun _ => 0
-  let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
-  let (cW, nW) ← pretty B (.momVNextF s!"%{g.nm}" "%wd" g.ds 0 z (.operand gAvg z))
-  let gr : SHlo n := .operand nW z
-  let (cS, nS) ← pretty B (.adamVNextF s!"%{g.nm}v" "%rho" "%orho" g.ds 0 z gr)
-  let (cB, nB) ← pretty B (.rmsBufNextF s!"%{g.nm}v" s!"%{g.nm}m" "%rho" "%orho" "%mu" "%eps"
-                    g.ds 0 0 0 z z gr)
-  -- θ' threads b' by SSA NAME, not by re-nesting `rmsBufNextF` inside `sgdParamF`: `pretty` has no
-  -- CSE (§4), so re-nesting would emit the whole 13-op buffer block a second time.
-  let (cT, nT) ← pretty B (.sgdParamF s!"%{g.nm}" "%lr" g.ds 0 z (.operand nB z))
-  pure (arS ++ cW ++ cS ++ cB ++ cT, nT, nB, nS)
-
 /-- The driver's **variant slug** for a given `(B, replicas)`: the artifact is
     `verified_mlir/mobilenetv2_<variant>_train_step.mlir`, the entry point is
     `@mobilenetv2_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it. All three must agree —
@@ -870,14 +810,14 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cQ17, q17) ← blkStats1 960 320  7 f17
     let (cQh, mh, vh) ← bnStat 1280 7 nHc F.hst
     -- ═══ the 210 parameter gradients in func-arg order ═══
-    let stemPs : List PGradM :=
+    let stemPs : List PGrad :=
       [⟨"sW", nsW, [32,3,3,3]⟩] ++ (if convBias then [⟨"sb", nsb, [32]⟩] else []) ++
       [⟨"sg", nsg, [32]⟩, ⟨"sbt", nst, [32]⟩]
-    let headPs : List PGradM :=
+    let headPs : List PGrad :=
       [⟨"hW", nHW, [1280,320,1,1]⟩] ++ (if convBias then [⟨"hb", nHb, [1280]⟩] else []) ++
       [⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
        ⟨"Wd", nWdg, [1280, nClasses]⟩, ⟨"bd", nbdg, [nClasses]⟩]
-    let allPs : List PGradM := stemPs ++
+    let allPs : List PGrad := stemPs ++
       b1.ps ++ b2.ps ++ b3.ps ++ b4.ps ++ b5.ps ++ b6.ps ++ b7.ps ++ b8.ps ++ b9.ps ++
       b10.ps ++ b11.ps ++ b12.ps ++ b13.ps ++ b14.ps ++ b15.ps ++ b16.ps ++ b17.ps ++ headPs
     -- ═══ AdamW: one proven triple per parameter ═══
@@ -887,8 +827,8 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut vNames : List String := []
     for g in allPs do
       let (c, nT, nM, nV) ← match opt with
-        | .adamw   => adamOneM B replicas g
-        | .rmsprop => rmsOneM  B replicas g
+        | .adamw   => adamOne B replicas g
+        | .rmsprop => rmsOne  B replicas g
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
