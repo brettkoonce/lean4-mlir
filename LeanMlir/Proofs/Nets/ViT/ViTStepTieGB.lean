@@ -59,6 +59,8 @@ namespace Proofs.ViTTiePoCGB
 
 open scoped BigOperators
 open Proofs.ViTTiePoC (vitBlockFwdOMHV vitBlockCotInAtMHV ViTTieWeights)
+open Proofs.ViTPoCGB (rowDenseBTiedB_holds rowDenseWTiedB_holds vecLNBetaTiedB_holds
+  vecLNGammaTiedB_holds)
 
 /-! ## Per-example saves and internal cotangents as functions of a block's INPUT
 
@@ -229,24 +231,10 @@ theorem vit_block_tiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : 
     vitBlockTiedGB N xN epsStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 bfc2
       xin dyOut := by
   unfold vitBlockTiedGB
-  intro ln1B attB hB ln2B gB cotLn1B dQB dKB dVB cotHB cotLn2B cotM1B
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro kk; exact ViTPoCGB.veclnGammaGradB_den xN epsStr cotN ε β1 xin γ1 cotLn1B kk
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den_lnbeta cotN ε γ1 (fun n => Mat.unflatten (batchSlice N (Np1 * (heads * d)) xin n)) β1 cotLn1B i
-  · intro i j; exact ViTPoCGB.rowDenseWeightGradB_den xN cotN bq ln1B Wq dQB i j
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den cotN Wq (fun n => Mat.unflatten (batchSlice N (Np1 * (heads * d)) ln1B n)) bq dQB i
-  · intro i j; exact ViTPoCGB.rowDenseWeightGradB_den xN cotN bk ln1B Wk dKB i j
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den cotN Wk (fun n => Mat.unflatten (batchSlice N (Np1 * (heads * d)) ln1B n)) bk dKB i
-  · intro i j; exact ViTPoCGB.rowDenseWeightGradB_den xN cotN bv ln1B Wv dVB i j
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den cotN Wv (fun n => Mat.unflatten (batchSlice N (Np1 * (heads * d)) ln1B n)) bv dVB i
-  · intro i j; exact ViTPoCGB.rowDenseWeightGradB_den xN cotN bo attB Wo cotHB i j
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den cotN Wo (fun n => Mat.unflatten (batchSlice N (Np1 * (heads * d)) attB n)) bo cotHB i
-  · intro kk; exact ViTPoCGB.veclnGammaGradB_den xN epsStr cotN ε β2 hB γ2 cotLn2B kk
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den_lnbeta cotN ε γ2 (fun n => Mat.unflatten (batchSlice N (Np1 * (heads * d)) hB n)) β2 cotLn2B i
-  · intro i j; exact ViTPoCGB.rowDenseWeightGradB_den xN cotN bfc1 ln2B Wfc1 cotM1B i j
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den cotN Wfc1 (fun n => Mat.unflatten (batchSlice N (Np1 * (heads * d)) ln2B n)) bfc1 cotM1B i
-  · intro i j; exact ViTPoCGB.rowDenseWeightGradB_den xN cotN bfc2 gB Wfc2 dyOut i j
-  · intro i; exact ViTPoCGB.rowDenseBiasGradB_den cotN Wfc2 (fun n => Mat.unflatten (batchSlice N (Np1 * mlpDim) gB n)) bfc2 dyOut i
+  exact ⟨vecLNGammaTiedB_holds, vecLNBetaTiedB_holds, rowDenseWTiedB_holds, rowDenseBTiedB_holds,
+    rowDenseWTiedB_holds, rowDenseBTiedB_holds, rowDenseWTiedB_holds, rowDenseBTiedB_holds,
+    rowDenseWTiedB_holds, rowDenseBTiedB_holds, vecLNGammaTiedB_holds, vecLNBetaTiedB_holds,
+    rowDenseWTiedB_holds, rowDenseBTiedB_holds, rowDenseWTiedB_holds, rowDenseBTiedB_holds⟩
 
 /-! ## Final LN, classifier and patch embedding — batched -/
 
@@ -265,7 +253,7 @@ theorem vit_finalLN_tiedGB (N : Nat) {nC : Nat} (xN epsStr cotN : String) (ε : 
   unfold vitFinalLNTiedGB
   intro cotFlB
   refine ⟨?_, ?_⟩
-  · intro k; exact ViTPoCGB.veclnGammaGradB_den xN epsStr cotN ε βF b12out γF cotFlB k
+  · exact vecLNGammaTiedB_holds
   · intro i
     exact ViTPoCGB.rowDenseBiasGradB_den_lnbeta cotN ε γF
       (fun n => Mat.unflatten (batchSlice N (197 * 192) b12out n)) βF cotFlB i

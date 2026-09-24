@@ -85,6 +85,8 @@ open Proofs Proofs.StableHLO Proofs.IR Proofs.ResNet34TieB Proofs.EnetTiePoC
 namespace Proofs.Mnv4TieB
 
 open scoped BigOperators
+open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedWTiedB_holds convStridedXlaWTiedB_holds
+  convWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The ExtraDW block's cotangent chain — 13 of Conv-M's 21 rows
@@ -353,15 +355,8 @@ theorem mnv4_extradw_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) 
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     mnv4ExtraDWTiedB N s xN cotN vN epsStr p xin dyOut := by
   unfold mnv4ExtraDWTiedB
-  intro qr er dr qc ec dc pc cotQn cotQc cotEn cotEc cotDn cotDc cotPc
-  exact ⟨fun idx => EnetPoCG.depthwiseWGradB_den xN cotN p.bq xin p.Wq cotQc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.eq_ p.gq p.bq2 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN p.be qr p.We cotEc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ee p.ge p.be2 _ _,
-    fun idx => EnetPoCG.depthwiseWGradB_den xN cotN p.bd er p.Wd cotDc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ed p.gd p.bd2 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN p.bz dr p.Wz cotPc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ez p.gz p.bz2 _ _⟩
+  exact ⟨depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
+    depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 
 def mnv4ConvNeXtTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
@@ -397,13 +392,8 @@ theorem mnv4_convnext_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     mnv4ConvNeXtTiedB N s xN cotN vN epsStr p xin dyOut := by
   unfold mnv4ConvNeXtTiedB
-  intro qr er dr qc ec pc cotQn cotQc cotEn cotEc cotPc
-  exact ⟨fun idx => EnetPoCG.depthwiseWGradB_den xN cotN p.bq xin p.Wq cotQc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.eq_ p.gq p.bq2 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN p.be qr p.We cotEc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ee p.ge p.be2 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN p.bz dr p.Wz cotPc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ez p.gz p.bz2 _ _⟩
+  exact ⟨depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
+    convWTiedB_holds, bnPairTiedB_holds⟩
 
 
 def mnv4FfnTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
@@ -431,11 +421,7 @@ theorem mnv4_ffn_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p :
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     mnv4FfnTiedB N s xN cotN vN epsStr p xin dyOut := by
   unfold mnv4FfnTiedB
-  intro qr er dr ec pc cotEn cotEc cotPc
-  exact ⟨fun idx => ResNet34PoCB.convWGradB_den xN cotN p.be qr p.We cotEc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ee p.ge p.be2 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN p.bz dr p.Wz cotPc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ez p.gz p.bz2 _ _⟩
+  exact ⟨convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -499,15 +485,8 @@ theorem mnv4_prestrided_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : Strin
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     mnv4PreStridedTiedB N s xN cotN vN epsStr p xin dyOut := by
   unfold mnv4PreStridedTiedB
-  intro qr er dr qc ec dc pc cotQn cotQc cotEn cotEc cotDn cotDc cotPc
-  exact ⟨fun idx => EnetPoCG.depthwiseStridedWGradB_den xN cotN p.bq xin p.Wq cotQc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.eq_ p.gq p.bq2 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN p.be qr p.We cotEc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ee p.ge p.be2 _ _,
-    fun idx => EnetPoCG.depthwiseWGradB_den xN cotN p.bd er p.Wd cotDc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ed p.gd p.bd2 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN p.bz dr p.Wz cotPc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ez p.gz p.bz2 _ _⟩
+  exact ⟨depthwiseStridedWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
+    depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The stem, the fused stage and the head — the three non-UIB stages
@@ -554,9 +533,7 @@ theorem mnv4_stem_tiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : S
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) :
     mnv4StemTiedB N h w xN cotN vN epsStr Ws bs εs γs βs x dyStem := by
   unfold mnv4StemTiedB
-  intro sc cotN' cotC
-  exact ⟨fun idx => EnetPoCG.convStridedXlaWGradB_den xN cotN bs x Ws cotC idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εs γs βs _ _⟩
+  exact ⟨convStridedXlaWTiedB_holds, bnPairTiedB_holds⟩
 
 /-- Cotangent at the fused stage's project CONV output. ⭐ `dyF` reaches the project BN's γ/β
     unmasked — the fused stage ends in a BatchNorm with no activation. Feeds `%f0pW`. -/
@@ -627,11 +604,7 @@ theorem mnv4_fused_tiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyF : Vec (N * (oc * h * w))) :
     mnv4FusedTiedB N h w Wc bc εc γc βc Wp bp εp γp βp xN cotN vN epsStr xin dyF := by
   unfold mnv4FusedTiedB
-  intro sw fc pc cotN' cotC cotPc
-  exact ⟨fun idx => ResNet34PoCB.convStridedWGradB_den xN cotN bc xin Wc cotC idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εc γc βc _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN bp sw Wp cotPc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εp γp βp _ _⟩
+  exact ⟨convStridedWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 
 /-! ⭐ The head's GAP-and-dense tail is ResNet-34's, reused: `r34HeadCotBlk` is its certified
@@ -725,10 +698,10 @@ theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
     mnv4HeadTiedB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xN cotN vN epsStr xin g := by
   unfold mnv4HeadTiedB
   intro r1 r2 c1 c2 cotH1n cotH1c cotHn cotHc
-  exact ⟨fun idx => ResNet34PoCB.convWGradB_den xN cotN b1 xin W1 cotH1c idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN ε1 γ1 β1 _ _,
-    fun idx => ResNet34PoCB.convWGradB_den xN cotN b2 r1 W2 cotHc idx,
-    ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN ε2 γ2 β2 _ _,
+  exact ⟨convWTiedB_holds,
+    bnPairTiedB_holds,
+    convWTiedB_holds,
+    bnPairTiedB_holds,
     ResNet34TieB.r34_head_tiedB N h w xN cotN Wd bd r2 g⟩
 
 

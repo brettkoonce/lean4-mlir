@@ -75,6 +75,8 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.CnxTiePoC
 
 open scoped BigOperators
+open Proofs.ViTPoC (vecLNGammaSgdTied_holds)
+open Proofs.CnxPoC (chanLNBetaSgdTied_holds chanLNGammaSgdTied_holds)
 
 /-! ## ConvNeXt block — all 9 params tied (depthwise → channel-LN → expand → GELU → project → layer-scale → +skip)
 
@@ -154,12 +156,12 @@ theorem cnx_block_ch_tied {c cExp h w : Nat}
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · intro idx; exact Mnv2PoC.depthwiseW_den xN wN lrStr cotN bdw (Tensor3.unflatten xin) Wdw cotD lr idx
   · intro o;   exact Mnv2PoC.depthwiseB_den bN lrStr cotN Wdw (Tensor3.unflatten xin) bdw cotD lr o
-  · intro k;   exact CnxPoC.chanLnGammaSgd_den gN xN epsStr lrStr cotN ε nbt d ng cotN' lr k
-  · intro k;   exact CnxPoC.chanLnBetaSgd_den bN lrStr cotN ε ng d nbt cotN' lr k
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN bex (Tensor3.unflatten nl) Wex cotE lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN Wex (Tensor3.unflatten nl) bex cotE lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN bpr (Tensor3.unflatten g) Wpr cotP lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN Wpr (Tensor3.unflatten g) bpr cotP lr o
+  · exact chanLNGammaSgdTied_holds
+  · exact chanLNBetaSgdTied_holds
+  · exact convWSgdTied_holds
+  · exact convBSgdTied_holds
+  · exact convWSgdTied_holds
+  · exact convBSgdTied_holds
   · intro cc;  exact CnxPoC.layerScaleChGammaSgd_den gN xN lrStr cotN p lg dyOut lr cc
 
 /-! ## Downsample — channel-LN → 2×2/s2 conv (all 4 params tied)
@@ -197,8 +199,8 @@ theorem cnx_down_ch_tied {ci co h w : Nat}
   unfold cnxDownChTied
   intro cotN'
   refine ⟨?_, ?_, ?_, ?_⟩
-  · intro k; exact CnxPoC.chanLnGammaSgd_den gN xN epsStr lrStr cotN ε dnbt xin dng cotN' lr k
-  · intro k; exact CnxPoC.chanLnBetaSgd_den bN lrStr cotN ε dng xin dnbt cotN' lr k
+  · exact chanLNGammaSgdTied_holds
+  · exact chanLNBetaSgdTied_holds
   · intro idx; exact ResNet34PoC.convStridedW_den xN wN lrStr cotN bd n Wd dyOut lr idx
   · intro o; exact ResNet34PoC.convStridedB_den bN lrStr cotN Wd n bd dyOut lr o
 
@@ -238,9 +240,9 @@ theorem cnx_stem_ch_tied {c h w : Nat}
   unfold cnxStemChTied
   intro cotPatch
   refine ⟨?_, ?_, ?_, ?_⟩
-  · intro k; exact CnxPoC.chanLnGammaSgd_den gN xN epsStr lrStr cotN ε psnbt patch psng dyStem lr k
-  · intro k; exact CnxPoC.chanLnBetaSgd_den bN lrStr cotN ε psng patch psnbt dyStem lr k
-  · intro o; exact CifarPoC.convB_den bN lrStr cotN Wst xstem psb cotPatch lr o
+  · exact chanLNGammaSgdTied_holds
+  · exact chanLNBetaSgdTied_holds
+  · exact convBSgdTied_holds
   · intro idx; exact flatConvStride4_weight_grad_has_vjp_correct psb x (Kernel4.flatten Wst) cotPatch idx
 
 /-! ## Head — GAP → vector-LN at one row → dense
@@ -270,7 +272,7 @@ theorem cnx_head_ch_tied (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ
   unfold cnxHeadChTied
   intro cotHn
   refine ⟨?_, ?_, ?_⟩
-  · intro k; exact ViTPoC.veclnGammaSgd_den gN xN epsStr lrStr cotN ε hnbt gap hng cotHn lr k
+  · exact vecLNGammaSgdTied_holds
   · intro k;
     exact ViTPoC.rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε hng (Mat.unflatten gap) hnbt cotHn lr k
   · intro i; exact Cifar8PoC.denseB_den bdN lrStr dyN Wfc hn bfc g lr i

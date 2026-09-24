@@ -119,8 +119,8 @@ def BnSgdPairTied {oc h w : Nat} (gN vN bN epsStr lrStr cotN : String) (ε : ℝ
           pdiv (fun β' : Vec oc => bnPerChannelFlat oc (h*w) ε γ β' (reassocFwd oc h w v))
                β idx j * reassocFwd oc h w c j)
 
-theorem bnSgdPairTied_holds {oc h w : Nat} (gN vN bN epsStr lrStr cotN : String) (ε : ℝ)
-    (γ β : Vec oc) (v c : Vec (oc*h*w)) (lr : ℝ) :
+theorem bnSgdPairTied_holds {oc h w : Nat} {gN vN bN epsStr lrStr cotN : String} {ε : ℝ}
+    {γ β : Vec oc} {v c : Vec (oc*h*w)} {lr : ℝ} :
     BnSgdPairTied gN vN bN epsStr lrStr cotN ε γ β v c lr :=
   ⟨bnGamma_den gN vN epsStr lrStr cotN ε γ β v c lr, bnBeta_den bN lrStr cotN ε γ β v c lr⟩
 

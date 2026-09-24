@@ -54,6 +54,8 @@ namespace Proofs.EnetTiePoCG
 open scoped BigOperators
 open Proofs.EnetTiePoC (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
   gateCotB)
+open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedXlaWTiedB_holds convWTiedB_holds
+  denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
 
 /-- **A conv or depthwise bias, tied.** A bias gradient is the channel sum of the conv-output
     cotangent `cot` (network layout), which is what the emitted `bnBetaGradB` node computes; the
@@ -67,8 +69,8 @@ def ConvBBetaTiedB (N h w : Nat) {oc : Nat} (cotN : String) (ε : ℝ) (b : Vec 
           pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε (fun _ => 0) β' (fun _ => 0))
                b o j * bnchwFwd N oc h w (reassocB N oc h w cot) j
 
-theorem convBBetaTiedB_holds {N h w oc : Nat} (cotN : String) (ε : ℝ) (b : Vec oc)
-    (cot : Vec (N * (oc * h * w))) : ConvBBetaTiedB N h w cotN ε b cot := fun o =>
+theorem convBBetaTiedB_holds {N h w oc : Nat} {cotN : String} {ε : ℝ} {b : Vec oc}
+    {cot : Vec (N * (oc * h * w))} : ConvBBetaTiedB N h w cotN ε b cot := fun o =>
   ResNet34PoCB.bnBetaGradB_den cotN ε (fun _ => 0) b (fun _ => 0) (reassocB N oc h w cot) o
 
 def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
@@ -137,25 +139,9 @@ theorem enet_exp_tiedG {N ic mid oc h w r kHd kWd : Nat}
     enetExpTiedG xN vN epsStr cotN εe hεe εd hεd εp hεp
       We be γe βe Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp xin dyOut := by
   unfold enetExpTiedG
-  intro ec en er dc dn dr s e1 z e2 se pc cotPbn cotSeOut dgate cotE2 cotZ cotE1
-        cotDxSe cotDn cotDc cotEr cotEn cotEc
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN be xin We cotEc idx
-  · exact convBBetaTiedB_holds cotN εe be cotEc
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εe γe βe (reassocB N mid h w ec)
-          (reassocB N mid h w cotEn)
-  · intro idx; exact EnetPoCG.depthwiseWGradB_den xN cotN bd er Wd cotDc idx
-  · exact convBBetaTiedB_holds cotN εd bd cotDc
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εd γd βd (reassocB N mid h w dc)
-          (reassocB N mid h w cotDn)
-  · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN s Wz1 bz1 cotE1 i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 j
-  · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN z Wz2 bz2 cotE2 i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 j
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bp se Wp cotPbn idx
-  · exact convBBetaTiedB_holds cotN εp bp cotPbn
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εp γp βp (reassocB N oc h w pc)
-          (reassocB N oc h w dyOut)
+  exact ⟨convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, depthwiseWTiedB_holds,
+    convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds, denseBTiedB_holds,
+    denseWTiedB_holds, denseBTiedB_holds, convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds⟩
 
 /-! ## Strided downsampling MBConv block — all 16 params tied (b2/b4/b6/b12)
 
@@ -231,25 +217,9 @@ theorem enet_strided_tiedG {N ic mid oc h w r kHd kWd : Nat}
     enetStridedTiedG xN vN epsStr cotN εe hεe εd hεd εp hεp
       We be γe βe Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp xin dyOut := by
   unfold enetStridedTiedG
-  intro ec en er dc dn dr s e1 z e2 se pc cotPbn cotSeOut dgate cotE2 cotZ cotE1
-        cotDxSe cotDn cotDc cotEr cotEn cotEc
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN be xin We cotEc idx
-  · exact convBBetaTiedB_holds cotN εe be cotEc
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εe γe βe
-          (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn)
-  · intro idx; exact EnetPoCG.depthwiseStridedWGradB_den xN cotN bd er Wd cotDc idx
-  · exact convBBetaTiedB_holds cotN εd bd cotDc
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εd γd βd (reassocB N mid h w dc)
-          (reassocB N mid h w cotDn)
-  · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN s Wz1 bz1 cotE1 i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 j
-  · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN z Wz2 bz2 cotE2 i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2 j
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bp se Wp cotPbn idx
-  · exact convBBetaTiedB_holds cotN εp bp cotPbn
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εp γp βp (reassocB N oc h w pc)
-          (reassocB N oc h w dyOut)
+  exact ⟨convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, depthwiseStridedWTiedB_holds,
+    convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds, denseBTiedB_holds,
+    denseWTiedB_holds, denseBTiedB_holds, convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds⟩
 
 /-! ## No-expand MBConv block (b1, t=1) — all 12 params tied (depthwise on `ic` → SE → project)
 
@@ -310,20 +280,9 @@ theorem enet_noexp_tiedG {N ic oc h w r kHd kWd : Nat}
     enetNoExpTiedG xN vN epsStr cotN εd hεd εp hεp
       Wd bd γd βd Wz1 bz1 Wz2 bz2 Wp bp γp βp xin dyOut := by
   unfold enetNoExpTiedG
-  intro dc dn dr s e1 z e2 se pc cotPbn cotSeOut dgate cotE2 cotZ cotE1 cotDxSe cotDn cotDc
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact EnetPoCG.depthwiseWGradB_den xN cotN bd xin Wd cotDc idx
-  · exact convBBetaTiedB_holds cotN εd bd cotDc
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εd γd βd (reassocB N ic h w dc)
-          (reassocB N ic h w cotDn)
-  · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN s Wz1 bz1 cotE1 i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1 j
-  · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN z Wz2 bz2 cotE2 i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2 j
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bp se Wp cotPbn idx
-  · exact convBBetaTiedB_holds cotN εp bp cotPbn
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εp γp βp (reassocB N oc h w pc)
-          (reassocB N oc h w dyOut)
+  exact ⟨depthwiseWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
+    denseBTiedB_holds, denseWTiedB_holds, denseBTiedB_holds, convWTiedB_holds, convBBetaTiedB_holds,
+    bnPairTiedB_holds⟩
 
 /-! ## Stem — the 3×3/s2 conv-bn-swish (4 params), feeding block 1
 
@@ -353,12 +312,7 @@ theorem enet_stem_tiedG {N ic oc h w kHs kWs : Nat}
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) :
     enetStemTiedG xN vN epsStr cotN εs hεs Ws bs γs βs x dyStem := by
   unfold enetStemTiedG
-  intro stc stn cotBnS cotStc
-  refine ⟨?_, ?_, ?_⟩
-  · intro idx; exact EnetPoCG.convStridedXlaWGradB_den xN cotN bs x Ws cotStc idx
-  · exact convBBetaTiedB_holds cotN εs bs cotStc
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εs γs βs (reassocB N oc h w stc)
-          (reassocB N oc h w cotBnS)
+  exact ⟨convStridedXlaWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds⟩
 
 /-! ## Head — the 1×1 conv-bn-swish (4 params) → GAP → dense (Wfc/bfc), + the loss cotangent
 
@@ -398,14 +352,8 @@ theorem enet_head_tiedG {N c oc h w nC : Nat}
     (xhead : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
     enetHeadTiedG xN vN epsStr cotN dN εh hεh Wh bh γh βh Wfc bfc xhead g := by
   unfold enetHeadTiedG
-  intro hc hn hr a_gap _logits cotGapIn cotHr cotHsw cotHbn
-  refine ⟨?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bh xhead Wh cotHbn idx
-  · exact convBBetaTiedB_holds cotN εh bh cotHbn
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εh γh βh (reassocB N oc h w hc)
-          (reassocB N oc h w cotHsw)
-  · intro i j; exact ResNet34PoCB.denseWGradB_den dN cotN a_gap Wfc bfc g i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat nC nC) (0 : Vec nC) bfc g j
+  exact ⟨convWTiedB_holds, convBBetaTiedB_holds, bnPairTiedB_holds, denseWTiedB_holds,
+    denseBTiedB_holds⟩
 
 /-! ## Bundle-taking `*TiedAt` wrappers — one per block type, for the whole-net thread
 

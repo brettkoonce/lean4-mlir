@@ -100,7 +100,7 @@ theorem chanLnBetaSgd_den {c h w : Nat} (bN lrStr cotN : String)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one channel-LN SGD node each (each its `_den` lemma's statement with the index
---   bound, over the flat input `x`; `intro i; exact …_den … i` proves it)
+--   bound, over the flat input `x`; each `…_holds` below proves it)
 -- ════════════════════════════════════════════════════════════════
 
 /-- A channel-LN γ SGD node, tied (`chanLnGammaSgd_den`). -/
@@ -120,5 +120,17 @@ def ChanLNBetaSgdTied (h w : Nat) {c : Nat} (bN lrStr cotN : String) (ε : ℝ) 
           (.operand cotN (chanLNRows c h w cot))) k
       = β k - lr * ∑ j : Fin (c * h * w),
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j
+
+/-! Each clause holds, every argument implicit (read off the goal by a step tie's constructor). -/
+
+theorem chanLNGammaSgdTied_holds {h w c : Nat} {gN xN epsStr lrStr cotN : String} {ε : ℝ}
+    {β : Vec c} {x : Vec (c * h * w)} {γ : Vec c} {cot : Vec (c * h * w)} {lr : ℝ} :
+    ChanLNGammaSgdTied h w gN xN epsStr lrStr cotN ε β x γ cot lr := fun k =>
+  chanLnGammaSgd_den gN xN epsStr lrStr cotN ε β x γ cot lr k
+
+theorem chanLNBetaSgdTied_holds {h w c : Nat} {bN lrStr cotN : String} {ε : ℝ} {γ : Vec c}
+    {x : Vec (c * h * w)} {β : Vec c} {cot : Vec (c * h * w)} {lr : ℝ} :
+    ChanLNBetaSgdTied h w bN lrStr cotN ε γ x β cot lr := fun k =>
+  chanLnBetaSgd_den bN lrStr cotN ε γ x β cot lr k
 
 end Proofs.CnxPoC

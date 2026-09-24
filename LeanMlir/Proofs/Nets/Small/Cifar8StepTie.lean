@@ -164,24 +164,9 @@ theorem cifar8_convs_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
   -- conv₈
   ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
   ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr := by
-  intro xv cc1 r1 r1t cc2 r2 r2t zp1 zp1t cc3 r3 r3t cc4 r4 r4t zp2 zp2t cc5 r5 r5t cc6 r6 r6t zp3 zp3t
-        cc7 r7 r7t cc8 r8 r8t zp4 h9 ha g cotC8 cotC7 cotC6 cotC5 cotC4 cotC3 cotC2 cotC1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₁ x W₁ cotC1 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₁ x b₁ cotC1 lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₂ r1t W₂ cotC2 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₂ r1t b₂ cotC2 lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₃ zp1t W₃ cotC3 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₃ zp1t b₃ cotC3 lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₄ r3t W₄ cotC4 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₄ r3t b₄ cotC4 lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₅ zp2t W₅ cotC5 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₅ zp2t b₅ cotC5 lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₆ r5t W₆ cotC6 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₆ r5t b₆ cotC6 lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₇ zp3t W₇ cotC7 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₇ zp3t b₇ cotC7 lr o
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₈ r7t W₈ cotC8 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₈ r7t b₈ cotC8 lr o
+  exact ⟨convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    convWSgdTied_holds, convBSgdTied_holds, convWSgdTied_holds, convBSgdTied_holds⟩
 
 end Proofs.Cifar8PoC

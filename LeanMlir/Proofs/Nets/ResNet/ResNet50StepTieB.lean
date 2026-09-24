@@ -75,6 +75,7 @@ open Proofs Proofs.StableHLO Proofs.IR Proofs.EnetTiePoC Proofs.ResNet34TieB
 namespace Proofs.ResNet50TieB
 
 open scoped BigOperators
+open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The identity bottleneck — the render's cotangent chain
@@ -373,17 +374,8 @@ theorem r50_idblock_tiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : Stri
     (xin dyOut : Vec (N * (oc * h * w))) :
     r50IdTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r50IdTiedB
-  intro r1 r2 c1 c2 c3 cotA cotC3 cotN2 cotC2 cotN1 cotC1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
-          (reassocB N mid h w cotN1)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
-          (reassocB N mid h w cotN2)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₃ r2 p.W₃ cotC3 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
-          (reassocB N oc h w cotA)
+  exact ⟨convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds,
+    bnPairTiedB_holds⟩
 
 /-- ⭐ **Stride-1 projection bottleneck, tied.** Twelve nodes: the identity block's nine plus the
     1×1 skip's weight and its BatchNorm γ/β. ⚠ The skip's conv is an ORDINARY `convWeightGradB` —
@@ -429,20 +421,8 @@ theorem r50_projblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
     r50ProjTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r50ProjTiedB
-  intro r1 r2 c1 c2 c3 cp cotA cotC3 cotN2 cotC2 cotN1 cotC1 cotCp
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
-          (reassocB N mid h w cotN1)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
-          (reassocB N mid h w cotN2)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₃ r2 p.W₃ cotC3 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
-          (reassocB N oc h w cotA)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.bp xin p.Wp cotCp idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
-          (reassocB N oc h w cotA)
+  exact ⟨convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds,
+    bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 /-- **Strided projection bottleneck, tied.** Twelve nodes, and TWO of the four conv weights are
     the strided op. ⚠⚠ v1.5: `W₁` is an ordinary `convWeightGradB` at the INPUT grid `2h × 2w` and
@@ -488,20 +468,8 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
     r50DownTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r50DownTiedB
-  intro r1 r2 c1 c2 c3 cp cotA cotC3 cotN2 cotC2 cotN1 cotC1 cotCp
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁
-          (reassocB N mid (2 * h) (2 * w) c1) (reassocB N mid (2 * h) (2 * w) cotN1)
-  · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
-          (reassocB N mid h w cotN2)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₃ r2 p.W₃ cotC3 idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
-          (reassocB N oc h w cotA)
-  · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN p.bp xin p.Wp cotCp idx
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
-          (reassocB N oc h w cotA)
+  exact ⟨convWTiedB_holds, bnPairTiedB_holds, convStridedWTiedB_holds, bnPairTiedB_holds,
+    convWTiedB_holds, bnPairTiedB_holds, convStridedWTiedB_holds, bnPairTiedB_holds⟩
 
 
 -- ════════════════════════════════════════════════════════════════

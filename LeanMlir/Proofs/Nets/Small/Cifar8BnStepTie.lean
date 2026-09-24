@@ -18,6 +18,7 @@ over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-b
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
+open Proofs.CifarBnPoC (bnSgdPairTied_holds)
 
 namespace Proofs.Cifar8BnPoC
 
@@ -173,34 +174,11 @@ theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : N
   ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
   ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr
   ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr := by
-  intro xv cc1 bn1o r1 r1t cc2 bn2o r2 r2t zp1 zp1t cc3 bn3o r3 r3t cc4 bn4o r4 r4t zp2 zp2t
-        cc5 bn5o r5 r5t cc6 bn6o r6 r6t zp3 zp3t cc7 bn7o r7 r7t cc8 bn8o r8 r8t zp4 h9 ha g cpool4
-        dyBn8 cotC8 dyBn7 cotC7 dyBn6 cotC6 dyBn5 cotC5 dyBn4 cotC4 dyBn3 cotC3 dyBn2 cotC2 dyBn1 cotC1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-          ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₁ x W₁ cotC1 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₁ x b₁ cotC1 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₂ r1t W₂ cotC2 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₂ r1t b₂ cotC2 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₃ zp1t W₃ cotC3 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₃ zp1t b₃ cotC3 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₄ r3t W₄ cotC4 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₄ r3t b₄ cotC4 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₅ zp2t W₅ cotC5 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₅ zp2t b₅ cotC5 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₆ r5t W₆ cotC6 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₆ r5t b₆ cotC6 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₇ zp3t W₇ cotC7 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₇ zp3t b₇ cotC7 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr
-  · intro idx; exact CifarPoC.convW_den xN wN lrStr cotN b₈ r7t W₈ cotC8 lr idx
-  · intro o;   exact CifarPoC.convB_den bN lrStr cotN W₈ r7t b₈ cotC8 lr o
-  · exact CifarBnPoC.bnSgdPairTied_holds gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr
+  exact ⟨convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds,
+    convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds,
+    convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds,
+    convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds,
+    bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds⟩
 
 end Proofs.Cifar8BnPoC

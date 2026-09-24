@@ -133,8 +133,8 @@ def BnSgdPairTiedB (N oc h w : Nat) (gN vN epsStr bN lrStr cotN : String) (ε : 
             pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ β' (bnchwFwd N oc h w v))
                  β k j * bnchwFwd N oc h w cot j)
 
-theorem bnSgdPairTiedB_holds {N oc h w : Nat} (gN vN epsStr bN lrStr cotN : String) (ε : ℝ)
-    (γ β : Vec oc) (v cot : Vec (N * (oc * (h * w)))) (lr : ℝ) :
+theorem bnSgdPairTiedB_holds {N oc h w : Nat} {gN vN epsStr bN lrStr cotN : String} {ε : ℝ}
+    {γ β : Vec oc} {v cot : Vec (N * (oc * (h * w)))} {lr : ℝ} :
     BnSgdPairTiedB N oc h w gN vN epsStr bN lrStr cotN ε γ β v cot lr :=
   ⟨fun k => bnGammaB_den gN vN epsStr lrStr cotN ε γ β v cot lr k,
    fun k => bnBetaB_den bN lrStr cotN ε γ β (bnchwFwd N oc h w v) cot lr k⟩
@@ -213,5 +213,27 @@ def DenseBSgdTiedB (N : Nat) {a c : Nat} (bN lrStr cotN : String) (W : Mat a c) 
     den (SHlo.denseBiasSgdB bN lrStr b lr (.operand cotN cot)) j
       = b j - lr * ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k
+
+/-! Each clause holds, every argument implicit (read off the goal by a step tie's constructor). -/
+
+theorem convWSgdTiedB_holds {N h w ic oc kH kW : Nat} {xN wN lrStr cotN : String} {b : Vec oc}
+    {x : Vec (N * (ic * h * w))} {W : Kernel4 oc ic kH kW} {cot : Vec (N * (oc * h * w))} {lr : ℝ} :
+    ConvWSgdTiedB N h w xN wN lrStr cotN b x W cot lr := fun idx =>
+  convWB_den xN wN lrStr cotN b x W cot lr idx
+
+theorem depthwiseWSgdTiedB_holds {N h w c kH kW : Nat} {xN wN lrStr cotN : String} {b : Vec c}
+    {x : Vec (N * (c * h * w))} {W : DepthwiseKernel c kH kW} {cot : Vec (N * (c * h * w))}
+    {lr : ℝ} : DepthwiseWSgdTiedB N h w xN wN lrStr cotN b x W cot lr := fun idx =>
+  depthwiseWB_den xN wN lrStr cotN b x W cot lr idx
+
+theorem denseWSgdTiedB_holds {N a c : Nat} {xN wN lrStr cotN : String} {x : Vec (N * a)}
+    {W : Mat a c} {b : Vec c} {cot : Vec (N * c)} {lr : ℝ} :
+    DenseWSgdTiedB N xN wN lrStr cotN x W b cot lr := fun i j =>
+  denseWB_den xN wN lrStr cotN x W b cot lr i j
+
+/-- At a square witness, as every use is (the gradient ignores `W` and `x`). -/
+theorem denseBSgdTiedB_holds {N c : Nat} {bN lrStr cotN : String} {W : Mat c c} {x : Vec c}
+    {b : Vec c} {cot : Vec (N * c)} {lr : ℝ} : DenseBSgdTiedB N bN lrStr cotN W x b cot lr :=
+  fun j => denseBB_den bN lrStr cotN W x b cot lr j
 
 end Proofs.EnetPoC

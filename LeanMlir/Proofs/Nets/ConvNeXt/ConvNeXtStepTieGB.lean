@@ -59,6 +59,10 @@ namespace Proofs.CnxTiePoCGB
 open scoped BigOperators
 open Proofs.CnxTiePoC (cnxStemFwdO cnxBlockFwdChO cnxDownFwdChO cnxBlockCotInChAt cnxDownCotInChAt
   CnxTieWeights)
+open Proofs.ResNet34PoCB (convBTiedB_holds convStridedBTiedB_holds convStridedWTiedB_holds
+  convWTiedB_holds depthwiseBTiedB_holds depthwiseWTiedB_holds)
+open Proofs.ViTPoCGB (vecLNGammaTiedB_holds)
+open Proofs.CnxPoCGB (chanLNBetaTiedB_holds chanLNGammaTiedB_holds)
 
 /-! ## Per-example internal cotangents as functions of a block's INPUT
 
@@ -176,14 +180,14 @@ theorem cnx_block_ch_tiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : Strin
   unfold cnxBlockChTiedGB
   intro γlsB dB nlB gB pB cotPB cotEB cotNB cotDB
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact EnetPoCG.depthwiseWGradB_den xN cotN bdw xin Wdw cotDB idx
-  · intro o;   exact Mnv2PaperPoCG.depthwiseBGradB_den cotN Wdw xin bdw cotDB o
-  · intro k;   exact CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε nbt dB ng cotNB k
-  · intro k;   exact CnxPoCGB.chanLnBetaGradB_den cotN ε ng dB nbt cotNB k
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bex nlB Wex cotEB idx
-  · intro o;   exact ResNet34PoCB.convBGradB_den cotN Wex nlB bex cotEB o
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN bpr gB Wpr cotPB idx
-  · intro o;   exact ResNet34PoCB.convBGradB_den cotN Wpr gB bpr cotPB o
+  · exact depthwiseWTiedB_holds
+  · exact depthwiseBTiedB_holds
+  · exact chanLNGammaTiedB_holds
+  · exact chanLNBetaTiedB_holds
+  · exact convWTiedB_holds
+  · exact convBTiedB_holds
+  · exact convWTiedB_holds
+  · exact convBTiedB_holds
   · intro cc;  exact CnxPoCGB.layerScaleChGammaGradB_den xN cotN pB lg dyOut cc
 
 /-! ## Downsample — channel-LN → 2×2/s2 conv, all 4 gradient nodes, batched -/
@@ -205,12 +209,8 @@ theorem cnx_down_ch_tiedGB (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String)
     (xin : Vec (N * (ci*(2*h)*(2*w)))) (dyOut : Vec (N * (co*h*w))) :
     cnxDownChTiedGB N xN epsStr cotN ε dng dnbt Wd bd xin dyOut := by
   unfold cnxDownChTiedGB
-  intro nB cotNB
-  refine ⟨?_, ?_, ?_, ?_⟩
-  · intro k;   exact CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε dnbt xin dng cotNB k
-  · intro k;   exact CnxPoCGB.chanLnBetaGradB_den cotN ε dng xin dnbt cotNB k
-  · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN bd nB Wd dyOut idx
-  · intro o;   exact ResNet34PoCB.convStridedBGradB_den cotN Wd nB bd dyOut o
+  exact ⟨chanLNGammaTiedB_holds, chanLNBetaTiedB_holds, convStridedWTiedB_holds,
+    convStridedBTiedB_holds⟩
 
 /-! ## Stem — 4×4/s4 patchify conv → channel-LN, all 4 gradient nodes, batched
 
@@ -251,9 +251,9 @@ theorem cnx_stem_ch_tiedGB (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε
   unfold cnxStemChTiedGB
   intro patchB cotPatchB
   refine ⟨?_, ?_, ?_, ?_⟩
-  · intro k;   exact CnxPoCGB.chanLnGammaGradB_den xN epsStr cotN ε psnbt patchB psng dyStem k
-  · intro k;   exact CnxPoCGB.chanLnBetaGradB_den cotN ε psng patchB psnbt dyStem k
-  · intro o;   exact ResNet34PoCB.convBGradB_den cotN Wst xstem psb cotPatchB o
+  · exact chanLNGammaTiedB_holds
+  · exact chanLNBetaTiedB_holds
+  · exact convBTiedB_holds
   · intro idx; exact CnxPoCGB.psWGradB_den xN cotN psb x Wst cotPatchB idx
 
 /-! ## Head — GAP → vector-LN at one row → dense, all 4 gradient nodes, batched
@@ -291,7 +291,7 @@ theorem cnx_head_ch_tiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String)
   unfold cnxHeadChTiedGB
   intro gapB hnB cotHnB
   refine ⟨?_, ?_, ?_, ?_⟩
-  · intro k;   exact ViTPoCGB.veclnGammaGradB_den xN epsStr cotN ε hnbt gapB hng cotHnB k
+  · exact vecLNGammaTiedB_holds
   · intro k;
     exact ViTPoCGB.rowDenseBiasGradB_den_lnbeta cotN ε hng
       (fun n => Mat.unflatten (batchSlice N (1*768) gapB n)) hnbt cotHnB k

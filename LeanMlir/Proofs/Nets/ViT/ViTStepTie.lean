@@ -30,6 +30,8 @@ namespace Proofs.ViTTiePoC
 
 open scoped BigOperators
 open Proofs Proofs.StableHLO
+open Proofs.ViTPoC (rowDenseBSgdTied_holds rowDenseWSgdTied_holds vecLNBetaSgdTied_holds
+  vecLNGammaSgdTied_holds)
 
 /-! ## Multi-head promotion (3 heads, d_head=64) — the committed-render block tie
 
@@ -91,24 +93,11 @@ theorem vit_block_tiedMHV {Np1 heads d mlpDim : Nat}
     vitBlockTiedMHV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
       Wfc1 bfc1 Wfc2 bfc2 xin ln1 q k v att h ln2 g m1 dyOut lr := by
   unfold vitBlockTiedMHV
-  intro dAtt dQ dK dV cotLn1 cotH cotLn2 cotM1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro kk;  exact ViTPoC.veclnGammaSgd_den gN xN epsStr lrStr cotN ε β1 xin γ1 cotLn1 lr kk
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε γ1 (Mat.unflatten xin) β1 cotLn1 lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bq ln1 Wq dQ lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wq (Mat.unflatten ln1) bq dQ lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bk ln1 Wk dK lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wk (Mat.unflatten ln1) bk dK lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bv ln1 Wv dV lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wv (Mat.unflatten ln1) bv dV lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bo att Wo cotH lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wo (Mat.unflatten att) bo cotH lr i
-  · intro kk;  exact ViTPoC.veclnGammaSgd_den gN xN epsStr lrStr cotN ε β2 h γ2 cotLn2 lr kk
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε γ2 (Mat.unflatten h) β2 cotLn2 lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bfc1 ln2 Wfc1 cotM1 lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wfc1 (Mat.unflatten ln2) bfc1 cotM1 lr i
-  · intro i j; exact ViTPoC.rowDenseWeightSgd_den xN wN lrStr cotN bfc2 g Wfc2 dyOut lr i j
-  · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wfc2 (Mat.unflatten g) bfc2 dyOut lr i
+  exact ⟨vecLNGammaSgdTied_holds, vecLNBetaSgdTied_holds, rowDenseWSgdTied_holds,
+    rowDenseBSgdTied_holds, rowDenseWSgdTied_holds, rowDenseBSgdTied_holds, rowDenseWSgdTied_holds,
+    rowDenseBSgdTied_holds, rowDenseWSgdTied_holds, rowDenseBSgdTied_holds, vecLNGammaSgdTied_holds,
+    vecLNBetaSgdTied_holds, rowDenseWSgdTied_holds, rowDenseBSgdTied_holds, rowDenseWSgdTied_holds,
+    rowDenseBSgdTied_holds⟩
 
 
 /-! ## Multi-head forward + cot-in + input-only block wrappers (the thread template) -/
@@ -222,9 +211,7 @@ def vitFinalLNTied (gN xN bN epsStr lrStr cotN : String) (ε : ℝ)
 theorem vit_finalLN_tied (gN xN bN epsStr lrStr cotN : String) (ε : ℝ)
     (γF βF : Vec 192) (Wcls : Mat 192 10) (b12out : Vec (197 * 192)) (g : Vec 10) (lr : ℝ) :
     vitFinalLNTied gN xN bN epsStr lrStr cotN ε γF βF Wcls b12out g lr := by
-  refine ⟨?_, ?_⟩
-  · intro k; exact ViTPoC.veclnGammaSgd_den (N := 197) gN xN epsStr lrStr cotN ε βF b12out γF (vitCotFl 196 192 10 Wcls g) lr k
-  · intro i; exact ViTPoC.rowDenseBiasSgd_den_lnbeta (N := 197) bN lrStr cotN ε γF (Mat.unflatten b12out) βF (vitCotFl 196 192 10 Wcls g) lr i
+  exact ⟨vecLNGammaSgdTied_holds, vecLNBetaSgdTied_holds⟩
 
 /-- Classifier Wcls/bcls tied at the loss cotangent `g`. -/
 def vitHeadTied (aN wN bN lrStr cotN : String)

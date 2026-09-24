@@ -145,7 +145,7 @@ theorem chanLnBetaGradB_den {N c h w : Nat} (cotN : String)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one batched channel-LN gradient node each (each its `_den` lemma's statement with the index
---   bound, over the flat input `x`; `intro i; exact …_den … i` proves it)
+--   bound, over the flat input `x`; each `…_holds` below proves it)
 -- ════════════════════════════════════════════════════════════════
 
 /-- A batched channel-LN γ gradient node, tied (`chanLnGammaGradB_den`). -/
@@ -168,5 +168,16 @@ def ChanLNBetaTiedB (N h w : Nat) {c : Nat} (cotN : String) (ε : ℝ) (γ : Vec
       = ∑ n : Fin N, ∑ j : Fin (c * h * w),
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' (batchSlice N (c * h * w) x n)) β k j
             * batchSlice N (c * h * w) cot n j
+
+/-! Each clause holds, every argument implicit (read off the goal by a step tie's constructor). -/
+
+theorem chanLNGammaTiedB_holds {N h w c : Nat} {xN epsStr cotN : String} {ε : ℝ} {β : Vec c}
+    {x : Vec (N * (c * h * w))} {γ : Vec c} {cot : Vec (N * (c * h * w))} :
+    ChanLNGammaTiedB N h w xN epsStr cotN ε β x γ cot := fun k =>
+  chanLnGammaGradB_den xN epsStr cotN ε β x γ cot k
+
+theorem chanLNBetaTiedB_holds {N h w c : Nat} {cotN : String} {ε : ℝ} {γ : Vec c}
+    {x : Vec (N * (c * h * w))} {β : Vec c} {cot : Vec (N * (c * h * w))} :
+    ChanLNBetaTiedB N h w cotN ε γ x β cot := fun k => chanLnBetaGradB_den cotN ε γ x β cot k
 
 end Proofs.CnxPoCGB

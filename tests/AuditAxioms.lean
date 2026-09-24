@@ -1928,6 +1928,35 @@ open Proofs
 
 -- 4b's CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetStepTieG.lean, 2026-09-06)
 #print axioms Proofs.EnetTiePoCG.convBBetaTiedB_holds
+#print axioms Proofs.ResNet34PoCB.convWTiedB_holds
+#print axioms Proofs.ResNet34PoCB.convBTiedB_holds
+#print axioms Proofs.ResNet34PoCB.convStridedWTiedB_holds
+#print axioms Proofs.ResNet34PoCB.convStridedBTiedB_holds
+#print axioms Proofs.ResNet34PoCB.convStridedXlaWTiedB_holds
+#print axioms Proofs.ResNet34PoCB.depthwiseWTiedB_holds
+#print axioms Proofs.ResNet34PoCB.depthwiseBTiedB_holds
+#print axioms Proofs.ResNet34PoCB.depthwiseStridedWTiedB_holds
+#print axioms Proofs.ResNet34PoCB.denseWTiedB_holds
+#print axioms Proofs.ResNet34PoCB.denseBTiedB_holds
+#print axioms Proofs.ViTPoCGB.rowDenseWTiedB_holds
+#print axioms Proofs.ViTPoCGB.rowDenseBTiedB_holds
+#print axioms Proofs.ViTPoCGB.vecLNGammaTiedB_holds
+#print axioms Proofs.ViTPoCGB.vecLNBetaTiedB_holds
+#print axioms Proofs.CnxPoCGB.chanLNGammaTiedB_holds
+#print axioms Proofs.CnxPoCGB.chanLNBetaTiedB_holds
+#print axioms Proofs.EnetPoC.convWSgdTiedB_holds
+#print axioms Proofs.EnetPoC.depthwiseWSgdTiedB_holds
+#print axioms Proofs.EnetPoC.denseWSgdTiedB_holds
+#print axioms Proofs.EnetPoC.denseBSgdTiedB_holds
+#print axioms Proofs.ViTPoC.rowDenseWSgdTied_holds
+#print axioms Proofs.ViTPoC.rowDenseBSgdTied_holds
+#print axioms Proofs.ViTPoC.vecLNGammaSgdTied_holds
+#print axioms Proofs.ViTPoC.vecLNBetaSgdTied_holds
+#print axioms Proofs.CnxPoC.chanLNGammaSgdTied_holds
+#print axioms Proofs.CnxPoC.chanLNBetaSgdTied_holds
+#print axioms Proofs.convWSgdTied_holds
+#print axioms Proofs.convBSgdTied_holds
+#print axioms Proofs.EnetTiePoC.convBBetaSgdTied_holds
 #print axioms Proofs.EnetTiePoCG.enet_exp_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_strided_tiedG
 #print axioms Proofs.EnetTiePoCG.enet_noexp_tiedG

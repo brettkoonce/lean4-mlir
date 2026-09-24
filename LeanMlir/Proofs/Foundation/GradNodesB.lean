@@ -164,8 +164,8 @@ def BnPairTiedB (N oc h w : Nat) (vN epsStr cotN : String) (ε : ℝ) (γ β : V
             pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ β' (bnchwFwd N oc h w v))
                  β k j * bnchwFwd N oc h w cot j)
 
-theorem bnPairTiedB_holds {N oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
-    (v cot : Vec (N * (oc * (h * w)))) : BnPairTiedB N oc h w vN epsStr cotN ε γ β v cot :=
+theorem bnPairTiedB_holds {N oc h w : Nat} {vN epsStr cotN : String} {ε : ℝ} {γ β : Vec oc}
+    {v cot : Vec (N * (oc * (h * w)))} : BnPairTiedB N oc h w vN epsStr cotN ε γ β v cot :=
   ⟨fun k => bnGammaGradB_den vN epsStr cotN ε γ β v cot k,
    fun k => bnBetaGradB_den cotN ε γ β (bnchwFwd N oc h w v) cot k⟩
 
@@ -201,8 +201,8 @@ theorem denseBGradB_den {N c : Nat}
 -- § Tie clauses — one gradient node each
 --   What a step tie states per conv / depthwise / dense parameter: the emitted `*GradB` node
 --   denotes the certified `Σ_n` gradient at the layer's input `x` and output cotangent `cot`.
---   Each is its `_den` lemma's statement with the index bound, so `intro idx; exact …_den … idx`
---   proves it (and `EnetPoCG` / `Mnv2PaperPoCG` / `CnxPoCGB` peers prove the same Props).
+--   Each is its `_den` lemma's statement with the index bound; `…TiedB_holds` (end of file,
+--   every argument implicit) proves it, so a step tie is an anonymous constructor of them.
 -- ════════════════════════════════════════════════════════════════
 
 /-- A stride-1 conv weight gradient node, tied (`convWGradB_den`). -/
@@ -513,3 +513,58 @@ theorem psWGradB_den {N ic oc h w kH kW : Nat} (xN cotN : String)
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
 end Proofs.CnxPoCGB
+
+namespace Proofs.ResNet34PoCB
+
+/-! ## Each tie clause holds
+
+One lemma per clause above, every argument implicit: a step tie's conjunction of clauses is then
+an anonymous constructor of these, its arguments read off the goal. -/
+
+theorem convWTiedB_holds {N h w ic oc kH kW : Nat} {xN cotN : String} {b : Vec oc}
+    {x : Vec (N * (ic * h * w))} {W : Kernel4 oc ic kH kW} {cot : Vec (N * (oc * h * w))} :
+    ConvWTiedB N h w xN cotN b x W cot := fun idx => convWGradB_den xN cotN b x W cot idx
+
+theorem convBTiedB_holds {N h w ic oc kH kW : Nat} {cotN : String} {W : Kernel4 oc ic kH kW}
+    {x : Vec (N * (ic * h * w))} {b : Vec oc} {cot : Vec (N * (oc * h * w))} :
+    ConvBTiedB N h w cotN W x b cot := fun o => convBGradB_den cotN W x b cot o
+
+theorem convStridedWTiedB_holds {N h w ic oc kH kW : Nat} {xN cotN : String} {b : Vec oc}
+    {x : Vec (N * (ic * (2 * h) * (2 * w)))} {W : Kernel4 oc ic kH kW}
+    {cot : Vec (N * (oc * h * w))} : ConvStridedWTiedB N h w xN cotN b x W cot :=
+  fun idx => convStridedWGradB_den xN cotN b x W cot idx
+
+theorem convStridedBTiedB_holds {N h w ic oc kH kW : Nat} {cotN : String}
+    {W : Kernel4 oc ic kH kW} {x : Vec (N * (ic * (2 * h) * (2 * w)))} {b : Vec oc}
+    {cot : Vec (N * (oc * h * w))} : ConvStridedBTiedB N h w cotN W x b cot :=
+  fun o => convStridedBGradB_den cotN W x b cot o
+
+theorem convStridedXlaWTiedB_holds {N h w ic oc kH kW : Nat} {xN cotN : String} {b : Vec oc}
+    {x : Vec (N * (ic * (2 * h) * (2 * w)))} {W : Kernel4 oc ic kH kW}
+    {cot : Vec (N * (oc * h * w))} : ConvStridedXlaWTiedB N h w xN cotN b x W cot :=
+  fun idx => EnetPoCG.convStridedXlaWGradB_den xN cotN b x W cot idx
+
+theorem depthwiseWTiedB_holds {N h w c kH kW : Nat} {xN cotN : String} {b : Vec c}
+    {x : Vec (N * (c * h * w))} {W : DepthwiseKernel c kH kW} {cot : Vec (N * (c * h * w))} :
+    DepthwiseWTiedB N h w xN cotN b x W cot :=
+  fun idx => EnetPoCG.depthwiseWGradB_den xN cotN b x W cot idx
+
+theorem depthwiseBTiedB_holds {N h w c kH kW : Nat} {cotN : String} {W : DepthwiseKernel c kH kW}
+    {x : Vec (N * (c * h * w))} {b : Vec c} {cot : Vec (N * (c * h * w))} :
+    DepthwiseBTiedB N h w cotN W x b cot :=
+  fun o => Mnv2PaperPoCG.depthwiseBGradB_den cotN W x b cot o
+
+theorem depthwiseStridedWTiedB_holds {N h w c kH kW : Nat} {xN cotN : String} {b : Vec c}
+    {x : Vec (N * (c * (2 * h) * (2 * w)))} {W : DepthwiseKernel c kH kW}
+    {cot : Vec (N * (c * h * w))} : DepthwiseStridedWTiedB N h w xN cotN b x W cot :=
+  fun idx => EnetPoCG.depthwiseStridedWGradB_den xN cotN b x W cot idx
+
+theorem denseWTiedB_holds {N a c : Nat} {xN cotN : String} {x : Vec (N * a)} {W : Mat a c}
+    {b : Vec c} {cot : Vec (N * c)} : DenseWTiedB N xN cotN x W b cot :=
+  fun i j => denseWGradB_den xN cotN x W b cot i j
+
+theorem denseBTiedB_holds {N a c : Nat} {cotN : String} {W : Mat a c} {x : Vec a} {b : Vec c}
+    {cot : Vec (N * c)} : DenseBTiedB N cotN W x b cot :=
+  fun j => EnetPoCG.denseBGradB_den cotN W x b cot j
+
+end Proofs.ResNet34PoCB

@@ -138,7 +138,7 @@ theorem headB_den {D nC : Nat} (bN lrStr cotN : String)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one per-token SGD node each (each its `_den` lemma's statement with the index
---   bound, over the flat input `x`; `intro i; exact …_den … i` proves it)
+--   bound, over the flat input `x`; each `…_holds` below proves it)
 -- ════════════════════════════════════════════════════════════════
 
 /-- A per-token dense weight SGD node, tied (`rowDenseWeightSgd_den`). -/
@@ -177,5 +177,27 @@ def VecLNBetaSgdTied (N : Nat) {D : Nat} (bN lrStr cotN : String) (ε : ℝ) (γ
       = β i - lr * ∑ o : Fin (N * D),
           pdiv (fun bv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε γv bv (Mat.unflatten x r))) β i o * dy o
+
+/-! Each clause holds, every argument implicit (read off the goal by a step tie's constructor). -/
+
+theorem rowDenseWSgdTied_holds {N a c : Nat} {xN wN lrStr cotN : String} {bb : Vec c}
+    {x : Vec (N * a)} {W : Mat a c} {dy : Vec (N * c)} {lr : ℝ} :
+    RowDenseWSgdTied N xN wN lrStr cotN bb x W dy lr := fun i j =>
+  rowDenseWeightSgd_den xN wN lrStr cotN bb x W dy lr i j
+
+theorem rowDenseBSgdTied_holds {N a c : Nat} {bN lrStr cotN : String} {W : Mat a c}
+    {x : Vec (N * a)} {b : Vec c} {dy : Vec (N * c)} {lr : ℝ} :
+    RowDenseBSgdTied N bN lrStr cotN W x b dy lr := fun i =>
+  rowDenseBiasSgd_den bN lrStr cotN W (Mat.unflatten x) b dy lr i
+
+theorem vecLNGammaSgdTied_holds {N D : Nat} {gN xN epsStr lrStr cotN : String} {ε : ℝ}
+    {βv : Vec D} {x : Vec (N * D)} {γ : Vec D} {dy : Vec (N * D)} {lr : ℝ} :
+    VecLNGammaSgdTied N gN xN epsStr lrStr cotN ε βv x γ dy lr := fun k =>
+  veclnGammaSgd_den gN xN epsStr lrStr cotN ε βv x γ dy lr k
+
+theorem vecLNBetaSgdTied_holds {N D : Nat} {bN lrStr cotN : String} {ε : ℝ} {γv : Vec D}
+    {x : Vec (N * D)} {β : Vec D} {dy : Vec (N * D)} {lr : ℝ} :
+    VecLNBetaSgdTied N bN lrStr cotN ε γv x β dy lr := fun i =>
+  rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε γv (Mat.unflatten x) β dy lr i
 
 end Proofs.ViTPoC

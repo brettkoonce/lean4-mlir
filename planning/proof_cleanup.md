@@ -440,3 +440,27 @@ as `nhw_ne_zero (Nat.mul_pos hR hN) hh hw` and 26 proofs opened with `have hM :=
 `den_bnSyncF_allReduce`, `den_bnSyncBack_allReduce` and `den_allReduceMeanF_bnSyncGammaGradB` derive
 it; 106 call-site arguments and the 26 `have`s are gone (−33 lines). `den_bnSyncBack_allReduce` is in
 the tier: its statement loses the redundant hypothesis (regenerated).
+
+### 6.9 `_holds` lemmas for the tie clauses (2026-09-24)
+
+Every step tie's per-block Prop is a conjunction of one-node clauses (`ConvWTiedB`, `BnPairTiedB`,
+`RowDenseWSgdTied`, …), and its proof restated each clause's arguments in a bullet:
+`· intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx`. Each clause Prop
+now has a `…_holds` lemma with EVERY argument implicit (29 new; `bnPairTiedB_holds`,
+`bnSgdPairTied_holds`, `bnSgdPairTiedB_holds`, `convBBetaTiedB_holds` switched to implicit), so the
+arguments are read off the goal and a block proof is
+
+    unfold mnv2Stride1TiedB
+    exact ⟨convWTiedB_holds, convBTiedB_holds, bnPairTiedB_holds, depthwiseWTiedB_holds, …⟩
+
+— no `intro` of the `let`s, no `refine` holes. Homes: `GradNodesB` (10 batched clauses),
+`ViTFoldGB` / `ConvNeXtFoldGB` (6), `EfficientNetFold` / `ViTFold` / `ConvNeXtFold` (10 fused),
+`CifarFold` (`convWSgdTied_holds` / `convBSgdTied_holds`: `CnnChainClose` cannot see `SgdNodes`).
+The fused EfficientNet tie's ten conv-bias clauses became `ConvBBetaSgdTied` (§6.6's `ConvBBetaTiedB`,
+fused form). Converted: the R34/R50/MNv2/MNv4/EffNet×2/ConvNeXt×2/ViT×2/Cifar8×2 step ties (MNv4's were term-mode
+`⟨fun idx => …_den … idx, …⟩`); every file
+compiles in the same ~2.5–2.9 s.
+
+Left as bullets: blocks with a clause used once (MNv2's XLA-strided depthwise, the ConvNeXt stem's
+patchify, the ViT/ConvNeXt head dense) — a Prop for one use does not pay; and the sync ties'
+`*Sync_of_scaled` bullets, which carry the shard rewrite each needs.

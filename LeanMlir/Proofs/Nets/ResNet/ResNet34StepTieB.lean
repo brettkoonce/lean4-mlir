@@ -70,6 +70,8 @@ namespace Proofs.ResNet34TieB
 
 open scoped BigOperators
 open Proofs.EnetTiePoC (reassocB bnBackB cInB gapInB)
+open Proofs.ResNet34PoCB (bnPairTiedB_holds convBTiedB_holds convStridedBTiedB_holds
+  convStridedWTiedB_holds convWTiedB_holds denseBTiedB_holds denseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The identity basic block — the render's cotangent chain, then the 8 parameter folds
@@ -302,16 +304,8 @@ theorem r34_idblock_tiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (
     (xin dyOut : Vec (N * (c * h * w))) :
     r34IdTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r34IdTiedB
-  intro r1 c1 c2 cotA cotC2 cotN1 cotC1
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · intro o;   exact ResNet34PoCB.convBGradB_den cotN p.W₁ xin p.b₁ cotC1 o
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N c h w c1)
-          (reassocB N c h w cotN1)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · intro o;   exact ResNet34PoCB.convBGradB_den cotN p.W₂ r1 p.b₂ cotC2 o
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N c h w c2)
-          (reassocB N c h w cotA)
+  exact ⟨convWTiedB_holds, convBTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, convBTiedB_holds,
+    bnPairTiedB_holds⟩
 
 
 /-- **Downsample basic block, tied.** All twelve parameter nodes — the STRIDED conv₁, the stride-1
@@ -350,20 +344,9 @@ theorem r34_downblock_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : Str
     (dyOut : Vec (N * (oc * h * w))) :
     r34DownTiedB N h w xN cotN vN epsStr p xin dyOut := by
   unfold r34DownTiedB
-  intro r1 c1 c2 cp cotA cotC2 cotN1 cotC1 cotCp
-  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN p.b₁ xin p.W₁ cotC1 idx
-  · intro o;   exact ResNet34PoCB.convStridedBGradB_den cotN p.W₁ xin p.b₁ cotC1 o
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N oc h w c1)
-          (reassocB N oc h w cotN1)
-  · intro idx; exact ResNet34PoCB.convWGradB_den xN cotN p.b₂ r1 p.W₂ cotC2 idx
-  · intro o;   exact ResNet34PoCB.convBGradB_den cotN p.W₂ r1 p.b₂ cotC2 o
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N oc h w c2)
-          (reassocB N oc h w cotA)
-  · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN p.bp xin p.Wp cotCp idx
-  · intro o;   exact ResNet34PoCB.convStridedBGradB_den cotN p.Wp xin p.bp cotCp o
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
-          (reassocB N oc h w cotA)
+  exact ⟨convStridedWTiedB_holds, convStridedBTiedB_holds, bnPairTiedB_holds, convWTiedB_holds,
+    convBTiedB_holds, bnPairTiedB_holds, convStridedWTiedB_holds, convStridedBTiedB_holds,
+    bnPairTiedB_holds⟩
 
 /-- **Stem, tied.** The 7×7/s2 conv's weight and bias and its BatchNorm's γ/β, at the cotangent
     that reaches the stem through block 1's input fan-in and the 3×3/s2 pool's backward. -/
@@ -385,12 +368,7 @@ theorem r34_stem_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
     (cotPool : Vec (N * (oc * h * w))) :
     r34StemTiedB N h w xN cotN vN epsStr Ws bs εs γs βs x cotPool := by
   unfold r34StemTiedB
-  intro sc cotN' cotC
-  refine ⟨?_, ?_, ?_⟩
-  · intro idx; exact ResNet34PoCB.convStridedWGradB_den xN cotN bs x Ws cotC idx
-  · intro o;   exact ResNet34PoCB.convStridedBGradB_den cotN Ws x bs cotC o
-  · exact ResNet34PoCB.bnPairTiedB_holds vN epsStr cotN εs γs βs
-          (reassocB N oc (2 * h) (2 * w) sc) (reassocB N oc (2 * h) (2 * w) cotN')
+  exact ⟨convStridedWTiedB_holds, convStridedBTiedB_holds, bnPairTiedB_holds⟩
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -421,10 +399,7 @@ theorem r34_head_tiedB (N h w : Nat) {c nCls : Nat} (xN cotN : String) (Wd : Mat
     (bd : Vec nCls) (xin : Vec (N * (c * h * w))) (dy : Vec (N * nCls)) :
     r34HeadTiedB N h w xN cotN Wd bd xin dy := by
   unfold r34HeadTiedB
-  intro a
-  refine ⟨?_, ?_⟩
-  · intro i j; exact ResNet34PoCB.denseWGradB_den xN cotN a Wd bd dy i j
-  · intro j;   exact EnetPoCG.denseBGradB_den cotN Wd (fun _ => 0) bd dy j
+  exact ⟨denseWTiedB_holds, denseBTiedB_holds⟩
 
 
 

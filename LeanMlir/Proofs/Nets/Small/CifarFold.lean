@@ -234,4 +234,16 @@ theorem cifar_conv_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
   · intro idx; exact convW_den xN wN lrStr cotN b₁ x W₁ cotW1 lr idx
   · intro o;   exact convB_den bN lrStr cotN W₁ x b₁ cotW1 lr o
 
+/-! Each fused conv clause holds, every argument implicit (read off the goal by a step tie's
+constructor). `ConvWSgdTied` / `ConvBSgdTied` live in `CnnChainClose`, which does not see
+`SgdNodes`; this file sees both. -/
+
+theorem _root_.Proofs.convWSgdTied_holds {ic oc h w kH kW : Nat} {xN wN lrStr cotN : String}
+    {b : Vec oc} {x : Tensor3 ic h w} {W : Kernel4 oc ic kH kW} {c : Vec (oc*h*w)} {lr : ℝ} :
+    ConvWSgdTied xN wN lrStr cotN b x W c lr := fun idx => convW_den xN wN lrStr cotN b x W c lr idx
+
+theorem _root_.Proofs.convBSgdTied_holds {ic oc h w kH kW : Nat} {bN lrStr cotN : String}
+    {W : Kernel4 oc ic kH kW} {x : Tensor3 ic h w} {b : Vec oc} {c : Vec (oc*h*w)} {lr : ℝ} :
+    ConvBSgdTied bN lrStr cotN W x b c lr := fun o => convB_den bN lrStr cotN W x b c lr o
+
 end Proofs.CifarPoC
