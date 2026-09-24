@@ -6,7 +6,9 @@ The layers every Lipschitz / interval certificate in `Certificates/` is stated a
 (bias-free dense, `(Wx)ᵢ`) and `reluE`, with the L2 Lipschitz bounds the product certificate
 multiplies — Frobenius (`denseE_lipschitzL2`), the Gram / Schatten-4 bound
 (`denseE_lipschitzL2_gram`), Schatten-8 (`denseE_lipschitzL2_gram2`), and the lower bound a
-witness vector gives (`lipschitzL2_lower_euclid`). `certified_at_eps` specialises the
+witness vector gives (`lipschitzL2_lower_euclid`). The upper bounds share one tail
+(`denseE_lipschitzL2_of_sq`) and the Gram ones one Cauchy–Schwarz step (`sq_le_of_gram_quad`,
+`quad_le_of_frob`). `certified_at_eps` specialises the
 Tsuzuku certificate to a rational radius check. The trained instances are in
 `LipschitzCertInstance`; the namespace is theirs, kept so every citation keeps its name.
 -/
@@ -26,41 +28,37 @@ noncomputable def denseE {n k : ℕ} (W : Fin k → Fin n → ℝ) :
     (x : EuclideanSpace ℝ (Fin n)) (i : Fin k) :
     denseE W x i = ∑ j, W i j * x j := rfl
 
+/-- Row-wise Cauchy–Schwarz summed: `‖Mv‖² ≤ ‖M‖_F²·‖v‖²` at the raw-sum level. -/
+theorem sum_sq_matvec_le {k n : ℕ} (M : Fin k → Fin n → ℝ) (y : Fin n → ℝ) :
+    ∑ a, (∑ b, M a b * y b) ^ 2 ≤ (∑ a, ∑ b, M a b ^ 2) * (∑ b, y b ^ 2) := by
+  calc ∑ a, (∑ b, M a b * y b) ^ 2
+      ≤ ∑ a, ((∑ b, M a b ^ 2) * (∑ b, y b ^ 2)) :=
+        Finset.sum_le_sum fun a _ => Finset.sum_mul_sq_le_sq_mul_sq _ _ _
+    _ = (∑ a, ∑ b, M a b ^ 2) * (∑ b, y b ^ 2) := (Finset.sum_mul ..).symm
+
+/-- **The common tail of every dense bound**: a raw-sum bound `‖Wd‖² ≤ B²·‖d‖²` for every `d`
+    makes the dense layer `B`-Lipschitz in L2. The Frobenius and Gram bounds below differ only in
+    how they prove `hW`. -/
+theorem denseE_lipschitzL2_of_sq {n k : ℕ} (W : Fin k → Fin n → ℝ) {B : ℝ} (hB : 0 ≤ B)
+    (hW : ∀ d : Fin n → ℝ, ∑ i, (∑ j, W i j * d j) ^ 2 ≤ B ^ 2 * ∑ j, d j ^ 2) :
+    LipschitzL2 B (denseE W) := by
+  intro u w
+  have hsq : ‖denseE W u - denseE W w‖ ^ 2 ≤ (B * ‖u - w‖) ^ 2 := by
+    rw [euclid_norm_sq, mul_pow, euclid_norm_sq]
+    refine le_of_eq_of_le (Finset.sum_congr rfl fun i _ => ?_) (hW fun j => u j - w j)
+    show ((∑ j, W i j * u j) - ∑ j, W i j * w j) ^ 2 = _
+    rw [← Finset.sum_sub_distrib]; simp only [mul_sub]
+  exact (abs_le_of_sq_le_sq' hsq (mul_nonneg hB (norm_nonneg _))).2
+
 /-- **Frobenius bound, proved.** If the entrywise square sum of `W` is at
     most `C²`, the dense layer is `C`-Lipschitz in L2. This is the certified
     replacement for the power-iteration estimate `specNormW`: `‖W‖₂ ≤ ‖W‖_F`,
     so any rational `C ≥ ‖W‖_F` is a sound Lipschitz constant. -/
 theorem denseE_lipschitzL2 {n k : ℕ} (W : Fin k → Fin n → ℝ) {C : ℝ}
     (hC : 0 ≤ C) (hW : ∑ i, ∑ j, W i j ^ 2 ≤ C ^ 2) :
-    LipschitzL2 C (denseE W) := by
-  intro u w
-  have hcoord : ∀ i : Fin k,
-      (denseE W u - denseE W w) i = ∑ j, W i j * ((u - w) j) := by
-    intro i
-    show (∑ j, W i j * u j) - (∑ j, W i j * w j) = _
-    rw [← Finset.sum_sub_distrib]
-    exact Finset.sum_congr rfl fun j _ => by
-      show W i j * u j - W i j * w j = W i j * (u j - w j); ring
-  have hsq : ‖denseE W u - denseE W w‖ ^ 2 ≤ (C * ‖u - w‖) ^ 2 := by
-    rw [euclid_norm_sq]
-    calc ∑ i, ((denseE W u - denseE W w) i) ^ 2
-        = ∑ i, (∑ j, W i j * ((u - w) j)) ^ 2 := by
-          exact Finset.sum_congr rfl fun i _ => by rw [hcoord]
-      _ ≤ ∑ i, ((∑ j, W i j ^ 2) * (∑ j, ((u - w) j) ^ 2)) :=
-          Finset.sum_le_sum fun i _ =>
-            Finset.sum_mul_sq_le_sq_mul_sq _ _ _
-      _ = (∑ i, ∑ j, W i j ^ 2) * (∑ j, ((u - w) j) ^ 2) :=
-          (Finset.sum_mul ..).symm
-      _ ≤ C ^ 2 * (∑ j, ((u - w) j) ^ 2) :=
-          mul_le_mul_of_nonneg_right hW
-            (Finset.sum_nonneg fun j _ => sq_nonneg _)
-      _ = (C * ‖u - w‖) ^ 2 := by rw [mul_pow, euclid_norm_sq]
-  have h0 : 0 ≤ C * ‖u - w‖ := mul_nonneg hC (norm_nonneg _)
-  calc ‖denseE W u - denseE W w‖
-      = Real.sqrt (‖denseE W u - denseE W w‖ ^ 2) :=
-        (Real.sqrt_sq (norm_nonneg _)).symm
-    _ ≤ Real.sqrt ((C * ‖u - w‖) ^ 2) := Real.sqrt_le_sqrt hsq
-    _ = C * ‖u - w‖ := Real.sqrt_sq h0
+    LipschitzL2 C (denseE W) :=
+  denseE_lipschitzL2_of_sq W hC fun d => (sum_sq_matvec_le W d).trans <|
+    mul_le_mul_of_nonneg_right hW (Finset.sum_nonneg fun _ _ => sq_nonneg _)
 
 /-- Coordinatewise ReLU on Euclidean space. -/
 noncomputable def reluE {n : ℕ} :
@@ -123,13 +121,73 @@ theorem reluE_lipschitzL2 {n : ℕ} : LipschitzL2 1 (reluE (n := n)) := by
        one_mul] at *
 
 
-/-- Row-wise Cauchy–Schwarz summed: `‖Mv‖² ≤ ‖M‖_F²·‖v‖²` at the raw-sum level. -/
-theorem sum_sq_matvec_le {k n : ℕ} (M : Fin k → Fin n → ℝ) (y : Fin n → ℝ) :
-    ∑ a, (∑ b, M a b * y b) ^ 2 ≤ (∑ a, ∑ b, M a b ^ 2) * (∑ b, y b ^ 2) := by
-  calc ∑ a, (∑ b, M a b * y b) ^ 2
-      ≤ ∑ a, ((∑ b, M a b ^ 2) * (∑ b, y b ^ 2)) :=
-        Finset.sum_le_sum fun a _ => Finset.sum_mul_sq_le_sq_mul_sq _ _ _
-    _ = (∑ a, ∑ b, M a b ^ 2) * (∑ b, y b ^ 2) := (Finset.sum_mul ..).symm
+-- ════════════════════════════════════════════════════════════
+-- § Gram bounds: Schatten-4 ‖W‖₂ ≤ ‖G‖_F^(1/2), Schatten-8 ‖W‖₂ ≤ ‖G²‖_F^(1/4)
+-- ════════════════════════════════════════════════════════════
+
+/-- Sum-shuffle: `‖Aᵀy‖² = ⟨y, K y⟩` for `K = A·Aᵀ` supplied as data. The
+    rearrangement engine both Gram bounds share. -/
+theorem sum_sq_matTvec_eq {p q : ℕ} (A : Fin p → Fin q → ℝ) (y : Fin p → ℝ)
+    (K : Fin p → Fin p → ℝ) (hK : ∀ a b, K a b = ∑ j, A a j * A b j) :
+    ∑ j, (∑ i, A i j * y i) ^ 2 = ∑ a, y a * ∑ b, K a b * y b := by
+  calc ∑ j, (∑ i, A i j * y i) ^ 2
+      = ∑ j, ∑ a, ∑ b, (A a j * y a) * (A b j * y b) := by
+        refine Finset.sum_congr rfl fun j _ => ?_
+        rw [pow_two, Finset.sum_mul_sum]
+    _ = ∑ a, ∑ j, ∑ b, (A a j * y a) * (A b j * y b) := Finset.sum_comm
+    _ = ∑ a, ∑ b, ∑ j, (A a j * y a) * (A b j * y b) := by
+        exact Finset.sum_congr rfl fun a _ => Finset.sum_comm
+    _ = ∑ a, ∑ b, (y a * y b) * ∑ j, A a j * A b j := by
+        refine Finset.sum_congr rfl fun a _ => Finset.sum_congr rfl fun b _ => ?_
+        rw [Finset.mul_sum]
+        exact Finset.sum_congr rfl fun j _ => by ring
+    _ = ∑ a, y a * ∑ b, K a b * y b := by
+        refine Finset.sum_congr rfl fun a _ => ?_
+        rw [Finset.mul_sum]
+        exact Finset.sum_congr rfl fun b _ => by rw [hK]; ring
+
+/-- Cauchy–Schwarz on a quadratic form: `‖My‖² ≤ c²·‖y‖²` gives `⟨y, My⟩ ≤ c·‖y‖²`. -/
+theorem quad_le_of_sq_matvec {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k → ℝ) {c : ℝ}
+    (hc : 0 ≤ c) (hM : ∑ a, (∑ b, M a b * y b) ^ 2 ≤ c ^ 2 * ∑ a, y a ^ 2) :
+    ∑ a, y a * ∑ b, M a b * y b ≤ c * ∑ a, y a ^ 2 := by
+  have hS0 : 0 ≤ ∑ a, y a ^ 2 := Finset.sum_nonneg fun _ _ => sq_nonneg _
+  refine (abs_le_of_sq_le_sq' ?_ (mul_nonneg hc hS0)).2
+  calc (∑ a, y a * ∑ b, M a b * y b) ^ 2
+      ≤ (∑ a, y a ^ 2) * ∑ a, (∑ b, M a b * y b) ^ 2 := Finset.sum_mul_sq_le_sq_mul_sq _ _ _
+    _ ≤ (∑ a, y a ^ 2) * (c ^ 2 * ∑ a, y a ^ 2) := mul_le_mul_of_nonneg_left hM hS0
+    _ = (c * ∑ a, y a ^ 2) ^ 2 := by ring
+
+/-- The Frobenius form of `quad_le_of_sq_matvec`: `‖M‖_F ≤ c` gives `⟨y, My⟩ ≤ c·‖y‖²`. -/
+theorem quad_le_of_frob {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k → ℝ) {c : ℝ}
+    (hc : 0 ≤ c) (hMF : ∑ a, ∑ b, M a b ^ 2 ≤ c ^ 2) :
+    ∑ a, y a * ∑ b, M a b * y b ≤ c * ∑ a, y a ^ 2 :=
+  quad_le_of_sq_matvec M y hc <| (sum_sq_matvec_le M y).trans <|
+    mul_le_mul_of_nonneg_right hMF (Finset.sum_nonneg fun _ _ => sq_nonneg _)
+
+/-- **The Gram step**: with `G = W·Wᵀ` and `y = Wd`, a bound `⟨y, Gy⟩ ≤ c·‖y‖²` gives
+    `‖y‖² ≤ c·‖d‖²` — because `‖y‖² = ⟨d, Wᵀy⟩ ≤ ‖d‖·‖Wᵀy‖` and `‖Wᵀy‖² = ⟨y, Gy⟩`. -/
+theorem sq_le_of_gram_quad {n k : ℕ} (W : Fin k → Fin n → ℝ) (G : Fin k → Fin k → ℝ)
+    (hG : ∀ a b, G a b = ∑ j, W a j * W b j) (d : Fin n → ℝ) {c : ℝ} (hc : 0 ≤ c)
+    (hq : ∑ a, (∑ j, W a j * d j) * ∑ b, G a b * ∑ j, W b j * d j
+      ≤ c * ∑ a, (∑ j, W a j * d j) ^ 2) :
+    ∑ i, (∑ j, W i j * d j) ^ 2 ≤ c * ∑ j, d j ^ 2 := by
+  set y : Fin k → ℝ := fun i => ∑ j, W i j * d j with hy
+  set S := ∑ i, y i ^ 2
+  have hS0 : 0 ≤ S := Finset.sum_nonneg fun i _ => sq_nonneg _
+  have hDq0 : 0 ≤ ∑ j, d j ^ 2 := Finset.sum_nonneg fun j _ => sq_nonneg _
+  have hswap : S = ∑ j, d j * ∑ i, W i j * y i := by
+    calc S = ∑ i, ∑ j, y i * (W i j * d j) := by
+          exact Finset.sum_congr rfl fun i _ => by rw [pow_two, ← Finset.mul_sum]
+      _ = ∑ j, ∑ i, y i * (W i j * d j) := Finset.sum_comm
+      _ = _ := Finset.sum_congr rfl fun j _ => by
+          rw [Finset.mul_sum]; exact Finset.sum_congr rfl fun i _ => by ring
+  have h : S ^ 2 ≤ (∑ j, d j ^ 2) * (c * S) := by
+    calc S ^ 2 ≤ (∑ j, d j ^ 2) * ∑ j, (∑ i, W i j * y i) ^ 2 := by
+          rw [hswap]; exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
+      _ ≤ _ := mul_le_mul_of_nonneg_left (by rw [sum_sq_matTvec_eq W y G hG]; exact hq) hDq0
+  rcases hS0.eq_or_lt with h0 | hpos
+  · rw [← h0]; exact mul_nonneg hc hDq0
+  · nlinarith
 
 /-- **Gram (Schatten-4) bound, proved.** If `G = W·Wᵀ` (supplied as data, verified
     entrywise) and `‖G‖_F² ≤ B⁴`, then the dense layer is `B`-Lipschitz in L2.
@@ -141,90 +199,28 @@ theorem denseE_lipschitzL2_gram {n k : ℕ} (W : Fin k → Fin n → ℝ)
     (G : Fin k → Fin k → ℝ) {B : ℝ} (hB : 0 ≤ B)
     (hG : ∀ a b, G a b = ∑ j, W a j * W b j)
     (hGF : ∑ a, ∑ b, G a b ^ 2 ≤ B ^ 4) :
-    LipschitzL2 B (denseE W) := by
-  intro u w
-  set d : Fin n → ℝ := fun j => u j - w j with hdd
-  set y : Fin k → ℝ := fun i => ∑ j, W i j * d j with hyy
-  set z : Fin n → ℝ := fun j => ∑ i, W i j * y i with hzz
-  set S : ℝ := ∑ i, y i ^ 2 with hS
-  set Dq : ℝ := ∑ j, d j ^ 2 with hDq
-  have hS0 : 0 ≤ S := Finset.sum_nonneg fun i _ => sq_nonneg _
-  have hDq0 : 0 ≤ Dq := Finset.sum_nonneg fun j _ => sq_nonneg _
-  -- S = ⟨d, Wᵀy⟩
-  have hswap : S = ∑ j, d j * z j := by
-    calc S = ∑ i, y i * ∑ j, W i j * d j := by
-          exact Finset.sum_congr rfl fun i _ => by rw [pow_two]
-      _ = ∑ i, ∑ j, y i * (W i j * d j) := by
-          exact Finset.sum_congr rfl fun i _ => Finset.mul_sum ..
-      _ = ∑ j, ∑ i, y i * (W i j * d j) := Finset.sum_comm
-      _ = ∑ j, d j * z j := by
-          refine Finset.sum_congr rfl fun j _ => ?_
-          rw [hzz, Finset.mul_sum]
-          exact Finset.sum_congr rfl fun i _ => by ring
-  -- Σz² = ⟨y, Gy⟩ =: T
-  have hTz : ∑ j, z j ^ 2 = ∑ a, y a * ∑ b, G a b * y b := by
-    calc ∑ j, z j ^ 2
-        = ∑ j, ∑ a, ∑ b, (W a j * y a) * (W b j * y b) := by
-          refine Finset.sum_congr rfl fun j _ => ?_
-          rw [pow_two, hzz, Finset.sum_mul_sum]
-      _ = ∑ a, ∑ j, ∑ b, (W a j * y a) * (W b j * y b) := Finset.sum_comm
-      _ = ∑ a, ∑ b, ∑ j, (W a j * y a) * (W b j * y b) := by
-          exact Finset.sum_congr rfl fun a _ => Finset.sum_comm
-      _ = ∑ a, ∑ b, (y a * y b) * ∑ j, W a j * W b j := by
-          refine Finset.sum_congr rfl fun a _ => Finset.sum_congr rfl fun b _ => ?_
-          rw [Finset.mul_sum]
-          exact Finset.sum_congr rfl fun j _ => by ring
-      _ = ∑ a, y a * ∑ b, G a b * y b := by
-          refine Finset.sum_congr rfl fun a _ => ?_
-          rw [Finset.mul_sum]
-          exact Finset.sum_congr rfl fun b _ => by rw [hG]; ring
-  have hT0 : 0 ≤ ∑ j, z j ^ 2 := Finset.sum_nonneg fun j _ => sq_nonneg _
-  -- CS1: S² ≤ Dq·T
-  have hCS1 : S ^ 2 ≤ Dq * ∑ j, z j ^ 2 := by
-    rw [hswap]
-    exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
-  -- CS2: T² ≤ S · (ΣG²·S) ≤ B⁴·S²
-  have hCS2 : (∑ j, z j ^ 2) ^ 2 ≤ B ^ 4 * S ^ 2 := by
-    have h1 : (∑ j, z j ^ 2) ^ 2 ≤ S * ∑ a, (∑ b, G a b * y b) ^ 2 := by
-      rw [hTz]
-      exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
-    have h2 : ∑ a, (∑ b, G a b * y b) ^ 2 ≤ (∑ a, ∑ b, G a b ^ 2) * S :=
-      sum_sq_matvec_le G y
-    have h3 : (∑ a, ∑ b, G a b ^ 2) * S ≤ B ^ 4 * S :=
-      mul_le_mul_of_nonneg_right hGF hS0
-    calc (∑ j, z j ^ 2) ^ 2 ≤ S * ∑ a, (∑ b, G a b * y b) ^ 2 := h1
-      _ ≤ S * (B ^ 4 * S) := by
-          exact mul_le_mul_of_nonneg_left (h2.trans h3) hS0
-      _ = B ^ 4 * S ^ 2 := by ring
-  -- T ≤ B²·S  (both nonneg, compare squares)
-  have hTle : (∑ j, z j ^ 2) ≤ B ^ 2 * S := by
-    have hb2 : 0 ≤ B ^ 2 * S := mul_nonneg (sq_nonneg _) hS0
-    nlinarith [hCS2, hT0, hb2]
-  -- S ≤ B²·Dq  (divide S² ≤ Dq·B²·S by S, case S = 0)
-  have hSle : S ≤ B ^ 2 * Dq := by
-    rcases eq_or_lt_of_le hS0 with h0 | hpos
-    · rw [← h0]; exact mul_nonneg (sq_nonneg _) hDq0
-    · have : S ^ 2 ≤ Dq * (B ^ 2 * S) :=
-        hCS1.trans (mul_le_mul_of_nonneg_left hTle hDq0)
-      nlinarith [this, hpos]
-  -- back to norms
-  have hcoord : ∀ i, (denseE W u - denseE W w) i = y i := by
-    intro i
-    show (∑ j, W i j * u j) - (∑ j, W i j * w j) = _
-    rw [← Finset.sum_sub_distrib]
-    exact Finset.sum_congr rfl fun j _ => by
-      show W i j * u j - W i j * w j = W i j * (u j - w j); ring
-  have hnormsq : ‖denseE W u - denseE W w‖ ^ 2 ≤ (B * ‖u - w‖) ^ 2 := by
-    rw [euclid_norm_sq, mul_pow, euclid_norm_sq]
-    calc ∑ i, ((denseE W u - denseE W w) i) ^ 2
-        = S := Finset.sum_congr rfl fun i _ => by rw [hcoord]
-      _ ≤ B ^ 2 * Dq := hSle
-      _ = B ^ 2 * ∑ j, ((u - w) j) ^ 2 := rfl
-  calc ‖denseE W u - denseE W w‖
-      = Real.sqrt (‖denseE W u - denseE W w‖ ^ 2) :=
-        (Real.sqrt_sq (norm_nonneg _)).symm
-    _ ≤ Real.sqrt ((B * ‖u - w‖) ^ 2) := Real.sqrt_le_sqrt hnormsq
-    _ = B * ‖u - w‖ := Real.sqrt_sq (mul_nonneg hB (norm_nonneg _))
+    LipschitzL2 B (denseE W) :=
+  denseE_lipschitzL2_of_sq W hB fun d => sq_le_of_gram_quad W G hG d (sq_nonneg B) <|
+    quad_le_of_frob G _ (sq_nonneg B) (by rwa [← pow_mul])
+
+/-- **Iterated Gram (Schatten-8) bound, proved.** One more squaring:
+    with `G = W·Wᵀ` and `H = Gᵀ·G` (= `G²` for the symmetric `G`) supplied as
+    data, `‖H‖_F² ≤ B⁸` gives `LipschitzL2 B (denseE W)` — i.e.
+    `‖W‖₂ ≤ ‖G²‖_F^(1/4) = (Σσᵢ⁸)^(1/8)`, one Cauchy–Schwarz level tighter
+    than the Schatten-4 bound. -/
+theorem denseE_lipschitzL2_gram2 {n k : ℕ} (W : Fin k → Fin n → ℝ)
+    (G : Fin k → Fin k → ℝ) (H : Fin k → Fin k → ℝ) {B : ℝ} (hB : 0 ≤ B)
+    (hG : ∀ a b, G a b = ∑ j, W a j * W b j)
+    (hH : ∀ a b, H a b = ∑ c, G c a * G c b)
+    (hHF : ∑ a, ∑ b, H a b ^ 2 ≤ B ^ 8) :
+    LipschitzL2 B (denseE W) :=
+  denseE_lipschitzL2_of_sq W hB fun d => sq_le_of_gram_quad W G hG d (sq_nonneg B) <| by
+    -- `‖Gy‖² = ⟨y, Hy⟩ ≤ B⁴·‖y‖²`, then Cauchy–Schwarz once more
+    refine quad_le_of_sq_matvec G _ (sq_nonneg B) ?_
+    rw [sum_sq_matTvec_eq (fun i j => G j i) (fun i => ∑ j, W i j * d j) H
+      (fun a b => by rw [hH]), ← pow_mul]
+    exact quad_le_of_frob H _ (by positivity) (by rwa [← pow_mul])
+
 
 /-- **Certified lower bound on any L2 Lipschitz constant** (the power-iteration
     direction): if `‖f u − f w‖ ≥ ℓ·‖u − w‖` at one concrete pair (verified as a
@@ -252,134 +248,6 @@ theorem lipschitzL2_lower_euclid {n k : ℕ} {L ℓ : ℝ}
       _ ≤ Real.sqrt (‖f u - f w‖ ^ 2) := Real.sqrt_le_sqrt e
       _ = ‖f u - f w‖ := Real.sqrt_sq (norm_nonneg _)
   exact le_of_mul_le_mul_right (h1.trans (hf u w)) hnw
-
-
-
--- ════════════════════════════════════════════════════════════
--- § Schatten-8: iterate the Gram trick once — ‖W‖₂ ≤ ‖G²‖_F^(1/4) = (Σσ⁸)^(1/8)
--- ════════════════════════════════════════════════════════════
-
-/-- Sum-shuffle: `‖Aᵀy‖² = ⟨y, K y⟩` for `K = A·Aᵀ` supplied as data. The
-    rearrangement engine both Gram bounds share. -/
-theorem sum_sq_matTvec_eq {p q : ℕ} (A : Fin p → Fin q → ℝ) (y : Fin p → ℝ)
-    (K : Fin p → Fin p → ℝ) (hK : ∀ a b, K a b = ∑ j, A a j * A b j) :
-    ∑ j, (∑ i, A i j * y i) ^ 2 = ∑ a, y a * ∑ b, K a b * y b := by
-  calc ∑ j, (∑ i, A i j * y i) ^ 2
-      = ∑ j, ∑ a, ∑ b, (A a j * y a) * (A b j * y b) := by
-        refine Finset.sum_congr rfl fun j _ => ?_
-        rw [pow_two, Finset.sum_mul_sum]
-    _ = ∑ a, ∑ j, ∑ b, (A a j * y a) * (A b j * y b) := Finset.sum_comm
-    _ = ∑ a, ∑ b, ∑ j, (A a j * y a) * (A b j * y b) := by
-        exact Finset.sum_congr rfl fun a _ => Finset.sum_comm
-    _ = ∑ a, ∑ b, (y a * y b) * ∑ j, A a j * A b j := by
-        refine Finset.sum_congr rfl fun a _ => Finset.sum_congr rfl fun b _ => ?_
-        rw [Finset.mul_sum]
-        exact Finset.sum_congr rfl fun j _ => by ring
-    _ = ∑ a, y a * ∑ b, K a b * y b := by
-        refine Finset.sum_congr rfl fun a _ => ?_
-        rw [Finset.mul_sum]
-        exact Finset.sum_congr rfl fun b _ => by rw [hK]; ring
-
-/-- **Iterated Gram (Schatten-8) bound, proved.** One more squaring:
-    with `G = W·Wᵀ` and `H = Gᵀ·G` (= `G²` for the symmetric `G`) supplied as
-    data, `‖H‖_F² ≤ B⁸` gives `LipschitzL2 B (denseE W)` — i.e.
-    `‖W‖₂ ≤ ‖G²‖_F^(1/4) = (Σσᵢ⁸)^(1/8)`, one Cauchy–Schwarz level tighter
-    than the Schatten-4 bound. -/
-theorem denseE_lipschitzL2_gram2 {n k : ℕ} (W : Fin k → Fin n → ℝ)
-    (G : Fin k → Fin k → ℝ) (H : Fin k → Fin k → ℝ) {B : ℝ} (hB : 0 ≤ B)
-    (hG : ∀ a b, G a b = ∑ j, W a j * W b j)
-    (hH : ∀ a b, H a b = ∑ c, G c a * G c b)
-    (hHF : ∑ a, ∑ b, H a b ^ 2 ≤ B ^ 8) :
-    LipschitzL2 B (denseE W) := by
-  intro u w
-  set d : Fin n → ℝ := fun j => u j - w j with hdd
-  set y : Fin k → ℝ := fun i => ∑ j, W i j * d j with hyy
-  set z : Fin n → ℝ := fun j => ∑ i, W i j * y i with hzz
-  set S : ℝ := ∑ i, y i ^ 2 with hS
-  set Dq : ℝ := ∑ j, d j ^ 2 with hDq
-  have hS0 : 0 ≤ S := Finset.sum_nonneg fun i _ => sq_nonneg _
-  have hDq0 : 0 ≤ Dq := Finset.sum_nonneg fun j _ => sq_nonneg _
-  -- S = ⟨d, Wᵀy⟩
-  have hswap : S = ∑ j, d j * z j := by
-    calc S = ∑ i, y i * ∑ j, W i j * d j := by
-          exact Finset.sum_congr rfl fun i _ => by rw [pow_two]
-      _ = ∑ i, ∑ j, y i * (W i j * d j) := by
-          exact Finset.sum_congr rfl fun i _ => Finset.mul_sum ..
-      _ = ∑ j, ∑ i, y i * (W i j * d j) := Finset.sum_comm
-      _ = ∑ j, d j * z j := by
-          refine Finset.sum_congr rfl fun j _ => ?_
-          rw [hzz, Finset.mul_sum]
-          exact Finset.sum_congr rfl fun i _ => by ring
-  -- T := Σz² = ⟨y, Gy⟩
-  have hTz : ∑ j, z j ^ 2 = ∑ a, y a * ∑ b, G a b * y b :=
-    sum_sq_matTvec_eq W y G hG
-  have hT0 : 0 ≤ ∑ j, z j ^ 2 := Finset.sum_nonneg fun j _ => sq_nonneg _
-  -- CS1: S² ≤ Dq·T
-  have hCS1 : S ^ 2 ≤ Dq * ∑ j, z j ^ 2 := by
-    rw [hswap]
-    exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
-  -- Q := Σ_a (Gy)_a² = ⟨y, Hy⟩  (the extra squaring level)
-  have hQz : ∑ a, (∑ b, G a b * y b) ^ 2 = ∑ a, y a * ∑ b, H a b * y b := by
-    have := sum_sq_matTvec_eq (fun i j => G j i) y H
-      (fun a b => by rw [hH])
-    simpa using this
-  have hQ0 : 0 ≤ ∑ a, (∑ b, G a b * y b) ^ 2 :=
-    Finset.sum_nonneg fun a _ => sq_nonneg _
-  -- Q² ≤ S·(ΣH²·S) ≤ B⁸·S²
-  have hQ2 : (∑ a, (∑ b, G a b * y b) ^ 2) ^ 2 ≤ B ^ 8 * S ^ 2 := by
-    have h1 : (∑ a, (∑ b, G a b * y b) ^ 2) ^ 2
-        ≤ S * ∑ a, (∑ b, H a b * y b) ^ 2 := by
-      rw [hQz]
-      exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
-    have h2 : ∑ a, (∑ b, H a b * y b) ^ 2 ≤ (∑ a, ∑ b, H a b ^ 2) * S :=
-      sum_sq_matvec_le H y
-    have h3 : (∑ a, ∑ b, H a b ^ 2) * S ≤ B ^ 8 * S :=
-      mul_le_mul_of_nonneg_right hHF hS0
-    calc (∑ a, (∑ b, G a b * y b) ^ 2) ^ 2
-        ≤ S * ∑ a, (∑ b, H a b * y b) ^ 2 := h1
-      _ ≤ S * (B ^ 8 * S) := mul_le_mul_of_nonneg_left (h2.trans h3) hS0
-      _ = B ^ 8 * S ^ 2 := by ring
-  -- Q ≤ B⁴·S
-  have hQle : (∑ a, (∑ b, G a b * y b) ^ 2) ≤ B ^ 4 * S := by
-    have hb4 : 0 ≤ B ^ 4 * S := mul_nonneg (by positivity) hS0
-    nlinarith [hQ2, hQ0, hb4]
-  -- T² ≤ S·Q ≤ B⁴·S² ⇒ T ≤ B²·S
-  have hT2 : (∑ j, z j ^ 2) ^ 2 ≤ B ^ 4 * S ^ 2 := by
-    have h1 : (∑ j, z j ^ 2) ^ 2 ≤ S * ∑ a, (∑ b, G a b * y b) ^ 2 := by
-      rw [hTz]
-      exact Finset.sum_mul_sq_le_sq_mul_sq _ _ _
-    calc (∑ j, z j ^ 2) ^ 2
-        ≤ S * ∑ a, (∑ b, G a b * y b) ^ 2 := h1
-      _ ≤ S * (B ^ 4 * S) := mul_le_mul_of_nonneg_left hQle hS0
-      _ = B ^ 4 * S ^ 2 := by ring
-  have hTle : (∑ j, z j ^ 2) ≤ B ^ 2 * S := by
-    have hb2 : 0 ≤ B ^ 2 * S := mul_nonneg (sq_nonneg _) hS0
-    nlinarith [hT2, hT0, hb2]
-  -- S ≤ B²·Dq
-  have hSle : S ≤ B ^ 2 * Dq := by
-    rcases eq_or_lt_of_le hS0 with h0 | hpos
-    · rw [← h0]; exact mul_nonneg (sq_nonneg _) hDq0
-    · have : S ^ 2 ≤ Dq * (B ^ 2 * S) :=
-        hCS1.trans (mul_le_mul_of_nonneg_left hTle hDq0)
-      nlinarith [this, hpos]
-  -- back to norms (identical tail to the Schatten-4 lemma)
-  have hcoord : ∀ i, (denseE W u - denseE W w) i = y i := by
-    intro i
-    show (∑ j, W i j * u j) - (∑ j, W i j * w j) = _
-    rw [← Finset.sum_sub_distrib]
-    exact Finset.sum_congr rfl fun j _ => by
-      show W i j * u j - W i j * w j = W i j * (u j - w j); ring
-  have hnormsq : ‖denseE W u - denseE W w‖ ^ 2 ≤ (B * ‖u - w‖) ^ 2 := by
-    rw [euclid_norm_sq, mul_pow, euclid_norm_sq]
-    calc ∑ i, ((denseE W u - denseE W w) i) ^ 2
-        = S := Finset.sum_congr rfl fun i _ => by rw [hcoord]
-      _ ≤ B ^ 2 * Dq := hSle
-      _ = B ^ 2 * ∑ j, ((u - w) j) ^ 2 := rfl
-  calc ‖denseE W u - denseE W w‖
-      = Real.sqrt (‖denseE W u - denseE W w‖ ^ 2) :=
-        (Real.sqrt_sq (norm_nonneg _)).symm
-    _ ≤ Real.sqrt ((B * ‖u - w‖) ^ 2) := Real.sqrt_le_sqrt hnormsq
-    _ = B * ‖u - w‖ := Real.sqrt_sq (mul_nonneg hB (norm_nonneg _))
 
 
 
