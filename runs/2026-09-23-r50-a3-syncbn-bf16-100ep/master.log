@@ -1,0 +1,7 @@
+[sup] 2026-09-23 16:58:31 START job=r50-a3-wxclip4x128-bf16-4gpu devs=0,1,2,3 epochs=100 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-23-r50-a3-syncbn-bf16-100ep
+[sup] 2026-09-23 16:58:31 cmd: .lake/build/bin/resnet50-imagenet-verified data
+[sup] 2026-09-23 16:58:31 eta: bf16 ~22 h on 4x 4060 Ti at the median (282-285 ms/step fed, 232 synth, 2500 steps/ep + ~92 s eval/ckpt, 100 ep); ares' stall tail (means 404-546) can stretch it to 30-40 h; 3060 box unmeasured, peak 4.39 GiB fits its arena
+[sup] 2026-09-23 16:58:31 attempt 1: resuming at epoch 0/100 (next rest: 999)
+[sup] 2026-09-23 16:58:31   launched PID=675232 PGID=675232
+[sup]   last line: done (trained ResNet-50 (ImageNet-1k, 160² train) lambaccdp4x128wxclipbcebf16 + cosine/warmup via packed threading).
+[sup] 2026-09-24 14:47:47 ✅ COMPLETE — 100/100 epochs
