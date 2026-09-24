@@ -39,7 +39,7 @@ multi-head `…mh` ones rather than the single-head `vitCotD{Q,K,V}`; everything
 `Wo`, LN₂, the MLP) is head-agnostic. `vitBlockTiedMHV` states the block's 16 parameter ties with
 those cotangents (no separate `ss`/`p` saves — the per-head scores/weights are recomputed inside the
 `…mh` cots from the saved Q/K); every conjunct delegates to a head-agnostic §1-fold generic
-`ViTPoC.*_den`. `@[irreducible]` wrappers keep the 12-block composition opaque. -/
+`ViTPoC.*_den`. -/
 
 def vitBlockTiedMHV {Np1 heads d mlpDim : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
@@ -111,11 +111,11 @@ theorem vit_block_tiedMHV {Np1 heads d mlpDim : Nat}
   · intro i;   exact ViTPoC.rowDenseBiasSgd_den bN lrStr cotN Wfc2 (Mat.unflatten g) bfc2 dyOut lr i
 
 
-/-! ## Multi-head forward + cot-in + input-only block wrappers (`@[irreducible]`, the thread template) -/
+/-! ## Multi-head forward + cot-in + input-only block wrappers (the thread template) -/
 
 /-- Multi-head forward block step (the committed render's block forward = `vitBlockSpelledMHV`,
     which IS `transformerBlockV` at general `heads` by `vitBlockSpelledMHV_eq`). -/
-@[irreducible] noncomputable def vitBlockFwdOMHV {Np1 heads d mlpDim : Nat} (ε : ℝ)
+noncomputable def vitBlockFwdOMHV {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
     (xin : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
@@ -126,7 +126,7 @@ theorem vit_block_tiedMHV {Np1 heads d mlpDim : Nat}
     (`vitCotXinV` at the multi-head Q/K/V dense cots — `vitCotLn1 Wq Wk Wv dQmh dKmh dVmh` IS the
     multi-head LN₁ fan-in `vitCotLn1MH`). Recomputes the saves from `xin` (the `vitBlockSpelledMHV`
     let-chain, multi-head `att`). -/
-@[irreducible] noncomputable def vitBlockCotInAtMHV {Np1 heads d mlpDim : Nat} (ε : ℝ)
+noncomputable def vitBlockCotInAtMHV {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
     (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
@@ -150,7 +150,7 @@ theorem vit_block_tiedMHV {Np1 heads d mlpDim : Nat}
   vitCotXinV ε γ1 Wq Wk Wv xin dQ dK dV cotH
 
 /-- Multi-head input-only block tie — recompute the 9 saves from `xin`, then `vit_block_tiedMHV`. -/
-@[irreducible] def vitBlockTiedAtMHV {Np1 heads d mlpDim : Nat}
+def vitBlockTiedAtMHV {Np1 heads d mlpDim : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
@@ -284,7 +284,7 @@ theorem vit_embed_tied (wN xN bN clsN pN lrStr cotN : String)
 
 Twelve blocks as `BlockParamsV` (ViTDepthK's bundle), plus the patch embed, final LN and head.
 The ties share ONE `ε` across every LN. The dot-notation wrappers are `abbrev`s over the
-`@[irreducible]` constructors above: a statement over a record unfolds to the unpacked one. -/
+constructors above: a statement over a record unfolds to the unpacked one. -/
 
 /-- ViT-Tiny as the ties bind it. -/
 structure ViTTieWeights (nC : Nat) where

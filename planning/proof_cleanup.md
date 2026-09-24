@@ -398,3 +398,27 @@ Not done:
 * The medium items (`*TiedB` Props restating `_den` lemmas, ConvNeXt's `@[irreducible]`
   wrappers, FloatBridge's cotangent blocks, MuonGeometry) and the codegen report stay listed in
   `…_open_findings.md`.
+
+### 6.7 `@[irreducible]` wrappers, strip-and-compile (2026-09-24)
+
+The 26 `@[irreducible]` defs in the ConvNeXt, ViT and EfficientNet step ties all carried the same
+comment ("keep the N-deep capstone thread opaque — the r34/mnv2 heartbeat lesson"). Stripped per file
+and bisected by group:
+
+| file | irreducible | needed |
+|---|---|---|
+| `ConvNeXtStepTie` | 11 (forward aliases, cot-in constructors, `*TiedAt`) | `cnxStemChTiedAt` |
+| `ConvNeXtStepTieGB` | 5 | `cnxStemChTiedGBAt` |
+| `ViTStepTie` / `ViTStepTieGB` | 3 / 1 | none |
+| `EfficientNetStepTie` / `…TieG` | 3 / 3 | none |
+
+Without the stem one, each ConvNeXt capstone's `refine ⟨cnx_stem_ch_tiedAt …, ?_, …⟩` times out in
+`whnf` (15 s, then the error; ~2.8 s with it). Moving the stem to its own goal does not help, so it
+stays. Every other file compiles in the same ~2.5–2.9 s without them.
+
+Four of the batched wrappers were pure aliases, `def XAt … := X …` plus a theorem that unfolds
+them (`cnxBlockChTiedGBAt`, `cnxDownChTiedGBAt`, `cnxHeadChTiedGBAt`, `vitBlockTiedGBAt`). They are
+deleted and their callers name the underlying Prop. `cnx_net_tiedGB` is in the tier, so its
+statement moves from `cnxHeadChTiedGBAt` to `cnxHeadChTiedGB` (tier regenerated). The wrappers that
+repackage a record or compute `let`s (`enet*TiedGAt`, `vitBlockTiedAtMHV`, the ConvNeXt `*TiedAt`)
+stay as plain `def`s.

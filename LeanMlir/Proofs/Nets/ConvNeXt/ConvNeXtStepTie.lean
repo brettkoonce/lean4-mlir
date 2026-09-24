@@ -296,18 +296,15 @@ theorem cnxLossCot_den (nlogN ohN : String) (logits : Vec 10) (label : Fin 10) :
       = fun j => softmax 10 logits j - oneHot 10 label j :=
   StableHLO.softmaxCELossCot_den nlogN ohN _ label
 
-/-! ## Forward aliases (`@[irreducible]`) — thread block inputs through the real forward
-
-`@[irreducible]` so the 18-deep nested composition stays opaque during the capstone's dimension
-inference (the r34/mnv2 heartbeat lesson). -/
+/-! ## Forward aliases — thread block inputs through the real forward -/
 
 /-- The stem output: patchify conv **then** channel-LN (§2m — the pre-§2m render had no stem LN). -/
-@[irreducible] noncomputable def cnxStemFwdO {c h w : Nat} (ε : ℝ)
+noncomputable def cnxStemFwdO {c h w : Nat} (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (bst psng psnbt : Vec c)
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) : Vec (c*h*w) :=
   chanLNTensor3 c h w ε psng psnbt (flatConvStride4 Wst bst x)
 
-@[irreducible] noncomputable def cnxBlockBodyChO {c cExp h w : Nat} (ε : ℝ)
+noncomputable def cnxBlockBodyChO {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin : Vec (c*h*w)) : Vec (c*h*w) :=
@@ -315,22 +312,22 @@ inference (the r34/mnv2 heartbeat lesson). -/
     (flatConv (h := h) (w := w) Wpr bpr (gelu (cExp*h*w) (flatConv (h := h) (w := w) Wex bex
       (chanLNTensor3 c h w ε ng nbt (depthwiseFlat (h := h) (w := w) Wdw bdw xin)))))
 
-@[irreducible] noncomputable def cnxBlockFwdChO {c cExp h w : Nat} (ε : ℝ)
+noncomputable def cnxBlockFwdChO {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin : Vec (c*h*w)) : Vec (c*h*w) :=
   fun i => cnxBlockBodyChO ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin i + xin i
 
-@[irreducible] noncomputable def cnxDownFwdChO {ci co h w : Nat} (ε : ℝ)
+noncomputable def cnxDownFwdChO {ci co h w : Nat} (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) : Vec (co*h*w) :=
   flatConvStride2 Wd bd (chanLNTensor3 ci (2*h) (2*w) ε dng dnbt xin)
 
-/-! ## Backward cot-in constructors (`@[irreducible]`) — thread block dyOuts (the residual fan-in) -/
+/-! ## Backward cot-in constructors — thread block dyOuts (the residual fan-in) -/
 
 /-- ConvNeXt block input cotangent: `depthwise-back(cotD) + dyOut` (the identity-skip fan-in),
     with `cotD` through the channel-LN input-VJP. -/
-@[irreducible] noncomputable def cnxBlockCotInChAt {c cExp h w : Nat} (ε : ℝ)
+noncomputable def cnxBlockCotInChAt {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
@@ -344,7 +341,7 @@ inference (the r34/mnv2 heartbeat lesson). -/
 
 /-- Downsample input cotangent (at `ci·(2h)·(2w)`): the channel-LN input-VJP of the
     strided-conv-back. No skip. -/
-@[irreducible] noncomputable def cnxDownCotInChAt {ci co h w : Nat} (ε : ℝ)
+noncomputable def cnxDownCotInChAt {ci co h w : Nat} (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) : Vec (ci*(2*h)*(2*w)) :=
   let n := chanLNTensor3 ci (2*h) (2*w) ε dng dnbt xin
@@ -354,7 +351,7 @@ inference (the r34/mnv2 heartbeat lesson). -/
 /-- The cotangent at the last block output `xhead` (= s3b2's `dyOut`): `gap-back(headLN-back(
     dense-back(g)))`. The head LN's input-VJP is the render's `rowScaleF γ` then `lnRowBack` at
     γ = 1, which is `rowLNVecFlatBack` (`ConvNeXtBackB0.rowLNBack_affine_eq`). -/
-@[irreducible] noncomputable def cnxHeadDyXheadCh {h w : Nat} (ε : ℝ)
+noncomputable def cnxHeadDyXheadCh {h w : Nat} (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 10) (bfc : Vec 10)
     (xhead : Vec (768*h*w)) (g : Vec 10) : Vec (768*h*w) :=
   let gap : Vec (1*768) := globalAvgPoolFlat 768 h w xhead
@@ -363,9 +360,13 @@ inference (the r34/mnv2 heartbeat lesson). -/
   let cotGap : Vec 768 := rowLNVecFlatBack 1 768 ε hng gap cotHn
   (globalAvgPoolFlat_has_vjp 768 h w).backward xhead cotGap
 
-/-! ## Input-only `*TiedAt` wrappers (`@[irreducible]`) — compute internals from a block's input -/
+/-! ## Input-only `*TiedAt` wrappers — compute internals from a block's input
 
-@[irreducible] def cnxBlockChTiedAt {c cExp h w : Nat}
+⚠ Only `cnxStemChTiedAt` is `@[irreducible]`: without it the capstone's
+`refine ⟨cnx_stem_ch_tiedAt …, ?_, …⟩` times out in `whnf`, and moving it to its own goal does not
+help. Every other definition in this section and the two above is a plain `def`. -/
+
+def cnxBlockChTiedAt {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
@@ -389,7 +390,7 @@ theorem cnx_block_ch_tiedAt {c cExp h w : Nat}
   exact cnx_block_ch_tied xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
     xin d nl p e g dyOut lr
 
-@[irreducible] def cnxDownChTiedAt {ci co h w : Nat}
+def cnxDownChTiedAt {ci co h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) : Prop :=
@@ -423,7 +424,7 @@ theorem cnx_stem_ch_tiedAt {c h w : Nat}
   intro patch
   exact cnx_stem_ch_tied xN wN bN gN epsStr lrStr cotN ε Wst psb psng psnbt x xstem patch dyStem lr
 
-@[irreducible] def cnxHeadChTiedAt {h w : Nat}
+def cnxHeadChTiedAt {h w : Nat}
     (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 10) (bfc : Vec 10)
     (xhead : Vec (768*h*w)) (g : Vec 10) (lr : ℝ) : Prop :=
@@ -444,7 +445,7 @@ theorem cnx_head_ch_tiedAt {h w : Nat}
 
 The whole-net ties share ONE `ε` across the stem, every block, downsample and head LN, so these
 records carry no `ε` (unlike `CnxBlockParamsCh`, whose `εn` is per block). The dot-notation
-wrappers below are `abbrev`s over the `@[irreducible]` constructors above: a statement over a
+wrappers below are `abbrev`s over the constructors above: a statement over a
 record unfolds to exactly the unpacked one. -/
 
 /-- One ConvNeXt block's weights: depthwise 7×7, channel-LN affine, the two 1×1 convs, layer

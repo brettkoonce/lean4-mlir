@@ -407,13 +407,12 @@ theorem enet_head_tiedG {N c oc h w nC : Nat}
   · intro i j; exact ResNet34PoCB.denseWGradB_den dN cotN a_gap Wfc bfc g i j
   · intro j;   exact EnetPoCG.denseBGradB_den cotN (0 : Mat nC nC) (0 : Vec nC) bfc g j
 
-/-! ## `@[irreducible]` bundle-taking `*TiedAt` wrappers — one per block type, for the whole-net thread
+/-! ## Bundle-taking `*TiedAt` wrappers — one per block type, for the whole-net thread
 
 Each takes the `B0Weights` block bundle (`MBW`/`MBWNoExp`) + its ε-positivity + the block input + the
-downstream cotangent `dyOut`, and delegates to the per-block-type tie. `@[irreducible]` keeps the
-16-deep capstone thread opaque to the elaborator (the r34/mnv2 heartbeat lesson). -/
+downstream cotangent `dyOut`, and delegates to the per-block-type tie. -/
 
-@[irreducible] def enetExpTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
+def enetExpTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   enetExpTiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
@@ -427,7 +426,7 @@ theorem enet_exp_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat
   exact enet_exp_tiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
 
-@[irreducible] def enetStridedTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
+def enetStridedTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   enetStridedTiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
@@ -441,7 +440,7 @@ theorem enet_strided_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw :
   exact enet_strided_tiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
 
-@[irreducible] def enetNoExpTiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
+def enetNoExpTiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
     (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
   enetNoExpTiedG xN vN epsStr cotN p.dε hd p.pε hp

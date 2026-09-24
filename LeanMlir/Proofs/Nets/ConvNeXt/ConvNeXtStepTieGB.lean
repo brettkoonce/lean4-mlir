@@ -113,7 +113,7 @@ noncomputable def headCotHn {nC : Nat} (Wfc : Mat 768 nC) (bfc : Vec nC)
 
 /-- The cotangent at the last block output, per example, at a GENERAL class count —
     `CnxTiePoC.cnxHeadDyXheadCh` with `nC` a binder (that one is at the literal 10). -/
-@[irreducible] noncomputable def cnxHeadDyXheadChN {h w nC : Nat} (ε : ℝ)
+noncomputable def cnxHeadDyXheadChN {h w nC : Nat} (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC)
     (xhead : Vec (768*h*w)) (g : Vec nC) : Vec (768*h*w) :=
   let gap : Vec (1*768) := globalAvgPoolFlat 768 h w xhead
@@ -298,33 +298,11 @@ theorem cnx_head_ch_tiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String)
   · intro i j; exact ViTPoCGB.headWGradB_den dN cotN hnB Wfc bfc g i j
   · intro n i; exact ViTPoCGB.headBGradB_den cotN Wfc (batchSlice N 768 hnB n) bfc g n i
 
-/-! ## `@[irreducible]` wrappers — keep the 22-deep capstone thread opaque (the r34/mnv2 heartbeat lesson) -/
+/-! ## The stem wrapper — `@[irreducible]`
 
-@[irreducible] def cnxBlockChTiedGBAt (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String)
-    (ε : ℝ) (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (lg : Vec c) (xin dyOut : Vec (N * (c*h*w))) : Prop :=
-  cnxBlockChTiedGB N xN epsStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut
-
-theorem cnx_block_ch_tiedGBAt (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String)
-    (ε : ℝ) (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
-    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
-    (lg : Vec c) (xin dyOut : Vec (N * (c*h*w))) :
-    cnxBlockChTiedGBAt N xN epsStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut := by
-  unfold cnxBlockChTiedGBAt
-  exact cnx_block_ch_tiedGB N xN epsStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut
-
-@[irreducible] def cnxDownChTiedGBAt (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String)
-    (ε : ℝ) (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
-    (xin : Vec (N * (ci*(2*h)*(2*w)))) (dyOut : Vec (N * (co*h*w))) : Prop :=
-  cnxDownChTiedGB N xN epsStr cotN ε dng dnbt Wd bd xin dyOut
-
-theorem cnx_down_ch_tiedGBAt (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String)
-    (ε : ℝ) (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
-    (xin : Vec (N * (ci*(2*h)*(2*w)))) (dyOut : Vec (N * (co*h*w))) :
-    cnxDownChTiedGBAt N xN epsStr cotN ε dng dnbt Wd bd xin dyOut := by
-  unfold cnxDownChTiedGBAt
-  exact cnx_down_ch_tiedGB N xN epsStr cotN ε dng dnbt Wd bd xin dyOut
+Without it the capstone's `refine ⟨cnx_stem_ch_tiedGBAt …, ?_, …⟩` times out in `whnf` at the
+default budget. The block, downsample and head ties need no wrapper: the capstone names
+`cnxBlockChTiedGB` / `cnxDownChTiedGB` / `cnxHeadChTiedGB` directly. -/
 
 @[irreducible] def cnxStemChTiedGBAt (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c)
@@ -340,18 +318,6 @@ theorem cnx_stem_ch_tiedGBAt (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (
   unfold cnxStemChTiedGBAt
   exact cnx_stem_ch_tiedGB N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem
 
-@[irreducible] def cnxHeadChTiedGBAt (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String)
-    (ε : ℝ) (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC)
-    (xhead : Vec (N * (768*h*w))) (g : Vec (N * nC)) : Prop :=
-  cnxHeadChTiedGB N xN epsStr cotN dN ε hng hnbt Wfc bfc xhead g
-
-theorem cnx_head_ch_tiedGBAt (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String)
-    (ε : ℝ) (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC)
-    (xhead : Vec (N * (768*h*w))) (g : Vec (N * nC)) :
-    cnxHeadChTiedGBAt N xN epsStr cotN dN ε hng hnbt Wfc bfc xhead g := by
-  unfold cnxHeadChTiedGBAt
-  exact cnx_head_ch_tiedGB N xN epsStr cotN dN ε hng hnbt Wfc bfc xhead g
-
 /-! ## The whole-net capstone — all 182 params through the REAL batched forward + composed cotangent
 
 The fused file's thread, lifted: block inputs are `batchMap N` of the forward prefixes, and the
@@ -360,26 +326,26 @@ backward cotangents are `batchMapAux N` of the per-example chain, composed from 
 the eighteen identity-skip merges, the channel-LN-back at each of the three downsamples, and the
 stem LN's own back before the patchify conv's gradients. -/
 
-/-- The block's batched tie (`cnxBlockChTiedGBAt`), over its `CnxTieBlk` record. -/
+/-- The block's batched tie (`cnxBlockChTiedGB`), over its `CnxTieBlk` record. -/
 abbrev _root_.Proofs.CnxTiePoC.CnxTieBlk.TiedGB {c cExp h w : Nat} (p : CnxTiePoC.CnxTieBlk c cExp)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) : Prop :=
-  cnxBlockChTiedGBAt N xN epsStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL xin dyOut
+  cnxBlockChTiedGB N xN epsStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL xin dyOut
 
 theorem _root_.Proofs.CnxTiePoC.CnxTieBlk.tiedGB {c cExp h w : Nat} (p : CnxTiePoC.CnxTieBlk c cExp)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) :
     p.TiedGB N xN epsStr cotN ε xin dyOut :=
-  cnx_block_ch_tiedGBAt N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ xin dyOut
+  cnx_block_ch_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ xin dyOut
 
-/-- The downsample's batched tie (`cnxDownChTiedGBAt`), over its `CnxTieDown` record. -/
+/-- The downsample's batched tie (`cnxDownChTiedGB`), over its `CnxTieDown` record. -/
 abbrev _root_.Proofs.CnxTiePoC.CnxTieDown.TiedGB {ci co h w : Nat} (p : CnxTiePoC.CnxTieDown ci co)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin : Vec (N * (ci*(2*h)*(2*w))))
     (dyOut : Vec (N * (co*h*w))) : Prop :=
-  cnxDownChTiedGBAt N xN epsStr cotN ε p.G p.T p.W p.B xin dyOut
+  cnxDownChTiedGB N xN epsStr cotN ε p.G p.T p.W p.B xin dyOut
 
 theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tiedGB {ci co h w : Nat} (p : CnxTiePoC.CnxTieDown ci co)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin : Vec (N * (ci*(2*h)*(2*w))))
     (dyOut : Vec (N * (co*h*w))) : p.TiedGB N xN epsStr cotN ε xin dyOut :=
-  cnx_down_ch_tiedGBAt N xN epsStr cotN ε _ _ _ _ xin dyOut
+  cnx_down_ch_tiedGB N xN epsStr cotN ε _ _ _ _ xin dyOut
 
 /-- ⭐⭐ **The whole [3,3,9,3] ConvNeXt-T train step, tied at the BATCHED index, the GRADIENT
     nodes and the SMOOTHED loss.** Threading the real channel-LN / per-channel layer-scale forward
@@ -480,7 +446,7 @@ theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
   ∧ w.b16.TiedGB N xN epsStr cotN ε ib16 dyO16
   ∧ w.b17.TiedGB N xN epsStr cotN ε ib17 dyO17
   ∧ w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18
-  ∧ cnxHeadChTiedGBAt N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g := by
+  ∧ cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g := by
   intro ib1 ib2 ib3 ibD0 ib4 ib5 ib6 ibD1 ib7 ib8 ib9 ib10 ib11 ib12 ib13 ib14 ib15 ibD2 ib16 ib17 ib18 xhead gapB hnB logitsB g dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
   refine ⟨cnx_stem_ch_tiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -505,6 +471,6 @@ theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
   · exact w.b16.tiedGB N xN epsStr cotN ε ib16 dyO16
   · exact w.b17.tiedGB N xN epsStr cotN ε ib17 dyO17
   · exact w.b18.tiedGB N xN epsStr cotN ε ib18 dyO18
-  · exact cnx_head_ch_tiedGBAt N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g
+  · exact cnx_head_ch_tiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g
 
 end Proofs.CnxTiePoCGB

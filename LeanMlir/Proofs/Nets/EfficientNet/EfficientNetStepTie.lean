@@ -38,8 +38,8 @@ tie builds explicit chain-cotangent constructors rather than reading them off.
 * `efficientnet_net_tied` — the whole-net thread. Block inputs are the forward's prefixes
   (`a0..a16`); the per-block output cotangents (`dy0..dy16`) are composed top-down by the proven
   block VJPs (`headFwdB_has_vjp`, `mb{Exp,Resid,Strided,NoExp}W_has_vjp`) from `g`. The residual
-  fan-in is in `mbResidW`'s own VJP (it includes the `+ x`). `@[irreducible]` `*TiedAt` wrappers
-  keep the 16-deep thread opaque to the elaborator.
+  fan-in is in `mbResidW`'s own VJP (it includes the `+ x`). One `*TiedAt` wrapper per block type
+  takes the `B0Weights` block bundle.
 
 Not done: the dense head's total-loss fold (`Wfc → ∂CE/∂Wfc`, the batched `Σ_n` analogue of
 `mlp_output_total_loss_grad`); the head dense ties at `g` directly. -/
@@ -449,13 +449,12 @@ theorem enet_head_tied {N c oc h w nC : Nat}
   · intro i j; exact EnetPoC.denseWB_den dN wN lrStr cotN a_gap Wfc bfc g lr i j
   · intro j;   exact EnetPoC.denseBB_den dN lrStr cotN (0 : Mat nC nC) (0 : Vec nC) bfc g lr j
 
-/-! ## `@[irreducible]` bundle-taking `*TiedAt` wrappers — one per block type, for the whole-net thread
+/-! ## Bundle-taking `*TiedAt` wrappers — one per block type, for the whole-net thread
 
 Each takes the `B0Weights` block bundle (`MBW`/`MBWNoExp`) + its ε-positivity + the block input + the
-downstream cotangent `dyOut`, and delegates to the per-block-type tie. `@[irreducible]` keeps the
-16-deep capstone thread opaque to the elaborator (the r34/mnv2 heartbeat lesson). -/
+downstream cotangent `dyOut`, and delegates to the per-block-type tie. -/
 
-@[irreducible] def enetExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+def enetExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) : Prop :=
   enetExpTied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
@@ -469,7 +468,7 @@ theorem enet_exp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc
   exact enet_exp_tied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
 
-@[irreducible] def enetStridedTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+def enetStridedTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) : Prop :=
   enetStridedTied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
@@ -483,7 +482,7 @@ theorem enet_strided_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mi
   exact enet_strided_tied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
 
-@[irreducible] def enetNoExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r kh kw : Nat}
+def enetNoExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r kh kw : Nat}
     (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) : Prop :=
   enetNoExpTied xN wN bN gN vN epsStr lrStr cotN p.dε hd p.pε hp

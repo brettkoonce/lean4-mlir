@@ -248,22 +248,6 @@ theorem vit_block_tiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : 
   · intro i j; exact ViTPoCGB.rowDenseWeightGradB_den xN cotN bfc2 gB Wfc2 dyOut i j
   · intro i; exact ViTPoCGB.rowDenseBiasGradB_den cotN Wfc2 (fun n => Mat.unflatten (batchSlice N (Np1 * mlpDim) gB n)) bfc2 dyOut i
 
-@[irreducible] def vitBlockTiedGBAt (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String)
-    (ε : ℝ) (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
-    (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
-  vitBlockTiedGB N xN epsStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 bfc2 xin dyOut
-
-theorem vit_block_tiedGBAt (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String)
-    (ε : ℝ) (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
-    (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d)) (bfc2 : Vec (heads * d))
-    (xin dyOut : Vec (N * (Np1 * (heads * d)))) :
-    vitBlockTiedGBAt N xN epsStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 bfc2
-      xin dyOut := by
-  unfold vitBlockTiedGBAt
-  exact vit_block_tiedGB N xN epsStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2 bfc2
-    xin dyOut
-
 /-! ## Final LN, classifier and patch embedding — batched -/
 
 /-- **Final vector-LN γF/βF, tied at the batched classifier-back cotangent** `vitCotFl` per
@@ -372,17 +356,17 @@ of theirs, `g` is the smoothed loss cotangent at a general target, and every cot
 `batchMapAux N` of the per-example chain — `vitCotB2outV` at the top, then twelve
 `vitBlockCotInAtMHV` attention-residual fan-ins down to the embed-output cotangent. -/
 
-/-- The block's batched tie (`vitBlockTiedGBAt`), over its `BlockParamsV` record. -/
+/-- The block's batched tie (`vitBlockTiedGB`), over its `BlockParamsV` record. -/
 abbrev _root_.Proofs.BlockParamsV.TiedGB {Np1 heads d mlpDim : Nat}
     (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ)
     (xin dyOut : Vec (N * (Np1 * (heads * d)))) : Prop :=
-  vitBlockTiedGBAt N xN epsStr cotN ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo
+  vitBlockTiedGB N xN epsStr cotN ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo
     p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 xin dyOut
 
 theorem _root_.Proofs.BlockParamsV.tiedGB {Np1 heads d mlpDim : Nat}
     (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ)
     (xin dyOut : Vec (N * (Np1 * (heads * d)))) : p.TiedGB N xN epsStr cotN ε xin dyOut :=
-  vit_block_tiedGBAt N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ xin dyOut
+  vit_block_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ xin dyOut
 
 /-- ⭐⭐ **The whole depth-12 multi-head ViT-Tiny train step, tied at the BATCHED index, the
     GRADIENT nodes and the SMOOTHED loss — all 200 parameters.** The real forward

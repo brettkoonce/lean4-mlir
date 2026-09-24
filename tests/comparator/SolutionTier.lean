@@ -688,7 +688,7 @@ theorem chk_cnx_net_tiedGB :
                                             w.b16.TiedGB N xN epsStr cotN ε ib16 dyO16 ∧
                                               w.b17.TiedGB N xN epsStr cotN ε ib17 dyO17 ∧
                                                 w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18 ∧
-                                                  Proofs.CnxTiePoCGB.cnxHeadChTiedGBAt N xN epsStr cotN dN ε w.hG w.hT w.Wfc
+                                                  Proofs.CnxTiePoCGB.cnxHeadChTiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc
                                                     w.bfc xhead g :=
   Proofs.CnxTiePoCGB.cnx_net_tiedGB
 
