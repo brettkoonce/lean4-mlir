@@ -110,7 +110,6 @@ run () {
   env \
     LD_LIBRARY_PATH="$DET" \
     CUDA_VISIBLE_DEVICES="$DEVS" \
-    HIP_VISIBLE_DEVICES="$DEVS" \
     PJRT_PLUGIN="$BOX_PLUG" \
     "${BOX_SHIMPY[@]}" \
     PJRT_REPLICAS="$REPLICAS" \

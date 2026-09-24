@@ -18,11 +18,10 @@ then retired: a redundant writer costs nothing until someone edits one of the tw
 is a silent last-writer-wins race (§2a, §2b-ter). Being *currently* identical is not a property that
 maintains itself.
 
-What remains is the part the `Proofs/` `#eval` cannot do: iree-compile the committed bytes on the
-rocm box, which needs the compiler on PATH and so must stay out of `lake build`.
+What remains is the part the `Proofs/` `#eval` cannot do: iree-compile the committed bytes,
+which needs the compiler on PATH and so must stay out of `lake build`.
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestViTTrain.lean
 -/
 

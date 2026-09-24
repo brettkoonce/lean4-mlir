@@ -33,7 +33,7 @@ Full-paper MobileNetV2 (17 inverted-residual blocks, 158 param tensors / 2,236,6
 trains on (NOTE: `TestMobilenetV2Train.lean`, the committed SGD renderer, is still the reduced 6-block
 net — this PC/adam path is the full one).
 
-Run: `IREE_BACKEND=rocm lake env lean tests/TestMobilenetV2TrainPC.lean`
+Run: `lake env lean tests/TestMobilenetV2TrainPC.lean`
 -/
 
 open Proofs Proofs.StableHLO

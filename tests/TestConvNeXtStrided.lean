@@ -17,7 +17,7 @@ verified on concrete tiny examples:
 
 Patchify (stem, first layer) needs only weight+bias grad. Compile-only shape check.
 
-Run (rocm): export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestConvNeXtStrided.lean
 -/
 

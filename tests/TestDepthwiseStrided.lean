@@ -9,8 +9,7 @@ import LeanMlir.Types
     reversed-kernel stride-1 depthwise. den via the proven `depthwiseStride2Flat`
     / `depthwiseStride2Flat_has_vjp` (= decimate ∘ depthwise). Values are placeholders.
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestDepthwiseStrided.lean
 -/
 

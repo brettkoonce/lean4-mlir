@@ -32,8 +32,8 @@ lake build vjp-oracle-dense
 (cd jax && lake build vjp-oracle-dense)
 ```
 
-Phase 2 runs on whatever JAX targets by default — ROCm on AMD hosts,
-CUDA on NVIDIA hosts. The earlier `JAX_PLATFORMS=cpu` requirement on
+Phase 2 runs on whatever JAX targets by default (CUDA here); phase 3 on
+`$IREE_BACKEND` (default cuda). The earlier `JAX_PLATFORMS=cpu` requirement on
 mars (ROCm/MIOpen#3955) is fixed in jax 0.10.0+; the runner no longer
 auto-pins JAX to CPU. If you need to force CPU for any reason, pass
 `JAX_PLATFORMS=cpu` in your environment.

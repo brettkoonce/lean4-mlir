@@ -36,7 +36,7 @@ no theorem — exactly the configuration in which §2b shipped plain CE against 
 cotangent, caught only by the numeric tie.
 
     lake build mobilenetv2-adam-tie
-    IREE_BACKEND=rocm .lake/build/bin/mobilenetv2-adam-tie [refRender.mlir] [candRender.mlir]
+    .lake/build/bin/mobilenetv2-adam-tie [refRender.mlir] [candRender.mlir]
 
 Links `lowererLink`: the backend is chosen at run time, not by the link line, and a tie should run
 on the backend the trainer actually uses.

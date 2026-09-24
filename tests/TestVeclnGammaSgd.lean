@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! Standalone iree-validation of the new `veclnGammaSgd` core op (ViT vector-[D] LayerNorm γ SGD).
     Renders a one-op module at the real ViT-Tiny shapes (B=32, N=197 tokens, D=192) and writes it to
-    `/tmp/vecln_gamma_sgd.mlir` for an iree-compile smoke test (rocm/gfx1100). NOT a proof — just
+    `/tmp/vecln_gamma_sgd.mlir` for an iree-compile smoke test. NOT a proof — just
     confirms the `emitTok` text is well-formed StableHLO at production shapes. -/
 
 open Proofs Proofs.StableHLO

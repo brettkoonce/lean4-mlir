@@ -3,7 +3,7 @@ import LeanMlir.VerifiedNets
 /-! # `r34-dp-shard` — do R34/ImageNet's four replicas actually SEE DIFFERENT DATA?
 
     lake build r34-dp-shard
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     PJRT_PLUGIN=... PJRT_REPLICAS=4 .lake/build/bin/r34-dp-shard
 
 **Why this file exists.** `tests/TestShardCheck.lean` says in its own docstring that *"R34 is

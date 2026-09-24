@@ -43,7 +43,7 @@ gate. (It also means a GAP-normaliser bug here could not change eval accuracy.)
 
 Recover the retired emitter from `git show 17413f0:tests/TestConvNeXtFwd.lean`.
 
-Run (rocm): export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestConvNeXtFwd.lean
 -/
 

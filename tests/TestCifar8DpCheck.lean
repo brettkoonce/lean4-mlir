@@ -17,7 +17,7 @@ Both renders come from `LeanMlir/Proofs/Codegen/CnnRender.lean`, i.e. the same
 `cifar8AdamTrainStepFaithfulV` at `replicas := 1` (B=256) and `replicas := 2` (B=128). 1/256 and
 1/128 are both exact in binary32, so the loss scaling contributes no rounding of its own.
 
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     lake build cifar8-dp-check
     scripts/det_shim.sh /tmp/detshim
     LD_LIBRARY_PATH=/tmp/detshim PJRT_REPLICAS=2 .lake/build/bin/cifar8-dp-check

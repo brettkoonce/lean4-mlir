@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderB
 /-! # `resnet34-syncbn-check` — synchronised BatchNorm: 2×b IS 1×2b
 
     lake build resnet34-syncbn-check
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=2 .lake/build/bin/resnet34-syncbn-check
 
 The identity every `*-dp-check` and `shard-check` could NOT state for a batch-BN net. Until

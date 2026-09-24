@@ -16,11 +16,10 @@ at which point it is a silent last-writer-wins race — which is what happened t
 (§2a) and `resnet34_adam_train_step` (§2b-ter). Being *currently* identical is not a property that
 maintains itself.
 
-What remains is the part the `Proofs/` `#eval` genuinely cannot do: iree-compile the committed bytes
-on the rocm box, which needs the compiler on PATH and so must stay out of `lake build`.
+What remains is the part the `Proofs/` `#eval` genuinely cannot do: iree-compile the committed bytes,
+which needs the compiler on PATH and so must stay out of `lake build`.
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestViTFwd.lean
 -/
 

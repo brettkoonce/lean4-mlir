@@ -43,7 +43,7 @@ Run (render-only, no GPU):
   `lake build LeanMlir.Proofs.Codegen.StableHLO && lake env lean tests/TestStrided1x1.lean`
   (the `lake build` first is §4's `lake env lean` trap — it links committed `.olean`s.)
 Run (the numeric gate):
-  `lake build strided-1x1 && HIP_VISIBLE_DEVICES=0 .lake/build/bin/strided-1x1`
+  `lake build strided-1x1 && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/strided-1x1`
 -/
 
 open Proofs Proofs.StableHLO

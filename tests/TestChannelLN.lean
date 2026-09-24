@@ -32,7 +32,7 @@ Three gates, and the second is the one that matters:
    `.bnF` would mean the probe is measuring something both paths satisfy — and would say the
    deviation §2m found does not exist. This gate is what makes the other two mean anything.
 
-    lake build channel-ln && HIP_VISIBLE_DEVICES=0 .lake/build/bin/channel-ln
+    lake build channel-ln && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/channel-ln
 -/
 
 open Proofs Proofs.StableHLO

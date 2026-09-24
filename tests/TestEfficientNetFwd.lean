@@ -55,8 +55,7 @@ down to the argument NAMES (263 in / 361 in). Shown capable of failing, two ways
 
 Recover the retired emitter from `git show 17413f0:tests/TestEfficientNetFwd.lean`.
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestEfficientNetFwd.lean
 -/
 

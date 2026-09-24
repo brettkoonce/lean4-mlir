@@ -52,7 +52,7 @@ The `bnChannels` layout this file used to print lives in `efficientnetVerified.b
 (49 layers, `LeanMlir/VerifiedNets.lean`), and the certified AdamW render now derives its 49 stat
 slots from the same forward traversal that computes them.
 
-Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestEfficientNetTrain.lean
+Run (needs iree-compile on PATH): lake env lean tests/TestEfficientNetTrain.lean
 -/
 
 

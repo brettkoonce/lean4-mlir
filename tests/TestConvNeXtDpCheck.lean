@@ -39,7 +39,7 @@ Two failure modes it separates, both of which have actually happened here:
   divisor; pass the broken render as `argv[1]` to run it here.
 
     lake build convnext-dp-check
-    unset HIP_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/convnext-dp-check
+    unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/convnext-dp-check
 
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path — the IREE shim
 refuses a DP entry point outright rather than silently running single-device, which is why

@@ -18,10 +18,7 @@ production 224²/depth-12 render (TestViTTrain) is the SAME fragments at scale.
 Config: b=2, ic=3, image 8×8 (s=4 ⇒ 2×2=4 patches, +CLS = 5 tokens), d=8, heads=2,
 mlp=16, classes=10, depth=2.
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"
-  export LD_LIBRARY_PATH="$PWD/ffi:/opt/rocm/lib:$LD_LIBRARY_PATH"
-  export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestViTTiny.lean
 -/
 

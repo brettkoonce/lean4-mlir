@@ -32,7 +32,7 @@ transfers to efficientnet/mobilenetv2 unchanged — unlike the cifar8 split iden
 needs no BN.
 
     lake build convnext-shard-check
-    unset HIP_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/convnext-shard-check
+    unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/convnext-shard-check
 
 Needs TWO GPUs and the XLA backend.
 -/

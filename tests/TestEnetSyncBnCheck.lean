@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.EfficientNetRender
 /-! # `efficientnet-syncbn-check` — synchronised BatchNorm on EfficientNet-B0: 2×32 IS 1×64
 
     lake build efficientnet-syncbn-check
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=2 .lake/build/bin/efficientnet-syncbn-check
 
 `resnet34-syncbn-check`'s gate on the 49-BN-layer EfficientNet-B0 render (`LeanMlir.SyncBnCheck`):

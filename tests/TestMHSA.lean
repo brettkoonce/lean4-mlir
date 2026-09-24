@@ -20,10 +20,7 @@ A=W·Vh back (dW=dA·Vhᵀ, dVh=Wᵀ·dA) → row-softmax VJP → undo scale →
 all read x, so dx = dxQ+dxK+dxV). The reshape↔transpose pair (dims=[0,2,1,3], an
 involution) must be exact inverses — a wrong perm compiles fine but trains dead.
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"
-  export LD_LIBRARY_PATH="$PWD/ffi:/opt/rocm/lib:$LD_LIBRARY_PATH"
-  export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestMHSA.lean          # renders, iree-compiles, AND gradchecks
 -/
 

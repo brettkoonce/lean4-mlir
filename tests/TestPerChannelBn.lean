@@ -4,13 +4,11 @@ import LeanMlir.Types
 /-! Standalone render + `iree-compile` validation for the Chapter-6 B8b per-channel
     BatchNorm SHlo op pair (`bnPerChannelF` / `bnPerChannelBack`). Renders a tiny
     forward and backward `func.func` from the VERIFIED `Proofs.StableHLO` emitter and
-    compiles each to a ROCm `.vmfb` — the thin lexical boundary the proofs leave to
+    compiles each to a `.vmfb` — the thin lexical boundary the proofs leave to
     `iree-compile`. The Lean operand/γ/β/x values are render-irrelevant placeholders
     (only SSA names + the ε literal reach the text).
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"
-      export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestPerChannelBn.lean
 -/
 

@@ -5,12 +5,10 @@ import LeanMlir.Types
     op pair (`relu6F` / `selectMid`). Renders a tiny forward (`clamp(·,0,6) =
     min(max(·,0),6)`) and backward (`select(0<x<6,·,0)`, the two-sided-kink mask)
     `func.func` from the VERIFIED `Proofs.StableHLO` emitter and compiles each to a
-    ROCm `.vmfb` — the thin lexical boundary the proofs leave to `iree-compile`.
+    `.vmfb` — the thin lexical boundary the proofs leave to `iree-compile`.
     The Lean operand/x values are render-irrelevant placeholders.
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"
-      export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestRelu6.lean
 -/
 

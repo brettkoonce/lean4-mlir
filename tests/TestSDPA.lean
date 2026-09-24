@@ -26,10 +26,7 @@ in Lean4 (no numpy): it shells out to `iree-run-module` to execute the compiled
 for random directions v — validating all three backward paths at once (the VJP
 is J·ᵀ, so ⟨Jᵀ dOut, v⟩ = ⟨dOut, J v⟩ = the directional derivative).
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"
-  export LD_LIBRARY_PATH="$PWD/ffi:/opt/rocm/lib:$LD_LIBRARY_PATH"
-  export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestSDPA.lean          # renders, iree-compiles, AND gradchecks
 -/
 

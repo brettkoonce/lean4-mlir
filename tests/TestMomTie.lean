@@ -37,7 +37,7 @@ hand-copied He fan-IN init onto the driver's `mkParam`; that makes R34's gradien
 against a fixed `wd`, so this control's margin fell from ~480× the tie to ~87×. Still decisive,
 but it is now the tightest margin in the harness — see `LeanMlir/VerifiedTrain.lean`'s `heFanIn`.
 
-    lake build r34-mom-tie && HIP_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie
+    lake build r34-mom-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie
 -/
 
 def main : IO Unit := do

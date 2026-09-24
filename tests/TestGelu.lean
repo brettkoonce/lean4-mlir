@@ -6,14 +6,12 @@ import LeanMlir.Types
     `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and backward
     (`dy ⊙ gelu'(x)`, the closed-form tanh-approx derivative, recomputed from the
     saved pre-activation `%xs`) `func.func` from the VERIFIED `Proofs.StableHLO`
-    emitter and compiles each to a ROCm `.vmfb` — the thin lexical boundary the
+    emitter and compiles each to a `.vmfb` — the thin lexical boundary the
     proofs leave to `iree-compile`. GELU is smooth everywhere (no kink, no select
     mask), like swish/sigmoid. The Lean operand/x values are render-irrelevant
     placeholders.
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"
-      export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestGelu.lean
 -/
 

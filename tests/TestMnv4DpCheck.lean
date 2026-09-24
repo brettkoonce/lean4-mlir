@@ -47,7 +47,7 @@ Two failure modes it separates, both of which have actually happened in this rep
   60× above even the bf16 bound. Pass the broken render as `argv[1]` to run that control here.
 
     lake build mnv4-dp-check
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check                  # fp32
     DP_VARIANT=adam64bf16 DP_VARIANT_DP=adamdp64bf16 \
       PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check                # the bf16 pair

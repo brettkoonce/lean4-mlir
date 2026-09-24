@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 /-! # `mobilenetv2-syncbn-check` — synchronised BatchNorm on MobileNetV2: 2×32 IS 1×64
 
     lake build mobilenetv2-syncbn-check
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=2 .lake/build/bin/mobilenetv2-syncbn-check
 
 `resnet34-syncbn-check`'s gate on the 52-BN-layer MobileNetV2 render (`LeanMlir.SyncBnCheck`):

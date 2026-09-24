@@ -4,14 +4,12 @@ import LeanMlir.Types
 /-! Standalone render + `iree-compile` validation for the Chapter-7 C1 depthwise
     conv SHlo op pair (`depthwiseF` / `depthwiseBack`). Renders a tiny forward and
     backward `func.func` from the VERIFIED `Proofs.StableHLO` emitter and compiles
-    each to a ROCm `.vmfb` — the thin lexical boundary the proofs leave to
+    each to a `.vmfb` — the thin lexical boundary the proofs leave to
     `iree-compile`. The depthwise delta from a normal conv: `feature_group_count = c`
     plus a `[c,1,kH,kW]` kernel (one filter per channel). The Lean operand/W/b values
     are render-irrelevant placeholders (only SSA names + shapes reach the text).
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"
-      export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestDepthwise.lean
 -/
 

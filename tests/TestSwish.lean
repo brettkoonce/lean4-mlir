@@ -5,14 +5,12 @@ import LeanMlir.Types
     op pair (`swishF` / `swishBack`). Renders a tiny forward (`x · σ(x)`, σ =
     `stablehlo.logistic`) and backward (`dy ⊙ σ(x)·(1 + x·(1−σ(x)))`, the closed-form
     swish derivative, recomputed from the saved pre-activation `%xs`) `func.func` from
-    the VERIFIED `Proofs.StableHLO` emitter and compiles each to a ROCm `.vmfb` — the
+    the VERIFIED `Proofs.StableHLO` emitter and compiles each to a `.vmfb` — the
     thin lexical boundary the proofs leave to `iree-compile`. Swish is smooth
     everywhere (no kink, no select mask), so this is even simpler than ReLU6.
     The Lean operand/x values are render-irrelevant placeholders.
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"
-      export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestSwish.lean
 -/
 

@@ -19,7 +19,7 @@ The backward threads the cotangent in reverse: addV fan-in → layerScale back �
 (project) → geluBack → conv1 back (expand) → lnBack → depthwiseBack → +skip. Compile-only
 (shape/type check); gradient correctness is validated by the full-net training run.
 
-Run (rocm): export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestConvNeXtBlock.lean
 -/
 

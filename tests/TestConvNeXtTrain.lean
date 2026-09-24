@@ -41,7 +41,7 @@ Conditioning noise is local to the ill-conditioned op; a different function is g
 Recover the retired emitter from `git show b94e8e9:tests/TestConvNeXtTrain.lean`; the retired
 *artifact* is `git show b94e8e9:verified_mlir/convnext_adam_train_step.mlir`.
 
-Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestConvNeXtTrain.lean
+Run (needs iree-compile on PATH): lake env lean tests/TestConvNeXtTrain.lean
 -/
 
 

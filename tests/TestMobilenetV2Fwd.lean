@@ -48,8 +48,7 @@ The net, unchanged (full paper `[t,c,n,s]` MobileNetV2, Imagenette 3×224×224):
 
 Recover the retired emitter from `git show 17413f0:tests/TestMobilenetV2Fwd.lean`.
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"; export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestMobilenetV2Fwd.lean
 -/
 

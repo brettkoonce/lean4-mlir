@@ -38,8 +38,8 @@ It runs every time, and the gate refuses as VACUOUS if the two endpoints are not
 
 ```
 lake build soft-target-tie
-HIP_VISIBLE_DEVICES=0 .lake/build/bin/soft-target-tie vit
-HIP_VISIBLE_DEVICES=0 .lake/build/bin/soft-target-tie convnext
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/soft-target-tie vit
+CUDA_VISIBLE_DEVICES=0 .lake/build/bin/soft-target-tie convnext
 ```
 -/
 

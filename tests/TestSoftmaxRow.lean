@@ -8,7 +8,7 @@ import LeanMlir.Types
     exp/sum — NO max-shift, matching the proven `softmax`) and backward (the closed
     form `p ⊙ (dy − ⟨p,dy⟩)` per row, recomputing `p` from the saved pre-softmax
     scores `%xs`) `func.func` from the VERIFIED `Proofs.StableHLO` emitter and
-    compiles each to a ROCm `.vmfb` — the thin lexical boundary the proofs leave to
+    compiles each to a `.vmfb` — the thin lexical boundary the proofs leave to
     `iree-compile`. Row-softmax is smooth everywhere (no kink). The Lean operand/x
     values are render-irrelevant placeholders.
 
@@ -18,9 +18,7 @@ import LeanMlir.Types
     capstone `Attention` (no import cycle); this file (which imports both) certifies
     the tie. rfl-faithful ⇒ stays OUT of the axiom audit (`roundtrip` covers it).
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"
-      export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestSoftmaxRow.lean
 -/
 

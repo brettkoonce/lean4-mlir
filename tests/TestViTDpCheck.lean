@@ -19,7 +19,7 @@ chosen render baked into `replica_groups` — the shim refuses a mismatch rather
 The identity above is N-generic, which is the whole reason the 4-replica gate needed no new harness:
 
 ```
-lake build vit-dp-check && unset HIP_VISIBLE_DEVICES
+lake build vit-dp-check && unset CUDA_VISIBLE_DEVICES
 VIT_DP_REPLICAS=4 PJRT_REPLICAS=4 .lake/build/bin/vit-dp-check \
   verified_mlir/vit_adamdp32x4_train_step.mlir
 sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)4\.0(>)/\11.0\2/' \
@@ -34,7 +34,7 @@ Two failure modes it separates, both of which have actually happened in this rep
 
 ```
 lake build vit-dp-check
-unset HIP_VISIBLE_DEVICES
+unset CUDA_VISIBLE_DEVICES
 MIOPEN_DEBUG_CONV_GEMM=0 PJRT_REPLICAS=2 .lake/build/bin/vit-dp-check
 ```
 

@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 /-! # `imagenet-syncbn-check` — synchronised BatchNorm at the ImageNet shape: 4×64 IS 1×256
 
     lake build imagenet-syncbn-check
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check resnet34        # momdp64bf16
     PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check mobilenetv2     # rmsdp64bf16
     PJRT_REPLICAS=4 .lake/build/bin/imagenet-syncbn-check efficientnet    # rmsdp64bf16

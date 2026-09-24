@@ -14,10 +14,7 @@ a tiny config (B=2,N=3,D=4,heads=2,mlp=8), `iree-compile`d, and gradchecked over
 EVERY input (x + all 16 block params) — this validates the new per-channel LN
 backward AND the residual fan-in wiring in addition to the already-validated MHSA.
 
-Run (rocm):
-  export PATH="$PWD/.venv/bin:$PATH"
-  export LD_LIBRARY_PATH="$PWD/ffi:/opt/rocm/lib:$LD_LIBRARY_PATH"
-  export IREE_BACKEND=rocm
+Run (needs iree-compile on PATH):
   lake env lean tests/TestViTBlock.lean
 -/
 

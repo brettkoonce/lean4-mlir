@@ -37,7 +37,7 @@ which together give the induction — a parameter whose gradient is identically 
 stays at 0, with `m`/`v` at 0 too. It does not measure a trained checkpoint; if you want that
 belt-and-braces, dump `[θ|m|v]` from a real run and read the same slots.
 
-    lake build conv-bias-zero && HIP_VISIBLE_DEVICES=0 .lake/build/bin/conv-bias-zero
+    lake build conv-bias-zero && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/conv-bias-zero
     #   optional argv[1]: a candidate render to measure instead of the committed one
 -/
 

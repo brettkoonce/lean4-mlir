@@ -3,7 +3,7 @@ import LeanMlir.VerifiedNets
 /-! # The **sharding** gate, for every net that has a data-parallel render
 
     lake build shard-check
-    unset HIP_VISIBLE_DEVICES
+    unset CUDA_VISIBLE_DEVICES
     PJRT_REPLICAS=2 .lake/build/bin/shard-check <convnext|vit> [<dpPath>]
 
 ⚠ A 4-replica render needs `SHARD_REPLICAS=4` and four GPUs (plus both `SHARD_VARIANT` knobs when

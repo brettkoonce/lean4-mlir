@@ -6,13 +6,11 @@ import LeanMlir.Types
     nonlinearity. Renders a tiny forward (`σ(x) = stablehlo.logistic`) and backward
     (`dy ⊙ σ(x)·(1−σ(x))`, recomputed from the saved pre-activation `%xs`)
     `func.func` from the VERIFIED `Proofs.StableHLO` emitter and compiles each to a
-    ROCm `.vmfb` — the thin lexical boundary the proofs leave to `iree-compile`.
+    `.vmfb` — the thin lexical boundary the proofs leave to `iree-compile`.
     Sigmoid is smooth everywhere (no kink, no mask), like swish but with a forward
     of just one `logistic`. The Lean operand/x values are render-irrelevant placeholders.
 
-    Run (rocm):
-      export PATH="$PWD/.venv/bin:$PATH"
-      export IREE_BACKEND=rocm
+    Run (needs iree-compile on PATH):
       lake env lean tests/TestSigmoid.lean
 -/
 

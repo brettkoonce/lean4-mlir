@@ -22,7 +22,7 @@ each line is what the proven-faithful emitter (`emitTok`) produces for that op:
 The squeeze GAP-back (`÷H·W` then broadcast) and the gate broadcast-back (sum over
 spatial) are adjoints of each other's forward steps (`broadcastFlat_has_vjp`).
 
-Run (rocm): export IREE_BACKEND=rocm; lake env lean tests/TestSE.lean
+Run (needs iree-compile on PATH): lake env lean tests/TestSE.lean
 -/
 
 open Proofs Proofs.StableHLO

@@ -33,7 +33,7 @@ Two failure modes it separates, both of which have actually happened in this rep
   orders above the gate. §2b-quater verified exactly that by breaking the divisor.
 
     lake build efficientnet-dp-check
-    unset HIP_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-check
+    unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-check
 
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path).
 -/

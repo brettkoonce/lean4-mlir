@@ -320,8 +320,14 @@ Done earlier: `yolo_map_visdrone.py:13`, `render_parity.py`, `jax_imagenet_bench
   to create a `--help/` dir); a real run still regenerates all 13 figures byte-identically.
 * `tests/TestConvNeXt{T,}TrainPC.lean`, `tests/TestViTTrainPC.lean`: run lines without
   `IREE_BACKEND=rocm` / `HIP_VISIBLE_DEVICES`; `render_parity` resolves IREE via `_iree.py`.
-* ⚠ Open: 45 more `tests/` files carry ROCm-era run lines (`Run (rocm)`, `IREE_BACKEND=rocm`,
-  `HIP_VISIBLE_DEVICES`, `unset HIP_VISIBLE_DEVICES`) — outside `scripts/`, not swept here.
+* `tests/` ROCm sweep (user: prune): 44 Lean tests' run lines lose `IREE_BACKEND=rocm`, the
+  `/opt/rocm` library path and the repo-`.venv` PATH export ("Run (needs iree-compile on PATH)");
+  `HIP_VISIBLE_DEVICES` → `CUDA_VISIBLE_DEVICES`; seven op tests no longer say "a ROCm `.vmfb`";
+  `vjp_oracle/run.sh` loses its auto-switch to rocm on AMD hosts (README to match);
+  `prefetch_tie.sh` drops HIP_VISIBLE_DEVICES; `cross_backend_mnist_mlp.sh` (unreferenced
+  llvm-cpu-vs-rocm trace diff) deleted. Kept: notes that RECORD a ROCm measurement or reason
+  (DropPathTie, GradClipTie, EfficientNetAdamTie, ArgmaxN, the oracle's tolerance comments).
+  The 20 lake exes among the edited tests build; target-name lint passes.
 
 ## 8. Decided
 

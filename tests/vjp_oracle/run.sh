@@ -6,19 +6,10 @@
 # VJP agrees with JAX's value_and_grad.
 #
 # Usage: tests/vjp_oracle/run.sh [case1 case2 ...]
-# Runs phase 2 (JAX) on whatever JAX_PLATFORMS resolves to — defaults
-# to ROCm on AMD hosts now that the prior MIOpen conv SIGSEGV is
-# fixed (upgrade to jax 0.10.0+).
+# Runs phase 2 (JAX) on whatever JAX_PLATFORMS resolves to, and phase 3
+# (IREE) on $IREE_BACKEND (LeanMlir/Train.lean's default: cuda).
 set -u
 cd "$(dirname "$0")/../.."  # → repo root
-
-# Auto-default IREE_BACKEND on AMD hosts. LeanMlir/Train.lean defaults
-# IREE_BACKEND to "cuda"; flip to rocm when /dev/kfd or /opt/rocm
-# present. User env wins. (JAX_PLATFORMS is no longer auto-pinned to
-# CPU — the original ROCm/MIOpen#3955 bug is fixed in jax 0.10.0+.)
-if [ -z "${IREE_BACKEND:-}" ] && { [ -e /dev/kfd ] || [ -d /opt/rocm ]; }; then
-  export IREE_BACKEND=rocm
-fi
 
 # On NVIDIA hosts, pin to a single GPU so phase 2's auto-sharding
 # doesn't inflate the effective batch size and diverge from phase 3.

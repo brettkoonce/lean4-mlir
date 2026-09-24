@@ -29,7 +29,7 @@ says whether device-resident parameters (§2d.3) is worth doing.
 
     gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
     lake build efficientnet-dp-bench
-    unset HIP_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-bench [rounds]
+    unset CUDA_VISIBLE_DEVICES && PJRT_REPLICAS=2 .lake/build/bin/efficientnet-dp-bench [rounds]
 
 Needs TWO GPUs and the XLA backend — collectives do not exist on the IREE path. One process holding
 both a 1-replica and a 2-replica executable is fine: the replica count is per-GRAPH, not per-process
