@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.CNN
 
-/-! # M3 — the CNN train step: convolution parameter-gradient bridges
+/-! # Convolution parameter-gradient bridges (the MNIST CNN train step's conv parameters)
 
 The MNIST CNN (`conv → relu → maxpool → conv → relu → maxpool → dense → … → dense`)
 train step has two kinds of parameters: the dense classifier head (whose grads reuse

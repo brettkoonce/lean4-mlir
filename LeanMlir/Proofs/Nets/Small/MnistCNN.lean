@@ -235,12 +235,6 @@ theorem maxPool2_pos {c h w : Nat} {x : Tensor3 c (2*h) (2*w)}
   unfold maxPool2
   exact lt_of_lt_of_le (hx _ _ _) (le_trans (le_max_left _ _) (le_max_left _ _))
 
-/-- ReLU is the identity on a strictly-positive vector. Discharges the
-    ReLU-as-identity steps that fold the composition into a plain conv
-    stack at a smooth (everywhere-positive) point. -/
-theorem relu_id_of_pos {n : Nat} {v : Vec n} (hv : ∀ i, 0 < v i) : relu n v = v := by
-  funext i; simp only [relu]; rw [ite_eq_left (hv i)]
-
 /-- A dense layer with nonnegative weights, a strictly-positive bias, and a
     nonnegative input is strictly positive — the propagating positivity
     invariant that discharges the dense ReLU `≠ 0` conditions without

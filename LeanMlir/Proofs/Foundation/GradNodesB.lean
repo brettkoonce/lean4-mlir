@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Nets.Small.CifarBnClose
-import LeanMlir.Proofs.Nets.Small.CnnTrainStep
+import LeanMlir.Proofs.Architectures.PerChannelBNGrad
+import LeanMlir.Proofs.Architectures.ConvGrad
 
 /-! # The batched f32 gradient nodes — one `*GradB_den` per op kind, shared by every conv net
 

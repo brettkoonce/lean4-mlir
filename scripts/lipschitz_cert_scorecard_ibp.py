@@ -79,8 +79,8 @@ def pgd_linf(W1q, W2q, eps, steps=100, restarts=4):
         robust += not broken
     return robust
 
-ENGINE_LINK = ("[`Foundation/IntervalBound.lean`](https://github.com/brettkoonce/lean4-mlir/"
-               "blob/main/LeanMlir/Proofs/Foundation/IntervalBound.lean)")
+ENGINE_LINK = ("[`Certificates/IntervalBound.lean`](https://github.com/brettkoonce/lean4-mlir/"
+               "blob/main/LeanMlir/Proofs/Certificates/IntervalBound.lean)")
 
 
 def analyze(tag, W1q, W2q):
@@ -130,7 +130,7 @@ def emit_data(results, out_path):
     """The shared module: per-row l1 facts for both nets, plus every fallback image."""
     Lb = []
     A = Lb.append
-    A("import LeanMlir.Proofs.Foundation.IntervalBound")
+    A("import LeanMlir.Proofs.Certificates.IntervalBound")
     A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
     A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
     A("")

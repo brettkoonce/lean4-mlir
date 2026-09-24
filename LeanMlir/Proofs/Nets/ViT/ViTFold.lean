@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Nets.ViT.ViTClose
+import LeanMlir.Proofs.Architectures.TokenParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 import LeanMlir.Proofs.Foundation.SgdNodes
 
@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 The ViT peer of `MobileNetV2Fold`/`ConvNeXtFold`/`EfficientNetFold`: for every
 param-SGD op the `vitTrainStepRenderV` renderer emits, prove `den(op) = θ − lr·(certified Jacobian ·
 cotangent)`. Each is a one-or-few-line delegation to the already-proven render certs in
-`ViTVecLN` (vector-[D] LN γ/β) and `ViTClose` (rowwise dense W/b, patch conv W/b, cls, pos); the
+`ViTVecLN` (vector-[D] LN γ/β) and `TokenParamGrad` (rowwise dense W/b, patch conv W/b, cls, pos); the
 classifier head reuses the M2 `Cifar8PoC.dense{W,B}_den`. Together these cover EVERY parameter family
 of the depth-12 ViT-Tiny train step (200 params), so the §1a tie (`ViTStepTie`) can thread them at the
 real backward chain cotangents.

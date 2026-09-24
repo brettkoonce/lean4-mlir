@@ -474,4 +474,10 @@ theorem relu6_continuous (n : Nat) : Continuous (relu6 n) := by
 theorem relu_continuous (n : Nat) : Continuous (relu n) :=
   continuous_pi fun k => by simp only [relu_apply_eq_max]; exact (continuous_apply k).max continuous_const
 
+/-- ReLU is the identity on a strictly-positive vector. Discharges the
+    ReLU-as-identity steps that fold the composition into a plain conv
+    stack at a smooth (everywhere-positive) point. -/
+theorem relu_id_of_pos {n : Nat} {v : Vec n} (hv : ∀ i, 0 < v i) : relu n v = v := by
+  funext i; simp only [relu]; rw [ite_eq_left (hv i)]
+
 end Proofs

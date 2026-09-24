@@ -13,6 +13,7 @@ import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
 

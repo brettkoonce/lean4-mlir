@@ -1,9 +1,9 @@
-import LeanMlir.Proofs.Nets.Small.CnnTrainStep
+import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 
 /-! # Upgrading the CNN conv close from a generic cotangent to the actual backward chain
 
-`cnn_render_conv{W,b}_certified` (CnnTrainStep.lean) certify each conv parameter output for
+`cnn_render_conv{W,b}_certified` (`Architectures/ConvGrad`) certify each conv parameter output for
 *any* cotangent `c` at that conv layer's output. This file pins `c` to the cotangent the CNN
 backward chain *actually* delivers — the conv analogue of the MLP's `mlpCotOut0/1`.
 

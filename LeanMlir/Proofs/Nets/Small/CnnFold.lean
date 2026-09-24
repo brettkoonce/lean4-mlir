@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
+import LeanMlir.Proofs.Nets.Small.MnistCNN
 import LeanMlir.Proofs.Codegen.CnnRender
 import LeanMlir.Proofs.Foundation.SgdNodes
 

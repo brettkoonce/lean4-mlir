@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.CrownBound
+import LeanMlir.Proofs.Certificates.CrownBound
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPData
 
 /-! # CROWN-IBP L∞ scorecard, full 784-dim input — unconstrained net (`mlpTF`)
@@ -21,7 +21,7 @@ taken ONCE — so the cancellation between rows of `W1` survives in `A`
 instead of dying to IBP's per-row `‖·‖₁`.
 
 **Theorem vs. measurement.** Soundness is in the ENGINE
-([`Foundation/CrownBound.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/CrownBound.lean)), proved once. The counts above are
+([`Certificates/CrownBound.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Certificates/CrownBound.lean)), proved once. The counts above are
 exact-rational MEASUREMENTS over the first 100 images; the first
 8 certifying images at each radius carry a `CertifiedAtLinf`
 THEOREM, and the aggregate below states only those. Each such image is

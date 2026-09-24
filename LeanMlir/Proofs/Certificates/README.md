@@ -29,8 +29,9 @@ generator run.
 Every family has the same shape: the data is ℚ/ℤ/ℕ, the ℝ object is *defined* as its cast, one
 computable check runs in the kernel, and one soundness lemma turns the check into an ℝ theorem.
 The engines — the ℝ theorems and checkers — are hand-written; the data files are generated. Some
-engines live in `Foundation/` (`IntervalBound`, `IntervalBoundConv`, `IntervalBoundConvQ`,
-`CrownBound`, `GramQ`, `ListDot`).
+engines are here (`IntervalBound`, `CrownBound`, `DenseEuclid`, `GaussianQuantile`, `LipschitzCert`);
+the ones with no certificate vocabulary live in `Foundation/` (`IntervalBoundConv`,
+`IntervalBoundConvQ`, `GramQ`, `ListDot`).
 
 | family | ℝ theorem (engine) | check → ℝ bridge | data (generated) | generator (`scripts/`) |
 |---|---|---|---|---|

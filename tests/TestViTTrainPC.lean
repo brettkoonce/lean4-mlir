@@ -32,7 +32,7 @@ shapes per head). Residual fan-ins are `addV`; the Q/K/V three-way fan-in at LN�
 output is two `addV`s.
 
 Only the no-SHlo-constructor pieces are hand-emitted, each certified in
-`ViTClose.lean` (Item C): per-token dense `dW = Σ_{b,tokens} x⊗dy` / `db = Σ dy`
+`TokenParamGrad.lean`: per-token dense `dW = Σ_{b,tokens} x⊗dy` / `db = Σ dy`
 (`vit_render_rowdense{W,b}_certified`), rowwise scalar-LN `dγ = Σ dy·x̂` / `dβ = Σ dy`
 (`vit_render_rowln{gamma,beta}_certified`), `dPos = Σ_b dy` (`vit_render_pos_certified`),
 `dCls = row-0 slice` (`vit_render_cls_certified`), the patchSize-1 patch-projection

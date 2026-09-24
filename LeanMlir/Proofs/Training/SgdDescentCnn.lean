@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Float.ConvFloat
 import LeanMlir.Proofs.Training.SgdDescentMlp
-import LeanMlir.Proofs.Nets.Small.CnnTrainStep
+import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Architectures.StridedConv
 import LeanMlir.Proofs.Nets.Small.MnistCNN
 

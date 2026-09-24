@@ -15,6 +15,7 @@ import LeanMlir.Proofs.Nets.Small.MnistCNN
 import LeanMlir.Proofs.Nets.Small.CifarCNN
 import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
 import LeanMlir.Proofs.Codegen.StableHLOParse
 import LeanMlir.Proofs.Codegen.StableHLOLex
 import LeanMlir.Proofs.Architectures.StridedConv
@@ -25,8 +26,8 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBSeal
 import LeanMlir.Proofs.Architectures.PerChannelBN
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 import LeanMlir.Proofs.Nets.Small.MlpTrainStep
-import LeanMlir.Proofs.Nets.Small.CnnTrainStep
-import LeanMlir.Proofs.Nets.Small.CifarBnClose
+import LeanMlir.Proofs.Architectures.ConvGrad
+import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
@@ -40,7 +41,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
-import LeanMlir.Proofs.Nets.ViT.ViTClose
+import LeanMlir.Proofs.Architectures.TokenParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
@@ -156,9 +157,9 @@ import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDP
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPUncon
 import LeanMlir.Proofs.Certificates.LipschitzCertFloat
 import LeanMlir.Proofs.Foundation.ListDot
-import LeanMlir.Proofs.Foundation.IntervalBound
+import LeanMlir.Proofs.Certificates.IntervalBound
 import LeanMlir.Proofs.Foundation.IntervalBoundConv
-import LeanMlir.Proofs.Foundation.CrownBound
+import LeanMlir.Proofs.Certificates.CrownBound
 import LeanMlir.Proofs.Certificates.SmoothingMC
 import LeanMlir.Proofs.Certificates.SmoothingCP
 import LeanMlir.Proofs.Certificates.SmoothingCPScorecard
@@ -1616,7 +1617,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.mlp2_boxSound
 #print axioms Proofs.LipschitzCertDemo.ibp2_certified_at_eps
 
--- CROWN (Foundation/CrownBound.lean)
+-- CROWN (Certificates/CrownBound.lean)
 #print axioms Proofs.LipschitzCertDemo.certified_of_marginPos
 #print axioms Proofs.LipschitzCertDemo.relu_lower_envelope
 #print axioms Proofs.LipschitzCertDemo.relu_upper_envelope

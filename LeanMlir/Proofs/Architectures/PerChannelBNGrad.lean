@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.PerChannelBN
 
-/-! # Closing the per-channel BN render — the BN parameter-gradient bridges (dγ, dβ certified)
+/-! # Per-channel BN parameter-gradient bridges (dγ, dβ certified)
 
 The non-BN closes (`cnn_render_conv{W,b}_certified` + the M2 dense bridges) and the BN
 **input**-grad (`bnPerChannel_grad_input_correct`, under `0<ε`) already cover every

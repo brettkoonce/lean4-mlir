@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.IntervalBound
+import LeanMlir.Proofs.Certificates.IntervalBound
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB
 

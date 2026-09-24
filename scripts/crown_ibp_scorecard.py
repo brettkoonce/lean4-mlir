@@ -192,7 +192,7 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
 
     L = []
     A = L.append
-    A("import LeanMlir.Proofs.Foundation.CrownBound")
+    A("import LeanMlir.Proofs.Certificates.CrownBound")
     A(f"import LeanMlir.Proofs.Certificates.{ibp_import}")
     A("")
     A(f"/-! # CROWN-IBP L∞ scorecard, full 784-dim input — {netdesc}")
@@ -215,8 +215,8 @@ def emit(tag, W1q, W2q, Xraw, yte, out_path, counts_ibp, pgd, netdesc, ibp_impor
     A("instead of dying to IBP's per-row `‖·‖₁`.")
     A("")
     A("**Theorem vs. measurement.** Soundness is in the ENGINE")
-    A("([`Foundation/CrownBound.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/"
-      "LeanMlir/Proofs/Foundation/CrownBound.lean)), proved once. The counts above are")
+    A("([`Certificates/CrownBound.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/"
+      "LeanMlir/Proofs/Certificates/CrownBound.lean)), proved once. The counts above are")
     A(f"exact-rational MEASUREMENTS over the first {N_IMG} images; the first")
     A(f"{N_EMIT} certifying images at each radius carry a `CertifiedAtLinf`")
     A("THEOREM, and the aggregate below states only those. Each such image is")

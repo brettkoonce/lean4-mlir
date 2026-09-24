@@ -1,8 +1,9 @@
-import LeanMlir.Proofs.Nets.ViT.ViTClose
+import LeanMlir.Proofs.Architectures.TokenParamGrad
+import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
 
 /-! # ViT Item D — the attention-block cotangent chain
 
-`ViTClose.lean` (Item C) certifies each ViT param output for *any* cotangent `dy` at that
+`TokenParamGrad.lean` certifies each ViT param output for *any* cotangent `dy` at that
 site's output. This file defines the cotangent the **actual backward chain delivers** at each
 site — the ViT analogue of `ConvNeXtChainClose` (`planning/archive/vit_close.md` Item D) — and
 the step ties (`ViTStepTie`, `ViTStepTieGB`) feed those cotangents to Item C's bridges at the real

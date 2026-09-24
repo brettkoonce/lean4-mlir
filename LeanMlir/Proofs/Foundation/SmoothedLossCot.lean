@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 
 /-! # The label-smoothed loss cotangent, at a GENERAL target
 

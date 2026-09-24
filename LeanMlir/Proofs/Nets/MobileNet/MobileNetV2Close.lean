@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Architectures.StridedConv
-import LeanMlir.Proofs.Nets.Small.CnnTrainStep
-import LeanMlir.Proofs.Nets.Small.CifarBnClose
+import LeanMlir.Proofs.Architectures.ConvGrad
+import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 
 /-! # Closing the MobileNetV2 render — the depthwise / strided parameter-gradient bridges
 

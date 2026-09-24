@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
-import LeanMlir.Proofs.Nets.ViT.ViTClose
+import LeanMlir.Proofs.Architectures.TokenParamGrad
 
 /-! # The bf16 gradient nodes — every `*GradBBf16` kind the suite emits, folded once
 

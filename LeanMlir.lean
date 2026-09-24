@@ -34,7 +34,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
-import LeanMlir.Proofs.Nets.ViT.ViTClose
+import LeanMlir.Proofs.Architectures.TokenParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
