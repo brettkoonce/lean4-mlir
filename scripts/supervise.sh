@@ -9,6 +9,7 @@
 #     scripts/supervise.sh <job>            # scripts/jobs/<job>.conf
 #     DRY_RUN=1 scripts/supervise.sh <job>  # print the plan and exit, run nothing
 #     ONCE=1 scripts/supervise.sh <job>     # one foreground run with the job's env, no restarts
+#     RUNDIR=<dir> scripts/supervise.sh <job>   # logs there (default: runs/<date>-<job>, reused on resume)
 #
 # `lake run <job>` (and `lake run <job> plan|once`) is the same thing from the lakefile, and
 # `lake run imagenet` walks the whole tier — see the ImageNet section of lakefile.lean.
@@ -104,7 +105,19 @@ case "$JOB" in
     ;;
 esac
 
-RUNDIR="${RUNDIR:-/tmp/supervise_${JOB}}"
+# Logs live in-repo by default: the newest runs/*-<job>/ whose master log records a launch (so a
+# resume keeps one directory), else runs/<today>-<job>. ⛔ Never /tmp for a real run — R34's
+# phase-2 master log was lost to a power cut there, and `lake run <job>` passes no RUNDIR.
+# A DRY_RUN writes to /tmp: a plan must not leave a run directory behind.
+if [ -z "${RUNDIR:-}" ]; then
+  if [ "${DRY_RUN:-0}" != "0" ]; then
+    RUNDIR="/tmp/supervise_dry_${JOB}"
+  else
+    RUNDIR="$(grep -l "launched PID=" runs/*-"$JOB"/master.log 2>/dev/null | sort | tail -1)"
+    RUNDIR="${RUNDIR%/master.log}"
+    RUNDIR="${RUNDIR:-runs/$(date +%F)-$JOB}"
+  fi
+fi
 mkdir -p "$RUNDIR"
 RUNLOG="$RUNDIR/attempt.log"      # current attempt only (stall + done detection)
 MASTER="$RUNDIR/master.log"       # supervisor's own narration, survives attempts

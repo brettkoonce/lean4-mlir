@@ -29,12 +29,11 @@ set -uo pipefail
 # variants; the demo loops did not show it only because `train`/`trainLinear` do
 # not checkpoint.
 #
-# There is NO safe default glob -- blindly deleting `.lake/build/*_ckpt*` would
-# destroy somebody's long run -- so this is opt-in, and the resume DETECTOR below
-# is what makes forgetting it loud instead of misleading:
-#
-#   GATE_CKPTS='.lake/build/cifar8*_ckpt_xla.bin*' scripts/eval_residency_gate.sh ...
-GATE_CKPTS=${GATE_CKPTS:-}
+# Every arm runs under its own `$LEAN_MLIR_CKPT_TAG` (unique to this invocation), so neither arm
+# can resume the other's — or a long run's — checkpoint, and nothing shared is ever deleted. (This
+# used to take an opt-in `GATE_CKPTS` glob to `rm -f` before each arm.) The resume detector below
+# stays, as the check that the tag reached the trainer.
+GATE_TAG="evalgate$$"
 DET=${DET_SHIM:-/tmp/residency_detshim}
 OUT=${GATE_OUT:-$(mktemp -d)}
 EPOCHS=${EPOCHS:-3}
@@ -43,7 +42,8 @@ mkdir -p "$OUT"
 
 BINS=("$@")
 if [ ${#BINS[@]} -eq 0 ]; then
-  BINS=(mnist-linear-verified mnist-mlp-verified mnist-cnn-verified-xla)
+  # lint-targets: mnist-linear-verified mnist-mlp-verified mnist-cnn-verified
+  BINS=(mnist-linear-verified mnist-mlp-verified mnist-cnn-verified)
 fi
 
 [ -f scripts/det_shim.sh ] || { echo "run from the repo root"; exit 2; }
@@ -59,25 +59,26 @@ echo
 
 FAILED=0
 for bin in "${BINS[@]}"; do
-  [ -x ".lake/build/bin/$bin" ] || { printf "  %-28s ⚠ SKIP — not built\n" "$bin"; continue; }
+  # A binary that is not there is a FAILURE, not a skip: a gate that skips every row exits 0 having
+  # checked nothing (residency_gate_all.sh learned this the same way).
+  [ -x ".lake/build/bin/$bin" ] || { printf "  %-28s ✗ FAIL — not built (lake build %s)\n" "$bin" "$bin"; FAILED=1; continue; }
   resumed=0
   for tag in copy res; do
     extra=""; [ "$tag" = res ] && extra="PJRT_FFI_RESIDENT=1"
     # shellcheck disable=SC2086
-    [ -n "$GATE_CKPTS" ] && rm -f $GATE_CKPTS
-    # shellcheck disable=SC2086
-    env $extra SHIM_DETERMINISM=1 LD_LIBRARY_PATH="$DET" CUDA_VISIBLE_DEVICES="$DEV" HIP_VISIBLE_DEVICES="$DEV" \
+    env $extra LEAN_MLIR_CKPT_TAG="${GATE_TAG}-${bin}-$tag" SHIM_DETERMINISM=1 LD_LIBRARY_PATH="$DET" CUDA_VISIBLE_DEVICES="$DEV" HIP_VISIBLE_DEVICES="$DEV" \
       LEAN_MLIR_MAX_EPOCHS="$EPOCHS" \
       ".lake/build/bin/$bin" data > "$OUT/${bin}_$tag.log" 2>&1
     grep -q "resuming from checkpoint" "$OUT/${bin}_$tag.log" && resumed=1
+    rm -f .lake/build/*_ckpt*_"${GATE_TAG}-${bin}-$tag".bin{,.epoch}
   done
   # Diagnose this BEFORE comparing anything: a resumed run is not a shorter run,
   # it is a DIFFERENT run, and reporting it as a residency difference sends the
   # reader to the generation token when the fault is a leftover file.
   if [ "$resumed" = 1 ]; then
     printf "  %-28s ✗ FAIL — a run RESUMED FROM A CHECKPOINT, so the two runs are not\n" "$bin"
-    printf "  %-28s   comparable (handoff §4). This is NOT a residency result. Set:\n" ""
-    printf "  %-28s     GATE_CKPTS='.lake/build/<slug>*_ckpt_xla.bin*'\n" ""
+    printf "  %-28s   comparable (handoff §4). This is NOT a residency result: this binary\n" ""
+    printf "  %-28s   ignored \$LEAN_MLIR_CKPT_TAG, so its checkpoint path is shared.\n" ""
     FAILED=1; continue
   fi
   a=$(grep -oE "test_acc = [0-9]+/[0-9]+" "$OUT/${bin}_copy.log" | tr '\n' ' ')

@@ -177,40 +177,37 @@ def slugs_from_verified_nets() -> list[str]:
 
 
 def writers() -> dict[str, str]:
+    # `git grep` over TRACKED files, so the manifest does not depend on what else is on disk.
     out = subprocess.run(
-        ["grep", "-rn", 'IO.FS.writeFile "verified_mlir/', "--include=*.lean", "."],
+        ["git", "grep", "-n", 'IO.FS.writeFile "verified_mlir/', "--", "*.lean"],
         cwd=ROOT, capture_output=True, text=True,
     ).stdout
     w: dict[str, str] = {}
     for line in out.splitlines():
-        if line.lstrip().startswith("--"):
+        path, _lineno, code = line.split(":", 2)
+        if code.lstrip().startswith("--"):
             continue  # a comment mentioning the literal, not a writer
-        m = re.search(r'IO\.FS\.writeFile "verified_mlir/([^"]+)\.mlir"', line)
+        m = re.search(r'IO\.FS\.writeFile "verified_mlir/([^"]+)\.mlir"', code)
         if not m:
             continue
-        path = line.split(":", 1)[0].lstrip("./")
         w.setdefault(m.group(1), path)
     return w
 
 
 def run_refs() -> dict[str, list[str]]:
-    out = subprocess.run(
-        ["grep", "-rho", r"compiled verified_mlir/[a-z0-9_]*\.mlir", "runs/"],
-        cwd=ROOT, capture_output=True, text=True,
-    ).stdout
+    # TRACKED run logs only: an untracked local run must not change a committed file (it made the
+    # counts differ from machine to machine).
+    logs = subprocess.run(["git", "ls-files", "runs/"], cwd=ROOT, capture_output=True,
+                          text=True).stdout.split()
+    pat = re.compile(r"compiled verified_mlir/([a-z0-9_]*)\.mlir")
     refs: dict[str, list[str]] = {}
-    for line in set(out.splitlines()):
-        name = line.split("/")[-1].removesuffix(".mlir")
-        refs.setdefault(name, [])
-    # second pass: which log
-    for log in (ROOT / "runs").rglob("*.log"):
+    for rel in sorted(l for l in logs if l.endswith(".log")):
         try:
-            txt = log.read_text(encoding="utf-8", errors="replace")
+            txt = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
         except Exception:
             continue
-        for name in refs:
-            if f"verified_mlir/{name}.mlir" in txt:
-                refs[name].append(log.relative_to(ROOT).as_posix())
+        for name in set(pat.findall(txt)):
+            refs.setdefault(name, []).append(rel)
     return refs
 
 

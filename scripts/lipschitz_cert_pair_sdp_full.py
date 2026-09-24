@@ -27,8 +27,8 @@ is the engine's, proved once -- see planning/archive/scorecard_trim.md). That ca
 decides which class pairs need an LDL^T PSD witness, i.e. it is what makes this
 tier affordable at all (planning/archive/certs_heavy_psd_memory.md).
 
-Reuses the base generator's trained nets/caches by importing it (module
-import re-emits the base files byte-identically; harmless).
+Reuses the base generator's trained nets/caches by importing it (the import
+computes `nets`/`info`/`need` and writes nothing; only the base's `__main__` writes).
 """
 import numpy as np
 from fractions import Fraction

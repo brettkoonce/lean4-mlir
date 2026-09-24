@@ -144,8 +144,8 @@ NETS = {
 # fixed while a hand-kept ledger still called it open, which is the whole argument for having this
 # script rather than a list in a doc.
 # The live ledger: what each net is EXPECTED to still show for padding/activation. All five are
-# now clean on both axes (r34/mnv2 still carry `bn-split`, which is a separate defect and not
-# checked here). ⚠ Because this is all-clean it no longer proves the detectors work — that job
+# now clean on both axes (and `bn-split`, the separate defect r34/mnv2 used to carry, is closed —
+# the baseline is empty). ⚠ Because this is all-clean it no longer proves the detectors work — that job
 # moved to REGRESSIONS below.
 KNOWN = {
     "r50":  set(),            # padding closed 2026-08-10 (NetSpec.convPadStyle)
@@ -486,7 +486,13 @@ def main():
         gone = sorted(audited - set(current))
         print(f"\n  RATCHET vs {args.baseline}: {len(current)} current, {len(known)} baselined")
         for e in gone:
-            print(f"    ✓ RESOLVED (drop from the baseline): {e}")
+            print(f"    ✗ RESOLVED but still baselined — drop it: {e}")
+        if gone:
+            # A resolved row left in the baseline is a hole in the ratchet: if the divergence came
+            # back it would read as known debt and CI would stay green. So a stale baseline fails.
+            ratchet_fail = True
+            print("    The baseline is stale. Re-record it (it may only shrink) with")
+            print(f"    python3 scripts/convention_audit.py --baseline {args.baseline} --update-baseline")
         if new:
             ratchet_fail = True
             print("\n  ✗ NEW DIVERGENCE — the render and its reference drifted apart:")
@@ -522,8 +528,8 @@ def main():
             return 2
         print("\n  ✓ selftest passes — every detector fires, and the corpus matches the ledger")
 
-    # ⚠ In ratchet mode the EXIT CODE tracks new debt, not total debt: the three open rows are
-    # known and tracked, and failing on them every run would make the signal worthless. Outside
+    # ⚠ In ratchet mode the EXIT CODE tracks new debt (and a stale baseline), not total debt: a
+    # baselined row is known and tracked, and failing on them every run would make the signal worthless. Outside
     # ratchet mode any divergence is a failure, which is what a human wants interactively.
     if args.baseline:
         return 2 if ratchet_fail else 0

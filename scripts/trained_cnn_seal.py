@@ -19,14 +19,16 @@ Seal: HasVJPAt.backward_ne_zero_of_pdiv_ne + fderiv/not-constant forms —
 the exact theorem set TrainedMlpWitness carries, now for the conv net.
 
 Runs scripts/trained_cnn_witness.py first (deterministic) to reproduce the
-trained weights and forward tables; weights/input are DATA here.
+trained weights and forward tables, without letting it write its own file;
+weights/input are DATA here.
 """
 import os
 import numpy as np
 from fractions import Fraction
 
-# ---- reproduce the witness (trains the net, computes exact tables, and
-# ---- rewrites TrainedCnnWitness.lean with identical content)
+# ---- reproduce the witness (trains the net and computes the exact tables; WITNESS_NO_WRITE
+# ---- keeps it from rewriting TrainedCnnWitness.lean — run that generator for that file)
+WITNESS_NO_WRITE = True
 exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "trained_cnn_witness.py")).read())
 
 SEAL_OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedCnnSeal.lean")

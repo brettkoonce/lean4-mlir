@@ -22,6 +22,7 @@ images the capped base doesn't carry — and the two certificate modules import
 only it. The CROWN scorecards import it too, so none of the four waits on
 another's certificates.
 """
+import inspect
 import numpy as np
 from fractions import Fraction
 from pathlib import Path
@@ -99,7 +100,8 @@ def analyze(tag, W1q, W2q):
     l2impl = {}
     L = base.info[tag]["L"]
     mp = base.info[tag]["mp"]
-    PGD_CACHE = Path("/tmp") / f"ibp_pgd_{tag}_h{H}.npz"
+    pgd_key = base.cache_key(inspect.getsource(pgd_linf), W1q.tobytes(), W2q.tobytes(), EPS_GRID)
+    PGD_CACHE = Path("/tmp") / f"ibp_pgd_{tag}_{pgd_key}.npz"
     if PGD_CACHE.exists():
         zc = np.load(PGD_CACHE)
         pgd = {en: int(zc[en]) for _, en in EPS_GRID}

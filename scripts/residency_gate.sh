@@ -52,7 +52,7 @@
 # "TEST <= FLOOR" is not evidence of anything and the gate must say so.
 set -uo pipefail
 
-BIN=${1:-resnet34-verified-adam-xla}
+BIN=${1:-resnet34-verified-adam}
 SLUG=${2:-resnet34}
 STEPS=${3:-10}
 VARIANT=${LEAN_MLIR_VARIANT:-adam}
@@ -86,7 +86,11 @@ mkdir -p "$OUT"
 BINPATH=.lake/build/bin/$BIN
 [ -x "$BINPATH" ] || { echo "no such binary: $BINPATH (lake build $BIN)"; exit 2; }
 
-CKPT=.lake/build/${SLUG}_${VARIANT}_ckpt_xla.bin
+# Every arm trains on its OWN checkpoint (`$LEAN_MLIR_CKPT_TAG`, unique to this invocation), so no
+# arm can resume another's state and the shared `<slug>_<variant>_ckpt_xla.bin` — possibly a long
+# run's — is never touched. (This used to `rm -f` that shared path before every arm.)
+GATE_TAG="gate$$"
+ckpt_of () { echo ".lake/build/${SLUG}_${VARIANT}_ckpt_xla_${GATE_TAG}-$1.bin"; }
 
 echo "── §2d.3 phase-3 residency gate ──"
 echo "   binary   $BIN   (slug $SLUG, variant $VARIANT)"
@@ -95,11 +99,12 @@ echo "   alt path $GATE_ALT"
 echo "   scratch  $OUT"
 
 # One run. A stale checkpoint would make the run a silent no-op or resume it from
-# another run's state, which is handoff §4's most expensive trap — so every run
-# starts from a deleted one rather than trusting that none is there.
+# another run's state, which is handoff §4's most expensive trap — so every run gets
+# a checkpoint path of its own, cleared before and after.
 run () {
   local tag=$1; shift
-  rm -f "$CKPT" "$CKPT.epoch"
+  local ck; ck="$(ckpt_of "$tag")"
+  rm -f "$ck" "$ck.epoch"
   # Both vendors' pinning vars, because each is inert on the other's runtime. With only
   # the HIP one set, a CUDA box silently ignored the pin and took whatever device 0 was —
   # which happens to be right by accident on an idle box and wrong the moment it is not.
@@ -120,8 +125,10 @@ run () {
     LEAN_MLIR_MAX_EPOCHS=1 \
     LEAN_MLIR_G2_STEPS="$STEPS" \
     LEAN_MLIR_DUMP_PARAMS="$OUT/$tag.bin" \
+    LEAN_MLIR_CKPT_TAG="${GATE_TAG}-$tag" \
     "$BINPATH" data > "$OUT/$tag.log" 2>&1
   local rc=$?
+  rm -f "$ck" "$ck.epoch"
   if [ $rc -ne 0 ] || [ ! -s "$OUT/$tag.bin" ]; then
     echo "   ✗ run $tag failed (rc=$rc); tail:"; tail -5 "$OUT/$tag.log"; exit 2
   fi

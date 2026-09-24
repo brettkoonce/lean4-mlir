@@ -9,18 +9,15 @@
 
 `PER_EPOCH_OVERHEAD_S` is eval + checkpoint, 37.5 s, measured on ResNet-34 and carried
 across nets — it is under 2% of every row here, so a per-net figure would not move any
-ETA. The one-time val drain (~30 GB) is NOT in it: paid once, not per epoch, and at
-90-350 epochs it rounds away.
+ETA.
 
-⚠⚠ **The ms/step column is `mean`, not `med`, and that is the whole point.** Commit
-4a0a2781 measured a net whose median sat within 5 ms of its compute floor at every
-worker count while its p90 was 1906 ms: shim starvation is BURSTY, so the trainer eats
-the prefetch queue and then stalls. The median hides that entirely, and ranking on it
-prefers the wrong arm — determinism ON reads a better median (166 vs 202) and a worse
-mean (333 vs 203), and mean is what sets wall clock. A conf whose ETA came off a median
-is quoting the compute floor and calling it a schedule. Seen live in `runs/probe3060.tsv`:
-EfficientNet bf16 fed is med 99 / mean 193 / p90 502, so on the median it looks 1.66x
-faster than f32 and on the mean it is not faster at all.
+⚠⚠ **The ms/step column is the MEDIAN (`--stat med`, the default), as for every ImageNet
+ETA.** The mean folds in host-side events that are not the step's cost — a leak in the
+prefetch path once made mean ms/step grow over a run while the median held — so a conf
+quoting the mean is quoting the box, not the graph. What the median can hide is BURSTY
+feed starvation (commit 4a0a2781: median within 5 ms of the compute floor, p90 1906 ms),
+and that is what the flag below is for. `--stat mean` is still there for a wall-clock
+estimate of a known-starving configuration.
 
 ▶ Rows where mean > 1.15 * med are flagged STARVING and their ETA is annotated: that ETA
 is a feed result, not a graph result, and it moves when `SHIM_WORKERS` or the tf.data
@@ -119,7 +116,7 @@ def main():
     ap.add_argument("tsv")
     ap.add_argument("--box", default="4x 4060 Ti")
     ap.add_argument("--jobs-dir", default="scripts/jobs")
-    ap.add_argument("--stat", choices=["mean", "med"], default="mean")
+    ap.add_argument("--stat", choices=["mean", "med"], default="med")
     ap.add_argument("--markdown", action="store_true",
                     help="emit the results table as markdown for a runs/ README")
     ap.add_argument("--epochs", action="append", default=[], metavar="CONF=N",

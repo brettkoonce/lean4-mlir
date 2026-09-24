@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
 # Validation gate for the mnist-linear verified trainer's committed render.
 # Companion to LeanMlir/Proofs/Nets/Small/LinearFold.lean and
-# planning/archive/verified_faithful_sweep.md. Runs on the GPU box (needs iree-compile;
-# CI's ubuntu runner can't, so this is local, not in proofs.yml).
+# planning/archive/verified_faithful_sweep.md. Runs on the GPU box (needs iree-compile).
 #
 #   (a) drift: the committed verified_mlir/linear_*.mlir == the proven renderer
-#       (linTrainStepFaithfulV / linearFwdModuleV in StableHLOPretty.lean), and
-#   (b) validity: those bytes iree-compile cleanly for the target backend.
+#       (the `#eval` writers in Codegen/ChapterArtifacts.lean) — proofs.yml's drift guard
+#       checks this too, so (a) here is the local shortcut, and
+#   (b) validity: those bytes iree-compile cleanly for the target backend — local only.
+#
+# Defaults are CUDA `sm_86` (this box's 4060 Tis take the sm_86 target; sm_89 fails in IREE).
 #
 # (a)+(b) + the LinearFold `den = certified` capstones = the chain
 # "trainer bytes == proven renderer == certified loss-descent step, and iree
@@ -15,14 +17,14 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 IREEC="${IREE_COMPILE:-iree-compile}"
-BACKEND="${IREE_BACKEND:-rocm}"
-CHIP="${IREE_CHIP:-gfx1100}"
+BACKEND="${IREE_BACKEND:-cuda}"
+CHIP="${IREE_CHIP:-sm_86}"
 
 echo "== (a) drift: committed verified_mlir/linear_* == proven renderer =="
-lake env lean LeanMlir/Proofs/Codegen/StableHLOPretty.lean >/dev/null
+lake env lean LeanMlir/Proofs/Codegen/ChapterArtifacts.lean >/dev/null
 git diff --exit-code -- verified_mlir/linear_train_step.mlir verified_mlir/linear_fwd.mlir \
   && echo "   OK: committed == renderer" \
-  || { echo "   DRIFT: regenerate with 'lake env lean LeanMlir/Proofs/Codegen/StableHLOPretty.lean'"; exit 1; }
+  || { echo "   DRIFT: regenerate with 'lake env lean LeanMlir/Proofs/Codegen/ChapterArtifacts.lean'"; exit 1; }
 
 echo "== (b) validity: iree-compile the committed bytes ($BACKEND/$CHIP) =="
 for f in linear_fwd linear_train_step; do

@@ -689,6 +689,9 @@ end TrainedCnn
 end Proofs
 '''
 
-with open(OUT, "w") as f:
-    f.write(hdr + mid1 + mid2 + mid3 + mid4 + mid5 + mid6)
-print(f"wrote {OUT}", flush=True)
+# `trained_cnn_seal.py` execs this file for its tables and sets WITNESS_NO_WRITE, so that running
+# the seal generator does not also rewrite TrainedCnnWitness.lean.
+if not globals().get("WITNESS_NO_WRITE", False):
+    with open(OUT, "w") as f:
+        f.write(hdr + mid1 + mid2 + mid3 + mid4 + mid5 + mid6)
+    print(f"wrote {OUT}", flush=True)
