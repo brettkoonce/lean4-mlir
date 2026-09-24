@@ -122,14 +122,6 @@ private def stridedModule : String := Id.run do
 def main : IO Unit := do
   let mlir := stridedModule
   IO.println s!"rendered ConvNeXt strided (patchify 4×4/s4 + downsample 2×2/s2): {mlir.length} chars"
-  IO.FS.createDirAll ".lake/build"
-  let path := ".lake/build/convnext_strided.mlir"
-  IO.FS.writeFile path mlir
-  let cargs ← ireeCompileArgs path ".lake/build/convnext_strided.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println "convnext_strided iree-compile OK → .lake/build/convnext_strided.vmfb"
+  compileCheck "convnext_strided" mlir
 
 #eval main

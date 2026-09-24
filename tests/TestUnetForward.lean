@@ -33,9 +33,7 @@ private def compileOne (label mlir mlirPath vmfbPath : String) : IO Unit := do
   IO.FS.writeFile mlirPath mlir
   IO.eprintln s!"  [{label}] wrote {mlirPath} ({mlir.length} chars)"
   let args ← ireeCompileArgs mlirPath vmfbPath
-  let compiler := if (← System.FilePath.pathExists ".venv/bin/iree-compile")
-                  then ".venv/bin/iree-compile"
-                  else "iree-compile"
+  let compiler ← findIreeCompile
   let r ← IO.Process.output { cmd := compiler, args := args }
   if r.exitCode != 0 then
     IO.eprintln s!"  [{label}] FAIL: iree-compile exit {r.exitCode}"

@@ -30,11 +30,6 @@ private def main : IO Unit := do
     throw (IO.userError s!"{path} missing — it is written by \
 LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.ViTRender` first")
   IO.println s!"iree-compile smoke on the COMMITTED {path} (this file does not re-render it)"
-  let cargs ← ireeCompileArgs path ".lake/build/vit_fwd_v.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"[vit_fwd] iree-compile FAILED:\n{r.stderr.take 3000}"
-  else
-    IO.println s!"ViT-Tiny forward iree-compile OK → {path}"
+  tryCompile path ".lake/build/vit_fwd_v.vmfb" "ViT-Tiny forward"
 
 #eval main

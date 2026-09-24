@@ -1112,6 +1112,14 @@ def ireeCompileArgs (mlirPath outPath : String) : IO (Array String) := do
     ((s.getD "").splitOn " ").filter (· ≠ "") |>.toArray
   return baseArgs ++ chipArgs ++ extraArgs ++ userArgs ++ #["-o", outPath]
 
+/-- The `iree-compile` to run: `.venv/bin/iree-compile` when present (local dev), else the one on
+    `PATH` (Docker, system install). ⚠ `compileCheckB`, `tryCompile` and `VerifiedTrain.compileVmfb`
+    run the `PATH` one. -/
+def findIreeCompile : IO String := do
+  if ← System.FilePath.pathExists ".venv/bin/iree-compile" then
+    return ".venv/bin/iree-compile"
+  return "iree-compile"
+
 /-- **Compile one MLIR module and report.** Writes `body` to `.lake/build/{name}.mlir`, runs
     `iree-compile` on it, prints the verdict, and returns `true` on success.
 

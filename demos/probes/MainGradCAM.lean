@@ -109,9 +109,7 @@ private def compileCamVmfb (spec : NetSpec) (batchSize : Nat) : IO String := do
     IO.eprintln s!"  cam vmfb cached: {vmfbPath}"
     return vmfbPath
   IO.eprintln s!"  compiling cam vmfb -> {vmfbPath}"
-  let compiler := if (← System.FilePath.pathExists ".venv/bin/iree-compile")
-                    then ".venv/bin/iree-compile"
-                    else "iree-compile"
+  let compiler ← findIreeCompile
   let args ← ireeCompileArgs mlirPath vmfbPath
   let r ← IO.Process.output { cmd := compiler, args := args }
   if r.exitCode != 0 then

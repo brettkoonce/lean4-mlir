@@ -51,13 +51,6 @@ private def cacheKey (mlir : String) : IO String := do
   let backend ← (IO.getEnv "IREE_BACKEND").map (·.getD "cuda")
   return toString (mlir ++ "::" ++ backend).hash
 
-/-- Find iree-compile: check .venv/bin first (local dev), then PATH. -/
-private def findIreeCompile : IO String := do
-  if ← System.FilePath.pathExists ".venv/bin/iree-compile" then
-    return ".venv/bin/iree-compile"
-  -- Fall back to PATH (Docker, system install)
-  return "iree-compile"
-
 private def runIree (mlirPath outPath : String) : IO Bool := do
   let args ← ireeCompileArgs mlirPath outPath
   let compiler ← findIreeCompile

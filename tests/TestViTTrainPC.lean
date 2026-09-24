@@ -44,7 +44,7 @@ GPU-trained renderer (same signature; expect equivalent-not-byte-identical — t
 recompute-vs-save layouts differ, e.g. per-head slice/pad-sum vs rank-4 batched
 attention, im2col vs dilate+conv patch W-grad, 3-token vs fused LN affine):
   `scripts/render_parity.py --fn vit_train_step --ref verified_mlir/vit_train_step.mlir \
-     --cand /tmp/vitpc/train_step.mlir`
+     --cand .lake/build/vitpc_train_step.mlir`
 
 Run: `IREE_BACKEND=rocm lake env lean tests/TestViTTrainPC.lean`
 -/
@@ -409,13 +409,6 @@ private def trainStep : String := Id.run do
 def main : IO Unit := do
   let mlir := trainStep
   IO.println s!"rendered structured ViT (representative) train step: {mlir.length} chars"
-  IO.FS.createDirAll "/tmp/vitpc"
-  IO.FS.writeFile "/tmp/vitpc/train_step.mlir" mlir
-  let cargs ← ireeCompileArgs "/tmp/vitpc/train_step.mlir" "/tmp/vitpc/train_step.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 5000}"
-  else
-    IO.println "structured ViT representative train step iree-compile OK → /tmp/vitpc/train_step.mlir"
+  compileCheck "vitpc_train_step" mlir (stderrTake := 5000)
 
 #eval main

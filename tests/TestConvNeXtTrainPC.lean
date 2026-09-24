@@ -20,7 +20,7 @@ Unlike the MNV2/r34 peers there is no committed same-signature renderer (the com
 `TestConvNeXtTrain.lean` is the full ConvNeXt-T [3,3,9,3]; "come back to scaling later"), so
 validation is the `scripts/render_parity.py` ref-only smoke: compile + run on the GPU, all 26
 updated params finite and non-zero:
-  `scripts/render_parity.py --fn convnext_rep_train_step --ref /tmp/cnxpc/train_step.mlir`
+  `scripts/render_parity.py --fn convnext_rep_train_step --ref .lake/build/cnxpc_train_step.mlir`
 
 Run: `IREE_BACKEND=rocm lake env lean tests/TestConvNeXtTrainPC.lean`
 -/
@@ -226,13 +226,6 @@ private def trainStep : String := Id.run do
 def main : IO Unit := do
   let mlir := trainStep
   IO.println s!"rendered structured ConvNeXt (representative) train step: {mlir.length} chars"
-  IO.FS.createDirAll "/tmp/cnxpc"
-  IO.FS.writeFile "/tmp/cnxpc/train_step.mlir" mlir
-  let cargs ← ireeCompileArgs "/tmp/cnxpc/train_step.mlir" "/tmp/cnxpc/train_step.vmfb"
-  let r ← IO.Process.output { cmd := "iree-compile", args := cargs }
-  if r.exitCode != 0 then
-    IO.eprintln s!"iree-compile FAILED:\n{r.stderr.take 5000}"
-  else
-    IO.println "structured ConvNeXt representative train step iree-compile OK → /tmp/cnxpc/train_step.mlir"
+  compileCheck "cnxpc_train_step" mlir (stderrTake := 5000)
 
 #eval main
