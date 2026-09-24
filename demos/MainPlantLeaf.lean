@@ -104,12 +104,9 @@ def loadPart (dataDir name : String) (side : Nat) : IO Part := do
     throw <| IO.userError s!"{path}: {raw.size} bytes for {n} records of side {side}"
   return { name, raw, lbl, n, side }
 
-def u32le (k : Nat) : ByteArray :=
-  ByteArray.mk #[(k % 256).toUInt8, ((k / 256) % 256).toUInt8, ((k / 65536) % 256).toUInt8, ((k / 16777216) % 256).toUInt8]
-
 /-- One image of a part as a normalised f32 buffer. -/
 def image (p : Part) (k : Nat) : IO ByteArray :=
-  F32.imagenetteGather p.raw (u32le k) 1 p.side.toUSize
+  F32.imagenetteGather p.raw (pushU32LE .empty k) 1 p.side.toUSize
 
 /-- A training batch gathered by global index over a list of parts (their concatenation), at
     the stored 256, then random-cropped to 224 and flipped — the Imagenette recipe. -/
@@ -141,7 +138,7 @@ def scoreSet (sess : LowererSession) (spec : NetSpec) (evalParams evalShapes xSh
     let avail := min evalB (p.n - bi * evalB)
     let mut idx := ByteArray.emptyWithCapacity (evalB * 4)
     for i in [:evalB] do
-      idx := idx ++ u32le (bi * evalB + (min i (avail - 1)))     -- pad with the last real image
+      idx := pushU32LE idx (bi * evalB + (min i (avail - 1)))     -- pad with the last real image
     let xba ← F32.imagenetteGather p.raw idx evalB.toUSize p.side.toUSize
     let out ← LowererSession.forwardF32 sess spec.evalFnName evalParams evalShapes xba xSh
                 evalB.toUSize nC.toUSize
@@ -193,7 +190,7 @@ def camDump (spec : NetSpec) (pfx : String) (params bn : ByteArray) (parts : Arr
       let avail := min B (p.n - bi * B)
       let mut idx := ByteArray.emptyWithCapacity (B * 4)
       for i in [:B] do
-        idx := idx ++ u32le (bi * B + (min i (avail - 1)))
+        idx := pushU32LE idx (bi * B + (min i (avail - 1)))
       let xba ← F32.imagenetteGather p.raw idx B.toUSize p.side.toUSize
       let lastConv ← LowererSession.forwardF32 camSess camFn evalParams evalShapes xba xSh B.toUSize (c * h * w).toUSize
       for i in [:avail] do
@@ -203,7 +200,7 @@ def camDump (spec : NetSpec) (pfx : String) (params bn : ByteArray) (parts : Arr
         let camTrue ← F32.camCompute denseW lastConv i.toUSize c.toUSize h.toUSize w.toUSize nClasses.toUSize label.toUSize
         let camPred ← F32.camCompute denseW lastConv i.toUSize c.toUSize h.toUSize w.toUSize nClasses.toUSize pred.toUSize
         cams := cams ++ camTrue ++ camPred
-        preds := preds ++ u32le pred
+        preds := pushU32LE preds pred
     let t1 ← IO.monoMsNow
     IO.FS.writeBinFile s!"{pfx}_cam_{p.name}.bin" cams
     IO.FS.writeBinFile s!"{pfx}_campred_{p.name}.bin" preds

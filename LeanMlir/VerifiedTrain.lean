@@ -428,6 +428,14 @@ def mkSessionDp (mlirPath : String) (replicas : Nat) : IO LowererSession := do
   IO.println s!"  xla/pjrt {mlirPath}  (eval, SHARDED over {replicas} replicas)"
   LowererSession.createDp mlirPath replicas.toUSize
 
+/-- `bs` labels, class `(i + off) % nc`, as the driver's int32 records — the shard labels the
+    sync-BN, shard and tie gates feed. -/
+def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
+  let mut y : ByteArray := .empty
+  for i in [0:bs] do
+    y := pushU32LE y ((i + off) % nc)
+  y
+
 /-- Init one parameter from its `(dims, initKind)` spec, matching the JAX reference's
     initialisers — they are the oracle these nets are paired against:
 

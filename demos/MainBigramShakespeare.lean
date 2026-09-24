@@ -213,13 +213,7 @@ def runBigramSample (paramsPath : String) (nChars : Nat)
   return decodeTokens (← (do
     let mut buf : ByteArray := ByteArray.emptyWithCapacity (tokIds.length * 4)
     for id in tokIds do
-      buf := buf.append (← do
-        let mut b : ByteArray := .empty
-        b := b.push (id % 256).toUInt8
-        b := b.push ((id / 256) % 256).toUInt8
-        b := b.push ((id / 65536) % 256).toUInt8
-        b := b.push ((id / 16777216) % 256).toUInt8
-        pure b)
+      buf := pushU32LE buf id
     pure buf)) tokIds.length vocab
 
 def main (args : List String) : IO Unit := do

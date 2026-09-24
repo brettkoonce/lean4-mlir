@@ -52,18 +52,13 @@ def obsIndex (o : Obs) : Nat :=
   if o.usable then 180 + (o.sum - 12) * 10 + (o.dealer - 1)
   else (o.sum - 4) * 10 + (o.dealer - 1)
 
-@[inline] def pushF32 (acc : ByteArray) (x : Float) : ByteArray :=
-  let u : UInt32 := x.toFloat32.toBits
-  (((acc.push (u &&& 0xff).toUInt8).push ((u >>> 8) &&& 0xff).toUInt8).push
-    ((u >>> 16) &&& 0xff).toUInt8).push ((u >>> 24) &&& 0xff).toUInt8
-
 /-- Append the 29-float encoding of `o`. A bust sum (> 21) encodes as all-zero
     sum slots; it only ever appears as the `s'` of a terminal transition. -/
 def pushObs (acc : ByteArray) (o : Obs) : ByteArray := Id.run do
   let mut acc := acc
-  for i in [0:18] do acc := pushF32 acc (if o.sum == 4 + i then 1.0 else 0.0)
-  for i in [0:10] do acc := pushF32 acc (if o.dealer == 1 + i then 1.0 else 0.0)
-  acc := pushF32 acc (if o.usable then 1.0 else 0.0)
+  for i in [0:18] do acc := pushF32LE acc (if o.sum == 4 + i then 1.0 else 0.0)
+  for i in [0:10] do acc := pushF32LE acc (if o.dealer == 1 + i then 1.0 else 0.0)
+  acc := pushF32LE acc (if o.usable then 1.0 else 0.0)
   return acc
 
 structure Transition where
@@ -202,8 +197,8 @@ are loaded as .mlir; there is no iree-compile step here)"
           then (if F32.read qo (2 * i + 1).toUSize > F32.read qo (2 * i).toUSize then n1 else n0)
           else max n0 n1
         let tgt := t.r + (if t.done then 0.0 else gamma * boot)
-        y := pushF32 y (if t.hit then q0 else tgt)
-        y := pushF32 y (if t.hit then tgt else q1)
+        y := pushF32LE y (if t.hit then q0 else tgt)
+        y := pushF32LE y (if t.hit then tgt else q1)
       updates := updates + 1
       let packed := (p.append m).append v
       let lrNow := if lrDecay then lr * (1.0 - 0.9 * updates.toFloat / steps.toFloat) else lr

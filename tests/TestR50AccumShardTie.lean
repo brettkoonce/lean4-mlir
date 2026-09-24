@@ -71,15 +71,6 @@ Knobs: `R50_ACC_VARIANT` (default `acc4x64`; k is read from the name and must eq
 count), `R50_ACC_TOL_U` (micro-units, default 200 = 2e-4).
 -/
 
-/-- Labels for one micro-batch: class `(i + off) % nClasses`, the driver's 4-byte records. The
-    offset makes the shards differ in their LABELS as well as their pixels, so a run that read the
-    wrong rows cannot coincidentally agree. -/
-private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
-  let mut y : ByteArray := .empty
-  for i in [0:bs] do
-    y := y.push (UInt8.ofNat ((i + off) % (min nc 251))); y := y.push 0; y := y.push 0; y := y.push 0
-  y
-
 private def cmpRegion (a b : ByteArray) (off n : Nat) : Float × Float × Nat := Id.run do
   let mut d := 0.0; let mut m := 0.0; let mut ex := 0
   for i in [0:n] do
@@ -164,7 +155,10 @@ want adamdp64 (224) or lambdp64bce (160)"
   let mut ys : Array ByteArray := #[]
   for i in [0:k] do
     xs := xs.push (← F32.heInit (555 + 444 * i).toUSize (bs * net.d0).toUSize 1.0)
-    ys := ys.push (mkLabels bs (5 * i) net.nClasses)
+    -- the offset makes the shards differ in their LABELS as well as their pixels, so a run that
+    -- read the wrong rows cannot coincidentally agree; classes capped at 251, the label set the
+    -- committed readings were taken on
+    ys := ys.push (mkLabels bs (5 * i) (min net.nClasses 251))
   let xAll := F32.concat xs
   let mut yAll : ByteArray := .empty
   for y in ys do yAll := yAll ++ y

@@ -31,9 +31,9 @@ lean_lib «LeanMlir» where
 
 -- Scoped targets, so CI and contributors can build one slice without the
 -- rest, along the seam between the proof suite and the program side. `Proofs` reaches no
--- program module. `Certs` reaches three, all import-free data (`VerifiedSpec`, `ParamLayouts`,
--- `VerifiedNetsCore`), through `SpecVJP`, the executable-spec ↔ proof bridge — never the trainer
--- or the FFI.
+-- program module. `Certs` reaches four, all pure data (`VerifiedSpec`, `ParamLayouts` and its
+-- byte writer `LEBytes`, `VerifiedNetsCore`), through `SpecVJP`, the executable-spec ↔ proof
+-- bridge — never the trainer or the FFI.
 
 /-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
     every demo's import cone actually reaches (StableHLO/IR + the per-net

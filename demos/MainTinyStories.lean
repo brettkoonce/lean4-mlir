@@ -240,8 +240,7 @@ def runSample (c : StoriesCfg) (nToks : Nat) (temperature : Float) (topK : Nat)
     let mut idsBA : ByteArray := ByteArray.emptyWithCapacity (T * 4)
     for t in [:T] do
       let id := context[t]!
-      idsBA := idsBA.push (id % 256).toUInt8 |>.push ((id / 256) % 256).toUInt8
-                  |>.push ((id / 65536) % 256).toUInt8 |>.push ((id / 16777216) % 256).toUInt8
+      idsBA := pushU32LE idsBA id
     let xba ← F32.idsToFloats idsBA
     let logitsFlat ← LowererSession.forwardF32 sess spec.evalFnName
                        evalParams evalShapesBA xba xShape 1 outElems

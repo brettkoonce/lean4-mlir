@@ -346,10 +346,7 @@ def packContext (ids : Array Nat) (T V : Nat) (useIds : Bool) : IO ByteArray := 
   let mut idsBA : ByteArray := ByteArray.emptyWithCapacity (T * 4)
   for t in [:T] do
     let id := if t < ids.size then ids[t]! else 0
-    idsBA := idsBA.push (id % 256).toUInt8
-                |>.push ((id / 256) % 256).toUInt8
-                |>.push ((id / 65536) % 256).toUInt8
-                |>.push ((id / 16777216) % 256).toUInt8
+    idsBA := pushU32LE idsBA id
   if useIds then F32.idsToFloats idsBA
   else F32.tokenOneHot idsBA 1 T.toUSize V.toUSize
 

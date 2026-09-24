@@ -37,13 +37,6 @@ needs no BN.
 Needs TWO GPUs and the XLA backend.
 -/
 
-/-- Labels for one shard: class `(i + off) % nClasses`, packed as the driver's 4-byte records. -/
-private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
-  let mut y : ByteArray := .empty
-  for i in [0:bs] do
-    y := y.push (UInt8.ofNat ((i + off) % nc)); y := y.push 0; y := y.push 0; y := y.push 0
-  y
-
 def main (args : List String) : IO Unit := do
   let net := convnextVerified.toNet
   let bs := 32

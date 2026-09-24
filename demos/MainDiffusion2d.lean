@@ -103,11 +103,6 @@ def nStripFrames : Nat := 8
 /-- Points whose full trajectory the flow samplers keep for the figure. -/
 def nPathPoints : Nat := 128
 
-@[inline] def pushF32 (acc : ByteArray) (x : Float) : ByteArray :=
-  let u : UInt32 := x.toFloat32.toBits
-  (((acc.push (u &&& 0xff).toUInt8).push ((u >>> 8) &&& 0xff).toUInt8).push
-    ((u >>> 16) &&& 0xff).toUInt8).push ((u >>> 24) &&& 0xff).toUInt8
-
 /-- The integer the time channel takes for a continuous flow time `t ∈ [0, 1]`.
     ⚠ Train and sample must agree on this map; `Ddpm.flowStepInputs` spells the
     same `round(t · Tmax)`. -/
@@ -149,8 +144,8 @@ def flowOde (vAt : ByteArray → Float → IO ByteArray) (x0 : ByteArray) (m : N
   let mut e1 := ByteArray.empty
   if withDiv then
     for _ in [:m] do
-      e0 := pushF32 (pushF32 e0 1.0) 0.0
-      e1 := pushF32 (pushF32 e1 0.0) 1.0
+      e0 := pushF32LE (pushF32LE e0 1.0) 0.0
+      e1 := pushF32LE (pushF32LE e1 0.0) 1.0
   let mut x := x0
   let mut divInt : Array Float := Array.replicate m 0.0
   let mut kin := 0.0
@@ -203,7 +198,7 @@ def logNormal2 (x : ByteArray) (m : Nat) : Array Float := Id.run do
   return out
 
 def floatsToBytes (a : Array Float) : ByteArray :=
-  a.foldl pushF32 ByteArray.empty
+  a.foldl pushF32LE ByteArray.empty
 
 def main (args : List String) : IO Unit := do
   -- The target is matched by NAME anywhere in the args, the same way `reuse`
@@ -677,7 +672,7 @@ straightness ∫E|v(x_t,t) - (z - x)|²dt = {straight}"
     let mut lat := ByteArray.empty
     for iy in [:side] do
       for ix in [:side] do
-        lat := pushF32 (pushF32 lat (lo + (hi - lo) * ix.toFloat / (side - 1).toFloat))
+        lat := pushF32LE (pushF32LE lat (lo + (hi - lo) * ix.toFloat / (side - 1).toFloat))
                               (lo + (hi - lo) * iy.toFloat / (side - 1).toFloat)
     let nL := side * side
     let nChunks := (nL + m - 1) / m

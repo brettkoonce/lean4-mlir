@@ -588,10 +588,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     let mut ba : ByteArray := .empty
     for (g, anchors) in cfg.fpnScales do
       for v in [g, anchors.length] do
-        ba := ba.push (v % 256).toUInt8
-        ba := ba.push (v / 256 % 256).toUInt8
-        ba := ba.push (v / 65536 % 256).toUInt8
-        ba := ba.push (v / 16777216 % 256).toUInt8
+        ba := pushU32LE ba v
     return ba
   -- Per-scale anchor priors packed f32-LE as (w,h) pairs, in the SAME scale
   -- order as fpnScalesFlat, for the box-aware affine's re-encode. Taken from
@@ -602,11 +599,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
     for (_, anchors) in cfg.fpnScales do
       for (aw, ah) in anchors do
         for v in [aw, ah] do
-          let bits := v.toFloat32.toBits
-          ba := ba.push (bits % 256).toUInt8
-          ba := ba.push (bits / 256 % 256).toUInt8
-          ba := ba.push (bits / 65536 % 256).toUInt8
-          ba := ba.push (bits / 16777216 % 256).toUInt8
+          ba := pushF32LE ba v
     return ba
   let nScalesU : USize := cfg.fpnScales.length.toUSize
 

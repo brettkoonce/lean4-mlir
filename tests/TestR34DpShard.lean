@@ -47,13 +47,6 @@ gradient, with no optimizer state to launder it.
 -/
 
 
-/-- Labels for one shard: class `(i + off) % nClasses`, in the driver's 4-byte records. -/
-private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
-  let mut y : ByteArray := .empty
-  for i in [0:bs] do
-    y := y.push (UInt8.ofNat ((i + off) % nc)); y := y.push 0; y := y.push 0; y := y.push 0
-  y
-
 def main : IO Unit := do
   let net      := resnet34ImagenetVerified.toNet
   let bs       := ((← IO.getEnv "SHARD_BS").bind (·.toNat?)).getD 64

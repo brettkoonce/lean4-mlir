@@ -53,13 +53,6 @@ disease one level down, in code — and the generic harness is gated by having t
 Needs TWO GPUs and the XLA backend (collectives do not exist on the IREE path).
 -/
 
-/-- Labels for one shard: class `(i + off) % nClasses`, packed as the driver's 4-byte records. -/
-private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
-  let mut y : ByteArray := .empty
-  for i in [0:bs] do
-    y := y.push (UInt8.ofNat ((i + off) % nc)); y := y.push 0; y := y.push 0; y := y.push 0
-  y
-
 /-- The nets with a DP render that this construction applies to. R34 is absent on purpose: its
     `_adam_train_step` is bs32 batch-BN like these, so the *test* would work, but its DP evidence
     is tracked separately (§2b-quater) and it has no `adamdp` peer at this batch to pair with. -/

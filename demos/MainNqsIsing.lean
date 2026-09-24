@@ -70,11 +70,6 @@ def sci (x : Float) : String :=
             else "+" ++ toString e.toUInt64.toNat
   s!"{fmt m 2}e{es}"
 
-@[inline] def pushF32 (acc : ByteArray) (x : Float) : ByteArray :=
-  let u : UInt32 := x.toFloat32.toBits
-  (((acc.push (u &&& 0xff).toUInt8).push ((u >>> 8) &&& 0xff).toUInt8).push
-    ((u >>> 16) &&& 0xff).toUInt8).push ((u >>> 24) &&& 0xff).toUInt8
-
 @[inline] def pushF64 (acc : ByteArray) (x : Float) : ByteArray := Id.run do
   let u := x.toBits
   let mut acc := acc
@@ -258,7 +253,7 @@ def targets (cfg : Cfg) (bias : Array Float) (out : ByteArray) (cs : Array UInt6
   let mut y : ByteArray := ByteArray.emptyWithCapacity (M * cfg.nOut * 4)
   if cfg.arch != "gpt" then
     for s in [0:M] do
-      y := pushF32 y (F32.read out s.toUSize - M.toFloat * w[s]! / 2.0)
+      y := pushF32LE y (F32.read out s.toUSize - M.toFloat * w[s]! / 2.0)
   else
     let T := cfg.T
     let V := cfg.V
@@ -283,7 +278,7 @@ def targets (cfg : Cfg) (bias : Array Float) (out : ByteArray) (cs : Array UInt6
           let q := Float.exp (l + bias[v]! - mx) / se
           let g := w[s]! * 0.5 * ((if v == id then 1.0 else 0.0) - q)
           row := row.set! (v * T + k) (l - scale * g)
-      for j in [0:T * V] do y := pushF32 y row[j]!
+      for j in [0:T * V] do y := pushF32LE y row[j]!
   return y
 
 def mkSpec (cfg : Cfg) : NetSpec :=
@@ -559,8 +554,8 @@ Im E = {sci ei}  Var(E_loc) = {sci var}  ({t1 - t0} ms)"
     -- y = out − (M·nOut/2)·g with g the two cotangents per configuration
     let mut y : ByteArray := ByteArray.emptyWithCapacity (M * nOut * 4)
     for s in [0:M] do
-      y := pushF32 y (F32.read out (2 * s).toUSize - M.toFloat * 2.0 * w[s]! * (re[s]! - er))
-      y := pushF32 y (F32.read out (2 * s + 1).toUSize - M.toFloat * 2.0 * w[s]! * (im[s]! - ei))
+      y := pushF32LE y (F32.read out (2 * s).toUSize - M.toFloat * 2.0 * w[s]! * (re[s]! - er))
+      y := pushF32LE y (F32.read out (2 * s + 1).toUSize - M.toFloat * 2.0 * w[s]! * (im[s]! - ei))
     let packed := (p.append m).append v
     let lrNow := if cfg.cosine then
         let lrMin := 0.05 * cfg.lr
@@ -601,12 +596,12 @@ Im E = {sci ei}  Var(E_loc) = {sci var}  ({t1 - t0} ms)"
   let mut rows : ByteArray := ByteArray.emptyWithCapacity (M * (cfg.N + 3) * 4)
   for s in [0:M] do
     for i in [0:cfg.N] do
-      rows := pushF32 rows (spin cs[s]! i)
-    psi := pushF32 psi a[s]!
-    psi := pushF32 psi ph[s]!
-    rows := pushF32 rows w[s]!
-    rows := pushF32 rows re[s]!
-    rows := pushF32 rows im[s]!
+      rows := pushF32LE rows (spin cs[s]! i)
+    psi := pushF32LE psi a[s]!
+    psi := pushF32LE psi ph[s]!
+    rows := pushF32LE rows w[s]!
+    rows := pushF32LE rows re[s]!
+    rows := pushF32LE rows im[s]!
   let t2 ← IO.monoMsNow
   let corrStr := String.intercalate ", " (corr.toList.map fun c => fmt c 6)
   IO.println s!"{cfg.arch} j1j2 N={cfg.N} J2={cfg.J2}: E = {fmt er 6}  E/N = {fmt (er / cfg.N.toFloat) 6}  \
@@ -701,7 +696,7 @@ def main (args : List String) : IO Unit := do
     throw <| IO.userError "symref: the symmetrised reference is not a product state, so it has no per-patch logit bias; mlp/vit only"
   let ref := mkRef cfg.J cfg.h
   let bias := patchBias cfg ref
-  let biasBA := bias.foldl pushF32 ByteArray.empty
+  let biasBA := bias.foldl pushF32LE ByteArray.empty
   let spec := mkSpec cfg
   match spec.validate with
   | some e => throw <| IO.userError s!"spec: {e}"
@@ -883,10 +878,10 @@ Var(E_loc) = {sci var}  ({t1 - t0} ms)"
     corr := correlations cfg cs weights
     nSamples := M
     for c in [0:M] do
-      for i in [0:cfg.N] do rows := pushF32 rows (spin c.toUInt64 i)
-      rows := pushF32 rows weights[c]!
-      rows := pushF32 rows eloc[c]!
-      rows := pushF32 rows sx[c]!
+      for i in [0:cfg.N] do rows := pushF32LE rows (spin c.toUInt64 i)
+      rows := pushF32LE rows weights[c]!
+      rows := pushF32LE rows eloc[c]!
+      rows := pushF32LE rows sx[c]!
     if cfg.check then
       -- §8: the sampler the N > 14 runs rely on, tested where the answer is known.
       -- E_loc of every drawn configuration is a lookup in the enumerated table.
@@ -955,10 +950,10 @@ E_MC = {fmt mcE 5} ± {fmt seE 5} vs exact {fmt mE 5} (z = {fmt ((mcE - mE) / se
     for i in [0:nSamples] do mVar := mVar + wq * (allE[i]! - mE) * (allE[i]! - mE)
     corr := correlations cfg allC (Array.replicate nSamples wq)
     for i in [0:nSamples] do
-      for j in [0:cfg.N] do rows := pushF32 rows (spin allC[i]! j)
-      rows := pushF32 rows wq
-      rows := pushF32 rows allE[i]!
-      rows := pushF32 rows allSx[i]!
+      for j in [0:cfg.N] do rows := pushF32LE rows (spin allC[i]! j)
+      rows := pushF32LE rows wq
+      rows := pushF32LE rows allE[i]!
+      rows := pushF32LE rows allSx[i]!
   let t2 ← IO.monoMsNow
   let corrStr := String.intercalate ", " (corr.toList.map fun c => fmt c 6)
   IO.println s!"{cfg.arch} N={cfg.N} h={cfg.h}: E = {fmt mE 6}  E/N = {fmt (mE / cfg.N.toFloat) 6}  \

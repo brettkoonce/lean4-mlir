@@ -42,12 +42,7 @@ def nBnStats (spec : NetSpec) : Nat :=
     The `trainStepAdamF32` FFI uses this to know how many BN-stat outputs
     to pop after the params/loss. -/
 def bnShapesBA (spec : NetSpec) : ByteArray := Id.run do
-  let push := fun (ba : ByteArray) (v : Nat) =>
-    let v32 : UInt32 := v.toUInt32
-    ba.push (v32 &&& 0xFF).toUInt8
-      |>.push ((v32 >>> 8) &&& 0xFF).toUInt8
-      |>.push ((v32 >>> 16) &&& 0xFF).toUInt8
-      |>.push ((v32 >>> 24) &&& 0xFF).toUInt8
+  let push := pushU32LE
   let bn := spec.bnLayers
   let mut ba := push .empty bn.size
   for (_, oc) in bn do ba := push ba oc

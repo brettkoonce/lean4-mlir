@@ -43,13 +43,6 @@ HIP_VISIBLE_DEVICES=0 .lake/build/bin/soft-target-tie convnext
 ```
 -/
 
-/-- int32 hard labels, class `(i + off) % nClasses` — the `batch*4`-byte form. -/
-private def mkLabels (bs off nc : Nat) : ByteArray := Id.run do
-  let mut y : ByteArray := .empty
-  for i in [0:bs] do
-    y := y.push (UInt8.ofNat ((i + off) % nc)); y := y.push 0; y := y.push 0; y := y.push 0
-  y
-
 /-- The `batch*nClasses*4`-byte SOFT form: `lam·onehot(i%nc) + (1−lam)·onehot((i+off)%nc)`, i.e.
     precisely what mixup produces from the two label sets `mkLabels bs 0 nc` and `mkLabels bs off nc`. -/
 private def mkSoft (bs off nc : Nat) (lam : Float) : IO ByteArray := do

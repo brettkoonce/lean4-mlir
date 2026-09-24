@@ -1,4 +1,5 @@
 import LeanMlir.F32Array
+import LeanMlir.LEBytes
 
 /-! # Pure-Lean E4M3 (fp8) fake-quant over raw-f32 `ByteArray`s
 
@@ -33,12 +34,6 @@ def roundE4M3 (x : Float) : Float :=
     let step := Float.exp2 (e - 3.0)          -- 3-bit mantissa LSB
     let q := min (Float.round (a / step) * step) e4m3Max
     s * q
-
-/-- Append `x` as 4 little-endian f32 bytes (narrowing f64 → `Float32`). -/
-@[inline] def pushF32LE (acc : ByteArray) (x : Float) : ByteArray :=
-  let u : UInt32 := x.toFloat32.toBits
-  ((acc.push (u &&& 0xff).toUInt8).push ((u >>> 8) &&& 0xff).toUInt8).push
-    ((u >>> 16) &&& 0xff).toUInt8 |>.push ((u >>> 24) &&& 0xff).toUInt8
 
 /-- **Per-tensor E4M3 quant** (one scale `s = max|·|/448`). Round-trips through
     the grid: returns `s · q(vᵢ/s)` as f32 bytes (the dequantized operand). -/
