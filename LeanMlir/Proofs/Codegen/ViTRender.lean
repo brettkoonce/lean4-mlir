@@ -127,9 +127,7 @@ def vitRampOf (site : Nat) : Nat := site / 2
 
 /-- The `%dp<i>: tensor<Bxf32>` inputs an SD ViT render appends to its signature — one per SITE, in
     ordinal order, which is the order the driver's `dropScales` writes them into the blob. -/
-def vitDropSig (B : Nat) (sd : Bool) : String :=
-  if sd then String.join ((List.range vitDropSites).map (fun i => s!", {dpName i}: {ty [B]}"))
-  else ""
+def vitDropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd (List.range vitDropSites)
 
 -- ── node-by-node renderers (the computable ConvNeXt pattern: each `pretty` emits ONE op with
 --    `.operand <prevSSA> <zero-placeholder>`, threading SSA name strings; `vitBlockGraphMHV` is the

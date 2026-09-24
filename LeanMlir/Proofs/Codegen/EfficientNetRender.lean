@@ -318,8 +318,7 @@ def enetDropSites : Nat := enetDropIdxs.length
 
 /-- The `%dp<i>: tensor<Bxf32>` inputs, appended to a render's signature when stochastic depth is
     on. Empty when off, which is what keeps gate 1 byte-identical. -/
-def enetDropSig (B : Nat) (sd : Bool) : String :=
-  if sd then String.join (enetDropIdxs.map (fun i => s!", {dpName i}: {ty [B]}")) else ""
+def enetDropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd enetDropIdxs
 
 -- ── ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C) ─────────────────────────────────────────────
 -- `efficientNetB0ImagenetConfig` sets `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`)

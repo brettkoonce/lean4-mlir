@@ -231,8 +231,7 @@ def cnxModelName (V : CnxDims := cnxTiny) : String :=
     ramp-index order, which is the order the driver's `dropScales` writes them into the blob.
     Empty when off, which is what keeps every committed artifact byte-identical. -/
 def cnxDropSig (B : Nat) (sd : Bool) (V : CnxDims := cnxTiny) : String :=
-  if sd then String.join ((List.range (cnxDropSites V)).map (fun i => s!", {dpName i}: {ty [B]}"))
-  else ""
+  dropMaskSig B sd (List.range (cnxDropSites V))
 
 -- ── The two hand-written weight-grad emitters that used to live here (`rs4`, `patchWGrad`
 --    for the 4×4/s4 patchify stem, `downWGrad` for the even-kernel 2×2/s2 downsample) are

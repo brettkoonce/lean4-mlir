@@ -148,4 +148,11 @@ def packedTrainRetTys (pTy : List String) (acc : Bool := false) (ema : Bool := f
     (if acc then ["tensor<f32>", "tensor<f32>"] else []) ++
     (if ema then ["tensor<f32>", "tensor<f32>"] else [])
 
+/-- The stochastic-depth mask arguments `, %dp<i>: tensor<Bxf32>` for the sites `idxs`, in the
+    order given — the order the driver's `dropScales` writes them into the blob. Empty when `sd` is
+    off, which keeps every non-SD render byte-identical. Each net passes its own site list
+    (`vitDropSig`, `cnxDropSig`, `enetDropSig`, `r50DropSig`). -/
+def dropMaskSig (B : Nat) (sd : Bool) (idxs : List Nat) : String :=
+  if sd then String.join (idxs.map (fun i => s!", {dpName i}: {ty [B]}")) else ""
+
 end Proofs.StableHLO

@@ -153,9 +153,7 @@ def r50DropTotal : Nat := 16
 
 /-- The `%dp0 … %dp15` mask arguments, `tensor<Bxf32>` each — appended to the train step's
     signature only under `sd`. Mirrors `cnxDropSig`. -/
-def r50DropSig (B : Nat) (sd : Bool) : String :=
-  if sd then String.join ((List.range r50DropTotal).map (fun i => s!", {dpName i}: {ty [B]}"))
-  else ""
+def r50DropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd (List.range r50DropTotal)
 
 /-- `some i` under `sd`, `none` otherwise — the per-block ramp index handed to the six block
     emitters. ⚠ **The index is the BLOCK index and the two coincide here**, because every R50
