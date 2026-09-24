@@ -1367,141 +1367,139 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
 -- § 7. The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐⭐ **The synchronised-BN data-parallel EfficientNet-B0 step IS the single-device step at the
-    global batch.** `R` replicas at batch `N`, each dividing its loss by `B`, each running the
-    render's sync-BN backward chain from its own label-smoothed cotangent; every parameter's
-    all-reduced mean gradient — stem 3, b1 10, fifteen MBConv6 blocks × 13, head 5: the 213 the
-    render emits at `convBias := false` — equals the single-device batch-BN gradient node at batch
-    `R·N`, loss divided by `R·B`, at the cotangent T3's chain delivers there.
+/-- **The whole-net statement, named** — so the capstone (cotangents bound) and its smoothed-CE
+    corollary (cotangents instantiated) state exactly one thing. The forward prefixes `a0 … a16`
+    and the block-output cotangents `dy16 … dy0` are `EnetTiePoCG.efficientnet_net_tiedG`'s chain at
+    `N := R·N`, driven by the global cotangent `g`; `e16 … e0` are the replicas' sync-BN chain,
+    driven by the family `gs`; the 18 conjuncts are one per stage. -/
+def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : String)
+    (w : B0Weights) (hεw : w.EpsPos) (x : Vec ((R * N) * (3 * 224 * 224)))
+    (g : Vec ((R * N) * 10)) (gs : Fin R → Vec (N * 10)) : Prop :=
+  -- ── the single-device chain at the global batch `R·N` (T3's), driven by `g` ──
+  let a0  : Vec ((R * N) * (32 * 112 * 112)) :=
+    stemB (R * N) (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
+  let a1  : Vec ((R * N) * (16 * 112 * 112)) := mbNoExpW (R * N) 112 112 w.b1 a0
+  let a2  : Vec ((R * N) * (24 * 56 * 56))   := mbStridedW (R * N) 56 56 w.b2 a1
+  let a3  : Vec ((R * N) * (24 * 56 * 56))   := mbResidW (R * N) 56 56 w.b3 a2
+  let a4  : Vec ((R * N) * (40 * 28 * 28))   := mbStridedW (R * N) 28 28 w.b4 a3
+  let a5  : Vec ((R * N) * (40 * 28 * 28))   := mbResidW (R * N) 28 28 w.b5 a4
+  let a6  : Vec ((R * N) * (80 * 14 * 14))   := mbStridedW (R * N) 14 14 w.b6 a5
+  let a7  : Vec ((R * N) * (80 * 14 * 14))   := mbResidW (R * N) 14 14 w.b7 a6
+  let a8  : Vec ((R * N) * (80 * 14 * 14))   := mbResidW (R * N) 14 14 w.b8 a7
+  let a9  : Vec ((R * N) * (112 * 14 * 14))  := mbExpW (R * N) 14 14 w.b9 a8
+  let a10 : Vec ((R * N) * (112 * 14 * 14))  := mbResidW (R * N) 14 14 w.b10 a9
+  let a11 : Vec ((R * N) * (112 * 14 * 14))  := mbResidW (R * N) 14 14 w.b11 a10
+  let a12 : Vec ((R * N) * (192 * 7 * 7))    := mbStridedW (R * N) 7 7 w.b12 a11
+  let a13 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b13 a12
+  let a14 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b14 a13
+  let a15 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b15 a14
+  let a16 : Vec ((R * N) * (320 * 7 * 7))    := mbExpW (R * N) 7 7 w.b16 a15
+  let dy16 : Vec ((R * N) * (320 * 7 * 7))   := (headFwdB_has_vjp (R * N) (h := 7) (w := 7)
+    w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
+  let dy15 : Vec ((R * N) * (192 * 7 * 7))   :=
+    (mbExpW_has_vjp (R * N) 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
+  let dy14 : Vec ((R * N) * (192 * 7 * 7))   :=
+    (mbResidW_has_vjp (R * N) 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+  let dy13 : Vec ((R * N) * (192 * 7 * 7))   :=
+    (mbResidW_has_vjp (R * N) 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+  let dy12 : Vec ((R * N) * (192 * 7 * 7))   :=
+    (mbResidW_has_vjp (R * N) 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+  let dy11 : Vec ((R * N) * (112 * 14 * 14)) :=
+    (mbStridedW_has_vjp (R * N) 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
+  let dy10 : Vec ((R * N) * (112 * 14 * 14)) :=
+    (mbResidW_has_vjp (R * N) 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+  let dy9  : Vec ((R * N) * (112 * 14 * 14)) :=
+    (mbResidW_has_vjp (R * N) 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+  let dy8  : Vec ((R * N) * (80 * 14 * 14))  :=
+    (mbExpW_has_vjp (R * N) 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
+  let dy7  : Vec ((R * N) * (80 * 14 * 14))  :=
+    (mbResidW_has_vjp (R * N) 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+  let dy6  : Vec ((R * N) * (80 * 14 * 14))  :=
+    (mbResidW_has_vjp (R * N) 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+  let dy5  : Vec ((R * N) * (40 * 28 * 28))  :=
+    (mbStridedW_has_vjp (R * N) 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
+  let dy4  : Vec ((R * N) * (40 * 28 * 28))  :=
+    (mbResidW_has_vjp (R * N) 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+  let dy3  : Vec ((R * N) * (24 * 56 * 56))  :=
+    (mbStridedW_has_vjp (R * N) 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
+  let dy2  : Vec ((R * N) * (24 * 56 * 56))  :=
+    (mbResidW_has_vjp (R * N) 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+  let dy1  : Vec ((R * N) * (16 * 112 * 112)) :=
+    (mbStridedW_has_vjp (R * N) 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
+  let dy0  : Vec ((R * N) * (32 * 112 * 112)) :=
+    (mbNoExpW_has_vjp (R * N) 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
+  -- ── the replicas' sync-BN chain, driven by the family `gs` ──
+  let e16 := hdsCotIn R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW a16 gs
+  let e15 := xsCotIn R hR N 7 7 w.b16 a15 e16
+  let e14 := rsCotIn R hR N 7 7 w.b15 a14 e15
+  let e13 := rsCotIn R hR N 7 7 w.b14 a13 e14
+  let e12 := rsCotIn R hR N 7 7 w.b13 a12 e13
+  let e11 := ssCotIn R hR N 7 7 w.b12 a11 e12
+  let e10 := rsCotIn R hR N 14 14 w.b11 a10 e11
+  let e9  := rsCotIn R hR N 14 14 w.b10 a9 e10
+  let e8  := xsCotIn R hR N 14 14 w.b9 a8 e9
+  let e7  := rsCotIn R hR N 14 14 w.b8 a7 e8
+  let e6  := rsCotIn R hR N 14 14 w.b7 a6 e7
+  let e5  := ssCotIn R hR N 14 14 w.b6 a5 e6
+  let e4  := rsCotIn R hR N 28 28 w.b5 a4 e5
+  let e3  := ssCotIn R hR N 28 28 w.b4 a3 e4
+  let e2  := rsCotIn R hR N 56 56 w.b3 a2 e3
+  let e1  := ssCotIn R hR N 56 56 w.b2 a1 e2
+  let e0  := nsCotIn R hR N 112 112 w.b1 a0 e1
+  -- ── every collective the render emits IS the single-device node ──
+  stemSyncTiedG R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ x e0 dy0
+  ∧ noExpSyncTiedG R hR N 112 112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1
+  ∧ stridedSyncTiedG R hR N 56 56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2
+  ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3
+  ∧ stridedSyncTiedG R hR N 28 28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4
+  ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5
+  ∧ stridedSyncTiedG R hR N 14 14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6
+  ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7
+  ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8
+  ∧ expSyncTiedG R hR N 14 14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9
+  ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10
+  ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11
+  ∧ stridedSyncTiedG R hR N 7 7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12
+  ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13
+  ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14
+  ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15
+  ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16
+  ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16 gs g
 
-    The right-hand chain is `EnetTiePoCG.efficientnet_net_tiedG`'s at `N := R·N`, `B := R·B`:
-    verbatim for the forward prefixes `a0 … a16`, the loss cotangent `g` and the block-output
-    cotangents `dy16 … dy0` threaded by the certified block VJPs' `.backward`; by `rfl` for the
-    in-block cotangents, which are this file's named chain. That capstone ties those nodes to the
-    certified gradient, so the two together say the DP step's update is the certified gradient of
-    the mean loss over all `R·N` examples. It carries the same fifty `0 < ε` hypotheses, because
-    T3's single-device chain does.
+/-- ⭐⭐⭐ **The synchronised-BN data-parallel EfficientNet-B0 step IS the single-device step at the
+    global batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from
+    its own cotangent `gs r`, with `gs r` the `R`-scaled shard of a global cotangent `g`; every
+    parameter's all-reduced mean gradient — stem 3, b1 10, fifteen MBConv6 blocks × 13, head 5: the
+    213 the render emits at `convBias := false` — equals the single-device batch-BN gradient node at
+    batch `R·N`, at the cotangent T3's chain delivers there from `g`.
+
+    The right-hand chain is `EnetTiePoCG.efficientnet_net_tiedG`'s at `N := R·N`: verbatim for the
+    forward prefixes `a0 … a16` and the block-output cotangents `dy16 … dy0` threaded by the
+    certified block VJPs' `.backward`; by `rfl` for the in-block cotangents, which are this file's
+    named chain. That capstone ties those nodes to the certified gradient, so the two together say
+    the DP step's update is the certified gradient of the global-batch step. It takes `hεw`
+    (`w.EpsPos`), because T3's single-device chain does. `efficientnet_net_syncTiedG_smoothedCE`
+    discharges the hypothesis for the label-smoothed chain the artifacts emit.
 
     ⭐ The left-hand chain is the replicas' own: sync-BN backward at every one of the 49
     BatchNorms (`bnSyncInB`, a collective each), per-example conv / depthwise / squeeze-excite /
-    swish / head links, each replica's own loss cotangent. -/
+    swish / head links. -/
 theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
-    (xN vN epsStr cotN dN : String) (w : B0Weights)
-    (hεw : w.EpsPos)
-    (aStr negAK bStr logN ohN : String) (α B : ℝ)
-    (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * 10))) :
-    -- ── the single-device step at the global batch `R·N`, loss divided by `R·B`: T3's chain ──
-    let a0  : Vec ((R * N) * (32 * 112 * 112)) :=
-      stemB (R * N) (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
-    let a1  : Vec ((R * N) * (16 * 112 * 112)) := mbNoExpW (R * N) 112 112 w.b1 a0
-    let a2  : Vec ((R * N) * (24 * 56 * 56))   := mbStridedW (R * N) 56 56 w.b2 a1
-    let a3  : Vec ((R * N) * (24 * 56 * 56))   := mbResidW (R * N) 56 56 w.b3 a2
-    let a4  : Vec ((R * N) * (40 * 28 * 28))   := mbStridedW (R * N) 28 28 w.b4 a3
-    let a5  : Vec ((R * N) * (40 * 28 * 28))   := mbResidW (R * N) 28 28 w.b5 a4
-    let a6  : Vec ((R * N) * (80 * 14 * 14))   := mbStridedW (R * N) 14 14 w.b6 a5
-    let a7  : Vec ((R * N) * (80 * 14 * 14))   := mbResidW (R * N) 14 14 w.b7 a6
-    let a8  : Vec ((R * N) * (80 * 14 * 14))   := mbResidW (R * N) 14 14 w.b8 a7
-    let a9  : Vec ((R * N) * (112 * 14 * 14))  := mbExpW (R * N) 14 14 w.b9 a8
-    let a10 : Vec ((R * N) * (112 * 14 * 14))  := mbResidW (R * N) 14 14 w.b10 a9
-    let a11 : Vec ((R * N) * (112 * 14 * 14))  := mbResidW (R * N) 14 14 w.b11 a10
-    let a12 : Vec ((R * N) * (192 * 7 * 7))    := mbStridedW (R * N) 7 7 w.b12 a11
-    let a13 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b13 a12
-    let a14 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b14 a13
-    let a15 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b15 a14
-    let a16 : Vec ((R * N) * (320 * 7 * 7))    := mbExpW (R * N) 7 7 w.b16 a15
-    let g    : Vec ((R * N) * 10) :=
-      unrowB (R * N) 10 (den (smoothedLossCotGraph (R * N) 10 α ((R : ℝ) * B) aStr negAK bStr logN
-        ohN (rowB (R * N) 10
-          (headFwdB (R * N) (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
-    let dy16 : Vec ((R * N) * (320 * 7 * 7))   := (headFwdB_has_vjp (R * N) (h := 7) (w := 7)
-      w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
-    let dy15 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbExpW_has_vjp (R * N) 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
-    let dy14 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbResidW_has_vjp (R * N) 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
-    let dy13 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbResidW_has_vjp (R * N) 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
-    let dy12 : Vec ((R * N) * (192 * 7 * 7))   :=
-      (mbResidW_has_vjp (R * N) 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
-    let dy11 : Vec ((R * N) * (112 * 14 * 14)) :=
-      (mbStridedW_has_vjp (R * N) 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
-    let dy10 : Vec ((R * N) * (112 * 14 * 14)) :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
-    let dy9  : Vec ((R * N) * (112 * 14 * 14)) :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
-    let dy8  : Vec ((R * N) * (80 * 14 * 14))  :=
-      (mbExpW_has_vjp (R * N) 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
-    let dy7  : Vec ((R * N) * (80 * 14 * 14))  :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
-    let dy6  : Vec ((R * N) * (80 * 14 * 14))  :=
-      (mbResidW_has_vjp (R * N) 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
-    let dy5  : Vec ((R * N) * (40 * 28 * 28))  :=
-      (mbStridedW_has_vjp (R * N) 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
-    let dy4  : Vec ((R * N) * (40 * 28 * 28))  :=
-      (mbResidW_has_vjp (R * N) 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
-    let dy3  : Vec ((R * N) * (24 * 56 * 56))  :=
-      (mbStridedW_has_vjp (R * N) 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
-    let dy2  : Vec ((R * N) * (24 * 56 * 56))  :=
-      (mbResidW_has_vjp (R * N) 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
-    let dy1  : Vec ((R * N) * (16 * 112 * 112)) :=
-      (mbStridedW_has_vjp (R * N) 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
-    let dy0  : Vec ((R * N) * (32 * 112 * 112)) :=
-      (mbNoExpW_has_vjp (R * N) 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
-    -- ── replica `r`, loss divided by `B`, its own sync-BN chain ──
-    let gs : Fin R → Vec (N * 10) := fun r =>
-      unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
-        (rowB N 10 (batchShard R N 10
-          (headFwdB (R * N) (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16) r))
-        (batchShard R N (1 * 10) t r)))
-    let e16 := hdsCotIn R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW a16 gs
-    let e15 := xsCotIn R hR N 7 7 w.b16 a15 e16
-    let e14 := rsCotIn R hR N 7 7 w.b15 a14 e15
-    let e13 := rsCotIn R hR N 7 7 w.b14 a13 e14
-    let e12 := rsCotIn R hR N 7 7 w.b13 a12 e13
-    let e11 := ssCotIn R hR N 7 7 w.b12 a11 e12
-    let e10 := rsCotIn R hR N 14 14 w.b11 a10 e11
-    let e9  := rsCotIn R hR N 14 14 w.b10 a9 e10
-    let e8  := xsCotIn R hR N 14 14 w.b9 a8 e9
-    let e7  := rsCotIn R hR N 14 14 w.b8 a7 e8
-    let e6  := rsCotIn R hR N 14 14 w.b7 a6 e7
-    let e5  := ssCotIn R hR N 14 14 w.b6 a5 e6
-    let e4  := rsCotIn R hR N 28 28 w.b5 a4 e5
-    let e3  := ssCotIn R hR N 28 28 w.b4 a3 e4
-    let e2  := rsCotIn R hR N 56 56 w.b3 a2 e3
-    let e1  := ssCotIn R hR N 56 56 w.b2 a1 e2
-    let e0  := nsCotIn R hR N 112 112 w.b1 a0 e1
-    -- ── every collective the render emits IS the single-device node ──
-    stemSyncTiedG R hR N 112 112 xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ x e0 dy0
-    ∧ noExpSyncTiedG R hR N 112 112 "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0 e1 dy1
-    ∧ stridedSyncTiedG R hR N 56 56 "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d hεw.b2.p a1 e2 dy2
-    ∧ expSyncTiedG R hR N 56 56 "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d hεw.b3.p a2 e3 dy3
-    ∧ stridedSyncTiedG R hR N 28 28 "b4" xN cotN vN epsStr w.b4 hεw.b4.e hεw.b4.d hεw.b4.p a3 e4 dy4
-    ∧ expSyncTiedG R hR N 28 28 "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d hεw.b5.p a4 e5 dy5
-    ∧ stridedSyncTiedG R hR N 14 14 "b6" xN cotN vN epsStr w.b6 hεw.b6.e hεw.b6.d hεw.b6.p a5 e6 dy6
-    ∧ expSyncTiedG R hR N 14 14 "b7" xN cotN vN epsStr w.b7 hεw.b7.e hεw.b7.d hεw.b7.p a6 e7 dy7
-    ∧ expSyncTiedG R hR N 14 14 "b8" xN cotN vN epsStr w.b8 hεw.b8.e hεw.b8.d hεw.b8.p a7 e8 dy8
-    ∧ expSyncTiedG R hR N 14 14 "b9" xN cotN vN epsStr w.b9 hεw.b9.e hεw.b9.d hεw.b9.p a8 e9 dy9
-    ∧ expSyncTiedG R hR N 14 14 "b10" xN cotN vN epsStr w.b10 hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10
-    ∧ expSyncTiedG R hR N 14 14 "b11" xN cotN vN epsStr w.b11 hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11
-    ∧ stridedSyncTiedG R hR N 7 7 "b12" xN cotN vN epsStr w.b12 hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12
-    ∧ expSyncTiedG R hR N 7 7 "b13" xN cotN vN epsStr w.b13 hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13
-    ∧ expSyncTiedG R hR N 7 7 "b14" xN cotN vN epsStr w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14
-    ∧ expSyncTiedG R hR N 7 7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15
-    ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16
-    ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16 gs g := by
+    (xN vN epsStr cotN dN : String) (w : B0Weights) (hεw : w.EpsPos)
+    (x : Vec ((R * N) * (3 * 224 * 224))) (g : Vec ((R * N) * 10)) (gs : Fin R → Vec (N * 10))
+    (hgs : ∀ r, gs r = batchShard R N 10 (fun i => (R : ℝ) * g i) r) :
+    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x g gs := by
+  unfold enetNetSyncTiedG
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
-    g dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
-    gs e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 e0
+    dy16 dy15 dy14 dy13 dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dy0
+    e16 e15 e14 e13 e12 e11 e10 e9 e8 e7 e6 e5 e4 e3 e2 e1 e0
   have h112 : 0 < 112 := by norm_num
   have h56 : 0 < 56 := by norm_num
   have h28 : 0 < 28 := by norm_num
   have h14 : 0 < 14 := by norm_num
   have h7 : 0 < 7 := by norm_num
-  -- the divisor: each replica's loss cotangent is `R ×` its shard of `g`
-  have sG : ∀ r, gs r = batchShard R N 10 (fun i => (R : ℝ) * g i) r :=
-    fun r => replicaLossCot_eq R N 10 hR α B aStr negAK bStr logN ohN _ t r
   -- the scaled-shard invariant, block by block down the chain
-  have s16 := hdsCotIn_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb a16 gs g sG
+  have s16 := hdsCotIn_scaled R hR N 7 7 hN h7 h7 w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb a16 gs g hgs
   have s15 := xsCotIn_scaled R hR N 7 7 hN h7 h7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 s16
   have s14 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 s15
   have s13 := rsCotIn_scaled R hR N 7 7 hN h7 h7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 s14
@@ -1540,6 +1538,24 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     exp_syncTiedG R hR N 7 7 hN h7 h7 "b15" xN cotN vN epsStr w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 s15,
     exp_syncTiedG R hR N 7 7 hN h7 h7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 s16,
     head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16
-      gs g sG⟩
+      gs g hgs⟩
+
+/-- ⭐⭐ **…and at the loss the artifacts emit.** `efficientnet_net_syncTiedG` with its cotangent
+    hypothesis discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
+    (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
+    single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
+    gradient the DP render emits IS the single-device node at batch `R·N`, loss divided by `R·B`. -/
+theorem efficientnet_net_syncTiedG_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+    (xN vN epsStr cotN dN : String) (w : B0Weights) (hεw : w.EpsPos)
+    (aStr negAK bStr logN ohN : String) (α B : ℝ)
+    (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * 10))) :
+    enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x
+      (unrowB (R * N) 10 (den (smoothedLossCotGraph (R * N) 10 α ((R : ℝ) * B) aStr negAK bStr
+        logN ohN (rowB (R * N) 10 (efficientnetForwardB_full (R * N) w x)) t)))
+      (fun r => unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
+        (rowB N 10 (batchShard R N 10 (efficientnetForwardB_full (R * N) w x) r))
+        (batchShard R N (1 * 10) t r)))) :=
+  efficientnet_net_syncTiedG R hR N hN xN vN epsStr cotN dN w hεw x _ _
+    (fun r => replicaLossCot_eq R N 10 hR α B aStr negAK bStr logN ohN _ t r)
 
 end Proofs.EnetSyncTieG

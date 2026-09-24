@@ -543,189 +543,90 @@ theorem bnIstdBroadcast_diff (n : Nat) (ε : ℝ) (hε : 0 < ε) :
   simp only [one_div]
   exact differentiable_pi.2 fun _ x => (hsqrt x).inv (Real.sqrt_pos.2 (hpos x)).ne'
 
+/-- The centering map `y ↦ y k − μ(y)` as a continuous linear functional: coordinate `k` minus
+    the mean. The variance is the mean of its squares, so this is what its derivative is built
+    from. -/
+noncomputable def bnCenterCLM (n : Nat) (k : Fin n) : Vec n →L[ℝ] ℝ :=
+  (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ)
+    - (n : ℝ)⁻¹ • ∑ i : Fin n, (ContinuousLinearMap.proj i : Vec n →L[ℝ] ℝ)
+
+theorem bnCenterCLM_apply (n : Nat) (k : Fin n) (y : Vec n) :
+    bnCenterCLM n k y = y k - bnMean n y := by
+  simp only [bnCenterCLM, sub_apply, smul_apply, _root_.sum_apply,
+    ContinuousLinearMap.proj_apply, smul_eq_mul, bnMean, div_eq_inv_mul]
+
+theorem bnCenterCLM_basisVec (n : Nat) (k i : Fin n) :
+    bnCenterCLM n k (basisVec i) = (if k = i then (1 : ℝ) else 0) - (n : ℝ)⁻¹ := by
+  rw [bnCenterCLM_apply, basisVec_apply]
+  simp only [bnMean, basisVec_apply, Finset.sum_ite_eq', Finset.mem_univ, ite_true, one_div]
+
+/-- The centered entries sum to zero. -/
+theorem sum_sub_bnMean (n : Nat) (hn : n ≠ 0) (x : Vec n) :
+    ∑ k : Fin n, (x k - bnMean n x) = 0 := by
+  have hnR : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn
+  rw [Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ, Fintype.card_fin, nsmul_eq_mul,
+    bnMean]
+  field_simp
+  ring
+
+/-- The derivative of the variance at `x`: `(1/n) Σ_k 2 (x_k − μ) · center_k`. -/
+noncomputable def bnVarDeriv (n : Nat) (x : Vec n) : Vec n →L[ℝ] ℝ :=
+  (n : ℝ)⁻¹ • ∑ k : Fin n, (2 * (x k - bnMean n x)) • bnCenterCLM n k
+
+/-- **The variance's derivative.** `σ² = (1/n) Σ_k (center_k)²`, and each `center_k` is linear,
+    so the product rule gives `2 center_k(x) · center_k` per term. -/
+theorem bnVar_hasFDerivAt (n : Nat) (x : Vec n) :
+    HasFDerivAt (fun x' : Vec n => bnVar n x') (bnVarDeriv n x) x := by
+  have hsq : ∀ k : Fin n, HasFDerivAt (fun x' => bnCenterCLM n k x' * bnCenterCLM n k x')
+      ((2 * (x k - bnMean n x)) • bnCenterCLM n k) x := fun k => by
+    convert (bnCenterCLM n k).hasFDerivAt.mul (bnCenterCLM n k).hasFDerivAt using 1
+    rw [bnCenterCLM_apply, two_mul, add_smul]
+  have hfun : (fun x' : Vec n => bnVar n x')
+      = fun x' => (∑ k : Fin n, bnCenterCLM n k x' * bnCenterCLM n k x') * (n : ℝ)⁻¹ := by
+    funext x'
+    simp only [bnCenterCLM_apply, bnVar, div_eq_mul_inv]
+  rw [hfun]
+  exact (HasFDerivAt.fun_sum fun k _ => hsq k).mul_const _
+
+/-- **`∂σ²/∂xᵢ = 2 (xᵢ − μ) / n`** — the derivative evaluated on a basis vector; the
+    `(1 − 1/n)` factor cancels because the centered entries sum to zero. -/
+theorem bnVarDeriv_basisVec (n : Nat) (x : Vec n) (i : Fin n) :
+    bnVarDeriv n x (basisVec i) = 2 * (x i - bnMean n x) / (n : ℝ) := by
+  have hn : n ≠ 0 := Nat.pos_iff_ne_zero.mp (Fin.pos i)
+  -- each term splits into the `k = i` spike and a multiple of the centered entry
+  have hterm : ∀ k : Fin n,
+      2 * (x k - bnMean n x) * ((if k = i then (1 : ℝ) else 0) - (n : ℝ)⁻¹)
+        = (if k = i then 2 * (x i - bnMean n x) else 0) - 2 * (n : ℝ)⁻¹ * (x k - bnMean n x) := by
+    intro k; split_ifs with h
+    · subst h; ring
+    · ring
+  simp only [bnVarDeriv, smul_apply, _root_.sum_apply, smul_eq_mul, bnCenterCLM_basisVec]
+  rw [Finset.sum_congr rfl fun k _ => hterm k, Finset.sum_sub_distrib, Finset.sum_ite_eq']
+  simp only [Finset.mem_univ, ite_true]
+  rw [← Finset.mul_sum, sum_sub_bnMean n hn x, mul_zero, sub_zero, div_eq_inv_mul]
+
 /-- **Broadcast inverse-stddev Jacobian** — proved (was an axiom).
 
     `∂istd(x,ε)/∂xᵢ = -istd³(x,ε) · (xᵢ - μ(x)) / n`
 
-    Derivation:
-    - `istd = 1/√(σ²+ε)` → chain rule through `Real.sqrt` and `x ↦ 1/x`:
-        `∂istd/∂σ² = -(1/2) · istd³`
-    - `∂σ²/∂xᵢ = (2/n) · (xᵢ - μ)`  (product rule on `(xⱼ - μ)²` summed,
-      using `Σⱼ (xⱼ - μ) = 0` to cancel a `(1 - 1/n)` factor)
-    - Chain together: `∂istd/∂xᵢ = -istd³ · (xᵢ - μ) / n`.
-
-    **Lean proof structure**: `HasFDerivAt` chain through the centering
-    CLM `C k = proj k - (1/n) Σ_i proj i` (linear in x'), squared via
-    `.mul`, summed via `.fun_sum`, scaled by `1/n` via `.mul_const`,
-    `.add_const ε`, then `.sqrt` (with `bnVar+ε > 0`), then
-    `(hasDerivAt_inv ·).comp_hasFDerivAt` for the reciprocal. The
-    resulting CLM at `basisVec i` simplifies via the `Σⱼ (xⱼ - μ) = 0`
-    identity. -/
+    `istd = (√(σ²+ε))⁻¹`: the chain rule through `Real.sqrt` and `x ↦ x⁻¹` on top of
+    `bnVar_hasFDerivAt`, evaluated at `basisVec i` by `bnVarDeriv_basisVec`. -/
 theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i j : Fin n) :
     pdiv (bnIstdBroadcast n ε) x i j =
       -(bnIstd n x ε)^3 * (x i - bnMean n x) / (n : ℝ) := by
-  cases n with
-  | zero => exact i.elim0
-  | succ n' =>
-  -- Positivity setup.
-  have h_arg_pos : 0 < bnVar (n' + 1) x + ε := by linarith [bnVar_nonneg (n' + 1) x]
-  have h_arg_ne : bnVar (n' + 1) x + ε ≠ 0 := h_arg_pos.ne'
-  have h_sqrt_pos : 0 < Real.sqrt (bnVar (n' + 1) x + ε) := Real.sqrt_pos.mpr h_arg_pos
-  have h_sqrt_ne : Real.sqrt (bnVar (n' + 1) x + ε) ≠ 0 := h_sqrt_pos.ne'
-  have hN_ne : ((n' + 1 : Nat) : ℝ) ≠ 0 := by
-    have : 0 < ((n' + 1 : Nat) : ℝ) := by exact_mod_cast Nat.succ_pos n'
-    exact this.ne'
-  -- Step 1: pdiv reduces to scalar fderiv (j-th coord is constant in j).
-  unfold pdiv
-  have h_swap : fderiv ℝ (bnIstdBroadcast (n' + 1) ε) x (basisVec i) j =
-                fderiv ℝ (fun x' : Vec (n' + 1) => bnIstd (n' + 1) x' ε) x (basisVec i) := by
-    show fderiv ℝ (bnIstdBroadcast (n' + 1) ε) x (basisVec i) j =
-         fderiv ℝ (fun x' : Vec (n' + 1) => bnIstdBroadcast (n' + 1) ε x' j)
-                  x (basisVec i)
-    rw [fderiv_apply (bnIstdBroadcast_diff (n' + 1) ε hε x) j]
-    rfl
-  rw [h_swap]
-  -- Step 2: rewrite bnIstd as (Real.sqrt (bnVar + ε))⁻¹.
-  rw [show (fun x' : Vec (n' + 1) => bnIstd (n' + 1) x' ε) =
-         (fun x' => (Real.sqrt (bnVar (n' + 1) x' + ε))⁻¹) from by
-    funext x'; show 1 / Real.sqrt (bnVar (n' + 1) x' + ε) = _; rw [one_div]]
-  -- Step 3: build HasFDerivAt for (sqrt (bnVar + ε))⁻¹ at x.
-  -- Centering CLM: C k = proj k - (1/N) Σ_i proj i.  Linear in x'.
-  let mean_clm : Vec (n' + 1) →L[ℝ] ℝ :=
-    ((n' + 1 : Nat) : ℝ)⁻¹ •
-      ∑ i' : Fin (n' + 1), (ContinuousLinearMap.proj i' : Vec (n' + 1) →L[ℝ] ℝ)
-  let C : Fin (n' + 1) → (Vec (n' + 1) →L[ℝ] ℝ) := fun k =>
-    (ContinuousLinearMap.proj k : Vec (n' + 1) →L[ℝ] ℝ) - mean_clm
-  -- C k y = y k - bnMean N y.
-  have hC_apply : ∀ (k : Fin (n' + 1)) (y : Vec (n' + 1)),
-      C k y = y k - bnMean (n' + 1) y := by
-    intros k y
-    show ((ContinuousLinearMap.proj k : Vec (n' + 1) →L[ℝ] ℝ) - mean_clm) y = _
-    rw [sub_apply]
-    show y k - mean_clm y = _
-    show y k - (((n' + 1 : Nat) : ℝ)⁻¹ •
-      ∑ i' : Fin (n' + 1), (ContinuousLinearMap.proj i' : Vec (n' + 1) →L[ℝ] ℝ)) y = _
-    rw [smul_apply, _root_.sum_apply, smul_eq_mul]
-    show y k - ((n' + 1 : Nat) : ℝ)⁻¹ * ∑ i' : Fin (n' + 1), y i' = _
-    unfold bnMean
-    rw [div_eq_inv_mul]
-  have hCk_at : ∀ k : Fin (n' + 1), HasFDerivAt (fun x' => C k x') (C k) x :=
-    fun k => (C k).hasFDerivAt
-  -- (C k)² has fderiv 2 (C k x) • C k.
-  have h_sq_at : ∀ k : Fin (n' + 1),
-      HasFDerivAt (fun x' : Vec (n' + 1) => C k x' * C k x')
-                  ((2 * C k x) • C k) x := fun k => by
-    have h := (hCk_at k).mul (hCk_at k)
-    -- h : HasFDerivAt (... * ...) (C k x • C k + C k x • C k) x
-    convert h using 1
-    rw [two_mul, add_smul]
-  have h_sumsq_at : HasFDerivAt
-      (fun x' : Vec (n' + 1) => ∑ k : Fin (n' + 1), C k x' * C k x')
-      (∑ k : Fin (n' + 1), (2 * C k x) • C k) x :=
-    HasFDerivAt.fun_sum (fun k _ => h_sq_at k)
-  -- bnVar = (Σ_k (C k)²) / N.
-  have h_bnVar_eq : (fun x' : Vec (n' + 1) => bnVar (n' + 1) x') =
-      (fun x' => (∑ k : Fin (n' + 1), C k x' * C k x') * ((n' + 1 : Nat) : ℝ)⁻¹) := by
-    funext x'
-    show bnVar (n' + 1) x' = _
-    unfold bnVar
-    rw [div_eq_mul_inv]
-    congr 1
-    apply Finset.sum_congr rfl
-    intros k _
-    rw [hC_apply k x']
-  have h_var_at : HasFDerivAt
-      (fun x' : Vec (n' + 1) => bnVar (n' + 1) x')
-      (((n' + 1 : Nat) : ℝ)⁻¹ • ∑ k : Fin (n' + 1), (2 * C k x) • C k) x := by
-    rw [h_bnVar_eq]
-    exact h_sumsq_at.mul_const _
-  have h_var_eps_at : HasFDerivAt
-      (fun x' : Vec (n' + 1) => bnVar (n' + 1) x' + ε)
-      (((n' + 1 : Nat) : ℝ)⁻¹ • ∑ k : Fin (n' + 1), (2 * C k x) • C k) x :=
-    h_var_at.add_const ε
-  have h_sqrt_at : HasFDerivAt
-      (fun x' : Vec (n' + 1) => Real.sqrt (bnVar (n' + 1) x' + ε))
-      ((1 / (2 * Real.sqrt (bnVar (n' + 1) x + ε))) •
-        (((n' + 1 : Nat) : ℝ)⁻¹ • ∑ k : Fin (n' + 1), (2 * C k x) • C k)) x :=
-    h_var_eps_at.sqrt h_arg_ne
-  have h_inv_at : HasFDerivAt
-      (fun x' : Vec (n' + 1) => (Real.sqrt (bnVar (n' + 1) x' + ε))⁻¹)
-      ((-(Real.sqrt (bnVar (n' + 1) x + ε) ^ 2)⁻¹) •
-        ((1 / (2 * Real.sqrt (bnVar (n' + 1) x + ε))) •
-          (((n' + 1 : Nat) : ℝ)⁻¹ • ∑ k : Fin (n' + 1), (2 * C k x) • C k))) x :=
-    (hasDerivAt_inv h_sqrt_ne).comp_hasFDerivAt x h_sqrt_at
-  rw [h_inv_at.fderiv]
-  -- Step 4: evaluate the CLM at basisVec i.
-  -- Need: C k (basisVec i) = δ_{ki} - 1/N.
-  have hC_basis : ∀ k : Fin (n' + 1),
-      C k (basisVec i) = (if k = i then (1 : ℝ) else 0) - ((n' + 1 : Nat) : ℝ)⁻¹ := by
-    intro k
-    rw [hC_apply k (basisVec i)]
-    rw [show (basisVec i : Vec (n' + 1)) k = (if k = i then (1 : ℝ) else 0) from
-        basisVec_apply i k]
-    congr 1
-    show bnMean (n' + 1) (basisVec i) = ((n' + 1 : Nat) : ℝ)⁻¹
-    unfold bnMean
-    rw [show (∑ j' : Fin (n' + 1), (basisVec i : Vec (n' + 1)) j') = 1 from by
-        simp only [basisVec_apply]
-        rw [Finset.sum_eq_single i]
-        · rw [ite_eq_left rfl]
-        · intros b _ hb; rw [ite_eq_right hb]
-        · intro h; exact absurd (Finset.mem_univ i) h]
-    rw [one_div]
-  -- Compute the sum CLM applied to basisVec i: equals 2 (x i - μ).
-  have h_sum_eval : (∑ k : Fin (n' + 1), (2 * C k x) • C k) (basisVec i) =
-                    2 * (x i - bnMean (n' + 1) x) := by
-    rw [_root_.sum_apply]
-    simp only [smul_apply, smul_eq_mul]
-    -- First rewrite C k (basisVec i) using hC_basis (specific form), then C k x using hC_apply.
-    simp_rw [hC_basis]
-    simp_rw [hC_apply]
-    -- Σ_k 2 (x_k - μ) * (δ_{ki} - 1/N) = 2 (x_i - μ).
-    rw [show (∑ k : Fin (n' + 1),
-          2 * (x k - bnMean (n' + 1) x) *
-            ((if k = i then (1 : ℝ) else 0) - ((n' + 1 : Nat) : ℝ)⁻¹)) =
-          (∑ k : Fin (n' + 1),
-            2 * (x k - bnMean (n' + 1) x) * (if k = i then (1 : ℝ) else 0)) -
-          (∑ k : Fin (n' + 1),
-            2 * (x k - bnMean (n' + 1) x) * ((n' + 1 : Nat) : ℝ)⁻¹) from by
-        rw [← Finset.sum_sub_distrib]
-        apply Finset.sum_congr rfl
-        intros k _; ring]
-    rw [show (∑ k : Fin (n' + 1),
-          2 * (x k - bnMean (n' + 1) x) * (if k = i then (1 : ℝ) else 0)) =
-        2 * (x i - bnMean (n' + 1) x) from by
-        rw [Finset.sum_eq_single i]
-        · rw [ite_eq_left rfl, mul_one]
-        · intros b _ hb; rw [ite_eq_right hb, mul_zero]
-        · intro h; exact absurd (Finset.mem_univ i) h]
-    rw [show (∑ k : Fin (n' + 1),
-          2 * (x k - bnMean (n' + 1) x) * ((n' + 1 : Nat) : ℝ)⁻¹) =
-        2 * ((n' + 1 : Nat) : ℝ)⁻¹ *
-          (∑ k : Fin (n' + 1), (x k - bnMean (n' + 1) x)) from by
-        rw [Finset.mul_sum]
-        apply Finset.sum_congr rfl
-        intros k _; ring]
-    rw [show (∑ k : Fin (n' + 1), (x k - bnMean (n' + 1) x)) = 0 from by
-        rw [Finset.sum_sub_distrib, Finset.sum_const, Finset.card_univ, Fintype.card_fin]
-        unfold bnMean
-        rw [nsmul_eq_mul]
-        field_simp
-        ring]
-    ring
-  -- Apply CLM step by step at basisVec i.
-  simp only [smul_apply, smul_eq_mul]
-  rw [h_sum_eval]
-  -- Goal: -(s²)⁻¹ * ((1/(2s)) * (N⁻¹ * (2 * (x_i - μ)))) =
-  --       -(bnIstd N x ε)^3 * (x_i - μ) / N
-  -- bnIstd N x ε = 1 / s where s = Real.sqrt(bnVar+ε).
-  rw [show bnIstd (n' + 1) x ε = 1 / Real.sqrt (bnVar (n' + 1) x + ε) from rfl]
-  set s := Real.sqrt (bnVar (n' + 1) x + ε) with hs_def
-  -- s ≠ 0, s^2 ≠ 0 (use this for field_simp).
-  have hs_ne : s ≠ 0 := h_sqrt_ne
-  have hs_sq_ne : s^2 ≠ 0 := pow_ne_zero _ hs_ne
-  -- Algebra: (1/s)^3 = 1/s^3, and s^3 = s * s^2; the LHS has (s^2)⁻¹ * (1/(2s)),
-  -- which after clearing denominators becomes 1/(2 s^3) — matches RHS modulo signs.
+  have h_arg_pos : 0 < bnVar n x + ε := by linarith [bnVar_nonneg n x]
+  have h_sqrt_ne : Real.sqrt (bnVar n x + ε) ≠ 0 := (Real.sqrt_pos.mpr h_arg_pos).ne'
+  have hn : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp (Fin.pos i))
+  -- the `j`-th output is the scalar `istd` itself (the broadcast is constant in `j`)
+  have h_swap := pdiv_eq_fderiv_coord (bnIstdBroadcast_diff n ε hε x) i j
+  have hfun : (fun x' : Vec n => bnIstdBroadcast n ε x' j)
+      = fun x' => (Real.sqrt (bnVar n x' + ε))⁻¹ := by
+    funext x'; simp only [bnIstdBroadcast, bnIstd, one_div]
+  have h_inv_at : HasFDerivAt (fun x' : Vec n => (Real.sqrt (bnVar n x' + ε))⁻¹) _ x :=
+    (hasDerivAt_inv h_sqrt_ne).comp_hasFDerivAt x
+      (((bnVar_hasFDerivAt n x).add_const ε).sqrt h_arg_pos.ne')
+  rw [h_swap, hfun, h_inv_at.fderiv]
+  simp only [smul_apply, smul_eq_mul, bnVarDeriv_basisVec, bnIstd]
   field_simp
 
 /-- **The BN normalize Jacobian — derived, no longer axiomatized.**

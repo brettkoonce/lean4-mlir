@@ -538,100 +538,103 @@ theorem r34HeadCotBlk_scaled (R : Nat) (N h w : Nat) {c nCls : Nat} (Wd : Mat c 
 -- § 5. The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The whole-net statement, named** — so the capstone (cotangents bound) and its smoothed-CE
+    corollary (cotangents instantiated) state exactly one thing. The first 16 `let`s are
+    `r34_net_tiedB`'s chain at `N := R·N`, driven by the global cotangent `G`; the rest are the
+    replicas' sync-BN chain, driven by the family `gs`; the 18 conjuncts are one per stage, every
+    emitted parameter collective against T3's node at the global batch. -/
+def r34NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
+    (w : R34BWeights nCls) (X : Vec ((R * N) * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
+    (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
+  -- ── the single-device chain at the global batch `R·N` (T3's), driven by `G` ──
+  let dyE1 := r34HeadCotBlk (R * N) 7 7 w.Wd w.bd (r34Pre16 (R * N) w X) G
+  let dyE0 := r34IdCotIn (R * N) 7 7 w.e1 (r34Pre15 (R * N) w X) dyE1
+  let dyD4 := r34IdCotIn (R * N) 7 7 w.e0 (r34Pre14 (R * N) w X) dyE0
+  let dyC4 := r34DownCotIn (R * N) 7 7 w.d4 (r34Pre13 (R * N) w X) dyD4
+  let dyC3 := r34IdCotIn (R * N) 14 14 w.c4 (r34Pre12 (R * N) w X) dyC4
+  let dyC2 := r34IdCotIn (R * N) 14 14 w.c3 (r34Pre11 (R * N) w X) dyC3
+  let dyC1 := r34IdCotIn (R * N) 14 14 w.c2 (r34Pre10 (R * N) w X) dyC2
+  let dyC0 := r34IdCotIn (R * N) 14 14 w.c1 (r34Pre9 (R * N) w X) dyC1
+  let dyD3 := r34IdCotIn (R * N) 14 14 w.c0 (r34Pre8 (R * N) w X) dyC0
+  let dyB2 := r34DownCotIn (R * N) 14 14 w.d3 (r34Pre7 (R * N) w X) dyD3
+  let dyB1 := r34IdCotIn (R * N) 28 28 w.b2 (r34Pre6 (R * N) w X) dyB2
+  let dyB0 := r34IdCotIn (R * N) 28 28 w.b1 (r34Pre5 (R * N) w X) dyB1
+  let dyD2 := r34IdCotIn (R * N) 28 28 w.b0 (r34Pre4 (R * N) w X) dyB0
+  let dyA2 := r34DownCotIn (R * N) 28 28 w.d2 (r34Pre3 (R * N) w X) dyD2
+  let dyA1 := r34IdCotIn (R * N) 56 56 w.a2 (r34Pre2 (R * N) w X) dyA2
+  let dyA0 := r34IdCotIn (R * N) 56 56 w.a1 (r34Pre1 (R * N) w X) dyA1
+  -- ── the replicas' sync-BN chain, driven by the family `gs` ──
+  let eE1 : Fin R → Vec (N * (512 * 7 * 7)) := fun r =>
+    r34HeadCotBlk N 7 7 w.Wd w.bd (batchShard R N _ (r34Pre16 (R * N) w X) r) (gs r)
+  let eE0 := r34IdSyncCotIn R hR N 7 7 w.e1 (r34Pre15 (R * N) w X) eE1
+  let eD4 := r34IdSyncCotIn R hR N 7 7 w.e0 (r34Pre14 (R * N) w X) eE0
+  let eC4 := r34DownSyncCotIn R hR N 7 7 w.d4 (r34Pre13 (R * N) w X) eD4
+  let eC3 := r34IdSyncCotIn R hR N 14 14 w.c4 (r34Pre12 (R * N) w X) eC4
+  let eC2 := r34IdSyncCotIn R hR N 14 14 w.c3 (r34Pre11 (R * N) w X) eC3
+  let eC1 := r34IdSyncCotIn R hR N 14 14 w.c2 (r34Pre10 (R * N) w X) eC2
+  let eC0 := r34IdSyncCotIn R hR N 14 14 w.c1 (r34Pre9 (R * N) w X) eC1
+  let eD3 := r34IdSyncCotIn R hR N 14 14 w.c0 (r34Pre8 (R * N) w X) eC0
+  let eB2 := r34DownSyncCotIn R hR N 14 14 w.d3 (r34Pre7 (R * N) w X) eD3
+  let eB1 := r34IdSyncCotIn R hR N 28 28 w.b2 (r34Pre6 (R * N) w X) eB2
+  let eB0 := r34IdSyncCotIn R hR N 28 28 w.b1 (r34Pre5 (R * N) w X) eB1
+  let eD2 := r34IdSyncCotIn R hR N 28 28 w.b0 (r34Pre4 (R * N) w X) eB0
+  let eA2 := r34DownSyncCotIn R hR N 28 28 w.d2 (r34Pre3 (R * N) w X) eD2
+  let eA1 := r34IdSyncCotIn R hR N 56 56 w.a2 (r34Pre2 (R * N) w X) eA2
+  let eA0 := r34IdSyncCotIn R hR N 56 56 w.a1 (r34Pre1 (R * N) w X) eA1
+  let ePool := r34IdSyncCotIn R hR N 56 56 w.a0 (r34Pre0 (R * N) w X) eA0
+  r34StemSyncTiedB R hR N 56 56 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X ePool
+      (r34IdCotIn (R * N) 56 56 w.a0 (r34Pre0 (R * N) w X) dyA0)
+  ∧ r34IdSyncTiedB R hR N 56 56 "s1b0" xN cotN vN epsStr w.a0 (r34Pre0 (R * N) w X) eA0 dyA0
+  ∧ r34IdSyncTiedB R hR N 56 56 "s1b1" xN cotN vN epsStr w.a1 (r34Pre1 (R * N) w X) eA1 dyA1
+  ∧ r34IdSyncTiedB R hR N 56 56 "s1b2" xN cotN vN epsStr w.a2 (r34Pre2 (R * N) w X) eA2 dyA2
+  ∧ r34DownSyncTiedB R hR N 28 28 "d2" xN cotN vN epsStr w.d2 (r34Pre3 (R * N) w X) eD2 dyD2
+  ∧ r34IdSyncTiedB R hR N 28 28 "s2b0" xN cotN vN epsStr w.b0 (r34Pre4 (R * N) w X) eB0 dyB0
+  ∧ r34IdSyncTiedB R hR N 28 28 "s2b1" xN cotN vN epsStr w.b1 (r34Pre5 (R * N) w X) eB1 dyB1
+  ∧ r34IdSyncTiedB R hR N 28 28 "s2b2" xN cotN vN epsStr w.b2 (r34Pre6 (R * N) w X) eB2 dyB2
+  ∧ r34DownSyncTiedB R hR N 14 14 "d3" xN cotN vN epsStr w.d3 (r34Pre7 (R * N) w X) eD3 dyD3
+  ∧ r34IdSyncTiedB R hR N 14 14 "s3b0" xN cotN vN epsStr w.c0 (r34Pre8 (R * N) w X) eC0 dyC0
+  ∧ r34IdSyncTiedB R hR N 14 14 "s3b1" xN cotN vN epsStr w.c1 (r34Pre9 (R * N) w X) eC1 dyC1
+  ∧ r34IdSyncTiedB R hR N 14 14 "s3b2" xN cotN vN epsStr w.c2 (r34Pre10 (R * N) w X) eC2 dyC2
+  ∧ r34IdSyncTiedB R hR N 14 14 "s3b3" xN cotN vN epsStr w.c3 (r34Pre11 (R * N) w X) eC3 dyC3
+  ∧ r34IdSyncTiedB R hR N 14 14 "s3b4" xN cotN vN epsStr w.c4 (r34Pre12 (R * N) w X) eC4 dyC4
+  ∧ r34DownSyncTiedB R hR N 7 7 "d4" xN cotN vN epsStr w.d4 (r34Pre13 (R * N) w X) eD4 dyD4
+  ∧ r34IdSyncTiedB R hR N 7 7 "s4b0" xN cotN vN epsStr w.e0 (r34Pre14 (R * N) w X) eE0 dyE0
+  ∧ r34IdSyncTiedB R hR N 7 7 "s4b1" xN cotN vN epsStr w.e1 (r34Pre15 (R * N) w X) eE1 dyE1
+  ∧ r34HeadSyncTiedB R hR N 7 7 xN cotN (r34Pre16 (R * N) w X) gs G
+
 /-- ⭐⭐⭐ **The synchronised-BN data-parallel ResNet-34 step IS the single-device step at the global
-    batch.** `R` replicas at batch `N`, each dividing its loss by `B`, each running the render's
-    sync-BN backward chain from its own label-smoothed cotangent; every parameter's all-reduced
-    mean gradient — stem 3, thirteen identity blocks × 6, three downsample blocks × 9, dense 2:
-    the 110 the render emits — equals the single-device batch-BN gradient node at batch `R·N`,
-    loss divided by `R·B`, at the cotangent T3's chain delivers there.
+    batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from its own
+    cotangent `gs r`, with `gs r` the `R`-scaled shard of a global cotangent `G`; every parameter's
+    all-reduced mean gradient — stem 3, thirteen identity blocks × 6, three downsample blocks × 9,
+    dense 2: the 110 the render emits — equals the single-device batch-BN gradient node at batch
+    `R·N`, at the cotangent T3's chain delivers there from `G`.
 
     ⭐ The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per BN
-    layer), per-example conv / relu / pool / head links, each replica's own loss cotangent. The
-    right-hand chain is `r34_net_tiedB`'s at `N := R·N`, `B := R·B`, whose nodes that capstone ties
-    to the certified gradient — so this and it together say the DP step's update is the certified
-    gradient of the mean loss over all `R·N` examples.
+    layer), per-example conv / relu / pool / head links. The right-hand chain is `r34_net_tiedB`'s
+    at `N := R·N`, whose nodes that capstone ties to the certified gradient — so this and it
+    together say the DP step's update is the certified gradient of the global-batch step.
+    `r34_net_syncTiedB_smoothedCE` discharges the hypothesis for the label-smoothed chain the
+    artifacts emit.
 
     ⛔ Before 2026-09-21 the DP render normalised per replica and this statement was false:
     `DataParallel.dpMeanGrad_ne_globalBatchGrad` is the witness, and stays as the statement of what
     those runs did. -/
 theorem r34_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
-    (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
-    (w : R34BWeights nCls)
-    (X : Vec ((R * N) * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (T : Vec ((R * N) * (1 * nCls))) :
-    -- ── the single-device step at the global batch `R·N`, loss divided by `R·B` ──
-    let G : Vec ((R * N) * nCls) :=
-      unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK bStr
-        logN ohN (rowB (R * N) nCls (resnet34ForwardB_full (R * N) w X)) T))
-    let dyE1 := r34HeadCotBlk (R * N) 7 7 w.Wd w.bd (r34Pre16 (R * N) w X) G
-    let dyE0 := r34IdCotIn (R * N) 7 7 w.e1 (r34Pre15 (R * N) w X) dyE1
-    let dyD4 := r34IdCotIn (R * N) 7 7 w.e0 (r34Pre14 (R * N) w X) dyE0
-    let dyC4 := r34DownCotIn (R * N) 7 7 w.d4 (r34Pre13 (R * N) w X) dyD4
-    let dyC3 := r34IdCotIn (R * N) 14 14 w.c4 (r34Pre12 (R * N) w X) dyC4
-    let dyC2 := r34IdCotIn (R * N) 14 14 w.c3 (r34Pre11 (R * N) w X) dyC3
-    let dyC1 := r34IdCotIn (R * N) 14 14 w.c2 (r34Pre10 (R * N) w X) dyC2
-    let dyC0 := r34IdCotIn (R * N) 14 14 w.c1 (r34Pre9 (R * N) w X) dyC1
-    let dyD3 := r34IdCotIn (R * N) 14 14 w.c0 (r34Pre8 (R * N) w X) dyC0
-    let dyB2 := r34DownCotIn (R * N) 14 14 w.d3 (r34Pre7 (R * N) w X) dyD3
-    let dyB1 := r34IdCotIn (R * N) 28 28 w.b2 (r34Pre6 (R * N) w X) dyB2
-    let dyB0 := r34IdCotIn (R * N) 28 28 w.b1 (r34Pre5 (R * N) w X) dyB1
-    let dyD2 := r34IdCotIn (R * N) 28 28 w.b0 (r34Pre4 (R * N) w X) dyB0
-    let dyA2 := r34DownCotIn (R * N) 28 28 w.d2 (r34Pre3 (R * N) w X) dyD2
-    let dyA1 := r34IdCotIn (R * N) 56 56 w.a2 (r34Pre2 (R * N) w X) dyA2
-    let dyA0 := r34IdCotIn (R * N) 56 56 w.a1 (r34Pre1 (R * N) w X) dyA1
-    -- ── replica `r`, loss divided by `B`, its own sync-BN chain ──
-    let g : Fin R → Vec (N * nCls) := fun r =>
-      unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (resnet34ForwardB_full (R * N) w X) r))
-        (batchShard R N (1 * nCls) T r)))
-    let eE1 : Fin R → Vec (N * (512 * 7 * 7)) := fun r =>
-      r34HeadCotBlk N 7 7 w.Wd w.bd (batchShard R N _ (r34Pre16 (R * N) w X) r) (g r)
-    let eE0 := r34IdSyncCotIn R hR N 7 7 w.e1 (r34Pre15 (R * N) w X) eE1
-    let eD4 := r34IdSyncCotIn R hR N 7 7 w.e0 (r34Pre14 (R * N) w X) eE0
-    let eC4 := r34DownSyncCotIn R hR N 7 7 w.d4 (r34Pre13 (R * N) w X) eD4
-    let eC3 := r34IdSyncCotIn R hR N 14 14 w.c4 (r34Pre12 (R * N) w X) eC4
-    let eC2 := r34IdSyncCotIn R hR N 14 14 w.c3 (r34Pre11 (R * N) w X) eC3
-    let eC1 := r34IdSyncCotIn R hR N 14 14 w.c2 (r34Pre10 (R * N) w X) eC2
-    let eC0 := r34IdSyncCotIn R hR N 14 14 w.c1 (r34Pre9 (R * N) w X) eC1
-    let eD3 := r34IdSyncCotIn R hR N 14 14 w.c0 (r34Pre8 (R * N) w X) eC0
-    let eB2 := r34DownSyncCotIn R hR N 14 14 w.d3 (r34Pre7 (R * N) w X) eD3
-    let eB1 := r34IdSyncCotIn R hR N 28 28 w.b2 (r34Pre6 (R * N) w X) eB2
-    let eB0 := r34IdSyncCotIn R hR N 28 28 w.b1 (r34Pre5 (R * N) w X) eB1
-    let eD2 := r34IdSyncCotIn R hR N 28 28 w.b0 (r34Pre4 (R * N) w X) eB0
-    let eA2 := r34DownSyncCotIn R hR N 28 28 w.d2 (r34Pre3 (R * N) w X) eD2
-    let eA1 := r34IdSyncCotIn R hR N 56 56 w.a2 (r34Pre2 (R * N) w X) eA2
-    let eA0 := r34IdSyncCotIn R hR N 56 56 w.a1 (r34Pre1 (R * N) w X) eA1
-    let ePool := r34IdSyncCotIn R hR N 56 56 w.a0 (r34Pre0 (R * N) w X) eA0
-    r34StemSyncTiedB R hR N 56 56 xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X ePool
-        (r34IdCotIn (R * N) 56 56 w.a0 (r34Pre0 (R * N) w X) dyA0)
-    ∧ r34IdSyncTiedB R hR N 56 56 "s1b0" xN cotN vN epsStr w.a0 (r34Pre0 (R * N) w X) eA0 dyA0
-    ∧ r34IdSyncTiedB R hR N 56 56 "s1b1" xN cotN vN epsStr w.a1 (r34Pre1 (R * N) w X) eA1 dyA1
-    ∧ r34IdSyncTiedB R hR N 56 56 "s1b2" xN cotN vN epsStr w.a2 (r34Pre2 (R * N) w X) eA2 dyA2
-    ∧ r34DownSyncTiedB R hR N 28 28 "d2" xN cotN vN epsStr w.d2 (r34Pre3 (R * N) w X) eD2 dyD2
-    ∧ r34IdSyncTiedB R hR N 28 28 "s2b0" xN cotN vN epsStr w.b0 (r34Pre4 (R * N) w X) eB0 dyB0
-    ∧ r34IdSyncTiedB R hR N 28 28 "s2b1" xN cotN vN epsStr w.b1 (r34Pre5 (R * N) w X) eB1 dyB1
-    ∧ r34IdSyncTiedB R hR N 28 28 "s2b2" xN cotN vN epsStr w.b2 (r34Pre6 (R * N) w X) eB2 dyB2
-    ∧ r34DownSyncTiedB R hR N 14 14 "d3" xN cotN vN epsStr w.d3 (r34Pre7 (R * N) w X) eD3 dyD3
-    ∧ r34IdSyncTiedB R hR N 14 14 "s3b0" xN cotN vN epsStr w.c0 (r34Pre8 (R * N) w X) eC0 dyC0
-    ∧ r34IdSyncTiedB R hR N 14 14 "s3b1" xN cotN vN epsStr w.c1 (r34Pre9 (R * N) w X) eC1 dyC1
-    ∧ r34IdSyncTiedB R hR N 14 14 "s3b2" xN cotN vN epsStr w.c2 (r34Pre10 (R * N) w X) eC2 dyC2
-    ∧ r34IdSyncTiedB R hR N 14 14 "s3b3" xN cotN vN epsStr w.c3 (r34Pre11 (R * N) w X) eC3 dyC3
-    ∧ r34IdSyncTiedB R hR N 14 14 "s3b4" xN cotN vN epsStr w.c4 (r34Pre12 (R * N) w X) eC4 dyC4
-    ∧ r34DownSyncTiedB R hR N 7 7 "d4" xN cotN vN epsStr w.d4 (r34Pre13 (R * N) w X) eD4 dyD4
-    ∧ r34IdSyncTiedB R hR N 7 7 "s4b0" xN cotN vN epsStr w.e0 (r34Pre14 (R * N) w X) eE0 dyE0
-    ∧ r34IdSyncTiedB R hR N 7 7 "s4b1" xN cotN vN epsStr w.e1 (r34Pre15 (R * N) w X) eE1 dyE1
-    ∧ r34HeadSyncTiedB R hR N 7 7 xN cotN (r34Pre16 (R * N) w X) g G := by
-  intro G dyE1 dyE0 dyD4 dyC4 dyC3 dyC2 dyC1 dyC0 dyD3 dyB2 dyB1 dyB0 dyD2 dyA2 dyA1 dyA0
-    g eE1 eE0 eD4 eC4 eC3 eC2 eC1 eC0 eD3 eB2 eB1 eB0 eD2 eA2 eA1 eA0 ePool
+    (xN cotN vN epsStr : String) (w : R34BWeights nCls)
+    (X : Vec ((R * N) * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (G : Vec ((R * N) * nCls))
+    (gs : Fin R → Vec (N * nCls))
+    (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
+    r34NetSyncTiedB R hR N xN cotN vN epsStr w X G gs := by
+  unfold r34NetSyncTiedB
+  intro dyE1 dyE0 dyD4 dyC4 dyC3 dyC2 dyC1 dyC0 dyD3 dyB2 dyB1 dyB0 dyD2 dyA2 dyA1 dyA0
+    eE1 eE0 eD4 eC4 eC3 eC2 eC1 eC0 eD3 eB2 eB1 eB0 eD2 eA2 eA1 eA0 ePool
   have h56 : 0 < 56 := by norm_num
   have h28 : 0 < 28 := by norm_num
   have h14 : 0 < 14 := by norm_num
   have h7 : 0 < 7 := by norm_num
-  -- the divisor: each replica's loss cotangent is `R ×` its shard of `G`
-  have sG : ∀ r, g r = batchShard R N nCls (fun i => (R : ℝ) * G i) r :=
-    fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r
   -- the scaled-shard invariant, block by block down the chain
   have sE1 : ∀ r, eE1 r = batchShard R N _ (fun i => (R : ℝ) * dyE1 i) r :=
-    fun r => r34HeadCotBlk_scaled R N 7 7 w.Wd w.bd (r34Pre16 (R * N) w X) g G sG r
+    fun r => r34HeadCotBlk_scaled R N 7 7 w.Wd w.bd (r34Pre16 (R * N) w X) gs G hgs r
   have sE0 := r34IdSyncCotIn_scaled R hR N 7 7 hN h7 h7 w.e1 (r34Pre15 (R * N) w X) eE1 dyE1 sE1
   have sD4 := r34IdSyncCotIn_scaled R hR N 7 7 hN h7 h7 w.e0 (r34Pre14 (R * N) w X) eE0 dyE0 sE0
   have sC4 := r34DownSyncCotIn_scaled R hR N 7 7 hN h7 h7 w.d4 (r34Pre13 (R * N) w X) eD4 dyD4 sD4
@@ -666,6 +669,24 @@ theorem r34_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : 
     r34_downblock_syncTiedB R hR N 7 7 hN h7 h7 "d4" xN cotN vN epsStr w.d4 (r34Pre13 (R * N) w X) eD4 dyD4 sD4,
     r34_idblock_syncTiedB R hR N 7 7 hN h7 h7 "s4b0" xN cotN vN epsStr w.e0 (r34Pre14 (R * N) w X) eE0 dyE0 sE0,
     r34_idblock_syncTiedB R hR N 7 7 hN h7 h7 "s4b1" xN cotN vN epsStr w.e1 (r34Pre15 (R * N) w X) eE1 dyE1 sE1,
-    r34_head_syncTiedB R hR N 7 7 xN cotN (r34Pre16 (R * N) w X) g G sG⟩
+    r34_head_syncTiedB R hR N 7 7 xN cotN (r34Pre16 (R * N) w X) gs G hgs⟩
+
+/-- ⭐⭐ **…and at the loss the artifacts emit.** `r34_net_syncTiedB` with its cotangent hypothesis
+    discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
+    (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
+    single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
+    gradient the DP render emits IS the single-device node at batch `R·N`, loss divided by `R·B`. -/
+theorem r34_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
+    (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
+    (w : R34BWeights nCls) (X : Vec ((R * N) * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
+    (T : Vec ((R * N) * (1 * nCls))) :
+    r34NetSyncTiedB R hR N xN cotN vN epsStr w X
+      (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
+        bStr logN ohN (rowB (R * N) nCls (resnet34ForwardB_full (R * N) w X)) T)))
+      (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
+        (rowB N nCls (batchShard R N nCls (resnet34ForwardB_full (R * N) w X) r))
+        (batchShard R N (1 * nCls) T r)))) :=
+  r34_net_syncTiedB R hR N hN xN cotN vN epsStr w X _ _
+    (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
 
 end Proofs.ResNet34SyncTieB

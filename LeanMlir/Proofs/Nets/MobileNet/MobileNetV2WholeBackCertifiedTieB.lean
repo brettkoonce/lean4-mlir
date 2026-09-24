@@ -84,47 +84,27 @@ noncomputable def mobilenetv2PaperPC_has_vjp_at
     (b17 : Vec s17 → Vec s18)
     (head : Vec s18 → Vec s19) (gap : Vec s19 → Vec s20) (dns : Vec s20 → Vec s21)
     (x : Vec s0)
-    (hstem : PProd (HasVJPAt stem x) (DifferentiableAt ℝ stem x))
-    (hb1 : PProd (HasVJPAt b1 (opaqueA0 stem x))
-                 (DifferentiableAt ℝ b1 (opaqueA0 stem x)))
-    (hb2 : PProd (HasVJPAt b2 (opaqueA1 stem b1 x))
-                 (DifferentiableAt ℝ b2 (opaqueA1 stem b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (opaqueA2 stem b1 b2 x))
-                 (DifferentiableAt ℝ b3 (opaqueA2 stem b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (opaqueA3 stem b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (opaqueA3 stem b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (opaqueA4 stem b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (opaqueA4 stem b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (opaqueA5 stem b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (opaqueA5 stem b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
-    (hb17 : PProd (HasVJPAt b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
-                 (DifferentiableAt ℝ b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
-    (hhead : PProd (HasVJPAt head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
-                   (DifferentiableAt ℝ head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
-    (hgap : PProd (HasVJPAt gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
-                  (DifferentiableAt ℝ gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
-    (hdns : PProd (HasVJPAt dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
-                  (DifferentiableAt ℝ dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))))
+    (hstem : HasVJPDiffAt stem x)
+    (hb1 : HasVJPDiffAt b1 (opaqueA0 stem x))
+    (hb2 : HasVJPDiffAt b2 (opaqueA1 stem b1 x))
+    (hb3 : HasVJPDiffAt b3 (opaqueA2 stem b1 b2 x))
+    (hb4 : HasVJPDiffAt b4 (opaqueA3 stem b1 b2 b3 x))
+    (hb5 : HasVJPDiffAt b5 (opaqueA4 stem b1 b2 b3 b4 x))
+    (hb6 : HasVJPDiffAt b6 (opaqueA5 stem b1 b2 b3 b4 b5 x))
+    (hb7 : HasVJPDiffAt b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x))
+    (hb8 : HasVJPDiffAt b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
+    (hb9 : HasVJPDiffAt b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
+    (hb10 : HasVJPDiffAt b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+    (hb11 : HasVJPDiffAt b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+    (hb12 : HasVJPDiffAt b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+    (hb13 : HasVJPDiffAt b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+    (hb14 : HasVJPDiffAt b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+    (hb15 : HasVJPDiffAt b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+    (hb16 : HasVJPDiffAt b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+    (hb17 : HasVJPDiffAt b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
+    (hhead : HasVJPDiffAt head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
+    (hgap : HasVJPDiffAt gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
+    (hdns : HasVJPDiffAt dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
     : HasVJPAt (dns ∘ gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) x :=
   let p1 := vjp_comp_diff_at stem b1 x hstem hb1
   let p2 := vjp_comp_diff_at (b1 ∘ stem) b2 x p1 hb2
@@ -147,6 +127,77 @@ noncomputable def mobilenetv2PaperPC_has_vjp_at
   let p19 := vjp_comp_diff_at (head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) gap x p18 hgap
   let p20 := vjp_comp_diff_at (gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) dns x p19 hdns
   p20.fst
+
+/-- **The apex's backward, peeled** — each stage's backward in turn, head first. `rfl` over
+    VARIABLE stages; the tie below instantiates it by `rw`, so the kernel never re-derives the
+    concrete chain (the ResNet-34 apex's `r34B_full_has_vjp_at_backward`). -/
+theorem mobilenetv2PaperPC_has_vjp_at_backward
+    {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 : Nat}
+    (stem : Vec s0 → Vec s1)
+    (b1 : Vec s1 → Vec s2)
+    (b2 : Vec s2 → Vec s3)
+    (b3 : Vec s3 → Vec s4)
+    (b4 : Vec s4 → Vec s5)
+    (b5 : Vec s5 → Vec s6)
+    (b6 : Vec s6 → Vec s7)
+    (b7 : Vec s7 → Vec s8)
+    (b8 : Vec s8 → Vec s9)
+    (b9 : Vec s9 → Vec s10)
+    (b10 : Vec s10 → Vec s11)
+    (b11 : Vec s11 → Vec s12)
+    (b12 : Vec s12 → Vec s13)
+    (b13 : Vec s13 → Vec s14)
+    (b14 : Vec s14 → Vec s15)
+    (b15 : Vec s15 → Vec s16)
+    (b16 : Vec s16 → Vec s17)
+    (b17 : Vec s17 → Vec s18)
+    (head : Vec s18 → Vec s19) (gap : Vec s19 → Vec s20) (dns : Vec s20 → Vec s21)
+    (x : Vec s0)
+    (hstem : HasVJPDiffAt stem x)
+    (hb1 : HasVJPDiffAt b1 (opaqueA0 stem x))
+    (hb2 : HasVJPDiffAt b2 (opaqueA1 stem b1 x))
+    (hb3 : HasVJPDiffAt b3 (opaqueA2 stem b1 b2 x))
+    (hb4 : HasVJPDiffAt b4 (opaqueA3 stem b1 b2 b3 x))
+    (hb5 : HasVJPDiffAt b5 (opaqueA4 stem b1 b2 b3 b4 x))
+    (hb6 : HasVJPDiffAt b6 (opaqueA5 stem b1 b2 b3 b4 b5 x))
+    (hb7 : HasVJPDiffAt b7 (opaqueA6 stem b1 b2 b3 b4 b5 b6 x))
+    (hb8 : HasVJPDiffAt b8 (opaqueA7 stem b1 b2 b3 b4 b5 b6 b7 x))
+    (hb9 : HasVJPDiffAt b9 (opaqueA8 stem b1 b2 b3 b4 b5 b6 b7 b8 x))
+    (hb10 : HasVJPDiffAt b10 (opaqueA9 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+    (hb11 : HasVJPDiffAt b11 (opaqueA10 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+    (hb12 : HasVJPDiffAt b12 (opaqueA11 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+    (hb13 : HasVJPDiffAt b13 (opaqueA12 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+    (hb14 : HasVJPDiffAt b14 (opaqueA13 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+    (hb15 : HasVJPDiffAt b15 (opaqueA14 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+    (hb16 : HasVJPDiffAt b16 (opaqueA15 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+    (hb17 : HasVJPDiffAt b17 (opaqueA16 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
+    (hhead : HasVJPDiffAt head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
+    (hgap : HasVJPDiffAt gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
+    (hdns : HasVJPDiffAt dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
+    (dy : Vec s21) :
+    (mobilenetv2PaperPC_has_vjp_at stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 head gap dns x hstem hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 hhead hgap hdns).backward dy
+      =
+      hstem.fst.backward
+        (hb1.fst.backward
+          (hb2.fst.backward
+            (hb3.fst.backward
+              (hb4.fst.backward
+                (hb5.fst.backward
+                  (hb6.fst.backward
+                    (hb7.fst.backward
+                      (hb8.fst.backward
+                        (hb9.fst.backward
+                          (hb10.fst.backward
+                            (hb11.fst.backward
+                              (hb12.fst.backward
+                                (hb13.fst.backward
+                                  (hb14.fst.backward
+                                    (hb15.fst.backward
+                                      (hb16.fst.backward
+                                        (hb17.fst.backward
+                                          (hhead.fst.backward
+                                            (hgap.fst.backward
+                                              (hdns.fst.backward dy)))))))))))))))))))) := rfl
 
 open scoped BigOperators
 
@@ -231,40 +282,23 @@ theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
     (b17 : Vec (N * (160 * 7 * 7)) → Vec (N * (320 * 7 * 7)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
     (h_stem : MNV2StemSmoothAtB N 112 112 Ws bs εs γs βs x)
-    (hb1 : PProd (HasVJPAt b1 (opaqueA0 (mnv2StemB N 112 112 Ws bs εs γs βs) x))
-                 (DifferentiableAt ℝ b1 (opaqueA0 (mnv2StemB N 112 112 Ws bs εs γs βs) x)))
-    (hb2 : PProd (HasVJPAt b2 (opaqueA1 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 x))
-                 (DifferentiableAt ℝ b2 (opaqueA1 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (opaqueA2 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 x))
-                 (DifferentiableAt ℝ b3 (opaqueA2 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (opaqueA3 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (opaqueA3 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (opaqueA4 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (opaqueA4 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (opaqueA5 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (opaqueA5 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (opaqueA6 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (opaqueA6 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (opaqueA7 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (opaqueA7 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (opaqueA8 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (opaqueA8 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (opaqueA9 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (opaqueA9 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (opaqueA10 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (opaqueA10 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (opaqueA11 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (opaqueA11 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (opaqueA12 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (opaqueA12 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (opaqueA13 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (opaqueA13 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (opaqueA14 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (opaqueA14 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (opaqueA15 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (opaqueA15 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
-    (hb17 : PProd (HasVJPAt b17 (opaqueA16 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
-                 (DifferentiableAt ℝ b17 (opaqueA16 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
+    (hb1 : HasVJPDiffAt b1 (opaqueA0 (mnv2StemB N 112 112 Ws bs εs γs βs) x))
+    (hb2 : HasVJPDiffAt b2 (opaqueA1 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 x))
+    (hb3 : HasVJPDiffAt b3 (opaqueA2 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 x))
+    (hb4 : HasVJPDiffAt b4 (opaqueA3 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 x))
+    (hb5 : HasVJPDiffAt b5 (opaqueA4 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 x))
+    (hb6 : HasVJPDiffAt b6 (opaqueA5 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
+    (hb7 : HasVJPDiffAt b7 (opaqueA6 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
+    (hb8 : HasVJPDiffAt b8 (opaqueA7 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
+    (hb9 : HasVJPDiffAt b9 (opaqueA8 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
+    (hb10 : HasVJPDiffAt b10 (opaqueA9 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+    (hb11 : HasVJPDiffAt b11 (opaqueA10 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+    (hb12 : HasVJPDiffAt b12 (opaqueA11 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+    (hb13 : HasVJPDiffAt b13 (opaqueA12 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+    (hb14 : HasVJPDiffAt b14 (opaqueA13 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+    (hb15 : HasVJPDiffAt b15 (opaqueA14 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+    (hb16 : HasVJPDiffAt b16 (opaqueA15 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+    (hb17 : HasVJPDiffAt b17 (opaqueA16 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
     (h_head : MNV2HeadSmoothAtB N 7 7 Wh bh εh γh βh (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) :
     mnv2InputGradB N Ws Wh Wfc
       ((bnBatchLA_has_vjp N 32 112 112 εs hεs γs βs).backward
@@ -314,6 +348,9 @@ theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
   rw [mnv2StemBBack_eq_vjp_backward (by decide) (by decide) Ws bs εs hεs γs βs x h_stem,
       cbrBBack_eq_vjp_backward (by decide) (by decide) Wh bh εh hεh γh βh _ h_head,
       dense_transpose_eq_vjp_backward Wfc bfc (fun _ => 0)]
+  funext dy
+  rw [mobilenetv2PaperPC_has_vjp_at_backward]
+  repeat rw [Function.comp_apply]
   rfl
 
 /-- ⭐⭐ **The batched chain IS the `pdiv`-contracted Jacobian of the twenty-one-stage net** — at
@@ -343,40 +380,23 @@ theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
     (b17 : Vec (N * (160 * 7 * 7)) → Vec (N * (320 * 7 * 7)))
     (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
     (h_stem : MNV2StemSmoothAtB N 112 112 Ws bs εs γs βs x)
-    (hb1 : PProd (HasVJPAt b1 (opaqueA0 (mnv2StemB N 112 112 Ws bs εs γs βs) x))
-                 (DifferentiableAt ℝ b1 (opaqueA0 (mnv2StemB N 112 112 Ws bs εs γs βs) x)))
-    (hb2 : PProd (HasVJPAt b2 (opaqueA1 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 x))
-                 (DifferentiableAt ℝ b2 (opaqueA1 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 x)))
-    (hb3 : PProd (HasVJPAt b3 (opaqueA2 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 x))
-                 (DifferentiableAt ℝ b3 (opaqueA2 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 x)))
-    (hb4 : PProd (HasVJPAt b4 (opaqueA3 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 x))
-                 (DifferentiableAt ℝ b4 (opaqueA3 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 x)))
-    (hb5 : PProd (HasVJPAt b5 (opaqueA4 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 x))
-                 (DifferentiableAt ℝ b5 (opaqueA4 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 x)))
-    (hb6 : PProd (HasVJPAt b6 (opaqueA5 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
-                 (DifferentiableAt ℝ b6 (opaqueA5 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 x)))
-    (hb7 : PProd (HasVJPAt b7 (opaqueA6 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
-                 (DifferentiableAt ℝ b7 (opaqueA6 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x)))
-    (hb8 : PProd (HasVJPAt b8 (opaqueA7 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
-                 (DifferentiableAt ℝ b8 (opaqueA7 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x)))
-    (hb9 : PProd (HasVJPAt b9 (opaqueA8 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
-                 (DifferentiableAt ℝ b9 (opaqueA8 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x)))
-    (hb10 : PProd (HasVJPAt b10 (opaqueA9 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
-                 (DifferentiableAt ℝ b10 (opaqueA9 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x)))
-    (hb11 : PProd (HasVJPAt b11 (opaqueA10 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
-                 (DifferentiableAt ℝ b11 (opaqueA10 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x)))
-    (hb12 : PProd (HasVJPAt b12 (opaqueA11 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
-                 (DifferentiableAt ℝ b12 (opaqueA11 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x)))
-    (hb13 : PProd (HasVJPAt b13 (opaqueA12 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
-                 (DifferentiableAt ℝ b13 (opaqueA12 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x)))
-    (hb14 : PProd (HasVJPAt b14 (opaqueA13 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
-                 (DifferentiableAt ℝ b14 (opaqueA13 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x)))
-    (hb15 : PProd (HasVJPAt b15 (opaqueA14 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
-                 (DifferentiableAt ℝ b15 (opaqueA14 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x)))
-    (hb16 : PProd (HasVJPAt b16 (opaqueA15 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
-                 (DifferentiableAt ℝ b16 (opaqueA15 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)))
-    (hb17 : PProd (HasVJPAt b17 (opaqueA16 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
-                 (DifferentiableAt ℝ b17 (opaqueA16 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)))
+    (hb1 : HasVJPDiffAt b1 (opaqueA0 (mnv2StemB N 112 112 Ws bs εs γs βs) x))
+    (hb2 : HasVJPDiffAt b2 (opaqueA1 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 x))
+    (hb3 : HasVJPDiffAt b3 (opaqueA2 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 x))
+    (hb4 : HasVJPDiffAt b4 (opaqueA3 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 x))
+    (hb5 : HasVJPDiffAt b5 (opaqueA4 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 x))
+    (hb6 : HasVJPDiffAt b6 (opaqueA5 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
+    (hb7 : HasVJPDiffAt b7 (opaqueA6 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
+    (hb8 : HasVJPDiffAt b8 (opaqueA7 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
+    (hb9 : HasVJPDiffAt b9 (opaqueA8 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
+    (hb10 : HasVJPDiffAt b10 (opaqueA9 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+    (hb11 : HasVJPDiffAt b11 (opaqueA10 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+    (hb12 : HasVJPDiffAt b12 (opaqueA11 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+    (hb13 : HasVJPDiffAt b13 (opaqueA12 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
+    (hb14 : HasVJPDiffAt b14 (opaqueA13 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 x))
+    (hb15 : HasVJPDiffAt b15 (opaqueA14 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
+    (hb16 : HasVJPDiffAt b16 (opaqueA15 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
+    (hb17 : HasVJPDiffAt b17 (opaqueA16 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
     (h_head : MNV2HeadSmoothAtB N 7 7 Wh bh εh γh βh (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * 112) * (2 * 112)))) :
     mnv2InputGradB N Ws Wh Wfc

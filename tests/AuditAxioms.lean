@@ -2056,6 +2056,7 @@ open Proofs
 #print axioms Proofs.ResNet34SyncTieB.replicaLossCot_eq
 -- the capstone: every all-reduced parameter gradient IS the single-device node at R·N
 #print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB
+#print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB_smoothedCE
 
 -- 4d PIECE 3, THE MBCONV PIECES MOBILENETV2 AND EFFICIENTNET-B0 SHARE
 -- (MBConvSyncTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
@@ -2137,6 +2138,7 @@ open Proofs
 #print axioms Proofs.EnetSyncTieG.stem_syncTiedG
 #print axioms Proofs.EnetSyncTieG.head_syncTiedG
 #print axioms Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
+#print axioms Proofs.EnetSyncTieG.efficientnet_net_syncTiedG_smoothedCE
 
 -- 4d PIECE 3 AT RESNET-50: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
 -- (ResNet50SyncB.lean + ResNet50SyncStepTieB.lean, planning/global_bn_verified.md §3.4, 2026-09-21)

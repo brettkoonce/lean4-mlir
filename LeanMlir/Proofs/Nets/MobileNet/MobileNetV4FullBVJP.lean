@@ -125,27 +125,26 @@ structure Mnv4SmoothAt (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     is `.fst`, `mobilenetv4ForwardB_full_differentiableAt` is `.snd`. -/
 private noncomputable def mnv4ChainB (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x) :
-    PProd (HasVJPAt (mobilenetv4ForwardB_full N w) x)
-      (DifferentiableAt ℝ (mobilenetv4ForwardB_full N w) x) :=
-  let p0 : PProd (HasVJPAt (mnv4Pre0 N w) x) (DifferentiableAt ℝ (mnv4Pre0 N w) x) :=
+    HasVJPDiffAt (mobilenetv4ForwardB_full N w) x :=
+  let p0 : HasVJPDiffAt (mnv4Pre0 N w) x :=
     ⟨mnv4StemB_has_vjp_at N 112 112 w.sW w.sb w.sE w.hsE w.sg w.sbt x hx.stem,
       mnv4StemB_differentiableAt N 112 112 w.sW w.sb w.sE w.hsE w.sg w.sbt x hx.stem⟩
-  let p1 : PProd (HasVJPAt (mnv4Pre1 N w) x) (DifferentiableAt ℝ (mnv4Pre1 N w) x) :=
+  let p1 : HasVJPDiffAt (mnv4Pre1 N w) x :=
     vjp_comp_diff_at _ _ x p0
       ⟨(mnv4FusedStack N w).vjp _ hx.fused, (mnv4FusedStack N w).diff _ hx.fused⟩
-  let p2 : PProd (HasVJPAt (mnv4Pre2 N w) x) (DifferentiableAt ℝ (mnv4Pre2 N w) x) :=
+  let p2 : HasVJPDiffAt (mnv4Pre2 N w) x :=
     vjp_comp_diff_at _ _ x p1
       ⟨(mnv4Res28Layer N w).vjp _ hx.g28, (mnv4Res28Layer N w).diff _ hx.g28⟩
-  let p3 : PProd (HasVJPAt (mnv4Pre3 N w) x) (DifferentiableAt ℝ (mnv4Pre3 N w) x) :=
+  let p3 : HasVJPDiffAt (mnv4Pre3 N w) x :=
     vjp_comp_diff_at _ _ x p2
       ⟨(mnv4Res14aLayer N w).vjp _ hx.g14a, (mnv4Res14aLayer N w).diff _ hx.g14a⟩
-  let p4 : PProd (HasVJPAt (mnv4Pre4 N w) x) (DifferentiableAt ℝ (mnv4Pre4 N w) x) :=
+  let p4 : HasVJPDiffAt (mnv4Pre4 N w) x :=
     vjp_comp_diff_at _ _ x p3
       ⟨(mnv4Res14bLayer N w).vjp _ hx.g14b, (mnv4Res14bLayer N w).diff _ hx.g14b⟩
-  let p5 : PProd (HasVJPAt (mnv4Pre5 N w) x) (DifferentiableAt ℝ (mnv4Pre5 N w) x) :=
+  let p5 : HasVJPDiffAt (mnv4Pre5 N w) x :=
     vjp_comp_diff_at _ _ x p4
       ⟨(mnv4Res7aLayer N w).vjp _ hx.g7a, (mnv4Res7aLayer N w).diff _ hx.g7a⟩
-  let p6 : PProd (HasVJPAt (mnv4Pre6 N w) x) (DifferentiableAt ℝ (mnv4Pre6 N w) x) :=
+  let p6 : HasVJPDiffAt (mnv4Pre6 N w) x :=
     vjp_comp_diff_at _ _ x p5
       ⟨(mnv4Res7bLayer N w).vjp _ hx.g7b, (mnv4Res7bLayer N w).diff _ hx.g7b⟩
   vjp_comp_diff_at _ _ x p6

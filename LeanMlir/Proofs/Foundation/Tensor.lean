@@ -115,6 +115,14 @@ theorem pdiv_id {n : Nat} (x : Vec n) (i j : Fin n) :
     pdiv (fun y : Vec n => y) x i j = if i = j then 1 else 0 := by
   simp [pdiv, @eq_comm _ j i]
 
+/-- **A `pdiv` entry is the derivative of one output coordinate** — `pdiv f x i j` is
+    `fderiv f x (basisVec i) j`, and at a differentiable point that is the `i`-th directional
+    derivative of `y ↦ f y j`. -/
+theorem pdiv_eq_fderiv_coord {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
+    (hf : DifferentiableAt ℝ f x) (i : Fin m) (j : Fin n) :
+    pdiv f x i j = fderiv ℝ (fun y => f y j) x (basisVec i) := by
+  unfold pdiv; rw [fderiv_apply hf j]; rfl
+
 /-- **Constant function Jacobian** — zero. -/
 theorem pdiv_const {m n : Nat} (c : Vec n) (x : Vec m)
     (i : Fin m) (j : Fin n) :
@@ -465,13 +473,15 @@ theorem vjp_comp_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec
     (vjp_comp f g hf_diff hg_diff hf hg).backward x dy = hf.backward x (hg.backward (f x) dy) :=
   rfl
 
-/-- Compose two `HasVJPAt`-with-`DifferentiableAt` pairs (carried as `PProd` so the
-    `DifferentiableAt` `Prop` is allowed). The fold step of every whole-net apex. -/
+/-- A VJP witness at `x` together with differentiability there — one stage of a whole-net
+    chain. A `PProd`, so the `DifferentiableAt` `Prop` can ride along with the data. -/
+abbrev HasVJPDiffAt {m n : Nat} (f : Vec m → Vec n) (x : Vec m) :=
+  PProd (HasVJPAt f x) (DifferentiableAt ℝ f x)
+
+/-- Compose two `HasVJPDiffAt` stages. The fold step of every whole-net apex. -/
 noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
-    (x : Vec m)
-    (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
-    (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) :
-    PProd (HasVJPAt (g ∘ f) x) (DifferentiableAt ℝ (g ∘ f) x) :=
+    (x : Vec m) (hf : HasVJPDiffAt f x) (hg : HasVJPDiffAt g (f x)) :
+    HasVJPDiffAt (g ∘ f) x :=
   ⟨vjp_comp_at f g x hf.snd hg.snd hf.fst hg.fst, hg.snd.comp x hf.snd⟩
 
 /-- One `vjp_comp_diff_at` level's backward, unfolded: the composite runs `g`'s backward, then
@@ -479,8 +489,7 @@ noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec 
     `rfl` that has to find the same unfolding through concrete witnesses. ⛔ Not by
     `simp only`: simp would use it as a `dsimp` step and record nothing for the kernel to replay. -/
 theorem vjp_comp_diff_at_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
-    (x : Vec m) (hf : PProd (HasVJPAt f x) (DifferentiableAt ℝ f x))
-    (hg : PProd (HasVJPAt g (f x)) (DifferentiableAt ℝ g (f x))) (dy : Vec p) :
+    (x : Vec m) (hf : HasVJPDiffAt f x) (hg : HasVJPDiffAt g (f x)) (dy : Vec p) :
     (vjp_comp_diff_at f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
 
 -- ════════════════════════════════════════════════════════════════

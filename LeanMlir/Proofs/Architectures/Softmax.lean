@@ -41,16 +41,6 @@ to a diagonal** — which means the VJP has a closed-form collapse, just
 like BatchNorm did.
 -/
 
-/-- **A `pdiv` entry is the derivative of one output coordinate** — `pdiv f x i j` is
-    `fderiv f x (basisVec i) j`, and at a differentiable point that is the `i`-th directional
-    derivative of `y ↦ f y j`. Parked in this leaf; `pdiv_bnIstdBroadcast` (BatchNorm, which does
-    not import this file) repeats the step and switches when this moves to `Tensor.lean` with the
-    next root batch. -/
-theorem pdiv_eq_fderiv_coord {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
-    (hf : DifferentiableAt ℝ f x) (i : Fin m) (j : Fin n) :
-    pdiv f x i j = fderiv ℝ (fun y => f y j) x (basisVec i) := by
-  unfold pdiv; rw [fderiv_apply hf j]; rfl
-
 /-- **Partial derivative of softmax** (quotient rule on the exponentials).
 
     `d(softmax(z))_j/dz_i = softmax(z)_j * (delta_{ij} - softmax(z)_i)`

@@ -229,27 +229,20 @@ private lemma sum_heads_3d {M : Type*} [AddCommMonoid M] (heads d : Nat)
     the three per-projection dense-backs at head `h`'s columns. -/
 private lemma qkv_back_fanin_MH (N heads d : Nat)
     (Wq Wk Wv : Mat (heads * d) (heads * d))
-    (dQg dKg dVg : Fin heads → Mat N d) (r : Fin N) (c : Fin (heads * d)) :
+    (G : Fin 3 → Fin heads → Mat N d) (r : Fin N) (c : Fin (heads * d)) :
     Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv)
       (fun (kj : Fin (heads * (3 * d))) =>
-        let p := finProdFinEquiv.symm kj
-        let q := finProdFinEquiv.symm p.2
-        if q.1 = (0 : Fin 3) then dQg p.1 r q.2
-        else if q.1 = (1 : Fin 3) then dKg p.1 r q.2
-        else dVg p.1 r q.2) c
+        G (finProdFinEquiv.symm (finProdFinEquiv.symm kj).2).1 (finProdFinEquiv.symm kj).1 r
+          (finProdFinEquiv.symm (finProdFinEquiv.symm kj).2).2) c
       = ∑ h : Fin heads,
-          ((∑ j : Fin d, Wq c (finProdFinEquiv (h, j)) * dQg h r j)
-           + (∑ j : Fin d, Wk c (finProdFinEquiv (h, j)) * dKg h r j)
-           + (∑ j : Fin d, Wv c (finProdFinEquiv (h, j)) * dVg h r j)) := by
+          ((∑ j : Fin d, Wq c (finProdFinEquiv (h, j)) * G 0 h r j)
+           + (∑ j : Fin d, Wk c (finProdFinEquiv (h, j)) * G 1 h r j)
+           + (∑ j : Fin d, Wv c (finProdFinEquiv (h, j)) * G 2 h r j)) := by
   unfold Mat.mulVec
   rw [sum_heads_3d]
   apply Finset.sum_congr rfl; intro h _
   rw [Fin.sum_univ_three]
-  simp only [Equiv.symm_apply_apply,
-    mhsa_qkv_W_eq0, mhsa_qkv_W_eq1, mhsa_qkv_W_eq2,
-    show (1 : Fin 3) ≠ (0 : Fin 3) from by decide,
-    show (2 : Fin 3) ≠ (0 : Fin 3) from by decide,
-    show (2 : Fin 3) ≠ (1 : Fin 3) from by decide, ite_true, ite_false]
+  simp only [Equiv.symm_apply_apply, mhsa_qkv_W_eq0, mhsa_qkv_W_eq1, mhsa_qkv_W_eq2]
 
 /-- The collapsed general-`heads` MHSA backward: for each head `h`, slice the
     dense Q/K/V projections and the `Wo`-back cotangent to head `h`'s columns,
@@ -271,160 +264,80 @@ noncomputable def mhsaBackCollapsedMH (N heads d : Nat)
        + (∑ j : Fin d, Wk c (finProdFinEquiv (h, j)) * dKg h r j)
        + (∑ j : Fin d, Wv c (finProdFinEquiv (h, j)) * dVg h r j))
 
+/-- The SDPA backward `mhsa_g`'s slab backward reads for column third `q` (Q / K / V). -/
+noncomputable def sdpaBackSel (N d : Nat) (q : Fin 3) (Q K V dA : Mat N d) : Mat N d :=
+  fun r j =>
+    if q = 0 then sdpa_back_Q N d Q K V dA r j
+    else if q = 1 then sdpa_back_K N d Q K V dA r j
+    else sdpa_back_V N d Q K V dA r j
+
+/-- `mhsa_g`'s backward, read through `sdpaBackSel` (its `backward` field, by definition). -/
+theorem mhsa_g_backward_eq_sel (N d : Nat) (M : Mat N (3 * d)) (dY : Mat N d) (r : Fin N)
+    (j : Fin (3 * d)) :
+    (mhsa_g_has_vjp_mat N d).backward M dY r j
+      = sdpaBackSel N d (finProdFinEquiv.symm j).1 (mhsa_proj_c 0 M) (mhsa_proj_c 1 M)
+          (mhsa_proj_c 2 M) dY r (finProdFinEquiv.symm j).2 := rfl
+
+/-- Head `h`'s slab of the fused QKV projection, third `q`, is head `h`'s columns of the `q`-th
+    projection. -/
+theorem mhsa_proj_c_qkv_slab (N heads d : Nat) (Wq Wk Wv : Mat (heads * d) (heads * d))
+    (bq bk bv : Vec (heads * d)) (X : Mat N (heads * d)) (h : Fin heads) (q : Fin 3) :
+    mhsa_proj_c q (fun r' (j_in : Fin (3 * d)) =>
+        dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv) (X r')
+          (finProdFinEquiv (h, j_in)))
+      = fun r' j => dense (![Wq, Wk, Wv] q) (![bq, bk, bv] q) (X r') (finProdFinEquiv (h, j)) := by
+  funext r' j
+  fin_cases q <;> simp [mhsa_proj_c, dense]
+
+/-- `mhsaClean`'s backward, unfolded: the fused-QKV dense backward (`mulVec` against
+    `mhsa_qkv_W`) of the column-slabwise `mhsa_g` backward at the `Wo`-back cotangent. `rfl`
+    through `vjp_comp`, `rowwise_has_vjp_mat` and `colSlabwise_has_vjp_mat`. -/
+theorem mhsaClean_backward_apply (N heads d : Nat)
+    (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
+    (X dh : Mat N (heads * d)) (r : Fin N) (c : Fin (heads * d)) :
+    (mhsaClean N heads d Wq Wk Wv Wo bq bk bv bo).backward X dh r c
+      = Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv)
+          (fun kj => (colSlabwise_has_vjp_mat (mhsa_g_has_vjp_mat N d) (mhsa_g_flat_diff N d)
+              (heads := heads)).backward
+            (fun n => dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv) (X n))
+            (fun n => Mat.mulVec Wo (dh n)) r kj) c := rfl
+
 /-- **MHSA backward general-`heads` collapse.** The clean MHSA witness's backward
-    equals the per-head sum fan-in `mhsaBackCollapsedMH`. -/
+    equals the per-head sum fan-in `mhsaBackCollapsedMH`. Each fused-slab column of the
+    colSlabwise backward is `sdpaBackSel` at its head's dense Q/K/V; the fan-in lemma splits the
+    `mulVec` per head and per third. -/
 theorem mhsaClean_backward_collapseMH (N heads d : Nat)
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (X dh : Mat N (heads * d)) :
     (mhsaClean N heads d Wq Wk Wv Wo bq bk bv bo).backward X dh
       = mhsaBackCollapsedMH N heads d Wq Wk Wv Wo bq bk bv bo X dh := by
   funext r c
-  show (rowwise_has_vjp_mat (dense_has_vjp (mhsa_qkv_W heads d Wq Wk Wv)
-                                          (mhsa_qkv_b heads d bq bk bv))
-                           (dense_diff (mhsa_qkv_W heads d Wq Wk Wv)
-                                       (mhsa_qkv_b heads d bq bk bv))).backward X
-        ((colSlabwise_has_vjp_mat (mhsa_g_has_vjp_mat N d) (mhsa_g_flat_diff N d)
-            (heads := heads)).backward
-          ((fun X' : Mat N (heads * d) => fun n =>
-              dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv) (X' n)) X)
-          ((rowwise_has_vjp_mat (dense_has_vjp Wo bo) (dense_diff Wo bo)).backward
-            (colSlabApply (mhsa_g N d) (heads := heads)
-              ((fun X' : Mat N (heads * d) => fun n =>
-                 dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv) (X' n)) X))
-            dh)) r c = _
-  show Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv)
-        (fun kj => (colSlabwise_has_vjp_mat (mhsa_g_has_vjp_mat N d) (mhsa_g_flat_diff N d)
-            (heads := heads)).backward
-          (fun n => dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv) (X n))
-          (fun n => Mat.mulVec Wo (dh n))
-          r kj) c = _
-  set M0 : Mat N (heads * (3 * d)) :=
-    fun n => dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv) (X n) with hM0
-  set dY0 : Mat N (heads * d) := fun n => Mat.mulVec Wo (dh n) with hdY0
-  -- Per slab column kj: the colSlabwise backward slices to head `(symm kj).1` and runs
-  -- `mhsa_g.backward` at that head's slab, read at `(symm kj).2`.
-  have hslab : ∀ kj : Fin (heads * (3 * d)),
-      (colSlabwise_has_vjp_mat (mhsa_g_has_vjp_mat N d) (mhsa_g_flat_diff N d)
-          (heads := heads)).backward M0 dY0 r kj
-        = (mhsa_g_has_vjp_mat N d).backward
-            (fun r' (j_in : Fin (3 * d)) =>
-              M0 r' (finProdFinEquiv ((finProdFinEquiv.symm kj).1, j_in)))
-            (fun r' (j_out : Fin d) =>
-              dY0 r' (finProdFinEquiv ((finProdFinEquiv.symm kj).1, j_out)))
-            r (finProdFinEquiv.symm kj).2 := fun _ => rfl
-  -- Rewrite each slab backward into the if-third `sdpa_back_*` form, with the
-  -- `mhsa_proj_c` projections collapsed to head-`h`-sliced dense Q/K/V.
+  rw [mhsaClean_backward_apply]
+  -- head `h`, third `q`: the SDPA backward at head `h`'s dense Q/K/V and `Wo`-back cotangent
+  let G : Fin 3 → Fin heads → Mat N d := fun q h =>
+    sdpaBackSel N d q
+      (fun r' j => dense Wq bq (X r') (finProdFinEquiv (h, j)))
+      (fun r' j => dense Wk bk (X r') (finProdFinEquiv (h, j)))
+      (fun r' j => dense Wv bv (X r') (finProdFinEquiv (h, j)))
+      (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (h, j)))
+  -- each slab column: colSlabwise slices to head `(symm kj).1` (by definition), then
+  -- `mhsa_g`'s backward is the selector at the sliced projections
   have hdz : (fun kj : Fin (heads * (3 * d)) =>
         (colSlabwise_has_vjp_mat (mhsa_g_has_vjp_mat N d) (mhsa_g_flat_diff N d)
-            (heads := heads)).backward M0 dY0 r kj)
-      = (fun (kj : Fin (heads * (3 * d))) =>
-          let p := finProdFinEquiv.symm kj
-          let q := finProdFinEquiv.symm p.2
-          if q.1 = (0 : Fin 3) then
-            sdpa_back_Q N d
-              (fun r' j => dense Wq bq (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => dense Wk bk (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => dense Wv bv (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (p.1, j))) r q.2
-          else if q.1 = (1 : Fin 3) then
-            sdpa_back_K N d
-              (fun r' j => dense Wq bq (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => dense Wk bk (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => dense Wv bv (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (p.1, j))) r q.2
-          else
-            sdpa_back_V N d
-              (fun r' j => dense Wq bq (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => dense Wk bk (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => dense Wv bv (X r') (finProdFinEquiv (p.1, j)))
-              (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (p.1, j))) r q.2) := by
+            (heads := heads)).backward
+          (fun n => dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv) (X n))
+          (fun n => Mat.mulVec Wo (dh n)) r kj)
+      = fun kj => G (finProdFinEquiv.symm (finProdFinEquiv.symm kj).2).1
+          (finProdFinEquiv.symm kj).1 r (finProdFinEquiv.symm (finProdFinEquiv.symm kj).2).2 := by
     funext kj
-    rw [hslab kj]
-    set h := (finProdFinEquiv.symm kj).1 with hh
-    -- the head-`h`-sliced slab projections collapse to head-`h`-sliced dense Q/K/V.
-    have hproj0 : mhsa_proj_c (0 : Fin 3)
-        (fun r' (j_in : Fin (3 * d)) => M0 r' (finProdFinEquiv (h, j_in)))
-        = (fun r' (j : Fin d) => dense Wq bq (X r') (finProdFinEquiv (h, j))) := by
-      funext r' j; unfold mhsa_proj_c; show dense _ _ _ _ = _
-      unfold dense; simp only [mhsa_qkv_W_eq0, mhsa_qkv_b_eq0]
-    have hproj1 : mhsa_proj_c (1 : Fin 3)
-        (fun r' (j_in : Fin (3 * d)) => M0 r' (finProdFinEquiv (h, j_in)))
-        = (fun r' (j : Fin d) => dense Wk bk (X r') (finProdFinEquiv (h, j))) := by
-      funext r' j; unfold mhsa_proj_c; show dense _ _ _ _ = _
-      unfold dense; simp only [mhsa_qkv_W_eq1, mhsa_qkv_b_eq1]
-    have hproj2 : mhsa_proj_c (2 : Fin 3)
-        (fun r' (j_in : Fin (3 * d)) => M0 r' (finProdFinEquiv (h, j_in)))
-        = (fun r' (j : Fin d) => dense Wv bv (X r') (finProdFinEquiv (h, j))) := by
-      funext r' j; unfold mhsa_proj_c; show dense _ _ _ _ = _
-      unfold dense; simp only [mhsa_qkv_W_eq2, mhsa_qkv_b_eq2]
-    rw [show (mhsa_g_has_vjp_mat N d).backward
-            (fun r' (j_in : Fin (3 * d)) => M0 r' (finProdFinEquiv (h, j_in)))
-            (fun r' (j_out : Fin d) => dY0 r' (finProdFinEquiv (h, j_out)))
-            r (finProdFinEquiv.symm kj).2
-          = (let p := finProdFinEquiv.symm (finProdFinEquiv.symm kj).2
-             if p.1 = (0 : Fin 3) then
-               sdpa_back_Q N d
-                 (mhsa_proj_c 0 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (mhsa_proj_c 1 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (mhsa_proj_c 2 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (fun r' (j_out : Fin d) => dY0 r' (finProdFinEquiv (h, j_out))) r p.2
-             else if p.1 = (1 : Fin 3) then
-               sdpa_back_K N d
-                 (mhsa_proj_c 0 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (mhsa_proj_c 1 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (mhsa_proj_c 2 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (fun r' (j_out : Fin d) => dY0 r' (finProdFinEquiv (h, j_out))) r p.2
-             else
-               sdpa_back_V N d
-                 (mhsa_proj_c 0 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (mhsa_proj_c 1 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (mhsa_proj_c 2 (fun r' (j_in : Fin (3*d)) => M0 r' (finProdFinEquiv (h, j_in))))
-                 (fun r' (j_out : Fin d) => dY0 r' (finProdFinEquiv (h, j_out))) r p.2)
-        from rfl]
-    rw [hproj0, hproj1, hproj2, hdY0]
-  -- Transit through the if-form: `congr` (defeq-tolerant on eta) folds the slab
-  -- backward into the if-form, then `qkv_back_fanin_MH` splits the fan-in per head.
-  trans (Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv)
-          (fun (kj : Fin (heads * (3 * d))) =>
-            let p := finProdFinEquiv.symm kj
-            let q := finProdFinEquiv.symm p.2
-            if q.1 = (0 : Fin 3) then
-              sdpa_back_Q N d
-                (fun r' j => dense Wq bq (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => dense Wk bk (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => dense Wv bv (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (p.1, j))) r q.2
-            else if q.1 = (1 : Fin 3) then
-              sdpa_back_K N d
-                (fun r' j => dense Wq bq (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => dense Wk bk (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => dense Wv bv (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (p.1, j))) r q.2
-            else
-              sdpa_back_V N d
-                (fun r' j => dense Wq bq (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => dense Wk bk (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => dense Wv bv (X r') (finProdFinEquiv (p.1, j)))
-                (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (p.1, j))) r q.2) c)
-  · exact congrFun (congrArg (Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv)) hdz) c
-  · -- `qkv_back_fanin_MH` (defeq-applied via `exact`, beta-tolerant) splits the
-    -- fan-in; `mhsaBackCollapsedMH` unfolds to the same per-head sum.
-    exact qkv_back_fanin_MH N heads d Wq Wk Wv
-          (fun h => sdpa_back_Q N d
-            (fun r' j => dense Wq bq (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => dense Wk bk (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => dense Wv bv (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (h, j))))
-          (fun h => sdpa_back_K N d
-            (fun r' j => dense Wq bq (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => dense Wk bk (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => dense Wv bv (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (h, j))))
-          (fun h => sdpa_back_V N d
-            (fun r' j => dense Wq bq (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => dense Wk bk (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => dense Wv bv (X r') (finProdFinEquiv (h, j)))
-            (fun r' j => Mat.mulVec Wo (dh r') (finProdFinEquiv (h, j)))) r c
+    change (mhsa_g_has_vjp_mat N d).backward _ _ r (finProdFinEquiv.symm kj).2 = _
+    rw [mhsa_g_backward_eq_sel]
+    simp only [mhsa_proj_c_qkv_slab, G, Matrix.cons_val_zero, Matrix.cons_val_one,
+      Matrix.cons_val_two, Matrix.head_cons, Matrix.tail_cons]
+  rw [hdz, qkv_back_fanin_MH]
+  simp only [G, sdpaBackSel, ite_true, show (1 : Fin 3) ≠ 0 from by decide,
+    show (2 : Fin 3) ≠ 0 from by decide, show (2 : Fin 3) ≠ 1 from by decide, ite_false]
+  rfl
 
 /-- The proven MHSA VJP's backward at general `heads` IS the per-head collapse. -/
 theorem mhsa_backward_collapseMH (N heads d : Nat)
@@ -608,18 +521,6 @@ theorem mhsaBackGraphMH_faithful {Np1 hm1 d : Nat}
   unfold mhsaBackGraphMH
   rw [den_headsSumG]
   funext j
-  -- RHS: flatten of the per-head sum.
-  show (∑ h : Fin (hm1 + 1),
-          den (SHlo.addV
-            (SHlo.addV
-              (SHlo.denseRowBack "%Wq" Wq (SHlo.headPadF h
-                (sdpaBackQGraph Np1 d _ (Mat.flatten (Kg h)) (Mat.flatten (Vg h))
-                  (SHlo.headSliceF h _))))
-              (SHlo.denseRowBack "%Wk" Wk (SHlo.headPadF h
-                (sdpaBackKGraph Np1 d _ (Mat.flatten (Qg h)) (Mat.flatten (Vg h))
-                  (SHlo.headSliceF h _)))))
-            (SHlo.denseRowBack "%Wv" Wv (SHlo.headPadF h
-              (sdpaBackVGraph Np1 d _ (SHlo.headSliceF h _))))) j) = _
   simp only [den_addV]
   -- Compute each branch via the per-head helpers.
   have hQbr : ∀ h : Fin (hm1 + 1),
@@ -658,27 +559,10 @@ theorem mhsaBackGraphMH_faithful {Np1 hm1 d : Nat}
     rw [denseRowBack_headPad_eq "%Wv" Wv h
           (sdpa_back_V Np1 d (Qg h) (Kg h) (Vg h) (dAttg h)) _
           (sdpaBackVGraph_head_eq Qg Kg Vg dAttg h _ (hdAtt h))]
-  rw [show (∑ h : Fin (hm1 + 1),
-        ((den (SHlo.denseRowBack "%Wq" Wq (SHlo.headPadF h
-            (sdpaBackQGraph Np1 d _ (Mat.flatten (Kg h)) (Mat.flatten (Vg h))
-              (SHlo.headSliceF h _)))) j
-         + den (SHlo.denseRowBack "%Wk" Wk (SHlo.headPadF h
-            (sdpaBackKGraph Np1 d _ (Mat.flatten (Qg h)) (Mat.flatten (Vg h))
-              (SHlo.headSliceF h _)))) j)
-         + den (SHlo.denseRowBack "%Wv" Wv (SHlo.headPadF h
-            (sdpaBackVGraph Np1 d _ (SHlo.headSliceF h _)))) j))
-      = ∑ h : Fin (hm1 + 1),
-        ((Mat.flatten (fun r c => ∑ jj : Fin d, Wq c (finProdFinEquiv (h, jj)) *
-            sdpa_back_Q Np1 d (Qg h) (Kg h) (Vg h) (dAttg h) r jj) j
-          + Mat.flatten (fun r c => ∑ jj : Fin d, Wk c (finProdFinEquiv (h, jj)) *
-            sdpa_back_K Np1 d (Qg h) (Kg h) (Vg h) (dAttg h) r jj) j)
-          + Mat.flatten (fun r c => ∑ jj : Fin d, Wv c (finProdFinEquiv (h, jj)) *
-            sdpa_back_V Np1 d (Qg h) (Kg h) (Vg h) (dAttg h) r jj) j)
-      from by
-        apply Finset.sum_congr rfl; intro h _; rw [hQbr h, hKbr h, hVbr h]]
-  -- RHS: flatten of mhsaBackCollapsedMH = the per-head sum.
-  unfold mhsaBackCollapsedMH
-  unfold Mat.flatten
+  -- per head: the three branches are the flattened fan-in parts; then the RHS unfolds to the
+  -- same per-head sum
+  conv_lhs => arg 2; ext h; rw [hQbr h, hKbr h, hVbr h]
+  unfold mhsaBackCollapsedMH Mat.flatten
   rfl
 
 -- ════════════════════════════════════════════════════════════════

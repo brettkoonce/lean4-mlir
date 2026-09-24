@@ -5352,7 +5352,7 @@ See \leandocref{Proofs.R50FullBSeal.sealX\_backward\_nontrivial}.
 
 \begin{theorem}[ResNet-34 data-parallel step is one device's step at \(R \cdot N\)]
   \label{thm:resnet34_sync_tie}
-  \lean{Proofs.ResNet34SyncTieB.r34_net_syncTiedB}
+  \lean{Proofs.ResNet34SyncTieB.r34_net_syncTiedB, Proofs.ResNet34SyncTieB.r34_net_syncTiedB_smoothedCE}
   \leanok
   \uses{ax:conv2d, ax:conv2d_has_vjp3, ax:conv2d_weight_grad_has_vjp, ax:pdiv,
       ax:pdiv_reindex, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:dense_has_vjp,
@@ -8396,7 +8396,7 @@ See \leandocref{Proofs.EnetTiePoCG.efficientnet\_net\_tiedG}.
 
 \begin{theorem}[The data-parallel step is one device's step at \(R \cdot N\)]
   \label{thm:efficientnet_sync_tie}
-  \lean{Proofs.EnetSyncTieG.efficientnet_net_syncTiedG}
+  \lean{Proofs.EnetSyncTieG.efficientnet_net_syncTiedG, Proofs.EnetSyncTieG.efficientnet_net_syncTiedG_smoothedCE}
   \leanok
   \uses{ax:bnIstdBroadcast_diff, ax:conv2d, ax:conv2d_has_vjp3,
       ax:conv2d_weight_grad_has_vjp, ax:depthwiseConv2d, ax:depthwise_has_vjp3,

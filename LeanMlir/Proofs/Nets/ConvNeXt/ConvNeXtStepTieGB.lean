@@ -57,7 +57,8 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.CnxTiePoCGB
 
 open scoped BigOperators
-open Proofs.CnxTiePoC (cnxStemFwdO cnxBlockFwdChO cnxDownFwdChO cnxBlockCotInChAt cnxDownCotInChAt)
+open Proofs.CnxTiePoC (cnxStemFwdO cnxBlockFwdChO cnxDownFwdChO cnxBlockCotInChAt cnxDownCotInChAt
+  CnxTieWeights)
 
 /-! ## Per-example internal cotangents as functions of a block's INPUT
 
@@ -359,6 +360,27 @@ backward cotangents are `batchMapAux N` of the per-example chain, composed from 
 the eighteen identity-skip merges, the channel-LN-back at each of the three downsamples, and the
 stem LN's own back before the patchify conv's gradients. -/
 
+/-- The block's batched tie (`cnxBlockChTiedGBAt`), over its `CnxTieBlk` record. -/
+abbrev _root_.Proofs.CnxTiePoC.CnxTieBlk.TiedGB {c cExp h w : Nat} (p : CnxTiePoC.CnxTieBlk c cExp)
+    (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) : Prop :=
+  cnxBlockChTiedGBAt N xN epsStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL xin dyOut
+
+theorem _root_.Proofs.CnxTiePoC.CnxTieBlk.tiedGB {c cExp h w : Nat} (p : CnxTiePoC.CnxTieBlk c cExp)
+    (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) :
+    p.TiedGB N xN epsStr cotN ε xin dyOut :=
+  cnx_block_ch_tiedGBAt N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ xin dyOut
+
+/-- The downsample's batched tie (`cnxDownChTiedGBAt`), over its `CnxTieDown` record. -/
+abbrev _root_.Proofs.CnxTiePoC.CnxTieDown.TiedGB {ci co h w : Nat} (p : CnxTiePoC.CnxTieDown ci co)
+    (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin : Vec (N * (ci*(2*h)*(2*w))))
+    (dyOut : Vec (N * (co*h*w))) : Prop :=
+  cnxDownChTiedGBAt N xN epsStr cotN ε p.G p.T p.W p.B xin dyOut
+
+theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tiedGB {ci co h w : Nat} (p : CnxTiePoC.CnxTieDown ci co)
+    (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin : Vec (N * (ci*(2*h)*(2*w))))
+    (dyOut : Vec (N * (co*h*w))) : p.TiedGB N xN epsStr cotN ε xin dyOut :=
+  cnx_down_ch_tiedGBAt N xN epsStr cotN ε _ _ _ _ xin dyOut
+
 /-- ⭐⭐ **The whole [3,3,9,3] ConvNeXt-T train step, tied at the BATCHED index, the GRADIENT
     nodes and the SMOOTHED loss.** Threading the real channel-LN / per-channel layer-scale forward
     as `batchMap N` of the per-example prefixes, and the label-smoothed loss cotangent
@@ -380,137 +402,109 @@ stem LN's own back before the patchify conv's gradients. -/
     name. -/
 theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
     (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-    -- stem (c=96): patchify conv + its channel-LN
-    (Wst : Kernel4 96 3 4 4) (psb psng psnbt : Vec 96) (xstem : Vec (N * (3*56*56)))
-    -- stage 0 (c=96, cExp=384): blocks 1,2,3
-    (aW1 : DepthwiseKernel 96 7 7) (aB1 : Vec 96) (nG1 nB1 : Vec 96) (eW1 : Kernel4 384 96 1 1) (eB1 : Vec 384) (pW1 : Kernel4 96 384 1 1) (pB1 sL1 : Vec 96)
-    (aW2 : DepthwiseKernel 96 7 7) (aB2 : Vec 96) (nG2 nB2 : Vec 96) (eW2 : Kernel4 384 96 1 1) (eB2 : Vec 384) (pW2 : Kernel4 96 384 1 1) (pB2 sL2 : Vec 96)
-    (aW3 : DepthwiseKernel 96 7 7) (aB3 : Vec 96) (nG3 nB3 : Vec 96) (eW3 : Kernel4 384 96 1 1) (eB3 : Vec 384) (pW3 : Kernel4 96 384 1 1) (pB3 sL3 : Vec 96)
-    (dG0 dT0 : Vec 96) (dW0 : Kernel4 192 96 2 2) (dB0 : Vec 192)
-    -- stage 1 (c=192, cExp=768): blocks 4,5,6
-    (aW4 : DepthwiseKernel 192 7 7) (aB4 : Vec 192) (nG4 nB4 : Vec 192) (eW4 : Kernel4 768 192 1 1) (eB4 : Vec 768) (pW4 : Kernel4 192 768 1 1) (pB4 sL4 : Vec 192)
-    (aW5 : DepthwiseKernel 192 7 7) (aB5 : Vec 192) (nG5 nB5 : Vec 192) (eW5 : Kernel4 768 192 1 1) (eB5 : Vec 768) (pW5 : Kernel4 192 768 1 1) (pB5 sL5 : Vec 192)
-    (aW6 : DepthwiseKernel 192 7 7) (aB6 : Vec 192) (nG6 nB6 : Vec 192) (eW6 : Kernel4 768 192 1 1) (eB6 : Vec 768) (pW6 : Kernel4 192 768 1 1) (pB6 sL6 : Vec 192)
-    (dG1 dT1 : Vec 192) (dW1 : Kernel4 384 192 2 2) (dB1 : Vec 384)
-    -- stage 2 (c=384, cExp=1536): blocks 7..15
-    (aW7 : DepthwiseKernel 384 7 7) (aB7 : Vec 384) (nG7 nB7 : Vec 384) (eW7 : Kernel4 1536 384 1 1) (eB7 : Vec 1536) (pW7 : Kernel4 384 1536 1 1) (pB7 sL7 : Vec 384)
-    (aW8 : DepthwiseKernel 384 7 7) (aB8 : Vec 384) (nG8 nB8 : Vec 384) (eW8 : Kernel4 1536 384 1 1) (eB8 : Vec 1536) (pW8 : Kernel4 384 1536 1 1) (pB8 sL8 : Vec 384)
-    (aW9 : DepthwiseKernel 384 7 7) (aB9 : Vec 384) (nG9 nB9 : Vec 384) (eW9 : Kernel4 1536 384 1 1) (eB9 : Vec 1536) (pW9 : Kernel4 384 1536 1 1) (pB9 sL9 : Vec 384)
-    (aW10 : DepthwiseKernel 384 7 7) (aB10 : Vec 384) (nG10 nB10 : Vec 384) (eW10 : Kernel4 1536 384 1 1) (eB10 : Vec 1536) (pW10 : Kernel4 384 1536 1 1) (pB10 sL10 : Vec 384)
-    (aW11 : DepthwiseKernel 384 7 7) (aB11 : Vec 384) (nG11 nB11 : Vec 384) (eW11 : Kernel4 1536 384 1 1) (eB11 : Vec 1536) (pW11 : Kernel4 384 1536 1 1) (pB11 sL11 : Vec 384)
-    (aW12 : DepthwiseKernel 384 7 7) (aB12 : Vec 384) (nG12 nB12 : Vec 384) (eW12 : Kernel4 1536 384 1 1) (eB12 : Vec 1536) (pW12 : Kernel4 384 1536 1 1) (pB12 sL12 : Vec 384)
-    (aW13 : DepthwiseKernel 384 7 7) (aB13 : Vec 384) (nG13 nB13 : Vec 384) (eW13 : Kernel4 1536 384 1 1) (eB13 : Vec 1536) (pW13 : Kernel4 384 1536 1 1) (pB13 sL13 : Vec 384)
-    (aW14 : DepthwiseKernel 384 7 7) (aB14 : Vec 384) (nG14 nB14 : Vec 384) (eW14 : Kernel4 1536 384 1 1) (eB14 : Vec 1536) (pW14 : Kernel4 384 1536 1 1) (pB14 sL14 : Vec 384)
-    (aW15 : DepthwiseKernel 384 7 7) (aB15 : Vec 384) (nG15 nB15 : Vec 384) (eW15 : Kernel4 1536 384 1 1) (eB15 : Vec 1536) (pW15 : Kernel4 384 1536 1 1) (pB15 sL15 : Vec 384)
-    (dG2 dT2 : Vec 384) (dW2 : Kernel4 768 384 2 2) (dB2 : Vec 768)
-    -- stage 3 (c=768, cExp=3072): blocks 16,17,18
-    (aW16 : DepthwiseKernel 768 7 7) (aB16 : Vec 768) (nG16 nB16 : Vec 768) (eW16 : Kernel4 3072 768 1 1) (eB16 : Vec 3072) (pW16 : Kernel4 768 3072 1 1) (pB16 sL16 : Vec 768)
-    (aW17 : DepthwiseKernel 768 7 7) (aB17 : Vec 768) (nG17 nB17 : Vec 768) (eW17 : Kernel4 3072 768 1 1) (eB17 : Vec 3072) (pW17 : Kernel4 768 3072 1 1) (pB17 sL17 : Vec 768)
-    (aW18 : DepthwiseKernel 768 7 7) (aB18 : Vec 768) (nG18 nB18 : Vec 768) (eW18 : Kernel4 3072 768 1 1) (eB18 : Vec 3072) (pW18 : Kernel4 768 3072 1 1) (pB18 sL18 : Vec 768)
-    -- head
-    (hG hT : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC)
+    (w : CnxTieWeights nC) (xstem : Vec (N * (3*56*56)))
     (x : Vec (N * (3*224*224))) (t : Vec (N * nC)) :
     -- forward block inputs (the prefixes of the committed render's forward)
-    let ib1 : Vec (N * (96*56*56)) := batchMap N (cnxStemFwdO (h := 56) (w := 56) ε Wst psb psng psnbt) x
-    let ib2 : Vec (N * (96*56*56)) := batchMap N (cnxBlockFwdChO ε aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 sL1 ) ib1
-    let ib3 : Vec (N * (96*56*56)) := batchMap N (cnxBlockFwdChO ε aW2 aB2 nG2 nB2 eW2 eB2 pW2 pB2 sL2 ) ib2
-    let ibD0 : Vec (N * (96*56*56)) := batchMap N (cnxBlockFwdChO ε aW3 aB3 nG3 nB3 eW3 eB3 pW3 pB3 sL3 ) ib3
-    let ib4 : Vec (N * (192*28*28)) := batchMap N (cnxDownFwdChO (h := 28) (w := 28) ε dG0 dT0 dW0 dB0) ibD0
-    let ib5 : Vec (N * (192*28*28)) := batchMap N (cnxBlockFwdChO ε aW4 aB4 nG4 nB4 eW4 eB4 pW4 pB4 sL4 ) ib4
-    let ib6 : Vec (N * (192*28*28)) := batchMap N (cnxBlockFwdChO ε aW5 aB5 nG5 nB5 eW5 eB5 pW5 pB5 sL5 ) ib5
-    let ibD1 : Vec (N * (192*28*28)) := batchMap N (cnxBlockFwdChO ε aW6 aB6 nG6 nB6 eW6 eB6 pW6 pB6 sL6 ) ib6
-    let ib7 : Vec (N * (384*14*14)) := batchMap N (cnxDownFwdChO (h := 14) (w := 14) ε dG1 dT1 dW1 dB1) ibD1
-    let ib8 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW7 aB7 nG7 nB7 eW7 eB7 pW7 pB7 sL7 ) ib7
-    let ib9 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW8 aB8 nG8 nB8 eW8 eB8 pW8 pB8 sL8 ) ib8
-    let ib10 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW9 aB9 nG9 nB9 eW9 eB9 pW9 pB9 sL9 ) ib9
-    let ib11 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW10 aB10 nG10 nB10 eW10 eB10 pW10 pB10 sL10 ) ib10
-    let ib12 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW11 aB11 nG11 nB11 eW11 eB11 pW11 pB11 sL11 ) ib11
-    let ib13 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW12 aB12 nG12 nB12 eW12 eB12 pW12 pB12 sL12 ) ib12
-    let ib14 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW13 aB13 nG13 nB13 eW13 eB13 pW13 pB13 sL13 ) ib13
-    let ib15 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW14 aB14 nG14 nB14 eW14 eB14 pW14 pB14 sL14 ) ib14
-    let ibD2 : Vec (N * (384*14*14)) := batchMap N (cnxBlockFwdChO ε aW15 aB15 nG15 nB15 eW15 eB15 pW15 pB15 sL15 ) ib15
-    let ib16 : Vec (N * (768*7*7)) := batchMap N (cnxDownFwdChO (h := 7) (w := 7) ε dG2 dT2 dW2 dB2) ibD2
-    let ib17 : Vec (N * (768*7*7)) := batchMap N (cnxBlockFwdChO ε aW16 aB16 nG16 nB16 eW16 eB16 pW16 pB16 sL16 ) ib16
-    let ib18 : Vec (N * (768*7*7)) := batchMap N (cnxBlockFwdChO ε aW17 aB17 nG17 nB17 eW17 eB17 pW17 pB17 sL17 ) ib17
-    let xhead : Vec (N * (768*7*7)) := batchMap N (cnxBlockFwdChO ε aW18 aB18 nG18 nB18 eW18 eB18 pW18 pB18 sL18 ) ib18
+    let ib1 : Vec (N * (96*56*56)) := batchMap N (cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ) x
+    let ib2 : Vec (N * (96*56*56)) := batchMap N (w.b1.fwdO ε) ib1
+    let ib3 : Vec (N * (96*56*56)) := batchMap N (w.b2.fwdO ε) ib2
+    let ibD0 : Vec (N * (96*56*56)) := batchMap N (w.b3.fwdO ε) ib3
+    let ib4 : Vec (N * (192*28*28)) := batchMap N (w.d0.fwdO (h := 28) (w := 28) ε) ibD0
+    let ib5 : Vec (N * (192*28*28)) := batchMap N (w.b4.fwdO ε) ib4
+    let ib6 : Vec (N * (192*28*28)) := batchMap N (w.b5.fwdO ε) ib5
+    let ibD1 : Vec (N * (192*28*28)) := batchMap N (w.b6.fwdO ε) ib6
+    let ib7 : Vec (N * (384*14*14)) := batchMap N (w.d1.fwdO (h := 14) (w := 14) ε) ibD1
+    let ib8 : Vec (N * (384*14*14)) := batchMap N (w.b7.fwdO ε) ib7
+    let ib9 : Vec (N * (384*14*14)) := batchMap N (w.b8.fwdO ε) ib8
+    let ib10 : Vec (N * (384*14*14)) := batchMap N (w.b9.fwdO ε) ib9
+    let ib11 : Vec (N * (384*14*14)) := batchMap N (w.b10.fwdO ε) ib10
+    let ib12 : Vec (N * (384*14*14)) := batchMap N (w.b11.fwdO ε) ib11
+    let ib13 : Vec (N * (384*14*14)) := batchMap N (w.b12.fwdO ε) ib12
+    let ib14 : Vec (N * (384*14*14)) := batchMap N (w.b13.fwdO ε) ib13
+    let ib15 : Vec (N * (384*14*14)) := batchMap N (w.b14.fwdO ε) ib14
+    let ibD2 : Vec (N * (384*14*14)) := batchMap N (w.b15.fwdO ε) ib15
+    let ib16 : Vec (N * (768*7*7)) := batchMap N (w.d2.fwdO (h := 7) (w := 7) ε) ibD2
+    let ib17 : Vec (N * (768*7*7)) := batchMap N (w.b16.fwdO ε) ib16
+    let ib18 : Vec (N * (768*7*7)) := batchMap N (w.b17.fwdO ε) ib17
+    let xhead : Vec (N * (768*7*7)) := batchMap N (w.b18.fwdO ε) ib18
     -- head forward + the SMOOTHED loss cotangent, at a general target `t`
     let gapB    : Vec (N * (1*768)) := batchMap N (globalAvgPoolFlat 768 7 7) xhead
-    let hnB     : Vec (N * 768)     := batchMap N (rowLNVecFlat 1 768 ε hG hT) gapB
-    let logitsB : Vec (N * nC)      := batchMap N (dense Wfc bfc) hnB
+    let hnB     : Vec (N * 768)     := batchMap N (rowLNVecFlat 1 768 ε w.hG w.hT) gapB
+    let logitsB : Vec (N * nC)      := batchMap N (dense w.Wfc w.bfc) hnB
     let g       : Vec (N * nC)      :=
       den (smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN logitsB t)
     -- backward cotangents (composed from the loss; residual fan-in at each skip, LN-back at each
     -- downsample and at the stem)
-    let dyO18 : Vec (N * (768*7*7)) := batchMapAux N (cnxHeadDyXheadChN (h := 7) (w := 7) ε hG hT Wfc bfc) xhead g
-    let dyO17 : Vec (N * (768*7*7)) := batchMapAux N (cnxBlockCotInChAt ε aW18 aB18 nG18 nB18 eW18 eB18 pW18 pB18 sL18 ) ib18 dyO18
-    let dyO16 : Vec (N * (768*7*7)) := batchMapAux N (cnxBlockCotInChAt ε aW17 aB17 nG17 nB17 eW17 eB17 pW17 pB17 sL17 ) ib17 dyO17
-    let dyD2 : Vec (N * (768*7*7)) := batchMapAux N (cnxBlockCotInChAt ε aW16 aB16 nG16 nB16 eW16 eB16 pW16 pB16 sL16 ) ib16 dyO16
-    let dyO15 : Vec (N * (384*14*14)) := batchMapAux N (cnxDownCotInChAt (h := 7) (w := 7) ε dG2 dT2 dW2 dB2) ibD2 dyD2
-    let dyO14 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW15 aB15 nG15 nB15 eW15 eB15 pW15 pB15 sL15 ) ib15 dyO15
-    let dyO13 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW14 aB14 nG14 nB14 eW14 eB14 pW14 pB14 sL14 ) ib14 dyO14
-    let dyO12 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW13 aB13 nG13 nB13 eW13 eB13 pW13 pB13 sL13 ) ib13 dyO13
-    let dyO11 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW12 aB12 nG12 nB12 eW12 eB12 pW12 pB12 sL12 ) ib12 dyO12
-    let dyO10 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW11 aB11 nG11 nB11 eW11 eB11 pW11 pB11 sL11 ) ib11 dyO11
-    let dyO9 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW10 aB10 nG10 nB10 eW10 eB10 pW10 pB10 sL10 ) ib10 dyO10
-    let dyO8 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW9 aB9 nG9 nB9 eW9 eB9 pW9 pB9 sL9 ) ib9 dyO9
-    let dyO7 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW8 aB8 nG8 nB8 eW8 eB8 pW8 pB8 sL8 ) ib8 dyO8
-    let dyD1 : Vec (N * (384*14*14)) := batchMapAux N (cnxBlockCotInChAt ε aW7 aB7 nG7 nB7 eW7 eB7 pW7 pB7 sL7 ) ib7 dyO7
-    let dyO6 : Vec (N * (192*28*28)) := batchMapAux N (cnxDownCotInChAt (h := 14) (w := 14) ε dG1 dT1 dW1 dB1) ibD1 dyD1
-    let dyO5 : Vec (N * (192*28*28)) := batchMapAux N (cnxBlockCotInChAt ε aW6 aB6 nG6 nB6 eW6 eB6 pW6 pB6 sL6 ) ib6 dyO6
-    let dyO4 : Vec (N * (192*28*28)) := batchMapAux N (cnxBlockCotInChAt ε aW5 aB5 nG5 nB5 eW5 eB5 pW5 pB5 sL5 ) ib5 dyO5
-    let dyD0 : Vec (N * (192*28*28)) := batchMapAux N (cnxBlockCotInChAt ε aW4 aB4 nG4 nB4 eW4 eB4 pW4 pB4 sL4 ) ib4 dyO4
-    let dyO3 : Vec (N * (96*56*56)) := batchMapAux N (cnxDownCotInChAt (h := 28) (w := 28) ε dG0 dT0 dW0 dB0) ibD0 dyD0
-    let dyO2 : Vec (N * (96*56*56)) := batchMapAux N (cnxBlockCotInChAt ε aW3 aB3 nG3 nB3 eW3 eB3 pW3 pB3 sL3 ) ib3 dyO3
-    let dyO1 : Vec (N * (96*56*56)) := batchMapAux N (cnxBlockCotInChAt ε aW2 aB2 nG2 nB2 eW2 eB2 pW2 pB2 sL2 ) ib2 dyO2
-    let dyStem : Vec (N * (96*56*56)) := batchMapAux N (cnxBlockCotInChAt ε aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 sL1 ) ib1 dyO1
+    let dyO18 : Vec (N * (768*7*7)) := batchMapAux N (cnxHeadDyXheadChN (h := 7) (w := 7) ε w.hG w.hT w.Wfc w.bfc) xhead g
+    let dyO17 : Vec (N * (768*7*7)) := batchMapAux N (w.b18.cotIn ε) ib18 dyO18
+    let dyO16 : Vec (N * (768*7*7)) := batchMapAux N (w.b17.cotIn ε) ib17 dyO17
+    let dyD2 : Vec (N * (768*7*7)) := batchMapAux N (w.b16.cotIn ε) ib16 dyO16
+    let dyO15 : Vec (N * (384*14*14)) := batchMapAux N (w.d2.cotIn (h := 7) (w := 7) ε) ibD2 dyD2
+    let dyO14 : Vec (N * (384*14*14)) := batchMapAux N (w.b15.cotIn ε) ib15 dyO15
+    let dyO13 : Vec (N * (384*14*14)) := batchMapAux N (w.b14.cotIn ε) ib14 dyO14
+    let dyO12 : Vec (N * (384*14*14)) := batchMapAux N (w.b13.cotIn ε) ib13 dyO13
+    let dyO11 : Vec (N * (384*14*14)) := batchMapAux N (w.b12.cotIn ε) ib12 dyO12
+    let dyO10 : Vec (N * (384*14*14)) := batchMapAux N (w.b11.cotIn ε) ib11 dyO11
+    let dyO9 : Vec (N * (384*14*14)) := batchMapAux N (w.b10.cotIn ε) ib10 dyO10
+    let dyO8 : Vec (N * (384*14*14)) := batchMapAux N (w.b9.cotIn ε) ib9 dyO9
+    let dyO7 : Vec (N * (384*14*14)) := batchMapAux N (w.b8.cotIn ε) ib8 dyO8
+    let dyD1 : Vec (N * (384*14*14)) := batchMapAux N (w.b7.cotIn ε) ib7 dyO7
+    let dyO6 : Vec (N * (192*28*28)) := batchMapAux N (w.d1.cotIn (h := 14) (w := 14) ε) ibD1 dyD1
+    let dyO5 : Vec (N * (192*28*28)) := batchMapAux N (w.b6.cotIn ε) ib6 dyO6
+    let dyO4 : Vec (N * (192*28*28)) := batchMapAux N (w.b5.cotIn ε) ib5 dyO5
+    let dyD0 : Vec (N * (192*28*28)) := batchMapAux N (w.b4.cotIn ε) ib4 dyO4
+    let dyO3 : Vec (N * (96*56*56)) := batchMapAux N (w.d0.cotIn (h := 28) (w := 28) ε) ibD0 dyD0
+    let dyO2 : Vec (N * (96*56*56)) := batchMapAux N (w.b3.cotIn ε) ib3 dyO3
+    let dyO1 : Vec (N * (96*56*56)) := batchMapAux N (w.b2.cotIn ε) ib2 dyO2
+    let dyStem : Vec (N * (96*56*56)) := batchMapAux N (w.b1.cotIn ε) ib1 dyO1
     -- the stem, every block, every downsample, the head, the dense total-loss fold + loss cot
-    cnxStemChTiedGBAt N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 sL1 ib1 dyO1
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW2 aB2 nG2 nB2 eW2 eB2 pW2 pB2 sL2 ib2 dyO2
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW3 aB3 nG3 nB3 eW3 eB3 pW3 pB3 sL3 ib3 dyO3
-  ∧ cnxDownChTiedGBAt N xN epsStr cotN ε dG0 dT0 dW0 dB0 ibD0 dyD0
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW4 aB4 nG4 nB4 eW4 eB4 pW4 pB4 sL4 ib4 dyO4
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW5 aB5 nG5 nB5 eW5 eB5 pW5 pB5 sL5 ib5 dyO5
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW6 aB6 nG6 nB6 eW6 eB6 pW6 pB6 sL6 ib6 dyO6
-  ∧ cnxDownChTiedGBAt N xN epsStr cotN ε dG1 dT1 dW1 dB1 ibD1 dyD1
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW7 aB7 nG7 nB7 eW7 eB7 pW7 pB7 sL7 ib7 dyO7
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW8 aB8 nG8 nB8 eW8 eB8 pW8 pB8 sL8 ib8 dyO8
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW9 aB9 nG9 nB9 eW9 eB9 pW9 pB9 sL9 ib9 dyO9
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW10 aB10 nG10 nB10 eW10 eB10 pW10 pB10 sL10 ib10 dyO10
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW11 aB11 nG11 nB11 eW11 eB11 pW11 pB11 sL11 ib11 dyO11
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW12 aB12 nG12 nB12 eW12 eB12 pW12 pB12 sL12 ib12 dyO12
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW13 aB13 nG13 nB13 eW13 eB13 pW13 pB13 sL13 ib13 dyO13
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW14 aB14 nG14 nB14 eW14 eB14 pW14 pB14 sL14 ib14 dyO14
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW15 aB15 nG15 nB15 eW15 eB15 pW15 pB15 sL15 ib15 dyO15
-  ∧ cnxDownChTiedGBAt N xN epsStr cotN ε dG2 dT2 dW2 dB2 ibD2 dyD2
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW16 aB16 nG16 nB16 eW16 eB16 pW16 pB16 sL16 ib16 dyO16
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW17 aB17 nG17 nB17 eW17 eB17 pW17 pB17 sL17 ib17 dyO17
-  ∧ cnxBlockChTiedGBAt N xN epsStr cotN ε aW18 aB18 nG18 nB18 eW18 eB18 pW18 pB18 sL18 ib18 dyO18
-  ∧ cnxHeadChTiedGBAt N xN epsStr cotN dN ε hG hT Wfc bfc xhead g := by
+    cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem
+  ∧ w.b1.TiedGB N xN epsStr cotN ε ib1 dyO1
+  ∧ w.b2.TiedGB N xN epsStr cotN ε ib2 dyO2
+  ∧ w.b3.TiedGB N xN epsStr cotN ε ib3 dyO3
+  ∧ w.d0.TiedGB N xN epsStr cotN ε ibD0 dyD0
+  ∧ w.b4.TiedGB N xN epsStr cotN ε ib4 dyO4
+  ∧ w.b5.TiedGB N xN epsStr cotN ε ib5 dyO5
+  ∧ w.b6.TiedGB N xN epsStr cotN ε ib6 dyO6
+  ∧ w.d1.TiedGB N xN epsStr cotN ε ibD1 dyD1
+  ∧ w.b7.TiedGB N xN epsStr cotN ε ib7 dyO7
+  ∧ w.b8.TiedGB N xN epsStr cotN ε ib8 dyO8
+  ∧ w.b9.TiedGB N xN epsStr cotN ε ib9 dyO9
+  ∧ w.b10.TiedGB N xN epsStr cotN ε ib10 dyO10
+  ∧ w.b11.TiedGB N xN epsStr cotN ε ib11 dyO11
+  ∧ w.b12.TiedGB N xN epsStr cotN ε ib12 dyO12
+  ∧ w.b13.TiedGB N xN epsStr cotN ε ib13 dyO13
+  ∧ w.b14.TiedGB N xN epsStr cotN ε ib14 dyO14
+  ∧ w.b15.TiedGB N xN epsStr cotN ε ib15 dyO15
+  ∧ w.d2.TiedGB N xN epsStr cotN ε ibD2 dyD2
+  ∧ w.b16.TiedGB N xN epsStr cotN ε ib16 dyO16
+  ∧ w.b17.TiedGB N xN epsStr cotN ε ib17 dyO17
+  ∧ w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18
+  ∧ cnxHeadChTiedGBAt N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g := by
   intro ib1 ib2 ib3 ibD0 ib4 ib5 ib6 ibD1 ib7 ib8 ib9 ib10 ib11 ib12 ib13 ib14 ib15 ibD2 ib16 ib17 ib18 xhead gapB hnB logitsB g dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
-  refine ⟨cnx_stem_ch_tiedGBAt N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem,
+  refine ⟨cnx_stem_ch_tiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 sL1 ib1 dyO1
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW2 aB2 nG2 nB2 eW2 eB2 pW2 pB2 sL2 ib2 dyO2
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW3 aB3 nG3 nB3 eW3 eB3 pW3 pB3 sL3 ib3 dyO3
-  · exact cnx_down_ch_tiedGBAt N xN epsStr cotN ε dG0 dT0 dW0 dB0 ibD0 dyD0
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW4 aB4 nG4 nB4 eW4 eB4 pW4 pB4 sL4 ib4 dyO4
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW5 aB5 nG5 nB5 eW5 eB5 pW5 pB5 sL5 ib5 dyO5
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW6 aB6 nG6 nB6 eW6 eB6 pW6 pB6 sL6 ib6 dyO6
-  · exact cnx_down_ch_tiedGBAt N xN epsStr cotN ε dG1 dT1 dW1 dB1 ibD1 dyD1
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW7 aB7 nG7 nB7 eW7 eB7 pW7 pB7 sL7 ib7 dyO7
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW8 aB8 nG8 nB8 eW8 eB8 pW8 pB8 sL8 ib8 dyO8
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW9 aB9 nG9 nB9 eW9 eB9 pW9 pB9 sL9 ib9 dyO9
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW10 aB10 nG10 nB10 eW10 eB10 pW10 pB10 sL10 ib10 dyO10
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW11 aB11 nG11 nB11 eW11 eB11 pW11 pB11 sL11 ib11 dyO11
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW12 aB12 nG12 nB12 eW12 eB12 pW12 pB12 sL12 ib12 dyO12
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW13 aB13 nG13 nB13 eW13 eB13 pW13 pB13 sL13 ib13 dyO13
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW14 aB14 nG14 nB14 eW14 eB14 pW14 pB14 sL14 ib14 dyO14
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW15 aB15 nG15 nB15 eW15 eB15 pW15 pB15 sL15 ib15 dyO15
-  · exact cnx_down_ch_tiedGBAt N xN epsStr cotN ε dG2 dT2 dW2 dB2 ibD2 dyD2
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW16 aB16 nG16 nB16 eW16 eB16 pW16 pB16 sL16 ib16 dyO16
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW17 aB17 nG17 nB17 eW17 eB17 pW17 pB17 sL17 ib17 dyO17
-  · exact cnx_block_ch_tiedGBAt N xN epsStr cotN ε aW18 aB18 nG18 nB18 eW18 eB18 pW18 pB18 sL18 ib18 dyO18
-  · exact cnx_head_ch_tiedGBAt N xN epsStr cotN dN ε hG hT Wfc bfc xhead g
+  · exact w.b1.tiedGB N xN epsStr cotN ε ib1 dyO1
+  · exact w.b2.tiedGB N xN epsStr cotN ε ib2 dyO2
+  · exact w.b3.tiedGB N xN epsStr cotN ε ib3 dyO3
+  · exact w.d0.tiedGB N xN epsStr cotN ε ibD0 dyD0
+  · exact w.b4.tiedGB N xN epsStr cotN ε ib4 dyO4
+  · exact w.b5.tiedGB N xN epsStr cotN ε ib5 dyO5
+  · exact w.b6.tiedGB N xN epsStr cotN ε ib6 dyO6
+  · exact w.d1.tiedGB N xN epsStr cotN ε ibD1 dyD1
+  · exact w.b7.tiedGB N xN epsStr cotN ε ib7 dyO7
+  · exact w.b8.tiedGB N xN epsStr cotN ε ib8 dyO8
+  · exact w.b9.tiedGB N xN epsStr cotN ε ib9 dyO9
+  · exact w.b10.tiedGB N xN epsStr cotN ε ib10 dyO10
+  · exact w.b11.tiedGB N xN epsStr cotN ε ib11 dyO11
+  · exact w.b12.tiedGB N xN epsStr cotN ε ib12 dyO12
+  · exact w.b13.tiedGB N xN epsStr cotN ε ib13 dyO13
+  · exact w.b14.tiedGB N xN epsStr cotN ε ib14 dyO14
+  · exact w.b15.tiedGB N xN epsStr cotN ε ib15 dyO15
+  · exact w.d2.tiedGB N xN epsStr cotN ε ibD2 dyD2
+  · exact w.b16.tiedGB N xN epsStr cotN ε ib16 dyO16
+  · exact w.b17.tiedGB N xN epsStr cotN ε ib17 dyO17
+  · exact w.b18.tiedGB N xN epsStr cotN ε ib18 dyO18
+  · exact cnx_head_ch_tiedGBAt N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g
 
 end Proofs.CnxTiePoCGB

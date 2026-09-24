@@ -329,7 +329,7 @@ noncomputable def mlp_has_vjp_at {d₀ d₁ d₂ d₃ : Nat}
     HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x :=
   let dn := fun {a c : Nat} (W : Mat a c) (b : Vec c) (y : Vec a) =>
     (⟨(dense_has_vjp W b).toHasVJPAt y, dense_differentiable W b y⟩ :
-      PProd (HasVJPAt (dense W b) y) (DifferentiableAt ℝ (dense W b) y))
+      HasVJPDiffAt (dense W b) y)
   (vjp_comp_diff_at _ _ x
     (vjp_comp_diff_at _ _ x
       (vjp_comp_diff_at _ _ x

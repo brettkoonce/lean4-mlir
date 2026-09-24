@@ -73,7 +73,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 
 **Next session, in order** (§3.1–§3.7 are done; §5 has the detail):
 
-§6 (re-audit 2026-09-24): batches 1 and 2 (§6.2, §6.3) done; §6.4 is what is left from it. Before §6 there was no main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
+§6 (re-audit 2026-09-24): §6.2–§6.4 done. Before §6 there was no main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
 [`certlayer_nets.md`](certlayer_nets.md): whole nets as one `CertLayer`, which would retire the
 `r34PreK`/`r50PreK`/`mnv2PreBK` chains and bundles outright (§3.1's vocabulary item folds into it).
 Also open, not measured: §3.6's `IsShardwise`.
@@ -322,9 +322,34 @@ Planned:
 * StableHLOPretty's `#eval` writers (and three stray `/tmp` writers) → a leaf, as CnnArtifacts.
 * Bf16GradNodes' nine near-identical `_den` bodies; six `*LossCot_den` copies (LinearTrainStep).
 
-### 6.4 Medium, later
+### 6.4 Medium (done, see the result list below)
 
-ViTBackB0 `mhsaClean_backward_collapseMH` (144 → ~40 lines); ConvNeXt/ViT ties' ~200 binders onto
+Result, all statements checked by the tier regen + comparator:
+
+* `pdiv_bnIstdBroadcast` (BatchNorm) 176 → 79 lines: `bnCenterCLM` (+ `_apply`, `_basisVec`),
+  `sum_sub_bnMean`, `bnVarDeriv`, `bnVar_hasFDerivAt`, `bnVarDeriv_basisVec`; the nine
+  CLM-coercion `show`s are gone.
+* ViTBackB0 −116 lines: `sdpaBackSel` (entrywise — an `ite` of matrices applied to `r j` is not
+  defeq to the `ite` of entries), `mhsa_g_backward_eq_sel`, `mhsa_proj_c_qkv_slab` (one lemma for
+  `hproj0/1/2`), `mhsaClean_backward_apply` (`rfl`, replaces the two bare `show`s),
+  `qkv_back_fanin_MH` over a selector family; `mhsaBackGraphMH_faithful` loses its 12-line `show`
+  and 20-line `rw [show …]` to a `conv_lhs => arg 2; ext h; rw [...]`.
+* `abbrev HasVJPDiffAt` in `Tensor.lean` (with `vjp_comp_diff_at` stated over it): 253 binder
+  pairs across the four whole-back ties, the two FullBVJP files and MLP; none reach the tier.
+  `pdiv_eq_fderiv_coord` moved to `Tensor.lean` in the same root batch; BatchNorm uses it.
+* MNv2 / MNv4 whole-back ties peel (`mobilenetv2PaperPC_has_vjp_at_backward`,
+  `mnv4B_full_has_vjp_at_backward`, generated from the apex binder lists, `rfl` at variable
+  stages); every whole-back tie now closes the same way.
+* R34 / EfficientNet sync apexes on the free-`G` shape: `r34NetSyncTiedB` / `enetNetSyncTiedG`
+  (the latter takes `hεw`, its chain's VJP witnesses need it) + `_smoothedCE` corollaries
+  (EfficientNet's states the forward as `efficientnetForwardB_full`, defeq to the `let` chain).
+* ConvNeXt / ViT ties over records: `CnxTieBlk` / `CnxTieDown` / `CnxTieWeights` (ε-free — the
+  ties share one `ε`) and `ViTTieWeights` over ViTDepthK's `BlockParamsV`; dot-notation `abbrev`
+  wrappers (`w.b7.fwdO ε`, `w.b7.cotIn ε`, `w.b7.TiedAt …`, `w.b7.tiedGB …`) over the
+  `@[irreducible]` constructors, so each 9- / 16-argument run is one term. ViTStepTie now imports
+  ViTDepthK (adds that one module).
+
+Was: ViTBackB0 `mhsaClean_backward_collapseMH` (144 → ~40 lines); ConvNeXt/ViT ties' ~200 binders onto
 the existing weight records; R34/EffNet sync apexes onto the free-`G` shape (tier regen);
 `abbrev HasVJPDiffAt` (257 binders, tier regen); `pdiv_bnIstdBroadcast` (~175 lines).
 

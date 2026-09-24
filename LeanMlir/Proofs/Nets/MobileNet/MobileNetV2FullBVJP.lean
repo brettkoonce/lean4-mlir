@@ -347,61 +347,59 @@ structure MNV2SmoothAtB (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     apex is `.fst`, `mobilenetv2ForwardB_full_differentiableAt` is `.snd`. -/
 private noncomputable def mnv2ChainB (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) :
-    PProd (HasVJPAt (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x)
-      (DifferentiableAt ℝ (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w)
-        x) :=
-  let p0 : PProd (HasVJPAt (mnv2PreB0 N w) x) (DifferentiableAt ℝ (mnv2PreB0 N w) x) :=
+    HasVJPDiffAt (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x :=
+  let p0 : HasVJPDiffAt (mnv2PreB0 N w) x :=
     ⟨mnv2StemB_has_vjp_at N 112 112 w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem,
       mnv2StemB_differentiableAt N 112 112 w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem⟩
-  let p1 : PProd (HasVJPAt (mnv2PreB1 N w) x) (DifferentiableAt ℝ (mnv2PreB1 N w) x) :=
+  let p1 : HasVJPDiffAt (mnv2PreB1 N w) x :=
     vjp_comp_diff_at _ _ x p0 ⟨mnv2NoExpB_has_vjp_at N 112 112 w.b1 hq.b1 _ hx.b1,
       mnv2NoExpB_differentiableAt N 112 112 w.b1 hq.b1 _ hx.b1⟩
-  let p2 : PProd (HasVJPAt (mnv2PreB2 N w) x) (DifferentiableAt ℝ (mnv2PreB2 N w) x) :=
+  let p2 : HasVJPDiffAt (mnv2PreB2 N w) x :=
     vjp_comp_diff_at _ _ x p1 ⟨mnv2StridedB_has_vjp_at N 56 56 w.b2 hq.b2 _ hx.b2,
       mnv2StridedB_differentiableAt N 56 56 w.b2 hq.b2 _ hx.b2⟩
-  let p3 : PProd (HasVJPAt (mnv2PreB3 N w) x) (DifferentiableAt ℝ (mnv2PreB3 N w) x) :=
+  let p3 : HasVJPDiffAt (mnv2PreB3 N w) x :=
     vjp_comp_diff_at _ _ x p2 ⟨mnv2ResidB_has_vjp_at N 56 56 w.b3 hq.b3 _ hx.b3,
       mnv2ResidB_differentiableAt N 56 56 w.b3 hq.b3 _ hx.b3⟩
-  let p4 : PProd (HasVJPAt (mnv2PreB4 N w) x) (DifferentiableAt ℝ (mnv2PreB4 N w) x) :=
+  let p4 : HasVJPDiffAt (mnv2PreB4 N w) x :=
     vjp_comp_diff_at _ _ x p3 ⟨mnv2StridedB_has_vjp_at N 28 28 w.b4 hq.b4 _ hx.b4,
       mnv2StridedB_differentiableAt N 28 28 w.b4 hq.b4 _ hx.b4⟩
-  let p5 : PProd (HasVJPAt (mnv2PreB5 N w) x) (DifferentiableAt ℝ (mnv2PreB5 N w) x) :=
+  let p5 : HasVJPDiffAt (mnv2PreB5 N w) x :=
     vjp_comp_diff_at _ _ x p4 ⟨mnv2ResidB_has_vjp_at N 28 28 w.b5 hq.b5 _ hx.b5,
       mnv2ResidB_differentiableAt N 28 28 w.b5 hq.b5 _ hx.b5⟩
-  let p6 : PProd (HasVJPAt (mnv2PreB6 N w) x) (DifferentiableAt ℝ (mnv2PreB6 N w) x) :=
+  let p6 : HasVJPDiffAt (mnv2PreB6 N w) x :=
     vjp_comp_diff_at _ _ x p5 ⟨mnv2ResidB_has_vjp_at N 28 28 w.b6 hq.b6 _ hx.b6,
       mnv2ResidB_differentiableAt N 28 28 w.b6 hq.b6 _ hx.b6⟩
-  let p7 : PProd (HasVJPAt (mnv2PreB7 N w) x) (DifferentiableAt ℝ (mnv2PreB7 N w) x) :=
+  let p7 : HasVJPDiffAt (mnv2PreB7 N w) x :=
     vjp_comp_diff_at _ _ x p6 ⟨mnv2StridedB_has_vjp_at N 14 14 w.b7 hq.b7 _ hx.b7,
       mnv2StridedB_differentiableAt N 14 14 w.b7 hq.b7 _ hx.b7⟩
-  let p8 : PProd (HasVJPAt (mnv2PreB8 N w) x) (DifferentiableAt ℝ (mnv2PreB8 N w) x) :=
+  let p8 : HasVJPDiffAt (mnv2PreB8 N w) x :=
     vjp_comp_diff_at _ _ x p7 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b8 hq.b8 _ hx.b8,
       mnv2ResidB_differentiableAt N 14 14 w.b8 hq.b8 _ hx.b8⟩
-  let p9 : PProd (HasVJPAt (mnv2PreB9 N w) x) (DifferentiableAt ℝ (mnv2PreB9 N w) x) :=
+  let p9 : HasVJPDiffAt (mnv2PreB9 N w) x :=
     vjp_comp_diff_at _ _ x p8 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b9 hq.b9 _ hx.b9,
       mnv2ResidB_differentiableAt N 14 14 w.b9 hq.b9 _ hx.b9⟩
-  let p10 : PProd (HasVJPAt (mnv2PreB10 N w) x) (DifferentiableAt ℝ (mnv2PreB10 N w) x) :=
+  let p10 : HasVJPDiffAt (mnv2PreB10 N w) x :=
     vjp_comp_diff_at _ _ x p9 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b10 hq.b10 _ hx.b10,
       mnv2ResidB_differentiableAt N 14 14 w.b10 hq.b10 _ hx.b10⟩
-  let p11 : PProd (HasVJPAt (mnv2PreB11 N w) x) (DifferentiableAt ℝ (mnv2PreB11 N w) x) :=
+  let p11 : HasVJPDiffAt (mnv2PreB11 N w) x :=
     vjp_comp_diff_at _ _ x p10 ⟨mnv2ExpOnlyB_has_vjp_at N 14 14 w.b11 hq.b11 _ hx.b11,
       mnv2ExpOnlyB_differentiableAt N 14 14 w.b11 hq.b11 _ hx.b11⟩
-  let p12 : PProd (HasVJPAt (mnv2PreB12 N w) x) (DifferentiableAt ℝ (mnv2PreB12 N w) x) :=
+  let p12 : HasVJPDiffAt (mnv2PreB12 N w) x :=
     vjp_comp_diff_at _ _ x p11 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b12 hq.b12 _ hx.b12,
       mnv2ResidB_differentiableAt N 14 14 w.b12 hq.b12 _ hx.b12⟩
-  let p13 : PProd (HasVJPAt (mnv2PreB13 N w) x) (DifferentiableAt ℝ (mnv2PreB13 N w) x) :=
+  let p13 : HasVJPDiffAt (mnv2PreB13 N w) x :=
     vjp_comp_diff_at _ _ x p12 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b13 hq.b13 _ hx.b13,
       mnv2ResidB_differentiableAt N 14 14 w.b13 hq.b13 _ hx.b13⟩
-  let p14 : PProd (HasVJPAt (mnv2PreB14 N w) x) (DifferentiableAt ℝ (mnv2PreB14 N w) x) :=
+  let p14 : HasVJPDiffAt (mnv2PreB14 N w) x :=
     vjp_comp_diff_at _ _ x p13 ⟨mnv2StridedB_has_vjp_at N 7 7 w.b14 hq.b14 _ hx.b14,
       mnv2StridedB_differentiableAt N 7 7 w.b14 hq.b14 _ hx.b14⟩
-  let p15 : PProd (HasVJPAt (mnv2PreB15 N w) x) (DifferentiableAt ℝ (mnv2PreB15 N w) x) :=
+  let p15 : HasVJPDiffAt (mnv2PreB15 N w) x :=
     vjp_comp_diff_at _ _ x p14 ⟨mnv2ResidB_has_vjp_at N 7 7 w.b15 hq.b15 _ hx.b15,
       mnv2ResidB_differentiableAt N 7 7 w.b15 hq.b15 _ hx.b15⟩
-  let p16 : PProd (HasVJPAt (mnv2PreB16 N w) x) (DifferentiableAt ℝ (mnv2PreB16 N w) x) :=
+  let p16 : HasVJPDiffAt (mnv2PreB16 N w) x :=
     vjp_comp_diff_at _ _ x p15 ⟨mnv2ResidB_has_vjp_at N 7 7 w.b16 hq.b16 _ hx.b16,
       mnv2ResidB_differentiableAt N 7 7 w.b16 hq.b16 _ hx.b16⟩
-  let p17 : PProd (HasVJPAt (mnv2PreB17 N w) x) (DifferentiableAt ℝ (mnv2PreB17 N w) x) :=
+  let p17 : HasVJPDiffAt (mnv2PreB17 N w) x :=
     vjp_comp_diff_at _ _ x p16 ⟨mnv2ExpOnlyB_has_vjp_at N 7 7 w.b17 hq.b17 _ hx.b17,
       mnv2ExpOnlyB_differentiableAt N 7 7 w.b17 hq.b17 _ hx.b17⟩
   vjp_comp_diff_at _ _ x p17

@@ -231,165 +231,7 @@ theorem chk_r50_net_tiedB :
 /-- `Proofs.ViTTiePoC.vit_net_tied_certified` -/
 theorem chk_vit_net_tied_certified :
     ∀ (xN wN bN gN aN clsN pN epsStr lrStr cotN : String) (ε : Real)
-      (Wc :
-        Proofs.Kernel4 (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
-          (@OfNat.ofNat Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))
-          (@OfNat.ofNat Nat (nat_lit 16) (instOfNatNat (nat_lit 16))))
-      (bc cls : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (pos :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (γF βF : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (Wcls :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))))
-      (bcls : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))))
-      (lnG1_1 lnB1_1 lnG2_1 lnB2_1 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_1 mWk_1 mWv_1 mWo_1 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_1 mbk_1 mbv_1 mbo_1 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_1 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_1 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_1 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_1 lnG1_2 lnB1_2 lnG2_2 lnB2_2 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_2 mWk_2 mWv_2 mWo_2 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_2 mbk_2 mbv_2 mbo_2 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_2 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_2 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_2 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_2 lnG1_3 lnB1_3 lnG2_3 lnB2_3 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_3 mWk_3 mWv_3 mWo_3 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_3 mbk_3 mbv_3 mbo_3 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_3 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_3 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_3 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_3 lnG1_4 lnB1_4 lnG2_4 lnB2_4 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_4 mWk_4 mWv_4 mWo_4 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_4 mbk_4 mbv_4 mbo_4 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_4 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_4 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_4 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_4 lnG1_5 lnB1_5 lnG2_5 lnB2_5 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_5 mWk_5 mWv_5 mWo_5 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_5 mbk_5 mbv_5 mbo_5 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_5 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_5 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_5 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_5 lnG1_6 lnB1_6 lnG2_6 lnB2_6 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_6 mWk_6 mWv_6 mWo_6 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_6 mbk_6 mbv_6 mbo_6 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_6 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_6 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_6 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_6 lnG1_7 lnB1_7 lnG2_7 lnB2_7 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_7 mWk_7 mWv_7 mWo_7 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_7 mbk_7 mbv_7 mbo_7 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_7 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_7 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_7 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_7 lnG1_8 lnB1_8 lnG2_8 lnB2_8 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_8 mWk_8 mWv_8 mWo_8 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_8 mbk_8 mbv_8 mbo_8 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_8 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_8 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_8 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_8 lnG1_9 lnB1_9 lnG2_9 lnB2_9 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_9 mWk_9 mWv_9 mWo_9 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_9 mbk_9 mbv_9 mbo_9 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_9 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_9 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_9 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_9 lnG1_10 lnB1_10 lnG2_10 lnB2_10 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_10 mWk_10 mWv_10 mWo_10 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_10 mbk_10 mbv_10 mbo_10 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_10 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_10 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_10 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_10 lnG1_11 lnB1_11 lnG2_11 lnB2_11 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_11 mWk_11 mWv_11 mWo_11 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_11 mbk_11 mbv_11 mbo_11 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_11 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_11 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_11 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_11 lnG1_12 lnB1_12 lnG2_12 lnB2_12 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mWq_12 mWk_12 mWv_12 mWo_12 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (mbq_12 mbk_12 mbv_12 mbo_12 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fW1_12 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fb1_12 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))))
-      (fW2_12 :
-        Proofs.Mat (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
-      (fb2_12 : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))))
+      (w : Proofs.ViTTiePoC.ViTTieWeights (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))))
       (img :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat)
@@ -403,115 +245,119 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 224) (instOfNatNat (nat_lit 224)))
           (@OfNat.ofNat Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))
           (@OfNat.ofNat Nat (nat_lit 196) (instOfNatNat (nat_lit 196)))
-          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))) Wc bc cls pos img;
+          (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.Wc (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTiePoC.ViTTieWeights.bc (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTiePoC.ViTTieWeights.cls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTiePoC.ViTTieWeights.pos (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) img;
       have ib2 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1
-          mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib1;
       have ib3 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2
-          mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib2;
       have ib4 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3
-          mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib3;
       have ib5 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4
-          mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib4;
       have ib6 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5
-          mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib5;
       have ib7 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6
-          mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib6;
       have ib8 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7
-          mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib7;
       have ib9 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8
-          mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib8;
       have ib10 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9
-          mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 fb2_9 ib9;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib9;
       have ib11 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10
-          mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 fb2_10 ib10;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib10;
       have ib12 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11
-          mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 fb2_11 ib11;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b11 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib11;
       have b12out :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockFwdOMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.fwdO (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12
-          mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 fb2_12 ib12;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b12 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib12;
       have fl :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
@@ -519,7 +365,9 @@ theorem chk_vit_net_tied_certified :
         @Proofs.Mat.flatten (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
           fun (r : Fin (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))) =>
-          Proofs.layerNormVec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))) ε γF βF
+          Proofs.layerNormVec (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))) ε
+            (@Proofs.ViTTiePoC.ViTTieWeights.γF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+            (@Proofs.ViTTiePoC.ViTTieWeights.βF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
             (@Proofs.Mat.unflatten (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
               (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))) b12out r);
       have hn :=
@@ -527,7 +375,9 @@ theorem chk_vit_net_tied_certified :
           (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192))) fl;
       have logits :=
         @Proofs.dense (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) Wcls bcls hn;
+          (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.Wcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTiePoC.ViTTieWeights.bcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) hn;
       have g : Proofs.Vec (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) :=
         fun (c : Fin (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))) =>
         @HSub.hSub Real Real Real (@instHSub Real Real.instSub)
@@ -536,389 +386,310 @@ theorem chk_vit_net_tied_certified :
       have dy12 :=
         Proofs.vitCotB2outV (@OfNat.ofNat Nat (nat_lit 196) (instOfNatNat (nat_lit 196)))
           (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))
-          (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) ε γF Wcls b12out g;
+          (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) ε
+          (@Proofs.ViTTiePoC.ViTTieWeights.γF (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+          (@Proofs.ViTTiePoC.ViTTieWeights.Wcls (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) b12out g;
       have dy11 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12
-          mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12 fW1_12 fb1_12 fW2_12 ib12 dy12;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b12 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib12 dy12;
       have dy10 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11
-          mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11 fb1_11 fW2_11 ib11 dy11;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b11 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib11 dy11;
       have dy9 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10
-          mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10 fb1_10 fW2_10 ib10 dy10;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib10 dy10;
       have dy8 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9
-          mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9 ib9 dy9;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib9 dy9;
       have dy7 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_8 lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8
-          mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 ib8 dy8;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib8 dy8;
       have dy6 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_7 lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7
-          mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 ib7 dy7;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib7 dy7;
       have dy5 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_6 lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6
-          mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 ib6 dy6;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib6 dy6;
       have dy4 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_5 lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5
-          mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 ib5 dy5;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib5 dy5;
       have dy3 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_4 lnB1_4 lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4
-          mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 ib4 dy4;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib4 dy4;
       have dy2 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_3 lnB1_3 lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3
-          mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 ib3 dy3;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib3 dy3;
       have dy1 :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_2 lnB1_2 lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2
-          mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 ib2 dy2;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib2 dy2;
       have dyEmbed :
         Proofs.Vec
           (@HMul.hMul Nat Nat Nat (@instHMul Nat instMulNat) (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 192) (instOfNatNat (nat_lit 192)))) :=
-        @Proofs.ViTTiePoC.vitBlockCotInAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        @Proofs.BlockParamsV.cotIn (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) ε lnG1_1 lnB1_1 lnG2_1 lnB2_1 mWq_1 mWk_1 mWv_1
-          mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 ib1 dy1;
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) ε ib1 dy1;
       And
-        (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+        (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_1 lnB1_1 lnG2_1
-          lnB2_1 mWq_1 mWk_1 mWv_1 mWo_1 mbq_1 mbk_1 mbv_1 mbo_1 fW1_1 fb1_1 fW2_1 fb2_1 ib1 dy1 lr)
+          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+          (@Proofs.ViTTiePoC.ViTTieWeights.b1 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
+          epsStr lrStr cotN ε ib1 dy1 lr)
         (And
-          (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+          (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
             (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
             (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-            (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_2 lnB1_2
-            lnG2_2 lnB2_2 mWq_2 mWk_2 mWv_2 mWo_2 mbq_2 mbk_2 mbv_2 mbo_2 fW1_2 fb1_2 fW2_2 fb2_2 ib2 dy2 lr)
+            (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+            (@Proofs.ViTTiePoC.ViTTieWeights.b2 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
+            epsStr lrStr cotN ε ib2 dy2 lr)
           (And
-            (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+            (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
               (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
               (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-              (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_3 lnB1_3
-              lnG2_3 lnB2_3 mWq_3 mWk_3 mWv_3 mWo_3 mbq_3 mbk_3 mbv_3 mbo_3 fW1_3 fb1_3 fW2_3 fb2_3 ib3 dy3 lr)
+              (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+              (@Proofs.ViTTiePoC.ViTTieWeights.b3 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN gN
+              epsStr lrStr cotN ε ib3 dy3 lr)
             (And
-              (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+              (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                 (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                 (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_4 lnB1_4
-                lnG2_4 lnB2_4 mWq_4 mWk_4 mWv_4 mWo_4 mbq_4 mbk_4 mbv_4 mbo_4 fW1_4 fb1_4 fW2_4 fb2_4 ib4 dy4 lr)
+                (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                (@Proofs.ViTTiePoC.ViTTieWeights.b4 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN bN
+                gN epsStr lrStr cotN ε ib4 dy4 lr)
               (And
-                (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                   (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                   (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                  (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_5
-                  lnB1_5 lnG2_5 lnB2_5 mWq_5 mWk_5 mWv_5 mWo_5 mbq_5 mbk_5 mbv_5 mbo_5 fW1_5 fb1_5 fW2_5 fb2_5 ib5 dy5 lr)
+                  (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                  (@Proofs.ViTTiePoC.ViTTieWeights.b5 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN
+                  bN gN epsStr lrStr cotN ε ib5 dy5 lr)
                 (And
-                  (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                  (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                     (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                     (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                    (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_6
-                    lnB1_6 lnG2_6 lnB2_6 mWq_6 mWk_6 mWv_6 mWo_6 mbq_6 mbk_6 mbv_6 mbo_6 fW1_6 fb1_6 fW2_6 fb2_6 ib6 dy6 lr)
+                    (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                    (@Proofs.ViTTiePoC.ViTTieWeights.b6 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN wN
+                    bN gN epsStr lrStr cotN ε ib6 dy6 lr)
                   (And
-                    (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                    (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                       (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                       (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                      (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_7
-                      lnB1_7 lnG2_7 lnB2_7 mWq_7 mWk_7 mWv_7 mWo_7 mbq_7 mbk_7 mbv_7 mbo_7 fW1_7 fb1_7 fW2_7 fb2_7 ib7 dy7
-                      lr)
+                      (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                      (@Proofs.ViTTiePoC.ViTTieWeights.b7 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w) xN
+                      wN bN gN epsStr lrStr cotN ε ib7 dy7 lr)
                     (And
-                      (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                      (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                         (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                         (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                        (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε lnG1_8
-                        lnB1_8 lnG2_8 lnB2_8 mWq_8 mWk_8 mWv_8 mWo_8 mbq_8 mbk_8 mbv_8 mbo_8 fW1_8 fb1_8 fW2_8 fb2_8 ib8 dy8
-                        lr)
+                        (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                        (@Proofs.ViTTiePoC.ViTTieWeights.b8 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                        xN wN bN gN epsStr lrStr cotN ε ib8 dy8 lr)
                       (And
-                        (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                        (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                           (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                           (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε
-                          lnG1_9 lnB1_9 lnG2_9 lnB2_9 mWq_9 mWk_9 mWv_9 mWo_9 mbq_9 mbk_9 mbv_9 mbo_9 fW1_9 fb1_9 fW2_9
-                          fb2_9 ib9 dy9 lr)
+                          (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                          (@Proofs.ViTTiePoC.ViTTieWeights.b9 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                          xN wN bN gN epsStr lrStr cotN ε ib9 dy9 lr)
                         (And
-                          (@Proofs.ViTTiePoC.vitBlockTiedAtMHV (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                          (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                             (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                             (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                            (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε
-                            lnG1_10 lnB1_10 lnG2_10 lnB2_10 mWq_10 mWk_10 mWv_10 mWo_10 mbq_10 mbk_10 mbv_10 mbo_10 fW1_10
-                            fb1_10 fW2_10 fb2_10 ib10 dy10 lr)
+                            (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                            (@Proofs.ViTTiePoC.ViTTieWeights.b10 (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))
+                              w)
+                            xN wN bN gN epsStr lrStr cotN ε ib10 dy10 lr)
                           (And
-                            (@Proofs.ViTTiePoC.vitBlockTiedAtMHV
-                              (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                            (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                               (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                               (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                              (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN ε
-                              lnG1_11 lnB1_11 lnG2_11 lnB2_11 mWq_11 mWk_11 mWv_11 mWo_11 mbq_11 mbk_11 mbv_11 mbo_11 fW1_11
-                              fb1_11 fW2_11 fb2_11 ib11 dy11 lr)
+                              (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                              (@Proofs.ViTTiePoC.ViTTieWeights.b11
+                                (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                              xN wN bN gN epsStr lrStr cotN ε ib11 dy11 lr)
                             (And
-                              (@Proofs.ViTTiePoC.vitBlockTiedAtMHV
-                                (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
+                              (@Proofs.BlockParamsV.TiedAt (@OfNat.ofNat Nat (nat_lit 197) (instOfNatNat (nat_lit 197)))
                                 (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
                                 (@OfNat.ofNat Nat (nat_lit 64) (instOfNatNat (nat_lit 64)))
-                                (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768))) xN wN bN gN epsStr lrStr cotN
-                                ε lnG1_12 lnB1_12 lnG2_12 lnB2_12 mWq_12 mWk_12 mWv_12 mWo_12 mbq_12 mbk_12 mbv_12 mbo_12
-                                fW1_12 fb1_12 fW2_12 fb2_12 ib12 dy12 lr)
-                              (And (Proofs.ViTTiePoC.vitFinalLNTied gN xN bN epsStr lrStr cotN ε γF βF Wcls b12out g lr)
-                                (And (Proofs.ViTTiePoC.vitHeadTied aN wN bN lrStr cotN hn Wcls bcls g lr)
-                                  (Proofs.ViTTiePoC.vitEmbedTied wN xN bN clsN pN lrStr cotN Wc bc cls pos img dyEmbed
-                                    lr)))))))))))))) :=
+                                (@OfNat.ofNat Nat (nat_lit 768) (instOfNatNat (nat_lit 768)))
+                                (@Proofs.ViTTiePoC.ViTTieWeights.b12
+                                  (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                xN wN bN gN epsStr lrStr cotN ε ib12 dy12 lr)
+                              (And
+                                (Proofs.ViTTiePoC.vitFinalLNTied gN xN bN epsStr lrStr cotN ε
+                                  (@Proofs.ViTTiePoC.ViTTieWeights.γF
+                                    (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                  (@Proofs.ViTTiePoC.ViTTieWeights.βF
+                                    (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                  (@Proofs.ViTTiePoC.ViTTieWeights.Wcls
+                                    (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                  b12out g lr)
+                                (And
+                                  (Proofs.ViTTiePoC.vitHeadTied aN wN bN lrStr cotN hn
+                                    (@Proofs.ViTTiePoC.ViTTieWeights.Wcls
+                                      (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                    (@Proofs.ViTTiePoC.ViTTieWeights.bcls
+                                      (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                    g lr)
+                                  (Proofs.ViTTiePoC.vitEmbedTied wN xN bN clsN pN lrStr cotN
+                                    (@Proofs.ViTTiePoC.ViTTieWeights.Wc
+                                      (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                    (@Proofs.ViTTiePoC.ViTTieWeights.bc
+                                      (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                    (@Proofs.ViTTiePoC.ViTTieWeights.cls
+                                      (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                    (@Proofs.ViTTiePoC.ViTTieWeights.pos
+                                      (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10))) w)
+                                    img dyEmbed lr)))))))))))))) :=
   Proofs.ViTTiePoC.vit_net_tied_certified
 
 /-- `Proofs.CnxTiePoCGB.cnx_net_tiedGB` -/
 theorem chk_cnx_net_tiedGB :
     ∀ (N : ℕ) {nC : ℕ} (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
-      (Wst : Proofs.Kernel4 (96 : ℕ) (3 : ℕ) (4 : ℕ) (4 : ℕ)) (psb psng psnbt : Proofs.Vec (96 : ℕ))
-      (xstem : Proofs.Vec (N * ((3 : ℕ) * (56 : ℕ) * (56 : ℕ)))) (aW1 : Proofs.DepthwiseKernel (96 : ℕ) (7 : ℕ) (7 : ℕ))
-      (aB1 nG1 nB1 : Proofs.Vec (96 : ℕ)) (eW1 : Proofs.Kernel4 (384 : ℕ) (96 : ℕ) (1 : ℕ) (1 : ℕ))
-      (eB1 : Proofs.Vec (384 : ℕ)) (pW1 : Proofs.Kernel4 (96 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (pB1 sL1 : Proofs.Vec (96 : ℕ))
-      (aW2 : Proofs.DepthwiseKernel (96 : ℕ) (7 : ℕ) (7 : ℕ)) (aB2 nG2 nB2 : Proofs.Vec (96 : ℕ))
-      (eW2 : Proofs.Kernel4 (384 : ℕ) (96 : ℕ) (1 : ℕ) (1 : ℕ)) (eB2 : Proofs.Vec (384 : ℕ))
-      (pW2 : Proofs.Kernel4 (96 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (pB2 sL2 : Proofs.Vec (96 : ℕ))
-      (aW3 : Proofs.DepthwiseKernel (96 : ℕ) (7 : ℕ) (7 : ℕ)) (aB3 nG3 nB3 : Proofs.Vec (96 : ℕ))
-      (eW3 : Proofs.Kernel4 (384 : ℕ) (96 : ℕ) (1 : ℕ) (1 : ℕ)) (eB3 : Proofs.Vec (384 : ℕ))
-      (pW3 : Proofs.Kernel4 (96 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (pB3 sL3 dG0 dT0 : Proofs.Vec (96 : ℕ))
-      (dW0 : Proofs.Kernel4 (192 : ℕ) (96 : ℕ) (2 : ℕ) (2 : ℕ)) (dB0 : Proofs.Vec (192 : ℕ))
-      (aW4 : Proofs.DepthwiseKernel (192 : ℕ) (7 : ℕ) (7 : ℕ)) (aB4 nG4 nB4 : Proofs.Vec (192 : ℕ))
-      (eW4 : Proofs.Kernel4 (768 : ℕ) (192 : ℕ) (1 : ℕ) (1 : ℕ)) (eB4 : Proofs.Vec (768 : ℕ))
-      (pW4 : Proofs.Kernel4 (192 : ℕ) (768 : ℕ) (1 : ℕ) (1 : ℕ)) (pB4 sL4 : Proofs.Vec (192 : ℕ))
-      (aW5 : Proofs.DepthwiseKernel (192 : ℕ) (7 : ℕ) (7 : ℕ)) (aB5 nG5 nB5 : Proofs.Vec (192 : ℕ))
-      (eW5 : Proofs.Kernel4 (768 : ℕ) (192 : ℕ) (1 : ℕ) (1 : ℕ)) (eB5 : Proofs.Vec (768 : ℕ))
-      (pW5 : Proofs.Kernel4 (192 : ℕ) (768 : ℕ) (1 : ℕ) (1 : ℕ)) (pB5 sL5 : Proofs.Vec (192 : ℕ))
-      (aW6 : Proofs.DepthwiseKernel (192 : ℕ) (7 : ℕ) (7 : ℕ)) (aB6 nG6 nB6 : Proofs.Vec (192 : ℕ))
-      (eW6 : Proofs.Kernel4 (768 : ℕ) (192 : ℕ) (1 : ℕ) (1 : ℕ)) (eB6 : Proofs.Vec (768 : ℕ))
-      (pW6 : Proofs.Kernel4 (192 : ℕ) (768 : ℕ) (1 : ℕ) (1 : ℕ)) (pB6 sL6 dG1 dT1 : Proofs.Vec (192 : ℕ))
-      (dW1 : Proofs.Kernel4 (384 : ℕ) (192 : ℕ) (2 : ℕ) (2 : ℕ)) (dB1 : Proofs.Vec (384 : ℕ))
-      (aW7 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB7 nG7 nB7 : Proofs.Vec (384 : ℕ))
-      (eW7 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB7 : Proofs.Vec (1536 : ℕ))
-      (pW7 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB7 sL7 : Proofs.Vec (384 : ℕ))
-      (aW8 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB8 nG8 nB8 : Proofs.Vec (384 : ℕ))
-      (eW8 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB8 : Proofs.Vec (1536 : ℕ))
-      (pW8 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB8 sL8 : Proofs.Vec (384 : ℕ))
-      (aW9 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB9 nG9 nB9 : Proofs.Vec (384 : ℕ))
-      (eW9 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB9 : Proofs.Vec (1536 : ℕ))
-      (pW9 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB9 sL9 : Proofs.Vec (384 : ℕ))
-      (aW10 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB10 nG10 nB10 : Proofs.Vec (384 : ℕ))
-      (eW10 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB10 : Proofs.Vec (1536 : ℕ))
-      (pW10 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB10 sL10 : Proofs.Vec (384 : ℕ))
-      (aW11 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB11 nG11 nB11 : Proofs.Vec (384 : ℕ))
-      (eW11 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB11 : Proofs.Vec (1536 : ℕ))
-      (pW11 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB11 sL11 : Proofs.Vec (384 : ℕ))
-      (aW12 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB12 nG12 nB12 : Proofs.Vec (384 : ℕ))
-      (eW12 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB12 : Proofs.Vec (1536 : ℕ))
-      (pW12 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB12 sL12 : Proofs.Vec (384 : ℕ))
-      (aW13 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB13 nG13 nB13 : Proofs.Vec (384 : ℕ))
-      (eW13 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB13 : Proofs.Vec (1536 : ℕ))
-      (pW13 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB13 sL13 : Proofs.Vec (384 : ℕ))
-      (aW14 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB14 nG14 nB14 : Proofs.Vec (384 : ℕ))
-      (eW14 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB14 : Proofs.Vec (1536 : ℕ))
-      (pW14 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB14 sL14 : Proofs.Vec (384 : ℕ))
-      (aW15 : Proofs.DepthwiseKernel (384 : ℕ) (7 : ℕ) (7 : ℕ)) (aB15 nG15 nB15 : Proofs.Vec (384 : ℕ))
-      (eW15 : Proofs.Kernel4 (1536 : ℕ) (384 : ℕ) (1 : ℕ) (1 : ℕ)) (eB15 : Proofs.Vec (1536 : ℕ))
-      (pW15 : Proofs.Kernel4 (384 : ℕ) (1536 : ℕ) (1 : ℕ) (1 : ℕ)) (pB15 sL15 dG2 dT2 : Proofs.Vec (384 : ℕ))
-      (dW2 : Proofs.Kernel4 (768 : ℕ) (384 : ℕ) (2 : ℕ) (2 : ℕ)) (dB2 : Proofs.Vec (768 : ℕ))
-      (aW16 : Proofs.DepthwiseKernel (768 : ℕ) (7 : ℕ) (7 : ℕ)) (aB16 nG16 nB16 : Proofs.Vec (768 : ℕ))
-      (eW16 : Proofs.Kernel4 (3072 : ℕ) (768 : ℕ) (1 : ℕ) (1 : ℕ)) (eB16 : Proofs.Vec (3072 : ℕ))
-      (pW16 : Proofs.Kernel4 (768 : ℕ) (3072 : ℕ) (1 : ℕ) (1 : ℕ)) (pB16 sL16 : Proofs.Vec (768 : ℕ))
-      (aW17 : Proofs.DepthwiseKernel (768 : ℕ) (7 : ℕ) (7 : ℕ)) (aB17 nG17 nB17 : Proofs.Vec (768 : ℕ))
-      (eW17 : Proofs.Kernel4 (3072 : ℕ) (768 : ℕ) (1 : ℕ) (1 : ℕ)) (eB17 : Proofs.Vec (3072 : ℕ))
-      (pW17 : Proofs.Kernel4 (768 : ℕ) (3072 : ℕ) (1 : ℕ) (1 : ℕ)) (pB17 sL17 : Proofs.Vec (768 : ℕ))
-      (aW18 : Proofs.DepthwiseKernel (768 : ℕ) (7 : ℕ) (7 : ℕ)) (aB18 nG18 nB18 : Proofs.Vec (768 : ℕ))
-      (eW18 : Proofs.Kernel4 (3072 : ℕ) (768 : ℕ) (1 : ℕ) (1 : ℕ)) (eB18 : Proofs.Vec (3072 : ℕ))
-      (pW18 : Proofs.Kernel4 (768 : ℕ) (3072 : ℕ) (1 : ℕ) (1 : ℕ)) (pB18 sL18 hG hT : Proofs.Vec (768 : ℕ))
-      (Wfc : Proofs.Mat (768 : ℕ) nC) (bfc : Proofs.Vec nC) (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
-      (t : Proofs.Vec (N * nC)),
+      (w : Proofs.CnxTiePoC.CnxTieWeights nC) (xstem : Proofs.Vec (N * ((3 : ℕ) * (56 : ℕ) * (56 : ℕ))))
+      (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (t : Proofs.Vec (N * nC)),
       have ib1 : Proofs.Vec (N * ((96 : ℕ) * (56 : ℕ) * (56 : ℕ))) :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxStemFwdO ε Wst psb psng psnbt) x;
-      have ib2 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 sL1) ib1;
-      have ib3 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW2 aB2 nG2 nB2 eW2 eB2 pW2 pB2 sL2) ib2;
-      have ibD0 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW3 aB3 nG3 nB3 eW3 eB3 pW3 pB3 sL3) ib3;
-      have ib4 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxDownFwdChO ε dG0 dT0 dW0 dB0) ibD0;
-      have ib5 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW4 aB4 nG4 nB4 eW4 eB4 pW4 pB4 sL4) ib4;
-      have ib6 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW5 aB5 nG5 nB5 eW5 eB5 pW5 pB5 sL5) ib5;
-      have ibD1 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW6 aB6 nG6 nB6 eW6 eB6 pW6 pB6 sL6) ib6;
-      have ib7 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxDownFwdChO ε dG1 dT1 dW1 dB1) ibD1;
-      have ib8 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW7 aB7 nG7 nB7 eW7 eB7 pW7 pB7 sL7) ib7;
-      have ib9 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW8 aB8 nG8 nB8 eW8 eB8 pW8 pB8 sL8) ib8;
-      have ib10 := Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW9 aB9 nG9 nB9 eW9 eB9 pW9 pB9 sL9) ib9;
-      have ib11 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW10 aB10 nG10 nB10 eW10 eB10 pW10 pB10 sL10) ib10;
-      have ib12 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW11 aB11 nG11 nB11 eW11 eB11 pW11 pB11 sL11) ib11;
-      have ib13 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW12 aB12 nG12 nB12 eW12 eB12 pW12 pB12 sL12) ib12;
-      have ib14 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW13 aB13 nG13 nB13 eW13 eB13 pW13 pB13 sL13) ib13;
-      have ib15 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW14 aB14 nG14 nB14 eW14 eB14 pW14 pB14 sL14) ib14;
-      have ibD2 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW15 aB15 nG15 nB15 eW15 eB15 pW15 pB15 sL15) ib15;
-      have ib16 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxDownFwdChO ε dG2 dT2 dW2 dB2) ibD2;
-      have ib17 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW16 aB16 nG16 nB16 eW16 eB16 pW16 pB16 sL16) ib16;
-      have ib18 :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW17 aB17 nG17 nB17 eW17 eB17 pW17 pB17 sL17) ib17;
-      have xhead :=
-        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxBlockFwdChO ε aW18 aB18 nG18 nB18 eW18 eB18 pW18 pB18 sL18) ib18;
+        Proofs.StableHLO.batchMap N (Proofs.CnxTiePoC.cnxStemFwdO ε w.sW w.sb w.sγ w.sβ) x;
+      have ib2 := Proofs.StableHLO.batchMap N (w.b1.fwdO ε) ib1;
+      have ib3 := Proofs.StableHLO.batchMap N (w.b2.fwdO ε) ib2;
+      have ibD0 := Proofs.StableHLO.batchMap N (w.b3.fwdO ε) ib3;
+      have ib4 : Proofs.Vec (N * ((192 : ℕ) * (28 : ℕ) * (28 : ℕ))) := Proofs.StableHLO.batchMap N (w.d0.fwdO ε) ibD0;
+      have ib5 := Proofs.StableHLO.batchMap N (w.b4.fwdO ε) ib4;
+      have ib6 := Proofs.StableHLO.batchMap N (w.b5.fwdO ε) ib5;
+      have ibD1 := Proofs.StableHLO.batchMap N (w.b6.fwdO ε) ib6;
+      have ib7 : Proofs.Vec (N * ((384 : ℕ) * (14 : ℕ) * (14 : ℕ))) := Proofs.StableHLO.batchMap N (w.d1.fwdO ε) ibD1;
+      have ib8 := Proofs.StableHLO.batchMap N (w.b7.fwdO ε) ib7;
+      have ib9 := Proofs.StableHLO.batchMap N (w.b8.fwdO ε) ib8;
+      have ib10 := Proofs.StableHLO.batchMap N (w.b9.fwdO ε) ib9;
+      have ib11 := Proofs.StableHLO.batchMap N (w.b10.fwdO ε) ib10;
+      have ib12 := Proofs.StableHLO.batchMap N (w.b11.fwdO ε) ib11;
+      have ib13 := Proofs.StableHLO.batchMap N (w.b12.fwdO ε) ib12;
+      have ib14 := Proofs.StableHLO.batchMap N (w.b13.fwdO ε) ib13;
+      have ib15 := Proofs.StableHLO.batchMap N (w.b14.fwdO ε) ib14;
+      have ibD2 := Proofs.StableHLO.batchMap N (w.b15.fwdO ε) ib15;
+      have ib16 : Proofs.Vec (N * ((768 : ℕ) * (7 : ℕ) * (7 : ℕ))) := Proofs.StableHLO.batchMap N (w.d2.fwdO ε) ibD2;
+      have ib17 := Proofs.StableHLO.batchMap N (w.b16.fwdO ε) ib16;
+      have ib18 := Proofs.StableHLO.batchMap N (w.b17.fwdO ε) ib17;
+      have xhead := Proofs.StableHLO.batchMap N (w.b18.fwdO ε) ib18;
       have gapB := Proofs.StableHLO.batchMap N (Proofs.globalAvgPoolFlat (768 : ℕ) (7 : ℕ) (7 : ℕ)) xhead;
-      have hnB := Proofs.StableHLO.batchMap N (Proofs.rowLNVecFlat (1 : ℕ) (768 : ℕ) ε hG hT) gapB;
-      have logitsB := Proofs.StableHLO.batchMap N (Proofs.dense Wfc bfc) hnB;
+      have hnB := Proofs.StableHLO.batchMap N (Proofs.rowLNVecFlat (1 : ℕ) (768 : ℕ) ε w.hG w.hT) gapB;
+      have logitsB := Proofs.StableHLO.batchMap N (Proofs.dense w.Wfc w.bfc) hnB;
       have g := Proofs.StableHLO.den (Proofs.smoothedLossCotGraphDiv N nC α B aStr negAK bStr logN ohN logitsB t);
-      have dyO18 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoCGB.cnxHeadDyXheadChN ε hG hT Wfc bfc) xhead g;
-      have dyO17 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW18 aB18 nG18 nB18 eW18 eB18 pW18 pB18 sL18)
-          ib18 dyO18;
-      have dyO16 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW17 aB17 nG17 nB17 eW17 eB17 pW17 pB17 sL17)
-          ib17 dyO17;
-      have dyD2 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW16 aB16 nG16 nB16 eW16 eB16 pW16 pB16 sL16)
-          ib16 dyO16;
-      have dyO15 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxDownCotInChAt ε dG2 dT2 dW2 dB2) ibD2 dyD2;
-      have dyO14 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW15 aB15 nG15 nB15 eW15 eB15 pW15 pB15 sL15)
-          ib15 dyO15;
-      have dyO13 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW14 aB14 nG14 nB14 eW14 eB14 pW14 pB14 sL14)
-          ib14 dyO14;
-      have dyO12 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW13 aB13 nG13 nB13 eW13 eB13 pW13 pB13 sL13)
-          ib13 dyO13;
-      have dyO11 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW12 aB12 nG12 nB12 eW12 eB12 pW12 pB12 sL12)
-          ib12 dyO12;
-      have dyO10 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW11 aB11 nG11 nB11 eW11 eB11 pW11 pB11 sL11)
-          ib11 dyO11;
-      have dyO9 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW10 aB10 nG10 nB10 eW10 eB10 pW10 pB10 sL10)
-          ib10 dyO10;
-      have dyO8 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW9 aB9 nG9 nB9 eW9 eB9 pW9 pB9 sL9) ib9 dyO9;
-      have dyO7 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW8 aB8 nG8 nB8 eW8 eB8 pW8 pB8 sL8) ib8 dyO8;
-      have dyD1 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW7 aB7 nG7 nB7 eW7 eB7 pW7 pB7 sL7) ib7 dyO7;
-      have dyO6 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxDownCotInChAt ε dG1 dT1 dW1 dB1) ibD1 dyD1;
-      have dyO5 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW6 aB6 nG6 nB6 eW6 eB6 pW6 pB6 sL6) ib6 dyO6;
-      have dyO4 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW5 aB5 nG5 nB5 eW5 eB5 pW5 pB5 sL5) ib5 dyO5;
-      have dyD0 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW4 aB4 nG4 nB4 eW4 eB4 pW4 pB4 sL4) ib4 dyO4;
-      have dyO3 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxDownCotInChAt ε dG0 dT0 dW0 dB0) ibD0 dyD0;
-      have dyO2 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW3 aB3 nG3 nB3 eW3 eB3 pW3 pB3 sL3) ib3 dyO3;
-      have dyO1 :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW2 aB2 nG2 nB2 eW2 eB2 pW2 pB2 sL2) ib2 dyO2;
-      have dyStem :=
-        Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoC.cnxBlockCotInChAt ε aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 sL1) ib1 dyO1;
-      Proofs.CnxTiePoCGB.cnxStemChTiedGBAt N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem ∧
-        Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 sL1 ib1 dyO1 ∧
-          Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW2 aB2 nG2 nB2 eW2 eB2 pW2 pB2 sL2 ib2 dyO2 ∧
-            Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW3 aB3 nG3 nB3 eW3 eB3 pW3 pB3 sL3 ib3 dyO3 ∧
-              Proofs.CnxTiePoCGB.cnxDownChTiedGBAt N xN epsStr cotN ε dG0 dT0 dW0 dB0 ibD0 dyD0 ∧
-                Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW4 aB4 nG4 nB4 eW4 eB4 pW4 pB4 sL4 ib4 dyO4 ∧
-                  Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW5 aB5 nG5 nB5 eW5 eB5 pW5 pB5 sL5 ib5 dyO5 ∧
-                    Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW6 aB6 nG6 nB6 eW6 eB6 pW6 pB6 sL6 ib6 dyO6 ∧
-                      Proofs.CnxTiePoCGB.cnxDownChTiedGBAt N xN epsStr cotN ε dG1 dT1 dW1 dB1 ibD1 dyD1 ∧
-                        Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW7 aB7 nG7 nB7 eW7 eB7 pW7 pB7 sL7 ib7
-                            dyO7 ∧
-                          Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW8 aB8 nG8 nB8 eW8 eB8 pW8 pB8 sL8 ib8
-                              dyO8 ∧
-                            Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW9 aB9 nG9 nB9 eW9 eB9 pW9 pB9 sL9 ib9
-                                dyO9 ∧
-                              Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW10 aB10 nG10 nB10 eW10 eB10 pW10
-                                  pB10 sL10 ib10 dyO10 ∧
-                                Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW11 aB11 nG11 nB11 eW11 eB11 pW11
-                                    pB11 sL11 ib11 dyO11 ∧
-                                  Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW12 aB12 nG12 nB12 eW12 eB12
-                                      pW12 pB12 sL12 ib12 dyO12 ∧
-                                    Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW13 aB13 nG13 nB13 eW13 eB13
-                                        pW13 pB13 sL13 ib13 dyO13 ∧
-                                      Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW14 aB14 nG14 nB14 eW14 eB14
-                                          pW14 pB14 sL14 ib14 dyO14 ∧
-                                        Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW15 aB15 nG15 nB15 eW15
-                                            eB15 pW15 pB15 sL15 ib15 dyO15 ∧
-                                          Proofs.CnxTiePoCGB.cnxDownChTiedGBAt N xN epsStr cotN ε dG2 dT2 dW2 dB2 ibD2
-                                              dyD2 ∧
-                                            Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW16 aB16 nG16 nB16
-                                                eW16 eB16 pW16 pB16 sL16 ib16 dyO16 ∧
-                                              Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW17 aB17 nG17 nB17
-                                                  eW17 eB17 pW17 pB17 sL17 ib17 dyO17 ∧
-                                                Proofs.CnxTiePoCGB.cnxBlockChTiedGBAt N xN epsStr cotN ε aW18 aB18 nG18 nB18
-                                                    eW18 eB18 pW18 pB18 sL18 ib18 dyO18 ∧
-                                                  Proofs.CnxTiePoCGB.cnxHeadChTiedGBAt N xN epsStr cotN dN ε hG hT Wfc bfc
-                                                    xhead g :=
+      have dyO18 := Proofs.StableHLO.batchMapAux N (Proofs.CnxTiePoCGB.cnxHeadDyXheadChN ε w.hG w.hT w.Wfc w.bfc) xhead g;
+      have dyO17 := Proofs.StableHLO.batchMapAux N (w.b18.cotIn ε) ib18 dyO18;
+      have dyO16 := Proofs.StableHLO.batchMapAux N (w.b17.cotIn ε) ib17 dyO17;
+      have dyD2 := Proofs.StableHLO.batchMapAux N (w.b16.cotIn ε) ib16 dyO16;
+      have dyO15 := Proofs.StableHLO.batchMapAux N (w.d2.cotIn ε) ibD2 dyD2;
+      have dyO14 := Proofs.StableHLO.batchMapAux N (w.b15.cotIn ε) ib15 dyO15;
+      have dyO13 := Proofs.StableHLO.batchMapAux N (w.b14.cotIn ε) ib14 dyO14;
+      have dyO12 := Proofs.StableHLO.batchMapAux N (w.b13.cotIn ε) ib13 dyO13;
+      have dyO11 := Proofs.StableHLO.batchMapAux N (w.b12.cotIn ε) ib12 dyO12;
+      have dyO10 := Proofs.StableHLO.batchMapAux N (w.b11.cotIn ε) ib11 dyO11;
+      have dyO9 := Proofs.StableHLO.batchMapAux N (w.b10.cotIn ε) ib10 dyO10;
+      have dyO8 := Proofs.StableHLO.batchMapAux N (w.b9.cotIn ε) ib9 dyO9;
+      have dyO7 := Proofs.StableHLO.batchMapAux N (w.b8.cotIn ε) ib8 dyO8;
+      have dyD1 := Proofs.StableHLO.batchMapAux N (w.b7.cotIn ε) ib7 dyO7;
+      have dyO6 := Proofs.StableHLO.batchMapAux N (w.d1.cotIn ε) ibD1 dyD1;
+      have dyO5 := Proofs.StableHLO.batchMapAux N (w.b6.cotIn ε) ib6 dyO6;
+      have dyO4 := Proofs.StableHLO.batchMapAux N (w.b5.cotIn ε) ib5 dyO5;
+      have dyD0 := Proofs.StableHLO.batchMapAux N (w.b4.cotIn ε) ib4 dyO4;
+      have dyO3 := Proofs.StableHLO.batchMapAux N (w.d0.cotIn ε) ibD0 dyD0;
+      have dyO2 := Proofs.StableHLO.batchMapAux N (w.b3.cotIn ε) ib3 dyO3;
+      have dyO1 := Proofs.StableHLO.batchMapAux N (w.b2.cotIn ε) ib2 dyO2;
+      have dyStem := Proofs.StableHLO.batchMapAux N (w.b1.cotIn ε) ib1 dyO1;
+      Proofs.CnxTiePoCGB.cnxStemChTiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem ∧
+        w.b1.TiedGB N xN epsStr cotN ε ib1 dyO1 ∧
+          w.b2.TiedGB N xN epsStr cotN ε ib2 dyO2 ∧
+            w.b3.TiedGB N xN epsStr cotN ε ib3 dyO3 ∧
+              w.d0.TiedGB N xN epsStr cotN ε ibD0 dyD0 ∧
+                w.b4.TiedGB N xN epsStr cotN ε ib4 dyO4 ∧
+                  w.b5.TiedGB N xN epsStr cotN ε ib5 dyO5 ∧
+                    w.b6.TiedGB N xN epsStr cotN ε ib6 dyO6 ∧
+                      w.d1.TiedGB N xN epsStr cotN ε ibD1 dyD1 ∧
+                        w.b7.TiedGB N xN epsStr cotN ε ib7 dyO7 ∧
+                          w.b8.TiedGB N xN epsStr cotN ε ib8 dyO8 ∧
+                            w.b9.TiedGB N xN epsStr cotN ε ib9 dyO9 ∧
+                              w.b10.TiedGB N xN epsStr cotN ε ib10 dyO10 ∧
+                                w.b11.TiedGB N xN epsStr cotN ε ib11 dyO11 ∧
+                                  w.b12.TiedGB N xN epsStr cotN ε ib12 dyO12 ∧
+                                    w.b13.TiedGB N xN epsStr cotN ε ib13 dyO13 ∧
+                                      w.b14.TiedGB N xN epsStr cotN ε ib14 dyO14 ∧
+                                        w.b15.TiedGB N xN epsStr cotN ε ib15 dyO15 ∧
+                                          w.d2.TiedGB N xN epsStr cotN ε ibD2 dyD2 ∧
+                                            w.b16.TiedGB N xN epsStr cotN ε ib16 dyO16 ∧
+                                              w.b17.TiedGB N xN epsStr cotN ε ib17 dyO17 ∧
+                                                w.b18.TiedGB N xN epsStr cotN ε ib18 dyO18 ∧
+                                                  Proofs.CnxTiePoCGB.cnxHeadChTiedGBAt N xN epsStr cotN dN ε w.hG w.hT w.Wfc
+                                                    w.bfc xhead g :=
   Proofs.CnxTiePoCGB.cnx_net_tiedGB
 
 /-- `Proofs.dpMeanGrad_ne_globalBatchGrad` -/
@@ -998,99 +769,11 @@ theorem chk_resnet34FwdGraphSync_full_shard :
 theorem chk_r34_net_syncTiedB :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ {nCls : ℕ} (xN cotN vN epsStr aStr negAK bStr logN ohN : String) (α B : ℝ) (w : Proofs.R34BWeights nCls)
+        ∀ {nCls : ℕ} (xN cotN vN epsStr : String) (w : Proofs.R34BWeights nCls)
           (X : Proofs.Vec (R * N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))))))
-          (T : Proofs.Vec (R * N * ((1 : ℕ) * nCls))),
-          have G :=
-            Proofs.ResNet34TieB.unrowB (R * N) nCls
-              (Proofs.StableHLO.den
-                (Proofs.smoothedLossCotGraph (R * N) nCls α (↑R * B) aStr negAK bStr logN ohN
-                  (Proofs.ResNet34TieB.rowB (R * N) nCls (Proofs.resnet34ForwardB_full (R * N) w X)) T));
-          have dyE1 := Proofs.ResNet34TieB.r34HeadCotBlk (R * N) (7 : ℕ) (7 : ℕ) w.Wd w.bd (Proofs.r34Pre16 (R * N) w X) G;
-          have dyE0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (7 : ℕ) (7 : ℕ) w.e1 (Proofs.r34Pre15 (R * N) w X) dyE1;
-          have dyD4 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (7 : ℕ) (7 : ℕ) w.e0 (Proofs.r34Pre14 (R * N) w X) dyE0;
-          have dyC4 := Proofs.ResNet34TieB.r34DownCotIn (R * N) (7 : ℕ) (7 : ℕ) w.d4 (Proofs.r34Pre13 (R * N) w X) dyD4;
-          have dyC3 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c4 (Proofs.r34Pre12 (R * N) w X) dyC4;
-          have dyC2 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c3 (Proofs.r34Pre11 (R * N) w X) dyC3;
-          have dyC1 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c2 (Proofs.r34Pre10 (R * N) w X) dyC2;
-          have dyC0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c1 (Proofs.r34Pre9 (R * N) w X) dyC1;
-          have dyD3 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (14 : ℕ) (14 : ℕ) w.c0 (Proofs.r34Pre8 (R * N) w X) dyC0;
-          have dyB2 := Proofs.ResNet34TieB.r34DownCotIn (R * N) (14 : ℕ) (14 : ℕ) w.d3 (Proofs.r34Pre7 (R * N) w X) dyD3;
-          have dyB1 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b2 (Proofs.r34Pre6 (R * N) w X) dyB2;
-          have dyB0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b1 (Proofs.r34Pre5 (R * N) w X) dyB1;
-          have dyD2 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (28 : ℕ) (28 : ℕ) w.b0 (Proofs.r34Pre4 (R * N) w X) dyB0;
-          have dyA2 := Proofs.ResNet34TieB.r34DownCotIn (R * N) (28 : ℕ) (28 : ℕ) w.d2 (Proofs.r34Pre3 (R * N) w X) dyD2;
-          have dyA1 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (56 : ℕ) (56 : ℕ) w.a2 (Proofs.r34Pre2 (R * N) w X) dyA2;
-          have dyA0 := Proofs.ResNet34TieB.r34IdCotIn (R * N) (56 : ℕ) (56 : ℕ) w.a1 (Proofs.r34Pre1 (R * N) w X) dyA1;
-          have g : Fin R → Proofs.Vec (N * nCls) := fun (r : Fin R) =>
-            Proofs.ResNet34TieB.unrowB N nCls
-              (Proofs.StableHLO.den
-                (Proofs.smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-                  (Proofs.ResNet34TieB.rowB N nCls
-                    (Proofs.batchShard R N nCls (Proofs.resnet34ForwardB_full (R * N) w X) r))
-                  (Proofs.batchShard R N ((1 : ℕ) * nCls) T r)));
-          have eE1 : Fin R → Proofs.Vec (N * ((512 : ℕ) * (7 : ℕ) * (7 : ℕ))) := fun (r : Fin R) =>
-            Proofs.ResNet34TieB.r34HeadCotBlk N (7 : ℕ) (7 : ℕ) w.Wd w.bd
-              (Proofs.batchShard R N ((512 : ℕ) * (7 : ℕ) * (7 : ℕ)) (Proofs.r34Pre16 (R * N) w X) r) (g r);
-          have eE0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.e1 (Proofs.r34Pre15 (R * N) w X) eE1;
-          have eD4 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.e0 (Proofs.r34Pre14 (R * N) w X) eE0;
-          have eC4 :=
-            Proofs.ResNet34SyncTieB.r34DownSyncCotIn R hR N (7 : ℕ) (7 : ℕ) w.d4 (Proofs.r34Pre13 (R * N) w X) eD4;
-          have eC3 :=
-            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c4 (Proofs.r34Pre12 (R * N) w X) eC4;
-          have eC2 :=
-            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c3 (Proofs.r34Pre11 (R * N) w X) eC3;
-          have eC1 :=
-            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c2 (Proofs.r34Pre10 (R * N) w X) eC2;
-          have eC0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c1 (Proofs.r34Pre9 (R * N) w X) eC1;
-          have eD3 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.c0 (Proofs.r34Pre8 (R * N) w X) eC0;
-          have eB2 :=
-            Proofs.ResNet34SyncTieB.r34DownSyncCotIn R hR N (14 : ℕ) (14 : ℕ) w.d3 (Proofs.r34Pre7 (R * N) w X) eD3;
-          have eB1 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b2 (Proofs.r34Pre6 (R * N) w X) eB2;
-          have eB0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b1 (Proofs.r34Pre5 (R * N) w X) eB1;
-          have eD2 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.b0 (Proofs.r34Pre4 (R * N) w X) eB0;
-          have eA2 :=
-            Proofs.ResNet34SyncTieB.r34DownSyncCotIn R hR N (28 : ℕ) (28 : ℕ) w.d2 (Proofs.r34Pre3 (R * N) w X) eD2;
-          have eA1 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.a2 (Proofs.r34Pre2 (R * N) w X) eA2;
-          have eA0 := Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.a1 (Proofs.r34Pre1 (R * N) w X) eA1;
-          have ePool :=
-            Proofs.ResNet34SyncTieB.r34IdSyncCotIn R hR N (56 : ℕ) (56 : ℕ) w.a0 (Proofs.r34Pre0 (R * N) w X) eA0;
-          Proofs.ResNet34SyncTieB.r34StemSyncTiedB R hR N (56 : ℕ) (56 : ℕ) xN cotN vN epsStr w.sW w.sb w.sε w.sγ w.sβ X
-              ePool (Proofs.ResNet34TieB.r34IdCotIn (R * N) (56 : ℕ) (56 : ℕ) w.a0 (Proofs.r34Pre0 (R * N) w X) dyA0) ∧
-            Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (56 : ℕ) (56 : ℕ) "s1b0" xN cotN vN epsStr w.a0
-                (Proofs.r34Pre0 (R * N) w X) eA0 dyA0 ∧
-              Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (56 : ℕ) (56 : ℕ) "s1b1" xN cotN vN epsStr w.a1
-                  (Proofs.r34Pre1 (R * N) w X) eA1 dyA1 ∧
-                Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (56 : ℕ) (56 : ℕ) "s1b2" xN cotN vN epsStr w.a2
-                    (Proofs.r34Pre2 (R * N) w X) eA2 dyA2 ∧
-                  Proofs.ResNet34SyncTieB.r34DownSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "d2" xN cotN vN epsStr w.d2
-                      (Proofs.r34Pre3 (R * N) w X) eD2 dyD2 ∧
-                    Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "s2b0" xN cotN vN epsStr w.b0
-                        (Proofs.r34Pre4 (R * N) w X) eB0 dyB0 ∧
-                      Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "s2b1" xN cotN vN epsStr w.b1
-                          (Proofs.r34Pre5 (R * N) w X) eB1 dyB1 ∧
-                        Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (28 : ℕ) (28 : ℕ) "s2b2" xN cotN vN epsStr w.b2
-                            (Proofs.r34Pre6 (R * N) w X) eB2 dyB2 ∧
-                          Proofs.ResNet34SyncTieB.r34DownSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "d3" xN cotN vN epsStr w.d3
-                              (Proofs.r34Pre7 (R * N) w X) eD3 dyD3 ∧
-                            Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b0" xN cotN vN epsStr w.c0
-                                (Proofs.r34Pre8 (R * N) w X) eC0 dyC0 ∧
-                              Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b1" xN cotN vN epsStr w.c1
-                                  (Proofs.r34Pre9 (R * N) w X) eC1 dyC1 ∧
-                                Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b2" xN cotN vN epsStr
-                                    w.c2 (Proofs.r34Pre10 (R * N) w X) eC2 dyC2 ∧
-                                  Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b3" xN cotN vN epsStr
-                                      w.c3 (Proofs.r34Pre11 (R * N) w X) eC3 dyC3 ∧
-                                    Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (14 : ℕ) (14 : ℕ) "s3b4" xN cotN vN epsStr
-                                        w.c4 (Proofs.r34Pre12 (R * N) w X) eC4 dyC4 ∧
-                                      Proofs.ResNet34SyncTieB.r34DownSyncTiedB R hR N (7 : ℕ) (7 : ℕ) "d4" xN cotN vN epsStr
-                                          w.d4 (Proofs.r34Pre13 (R * N) w X) eD4 dyD4 ∧
-                                        Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (7 : ℕ) (7 : ℕ) "s4b0" xN cotN vN
-                                            epsStr w.e0 (Proofs.r34Pre14 (R * N) w X) eE0 dyE0 ∧
-                                          Proofs.ResNet34SyncTieB.r34IdSyncTiedB R hR N (7 : ℕ) (7 : ℕ) "s4b1" xN cotN vN
-                                              epsStr w.e1 (Proofs.r34Pre15 (R * N) w X) eE1 dyE1 ∧
-                                            Proofs.ResNet34SyncTieB.r34HeadSyncTiedB R hR N (7 : ℕ) (7 : ℕ) xN cotN
-                                              (Proofs.r34Pre16 (R * N) w X) g G :=
+          (G : Proofs.Vec (R * N * nCls)) (gs : Fin R → Proofs.Vec (N * nCls)),
+          (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * G i) r) →
+            Proofs.ResNet34SyncTieB.r34NetSyncTiedB R hR N xN cotN vN epsStr w X G gs :=
   Proofs.ResNet34SyncTieB.r34_net_syncTiedB
 
 /-- `Proofs.StableHLO.mobilenetv2FwdGraphSync_full_shard` -/
@@ -1136,143 +819,11 @@ theorem chk_efficientnetFwdGraphSync_full_shard :
 theorem chk_efficientnet_net_syncTiedG :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ (xN vN epsStr cotN dN : String) (w : Proofs.B0Weights) (hεw : w.EpsPos) (aStr negAK bStr logN ohN : String)
-          (α B : ℝ) (x : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
-          (t : Proofs.Vec (R * N * ((1 : ℕ) * (10 : ℕ)))),
-          have a0 : Proofs.Vec (R * N * ((32 : ℕ) * (112 : ℕ) * (112 : ℕ))) :=
-            Proofs.stemB (R * N) w.sW w.sb w.sε w.sγ w.sβ x;
-          have a1 := Proofs.mbNoExpW (R * N) (112 : ℕ) (112 : ℕ) w.b1 a0;
-          have a2 := Proofs.mbStridedW (R * N) (56 : ℕ) (56 : ℕ) w.b2 a1;
-          have a3 := Proofs.mbResidW (R * N) (56 : ℕ) (56 : ℕ) w.b3 a2;
-          have a4 := Proofs.mbStridedW (R * N) (28 : ℕ) (28 : ℕ) w.b4 a3;
-          have a5 := Proofs.mbResidW (R * N) (28 : ℕ) (28 : ℕ) w.b5 a4;
-          have a6 := Proofs.mbStridedW (R * N) (14 : ℕ) (14 : ℕ) w.b6 a5;
-          have a7 := Proofs.mbResidW (R * N) (14 : ℕ) (14 : ℕ) w.b7 a6;
-          have a8 := Proofs.mbResidW (R * N) (14 : ℕ) (14 : ℕ) w.b8 a7;
-          have a9 := Proofs.mbExpW (R * N) (14 : ℕ) (14 : ℕ) w.b9 a8;
-          have a10 := Proofs.mbResidW (R * N) (14 : ℕ) (14 : ℕ) w.b10 a9;
-          have a11 := Proofs.mbResidW (R * N) (14 : ℕ) (14 : ℕ) w.b11 a10;
-          have a12 := Proofs.mbStridedW (R * N) (7 : ℕ) (7 : ℕ) w.b12 a11;
-          have a13 := Proofs.mbResidW (R * N) (7 : ℕ) (7 : ℕ) w.b13 a12;
-          have a14 := Proofs.mbResidW (R * N) (7 : ℕ) (7 : ℕ) w.b14 a13;
-          have a15 := Proofs.mbResidW (R * N) (7 : ℕ) (7 : ℕ) w.b15 a14;
-          have a16 := Proofs.mbExpW (R * N) (7 : ℕ) (7 : ℕ) w.b16 a15;
-          have g :=
-            Proofs.ResNet34TieB.unrowB (R * N) (10 : ℕ)
-              (Proofs.StableHLO.den
-                (Proofs.smoothedLossCotGraph (R * N) (10 : ℕ) α (↑R * B) aStr negAK bStr logN ohN
-                  (Proofs.ResNet34TieB.rowB (R * N) (10 : ℕ)
-                    (Proofs.headFwdB (R * N) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16))
-                  t));
-          have dy16 :=
-            Proofs.HasVJP.backward (f := Proofs.headFwdB (R * N) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb)
-              (Proofs.headFwdB_has_vjp (R * N) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb) a16 g;
-          have dy15 :=
-            Proofs.HasVJP.backward (Proofs.mbExpW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b16 hεw.b16.e hεw.b16.d hεw.b16.p) a15
-              dy16;
-          have dy14 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b15 hεw.b15.e hεw.b15.d hεw.b15.p) a14
-              dy15;
-          have dy13 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b14 hεw.b14.e hεw.b14.d hεw.b14.p) a13
-              dy14;
-          have dy12 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b13 hεw.b13.e hεw.b13.d hεw.b13.p) a12
-              dy13;
-          have dy11 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (7 : ℕ) (7 : ℕ) w.b12 hεw.b12.e hεw.b12.d hεw.b12.p)
-              a11 dy12;
-          have dy10 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b11 hεw.b11.e hεw.b11.d hεw.b11.p)
-              a10 dy11;
-          have dy9 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b10 hεw.b10.e hεw.b10.d hεw.b10.p)
-              a9 dy10;
-          have dy8 :=
-            Proofs.HasVJP.backward (Proofs.mbExpW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b9 hεw.b9.e hεw.b9.d hεw.b9.p) a8 dy9;
-          have dy7 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b8 hεw.b8.e hεw.b8.d hεw.b8.p) a7
-              dy8;
-          have dy6 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b7 hεw.b7.e hεw.b7.d hεw.b7.p) a6
-              dy7;
-          have dy5 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (14 : ℕ) (14 : ℕ) w.b6 hεw.b6.e hεw.b6.d hεw.b6.p) a5
-              dy6;
-          have dy4 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (28 : ℕ) (28 : ℕ) w.b5 hεw.b5.e hεw.b5.d hεw.b5.p) a4
-              dy5;
-          have dy3 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (28 : ℕ) (28 : ℕ) w.b4 hεw.b4.e hεw.b4.d hεw.b4.p) a3
-              dy4;
-          have dy2 :=
-            Proofs.HasVJP.backward (Proofs.mbResidW_has_vjp (R * N) (56 : ℕ) (56 : ℕ) w.b3 hεw.b3.e hεw.b3.d hεw.b3.p) a2
-              dy3;
-          have dy1 :=
-            Proofs.HasVJP.backward (Proofs.mbStridedW_has_vjp (R * N) (56 : ℕ) (56 : ℕ) w.b2 hεw.b2.e hεw.b2.d hεw.b2.p) a1
-              dy2;
-          have dy0 :=
-            Proofs.HasVJP.backward (Proofs.mbNoExpW_has_vjp (R * N) (112 : ℕ) (112 : ℕ) w.b1 hεw.b1.d hεw.b1.p) a0 dy1;
-          have gs : Fin R → Proofs.Vec (N * (10 : ℕ)) := fun (r : Fin R) =>
-            Proofs.ResNet34TieB.unrowB N (10 : ℕ)
-              (Proofs.StableHLO.den
-                (Proofs.smoothedLossCotGraph N (10 : ℕ) α B aStr negAK bStr logN ohN
-                  (Proofs.ResNet34TieB.rowB N (10 : ℕ)
-                    (Proofs.batchShard R N (10 : ℕ) (Proofs.headFwdB (R * N) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16) r))
-                  (Proofs.batchShard R N ((1 : ℕ) * (10 : ℕ)) t r)));
-          have e16 := Proofs.EnetSyncTieG.hdsCotIn R hR N (7 : ℕ) (7 : ℕ) w.hW w.hb w.hε w.hγ w.hβ w.fcW a16 gs;
-          have e15 := Proofs.EnetSyncTieG.xsCotIn R hR N (7 : ℕ) (7 : ℕ) w.b16 a15 e16;
-          have e14 := Proofs.EnetSyncTieG.rsCotIn R hR N (7 : ℕ) (7 : ℕ) w.b15 a14 e15;
-          have e13 := Proofs.EnetSyncTieG.rsCotIn R hR N (7 : ℕ) (7 : ℕ) w.b14 a13 e14;
-          have e12 := Proofs.EnetSyncTieG.rsCotIn R hR N (7 : ℕ) (7 : ℕ) w.b13 a12 e13;
-          have e11 := Proofs.EnetSyncTieG.ssCotIn R hR N (7 : ℕ) (7 : ℕ) w.b12 a11 e12;
-          have e10 := Proofs.EnetSyncTieG.rsCotIn R hR N (14 : ℕ) (14 : ℕ) w.b11 a10 e11;
-          have e9 := Proofs.EnetSyncTieG.rsCotIn R hR N (14 : ℕ) (14 : ℕ) w.b10 a9 e10;
-          have e8 := Proofs.EnetSyncTieG.xsCotIn R hR N (14 : ℕ) (14 : ℕ) w.b9 a8 e9;
-          have e7 := Proofs.EnetSyncTieG.rsCotIn R hR N (14 : ℕ) (14 : ℕ) w.b8 a7 e8;
-          have e6 := Proofs.EnetSyncTieG.rsCotIn R hR N (14 : ℕ) (14 : ℕ) w.b7 a6 e7;
-          have e5 := Proofs.EnetSyncTieG.ssCotIn R hR N (14 : ℕ) (14 : ℕ) w.b6 a5 e6;
-          have e4 := Proofs.EnetSyncTieG.rsCotIn R hR N (28 : ℕ) (28 : ℕ) w.b5 a4 e5;
-          have e3 := Proofs.EnetSyncTieG.ssCotIn R hR N (28 : ℕ) (28 : ℕ) w.b4 a3 e4;
-          have e2 := Proofs.EnetSyncTieG.rsCotIn R hR N (56 : ℕ) (56 : ℕ) w.b3 a2 e3;
-          have e1 := Proofs.EnetSyncTieG.ssCotIn R hR N (56 : ℕ) (56 : ℕ) w.b2 a1 e2;
-          have e0 := Proofs.EnetSyncTieG.nsCotIn R hR N (112 : ℕ) (112 : ℕ) w.b1 a0 e1;
-          Proofs.EnetSyncTieG.stemSyncTiedG R hR N (112 : ℕ) (112 : ℕ) xN cotN vN epsStr w.sW w.sb w.sε hεw.s w.sγ w.sβ x e0
-              dy0 ∧
-            Proofs.EnetSyncTieG.noExpSyncTiedG R hR N (112 : ℕ) (112 : ℕ) "b1" xN cotN vN epsStr w.b1 hεw.b1.d hεw.b1.p a0
-                e1 dy1 ∧
-              Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (56 : ℕ) (56 : ℕ) "b2" xN cotN vN epsStr w.b2 hεw.b2.e hεw.b2.d
-                  hεw.b2.p a1 e2 dy2 ∧
-                Proofs.EnetSyncTieG.expSyncTiedG R hR N (56 : ℕ) (56 : ℕ) "b3" xN cotN vN epsStr w.b3 hεw.b3.e hεw.b3.d
-                    hεw.b3.p a2 e3 dy3 ∧
-                  Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (28 : ℕ) (28 : ℕ) "b4" xN cotN vN epsStr w.b4 hεw.b4.e
-                      hεw.b4.d hεw.b4.p a3 e4 dy4 ∧
-                    Proofs.EnetSyncTieG.expSyncTiedG R hR N (28 : ℕ) (28 : ℕ) "b5" xN cotN vN epsStr w.b5 hεw.b5.e hεw.b5.d
-                        hεw.b5.p a4 e5 dy5 ∧
-                      Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b6" xN cotN vN epsStr w.b6 hεw.b6.e
-                          hεw.b6.d hεw.b6.p a5 e6 dy6 ∧
-                        Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b7" xN cotN vN epsStr w.b7 hεw.b7.e
-                            hεw.b7.d hεw.b7.p a6 e7 dy7 ∧
-                          Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b8" xN cotN vN epsStr w.b8 hεw.b8.e
-                              hεw.b8.d hεw.b8.p a7 e8 dy8 ∧
-                            Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b9" xN cotN vN epsStr w.b9 hεw.b9.e
-                                hεw.b9.d hεw.b9.p a8 e9 dy9 ∧
-                              Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b10" xN cotN vN epsStr w.b10
-                                  hεw.b10.e hεw.b10.d hεw.b10.p a9 e10 dy10 ∧
-                                Proofs.EnetSyncTieG.expSyncTiedG R hR N (14 : ℕ) (14 : ℕ) "b11" xN cotN vN epsStr w.b11
-                                    hεw.b11.e hεw.b11.d hεw.b11.p a10 e11 dy11 ∧
-                                  Proofs.EnetSyncTieG.stridedSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b12" xN cotN vN epsStr w.b12
-                                      hεw.b12.e hεw.b12.d hεw.b12.p a11 e12 dy12 ∧
-                                    Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b13" xN cotN vN epsStr w.b13
-                                        hεw.b13.e hεw.b13.d hεw.b13.p a12 e13 dy13 ∧
-                                      Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b14" xN cotN vN epsStr w.b14
-                                          hεw.b14.e hεw.b14.d hεw.b14.p a13 e14 dy14 ∧
-                                        Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b15" xN cotN vN epsStr
-                                            w.b15 hεw.b15.e hεw.b15.d hεw.b15.p a14 e15 dy15 ∧
-                                          Proofs.EnetSyncTieG.expSyncTiedG R hR N (7 : ℕ) (7 : ℕ) "b16" xN cotN vN epsStr
-                                              w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16 ∧
-                                            Proofs.EnetSyncTieG.headSyncTiedG R hR N (7 : ℕ) (7 : ℕ) xN cotN vN epsStr dN
-                                              w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16 gs g :=
+        ∀ (xN vN epsStr cotN dN : String) (w : Proofs.B0Weights) (hεw : w.EpsPos)
+          (x : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (g : Proofs.Vec (R * N * (10 : ℕ)))
+          (gs : Fin R → Proofs.Vec (N * (10 : ℕ))),
+          (∀ (r : Fin R), gs r = Proofs.batchShard R N (10 : ℕ) (fun (i : Fin (R * N * (10 : ℕ))) => ↑R * g i) r) →
+            Proofs.EnetSyncTieG.enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x g gs :=
   Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
 
 /-- `Proofs.StableHLO.resnet50FwdGraphSync_full_shard` -/
@@ -1376,79 +927,44 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
       (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))))))
       (h_stem : Proofs.R34StemSmoothAt N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs x)
       (h_pool : Proofs.R34PoolSmoothAt N (56 : ℕ) (56 : ℕ) (Proofs.StableHLO.cbReluStridedB N Ws bs εs γs βs x))
-      (hb1 :
-        Proofs.HasVJPAt b1 (Proofs.opaqueA0 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) x) ×'
-          DifferentiableAt ℝ b1 (Proofs.opaqueA0 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) x))
-      (hb2 :
-        Proofs.HasVJPAt b2 (Proofs.opaqueA1 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 x) ×'
-          DifferentiableAt ℝ b2 (Proofs.opaqueA1 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 x))
-      (hb3 :
-        Proofs.HasVJPAt b3 (Proofs.opaqueA2 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 x) ×'
-          DifferentiableAt ℝ b3 (Proofs.opaqueA2 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 x))
-      (hb4 :
-        Proofs.HasVJPAt b4 (Proofs.opaqueA3 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 x) ×'
-          DifferentiableAt ℝ b4 (Proofs.opaqueA3 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 x))
-      (hb5 :
-        Proofs.HasVJPAt b5 (Proofs.opaqueA4 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 x) ×'
-          DifferentiableAt ℝ b5 (Proofs.opaqueA4 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 x))
-      (hb6 :
-        Proofs.HasVJPAt b6 (Proofs.opaqueA5 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 x) ×'
-          DifferentiableAt ℝ b6 (Proofs.opaqueA5 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
+      (hb1 : Proofs.HasVJPDiffAt b1 (Proofs.opaqueA0 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) x))
+      (hb2 : Proofs.HasVJPDiffAt b2 (Proofs.opaqueA1 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 x))
+      (hb3 : Proofs.HasVJPDiffAt b3 (Proofs.opaqueA2 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 x))
+      (hb4 : Proofs.HasVJPDiffAt b4 (Proofs.opaqueA3 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 x))
+      (hb5 : Proofs.HasVJPDiffAt b5 (Proofs.opaqueA4 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 x))
+      (hb6 : Proofs.HasVJPDiffAt b6 (Proofs.opaqueA5 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 x))
       (hb7 :
-        Proofs.HasVJPAt b7 (Proofs.opaqueA6 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x) ×'
-          DifferentiableAt ℝ b7 (Proofs.opaqueA6 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
+        Proofs.HasVJPDiffAt b7 (Proofs.opaqueA6 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 x))
       (hb8 :
-        Proofs.HasVJPAt b8 (Proofs.opaqueA7 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x) ×'
-          DifferentiableAt ℝ b8
-            (Proofs.opaqueA7 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
+        Proofs.HasVJPDiffAt b8
+          (Proofs.opaqueA7 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 x))
       (hb9 :
-        Proofs.HasVJPAt b9
-            (Proofs.opaqueA8 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x) ×'
-          DifferentiableAt ℝ b9
-            (Proofs.opaqueA8 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
+        Proofs.HasVJPDiffAt b9
+          (Proofs.opaqueA8 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 x))
       (hb10 :
-        Proofs.HasVJPAt b10
-            (Proofs.opaqueA9 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x) ×'
-          DifferentiableAt ℝ b10
-            (Proofs.opaqueA9 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
+        Proofs.HasVJPDiffAt b10
+          (Proofs.opaqueA9 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 x))
       (hb11 :
-        Proofs.HasVJPAt b11
-            (Proofs.opaqueA10 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x) ×'
-          DifferentiableAt ℝ b11
-            (Proofs.opaqueA10 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
+        Proofs.HasVJPDiffAt b11
+          (Proofs.opaqueA10 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 x))
       (hb12 :
-        Proofs.HasVJPAt b12
-            (Proofs.opaqueA11 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x) ×'
-          DifferentiableAt ℝ b12
-            (Proofs.opaqueA11 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
+        Proofs.HasVJPDiffAt b12
+          (Proofs.opaqueA11 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 x))
       (hb13 :
-        Proofs.HasVJPAt b13
-            (Proofs.opaqueA12 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              x) ×'
-          DifferentiableAt ℝ b13
-            (Proofs.opaqueA12 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              x))
+        Proofs.HasVJPDiffAt b13
+          (Proofs.opaqueA12 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 x))
       (hb14 :
-        Proofs.HasVJPAt b14
-            (Proofs.opaqueA13 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              b13 x) ×'
-          DifferentiableAt ℝ b14
-            (Proofs.opaqueA13 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              b13 x))
+        Proofs.HasVJPDiffAt b14
+          (Proofs.opaqueA13 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13
+            x))
       (hb15 :
-        Proofs.HasVJPAt b15
-            (Proofs.opaqueA14 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              b13 b14 x) ×'
-          DifferentiableAt ℝ b15
-            (Proofs.opaqueA14 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              b13 b14 x))
+        Proofs.HasVJPDiffAt b15
+          (Proofs.opaqueA14 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13
+            b14 x))
       (hb16 :
-        Proofs.HasVJPAt b16
-            (Proofs.opaqueA15 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              b13 b14 b15 x) ×'
-          DifferentiableAt ℝ b16
-            (Proofs.opaqueA15 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
-              b13 b14 b15 x)),
+        Proofs.HasVJPDiffAt b16
+          (Proofs.opaqueA15 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13
+            b14 b15 x)),
       (Proofs.r34InputGradB N Ws Wd
           (Proofs.HasVJP.backward
             (Proofs.bnBatchLA_has_vjp N (64 : ℕ) ((2 : ℕ) * (56 : ℕ)) ((2 : ℕ) * (56 : ℕ)) εs hεs γs βs)
