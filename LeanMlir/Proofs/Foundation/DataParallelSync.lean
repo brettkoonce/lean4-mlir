@@ -211,6 +211,11 @@ theorem bnMean_pair_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w
   rw [bnMean_shard hR hm (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
+/-- The global batch-spatial count is nonzero when a replica's is: `(R·N)·(h·w) = R·(N·(h·w))`. -/
+theorem mulR_nhw_ne_zero {R N h w : Nat} (hR : 0 < R) (hm : N * (h * w) ≠ 0) :
+    (R * N) * (h * w) ≠ 0 := by
+  rw [Nat.mul_assoc]; exact Nat.mul_ne_zero hR.ne' hm
+
 /-- ⭐⭐⭐ **P1 — SYNC-BN ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH BN.**
 
     Handed the GLOBAL statistics — `(1/R)·Σ_r` of each replica's own `bnMean` and `bnMeanSq`,
@@ -226,7 +231,7 @@ theorem bnMean_pair_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w
     statistics really are the all-reduced ones — all the mathematics) through
     `bnSyncTensor4_at_own_stats`. -/
 theorem bnSyncTensor4_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
-    (hM : (R*N) * (h * w) ≠ 0) (ε : ℝ) (γ β : Vec oc)
+    (ε : ℝ) (γ β : Vec oc)
     (X : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) :
     bnSyncTensor4 N oc h w ε γ β
         (fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
@@ -235,6 +240,7 @@ theorem bnSyncTensor4_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0) (hm : N 
           (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c))
         (batchShard R N (oc * (h * w)) X r)
       = batchShard R N (oc * (h * w)) (bnBatchTensor4 (R*N) oc h w ε γ β X) r := by
+  have hM := mulR_nhw_ne_zero (Nat.pos_of_ne_zero hR) hm
   have hμ : ∀ c : Fin oc, (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
       (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c)
       = bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) :=
@@ -382,7 +388,7 @@ theorem bnSyncTensor4_grad_input_at_own_stats' (N oc h w : Nat) (hm : N * (h * w
     ⭐ **The spec does not move**: the right-hand side is the existing
     `bnBatchTensor4_grad_input` at `N := R·N`. -/
 theorem bnSyncTensor4_grad_input_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0)
-    (hm : N * (h * w) ≠ 0) (hM : (R*N) * (h * w) ≠ 0) (ε : ℝ) (γ : Vec oc)
+    (hm : N * (h * w) ≠ 0) (ε : ℝ) (γ : Vec oc)
     (X DY : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) (μg m2g mdyg mdyxg : Vec oc)
     (hμ : μg = fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
       (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c))
@@ -397,6 +403,7 @@ theorem bnSyncTensor4_grad_input_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 
     bnSyncTensor4_grad_input N oc h w ε γ μg m2g mdyg mdyxg
         (batchShard R N (oc * (h * w)) X r) (batchShard R N (oc * (h * w)) DY r)
       = batchShard R N (oc * (h * w)) (bnBatchTensor4_grad_input (R*N) oc h w ε γ X DY) r := by
+  have hM := mulR_nhw_ne_zero (Nat.pos_of_ne_zero hR) hm
   -- 1. the forward statistics are the global row's own (P1b)
   have hμ' : μg = fun c => bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) := by
     rw [hμ]; funext c; rw [← bnMean_row_shard R N oc h w hR hm X c]
@@ -529,12 +536,13 @@ theorem global_var_add_sq {N oc h w : Nat} (R : Nat) (hM : (R * N) * (h * w) ≠
     `bnBatchTensor4` — given that each replica's operand denotes its shard (`hx`, the chain's
     induction hypothesis). `den_bnSyncF_allReduce_R1` is this at `R := 1`. -/
 theorem den_bnSyncF_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
-    (hm : N * (h * w) ≠ 0) (hM : (R * N) * (h * w) ≠ 0) (gN bN es t t' : String)
+    (hm : N * (h * w) ≠ 0) (gN bN es t t' : String)
     (ds ds' : List Nat) (ε : ℝ) (γ β : Vec oc) (x : Fin R → SHlo (N * (oc * (h * w))))
     (X : Vec ((R * N) * (oc * (h * w))))
     (hx : ∀ r, den (x r) = batchShard R N (oc * (h * w)) X r) (r : Fin R) :
     den (.bnSyncF gN bN es ε γ β (x r) (syncStats R hR t t' ds ds' x))
       = batchShard R N (oc * (h * w)) (bnBatchTensor4 (R * N) oc h w ε γ β X) r := by
+  have hM := mulR_nhw_ne_zero hR hm
   rw [den_bnSyncF]
   simp only [den_syncStats_left R hR hm t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM, hx]
@@ -548,7 +556,7 @@ theorem den_bnSyncF_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
     saved activation and its incoming cotangent are its shards of the global ones (`hx` / `hxv`,
     `hdy`). `den_bnSyncBack_allReduce_R1` is this at `R := 1`. -/
 theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
-    (hm : N * (h * w) ≠ 0) (hM : (R * N) * (h * w) ≠ 0) (gN xN es t t' t'' : String)
+    (hm : N * (h * w) ≠ 0) (gN xN es t t' t'' : String)
     (ds ds' ds'' : List Nat) (ε : ℝ) (γ : Vec oc)
     (x : Fin R → SHlo (N * (oc * (h * w)))) (xv : Fin R → Vec (N * (oc * (h * w))))
     (dy : Fin R → SHlo (N * (oc * (h * w)))) (X DY : Vec ((R * N) * (oc * (h * w))))
@@ -559,6 +567,7 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
           (.allReduceMeanF R hR t'' ds'' (fun r' => .bnSyncDyStatsB gN xN es ε γ (xv r') (dy r')
             (syncStats R hR t t' ds ds' x))))
       = batchShard R N (oc * (h * w)) (bnBatchTensor4_grad_input (R * N) oc h w ε γ X DY) r := by
+  have hM := mulR_nhw_ne_zero hR hm
   have hRne : R ≠ 0 := Nat.pos_iff_ne_zero.mp hR
   have hRr : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hRne
   rw [den_bnSyncBack, hxv r, hdy r]
@@ -567,7 +576,7 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
              den_syncStats_left R hR hm t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM,
              hxv, hdy, dpMean_const_mul hRr]
-  exact bnSyncTensor4_grad_input_shard_eq_global R N oc h w hRne hm hM ε γ X DY r
+  exact bnSyncTensor4_grad_input_shard_eq_global R N oc h w hRne hm ε γ X DY r
     _ _ _ _ (by funext c; exact bnMean_row_shard R N oc h w hRne hm X c)
     (by funext c; exact bnMeanSq_row_shard R N oc h w hRne hm X c) rfl rfl
 
@@ -581,7 +590,7 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
     at the global batch. The BN γ node is the one parameter gradient sync-BN changes, because it
     is the one that reads `x̂`. -/
 theorem den_allReduceMeanF_bnSyncGammaGradB {N oc h w : Nat} (R : Nat) (hR : 0 < R)
-    (hm : N * (h * w) ≠ 0) (hM : (R * N) * (h * w) ≠ 0) (xN es t t' t'' : String)
+    (hm : N * (h * w) ≠ 0) (xN es t t' t'' : String)
     (ds ds' ds'' : List Nat) (ε : ℝ)
     (x : Fin R → SHlo (N * (oc * (h * w)))) (xv : Fin R → Vec (N * (oc * (h * w))))
     (dy : Fin R → SHlo (N * (oc * (h * w)))) (X DY : Vec ((R * N) * (oc * (h * w))))
@@ -592,6 +601,7 @@ theorem den_allReduceMeanF_bnSyncGammaGradB {N oc h w : Nat} (R : Nat) (hR : 0 <
           (syncStats R hR t t' ds ds' x))) c
       = (1 / (R : ℝ)) * bnPerChannel_grad_gamma oc ((R * N) * (h * w)) ε
           (bnchwFwd (R * N) oc h w X) (bnchwFwd (R * N) oc h w DY) c := by
+  have hM := mulR_nhw_ne_zero hR hm
   simp only [den_allReduceMeanF, den_bnSyncGammaGradB,
              den_syncStats_left R hR hm t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM, hxv, hdy]

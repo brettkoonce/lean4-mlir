@@ -1990,6 +1990,7 @@ open Proofs
 -- the BN case of the per-net chain induction
 #print axioms Proofs.den_syncStats_left
 #print axioms Proofs.den_syncStats_right
+#print axioms Proofs.mulR_nhw_ne_zero
 #print axioms Proofs.den_bnSyncF_allReduce
 #print axioms Proofs.den_bnSyncBack_allReduce
 #print axioms Proofs.den_allReduceMeanF_bnSyncGammaGradB

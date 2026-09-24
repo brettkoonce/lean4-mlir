@@ -707,20 +707,19 @@ theorem chk_dpSyncGrad_eq_globalBatchGrad :
 theorem chk_den_bnSyncBack_allReduce :
     ∀ {N oc h w : ℕ} (R : ℕ) (hR : (0 : ℕ) < R),
       N * (h * w) ≠ (0 : ℕ) →
-        R * N * (h * w) ≠ (0 : ℕ) →
-          ∀ (gN xN es t t' t'' : String) (ds ds' ds'' : List ℕ) (ε : ℝ) (γ : Proofs.Vec oc)
-            (x : Fin R → Proofs.StableHLO.SHlo (N * (oc * (h * w)))) (xv : Fin R → Proofs.Vec (N * (oc * (h * w))))
-            (dy : Fin R → Proofs.StableHLO.SHlo (N * (oc * (h * w)))) (X DY : Proofs.Vec (R * N * (oc * (h * w)))),
-            (∀ (r : Fin R), Proofs.StableHLO.den (x r) = Proofs.batchShard R N (oc * (h * w)) X r) →
-              (∀ (r : Fin R), xv r = Proofs.batchShard R N (oc * (h * w)) X r) →
-                (∀ (r : Fin R), Proofs.StableHLO.den (dy r) = Proofs.batchShard R N (oc * (h * w)) DY r) →
-                  ∀ (r : Fin R),
-                    Proofs.StableHLO.den
-                        (Proofs.StableHLO.SHlo.bnSyncBack gN xN es ε γ (xv r) (dy r)
-                          (Proofs.StableHLO.SHlo.allReduceMeanF R hR t'' ds'' fun (r' : Fin R) =>
-                            Proofs.StableHLO.SHlo.bnSyncDyStatsB gN xN es ε γ (xv r') (dy r')
-                              (Proofs.syncStats R hR t t' ds ds' x))) =
-                      Proofs.batchShard R N (oc * (h * w)) (Proofs.bnBatchTensor4_grad_input (R * N) oc h w ε γ X DY) r := by sorry
+        ∀ (gN xN es t t' t'' : String) (ds ds' ds'' : List ℕ) (ε : ℝ) (γ : Proofs.Vec oc)
+          (x : Fin R → Proofs.StableHLO.SHlo (N * (oc * (h * w)))) (xv : Fin R → Proofs.Vec (N * (oc * (h * w))))
+          (dy : Fin R → Proofs.StableHLO.SHlo (N * (oc * (h * w)))) (X DY : Proofs.Vec (R * N * (oc * (h * w)))),
+          (∀ (r : Fin R), Proofs.StableHLO.den (x r) = Proofs.batchShard R N (oc * (h * w)) X r) →
+            (∀ (r : Fin R), xv r = Proofs.batchShard R N (oc * (h * w)) X r) →
+              (∀ (r : Fin R), Proofs.StableHLO.den (dy r) = Proofs.batchShard R N (oc * (h * w)) DY r) →
+                ∀ (r : Fin R),
+                  Proofs.StableHLO.den
+                      (Proofs.StableHLO.SHlo.bnSyncBack gN xN es ε γ (xv r) (dy r)
+                        (Proofs.StableHLO.SHlo.allReduceMeanF R hR t'' ds'' fun (r' : Fin R) =>
+                          Proofs.StableHLO.SHlo.bnSyncDyStatsB gN xN es ε γ (xv r') (dy r')
+                            (Proofs.syncStats R hR t t' ds ds' x))) =
+                    Proofs.batchShard R N (oc * (h * w)) (Proofs.bnBatchTensor4_grad_input (R * N) oc h w ε γ X DY) r := by sorry
 
 /-- `Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global` -/
 theorem chk_den_allReduceMeanF_convWeightGradBBf16_sub_global :

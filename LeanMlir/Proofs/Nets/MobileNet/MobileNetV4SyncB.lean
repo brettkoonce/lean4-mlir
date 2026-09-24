@@ -107,11 +107,10 @@ theorem mnv4StemGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
     den (mnv4StemGraphSync epsStr R hR N h w Ws bs εs γs βs e r)
       = batchShard R N (oc * h * w) (mnv4StemB (R * N) h w Ws bs εs γs βs X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hc := den_batchOp_shard (N := N)
     (.convStridedXla (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e X he
   have hn := den_bnSyncSiteLA "%sg" "%sbt" epsStr "sgmu" "sgvar" [oc] [oc]
-    R hR hm hM εs γs βs _ _ hc
+    R hR hm εs γs βs _ _ hc
   exact den_relu_shard _ _ hn r
 
 /-- Fused stage at sync-BN, over the replica family: 3×3/s2 SYMMETRIC conv → sync-BN → **swish** →
@@ -140,15 +139,14 @@ theorem mnv4FusedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w
           ((mnv4FusedStage (R * N) (mnv4FusedConvLayer (h := h) (w := w) (R * N) Wc bc εc hεc γc βc)
             (projLayer (h := h) (w := w) (R * N) Wp bp εp hεp γp βp)).fwd X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hcc := den_batchOp_shard (N := N)
     (.convStrided (h := h) (w := w) "%f0cW" s!"%zb{mid}" Wc bc) e X he
   have hcn := den_bnSyncSiteLA "%f0cg" "%f0cbt" epsStr "f0cgmu" "f0cgvar" [mid] [mid]
-    R hR hm hM εc γc βc _ _ hcc
+    R hR hm εc γc βc _ _ hcc
   have hcs := den_swish_shard _ _ hcn
   have hpc := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%f0pW" s!"%zb{oc}" Wp bp) _ _ hcs
   exact den_bnSyncSiteLA "%f0pg" "%f0pbt" epsStr "f0pgmu" "f0pgvar" [oc] [oc]
-    R hR hm hM εp γp βp _ _ hpc r
+    R hR hm εp γp βp _ _ hpc r
 
 -- ════════════════════════════════════════════════════════════════
 -- § The UIB bodies — GENERIC IN THE ROW, one per family, as T2's
@@ -195,28 +193,27 @@ theorem mnv4ExtraDWBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) 
     den (mnv4ExtraDWBodyGraphSync epsStr R hR N s p e r)
       = batchShard R N (s.oc * s.h * s.h) ((mnv4BodyOfRow (R * N) s p).fwd X) r := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   have hqc := den_batchOp_shard (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
     s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) e X he
   have hqn := den_bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
-    [s.ic] [s.ic] R hR hm hM p.eq_ p.gq p.bq2 _ _ hqc
+    [s.ic] [s.ic] R hR hm p.eq_ p.gq p.bq2 _ _ hqc
   have hqr := den_relu_shard _ _ hqn
   have hec := den_batchOp_shard (N := N)
     (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
       s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqr
   have hen := den_bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
-    [s.ic * s.expand] [s.ic * s.expand] R hR hm hM p.ee p.ge p.be2 _ _ hec
+    [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ee p.ge p.be2 _ _ hec
   have her := den_relu_shard _ _ hen
   have hdc := den_batchOp_shard (N := N) (.depthwise (c := s.ic * s.expand) (h := s.h) (w := s.h)
     s!"%u{s.p}dW" s!"%zb{s.ic * s.expand}" p.Wd p.bd) _ _ her
   have hdn := den_bnSyncSiteLA s!"%u{s.p}dg" s!"%u{s.p}dbt" epsStr s!"u{s.p}dgmu" s!"u{s.p}dgvar"
-    [s.ic * s.expand] [s.ic * s.expand] R hR hm hM p.ed p.gd p.bd2 _ _ hdc
+    [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ed p.gd p.bd2 _ _ hdc
   have hdr := den_relu_shard _ _ hdn
   have hpc := den_batchOp_shard (N := N)
     (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
       s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz) _ _ hdr
   refine (den_bnSyncSiteLA s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr s!"u{s.p}pgmu" s!"u{s.p}pgvar"
-    [s.oc] [s.oc] R hR hm hM p.ez p.gz p.bz2 _ _ hpc r).trans
+    [s.oc] [s.oc] R hR hm p.ez p.gz p.bz2 _ _ hpc r).trans
     (congrArg (fun z => batchShard R N (s.oc * s.h * s.h) z r) ?_)
   simp only [mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot, ite_eq_right hq,
     ite_eq_right hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.comp_fwd, projB, cbReluB,
@@ -253,23 +250,22 @@ theorem mnv4ConvNeXtBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R)
     den (mnv4ConvNeXtBodyGraphSync epsStr R hR N s p e r)
       = batchShard R N (s.oc * s.h * s.h) ((mnv4BodyOfRow (R * N) s p).fwd X) r := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   have hqc := den_batchOp_shard (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
     s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) e X he
   have hqn := den_bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
-    [s.ic] [s.ic] R hR hm hM p.eq_ p.gq p.bq2 _ _ hqc
+    [s.ic] [s.ic] R hR hm p.eq_ p.gq p.bq2 _ _ hqc
   have hqr := den_relu_shard _ _ hqn
   have hec := den_batchOp_shard (N := N)
     (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
       s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqr
   have hen := den_bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
-    [s.ic * s.expand] [s.ic * s.expand] R hR hm hM p.ee p.ge p.be2 _ _ hec
+    [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ee p.ge p.be2 _ _ hec
   have her := den_relu_shard _ _ hen
   have hpc := den_batchOp_shard (N := N)
     (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
       s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz) _ _ her
   refine (den_bnSyncSiteLA s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr s!"u{s.p}pgmu" s!"u{s.p}pgvar"
-    [s.oc] [s.oc] R hR hm hM p.ez p.gz p.bz2 _ _ hpc r).trans
+    [s.oc] [s.oc] R hR hm p.ez p.gz p.bz2 _ _ hpc r).trans
     (congrArg (fun z => batchShard R N (s.oc * s.h * s.h) z r) ?_)
   simp only [mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot, ite_eq_right hq,
     ite_eq_left hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.id'_fwd,
@@ -299,18 +295,17 @@ theorem mnv4FfnBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N :
     den (mnv4FfnBodyGraphSync epsStr R hR N s p e r)
       = batchShard R N (s.oc * s.h * s.h) ((mnv4BodyOfRow (R * N) s p).fwd X) r := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   have hec := den_batchOp_shard (N := N)
     (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
       s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) e X he
   have hen := den_bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
-    [s.ic * s.expand] [s.ic * s.expand] R hR hm hM p.ee p.ge p.be2 _ _ hec
+    [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ee p.ge p.be2 _ _ hec
   have her := den_relu_shard _ _ hen
   have hpc := den_batchOp_shard (N := N)
     (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
       s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz) _ _ her
   refine (den_bnSyncSiteLA s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr s!"u{s.p}pgmu" s!"u{s.p}pgvar"
-    [s.oc] [s.oc] R hR hm hM p.ez p.gz p.bz2 _ _ hpc r).trans
+    [s.oc] [s.oc] R hR hm p.ez p.gz p.bz2 _ _ hpc r).trans
     (congrArg (fun z => batchShard R N (s.oc * s.h * s.h) z r) ?_)
   simp only [mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot, ite_eq_left hq,
     ite_eq_left hd, cbReluLayer, projLayer, CertLayer.id'_fwd, CertLayer.comp_fwd, projB, cbReluB,
@@ -356,28 +351,27 @@ theorem mnv4PreStridedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (
     den (mnv4PreStridedGraphSync epsStr R hR N s p e r)
       = batchShard R N (s.oc * s.h * s.h) ((mnv4PreStridedBodyOfRow (R * N) s p).fwd X) r := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   have hqc := den_batchOp_shard (N := N) (.depthwiseStrided (c := s.ic) (h := s.h) (w := s.h)
     s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) e X he
   have hqn := den_bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
-    [s.ic] [s.ic] R hR hm hM p.eq_ p.gq p.bq2 _ _ hqc
+    [s.ic] [s.ic] R hR hm p.eq_ p.gq p.bq2 _ _ hqc
   have hqr := den_relu_shard _ _ hqn
   have hec := den_batchOp_shard (N := N)
     (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
       s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqr
   have hen := den_bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
-    [s.ic * s.expand] [s.ic * s.expand] R hR hm hM p.ee p.ge p.be2 _ _ hec
+    [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ee p.ge p.be2 _ _ hec
   have her := den_relu_shard _ _ hen
   have hdc := den_batchOp_shard (N := N) (.depthwise (c := s.ic * s.expand) (h := s.h) (w := s.h)
     s!"%u{s.p}dW" s!"%zb{s.ic * s.expand}" p.Wd p.bd) _ _ her
   have hdn := den_bnSyncSiteLA s!"%u{s.p}dg" s!"%u{s.p}dbt" epsStr s!"u{s.p}dgmu" s!"u{s.p}dgvar"
-    [s.ic * s.expand] [s.ic * s.expand] R hR hm hM p.ed p.gd p.bd2 _ _ hdc
+    [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ed p.gd p.bd2 _ _ hdc
   have hdr := den_relu_shard _ _ hdn
   have hpc := den_batchOp_shard (N := N)
     (.conv (ic := s.ic * s.expand) (oc := s.oc) (h := s.h) (w := s.h)
       s!"%u{s.p}pW" s!"%zb{s.oc}" p.Wz p.bz) _ _ hdr
   refine (den_bnSyncSiteLA s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr s!"u{s.p}pgmu" s!"u{s.p}pgvar"
-    [s.oc] [s.oc] R hR hm hM p.ez p.gz p.bz2 _ _ hpc r).trans
+    [s.oc] [s.oc] R hR hm p.ez p.gz p.bz2 _ _ hpc r).trans
     (congrArg (fun z => batchShard R N (s.oc * s.h * s.h) z r) ?_)
   simp only [mnv4PreStridedBodyOfRow, mnv4UibPreStridedBody, mnv4PostDWSlot, ite_eq_right hd,
     mnv4DWReluLayer, mnv4DWReluStridedLayer, cbReluLayer, projLayer, CertLayer.comp_fwd, projB,
@@ -434,14 +428,13 @@ theorem mnv4HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
               (gapLayer (R * N) (c := oc) (h := h) (w := w))
               (denseLayer (R * N) Wd bd))).fwd X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hc1 := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1) e X he
   have hn1 := den_bnSyncSiteLA "%h1g" "%h1bt" epsStr "h1gmu" "h1gvar" [mid] [mid]
-    R hR hm hM ε1 γ1 β1 _ _ hc1
+    R hR hm ε1 γ1 β1 _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
   have hc2 := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%hW" s!"%zb{oc}" W2 b2) _ _ hr1
   have hn2 := den_bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc]
-    R hR hm hM ε2 γ2 β2 _ _ hc2
+    R hR hm ε2 γ2 β2 _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hg := den_batchOp_shard (N := N) (.gap (c := oc) (h := h) (w := w)) _ _ hr2
   exact den_batchOp_shard (N := N) (.dense "%Wd" "%bd" Wd bd) _ _ hg r

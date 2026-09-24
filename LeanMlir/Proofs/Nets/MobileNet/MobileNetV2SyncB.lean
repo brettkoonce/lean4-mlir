@@ -87,11 +87,10 @@ theorem mnv2StemGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
     den (mnv2StemGraphSync epsStr R hR N h w Ws bs εs γs βs e r)
       = batchShard R N (oc * h * w) (mnv2StemB (R * N) h w Ws bs εs γs βs X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hc := den_batchOp_shard (N := N)
     (.convStridedXla (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e X he
   have hn := den_bnSyncSiteLA "%sg" "%sbt" epsStr "sgmu" "sgvar" [oc] [oc]
-    R hR hm hM εs γs βs _ _ hc
+    R hR hm εs γs βs _ _ hc
   exact den_relu6_shard _ _ hn r
 
 /-- `t = 1` bottleneck (b1) at sync-BN, over the replica family: depthwise → sync-BN → relu6 →
@@ -115,16 +114,15 @@ theorem mnv2NoExpGraphSync_shard (pfx epsStr : String) (R : Nat) (hR : 0 < R) (N
     den (mnv2NoExpGraphSync pfx epsStr R hR N h w p e r)
       = batchShard R N (oc * h * w) (mnv2NoExpB (R * N) h w p X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hdc := den_batchOp_shard (N := N)
     (.depthwise (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{ic}" p.dW p.db) e X he
   have hdn := den_bnSyncSiteLA s!"%b{pfx}dg" s!"%b{pfx}dbt" epsStr s!"b{pfx}dgmu" s!"b{pfx}dgvar"
-    [ic] [ic] R hR hm hM p.dε p.dγ p.dβ _ _ hdc
+    [ic] [ic] R hR hm p.dε p.dγ p.dβ _ _ hdc
   have hdr := den_relu6_shard _ _ hdn
   have hpc := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb) _ _ hdr
   exact den_bnSyncSiteLA s!"%b{pfx}pg" s!"%b{pfx}pbt" epsStr s!"b{pfx}pgmu" s!"b{pfx}pgvar"
-    [oc] [oc] R hR hm hM p.pε p.pγ p.pβ _ _ hpc r
+    [oc] [oc] R hR hm p.pε p.pγ p.pβ _ _ hpc r
 
 /-- Stride-1 no-skip bottleneck (b11, b17) at sync-BN, over the replica family: expand →
     depthwise → project, a sync site after each, relu6 after the first two. -/
@@ -154,21 +152,20 @@ theorem mnv2ExpOnlyGraphSync_shard (pfx epsStr : String) (R : Nat) (hR : 0 < R) 
     den (mnv2ExpOnlyGraphSync pfx epsStr R hR N h w p e r)
       = batchShard R N (oc * h * w) (mnv2ExpOnlyB (R * N) h w p X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hec := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%b{pfx}eW" s!"%zb{mid}" p.eW p.eb) e X he
   have hen := den_bnSyncSiteLA s!"%b{pfx}eg" s!"%b{pfx}ebt" epsStr s!"b{pfx}egmu" s!"b{pfx}egvar"
-    [mid] [mid] R hR hm hM p.eε p.eγ p.eβ _ _ hec
+    [mid] [mid] R hR hm p.eε p.eγ p.eβ _ _ hec
   have her := den_relu6_shard _ _ hen
   have hdc := den_batchOp_shard (N := N)
     (.depthwise (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{mid}" p.dW p.db) _ _ her
   have hdn := den_bnSyncSiteLA s!"%b{pfx}dg" s!"%b{pfx}dbt" epsStr s!"b{pfx}dgmu" s!"b{pfx}dgvar"
-    [mid] [mid] R hR hm hM p.dε p.dγ p.dβ _ _ hdc
+    [mid] [mid] R hR hm p.dε p.dγ p.dβ _ _ hdc
   have hdr := den_relu6_shard _ _ hdn
   have hpc := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb) _ _ hdr
   exact den_bnSyncSiteLA s!"%b{pfx}pg" s!"%b{pfx}pbt" epsStr s!"b{pfx}pgmu" s!"b{pfx}pgvar"
-    [oc] [oc] R hR hm hM p.pε p.pγ p.pβ _ _ hpc r
+    [oc] [oc] R hR hm p.pε p.pγ p.pβ _ _ hpc r
 
 /-- Stride-1 skip bottleneck at sync-BN: the body plus the `addVB` identity skip, the block input
     shared between both arms on every replica. -/
@@ -216,23 +213,21 @@ theorem mnv2StridedGraphSync_shard (pfx epsStr : String) (R : Nat) (hR : 0 < R) 
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hm2 := nhw_ne_zero hN h2h h2w
-  have hM2 := nhw_ne_zero (Nat.mul_pos hR hN) h2h h2w
   have hec := den_batchOp_shard (N := N)
     (.conv (h := 2 * h) (w := 2 * w) s!"%b{pfx}eW" s!"%zb{mid}" p.eW p.eb) e X he
   have hen := den_bnSyncSiteLA s!"%b{pfx}eg" s!"%b{pfx}ebt" epsStr s!"b{pfx}egmu" s!"b{pfx}egvar"
-    [mid] [mid] R hR hm2 hM2 p.eε p.eγ p.eβ _ _ hec
+    [mid] [mid] R hR hm2 p.eε p.eγ p.eβ _ _ hec
   have her := den_relu6_shard _ _ hen
   have hdc := den_batchOp_shard (N := N)
     (.depthwiseStridedXla (h := h) (w := w) s!"%b{pfx}dW" s!"%zb{mid}" p.dW p.db) _ _ her
   have hdn := den_bnSyncSiteLA s!"%b{pfx}dg" s!"%b{pfx}dbt" epsStr s!"b{pfx}dgmu" s!"b{pfx}dgvar"
-    [mid] [mid] R hR hm hM p.dε p.dγ p.dβ _ _ hdc
+    [mid] [mid] R hR hm p.dε p.dγ p.dβ _ _ hdc
   have hdr := den_relu6_shard _ _ hdn
   have hpc := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%b{pfx}pW" s!"%zb{oc}" p.pW p.pb) _ _ hdr
   exact den_bnSyncSiteLA s!"%b{pfx}pg" s!"%b{pfx}pbt" epsStr s!"b{pfx}pgmu" s!"b{pfx}pgvar"
-    [oc] [oc] R hR hm hM p.pε p.pγ p.pβ _ _ hpc r
+    [oc] [oc] R hR hm p.pε p.pγ p.pβ _ _ hpc r
 
 /-- Head at sync-BN, over the replica family: 1x1 conv → sync-BN → relu6 → GAP → dense. -/
 def mnv2HeadGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : Nat}
@@ -254,10 +249,9 @@ theorem mnv2HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
     den (mnv2HeadGraphSync epsStr R hR N h w Wh bh εh γh βh Wd bd e r)
       = batchShard R N nCls (mnv2HeadB (R * N) h w Wh bh εh γh βh Wd bd X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hc := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%hW" s!"%zb{oc}" Wh bh) e X he
   have hn := den_bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc]
-    R hR hm hM εh γh βh _ _ hc
+    R hR hm εh γh βh _ _ hc
   have hr := den_relu6_shard _ _ hn
   have hg := den_batchOp_shard (N := N) (.gap (c := oc) (h := h) (w := w)) _ _ hr
   exact den_batchOp_shard (N := N) (.dense "%Wd" "%bd" Wd bd) _ _ hg r

@@ -217,7 +217,7 @@ include hN hh hw in
 theorem r34IdSyncCotC2_shard (r : Fin R) :
     r34IdSyncCotC2 R hR N h w p XIN dys r
       = batchShard R N (c * h * w) (r34IdCotC2 (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N c h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N c h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34IdSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
@@ -232,7 +232,7 @@ include hN hh hw in
 theorem r34IdSyncCotC1_shard (r : Fin R) :
     r34IdSyncCotC1 R hR N h w p XIN dys r
       = batchShard R N (c * h * w) (r34IdCotC1 (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N c h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N c h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34IdSyncCotN1_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
@@ -298,7 +298,7 @@ include hN hh hw in
 theorem r34DownSyncCotC2_shard (r : Fin R) :
     r34DownSyncCotC2 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotC2 (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34DownSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
@@ -313,14 +313,14 @@ include hN hh hw in
 theorem r34DownSyncCotC1_shard (r : Fin R) :
     r34DownSyncCotC1 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotC1 (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34DownSyncCotN1_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
 theorem r34DownSyncCotCp_shard (r : Fin R) :
     r34DownSyncCotCp R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotCp (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34DownSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
@@ -379,7 +379,6 @@ theorem r34StemSyncCotC_shard (r : Fin R) :
       = batchShard R N _ (r34StemCotC (R * N) h w Ws bs εs γs βs X DY) r :=
   bnSyncInB_shard R hR N oc (2 * h) (2 * w)
     (nhw_ne_zero hN (Nat.mul_pos (by norm_num) hh) (Nat.mul_pos (by norm_num) hw))
-    (nhw_ne_zero (Nat.mul_pos hR hN) (Nat.mul_pos (by norm_num) hh) (Nat.mul_pos (by norm_num) hw))
     _ _ _ _ _ _ (fun _ => rfl) (r34StemSyncCotN_shard R N h w Ws bs εs γs βs X dys DY hdys) r
 
 end StemShard

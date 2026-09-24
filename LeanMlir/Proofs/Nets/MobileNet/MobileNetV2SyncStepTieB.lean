@@ -280,7 +280,7 @@ include hN hh hw hdys
 theorem mnv2NoExpSyncCotPc_shard (r : Fin R) :
     mnv2NoExpSyncCotPc R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (mnv2NoExpCotPc (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) hdys r
 
 theorem mnv2NoExpSyncCotDn_shard (r : Fin R) :
@@ -293,7 +293,7 @@ theorem mnv2NoExpSyncCotDn_shard (r : Fin R) :
 theorem mnv2NoExpSyncCotDc_shard (r : Fin R) :
     mnv2NoExpSyncCotDc R hR N h w p XIN dys r
       = batchShard R N (ic * h * w) (mnv2NoExpCotDc (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N ic h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N ic h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (mnv2NoExpSyncCotDn_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 theorem mnv2NoExpSyncCotIn_shard (r : Fin R) :
@@ -367,7 +367,7 @@ include hN hh hw hdys
 theorem mnv2SyncCotPc_shard (r : Fin R) :
     mnv2SyncCotPc R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (mnv2CotPc (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) hdys r
 
 theorem mnv2SyncCotDn_shard (r : Fin R) :
@@ -380,7 +380,7 @@ theorem mnv2SyncCotDn_shard (r : Fin R) :
 theorem mnv2SyncCotDc_shard (r : Fin R) :
     mnv2SyncCotDc R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (mnv2CotDc (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (mnv2SyncCotDn_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 theorem mnv2SyncCotEn_shard (r : Fin R) :
@@ -393,7 +393,7 @@ theorem mnv2SyncCotEn_shard (r : Fin R) :
 theorem mnv2SyncCotEc_shard (r : Fin R) :
     mnv2SyncCotEc R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (mnv2CotEc (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (mnv2SyncCotEn_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 theorem mnv2SyncCotInBody_shard (r : Fin R) :
@@ -473,7 +473,7 @@ include hN hh hw hdys
 theorem mnv2SSyncCotPc_shard (r : Fin R) :
     mnv2SSyncCotPc R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (mnv2SCotPc (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) hdys r
 
 theorem mnv2SSyncCotDn_shard (r : Fin R) :
@@ -486,7 +486,7 @@ theorem mnv2SSyncCotDn_shard (r : Fin R) :
 theorem mnv2SSyncCotDc_shard (r : Fin R) :
     mnv2SSyncCotDc R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (mnv2SCotDc (R * N) h w p XIN DY) r :=
-  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (mnv2SSyncCotDn_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 theorem mnv2SSyncCotEn_shard (r : Fin R) :
@@ -501,7 +501,6 @@ theorem mnv2SSyncCotEc_shard (r : Fin R) :
       = batchShard R N (mid * (2 * h) * (2 * w)) (mnv2SCotEc (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N mid (2 * h) (2 * w)
     (nhw_ne_zero hN (Nat.mul_pos (by norm_num) hh) (Nat.mul_pos (by norm_num) hw))
-    (nhw_ne_zero (Nat.mul_pos hR hN) (Nat.mul_pos (by norm_num) hh) (Nat.mul_pos (by norm_num) hw))
     _ _ _ _ _ _ (fun _ => rfl) (mnv2SSyncCotEn_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 theorem mnv2StridedSyncCotIn_shard (r : Fin R) :
@@ -549,7 +548,7 @@ include hN hh hw in
 theorem mnv2StemSyncCotC_shard (r : Fin R) :
     mnv2StemSyncCotC R hR N h w Ws bs εs γs βs X dys r
       = batchShard R N (oc * h * w) (mnv2StemCotC (R * N) h w Ws bs εs γs βs X DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (mnv2StemSyncCotN_shard R N h w Ws bs εs γs βs X dys DY hdys) r
 
 end StemShard
@@ -597,7 +596,7 @@ include hN hh hw in
 theorem mnv2HeadSyncCotHc_shard (r : Fin R) :
     mnv2HeadSyncCotHc R hR N h w Wh bh εh γh βh Wd XIN gs r
       = batchShard R N (oc * h * w) (mnv2HeadCotHc (R * N) h w Wh bh εh γh βh Wd XIN G) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (mnv2HeadSyncCotHn_shard R N h w Wh bh εh γh βh Wd XIN gs G hgs) r
 
 include hN hh hw in

@@ -357,8 +357,7 @@ include hN hh hdys
 theorem mnv4SyncCotPc_shard (r : Fin R) :
     mnv4SyncCotPc R hR N s p XIN dys r
       = batchShard R N (s.oc * s.h * s.h) (mnv4CotPc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N s.oc s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl) hdys r
+  bnSyncInB_shard R hR N s.oc s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl) hdys r
 
 theorem mnv4SyncCotDn_shard (r : Fin R) :
     mnv4SyncCotDn R hR N s p XIN dys r
@@ -370,8 +369,7 @@ theorem mnv4SyncCotDn_shard (r : Fin R) :
 theorem mnv4SyncCotDc_shard (r : Fin R) :
     mnv4SyncCotDc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4CotDc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SyncCotDn_shard R hR N hN s hh p XIN dys DY hdys) r
 
 theorem mnv4SyncCotEn_shard (r : Fin R) :
@@ -387,8 +385,7 @@ theorem mnv4SyncCotEn_shard (r : Fin R) :
 theorem mnv4SyncCotEc_shard (r : Fin R) :
     mnv4SyncCotEc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4CotEc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SyncCotEn_shard R hR N hN s hh p XIN dys DY hdys) r
 
 theorem mnv4SyncCotQn_shard (r : Fin R) :
@@ -401,8 +398,7 @@ theorem mnv4SyncCotQn_shard (r : Fin R) :
 theorem mnv4SyncCotQc_shard (r : Fin R) :
     mnv4SyncCotQc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.h * s.h) (mnv4CotQc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N s.ic s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard R hR N s.ic s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SyncCotQn_shard R hR N hN s hh p XIN dys DY hdys) r
 
 theorem mnv4BodySyncCotIn_shard (r : Fin R) :
@@ -501,8 +497,7 @@ include hN hh hdys
 theorem mnv4SSyncCotPc_shard (r : Fin R) :
     mnv4SSyncCotPc R hR N s p XIN dys r
       = batchShard R N (s.oc * s.h * s.h) (mnv4SCotPc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N s.oc s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl) hdys r
+  bnSyncInB_shard R hR N s.oc s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl) hdys r
 
 theorem mnv4SSyncCotDn_shard (r : Fin R) :
     mnv4SSyncCotDn R hR N s p XIN dys r
@@ -514,8 +509,7 @@ theorem mnv4SSyncCotDn_shard (r : Fin R) :
 theorem mnv4SSyncCotDc_shard (r : Fin R) :
     mnv4SSyncCotDc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4SCotDc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SSyncCotDn_shard R hR N hN s hh p XIN dys DY hdys) r
 
 theorem mnv4SSyncCotEn_shard (r : Fin R) :
@@ -528,8 +522,7 @@ theorem mnv4SSyncCotEn_shard (r : Fin R) :
 theorem mnv4SSyncCotEc_shard (r : Fin R) :
     mnv4SSyncCotEc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4SCotEc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SSyncCotEn_shard R hR N hN s hh p XIN dys DY hdys) r
 
 theorem mnv4SSyncCotQn_shard (r : Fin R) :
@@ -542,8 +535,7 @@ theorem mnv4SSyncCotQn_shard (r : Fin R) :
 theorem mnv4SSyncCotQc_shard (r : Fin R) :
     mnv4SSyncCotQc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.h * s.h) (mnv4SCotQc (R * N) s p XIN DY) r :=
-  bnSyncInB_shard R hR N s.ic s.h s.h (nhw_ne_zero hN hh hh)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hh) _ _ _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard R hR N s.ic s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SSyncCotQn_shard R hR N hN s hh p XIN dys DY hdys) r
 
 theorem mnv4SBodySyncCotIn_shard (r : Fin R) :
@@ -592,7 +584,7 @@ include hN hh hw in
 theorem mnv4StemSyncCotC_shard (r : Fin R) :
     mnv4StemSyncCotC R hR N h w Ws bs εs γs βs X dys r
       = batchShard R N (oc * h * w) (mnv4StemCotC (R * N) h w Ws bs εs γs βs X DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (mnv4StemSyncCotN_shard R N h w Ws bs εs γs βs X dys DY hdys) r
 
 end StemShard
@@ -644,7 +636,7 @@ theorem mnv4FusedSyncCotPc_shard (r : Fin R) :
     mnv4FusedSyncCotPc R hR N h w Wc bc εc γc βc Wp bp εp γp XIN dys r
       = batchShard R N (oc * h * w)
           (mnv4FusedCotPc (R * N) h w Wc bc εc γc βc Wp bp εp γp βp XIN DY) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) hdys r
 
 theorem mnv4FusedSyncCotN_shard (r : Fin R) :
@@ -660,7 +652,7 @@ theorem mnv4FusedSyncCotC_shard (r : Fin R) :
     mnv4FusedSyncCotC R hR N h w Wc bc εc γc βc Wp bp εp γp XIN dys r
       = batchShard R N (mid * h * w)
           (mnv4FusedCotC (R * N) h w Wc bc εc γc βc Wp bp εp γp βp XIN DY) r :=
-  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl)
     (mnv4FusedSyncCotN_shard R hR N h w hN hh hw Wc bc εc γc βc Wp bp εp γp βp XIN dys DY hdys) r
 
@@ -740,7 +732,7 @@ theorem mnv4HeadSyncCotHc_shard (r : Fin R) :
     mnv4HeadSyncCotHc R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs r
       = batchShard R N (oc * h * w)
           (mnv4HeadCotHc (R * N) h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN G) r :=
-  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl)
     (mnv4HeadSyncCotHn_shard R N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs G hgs) r
 
@@ -759,7 +751,7 @@ theorem mnv4HeadSyncCotH1c_shard (r : Fin R) :
     mnv4HeadSyncCotH1c R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs r
       = batchShard R N (mid * h * w)
           (mnv4HeadCotH1c (R * N) h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN G) r :=
-  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+  bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl)
     (mnv4HeadSyncCotH1n_shard R hR N h w hN hh hw W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs G
       hgs) r

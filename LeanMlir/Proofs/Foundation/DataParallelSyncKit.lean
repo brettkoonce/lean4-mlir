@@ -70,11 +70,12 @@ def bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) (hR : 0 
     `den_bnSyncF_allReduce` (P1 on the graph), carried across the `mul_assoc` seam: the right-hand
     side is `bnBatchLA` — what `bnBatchF` denotes — at `N := R·N`. -/
 theorem den_bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) (hR : 0 < R)
-    {N oc h w : Nat} (hm : N * (h * w) ≠ 0) (hM : (R * N) * (h * w) ≠ 0) (ε : ℝ) (γ β : Vec oc)
+    {N oc h w : Nat} (hm : N * (h * w) ≠ 0) (ε : ℝ) (γ β : Vec oc)
     (x : Fin R → SHlo (N * (oc * h * w))) (X : Vec ((R * N) * (oc * h * w)))
     (hx : ∀ r, den (x r) = batchShard R N (oc * h * w) X r) (r : Fin R) :
     den (bnSyncSiteLA gN bN es t t' ds ds' R hR ε γ β x r)
       = batchShard R N (oc * h * w) (bnBatchLA (R * N) oc h w ε γ β X) r := by
+  have hM := mulR_nhw_ne_zero hR hm
   have hx' : ∀ r, den (castIdx (laAssoc N oc h w) (x r))
       = batchShard R N (oc * (h * w))
           (fun i => X (Fin.cast (congrArg ((R * N) * ·) (Nat.mul_assoc oc h w)).symm i)) r := by
@@ -82,7 +83,7 @@ theorem den_bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) 
     rw [den_castIdx, hx]
     exact (batchShard_castIdx (Nat.mul_assoc oc h w) X r).symm
   unfold bnSyncSiteLA
-  rw [den_castIdx, den_bnSyncF_allReduce R hR hm hM gN bN es t t' ds ds' ε γ β _ _ hx' r]
+  rw [den_castIdx, den_bnSyncF_allReduce R hR hm gN bN es t t' ds ds' ε γ β _ _ hx' r]
   exact (batchShard_castIdx (Nat.mul_assoc oc h w).symm _ r).symm
 
 /-- The reduction width a BatchNorm site needs nonzero, from the three positive dimensions. -/
@@ -252,19 +253,20 @@ theorem reassocB_shard {R N oc h w : Nat} (X : Vec ((R * N) * (oc * h * w))) (r 
 /-- ⭐⭐ **The sync-BN backward on replica `r` is shard `r` of the global-batch BN backward** —
     `den_bnSyncBack_allReduce` (P2 on the graph) at the network index. The right-hand side is
     `bnInB`, the single-device chain's BN link, at `N := R·N`. -/
-theorem bnSyncInB_shard (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
-    (hM : (R * N) * (h * w) ≠ 0) (ε : ℝ) (γ : Vec oc) (xs dys : Fin R → Vec (N * (oc * h * w)))
+theorem bnSyncInB_shard (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0) (ε : ℝ)
+    (γ : Vec oc) (xs dys : Fin R → Vec (N * (oc * h * w)))
     (X DY : Vec ((R * N) * (oc * h * w)))
     (hxs : ∀ r, xs r = batchShard R N (oc * h * w) X r)
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     bnSyncInB R hR N oc h w ε γ xs dys r
       = batchShard R N (oc * h * w) (bnInB (R * N) oc h w ε γ X DY) r := by
+  have hM := mulR_nhw_ne_zero hR hm
   have hX : ∀ r, reassocB N oc h w (xs r) = batchShard R N (oc * (h * w)) (reassocB (R * N) oc h w X) r :=
     fun r => by rw [hxs]; exact reassocB_shard X r
   have hDY : ∀ r, reassocB N oc h w (dys r)
       = batchShard R N (oc * (h * w)) (reassocB (R * N) oc h w DY) r :=
     fun r => by rw [hdys]; exact reassocB_shard DY r
-  have key := den_bnSyncBack_allReduce R hR hm hM "" "" "" "" "" "" [] [] [] ε γ
+  have key := den_bnSyncBack_allReduce R hR hm "" "" "" "" "" "" [] [] [] ε γ
     (fun r => .operand "" (reassocB N oc h w (xs r))) (fun r => reassocB N oc h w (xs r))
     (fun r => .operand "" (reassocB N oc h w (dys r)))
     (reassocB (R * N) oc h w X) (reassocB (R * N) oc h w DY) hX hX hDY r
@@ -398,7 +400,6 @@ theorem bnSync_of_scaled (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * 
     (COT : Vec ((R * N) * (oc * h * w)))
     (hc : ∀ r, cots r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * COT i) r) :
     BnSync R hR N oc h w tg tb vN epsStr cotN ε V cots COT := by
-  have hM : (R * N) * (h * w) ≠ 0 := by rw [Nat.mul_assoc]; exact Nat.mul_ne_zero hR.ne' hm
   have hV : ∀ r, den (SHlo.operand vN (reassocB N oc h w (batchShard R N (oc * h * w) V r)))
       = batchShard R N (oc * (h * w)) (reassocB (R * N) oc h w V) r :=
     fun r => reassocB_shard V r
@@ -406,7 +407,7 @@ theorem bnSync_of_scaled (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * 
       = batchShard R N (oc * (h * w)) (reassocB (R * N) oc h w (fun i => (R : ℝ) * COT i)) r :=
     fun r => by rw [den_operand, hc]; exact reassocB_shard _ r
   refine ⟨fun k => ?_, fun k => ?_⟩
-  · rw [den_allReduceMeanF_bnSyncGammaGradB R hR hm hM vN epsStr s!"{tg}mu" s!"{tg}var" tg
+  · rw [den_allReduceMeanF_bnSyncGammaGradB R hR hm vN epsStr s!"{tg}mu" s!"{tg}var" tg
         [oc] [oc] [oc] ε _ (fun r => reassocB N oc h w (batchShard R N (oc * h * w) V r)) _
         (reassocB (R * N) oc h w V) (reassocB (R * N) oc h w (fun i => (R : ℝ) * COT i)) hV
         (fun r => reassocB_shard V r) hC k]

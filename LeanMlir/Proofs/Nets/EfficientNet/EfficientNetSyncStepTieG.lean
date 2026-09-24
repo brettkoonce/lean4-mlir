@@ -564,13 +564,13 @@ theorem seInB_shard {R N : Nat} {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec r
     `bnSyncInB_shard` (P2 at the network index) read through `bnInB_eq_bnBackB`, so the right-hand
     side is `bnBackB`, T3's own BN link. -/
 theorem bnSyncInB_shard_bnBackB (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
-    (hM : (R * N) * (h * w) ≠ 0) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (xs dys : Fin R → Vec (N * (oc * h * w))) (X DY : Vec ((R * N) * (oc * h * w)))
     (hxs : ∀ r, xs r = batchShard R N (oc * h * w) X r)
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     bnSyncInB R hR N oc h w ε γ xs dys r
       = batchShard R N (oc * h * w) (bnBackB (R * N) oc h w ε hε γ β X DY) r := by
-  rw [bnSyncInB_shard R hR N oc h w hm hM ε γ xs dys X DY hxs hdys r,
+  rw [bnSyncInB_shard R hR N oc h w hm ε γ xs dys X DY hxs hdys r,
     bnInB_eq_bnBackB (R * N) oc h w ε hε γ β]
 
 -- ════════════════════════════════════════════════════════════════
@@ -766,8 +766,8 @@ theorem tsCotPbn_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotPbn R hR N h w t DC dys r = batchShard R N (oc * h * w) (tCotPbn (R * N) h w t hp DC DY) r :=
-  bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) t.pε hp t.pγ t.pβ _ dys _ DY (fun _ => rfl) hdys r
+  bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw) t.pε hp t.pγ t.pβ
+    _ dys _ DY (fun _ => rfl) hdys r
 
 theorem tsCotSeOut_shard (hp : 0 < t.pε) (DC : Vec ((R * N) * (mid * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
@@ -832,8 +832,8 @@ theorem tsCotDc_shard (hd : 0 < t.dε) (hp : 0 < t.pε) (DC : Vec ((R * N) * (mi
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     tsCotDc R hR N h w t DC dys r
       = batchShard R N (mid * h * w) (tCotDc (R * N) h w t hd hp DC DY) r :=
-  bnSyncInB_shard_bnBackB R hR N mid h w (nhw_ne_zero hN hh hw)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) t.dε hd t.dγ t.dβ _ _ DC _ (fun _ => rfl)
+  bnSyncInB_shard_bnBackB R hR N mid h w (nhw_ne_zero hN hh hw) t.dε hd t.dγ t.dβ
+    _ _ DC _ (fun _ => rfl)
     (tsCotDn_shard R hR N h w hN hh hw t hp DC dys DY hdys) r
 
 end
@@ -967,8 +967,8 @@ theorem xsCotEc_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (r : Fin R) :
     xsCotEc R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (xCotEc (R * N) h w p he hd hp XIN DY) r :=
-  bnSyncInB_shard_bnBackB R hR N mid h w (nhw_ne_zero hN hh hw)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) p.eε he p.eγ p.eβ _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard_bnBackB R hR N mid h w (nhw_ne_zero hN hh hw) p.eε he p.eγ p.eβ
+    _ _ _ _ (fun _ => rfl)
     (xsCotEn_shard R hR N h w hN hh hw p hd hp XIN dys DY hdys) r
 
 theorem xsCotIn_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
@@ -1027,7 +1027,6 @@ theorem ssCotEc_shard (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
       = batchShard R N (mid * (2 * h) * (2 * w)) (sCotEc (R * N) h w p he hd hp XIN DY) r :=
   bnSyncInB_shard_bnBackB R hR N mid (2 * h) (2 * w)
     (nhw_ne_zero hN (Nat.mul_pos (by norm_num) hh) (Nat.mul_pos (by norm_num) hw))
-    (nhw_ne_zero (Nat.mul_pos hR hN) (Nat.mul_pos (by norm_num) hh) (Nat.mul_pos (by norm_num) hw))
     p.eε he p.eγ p.eβ _ _ _ _ (fun _ => rfl)
     (ssCotEn_shard R hR N h w hN hh hw p hd hp XIN dys DY hdys) r
 
@@ -1073,8 +1072,7 @@ theorem stsCotStc_shard (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kHs kWs : Na
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
     stsCotStc R hR N h w Ws bs εs γs βs X dys r
       = batchShard R N (oc * h * w) (stCotStc (R * N) h w Ws bs εs hεs γs βs X DY) r :=
-  bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) εs hεs γs βs _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw) εs hεs γs βs _ _ _ _ (fun _ => rfl)
     (stsCotBnS_shard R N h w Ws bs εs γs βs X dys DY hdys) r
 
 theorem hdCotHr_shard {R N : Nat} (h w : Nat) {oc nC : Nat} (Wfc : Mat oc nC)
@@ -1103,8 +1101,7 @@ theorem hdsCotHbn_shard {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
     (hgs : ∀ r, gs r = batchShard R N nC G r) (r : Fin R) :
     hdsCotHbn R hR N h w Wh bh εh γh βh Wfc XIN gs r
       = batchShard R N (oc * h * w) (hdCotHbn (R * N) h w Wh bh εh hεh γh βh Wfc XIN G) r :=
-  bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw)
-    (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) εh hεh γh βh _ _ _ _ (fun _ => rfl)
+  bnSyncInB_shard_bnBackB R hR N oc h w (nhw_ne_zero hN hh hw) εh hεh γh βh _ _ _ _ (fun _ => rfl)
     (hdsCotHsw_shard R N h w Wh bh εh γh βh Wfc XIN gs G hgs) r
 
 theorem hdsCotIn_shard {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)

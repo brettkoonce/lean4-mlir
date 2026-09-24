@@ -78,9 +78,9 @@ as far as it pays (6778f8c9); retiring the `r34PreK`/`r50PreK`/`mnv2PreBK` vocab
 comparator-tier change, parked there. What is left is the medium tier of
 `proof_cleanup_audits/reaudit_2026_09_24_open_findings.md` (the `*TiedB` Props that restate their
 `_den` lemmas, ConvNeXt's `@[irreducible]` wrappers, FloatBridge's repeated cotangent blocks) and
-its codegen report. Also open, not measured: §3.6's `IsShardwise`.
+its codegen report. §3.6's `IsShardwise` was surveyed and not built (§6.8).
 
-Parked (low payoff): `IsShardwise` for the `_shard` family (§3.6), the StableHLO printer split
+Parked (low payoff): the StableHLO printer split
 (§3.2, ~45 s), FullNets' matrix-level `G1` lemma (§3.3, ~20 s).
 
 ## 1. Done
@@ -201,8 +201,10 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
   longer than what it replaces, and its closing `rfl` would have the kernel compare the concrete
   chain (the timeout `comp3_assoc`'s comment records). The `simp only` over the prefix defs is fast.
 * ~~`sealDiffAt` for R34/R50~~ — done as §1(t), bundles first (the unbundled try was +99 lines).
-* The `_shard` family (~130 lemmas) has the same shape as `_smul`; an `IsShardwise` predicate was not
-  built. `[NeZero N]` for the `hN hh hw` threading was not done (it changes every caller's arguments).
+* ~~`IsShardwise` for the `_shard` family~~ — surveyed in §6.8 and not built: the op-level lemmas
+  are already one term each and the net-level ones are chain steps over named replica defs. The
+  repetition that was there (the global count `hM`) went instead. `[NeZero N]` for the
+  `hN hh hw` threading was not done (it changes every caller's arguments).
 * The weight-gradient `den` `_smul` lemmas (pointwise, scalar-valued) keep their form.
 
 ### 3.7 Small, any time — DONE as §1(l)
@@ -422,3 +424,19 @@ deleted and their callers name the underlying Prop. `cnx_net_tiedGB` is in the t
 statement moves from `cnxHeadChTiedGBAt` to `cnxHeadChTiedGB` (tier regenerated). The wrappers that
 repackage a record or compute `let`s (`enet*TiedGAt`, `vitBlockTiedAtMHV`, the ConvNeXt `*TiedAt`)
 stay as plain `def`s.
+
+### 6.8 §3.6 `IsShardwise`, surveyed; the global count `hM` derived instead (2026-09-24)
+
+~200 `*_shard` theorems in 15 files. An `IsShardwise` predicate does not pay: the ~50 op-level ones
+(`cInB_shard`, `dInB_shard`, …) are already `(batchShard_batchMap _ DY r).symm`, and the net-level
+ones (`r34IdSyncCotC2_shard`, `mnv4FusedGraphSync_shard`, …) are chain steps over named replica
+definitions, 5–7 lines each, mostly statement; a predicate would rename their hypotheses only.
+
+The repetition they did share: eight lemmas took both `hm : N·(h·w) ≠ 0` and
+`hM : (R·N)·(h·w) ≠ 0`, the second following from `hR` and the first, so 52 call sites built it
+as `nhw_ne_zero (Nat.mul_pos hR hN) hh hw` and 26 proofs opened with `have hM := …`. New
+`mulR_nhw_ne_zero` (DataParallelSync); `den_bnSyncSiteLA`, `bnSyncInB_shard`,
+`bnSyncInB_shard_bnBackB`, `bnSyncTensor4_shard_eq_global`, `…_grad_input_shard_eq_global`,
+`den_bnSyncF_allReduce`, `den_bnSyncBack_allReduce` and `den_allReduceMeanF_bnSyncGammaGradB` derive
+it; 106 call-site arguments and the 26 `have`s are gone (−33 lines). `den_bnSyncBack_allReduce` is in
+the tier: its statement loses the redundant hypothesis (regenerated).

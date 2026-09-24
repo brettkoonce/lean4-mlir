@@ -114,21 +114,20 @@ theorem r50IdGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w :
     den (r50IdGraphSync p epsStr R hR N h w pw e r)
       = batchShard R N (oc * h * w) (r50IdB (R * N) h w pw X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hc1 := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
   have hn1 := den_bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
-    R hR hm hM pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
+    R hR hm pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
   have hc2 := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
   have hn2 := den_bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid]
-    R hR hm hM pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
+    R hR hm pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hc3 := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
   have hn3 := den_bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc]
-    R hR hm hM pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
+    R hR hm pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
   have ha := den_addVB_shard _ e _ X hn3 he
   exact den_relu_shard _ _ ha r
 
@@ -171,25 +170,24 @@ theorem r50ProjGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w
     den (r50ProjGraphSync p epsStr R hR N h w pw e r)
       = batchShard R N (oc * h * w) (r50ProjB (R * N) h w pw X) r := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hc1 := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
   have hn1 := den_bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
-    R hR hm hM pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
+    R hR hm pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
   have hc2 := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
   have hn2 := den_bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid]
-    R hR hm hM pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
+    R hR hm pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hc3 := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
   have hn3 := den_bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc]
-    R hR hm hM pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
+    R hR hm pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
   have hcp := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e X he
   have hnp := den_bnSyncSiteLA s!"%{p}gp" s!"%{p}btp" epsStr s!"{p}gpmu" s!"{p}gpvar" [oc] [oc]
-    R hR hm hM pw.εp pw.γp pw.βp _ _ hcp
+    R hR hm pw.εp pw.γp pw.βp _ _ hcp
   have ha := den_addVB_shard_comm _ _ _ _ hn3 hnp
   exact den_relu_shard _ _ ha r
 
@@ -237,27 +235,25 @@ theorem r50DownGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   have hm2 := nhw_ne_zero hN h2h h2w
-  have hM2 := nhw_ne_zero (Nat.mul_pos hR hN) h2h h2w
   have hc1 := den_batchOp_shard (N := N)
     (.conv (h := 2 * h) (w := 2 * w) s!"%{p}W1" (biasName false "" mid) pw.W₁ pw.b₁) e X he
   have hn1 := den_bnSyncSiteLA s!"%{p}g1" s!"%{p}bt1" epsStr s!"{p}g1mu" s!"{p}g1var" [mid] [mid]
-    R hR hm2 hM2 pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
+    R hR hm2 pw.ε₁ pw.γ₁ pw.β₁ _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
   have hc2 := den_batchOp_shard (N := N)
     (.convStrided (h := h) (w := w) s!"%{p}W2" (biasName false "" mid) pw.W₂ pw.b₂) _ _ hr1
   have hn2 := den_bnSyncSiteLA s!"%{p}g2" s!"%{p}bt2" epsStr s!"{p}g2mu" s!"{p}g2var" [mid] [mid]
-    R hR hm hM pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
+    R hR hm pw.ε₂ pw.γ₂ pw.β₂ _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hc3 := den_batchOp_shard (N := N)
     (.conv (h := h) (w := w) s!"%{p}W3" (biasName false "" oc) pw.W₃ pw.b₃) _ _ hr2
   have hn3 := den_bnSyncSiteLA s!"%{p}g3" s!"%{p}bt3" epsStr s!"{p}g3mu" s!"{p}g3var" [oc] [oc]
-    R hR hm hM pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
+    R hR hm pw.ε₃ pw.γ₃ pw.β₃ _ _ hc3
   have hcp := den_batchOp_shard (N := N)
     (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e X he
   have hnp := den_bnSyncSiteLA s!"%{p}gp" s!"%{p}btp" epsStr s!"{p}gpmu" s!"{p}gpvar" [oc] [oc]
-    R hR hm hM pw.εp pw.γp pw.βp _ _ hcp
+    R hR hm pw.εp pw.γp pw.βp _ _ hcp
   have ha := den_addVB_shard_comm _ _ _ _ hn3 hnp
   exact den_relu_shard _ _ ha r
 
