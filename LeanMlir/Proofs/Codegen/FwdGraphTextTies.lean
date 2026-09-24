@@ -6,6 +6,8 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
+import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
 /-! # FwdGraphTextTies — the rendered forward blocks are `pretty` of the T2 block graphs
 
@@ -26,13 +28,8 @@ with the T2 graph's prefixes and shapes, each block reading the previous block's
 **Scope.** f32, `convBias := false`, one replica (`sync := false`) — the configuration the T2
 graphs describe. The bf16 renders swap in `…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`);
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
-ResNet-50, MobileNetV2, MobileNetV4-Conv-M — every block kind, stem and head. Not covered:
-* **EfficientNet-B0.** Its forward emits an un-fused squeeze-excite (GAP → dense → swish → dense,
-  saved for the backward) beside the fused `seBlock` it actually reads, and a single-output graph
-  cannot contain ops off its output's path. Its T2 block graphs (`EfficientNetRenderPC`) also
-  spell the SE weights `zWa`/`zbb`, the head `%Wfc`, the conv biases `%{p}pb` and the skip `.addV`
-  where the artifact has `zW1`/`zb2`, `%Wd`, `%zb{c}` and `.addVB`.
-* **ConvNeXt-T and ViT.** Their T2 graphs are per-example, with their own constructors.
+ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head.
+Not covered: ConvNeXt-T and ViT, whose T2 graphs are per-example, with their own constructors.
 
 A `#guard` failing here means the emitted text and the proven graph drifted: the graph's operand
 order, a name, a constructor or a shape differs from what the renderer writes. Fix the side that is
@@ -217,5 +214,60 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
     (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- ════════════════════════════════════════════════════════════════
+-- § EfficientNet-B0 — `enetFwdChain` vs `efficientnetFwdGraphB_full`
+-- ════════════════════════════════════════════════════════════════
+
+-- Stem: 3×3/s2 XLA-SAME (3 → 32, 224 → 112) → BN → swish.
+#guard textOf (enetStemFwdB 2 .train "1.0e-03" false) (·.code) ==
+  prettyText 2 (stemGraphB "1.0e-03" (N := 2) (ic := 3) (oc := 32) (h := 112) (w := 112)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%x" _))
+
+-- MBConv1, no expand (b1: 32 → 16 at 112², 3×3, SE r = 8).
+#guard textOf (eFwdNoExp 2 32 16 112 3 8 .train "1.0e-03" "b1" "%in" false) (·.code) ==
+  prettyText 2 (mbNoExpGraphB "b1" "1.0e-03" (N := 2) (ic := 32) (oc := 16) (h := 112) (w := 112)
+    (kHd := 3) (kWd := 3) (r := 8)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- Strided MBConv6 (b4: 24 → 144 → 40, 56² → 28², 5×5, SE r = 6).
+#guard textOf (eFwdStrided 2 24 144 40 28 5 6 .train "1.0e-03" "b4" "%in" false) (·.code) ==
+  prettyText 2 (mbStridedGraphB "b4" "1.0e-03" (N := 2) (ic := 24) (mid := 144) (oc := 40) (h := 28)
+    (w := 28) (kHd := 5) (kWd := 5) (r := 6)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- Residual MBConv6 (b3: 24 → 144 → 24 at 56², 3×3, SE r = 6), no drop site.
+#guard textOf (eFwd 2 24 144 24 56 3 6 .train "1.0e-03" "b3" "%in" false) (·.code) ==
+  prettyText 2 (mbResidGraphB "b3" "1.0e-03" (N := 2) (c := 24) (mid := 144) (h := 56) (w := 56)
+    (kHd := 3) (kWd := 3) (r := 6)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- Expand, no skip (b9: 80 → 480 → 112 at 14², 5×5, SE r = 20).
+#guard textOf (eFwdNoSkip 2 80 480 112 14 5 20 .train "1.0e-03" "b9" "%in" false) (·.code) ==
+  prettyText 2 (mbExpGraphB "b9" "1.0e-03" (N := 2) (ic := 80) (mid := 480) (oc := 112) (h := 14)
+    (w := 14) (kHd := 5) (kWd := 5) (r := 20)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
+    (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%in" _))
+
+-- Head: 1×1 (320 → 1280) → BN → swish → GAP(7²) → dense(1280 → 10). The chain's classifier dropout
+-- sits between the GAP and the dense and is off in the T2 configuration (`cd := false`).
+#guard textOf (do
+    let hd ← enetHeadFwdB 2 10 .train "1.0e-03" "%in" false
+    let (c, _) ← pretty 2 (.batchOp (N := 2) (.dense "%Wd" "%bd" (fun _ _ => 0 : Mat 1280 10) (fun _ => 0))
+      (.operand hd.gap (fun _ => 0 : Vec (2 * 1280))))
+    pure (hd.code ++ c)) id ==
+  prettyText 2 (headGraphB "1.0e-03" (N := 2) (c := 320) (oc := 1280) (h := 7) (w := 7) (nC := 10)
+    (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0)
+    (leaf "%in" _))
 
 end Proofs.StableHLO.FwdGraphTextTies

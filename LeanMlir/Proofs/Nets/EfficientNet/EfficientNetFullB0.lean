@@ -147,13 +147,13 @@ def mbExpGraphB (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat}
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
     (e : SHlo (N * (ic * h * w))) : SHlo (N * (oc * h * w)) :=
   .bnBatchF s!"%{p}pg" s!"%{p}pbt" epsStr εp γp βp
-    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" s!"%{p}pb" Wp bp)
-      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zWa" s!"%{p}zba" s!"%{p}zWb" s!"%{p}zbb"
+    (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}pW" (biasName false "" oc) Wp bp)
+      (.batchOp (N := N) (.seBlock (h := h) (w := w) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2"
           Wz₁ bz₁ Wz₂ bz₂)
-        (.swishF (.bnBatchF s!"%{p}dg" s!"%{p}dbt" epsStr εd γd βd
-          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" s!"%{p}db" Wd bd)
-            (.swishF (.bnBatchF s!"%{p}eg" s!"%{p}ebt" epsStr εe γe βe
-              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" s!"%{p}eb" We be) e))))))))
+        (.batchOp (N := N) .swish (.bnBatchF s!"%{p}dg" s!"%{p}dbt" epsStr εd γd βd
+          (.batchOp (N := N) (.depthwise (h := h) (w := w) s!"%{p}dW" (biasName false "" mid) Wd bd)
+            (.batchOp (N := N) .swish (.bnBatchF s!"%{p}eg" s!"%{p}ebt" epsStr εe γe βe
+              (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}eW" (biasName false "" mid) We be) e))))))))
 
 theorem mbExpGraphB_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r : Nat}
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
@@ -166,7 +166,7 @@ theorem mbExpGraphB_faithful (p epsStr : String) {N ic mid oc h w kHd kWd r : Na
           Wp bp εp γp βp (den e) := by
   unfold mbExpGraphB mbExpFwdB projB seB dwbsB cbsB
   simp only [den_batchOp, denOp, den_bnBatchF,
-             swishF_faithful, Function.comp_apply]
+             ↓den_batchOp_swish_eq_swishF, swishF_faithful, Function.comp_apply]
 
 end StableHLO
 

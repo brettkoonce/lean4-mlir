@@ -221,27 +221,26 @@ private def dnB (adam : Bool) (B c : Nat) (bName lrStr dy : String) : StateM Pro
 -- § Squeeze-excite forward (un-fused, for activation-saving) + backward (param grads)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Un-fused SE forward** on `c` channels at `hh×ww`, reduce dim `r`. Emits the squeeze (GAP),
-    reduce dense (`W₁`), swish, excite dense (`W₂`) to expose `s/e1/z/e2`, AND the fused `seBlock`
-    for the actual SE output `seOut`. Returns `(code, s, e1, z, e2, seOut)`. -/
-private def seFwd (B c hh r : Nat) (p drName : String) :
+/-- **SE forward** on `c` channels at `hh×ww`, reduce dim `r`: one fused `seBlock`, whose text
+    computes the squeeze (GAP), reduce dense (`W₁`), swish and excite dense (`W₂`) on the way to the
+    gate. Their SSA names (`seBlockSavedNames`) are the activations the SE backward reads, so the
+    forward computes the SE once — it is `pretty` of the T2 graph's `seBlock` node — rather than a
+    second, un-fused copy beside it (the render did that until 2026-09-24).
+    Returns `(code, s, e1, z, e2, seOut)`. -/
+def seFwd (B c hh r : Nat) (p drName : String) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String) := do
   let ww := hh
   let zChw : Vec (B * (c * hh * ww)) := fun _ => 0
-  let zCc  : Vec (B * c) := fun _ => 0
-  let zRr  : Vec (B * r) := fun _ => 0
   let zW1  : Mat c r := fun _ _ => 0
   let zb1  : Vec r := fun _ => 0
   let zW2  : Mat r c := fun _ _ => 0
   let zb2  : Vec c := fun _ => 0
-  let (cS,  nS)  ← pretty B (.batchOp (N := B) (.gap (c := c) (h := hh) (w := ww)) (.operand drName zChw))
-  let (cE1, nE1) ← pretty B (.batchOp (N := B) (.dense s!"%{p}zW1" s!"%{p}zb1" zW1 zb1) (.operand nS zCc))
-  let (cZ,  nZ)  ← pretty B (.batchOp (.swish) (.operand nE1 zRr))
-  let (cE2, nE2) ← pretty B (.batchOp (N := B) (.dense s!"%{p}zW2" s!"%{p}zb2" zW2 zb2) (.operand nZ zRr))
+  let (k0, _) ← get
   let (cSe, nSe) ← pretty B (.batchOp (N := B)
       (.seBlock (h := hh) (w := ww) s!"%{p}zW1" s!"%{p}zb1" s!"%{p}zW2" s!"%{p}zb2" zW1 zb1 zW2 zb2)
       (.operand drName zChw))
-  pure (cS ++ cE1 ++ cZ ++ cE2 ++ cSe, nS, nE1, nZ, nE2, nSe)
+  let (nS, nE1, nZ, nE2) := seBlockSavedNames k0
+  pure (cSe, nS, nE1, nZ, nE2, nSe)
 
 /-- **SE backward + 4 param SGD ops.** `dx` (SE input cot) via the fused `seBackBatched`; the SE dense
     param grads via `seReduceB → sigmoidBack(e2) → {W₂} → denseRowBack(W₂) → swishBack(e1) → {W₁}`.
@@ -374,7 +373,7 @@ private def bnSiteB (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName stat
 /-- Stride-1 expand MBConv forward body (shared by residual + no-skip): expand 1×1 conv-bn-swish →
     depthwise(kd) conv-bn-swish → SE → project 1×1 conv-bn. Returns the EFwd WITHOUT the final
     residual (caller adds the `addV` for residual blocks). -/
-private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
+def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
@@ -401,7 +400,7 @@ private def eFwdBody (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName
          stE := stE, stD := stD, stP := stP, bnSt := [stE, stD, stP] }
 
 /-- **Residual stride-1 MBConv forward** (ic = oc): body + `addV` skip. -/
-private def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String)
+def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String)
     (convBias : Bool) (drop : Option Nat := none) (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let f ← eFwdBody B ic mid oc hh kd r mode epsStr p xName convBias bf16 replicas sync
   let zOut : Vec (B * (oc * hh * hh)) := fun _ => 0
@@ -418,13 +417,13 @@ private def eFwd (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : S
   pure { f with code := f.code ++ cD ++ cA, o := nA }
 
 /-- **No-skip stride-1 MBConv forward** (ic ≠ oc, b9/b16): body, output = project-BN out. -/
-private def eFwdNoSkip (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
+def eFwdNoSkip (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd :=
   eFwdBody B ic mid oc hh kd r mode epsStr p xName convBias bf16 replicas sync
 
 /-- **Strided MBConv forward** (b2/b4/b6/b12): expand at the input `2hh×2ww`, depthwise downsamples
     `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
+def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
   let zIn  : Vec (B * (ic * (2*hh) * (2*ww))) := fun _ => 0
@@ -455,7 +454,7 @@ private def eFwdStrided (B ic mid oc hh kd r : Nat) (mode : BnMode) (epsStr p xN
 
 /-- **No-expand MBConv forward** (b1, t=1): depthwise(kd, on `ic` channels)-bn-swish → SE → project
     1×1 (ic→oc)-bn. NO expand, NO skip. `ec/en` unused; `er` = block input (= depthwise input). -/
-private def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
+def eFwdNoExp (B ic oc hh kd r : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EFwd := do
   let ww := hh
   let zIn  : Vec (B * (ic * hh * ww)) := fun _ => 0
@@ -727,6 +726,51 @@ structure ENetFwd where
   deriving Inhabited
 
 set_option maxRecDepth 4000000 in
+/-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), swish output. -/
+structure ENetStemFwdB where
+  code : String
+  c : String
+  n : String
+  st : String
+  o : String
+
+/-- Stem forward: 3×3/s2 XLA-`SAME` conv (3→32, 224→112) → BN → swish, on `%x`. -/
+def enetStemFwdB (B : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS ENetStemFwdB := do
+  let zx   : Vec (B * (3*224*224)) := fun _ => 0
+  let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+  let z32  : Vec 32 := fun _ => 0
+  let z112F : Vec (B * (32*112*112)) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStridedXlaAt bf16 (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sb" 32) zSk z32) (.operand "%x" zx))
+  let (cStn, nStn, sst) ← bnSiteB B 32 112 112 mode epsStr "%sg" "%sbt" "stn" nStc (replicas := replicas) (sync := sync)
+  let (cStr, nStr) ← pretty B (.batchOp (.swish) (.operand nStn z112F))
+  pure { code := cStc ++ cStn ++ cStr, c := nStc, n := nStn, st := sst, o := nStr }
+
+/-- The head's saved SSA names up to the GAP: conv, BN, BN stats, swish, GAP. -/
+structure ENetHeadFwdB where
+  code : String
+  hc : String
+  hn : String
+  hst : String
+  hr : String
+  gap : String
+
+/-- Head forward up to the GAP: 1×1 conv (320→1280) → BN → swish → GAP(7×7), on block 16's output
+    `xName`. The classifier dropout and the dense stay in the chain (`cd` decides the dropout). -/
+def enetHeadFwdB (B _nClasses : Nat) (mode : BnMode) (epsStr xName : String) (convBias : Bool)
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS ENetHeadFwdB := do
+  let z7F   : Vec (B * (320*7*7)) := fun _ => 0
+  let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
+  let z1280 : Vec 1280 := fun _ => 0
+  let zH7F  : Vec (B * (1280*7*7)) := fun _ => 0
+  let (cHc, nHc) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := 7) (w := 7) zrnd "%hW" (biasName convBias "%hb" 1280) zHk z1280) (.operand xName z7F))
+  let (cHn, nHn, hst) ← bnSiteB B 1280 7 7 mode epsStr "%hg" "%hbt" "hn" nHc (replicas := replicas) (sync := sync)
+  let (cHr, nHr) ← pretty B (.batchOp (.swish) (.operand nHn zH7F))
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7)) (.operand nHr zH7F))
+  pure { code := cHc ++ cHn ++ cHr ++ cGap, hc := nHc, hn := nHn, hst := hst, hr := nHr, gap := nGap }
+
 /-- **The full EfficientNet-B0 forward as `pretty` of the verified AST**, at the batched index
     `N := B`. 3×3/s2 stem (3→32, 224→112) → 16 MBConv blocks (the paper `[t,c,n,s]` table, SE in
     every block) → 1×1 head (320→1280) → GAP(7×7) → dense(1280→`nClasses`).
@@ -746,13 +790,8 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
   -- BLOCK index (see `enetDropIdxs`' note on why the site ordinal would be wrong).
   let dp : Nat → Option Nat := fun i => if sd && enetDropIdxs.contains i then some i else none
     -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → bn → swish ═══
-    let zx   : Vec (B * (3*224*224)) := fun _ => 0
-    let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
-    let z32  : Vec 32 := fun _ => 0
-    let z112F : Vec (B * (32*112*112)) := fun _ => 0
-    let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStridedXlaAt bf16 (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sb" 32) zSk z32) (.operand "%x" zx))
-    let (cStn, nStn, sst) ← bnSiteB B 32 112 112 mode epsStr "%sg" "%sbt" "stn" nStc (replicas := replicas) (sync := sync)
-    let (cStr, nStr) ← pretty B (.batchOp (.swish) (.operand nStn z112F))
+    let st ← enetStemFwdB B mode epsStr convBias bf16 replicas sync
+    let (nStc, nStn, sst, nStr) := (st.c, st.n, st.st, st.o)
     -- ═══ forward: 16 MBConv blocks ═══
     let f1  ← eFwdNoExp   B 32      16 112 3  8 mode epsStr "b1"  nStr convBias (bf16 := bf16) (replicas := replicas) (sync := sync)
     let f2  ← eFwdStrided B 16  96  24  56 3  4 mode epsStr "b2"  f1.o convBias (bf16 := bf16) (replicas := replicas) (sync := sync)
@@ -771,17 +810,11 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let f15 ← eFwd        B 192 1152 192 7 5 48 mode epsStr "b15" f14.o convBias (dp 14) (bf16 := bf16) (replicas := replicas) (sync := sync)
     let f16 ← eFwdNoSkip  B 192 1152 320 7 3 48 mode epsStr "b16" f15.o convBias (bf16 := bf16) (replicas := replicas) (sync := sync)
     -- ═══ head: 1×1 conv (320→1280) → bn → swish → GAP → dense ═══
-    let z7F   : Vec (B * (320*7*7)) := fun _ => 0
-    let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
-    let z1280 : Vec 1280 := fun _ => 0
-    let zH7F  : Vec (B * (1280*7*7)) := fun _ => 0
+    let hd ← enetHeadFwdB B nClasses mode epsStr f16.o convBias bf16 replicas sync
+    let (nHc, nHn, hst, nHr, nGap) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap)
     let z1280c : Vec (B * 1280) := fun _ => 0
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
-    let (cHc, nHc) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := 7) (w := 7) zrnd "%hW" (biasName convBias "%hb" 1280) zHk z1280) (.operand f16.o z7F))
-    let (cHn, nHn, hst) ← bnSiteB B 1280 7 7 mode epsStr "%hg" "%hbt" "hn" nHc (replicas := replicas) (sync := sync)
-    let (cHr, nHr) ← pretty B (.batchOp (.swish) (.operand nHn zH7F))
-    let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7)) (.operand nHr zH7F))
     -- ▶ CLASSIFIER DROPOUT: the per-ELEMENT inverted mask, exactly where the reference puts it —
     -- between GAP and the dense (`jax/Jax/Codegen.lean:1971`, the `.dense` case).
     -- ⚠ At `cd = false` NO `pretty` call happens, so the fresh-name counter does not move and every
@@ -795,10 +828,10 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
           (.operand nGap z1280c))
       else pure ("", nGap)
     let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nCin z1280c))
-    pure { code := cStc ++ cStn ++ cStr ++
+    pure { code := st.code ++
              f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
              f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
-             f15.code ++ f16.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cDo ++ cLog,
+             f15.code ++ f16.code ++ hd.code ++ cDo ++ cLog,
            stc := nStc, stn := nStn, str := nStr,
            blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
            hc := nHc, hn := nHn, hr := nHr, gap := nGap, cin := nCin, logits := nLog,

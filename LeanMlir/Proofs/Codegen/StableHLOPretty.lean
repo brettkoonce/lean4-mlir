@@ -1348,6 +1348,16 @@ def emitMatmul (B : Nat) (lp : Option (List Nat → String)) (a b : String) (m k
     s!"    {bn} = stablehlo.reshape {b} : ({ty [B, k*n]}) -> {ty [B,k,n]}\n" ++ cs ++
     s!"    {o} = stablehlo.reshape {mm} : ({ty [B,m,n]}) -> {ty [B, m*n]}\n", o)
 
+/-- **The squeeze-excite activations inside one `seBlock` emission**, by name: the squeeze (GAP,
+    `[B,c]`), the reduce dense + bias (`[B,r]`), its swish, and the excite dense + bias (`[B,c]`) —
+    the four values the SE backward reads. `k0` is the fresh-name counter when the `seBlock` token
+    is emitted. The offsets are the order the `"seBlock"` arm of `emitTok` below calls `fresh` in
+    (`sq` 5th, `ex` 8th, `a1` 10th, `h2` 13th); the `#guard` after `emitTok` checks each name is
+    defined by the op it claims. A renderer that saves these reuses the SE the forward already
+    computes instead of emitting a second, un-fused copy. -/
+def seBlockSavedNames (k0 : Nat) : String × String × String × String :=
+  (s!"%v{k0 + 4}", s!"%v{k0 + 7}", s!"%v{k0 + 9}", s!"%v{k0 + 12}")
+
 -- Compiling this one 99-arm def needs ~2× the default budget (more under `trace.profiler`, which
 -- trips 400000); 5× leaves room for new arms. Nothing else in the file needs a bump.
 set_option maxHeartbeats 1000000 in
@@ -4640,6 +4650,20 @@ def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM EmitS (String × String) :=
   match st with
   | [r] => pure (code, r)
   | _   => pure (code, "%MALFORMED")
+
+-- `seBlockSavedNames` names the four SE activations of the `seBlock` it is handed the counter of:
+-- the squeeze is the `divide`, the reduce and excite pre-activations the bias `add`s, the swish
+-- the `multiply` of the reduce pre-activation.
+#guard
+  let k0 := 7
+  let (sq, ex, a1, h2) := seBlockSavedNames k0
+  let txt := (Id.run ((pretty 2 (.batchOp (N := 2) (.seBlock (c := 8) (h := 3) (w := 3) (r := 2)
+    "%W1" "%b1" "%W2" "%b2" (fun _ _ => 0) (fun _ => 0) (fun _ _ => 0) (fun _ => 0))
+    (.operand "%x" (fun _ => 0)))).run' (k0, []))).1
+  txt.contains s!"{sq} = stablehlo.divide " ∧ txt.contains s!"{ex} = stablehlo.add " ∧
+    txt.contains s!"{a1} = stablehlo.multiply {ex}, " ∧ txt.contains s!"{h2} = stablehlo.add " ∧
+    txt.contains s!"stablehlo.dot_general {sq}, %W1" ∧ txt.contains s!"stablehlo.dot_general {a1}, %W2" ∧
+    txt.contains s!"stablehlo.logistic {h2} "
 
 /-- **The rounding a render hands the bf16/fp8 ops: the identity.** A placeholder, exactly as a
     renderer's zero kernels are: a render produces TEXT, `skel` erases every ℝ payload before a

@@ -168,7 +168,7 @@ theorem mbExpGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w :
   mbBodyGraphSync_shard p epsStr R hR N h w hN hh hw q e X he r
 
 /-- The residual MBConv6 block (b3, b5, b7, b8, b10, b11, b13–b15): the body plus the identity skip,
-    `addV body e`, as `mbResidGraphB` orders it. -/
+    `addV body e` — body first, the order `mbResidGraphB` uses. -/
 def mbResidGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
     {c mid rd kh kw : Nat} (q : MBW c mid c rd kh kw) (e : Fin R → SHlo (N * (c * h * w))) :
     Fin R → SHlo (N * (c * h * w)) :=
