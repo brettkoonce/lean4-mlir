@@ -285,16 +285,14 @@ namespace StableHLO
 --
 --   ⚠ **`.addVB`, not `.addV`.** `ResNet50RenderB` emits the batched add; `den` is identical
 --   (both are `fun j => den a j + den b j`, both by `rfl`) but `skel` is not, so the emitted shape
---   annotation differs. `ResNet34FullB.lean` uses `.addV` where its own render emits `.addVB` —
---   recorded in §4.2b and left alone there; this file does not repeat it.
+--   annotation differs.
 --
 --   ⚠ **The bias operands are `biasName false "" c`, the render's own function.** `ResNet50RenderB`
 --   has no `convBias` flag at all — its `zb` bakes `false` — so `%zb{c}`, the shared zero constant
 --   each conv bias is folded into its BatchNorm and bound to, is the ONLY name this net emits.
 --   Calling the shared function rather than writing the literal is what keeps the two from
---   drifting. ⛔ `ResNet34FullB.lean` writes `"%sb"` / `"%{p}b1"`, which are the `convBias := true`
---   names its render does NOT emit by default — the graph-operand form of the census trap, and a
---   cosmetic gap on that file worth fixing when it is next touched.
+--   drifting. `Codegen/FwdGraphTextTies` checks every block kind here (and ResNet-34's) against
+--   the render's text.
 -- ════════════════════════════════════════════════════════════════
 
 /-- Identity bottleneck graph: `relu(addVB(bn3(conv3(relu(bn2(conv2(relu(bn1(conv1 e))))))), e))`.

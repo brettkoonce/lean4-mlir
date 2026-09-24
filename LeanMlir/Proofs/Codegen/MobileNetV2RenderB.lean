@@ -88,7 +88,7 @@ structure MBBackB where
 
 /-- **STRIDED inverted-residual forward**: expand at the input `2hh×2ww`, depthwise downsamples
     `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
+def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
@@ -121,7 +121,7 @@ private def irFwdStridedB (B ic mid oc hh : Nat) (epsStr p xName : String) (conv
 /-- **STRIDE-1 inverted-residual forward with the identity skip** (`ic = oc`): everything at
     `hh×ww`, block output = `addVB (project-BN out) (block input)`. The bottleneck is LINEAR — no
     relu6 after the add. -/
-private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
+def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
@@ -153,7 +153,7 @@ private def irFwdSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBia
 
 /-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): as `irFwdSkipB` but `ic ≠ oc`, so the block
     output is the project-BN output directly. -/
-private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
+def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
@@ -184,7 +184,7 @@ private def irFwdNoSkipB (B ic mid oc hh : Nat) (epsStr p xName : String) (convB
 /-- **NO-EXPAND forward** (b1, the canonical `t = 1` block): depthwise(stride-1, on `ic` channels)
     → BN → relu6 → project(1×1 `ic→oc`) → BN. No expand conv, no skip. `er` is the depthwise INPUT
     (= the block input), which is what the depthwise weight gradient reads. -/
-private def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
+def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS MBFwdB := do
   let ww := hh
@@ -509,6 +509,61 @@ structure MNV2FwdRecB where
   hst : String := ""      -- head BN's packed global statistics (sync-BN only)
 deriving Inhabited
 
+/-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), relu6 output. -/
+structure MNV2StemFwdB where
+  code : String
+  c : String
+  n : String
+  st : String
+  o : String
+
+/-- Stem forward: 3×3/s2 XLA-`SAME` conv (3→32, 224→112) → batch BN → relu6 (no max-pool). -/
+def mnv2StemFwdB (B : Nat) (epsStr : String) (convBias : Bool) (bf16 : Bool := false)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS MNV2StemFwdB := do
+  let zx    : Vec (B*(3*224*224)) := fun _ => 0
+  let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+  let z32   : Vec 32 := fun _ => 0
+  let z112  : Vec (B*(32*112*112)) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.batchOp (N := B)
+    (.convStridedXlaAt bf16 (ic := 3) (oc := 32) (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sb" 32) zSk z32)
+    (.operand "%x" zx))
+  let (cStn, nStn, sst) ← bnFwdSite B 32 (112) (112) sync replicas epsStr "%sg" "%sbt" "sg" nStc
+  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu6 (n := 32*112*112)) (.operand nStn z112))
+  pure { code := cStc ++ cStn ++ cStr, c := nStc, n := nStn, st := sst, o := nStr }
+
+/-- The head's saved SSA names: conv, BN, BN stats, relu6, GAP, logits. -/
+structure MNV2HeadFwdB where
+  code : String
+  hc : String
+  hn : String
+  hst : String
+  hr : String
+  gap : String
+  log : String
+
+/-- Head forward: 1×1 conv (320→1280) → batch BN → relu6 → GAP(7×7) → dense, on block 17's
+    output `xName`. -/
+def mnv2HeadFwdB (B nClasses : Nat) (epsStr xName : String) (convBias : Bool)
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS MNV2HeadFwdB := do
+  let z7     : Vec (B*(320*7*7)) := fun _ => 0
+  let zHk    : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
+  let z1280  : Vec 1280 := fun _ => 0
+  let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
+  let z1280b : Vec (B*1280) := fun _ => 0
+  let zWd    : Mat 1280 nClasses := fun _ _ => 0
+  let zNC    : Vec nClasses := fun _ => 0
+  let (cHc, nHc) ← pretty B (.batchOp (N := B)
+    (.convAt bf16 (ic := 320) (oc := 1280) (h := 7) (w := 7) zrnd "%hW" (biasName convBias "%hb" 1280) zHk z1280) (.operand xName z7))
+  let (cHn, nHn, hst) ← bnFwdSite B 1280 (7) (7) sync replicas epsStr "%hg" "%hbt" "hg" nHc
+  let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu6 (n := 1280*7*7)) (.operand nHn zH7))
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
+    (.operand nHr zH7))
+  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
+    (.operand nGap z1280b))
+  pure { code := cHc ++ cHn ++ cHr ++ cGap ++ cLog, hc := nHc, hn := nHn, hst := hst, hr := nHr,
+         gap := nGap, log := nLog }
+
 set_option maxRecDepth 4000000 in
 /-- **The MobileNetV2 forward chain at the BATCHED index** — one traversal, consumed by both
     `@mobilenetv2_fwd` and every train step that differentiates it.
@@ -534,15 +589,8 @@ def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS MNV2FwdRecB := do
   -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → batch BN → relu6 (NO maxpool) ═══
-  let zx    : Vec (B*(3*224*224)) := fun _ => 0
-  let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
-  let z32   : Vec 32 := fun _ => 0
-  let z112  : Vec (B*(32*112*112)) := fun _ => 0
-  let (cStc, nStc) ← pretty B (.batchOp (N := B)
-    (.convStridedXlaAt bf16 (ic := 3) (oc := 32) (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sb" 32) zSk z32)
-    (.operand "%x" zx))
-  let (cStn, nStn, sst) ← bnFwdSite B 32 (112) (112) sync replicas epsStr "%sg" "%sbt" "sg" nStc
-  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu6 (n := 32*112*112)) (.operand nStn z112))
+  let st ← mnv2StemFwdB B epsStr convBias bf16 replicas sync
+  let (nStc, nStn, sst, nStr) := (st.c, st.n, st.st, st.o)
   -- ═══ forward: the 17 inverted-residual blocks ═══
   let f1  ← irFwdNoExpB   B 32      16 112 epsStr "1"  nStr convBias bf16 replicas sync
   let f2  ← irFwdStridedB B 16  96  24  56 epsStr "2"  f1.o convBias bf16 replicas sync
@@ -562,25 +610,12 @@ def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false
   let f16 ← irFwdSkipB    B 160 960 160  7 epsStr "16" f15.o convBias bf16 replicas sync
   let f17 ← irFwdNoSkipB  B 160 960 320  7 epsStr "17" f16.o convBias bf16 replicas sync
   -- ═══ head: 1×1 conv (320→1280) → batch BN → relu6 → GAP(7×7) → dense ═══
-  let z7     : Vec (B*(320*7*7)) := fun _ => 0
-  let zHk    : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
-  let z1280  : Vec 1280 := fun _ => 0
-  let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
-  let z1280b : Vec (B*1280) := fun _ => 0
-  let zWd    : Mat 1280 nClasses := fun _ _ => 0
-  let zNC    : Vec nClasses := fun _ => 0
-  let (cHc, nHc) ← pretty B (.batchOp (N := B)
-    (.convAt bf16 (ic := 320) (oc := 1280) (h := 7) (w := 7) zrnd "%hW" (biasName convBias "%hb" 1280) zHk z1280) (.operand f17.o z7))
-  let (cHn, nHn, hst) ← bnFwdSite B 1280 (7) (7) sync replicas epsStr "%hg" "%hbt" "hg" nHc
-  let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu6 (n := 1280*7*7)) (.operand nHn zH7))
-  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
-    (.operand nHr zH7))
-  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
-    (.operand nGap z1280b))
-  pure { code := cStc ++ cStn ++ cStr ++
+  let hd ← mnv2HeadFwdB B nClasses epsStr f17.o convBias bf16 replicas sync
+  let (nHc, nHn, hst, nHr, nGap, nLog) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap, hd.log)
+  pure { code := st.code ++
            f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
            f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
-           f15.code ++ f16.code ++ f17.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+           f15.code ++ f16.code ++ f17.code ++ hd.code,
          stc := nStc, stn := nStn, str := nStr,
          hc := nHc, hn := nHn, hr := nHr, gap := nGap, log := nLog,
          b := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17],

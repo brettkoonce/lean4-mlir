@@ -38,7 +38,7 @@ lean_lib «LeanMlir» where
 /-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
     every demo's import cone actually reaches (StableHLO/IR + the per-net
     op/VJP modules the proven renderers are built on) plus every renderer the
-    CI drift guard re-elaborates. 22 roots, builds in minutes. The
+    CI drift guard re-elaborates. 23 roots, builds in minutes. The
     certificate corpus lives in `Certs` below and is checked by its own
     workflow (.github/workflows/certs.yml: proof-path pushes + nightly cron),
     so demo/book/engine pushes stop paying the multi-hour corpus tail.
@@ -71,8 +71,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ViTRender,
              `LeanMlir.Proofs.Codegen.ViTRenderB]
 
-/-- **`lake build Certs`** — the certificate corpus (192 roots reaching 223 proof modules,
-    ~133k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
+/-- **`lake build Certs`** — the certificate corpus (187 roots reaching 234 proof modules,
+    ~121k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
     Muon, the float model, …): the VJP proof suite's apex modules; their transitive
     imports cover every proof file (they subsume the `Proofs` roots above, so
     building `Certs` builds everything the axiom audit needs). Built +
@@ -94,6 +94,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.IR,
              `LeanMlir.Proofs.Codegen.StableHLO,
              `LeanMlir.Proofs.Codegen.StableHLOPretty,
+             `LeanMlir.Proofs.Codegen.FwdGraphTextTies,
              `LeanMlir.Proofs.Codegen.StableHLOParse,
              `LeanMlir.Proofs.Codegen.StableHLOLex,
              `LeanMlir.Proofs.Nets.Small.LinearTrainStep,

@@ -221,28 +221,30 @@ theorem r34IdGraphB_faithful (p epsStr : String) (N h w : Nat) {c : Nat} (pw : R
     den_addVB,
     Function.comp_apply]
 
-/-- Downsample basic-block graph: `relu(addVB(projection, body))` — projection first, matching
-    `residualProj proj body`. Both branches read the block-input subtree `e`; both stride-2 convs
-    are `.convStrided` (symmetric padding). -/
+/-- Downsample basic-block graph: `relu(addVB(body, projection))` — body first, the order the
+    render emits (so `pretty` of this graph is the rendered block's text); `residualProj proj body`
+    adds them the other way round, which the faithfulness proof absorbs with `add_comm`. Both
+    branches read the block-input subtree `e`; both stride-2 convs are `.convStrided` (symmetric
+    padding). -/
 def r34DownGraphB (p epsStr : String) (N h w : Nat) {ic oc : Nat} (pw : R34DownW ic oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) : SHlo (N * (oc * h * w)) :=
   .batchOp (N := N) (.relu (n := oc * h * w))
     (.addVB
-      (.bnBatchF s!"%{p}gp" s!"%{p}btp" epsStr pw.εp pw.γp pw.βp
-        (.batchOp (N := N) (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e))
       (.bnBatchF s!"%{p}g2" s!"%{p}bt2" epsStr pw.ε₂ pw.γ₂ pw.β₂
         (.batchOp (N := N) (.conv (h := h) (w := w) s!"%{p}W2" (biasName false "" oc) pw.W₂ pw.b₂)
           (.batchOp (N := N) (.relu (n := oc * h * w))
             (.bnBatchF s!"%{p}g1" s!"%{p}bt1" epsStr pw.ε₁ pw.γ₁ pw.β₁
               (.batchOp (N := N)
-                (.convStrided (h := h) (w := w) s!"%{p}W1" (biasName false "" oc) pw.W₁ pw.b₁) e))))))
+                (.convStrided (h := h) (w := w) s!"%{p}W1" (biasName false "" oc) pw.W₁ pw.b₁) e)))))
+      (.bnBatchF s!"%{p}gp" s!"%{p}btp" epsStr pw.εp pw.γp pw.βp
+        (.batchOp (N := N) (.convStrided (h := h) (w := w) s!"%{p}Wp" (biasName false "" oc) pw.Wp pw.bp) e)))
 
 theorem r34DownGraphB_faithful (p epsStr : String) (N h w : Nat) {ic oc : Nat}
     (pw : R34DownW ic oc) (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (r34DownGraphB p epsStr N h w pw e) = r34DownB N h w pw (den e) := by
   unfold r34DownGraphB r34DownB projB projStridedB cbReluStridedB residualProj biPath
   simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp,
-    den_bnBatchF, den_addVB, Function.comp_apply]
+    den_bnBatchF, den_addVB, Function.comp_apply, add_comm]
 
 /-- Stem graph: 7x7/s2 conv -> bn -> relu -> 3x3/s2 max-pool. -/
 def r34StemGraphB (epsStr : String) (N h w : Nat) {ic oc : Nat}

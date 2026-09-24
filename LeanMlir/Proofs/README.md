@@ -30,14 +30,14 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 The files here are not one homogeneous suite; they split along the seam
 the lakefile's libs encode (rationale: `planning/archive/repo_shape_deletion_audit.md`):
 
-* **The engine slice — `lake build Proofs`** (22 roots reaching 43 modules, the default target):
+* **The engine slice — `lake build Proofs`** (23 roots reaching 50 modules, the default target):
   the IR/render layer every demo exe's import cone actually reaches —
   `StableHLO`/`IR`/`Tensor`, the per-net op+VJP modules the proven renderers
   are built on (`Attention`, `CNN`, `MLP`, `BatchNorm`, `MobileNetV2`, …),
   and the renderers CI's drift guard re-elaborates (`*Render`). If you're
   here to understand how "verified trainer" works, this slice is the whole
   story.
-* **The certificate corpus — `lake build Certs`** (192 roots reaching 223 proof modules, ~133k lines):
+* **The certificate corpus — `lake build Certs`** (187 roots reaching 234 proof modules, ~121k lines):
   research results *about* the engine that no demo imports — the float model (`FloatClose`),
   the §1a tie certificates (`*Fold`/`*StepTie`), trained-net seals, SGD-descent
   capstones, the Lipschitz/LipSDP robustness scorecards, Muon geometry, the

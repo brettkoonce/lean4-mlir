@@ -328,7 +328,7 @@ structure BBackB where
 -- ════════════════════════════════════════════════════════════════
 
 /-- Identity block forward: `conv1→BN1→relu1→conv2→BN2→(+x)→relu`, all at `N := B`. -/
-private def idFwdB (B c hh : Nat) (epsStr p xName : String)
+def idFwdB (B c hh : Nat) (epsStr p xName : String)
     (convBias : Bool) (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BFwdB := do
   let ww := hh
   let zc  : Vec c := fun _ => 0
@@ -346,7 +346,7 @@ private def idFwdB (B c hh : Nat) (epsStr p xName : String)
          st1 := st1, st2 := st2, stp := "" }
 
 /-- Downsample block forward: strided body + strided projection skip. `cin→c`, `2hh→hh`. -/
-private def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
+def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
     (convBias : Bool) (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BFwdB := do
   let ww := hh
   let zc   : Vec c := fun _ => 0
@@ -1307,13 +1307,21 @@ structure R34FwdRecB where
   b : Array BFwdB         -- the 16 basic blocks, in forward order
 deriving Inhabited
 
-set_option maxRecDepth 4000000 in
-/-- **The ResNet-34 forward chain at the BATCHED index** — one traversal, consumed by both
-    `@resnet34_fwd` and every train step that differentiates it. -/
-def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
-    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS R34FwdRecB := do
-  -- ═══ stem: 7×7/s2 conv → batch BN → relu → 3×3/s2 maxpool ═══
+/-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), relu, pool output. -/
+structure R34StemFwdB where
+  code : String
+  c : String
+  n : String
+  st : String
+  r : String
+  o : String
+
+/-- Stem forward: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 max-pool, on `%x`.
+    ⚠ The pool read `.maxPool` (2×2, non-overlapping) until 2026-08-04 — a different function at
+    the identical 112→56 output shape, so nothing ever failed
+    (`planning/archive/rsb_a3_r50_verified.md` §4b). -/
+def r34StemFwdB (B : Nat) (epsStr : String) (convBias : Bool) (bf16 : Bool := false)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS R34StemFwdB := do
   let zx    : Vec (B*(3*224*224)) := fun _ => 0
   let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
   let z64   : Vec 64 := fun _ => 0
@@ -1321,10 +1329,30 @@ def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
   let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStridedAt bf16 (h := 112) (w := 112) zrnd "%sW" (biasName convBias "%sbi" 64) zSk z64) (.operand "%x" zx))
   let (cStn, nStn, sst) ← bnFwdSite B 64 112 112 sync replicas epsStr "%sg" "%sbt" "sg" nStc
   let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*112*112)) (.operand nStn z112))
-  -- ⭐ He et al.'s 3×3/s2 stem pool. ⚠ This read `.maxPool` (2×2, non-overlapping) until
-  -- 2026-08-04 — a different function at the identical 112→56 output shape, so nothing ever
-  -- failed. `planning/archive/rsb_a3_r50_verified.md` §4b.
   let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := 56) (w := 56)) (.operand nStr z112))
+  pure { code := cStc ++ cStn ++ cStr ++ cStp, c := nStc, n := nStn, st := sst, r := nStr, o := nStp }
+
+/-- Head forward: GAP(7×7) → dense(512→nClasses) on the last block's output `xName`. Returns the
+    text and the GAP and logit names. -/
+def r34HeadFwdB (B nClasses : Nat) (xName : String) :
+    StateM Proofs.StableHLO.EmitS (String × String × String) := do
+  let zL    : Vec (B*(512*7*7)) := fun _ => 0
+  let z512  : Vec (B*512) := fun _ => 0
+  let zWd   : Mat 512 nClasses := fun _ _ => 0
+  let zNC   : Vec nClasses := fun _ => 0
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 512) (h := 7) (w := 7)) (.operand xName zL))
+  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z512))
+  pure (cGap ++ cLog, nGap, nLog)
+
+set_option maxRecDepth 4000000 in
+/-- **The ResNet-34 forward chain at the BATCHED index** — one traversal, consumed by both
+    `@resnet34_fwd` and every train step that differentiates it. -/
+def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS R34FwdRecB := do
+  -- ═══ stem: 7×7/s2 conv → batch BN → relu → 3×3/s2 maxpool ═══
+  let st ← r34StemFwdB B epsStr convBias bf16 replicas sync
+  let (nStc, nStn, sst, nStr, nStp) := (st.c, st.n, st.st, st.r, st.o)
   -- ═══ 16 blocks ═══
   let f1  ← idFwdB   B 64 56 epsStr "s1b0" nStp convBias bf16 replicas sync
   let f2  ← idFwdB   B 64 56 epsStr "s1b1" f1.o convBias bf16 replicas sync
@@ -1343,16 +1371,11 @@ def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
   let f15 ← idFwdB   B 512 7 epsStr "s4b0" f14.o convBias bf16 replicas sync
   let f16 ← idFwdB   B 512 7 epsStr "s4b1" f15.o convBias bf16 replicas sync
   -- ═══ head: GAP(7×7) → dense(512→nClasses) ═══
-  let zL    : Vec (B*(512*7*7)) := fun _ => 0
-  let z512  : Vec (B*512) := fun _ => 0
-  let zWd   : Mat 512 nClasses := fun _ _ => 0
-  let zNC   : Vec nClasses := fun _ => 0
-  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 512) (h := 7) (w := 7)) (.operand f16.o zL))
-  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z512))
-  pure { code := cStc ++ cStn ++ cStr ++ cStp ++
+  let (cHead, nGap, nLog) ← r34HeadFwdB B nClasses f16.o
+  pure { code := st.code ++
            f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
            f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
-           f16.code ++ cGap ++ cLog,
+           f16.code ++ cHead,
          stc := nStc, stn := nStn, str := nStr, stp := nStp, sst := sst, gap := nGap, log := nLog,
          b := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16] }
 

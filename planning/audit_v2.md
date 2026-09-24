@@ -66,6 +66,7 @@ the "where is X?" problem. The fix is mostly *moves with names kept* — no pinn
 | `91737514` | §5 `emitTok`, −411 lines: `emitContract` renders a convolution / dot at f32, bf16 or fp8 (operand converts, low-typed op, convert back — or f32 result for the accumulator dot); `lowOf tag`; 24 `.batched` families match `"x" \| "xBf16" \| "xF8"`, 27 twin cases gone; `emitFlatConv` / `dotInOp` / `emitMatmul` for the top-level pairs. Gate: old `emitTok` copied into a scratch module vs new on every tag × B∈{1,3} × 2 stacks = 560 cases, 0 mismatches (corrupted control caught); regen proofs → `verified_mlir/` unchanged; emit ties; Certs/CertsHeavy; comparator 3 tiers; AuditAxioms 1,573 |
 | `db38ec97` | §5 `emitTrainStepBody` 3,094 → 2,456 lines: `emitTrainConstants`, `emitTrainLoss` (all five loss branches + seed → `(text, gradSSA, gradShape)`), `emitOptimizerUpdates` split out. Gate: main harness byte-identical + 281 specs × 15 loss paths hash-identical |
 | (this session) | §5 judgement calls, 2026-09-24. `emitTrainStepBody` → `emitTrainForward` (spec, B ↦ text, logits SSA/shape, `FwdRec`s) + `emitTrainBackward` (B, records, seed cotangent ↦ text) + a 6-line composition — the backward reads nothing of the forward but `records`, so no design change was needed; 288 specs × 6 optimizers + 15 loss paths byte-identical. Printer → `Codegen/StableHLOPretty` (names kept, namespace `Proofs.StableHLO`): `skel`/`Tok`/`emitTok`/`pretty`, the `*ModuleV` renderers and the ch 1–3 `#eval` writers; `biasName` stays in `StableHLO` (T2 graphs build names with it). 34 of 70 direct importers and every module reaching `StableHLO` only through them stop depending on the printer (StableHLO ~85 → ~40 s); 40 importers repointed; Proofs/Certs roots, regen list, proofs.yml, `validate_linear_faithful.sh` follow. `iree-compile`: every site resolves through `findIreeCompile` (3 library helpers, 5 tests, 7 demos). `ReferenceNets.unetPets` / `.autoencoderPets` (4 + 3 copies, identical modulo comments → 1 each; Bestiary UNet prints them). CI: blueprint builds `Reference` (checkdecls imports its roots; `ReferenceNets` is in no `LeanMlir` import cone — the post-`d9b15213` red); jax job name loses "(§5)". ⛔ SHlo constructor regroup declined (below). Gated: full build, AuditAxioms 1,573 + Heavy 62/62, docstring-checkrefs, comparator tier --check, audit/render coverage, regen check, checkdecls + uses, local comparator 3 tiers, the three text-tie tests |
+| (guards session) | §5 T2 text guards, 2026-09-24. New `Codegen/FwdGraphTextTies` (a `Certs` root): 19 `#guard`s — every block kind, stem and head of ResNet-34, ResNet-50, MobileNetV2, and MobileNetV4-Conv-M (stem, fused stage, head, and one guard walking all 21 `mnv4Blocks` rows through the render's dispatch and the T2 graph's) — each asserting the render's block emitter and `pretty` of the T2 block graph print the same bytes (zero weights, `.operand` input, f32, one replica). ⭐ Found one real drift: ResNet-34's `r34DownGraphB` was `addVB(projection, body)`, the render emits body first — the T2 graph now follows the render and `r34DownGraphB_faithful` absorbs it with `add_comm` (statement and pin unchanged). The inline stems/heads of the four chains became `r34StemFwdB`/`r34HeadFwdB`, `r50StemFwdB`/`r50HeadFwdB`, `mnv2StemFwdB`/`mnv2HeadFwdB`, `mnv4StemFwdB`/`mnv4HeadFwdB`; the block emitters lost `private`. Artifacts byte-identical. Controls (a one-character change on either side) fail. Root/module counts in lakefile + Proofs/README re-measured (Certs 187 roots / 234 modules; they were stale at 192/223) |
 
 Each gated: `lake build Certs LeanMlir Apps`, AuditAxioms 1,597/1,597, `docstring-checkrefs`,
 `verified_mlir/` byte-clean; `a745b694` also `CertsHeavy` + AuditAxiomsHeavy 62/62 and the three
@@ -158,16 +159,18 @@ before the commit.
   (every match is by name; the comparator imports `SHlo`, it does not restate it), so a regroup is
   a ~1,100-line permutation for reading order alone, and `den` / `skel` / `emitTok` would keep their
   own arm orders anyway. Readers find a constructor by name; the header's suffix legend is the map.
-- ▶ **Emitted forward ↔ T2 graph: per-block `#guard`s — prototyped, not landed.** A whole-net
-  `pretty (T2 graph) == chain text` cannot work: `pretty` has no CSE and the T2 graphs repeat the
-  block input at every skip (≈2^16 re-emits for R34). Per block it works: ResNet-34's `idFwdB`
-  (`sync := false`, f32, `convBias := false`) and `pretty (r34IdGraphB … (.operand x 0))` from the
-  same `EmitS` start print the same 5,422 bytes (scratch copy of `idFwdB`, which is `private`).
-  To land: make the per-block emitters public, a leaf module importing renderer + `*FullB` with one
-  `#guard` per block kind (R34 id/down/stem/head; R50 bottleneck id/down; MNv2 / MNv4 / ENet block
-  kinds), built by a CI-built lib so the guard gates. ConvNeXt / ViT need a hop: their T2 graphs are
-  per-example with other constructors (`denseF`, `chanLNGraph`, …). The block→chain composition stays
-  a name-threading argument in prose.
+- ✅ **Emitted forward ↔ T2 graph: per-block `#guard`s** — landed (row above).
+- ▶ **EfficientNet-B0 has no text tie, and cannot get one by re-spelling its graph alone.** Its
+  render emits an un-fused SE (GAP → dense → swish → dense, the activations the backward reads)
+  beside the fused `seBlock` the forward output reads; those ops are off the output's path, so no
+  single-output graph prints them. Its T2 block graphs (`EfficientNetRenderPC`) are also spelled
+  differently from the artifact: SE `zWa/zba/zWb/zbb` vs `zW1/zb1/zW2/zb2`, head `%Wfc/%bfc` vs
+  `%Wd/%bd`, conv biases `%{p}pb` vs `%zb{c}`, `.swishF` vs `.batchOp .swish`, `.addV` vs `.addVB`.
+  Options: (a) re-spell the T2 graphs to the artifact's names/tokens and guard the forward with
+  the saved-SE lines filtered out; (b) have the render read the un-fused SE (`x · σ(e2)`) instead
+  of a second fused `seBlock` — one SE, a text tie possible, but every ENet artifact changes.
+  The comparator-cited sync twin (`efficientnetFwdGraphSync_full_shard`) sits on these graphs.
+- ConvNeXt-T / ViT: T2 graphs are per-example with other constructors — no text tie of this kind.
 
 ### 2. Found in §6 — open
 - GramQ `rowDotQ`/`castM` ≡ IBP `sumQ`/`castV`, and the dense uniform boxes — skipped (reasons in

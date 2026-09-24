@@ -361,7 +361,7 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
     render must match the REFERENCE or the forward tie cannot pass and the number cannot be
     reproduced. `uibFwd*` above are relu, correctly — the two activations sit twenty lines apart and
     the difference is real, not a copy-paste slip. -/
-private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
+def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     (epsStr p xName : String)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS UibFwdB := do
@@ -392,7 +392,7 @@ private def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     the row: stride 1 ⇒ the identity skip (`ic = oc`, pinned by `mnv4-fwd-smoke`); stride 2 splits
     on which depthwise carries the stride, because that decides the spatial size the expand runs at.
     The three cannot be one function — `.depthwise` and `.depthwiseStrided` differ in INPUT type. -/
-private def uibFwdDispatch (B : Nat) (b : UibSpec) (mode : BnMode) (epsStr xName : String)
+def uibFwdDispatch (B : Nat) (b : UibSpec) (mode : BnMode) (epsStr xName : String)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS UibFwdB :=
   if b.stride2 then
@@ -429,6 +429,82 @@ structure Mnv4FwdRec where
   hst : String := ""
 deriving Inhabited
 
+/-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), relu output. -/
+structure Mnv4StemFwdB where
+  code : String
+  c : String
+  n : String
+  st : String
+  o : String
+
+/-- Stem forward: 3×3/s2 conv (3→32), 224→112 → batch BN → relu, on `%x`.
+    ⭐ `.convStridedXla`, NOT `.convStrided` — and this net is the reason that token exists.
+    The reference stem is `conv_bn(…, stride=(2,2), padding='SAME')`, and XLA `'SAME'` on a 3×3/s2
+    at 224 pads **(0,1)**, not (1,1). Both give 112×112, so no shape check, `#guard`, op count or
+    arity audit can see the difference — the forward tie is the only thing that can, and it
+    measured **6.16e-2** with the symmetric token against **1.79e-6** with the reference patched
+    to match (`planning/archive/mnv4_verified.md` §3b). Every OTHER stride-2 site in this net is
+    genuinely symmetric: `uib_block` and `fused_mbconv_block` pass an explicit `(pad,pad)` tuple,
+    which is why patching this one line alone closed the whole tie. -/
+def mnv4StemFwdB (B : Nat) (epsStr : String) (mode : BnMode := .train) (bf16 : Bool := false)
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4StemFwdB := do
+  let zx    : Vec (B*(3*224*224)) := fun _ => 0
+  let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
+  let z32   : Vec 32 := fun _ => 0
+  let z112  : Vec (B*(32*112*112)) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.batchOp (N := B)
+    (.convStridedXlaAt bf16 (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) zrnd "%sW" "%zb32" zSk z32)
+    (.operand "%x" zx))
+  let (cStn, nStn, sst) ← mnv4Bn B 32 112 mode epsStr "%sg" "%sbt" "stn" nStc replicas sync
+  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 32*112*112)) (.operand nStn z112))
+  pure { code := cStc ++ cStn ++ cStr, c := nStc, n := nStn, st := sst, o := nStr }
+
+/-- The head's saved SSA names: both convs, their BNs and stats, relus, GAP, logits. -/
+structure Mnv4HeadFwdB where
+  code : String
+  h1c : String
+  h1n : String
+  h1st : String
+  h1r : String
+  hc : String
+  hn : String
+  hst : String
+  hr : String
+  gap : String
+  log : String
+
+/-- Head forward, TWO convs (Conv-M's `cn_r1_k1_s1_c960` then `conv_head` to 1280):
+    1×1 (256→960) → BN → relu → 1×1 (960→1280) → BN → relu → GAP(7×7) → dense, on the last
+    block's output `xName`. -/
+def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .train)
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    StateM Proofs.StableHLO.EmitS Mnv4HeadFwdB := do
+  let z7     : Vec (B*(256*7*7)) := fun _ => 0
+  let zH1k   : Kernel4 960 256 1 1 := fun _ _ _ _ => 0
+  let z960   : Vec 960 := fun _ => 0
+  let zH17   : Vec (B*(960*7*7)) := fun _ => 0
+  let zHk    : Kernel4 1280 960 1 1 := fun _ _ _ _ => 0
+  let z1280  : Vec 1280 := fun _ => 0
+  let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
+  let z1280b : Vec (B*1280) := fun _ => 0
+  let zWd    : Mat 1280 nClasses := fun _ _ => 0
+  let zNC    : Vec nClasses := fun _ => 0
+  let (cH1c, nH1c) ← pretty B (.batchOp (N := B)
+    (.convAt bf16 (ic := 256) (oc := 960) (h := 7) (w := 7) zrnd "%h1W" "%zb960" zH1k z960) (.operand xName z7))
+  let (cH1n, nH1n, h1st) ← mnv4Bn B 960 7 mode epsStr "%h1g" "%h1bt" "h1n" nH1c replicas sync
+  let (cH1r, nH1r) ← pretty B (.batchOp (N := B) (.relu (n := 960*7*7)) (.operand nH1n zH17))
+  let (cHc, nHc) ← pretty B (.batchOp (N := B)
+    (.convAt bf16 (ic := 960) (oc := 1280) (h := 7) (w := 7) zrnd "%hW" "%zb1280" zHk z1280) (.operand nH1r zH17))
+  let (cHn, nHn, hst) ← mnv4Bn B 1280 7 mode epsStr "%hg" "%hbt" "hn" nHc replicas sync
+  let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*7*7)) (.operand nHn zH7))
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
+    (.operand nHr zH7))
+  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
+    (.operand nGap z1280b))
+  pure { code := cH1c ++ cH1n ++ cH1r ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+         h1c := nH1c, h1n := nH1n, h1st := h1st, h1r := nH1r,
+         hc := nHc, hn := nHn, hst := hst, hr := nHr, gap := nGap, log := nLog }
+
 /-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → 10 classes.
 
     Transcribed 1:1 from [`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean), which is the faithful Conv-M table as of
@@ -460,24 +536,9 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     (bf16 : Bool := false)
     -- ▶ SYNC-BN (`planning/global_bn_verified.md` §3.4), trailing and defaulted off likewise.
     (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
-  -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu ═══
-  -- ⭐ `.convStridedXla`, NOT `.convStrided` — and this net is the reason that token exists.
-  -- The reference stem is `conv_bn(…, stride=(2,2), padding='SAME')`, and XLA `'SAME'` on a 3×3/s2
-  -- at 224 pads **(0,1)**, not (1,1). Both give 112×112, so no shape check, `#guard`, op count or
-  -- arity audit can see the difference — the forward tie is the only thing that can, and it
-  -- measured **6.16e-2** with the symmetric token against **1.79e-6** with the reference patched
-  -- to match (`planning/archive/mnv4_verified.md` §3b). Every OTHER stride-2 site in this net is genuinely
-  -- symmetric: `uib_block` and `fused_mbconv_block` pass an explicit `(pad,pad)` tuple, which is
-  -- why patching this one line alone closed the whole tie.
-  let zx    : Vec (B*(3*224*224)) := fun _ => 0
-  let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
-  let z32   : Vec 32 := fun _ => 0
-  let z112  : Vec (B*(32*112*112)) := fun _ => 0
-  let (cStc, nStc) ← pretty B (.batchOp (N := B)
-    (.convStridedXlaAt bf16 (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) zrnd "%sW" "%zb32" zSk z32)
-    (.operand "%x" zx))
-  let (cStn, nStn, sst) ← mnv4Bn B 32 112 mode epsStr "%sg" "%sbt" "stn" nStc replicas sync
-  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 32*112*112)) (.operand nStn z112))
+  -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu (XLA-`SAME`; see `mnv4StemFwdB`) ═══
+  let st ← mnv4StemFwdB B epsStr mode bf16 replicas sync
+  let (nStc, nStn, sst, nStr) := (st.c, st.n, st.st, st.o)
 
   -- ═══ stage 0: the fused inverted bottleneck, 112→56 (swish) ═══
   let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 mode epsStr "0" nStr bf16 replicas sync
@@ -494,33 +555,12 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     inputs := inputs ++ [cur]
     cur := r.o
 
-  -- ═══ head, TWO convs (Conv-M's `cn_r1_k1_s1_c960` then `conv_head` to 1280):
-  --     1×1 (256→960) → BN → relu → 1×1 (960→1280) → BN → relu → GAP(7×7) → dense ═══
-  let z7     : Vec (B*(256*7*7)) := fun _ => 0
-  let zH1k   : Kernel4 960 256 1 1 := fun _ _ _ _ => 0
-  let z960   : Vec 960 := fun _ => 0
-  let zH17   : Vec (B*(960*7*7)) := fun _ => 0
-  let zHk    : Kernel4 1280 960 1 1 := fun _ _ _ _ => 0
-  let z1280  : Vec 1280 := fun _ => 0
-  let zH7    : Vec (B*(1280*7*7)) := fun _ => 0
-  let z1280b : Vec (B*1280) := fun _ => 0
-  let zWd    : Mat 1280 nClasses := fun _ _ => 0
-  let zNC    : Vec nClasses := fun _ => 0
-  let (cH1c, nH1c) ← pretty B (.batchOp (N := B)
-    (.convAt bf16 (ic := 256) (oc := 960) (h := 7) (w := 7) zrnd "%h1W" "%zb960" zH1k z960) (.operand cur z7))
-  let (cH1n, nH1n, h1st) ← mnv4Bn B 960 7 mode epsStr "%h1g" "%h1bt" "h1n" nH1c replicas sync
-  let (cH1r, nH1r) ← pretty B (.batchOp (N := B) (.relu (n := 960*7*7)) (.operand nH1n zH17))
-  let (cHc, nHc) ← pretty B (.batchOp (N := B)
-    (.convAt bf16 (ic := 960) (oc := 1280) (h := 7) (w := 7) zrnd "%hW" "%zb1280" zHk z1280) (.operand nH1r zH17))
-  let (cHn, nHn, hst) ← mnv4Bn B 1280 7 mode epsStr "%hg" "%hbt" "hn" nHc replicas sync
-  let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*7*7)) (.operand nHn zH7))
-  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
-    (.operand nHr zH7))
-  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
-    (.operand nGap z1280b))
+  -- ═══ head: two 1×1 conv-BN-relu (256→960→1280) → GAP(7×7) → dense ═══
+  let hd ← mnv4HeadFwdB B nClasses epsStr cur mode bf16 replicas sync
+  let (nH1c, nH1n, h1st, nH1r) := (hd.h1c, hd.h1n, hd.h1st, hd.h1r)
+  let (nHc, nHn, hst, nHr, nGap, nLog) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap, hd.log)
 
-  pure { code := cStc ++ cStn ++ cStr ++ f0.code ++ bcode ++
-                 cH1c ++ cH1n ++ cH1r ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
+  pure { code := st.code ++ f0.code ++ bcode ++ hd.code,
          logits := nLog, stc := nStc, stn := nStn, str := nStr,
          f0 := f0, blocks := blocks, inputs := inputs,
          h1c := nH1c, h1n := nH1n, h1r := nH1r,

@@ -8,6 +8,7 @@ its text is `pretty` of an `SHlo` term. The theorems about what that term *means
 |---|---|
 | `StableHLO.lean` | the `SHlo` AST, `den` (its ℝ semantics), the per-op `*_faithful` lemmas, the chapter 1–3 graphs. A module that only states `den` facts imports this alone. Header has a table of contents |
 | `StableHLOPretty.lean` | the printer (`skel` → `Tok` → `emitTok` → `pretty`), the chapter 1–3 `*ModuleV` renderers and their `#eval` writers. Every renderer imports it |
+| `FwdGraphTextTies.lean` | `#guard`s that each net's rendered forward blocks print exactly `pretty` of its T2 block graphs (ResNet-34/50, MobileNetV2/V4; header says why not EfficientNet, ConvNeXt, ViT) |
 | `StableHLOLex.lean`, `StableHLOParse.lean` | the syntactic round-trip (`parse (lex (pretty g)) = some (skel g)`) |
 | `SyncBnSites.lean` | the one writer of the sync-BatchNorm text, shared by every net's data-parallel render |
 | `RenderKit.lean` | the renderers' shared optimizer tail: `PGrad` and the per-parameter steps `adamOne`, `rmsOne`, `adamOneEma` (ResNet's multi-optimizer `optOne` stays in `ResNet34RenderB`) |
@@ -30,9 +31,12 @@ its text is `pretty` of an `SHlo` term. The theorems about what that term *means
 | ConvNeXt-T | `ConvNeXtRenderB` | `convNextFwdGraphTCh_faithful` | `cnx_net_tiedGB` | `convnextInputGradB_eq_convNextForwardTChB_vjp` |
 | ViT-Tiny | `ViTRenderB` | `vitFwdGraphKMHV_faithful` | `vit_net_tiedGB` | `vitInputGradKB_eq_vitKVB_vjp` |
 
-The emitted forward and the T2 graph are separate definitions: the renderer builds its forward
-inline, and the T2 theorem is about `*FwdGraph*` at the renderer's tokens. The CI drift guard
-(`proofs.yml`) re-elaborates every renderer and byte-checks `verified_mlir/`.
+The emitted forward and the T2 graph are separate definitions: the renderer emits its forward one
+block at a time, and the T2 theorem is about `*FwdGraph*`. `FwdGraphTextTies` ties them per block
+kind by text — the block emitter and `pretty` of the T2 block graph print the same bytes — for
+ResNet-34/50 and MobileNetV2/V4; the chain's glue (block order, prefixes, shapes, threading each
+output name into the next block) is read off the chain beside the T2 graph's nesting. The CI drift
+guard (`proofs.yml`) re-elaborates every renderer and byte-checks `verified_mlir/`.
 
 ## `SHlo` constructor suffixes
 

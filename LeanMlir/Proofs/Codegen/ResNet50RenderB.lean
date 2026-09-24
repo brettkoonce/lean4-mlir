@@ -165,7 +165,7 @@ def dpAt (sd : Bool) (i : Nat) : Option Nat := if sd then some i else none
 
 /-- Identity bottleneck forward: `1×1 → BN → relu → 3×3 → BN → relu → 1×1 → BN → (+x) → relu`,
     all at `hh`, channels `oc → mid → mid → oc`. -/
-private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
+def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
     (bf16 : Bool := false) (drop : Option Nat := none)
     (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
@@ -200,7 +200,7 @@ private def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
 /-- ⭐ **Stride-1 projection bottleneck forward** — R50 stage 1 block 0, and nowhere else.
     `cin → mid → mid → oc` with the resolution unchanged, so the projection is a plain `1×1`
     conv → BN, NOT the strided one `bnkStridedFwdB` uses. -/
-private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
+def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     (bf16 : Bool := false) (drop : Option Nat := none)
     (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
@@ -243,7 +243,7 @@ private def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
 
     ⚠ `conv1`/`bn1`/`relu1` run at the **input** resolution `2hh`; only `conv2` (the 3×3) is
     strided. v1.5. -/
-private def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
+def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     (bf16 : Bool := false) (drop : Option Nat := none)
     (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BNFwd := do
   let ww := hh
@@ -521,6 +521,36 @@ structure R50FwdRecB where
   b : Array BNFwd         -- the 16 bottleneck blocks, in forward order
 deriving Inhabited
 
+/-- Stem forward at ladder base `q` (input `32q`): 7×7/s2 conv → batch BN → relu → He et al.'s
+    3×3/s2 max-pool on `%x`, output at `8q`. ResNet-34's stem at another resolution (same record).
+    ⚠ `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
+    `Vec (B*(3*(2*q1)*(2*q1)))` and any other spelling of the same number is a different TERM. -/
+def r50StemFwdB (B q : Nat) (epsStr : String) (bf16 : Bool := false) (replicas : Nat := 1)
+    (sync : Bool := false) : StateM Proofs.StableHLO.EmitS R34StemFwdB := do
+  let q2 := 2 * (2 * (2 * q))
+  let q1 := 2 * q2
+  let zx    : Vec (B*(3*(2*q1)*(2*q1))) := fun _ => 0
+  let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
+  let z64   : Vec 64 := fun _ => 0
+  let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
+  let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStridedAt bf16 (h := q1) (w := q1) zrnd "%sW" (zb 64) zSk z64) (.operand "%x" zx))
+  let (cStn, nStn, sst) ← bnFwdSite B 64 q1 q1 sync replicas epsStr "%sg" "%sbt" "sg" nStc
+  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
+  let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := q2) (w := q2)) (.operand nStr z112))
+  pure { code := cStc ++ cStn ++ cStr ++ cStp, c := nStc, n := nStn, st := sst, r := nStr, o := nStp }
+
+/-- Head forward: GAP(q×q) → dense(2048→nClasses) on the last block's output `xName`. Returns the
+    text and the GAP and logit names. -/
+def r50HeadFwdB (B q nClasses : Nat) (xName : String) :
+    StateM Proofs.StableHLO.EmitS (String × String × String) := do
+  let zL    : Vec (B*(2048*q*q)) := fun _ => 0
+  let z2048 : Vec (B*2048) := fun _ => 0
+  let zWd   : Mat 2048 nClasses := fun _ _ => 0
+  let zNC   : Vec nClasses := fun _ => 0
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := q) (w := q)) (.operand xName zL))
+  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
+  pure (cGap ++ cLog, nGap, nLog)
+
 set_option maxRecDepth 4000000 in
 /-- **The ResNet-50 forward chain at the BATCHED index** — one traversal, consumed by both
     `@resnet50_fwd` and the train step that differentiates it. -/
@@ -545,16 +575,8 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   -- ═══ stem: 7×7/s2 conv → batch BN → relu → He et al.'s 3×3/s2 pool (img→img/2→img/4) ═══
   -- ⚠ `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
   -- `Vec (B*(3*(2*q1)*(2*q1)))` and any other spelling of the same number is a different TERM.
-  let zx    : Vec (B*(3*(2*q1)*(2*q1))) := fun _ => 0
-  let zSk   : Kernel4 64 3 7 7 := fun _ _ _ _ => 0
-  let z64   : Vec 64 := fun _ => 0
-  let z112  : Vec (B*(64*q1*q1)) := fun _ => 0
-  let _z112b : Vec (B*(64*(q1*q1))) := fun _ => 0
-  let _z56   : Vec (B*(64*q2*q2)) := fun _ => 0
-  let (cStc, nStc) ← pretty B (.batchOp (N := B) (.convStridedAt bf16 (h := q1) (w := q1) zrnd "%sW" (zb 64) zSk z64) (.operand "%x" zx))
-  let (cStn, nStn, sst) ← bnFwdSite B 64 q1 q1 sync replicas epsStr "%sg" "%sbt" "sg" nStc
-  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 64*q1*q1)) (.operand nStn z112))
-  let (cStp, nStp) ← pretty B (.batchOp (N := B) (.maxPool3s2 (c := 64) (h := q2) (w := q2)) (.operand nStr z112))
+  let st ← r50StemFwdB B q epsStr bf16 replicas sync
+  let (nStc, nStn, sst, nStr, nStp) := (st.c, st.n, st.st, st.r, st.o)
   -- ═══ 16 bottleneck blocks, [3,4,6,3] ═══
   let f1  ← bnkProjFwdB    B   64  64  256 q2 epsStr "s1b0" nStp bf16 (dpAt sd 0) replicas sync   -- ⭐ the stride-1 projection
   let f2  ← bnkIdFwdB      B       64  256 q2 epsStr "s1b1" f1.o bf16 (dpAt sd 1) replicas sync
@@ -573,18 +595,11 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
   let f15 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b1" f14.o bf16 (dpAt sd 14) replicas sync
   let f16 ← bnkIdFwdB      B      512 2048  q5 epsStr "s4b2" f15.o bf16 (dpAt sd 15) replicas sync
   -- ═══ head: GAP(7×7) → dense(2048→nClasses) ═══
-  let zL    : Vec (B*(2048*q5*q5)) := fun _ => 0
-  let z2048 : Vec (B*2048) := fun _ => 0
-  let zWd   : Mat 2048 nClasses := fun _ _ => 0
-  let zNC   : Vec nClasses := fun _ => 0
-  let _zNCb  : Vec (B*(1*nClasses)) := fun _ => 0
-  let _zNCp  : Vec (B*nClasses) := fun _ => 0
-  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 2048) (h := q5) (w := q5)) (.operand f16.o zL))
-  let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
-  pure { code := cStc ++ cStn ++ cStr ++ cStp ++
+  let (cHead, nGap, nLog) ← r50HeadFwdB B q nClasses f16.o
+  pure { code := st.code ++
                  f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
                  f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
-                 f15.code ++ f16.code ++ cGap ++ cLog,
+                 f15.code ++ f16.code ++ cHead,
          logits := nLog, stc := nStc, stn := nStn, str := nStr, stp := nStp, sst := sst, gap := nGap,
          b := #[f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13,f14,f15,f16] }
 
