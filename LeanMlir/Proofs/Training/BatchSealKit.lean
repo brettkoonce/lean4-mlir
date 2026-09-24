@@ -1039,64 +1039,28 @@ theorem bnBatchLA_pair {oc h w : Nat} (hhw : 0 < h * w) (ε : ℝ) (γ β : Vec 
 -- ════════════════════════════════════════════════════════════════
 -- § 14. `swish` — the one activation no window makes the identity
 --   Used only by MobileNetV4, whose fused stage is swish where every other stage in every other
---   net is relu or relu6.
+--   net is relu or relu6. Its scalar facts (`hasDerivAt_swishScalar`, `swishScalarDeriv_pos`,
+--   `swishScalar_lt`) are in `Architectures/LayerNorm`, beside `swishScalar`.
 -- ════════════════════════════════════════════════════════════════
-noncomputable def swishD (x : ℝ) : ℝ :=
-  (1 + Real.exp (-x) + x * Real.exp (-x)) / (1 + Real.exp (-x)) ^ 2
-
-theorem one_add_exp_pos (x : ℝ) : 0 < 1 + Real.exp (-x) := by
-  have := Real.exp_pos (-x); linarith
-
-theorem hasDerivAt_swishScalar (x : ℝ) : HasDerivAt swishScalar (swishD x) x := by
-  have hd : HasDerivAt (fun y : ℝ => 1 + Real.exp (-y)) (-Real.exp (-x)) x := by
-    have := ((Real.hasDerivAt_exp (-x)).comp x ((hasDerivAt_id x).neg)).const_add (1 : ℝ)
-    simpa using this
-  have hne : (1 : ℝ) + Real.exp (-x) ≠ 0 := (one_add_exp_pos x).ne'
-  have hq : HasDerivAt (fun y : ℝ => y / (1 + Real.exp (-y)))
-      ((1 * (1 + Real.exp (-x)) - x * -Real.exp (-x)) / (1 + Real.exp (-x)) ^ 2) x :=
-    HasDerivAt.div (hasDerivAt_id x) hd hne
-  have hval : (1 * (1 + Real.exp (-x)) - x * -Real.exp (-x)) / (1 + Real.exp (-x)) ^ 2
-      = swishD x := by
-    simp only [swishD]
-    congr 1
-    ring
-  exact hval ▸ hq
-
-theorem swishD_pos {x : ℝ} (hx : 0 ≤ x) : 0 < swishD x := by
-  have h1 := Real.exp_pos (-x)
-  have h2 : 0 ≤ x * Real.exp (-x) := mul_nonneg hx h1.le
-  exact div_pos (by linarith) (pow_pos (one_add_exp_pos x) 2)
-
-theorem swishScalar_lt {a b : ℝ} (ha : 0 ≤ a) (hab : a < b) :
-    swishScalar a < swishScalar b := by
-  have hea : Real.exp (-b) ≤ Real.exp (-a) := Real.exp_le_exp.mpr (by linarith)
-  have hpb : (0 : ℝ) < 1 + Real.exp (-b) := one_add_exp_pos b
-  have hpa : (0 : ℝ) < 1 + Real.exp (-a) := one_add_exp_pos a
-  have step1 : a / (1 + Real.exp (-a)) ≤ a / (1 + Real.exp (-b)) :=
-    div_le_div_of_nonneg_left ha hpb (by linarith)
-  have step2 : a / (1 + Real.exp (-b)) < b / (1 + Real.exp (-b)) := by gcongr
-  simp only [swishScalar]
-  linarith
-
 /-- the two examples' swish outputs, as a function of half their gap. -/
 noncomputable def swishGap (β u : ℝ) : ℝ := swishScalar (β + u) - swishScalar (β - u)
 
 @[simp] theorem swishGap_zero (β : ℝ) : swishGap β 0 = 0 := by
   simp only [swishGap, add_zero, sub_zero, sub_self]
 
-theorem hasDerivAt_swishGap (β : ℝ) : HasDerivAt (swishGap β) (2 * swishD β) 0 := by
-  have hp : HasDerivAt (fun u : ℝ => swishScalar (β + u)) (swishD β) 0 := by
+theorem hasDerivAt_swishGap (β : ℝ) : HasDerivAt (swishGap β) (2 * swishScalarDeriv β) 0 := by
+  have hp : HasDerivAt (fun u : ℝ => swishScalar (β + u)) (swishScalarDeriv β) 0 := by
     have h1 : HasDerivAt (fun u : ℝ => β + u) 1 0 := (hasDerivAt_id (0:ℝ)).const_add β
     have h2 := HasDerivAt.comp (0:ℝ) (hasDerivAt_swishScalar (β + 0)) h1
     rw [add_zero, mul_one] at h2
     exact h2
-  have hm : HasDerivAt (fun u : ℝ => swishScalar (β - u)) (-swishD β) 0 := by
+  have hm : HasDerivAt (fun u : ℝ => swishScalar (β - u)) (-swishScalarDeriv β) 0 := by
     have h1 : HasDerivAt (fun u : ℝ => β - u) (-1) 0 := (hasDerivAt_id (0:ℝ)).const_sub β
     have h2 := HasDerivAt.comp (0:ℝ) (hasDerivAt_swishScalar (β - 0)) h1
     rw [sub_zero, mul_neg, mul_one] at h2
     exact h2
   have h3 : HasDerivAt (fun u : ℝ => swishScalar (β + u) - swishScalar (β - u))
-      (swishD β - -swishD β) 0 := hp.sub hm
+      (swishScalarDeriv β - -swishScalarDeriv β) 0 := hp.sub hm
   rw [sub_neg_eq_add, ← two_mul] at h3
   exact h3
 

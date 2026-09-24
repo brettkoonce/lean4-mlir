@@ -981,8 +981,8 @@ theorem uF_zero : uF 0 0 = 0 := by simp [uF]
 /-- ⭐⭐ the swish's contribution: `swishGap` is differentiable at `0` with slope `2 · swish' β`,
     and that is the whole reason this net's readout is not `t · Rr t`. -/
 theorem hasDerivAt_gsw :
-    HasDerivAt (fun t : ℝ => swishGap 160 (uF t 0)) (2 * swishD 160 * Q0 0) 0 := by
-  have hg : HasDerivAt (swishGap 160) (2 * swishD 160) (uF 0 0) := by
+    HasDerivAt (fun t : ℝ => swishGap 160 (uF t 0)) (2 * swishScalarDeriv 160 * Q0 0) 0 := by
+  have hg : HasDerivAt (swishGap 160) (2 * swishScalarDeriv 160) (uF 0 0) := by
     rw [uF_zero]; exact hasDerivAt_swishGap 160
   have h2 := HasDerivAt.comp (0 : ℝ) hg hasDerivAt_uF
   exact h2
@@ -991,14 +991,14 @@ theorem gd_zero : swishGap 160 (uF 0 0) = 0 := by rw [uF_zero, swishGap_zero]
 
 theorem hasDerivAt_gd :
     HasDerivAt (fun t : ℝ => swishGap 160 (uF t 0) * Rr t)
-      (2 * swishD 160 * Q0 0 * Rr 0) 0 :=
+      (2 * swishScalarDeriv 160 * Q0 0 * Rr 0) 0 :=
   hasDerivAt_mul_of_zero hasDerivAt_gsw gd_zero Rr_continuous.continuousAt
 
-theorem gd_slope_ne : 2 * swishD 160 * Q0 0 * Rr 0 ≠ 0 := by
-  have h1 : 0 < swishD 160 := swishD_pos (by norm_num)
+theorem gd_slope_ne : 2 * swishScalarDeriv 160 * Q0 0 * Rr 0 ≠ 0 := by
+  have h1 : 0 < swishScalarDeriv 160 := swishScalarDeriv_pos (by norm_num)
   have h2 := Q0_pos 0
   have h3 := Rr_pos 0
-  have : 0 < 2 * swishD 160 * Q0 0 * Rr 0 :=
+  have : 0 < 2 * swishScalarDeriv 160 * Q0 0 * Rr 0 :=
     mul_pos (mul_pos (mul_pos two_pos h1) h2) h3
   exact this.ne'
 
