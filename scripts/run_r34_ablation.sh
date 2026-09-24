@@ -97,9 +97,10 @@ fi
 # arm launches anyway, both jobs halve, and the s/ep figure the chapter quotes is a contention
 # artifact rather than the net's cost. Measured: 4 arms one-per-card run at the same 60 s/epoch as
 # one arm alone, so the only thing that slows an arm down is sharing a card.
+. scripts/lib/gpu.sh
 wait_for_gpu () {  # gpu
   local gpu="$1" waited=0
-  while nvidia-smi --query-compute-apps=gpu_uuid --format=csv,noheader -i "$gpu" 2>/dev/null | grep -q .; do
+  while gpu_busy "$gpu"; do
     sleep 30; waited=$((waited+30))
   done
   [ "$waited" -gt 0 ] && echo "    (waited ${waited}s for gpu$gpu)"

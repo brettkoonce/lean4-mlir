@@ -276,9 +276,20 @@ Also: `smooth_scorecard_gen.py:33`, `smooth_dec_scorecard_gen.py:47-48`,
 * Found on the way: `crown_ibp_probe.py` had been dead since the W2 → `W2<tag>Q : ℚ` + `castM`
   change; parser fixed, reproduces its documented 92/88/69/24 and the "k = 8 rounding costs zero"
   claim `CrownBound.lean` cites.
-* Not done: `lean_graph.py` (the `audit_census/run.sh` heredoc; `check_audit_coverage` already has
-  one `lib_roots` since §2), `lib/gpu.sh` (det-shim ×4, idle-GPU ×3, work-queue ×3 — shell, three
-  different launch paths), and the import-only row (FPN oracle, anchor loaders, SHIM_HASH, read_part).
+* `scripts/lean_graph.py` — `libs`/`lib_roots`/`imports_of`/`reachable`; `check_audit_coverage.py`
+  (output identical, now cwd-independent, control still exits 1) and the `audit_census/run.sh`
+  heredoc (roots.txt + modules.txt identical: 199 / 275) both on it.
+* `scripts/lib/gpu.sh` — `det_shim_ensure` (build when missing or older than `ffi/pjrt_ffi.c` /
+  `det_shim.sh`; `streamed_val_gate` used to reuse a stale `DET_SHIM` and `sharded_eval_gate`
+  rebuilt every time) in the four det-shim gates; `gpu_busy [gpu]` in `bf16_probe_3060`'s refusal
+  and `run_r34_ablation`'s per-card wait. Exercised: build, reuse, stale rebuild, failed build → 2.
+* Imports: `fpn_neck_probe_check` takes the oracle from `fpn_neck_check` (as `fpn_detect_probe_check`
+  does); `crown_ibp_probe` uses `crown_ibp_scorecard.load_nets` (its own parser copy is what went
+  stale; output identical); `fpn_obj_separation`/`fpn_loss_breakdown` import `fpn_class_freq`'s
+  `load_anchors` (12 reads equal; `preprocess_visdrone`'s returns float32, so not that one).
+* Deliberately left: the three work-queue loops (each is tied to its own bookkeeping and can only
+  be tested by a real multi-GPU launch), `read_part` (the two versions return different things),
+  and the two SHIM_HASH parsers (different line shapes).
 
 ## 7. Docs
 

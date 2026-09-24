@@ -14,6 +14,7 @@ objectness pos/neg split that T1a targets.
 """
 import sys
 import numpy as np
+from fpn_class_freq import load_anchors  # noqa: E402  (one anchor-file reader)
 
 P = 15          # per-anchor slot: tx,ty,tw,th,obj,cls(10)
 NC = 10
@@ -21,18 +22,6 @@ LAMBDA_BOX = 5.0
 GAMMA = 2.0
 LN = 0.5        # lambda_noobj (alpha for negatives)
 IMG_BYTES = 448 * 448 * 3
-
-
-def load_anchors(path):
-    out = []
-    with open(path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#"):
-                continue
-            w, h = line.split()
-            out.append((float(w), float(h)))
-    return out
 
 
 def diou_terms(pred, tgt, mask, aw, ah, g):

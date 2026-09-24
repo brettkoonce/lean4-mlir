@@ -13,7 +13,7 @@ Three counts per (net, eps):
   crown      -- CROWN-IBP: relax each unstable ReLU linearly, back-substitute
                 v through W1 to one row A, concretize once: <A,x0> - eps*||A||_1.
 """
-import re, sys
+import sys
 from pathlib import Path
 import numpy as np
 
@@ -23,38 +23,17 @@ NETS = REPO / "LeanMlir/Proofs/Certificates/LipschitzCertScorecardFullNets.lean"
 DATA = REPO / "data"
 sys.path.insert(0, str(REPO / "scripts"))
 from _mnist_io import mnist  # noqa: E402
+from crown_ibp_scorecard import load_nets as scorecard_nets  # noqa: E402
 H, K, DIM, DEN, PIX, N_IMG = 16, 10, 784, 256, 255, 100
 EPS_GRID = [1, 2, 4, 8]
 
 
-def parse_int_list(text):
-    out = []
-    for tok in text.split(","):
-        tok = tok.strip()
-        if tok.startswith("Int.negSucc"):
-            out.append(-(int(tok.split()[1]) + 1))
-        else:
-            out.append(int(tok))
-    return out
-
-
 def load_nets():
-    src = NETS.read_text()
+    """The committed SF/TF weights as int64, through the scorecard's own parser — one parser, so a
+    change to the emitted Lean format cannot leave this probe reading an empty matrix again."""
     nets = {}
-    for tag in ("SF", "TF"):
-        W1 = np.array([parse_int_list(
-            src.split(f"def w1z{tag}{k} : List ℤ := [")[1].split("]")[0])
-            for k in range(H)], dtype=np.int64)
-        # W2 is emitted as a ℚ matrix (`W2<tag>Q`, cast to ℝ by `castM`) -- pull the /256 numerators.
-        blk = src.split(f"def W2{tag}Q : Fin {K} → Fin {H} → ℚ")[1]
-        rows = []
-        for ln in blk.splitlines():
-            nums = re.findall(rf"\((-?\d+) : ℚ\)/{DEN}", ln)
-            if len(nums) == H:
-                rows.append([int(v) for v in nums])
-            if len(rows) == K:
-                break
-        W2 = np.array(rows, dtype=np.int64)
+    for tag, (W1, W2) in scorecard_nets().items():
+        W1, W2 = W1.astype(np.int64), W2.astype(np.int64)
         assert W1.shape == (H, DIM) and W2.shape == (K, H), (W1.shape, W2.shape)
         nets[tag] = (W1, W2)
     return nets

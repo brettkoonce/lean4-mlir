@@ -74,8 +74,8 @@ fi
 SHIMENV=()
 if [ "${GATE_DET:-1}" = 1 ]; then
   DET=${DET_SHIM:-$OUT/detshim}
-  scripts/det_shim.sh "$DET" > "$OUT/det_shim.log" 2>&1 || {
-    echo "✗ det_shim.sh failed:"; cat "$OUT/det_shim.log"; exit 2; }
+  . scripts/lib/gpu.sh
+  det_shim_ensure "$DET" "$OUT/det_shim.log" || exit 2
   SHIMENV=(LD_LIBRARY_PATH="$DET")
 fi
 

@@ -11,19 +11,9 @@ and the class-head collapse, per scale.
 """
 import sys
 import numpy as np
+from fpn_class_freq import load_anchors  # noqa: E402  (one anchor-file reader)
 
 P, NC, IMG_BYTES = 15, 10, 448 * 448 * 3
-
-
-def load_anchors(path):
-    out = []
-    with open(path) as f:
-        for line in f:
-            s = line.strip()
-            if s and not s.startswith("#"):
-                w, h = s.split()
-                out.append((float(w), float(h)))
-    return out
 
 
 def auc(pos, neg, cap=400000):

@@ -11,29 +11,21 @@ cd "$(git rev-parse --show-toplevel)"
 export CENSUS_DIR="${CENSUS_DIR:-/tmp/audit_census}"
 mkdir -p "$CENSUS_DIR"
 python3 - <<'PY'
-import os, re
+import os, sys
 from pathlib import Path
+sys.path.insert(0, "scripts")
+from lean_graph import lakefile_text, lib_roots, libs, reachable
 out = Path(os.environ["CENSUS_DIR"])
-text = Path("lakefile.lean").read_text()
+text = lakefile_text()
 roots, gate_roots = [], []
-for seg in re.split(r"\nlean_lib ", text)[1:]:
-    name = seg.split()[0]
-    seg = seg.split("lean_exe", 1)[0].split("\nlean_lib", 1)[0]
-    body = seg.split("roots", 1)
-    if len(body) < 2: continue
-    code = "\n".join(l.split("--", 1)[0] for l in body[1].split("]", 1)[0].splitlines())
-    rs = [r for r in re.findall(r"`([A-Za-z0-9_.«»]+)", code) if not r.startswith(("apps", "demos"))]
+for name in libs(text):
+    if "roots" not in text.split(f"lean_lib {name} where", 1)[1].split("lean_lib", 1)[0]: continue
+    rs = [r for r in lib_roots(text, name) if not r.startswith(("apps", "demos"))]
     roots += rs
     if "CertsHeavy" not in name: gate_roots += rs
 (out / "roots.txt").write_text("\n".join(dict.fromkeys(gate_roots)) + "\n")
 # every LeanMlir module reachable from a lib root that has an olean
-seen, st = set(), [r for r in roots if r.startswith("LeanMlir")]
-while st:
-    m = st.pop()
-    p = Path(m.replace(".", "/") + ".lean")
-    if m in seen or not p.exists(): continue
-    seen.add(m)
-    st += [x for x in re.findall(r"^import\s+([A-Za-z0-9_.]+)", p.read_text(), re.M) if x.startswith("LeanMlir")]
+seen = reachable(roots, strict=False)
 mods = sorted(m for m in seen if Path(".lake/build/lib/lean/" + m.replace(".", "/") + ".olean").exists())
 (out / "modules.txt").write_text("\n".join(mods) + "\n")
 print(f"{len(mods)} modules, {len(gate_roots)} gate roots")

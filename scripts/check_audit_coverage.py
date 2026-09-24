@@ -20,51 +20,16 @@ import re
 import sys
 from pathlib import Path
 
-LAKEFILE = Path("lakefile.lean")
-AUDIT = Path("tests/AuditAxioms.lean")
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from lean_graph import LAKEFILE, ROOT, lib_roots, reachable  # noqa: E402
 
-
-def lib_roots(text: str, lib: str) -> list[str]:
-    """Roots of one lib, e.g. «CertsHeavy»: the names inside its `roots := #[...]` only.
-
-    `--` comments are stripped first (they hold brackets like [3,4,6,3] that end a naive match
-    early), and the scan stops at the array's `]` — not at the next `lean_lib`, which would also
-    sweep in the next lib's docstring and count every backticked name there as a root.
-    """
-    try:
-        segment = text.split(f"lean_lib {lib} where", 1)[1].split("lean_lib", 1)[0]
-    except IndexError:
-        sys.exit(f"error: no `lean_lib {lib}` in lakefile.lean")
-    code = "\n".join(line.split("--", 1)[0] for line in segment.splitlines())
-    m = re.search(r"roots\s*:=\s*#\[(.*?)\]", code, re.S)
-    if not m:
-        sys.exit(f"error: `lean_lib {lib}` has no `roots := #[...]`")
-    return re.findall(r"`([A-Za-z0-9_.]+)", m.group(1))
+AUDIT = ROOT / "tests" / "AuditAxioms.lean"
 
 
 def proofs_roots(text: str) -> list[str]:
     """The union of the `Proofs` (per-push IR/render slice) and `Certs` (certificate corpus)
     libs' roots."""
     return lib_roots(text, "«Proofs»") + lib_roots(text, "«Certs»")
-
-
-def imports_of(module: str) -> list[str]:
-    path = Path(module.replace(".", "/") + ".lean")
-    if not path.exists():
-        sys.exit(f"error: root/import `{module}` has no source file at {path}")
-    return re.findall(r"^import\s+([A-Za-z0-9_.]+)", path.read_text(), re.M)
-
-
-def reachable(roots: list[str]) -> set[str]:
-    seen: set[str] = set()
-    stack = [r for r in roots if r.startswith("LeanMlir")]
-    while stack:
-        module = stack.pop()
-        if module in seen:
-            continue
-        seen.add(module)
-        stack += [m for m in imports_of(module) if m.startswith("LeanMlir")]
-    return seen
 
 
 def check(audit: Path, covered: set[str], libs_desc: str, fix: str) -> int:
@@ -89,7 +54,7 @@ def main() -> None:
               "data-heavy generated instances, to `CertsHeavy` + AuditAxiomsHeavy.")
     print(f"audit coverage OK: all {n} AuditAxioms imports reachable "
           f"from the Proofs+Certs roots ({len(covered)} modules covered)")
-    heavy_audit = Path("tests/AuditAxiomsHeavy.lean")
+    heavy_audit = ROOT / "tests" / "AuditAxiomsHeavy.lean"
     if heavy_audit.exists():
         covered_heavy = reachable(proofs_roots(text) + lib_roots(text, "«CertsHeavy»"))
         nh = check(heavy_audit, covered_heavy, "`Proofs`/`Certs`/`CertsHeavy`",

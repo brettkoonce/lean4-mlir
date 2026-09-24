@@ -47,11 +47,8 @@ if [ ${#BINS[@]} -eq 0 ]; then
 fi
 
 [ -f scripts/det_shim.sh ] || { echo "run from the repo root"; exit 2; }
-if [ ! -f "$DET/libpjrt_ffi.so" ] || [ ffi/pjrt_ffi.c -nt "$DET/libpjrt_ffi.so" ]; then
-  echo "building the deterministic shim in $DET ..."
-  scripts/det_shim.sh "$DET" > "$OUT/det_shim.log" 2>&1 || {
-    echo "✗ det_shim.sh failed:"; cat "$OUT/det_shim.log"; exit 2; }
-fi
+. scripts/lib/gpu.sh
+det_shim_ensure "$DET" "$OUT/det_shim.log" || exit 2
 
 echo "── eval-forward residency gate (hold mode, §2d.3) ──"
 echo "   shim   $DET/libpjrt_ffi.so   epochs $EPOCHS   device $DEV"

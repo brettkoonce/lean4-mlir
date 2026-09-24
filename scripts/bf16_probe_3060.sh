@@ -51,9 +51,10 @@ TIMEOUT="${TIMEOUT:-2400}"
 [ -x "$PY" ]   || { echo "⛔ shim python not found: $PY"; exit 1; }
 
 # ⚠⚠ A stale GPU process fakes OOM and NCCL errors. Refuse to benchmark next to one.
-LEFTOVER="$(nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader 2>/dev/null)"
-if [ -n "$LEFTOVER" ]; then
-  echo "⛔ GPUs are not idle — benchmark refused. Compute apps present:"; echo "$LEFTOVER"
+. scripts/lib/gpu.sh
+if gpu_busy; then
+  echo "⛔ GPUs are not idle — benchmark refused. Compute apps present:"
+  nvidia-smi --query-compute-apps=pid,used_memory --format=csv,noheader 2>/dev/null
   echo "   (clear them first; a leftover process fakes OOM and NCCL failures)"; exit 1
 fi
 

@@ -109,11 +109,8 @@ echo "   scratch $OUT"
 
 # The deterministic shim is a PREREQUISITE, not an option: without it the A-vs-A
 # floor is autotuning noise and no verdict below can be read. Built once, reused.
-if [ ! -f "$DET/libpjrt_ffi.so" ] || [ ffi/pjrt_ffi.c -nt "$DET/libpjrt_ffi.so" ]; then
-  echo "   building the deterministic shim in $DET ..."
-  scripts/det_shim.sh "$DET" > "$OUT/det_shim.log" 2>&1 || {
-    echo "   ✗ det_shim.sh failed:"; cat "$OUT/det_shim.log"; exit 2; }
-fi
+. scripts/lib/gpu.sh
+det_shim_ensure "$DET" "$OUT/det_shim.log" "   " || exit 2
 echo "   shim    $DET/libpjrt_ffi.so"
 echo
 

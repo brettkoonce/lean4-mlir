@@ -33,6 +33,7 @@ on:
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
       - 'scripts/check_audit_coverage.py'
+      - 'scripts/lean_graph.py'
       - 'scripts/check_render_coverage.py'
       - 'scripts/render_guard_baseline.txt'
       - '.github/workflows/proofs.yml'
@@ -57,6 +58,7 @@ on:
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
       - 'scripts/check_audit_coverage.py'
+      - 'scripts/lean_graph.py'
       - 'scripts/check_render_coverage.py'
       - 'scripts/render_guard_baseline.txt'
       - '.github/workflows/proofs.yml'

@@ -31,59 +31,7 @@ PROBE = ".lake/build/bin/fpn-neck-probe"
 
 
 # ── numpy oracle (mirrors scripts/fpn_neck_check.py + emitBilinearUpsample) ──
-def bilinear_weights_1d(in_len, scale):
-    out_len = in_len * scale
-    den = 2 * scale
-    W = np.zeros((out_len, in_len))
-    for i in range(out_len):
-        num = 2 * i + 1 - scale
-        y0 = num // den if num >= 0 else -((-num + den - 1) // den)
-        wy = (num - y0 * den) / den
-        cl = lambda x: 0 if x < 0 else (in_len - 1 if x >= in_len else x)
-        W[i, cl(y0)] += 1.0 - wy
-        W[i, cl(y0 + 1)] += wy
-    return W
-
-
-def upsample2(x):
-    B, C, H, Wd = x.shape
-    Wy = bilinear_weights_1d(H, 2)
-    Wx = bilinear_weights_1d(Wd, 2)
-    y = np.einsum('oh,bchw->bcow', Wy, x)
-    y = np.einsum('bcow,vw->bcov', y, Wx)
-    return y
-
-
-def upsample2_T(g):
-    B, C, oH, oW = g.shape
-    H, Wd = oH // 2, oW // 2
-    Wy = bilinear_weights_1d(H, 2); Wx = bilinear_weights_1d(Wd, 2)
-    d = np.einsum('bcov,vw->bcow', g, Wx)
-    d = np.einsum('oh,bcow->bchw', Wy, d)
-    return d
-
-
-def conv1x1(x, W):
-    return np.einsum('oi,bihw->bohw', W, x)
-
-
-def fpn_forward(C3, C4, C5, W3, W4, W5):
-    P5 = conv1x1(C5, W5)
-    P4 = conv1x1(C4, W4) + upsample2(P5)
-    P3 = conv1x1(C3, W3) + upsample2(P4)
-    return P3, P4, P5
-
-
-def fpn_grad(C3, C4, C5, W3, W4, W5, dP3, dP4, dP5):
-    dP4_tot = dP4 + upsample2_T(dP3)
-    dP5_tot = dP5 + upsample2_T(dP4_tot)
-    dC3 = np.einsum('oi,bohw->bihw', W3, dP3)
-    dC4 = np.einsum('oi,bohw->bihw', W4, dP4_tot)
-    dC5 = np.einsum('oi,bohw->bihw', W5, dP5_tot)
-    dW3 = np.einsum('bohw,bihw->oi', dP3, C3)
-    dW4 = np.einsum('bohw,bihw->oi', dP4_tot, C4)
-    dW5 = np.einsum('bohw,bihw->oi', dP5_tot, C5)
-    return dC3, dC4, dC5, dW3, dW4, dW5
+from fpn_neck_check import fpn_forward, fpn_grad  # noqa: E402  (the numpy oracle, one copy)
 
 
 def make_runner(B, oc, c3, c4, c5, g5):
