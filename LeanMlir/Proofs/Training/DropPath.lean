@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.LayerNorm
 /-! # Stochastic depth (drop-path) over ℝ — the per-example branch scale
 
 The ℝ reference for `planning/archive/stochastic_depth.md`. The JAX reference emits, verbatim
-(`jax/Jax/Codegen.lean:1037`):
+(`_drop_branch` in `emitHelpers`, [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)):
 
 ```python
 def _drop_branch(branch, drop_key, keep_prob):
@@ -154,7 +154,7 @@ theorem dropPath_has_vjp_correct (N n : Nat) (s : Vec N)
 /-- **The keep-probability ramp**, `keep_i = 1 − dropPath · i / (totalDrop − 1)`.
 
     ⚠⚠ **`totalDrop` counts ALL blocks, including ones the drop never fires on.** The reference sums
-    the block count of every stage (`Codegen.lean:1888`) and its own comment says *"the drop only
+    the block count of every stage (`emitForward`'s drop-path ramp in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)) and its own comment says *"the drop only
     actually fires where a skip exists … so no-skip blocks just carry a unit keep"* — so the ramp
     index advances over blocks that do not drop. **Deriving the denominator from the drop-ELIGIBLE
     blocks instead silently changes every keep probability in the net**, which compiles, runs,
@@ -193,7 +193,7 @@ theorem keepProb_last (dropRate : ℝ) (totalDrop : Nat) (h : 2 ≤ totalDrop) :
 /-! ## Classifier dropout — the OTHER diagonal scale, and the reason both live in one file
 
 `recipe_gaps.md` gap C. The reference emits it in the `.dense` case
-(`jax/Jax/Codegen.lean:1971`), immediately before the classifier:
+(`emitForward`'s classifier dropout in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)), immediately before the classifier:
 
 ```python
 if drop_key is not None:

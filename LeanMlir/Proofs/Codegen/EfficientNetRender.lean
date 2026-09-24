@@ -317,13 +317,13 @@ def enetDropSites : Nat := enetDropIdxs.length
 def enetDropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd enetDropIdxs
 
 -- ── ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C) ─────────────────────────────────────────────
--- `efficientNetB0ImagenetConfig` sets `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`)
+-- `efficientNetB0ImagenetConfig` sets `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean`)
 -- and until now there were **zero dropout sites in any verified EfficientNet render**. The recipe
 -- matrix carried a stochastic-depth row and no dropout row, which read as coverage: they are
 -- different regularisers, at different places, with different mask ranks.
 --
 -- ⚠⚠ ONE SITE, AND IT IS NOT A RAMP. The reference applies it in the `.dense` case
--- (`jax/Jax/Codegen.lean:1971`), immediately before the single classifier — so unlike stochastic
+-- (`emitForward`'s classifier dropout in `jax/Jax/Codegen.lean`), immediately before the single classifier — so unlike stochastic
 -- depth there is no per-block schedule, no `totalDrop` denominator, and therefore none of §2k's
 -- `α/K` class of silent-constant bug is even spellable here. What replaces that risk is the mask
 -- RANK (`Proofs.dropout` vs `Proofs.dropPath`) and the weight-gradient operand below.
@@ -816,7 +816,7 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
     -- ▶ CLASSIFIER DROPOUT: the per-ELEMENT inverted mask, exactly where the reference puts it —
-    -- between GAP and the dense (`jax/Jax/Codegen.lean:1971`, the `.dense` case).
+    -- between GAP and the dense (`emitForward`'s classifier dropout in `jax/Jax/Codegen.lean`, the `.dense` case).
     -- ⚠ At `cd = false` NO `pretty` call happens, so the fresh-name counter does not move and every
     -- committed artifact re-renders byte-identically. Same convention as `drop`'s `Option Nat`; it
     -- is what makes the inertness gate a byte claim rather than a diff-review.
@@ -1690,7 +1690,7 @@ end Proofs.StableHLO
 -- `emarms64` is the reference's ACTUAL recipe at ImageNet scale — RMSProp + exponential decay +
 -- EMA. ⚠ This comment used to end *"and with stochastic depth it is `efficientNetB0ImagenetConfig`
 -- entire"*, and that was FALSE the day it was written: the config also sets `dropout := 0.2`
--- (`jax/MainEfficientNetImagenet.lean:68`), which no render had. Corrected 2026-08-03 with the
+-- (`jax/MainEfficientNetImagenet.lean`), which no render had. Corrected 2026-08-03 with the
 -- render that makes it true — `efficientnetin_emarmsdropdo64` below. ⚠ The claim was wrong in the way
 -- §0.9 finding 3 describes: the recipe matrix had a stochastic-depth row and no dropout row, so
 -- "the regulariser is covered" read as "the regularisers are covered", and a doc drifts to the
@@ -1708,7 +1708,7 @@ end Proofs.StableHLO
 -- ⚠⚠ THE PATH WAS `efficientnetin_emarmsdrop64_train_step.mlir` AND THAT ARTIFACT WAS UNLOADABLE.
 -- Renamed 2026-08-03. `enetAdamVariant 64 1 .rmsprop true true` emits **`emarms64drop`** — the
 -- batch suffix precedes the regulariser markers — while the path spelled `emarmsdrop64`. The
--- driver derives the artifact path from `variant` (`VerifiedTrain.lean:771`) AND the entry name
+-- driver derives the artifact path from `variant` (`VerifiedNet.trainAdamSched`) AND the entry name
 -- from the same `variant` (`:868`), so the two spellings cannot both be reached: `emarmsdrop64`
 -- finds the file and asks for an entry it does not contain, `emarms64drop` names the right entry
 -- at a path that does not exist. No byte of the artifact changed; only its name did.
@@ -1762,7 +1762,7 @@ end Proofs.StableHLO
 --
 -- ⚠⚠ NOTE THE PATH: `efficientnetin_emarms64dropdo`, batch suffix BEFORE the two regulariser markers,
 -- because that is what `enetAdamVariant` emits and the driver derives the artifact PATH and the
--- entry NAME from the same string (`VerifiedTrain.lean:771` and `:868`). The neighbouring
+-- entry NAME from the same string (`VerifiedNet.trainAdamSched`). The neighbouring
 -- `efficientnetin_emarmsdrop64_train_step.mlir` had them the other way round and was therefore
 -- **unloadable at any `LEAN_MLIR_VARIANT`** — see the note on that `#eval` below. The `#guard`s at
 -- the bottom of this file are what caught it, which is the argument for pinning literal paths

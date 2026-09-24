@@ -139,7 +139,7 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
     ⚠⚠ **`n` DRAWS, NOT `B` — this is `dropScales`' per-example loop replaced by a per-ELEMENT one,
     and that single difference is the whole distinction between the two regularisers.** The
     reference draws `bernoulli(key, keep, x.shape)` for the classifier
-    (`jax/Jax/Codegen.lean:1971`) against `(branch.shape[0],) + (1,)*(ndim-1)` for stochastic depth
+    (`emitForward`'s classifier dropout in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)) against `(branch.shape[0],) + (1,)*(ndim-1)` for stochastic depth
     (`:1037`). A mask built by drawing `B` values and repeating each `w` times type-checks, fills
     the same buffer, trains and descends — it is stochastic depth on the classifier. Nothing
     downstream can tell: the shapes agree, the emitted graph is identical, and only the

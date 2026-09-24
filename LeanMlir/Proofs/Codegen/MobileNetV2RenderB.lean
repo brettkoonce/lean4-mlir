@@ -982,29 +982,9 @@ structure MBFwd where
 --   inverted residual: expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6 → project(1×1)→BN
 -- ════════════════════════════════════════════════════════════════
 
-/-- One BN site at the PER-EXAMPLE index — the `ResNet34RenderB.bnSite` peer. `statP` is the
-    running-stat input prefix (`%{statP}mu` / `%{statP}var`), used only in `.eval` mode; in
-    `.train` mode the statistics are reduced out of `xin` and `statP` only names the slot.
-
-    This is the ONLY place the two BN worlds are chosen between, and it is the fix for a live
-    instance of the §2a bug: until 2026-07-28 `verified_mlir/mobilenetv2_fwd.mlir` was a
-    hand-written **batch**-BN render (reduce `[0,2,3]`, n = B·H·W) while the
-    `mobilenetv2_train_step.mlir` it partners normalises **per example** (reduce `[2,3]`,
-    n = H·W) — so `mobilenetv2-verified` trained one function and scored another. -/
-private def bnSiteP (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName statP xin : String) :
-    StateM Proofs.StableHLO.EmitS (String × String) := do
-  let zc  : Vec oc := fun _ => 0
-  let zin : Vec (oc*hh*ww) := fun _ => 0
-  match mode with
-  | .train => pretty B (.bnPerChannelF (oc := oc) (h := hh) (w := ww)
-                          gName btName epsStr 0 zc zc (.operand xin zin))
-  | .eval  => pretty B (.bnPerChannelEvalF (oc := oc) (h := hh) (w := ww)
-                          gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc
-                          (.operand xin zin))
-
 /-- **STRIDED inverted-residual forward** (b1/b3/b5/b6): expand at the input `2hh×2ww`, depthwise
     downsamples `2hh×2ww → hh×ww`, project 1×1 at `hh×ww`. NO skip. -/
-private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1016,23 +996,23 @@ private def irFwdStrided (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName 
   let zdb  : Vec (mid*hh*ww) := fun _ => 0
   let _zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
-  let (cEn, nEn) ← bnSiteP B mid (2*hh) (2*ww) mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
+  let (cEn, nEn) ← bnEvalSite B mid (2*hh) (2*ww) epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
   -- ⚠ XLA-`SAME` (`depthwiseStridedXlaF`), the TF-origin convention. The symmetric token has the
   -- same type and output shape, so nothing structural would notice the wrong one here — only
   -- `scripts/convention_audit.py` (pad profile) and `scripts/mnv2_forward_tie.py` (values) can.
   let (cDc, nDc) ← pretty B (.depthwiseStridedXlaF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
-  let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
+  let (cDn, nDn) ← bnEvalSite B mid hh ww epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zdb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zdb))
-  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
+  let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
          bns := [(s!"b{p}en", mid, 2*hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
 /-- **STRIDE-1 inverted-residual forward** (b2/b4): everything at `hh×ww`, with an `addV` skip on the
     block input (ic = oc). -/
-private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+private def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1043,13 +1023,13 @@ private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : Strin
   let zeb  : Vec (mid*hh*ww) := fun _ => 0
   let zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
-  let (cEn, nEn) ← bnSiteP B mid hh ww mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
+  let (cEn, nEn) ← bnEvalSite B mid hh ww epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
-  let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
+  let (cDn, nDn) ← bnEvalSite B mid hh ww epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zeb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zeb))
-  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
+  let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   let (cA, nA) ← pretty B (.addV (.operand nPn zob) (.operand xName zob))
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn ++ cA,
          o := nA, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
@@ -1064,7 +1044,7 @@ private def irFwd (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : Strin
 /-- **NO-EXPAND inverted-residual forward** (b1): depthwise(stride-1, on `ic` channels)→BN→relu6
     → project(1×1 ic→oc)→BN. NO expand, NO skip. `f.er` = the depthwise INPUT (= block input
     `xName`), `f.dr` = the project input. (`ec`/`en` are unused for this block kind.) -/
-private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+private def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1073,10 +1053,10 @@ private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : Stri
   let zib  : Vec (ic*hh*ww) := fun _ => 0
   let _zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" ic) zdk zic (.operand xName zib))
-  let (cDn, nDn) ← bnSiteP B ic hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
+  let (cDn, nDn) ← bnEvalSite B ic hh ww epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zib))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := ic) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zib))
-  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
+  let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cDc ++ cDn ++ cDr ++ cPc ++ cPn,
          o := nPn, ec := xName, en := xName, er := xName, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
          -- NO expand entry: b1 has two BN layers, not three.
@@ -1089,7 +1069,7 @@ private def irFwdNoExp (B ic oc hh : Nat) (mode : BnMode) (epsStr p xName : Stri
 
 /-- **EXPAND-NO-SKIP stride-1 forward** (b11/b17): expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6
     → project(1×1)→BN. Everything at `hh×ww`; `ic ≠ oc` so NO skip (block output = project-BN out). -/
-private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
+private def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : Bool) : StateM Proofs.StableHLO.EmitS MBFwd := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -1100,13 +1080,13 @@ private def irFwdNoSkip (B ic mid oc hh : Nat) (mode : BnMode) (epsStr p xName :
   let zeb  : Vec (mid*hh*ww) := fun _ => 0
   let _zob  : Vec (oc*hh*ww) := fun _ => 0
   let (cEc, nEc) ← pretty B (.flatConvF (ic := ic) (oc := mid) (h := hh) (w := ww) s!"%We{p}" (biasName convBias s!"%be{p}" mid) zke zmid (.operand xName zxin))
-  let (cEn, nEn) ← bnSiteP B mid hh ww mode epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
+  let (cEn, nEn) ← bnEvalSite B mid hh ww epsStr s!"%ge{p}" s!"%bte{p}" s!"b{p}en" nEc
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
   let (cDc, nDc) ← pretty B (.depthwiseF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
-  let (cDn, nDn) ← bnSiteP B mid hh ww mode epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
+  let (cDn, nDn) ← bnEvalSite B mid hh ww epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zeb))
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zeb))
-  let (cPn, nPn) ← bnSiteP B oc hh ww mode epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
+  let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
          o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
          bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
@@ -1180,11 +1160,9 @@ set_option maxRecDepth 4000000 in
     PER-EXAMPLE index. 3x3/s2 stem (3->32, 224->112) -> the `[t,c,n,s]` inverted-residual stack
     (112->56->28->14->7) -> 1x1 head (320->1280) -> GAP(7x7) -> dense(1280->`nClasses`).
 
-    `mode` picks the BN world and nothing else. Routing both forward artifacts and the train step
-    through one chain is the fix for a live §2a skew: the committed `mobilenetv2_fwd.mlir` was a
-    hand-written BATCH-BN render while this train step normalises PER EXAMPLE, so
-    `mobilenetv2-verified` trained one function and evaluated another. -/
-private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool) :
+    The EVAL forward: every BN site is `RenderKit.bnEvalSite` (frozen running statistics), so this
+    writes `@mobilenetv2_fwd_eval` only; the training forward is the batched `mnv2FwdChainB`. -/
+private def mnv2FwdChain (B nClasses : Nat) (epsStr : String) (convBias : Bool) :
     StateM Proofs.StableHLO.EmitS MNV2Fwd := do
     -- stem: 3x3/s2 conv (3->32, 224->112) -> BN -> relu6 (NO maxpool)
     let zx   : Vec (3*224*224) := fun _ => 0
@@ -1192,26 +1170,26 @@ private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let z32  : Vec 32 := fun _ => 0
     let z112 : Vec (32*112*112) := fun _ => 0
     let (cStc, nStc) ← pretty B (.flatConvStridedXlaF (ic := 3) (oc := 32) (h := 112) (w := 112) "%Ws" (biasName convBias "%bs" 32) zSk z32 (.operand "%x" zx))
-    let (cStn, nStn) ← bnSiteP B 32 112 112 mode epsStr "%gs" "%bts" "stn" nStc
+    let (cStn, nStn) ← bnEvalSite B 32 112 112 epsStr "%gs" "%bts" "stn" nStc
     let (cStr, nStr) ← pretty B (.relu6F (.operand nStn z112))
     -- forward: 17 inverted-residual blocks
-    let f1  ← irFwdNoExp   B 32      16 112 mode epsStr "1"  nStr convBias
-    let f2  ← irFwdStrided B 16  96  24  56 mode epsStr "2"  f1.o convBias
-    let f3  ← irFwd        B 24 144  24  56 mode epsStr "3"  f2.o convBias
-    let f4  ← irFwdStrided B 24 144  32  28 mode epsStr "4"  f3.o convBias
-    let f5  ← irFwd        B 32 192  32  28 mode epsStr "5"  f4.o convBias
-    let f6  ← irFwd        B 32 192  32  28 mode epsStr "6"  f5.o convBias
-    let f7  ← irFwdStrided B 32 192  64  14 mode epsStr "7"  f6.o convBias
-    let f8  ← irFwd        B 64 384  64  14 mode epsStr "8"  f7.o convBias
-    let f9  ← irFwd        B 64 384  64  14 mode epsStr "9"  f8.o convBias
-    let f10 ← irFwd        B 64 384  64  14 mode epsStr "10" f9.o convBias
-    let f11 ← irFwdNoSkip  B 64 384  96  14 mode epsStr "11" f10.o convBias
-    let f12 ← irFwd        B 96 576  96  14 mode epsStr "12" f11.o convBias
-    let f13 ← irFwd        B 96 576  96  14 mode epsStr "13" f12.o convBias
-    let f14 ← irFwdStrided B 96 576 160   7 mode epsStr "14" f13.o convBias
-    let f15 ← irFwd        B 160 960 160   7 mode epsStr "15" f14.o convBias
-    let f16 ← irFwd        B 160 960 160   7 mode epsStr "16" f15.o convBias
-    let f17 ← irFwdNoSkip  B 160 960 320   7 mode epsStr "17" f16.o convBias
+    let f1  ← irFwdNoExp   B 32      16 112 epsStr "1"  nStr convBias
+    let f2  ← irFwdStrided B 16  96  24  56 epsStr "2"  f1.o convBias
+    let f3  ← irFwd        B 24 144  24  56 epsStr "3"  f2.o convBias
+    let f4  ← irFwdStrided B 24 144  32  28 epsStr "4"  f3.o convBias
+    let f5  ← irFwd        B 32 192  32  28 epsStr "5"  f4.o convBias
+    let f6  ← irFwd        B 32 192  32  28 epsStr "6"  f5.o convBias
+    let f7  ← irFwdStrided B 32 192  64  14 epsStr "7"  f6.o convBias
+    let f8  ← irFwd        B 64 384  64  14 epsStr "8"  f7.o convBias
+    let f9  ← irFwd        B 64 384  64  14 epsStr "9"  f8.o convBias
+    let f10 ← irFwd        B 64 384  64  14 epsStr "10" f9.o convBias
+    let f11 ← irFwdNoSkip  B 64 384  96  14 epsStr "11" f10.o convBias
+    let f12 ← irFwd        B 96 576  96  14 epsStr "12" f11.o convBias
+    let f13 ← irFwd        B 96 576  96  14 epsStr "13" f12.o convBias
+    let f14 ← irFwdStrided B 96 576 160   7 epsStr "14" f13.o convBias
+    let f15 ← irFwd        B 160 960 160   7 epsStr "15" f14.o convBias
+    let f16 ← irFwd        B 160 960 160   7 epsStr "16" f15.o convBias
+    let f17 ← irFwdNoSkip  B 160 960 320   7 epsStr "17" f16.o convBias
     -- head: 1x1 conv (320->1280) -> BN -> relu6 -> GAP(7x7) -> dense(1280->nClasses)
     let z7    : Vec (320*7*7) := fun _ => 0
     let zHk   : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
@@ -1220,7 +1198,7 @@ private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
     let (cHc, nHc) ← pretty B (.flatConvF (ic := 320) (oc := 1280) (h := 7) (w := 7) "%Wh" (biasName convBias "%bh" 1280) zHk z1280 (.operand f17.o z7))
-    let (cHn, nHn) ← bnSiteP B 1280 7 7 mode epsStr "%gh" "%bth" "hn" nHc
+    let (cHn, nHn) ← bnEvalSite B 1280 7 7 epsStr "%gh" "%bth" "hn" nHc
     let (cHr, nHr) ← pretty B (.relu6F (.operand nHn zH7))
     let (cGap, nGap) ← pretty B (.gapF (c := 1280) (h := 7) (w := 7) (.operand nHr zH7))
     let (cLog, nLog) ← pretty B (denseF "%Wfc" "%bfc" zWd zNC (.operand nGap z1280))
@@ -1236,13 +1214,12 @@ private def mnv2FwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
               f9.bns ++ f10.bns ++ f11.bns ++ f12.bns ++ f13.bns ++ f14.bns ++ f15.bns ++
               f16.bns ++ f17.bns ++ [("hn", 1280, 7)]) }
 
-/-- The `@mobilenetv2_fwd` / `@mobilenetv2_fwd_eval` argument signature. The 104 stat slots come off
+/-- The `@mobilenetv2_fwd_eval` argument signature. The 104 stat slots come off
     the SAME `bns` the traversal built — never a parallel 52-entry table (§2e). -/
-private def mnv2FwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool) : String :=
-  let F : MNV2Fwd := (mnv2FwdChain B nClasses mode epsStr convBias).run' (0, [])
+private def mnv2FwdSig (B nClasses : Nat) (epsStr : String) (convBias : Bool) : String :=
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses epsStr convBias).run' (0, [])
   let params := (paperSig nClasses convBias).map (fun (nm, t) => s!"{nm}: {t}")
-  let stats := if mode == .train then [] else
-    F.bns.flatMap (fun (sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
+  let stats := F.bns.flatMap (fun (sp, c, _) => [s!"%{sp}mu: {ty [c]}", s!"%{sp}var: {ty [c]}"])
   String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats))
 
 
@@ -1265,9 +1242,9 @@ def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool :
   -- `@mobilenetv2_fwd` are one net at every stride-2 site (they still differ in BN world: frozen
   -- stats here, per-example there) and `LEAN_MLIR_EVAL_BATCHSTATS=1` — which scores through
   -- `@mobilenetv2_fwd` — is back to being transductive-only rather than also cross-net.
-  let F : MNV2Fwd := (mnv2FwdChain B nClasses .eval epsStr convBias).run' (0, [])
+  let F : MNV2Fwd := (mnv2FwdChain B nClasses epsStr convBias).run' (0, [])
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd_eval({mnv2FwdSig B nClasses .eval epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{slug}_fwd_eval({mnv2FwdSig B nClasses epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // -- MobileNetV2 eval forward (running-stats BN): every line is pretty(verified AST node) --\n" ++
   zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++

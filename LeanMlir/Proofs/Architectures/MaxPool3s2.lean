@@ -72,12 +72,6 @@ def win3ColInv {w : Nat} (wi_out : Fin w) (b : Fin 3) : Fin (2 * w) :=
   ⟨2 * wi_out.val + b.val - 1, by
     have h1 := wi_out.isLt; have h2 := b.isLt; omega⟩
 
-@[simp] theorem win3RowInv_val {h : Nat} (hi_out : Fin h) (a : Fin 3) :
-    (win3RowInv hi_out a).val = 2 * hi_out.val + a.val - 1 := rfl
-
-@[simp] theorem win3ColInv_val {w : Nat} (wi_out : Fin w) (b : Fin 3) :
-    (win3ColInv wi_out b).val = 2 * wi_out.val + b.val - 1 := rfl
-
 /-- ⭐ **The padding statement.** In the FIRST window offset `a = 0` duplicates `a = 1` rather
     than reading out of range — exactly what a `-∞` pad contributes to a `max`. -/
 theorem win3RowInv_first_dup {h : Nat} (hi_out : Fin h) (hfirst : hi_out.val = 0) :

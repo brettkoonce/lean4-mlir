@@ -14,7 +14,7 @@ contracted with the cotangent.
 
 This is the only genuinely-NEW proof obligation for the ConvNeXt tie (the depthwise-7×7, 1×1-conv,
 strided-stem/downsample and dense param grads are covered by the existing M2 / M3 certs, the
-channel-LN γ/β by `ConvNeXtChannelLN`). It is linear in the parameter (`pdiv_of_linear`), with the
+channel-LN γ/β by `ChannelLN`). It is linear in the parameter (`pdiv_of_linear`), with the
 `chanIdx` reindex (the per-channel broadcast) — `∂(γ'(chanIdx j)·x_j)/∂γ'_c = x_j·[chanIdx j = c]`.
 
 The `layerScaleChGammaSgd` core `SHlo` op (the per-channel layer-scale param-SGD, emitting
@@ -69,7 +69,7 @@ theorem layerScaleChGammaSgd_den {c h w : Nat} (gN xN lrStr cotN : String)
 `veclnGammaSgd` / `rowDenseBiasSgd` on that view, so the op operands below are the transposed
 views `chanLNRows` of the saved LN input and of the chain cotangent — the values those SSA names
 denote. The certified Jacobian on the right is `chanLNTensor3`'s, in the `c·h·w` activation
-layout the rest of the block lives in; `ConvNeXtChannelLN`'s permutation argument is what lets
+layout the rest of the block lives in; `ChannelLN`'s permutation argument is what lets
 one op serve both layouts. They cover every one of the net's 22 spatial LN sites (1 stem + 18 block + 3 downsample); the 23rd, the
 head, runs after GAP and is ViT's vector-LN at `N = 1` (`ViTPoC.veclnGammaSgd_den`). -/
 

@@ -7,7 +7,7 @@ where it can be, mirroring the emitted StableHLO op-for-op so the faithfulness t
 `StableHLO.lean` are structural matches (`rfl`), exactly as `AdamStep` is for the AdamW triple and
 `RmsPropStep` for RMSProp's buffer.
 
-**The reference** (`jax/Jax/Codegen.lean:2262`, emitted verbatim into every trainer whose config
+**The reference** (`emitLossAndTraining` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), emitted verbatim into every trainer whose config
 sets `gradClipNorm`, and placed AFTER `value_and_grad` and BEFORE weight decay + the optimizer):
 
 ```python
@@ -22,8 +22,8 @@ being shared. `clipFactor_shared` below is the statement the numeric gate drives
 gate measures the ratio's CONSTANCY across parameters rather than the presence of scaling
 (`planning/archive/grad_clip.md` §7 — `wdx-tie`'s *gate the partition, not the count*, one feature over).
 
-**Who uses it**: ViT 1.0 (`jax/MainVitImagenet.lean:45`, *"DeiT default; the unlock for the 5e-4
-LR"*) and ConvNeXt 1.0 (`jax/MainConvNeXtImagenet.lean:74`). **EfficientNet sets it to 0.0
+**Who uses it**: ViT 1.0 ([`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean), *"DeiT default; the unlock for the 5e-4
+LR"*) and ConvNeXt 1.0 ([`jax/MainConvNeXtImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainConvNeXtImagenet.lean)). **EfficientNet sets it to 0.0
 deliberately** — its own comment says the TF-RMSProp fix (ε-inside-sqrt + ms-init 1.0) removed the
 blow-up it was compensating for. R34 and mnv2 do not use it. Do not add it to any of the three.
 
@@ -167,7 +167,7 @@ theorem clipGrad_id_below (c ε sTotal : ℝ) (g : Vec n)
 -- § THE CLIP UNDER GRADIENT ACCUMULATION — why the render bakes `k·C`, not `C`
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠⚠ **THE REFERENCE CLIPS THE MEAN ACCUMULATED GRADIENT.** `jax/Jax/Codegen.lean:2439` forms
+/-! ⚠⚠ **THE REFERENCE CLIPS THE MEAN ACCUMULATED GRADIENT.** `emitLossAndTraining` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean) forms
 `grads = _gsum / _K` and only THEN emits the clip line, so under accumulation the norm is of the
 MEAN over the k micro-batches — not of any one of them, and not of their sum.
 

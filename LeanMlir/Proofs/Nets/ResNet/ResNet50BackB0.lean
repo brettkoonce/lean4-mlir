@@ -1,80 +1,55 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0
 
-/-! # Backward-graph faithfulness for the VERIFIED ResNet-50 bottleneck block
+/-! # Backward-graph faithfulness for the ResNet-50 bottleneck block (batched)
 
-The R50 peer of `ResNet34BackB0.lean`, and the step `planning/archive/mnv4_verified.md` §8 calls
-`<blk>BackBatchedGraph` + `<blk>BackBatchedGraph_faithful` — the two theorems that make the
-render's backward *the certified one*. R50 shipped a trained number (89.86%, Imagenette) off a
-certified renderer with no whole-net backward at all; this file is that gap.
-
-## ⚠⚠ WHAT §8 GOT WRONG — "R50 is one step from done" was measured against the WRONG phase 1
-
-§8 records R50's block-level VJP as ✓ (`ResNet50BlocksCertified.lean`, retired 2026-09-19) and concludes the
-job is only (2) + (3). That certificate is real, but it is for the **per-channel, non-batched**
-forms — `bblkPC` / `bblkPProjPC` / `bblkPStridedPC` are built from `bnPerChannelTensor3` and plain
-`flatConv`, with no `N`. The backward-graph vocabulary is **batched**: `bnBatchLA`, `batchMap`,
-`convBackBatched`. Grepped before starting: there is **no batched R50 block VJP anywhere in the
-repo**. So phase 1 had to be redone in the batched world here, exactly as §8 says MNv4 needs — R50
-was *two* steps from done, not one.
-
-⭐ It was still cheap, and for the reason §1 of the R50 file already gives: **every stage this
-needs already exists.** `ResNet34BackB0` builds its own batched stages rather than lifting the PC
-ones, and those stages are generic in `{ic oc h w kH kW}`, so R50 reuses all four **verbatim**:
+Each bottleneck form's backward graph (`<blk>BackBatchedGraph`) and the theorem that it denotes the
+certified VJP (`<blk>BackBatchedGraph_faithful`) — the ResNet-50 peer of `ResNet34BackB0`, at the
+batched index (`bnBatchLA`, `batchMap`, `convBackBatched`). Every stage is one other nets already
+use, generic in `{ic oc h w kH kW}`, so the file is composition — no new stage, `SHlo` op or VJP:
 
 | stage | what R50 uses it for | from |
 |---|---|---|
-| `cbReluB` | the 1×1 reduce AND the 3×3 (stride-1 blocks) | `ResNet34BackB0` |
-| `cbReluStridedB` | the 3×3 in a downsample block | `ResNet34BackB0` |
-| `projB` | the 1×1 expand (no activation) and the stride-1 skip | `EfficientNetBackB0` |
-| `projStridedB` | the strided projection skip | `ResNet34BackB0` |
+| `cbReluB` | the 1×1 reduce and the 3×3 (stride-1 blocks) | `Foundation/BatchedStageLayers` |
+| `cbReluStridedB` | the 3×3 of a downsample block | `Foundation/BatchedStageLayers` |
+| `projB` | the 1×1 expand (no activation) and the stride-1 skip | `Foundation/BatchedStages` |
+| `projStridedB` | the strided projection skip | `Foundation/BatchedStageLayers` |
 
-**Zero new stages, zero new SHlo ops, zero new VJP obligations.** The bottleneck's third conv is
-one more `CertLayer.comp`, and the whole file is composition — §6's "a family from one
-constructor" landing on R50's backward the way §3i records it landing on MNv4's.
-
-## The three forms, and why the third exists
+## The three forms
 
 | form | where in R50 | R34 analogue |
 |---|---|---|
 | `r50Bottleneck…` — identity | 12 blocks | `r34BasicBlock…` |
 | `r50DownBlock…` — strided projection | stages 2/3/4, block 0 | `r34DownBlock…` |
-| ⭐ `r50ProjBlock…` — **stride-1** projection | **stage 1 block 0 ONLY** | ⛔ **none** |
+| `r50ProjBlock…` — **stride-1** projection | stage 1 block 0 only | none |
 
-R34 never needed the third: its stage 1 is `ic = oc = 64`, so block 0 is an identity block. R50's
-stage 1 goes `64 → 256` at stride 1 — the channels change so it needs a projection, the resolution
-does not so that projection is not strided. ⚠ `r50DownBlock` cannot be substituted for it: its type
-reads `Vec (N * (ic * (2*h) * (2*w))) → Vec (N * (oc * h * w))`, so the halving is in the
-*signature* and the substitution is a shape error. Reaching for the identity form instead is the
-dangerous one — an identity skip where a projection belongs is well-typed only if `ic = oc`.
+R34's stage 1 is `ic = oc = 64`, so its block 0 is an identity block. R50's stage 1 goes
+`64 → 256` at stride 1: the channels change, so it needs a projection, and the resolution does not,
+so the projection is not strided. `r50DownBlock` cannot stand in for it — its type
+`Vec (N * (ic * (2*h) * (2*w))) → Vec (N * (oc * h * w))` puts the halving in the signature.
 
-## ⚠ THE STRIDE IS ON THE 3×3, NOT THE LEADING 1×1
+## The stride is on the 3×3, not the leading 1×1
 
-`r50DownBody` puts `cbReluStridedB` on the **second** conv. That is ResNet **v1.5** / torchvision,
-which is what [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. The v1 placement (stride on the leading 1×1)
-compiles, trains and descends — and is a different net (§3's trap, and `VerifiedSpec.lean:46`
-records it costing ~0.5 pt of top-1). The leading 1×1 therefore runs at the INPUT resolution
-`(2*h)×(2*w)` and carries `mid` channels there until `W₂` decimates.
+`r50DownBody` puts `cbReluStridedB` on the **second** conv: ResNet **v1.5** / torchvision, what
+[`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. The v1 placement (stride on the leading 1×1)
+compiles, trains and descends, and is a different net (`VerifiedSpec` records it costing ~0.5 pt
+of top-1). The leading 1×1 therefore runs at the input resolution `(2*h)×(2*w)`.
 
-## Relu, and why every statement here is `_at`
+## Relu, and why every statement is `_at`
 
-R50 is relu throughout, so — per §8's design note — the VJPs are pointwise and hypothesis-threaded
-via `vjp_comp_at`, never the global form. A bottleneck has **three** kinks, not the basic block's
-two: the two interior relus (`h_s1`, `h_s2`) and the outer post-residual relu (`h_out`). The
-per-op backward token is `.selectPos`, whose faithfulness is the already-proven `selectPos_faithful`.
+R50 is relu throughout, so the VJPs are pointwise and hypothesis-threaded via `vjp_comp_at`. A
+bottleneck has three kinks: the two interior relus (`h_s1`, `h_s2`) and the post-residual relu
+(`h_out`). The backward token is `.selectPos`, faithful by `selectPos_faithful`.
 
-## Structure
+## Contents
 
-* `r50BodyBackBatchedGraph` — the stride-1 bottleneck body `projB ∘ cbReluB ∘ cbReluB`'s backward
-  graph (`r50DownBodyBackBatchedGraph` is its strided peer).
-* `r50BottleneckBackBatchedGraph_faithful` — **CAPSTONE 1**, the identity block
-  `relu ∘ residual(F)`.
-* `r50ProjBlockBackBatchedGraph_faithful` — **CAPSTONE 2**, `relu ∘ residualProj(projB, F)`, the
-  form with no R34 analogue.
-* `r50DownBlockBackBatchedGraph_faithful` — **CAPSTONE 3**, the strided projection block
-  `relu ∘ residualProj(projStridedB, F_s)`.
+* `r50BodyBackBatchedGraph` — the stride-1 body `projB ∘ cbReluB ∘ cbReluB`'s backward graph;
+  `r50DownBodyBackBatchedGraph` is its strided peer.
+* `r50BottleneckBackBatchedGraph_faithful` — the identity block `relu ∘ residual(F)`.
+* `r50ProjBlockBackBatchedGraph_faithful` — `relu ∘ residualProj(projB, F)`.
+* `r50DownBlockBackBatchedGraph_faithful` — `relu ∘ residualProj(projStridedB, F_s)`.
 
 Each block is a `CertLayer` (`r50BottleneckLayer`, `r50ProjBlockLayer`, `r50DownBlockLayer`)
-composed from `ResNet34BackB0`'s stage layers, and each capstone is that layer's `faithful`.
+composed from the stage layers, and each theorem is that layer's `faithful`.
 -/
 
 namespace Proofs.StableHLO

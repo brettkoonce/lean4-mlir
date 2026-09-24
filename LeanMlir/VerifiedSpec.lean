@@ -145,7 +145,7 @@ inductive VLayer where
 
       ⚠⚠ **THE ACTIVATION IS SWISH, NOT RELU, AND THAT IS A PAPER DEVIATION.** MobileNetV4-Conv is
       a ReLU network, but both emitters that produced the 84.58% use swish here
-      (`jax/Jax/Codegen.lean:1031` — the reference — and `MlirCodegen.lean:6148`'s
+      (`fused_mbconv_block` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean) — the reference — and `MlirCodegen`'s
       `emitConvBnTrainSwish`), inherited from the block being shared with EfficientNetV2. Matching
       the REFERENCE is what lets the number be reproduced and tied; matching the PAPER would be a
       different net from the one with the result. Recorded rather than quietly fixed.

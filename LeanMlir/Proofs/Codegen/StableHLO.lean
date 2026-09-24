@@ -140,7 +140,7 @@ inductive BatchableOp : Nat → Nat → Type where
       (W : DepthwiseKernel c kH kW) (bias : Vec c)         : BatchableOp (c*h*w) (c*h*w)
   -- ⭐ The XLA-`SAME` depthwise peer of `convStridedXla`, and the token MobileNetV2 and
   -- EfficientNet need: their `depthwise_conv` defaults to `padding='SAME'`
-  -- (`jax/Jax/Codegen.lean:679`), so every strided depthwise in those references pads
+  -- (`depthwise_conv` in `jax/Jax/Codegen.lean`), so every strided depthwise in those references pads
   -- `((k-2)/2, k/2)`, not symmetrically. Same invisibility caveat as `convStridedXla` — identical
   -- shapes, identical counts, identical group widths; only a forward tie separates them.
   -- `den` is `depthwiseStride2FlatXla` = `decimateOddFlat ∘ depthwiseFlat`.
@@ -702,7 +702,7 @@ inductive SHlo : Nat → Type where
   -- linear map is its own transpose, so there is no `*Grad` peer to build or to keep in step.
   | dropPathB    {N n : Nat} (mName : String) (s : Vec N)        : SHlo (N*n) → SHlo (N*n)
   -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask the reference
-  -- applies immediately before the classifier dense (`jax/Jax/Codegen.lean:1971`). `mName` is a
+  -- applies immediately before the classifier dense (`emitForward`'s classifier dropout in `jax/Jax/Codegen.lean`). `mName` is a
   -- graph INPUT of type `tensor<N×n×f32>`, drawn on the HOST for `dropPathB`'s reasons exactly.
   --
   -- ⚠⚠ IT IS `dropPathB` AT A MASK OF THE VALUE'S OWN TYPE, AND THAT IS THE ONLY DIFFERENCE.
@@ -1770,9 +1770,8 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
   | _, _, .headSlice (N := N) (heads := heads) (d := d) h => headSliceFlat N heads d h
   | _, _, .headPad (N := N) (heads := heads) (d := d) h => headPadFlat N heads d h
 
-/-- Which BatchNorm a forward chain emits — the batched-index peer of `ResNet34RenderB.R34Bn`,
-    shared by the EfficientNet and MobileNetV2 renders so one traversal can produce both the
-    training forward and its frozen-stats eval partner.
+/-- Which BatchNorm a batched forward chain emits, for the renders whose one traversal produces
+    both the training forward and its frozen-stats eval partner (EfficientNet, MobileNetV4).
 
     The distinction is not cosmetic and the §2a bug is what it exists to prevent: a `.train` chain
     reduces its statistics out of the activation (`bnBatchF`, which couples the batch), a `.eval`

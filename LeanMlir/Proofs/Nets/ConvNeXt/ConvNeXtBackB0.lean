@@ -14,7 +14,7 @@ denotes the proven whole-block VJP.
 ConvNeXt's whole verified stack is **per-example / batch-1** — LayerNorm here is
 the per-example separable `layerNormForward` (= `bnForward` on the feature axis),
 so NONE of EfficientNet's `batchMap`/`bnBatchLA` batched machinery is needed
-(`ConvNeXtChainClose.lean:8`). So this file targets the per-example VJPs of the shipped
+(`ConvNeXtChainClose`'s header). So this file targets the per-example VJPs of the shipped
 CHANNEL-LN net directly, modeled on the per-example section of `EfficientNetBackB0.lean`
 (`residualBackGraph`, `convBnSwishBackGraph`).
 
@@ -37,7 +37,7 @@ open Proofs Proofs.StableHLO
 
 namespace Proofs
 
-/-- **The backward peer of `rowLN_affine_eq`** (`ConvNeXtChannelLN.lean`). Forward, the emitted
+/-- **The backward peer of `rowLN_affine_eq`** (`ChannelLN.lean`). Forward, the emitted
     subtree normalises at the scalar identities `%one`/`%zero` and only then applies the real `[c]`
     affine, so three denotations collapse onto `rowLNVecFlat`. Backward it is the same fold one
     step earlier: the emitted `rowScaleF γ` applied to the COTANGENT is exactly the per-row

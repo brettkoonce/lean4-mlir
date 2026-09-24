@@ -37,7 +37,7 @@ theorem layerScaleChGammaGrad_den {c h w : Nat} (xN cotN : String)
 -- ════════════════════════════════════════════════════════════════
 -- § The 22 spatial LayerNorm sites — the CHANNEL-LN form the render actually emits
 --   The op operands are the `[h·w, c]` transposed views the render re-emits; the certified
---   Jacobian is `chanLNTensor3`'s in the `c·h·w` activation layout, and `ConvNeXtChannelLN`'s
+--   Jacobian is `chanLNTensor3`'s in the `c·h·w` activation layout, and `ChannelLN`'s
 --   permutation argument is what lets one op serve both.
 -- ════════════════════════════════════════════════════════════════
 

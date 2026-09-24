@@ -93,7 +93,7 @@ def rmsOne (B : Nat) (replicas : Nat) (g : PGrad) :
       once while this step is per parameter, so at `clip := true` the caller hoists both
       (`planning/archive/grad_clip.md` §4).
     * `ema` — the shadow `e' = d·e + (1−d)·θ'` is `adamMNextF` at `(β₁ := d, m := e, g := θ')`:
-      `Proofs.adamMNext` IS the reference's `ema_update` (`jax/Jax/Codegen.lean:2459`), so it needs
+      `Proofs.adamMNext` IS the reference's `ema_update` (`ema_update` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)), so it needs
       no new op and `adamMNextF_faithful` closes the `den` side by `rfl`. ⚠ It reads `nT`, the
       UPDATED parameter — the shadow averages weights after the optimizer moves them. ⚠
       `%emad`/`%oemad` are function ARGS, not constants: the reference's decay is warmup-corrected,
@@ -324,5 +324,20 @@ chosen branch's — every artifact renders byte-identically. -/
     (rnd : ℝ → ℝ) (xName : String) (x : Vec (N*(tk*a))) :
     SHlo (N*(tk*c)) → SHlo (a*c) :=
   if bf16 then .rowDenseWeightGradBBf16 rnd xName x else .rowDenseWeightGradB xName x
+
+/-- **One frozen-statistic BN site at the per-example index** — `bnPerChannelEvalF` on `xin`, with
+    the running statistics arriving as graph inputs `%{statP}mu` / `%{statP}var`. The BN site of the
+    per-example eval chains (`r34FwdChain`, `r50FwdChain`, `mnv2FwdChain`), which write
+    `@resnet34_fwd_eval`, `@resnet50in_fwd_eval` and `@mobilenetv2_fwd_eval`: frozen-stat affine BN
+    performs no reduction, so these forwards are class-batch-independent and partner the batch-BN
+    train steps whose EMA'd μ/σ² they read. There is deliberately no training arm — the per-example
+    training BN those chains once also emitted (`bnPerChannelF`) is not the BN any shipped train
+    step uses. -/
+def bnEvalSite (B oc hh ww : Nat) (epsStr gName btName statP xin : String) :
+    StateM EmitS (String × String) := do
+  let zc  : Vec oc := fun _ => 0
+  let zin : Vec (oc*hh*ww) := fun _ => 0
+  pretty B (.bnPerChannelEvalF (oc := oc) (h := hh) (w := ww)
+    gName btName s!"%{statP}mu" s!"%{statP}var" epsStr 0 zc zc zc zc (.operand xin zin))
 
 end Proofs.StableHLO

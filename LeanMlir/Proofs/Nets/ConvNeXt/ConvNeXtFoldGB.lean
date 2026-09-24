@@ -39,7 +39,7 @@ per-example bridge at `batchSlice n` — `ResNet34PoCB.denseWGradB_den`'s shape 
 each batched `den` arm is literally the per-example one under a batch sum. The channel-LN sites
 add one step: the batched render hands the LN ops `batchMap N (chanLNRows c h w)` of the saved
 input and of the cotangent (the `[h·w, c]` transposed views, lifted per example), and
-`batchSlice_batchMap` peels the lift so `ConvNeXtChannelLN`'s permutation argument applies at each
+`batchSlice_batchMap` peels the lift so `ChannelLN`'s permutation argument applies at each
 slice.
 
 ⭐ **The bf16 artifacts (`convnextin_adamwxclipdropbf16`, the S/B twins) emit `*GradBBf16`

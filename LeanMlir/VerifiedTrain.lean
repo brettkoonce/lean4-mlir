@@ -102,7 +102,7 @@ structure VerifiedNet where
   dropKeeps : Array Float := #[]
   /-- ▶ **CLASSIFIER DROPOUT** (`recipe_gaps.md` gap C) — `(keep_prob, per-example width)`, or
       `none` when the net has none. EfficientNet-B0: `(0.8, 1280)` for the reference's
-      `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`).
+      `dropout := 0.2` ([`jax/MainEfficientNetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainEfficientNetImagenet.lean)).
 
       ⚠⚠ **THE WIDTH IS HERE BECAUSE THE MASK IS PER-ELEMENT, WHICH IS THE WHOLE DIFFERENCE FROM
       `dropKeeps`.** Stochastic depth's masks are `tensor<Bxf32>` — one value per example, so the
@@ -1412,34 +1412,20 @@ def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (data
     (← IO.getStdout).flush
   IO.println s!"done (trained {net.name} with AdamW via packed θ|m|v threading)."
 
-/-- The batch a forward artifact was **rendered at**, read out of its own `%x:` signature.
+/-- The eval forward's rendered input shape, `(batch, d0)`, off `%x: tensor<BxWxf32>`.
 
     Batch is baked into a render, not a runtime dimension, so the eval forward has a fixed width
     that need not equal the training batch — `LEAN_MLIR_BATCH=128` trains at 128 while every
-    Imagenette `_fwd{,_eval}` is rendered at 32. Feeding a 128-wide slice to a 32-wide graph is a
-    shape error at the first invoke, which is why `LEAN_MLIR_SKIP_EVAL` existed as the only way out.
-
-    Reading the width off the artifact removes that trade-off, and it is **sound because eval is
+    Imagenette `_fwd{,_eval}` is rendered at 32, and feeding a 128-wide slice to a 32-wide graph is
+    a shape error at the first invoke. Reading the batch off the artifact is **sound because eval is
     class-batch-independent by construction**: the BN nets score through `@<slug>_fwd_eval`, which
-    is frozen-running-stat affine BN and performs *no* reduction over the batch (handoff §2g — the
-    very property that made `mobilenetv2_fwd_eval` immune to the skew that hit `mobilenetv2_fwd`),
-    and the others normalise per example (LayerNorm) or not at all. So the eval batch decides only
-    how many rows ride per invoke; it cannot move a per-example logit.
+    is frozen-running-stat affine BN and performs *no* reduction over the batch, and the others
+    normalise per example (LayerNorm) or not at all. So the eval batch decides only how many rows
+    ride per invoke; it cannot move a per-example logit. Returns `none` rather than guessing if the
+    signature does not parse — the caller then falls back to the training batch.
 
-    Returns `none` rather than guessing if the signature does not parse — the caller falls back to
-    the training batch, i.e. exactly the old behaviour. -/
-private def fwdRenderedBatch (path : String) : IO (Option Nat) := do
-  if !(← System.FilePath.pathExists path) then return none
-  let txt ← IO.FS.readFile path
-  match txt.splitOn "%x: tensor<" with
-  | _ :: rest :: _ => return (rest.takeWhile (· != 'x')).toNat?
-  | _ => return none
-
-/-- The eval forward's rendered input shape, `(batch, d0)`, off `%x: tensor<BxWxf32>`.
-
-    ⭐ **BOTH numbers come from ONE parse of ONE declaration**, deliberately. `evalBs` was already
-    read off the artifact rather than assumed; the WIDTH has to be too, and a second parser of the
-    same text is the double-writer failure in miniature — the two could then disagree about the same
+    ⭐ **BOTH numbers come from ONE parse of ONE declaration**, deliberately: a second parser of the
+    same text is the double-writer failure in miniature — the two could disagree about the same
     tensor.
 
     ▶ Why the width is not `net.d0`: under RSB-A3 the eval resolution is **not** the train
@@ -1881,7 +1867,7 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- value of a graph INPUT, and the graph is a step function that never sees step 0.
   -- `Proofs.rmsBufNext` is correct either way — this is what it gets fed.
   let msInit ← if rmsprop then F32.const net.nParams.toUSize 1.0 else pure zeros
-  -- ⚠ THE EMA SHADOW STARTS AT THE WEIGHTS (`ema_params = params`, jax/Jax/Codegen.lean:2739), not
+  -- ⚠ THE EMA SHADOW STARTS AT THE WEIGHTS (`ema_params = params`, `emitMainImagenet` in `jax/Jax/Codegen.lean`), not
   -- at zeros. A zero-init shadow is a different filter; and it is the warmup-corrected decay below
   -- that stops even THIS init from poisoning the average early — see the `emaD` note.
   -- ⚠ The FOURTH region, when there is one, and the two features that use it seed it DIFFERENTLY.
@@ -2273,7 +2259,7 @@ gate's control, not a configuration.")
         pbuf ← F32.blit pbuf (nRegions * net.nParams + 3).toUSize accPair 0 2
       -- ⚠ THE WARMUP-CORRECTED DECAY, required at our scale rather than optional.
       -- `d = min(decay, (1+t)/(10+t))` is TF's `ExponentialMovingAverage(decay, num_updates)`, the
-      -- form the reference emits (`jax/Jax/Codegen.lean:2460`). Without it the shadow decays its own
+      -- form the reference emits (`ema_update` in `jax/Jax/Codegen.lean`). Without it the shadow decays its own
       -- init away only as `decay^t`: the reference MEASURED a shadow still holding 12.8% init at
       -- 3.1 tau, scoring 0.00% top-1 while the live weights scored 70.48%. An 80-epoch Imagenette
       -- run is 23,600 steps = 2.4 tau at decay 0.9999 — squarely inside that regime.
@@ -2282,7 +2268,7 @@ gate's control, not a configuration.")
       if emaOn then
         -- ⚠⚠ **THE SHADOW MOVES ONCE PER OPTIMIZER STEP, NOT ONCE PER MICRO-BATCH**, and under
         -- accumulation those differ by a factor of `k`. The reference EMAs after the `train_step`
-        -- call (`jax/Jax/Codegen.lean:3017`) and JAX's accumulation lives INSIDE that call, so one
+        -- call (`emitMainImagenet` in `jax/Jax/Codegen.lean`) and JAX's accumulation lives INSIDE that call, so one
         -- `ema_update` covers all k micro-batches. This driver invokes the graph per micro-batch,
         -- so on an accumulate micro-batch it must hand the graph the IDENTITY: `%emad = 1`,
         -- `%oemad = 0` gives `e' = 1·e + 0·θ' = e` exactly.

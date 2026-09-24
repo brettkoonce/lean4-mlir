@@ -5,22 +5,26 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 
-/-! # Spike: fan-in backward-graph faithfulness (EfficientNet-B0 assembly brick)
+/-! # EfficientNet-B0 block backward graphs — the residual and squeeze-excite fan-ins
 
-The first reusable brick toward an `efficientnet*_back_faithful` theorem:
-a *backward* StableHLO graph that denotes the proven whole-net VJP, the way
-`mlpVerified_back_faithful` does for the MLP.
+Backward StableHLO graphs for B0's MBConv blocks and the theorems that they denote the proven
+VJPs. B0 has two branching ops the dense-chain nets do not: the residual skip (additive fan-in)
+and the squeeze-excite gate (multiplicative fan-in). `SHlo`'s backward constructors are unary, but
+both fan-ins are spelled with forward elementwise combinators: `addV` for the residual, and
+`layerScaleF` (Hadamard by a known activation) + `addV` for the SE gate.
 
-EfficientNet-B0 has two *branching* ops the MLP/dense-chain nets don't: the
-MBConv **residual** skip (additive fan-in) and the squeeze-excite **gate**
-(multiplicative fan-in). The `SHlo` backward inductive only has *unary*
-backward constructors (`convBack`, `swishBack`, `denseRowBack`, …), but the
-fan-ins are expressible with the existing *forward* elementwise combinators:
-`addV` (`den (.addV a b) = den a + den b`) for the residual here, and
-`layerScaleF` (Hadamard by a known activation vector) + `addV` for SE.
+## Contents
 
-This file proves the residual case in general, then closes a fully concrete
-instance (a dense body) end-to-end with no remaining hypothesis. -/
+* SE: `seBlockBackGraph` (the generic multiplicative fan-in), `seGateBackGraph` (B0's gate from
+  per-op bricks) and the subgraph-cotangent forms `seGateBackGraphE` / `seBlockFullBackGraphE`
+  used mid-chain;
+* stage bricks: `convBnSwishBackGraph`, `dwBnSwishBackGraph`, `convBnBackGraph` (projection), with
+  `bnBack_faithful_fn`;
+* per-example block: `mbconvBodyBackGraph`;
+* batched capstones: `mbBodyBackBatchedGraph` (stride-1 body), `mbDownBodyBackBatchedGraph`
+  (strided depthwise, no residual) and `mbResidBlockBackBatchedGraph` (body + skip).
+
+Each `…_faithful` states `den (graph) = ` the certified backward, 3-axiom clean. -/
 
 open Proofs Proofs.StableHLO
 

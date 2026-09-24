@@ -45,7 +45,7 @@ forward → loss → backward, no free activations, no symbolic cotangent.
   — the render re-emits the `[h·w, c]` transposes and runs ViT's `veclnGammaSgd` /
   `rowDenseBiasSgd` on that view, so the op operands here are `chanLNRows` of the saved LN input
   and of the chain cotangent, while the certified Jacobian is `chanLNTensor3`'s in the `c·h·w`
-  activation layout (`ConvNeXtChannelLN`'s permutation argument bridges the two).
+  activation layout (`ChannelLN`'s permutation argument bridges the two).
 * **the channel-LN input-VJP** in the cotangent chain: `chanLNTensor3Back` where the scalar
   version had `bn_grad_input`. It is the certified VJP —
   `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`.

@@ -890,7 +890,7 @@ def efficientnetVerified : VerifiedNetSpec where
   dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
     (fun i => 1.0 - 0.2 * i.toFloat / 15.0)
   -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C). `efficientNetB0ImagenetConfig` sets
-  -- `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean:68`), so keep = 0.8, and the width is the
+  -- `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean`), so keep = 0.8, and the width is the
   -- head's 1280 — the GAP output the classifier consumes, NOT `nClasses`.
   --
   -- ⚠⚠ IT IS PER-ELEMENT AND `dropKeeps` ABOVE IS PER-EXAMPLE, which is why this is a separate
@@ -987,8 +987,8 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
     Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean) (`convnextVerified_denote_eq` →
     `convNextForwardTCh`, the committed channel-LN config, + rung E
     `convnextVerified_fwd_faithful`); the full-depth REAL VJP is
-    `Proofs.convNextForwardTCh_has_vjp_correct` (ConvNeXtFullT.lean:341), whose `HasVJP` is
-    `Proofs.convNextForwardTCh_has_vjp` (:270) — GLOBAL, not the pointwise `_at` form MobileNetV2
+    `Proofs.convNextForwardTCh_has_vjp_correct` (`ConvNeXtFullT`), whose `HasVJP` is
+    `Proofs.convNextForwardTCh_has_vjp` — GLOBAL, not the pointwise `_at` form MobileNetV2
     is stuck with, because GELU is smooth where relu6 kinks. Its only hypotheses are the 22 LN
     positivities (stem + 18 blocks + 3 downsamples; there is no head LN).
     ⚠ Three things above were stale or wrong until 2026-08-12 and all three typeset fine: the LN
@@ -1023,7 +1023,7 @@ def convnextVerified : VerifiedNetSpec where
   --
   -- ⚠⚠ THE DENOMINATOR IS 17, i.e. `totalDrop − 1` OVER THE WHOLE NET, and the index is the GLOBAL
   -- block index. The reference's `dbi` is one counter advanced once per `convnext_block` across all
-  -- four stages (`jax/Jax/Codegen.lean:1948`); re-indexing per stage would give four short ramps
+  -- four stages (`emitForward`'s drop-path ramp in `jax/Jax/Codegen.lean`); re-indexing per stage would give four short ramps
   -- instead of one long one — it compiles, runs, descends and trains a different objective, and no
   -- numeric tie can see it, because every tie compares the render against a peer built from the same
   -- constants. `tests/TestDropPathRamp.lean` is what pins this against the renderer's

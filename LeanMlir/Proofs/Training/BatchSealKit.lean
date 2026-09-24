@@ -578,14 +578,8 @@ noncomputable def kv (c : Nat) (x : ℝ) : Vec c := fun _ => x
 /-- The zero kernel — every residual body. -/
 noncomputable def zk (oc ic kH kW : Nat) : Kernel4 oc ic kH kW := fun _ _ _ _ => 0
 
-@[simp] theorem zk_apply (oc ic kH kW : Nat) (o : Fin oc) (c : Fin ic) (kh : Fin kH)
-    (kw : Fin kW) : zk oc ic kH kW o c kh kw = 0 := rfl
-
 /-- The zero **depthwise** kernel — an inverted-residual net's zeroed bodies. -/
 noncomputable def dzk (c kH kW : Nat) : DepthwiseKernel c kH kW := fun _ _ _ => 0
-
-@[simp] theorem dzk_apply (c kH kW : Nat) (ch : Fin c) (kh : Fin kH) (kw : Fin kW) :
-    dzk c kH kW ch kh kw = 0 := rfl
 
 /-- `1 · √n < 160` whenever `n < 25600` — the margin `bnBatchLA_pos` consumes, at `γ = 1`,
     `β = 160`. Every BN width of a 224×224 ResNet witness clears it (the widest is the stem's

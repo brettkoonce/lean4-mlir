@@ -18,7 +18,7 @@ tokens: every BatchNorm node's `den` is `bnPerChannelEvalTensor3`, proved once.
 
 ⭐ **The SSA names are the committed ones, and that is the point of this file's graph.** The
 seventeen-block TRAINING graph names its parameters `%b17gp`/`%b17btp`, where the render emits `%gp17`/`%btp17`. This
-file's graph carries `bnSiteP`'s names verbatim: `%stnmu`/`%stnvar` for the stem, `%b{k}enmu`,
+file's graph carries `bnEvalSite`'s names verbatim: `%stnmu`/`%stnvar` for the stem, `%b{k}enmu`,
 `%b{k}dnmu`, `%b{k}pnmu` and their `nvar` peers per block, `%hnmu`/`%hnvar` for the head, around
 `irSig`/`irSigNoExp`'s `%We{k}`/`%ge{k}`/`%bte{k}`/`%Wd{k}`/`%gd{k}`/`%btd{k}`/`%Wp{k}`/`%gp{k}`/
 `%btp{k}`. Names are pretty-printing metadata and do not enter `den`; matching them is what lets a
@@ -183,7 +183,7 @@ namespace StableHLO
 -- ════════════════════════════════════════════════════════════════
 -- § Per-block-kind typed `SHlo` inference graphs + faithfulness
 --   ⭐ `k` is the block INDEX, so the emitted names are `irSig`'s: `%We{k}`/`%ge{k}`/… and
---   `bnSiteP`'s statistics `%b{k}enmu`/`%b{k}envar`/… — the committed artifact's, not the
+--   `bnEvalSite`'s statistics `%b{k}enmu`/`%b{k}envar`/… — the committed artifact's, not the
 --   six-block eval graph's `%mue1`/`%vare1`.
 -- ════════════════════════════════════════════════════════════════
 

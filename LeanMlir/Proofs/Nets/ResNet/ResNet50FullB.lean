@@ -49,7 +49,7 @@ block kinds.
 the leading 1×1 runs at the INPUT resolution and carries `mid` channels there until `W₂` decimates.
 That is ResNet **v1.5** / torchvision, which is what [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. The v1
 placement compiles, trains and descends, and is a different net worth ~0.5 pt of top-1
-(`VerifiedSpec.lean:46`). Nothing in the types sees the difference.
+(`VerifiedSpec.Layer.bottleneckStage`'s note). Nothing in the types sees the difference.
 
 ⚠ **Stage 1 block 0 is a STRIDE-1 projection, and it is the block with no ResNet-34 analogue.**
 Channels go 64 → 256 at unchanged resolution, so it needs a projection but not a strided one.

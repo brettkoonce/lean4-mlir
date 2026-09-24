@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Generate `verified_mlir/MANIFEST.md` — an index of the committed artifacts.
 
-`verified_mlir/` is 157 files and ~108 MB, and until now the only way to know what one of them
+`verified_mlir/` is ~250 files and ~210 MB, and until now the only way to know what one of them
 was came from reading the renderer that wrote it. Two things made that worse than a long
 directory listing:
 
@@ -152,15 +152,27 @@ def decode(variant: str) -> str:
         bits.append("grad clip")
     if "bce" in variant:
         bits.append("BCE loss")
-    m = re.search(r"(\d{2,4})(?:x(\d+))?", variant)
+    if "bf16" in variant:
+        bits.append("bf16")
+    if "fp8" in variant:
+        bits.append("fp8")
+    # the precision markers carry digits of their own — strip them before reading a batch size
+    m = re.search(r"(\d{2,4})(?:x(\d+))?", variant.replace("bf16", "").replace("fp8", ""))
     if m and not k:
         bits.append(f"batch {m.group(1)}")
     return ", ".join(bits) if bits else variant
 
 
+# Slugs with committed artifacts but no `VerifiedNetsCore` entry: renders kept after their trainer
+# was retired. `cifar8b` — the narrow-head CIFAR-8 trainers went on 2026-09-20; its
+# `cifar8b{,_bf16,_fp8}` renders stay as `CnnRender` outputs (the §4.1/§5.2 provenance), per the
+# note beside `cifar8Verified` in `VerifiedNetsCore.lean`.
+RENDER_ONLY_SLUGS = {"cifar8b"}
+
+
 def slugs_from_verified_nets() -> list[str]:
     src = (ROOT / "LeanMlir" / "VerifiedNetsCore.lean").read_text(encoding="utf-8")
-    found = set(re.findall(r'slug\s*:=\s*"([^"]+)"', src))
+    found = set(re.findall(r'slug\s*:=\s*"([^"]+)"', src)) | RENDER_ONLY_SLUGS
     return sorted(found, key=len, reverse=True)  # longest first, for prefix matching
 
 

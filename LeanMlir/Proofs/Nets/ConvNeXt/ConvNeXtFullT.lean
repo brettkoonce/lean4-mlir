@@ -44,7 +44,7 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-! ConvNeXt specifies `channel_layer_norm` — `h·w` statistics per example, each over the `c`
-channels at one spatial position, per-channel `[c]` affine. See `ConvNeXtChannelLN.lean` for the
+channels at one spatial position, per-channel `[c]` affine. See `ChannelLN.lean` for the
 primitive and for why Route A needs no new op and no new VJP.
 
 §2m built this as a PARALLEL chain beside the scalar-LN one it superseded, so that flipping the

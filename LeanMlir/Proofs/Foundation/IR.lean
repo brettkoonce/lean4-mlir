@@ -160,7 +160,7 @@ theorem relu_back_bridge {n : Nat} (x : Vec n) (h_smooth : ∀ k, x k ≠ 0)
 -- `⟦conv⟧ := conv2d` (D3) that graph denotes a forward `conv2d` of the
 -- reversed-swapped kernel, so the backward bridge reduces to the
 -- "reversed-kernel identity" `dx = conv(dy, reverse(Wᵀ))` that `CNN.lean`
--- only *asserts* in prose (CNN.lean:288–290, "Equivalent under the partial
+-- only *asserts* in prose (in `CNN.lean`, "Equivalent under the partial
 -- bijection …") and never proves — the repo deliberately uses the
 -- (co, ho, wo) form of `conv2d_input_grad_formula` to avoid this bijection.
 -- Here it is discharged by expansion at the concrete shapes the Spatial

@@ -1284,7 +1284,7 @@ set_option maxRecDepth 8000 in
       a host-side EMA, and a frozen-stat eval render; the packed protocol has nowhere to put them.
     * **It matches mixed precision as everyone practises it.** Every bf16 net in this repo —
       R34, R50, MNv2, MNv4, EfficientNet — keeps BN in f32 and rounds only the convolutions and
-      the dense layers (`ResNet34RenderB.lean:141` is the pattern: the conv backward branches on
+      the dense layers (`ResNet34RenderB`'s block backwards are the pattern: the conv backward branches on
       `bf16`, the `bnBatchBack` above it does not). A bf16 BatchNorm would measure a recipe
       Chapter 5 does not use.
 

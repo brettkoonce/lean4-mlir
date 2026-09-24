@@ -625,7 +625,7 @@ noncomputable def depthwiseStride2_bias_grad_has_vjp {c h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-! **The depthwise peer of `flatConvStride2Xla`** ([`Architectures/StridedConv.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Architectures/StridedConv.lean)), and it exists
-for the same reason: `jax/Jax/Codegen.lean:679`'s `depthwise_conv` defaults to `padding='SAME'`,
+for the same reason: `depthwise_conv` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `depthwise_conv` defaults to `padding='SAME'`,
 so MobileNetV2's four strided depthwises — and EfficientNet's — pad **asymmetrically**, while
 `depthwiseStride2Flat` above pads symmetrically. Both give the same output size, so only a forward
 tie can see it; `planning/archive/mnv4_verified.md` §3d measured MNv2's five sites at 2.9e-1 of a ~1.05

@@ -312,7 +312,7 @@ for the nets that use them:
 
 * **`flatConvStride2`** (above) pads symmetrically, `(k-1)/2` on each side. This is
   He et al. / torchvision — `nn.Conv2d(padding=k//2)` — and it is what ResNet-34, ResNet-50 and
-  ConvNeXt's references do (`jax/Jax/Codegen.lean:462`, symmetric ON PURPOSE since 2026-08-04).
+  ConvNeXt's references do (`emitHelpers` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), symmetric ON PURPOSE since 2026-08-04).
 * **`flatConvStride2Xla`** (here) pads the way XLA `'SAME'` does: at an **even** input the total
   padding is `k-2`, split **asymmetrically** as `((k-2)/2, k/2)` — `(0,1)` at `k=3`, `(1,2)` at
   `k=5`, `(2,3)` at `k=7`. This is what the TF-origin ports do — MobileNetV2, MobileNetV4,

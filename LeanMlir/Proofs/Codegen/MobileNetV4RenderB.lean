@@ -28,7 +28,7 @@ here, not separate functions, because omitting a shape-preserving op does not ch
 
 **Phase 0 found this needs no new op and no new position** (`planning/archive/mnv4_verified.md` §2): the
 depthwise VJP is kernel-general (`cnx_render_dw7*_certified`; the descriptor carries `kH kW`), and
-a leading depthwise already exists — `MobileNetV2RenderB.lean:196`'s `t = 1` inverted residual
+a leading depthwise already exists — `MobileNetV2RenderB.irFwdNoExpB`, the `t = 1` inverted residual,
 emits `.depthwise (c := ic)` straight onto the block input. What is new is the **composition**:
 ExtraDW puts a depthwise on *both* sides of the pointwise expand.
 
@@ -357,7 +357,7 @@ private def uibFwdPostStridedB (B ic oc expand postDWk h : Nat) (mode : BnMode)
 
     ⚠⚠ **SWISH, NOT RELU — and that is a deviation from the MNv4 paper, on purpose.** MobileNetV4-Conv
     is a ReLU network, but the reference that produced 84.58% uses swish at this site
-    (`jax/Jax/Codegen.lean:1031`), inherited from the block being shared with EfficientNetV2. This
+    (`fused_mbconv_block` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)), inherited from the block being shared with EfficientNetV2. This
     render must match the REFERENCE or the forward tie cannot pass and the number cannot be
     reproduced. `uibFwd*` above are relu, correctly — the two activations sit twenty lines apart and
     the difference is real, not a copy-paste slip. -/
@@ -524,7 +524,7 @@ def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .t
     **Activations, and they are not uniform** — each read off the emitter that produced the number,
     not assumed:
     * stem and head `.convBn` → **relu** (`MlirCodegen.emitConvBnTrain … useRelu := true`)
-    * the fused stage → **swish** (`jax/Jax/Codegen.lean:1031`) — a deliberate paper deviation, see
+    * the fused stage → **swish** (`fused_mbconv_block` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)) — a deliberate paper deviation, see
       `fusedMbConvFwdStridedB`
     * every UIB block → **relu** (`MlirCodegen.emitTrainStepBody`'s `.uib` case, "Plain ReLU throughout")
 

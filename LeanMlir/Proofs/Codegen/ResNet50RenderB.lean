@@ -497,13 +497,11 @@ set_option maxRecDepth 4000000 in
 /-- Everything the whole-net render needs out of ONE forward traversal of ResNet-50: the emitted
     code, the logits, and every saved activation the backward reads.
 
-    ⭐⭐ **This exists so `@resnet50_fwd` and `@resnet50_adam_train_step` cannot be different nets.**
-    They were: `resnet50FwdFaithfulV` built its forward from the PER-EXAMPLE chain (`r50FwdChain`,
-    which reaches `bnSite` and therefore `bnPerChannelF`, reduce `[2,3]`, divisor `H·W`) while the
-    train step is batch BN (reduce `[0,2,3]`, divisor `B·H·W`). Its own docstring claimed "the same
-    forward the train step differentiates", which was the invariant that did not hold.
-    `scripts/regen_verified_mlir.sh check` could not see it: it only ever paired a forward with the
-    SGD train step, and R50 has none (`planning/archive/mnv4_verified.md` §3d(b)).
+    ⭐⭐ **This exists so `@resnet50_fwd` and `@resnet50_adam_train_step` cannot be different nets:**
+    both are rendered from this one traversal, batch BN throughout (reduce `[0,2,3]`, divisor
+    `B·H·W`), and `scripts/regen_verified_mlir.sh check` holds the forward as a byte prefix of the
+    train step (`planning/archive/mnv4_verified.md` §3d(b) records the per-example forward this
+    replaced).
 
     ⚠ The eval forward is deliberately NOT moved onto this chain. `bnEval` reads frozen per-channel
     statistics as graph inputs, so it is the same arithmetic in either vocabulary and has no
@@ -1056,13 +1054,12 @@ historical — R34 has a per-example-BN net AND a batch-BN net, and they are dif
 they get different files. R50 has only the batch-BN net, so one file keeps `r50SigList` and every
 consumer of it together.
 
-⚠⚠ **The train and eval forwards MUST be the same chain with one switch**, which is why `bnSite`
-(shared with R34, now public) takes the mode rather than each render spelling its BN. §2g's
-`mobilenetv2_fwd` defect was exactly this drifting: a net trained with one pool and scored with
-another, logits rel 1.86, silent. -/
+The chain below is the EVAL forward only: every BN site is `RenderKit.bnEvalSite` (frozen running
+statistics, the per-example index), shared with ResNet-34's eval chain. The training forward is
+the batched `r50FwdChainB`. -/
 
 /-- Identity bottleneck forward, per-example vocabulary. -/
-private def bnkIdFwdV (B mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
+private def bnkIdFwdV (B mid oc hh : Nat) (epsStr p xName : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
   let ww := hh
   let zm   : Vec mid := fun _ => 0
@@ -1073,20 +1070,20 @@ private def bnkIdFwdV (B mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : Strin
   let zOut : Vec (oc*hh*ww) := fun _ => 0
   let zMid : Vec (mid*hh*ww) := fun _ => 0
   let (cC1, nC1) ← pretty B (.flatConvF (ic := oc) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm (.operand xName zOut))
-  let (cN1, nN1) ← bnSite B mid hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cN1, nN1) ← bnEvalSite B mid hh hh epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
   let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zMid))
   let (cC2, nC2) ← pretty B (.flatConvF (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm (.operand nR1 zMid))
-  let (cN2, nN2) ← bnSite B mid hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cN2, nN2) ← bnEvalSite B mid hh hh epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
   let (cR2, nR2) ← pretty B (.reluF (.operand nN2 zMid))
   let (cC3, nC3) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo (.operand nR2 zMid))
-  let (cN3, nN3) ← bnSite B oc hh mode epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
+  let (cN3, nN3) ← bnEvalSite B oc hh hh epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
   let (cA,  nA)  ← pretty B (.addV (.operand nN3 zOut) (.operand xName zOut))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
   pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cA ++ cO, nO)
 
 /-- ⭐ Stride-1 projection bottleneck forward — stage 1 block 0. The projection is `.flatConvF`,
     NOT `.flatConvStridedF`. -/
-private def bnkProjFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
+private def bnkProjFwdV (B cin mid oc hh : Nat) (epsStr p xName : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
   let ww := hh
   let zm   : Vec mid := fun _ => 0
@@ -1099,21 +1096,21 @@ private def bnkProjFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName :
   let zOut : Vec (oc*hh*ww) := fun _ => 0
   let zMid : Vec (mid*hh*ww) := fun _ => 0
   let (cC1, nC1) ← pretty B (.flatConvF (ic := cin) (oc := mid) (h := hh) (w := ww) s!"%{p}W1" (zb mid) zk1 zm (.operand xName zIn))
-  let (cN1, nN1) ← bnSite B mid hh mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cN1, nN1) ← bnEvalSite B mid hh hh epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
   let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zMid))
   let (cC2, nC2) ← pretty B (.flatConvF (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm (.operand nR1 zMid))
-  let (cN2, nN2) ← bnSite B mid hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cN2, nN2) ← bnEvalSite B mid hh hh epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
   let (cR2, nR2) ← pretty B (.reluF (.operand nN2 zMid))
   let (cC3, nC3) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo (.operand nR2 zMid))
-  let (cN3, nN3) ← bnSite B oc hh mode epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
+  let (cN3, nN3) ← bnEvalSite B oc hh hh epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
   let (cCp, nCp) ← pretty B (.flatConvF (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo (.operand xName zIn))
-  let (cNp, nNp) ← bnSite B oc hh mode epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
+  let (cNp, nNp) ← bnEvalSite B oc hh hh epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
   let (cA,  nA)  ← pretty B (.addV (.operand nN3 zOut) (.operand nNp zOut))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
   pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO, nO)
 
 /-- Strided projection bottleneck forward. ⚠ `conv1`/`bn1`/`relu1` at `2hh`; only `conv2` strides. -/
-private def bnkStridedFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xName : String) :
+private def bnkStridedFwdV (B cin mid oc hh : Nat) (epsStr p xName : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
   let ww := hh
   let zm     : Vec mid := fun _ => 0
@@ -1127,24 +1124,23 @@ private def bnkStridedFwdV (B cin mid oc hh : Nat) (mode : R34Bn) (epsStr p xNam
   let zMid   : Vec (mid*hh*ww) := fun _ => 0
   let zOut   : Vec (oc*hh*ww) := fun _ => 0
   let (cC1, nC1) ← pretty B (.flatConvF (ic := cin) (oc := mid) (h := 2*hh) (w := 2*ww) s!"%{p}W1" (zb mid) zk1 zm (.operand xName zIn))
-  let (cN1, nN1) ← bnSite B mid (2*hh) mode epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
+  let (cN1, nN1) ← bnEvalSite B mid (2*hh) (2*hh) epsStr s!"%{p}g1" s!"%{p}bt1" s!"{p}n1" nC1
   let (cR1, nR1) ← pretty B (.reluF (.operand nN1 zMidIn))
   let (cC2, nC2) ← pretty B (.flatConvStridedF (ic := mid) (oc := mid) (h := hh) (w := ww) s!"%{p}W2" (zb mid) zk2 zm (.operand nR1 zMidIn))
-  let (cN2, nN2) ← bnSite B mid hh mode epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
+  let (cN2, nN2) ← bnEvalSite B mid hh hh epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
   let (cR2, nR2) ← pretty B (.reluF (.operand nN2 zMid))
   let (cC3, nC3) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%{p}W3" (zb oc) zk3 zo (.operand nR2 zMid))
-  let (cN3, nN3) ← bnSite B oc hh mode epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
+  let (cN3, nN3) ← bnEvalSite B oc hh hh epsStr s!"%{p}g3" s!"%{p}bt3" s!"{p}n3" nC3
   let (cCp, nCp) ← pretty B (.flatConvStridedF (ic := cin) (oc := oc) (h := hh) (w := ww) s!"%{p}Wp" (zb oc) zkp zo (.operand xName zIn))
-  let (cNp, nNp) ← bnSite B oc hh mode epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
+  let (cNp, nNp) ← bnEvalSite B oc hh hh epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
   let (cA,  nA)  ← pretty B (.addV (.operand nN3 zOut) (.operand nNp zOut))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
   pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO, nO)
 
 set_option maxRecDepth 4000000 in
-/-- The full R50 forward: stem → `[3,4,6,3]` bottlenecks → GAP(7×7) → dense(2048→nClasses).
-    `mode` picks batch statistics (`.train`) or frozen running stats (`.eval`); ONE chain, so the
-    two renders cannot describe different nets. -/
-private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
+/-- The R50 EVAL forward: stem → `[3,4,6,3]` bottlenecks → GAP(q×q) → dense(2048→nClasses), every
+    BN at frozen running statistics (`bnEvalSite`). Writes `@resnet50in_fwd_eval`. -/
+private def r50FwdChain (B nClasses : Nat) (epsStr : String)
     -- ⚠ TRAILING, and the SAME ladder the train step uses (`q = 7` is 224, `q = 5` is 160). It has
     -- to be the same derivation, not merely the same numbers: the §2g prefix audit only means
     -- anything if the forward and the train step are one chain at one resolution.
@@ -1155,25 +1151,25 @@ private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
   let z64  : Vec 64 := fun _ => 0
   let z112 : Vec (64*q1*q1) := fun _ => 0
   let (cStc, nStc) ← pretty B (.flatConvStridedF (ic := 3) (oc := 64) (h := q1) (w := q1) "%sW" (zb 64) zSk z64 (.operand "%x" zx))
-  let (cStn, nStn) ← bnSite B 64 q1 mode epsStr "%sg" "%sbt" "stn" nStc
+  let (cStn, nStn) ← bnEvalSite B 64 q1 q1 epsStr "%sg" "%sbt" "stn" nStc
   let (cStr, nStr) ← pretty B (.reluF (.operand nStn z112))
   let (cStp, nStp) ← pretty B (.maxPool3s2F (c := 64) (h := q2) (w := q2) (.operand nStr z112))
-  let (c1, n1)   ← bnkProjFwdV    B   64  64  256 q2 mode epsStr "s1b0" nStp
-  let (c2, n2)   ← bnkIdFwdV      B       64  256 q2 mode epsStr "s1b1" n1
-  let (c3, n3)   ← bnkIdFwdV      B       64  256 q2 mode epsStr "s1b2" n2
-  let (c4, n4)   ← bnkStridedFwdV B  256 128  512 q3 mode epsStr "s2b0" n3
-  let (c5, n5)   ← bnkIdFwdV      B      128  512 q3 mode epsStr "s2b1" n4
-  let (c6, n6)   ← bnkIdFwdV      B      128  512 q3 mode epsStr "s2b2" n5
-  let (c7, n7)   ← bnkIdFwdV      B      128  512 q3 mode epsStr "s2b3" n6
-  let (c8, n8)   ← bnkStridedFwdV B  512 256 1024 q4 mode epsStr "s3b0" n7
-  let (c9, n9)   ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b1" n8
-  let (c10, n10) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b2" n9
-  let (c11, n11) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b3" n10
-  let (c12, n12) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b4" n11
-  let (c13, n13) ← bnkIdFwdV      B      256 1024 q4 mode epsStr "s3b5" n12
-  let (c14, n14) ← bnkStridedFwdV B 1024 512 2048  q5 mode epsStr "s4b0" n13
-  let (c15, n15) ← bnkIdFwdV      B      512 2048  q5 mode epsStr "s4b1" n14
-  let (c16, n16) ← bnkIdFwdV      B      512 2048  q5 mode epsStr "s4b2" n15
+  let (c1, n1)   ← bnkProjFwdV    B   64  64  256 q2 epsStr "s1b0" nStp
+  let (c2, n2)   ← bnkIdFwdV      B       64  256 q2 epsStr "s1b1" n1
+  let (c3, n3)   ← bnkIdFwdV      B       64  256 q2 epsStr "s1b2" n2
+  let (c4, n4)   ← bnkStridedFwdV B  256 128  512 q3 epsStr "s2b0" n3
+  let (c5, n5)   ← bnkIdFwdV      B      128  512 q3 epsStr "s2b1" n4
+  let (c6, n6)   ← bnkIdFwdV      B      128  512 q3 epsStr "s2b2" n5
+  let (c7, n7)   ← bnkIdFwdV      B      128  512 q3 epsStr "s2b3" n6
+  let (c8, n8)   ← bnkStridedFwdV B  512 256 1024 q4 epsStr "s3b0" n7
+  let (c9, n9)   ← bnkIdFwdV      B      256 1024 q4 epsStr "s3b1" n8
+  let (c10, n10) ← bnkIdFwdV      B      256 1024 q4 epsStr "s3b2" n9
+  let (c11, n11) ← bnkIdFwdV      B      256 1024 q4 epsStr "s3b3" n10
+  let (c12, n12) ← bnkIdFwdV      B      256 1024 q4 epsStr "s3b4" n11
+  let (c13, n13) ← bnkIdFwdV      B      256 1024 q4 epsStr "s3b5" n12
+  let (c14, n14) ← bnkStridedFwdV B 1024 512 2048  q5 epsStr "s4b0" n13
+  let (c15, n15) ← bnkIdFwdV      B      512 2048  q5 epsStr "s4b1" n14
+  let (c16, n16) ← bnkIdFwdV      B      512 2048  q5 epsStr "s4b2" n15
   let zL    : Vec (2048*q5*q5) := fun _ => 0
   let z2048 : Vec 2048 := fun _ => 0
   let zWd   : Mat 2048 nClasses := fun _ _ => 0
@@ -1186,15 +1182,8 @@ private def r50FwdChain (B nClasses : Nat) (mode : R34Bn) (epsStr : String)
 
 set_option maxRecDepth 4000000 in
 /-- **`@resnet50in_fwd`** — 162 inputs (`%x` + 161 params), logits `[B, nClasses]`. Batch-statistic
-    BN, i.e. the same forward the train step differentiates.
-
-    ⚠⚠ **That sentence was FALSE until 2026-08-10 and is now enforced.** This built its forward from
-    `r50FwdChain .train`, which reaches R34's shared `bnSite` and therefore `bnPerChannelF` — reduce
-    `[2,3]`, divisor `H·W`, PER-EXAMPLE — while `resnet50TrainStepFaithfulB` is `bnBatchF`, reduce
-    `[0,2,3]`, divisor `B·H·W`. Two different functions under one net's name (§3d(b)), and
-    `regen_verified_mlir.sh check` could not see it because it only ever paired a forward with the
-    SGD train step and R50 has none. It now renders from `r50FwdChainB` — literally the traversal
-    the train step differentiates — so `check_adam_prefix` holds it as a byte prefix.
+    BN: rendered from `r50FwdChainB`, the traversal the train step differentiates, so
+    `check_adam_prefix` holds it as a byte prefix of the train step.
 
     ⚠ `r50FwdChain`'s `.train` branch is now UNUSED by R50 and must stay that way; it survives only
     because `.eval` shares the function. Rendering a forward from it reopens the split. -/
@@ -1221,7 +1210,7 @@ def resnet50FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let sigList := r50SigList nClasses ++ r50StatSigList
   let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let (code, logits) := (r50FwdChain B nClasses .eval epsStr q).run' (0, [])
+  let (code, logits) := (r50FwdChain B nClasses epsStr q).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── ResNet-50 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
@@ -1468,7 +1457,7 @@ end Proofs.StableHLO
 -- graph with different gradient semantics makes an already-quoted number unreproducible.
 --
 -- ⚠⚠ **THE CLIP IS ON THE MEAN ACCUMULATED GRADIENT**, which is why the threshold this bakes is
--- `k·C = 8.0` and not `1.0`. The reference (`jax/Jax/Codegen.lean:2439`) forms `_gsum / _K` and
+-- `k·C = 8.0` and not `1.0`. The reference (`emitLossAndTraining` in `jax/Jax/Codegen.lean`) forms `_gsum / _K` and
 -- clips THAT; this graph never materialises the mean, so the fold runs on `Gt` and the threshold
 -- moves with it — `min(1, kC/(‖Gt‖ + kε)) = min(1, C/(‖Gt‖/k + ε))`, equal by algebra, no new op.
 -- ▶ Read `clipNormStr` before changing either constant.
@@ -1651,7 +1640,7 @@ end Proofs.StableHLO
 --   ⛔ **MODEL EMA (`useEMA := true`, `emaDecay := 0.9999`) — STRUCTURALLY IMPOSSIBLE HERE, not
 --      merely unrendered.** The EMA shadow and the gradient accumulator are THE SAME fourth region
 --      of `[θ|m|v|·]` — see the packed-layout note above `accScalars` in this file — and
---      `VerifiedTrain.lean:1156` throws on the combination rather than letting one win:
+--      `VerifiedNet.trainAdamSched` throws on the combination rather than letting one win:
 --      *"variant selects BOTH the EMA shadow and gradient accumulation, and they occupy the same
 --      fourth region … Render one or the other."*
 --      ▶ And accumulation is not optional for A2: the recipe's effective batch is 2048, and at

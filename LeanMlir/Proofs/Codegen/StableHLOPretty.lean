@@ -2218,7 +2218,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   -- ══ GLOBAL-NORM GRADIENT CLIPPING: op-for-op the reference's two lines
   --      gn    = sqrt(sum(jnp.sum(g*g) for g in tree.leaves(grads)))
   --      grads = tree.map(lambda g: g * minimum(1.0, CLIP/(gn + 1e-6)), grads)
-  --    `jax/Jax/Codegen.lean:2262`. All four emit at the PARAMETER shape `ty ds`, not at
+  --    `emitLossAndTraining` in `jax/Jax/Codegen.lean`. All four emit at the PARAMETER shape `ty ds`, not at
   --    `ty [B,n]` — the clip runs on parameter gradients, after the batch has been contracted. ══
   | .gradSumSqAccF ds, g :: acc :: st => do
       -- One leaf's `jnp.sum(g*g)`, reduced over EVERY axis to rank 0, added to the running total.
@@ -3123,7 +3123,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             --
             -- ⚠⚠ **NO `broadcast_in_dim`, AND THAT ABSENCE IS THE WHOLE CLAIM.** The mask already
             -- has the value's shape, because the reference draws `bernoulli(key, keep, x.shape)`
-            -- (`jax/Jax/Codegen.lean:1971`) rather than the `(B, 1, …, 1)` shape stochastic depth
+            -- (`emitForward`'s classifier dropout in `jax/Jax/Codegen.lean`) rather than the `(B, 1, …, 1)` shape stochastic depth
             -- uses. A `dims = [0]` broadcast off a `tensor<B>` input here typechecks, compiles, runs,
             -- descends — and is stochastic depth on the classifier, a different regulariser. That is
             -- `dropPathP`'s warning read backwards, and `tests/TestBatchedEmitTie.lean` pins both

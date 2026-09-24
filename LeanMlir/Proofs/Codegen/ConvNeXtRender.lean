@@ -122,7 +122,7 @@ private def zT {c h w : Nat} : Tensor3 c h w := fun _ _ _ => 0
 -- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`, handoff §0.10) ────────────────────────
 -- ConvNeXt-T is the easy shape of this feature and that is why it is the net that gets it: ONE
 -- site per block, on the residual branch, and **every** block carries one — no EfficientNet skip
--- guard, no ViT branch split. `convnext_block` in the reference (`jax/Jax/Codegen.lean:1079`) ends
+-- guard, no ViT branch split. `convnext_block` in the reference (`jax/Jax/Codegen.lean`) ends
 --
 --     branch = x * ls.reshape(1, -1, 1, 1)
 --     if drop_key is not None and keep_prob < 1.0:
@@ -134,7 +134,7 @@ private def zT {c h w : Nat} : Tensor3 c h w := fun _ _ _ => 0
 --
 -- ⚠⚠ AND THE RAMP INDEX IS THE GLOBAL BLOCK INDEX ACROSS ALL FOUR STAGES, not the per-stage `j`.
 -- `emitForward`'s `dbi` is a single counter advanced once per `convnext_block` over the whole net
--- (`Codegen.lean:1948-1955`), and `totalDrop` sums every `convNextStage`'s block count — so the
+-- (`emitForward`'s drop-path ramp in `jax/Jax/Codegen.lean`), and `totalDrop` sums every `convNextStage`'s block count — so the
 -- denominator is **17** and stage 1's first block is index 3, not 0. Re-indexing per stage gives
 -- four short ramps instead of one long one: it compiles, runs, descends, and trains a different
 -- objective, and no numeric tie can see it (every tie compares the render against a peer built from

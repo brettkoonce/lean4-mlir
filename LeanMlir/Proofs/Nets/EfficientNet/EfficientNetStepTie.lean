@@ -2,53 +2,47 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 
-/-! # PoC: the full-16 EfficientNet-B0 train step §1a TIE (whole-net thread) — DONE (capstone `efficientnet_net_tied`, all 262 params, 3-axiom clean; only the optional dense-head fold below remains)
+/-! # EfficientNet-B0 train-step tie (§1a, fused SGD) — `efficientnet_net_tied`
 
-The EfficientNet-B0 §1a tie (its batched, un-fused peer is `EnetTiePoCG.efficientnet_net_tiedG`). The §1 fold
-(`EfficientNetFold`) gives every batched param-SGD op `den = certified ∀ cotangent`; this
-file pins each cotangent to the **actual loss-driven backward chain** of the rendered net — threading
-the real forward activations through every param op and composing the backward cotangent from the
-loss down through all 16 MBConv blocks (with the residual fan-in at every stride-1 skip AND the SE
-gate fan-in), so each output's `den = certified` becomes a single composed theorem with the forward
-= the proven `efficientnetForwardB_full`.
+Every one of B0's 262 parameters' SGD ops, at the cotangent the rendered net's own backward chain
+hands it: the real forward (`efficientnetForwardB_full`) threaded through every parameter op, the
+loss cotangent composed back through all 16 MBConv blocks, the residual fan-in at each stride-1
+skip and the squeeze-excite gate fan-in included. The batched, un-fused peer (tied at the
+`*GradB` nodes) is `EnetTiePoCG.efficientnet_net_tiedG` in `EfficientNetStepTieG`.
 
-**What is NEW vs mnv2's tie** (the harder content, hence a dedicated effort):
-* **swish** masks instead of relu6 — the cotangent crosses `swishBack` (smooth, no two-kink
-  `selectMid`) at every conv-bn-swish / depthwise-bn-swish stage.
-* the **SE multiplicative gate fan-in** — the cotangent at an SE input is `gate ⊙ dyOut` (the
-  fused `seBackBatched` value) and the SE dense param cotangents come from `seReduceB` (the gate
-  cotangent `Σ_{h,w}(x⊙dy)`) threaded back through `sigmoidBack → denseRowBack(W₂) → swishBack`.
-* **true batch-norm** backward (`bnBatchBack`) — batch-coupled, vs mnv2's per-example BN.
-* `EfficientNetChainClose`'s whole-net backward is **HasVJP-composition** style (`vjp_comp` of the
-  per-block `_has_vjp`), NOT explicit cotangent-vector defs like mnv2's `invresCot*` — so the tie
-  must BUILD explicit chain-cot constructors (the bulk of the remaining work).
+## What B0 adds over MobileNetV2's tie
 
-## Landed so far (all 3-axiom clean — `[propext, Classical.choice, Quot.sound]`)
-* **All five per-block-type tie lemmas — every one of the 262 params' SGD ops** denotes the certified
-  batched `Σ_n` loss-descent step at the REAL loss-driven backward cotangent:
-  - `enet_exp_tied` (16 params) — stride-1 expand block; covers the 9 residual blocks (`ic=oc`) AND the
-    2 no-skip widenings (`ic≠oc`, b9/b16); the param ops are skip-agnostic (the fan-in lives in the thread).
-  - `enet_strided_tied` (16) — strided downsample (b2/4/6/12): expand at `2h×2w`, strided depthwise.
-  - `enet_noexp_tied` (12) — b1 (t=1, no expand; depthwise on `ic` → SE → project).
-  - `enet_stem_tied` (4) — 3×3/s2 conv-bn-swish stem.
-  - `enet_head_tied` (6) — 1×1 conv-bn-swish head + dense (Wfc/bfc tied at the loss cotangent `g`).
-* The genuinely-new content vs mnv2 is PROVEN here: **swish** masks (`swBackB`), the **SE gate fan-in**
-  (`gateCotB`=`den seReduceB` → `sigBackB` → `rowDenseBackFlat` → `swBackB` → SE dense ops), **true
-  batch-norm** backward (`bnBackB`=`bnBatchLA` VJP), the strided depthwise back (`dStridedInB`), all at
-  the **batched index** `N·(c·h·w)`. `reassocB` bridges the conv/swish `(oc·h·w)` ↔ BN `(oc·(h·w))` index.
-  Each per-block tie is a pure delegation to the §1-fold generics `EnetPoC.*` at the chain cotangents.
+* **swish** masks (`swBackB`) instead of relu6's two-kink `selectMid`, at every conv-bn-swish and
+  depthwise-bn-swish stage;
+* the **SE gate fan-in**: the cotangent at an SE input is `gate ⊙ dyOut` (the fused
+  `seBackBatched` value), and the SE dense parameters' cotangents come from `seReduceB` (the gate
+  cotangent `Σ_{h,w}(x⊙dy)`) through `sigmoidBack → denseRowBack(W₂) → swishBack`;
+* **true batch-norm** backward (`bnBackB`, the `bnBatchLA` VJP), batch-coupled;
+* the strided depthwise back (`dStridedInB`); `reassocB` bridges the conv/swish `(oc·h·w)` and
+  BN `(oc·(h·w))` layouts.
 
-* **The whole-net thread `efficientnet_net_tied`** (DONE, 3-axiom clean) — all 262 params tied through
-  the REAL `efficientnetForwardB_full`: block inputs are its forward prefixes (`a0..a16`), the per-block
-  output cotangents (`dy0..dy16`) composed top-down by the proven block VJPs (`headFwdB_has_vjp`,
-  `mb{Exp,Resid,Strided,NoExp}W_has_vjp`) from the loss cotangent `g`. `@[irreducible]` `*TiedAt`
-  wrappers keep the 16-deep thread opaque (the r34/mnv2 heartbeat lesson). The residual fan-in at the 9
-  identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so it is automatic — the
-  whole 262-param train step is den-composed forward→loss→backward, no free activations, no symbolic cot.
+`EfficientNetChainClose`'s whole-net backward is `vjp_comp` of the per-block `_has_vjp`s, so the
+tie builds explicit chain-cotangent constructors rather than reading them off.
 
-## Remaining (optional refinement)
-* The dense-head total-loss fold (`Wfc → ∂CE/∂Wfc`) — the batched-`Σ_n` analogue of
-  `mlp_output_total_loss_grad`; today the head dense ties at the loss cotangent `g` directly. -/
+## Contents
+
+* Per block type, every parameter op at the chain cotangent — each a delegation to the §1-fold
+  generics `EnetPoC.*`:
+  - `enet_exp_tied` (16 params) — the stride-1 expand block: the 9 residual blocks and the two
+    widenings b9/b16 (the parameter ops are skip-agnostic; the fan-in lives in the thread);
+  - `enet_strided_tied` (16) — b2/4/6/12: expand at `2h×2w`, strided depthwise;
+  - `enet_noexp_tied` (12) — b1 (`t = 1`: depthwise on `ic` → SE → project);
+  - `enet_stem_tied` (4) — the 3×3/s2 conv-bn-swish stem;
+  - `enet_head_tied` (6) — the 1×1 conv-bn-swish head and the dense, which ties at the loss
+    cotangent `g`.
+* `efficientnet_net_tied` — the whole-net thread. Block inputs are the forward's prefixes
+  (`a0..a16`); the per-block output cotangents (`dy0..dy16`) are composed top-down by the proven
+  block VJPs (`headFwdB_has_vjp`, `mb{Exp,Resid,Strided,NoExp}W_has_vjp`) from `g`. The residual
+  fan-in is in `mbResidW`'s own VJP (it includes the `+ x`). `@[irreducible]` `*TiedAt` wrappers
+  keep the 16-deep thread opaque to the elaborator.
+
+Not done: the dense head's total-loss fold (`Wfc → ∂CE/∂Wfc`, the batched `Σ_n` analogue of
+`mlp_output_total_loss_grad`); the head dense ties at `g` directly. -/
 
 open Proofs Proofs.StableHLO
 

@@ -2,22 +2,17 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 import LeanMlir.Proofs.Foundation.HeadLayers
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 
-/-! # MobileNetV4 — the batched UIB backward, and the four families as ONE chain
+/-! # MobileNetV4 — the batched UIB backward, and the four families as one chain
 
-MNv4 was the last net with **no backward of any kind** (`planning/archive/mnv4_verified.md` §8): the
-strongest empirical evidence in the repo — forward tied at 1.423e-06, gradient at 0/147 — and
-nothing in Lean beyond the render. This file is its phase 1–3, and the fold falls out with it.
+The block- and stage-level backward of MobileNetV4-Conv-M at the batched index: the depthwise-relu
+stages, the UIB body, the skip block, the stride-2 form, the fused stage and the head, each a
+`CertLayer` whose backward graph is faithful to its certified VJP.
 
-## ⭐⭐ THE ANSWER TO §8's OPEN QUESTION: the four families COLLAPSE
+## The four families are one chain
 
-§8 asked whether MNv4's four block families — ExtraDW / IB / ConvNeXt-like / FFN — "collapse to one
-parameterised theorem or need a case split", and called it "the difference between a small file and
-a large one". **They collapse, and the mechanism is `CertLayer.id'`.**
-
-The UIB body is `preDW? → expand → postDW? → project`, and `k = 0` omits a depthwise. Crucially
-**both depthwise positions are channel- and shape-preserving** — `preDW : ic → ic`,
-`postDW : mid → mid` — so an absent one is not a different composition, it is the **identity
-layer** in the same slot:
+The UIB body is `preDW? → expand → postDW? → project`, and `k = 0` omits a depthwise. Both
+depthwise positions are channel- and shape-preserving — `preDW : ic → ic`, `postDW : mid → mid` —
+so an absent one is the **identity layer** (`CertLayer.id'`) in the same slot:
 
 | family | pre | post | as a chain |
 |---|---|---|---|
@@ -26,63 +21,36 @@ layer** in the same slot:
 | IB / MBConv | ✗ | ✓ | `chain [id', expand, postDW, project]` |
 | FFN | ✗ | ✗ | `chain [id', expand, id', project]` |
 
-⭐ One `mnv4UibBody` takes the two depthwise slots as `CertLayer` arguments; the caller passes
-`id'` where the table says `k = 0`. **No case split, no four proofs** — and no dispatch that could
-silently disagree with the forward's, which is §3's trap ("a wrong `k = 0` dispatch is silent…
-produces a valid net that trains and descends and is not MobileNetV4").
+`mnv4UibBody` takes the two depthwise slots as `CertLayer` arguments and the caller passes `id'`
+where the table says `k = 0` — one body, no case split, and no dispatch that could disagree with
+the forward's (`mnv4BodyOfRow` reads the slots off the `UibSpec` row).
 
-⚠ This is exactly the §6 claim — *"a family from one constructor"* — landing on the proof side,
-the way §3i records it landing on the backward render.
+## The depthwise-bn-relu stage
 
-## What was genuinely new: a depthwise-bn-RELU stage
+MNv4 is relu throughout its UIB blocks — not relu6, which MobileNetV2 uses one file over. The
+stage `dwbReluB` (and its strided peer `dwbReluBstrided`) is `bnReluStage_has_vjp_at`
+(`Foundation/BatchedStageLayers`, generic in the op) at `depthwiseFlat`; its backward graph masks
+with `.selectPos`, relu's one-sided mask, where MobileNetV2's uses `.selectMid`.
 
-Measured before building: the repo had batched depthwise stages at **relu6** (`dwbrB`, MobileNetV2)
-and at **swish** (`dwbsB`, EfficientNet), and **none at plain relu**. MNv4 is relu throughout its
-21 UIB blocks (⚠ *not* relu6 — `MobileNetV4RenderB` flags this explicitly, and mnv2 sitting one
-file over makes it an easy thing to get wrong).
+## Contents
 
-⭐ It cost almost nothing, because `bnReluStage_has_vjp_at` (`ResNet34BackB0`) is **generic in the
-op**: it takes any differentiable `op` with a `HasVJP` and builds `relu ∘ bnBatchLA ∘ batchMap op`.
-`cbReluB` is that at `flatConv`; `dwbReluB` is the same lemma at `depthwiseFlat`. Zero new analytic
-content — one instantiation, plus the backward graph's `.selectPos` (relu's one-sided mask) where
-mnv2's uses `.selectMid`.
+* the depthwise-relu stages (stride-1 and strided), their backward graphs and `CertLayer`s
+  (`mnv4DWReluLayer`, `mnv4DWReluStridedLayer`);
+* the family-collapsing body `mnv4UibBody`, the skip block, and the stride-2 form
+  `mnv4UibPreStridedBody` (Conv-M has no post-strided row);
+* the fused stage (`mnv4FusedStage`, swish, stage 0) with `stemBackBatchedGraph`, the
+  symmetric-padding strided conv-bn-swish backward;
+* the head `mnv4Head` (its GAP and dense layers tie by `rfl`);
+* `UibParams`, the row-typed weight record, and the table-driven `k = 0` dispatch.
 
-## Scope
+The net level consumes these block by block: T1 and T2 are `MobileNetV4FullB` /
+`MobileNetV4FullBVJP`, T3 is `MobileNetV4StepTieB`, T6 is `MobileNetV4WholeBackCertifiedTieB`.
 
-⚠⚠ **This paragraph was WRONG from the day it was written, and a planning row copied it.** It
-said the fused stage, the head and the strided body assembly were not built. All three landed on
-**2026-08-10**, the same day, in the three commits that follow the one carrying this header —
-`e25a011` (stride-2 blocks), `61eb512` (fused stage) and `411b1a5`, whose own message reads *"the
-head — MNv4 complete at stage level"*. Nobody came back to the header, so for four weeks the file
-asserted a gap its own commit log had already closed, and `proofs_tier_to_paper_nets.md` §3.6
-priced a session against it (`planning/archive/mnv4_proofs_tier.md` §0 — seventh instance of that
-pattern, and the cheapest: the declaration list was one `grep` away).
-▶ **When a session lands a piece, edit the header that said it was missing, in the same commit.**
-
-**Built here — everything at the BLOCK and STAGE level, which is this file's whole remit:** the two
-depthwise-relu stages (stride-1 + strided) and their backward graphs; the four stage `CertLayer`s;
-the family-collapsing body and the skip block; the stride-2 form (`mnv4UibPreStridedBody`; Conv-M has no post-strided row); the **fused stage** (swish, stage 0)
-with `stemBackBatchedGraph` — the symmetric-padding strided conv-bn-swish backward that closed
-EfficientNet's stem hole at the same time; the **head** (`mnv4Head`, its GAP and dense layers both
-tying by `rfl`); the table-driven `k = 0` dispatch; and `UibParams`, the row-typed weight record.
-Nine of these are in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean), 3-axiom clean.
-
-**Not built here — the NET level, which is four other files as of 2026-09-07.** T1 (the whole-net
-forward and its input-VJP) is [`Nets/MobileNet/MobileNetV4FullB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean) +
-`MobileNetV4FullBVJP.lean`, T2 (the typed forward graph at `mnv4FwdChainB`'s tokens) is in the
-first of those, T3 (the tie at the emitted gradient nodes, all 233) is
-`MobileNetV4StepTieB.lean`, and T6 (the certified whole-net
-backward tie) is `MobileNetV4WholeBackCertifiedTieB.lean` + its float chain. Each of them consumes
-what is built here, block by block. `planning/archive/mnv4_proofs_tier.md` is the record; ResNet-50 — which
-was in exactly this position, block-level only with no per-example legacy — was the file-by-file
-precedent, closed over 2026-09-06/07.
-
-⚠ **Two things this file's certificates do NOT give you.** (i) The head models ONE conv stage;
-Conv-M's render has **two** (`%h1W` 256→960, then `%hW` 960→1280), so a whole-net use composes
-`cbReluLayer` twice. (ii) The **stem** is not here and cannot be a `CertLayer`: no render
-emits a gradient into `%x`, so there is no `convStridedXlaBackBatched` token and hence no backward
-graph to be faithful to. That is B0's situation exactly, and a net-level forward must compose the stem's VJP by
-`vjp_comp_at` rather than by `CertLayer.comp`.
+⚠ Two things these certificates do not give. (i) `mnv4Head` models ONE conv stage; Conv-M's
+render has two (`%h1W` 256→960, then `%hW` 960→1280), so a whole-net use composes `cbReluLayer`
+twice. (ii) The stem is not here and is not a `CertLayer`: no render emits a gradient into `%x`,
+so there is no backward graph for it, and a net-level forward composes the stem's VJP by
+`vjp_comp_at` rather than `CertLayer.comp`.
 -/
 
 namespace Proofs.StableHLO
