@@ -1051,15 +1051,13 @@ inductive DatasetKind where
   | mnist
   | cifar10
   | imagenette
-  | pets
   | imagenet
-  /-- YOLOv1 detection on Oxford-IIIT Pets (cat/dog head boxes, tiled into
-      2×2 mosaics). Images are 224×224×3 (resized at preprocess time,
-      ImageNet-normalized on Lean read). Labels carry the YOLOv1 target tensor +
-      per-cell mask concatenated as 6076 bytes/image. See
-      `planning/archive/yolo_final.md` and `historical/preprocess_pets_mosaic.py` for the on-disk
-      format. Only valid with `lossKind := .yolov1Masked` (or `useYolov1 := true`). -/
-  | petsDet
+  /-- Box detection (VisDrone, NEU-DET). Images are ImageNet-normalized on Lean read; the
+      labels carry the detector target, whose layout the run's config picks: the YOLOv1
+      target + per-cell mask + box tail at 224/7×7, the same at another grid
+      (`loadDetBinDims`), per-anchor targets (`cfg.anchors`), or the flat FPN block
+      (`cfg.fpnScales`). See `preprocess_visdrone.py` for the on-disk format. -/
+  | detection
   /-- Brain-tumour segmentation on the Medical Segmentation Decathlon
       Task01_BrainTumour volumes (BraTS-derived). 2D axial slices: images are
       240×240×4 (FLAIR / T1w / T1gd / T2w modalities as channels, z-scored per

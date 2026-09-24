@@ -302,6 +302,6 @@ def runYolov1NeuDetFpn (args : List String) : IO Unit := do
     else
       IO.println s!"  affine : off"
     IO.println s!"  bootstrap: {if noBoot then "OFF (FPN_NOBOOTSTRAP=1, He init)" else "ImageNet R34 prefix"}"
-    spec.train cfg dataDir DatasetKind.petsDet
+    spec.train cfg dataDir DatasetKind.detection
 
 def main (args : List String) : IO Unit := runYolov1NeuDetFpn args

@@ -60,11 +60,11 @@ prose explains the pairing; the NetSpec stays readable.
 - `unetSmall` — depth 3, base 32 — lighter variant used as a
   Stable-Diffusion-style denoiser backbone (without the attention
   blocks; those'd need additional primitives).
-- `ReferenceNets.unetPets` — depth 4, base 32, 224×224 RGB → 3-class
-  trimap; the Pets demo's net, sitting between `unetSmall` and the
-  original `unet` in size. `ReferenceNets.autoencoderPets` is its
-  skipless baseline. Both live in `LeanMlir.ReferenceNets`, which the
-  Pets trainers and the forward test import.
+- `ReferenceNets.unetBrats` — depth 4, base 32, 240×240 4-modality MRI
+  → 4-class tumour mask; the BraTS demo's net, sitting between
+  `unetSmall` and the original `unet` in size. It lives in
+  `LeanMlir.ReferenceNets`, which the BraTS trainer, its predictor and
+  the forward test import.
 - `tinyUnet` — depth 2, base 16 — bestiary fixture.
 -/
 
@@ -169,8 +169,7 @@ def main : IO Unit := do
   unet.summarize
   unetRgb.summarize
   unetSmall.summarize
-  ReferenceNets.unetPets.summarize
-  ReferenceNets.autoencoderPets.summarize
+  ReferenceNets.unetBrats.summarize
   tinyUnet.summarize
 
   IO.println ""

@@ -311,15 +311,10 @@ private def emitDataLoading (ds : DatasetKind) (cfg : TrainConfig) : String :=
     "    std = np.array([0.229, 0.224, 0.225]).reshape(1, 3, 1, 1)\n" ++
     "    images = ((images - mean) / std).reshape(count, -1)\n" ++
     "    return images, labels\n\n"
-  | .pets =>
-    -- The UNet/Pets segmentation demo is phase-3-only. The JAX codegen
-    -- doesn't currently emit a segmentation loss/train loop, so this
-    -- branch is unreachable at runtime; keep it stubbed for exhaustivity.
-    "# Pets segmentation is phase-3-only; phase 2 emits nothing for .pets.\n\n"
-  | .petsDet =>
+  | .detection =>
     -- YOLOv1/detection is phase-3-only (see planning/archive/yolo_final.md).
     -- JAX codegen has no detection emit; stub for exhaustivity.
-    "# detection is phase-3-only; phase 2 emits nothing for .petsDet.\n\n"
+    "# detection is phase-3-only; phase 2 emits nothing for .detection.\n\n"
   | .imagenet =>
     -- ImageNet (full 1000-class, 1.28M training, 50K val) — streaming
     -- pipeline via TFDS + tf.data. Requires `tensorflow` and
@@ -2843,12 +2838,9 @@ private def emitDataLoadCalls (ds : DatasetKind) (dataDir : String) (spec : NetS
     "    train_images, train_labels = load_imagenette(os.path.join(data_dir, \"train.bin\"))\n" ++
     "    test_images, test_labels = load_imagenette(os.path.join(data_dir, \"val.bin\"))\n" ++
     "    print(\"  \" + str(len(train_images)) + \" train, \" + str(len(test_images)) + \" val, " ++ imgDesc ++ "x3\")\n\n"
-  | .pets =>
+  | .detection =>
     -- Phase-3-only kind. Stub for exhaustivity.
-    "    raise RuntimeError(\"phase 2 doesn't emit a pets/segmentation trainer\")\n\n"
-  | .petsDet =>
-    -- Phase-3-only kind. Stub for exhaustivity.
-    "    raise RuntimeError(\"phase 2 doesn't emit a petsDet/detection trainer\")\n\n"
+    "    raise RuntimeError(\"phase 2 doesn't emit a detection trainer\")\n\n"
   | .imagenet =>
     -- Streaming: no upfront load. Just record the canonical example counts
     -- (tfds knows them too, but we don't need to round-trip through it for
@@ -3288,8 +3280,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
                                 | .mnist => "'mnist'"
                                 | .cifar10 => "'cifar10'"
                                 | .imagenette => "'imagenette'"
-                                | .pets => "'pets'"
-                                | .petsDet => "'pets_det'"
+                                | .detection => "'detection'"
                                 | .imagenet => "'imagenet'"
                                 | .brats => "'brats'"
                                 | .brats224 => "'brats224'") ++ ",\n" ++

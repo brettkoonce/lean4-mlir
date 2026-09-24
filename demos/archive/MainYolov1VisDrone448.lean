@@ -5,11 +5,11 @@ import LeanMlir
     The validation-ladder rung above the 224/7×7 baseline (planning/archive/yolo_drone.md
     WS-A, which collapsed to mAP 0.0000): change ONE thing — input resolution —
     and see whether it alone lifts detection off zero, before committing to the
-    multi-scale build. Same ResNet-34 backbone + deep conv head as the Pets
-    detector; at 448 the stride-32 backbone yields a 14×14 grid (196 cells vs 49),
+    multi-scale build. Same ResNet-34 backbone + deep conv head as the 224
+    baseline; at 448 the stride-32 backbone yields a 14×14 grid (196 cells vs 49),
     and a median VisDrone object grows from ~2×5 px to ~5×10 px — small, but
     visible to the backbone. Its own build prefix so it never collides with the
-    Pets checkpoints.
+    224 checkpoints.
 
     Usage:
       lake build yolov1-visdrone448
@@ -21,7 +21,7 @@ import LeanMlir
 -/
 
 def r34Yolov1_448 : NetSpec where
-  -- Identical architecture to the Pets r34Yolov1, at 448² input. Backbone
+  -- Identical architecture to the 224 r34Yolov1 baseline, at 448² input. Backbone
   -- strides 2·2·1·2·2·2 = 32 ⇒ 448/32 = 14 ⇒ head output [B,30,14,14],
   -- flatten [B,5880]. Distinct name ⇒ distinct buildPrefix ⇒ own vmfbs/ckpts.
   name := "ResNet-34 + YOLOv1 448 (VisDrone)"
@@ -125,4 +125,4 @@ def main (args : List String) : IO Unit := do
     let spec := if useDiou then r34Yolov1_448.withBuildTag "diou" else r34Yolov1_448
     let boxName := if useDiou then "DIoU" else "sqrt-MSE"
     IO.println s!"YOLOv1 VisDrone-448 (14×14) — data {dataDir} — box loss: {boxName}"
-    spec.train cfg dataDir DatasetKind.petsDet
+    spec.train cfg dataDir DatasetKind.detection

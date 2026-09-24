@@ -3,14 +3,12 @@ import LeanMlir.ReferenceNets
 
 /-! Forward-only smoke test for the new `unetDown` / `unetUp` codegen.
 
-Generates the forward MLIR for `unetPets` (depth 4, base 32, 224×224
-RGB → 3-class trimap), writes it to disk, runs iree-compile to produce
-a .vmfb, and exits 0 if iree-compile succeeded.
+Generates the forward MLIR and the segmentation train step for `unetBrats`
+(depth 4, base 32, 240×240 4-modality MRI → 4-class tumour), writes them to
+disk, runs iree-compile on each, and exits 0 if both compile.
 
-Only validates the **forward** path. Train-step backward (with
-skip-grad slots) is the next session.
-
-Usage: `IREE_BACKEND=rocm IREE_CHIP=gfx1100 lake exe test-unet-forward` -/
+Usage: `lake exe test-unet-forward` (`IREE_BACKEND` / `IREE_CHIP` pick the
+target; default cuda / sm_86) -/
 
 private def compileOne (label mlir mlirPath vmfbPath : String) : IO Unit := do
   IO.FS.writeFile mlirPath mlir
@@ -26,10 +24,10 @@ private def compileOne (label mlir mlirPath vmfbPath : String) : IO Unit := do
 
 def main : IO Unit := do
   IO.FS.createDirAll ".lake/build"
-  let fwd := MlirCodegen.generate ReferenceNets.unetPets 2
+  let fwd := MlirCodegen.generate ReferenceNets.unetBrats 2
   compileOne "forward" fwd
     ".lake/build/test_unet_forward.mlir" ".lake/build/test_unet_forward.vmfb"
-  let train := MlirCodegen.generateTrainStep ReferenceNets.unetPets 2 "jit_test_unet_train_step"
+  let train := MlirCodegen.generateTrainStep ReferenceNets.unetBrats 2 "jit_test_unet_train_step"
     (useAdam := true) (useSeg := true)
   compileOne "train-step" train
     ".lake/build/test_unet_train.mlir" ".lake/build/test_unet_train.vmfb"

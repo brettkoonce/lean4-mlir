@@ -1071,19 +1071,7 @@ lean_exe «vit-verified» where
   root := `apps.imagenette.MainViTVerified
   moreLinkArgs := lowererLink
 
--- ─── demos/archive/ — earlier demo generations (Pets, CIFAR DDPM, VisDrone v1) ───
-
-lean_exe «autoencoder-pets-train» where
-  root := `demos.archive.MainAutoencoderPetsTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «unet-pets-train» where
-  root := `demos.archive.MainUnetPetsTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «pets-predict» where
-  root := `demos.archive.MainPetsPredict
-  moreLinkArgs := lowererLink
+-- ─── demos/archive/ — earlier demo generations (CIFAR DDPM, VisDrone v1) ───
 
 lean_exe «cifar-ddpm-train» where
   root := `demos.archive.MainCifarDdpmTrain
@@ -1107,17 +1095,6 @@ lean_exe «cifar-ddpm-sincos-train» where
 
 lean_exe «cifar-ddpm-sincos-sample» where
   root := `demos.archive.MainCifarDdpmSincosSample
-  moreLinkArgs := lowererLink
-
--- YOLOv1 cat/dog head detector on Oxford-IIIT Pets (2×2 mosaic, R34 backbone
--- bootstrap, focal objectness). See planning/archive/yolo_final.md.
-lean_exe «yolov1-pets-train-bootstrap» where
-  root := `demos.archive.MainYolov1PetsTrainBootstrap
-  moreLinkArgs := lowererLink
-
--- Inference dump (logits + images + IDs) for scripts/yolo_render.py.
-lean_exe «yolov1-pets-infer» where
-  root := `demos.archive.MainYolov1PetsInfer
   moreLinkArgs := lowererLink
 
 -- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).

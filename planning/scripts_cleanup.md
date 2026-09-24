@@ -205,9 +205,17 @@ material is old lab work and is pruned, not archived.
   lockfile's version rather than PyPI's latest (path filters updated).
 * Every citation of a deleted script repointed or marked "in git history"; all surviving scripts
   `py_compile` / `bash -n` clean; manifest and target-name lints pass.
-* ⚠ Pets outside `scripts/` is untouched: five `demos/archive` exes in the lakefile
-  (`lakefile.lean:1074-1120`, one comment still names `yolo_render.py`), three
-  `demos/figures/*pets*.png`, five `historical/*pets*` preprocessors, and book mentions.
+* Pets removed everywhere (user: "that demo was cursed as well"): the five `demos/archive` exes and
+  sources, three figures, the five `historical/` Pets files, the two `RESULTS.md` sections, the
+  `.pets` dataset kind + `petsIO` + `loadPets` (Lean and C), the JAX codegen's `.pets` arms.
+  `.petsDet` was the canonical VisDrone/NEU-DET detection kind under a Pets name → renamed
+  `.detection` (`detectionIO`; the trace's dataset string is now "detection", nothing read
+  "pets_det"). `ReferenceNets.unetPets`/`autoencoderPets` → `ReferenceNets.unetBrats`, which the
+  BraTS trainer and predictor now share instead of carrying two "MUST match" copies; the UNet
+  forward test, Bestiary entry and param census moved with it (7,849,988 = Pets + 288 + 33).
+  Gates: `lake build Apps`, the tests, all 139 jax exes, `regen_jax_generated.sh check`, all 45
+  bestiary binaries (201 variants), `test-unet-forward` (both vmfbs compile on CUDA), the record-size
+  test (new VisDrone-224 row loads real data), target-name lint, `docstring-checkrefs`.
 
 ## 5. Unguarded generators
 

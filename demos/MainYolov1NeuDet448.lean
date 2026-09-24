@@ -160,4 +160,4 @@ def main (args : List String) : IO Unit := do
     let spec ← specFromEnv
     IO.println s!"YOLOv1 NEU-DET-448 (single 14×14 grid) — data {dataDir} — epochs {epochs} — box loss: sqrt-MSE"
     IO.println s!"  spec   : {spec.name}"
-    spec.train cfg dataDir DatasetKind.petsDet
+    spec.train cfg dataDir DatasetKind.detection

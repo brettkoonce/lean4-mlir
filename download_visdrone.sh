@@ -57,8 +57,8 @@ echo "Preprocessing to train.bin / val.bin ..."
 python3 "$REPO_ROOT/preprocess_visdrone.py" "$OUT" "$OUT"
 
 echo
-echo "Done. Train (single-grid YOLOv1 baseline, WS-A) with:"
-echo "  lake exe yolov1-pets-train-bootstrap data/visdrone"
+echo "Done. The detector demo (R34+FPN) needs the 448/FPN records next — see"
+echo "  demos/README.md: preprocess_visdrone.py ... data/visdrone_fpn --fpn data/visdrone"
 echo
 echo "The zips and extracted image trees are no longer needed once the .bin"
 echo "files exist; reclaim ~2 GB with:"

@@ -274,12 +274,12 @@ private structure DatasetIO where
   /-- Channels (1 for MNIST, 3 for CIFAR/Imagenette). -/
   channels : Nat
   /-- Bytes per label record. 4 for int32-class classification (default),
-      H*W for per-pixel segmentation masks (Pets: 224*224 = 50176). -/
+      H*W for per-pixel segmentation masks (BraTS: 240*240 = 57600). -/
   labelBytesPerRecord : Nat := 4
   /-- Named unions of raw classes to additionally report **Dice** for at
       eval. Empty (the default) for datasets whose raw classes are already
-      the entity the field reports — pets' trimap, where per-class IoU is
-      the whole story.
+      the entity the field reports, where per-class IoU is the whole
+      story.
 
       BraTS is the exception this exists for: the literature scores nested
       unions (WT/TC/ET), not the raw labels, and because the unions are
@@ -406,32 +406,16 @@ private def cifar10IO : DatasetIO where
   augmentBatch := fun raw batch seed =>
     F32.randomHFlip raw batch 3 32 32 seed.toUSize
 
-/-- Oxford-IIIT Pets: 224×224 RGB images with 224×224 per-pixel
-    masks (3-class trimap: 0=foreground, 1=background, 2=boundary).
-    No augmentation in Phase 0 of the UNet demo — mask-aware aug
-    is a follow-on. The "labels" buffer in this DatasetIO is the
-    mask buffer (224*224 bytes per record, not 4 bytes per record
-    like the classification datasets); downstream segmentation
-    code reads it as a per-pixel layout. -/
-private def petsIO : DatasetIO where
-  trainPixels := 3 * 224 * 224
-  valPixels   := 3 * 224 * 224
-  channels    := 3
-  labelBytesPerRecord := 224 * 224
-  loadTrain := fun dir => F32.loadPets (dir ++ "/train.bin")
-  loadVal   := fun dir => F32.loadPets (dir ++ "/val.bin")
-  augmentBatch := fun raw _ _ => return raw
-
 /-- BraTS brain-tumour segmentation (MSD Task01_BrainTumour), 2D axial
     slices. 240×240 images with 4 MRI modalities as channels (FLAIR / T1w /
     T1gd / T2w) and 240×240 per-pixel masks (4-class: 0=background, 1=edema,
-    2=non-enhancing tumour, 3=enhancing tumour). Like `petsIO`, the "labels"
+    2=non-enhancing tumour, 3=enhancing tumour). The "labels"
     buffer is the mask buffer (240*240 bytes per record), which is what puts
     `runTraining` on the `.perPixelCE` segmentation path.
 
     240 is the native BraTS in-plane size and 240 = 16*15, so a depth-4 UNet's
     four halvings divide evenly — no resize is needed anywhere in the pipeline.
-    Augmentation is identity for now (same starting point as the pets demo). -/
+    Augmentation is identity for now. -/
 private def bratsIO : DatasetIO where
   trainPixels := 4 * 240 * 240
   valPixels   := 4 * 240 * 240
@@ -450,13 +434,13 @@ private def bratsIO : DatasetIO where
   --   ET (enhancing tumour) = the surgical target, and the class that collapses
   segRegions := [("WT", [1, 2, 3]), ("TC", [2, 3]), ("ET", [3])]
 
-/-- YOLOv1 detection (Oxford-IIIT Pets). 224×224 RGB images; the "labels"
+/-- Box detection at 224/7×7 (the YOLOv1 record). 224×224 RGB images; the "labels"
     buffer carries the 30×7×7 float32 target tensor concatenated with the
     7×7 float32 per-cell objectness mask (6076 bytes per record). The
     `runTraining` dispatch splits this into target + mask before calling
-    `trainStepAdamF32Yolov1`. See `historical/preprocess_pets_mosaic.py` for the on-disk
+    `trainStepAdamF32Yolov1`. See `preprocess_visdrone.py` for the on-disk
     format and `planning/archive/yolo_final.md` for the recipe. -/
-private def petsDetIO : DatasetIO where
+private def detectionIO : DatasetIO where
   trainPixels := 3 * 224 * 224
   valPixels   := 3 * 224 * 224
   channels    := 3
@@ -485,8 +469,7 @@ private def datasetIO : DatasetKind → DatasetIO
   | .imagenette => imagenetteIO
   | .mnist      => mnistIO
   | .cifar10    => cifar10IO
-  | .pets       => petsIO
-  | .petsDet  => petsDetIO
+  | .detection  => detectionIO
   | .brats      => bratsIO
   | .brats224   => brats224IO
   | .imagenet   =>
@@ -510,13 +493,13 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let batch  : USize := cfg.batchSize.toUSize
   let dio0 := datasetIO ds
   -- Higher-resolution detection (VisDrone 448/14×14): the det DatasetIO is
-  -- hardcoded to 224/7×7 (Pets). When the spec runs at a larger input, override
+  -- hardcoded to 224/7×7. When the spec runs at a larger input, override
   -- the record geometry + loader to the dims-parameterized path so the same
-  -- .bin format works at any resolution. Pets (imageH=224) is left untouched.
+  -- .bin format works at any resolution. imageH = 224 is left untouched.
   -- FPN multi-scale total target width Σ_s Aₛ·15·g_s² (0 when not an FPN run).
   let fpnNtot : Nat := (cfg.fpnScales.map (fun sc => sc.2.length * 15 * sc.1 * sc.1)).foldl (·+·) 0
   let dio :=
-    if ds == .petsDet && !cfg.fpnScales.isEmpty then
+    if ds == .detection && !cfg.fpnScales.isEmpty then
       -- FPN mode (brick #3): the loader returns the flat [P3|P4|P5] target
       -- (ntot f32/record); mask derived from obj channels in the loss.
       { dio0 with
@@ -533,7 +516,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         augmentBatch := fun raw b seed =>
           F32.hsvJitter raw b 3 spec.imageH.toUSize spec.imageW.toUSize
             0.015 0.7 0.4 1 seed.toUSize }
-    else if ds == .petsDet && !cfg.anchors.isEmpty then
+    else if ds == .detection && !cfg.anchors.isEmpty then
       -- Anchor mode (brick #2): the loader returns TARGET-ONLY labels
       -- [A·15,gH,gW] (mask derived from target obj channels in the loss).
       let gH := spec.imageH / spec.detStride
@@ -545,7 +528,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         labelBytesPerRecord := A * 15 * gH * gW * 4
         loadTrain := fun d => F32.loadDetBinAnchor (d ++ "/train.bin") spec.imageH.toUSize gH.toUSize gW.toUSize A.toUSize
         loadVal   := fun d => F32.loadDetBinAnchor (d ++ "/val.bin") spec.imageH.toUSize gH.toUSize gW.toUSize A.toUSize }
-    else if ds == .petsDet && spec.imageH != 224 then
+    else if ds == .detection && spec.imageH != 224 then
       let gH := spec.imageH / spec.detStride
       let gW := spec.imageW / spec.detStride
       let imgSz := spec.imageH.toUSize
@@ -561,14 +544,14 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   -- Derive effective LossKind (planning/archive/yolo_final.md R1). Existing
   -- callers leave cfg.lossKind at the default .classCE and we infer from
   -- the older booleans + the dataset kind:
-  --   * petsDet + useYolov1   → yolov1Masked (target+mask f32 batch dispatch)
-  --   * label record != 4 bytes → perPixelCE  (segmentation; pets path)
+  --   * detection + useYolov1 → yolov1Masked (target+mask f32 batch dispatch)
+  --   * label record != 4 bytes → perPixelCE  (segmentation)
   --   * mixup/cutmix/knnMixup   → softLabelCE
   --   * else                    → classCE (with optional useFocal modifier)
   let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
   let lossKind : LossKind :=
     if cfg.lossKind != .classCE then cfg.lossKind
-    else if cfg.useYolov1 || ds matches .petsDet then .yolov1Masked
+    else if cfg.useYolov1 || ds matches .detection then .yolov1Masked
     else if dio.labelBytesPerRecord != 4 then .perPixelCE
     else if useSoftLabelsTop then .softLabelCE
     else .classCE
@@ -708,9 +691,8 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           | .mnist      => "mnist"
           | .cifar10    => "cifar10"
           | .imagenette => "imagenette"
-          | .pets       => "pets"
           | .imagenet   => "imagenet"
-          | .petsDet  => "pets_det"
+          | .detection  => "detection"
           | .brats      => "brats"
           | .brats224   => "brats224"
         let hdr :=
@@ -970,7 +952,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                     packed allShapes xAug xSh yTgtAug yMskAug lr globalStep.toFloat bnShapes batch
                     gHu gWu (30 : USize)
                 else if useSeg then do
-                  -- Pets `loadPets` returns uint8 masks; the seg train step
+                  -- `loadBrats` returns uint8 masks; the seg train step
                   -- expects int32 LE [B, H, W]. yArg here is the raw uint8
                   -- batch slice (sliceLabels with bytesPerRecord = H*W).
                   let yI32 ← F32.maskU8ToI32 yArg
@@ -1100,8 +1082,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
          --   |pr_R|  = Σ_{p∈R} Σ_g C[g][p]
          --   Dice_R  = 2·inter_R / (|gt_R| + |pr_R|)
          -- Counts stay exact `Nat` until the final divide. IoU is kept
-         -- alongside rather than replaced: it is what makes this demo
-         -- comparable to the pets one, while Dice is what makes it
+         -- alongside rather than replaced; Dice is what makes it
          -- comparable to the BraTS literature.
          let mut regionDices : Array Float := #[]
          for (name, cls) in dio.segRegions do
@@ -1330,7 +1311,7 @@ def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
   let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
   let lossKind : LossKind :=
     if cfg.lossKind != .classCE then cfg.lossKind
-    else if cfg.useYolov1 || ds matches .petsDet then .yolov1Masked
+    else if cfg.useYolov1 || ds matches .detection then .yolov1Masked
     else if (datasetIO ds).labelBytesPerRecord != 4 then .perPixelCE
     else if useSoftLabelsTop then .softLabelCE
     else .classCE

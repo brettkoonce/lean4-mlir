@@ -1,24 +1,23 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
+
+open ReferenceNets (unetBrats)
 
 /-! UNet on BraTS brain-tumour MRI (MSD Task01_BrainTumour), 2D axial slices.
 
-    The segmentation demo one rung up the ladder from `MainUnetPetsTrain`.
-    Same UNet, same skip codegen, same per-pixel CE — three things change,
-    and each one is the point:
+    The segmentation demo: a depth-4 UNet (`ReferenceNets.unetBrats`), the
+    skip codegen and per-pixel CE, on MRI rather than RGB. Three things make
+    it harder than an RGB segmentation task, and each one is the point:
 
     * **4 input channels, not 3.** The channels are co-registered MRI
       modalities (FLAIR / T1w / T1gd / T2w), not RGB. The tumour sub-regions
       are *defined* by which modalities light up: enhancing tumour is bright
       on T1gd, edema is bright on FLAIR. So the input is genuinely
-      multi-modal rather than three correlated views of one thing — the
-      `.unetDown 3 32` -> `.unetDown 4 32` edit is the whole architectural
-      diff.
+      multi-modal rather than three correlated views of one thing.
 
     * **4 output classes, and they are brutally imbalanced.** Enhancing
-      tumour is on the order of 1% of pixels. The pets demo already collapsed
-      its thin class (boundary IoU 0.000 at 3 epochs, RESULTS.md) and we
-      shrugged, because a trimap boundary is not what the demo was about.
-      Here the thin classes *are* the task, so a collapse would be
+      tumour is on the order of 1% of pixels, and the thin classes *are* the
+      task, so a collapse would be
       unignorable — which is why medical segmentation invented Dice.
 
       ⚠ Historical note, because this demo's original thesis was exactly the
@@ -135,24 +134,6 @@ def unetBratsClassWeightsBeta (beta : Float) : List Float :=
   let w0 := Float.exp (-beta * Float.log unetBratsClassPriors.head!)
   unetBratsClassPriors.map (fun p => Float.exp (-beta * Float.log p) / w0)
 
-def unetBrats : NetSpec where
-  name := "UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)"
-  imageH := 240
-  imageW := 240
-  layers := [
-    .unetDown 4   32,
-    .unetDown 32  64,
-    .unetDown 64  128,
-    .unetDown 128 256,
-    .convBn 256 512 3 1 .same,
-    .convBn 512 512 3 1 .same,
-    .unetUp 512 256,
-    .unetUp 256 128,
-    .unetUp 128 64,
-    .unetUp 64  32,
-    .conv2d 32 4 1 .same .identity
-  ]
-
 def unetBratsConfig : TrainConfig where
   learningRate := 0.001
   batchSize    := 16
@@ -201,8 +182,7 @@ def main (args : List String) : IO Unit := do
   let optionPrefixes : List String := ["g=", "b=", "lr=", "tag="]
   let positionals := args.filter (fun a =>
     !(optionWords.contains a || optionPrefixes.any (fun q => a.startsWith q)))
-  -- Epoch count: the first bare number. Default 3 is a smoke test, same
-  -- convention as unet-pets-train. mIoU + per-class IoU print EVERY epoch
+  -- Epoch count: the first bare number. Default 3 is a smoke test. mIoU + per-class IoU print EVERY epoch
   -- (`evalEveryNEpochs := 1` below) and at the end.
   let epochs := (positionals.findSome? String.toNat?).getD unetBratsConfig.epochs
   -- Data dir: the first non-numeric leftover.

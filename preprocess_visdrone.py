@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Pre-process VisDrone-DET2019 → the YOLOv1 detection .bin format.
 
-Produces the EXACT on-disk record format of historical/preprocess_pets_det.py
-(157,728 bytes/record, perCell=30, 224x224 image, 7x7 grid) so the existing
-Lean FFI loader and the YOLOv1 codegen work
-UNCHANGED. This is the WS-A baseline: the single-grid YOLOv1 detector run on
+Produces the YOLOv1 detection record (157,728 bytes/record, perCell=30, 224x224
+image, 7x7 grid) that `F32.loadDetBin` and the YOLOv1 codegen read. This is the WS-A baseline: the single-grid YOLOv1 detector run on
 VisDrone, where it is expected to collapse — 70 tiny objects per image cannot
 be resolved by a 7x7 grid at 224x224 (a median 20x25 px box shrinks to ~2x5 px
 after the resize, far below one 32 px cell). That collapse is the motivating
@@ -73,7 +71,7 @@ def parse_visdrone_txt(txt_path):
 
 
 def encode_targets(img_w, img_h, boxes):
-    """Same encoding as historical/preprocess_pets_det.py. One box per cell: a later box
+    """The YOLOv1 target encoding. One box per cell: a later box
     in the same cell overwrites an earlier one — the coarse-grid limitation that
     makes this the collapse baseline on VisDrone's density."""
     target = np.zeros((PER_CELL, GRID_H, GRID_W), dtype=np.float32)

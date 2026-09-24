@@ -275,8 +275,8 @@ def sliceImagesPad (images : ByteArray) (start count pixelsPerImage total : Nat)
 
 /-- Slice a batch of labels: `count` records of `bytesPerLabel` bytes
     each. Defaults to 4 (int32 LE) for classification. Per-pixel
-    segmentation masks pass `bytesPerLabel := H * W` (e.g. 224*224 = 50176
-    for Pets). Zero-copy. -/
+    segmentation masks pass `bytesPerLabel := H * W` (e.g. 240*240 = 57600
+    for BraTS). Zero-copy. -/
 def sliceLabels (labels : ByteArray) (start count : Nat) (bytesPerLabel : Nat := 4) : ByteArray :=
   labels.extract (start * bytesPerLabel) ((start + count) * bytesPerLabel)
 
@@ -307,13 +307,6 @@ opaque imagenetteGather (raw : @& ByteArray) (idx : @& ByteArray) (count : USize
 @[extern "lean_f32_imagenette_labels"]
 opaque imagenetteLabels (raw : @& ByteArray) (imgSize : USize) : IO ByteArray
 
-/-- Load Oxford-IIIT Pets binary file. Returns
-    (images f32 ByteArray, masks uint8 ByteArray, count).
-    Images are 224×224×3, channel-first, normalized with ImageNet mean/std.
-    Masks are 224×224 uint8 per-pixel class labels (0=fg, 1=bg, 2=boundary). -/
-@[extern "lean_f32_load_pets"]
-opaque loadPets (path : @& String) : IO (ByteArray × ByteArray × Nat)
-
 /-- Load a BraTS (MSD Task01_BrainTumour) binary file at the given in-plane
     size. Returns (images f32 ByteArray, masks uint8 ByteArray, count).
     Images are `imgSize`×`imgSize`×4 (FLAIR / T1w / T1gd / T2w), channel-first.
@@ -325,15 +318,15 @@ opaque loadPets (path : @& String) : IO (ByteArray × ByteArray × Nat)
 @[extern "lean_f32_load_brats"]
 opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArray × Nat)
 
-/-- YOLOv1 detection-bin loader (target+mask format; used by Pets). Returns `(images_f32_normalized,
+/-- YOLOv1 detection-bin loader (target+mask format, 224 input / 7×7 grid). Returns `(images_f32_normalized,
     yLabels_concat, count)` where `yLabels_concat` carries **7200** bytes
     per image: 30×7×7 float32 target (5880), then 7×7 float32 mask (196),
     then numBoxes (4), then raw_boxes 56×20 (1120) — the Phase 3b format,
-    matching `petsDetIO.labelBytesPerRecord`. (This docstring said 6076,
+    matching `detectionIO.labelBytesPerRecord`. (This docstring said 6076,
     the pre-Phase-3b target+mask size, long after the record grew the bbox
     tail; a stale stride in the docs is what this whole bug class feeds on.)
     The Lean dispatcher (`runTraining`) splits this into target + mask before
-    calling `trainStepAdamF32Yolov1`. See `historical/preprocess_pets_mosaic.py` for the
+    calling `trainStepAdamF32Yolov1`. See `preprocess_visdrone.py` for the
     on-disk format. -/
 @[extern "lean_f32_load_voc"]
 opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)
@@ -341,7 +334,7 @@ opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)
 /-- Dimension-parameterized detection-bin loader (same record format as
     `loadDetBin`, but for an arbitrary square input `imgSize` and grid
     `gridH`×`gridW`). Used for the higher-resolution VisDrone path (448 input /
-    14×14 grid); `loadDetBin` is the fixed 224/7×7 Pets path. -/
+    14×14 grid); `loadDetBin` is the fixed 224/7×7 path. -/
 @[extern "lean_f32_load_voc_dims"]
 opaque loadDetBinDims (path : @& String) (imgSize gridH gridW : USize)
     : IO (ByteArray × ByteArray × Nat)
@@ -372,7 +365,7 @@ opaque loadDetBinFpn (path : @& String) (imgSize ntot : USize)
     Returns `(target_concat, mask_concat)` sized `batch * perCell*gH*gW*4` and
     `batch * gH*gW*4`.
 
-    **Pass the caller's real grid.** This used to hardcode the Pets 7×7 record
+    **Pass the caller's real grid.** This used to hardcode the 224/7×7 record
     (7200 bytes/record) while the caller sliced at `dio.labelBytesPerRecord` —
     25428 at VisDrone-448/14×14. Reading at the wrong stride pairs each image
     with a target lifted out of a different record, which nothing downstream can
@@ -472,7 +465,7 @@ opaque fpnAffine (images target : @& ByteArray)
     : IO (ByteArray × ByteArray)
 
 /-- Convert a uint8 mask ByteArray (one byte per pixel) into a little-endian
-    int32 ByteArray of 4× the size. Pets `loadPets` returns masks as packed
+    int32 ByteArray of 4× the size. `loadBrats` returns masks as packed
     uint8; `trainStepAdamF32Seg` expects int32 per-pixel class labels. -/
 @[extern "lean_f32_mask_u8_to_i32"]
 opaque maskU8ToI32 (mask : @& ByteArray) : IO ByteArray

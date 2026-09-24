@@ -1,4 +1,7 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
+
+open ReferenceNets (unetBrats)
 
 /-! Render predictions from a trained BraTS segmentation checkpoint.
 
@@ -13,7 +16,7 @@ import LeanMlir
 
         T1gd | T1gd + ground truth | T1gd + prediction
 
-    Three things differ from the pets renderer, each because MRI is not RGB:
+    Three things differ from an RGB mask renderer, each because MRI is not RGB:
 
     * **The backdrop is one modality, not the input.** The input has four
       co-registered modalities (FLAIR / T1w / T1gd / T2w) and there is no
@@ -51,29 +54,9 @@ import LeanMlir
     outside `.lake/build` (a copy saved aside, a file from another box).
 -/
 
-/-- MUST match `demos/MainUnetBratsTrain.lean` exactly, name string included:
+/-- MUST match `demos/MainUnetBratsR34.lean` exactly, name string included:
     `buildPrefix` is derived from `spec.name`, so a single edited character
-    here points this renderer at a checkpoint that does not exist. -/
-def unetBrats : NetSpec where
-  name := "UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)"
-  imageH := 240
-  imageW := 240
-  layers := [
-    .unetDown 4   32,
-    .unetDown 32  64,
-    .unetDown 64  128,
-    .unetDown 128 256,
-    .convBn 256 512 3 1 .same,
-    .convBn 512 512 3 1 .same,
-    .unetUp 512 256,
-    .unetUp 256 128,
-    .unetUp 128 64,
-    .unetUp 64  32,
-    .conv2d 32 4 1 .same .identity
-  ]
-
-/-- MUST match `demos/MainUnetBratsR34.lean` exactly, name string included —
-    same rule and same reason as `unetBrats` above.
+    here points this renderer at a checkpoint that does not exist.
 
     Selected with `net=r34`. It renders through the rest of this file
     unchanged: it keeps all four modalities, so the brain mask and the T1gd

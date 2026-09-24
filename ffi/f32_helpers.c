@@ -315,72 +315,16 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj,
     return load_imagenette_sized(lean_string_cstr(path_obj), img_size);
 }
 
-// ---- Pets (Oxford-IIIT) loader ----
-// Binary format per record:
-//   image: 3 * 224 * 224 bytes (channel-first RGB, uint8)
-//   mask:  224 * 224     bytes (per-pixel class 0/1/2)
-// Total per record: 200,704 bytes.
-//
-// Returns (image_f32_normalized, mask_uint8, count) as a 3-tuple.
-// Image is normalized with ImageNet mean/std for transfer-learning consistency
-// with the rest of the project; the mask is left as raw uint8 (one byte per
-// pixel) so downstream code can treat it as integer per-pixel class labels.
-LEAN_EXPORT lean_obj_res lean_f32_load_pets(b_lean_obj_arg path_obj, lean_obj_arg w) {
-    (void)w;
-    const char* path = lean_string_cstr(path_obj);
-    FILE* f = fopen(path, "rb");
-    if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open pets file")));
-    uint32_t file_count;
-    if (fread(&file_count, 4, 1, f) != 1) { fclose(f);
-        return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("bad header"))); }
-    uint32_t count = file_count;
-    const size_t img_size = 224;
-    const size_t pix = 3 * img_size * img_size;          // 150,528
-    const size_t mask_pix = img_size * img_size;         // 50,176
-    size_t img_bytes  = (size_t)count * pix * 4;         // f32 image buffer
-    size_t mask_bytes = (size_t)count * mask_pix;        // uint8 mask buffer
-    lean_object* img_ba  = lean_alloc_sarray(1, img_bytes,  img_bytes);
-    lean_object* mask_ba = lean_alloc_sarray(1, mask_bytes, mask_bytes);
-    float*   img  = (float*)lean_sarray_cptr(img_ba);
-    uint8_t* mask = lean_sarray_cptr(mask_ba);
-    const float mean[3] = {0.485f, 0.456f, 0.406f};
-    const float istd[3] = {1.0f/0.229f, 1.0f/0.224f, 1.0f/0.225f};
-    uint8_t* buf = (uint8_t*)malloc(pix + mask_pix);
-    for (uint32_t i = 0; i < count; i++) {
-        if (fread(buf, 1, pix + mask_pix, f) != pix + mask_pix) { free(buf); fclose(f);
-            return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("short read"))); }
-        // Normalize image into f32 buffer
-        float* dst = img + (size_t)i * pix;
-        size_t hw = img_size * img_size;
-        for (int ch = 0; ch < 3; ch++) {
-            float m = mean[ch], s = istd[ch];
-            for (size_t j = 0; j < hw; j++)
-                dst[ch*hw+j] = (buf[ch*hw+j]/255.0f - m) * s;
-        }
-        // Mask is already uint8 0/1/2; copy directly
-        memcpy(mask + (size_t)i * mask_pix, buf + pix, mask_pix);
-    }
-    free(buf); fclose(f);
-
-    lean_object* inner_pair = lean_alloc_ctor(0, 2, 0);
-    lean_ctor_set(inner_pair, 0, mask_ba);
-    lean_ctor_set(inner_pair, 1, lean_usize_to_nat((size_t)count));
-    lean_object* outer = lean_alloc_ctor(0, 2, 0);
-    lean_ctor_set(outer, 0, img_ba);
-    lean_ctor_set(outer, 1, inner_pair);
-    return lean_io_result_mk_ok(outer);
-}
-
 // ---- BraTS (MSD Task01_BrainTumour) loader ----
 // Binary format per record (written by preprocess_brats.py):
 //   image: 4 * S * S bytes (channel-first [modality][y][x], uint8)
 //   mask:  S * S     bytes (per-pixel class 0..3)
 // At the default S=240: 288,000 bytes/record.
 //
-// Returns (image_f32_dequantized, mask_uint8, count) as a 3-tuple — the same
-// shape as lean_f32_load_pets, so the segmentation train path is unchanged.
+// Returns (image_f32_dequantized, mask_uint8, count) as a 3-tuple, the shape the
+// segmentation train path expects.
 //
-// Unlike the pets loader, this does NOT apply ImageNet mean/std. MRI is not
+// Unlike the RGB loaders, this does NOT apply ImageNet mean/std. MRI is not
 // RGB and has no such statistics. preprocess_brats.py z-scores each modality
 // over that volume's brain (nonzero) voxels and quantizes the result to uint8
 // over a +/-BRATS_CLIP_SIGMA window; here we invert exactly that, so the model
@@ -450,8 +394,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img
 // Returns (image_f32_normalized, ylabels_concat, count) where
 // ylabels_concat lays out target ++ mask ++ numBoxes ++ raw_boxes per
 // record (7,200 bytes/record). The Lean dispatcher splits this at
-// training time. Image is ImageNet-normalized as in load_imagenette/
-// load_pets. See planning/archive/yolo_demo_v2.md Phase 1 + yolo_demo_v3.md (folded into planning/archive/yolo_final.md at a0a33a3)
+// training time. Image is ImageNet-normalized as in load_imagenette. See planning/archive/yolo_demo_v2.md Phase 1 + yolo_demo_v3.md (folded into planning/archive/yolo_final.md at a0a33a3)
 // Phase 2-3.
 LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg w) {
     (void)w;
@@ -1058,7 +1001,7 @@ LEAN_EXPORT lean_obj_res lean_f32_yolo_hflip(
 // yoloAugment when you need the bbox tail.
 //
 // The geometry is PARAMETERIZED and must not go back to literals. It used to
-// hardcode the Pets 7x7 record (7200 bytes) while its caller sliced records at
+// hardcode the 224/7x7 record (7200 bytes) while its caller sliced records at
 // `dio.labelBytesPerRecord`, which is 25428 at VisDrone-448/14x14 and 98340 at
 // 28x28. Reading record i at a 7200 stride out of a 25428-stride buffer pairs
 // image i with a target taken from the middle of a different image's record --
@@ -1626,7 +1569,7 @@ LEAN_EXPORT lean_obj_res lean_f32_ids_to_floats(
 }
 
 // ---- uint8 mask → int32 LE mask ByteArray ----
-// Pets `loadPets` returns per-pixel class labels packed as one byte per pixel.
+// `loadBrats` returns per-pixel class labels packed as one byte per pixel.
 // `trainStepAdamF32Seg` expects an int32 LE buffer (one 4-byte little-endian
 // signed int per pixel, matching the classification label convention used
 // elsewhere in the project). Output buffer is exactly 4× the input size.

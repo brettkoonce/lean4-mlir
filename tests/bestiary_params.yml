@@ -206,8 +206,7 @@ bestiary-unet:
   "UNet (original, grayscale → 2-class)": 31383746
   "UNet (RGB → 10-class)": 31385418
   "UNet (small, depth 3)": 1948355
-  "UNet (Pets, 224×224 RGB → 3-class trimap)": 7849667
-  "Autoencoder (Pets, 224×224 RGB → 3-class trimap, skipless)": 5498627
+  "UNet (BraTS, 240×240 4-modality MRI → 4-class tumour)": 7849988
   "tiny-UNet (depth 2)": 118593
 bestiary-vae:
   "MNIST VAE encoder (MLP, 20-dim latent)": 330040

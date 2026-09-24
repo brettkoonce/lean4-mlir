@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """mAP@0.5 scorer for the VisDrone single-grid YOLOv1 baseline (WS-A, planning/archive/yolo_drone.md).
 
-Reads a whole-val-set logits dump (from `yolov1-pets-infer 0 data/visdrone <out>`)
-plus the matching VisDrone detection-record `val.bin` (produced by
-preprocess_visdrone.py — the SAME 157,728-byte record layout as the Pets path,
-so the Lean loader/codegen are unchanged) and reports:
+Reads a whole-val-set logits dump (from a detector's `infer` mode, e.g.
+`yolov1-visdrone-fpn infer`) plus the matching VisDrone detection-record `val.bin`
+(produced by preprocess_visdrone.py) and reports:
 
   * a CLASS-AGNOSTIC localization AP@0.5 — "did the detector box *anything* in
     the right place, regardless of label", the honest floor for the collapse story;
   * per-class AP@0.5 + mAP over the 10 VisDrone classes.
 
-Started as a copy of the Pets-era yolo_map.py (deleted) with the 10-class VisDrone
-name map (ids 0..9, matching preprocess_visdrone.py) and an extra class-agnostic
-row; it has since grown the FPN decode and the NEU-DET class table. The decode is identical: rank by sigmoid(conf logit), class from argmax of
-the class slots, per-class greedy NMS.
+The 10-class VisDrone name map (ids 0..9, matching preprocess_visdrone.py), an
+extra class-agnostic row, the FPN decode and the NEU-DET class table. The decode:
+rank by sigmoid(conf logit), class from argmax of the class slots, per-class
+greedy NMS.
 
 The single 7x7 grid emits at most ONE box per cell (<=49 detections/image after
 NMS) against VisDrone's ~70 GT boxes/image — recall is structurally capped well
@@ -358,7 +357,7 @@ def average_precision(confs, tps, n_gt):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("logits", help="logits.bin dump ([N,1470] f32) from yolov1-pets-infer")
+    ap.add_argument("logits", help="logits.bin dump from a detector's infer mode")
     ap.add_argument("val_bin", help="data/visdrone/val.bin")
     ap.add_argument("--iou", type=float, default=0.5, help="TP IoU threshold (default 0.5)")
     ap.add_argument("--nms-iou", type=float, default=0.5)

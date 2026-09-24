@@ -19,10 +19,10 @@ the cheap differential reference the host data path otherwise lacks: it compares
 the *declared* layout against the *loaded* layout, which no proof obligation,
 `iree-compile` run or FD probe can see.
 
-Note the two label conventions this pins, which are easy to conflate: pets and
-BraTS masks are **uint8**, one byte per pixel, so `224 * 224` and `240 * 240`
-are byte counts and correctly have no `* 4`. Every detection target is **f32**,
-so those spell out `... * 4`.
+Note the two label conventions this pins, which are easy to conflate: BraTS
+masks are **uint8**, one byte per pixel, so `240 * 240` is a byte count and
+correctly has no `* 4`. Every detection target is **f32**, so those spell out
+`... * 4`.
 
 Datasets that are absent are skipped, not failed — this cannot run in CI, it is
 a pre-flight check to run whenever a dataset or its preprocessing changes.
@@ -92,16 +92,13 @@ def main : IO UInt32 := do
         let imgs ← F32.cifarBatch raw 0 n.toUSize
         return (imgs, labels, n) },
     -- Segmentation: uint8 mask, ONE byte per pixel (hence no `* 4`).
-    { name := "pets seg (val)", path := "data/pets/val.bin"
-      pixels := 3 * 224 * 224, labelBytes := 224 * 224
-      load := F32.loadPets "data/pets/val.bin" },
     { name := "brats (val)", path := "data/brats/val.bin"
       pixels := 4 * 240 * 240, labelBytes := 240 * 240
       load := F32.loadBrats "data/brats/val.bin" 240 },
     -- Detection: f32 target tensors.
-    { name := "pets det yolov1 (val)", path := "data/pets_det/val.bin"
+    { name := "visdrone yolov1 224 (val)", path := "data/visdrone/val.bin"
       pixels := 3 * 224 * 224, labelBytes := 30 * 7 * 7 * 4 + 7 * 7 * 4 + 4 + 56 * 20
-      load := F32.loadDetBin "data/pets_det/val.bin" },
+      load := F32.loadDetBin "data/visdrone/val.bin" },
     { name := "visdrone fpn (overfit-8)", path := "data/visdrone_fpn_of8/train.bin"
       pixels := 3 * 448 * 448, labelBytes := 185220 * 4
       load := F32.loadDetBinFpn "data/visdrone_fpn_of8/train.bin" 448 185220 },

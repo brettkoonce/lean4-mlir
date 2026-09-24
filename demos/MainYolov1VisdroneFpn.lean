@@ -476,6 +476,6 @@ weights (FPN_CLSW=none|sqrt|inv), class focal γ={clsGam}"
 (box-aware, target re-encoded)"
     else
       IO.println s!"  affine : off (FPN_AFFINE=<percent> to enable)"
-    spec.train cfg dataDir DatasetKind.petsDet
+    spec.train cfg dataDir DatasetKind.detection
 
 def main (args : List String) : IO Unit := runYolov1VisdroneFpn args

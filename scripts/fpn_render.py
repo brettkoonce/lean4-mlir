@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Draw the FPN detector's predictions over VisDrone val images.
 
-The Pets-era `yolo_render.py` (deleted) could not read this head: it assumes a single
+A single-grid renderer cannot read this head: it would assume a single
 7x7 grid and a 1470-wide output, where the multi-scale head emits 185,220 across
 P3/P4/P5 with 3 anchors per scale. Rather than reimplement the decode (and risk a
 picture that disagrees with the metric), this imports `decode_fpn` from

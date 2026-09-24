@@ -106,4 +106,4 @@ def main (args : List String) : IO Unit := do
   | _ =>
     let dataDir := args.head?.getD "data/visdrone448_a6"
     IO.println s!"YOLO anchor A6 VisDrone (14×14, 6 anchors) — data dir: {dataDir}"
-    r34Yolov1Anchor.train r34Yolov1AnchorConfig dataDir DatasetKind.petsDet
+    r34Yolov1Anchor.train r34Yolov1AnchorConfig dataDir DatasetKind.detection

@@ -41,7 +41,7 @@ would silently ruin the numbers if done the obvious way instead:
 
 Storage note: images are stored as uint8, quantizing the z-scored value
 over a +/-5 sigma window (step ~0.039 sigma). This matches the on-disk
-convention of every other dataset in the repo (pets/imagenette/cifar all
+convention of every other dataset in the repo (imagenette/cifar/visdrone all
 store uint8 and normalize in the C loader) and keeps train.bin 4x smaller
 than f32. The quantization step is far below the tissue contrasts that
 define tumour boundaries. `lean_f32_load_brats` inverts it on load.

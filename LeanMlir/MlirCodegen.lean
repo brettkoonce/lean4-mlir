@@ -2206,7 +2206,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
   -- UNet skip stack: each `unetDown` pushes the (preMaxPoolSSA, preMaxPoolShape)
   -- of its second convBn output; each `unetUp` pops the most-recent one to
   -- concat with its upsampled feature. Pairing is LIFO — i-th unetUp from the
-  -- bottom matches i-th unetDown from the top, which is what unetPets / unet
+  -- bottom matches i-th unetDown from the top, which is what unetBrats / unet
   -- assume.
   let mut skipStack : List (String × List Nat) := []
   -- FPN detector taps: each residualBlock stage output (SSA, shape); a trailing

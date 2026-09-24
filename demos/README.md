@@ -821,11 +821,6 @@ demos/
 │   └── MainInspectConvNeXt.lean           #   checkpoint diagnostics
 │
 └── archive/                               # superseded; kept building, not maintained
-    ├── MainUnetPetsTrain.lean             #   UNet on Pets, superseded by BraTS
-    ├── MainAutoencoderPetsTrain.lean      #   autoencoder baseline (no skips)
-    ├── MainPetsPredict.lean               #   Pets mask rendering
-    ├── MainYolov1PetsTrainBootstrap.lean  #   YOLOv1 on Pets, superseded by VisDrone
-    ├── MainYolov1PetsInfer.lean           #   Pets detection dump
     ├── MainYolov1VisDrone448.lean         #   single-scale VisDrone arms, superseded
     ├── MainYolov1VisDrone448S16.lean      #     by the FPN detector
     ├── MainYolov1VisDroneAnchor.lean      #
