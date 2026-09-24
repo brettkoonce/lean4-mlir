@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The gravitational-wave demo's figure — planning/gw_detection_demo.md §7, grown from
-scripts/mock_gw_figure.py, whose numbers were the closed form and whose CNN was a
+the deleted scripts/mock_gw_figure.py, whose numbers were the closed form and whose CNN was a
 placeholder; every curve here is measured.
 
   (a) a whitened 2-s H1 window from the val set with its injected chirp overlaid

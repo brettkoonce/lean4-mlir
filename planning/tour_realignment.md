@@ -112,7 +112,7 @@ landed:
 * **The box lost two cards the same day.** The two PCIe-AER cards (old idx 1 and 5) were pulled;
   `nvidia-smi` shows four 4060 Ti at 0–3 and zero AER lines this boot. Every live device list
   moved from `0,2,3,4` to `0,1,2,3`: 13 job confs, `supervise.sh`'s note, `seed_sweep.sh`
-  (default GPUs, timings), `bf16_probe_4gpu.sh`, `queue_r50_a3_pair.sh`, `tests/prefetch_tie.sh`,
+  (default GPUs, timings), `bf16_probe_4gpu.sh`, `queue_r50_a3_pair.sh` (both deleted 2026-09-24), `tests/prefetch_tie.sh`,
   21 `jax/scripts/supervise_*.sh`, `historical/CUDA.md`, `jax/README.md`, three trainer docstrings and the
   shard-tie test's. The AER watchdogs stay as insurance. ⚠ Bus 62 is still in the box and the
   old notes named bus 02 + bus 62 as the bad pair — worth knowing which two came out. The

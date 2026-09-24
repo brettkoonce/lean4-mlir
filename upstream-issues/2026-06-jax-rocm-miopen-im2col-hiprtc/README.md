@@ -252,6 +252,9 @@ rm -rf ~/.cache/miopen && mv ~/.cache/miopen.aside ~/.cache/miopen
 
 ## The Bench (feature context)
 
+⚠ Both bench scripts below were deleted from `scripts/` on 2026-09-24 with the rest of the
+ROCm-era probes; they are in git history before that date.
+
 - **UNCOMMITTED:** `scripts/jax_imagenet_bench.py` — JAX/ImageNet training-time ETA, the
   per-chapter "sample" idea (like `lake run benchmark`) for the phase-2 (Lean→JAX) ImageNet
   path. Synthetic input (no dataset on disk), bf16, multi-GPU via `jax.device_count()` +

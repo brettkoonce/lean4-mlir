@@ -5,9 +5,9 @@
 #     scripts/bf16_probe_3060.sh /tmp/probe.tsv r34 vit    # just those nets
 #     WORKERS=12 ARMS=fed NETS=vit scripts/bf16_probe_3060.sh /tmp/sweep.tsv    # the §1c sweep
 #
-# ⛔ WHY THIS EXISTS AND WHY IT IS NOT `bf16_probe_4gpu.sh`. That script is ares': it pins
-# `CUDA_VISIBLE_DEVICES=0,2,3,4` (cards this box does not have) and the `xla_cuda12` plugin, so it
-# cannot run here at all. It is left untouched so ares' committed numbers keep their provenance.
+# ⛔ WHY THIS EXISTS AND WHY IT REPLACED `bf16_probe_4gpu.sh` (deleted 2026-09-24; in git history
+# for the provenance of ares' committed numbers). That script pinned `CUDA_VISIBLE_DEVICES=0,2,3,4`
+# and the `xla_cuda12` plugin only.
 #
 # ⛔⛔ AND ITS NUMBERS ARE WRONG EVEN ON ARES. `LEAN_MLIR_MAX_STEPS=40` with the probe clock
 # starting at step 8 measures a window that is roughly half BURST: `SHIM PREFETCH` holds one read

@@ -35,6 +35,7 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 import numpy as np
 
@@ -42,15 +43,14 @@ EXE = "./.lake/build/bin/unet-brats-r34"
 NOSKIP = False
 TAGSUF = ""
 DATA = "data/brats224_overfit"
-SCRATCH = "/tmp/claude-1000/-home-skoonce-lean-proof-verify-demo-verify-v2/fd"
+SCRATCH = tempfile.mkdtemp(prefix="brats_r34_fd_")
 # Encoder = 4-ch stem + the R34 body. Everything after is decoder/head.
 ENCODER_FLOATS = (64 * 4 * 49 + 64 + 64) + (21284672 - (64 * 3 * 49 + 64 + 64))
 
 
 def run(tag, lr, init_load=None, init_dump=None):
     env = dict(os.environ)
-    env["IREE_BACKEND"] = "rocm"
-    env["HIP_VISIBLE_DEVICES"] = "0"
+    env.setdefault("CUDA_VISIBLE_DEVICES", "0")
     if init_load:
         env["LEAN_MLIR_INIT_LOAD"] = init_load
     else:

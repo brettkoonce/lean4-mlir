@@ -173,7 +173,7 @@ A("  (via the explicit Jacobian entry `pdiv = " + f"{pv}" + " ≈ " + f"{float(p
 A("* `trainedMlp_jacobian_nonzero` / `trainedMlp_not_constant`: the `fderiv` forms.")
 A("")
 A("Weights/input are imported from `LipschitzCertInstance` (generator:")
-A("`scripts/lipschitz_cert_rationalize.py`); the dense convention is transposed")
+A("`historical/lipschitz_cert_rationalize.py`); the dense convention is transposed")
 A("(`Mat` is input×output) and biases are zero. -/")
 A("")
 A("namespace Proofs")

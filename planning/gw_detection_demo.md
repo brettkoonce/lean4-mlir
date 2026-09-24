@@ -8,7 +8,7 @@ Müller-Brown's is quadrature — and then run it over the public catalogue and
 print which events it finds.
 
 Mock of the figure, computed from the physics alone on 2026-09-11:
-`scripts/mock_gw_figure.py` (an analytic aLIGO noise curve, a Newtonian chirp
+`scripts/mock_gw_figure.py` (deleted 2026-09-24, in git history; an analytic aLIGO noise curve, a Newtonian chirp
 whitened by it, the Marcum-Q detection curve). The CNN curve in it is a
 placeholder drawn one SNR unit below the theorem; the trained model's gap to
 the theorem is this demo's headline.
@@ -223,6 +223,11 @@ nobody has measured retrain variance yet. P_fa is 10⁻² not 10⁻³ because
 the val split has ~8k noise-only windows and 10⁻³ is its 8th-largest value;
 the scorer takes `--pfa` and both are reported.
 
+Across arms, `scripts/gw_compare.py` reads each run directory's `table_val.json` and prints one
+SNR-at-P_d = ½ table: every net trained on Gaussian and on real noise, each scored on both val
+sets, closed by the PyCBC coherent search —
+`.venv-gw/bin/python scripts/gw_compare.py "B0 3ep=runs/<gauss>:runs/<real>:7.1M" ...`.
+
 ## 6. The physics claims, in order of cost
 
 **6.1 The theorem, reproduced (Phase 1, CPU).** PyCBC's matched filter with
@@ -390,5 +395,5 @@ a phase); glitch CLASSIFICATION as a demo (Gravity Spy is a row here).
 - The 60 Hz line and its harmonics survive an imperfect PSD estimate as
   horizontal streaks in the spectrogram; the median-normalised display in
   the mock removes them, and so should the preprocess.
-- `scripts/mock_gw_figure.py` is the template for `gw_figure.py`; its
-  numbers are the closed form, not results.
+- `scripts/mock_gw_figure.py` was the template for `gw_figure.py` (deleted 2026-09-24); its
+  numbers were the closed form, not results.

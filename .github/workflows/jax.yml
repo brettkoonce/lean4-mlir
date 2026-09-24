@@ -41,6 +41,7 @@ on:
       - 'verified_mlir/**'
       - 'scripts/convention_audit.py'
       - 'scripts/convention_baseline.txt'
+      - 'scripts/check_pinned_env.py'
       # The one-step optimizer tie reads BOTH sides: the renderer that emits the optimizer stage
       # and the harness that diffs it. ⚠ `ResNet34RenderB.lean` is where `optOne`/`optAllParams`
       # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
@@ -71,6 +72,7 @@ on:
       - 'verified_mlir/**'
       - 'scripts/convention_audit.py'
       - 'scripts/convention_baseline.txt'
+      - 'scripts/check_pinned_env.py'
       # The one-step optimizer tie reads BOTH sides: the renderer that emits the optimizer stage
       # and the harness that diffs it. ⚠ `ResNet34RenderB.lean` is where `optOne`/`optAllParams`
       # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
@@ -340,8 +342,13 @@ jobs:
             lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
             lake-jax-
 
-      - name: Install jax (CPU)
-        run: python3 -m pip install --quiet "jax[cpu]"
+      - name: Install jax (CPU, the lockfile's version)
+        # The audit runs each reference's forward() under THIS jax, so it is the trainers' jax:
+        # the version jax/requirements-cuda-lock.txt pins, not whatever PyPI serves today.
+        run: python3 -m pip install --quiet "jax[cpu]==$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)"
+
+      - name: Pinned env (jax version only — the cuDNN half needs the GPU box)
+        run: python3 scripts/check_pinned_env.py --allow-cpu
 
       - name: Emit the generated references
         # ⚠ `runJax` WRITES the .py and then spawns python to train it. There is no emit-only flag,

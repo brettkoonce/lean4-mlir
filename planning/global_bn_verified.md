@@ -879,7 +879,7 @@ Logs: `runs/2026-09-21-syncbn-r50-mnv4/`.
 `LeanMlir/SyncBnCheck.lean`, `tests/TestImagenetSyncBnCheck.lean`, `tests/TestShardCheck.lean`,
 `tests/TestMnv4DpCheck.lean`, `tests/TestR50AccumShardTie.lean`, `tests/TestR50GradCheck.lean`,
 `tests/TestDropShardCheck.lean`, `tests/r50_dp_render_tie.py`, `scripts/regen_verified_mlir.sh`,
-`scripts/check_render_coverage.py`, `scripts/bf16_probe_4gpu.sh`, `scripts/gen_comparator_tier.py`
+`scripts/check_render_coverage.py`, `scripts/bf16_probe_4gpu.sh` (since deleted), `scripts/gen_comparator_tier.py`
 + the three regenerated `tests/comparator/*Tier*`, `tests/AuditAxioms.lean`, `formalization.yaml`,
 `lakefile.lean`, the two T2 docstrings (`ResNet50FullB`, `MobileNetV4FullB`),
 `apps/imagenette/MainMobilenetV4Imagenet.lean`, and this doc.

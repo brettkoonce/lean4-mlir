@@ -16,8 +16,7 @@ TinyGPT book entry was rewritten the same day (`3c8c5dce`) on a fresh run; this 
   `demos/README.md`, and the front-door README quote these now.
 * **Still stale, deliberately left:** `historical/RESULTS.md:58,87` ("CUDA / IREE", "IREE
   pipeline") — historical by policy; `planning/tour_realignment.md:48,166` (1.45 nats/char);
-  `scripts/run_tinystories_8k.sh` is an IREE-era launcher (`IREE_BACKEND=cuda`, `iree-compile`)
-  for a cloud A100; `LeanMlir/Train.lean` prints "Compiling vmfbs..." on XLA (a code string).
+  `LeanMlir/Train.lean` prints "Compiling vmfbs..." on XLA (a code string).
 
 ## §1 Bugs (fix these first; each is small)
 
@@ -29,7 +28,7 @@ TinyGPT book entry was rewritten the same day (`3c8c5dce`) on a fresh run; this 
 2. **TinyStories never stops on the EOT token.** `historical/preprocess_tinystories.py:100` writes `eot_id`
    to `meta.txt` "so the sampler can stop on it"; `MainTinyStories.lean:215-256` never reads it.
 3. **No `PJRT_FFI_RESIDENT=1` / `SHIM_WORKERS` on any LM run line** (docstrings :30-33 / :25-27,
-   `run_tinystories_8k.sh`). Off by default (`ffi/pjrt_ffi.c:284`); TinyStories at 2.7 s/step is
+   and §5's 8K run line). Off by default (`ffi/pjrt_ffi.c:284`); TinyStories at 2.7 s/step is
    host-bound, the exact profile residency fixes. Add to the run lines and re-measure.
 4. **`gradClipNorm` 0 and no dropout** (`MainTinyGptShakespeare.lean:133-141`,
    `MainTinyStories.lean:74-83`) while `tiny` overfits from step ~3500 (`RESULTS.md:65`). Dropout
@@ -44,7 +43,7 @@ TinyGPT book entry was rewritten the same day (`3c8c5dce`) on a fresh run; this 
 | verified-render tier | attention/LN hand-rolled; `Proofs/Nets/ViT/*` (`mhsa_has_vjp_mat`, `layerNormVec_has_vjp`, `transformerBlockV_has_vjp_mat`) unused; causal mask has no proven analogue; `content.tex`'s "same VJP machinery" is loose | very high (a project) |
 | JAX twin | none (`jax/` has no GPT; `Jax/Codegen.lean` hardcodes NCHW). The gather path's only validation is a loss-sequence tie against the one-hot path — good but self-referential | medium |
 | `runs/` dir | ✅ nano since 2026-09-09; none for `tiny` or TinyStories | low + GPU |
-| CI | not in any workflow; `scripts/rope_test.sh` is the closest gate | medium |
+| CI | not in any workflow; §5's RoPE extrapolation check is the closest gate | medium |
 | data pipeline docs | the `.venv-tokenizers` requirement is recorded only in `demo_xla_port.md:288`; `download_tinystories.sh` guards on file existence so a truncated 1.9 GB download passes forever | low |
 
 Post-v2 additions (flash attention, RoPE, no-pos, the 8K config) exist only as configs
@@ -63,3 +62,24 @@ verbatim panel — data already in `blueprint/src/figures/tinygpt/` (five orphan
 
 §1.1 → §1.2 → §1.3 (one commit, re-run nano + tiny with the flags, ~10 min GPU) → §3 curve →
 §1.4 as an experiment → §2 rows as separate sessions. Ask before TinyStories' 12K-step run.
+
+## §5 The two IREE-era launchers, folded in (2026-09-24)
+
+`scripts/rope_test.sh` and `scripts/run_tinystories_8k.sh` were cloud-pod launchers for the IREE
+pipeline (`IREE_BACKEND=cuda`, `IREE_CHIP=sm_80`, `jax/probe/bootstrap_lean_iree.sh`). They are
+deleted (git history before 2026-09-24 has them); what they tested is kept here, to be rebuilt on
+the XLA path when §2's CI row is taken up.
+
+* **RoPE extrapolation (`rope_test.sh`, ~minutes).** On tinyshakespeare:
+  `tinygpt-shakespeare train nano-rope-nopos <steps=800> <batch=32> 30`, then the SAME T=64
+  checkpoint through `tinygpt-shakespeare xeval nano-rope-nopos T` for T = 64, 128, 256 — it runs
+  and stays coherent because RoPE with no absolute position table leaves every weight
+  seqLen-independent. Contrast arm: `train nano 200 32 30`, then `xeval nano 128` must FAIL to
+  load (the absolute-position table is length-locked). Both halves are the gate.
+* **TinyStories 8K (`run_tinystories_8k.sh`).** `tinystories train 8k <steps=12000> <batch=8>
+  <lr×1e4=30>`, logged to `runs/tinystories_8k.log`. Model: byte-level BPE V=4096, T=8192, D=512,
+  8 heads, mlp 2048, 8 blocks, ~29M params; flash attention (O(T·blk) memory — dense [B,H,T,T]
+  scores would be ~4 GB per leg at T=8192), RoPE, no position table. fp32 memory ≈ 0.35 GB of
+  params + ~2.5 GB per batch item: batch 8–12 on an A100-40GB, 16–24 on 80GB; grad-accumulate for
+  more. Data: `data/tinystories/{train,val}.bin` from `historical/preprocess_tinystories.py`
+  (~50M train tokens). Add §1.3's flags to the run line; ask before the 12K-step run (§4).

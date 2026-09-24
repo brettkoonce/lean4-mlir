@@ -24,7 +24,7 @@ on, 1 strictly off; nothing sits on a kink), rather than engineered by synthetic
 * `trainedMlp_jacobian_nonzero` / `trainedMlp_not_constant`: the `fderiv` forms.
 
 Weights/input are imported from `LipschitzCertInstance` (generator:
-`scripts/lipschitz_cert_rationalize.py`); the dense convention is transposed
+`historical/lipschitz_cert_rationalize.py`); the dense convention is transposed
 (`Mat` is input×output) and biases are zero. -/
 
 namespace Proofs

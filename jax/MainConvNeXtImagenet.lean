@@ -13,7 +13,12 @@ import Jax
 
     Architecture is canonical ConvNeXt-T with a faithful patchify stem (4×4 s4
     conv → channel-LN, no BN/ReLU — see the NetSpec below); EMA + stochastic depth
-    wired. No remaining architectural deviation from the paper. -/
+    wired. No remaining architectural deviation from the paper.
+
+    The verified peer is tied to this file's generated output on shared weights by
+    `scripts/convnext_forward_tie.py` (`--net convnextsin` for the S pair), the ConvNeXt sibling
+    of the mnv2/mnv4/enet forward ties: max |Δ| 1.464e-03 over the logits, under its 2e-3 bound
+    (2026-09-24). A divergence here compares two different networks. -/
 
 def convNeXtTinyImagenet : NetSpec where
   name := "ConvNeXt-T (ImageNet, bf16)"

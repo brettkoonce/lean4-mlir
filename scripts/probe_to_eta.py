@@ -31,7 +31,7 @@ ResNet-50's. An earlier draft of this script keyed on variant and cheerfully wro
 ResNet-34's ms/step into ResNet-50's conf.
 
 ⛔ And the conf's variant is checked against the probe's: `mnv2-default-4gpu.conf` trains
-`rmsdp64` (RMSProp, MobileNetV2's reference optimizer) while `bf16_probe_4gpu.sh`'s row
+`rmsdp64` (RMSProp, MobileNetV2's reference optimizer) while the old `bf16_probe_4gpu.sh`'s row
 list measured `adamdp64`. Those are different graphs, and a number carried from one to
 the other is exactly the failure `enet-default-4gpu.conf`'s header warns about.
 """

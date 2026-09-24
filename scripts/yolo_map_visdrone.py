@@ -10,9 +10,9 @@ so the Lean loader/codegen are unchanged) and reports:
     the right place, regardless of label", the honest floor for the collapse story;
   * per-class AP@0.5 + mAP over the 10 VisDrone classes.
 
-This is a copy of scripts/yolo_map.py with two changes: the 10-class VisDrone
-name map (ids 0..9, matching preprocess_visdrone.py) and the extra class-agnostic
-row. The decode is identical: rank by sigmoid(conf logit), class from argmax of
+Started as a copy of the Pets-era yolo_map.py (deleted) with the 10-class VisDrone
+name map (ids 0..9, matching preprocess_visdrone.py) and an extra class-agnostic
+row; it has since grown the FPN decode and the NEU-DET class table. The decode is identical: rank by sigmoid(conf logit), class from argmax of
 the class slots, per-class greedy NMS.
 
 The single 7x7 grid emits at most ONE box per cell (<=49 detections/image after
@@ -186,7 +186,7 @@ def _nms_per_class(dets, nms_iou):
 # reproduces unchanged. "obj" = sigmoid(obj) alone.
 #
 # Why the switch exists -- and why "obj" is a DIAGNOSTIC, NOT AN IMPROVEMENT.
-# scripts/fpn_objectness_readout_probe.py measured that the two channels do two
+# fpn_objectness_readout_probe.py (deleted 2026-09-24, in git history) measured that the two channels do two
 # DIFFERENT ranking jobs on this detector:
 #   object-vs-background : sigmoid(obj) AUC 0.7504, obj*clsprob only 0.6373
 #   box quality (IoU>=0.5 among positives)
@@ -381,7 +381,7 @@ def main():
     ap.add_argument("--score", choices=["objcls", "obj"], default="objcls",
                     help="detection ranking score: objcls = sigmoid(obj)*max "
                          "softmax(cls) (default, original); obj = objectness "
-                         "alone (see fpn_objectness_readout_probe.py)")
+                         "alone (a diagnostic; see the note on the ranking score)")
     ap.add_argument("--grid", type=int, default=7, help="detection grid side (7 for 224, 14 for 448)")
     ap.add_argument("--size", type=int, default=None, help="input px (default grid*32)")
     ap.add_argument("--box-param", choices=["raw", "diou"], default="raw",

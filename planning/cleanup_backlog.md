@@ -188,8 +188,8 @@ so it would close the same way, and it is the last `*InputGradB` gap.
   existential `FloatBridges` predicate the yaml itself says "constrains nothing — do not cite as
   budgets". Either restate it on `FloatBridgesTo` or drop it, and `Float/LinBackFloatBridge.lean`
   goes with it (its only kept consumer).
-* Probe scripts under `scripts/` that mention float names (`transcendental_probe.py`,
-  `kernel_faithfulness_probe.py`, `margin_probe.py`, …) point at `FloatBridge.lean` and the fp8
+* Probe scripts under `scripts/` that mention float names (`margin_probe.py`, …; the ROCm-era
+  `transcendental_probe.py` / `kernel_faithfulness_probe.py` were deleted 2026-09-24) point at `FloatBridge.lean` and the fp8
   files, which stay. Leave them.
 
 **DONE 2026-09-08.** `FloatComposeBridge.lean` 775 → 496 lines: the `FloatBridges` predicate,
@@ -384,7 +384,7 @@ Seventeen went, `lean_exe` 244 → 227:
   64-wide-head net the head-width proof is parametric over) and `cifar8-bn-verified-adam`
   (`run.sh`, `residency_gate_all.sh`). Also kept: the ten `*-pgd` / `*-spectral` / `*-smooth`
   robustness binaries — the book has no robustness chapter and every planning doc for them is
-  archived, but `scripts/run_smooth_scorecard.sh` drives three of them to GENERATE the committed
+  archived, but `historical/run_smooth_scorecard.sh` drove three of them to GENERATE the committed
   certificate corpus under `Proofs/Certificates/`, and they are the empirical face of the three
   formalized papers in `formalization.yaml` (Tsuzuku, Cohen, LipSDP). Dropping them orphans a
   regeneration path — the `regen_verified_mlir.sh` module-list trap one directory over.

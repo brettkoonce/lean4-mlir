@@ -3,7 +3,7 @@
 
 Produces the EXACT on-disk record format of historical/preprocess_pets_det.py
 (157,728 bytes/record, perCell=30, 224x224 image, 7x7 grid) so the existing
-Lean FFI loader, the YOLOv1 codegen, and scripts/yolo_render.py all work
+Lean FFI loader and the YOLOv1 codegen work
 UNCHANGED. This is the WS-A baseline: the single-grid YOLOv1 detector run on
 VisDrone, where it is expected to collapse — 70 tiny objects per image cannot
 be resolved by a 7x7 grid at 224x224 (a median 20x25 px box shrinks to ~2x5 px

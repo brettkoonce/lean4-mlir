@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
 """Sample nvidia-smi (all visible CUDA GPUs) to a CSV every INTERVAL seconds.
 
-The CUDA peer of `log_gpu_temps.py`, which shells out to `rocm-smi` and therefore
-does nothing on an NVIDIA box. Same purpose: correlate temps/clocks/power/util with
-epochs and cooldowns over a long run.
+Correlate temps/clocks/power/util with epochs and cooldowns over a long run.
 
 Reading it: `power_W` near the cap with `util_pct` 100 = compute-bound; low power
 despite util 100 = likely input/augmentation-bound. `sm_clk_MHz` sagging while

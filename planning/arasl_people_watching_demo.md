@@ -205,7 +205,7 @@ train neighbour under each split — the same hand twice under `random`, a
 different hand under `blocked`. A preview of (a) plus the burst-vs-random
 strip exists already: `runs/2026-09-17-arasl-preview/{preview_figure.py,
 arasl_preview.png}` (untracked), the template for the real script the way
-`scripts/mock_gw_figure.py` was for the GW figure — the user's reaction to
+`scripts/mock_gw_figure.py` (now deleted) was for the GW figure — the user's reaction to
 it was "if we had that pic for real that would look great", so build (a)
 to that layout.
 

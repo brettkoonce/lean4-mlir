@@ -20,7 +20,6 @@ DATA="${2:-data/brats224}"
 VARIANT="${3:-skip}"
 EXTRA=""
 if [ "$VARIANT" = "noskip" ]; then EXTRA="noskip"; fi
-export IREE_BACKEND="${IREE_BACKEND:-rocm}"
 
 if [ ! -f "$DATA/train.bin" ] || [ ! -f "$DATA/val.bin" ]; then
   echo "missing $DATA/{train,val}.bin — build it with:"
@@ -48,11 +47,11 @@ for f in "$A_LOG" "$B_LOG"; do
   fi
 done
 
-HIP_VISIBLE_DEVICES=0 nohup ./.lake/build/bin/unet-brats-r34 "$DATA" "$EPOCHS" r34 $EXTRA \
+CUDA_VISIBLE_DEVICES=0 nohup ./.lake/build/bin/unet-brats-r34 "$DATA" "$EPOCHS" r34 $EXTRA \
   > "$A_LOG" 2>&1 &
 echo "  GPU0  r34 (ImageNet bootstrap)  pid $!  -> $A_LOG"
 
-HIP_VISIBLE_DEVICES=1 nohup ./.lake/build/bin/unet-brats-r34 "$DATA" "$EPOCHS" scratch $EXTRA \
+CUDA_VISIBLE_DEVICES=1 nohup ./.lake/build/bin/unet-brats-r34 "$DATA" "$EPOCHS" scratch $EXTRA \
   > "$B_LOG" 2>&1 &
 echo "  GPU1  scratch (He-init control) pid $!  -> $B_LOG"
 
