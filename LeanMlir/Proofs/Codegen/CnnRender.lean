@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # CNN + CIFAR render half — conv train-step text as `pretty` of proven graphs
 
@@ -232,24 +233,24 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward (proof-rendered, flat): (conv→relu)×2→pool ×4 → (dense→relu)×2→dense ═══
-    let (cHc1, nHc1) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W1" "%b1" W₁ b₁ (.operand "%x" x) else .flatConvF (h := s1h) (w := s1w) "%W1" "%b1" W₁ b₁ (.operand "%x" x))
+    let (cHc1, nHc1) ← pretty B (.flatConvFAt bf16 (h := s1h) (w := s1w) zrnd "%W1" "%b1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zS1c1))
-    let (cHc2, nHc2) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W2" "%b2" W₂ b₂ (.operand nAc1 zS1c1) else .flatConvF (h := s1h) (w := s1w) "%W2" "%b2" W₂ b₂ (.operand nAc1 zS1c1))
+    let (cHc2, nHc2) ← pretty B (.flatConvFAt bf16 (h := s1h) (w := s1w) zrnd "%W2" "%b2" W₂ b₂ (.operand nAc1 zS1c1))
     let (cAc2, nAc2) ← pretty B (.reluF (.operand nHc2 zS1c1))
     let (cP1, nPool1) ← pretty B (.maxPoolF (c := c1) (h := s2h) (w := s2w) (.operand nAc2 zS1c1))
-    let (cHc3, nHc3) ← pretty B (if bf16 then .flatConvFBf16 (h := s2h) (w := s2w) zrnd "%W3" "%b3" W₃ b₃ (.operand nPool1 zS2c1) else .flatConvF (h := s2h) (w := s2w) "%W3" "%b3" W₃ b₃ (.operand nPool1 zS2c1))
+    let (cHc3, nHc3) ← pretty B (.flatConvFAt bf16 (h := s2h) (w := s2w) zrnd "%W3" "%b3" W₃ b₃ (.operand nPool1 zS2c1))
     let (cAc3, nAc3) ← pretty B (.reluF (.operand nHc3 zS2c2))
-    let (cHc4, nHc4) ← pretty B (if bf16 then .flatConvFBf16 (h := s2h) (w := s2w) zrnd "%W4" "%b4" W₄ b₄ (.operand nAc3 zS2c2) else .flatConvF (h := s2h) (w := s2w) "%W4" "%b4" W₄ b₄ (.operand nAc3 zS2c2))
+    let (cHc4, nHc4) ← pretty B (.flatConvFAt bf16 (h := s2h) (w := s2w) zrnd "%W4" "%b4" W₄ b₄ (.operand nAc3 zS2c2))
     let (cAc4, nAc4) ← pretty B (.reluF (.operand nHc4 zS2c2))
     let (cP2, nPool2) ← pretty B (.maxPoolF (c := c2) (h := s3h) (w := s3w) (.operand nAc4 zS2c2))
-    let (cHc5, nHc5) ← pretty B (if bf16 then .flatConvFBf16 (h := s3h) (w := s3w) zrnd "%W5" "%b5" W₅ b₅ (.operand nPool2 zS3c2) else .flatConvF (h := s3h) (w := s3w) "%W5" "%b5" W₅ b₅ (.operand nPool2 zS3c2))
+    let (cHc5, nHc5) ← pretty B (.flatConvFAt bf16 (h := s3h) (w := s3w) zrnd "%W5" "%b5" W₅ b₅ (.operand nPool2 zS3c2))
     let (cAc5, nAc5) ← pretty B (.reluF (.operand nHc5 zS3c3))
-    let (cHc6, nHc6) ← pretty B (if bf16 then .flatConvFBf16 (h := s3h) (w := s3w) zrnd "%W6" "%b6" W₆ b₆ (.operand nAc5 zS3c3) else .flatConvF (h := s3h) (w := s3w) "%W6" "%b6" W₆ b₆ (.operand nAc5 zS3c3))
+    let (cHc6, nHc6) ← pretty B (.flatConvFAt bf16 (h := s3h) (w := s3w) zrnd "%W6" "%b6" W₆ b₆ (.operand nAc5 zS3c3))
     let (cAc6, nAc6) ← pretty B (.reluF (.operand nHc6 zS3c3))
     let (cP3, nPool3) ← pretty B (.maxPoolF (c := c3) (h := s4h) (w := s4w) (.operand nAc6 zS3c3))
-    let (cHc7, nHc7) ← pretty B (if bf16 then .flatConvFBf16 (h := s4h) (w := s4w) zrnd "%W7" "%b7" W₇ b₇ (.operand nPool3 zS4c3) else .flatConvF (h := s4h) (w := s4w) "%W7" "%b7" W₇ b₇ (.operand nPool3 zS4c3))
+    let (cHc7, nHc7) ← pretty B (.flatConvFAt bf16 (h := s4h) (w := s4w) zrnd "%W7" "%b7" W₇ b₇ (.operand nPool3 zS4c3))
     let (cAc7, nAc7) ← pretty B (.reluF (.operand nHc7 zS4c4))
-    let (cHc8, nHc8) ← pretty B (if bf16 then .flatConvFBf16 (h := s4h) (w := s4w) zrnd "%W8" "%b8" W₈ b₈ (.operand nAc7 zS4c4) else .flatConvF (h := s4h) (w := s4w) "%W8" "%b8" W₈ b₈ (.operand nAc7 zS4c4))
+    let (cHc8, nHc8) ← pretty B (.flatConvFAt bf16 (h := s4h) (w := s4w) zrnd "%W8" "%b8" W₈ b₈ (.operand nAc7 zS4c4))
     let (cAc8, nAc8) ← pretty B (.reluF (.operand nHc8 zS4c4))
     let (cP4, nPool4) ← pretty B (.maxPoolF (c := c4) (h := h) (w := w) (.operand nAc8 zS4c4))
     let (cH9, nH9) ← pretty B (denseF "%W9" "%b9" W₉ b₉ (.operand nPool4 zPc4))
@@ -441,24 +442,24 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
-    let (cHc1, nHc1) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁ (.operand "%x" x) else .flatConvF (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁ (.operand "%x" x))
+    let (cHc1, nHc1) ← pretty B (.flatConvFAt bf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁ (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.reluF (.operand nHc1 zS1c1))
-    let (cHc2, nHc2) ← pretty B (if bf16 then .flatConvFBf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂ (.operand nAc1 zS1c1) else .flatConvF (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂ (.operand nAc1 zS1c1))
+    let (cHc2, nHc2) ← pretty B (.flatConvFAt bf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂ (.operand nAc1 zS1c1))
     let (cAc2, nAc2) ← pretty B (.reluF (.operand nHc2 zS1c1))
     let (cP1, nPool1) ← pretty B (.maxPoolF (c := c1) (h := s2h) (w := s2w) (.operand nAc2 zS1c1))
-    let (cHc3, nHc3) ← pretty B (if bf16 then .flatConvFBf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃ (.operand nPool1 zS2c1) else .flatConvF (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃ (.operand nPool1 zS2c1))
+    let (cHc3, nHc3) ← pretty B (.flatConvFAt bf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃ (.operand nPool1 zS2c1))
     let (cAc3, nAc3) ← pretty B (.reluF (.operand nHc3 zS2c2))
-    let (cHc4, nHc4) ← pretty B (if bf16 then .flatConvFBf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄ (.operand nAc3 zS2c2) else .flatConvF (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄ (.operand nAc3 zS2c2))
+    let (cHc4, nHc4) ← pretty B (.flatConvFAt bf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄ (.operand nAc3 zS2c2))
     let (cAc4, nAc4) ← pretty B (.reluF (.operand nHc4 zS2c2))
     let (cP2, nPool2) ← pretty B (.maxPoolF (c := c2) (h := s3h) (w := s3w) (.operand nAc4 zS2c2))
-    let (cHc5, nHc5) ← pretty B (if bf16 then .flatConvFBf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅ (.operand nPool2 zS3c2) else .flatConvF (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅ (.operand nPool2 zS3c2))
+    let (cHc5, nHc5) ← pretty B (.flatConvFAt bf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅ (.operand nPool2 zS3c2))
     let (cAc5, nAc5) ← pretty B (.reluF (.operand nHc5 zS3c3))
-    let (cHc6, nHc6) ← pretty B (if bf16 then .flatConvFBf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆ (.operand nAc5 zS3c3) else .flatConvF (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆ (.operand nAc5 zS3c3))
+    let (cHc6, nHc6) ← pretty B (.flatConvFAt bf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆ (.operand nAc5 zS3c3))
     let (cAc6, nAc6) ← pretty B (.reluF (.operand nHc6 zS3c3))
     let (cP3, nPool3) ← pretty B (.maxPoolF (c := c3) (h := s4h) (w := s4w) (.operand nAc6 zS3c3))
-    let (cHc7, nHc7) ← pretty B (if bf16 then .flatConvFBf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇ (.operand nPool3 zS4c3) else .flatConvF (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇ (.operand nPool3 zS4c3))
+    let (cHc7, nHc7) ← pretty B (.flatConvFAt bf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇ (.operand nPool3 zS4c3))
     let (cAc7, nAc7) ← pretty B (.reluF (.operand nHc7 zS4c4))
-    let (cHc8, nHc8) ← pretty B (if bf16 then .flatConvFBf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈ (.operand nAc7 zS4c4) else .flatConvF (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈ (.operand nAc7 zS4c4))
+    let (cHc8, nHc8) ← pretty B (.flatConvFAt bf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈ (.operand nAc7 zS4c4))
     let (cAc8, nAc8) ← pretty B (.reluF (.operand nHc8 zS4c4))
     let (cP4, nPool4) ← pretty B (.maxPoolF (c := c4) (h := h) (w := w) (.operand nAc8 zS4c4))
     let (cH9, nH9) ← pretty B (denseF "%W9" "%b9" W₉ b₉ (.operand nPool4 zPc4))
@@ -699,24 +700,24 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let _zTW8 : Tensor3 c4 s4h s4w := fun _ _ _ => 0
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — identical to cifar8TrainStepFaithfulV, conv biases renamed %cb* ═══
-    let (cHc1, nHc1) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
+    let (cHc1, nHc1) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x) else .batchOp (N := B) (.convAt bf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
     let (cAc1, nAc1) ← pretty B (.batchOp (N := B) .relu (.operand nHc1 bS1c1))
-    let (cHc2, nHc2) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1) else if bf16 then .batchOp (N := B) (.convBf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1) else .batchOp (N := B) (.conv (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
+    let (cHc2, nHc2) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1) else .batchOp (N := B) (.convAt bf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
     let (cAc2, nAc2) ← pretty B (.batchOp (N := B) .relu (.operand nHc2 bS1c1))
     let (cP1, nPool1) ← pretty B (.batchOp (N := B) (.maxPool (c := c1) (h := s2h) (w := s2w)) (.operand nAc2 bS1c1))
-    let (cHc3, nHc3) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1) else if bf16 then .batchOp (N := B) (.convBf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1) else .batchOp (N := B) (.conv (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1))
+    let (cHc3, nHc3) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1) else .batchOp (N := B) (.convAt bf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1))
     let (cAc3, nAc3) ← pretty B (.batchOp (N := B) .relu (.operand nHc3 bS2c2))
-    let (cHc4, nHc4) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2) else if bf16 then .batchOp (N := B) (.convBf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2) else .batchOp (N := B) (.conv (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2))
+    let (cHc4, nHc4) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2) else .batchOp (N := B) (.convAt bf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2))
     let (cAc4, nAc4) ← pretty B (.batchOp (N := B) .relu (.operand nHc4 bS2c2))
     let (cP2, nPool2) ← pretty B (.batchOp (N := B) (.maxPool (c := c2) (h := s3h) (w := s3w)) (.operand nAc4 bS2c2))
-    let (cHc5, nHc5) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2) else if bf16 then .batchOp (N := B) (.convBf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2) else .batchOp (N := B) (.conv (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2))
+    let (cHc5, nHc5) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2) else .batchOp (N := B) (.convAt bf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2))
     let (cAc5, nAc5) ← pretty B (.batchOp (N := B) .relu (.operand nHc5 bS3c3))
-    let (cHc6, nHc6) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3) else if bf16 then .batchOp (N := B) (.convBf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3) else .batchOp (N := B) (.conv (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3))
+    let (cHc6, nHc6) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3) else .batchOp (N := B) (.convAt bf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3))
     let (cAc6, nAc6) ← pretty B (.batchOp (N := B) .relu (.operand nHc6 bS3c3))
     let (cP3, nPool3) ← pretty B (.batchOp (N := B) (.maxPool (c := c3) (h := s4h) (w := s4w)) (.operand nAc6 bS3c3))
-    let (cHc7, nHc7) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3) else if bf16 then .batchOp (N := B) (.convBf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3) else .batchOp (N := B) (.conv (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3))
+    let (cHc7, nHc7) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3) else .batchOp (N := B) (.convAt bf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3))
     let (cAc7, nAc7) ← pretty B (.batchOp (N := B) .relu (.operand nHc7 bS4c4))
-    let (cHc8, nHc8) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4) else if bf16 then .batchOp (N := B) (.convBf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4) else .batchOp (N := B) (.conv (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4))
+    let (cHc8, nHc8) ← pretty B (if fp8 then .batchOp (N := B) (.convF8 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4) else .batchOp (N := B) (.convAt bf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4))
     let (cAc8, nAc8) ← pretty B (.batchOp (N := B) .relu (.operand nHc8 bS4c4))
     let (cP4, nPool4) ← pretty B (.batchOp (N := B) (.maxPool (c := c4) (h := h) (w := w)) (.operand nAc8 bS4c4))
     let (cH9, nH9) ← pretty B (.batchOp (N := B) (.dense "%W9" "%b9" W₉ b₉) (.operand nPool4 bPc4))
@@ -734,53 +735,53 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (cDx9, nDx9) ← pretty B (.batchOp (N := B) (.denseRowBack (rows := 1) "%W9" W₉) (.operand nDy9 b1D1))
     let (cDac8, nDac8) ← pretty B (.maxPoolBackB (N := B) (c := c4) (h := h) (w := w) nAc8 bS4c4 (.operand nDx9 bPc4))
     let (cDhc8, nDhc8) ← pretty B (.selectPosB nHc8 bS4c4 (.operand nDac8 bS4c4))
-    let (cDac7, nDac7) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s4h) (w := s4w) zrnd "%W8" W₈ b₈ else if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s4h) (w := s4w) zrnd "%W8" W₈ b₈ else SHlo.convBackBatched (N := B) (h := s4h) (w := s4w) "%W8" W₈ b₈) (.operand nDhc8 bS4c4))
+    let (cDac7, nDac7) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s4h) (w := s4w) zrnd "%W8" W₈ b₈ else SHlo.convBackBatchedAt bf16 (N := B) (h := s4h) (w := s4w) zrnd "%W8" W₈ b₈) (.operand nDhc8 bS4c4))
     let (cDhc7, nDhc7) ← pretty B (.selectPosB nHc7 bS4c4 (.operand nDac7 bS4c4))
-    let (cDpl3, nDpool3) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s4h) (w := s4w) zrnd "%W7" W₇ b₇ else if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s4h) (w := s4w) zrnd "%W7" W₇ b₇ else SHlo.convBackBatched (N := B) (h := s4h) (w := s4w) "%W7" W₇ b₇) (.operand nDhc7 bS4c4))
+    let (cDpl3, nDpool3) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s4h) (w := s4w) zrnd "%W7" W₇ b₇ else SHlo.convBackBatchedAt bf16 (N := B) (h := s4h) (w := s4w) zrnd "%W7" W₇ b₇) (.operand nDhc7 bS4c4))
     let (cDac6, nDac6) ← pretty B (.maxPoolBackB (N := B) (c := c3) (h := s4h) (w := s4w) nAc6 bS3c3 (.operand nDpool3 bS4c3))
     let (cDhc6, nDhc6) ← pretty B (.selectPosB nHc6 bS3c3 (.operand nDac6 bS3c3))
-    let (cDac5, nDac5) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s3h) (w := s3w) zrnd "%W6" W₆ b₆ else if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s3h) (w := s3w) zrnd "%W6" W₆ b₆ else SHlo.convBackBatched (N := B) (h := s3h) (w := s3w) "%W6" W₆ b₆) (.operand nDhc6 bS3c3))
+    let (cDac5, nDac5) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s3h) (w := s3w) zrnd "%W6" W₆ b₆ else SHlo.convBackBatchedAt bf16 (N := B) (h := s3h) (w := s3w) zrnd "%W6" W₆ b₆) (.operand nDhc6 bS3c3))
     let (cDhc5, nDhc5) ← pretty B (.selectPosB nHc5 bS3c3 (.operand nDac5 bS3c3))
-    let (cDpl2, nDpool2) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s3h) (w := s3w) zrnd "%W5" W₅ b₅ else if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s3h) (w := s3w) zrnd "%W5" W₅ b₅ else SHlo.convBackBatched (N := B) (h := s3h) (w := s3w) "%W5" W₅ b₅) (.operand nDhc5 bS3c3))
+    let (cDpl2, nDpool2) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s3h) (w := s3w) zrnd "%W5" W₅ b₅ else SHlo.convBackBatchedAt bf16 (N := B) (h := s3h) (w := s3w) zrnd "%W5" W₅ b₅) (.operand nDhc5 bS3c3))
     let (cDac4, nDac4) ← pretty B (.maxPoolBackB (N := B) (c := c2) (h := s3h) (w := s3w) nAc4 bS2c2 (.operand nDpool2 bS3c2))
     let (cDhc4, nDhc4) ← pretty B (.selectPosB nHc4 bS2c2 (.operand nDac4 bS2c2))
-    let (cDac3, nDac3) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s2h) (w := s2w) zrnd "%W4" W₄ b₄ else if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s2h) (w := s2w) zrnd "%W4" W₄ b₄ else SHlo.convBackBatched (N := B) (h := s2h) (w := s2w) "%W4" W₄ b₄) (.operand nDhc4 bS2c2))
+    let (cDac3, nDac3) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s2h) (w := s2w) zrnd "%W4" W₄ b₄ else SHlo.convBackBatchedAt bf16 (N := B) (h := s2h) (w := s2w) zrnd "%W4" W₄ b₄) (.operand nDhc4 bS2c2))
     let (cDhc3, nDhc3) ← pretty B (.selectPosB nHc3 bS2c2 (.operand nDac3 bS2c2))
-    let (cDpl1, nDpool1) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s2h) (w := s2w) zrnd "%W3" W₃ b₃ else if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s2h) (w := s2w) zrnd "%W3" W₃ b₃ else SHlo.convBackBatched (N := B) (h := s2h) (w := s2w) "%W3" W₃ b₃) (.operand nDhc3 bS2c2))
+    let (cDpl1, nDpool1) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s2h) (w := s2w) zrnd "%W3" W₃ b₃ else SHlo.convBackBatchedAt bf16 (N := B) (h := s2h) (w := s2w) zrnd "%W3" W₃ b₃) (.operand nDhc3 bS2c2))
     let (cDac2, nDac2) ← pretty B (.maxPoolBackB (N := B) (c := c1) (h := s2h) (w := s2w) nAc2 bS1c1 (.operand nDpool1 bS2c1))
     let (cDhc2, nDhc2) ← pretty B (.selectPosB nHc2 bS1c1 (.operand nDac2 bS1c1))
-    let (cDac1, nDac1) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s1h) (w := s1w) zrnd "%W2" W₂ b₂ else if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s1h) (w := s1w) zrnd "%W2" W₂ b₂ else SHlo.convBackBatched (N := B) (h := s1h) (w := s1w) "%W2" W₂ b₂) (.operand nDhc2 bS1c1))
+    let (cDac1, nDac1) ← pretty B ((if fp8 then SHlo.convBackBatchedF8 (N := B) (h := s1h) (w := s1w) zrnd "%W2" W₂ b₂ else SHlo.convBackBatchedAt bf16 (N := B) (h := s1h) (w := s1w) zrnd "%W2" W₂ b₂) (.operand nDhc2 bS1c1))
     let (cDhc1, nDhc1) ← pretty B (.selectPosB nHc1 bS1c1 (.operand nDac1 bS1c1))
     -- ═══ per param: un-fused gradient, then the three proven AdamW outputs ═══
-    let (gW1, sW1) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd "%x" b₁ bX W₁ else SHlo.convWeightGradB (N := B) "%x" b₁ bX W₁) (.operand nDhc1 bS1c1))
+    let (gW1, sW1) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd "%x" b₁ bX W₁) (.operand nDhc1 bS1c1))
     let (aW1, tW1, mW1, vW1) ← optTail opt B replicas (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1
     let (gb1, sb1) ← pretty B (.convBiasGradB (N := B) W₁ bX b₁ (.operand nDhc1 bS1c1))
     let (ab1, tb1, mb1, vb1) ← optTail opt B replicas c1 "%cb1" [c1] sb1
-    let (gW2, sW2) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc1 b₂ bS1c1 W₂ else SHlo.convWeightGradB (N := B) nAc1 b₂ bS1c1 W₂) (.operand nDhc2 bS1c1))
+    let (gW2, sW2) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc1 b₂ bS1c1 W₂) (.operand nDhc2 bS1c1))
     let (aW2, tW2, mW2, vW2) ← optTail opt B replicas (c1*c1*kH*kW) "%W2" [c1,c1,kH,kW] sW2
     let (gb2, sb2) ← pretty B (.convBiasGradB (N := B) W₂ bS1c1 b₂ (.operand nDhc2 bS1c1))
     let (ab2, tb2, mb2, vb2) ← optTail opt B replicas c1 "%cb2" [c1] sb2
-    let (gW3, sW3) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool1 b₃ bS2c1 W₃ else SHlo.convWeightGradB (N := B) nPool1 b₃ bS2c1 W₃) (.operand nDhc3 bS2c2))
+    let (gW3, sW3) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nPool1 b₃ bS2c1 W₃) (.operand nDhc3 bS2c2))
     let (aW3, tW3, mW3, vW3) ← optTail opt B replicas (c2*c1*kH*kW) "%W3" [c2,c1,kH,kW] sW3
     let (gb3, sb3) ← pretty B (.convBiasGradB (N := B) W₃ bS2c1 b₃ (.operand nDhc3 bS2c2))
     let (ab3, tb3, mb3, vb3) ← optTail opt B replicas c2 "%cb3" [c2] sb3
-    let (gW4, sW4) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc3 b₄ bS2c2 W₄ else SHlo.convWeightGradB (N := B) nAc3 b₄ bS2c2 W₄) (.operand nDhc4 bS2c2))
+    let (gW4, sW4) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc3 b₄ bS2c2 W₄) (.operand nDhc4 bS2c2))
     let (aW4, tW4, mW4, vW4) ← optTail opt B replicas (c2*c2*kH*kW) "%W4" [c2,c2,kH,kW] sW4
     let (gb4, sb4) ← pretty B (.convBiasGradB (N := B) W₄ bS2c2 b₄ (.operand nDhc4 bS2c2))
     let (ab4, tb4, mb4, vb4) ← optTail opt B replicas c2 "%cb4" [c2] sb4
-    let (gW5, sW5) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool2 b₅ bS3c2 W₅ else SHlo.convWeightGradB (N := B) nPool2 b₅ bS3c2 W₅) (.operand nDhc5 bS3c3))
+    let (gW5, sW5) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nPool2 b₅ bS3c2 W₅) (.operand nDhc5 bS3c3))
     let (aW5, tW5, mW5, vW5) ← optTail opt B replicas (c3*c2*kH*kW) "%W5" [c3,c2,kH,kW] sW5
     let (gb5, sb5) ← pretty B (.convBiasGradB (N := B) W₅ bS3c2 b₅ (.operand nDhc5 bS3c3))
     let (ab5, tb5, mb5, vb5) ← optTail opt B replicas c3 "%cb5" [c3] sb5
-    let (gW6, sW6) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc5 b₆ bS3c3 W₆ else SHlo.convWeightGradB (N := B) nAc5 b₆ bS3c3 W₆) (.operand nDhc6 bS3c3))
+    let (gW6, sW6) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc5 b₆ bS3c3 W₆) (.operand nDhc6 bS3c3))
     let (aW6, tW6, mW6, vW6) ← optTail opt B replicas (c3*c3*kH*kW) "%W6" [c3,c3,kH,kW] sW6
     let (gb6, sb6) ← pretty B (.convBiasGradB (N := B) W₆ bS3c3 b₆ (.operand nDhc6 bS3c3))
     let (ab6, tb6, mb6, vb6) ← optTail opt B replicas c3 "%cb6" [c3] sb6
-    let (gW7, sW7) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool3 b₇ bS4c3 W₇ else SHlo.convWeightGradB (N := B) nPool3 b₇ bS4c3 W₇) (.operand nDhc7 bS4c4))
+    let (gW7, sW7) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nPool3 b₇ bS4c3 W₇) (.operand nDhc7 bS4c4))
     let (aW7, tW7, mW7, vW7) ← optTail opt B replicas (c4*c3*kH*kW) "%W7" [c4,c3,kH,kW] sW7
     let (gb7, sb7) ← pretty B (.convBiasGradB (N := B) W₇ bS4c3 b₇ (.operand nDhc7 bS4c4))
     let (ab7, tb7, mb7, vb7) ← optTail opt B replicas c4 "%cb7" [c4] sb7
-    let (gW8, sW8) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc7 b₈ bS4c4 W₈ else SHlo.convWeightGradB (N := B) nAc7 b₈ bS4c4 W₈) (.operand nDhc8 bS4c4))
+    let (gW8, sW8) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc7 b₈ bS4c4 W₈) (.operand nDhc8 bS4c4))
     let (aW8, tW8, mW8, vW8) ← optTail opt B replicas (c4*c4*kH*kW) "%W8" [c4,c4,kH,kW] sW8
     let (gb8, sb8) ← pretty B (.convBiasGradB (N := B) W₈ bS4c4 b₈ (.operand nDhc8 bS4c4))
     let (ab8, tb8, mb8, vb8) ← optTail opt B replicas c4 "%cb8" [c4] sb8
@@ -1360,31 +1361,31 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   let b1D1  : Vec (B*(1*d1)) := fun _ => 0
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward: (conv→BN→relu)×2→pool ×4 → (dense→relu)×2→dense ═══
-    let (cHc1, nHc1) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁ else .conv (h := s1h) (w := s1w) "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
+    let (cHc1, nHc1) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s1h) (w := s1w) zrnd "%W1" "%cb1" W₁ b₁) (.operand "%x" x))
     let (cBn1, nBn1) ← pretty B (.bnPerChannelF (oc := c1) (h := s1h) (w := s1w) "%g1" "%bt1" bnEpsStr 0 zVc1 zVc1 (.operand nHc1 zS1c1))
     let (cAc1, nAc1) ← pretty B (.batchOp (N := B) .relu (.operand nBn1 bS1c1))
-    let (cHc2, nHc2) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂ else .conv (h := s1h) (w := s1w) "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
+    let (cHc2, nHc2) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s1h) (w := s1w) zrnd "%W2" "%cb2" W₂ b₂) (.operand nAc1 bS1c1))
     let (cBn2, nBn2) ← pretty B (.bnPerChannelF (oc := c1) (h := s1h) (w := s1w) "%g2" "%bt2" bnEpsStr 0 zVc1 zVc1 (.operand nHc2 zS1c1))
     let (cAc2, nAc2) ← pretty B (.batchOp (N := B) .relu (.operand nBn2 bS1c1))
     let (cP1, nPool1) ← pretty B (.batchOp (N := B) (.maxPool (c := c1) (h := s2h) (w := s2w)) (.operand nAc2 bS1c1))
-    let (cHc3, nHc3) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃ else .conv (h := s2h) (w := s2w) "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1))
+    let (cHc3, nHc3) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s2h) (w := s2w) zrnd "%W3" "%cb3" W₃ b₃) (.operand nPool1 bS2c1))
     let (cBn3, nBn3) ← pretty B (.bnPerChannelF (oc := c2) (h := s2h) (w := s2w) "%g3" "%bt3" bnEpsStr 0 zVc2 zVc2 (.operand nHc3 zS2c2))
     let (cAc3, nAc3) ← pretty B (.batchOp (N := B) .relu (.operand nBn3 bS2c2))
-    let (cHc4, nHc4) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄ else .conv (h := s2h) (w := s2w) "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2))
+    let (cHc4, nHc4) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s2h) (w := s2w) zrnd "%W4" "%cb4" W₄ b₄) (.operand nAc3 bS2c2))
     let (cBn4, nBn4) ← pretty B (.bnPerChannelF (oc := c2) (h := s2h) (w := s2w) "%g4" "%bt4" bnEpsStr 0 zVc2 zVc2 (.operand nHc4 zS2c2))
     let (cAc4, nAc4) ← pretty B (.batchOp (N := B) .relu (.operand nBn4 bS2c2))
     let (cP2, nPool2) ← pretty B (.batchOp (N := B) (.maxPool (c := c2) (h := s3h) (w := s3w)) (.operand nAc4 bS2c2))
-    let (cHc5, nHc5) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅ else .conv (h := s3h) (w := s3w) "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2))
+    let (cHc5, nHc5) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s3h) (w := s3w) zrnd "%W5" "%cb5" W₅ b₅) (.operand nPool2 bS3c2))
     let (cBn5, nBn5) ← pretty B (.bnPerChannelF (oc := c3) (h := s3h) (w := s3w) "%g5" "%bt5" bnEpsStr 0 zVc3 zVc3 (.operand nHc5 zS3c3))
     let (cAc5, nAc5) ← pretty B (.batchOp (N := B) .relu (.operand nBn5 bS3c3))
-    let (cHc6, nHc6) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆ else .conv (h := s3h) (w := s3w) "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3))
+    let (cHc6, nHc6) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s3h) (w := s3w) zrnd "%W6" "%cb6" W₆ b₆) (.operand nAc5 bS3c3))
     let (cBn6, nBn6) ← pretty B (.bnPerChannelF (oc := c3) (h := s3h) (w := s3w) "%g6" "%bt6" bnEpsStr 0 zVc3 zVc3 (.operand nHc6 zS3c3))
     let (cAc6, nAc6) ← pretty B (.batchOp (N := B) .relu (.operand nBn6 bS3c3))
     let (cP3, nPool3) ← pretty B (.batchOp (N := B) (.maxPool (c := c3) (h := s4h) (w := s4w)) (.operand nAc6 bS3c3))
-    let (cHc7, nHc7) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇ else .conv (h := s4h) (w := s4w) "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3))
+    let (cHc7, nHc7) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s4h) (w := s4w) zrnd "%W7" "%cb7" W₇ b₇) (.operand nPool3 bS4c3))
     let (cBn7, nBn7) ← pretty B (.bnPerChannelF (oc := c4) (h := s4h) (w := s4w) "%g7" "%bt7" bnEpsStr 0 zVc4 zVc4 (.operand nHc7 zS4c4))
     let (cAc7, nAc7) ← pretty B (.batchOp (N := B) .relu (.operand nBn7 bS4c4))
-    let (cHc8, nHc8) ← pretty B (.batchOp (N := B) (if bf16 then .convBf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈ else .conv (h := s4h) (w := s4w) "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4))
+    let (cHc8, nHc8) ← pretty B (.batchOp (N := B) (.convAt bf16 (h := s4h) (w := s4w) zrnd "%W8" "%cb8" W₈ b₈) (.operand nAc7 bS4c4))
     let (cBn8, nBn8) ← pretty B (.bnPerChannelF (oc := c4) (h := s4h) (w := s4w) "%g8" "%bt8" bnEpsStr 0 zVc4 zVc4 (.operand nHc8 zS4c4))
     let (cAc8, nAc8) ← pretty B (.batchOp (N := B) .relu (.operand nBn8 bS4c4))
     let (cP4, nPool4) ← pretty B (.batchOp (N := B) (.maxPool (c := c4) (h := h) (w := w)) (.operand nAc8 bS4c4))
@@ -1405,37 +1406,37 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (cDac8, nDac8) ← pretty B (.maxPoolBackB (N := B) (c := c4) (h := h) (w := w) nAc8 bS4c4 (.operand nDx9 bPc4))
     let (cDbn8, nDbn8) ← pretty B (.selectPosB nBn8 bS4c4 (.operand nDac8 bS4c4))
     let (cDhc8, nDhc8) ← pretty B (.bnPerChannelBack (oc := c4) (h := s4h) (w := s4w) "%g8" nHc8 bnEpsStr 0 zVc4 zS4c4 (.operand nDbn8 zS4c4))
-    let (cDac7, nDac7) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s4h) (w := s4w) zrnd "%W8" W₈ b₈ else SHlo.convBackBatched (N := B) (h := s4h) (w := s4w) "%W8" W₈ b₈) (.operand nDhc8 bS4c4))
+    let (cDac7, nDac7) ← pretty B ((SHlo.convBackBatchedAt bf16 (N := B) (h := s4h) (w := s4w) zrnd "%W8" W₈ b₈) (.operand nDhc8 bS4c4))
     let (cDbn7, nDbn7) ← pretty B (.selectPosB nBn7 bS4c4 (.operand nDac7 bS4c4))
     let (cDhc7, nDhc7) ← pretty B (.bnPerChannelBack (oc := c4) (h := s4h) (w := s4w) "%g7" nHc7 bnEpsStr 0 zVc4 zS4c4 (.operand nDbn7 zS4c4))
-    let (cDpl3, nDpool3) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s4h) (w := s4w) zrnd "%W7" W₇ b₇ else SHlo.convBackBatched (N := B) (h := s4h) (w := s4w) "%W7" W₇ b₇) (.operand nDhc7 bS4c4))
+    let (cDpl3, nDpool3) ← pretty B ((SHlo.convBackBatchedAt bf16 (N := B) (h := s4h) (w := s4w) zrnd "%W7" W₇ b₇) (.operand nDhc7 bS4c4))
     -- stage 3
     let (cDac6, nDac6) ← pretty B (.maxPoolBackB (N := B) (c := c3) (h := s4h) (w := s4w) nAc6 bS3c3 (.operand nDpool3 bS4c3))
     let (cDbn6, nDbn6) ← pretty B (.selectPosB nBn6 bS3c3 (.operand nDac6 bS3c3))
     let (cDhc6, nDhc6) ← pretty B (.bnPerChannelBack (oc := c3) (h := s3h) (w := s3w) "%g6" nHc6 bnEpsStr 0 zVc3 zS3c3 (.operand nDbn6 zS3c3))
-    let (cDac5, nDac5) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s3h) (w := s3w) zrnd "%W6" W₆ b₆ else SHlo.convBackBatched (N := B) (h := s3h) (w := s3w) "%W6" W₆ b₆) (.operand nDhc6 bS3c3))
+    let (cDac5, nDac5) ← pretty B ((SHlo.convBackBatchedAt bf16 (N := B) (h := s3h) (w := s3w) zrnd "%W6" W₆ b₆) (.operand nDhc6 bS3c3))
     let (cDbn5, nDbn5) ← pretty B (.selectPosB nBn5 bS3c3 (.operand nDac5 bS3c3))
     let (cDhc5, nDhc5) ← pretty B (.bnPerChannelBack (oc := c3) (h := s3h) (w := s3w) "%g5" nHc5 bnEpsStr 0 zVc3 zS3c3 (.operand nDbn5 zS3c3))
-    let (cDpl2, nDpool2) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s3h) (w := s3w) zrnd "%W5" W₅ b₅ else SHlo.convBackBatched (N := B) (h := s3h) (w := s3w) "%W5" W₅ b₅) (.operand nDhc5 bS3c3))
+    let (cDpl2, nDpool2) ← pretty B ((SHlo.convBackBatchedAt bf16 (N := B) (h := s3h) (w := s3w) zrnd "%W5" W₅ b₅) (.operand nDhc5 bS3c3))
     -- stage 2
     let (cDac4, nDac4) ← pretty B (.maxPoolBackB (N := B) (c := c2) (h := s3h) (w := s3w) nAc4 bS2c2 (.operand nDpool2 bS3c2))
     let (cDbn4, nDbn4) ← pretty B (.selectPosB nBn4 bS2c2 (.operand nDac4 bS2c2))
     let (cDhc4, nDhc4) ← pretty B (.bnPerChannelBack (oc := c2) (h := s2h) (w := s2w) "%g4" nHc4 bnEpsStr 0 zVc2 zS2c2 (.operand nDbn4 zS2c2))
-    let (cDac3, nDac3) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s2h) (w := s2w) zrnd "%W4" W₄ b₄ else SHlo.convBackBatched (N := B) (h := s2h) (w := s2w) "%W4" W₄ b₄) (.operand nDhc4 bS2c2))
+    let (cDac3, nDac3) ← pretty B ((SHlo.convBackBatchedAt bf16 (N := B) (h := s2h) (w := s2w) zrnd "%W4" W₄ b₄) (.operand nDhc4 bS2c2))
     let (cDbn3, nDbn3) ← pretty B (.selectPosB nBn3 bS2c2 (.operand nDac3 bS2c2))
     let (cDhc3, nDhc3) ← pretty B (.bnPerChannelBack (oc := c2) (h := s2h) (w := s2w) "%g3" nHc3 bnEpsStr 0 zVc2 zS2c2 (.operand nDbn3 zS2c2))
-    let (cDpl1, nDpool1) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s2h) (w := s2w) zrnd "%W3" W₃ b₃ else SHlo.convBackBatched (N := B) (h := s2h) (w := s2w) "%W3" W₃ b₃) (.operand nDhc3 bS2c2))
+    let (cDpl1, nDpool1) ← pretty B ((SHlo.convBackBatchedAt bf16 (N := B) (h := s2h) (w := s2w) zrnd "%W3" W₃ b₃) (.operand nDhc3 bS2c2))
     -- stage 1
     let (cDac2, nDac2) ← pretty B (.maxPoolBackB (N := B) (c := c1) (h := s2h) (w := s2w) nAc2 bS1c1 (.operand nDpool1 bS2c1))
     let (cDbn2, nDbn2) ← pretty B (.selectPosB nBn2 bS1c1 (.operand nDac2 bS1c1))
     let (cDhc2, nDhc2) ← pretty B (.bnPerChannelBack (oc := c1) (h := s1h) (w := s1w) "%g2" nHc2 bnEpsStr 0 zVc1 zS1c1 (.operand nDbn2 zS1c1))
-    let (cDac1, nDac1) ← pretty B ((if bf16 then SHlo.convBackBatchedBf16 (N := B) (h := s1h) (w := s1w) zrnd "%W2" W₂ b₂ else SHlo.convBackBatched (N := B) (h := s1h) (w := s1w) "%W2" W₂ b₂) (.operand nDhc2 bS1c1))
+    let (cDac1, nDac1) ← pretty B ((SHlo.convBackBatchedAt bf16 (N := B) (h := s1h) (w := s1w) zrnd "%W2" W₂ b₂) (.operand nDhc2 bS1c1))
     let (cDbn1, nDbn1) ← pretty B (.selectPosB nBn1 bS1c1 (.operand nDac1 bS1c1))
     let (cDhc1, nDhc1) ← pretty B (.bnPerChannelBack (oc := c1) (h := s1h) (w := s1w) "%g1" nHc1 bnEpsStr 0 zVc1 zS1c1 (.operand nDbn1 zS1c1))
     -- ═══ per param: un-fused gradient, then the optimizer outputs. Order is `bnSig`'s. ═══
     -- ⚠ The conv/dense gradients are BATCHED ops (so the bf16 twins apply); the BN γ/β gradients
     -- are the per-example ones, whose emit already reduces over `[0,2,3]` to a `Vec oc`.
-    let (gW1, sW1) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd "%x" b₁ bX W₁ else SHlo.convWeightGradB (N := B) "%x" b₁ bX W₁) (.operand nDhc1 bS1c1))
+    let (gW1, sW1) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd "%x" b₁ bX W₁) (.operand nDhc1 bS1c1))
     let (aW1, tW1, mW1, vW1) ← optTail opt B replicas (c1*ic*kH*kW) "%W1" [c1,ic,kH,kW] sW1
     let (gb1, sb1) ← pretty B (.convBiasGradB (N := B) W₁ bX b₁ (.operand nDhc1 bS1c1))
     let (ab1, tb1, mb1, vb1) ← optTail opt B replicas c1 "%cb1" [c1] sb1
@@ -1443,7 +1444,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (ag1, tg1, mg1, vg1) ← optTail opt B replicas c1 "%g1" [c1] sg1
     let (gt1, st1) ← pretty B (SHlo.bnBetaGrad (.operand nDbn1 zS1c1))
     let (at1, tt1, mt1, vt1) ← optTail opt B replicas c1 "%bt1" [c1] st1
-    let (gW2, sW2) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc1 b₂ bS1c1 W₂ else SHlo.convWeightGradB (N := B) nAc1 b₂ bS1c1 W₂) (.operand nDhc2 bS1c1))
+    let (gW2, sW2) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc1 b₂ bS1c1 W₂) (.operand nDhc2 bS1c1))
     let (aW2, tW2, mW2, vW2) ← optTail opt B replicas (c1*c1*kH*kW) "%W2" [c1,c1,kH,kW] sW2
     let (gb2, sb2) ← pretty B (.convBiasGradB (N := B) W₂ bS1c1 b₂ (.operand nDhc2 bS1c1))
     let (ab2, tb2, mb2, vb2) ← optTail opt B replicas c1 "%cb2" [c1] sb2
@@ -1451,7 +1452,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (ag2, tg2, mg2, vg2) ← optTail opt B replicas c1 "%g2" [c1] sg2
     let (gt2, st2) ← pretty B (SHlo.bnBetaGrad (.operand nDbn2 zS1c1))
     let (at2, tt2, mt2, vt2) ← optTail opt B replicas c1 "%bt2" [c1] st2
-    let (gW3, sW3) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool1 b₃ bS2c1 W₃ else SHlo.convWeightGradB (N := B) nPool1 b₃ bS2c1 W₃) (.operand nDhc3 bS2c2))
+    let (gW3, sW3) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nPool1 b₃ bS2c1 W₃) (.operand nDhc3 bS2c2))
     let (aW3, tW3, mW3, vW3) ← optTail opt B replicas (c2*c1*kH*kW) "%W3" [c2,c1,kH,kW] sW3
     let (gb3, sb3) ← pretty B (.convBiasGradB (N := B) W₃ bS2c1 b₃ (.operand nDhc3 bS2c2))
     let (ab3, tb3, mb3, vb3) ← optTail opt B replicas c2 "%cb3" [c2] sb3
@@ -1459,7 +1460,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (ag3, tg3, mg3, vg3) ← optTail opt B replicas c2 "%g3" [c2] sg3
     let (gt3, st3) ← pretty B (SHlo.bnBetaGrad (.operand nDbn3 zS2c2))
     let (at3, tt3, mt3, vt3) ← optTail opt B replicas c2 "%bt3" [c2] st3
-    let (gW4, sW4) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc3 b₄ bS2c2 W₄ else SHlo.convWeightGradB (N := B) nAc3 b₄ bS2c2 W₄) (.operand nDhc4 bS2c2))
+    let (gW4, sW4) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc3 b₄ bS2c2 W₄) (.operand nDhc4 bS2c2))
     let (aW4, tW4, mW4, vW4) ← optTail opt B replicas (c2*c2*kH*kW) "%W4" [c2,c2,kH,kW] sW4
     let (gb4, sb4) ← pretty B (.convBiasGradB (N := B) W₄ bS2c2 b₄ (.operand nDhc4 bS2c2))
     let (ab4, tb4, mb4, vb4) ← optTail opt B replicas c2 "%cb4" [c2] sb4
@@ -1467,7 +1468,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (ag4, tg4, mg4, vg4) ← optTail opt B replicas c2 "%g4" [c2] sg4
     let (gt4, st4) ← pretty B (SHlo.bnBetaGrad (.operand nDbn4 zS2c2))
     let (at4, tt4, mt4, vt4) ← optTail opt B replicas c2 "%bt4" [c2] st4
-    let (gW5, sW5) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool2 b₅ bS3c2 W₅ else SHlo.convWeightGradB (N := B) nPool2 b₅ bS3c2 W₅) (.operand nDhc5 bS3c3))
+    let (gW5, sW5) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nPool2 b₅ bS3c2 W₅) (.operand nDhc5 bS3c3))
     let (aW5, tW5, mW5, vW5) ← optTail opt B replicas (c3*c2*kH*kW) "%W5" [c3,c2,kH,kW] sW5
     let (gb5, sb5) ← pretty B (.convBiasGradB (N := B) W₅ bS3c2 b₅ (.operand nDhc5 bS3c3))
     let (ab5, tb5, mb5, vb5) ← optTail opt B replicas c3 "%cb5" [c3] sb5
@@ -1475,7 +1476,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (ag5, tg5, mg5, vg5) ← optTail opt B replicas c3 "%g5" [c3] sg5
     let (gt5, st5) ← pretty B (SHlo.bnBetaGrad (.operand nDbn5 zS3c3))
     let (at5, tt5, mt5, vt5) ← optTail opt B replicas c3 "%bt5" [c3] st5
-    let (gW6, sW6) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc5 b₆ bS3c3 W₆ else SHlo.convWeightGradB (N := B) nAc5 b₆ bS3c3 W₆) (.operand nDhc6 bS3c3))
+    let (gW6, sW6) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc5 b₆ bS3c3 W₆) (.operand nDhc6 bS3c3))
     let (aW6, tW6, mW6, vW6) ← optTail opt B replicas (c3*c3*kH*kW) "%W6" [c3,c3,kH,kW] sW6
     let (gb6, sb6) ← pretty B (.convBiasGradB (N := B) W₆ bS3c3 b₆ (.operand nDhc6 bS3c3))
     let (ab6, tb6, mb6, vb6) ← optTail opt B replicas c3 "%cb6" [c3] sb6
@@ -1483,7 +1484,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (ag6, tg6, mg6, vg6) ← optTail opt B replicas c3 "%g6" [c3] sg6
     let (gt6, st6) ← pretty B (SHlo.bnBetaGrad (.operand nDbn6 zS3c3))
     let (at6, tt6, mt6, vt6) ← optTail opt B replicas c3 "%bt6" [c3] st6
-    let (gW7, sW7) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nPool3 b₇ bS4c3 W₇ else SHlo.convWeightGradB (N := B) nPool3 b₇ bS4c3 W₇) (.operand nDhc7 bS4c4))
+    let (gW7, sW7) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nPool3 b₇ bS4c3 W₇) (.operand nDhc7 bS4c4))
     let (aW7, tW7, mW7, vW7) ← optTail opt B replicas (c4*c3*kH*kW) "%W7" [c4,c3,kH,kW] sW7
     let (gb7, sb7) ← pretty B (.convBiasGradB (N := B) W₇ bS4c3 b₇ (.operand nDhc7 bS4c4))
     let (ab7, tb7, mb7, vb7) ← optTail opt B replicas c4 "%cb7" [c4] sb7
@@ -1491,7 +1492,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let (ag7, tg7, mg7, vg7) ← optTail opt B replicas c4 "%g7" [c4] sg7
     let (gt7, st7) ← pretty B (SHlo.bnBetaGrad (.operand nDbn7 zS4c4))
     let (at7, tt7, mt7, vt7) ← optTail opt B replicas c4 "%bt7" [c4] st7
-    let (gW8, sW8) ← pretty B ((if bf16 then SHlo.convWeightGradBBf16 (N := B) zrnd nAc7 b₈ bS4c4 W₈ else SHlo.convWeightGradB (N := B) nAc7 b₈ bS4c4 W₈) (.operand nDhc8 bS4c4))
+    let (gW8, sW8) ← pretty B ((SHlo.convWeightGradBAt bf16 (N := B) zrnd nAc7 b₈ bS4c4 W₈) (.operand nDhc8 bS4c4))
     let (aW8, tW8, mW8, vW8) ← optTail opt B replicas (c4*c4*kH*kW) "%W8" [c4,c4,kH,kW] sW8
     let (gb8, sb8) ← pretty B (.convBiasGradB (N := B) W₈ bS4c4 b₈ (.operand nDhc8 bS4c4))
     let (ab8, tb8, mb8, vb8) ← optTail opt B replicas c4 "%cb8" [c4] sb8

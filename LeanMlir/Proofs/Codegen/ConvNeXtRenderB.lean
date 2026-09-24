@@ -210,8 +210,8 @@ private def fwdBlockB (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option
     (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty bB (.batchOp (N := bB)
-      (if bf16 then .depthwiseBf16 (h := h) (w := h) zrnd s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB
-       else .depthwise (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zDB : DepthwiseKernel c 7 7) zVB)
+      (.depthwiseAt bf16 (h := h) (w := h) zrnd s!"%{pfx}dW" s!"%{pfx}db"
+          (zDB : DepthwiseKernel c 7 7) zVB)
       (.operand xin zVB))
   let (k2, n) ← lnFwdSiteB bB s!"%{pfx}ng" s!"%{pfx}nbt" d c h
   -- ⚠ The block's 1×1s are `.conv` at `kH = kW = 1`, so they take `convBf16` — NOT a new matmul op.
@@ -219,14 +219,12 @@ private def fwdBlockB (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option
   -- activation ops is wrong for THIS render; the only true matmul is the classifier head, which
   -- stays f32 like every other net's.
   let (k3, e') ← pretty bB (.batchOp (N := bB)
-      (if bf16 then .convBf16 (h := h) (w := h) zrnd s!"%{pfx}eW" s!"%{pfx}eb" (zKB : Kernel4 e c 1 1) zVB
-       else .conv (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (zKB : Kernel4 e c 1 1) zVB)
+      (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}eW" s!"%{pfx}eb" (zKB : Kernel4 e c 1 1) zVB)
       (.operand n zVB))
   let (k4, g) ← pretty bB (.batchOp (N := bB) (.gelu (n := e*h*h))
       (.operand e' (zVB : Vec (bB*(e*h*h)))))
   let (k5, p) ← pretty bB (.batchOp (N := bB)
-      (if bf16 then .convBf16 (h := h) (w := h) zrnd s!"%{pfx}pW" s!"%{pfx}pb" (zKB : Kernel4 c e 1 1) zVB
-       else .conv (h := h) (w := h) s!"%{pfx}pW" s!"%{pfx}pb" (zKB : Kernel4 c e 1 1) zVB)
+      (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}pW" s!"%{pfx}pb" (zKB : Kernel4 c e 1 1) zVB)
       (.operand g zVB))
   let (k6, ls) ← pretty bB (.batchOp (N := bB)
       (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (zVB : Vec c)) (.operand p zVB))
@@ -244,8 +242,8 @@ private def fwdDownB (bB : Nat) (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool
   -- ⚠ SYMMETRIC pad (`convStrided`, not `convStridedXla`) — ConvNeXt is torchvision-origin. Both
   -- spellings give the same output size at every kernel, so only a forward tie separates them.
   let (k2, o) ← pretty bB (.batchOp (N := bB)
-      (if bf16 then .convStridedBf16 (h := h2) (w := h2) zrnd s!"%{pfx}W" s!"%{pfx}b" (zKB : Kernel4 co ci 2 2) zVB
-       else .convStrided (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (zKB : Kernel4 co ci 2 2) zVB)
+      (.convStridedAt bf16 (h := h2) (w := h2) zrnd s!"%{pfx}W" s!"%{pfx}b"
+          (zKB : Kernel4 co ci 2 2) zVB)
       (.operand n zVB))
   pure (k1 ++ k2, n, o)
 
@@ -271,8 +269,8 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
   -- `convStride4`'s pad-one-less rule (`[[0,0]]` at k=4), which is NOT the symmetric pad every
   -- other forward conv uses; `BatchableOp.convStride4Bf16` carries the note.
   let (cS, stemC) ← pretty bB (.batchOp (N := bB)
-      (if bf16 then .convStride4Bf16 (h := 56) (w := 56) zrnd "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB
-       else .convStride4 (h := 56) (w := 56) "%psW" "%psb" (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
+      (.convStride4At bf16 (h := 56) (w := 56) zrnd "%psW" "%psb"
+          (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
       (.operand "%x" (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56)))))))
   let (cSln, stem) ← lnFwdSiteB bB "%psng" "%psnbt" stemC V.dims[0]! 56
   let mut fwd := cS ++ cSln
@@ -420,23 +418,15 @@ private def bwdBlockB (bB : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) (d
     | none   => pure ("", dy)
   let (k1, cot_p) ← pretty bB (.batchOp (N := bB)
       (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (zVB : Vec c)) (.operand dyd zVB))
-  let (k2, cot_g) ← pretty bB (if bf16 then
-      .convBackBatchedBf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}pW"
-        (zKB : Kernel4 c e 1 1) zVB (.operand cot_p zVB)
-    else .convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}pW"
-      (zKB : Kernel4 c e 1 1) zVB (.operand cot_p zVB))
+  let (k2, cot_g) ← pretty bB (.convBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}pW"
+        (zKB : Kernel4 c e 1 1) zVB (.operand cot_p zVB))
   let (k3, cot_e) ← pretty bB (.geluBackB b.e (zVB : Vec (bB*(e*h*h))) (.operand cot_g zVB))
-  let (k4, cot_n) ← pretty bB (if bf16 then
-      .convBackBatchedBf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}eW"
-        (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB)
-    else .convBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}eW"
-      (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB))
+  let (k4, cot_n) ← pretty bB (.convBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}eW"
+        (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB))
   let (k5, cot_d) ← lnBackSiteB bB s!"%{pfx}ng" b.d cot_n c h
-  let (k6, cot_main) ← pretty bB (if bf16 then
-      .depthwiseBackBatchedBf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}dW"
-        (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB)
-    else .depthwiseBackBatched (N := bB) (h := h) (w := h) s!"%{pfx}dW"
-      (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB))
+  let (k6, cot_main) ← pretty bB (.depthwiseBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd
+        s!"%{pfx}dW"
+        (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB))
   let (k7, cot_xin) ← pretty bB (.addVB (.operand cot_main (zVB : Vec (bB*(c*h*h))))
       (.operand dy zVB))
   pure (kD ++ k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd)
@@ -449,11 +439,9 @@ private def bwdDownB (bB : Nat) (pfx dy xin : String) (ci co h2 : Nat) (bf16 : B
   -- wrong at `k = 2` — and ConvNeXt's downsample is the repo's ONLY even strided kernel, so this
   -- is the only site in the repo where the difference is observable at all.
   -- `convStridedBackBatchedBf16` preserves it verbatim; do not "tidy" it.
-  let (k1, cot_n) ← pretty bB (if bf16 then
-      .convStridedBackBatchedBf16 (N := bB) (h := h2) (w := h2) zrnd s!"%{pfx}W"
-        (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2))))
-    else .convStridedBackBatched (N := bB) (h := h2) (w := h2) s!"%{pfx}W"
-      (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
+  let (k1, cot_n) ← pretty bB (.convStridedBackBatchedAt bf16 (N := bB) (h := h2) (w := h2) zrnd
+        s!"%{pfx}W"
+        (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
   let (k2, cot_x) ← lnBackSiteB bB s!"%{pfx}ng" xin cot_n ci (2*h2)
   pure (k1 ++ k2, cot_n, cot_x)
 
@@ -471,35 +459,25 @@ private def blockParamGradB (bB : Nat) (pfx : String) (b : FNames)
     StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
   let (cLg, nLg) ← pretty bB (.layerScaleChGammaGradB (N := bB) (c := c) (h := h) (w := h) b.p
       (zVB : Vec (bB*(c*h*h))) (.operand dy zVB))
-  let (cPw, nPw) ← pretty bB (if bf16 then
-      .convWeightGradBBf16 (N := bB) (ic := e) (oc := c) (h := h) (w := h)
+  let (cPw, nPw) ← pretty bB (.convWeightGradBAt bf16 (N := bB) (ic := e) (oc := c) (h := h)
+        (w := h)
         (kH := 1) (kW := 1) zrnd b.g (zVB : Vec c) (zVB : Vec (bB*(e*h*h))) (zKB : Kernel4 c e 1 1)
-        (.operand cot_p zVB)
-    else .convWeightGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
-      (kH := 1) (kW := 1) b.g (zVB : Vec c) (zVB : Vec (bB*(e*h*h))) (zKB : Kernel4 c e 1 1)
-      (.operand cot_p zVB))
+        (.operand cot_p zVB))
   let (cPb, nPb) ← pretty bB (.convBiasGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
       (kH := 1) (kW := 1) (zKB : Kernel4 c e 1 1) (zVB : Vec (bB*(e*h*h))) (zVB : Vec c)
       (.operand cot_p zVB))
-  let (cEw, nEw) ← pretty bB (if bf16 then
-      .convWeightGradBBf16 (N := bB) (ic := c) (oc := e) (h := h) (w := h)
+  let (cEw, nEw) ← pretty bB (.convWeightGradBAt bf16 (N := bB) (ic := c) (oc := e) (h := h)
+        (w := h)
         (kH := 1) (kW := 1) zrnd b.n (zVB : Vec e) (zVB : Vec (bB*(c*h*h))) (zKB : Kernel4 e c 1 1)
-        (.operand cot_e zVB)
-    else .convWeightGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
-      (kH := 1) (kW := 1) b.n (zVB : Vec e) (zVB : Vec (bB*(c*h*h))) (zKB : Kernel4 e c 1 1)
-      (.operand cot_e zVB))
+        (.operand cot_e zVB))
   let (cEb, nEb) ← pretty bB (.convBiasGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
       (kH := 1) (kW := 1) (zKB : Kernel4 e c 1 1) (zVB : Vec (bB*(c*h*h))) (zVB : Vec e)
       (.operand cot_e zVB))
   let (cNg, nNg) ← lnGammaTailB bB s!"%{pfx}ng" b.d cot_n c h
   let (cNb, nNb) ← lnBetaTailB bB cot_n c h
-  let (cDw, nDw) ← pretty bB (if bf16 then
-      .depthwiseWeightGradBBf16 (N := bB) (c := c) (h := h) (w := h)
+  let (cDw, nDw) ← pretty bB (.depthwiseWeightGradBAt bf16 (N := bB) (c := c) (h := h) (w := h)
         (kH := 7) (kW := 7) zrnd b.xin (zVB : Vec c) (zVB : Vec (bB*(c*h*h)))
-        (zDB : DepthwiseKernel c 7 7) (.operand cot_d zVB)
-    else .depthwiseWeightGradB (N := bB) (c := c) (h := h) (w := h)
-      (kH := 7) (kW := 7) b.xin (zVB : Vec c) (zVB : Vec (bB*(c*h*h)))
-      (zDB : DepthwiseKernel c 7 7) (.operand cot_d zVB))
+        (zDB : DepthwiseKernel c 7 7) (.operand cot_d zVB))
   let (cDb, nDb) ← pretty bB (.depthwiseBiasGradB (N := bB) (c := c) (h := h) (w := h)
       (kH := 7) (kW := 7) (zDB : DepthwiseKernel c 7 7) (zVB : Vec (bB*(c*h*h))) (zVB : Vec c)
       (.operand cot_d zVB))
@@ -520,15 +498,11 @@ private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci 
   -- ⚠ The wgrad pad is `[[p-1, p+1], …]`, the OPPOSITE shift from the dgrad's `[[p+1, p-1], …]`
   -- in `bwdDownB`. `convStridedWeightGradBBf16` keeps its f32 peer's geometry verbatim;
   -- `scripts/xla_pad_op_check.py` caught this pair being "fixed by symmetry" once already.
-  let (wcode, nW) ← pretty bB (if bf16 then
-      .convStridedWeightGradBBf16 (N := bB) (ic := ci) (oc := co) (h := h2)
+  let (wcode, nW) ← pretty bB (.convStridedWeightGradBAt bf16 (N := bB) (ic := ci) (oc := co)
+        (h := h2)
         (w := h2) (kH := 2) (kW := 2) zrnd downLn (zVB : Vec co)
         (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zKB : Kernel4 co ci 2 2)
-        (.operand dy (zVB : Vec (bB*(co*h2*h2))))
-    else .convStridedWeightGradB (N := bB) (ic := ci) (oc := co) (h := h2)
-      (w := h2) (kH := 2) (kW := 2) downLn (zVB : Vec co)
-      (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zKB : Kernel4 co ci 2 2)
-      (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
+        (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
   pure (cB ++ cNg ++ cNb ++ wcode,
     [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", nW), (s!"{pfx}b", nB)])
 
@@ -648,15 +622,11 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     -- ⭐ **The stem weight grad — ConvNeXt's second and last new bf16 op.** ⚠ There is no
     -- `convStride4BackBatched` and no bf16 twin of one: this is the patchify stem, its input is
     -- `%x`, and there is no input gradient to compute. TWO new ops for this net, not three.
-    let (cPsW, nPsW) ← pretty bB (if bf16 then
-        .convStride4WeightGradBBf16 (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56)
+    let (cPsW, nPsW) ← pretty bB (.convStride4WeightGradBAt bf16 (N := bB) (ic := 3)
+          (oc := V.dims[0]!) (h := 56)
           (w := 56) (kH := 4) (kW := 4) zrnd "%x" (zVB : Vec (V.dims[0]!))
           (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 (V.dims[0]!) 3 4 4)
-          (.operand dy (zVB : Vec (bB*(V.dims[0]!*56*56))))
-      else .convStride4WeightGradB (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56)
-        (w := 56) (kH := 4) (kW := 4) "%x" (zVB : Vec (V.dims[0]!))
-        (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 (V.dims[0]!) 3 4 4)
-        (.operand dy (zVB : Vec (bB*(V.dims[0]!*56*56)))))
+          (.operand dy (zVB : Vec (bB*(V.dims[0]!*56*56)))))
     bwd := bwd ++ cPsW ++ cPsb
     updMap := updMap ++ [("psW", nPsW), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
