@@ -159,7 +159,7 @@ def decode(variant: str) -> str:
 
 
 def slugs_from_verified_nets() -> list[str]:
-    src = (ROOT / "LeanMlir" / "VerifiedNets.lean").read_text(encoding="utf-8")
+    src = (ROOT / "LeanMlir" / "VerifiedNetsCore.lean").read_text(encoding="utf-8")
     found = set(re.findall(r'slug\s*:=\s*"([^"]+)"', src))
     return sorted(found, key=len, reverse=True)  # longest first, for prefix matching
 

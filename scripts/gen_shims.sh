@@ -90,7 +90,7 @@ for e in "${EXES[@]}"; do
   if [ ! -f "jax/.lake/build/$want" ]; then
     echo "FAIL: $exe did not write jax/.lake/build/$want" >&2
     echo "      (its default recipe's \`out\` was renamed — update EXES here AND the matching" >&2
-    echo "       \`shimScript\` in LeanMlir/VerifiedNets.lean, which is what the driver spawns)" >&2
+    echo "       \`shimScript\` in LeanMlir/VerifiedNetsCore.lean, which is what the driver spawns)" >&2
     exit 1
   fi
   printf '  %-40s %s\n' "$want" "$(md5sum "jax/.lake/build/$want" | cut -c1-12)"

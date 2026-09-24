@@ -24,6 +24,7 @@ on:
       # failure the corpus must catch on the push that causes it, not nightly
       # (mnv2 6→17-block promotion rotted the orphaned SpecVJP for weeks).
       - 'LeanMlir/VerifiedNets.lean'
+      - 'LeanMlir/VerifiedNetsCore.lean'
       - 'LeanMlir/VerifiedSpec.lean'
       # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`
       # below is the only thing that elaborates them. Added 2026-09-20 with that step.
@@ -47,6 +48,7 @@ on:
       - 'lake-manifest.json'
       - '.github/workflows/certs.yml'
       - 'LeanMlir/VerifiedNets.lean'
+      - 'LeanMlir/VerifiedNetsCore.lean'
       - 'LeanMlir/VerifiedSpec.lean'
       # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`
       # below is the only thing that elaborates them. Added 2026-09-20 with that step.
