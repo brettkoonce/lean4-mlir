@@ -507,7 +507,7 @@ function changes. Decide per net at render time; the default is to touch only th
 
 ### 3.1 The kit (once)
 
-The sync-BN ops (2b), P1/P2 (2c) in `Foundation/PerChannelBN.lean` beside `bnBatchTensor4`, P4 in
+The sync-BN ops (2b), P1/P2 (2c) in `Architectures/PerChannelBN.lean` beside `bnBatchTensor4`, P4 in
 `Foundation/DataParallel.lean` beside its negative twin, the `allReduceMeanF`-at-`[2·oc]`/`[4·oc]`
 emit checked against the parser. Gate: `lake build Certs`, parser round-trip, AuditAxioms.
 
@@ -523,7 +523,7 @@ new theorem on the standard 3 axioms.
 | `bnSync_grad_input` | the three-term backward, every reduction handed in |
 | `bnSync_grad_input_at_own_stats` | …at its own statistics it IS `bn_grad_input` |
 
-| in `Foundation/PerChannelBN.lean` | |
+| in `Architectures/PerChannelBN.lean` | |
 |---|---|
 | `bnEvalForward_at_own_stats` | frozen-stats BN at own stats IS `bnForward` |
 | `bnSyncTensor4` + `_at_own_stats` | sync forward at `[N,C,H,W]`, and the `R=1` anchor |

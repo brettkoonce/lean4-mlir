@@ -209,7 +209,7 @@ theorem <net>ForwardB_full_backward_nontrivial : ∃ j₀ i₀, (…seal_has_vjp
 
 The class count is a binder (`nCls`, with `Wd 0 0 = 1` needing `0 < nCls`); ResNet-50's `q` is
 instantiated at `7` (224 px). The kit (§3.2's lemma column) goes in one shared file,
-`Foundation/BatchSealKit.lean` or next to `bnBatchTensor4` in `Foundation/PerChannelBN.lean` —
+`Foundation/BatchSealKit.lean` or next to `bnBatchTensor4` in `Architectures/PerChannelBN.lean` —
 the executor's call; what matters is that ResNet-50 and the MobileNets import it rather than
 re-prove it.
 

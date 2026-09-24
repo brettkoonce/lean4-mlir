@@ -43,6 +43,19 @@ the "where is X?" problem. The fix is mostly *moves with names kept* — no pinn
 | Certs-cone commit | §2.6 part 4 — `Certs` no longer builds the trainer or the FFI: it reaches 3 program modules, all import-free data (`VerifiedSpec`, `ParamLayouts`, `VerifiedNetsCore`), was 7 incl. `VerifiedTrain` + `IreeRuntime`. `VerifiedSpec` import-free (gains `VerifiedData`; `toNet` + the 10 IO forwarders → `VerifiedTrain` / `VerifiedAttack` / `VerifiedSmoothing`); the XLayout tables → new `ParamLayouts` (`IreeRuntime` re-exports); the specs → `VerifiedNetsCore` (git mv; `SpecVJP` imports it), `VerifiedNets` = Core + the program modules (apps unchanged). `VerifiedTrain`'s four jobs split on its banners: driver (+ fp8) stays, `VerifiedPgdGen` (the four hand-typed PGD-step StableHLO generators, now documented as unverified), `VerifiedAttack`, `VerifiedSmoothing`; `compileVmfb` / `loadData` / `gen*PgdStep` lose `private`. Book: one path (`LeanMlir/VerifiedNetsCore.lean`, ch 1 "the spec lives in …"). ⚠ `fwdRenderedBatch` (private, `VerifiedTrain`) has no caller — dead |
 | edges commit | §2.6 part 5, closes §2.6 — ⭐ no Foundation file imports a net or a certificate (was 13/29 at the audit), and `StableHLO` imports no net. The chapter 3–4 graph ties (`cnnFwdGraph_faithful`, `cifar{,8,8Bn}FwdGraph_faithful`, `cnnBackGraph_faithful` + `maxPoolFlat_has_vjp_at'`) → new leaf `Nets/Small/ChapterGraphTies` (graphs stay in `StableHLO`; names kept). `CnnTrainStep` → `Architectures/ConvGrad`, `CifarBnClose` → `Architectures/PerChannelBNGrad`, `ViTClose` → `Architectures/TokenParamGrad` (git mv, names kept, now on Architectures imports only). `IntervalBound` + `CrownBound` → `Certificates/` (both declare into `LipschitzCertDemo`; the two scorecard generators re-run, diff = the 7 path lines). `SmoothedLossCot`'s `LinearTrainStep` import was dead. `relu_id_of_pos` (MnistCNN) → `MLP`. ⚠ Left: `Architectures/ChannelLNBack` → `Nets/ConvNeXt/ConvNeXtChannelLN` (needs the channel-LN op itself in Architectures) |
 | seals fun_prop commit | §6 seals' continuity, −489 lines net (est. ~250). The op files tag their continuity facts `@[fun_prop]` (`relu`, `relu6`, `residual(Proj)`, `batchMap`, `maxPool3s2Flat`, `bnRowLA`, `rayX`) and gain seven atoms (`bnBatchLA`, `flatConv`, `flatConvStride2(Xla)`, `depthwiseFlat`, `depthwiseStride2Flat(Xla)`, `swish`) + `bnIstd_continuous` (the old `bnIstd_cont` took an index it never read, so `fun_prop` could not infer it — deleted). Each seal's `Rr_continuous` (and MNv4's `Q0_continuous`) is now one `fun_prop (disch := exact one_pos)` after unfolding the carrier to its atoms; the hand-composed `cn*` / `Z*_continuous` / block-continuity chains (R34 17, R50 22, MNv2 51, MNv4 38) and the four `R34FullBSeal` stage lemmas are gone. ⚠ Recipe: unfold to the ATOMS, never tag a block lemma — `fun_prop` then unifies at literal widths and times out (numeral-shape trap); MNv2/MNv4's interleaved `Z`/`A` defs need `repeat (first | unfold …)` |
+| DenseEuclid commit | §6 dense bounds, −133 lines (est. ~150), statements + 5 pins unchanged. `denseE_lipschitzL2_of_sq` (every upper bound's L2 tail from a raw-sum `‖Wd‖² ≤ B²‖d‖²`), `quad_le_of_sq_matvec` / `quad_le_of_frob` (`⟨y, My⟩ ≤ c‖y‖²`), `sq_le_of_gram_quad` (the Gram step `⟨y, Gy⟩ ≤ c‖y‖² ⇒ ‖Wd‖² ≤ c‖d‖²`); Frobenius, Schatten-4 and Schatten-8 are each one term on them, and the Schatten-4 proof reuses `sum_sq_matTvec_eq` instead of re-deriving it |
+| smoothing commit | §6 smoothing, −59 lines (est. ~85), statements + pins unchanged. `SmoothingGaussian`: the integrable-×-bounded proofs → `Integrable.mul_bdd` (one local `hWbdd` for the three weighted ones), the bounded ones → `Integrable.of_mem_Icc`, `htrans` → `MeasurePreserving.integral_comp'` (drops three measurability `have`s), `pi_gaussian_integral_eval` (unpinned) → Mathlib's `integral_comp_eval`. New `smoothing_certified_of_le` (any `q ≤ p` certifies radius `σ·Φ⁻¹(q)`), `smoothProb_eq_real` + `measurableSet_smoothRegion` (the indicator bridge), `hitCount_setOf` (CP) — MC, CP ×2 and NetSemantics use them. Gated incl. the local comparator (3 tiers) |
+| ENet VJP commit | §6 ENet MBConv VJPs written twice, −52 lines. `EfficientNetChainClose` holds the one term-mode chain per shape: `mbStridedFwdB_has_vjp` (was tactic-built) and `mbExpFwdB` + `_differentiable` + `_has_vjp` (moved from `EfficientNetFullB0`, names kept); `mbResidFwdB_has_vjp` takes its body from `mbExpFwdB_has_vjp`. `BackB0`'s `mbBodyB_has_vjp` / `mbDownBodyB_has_vjp` (unpinned, uncited) deleted — the two body graph ties now state `mbExpFwdB_has_vjp` / `mbStridedFwdB_has_vjp`. Gated incl. the local comparator (3 tiers) |
+| swish commit | §6 `BatchSealKit`'s second swish derivative, −29 lines. `swishD` (the quotient-rule formula) and `one_add_exp_pos` deleted; `hasDerivAt_swishScalar` (now one line, from `swishScalar_diff`), `swishScalarDeriv_pos` (was `swishD_pos`) and `swishScalar_lt` move to `Architectures/LayerNorm` beside `swishScalar`, proved on `Real.sigmoid_pos` / `_lt_one` / `_monotone`; `swishGap` and MNv4's seal use `swishScalarDeriv`. ⚠ namespace `Proofs.BatchSeal` → `Proofs` (unpinned). Gated incl. the local comparator (3 tiers) |
+| reindex commit | §6 reindex VJPs — one Jacobian proof, not ~30 lines out (net +4). `reindexVJP` (+ `_backward_of_inv`) moves from `PerChannelBN` to `Foundation/Tensor` beside `pdiv_reindex`, with a bridge `reindexVJP_backward` to the masked-sum spelling; `reindex_has_vjp` keeps that spelling as its backward and takes `correct` from `reindexVJP`; ⭐ `StridedConv` stops importing `PerChannelBN` (it was only there for `reindexVJP`). ⚠ The audit's premise was wrong: `reindex_has_vjp` / `broadcastFlat_has_vjp` can't be `reindexVJP` aliases — their backwards are spelled as the IR's scatter ops denote, and `bnBatchLABack_faithful`, the SE-gate graph ties (`EfficientNetBackB0`) and MNv4's whole-net tie match them by `rfl` (as aliases MNv4's hits max recursion depth). `broadcastFlat_has_vjp` unchanged. Gated incl. the local comparator (3 tiers) |
+| small-collapses commit | §6 small collapses, −47 lines (est. ~80). New `sum_finProdFinEquiv₃` (Tensor): `sum_flat3` (unpinned) deleted, `sum_w3` / `Tensor3.sum_flatten` one-liners, and the three hand-rolled triple re-indexings in `Depthwise` / `CNN` (the audit's "Depthwise / CNN GAP collapses") call it; `sum_s2` kept (pinned, already `sum_finProdFinEquiv`). IBP conv uniform boxes: `ite_sign_lo/hi`, `convTap_uniform_*` by `split_ifs`, `convLo/Hi_uniform` one `simp` each (names kept). `euclid_norm_sq` := `EuclideanSpace.real_norm_sq_eq` (pinned, name kept). `layerNormVec_has_vjp`'s `h3` by `fun_prop`. `mulVec_headPadMat` on `sum_finProdFinEquiv` + one `simp`. `mhSlab` → `headSliceMat` (one spelling; ≈ +2 lines). ⛔ Skipped: GramQ `rowDotQ`/`castM` ≡ IBP `sumQ`/`castV` (needs a shared ℚ module both import, generated certificates cite the names, ~3 lines); dense `denseLo/Hi_uniform` (`IntervalBound` can't see `ite_sign_*` without a heavy import edge, ~1 line each). Gated incl. the local comparator (3 tiers) |
+| RenderKit commit | §5 part 1, −131 lines. New `Codegen/RenderKit.lean`: `PGrad` (from `ResNet34RenderB`; MNv2's `PGradM` / MNv4's `PGradV4` gone), `adamOne` (was `adamOneM` / `adamOne4` / `enetAdamOne`), `rmsOne` (was `rmsOneM` ≡ `enetRmsOne`), `adamOneEma` (was `vitAdamOne` ≡ `convnextAdamOne`). R34's multi-optimizer `optOne` stays. ⭐ 198 of 248 artifacts re-written by the build, `git diff verified_mlir/` empty; `regen_verified_mlir.sh check` all OK. |
+| packedTrainSig commit | §5 part 2, −51 lines. RenderKit's `packedTrainSig` (the `[θ|m|v|G|E]` argument regions + `%lr/%bc1/%bc2` [+ `%aup/%akeep`] [+ `%emad/%oemad`]) and `packedTrainRetTys` (results in the same order) replace the hand-built lists in R34, R50, MNv2, MNv4, ENet, ViT, ConvNeXt — 7 signatures and 10 result-type lists (incl. the inner `retTys` of ViT / ConvNeXt / ENet). R50's `emaSuf := "ema"` (the `%sge` collision) is a parameter. CnnRender's hand-listed small nets untouched. 198 artifacts re-written, byte-identical; regen check OK. |
+| dropMaskSig commit | §5 part 3, net +1 line — one spelling, not a line win. RenderKit's `dropMaskSig B sd idxs` (`, %dp<i>: tensor<Bxf32>` per site, `""` when off) is the body of `vitDropSig` / `cnxDropSig` / `enetDropSig` / `r50DropSig`, each now a one-liner over its own site list; the per-net names stay (8 call sites + prose cite them). 198 artifacts byte-identical; regen check OK. |
+| bf16 smart-ctor commit | §5 part 4 — 24 precision-switched constructors `XAt bf16 rnd …` in RenderKit (generated from `StableHLO`'s own signatures; each `XBf16` is `X` with `rnd` first), and all 248 `if bf16 then .XBf16 … else .X …` switches in 9 renderers rewritten to them by a checker that only rewrites when the else-branch is exactly the then-branch minus `Bf16` and the rounding argument (recursing through `.batchOp`). −16.3 KB of renderer source; lines ≈ flat (+34: most switches were single long lines, RenderKit +190). ⚠ The byte gate caught a rewriter bug: CnnRender spells the ctors qualified (`SHlo.convBackBatchedBf16`) and the first pass dropped their f32 branch — 8 cifar8b artifacts changed; fixed and re-verified. 238 artifacts re-written, byte-identical; regen check OK. |
+| fwdSigParts commit | §5 part 5, −321 lines. `MlirCodegen.emitForwardEvalSig` was a 335-line copy of `emitForwardSig` (identical but for comments) plus the per-BN `%bn_mean/%bn_var` suffix; both are now thin wrappers over `fwdSigParts : NetSpec → Nat → String × List Nat`. Gate (reference codegen has no `verified_mlir/` artifact): a per-module harness renders `generate` / `generateEval` / `generateForwardCam` for every `NetSpec` constant in the 45 Bestiary modules + `VjpOracleNets` — 216 specs, 51 MB — before and after: byte-identical. `regen_jax_generated.sh check` OK. |
+| paramSlots commit | §5 part 6 (NetSpec layout, first half), −431 lines. `Spec.Layer.paramSlots : Layer → Option (List ParamSlot)` — shape + init role (`he fanIn` / `normal σ` / `const v` / `zeroSeeded`) per tensor, for the 22 trainable layer kinds — is now the one writer that `NetSpec.paramShapes`, `heInitLayer` (a fold: random draws consume a seed, constants don't) and `Layer.nParams` read; the old `nParams` keeps only the untrained Bestiary arms as `nParamsUntrained` (69 of 216 specs' displayed totals come from those, e.g. DenseNet / Swin / Mamba — unchanged). Gate: harness over all 216 NetSpecs — `paramShapes`, `totalParams`, `heInitParams` size + hash (164 specs; the F32 extern loaded via a scratch `.so` of `F32Array.c` + `ffi/f32_helpers.c`; 52 too large to allocate) and `generateTrainStep` — byte-identical before/after. ⚠ Still hand-spelled: the MLIR signature emitters (`fwdSigParts`, `emitTrainStepSig`, `emitForwardCamSig`) — they carry SSA names (`%W{pidx}`/`%b`/`%g`/`%bt` per group) and thread the activation shape, so they need a naming role + group index on the slot, and `MlirCodegen` can only reach it through `Spec` (SpecHelpers imports MlirCodegen) |
+| signature-emitters commit | §5 part 6 (NetSpec layout, second half), −1,092 lines. `ParamSlot` gains its signature name (`W` / `b` / `g` / `bt`; a `W` opens a group sharing one index). `emitTrainStepSig`'s three ~300-line walks (θ, `m_`, `v_`, plus the lockstep return-type lists and a dead `curShape` walk) are one `trainSigArgs pfx` over the slots; `fwdSigParts` is a per-layer `fwdLayerArgs` plus a shape-only walk. Kept by hand: `.fpnDetect`'s line layout, `.tokenPositionEmbed`'s one-line pair, and `.layerNorm` / `.convNextStem` emitting nothing (the reference codegen has no lowering for them). ⚠ Found and preserved verbatim: the FORWARD signature drops a block layer's params when the activation isn't rank 4 (`muZeroGoPredictionPolicy`: a residual stack on a flat input) while the TRAIN signature keeps them — the two signatures disagree for such specs. Gate: the harness widened to all 77 NetSpec modules (Bestiary, VjpOracleNets, apps/, demos/, tests/) — 281 specs, 190 MB of `generate` / `generateEval` / `generateForwardCam` / `generateTrainStep` + shapes / totals / init hashes — byte-identical. Not done: `emitTrainStepBody`'s optimizer-update walk, which is interleaved with the update code |
 
 Each gated: `lake build Certs LeanMlir Apps`, AuditAxioms 1,597/1,597, `docstring-checkrefs`,
 `verified_mlir/` byte-clean; `a745b694` also `CertsHeavy` + AuditAxiomsHeavy 62/62 and the three
@@ -57,100 +70,85 @@ wording was off; `ViTFold`'s import (above).
 
 ## ▶ Next session — start here
 
-State: everything in the Status table is on `main` = `proof-cleanup` = **`528fd25f`** (pushed
-2026-09-23). §0, §1, §2.1 (minus the file split), §2.2, §2.3, §2.4, §2.5, §3 and half of §2.6 are
-done; Foundation → Nets/Certificates imports went 13/29 → 5/32.
+State (2026-09-24, end of day): `proof-cleanup` = `main` = **`18961f80`**, pushed. Done: §0–§4, §6,
+§8, and §5 except the item below. ⭐ No Foundation file imports a net or a certificate; `StableHLO`
+imports no net; `Certs` reaches three import-free program modules; the renderers share
+`Codegen/RenderKit`; the reference codegen's parameter layout (shapes, init, counts, both MLIR
+signatures) is one table, `Spec.Layer.paramSlots`. AuditAxioms: 1,573.
 
 **The gate, every commit** (the user approves each commit; commit ≠ push):
-`lake build Certs LeanMlir Apps CertsHeavy`; `tests/AuditAxioms.lean` elaborates with every
-`#print axioms` giving a 3-axiom verdict (1,573 today — the certs.yml recipe); `lake exe
-docstring-checkrefs`; `python3 scripts/gen_comparator_tier.py --check`;
-`scripts/check_audit_coverage.py` + `scripts/check_render_coverage.py`; regenerate
-`blueprint/lean_decls` from content.tex's `\lean{}` names, then `lake exe blueprint-checkdecls
-blueprint/lean_decls blueprint/lean_deps` + `scripts/blueprint_uses.py --check` (`--fix`, then re-run
-`scripts/blueprint_depgraph_tikz.py`, when an edge moves); every `formalization.yaml`
-`declaration`/`file` pair still matches; `git status verified_mlir/` clean; and
-`tests/comparator/run.sh` (~4 min, three tiers) whenever a comparator-cited name, a root file or a
-tie moves.
-**Traps met this round:** `git grep` misses untracked new files (use `grep -r` for renames);
-moving a decl out of a file whose namespace it inherited RENAMES it (`crossEntropy_differentiable`
-was `StableHLO.…`) — AuditAxioms catches pinned ones, checkdecls the blueprint ones; `rw` does not
-match `h ▸ e` against `castIdx h e` — use `refine (lemma …).trans ?_`; generated files
-(`Certificates/*Scorecard*`, `SmoothingNetWitness`, the Budget-map chains) change only via their
-generator, and the regenerated diff must be exactly the intended lines.
+`lake build Certs LeanMlir Apps CertsHeavy Reference`; `tests/AuditAxioms.lean` elaborates with
+every `#print axioms` giving a 3-axiom verdict (1,573 today — the certs.yml recipe) and
+`AuditAxiomsHeavy.lean` 62/62; `lake exe docstring-checkrefs`; `python3
+scripts/gen_comparator_tier.py --check`; `scripts/check_audit_coverage.py` +
+`scripts/check_render_coverage.py`; `scripts/regen_verified_mlir.sh check` when a renderer or writer
+moves; regenerate `blueprint/lean_decls` from content.tex's `\lean{}` names, then `lake exe
+blueprint-checkdecls blueprint/lean_decls blueprint/lean_deps` + `scripts/blueprint_uses.py --check`
+(`--fix`, then re-run `scripts/blueprint_depgraph_tikz.py`, when an edge moves); every
+`formalization.yaml` `declaration`/`file` pair still matches; `git status verified_mlir/` clean;
+and `tests/comparator/run.sh` (~4 min, three tiers) whenever a comparator-cited name, a root file
+or a tie moves. A book change gets the current-vs-proposed preview on :8765 (tailscale
+100.76.1.97) before the commit.
 
-### 1. §8 owner decisions — ✅ DONE (the §8 deletions commit in the Status table); the list below is the record
-- **`resnet34_has_vjp_at`** (`Nets/ResNet/ResNet34.lean:92`, pin `tests/AuditAxioms.lean`
-  `#print axioms resnet34_has_vjp_at`) and the ~160 lines of `ResNet34.lean` kept alive only for it
-  (`chainComp` / `chain_vjp_diff_at` skeleton — check each for other users first). Its module doc
-  describes it; rewrite the doc.
-- **IBP flat-`Vec` residue** in `Foundation/IntervalBoundConv.lean`: `BoxSound` + `BoxSound.comp`,
-  `boxSound_id`, `denseLoV`/`denseHiV` (+ `_uniform`), `flatten_reluT`, `unflatten_sub_const` /
-  `unflatten_add_const`, `CertifiedAtLinfV` (+ `.mono`) — 3 pins (`IBP.BoxSound.comp`,
-  `IBP.flatten_reluT`, `IBP.CertifiedAtLinfV.mono`). Verify each is unused outside the file
-  (the `BoxSound3` / `BoxSoundE` families are live — keep).
-- **Three unused `*_correct` wrappers**: `residual_has_vjp_at_correct`,
-  `residualProj_has_vjp_at_correct` (`Architectures/Residual.lean`),
-  `depthwiseStride2FlatXla_has_vjp_correct` (`Architectures/Depthwise.lean`). Unpinned; the
-  comparator checks the non-`_at` `residual_has_vjp_correct`, which stays.
-- **Rank-3 kit** in `Foundation/Tensor.lean` (`vjp3_comp(_at)`, `pdiv3_add`, `biPath3(_has_vjp)`,
-  `pdiv3_id`, `identity3_has_vjp`, plus `pdiv_clm`, `HasVJPMat.backward_unique`) and its two
-  blueprint nodes (`thm:vjp3_comp`, `thm:biPath3_has_vjp`, content.tex ~11000/11023; fix every
-  `\uses` pointing at them, re-run the depgraph generator). ⚠ Root file: run the comparator —
-  `tests/comparator/Solution.lean` imports only `Tensor` and cites Tensor names.
-- **MobileNetV2 per-channel legacy chain**: move `IVPos` (`Nets/MobileNet/MobileNetV2FullVJP.lean:59`)
-  / `IVNoExpPos` beside `IVW`, then retire `MobileNetV2FullVJP`, `MobileNetV2FullBVJP`'s legacy
-  imports, `MobileNetV2BackCertifiedTie`, `MobileNetV2WholeBackCertifiedTie` (non-B) — whatever no
-  live chain imports after the move. §1's table lists the edges.
-- **Audit leftovers**: delete `tests/AuditBridge.lean`, `AuditMutation.lean`, `AuditProbes.lean`,
-  `AuditSanity.lean`, `AUDIT_REPORT.md`, `AUDIT_REPORT_2.md` (no CI job; AuditBridge's two theorems
-  live in `MLP.lean`). ⛔ NOT `AuditAxioms.lean` / `AuditAxiomsHeavy.lean` — those are the CI gates.
-- **`lean_lib «Codegen»` → `«Reference»`** in `lakefile.lean` (it builds only the unverified
-  reference path); grep CI, READMEs, CLAUDE-facing docs and `lake build Codegen` mentions.
-- Keep (decided): `SgdDescentCnn`'s margin instances, no optional renames, `pdiv_finset_sum`'s binder.
+**Traps met (both rounds):**
+- `git grep` misses untracked new files — use `grep -r` for renames.
+- Moving a decl out of a file whose namespace it inherited RENAMES it; AuditAxioms catches pinned
+  ones, checkdecls the blueprint ones.
+- ⚠ Cutting an import (or moving a file) silently removes TRANSITIVE names from every importer:
+  budget one fix-up build per move (this round: `ViTChainClose`, `CnnFold`, `BatchSealKit`,
+  `MobileNetV2WholeBackCertifiedTieB` each needed a direct import after a cut).
+- Generated files change only via their generator. Before a move that touches a generated file's
+  imports, RUN its generator on the untouched tree and confirm it reproduces the committed bytes
+  (`lipschitz_cert_scorecard_ibp.py` 0.8 s, `crown_ibp_scorecard.py` 17 s did;
+  `ibp_conv_scorecard.py` retrains a CNN — avoid touching its output).
+- Dropping blueprint nodes can flip Figure C.1's double borders (the `EVERY` rule) and delete a
+  caption macro (`\depgraphCites*`) — build the PDF.
+- `fun_prop` at the nets' literal widths: tag the ATOMS, unfold down to them, never tag a block
+  lemma (it unifies at numerals and times out); interleaved defs need `repeat (first | unfold …)`;
+  a `first` alternative on a continuation line must sit at a column ≥ the first alternative's.
+- `scripts/blueprint_depgraph_tikz.py` treats `argv[1]` as the OUTDIR — `--help` wrote a stray
+  `--help/` directory (untracked, in the repo root; delete it).
+- `rw` does not match `h ▸ e` against `castIdx h e` — use `refine (lemma …).trans ?_`.
+- A `HasVJP` whose backward is spelled the way the IR op denotes cannot be swapped for an
+  equal-but-differently-spelled witness: graph ties close by `rfl` against `den` (the reindex row).
+  Dedupe `correct`, keep the spelling.
+- Scripted renderer rewrites: constructors appear both as `.XBf16` and qualified `SHlo.XBf16`; assert
+  every edit actually changed the name — the byte gate caught a dropped f32 branch (bf16 row).
+- A signature emitter's shape guard can hide params (`fwdSigParts`' rank-4 guard); a slot-driven
+  rewrite must keep it or the bytes move (signature-emitters row).
 
-### 2. Rest of §2.6 — ✅ DONE (the §2.6 Codegen-moves / one-job / Certs-cone / edges commits in the Status table). Found on the way, open: `verified_mlir/MANIFEST.md` stale since 2026-08-28; `fwdRenderedBatch` dead; `ChannelLNBack` → ConvNeXt edge
-- **`Proofs/Codegen/` files that render nothing**: `AdamStep`, `SgdMomentumStep`, `RmsPropStep`,
-  `GradClip`, `Lamb`, `DropPath` (ℝ specs) → `Training/Optim/` (StableHLO imports all six — a
-  root-file edit); `MatBridge` (0 importers) → Foundation or delete; `MobileNetV2RenderPC(Eval)` →
-  Nets; `UibSpec` / `mnv4Blocks` → `MobileNetV4Spec`; the CnnRender / MlpRender artifact writers →
-  leaf modules (⚠ `regen_verified_mlir.sh`'s module list + the render drift guard).
-- **One job per file**: `PerChannelBN`'s ~513 lines of sync-BN sharding → `DataParallelSync`;
-  `Tensor.lean`'s ~230 lines of SDPA calculus → `Attention` (⚠ comparator Solution cites Tensor);
-  the `BatchSeal` namespace's 14 BN / continuity / pool facts → their op files; `ViTVecLN`'s five
-  jobs; `VerifiedTrain`'s four (driver / PGD-spectral / three hand-typed StableHLO generators /
-  smoothing) split on its banners.
-- **`Certs` builds the trainer and FFI** (SpecVJP → VerifiedNets → VerifiedSpec → VerifiedTrain →
-  IreeRuntime): make `VerifiedSpec` import-free (DSL + `VerifiedData` + XLayout tables), move its
-  10 IO forwarders into `VerifiedTrain`, a `VerifiedNetsCore` for `SpecVJP`. Program side.
-- **Found this round**: `StableHLO` still imports `Nets.Small.CifarCNN` (§2.3 leftover — find what
-  it uses); the last 5 Foundation → Nets edges (`GradNodesB` / `SgdNodes` on `Small/CnnTrainStep` +
-  `CifarBnClose`, `Bf16GradNodes` on `ViT/ViTClose`, `SmoothedLossCot`, `IntervalBound` →
-  Certificates) go away if the per-example conv / BN / ViT row-dense bridges move to
-  Architectures. `SgdDescentCnnFloat` is NOT possible as specified (float budgets are inside every
-  rung's capstone); a kernel-rungs / bias-rungs size split (~4.6k / 1.7k) is the only cut.
+### 1. Rest of §5 — open
+- `MlirCodegen.emitTrainStepBody`'s optimizer-update loop lays the parameters out a fourth time,
+  interleaved with the update code — the last hand-written copy of the `paramSlots` order.
+- ⚠ Decide: the FORWARD signature drops a block layer's params when the activation isn't rank 4
+  (`muZeroGoPredictionPolicy`, a residual stack on a flat input) while the TRAIN signature keeps
+  them. Kept verbatim in `fwdSigParts` (comment at the guard).
+- Byte gate for the reference codegen: a per-module harness that renders every `NetSpec` constant
+  (`generate` / `generateEval` / `generateForwardCam` / `generateTrainStep`, `paramShapes`,
+  `totalParams`, `heInitParams` hash with the F32 extern loaded from a `.so` built from
+  `.lake/build/ir/LeanMlir/F32Array.c` + `ffi/f32_helpers.c`) over the 77 modules that define one —
+  lived in `/tmp`, rebuild it from the paramSlots / signature-emitters rows above.
+- Not started (§5 table): `emitTok`'s per-arm text, the 3,416-line `emitTrainStepBody`, v1 §10
+  leftovers, the reference-NetSpec copies, `TestR34SyncBnCheck` onto `SyncBnCheck.run`.
 
-### 3. §6 proof reuse (~700 lines)
-Seals' continuity via `@[fun_prop]` on `BatchSealKit` atoms (~250; one `fun_prop` covers R34's 14
-blocks at literal widths); `DenseEuclid`'s Frobenius / Schatten-4 / Schatten-8 → three shared
-lemmas (`denseE_lipschitzL2_of_sq`, `sq_le_of_gram_quad`, `quad_le_of_frob`, ~150); SmoothingGaussian
-integrability (~45); smoothing `q ≤ p` ×3 + indicator bridge ×3 (~40); EfficientNet MBConv twins
-`mbStridedFwdB ≡ mbDownBodyB`, `mbExpFwdB ≡ mbBodyB` (~50); BatchSealKit's second swish derivative;
-`reindex_has_vjp` / `broadcastFlat_has_vjp` → `reindexVJP`; small collapses (§6 list).
+### 2. Found in §6 — open
+- GramQ `rowDotQ`/`castM` ≡ IBP `sumQ`/`castV`, and the dense uniform boxes — skipped (reasons in
+  the small-collapses row).
 
-### 4. §5 program dedup (~1.5k lines; byte-identity of every artifact is the gate)
-`Codegen/RenderKit.lean` (optOne / PGrad / packedTrainSig / dropMaskSig; R34's renderer is the
-de-facto kit today), then the ~20 bf16 smart constructors (258 `if bf16 …` sites), then
-`MlirCodegen.emitForwardEvalSig` onto `fwdSigParts` (byte-equal on 210 specs — rebuild the harness),
-then the NetSpec layout (`Layer.paramSlots` / `outShape`; the SE width is now `mbConvSeMid`
-everywhere, so the six copies agree).
+### 3. Found on the way — open, small
+- `Architectures/ChannelLNBack` → `Nets/ConvNeXt/ConvNeXtChannelLN`: the last Architectures → Nets
+  edge; needs ConvNeXt's channel-LN op (`chanLNTensor3`, `chanLNRows`) moved into Architectures.
+- `verified_mlir/MANIFEST.md` is stale since `5a4e7778` (2026-08-28): 231 vs 248 artifacts,
+  ungated; regenerating puts four `cifar8b_*` under an "(unknown)" slug — fix the generator's
+  slug table, then regenerate.
+- `fwdRenderedBatch` (private, `VerifiedTrain`) has no caller — dead.
 
-### 5. Small
+### 4. Small (from round 1)
 History-first module docs (`ResNet50BackB0`, `MobileNetV4BackB0`, `EfficientNetStepTie`,
 `EfficientNetBackB0`); file:line citations into `jax/` and `VerifiedTrain`; the four `@[simp]` lemmas
 with no named use (`win3RowInv_val`, `win3ColInv_val` in MaxPool3s2, `zk_apply`, `dzk_apply` in
 BatchSealKit — need a build without them); the `.train`-arm hazard in `r34FwdChain` /
-`r50FwdChain` / `mnv2FwdChain`. ⚠ Auditor claims were wrong 3× — verify before editing.
+`r50FwdChain` / `mnv2FwdChain`.
 
 ---
 
