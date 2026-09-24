@@ -43,10 +43,7 @@ namespace Proofs
 /-- Summing a flattened `Tensor3` is the triple sum. -/
 theorem Tensor3.sum_flatten {c h w : Nat} (T : Tensor3 c h w) :
     ∑ k, Tensor3.flatten T k = ∑ i, ∑ j, ∑ l, T i j l := by
-  rw [← Equiv.sum_comp (finProdFinEquiv (m := c*h) (n := w))]
-  rw [Fintype.sum_prod_type]
-  rw [← Equiv.sum_comp (finProdFinEquiv (m := c) (n := h))]
-  rw [Fintype.sum_prod_type]
+  rw [sum_finProdFinEquiv₃]
   simp only [Tensor3.flatten, Equiv.symm_apply_apply]
 
 /-- Flattening commutes with a pointwise product: both sides look up the same index. -/

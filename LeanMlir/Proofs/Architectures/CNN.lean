@@ -662,9 +662,7 @@ noncomputable def conv2d_weight_grad_has_vjp {ic oc h w kH kW : Nat}
     obtain ⟨⟨q, kw'⟩, rfl⟩ := finProdFinEquiv.surjective idx_in
     obtain ⟨⟨r, kh'⟩, rfl⟩ := finProdFinEquiv.surjective q
     obtain ⟨⟨o', c'⟩, rfl⟩ := finProdFinEquiv.surjective r
-    rw [← Equiv.sum_comp (finProdFinEquiv : Fin (oc * h) × Fin w ≃ Fin (oc * h * w)),
-      Fintype.sum_prod_type, ← Equiv.sum_comp (finProdFinEquiv : Fin oc × Fin h ≃ Fin (oc * h)),
-      Fintype.sum_prod_type]
+    rw [sum_finProdFinEquiv₃]
     simp only [Tensor3.flatten, conv2d, Kernel4.unflatten, Pi.zero_apply, zero_add,
       basisVec_apply, Equiv.symm_apply_apply, EmbeddingLike.apply_eq_iff_eq, Prod.mk.injEq,
       and_assoc, ite_and, ite_mul, one_mul, zero_mul, Finset.sum_ite_irrel,
@@ -704,9 +702,7 @@ noncomputable def conv2d_bias_grad_has_vjp {ic oc h w kH kW : Nat}
     simp only [pdiv_of_affine (fun b' k => b' (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1)
       _ (fun _ _ => rfl) (fun _ _ => rfl), basisVec_apply]
     -- Re-index `Fin (oc*h*w)` as `(c, hi, wi)` and collapse the channel Kronecker at `c = o`.
-    rw [← Equiv.sum_comp (finProdFinEquiv : Fin (oc * h) × Fin w ≃ Fin (oc * h * w)),
-      Fintype.sum_prod_type, ← Equiv.sum_comp (finProdFinEquiv : Fin oc × Fin h ≃ Fin (oc * h)),
-      Fintype.sum_prod_type]
+    rw [sum_finProdFinEquiv₃]
     simp only [Equiv.symm_apply_apply, ite_mul, one_mul, zero_mul, Finset.sum_ite_irrel,
       Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ, ite_true]
 

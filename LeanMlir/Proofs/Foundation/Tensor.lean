@@ -504,6 +504,14 @@ theorem sum_finProdFinEquiv {M : Type*} [AddCommMonoid M] {m n : Nat}
     ∑ k, f k = ∑ i : Fin m, ∑ j : Fin n, f (finProdFinEquiv (i, j)) := by
   rw [← Equiv.sum_comp finProdFinEquiv f, Fintype.sum_prod_type]
 
+/-- The rank-3 case: a `Fin (a·b·c)` sum is the row-major triple sum — the layout `Tensor3.flatten`
+    and every `c·h·w` activation index use. -/
+theorem sum_finProdFinEquiv₃ {M : Type*} [AddCommMonoid M] {a b c : Nat}
+    (f : Fin (a * b * c) → M) :
+    ∑ k, f k = ∑ i : Fin a, ∑ j : Fin b, ∑ l : Fin c,
+      f (finProdFinEquiv (finProdFinEquiv (i, j), l)) := by
+  rw [sum_finProdFinEquiv, sum_finProdFinEquiv]
+
 namespace Mat
 
 /-- Row-major flatten: `Mat m n → Vec (m * n)`. Uses Mathlib's

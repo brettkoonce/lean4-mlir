@@ -453,9 +453,7 @@ noncomputable def layerNormVec_has_vjp (D : Nat) (ε : ℝ) (γv βv : Vec D)
   have h1 : Differentiable ℝ (layerNormForward D ε 1 0) :=
     bnForward_differentiable D ε 1 0 hε
   have h2 : Differentiable ℝ (layerScale γv) := layerScale_differentiable γv
-  have h3 : Differentiable ℝ (fun z : Vec D => fun k => z k + βv k) := by
-    rw [differentiable_pi]; intro k
-    exact (differentiable_pi.mp differentiable_id k).add_const (βv k)
+  have h3 : Differentiable ℝ (fun z : Vec D => fun k => z k + βv k) := by fun_prop
   vjp_comp _ (fun z : Vec D => fun k => z k + βv k) (h2.comp h1) h3
     (vjp_comp (layerNormForward D ε 1 0) (layerScale γv) h1 h2
       (layerNorm_has_vjp D ε 1 0 hε) (layerScale_has_vjp γv))

@@ -492,16 +492,9 @@ private lemma mulVec_headPadMat {N heads d : Nat} (W : Mat (heads * d) (heads * 
     Mat.mulVec W (headPadMat N heads d h M r) c
       = ∑ j : Fin d, W c (finProdFinEquiv (h, j)) * M r j := by
   unfold Mat.mulVec headPadMat
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin heads × Fin d ≃ Fin (heads * d))
-        (fun kj => W c kj *
-          (if (finProdFinEquiv.symm kj).1 = h then M r (finProdFinEquiv.symm kj).2 else 0))]
-  rw [Fintype.sum_prod_type]
-  simp only [Equiv.symm_apply_apply]
-  rw [Finset.sum_eq_single h]
-  · apply Finset.sum_congr rfl; intro j _; rw [ite_eq_left rfl]
-  · intro h' _ hne
-    apply Finset.sum_eq_zero; intro j _; rw [ite_eq_right hne, mul_zero]
-  · intro hc; exact absurd (Finset.mem_univ h) hc
+  rw [sum_finProdFinEquiv]
+  simp only [Equiv.symm_apply_apply, mul_ite, mul_zero, Finset.sum_ite_irrel,
+    Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ, ite_true]
 
 /-- `denseRowBack W` of head `h`'s pad of a flattened `[N,d]` matrix `M` reads off
     head `h`'s columns of `W` per output column. -/

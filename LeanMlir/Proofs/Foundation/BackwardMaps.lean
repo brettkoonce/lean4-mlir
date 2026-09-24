@@ -202,14 +202,6 @@ noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
 -- § The 3×3/s2 stem-pool backward: an ACCUMULATING scatter, and its VJP at a `Vec` point
 -- ════════════════════════════════════════════════════════════════
 
-/-- Row-major re-indexing of a `Fin (c*h*w)` sum as a triple sum — the shape every
-    `maxPool3s2` statement is written in. -/
-theorem sum_flat3 {c h w : Nat} (g : Fin (c*h*w) → ℝ) :
-    ∑ k : Fin (c*h*w), g k
-      = ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
-          g (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) := by
-  rw [sum_finProdFinEquiv, sum_finProdFinEquiv]
-
 /-- **3×3/s2 max-pool backward in flat `Vec` space** — the accumulating scatter: each input cell
     collects `dy` from every output whose 3×3 window selects it. ⛔ `maxPool2`'s windows TILE, so
     the 2×2 pool's backward (`StableHLO.maxPoolBackFlat`) is a lookup; 3×3/s2 windows OVERLAP, so
@@ -225,13 +217,13 @@ noncomputable def maxPool3s2FlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
 /-- **3×3/s2 pool input-VJP leaf tie (smooth point).** `maxPool3s2FlatBack x` IS the certified
     pool input-VJP `(maxPool3s2Flat_has_vjp_at x h_smooth).backward`: the certified backward is the
     triple sum `∑_{co,ho,wo} [σ(co,ho,wo) = idx]·dy(co,ho,wo)`, and this is that sum re-indexed
-    row-major (`sum_flat3`). The 3×3/s2 peer of the 2×2 bridge `StableHLO.maxPoolBack_faithful`. -/
+    row-major (`sum_finProdFinEquiv₃`). The 3×3/s2 peer of the 2×2 bridge `StableHLO.maxPoolBack_faithful`. -/
 theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool3s2Smooth x) :
     maxPool3s2FlatBack x = (maxPool3s2Flat_has_vjp_at x h_smooth).backward := by
   funext dy idx
   show (∑ k : Fin (c*h*w), (if maxPool3s2LocalReindex x k = idx then dy k else 0)) = _
-  rw [sum_flat3 (fun k => if maxPool3s2LocalReindex x k = idx then dy k else 0)]
+  rw [sum_finProdFinEquiv₃ (fun k => if maxPool3s2LocalReindex x k = idx then dy k else 0)]
   have hidx : finProdFinEquiv
       (finProdFinEquiv ((finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1,
         (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
@@ -304,7 +296,7 @@ noncomputable def maxPool3s2FlatBackB (N c h w : Nat) (v : Vec (N * (c * (2*h) *
 /-- **The two spellings of the 3×3/s2 scatter are one map, at every input.** The render's
     `den (.maxPool3s2Back …)` is `StableHLO.maxPool3s2BackFlat`, a triple sum against a `0/1`
     indicator; the chain's `maxPool3s2FlatBack` is the same sum over the flat index with the
-    indicator folded into the `if`. `sum_flat3` re-indexes one into the other. No smoothness
+    indicator folded into the `if`. `sum_finProdFinEquiv₃` re-indexes one into the other. No smoothness
     hypothesis: this is about the scatter itself, not about the VJP it equals at a smooth point
     (`maxPool3s2FlatBack_eq_vjp_backward`). -/
 theorem maxPool3s2BackFlat_eq_flatBack (c h w : Nat) (xv : Vec (c * (2*h) * (2*w)))
@@ -318,7 +310,7 @@ theorem maxPool3s2BackFlat_eq_flatBack (c h w : Nat) (xv : Vec (c * (2*h) * (2*w
         (finProdFinEquiv.symm idx).2) = idx := by
     rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
   simp only [StableHLO.maxPool3s2BackFlat, maxPool3s2FlatBack]
-  rw [sum_flat3 (fun k => if maxPool3s2LocalReindex
+  rw [sum_finProdFinEquiv₃ (fun k => if maxPool3s2LocalReindex
         (Tensor3.unflatten xv : Tensor3 c (2*h) (2*w)) k = idx then dyv k else 0)]
   refine Finset.sum_congr rfl fun co _ => Finset.sum_congr rfl fun ho _ =>
     Finset.sum_congr rfl fun wo _ => ?_

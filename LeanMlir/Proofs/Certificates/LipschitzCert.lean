@@ -73,11 +73,11 @@ theorem clm_lipschitzL2 {α β : Type*} [NormedAddCommGroup α] [NormedSpace ℝ
 
 variable {k : ℕ}
 
-/-- `‖v‖² = Σᵢ (vᵢ)²` on `EuclideanSpace ℝ (Fin k)` (unfold the L2 norm). -/
+/-- `‖v‖² = Σᵢ (vᵢ)²` on `EuclideanSpace ℝ (Fin k)` — Mathlib's
+    `EuclideanSpace.real_norm_sq_eq` at `Fin k`. -/
 theorem euclid_norm_sq (v : EuclideanSpace ℝ (Fin k)) :
-    ‖v‖ ^ 2 = ∑ i, (v i) ^ 2 := by
-  rw [EuclideanSpace.norm_eq, Real.sq_sqrt (by positivity)]
-  simp [Real.norm_eq_abs, sq_abs]
+    ‖v‖ ^ 2 = ∑ i, (v i) ^ 2 :=
+  EuclideanSpace.real_norm_sq_eq v
 
 /-- Two distinct coordinates of `v` carry at most `2‖v‖²` of squared mass:
     `(vᵢ − vⱼ)² ≤ 2‖v‖²`. Equivalently `|vᵢ − vⱼ| ≤ √2·‖v‖` — the `√2` in the radius. -/

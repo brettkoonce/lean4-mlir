@@ -9,7 +9,7 @@ flattened — the attention analogue of the depthwise/conv adjoint gates.
 
 Unlike the CNN `convFlatBack` (a free reversed-kernel conv that needed a gate), the ViT sdpa cores are
 ALREADY certified-`sdpa_back`-grounded by construction (`coreQFlat = flatten ∘ mhsaSdpaBackQ ∘ unflatten`,
-`mhsaSdpaBackQ = sdpa_back_Q` per `mhSlab` head). What this file closes is the **assembly reconciliation**:
+`mhsaSdpaBackQ = sdpa_back_Q` per `headSliceMat` head). What this file closes is the **assembly reconciliation**:
 `mhsaBackFlat` is a flat per-head fan-in with SEPARATE `dense Wᵀq/Wᵀk/Wᵀv` projection-backwards
 (`perRowFlat`), while the certified `mhsa_has_vjp_mat.backward` is a Mat-space VJP over the qkv-MERGED
 projection. ViTBackB0's `mhsa_backward_collapseMH` already collapses the certified Mat backward to the clean
@@ -42,7 +42,7 @@ theorem projBack_core_coord (W : Mat (h * dh) (h * dh)) (S : Mat N (h * dh))
 
 /-- **The Wo-back, unflattened.** `unflatten (perRowFlat (dense Wᵀo 0) dconcat) = fun i c => mulVec Wo
     (unflatten dconcat i) c` — the block cotangent run through the output-projection backward, in Mat
-    form. This is the per-head slab the cores read (`mhSlab h (unflatten woflat) = dAttg h`). -/
+    form. This is the per-head slab the cores read (`headSliceMat _ _ _ h (unflatten woflat) = dAttg h`). -/
 theorem woback_unflatten (Wo : Mat (h * dh) (h * dh)) (dconcat : Vec (N * (h * dh))) :
     Mat.unflatten (perRowFlat N (h * dh) (Proofs.dense (Mat.transpose Wo) (0 : Vec (h * dh))) dconcat)
       = (fun (i : Fin N) (c : Fin (h * dh)) => Mat.mulVec Wo (Mat.unflatten dconcat i) c) := by
@@ -105,7 +105,7 @@ theorem mhsaBackFlat_eq_mhsa_vjp
   -- RHS: unfold `mhsaBackCollapsedMH` and combine the three `Σ h'` via `sum_add_distrib`
   simp only [Mat.flatten, StableHLO.mhsaBackCollapsedMH, mhsaSdpaBackQ, mhsaSdpaBackK, mhsaSdpaBackV,
     hwo, Equiv.symm_apply_apply, Finset.sum_add_distrib]
-  unfold mhSlab
+  unfold headSliceMat
   ring
 
 -- ════════════════════════════════════════════════════════════════

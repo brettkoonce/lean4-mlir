@@ -101,8 +101,8 @@ def w3Idx {ic kH kW : Nat} (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
     one fewer axis). -/
 theorem sum_w3 {ic kH kW : Nat} (g : Fin (ic * kH * kW) → ℝ) :
     ∑ idx, g idx =
-      ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, g (w3Idx c kh kw) := by
-  simp only [sum_finProdFinEquiv]; rfl
+      ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, g (w3Idx c kh kw) :=
+  sum_finProdFinEquiv₃ g
 
 /-- The per-output-coordinate conv *window* as a flat `Vec` over the fan-in:
     the (padded) input reads that the kernel slab dots against. -/

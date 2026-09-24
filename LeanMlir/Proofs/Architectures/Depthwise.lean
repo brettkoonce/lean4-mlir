@@ -449,8 +449,7 @@ noncomputable def depthwise_bias_grad_has_vjp {c h w kH kW : Nat}
     simp only [hsplit, pdiv_of_affine (fun (b' : Vec c) (k : Fin (c * h * w)) =>
       b' (finProdFinEquiv.symm (finProdFinEquiv.symm k).1).1) _ (fun _ _ => rfl) (fun _ _ => rfl),
       basisVec_apply, ite_mul, one_mul, zero_mul]
-    rw [← (finProdFinEquiv (m := c * h) (n := w)).sum_comp, Fintype.sum_prod_type,
-      ← (finProdFinEquiv (m := c) (n := h)).sum_comp, Fintype.sum_prod_type]
+    rw [sum_finProdFinEquiv₃]
     simp
 
 /-- Named accessor for the depthwise bias backward via the VJP framework. -/

@@ -357,22 +357,29 @@ theorem convTap_uniform_lo {ic h w kH kW : Nat} (x : Tensor3 ic h w) (ε : ℝ)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hI : Fin h) (wI : Fin w) :
     convTap (fun a b d => x a b d - ε) c kh kw hI wI
       = convTap x c kh kw hI wI - ε * convTap (onesT ic h w) c kh kw hI wI := by
-  unfold convTap convPad onesT
-  by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
-      (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
-  · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]; ring
-  · rw [dite_eq_right hpad, dite_eq_right hpad, dite_eq_right hpad]; ring
+  unfold convTap convPad onesT; split_ifs <;> ring
 
 /-- A tap of the uniform box's UPPER face splits into `tap x + ε·tap 𝟙`. -/
 theorem convTap_uniform_hi {ic h w kH kW : Nat} (x : Tensor3 ic h w) (ε : ℝ)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hI : Fin h) (wI : Fin w) :
     convTap (fun a b d => x a b d + ε) c kh kw hI wI
       = convTap x c kh kw hI wI + ε * convTap (onesT ic h w) c kh kw hI wI := by
-  unfold convTap convPad onesT
-  by_cases hpad : ((kH - 1) / 2 ≤ kh.val + hI.val ∧ kh.val + hI.val - (kH - 1) / 2 < h ∧
-      (kW - 1) / 2 ≤ kw.val + wI.val ∧ kw.val + wI.val - (kW - 1) / 2 < w)
-  · rw [dite_eq_left hpad, dite_eq_left hpad, dite_eq_left hpad]; ring
-  · rw [dite_eq_right hpad, dite_eq_right hpad, dite_eq_right hpad]; ring
+  unfold convTap convPad onesT; split_ifs <;> ring
+
+/-- The sign split on a box `a ∓ e` is the centre minus `e·|w|` — one term of every uniform-box
+    collapse below. -/
+theorem ite_sign_lo (w a e : ℝ) :
+    (if 0 ≤ w then w * (a - e) else w * (a + e)) = w * a - e * |w| := by
+  split_ifs with h
+  · rw [abs_of_nonneg h]; ring
+  · rw [abs_of_neg (not_le.mp h)]; ring
+
+/-- The UPPER sign split on a box `a ∓ e` is the centre plus `e·|w|`. -/
+theorem ite_sign_hi (w a e : ℝ) :
+    (if 0 ≤ w then w * (a + e) else w * (a - e)) = w * a + e * |w| := by
+  split_ifs with h
+  · rw [abs_of_nonneg h]; ring
+  · rw [abs_of_neg (not_le.mp h)]; ring
 
 /-- **Uniform-box collapse, LOWER.** On the first layer's box `x ∓ ε` the conv
     sign split evaluates to `conv2d W b x − ε · conv2d |W| 0 𝟙` — one ordinary
@@ -384,29 +391,10 @@ theorem convLo_uniform {ic oc h w kH kW : Nat}
     convLo W b (fun a b' d => x a b' d - ε) (fun a b' d => x a b' d + ε) o hI wI
       = conv2d W b x o hI wI - ε * conv2d (absK W) (fun _ => 0) (onesT ic h w) o hI wI := by
   rw [conv2d_eq_tap, conv2d_eq_tap]
-  unfold convLo
-  have hmul : ∀ (c : Fin ic) (kh : Fin kH) (kw : Fin kW),
-      (if 0 ≤ W o c kh kw
-        then W o c kh kw * convTap (fun a b' d => x a b' d - ε) c kh kw hI wI
-        else W o c kh kw * convTap (fun a b' d => x a b' d + ε) c kh kw hI wI)
-      = W o c kh kw * convTap x c kh kw hI wI
-        - ε * (absK W o c kh kw * convTap (onesT ic h w) c kh kw hI wI) := by
-    intro c kh kw
-    by_cases hW : 0 ≤ W o c kh kw
-    · rw [ite_eq_left hW, convTap_uniform_lo, absK, abs_of_nonneg hW]; ring
-    · rw [ite_eq_right hW, convTap_uniform_hi, absK, abs_of_neg (lt_of_not_ge hW)]; ring
-  calc b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          (if 0 ≤ W o c kh kw
-            then W o c kh kw * convTap (fun a b' d => x a b' d - ε) c kh kw hI wI
-            else W o c kh kw * convTap (fun a b' d => x a b' d + ε) c kh kw hI wI)
-      = b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          (W o c kh kw * convTap x c kh kw hI wI
-            - ε * (absK W o c kh kw * convTap (onesT ic h w) c kh kw hI wI)) := by
-          refine congrArg _ (Finset.sum_congr rfl fun c _ =>
-            Finset.sum_congr rfl fun kh _ => Finset.sum_congr rfl fun kw _ => hmul c kh kw)
-    _ = _ := by
-          simp only [Finset.sum_sub_distrib, ← Finset.mul_sum]
-          ring
+  simp only [convLo, convTap_uniform_lo, convTap_uniform_hi, ite_sign_lo, absK,
+    Finset.sum_sub_distrib]
+  simp only [mul_comm, mul_left_comm, zero_add, Finset.mul_sum]
+  ring
 
 /-- **Uniform-box collapse, UPPER** (sibling of `convLo_uniform`). -/
 theorem convHi_uniform {ic oc h w kH kW : Nat}
@@ -415,29 +403,10 @@ theorem convHi_uniform {ic oc h w kH kW : Nat}
     convHi W b (fun a b' d => x a b' d - ε) (fun a b' d => x a b' d + ε) o hI wI
       = conv2d W b x o hI wI + ε * conv2d (absK W) (fun _ => 0) (onesT ic h w) o hI wI := by
   rw [conv2d_eq_tap, conv2d_eq_tap]
-  unfold convHi
-  have hmul : ∀ (c : Fin ic) (kh : Fin kH) (kw : Fin kW),
-      (if 0 ≤ W o c kh kw
-        then W o c kh kw * convTap (fun a b' d => x a b' d + ε) c kh kw hI wI
-        else W o c kh kw * convTap (fun a b' d => x a b' d - ε) c kh kw hI wI)
-      = W o c kh kw * convTap x c kh kw hI wI
-        + ε * (absK W o c kh kw * convTap (onesT ic h w) c kh kw hI wI) := by
-    intro c kh kw
-    by_cases hW : 0 ≤ W o c kh kw
-    · rw [ite_eq_left hW, convTap_uniform_hi, absK, abs_of_nonneg hW]; ring
-    · rw [ite_eq_right hW, convTap_uniform_lo, absK, abs_of_neg (lt_of_not_ge hW)]; ring
-  calc b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          (if 0 ≤ W o c kh kw
-            then W o c kh kw * convTap (fun a b' d => x a b' d + ε) c kh kw hI wI
-            else W o c kh kw * convTap (fun a b' d => x a b' d - ε) c kh kw hI wI)
-      = b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
-          (W o c kh kw * convTap x c kh kw hI wI
-            + ε * (absK W o c kh kw * convTap (onesT ic h w) c kh kw hI wI)) := by
-          refine congrArg _ (Finset.sum_congr rfl fun c _ =>
-            Finset.sum_congr rfl fun kh _ => Finset.sum_congr rfl fun kw _ => hmul c kh kw)
-    _ = _ := by
-          simp only [Finset.sum_add_distrib, ← Finset.mul_sum]
-          ring
+  simp only [convHi, convTap_uniform_lo, convTap_uniform_hi, ite_sign_hi, absK,
+    Finset.sum_add_distrib]
+  simp only [mul_comm, mul_left_comm, zero_add, Finset.mul_sum]
+  ring
 
 end IBP
 end Proofs

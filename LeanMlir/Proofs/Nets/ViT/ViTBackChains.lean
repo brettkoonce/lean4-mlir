@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 The hand-composed reverse of the committed ViT-Tiny forward, as plain `def`s on the cotangent,
 from the attention core outwards:
 
-* the multi-head sdpa backward (`mhSlab`, `mhsaSdpaBackQ`/`K`/`V`): the certified single-head
+* the multi-head sdpa backward (`headSliceMat` per head, `mhsaSdpaBackQ`/`K`/`V`): the certified single-head
   `sdpa_back_{Q,K,V}` (`Attention.lean`) on each head slab, concatenated by the
   `finProdFinEquiv` column layout, and its flattened forms `coreQFlat`/`coreKFlat`/`coreVFlat`;
 * the full MHSA input-gradient backward `mhsaBackFlat` — output-projection backward, the three
@@ -40,29 +40,30 @@ namespace Proofs
 -- § The multi-head sdpa backward — the certified single-head adjoint on each head slab
 -- ════════════════════════════════════════════════════════════════
 
-/-- The column slab `[hd·dh, (hd+1)·dh)` of a `Mat n (h·dh)` as a `Mat n dh` (head hd's view) — the
-    `finProdFinEquiv (hd, ·)` column restriction, matching `mhsa_layer`'s per-head extraction. -/
-noncomputable def mhSlab {n h dh : Nat} (hd : Fin h) (Q : Mat n (h * dh)) : Mat n dh :=
-  fun i c => Q i (finProdFinEquiv (hd, c))
-
 /-- **Multi-head sdpa backward w.r.t. V** — per head, the certified `sdpa_back_V` on the head
     slabs; concatenated by the `finProdFinEquiv` column layout. -/
 noncomputable def mhsaSdpaBackV {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
-  fun i j => sdpa_back_V N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
-              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
-              i (finProdFinEquiv.symm j).2
+  fun i j =>
+    sdpa_back_V N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 K)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 V)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 dOut) i (finProdFinEquiv.symm j).2
 
 /-- **Multi-head sdpa backward w.r.t. Q.** -/
 noncomputable def mhsaSdpaBackQ {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
-  fun i j => sdpa_back_Q N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
-              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
-              i (finProdFinEquiv.symm j).2
+  fun i j =>
+    sdpa_back_Q N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 K)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 V)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 dOut) i (finProdFinEquiv.symm j).2
 
 /-- **Multi-head sdpa backward w.r.t. K.** -/
 noncomputable def mhsaSdpaBackK {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
-  fun i j => sdpa_back_K N dh (mhSlab (finProdFinEquiv.symm j).1 Q) (mhSlab (finProdFinEquiv.symm j).1 K)
-              (mhSlab (finProdFinEquiv.symm j).1 V) (mhSlab (finProdFinEquiv.symm j).1 dOut)
-              i (finProdFinEquiv.symm j).2
+  fun i j =>
+    sdpa_back_K N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 K)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 V)
+      (headSliceMat N h dh (finProdFinEquiv.symm j).1 dOut) i (finProdFinEquiv.symm j).2
 
 variable {h N dh : Nat}
 
