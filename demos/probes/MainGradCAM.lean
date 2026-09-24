@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! GradCAM (Zhou-2016 closed form) on a trained checkpoint.
 
@@ -27,38 +28,6 @@ The walk is:
 This carries no autodiff: for nets with this head, the per-channel
 GradCAM weight is just the dense matrix's row for the target class. -/
 
-def convNextTinyGelu : NetSpec where
-  name := "ConvNeXt-T-GELU"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 96 4 4 .same,
-    .convNextStage 96 3 .ln .gelu,
-    .convNextDownsample 96 192,
-    .convNextStage 192 3 .ln .gelu,
-    .convNextDownsample 192 384,
-    .convNextStage 384 9 .ln .gelu,
-    .convNextDownsample 384 768,
-    .convNextStage 768 3 .ln .gelu,
-    .globalAvgPool,
-    .dense 768 10 .identity
-  ]
-
-def resnet34 : NetSpec where
-  name := "ResNet-34"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 2 2,
-    .residualBlock  64  64 3 1,
-    .residualBlock  64 128 4 2,
-    .residualBlock 128 256 6 2,
-    .residualBlock 256 512 3 2,
-    .globalAvgPool,
-    .dense 512 10 .identity
-  ]
-
 /-- A picked model: spec, the file prefix where the trained params live,
     and the default output PPM path. -/
 structure Model where
@@ -68,11 +37,11 @@ structure Model where
 
 def pickModel : String → Option Model
   | "convnext" =>
-    some { spec := convNextTinyGelu
+    some { spec := ReferenceNets.convNextTinyGelu
            ckptPfx := ".lake/build/convnext_t_gelu_convnext_tiny_gelu"
            defaultOut := "blueprint/src/figures/gradcam/convnext_t_gelu_strip.ppm" }
   | "r34" =>
-    some { spec := resnet34
+    some { spec := ReferenceNets.resnet34
            ckptPfx := ".lake/build/resnet_34_r34_full"
            defaultOut := "blueprint/src/figures/gradcam/resnet34_strip.ppm" }
   | _ => none

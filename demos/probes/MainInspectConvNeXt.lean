@@ -1,22 +1,7 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
-/-- ConvNeXt-T spec — mirrors `convNextTinyGeluSpec` in MainAblation.lean. -/
-def specGelu : NetSpec where
-  name := "ConvNeXt-T-GELU"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 96 4 4 .same,
-    .convNextStage 96 3 .ln .gelu,
-    .convNextDownsample 96 192,
-    .convNextStage 192 3 .ln .gelu,
-    .convNextDownsample 192 384,
-    .convNextStage 384 9 .ln .gelu,
-    .convNextDownsample 384 768,
-    .convNextStage 768 3 .ln .gelu,
-    .globalAvgPool,
-    .dense 768 10 .identity
-  ]
+open ReferenceNets
 
 def imagenetteClasses : Array String := #[
   "tench", "English springer", "cassette player", "chain saw", "church",
@@ -44,9 +29,9 @@ def main : IO Unit := do
   let evalBatch : Nat := 32
   let evalSteps := nVal / evalBatch
   let valPixels : Nat := 3 * 224 * 224
-  let evalXSh := specGelu.xShape evalBatch
-  let evalShapesBA := specGelu.evalShapesBA
-  let nClasses := specGelu.numClasses.toUSize
+  let evalXSh := convNextTinyGelu.xShape evalBatch
+  let evalShapesBA := convNextTinyGelu.evalShapesBA
+  let nClasses := convNextTinyGelu.numClasses.toUSize
 
   let mut predHist : Array Nat := Array.replicate 10 0
   let mut classCorrect : Array Nat := Array.replicate 10 0
@@ -64,7 +49,7 @@ def main : IO Unit := do
     if bi == 0 then firstBatchLogits := logits
     let lblSlice := F32.sliceLabels valLbl (bi * evalBatch) evalBatch
     for i in [:evalBatch] do
-      let pred := (F32.argmaxN logits (i * specGelu.numClasses).toUSize specGelu.numClasses.toUSize).toNat
+      let pred := (F32.argmaxN logits (i * convNextTinyGelu.numClasses).toUSize convNextTinyGelu.numClasses.toUSize).toNat
       let label := lblSlice.data[i * 4]!.toNat
       predHist := predHist.modify pred (· + 1)
       classTotal := classTotal.modify label (· + 1)

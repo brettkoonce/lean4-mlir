@@ -305,7 +305,7 @@ lean_lib «ProofsMinimal» where
     `verified_mlir/`) or anything in `LeanMlir/Proofs/Codegen/`, and no CI job uses it. -/
 lean_lib «Reference» where
   srcDir := "."
-  roots := #[`LeanMlir.MlirCodegen, `LeanMlir.Train, `LeanMlir.Spec,
+  roots := #[`LeanMlir.MlirCodegen, `LeanMlir.Train, `LeanMlir.Spec, `LeanMlir.ReferenceNets,
              `LeanMlir.SpecHelpers, `LeanMlir.Types, `LeanMlir.IreeRuntime,
              `LeanMlir.Ddpm, `LeanMlir.Cam, `LeanMlir.F32Array]
 

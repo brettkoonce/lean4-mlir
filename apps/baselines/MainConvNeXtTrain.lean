@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! ConvNeXt-Tiny on Imagenette — pure-CNN modernization recipe.
 
@@ -12,22 +13,8 @@ import LeanMlir
     stride 2`, dedicated between stages (not fused with the first block
     of a stage like ResNet). -/
 
-def convNextTiny : NetSpec where
-  name := "ConvNeXt-T"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 96 4 4 .same,                    -- patchify stem (4×4 stride 4)
-    .convNextStage 96 3 .ln .gelu,             -- stage 1: 3 blocks at 96 ch
-    .convNextDownsample 96 192,
-    .convNextStage 192 3 .ln .gelu,            -- stage 2: 3 blocks at 192 ch
-    .convNextDownsample 192 384,
-    .convNextStage 384 9 .ln .gelu,            -- stage 3: 9 blocks at 384 ch
-    .convNextDownsample 384 768,
-    .convNextStage 768 3 .ln .gelu,            -- stage 4: 3 blocks at 768 ch
-    .globalAvgPool,
-    .dense 768 10 .identity
-  ]
+/-- `ReferenceNets.convNextTinyGelu`, trained under the prefix `ConvNeXt-T`. -/
+def convNextTiny : NetSpec := { ReferenceNets.convNextTinyGelu with name := "ConvNeXt-T" }
 
 def convNextTinyConfig : TrainConfig where
   learningRate := 0.001

@@ -1,4 +1,5 @@
 import LeanMlir
+import LeanMlir.ReferenceNets
 
 /-! Ablation study runner. Single binary that runs any ablation config
     based on a command-line argument.
@@ -303,21 +304,6 @@ def cifarBnBare : TrainConfig where
 -- starting point; the leave-one-out table below measures lift.
 -- ═══════════════════════════════════════════════════════════════════
 
-def resnet34Spec : NetSpec where
-  name := "ResNet-34"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 64 7 2 .same,
-    .maxPool 2 2,
-    .residualBlock  64  64 3 1,
-    .residualBlock  64 128 4 2,
-    .residualBlock 128 256 6 2,
-    .residualBlock 256 512 3 2,
-    .globalAvgPool,
-    .dense 512 10 .identity
-  ]
-
 def r34Full : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
@@ -617,23 +603,6 @@ def vitTinyKitchenSinkConfig : TrainConfig :=
 -- in seconds for fast smoke.
 -- ═══════════════════════════════════════════════════════════════════
 
-def convNextTinyGeluSpec : NetSpec where
-  name := "ConvNeXt-T-GELU"
-  imageH := 224
-  imageW := 224
-  layers := [
-    .convBn 3 96 4 4 .same,
-    .convNextStage 96 3 .ln .gelu,
-    .convNextDownsample 96 192,
-    .convNextStage 192 3 .ln .gelu,
-    .convNextDownsample 192 384,
-    .convNextStage 384 9 .ln .gelu,
-    .convNextDownsample 384 768,
-    .convNextStage 768 3 .ln .gelu,
-    .globalAvgPool,
-    .dense 768 10 .identity
-  ]
-
 def convNextTinyReluSpec : NetSpec where
   name := "ConvNeXt-T-ReLU"
   imageH := 224
@@ -851,14 +820,14 @@ def ablations : List (String × AblationRun) := [
   -- Chapter 6: ResNet-34 Imagenette leave-one-out recipe ablation.
   -- r34-full is the headline; each r34-no-X removes one ingredient
   -- from the full recipe. Compare rows to measure marginal lift.
-  ("r34-full",      ⟨resnet34Spec, r34Full,     .imagenette, "data/imagenette"⟩),
-  ("r34-no-adam",   ⟨resnet34Spec, r34NoAdam,   .imagenette, "data/imagenette"⟩),
-  ("r34-no-cosine", ⟨resnet34Spec, r34NoCosine, .imagenette, "data/imagenette"⟩),
-  ("r34-no-warmup", ⟨resnet34Spec, r34NoWarmup, .imagenette, "data/imagenette"⟩),
-  ("r34-no-wd",     ⟨resnet34Spec, r34NoWd,     .imagenette, "data/imagenette"⟩),
-  ("r34-no-smooth", ⟨resnet34Spec, r34NoSmooth, .imagenette, "data/imagenette"⟩),
-  ("r34-no-aug",    ⟨resnet34Spec, r34NoAug,    .imagenette, "data/imagenette"⟩),
-  ("r34-bare",      ⟨resnet34Spec, r34Bare,     .imagenette, "data/imagenette"⟩),
+  ("r34-full",      ⟨ReferenceNets.resnet34, r34Full,     .imagenette, "data/imagenette"⟩),
+  ("r34-no-adam",   ⟨ReferenceNets.resnet34, r34NoAdam,   .imagenette, "data/imagenette"⟩),
+  ("r34-no-cosine", ⟨ReferenceNets.resnet34, r34NoCosine, .imagenette, "data/imagenette"⟩),
+  ("r34-no-warmup", ⟨ReferenceNets.resnet34, r34NoWarmup, .imagenette, "data/imagenette"⟩),
+  ("r34-no-wd",     ⟨ReferenceNets.resnet34, r34NoWd,     .imagenette, "data/imagenette"⟩),
+  ("r34-no-smooth", ⟨ReferenceNets.resnet34, r34NoSmooth, .imagenette, "data/imagenette"⟩),
+  ("r34-no-aug",    ⟨ReferenceNets.resnet34, r34NoAug,    .imagenette, "data/imagenette"⟩),
+  ("r34-bare",      ⟨ReferenceNets.resnet34, r34Bare,     .imagenette, "data/imagenette"⟩),
 
   -- Chapter 8: EfficientNet-B0 activation ablation. Swish (default) vs
   -- ReLU. Same recipe as r34-full to factor out optimizer/schedule
@@ -894,11 +863,11 @@ def ablations : List (String × AblationRun) := [
   -- Chapter 9: ConvNeXt-Tiny activation ablation (GELU vs ReLU, both
   -- with LN). The full paper recipe on Imagenette (224×224); a CIFAR
   -- "mini" pair at 32×32 doubles as a fast-compile smoke variant.
-  ("convnext-tiny-gelu",         ⟨convNextTinyGeluSpec, convNextTinyConfig,         .imagenette, "data/imagenette"⟩),
-  ("convnext-tiny-gelu-cutmix",  ⟨convNextTinyGeluSpec, convNextTinyCutmixConfig,   .imagenette, "data/imagenette"⟩),
-  ("convnext-tiny-gelu-randaug", ⟨convNextTinyGeluSpec, convNextTinyRandAugConfig,  .imagenette, "data/imagenette"⟩),
-  ("convnext-tiny-gelu-mixup",   ⟨convNextTinyGeluSpec, convNextTinyMixupConfig,    .imagenette, "data/imagenette"⟩),
-  ("convnext-tiny-gelu-erase",   ⟨convNextTinyGeluSpec, convNextTinyEraseConfig,    .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-gelu",         ⟨ReferenceNets.convNextTinyGelu, convNextTinyConfig,         .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-gelu-cutmix",  ⟨ReferenceNets.convNextTinyGelu, convNextTinyCutmixConfig,   .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-gelu-randaug", ⟨ReferenceNets.convNextTinyGelu, convNextTinyRandAugConfig,  .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-gelu-mixup",   ⟨ReferenceNets.convNextTinyGelu, convNextTinyMixupConfig,    .imagenette, "data/imagenette"⟩),
+  ("convnext-tiny-gelu-erase",   ⟨ReferenceNets.convNextTinyGelu, convNextTinyEraseConfig,    .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-relu",    ⟨convNextTinyReluSpec,   convNextTinyConfig, .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-bn-gelu", ⟨convNextTinyBnGeluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
   ("convnext-tiny-bn-relu", ⟨convNextTinyBnReluSpec, convNextTinyConfig, .imagenette, "data/imagenette"⟩),
