@@ -129,6 +129,12 @@ theorem bnVar_eq_bnMeanSq_sub_sq (n : Nat) (hn : n ≠ 0) (x : Vec n) :
   rw [bnVar, bnMeanSq, ← hμ, hexp]
   field_simp
 
+/-- `bnVar_eq_bnMeanSq_sub_sq` solved for `E[x²]` — the form a sync-BN statistics pack
+    (`μ`, `σ² + μ²`) needs to read the batch's own second moment back. -/
+theorem bnVar_add_mean_mul_mean (n : Nat) (hn : n ≠ 0) (x : Vec n) :
+    bnVar n x + bnMean n x * bnMean n x = bnMeanSq n x := by
+  rw [bnVar_eq_bnMeanSq_sub_sq n hn]; ring
+
 /-- ⭐⭐ **Chan's parallel variance: the variance of the whole is the mean over shards of each
     shard's OWN variance plus its mean's squared offset from the global mean.**
 

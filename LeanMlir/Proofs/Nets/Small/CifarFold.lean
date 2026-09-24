@@ -108,8 +108,8 @@ theorem cifarLossCot_den {ic c1 c2 h w d1 nClasses kH kW : Nat}
             (.operand nlogN (cifarCnnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x))))
           (.operand ohN (oneHot nClasses label)))
       = fun j => softmax nClasses (cifarCnnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x) j
-                  - oneHot nClasses label j := by
-  funext j; simp only [denStepApp, softmax]
+                  - oneHot nClasses label j :=
+  StableHLO.softmaxCELossCot_den nlogN ohN _ label
 
 /-- **Dense output weight `W₇`, tied to the WHOLE softmax-CE loss through the cifar forward.** With the
     dense-head input = the real cifar forward pool₂ output and the cotangent the emitted loss graph

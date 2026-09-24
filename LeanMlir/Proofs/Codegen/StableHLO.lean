@@ -2428,7 +2428,7 @@ theorem den_batchOp_softmaxDiv_per_example {N n : Nat} (e : SHlo (N * n))
     (k : Fin N) (j : Fin n) :
     den (.batchOp (N := N) (.softmaxDiv (n := n)) e) (finProdFinEquiv (k, j))
       = batchSlice N n (den e) k j / ∑ i, batchSlice N n (den e) k i := by
-  simp [batchMap, batchSlice]
+  simp only [den_batchOp, batchMap, denOp, Equiv.symm_apply_apply, batchSlice]
 
 /-- ⭐ **THE CLS SLICE IS THE ONE PLACE THE BATCH AND THE TOKEN AXIS COULD SWAP SILENTLY.**
     `clsSlice` takes `(tk+1)*D` to `D` — it CONTRACTS — and `batchMap N` of it takes `N*((tk+1)*D)`
@@ -2515,7 +2515,8 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
 /-- The one-replica collective threads its operand. -/
 theorem den_allReduceMeanF_one {n : Nat} (t : String) (ds : List Nat) (g : SHlo n) (i : Fin n) :
     den (SHlo.allReduceMeanF 1 Nat.one_pos t ds (fun _ => g)) i = den g i := by
-  simp [den_allReduceMeanF]
+  simp only [den_allReduceMeanF, Nat.cast_one, ne_eq, one_ne_zero, not_false_eq_true, div_self, univ_unique,
+    Fin.default_eq_zero, Fin.isValue, sum_const, card_singleton, one_smul, one_mul]
 
 /-- **At `R = 1` the two-round statistics subgraph is `[μ ‖ σ²]` of the batch itself**: the
     replica's own mean, and its own two-pass variance with a zero offset. -/
@@ -2554,14 +2555,9 @@ theorem den_bnSyncF_allReduce_R1 {N oc h w : Nat} (gN bN es t t' : String) (ds d
               (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB x))))))
       = bnBatchTensor4 N oc h w ε γ β (den x) := by
   rw [den_bnSyncF]
-  simp only [(den_syncStats_R1 t t' ds ds' x _).1, (den_syncStats_R1 t t' ds ds' x _).2]
-  have key : ∀ m2 : Vec oc,
-      m2 = (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den x)) c)) →
-      bnSyncTensor4 N oc h w ε γ β
-        (fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den x)) c)) m2 (den x)
-        = bnBatchTensor4 N oc h w ε γ β (den x) := by
-    intro m2 hm2; rw [hm2]; exact bnSyncTensor4_at_own_stats N oc h w hm ε γ β (den x)
-  exact key _ (by funext c; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring)
+  simp only [(den_syncStats_R1 t t' ds ds' x _).1, (den_syncStats_R1 t t' ds ds' x _).2,
+    bnVar_add_mean_mul_mean _ hm]
+  exact bnSyncTensor4_at_own_stats N oc h w hm ε γ β (den x)
 
 /-- ⭐⭐ **THE DROP-IN, backward half: at `R = 1` the sync-BN backward subgraph denotes
     `bnBatchTensor4_grad_input`.**
@@ -2584,15 +2580,9 @@ theorem den_bnSyncBack_allReduce_R1 {N oc h w : Nat} (gN xN es t t' t'' : String
       = bnBatchTensor4_grad_input N oc h w ε γ x (den dy) := by
   subst hx
   rw [den_bnSyncBack]
-  have hm2c : ∀ c : Fin oc,
-      bnVar (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)
-        + bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)
-          * bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)
-      = bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c) := by
-    intro c; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring
   simp only [den_allReduceMeanF_one, den_bnSyncDyStatsB, Fin.append_left, Fin.append_right,
              (den_syncStats_R1 t t' ds ds' xg _).1, (den_syncStats_R1 t t' ds ds' xg _).2,
-             hm2c, bnSyncXhat_at_own_stats _ hm]
+             bnVar_add_mean_mul_mean _ hm, bnSyncXhat_at_own_stats _ hm]
   exact bnSyncTensor4_grad_input_at_own_stats N oc h w hm ε γ _ (den dy)
 
 /-- ⭐⭐ **THE DROP-IN, γ half: at `R = 1` the sync γ-gradient node denotes `bnGammaGradB`.**
@@ -2610,16 +2600,9 @@ theorem den_bnSyncGammaGradB_allReduce_R1 {N oc h w : Nat} (xN es t t' : String)
       = den (.bnGammaGradB xN es ε x dy) := by
   subst hx
   rw [den_bnSyncGammaGradB]
-  simp only [(den_syncStats_R1 t t' ds ds' xg _).1, (den_syncStats_R1 t t' ds ds' xg _).2]
-  have key : ∀ m2 : Vec oc,
-      m2 = (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)) →
-      bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
-        (fun c => bnMean (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w (den xg)) c)) m2
-        (bnchwFwd N oc h w (den xg)) (bnchwFwd N oc h w (den dy))
-        = den (.bnGammaGradB xN es ε (den xg) dy) := by
-    intro m2 hm2; rw [hm2]
-    exact bnSyncPerChannel_grad_gamma_at_own_stats oc (N*(h*w)) hm ε _ _
-  exact key _ (by funext c; rw [bnVar_eq_bnMeanSq_sub_sq _ hm]; ring)
+  simp only [(den_syncStats_R1 t t' ds ds' xg _).1, (den_syncStats_R1 t t' ds ds' xg _).2,
+    bnVar_add_mean_mul_mean _ hm]
+  exact bnSyncPerChannel_grad_gamma_at_own_stats oc (N*(h*w)) hm ε _ _
 
 /-- **`R = 1`: the handed-back sync mean IS `bnBatchMeanB`.** -/
 theorem den_bnStatsMeanB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : List Nat)
@@ -2681,7 +2664,8 @@ theorem den_bnStatsVarB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : 
 theorem den_rowDenseBiasGradB_at_one {R c : Nat} (e : SHlo (1*(R*c))) (j : Fin c) :
     den (.rowDenseBiasGradB (N := 1) (R := R) (c := c) e) j
       = ∑ r : Fin R, batchSlice R c (batchSlice 1 (R*c) (den e) 0) r j := by
-  simp [den_rowDenseBiasGradB, Finset.sum_fin_eq_sum_range]
+  simp only [den_rowDenseBiasGradB, univ_unique, Fin.default_eq_zero, Fin.isValue, sum_fin_eq_sum_range,
+    sum_singleton]
 @[simp] theorem den_lnRowBackB {N m n : Nat} (gN xN es : String) (ε γ : ℝ)
     (x : Vec (N*(m*n))) (e : SHlo (N*(m*n))) :
     den (.lnRowBackB gN xN es ε γ x e) = batchMapAux N (rowLNBackFlat m n ε γ) x (den e) := rfl
@@ -2695,7 +2679,7 @@ theorem den_lnRowBackB_per_example {N m n : Nat} (gN xN es : String) (ε γ : �
     (x : Vec (N*(m*n))) (e : SHlo (N*(m*n))) (k : Fin N) (i : Fin (m*n)) :
     den (.lnRowBackB gN xN es ε γ x e) (finProdFinEquiv (k, i))
       = rowLNBackFlat m n ε γ (batchSlice N (m*n) x k) (batchSlice N (m*n) (den e) k) i := by
-  simp [den_lnRowBackB, batchMapAux]
+  simp only [den_lnRowBackB, batchMapAux, Equiv.symm_apply_apply]
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.sigmoidBackB xN x e) = (sigmoid_has_vjp (N*n)).backward x (den e) := rfl
 
@@ -2722,7 +2706,7 @@ theorem den_matmulFB_per_example {N m k n : Nat} (a : SHlo (N*(m*k))) (b : SHlo 
     (t : Fin N) (i : Fin (m*n)) :
     den (.matmulFB a b) (finProdFinEquiv (t, i))
       = matMulFlat m k n (batchSlice N (m*k) (den a) t) (batchSlice N (k*n) (den b) t) i := by
-  simp [den_matmulFB, batchMapAux]
+  simp only [den_matmulFB, batchMapAux, Equiv.symm_apply_apply]
 
 @[simp] theorem den_softmaxRowBackB {N m n : Nat} (xN : String) (preAct : Vec (N*(m*n)))
     (e : SHlo (N*(m*n))) :
@@ -2737,7 +2721,7 @@ theorem den_softmaxRowBackB_per_example {N m n : Nat} (xN : String) (preAct : Ve
     den (.softmaxRowBackB xN preAct e) (finProdFinEquiv (k, i))
       = rowSoftmaxBackFlat m n (batchSlice N (m*n) preAct k)
           (batchSlice N (m*n) (den e) k) i := by
-  simp [den_softmaxRowBackB, batchMapAux]
+  simp only [den_softmaxRowBackB, batchMapAux, Equiv.symm_apply_apply]
 
 @[simp] theorem den_posEmbedGradB {N tk D : Nat} (e : SHlo (N*((tk+1)*D))) :
     den (.posEmbedGradB (tk := tk) (D := D) e)
@@ -2756,7 +2740,7 @@ theorem den_softmaxRowBackB_per_example {N m n : Nat} (xN : String) (preAct : Ve
 theorem den_posEmbedGradB_at_one {tk D : Nat} (e : SHlo (1*((tk+1)*D))) (i : Fin ((tk+1)*D)) :
     den (.posEmbedGradB (N := 1) (tk := tk) (D := D) e) i
       = batchSlice 1 ((tk+1)*D) (den e) 0 i := by
-  simp [den_posEmbedGradB]
+  simp only [den_posEmbedGradB, univ_unique, Fin.default_eq_zero, Fin.isValue, sum_singleton]
 @[simp] theorem den_addVB {N n : Nat} (a b : SHlo (N*n)) :
     den (.addVB a b) = fun j => den a j + den b j := rfl
 @[simp] theorem den_subB {N n : Nat} (a b : SHlo (N*n)) :
@@ -2967,7 +2951,7 @@ theorem dropPathB_back_faithful {N n : Nat} (mN : String) (s : Vec N)
 
 @[simp] theorem den_dropPathB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     den (.dropPathB mN (fun _ => 1) e) = den e := by
-  simp [den_dropPathB]
+  simp only [den_dropPathB, dropPath_ones_id]
 
 /-- **Classifier-dropout forward faithfulness.** `dropoutB` denotes `Proofs.dropout`, the
     per-ELEMENT inverted mask. `rfl`, because dropout is `layerScale` at a mask of the value's own
@@ -2988,7 +2972,7 @@ theorem dropoutB_back_faithful {N n : Nat} (mN : String) (mask : Vec (N*n))
     graph differing only in the mask the driver supplies, and the prefix audit survives. -/
 @[simp] theorem den_dropoutB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     den (.dropoutB mN (fun _ => 1) e) = den e := by
-  simp [den_dropoutB]
+  simp only [den_dropoutB, dropout_ones_id]
 
 /-- ⭐⭐ **THE TWO OPS AGREE EXACTLY WHEN THE MASK IS LIFTED, AND THE AST SAYS SO.**
     `Proofs.dropout_of_dropScale` at the node level: a `dropoutB` carrying `dropScale N n s` denotes
@@ -3039,7 +3023,7 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
           (dense W₁ b₁ (relu e₁ (dense W₀ b₀ x))) dy)
       = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
   simp only [mlpBackGraph, denStep, denStepApp, mlp_has_vjp_at, dense_has_vjp, relu_has_vjp_at,
-             HasVJP.toHasVJPAt, Mat.mulVec, Function.comp_apply]
+             HasVJP.toHasVJPAt, Function.comp_apply]
   rfl
 
 -- ════════════════════════════════════════════════════════════════
@@ -3176,6 +3160,10 @@ theorem convStridedBack_faithful {ic oc h w kH kW : Nat} (wN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*(2*(2*h))*(2*(2*w)))) :
     den (.flatConvStride4F wN bN W b e) = flatConvStride4 W b (den e) := rfl
 
+/-- The scalar-BN backward node denotes the grad-input helper at its cotangent. -/
+@[simp] theorem den_bnBack {n : Nat} (gN xN es : String) (ε γ : ℝ) (x : Vec n) (e : SHlo n) :
+    den (.bnBack gN xN es ε γ x e) = bn_grad_input n ε γ x (den e) := rfl
+
 /-- **BN backward faithfulness.** The consolidated three-term graph denotes the
     proven BN input-VJP — equal to the `pdiv`-contracted Jacobian of `bnForward`
     (`bn_input_grad_correct`), under `0 < ε`. β-independent (a constant shift
@@ -3184,7 +3172,7 @@ theorem bnBack_faithful {n : Nat} (gN xN es : String) (ε γ β : ℝ) (hε : 0 
     (x : Vec n) (e : SHlo n) (i : Fin n) :
     den (.bnBack gN xN es ε γ x e) i
       = ∑ j : Fin n, pdiv (bnForward n ε γ β) x i j * den e j := by
-  show bn_grad_input n ε γ x (den e) i = _
+  rw [den_bnBack]
   exact bn_input_grad_correct n ε γ β hε x (den e) i
 
 /-- **Per-channel BN forward faithfulness.** The 4-D reshape + per-channel
@@ -3627,6 +3615,12 @@ theorem clipScaleF_id_below {n : Nat} (clipS epsS : String) (c ε : ℝ) (ds : L
     den (.bnPerChannelEvalF gN bN muN varN es ε γ β μ var e)
       = bnPerChannelEvalTensor3 oc h w ε γ β μ var (den e) := rfl
 
+/-- The per-channel BN backward node denotes the per-channel grad-input helper at its cotangent. -/
+@[simp] theorem den_bnPerChannelBack {oc h w : Nat} (gN xN es : String) (ε : ℝ) (γ : Vec oc)
+    (x : Vec (oc*h*w)) (e : SHlo (oc*h*w)) :
+    den (.bnPerChannelBack gN xN es ε γ x e) = bnPerChannelTensor3_grad_input oc h w ε γ x (den e) :=
+  rfl
+
 /-- **Per-channel BN backward faithfulness.** The block-diagonal three-term graph
     (per-channel, reducing over the spatial axes) denotes the proven per-channel BN
     input-VJP — equal to the `pdiv`-contracted (block-diagonal) Jacobian of
@@ -3635,7 +3629,7 @@ theorem bnPerChannelBack_faithful {oc h w : Nat} (gN xN es : String) (ε : ℝ) 
     (γ β : Vec oc) (x : Vec (oc*h*w)) (e : SHlo (oc*h*w)) (i : Fin (oc*h*w)) :
     den (.bnPerChannelBack gN xN es ε γ x e) i
       = ∑ j : Fin (oc*h*w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * den e j := by
-  show bnPerChannelTensor3_grad_input oc h w ε γ x (den e) i = _
+  rw [den_bnPerChannelBack]
   exact bnPerChannelTensor3_grad_input_correct oc h w ε hε γ β x (den e) i
 
 /-- **Depthwise-conv forward faithfulness.** The `feature_group_count = c`

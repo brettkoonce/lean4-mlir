@@ -55,6 +55,17 @@ theorem residualBackGraph_faithful {n : Nat}
 -- § Batched lifting (start): true batch-norm backward primitive
 -- ════════════════════════════════════════════════════════════════
 
+/-- **The renderable batch-norm input-grad IS the certified backward** — both equal the
+    `pdiv`-contracted Jacobian (`bnBatchTensor4_grad_input_correct`,
+    `bnBatchTensor4_has_vjp_correct`). -/
+theorem bnBatchTensor4_grad_input_eq_backward (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε)
+    (γ β : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
+    bnBatchTensor4_grad_input N oc h w ε γ x dy
+      = (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x dy :=
+  funext fun i => by
+    rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β,
+      ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β]
+
 /-- **`bnBatchBack` (true batch-norm backward) faithfulness.** The first
     batched-backward primitive: `bnBatchBack` denotes the proven
     `bnBatchTensor4` VJP backward (batch-COUPLED batch-norm on `[N,C,H,W]`,
@@ -69,10 +80,9 @@ theorem bnBatchBack_faithful {N oc h w : Nat} (gN xN es : String)
     (x : Vec (N * (oc * (h * w)))) (e : SHlo (N * (oc * (h * w)))) :
     den (SHlo.bnBatchBack gN xN es ε γ x e)
       = (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x (den e) := by
-  funext i
-  show bnBatchTensor4_grad_input N oc h w ε γ x (den e) i = _
-  rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β x (den e) i,
-      ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β x (den e) i]
+  -- `den (.bnBatchBack …)` is the grad-input at `den e` by definition (its `den` arm).
+  show bnBatchTensor4_grad_input N oc h w ε γ x (den e) = _
+  exact bnBatchTensor4_grad_input_eq_backward N oc h w ε hε γ β x (den e)
 
 /-- **Batched conv input-VJP faithfulness.** `convBackBatched` denotes the proven
     VJP of the batched conv `batchMap N (flatConv W b)` — i.e. the per-example
@@ -191,18 +201,7 @@ theorem bnBatchLA_back_conj {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (hε : 
         ((reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
           (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x) dy))
       = (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x dy := by
-  have hb : bnBatchTensor4_grad_input N oc h w ε γ
-        (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
-        ((reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
-          (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x) dy)
-      = (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward
-        (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
-        ((reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
-          (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x) dy) := by
-    funext i
-    rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β,
-        ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β]
-  rw [hb]
+  rw [bnBatchTensor4_grad_input_eq_backward N oc h w ε hε γ β]
   simp only [bnBatchLA_has_vjp, eq_mpr_eq_cast]
   rfl
 

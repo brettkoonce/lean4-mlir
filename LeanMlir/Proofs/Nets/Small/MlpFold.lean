@@ -135,8 +135,8 @@ theorem mlpLossCot_den (nlogN ohN : String) (label : Fin d₃) :
             (.operand nlogN (mnistLinear W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))))))
           (.operand ohN (oneHot d₃ label)))
       = fun j => softmax d₃ (mnistLinear W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) j
-                  - oneHot d₃ label j := by
-  funext j; simp only [denStepApp, softmax]
+                  - oneHot d₃ label j :=
+  StableHLO.softmaxCELossCot_den nlogN ohN _ label
 
 /-- **Output-layer weight op, fully tied to the WHOLE softmax-CE loss.** Fed the cotangent the
     emitted loss graph denotes (`mlpLossCot_den`), the `weightSgd` for `W₂` denotes

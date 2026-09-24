@@ -41,6 +41,16 @@ to a diagonal** — which means the VJP has a closed-form collapse, just
 like BatchNorm did.
 -/
 
+/-- **A `pdiv` entry is the derivative of one output coordinate** — `pdiv f x i j` is
+    `fderiv f x (basisVec i) j`, and at a differentiable point that is the `i`-th directional
+    derivative of `y ↦ f y j`. Parked in this leaf; `pdiv_bnIstdBroadcast` (BatchNorm, which does
+    not import this file) repeats the step and switches when this moves to `Tensor.lean` with the
+    next root batch. -/
+theorem pdiv_eq_fderiv_coord {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
+    (hf : DifferentiableAt ℝ f x) (i : Fin m) (j : Fin n) :
+    pdiv f x i j = fderiv ℝ (fun y => f y j) x (basisVec i) := by
+  unfold pdiv; rw [fderiv_apply hf j]; rfl
+
 /-- **Partial derivative of softmax** (quotient rule on the exponentials).
 
     `d(softmax(z))_j/dz_i = softmax(z)_j * (delta_{ij} - softmax(z)_i)`
@@ -58,13 +68,7 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
   cases c with
   | zero => exact j.elim0
   | succ c' =>
-  unfold pdiv
-  -- Convert (fderiv ℝ softmax z) (basisVec i) j → fderiv of the j-th coord function.
-  have h_swap : fderiv ℝ (softmax (c' + 1)) z (basisVec i) j =
-                fderiv ℝ (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) z (basisVec i) := by
-    rw [fderiv_apply (softmax_diff (c' + 1) z) j]
-    rfl
-  rw [h_swap]
+  rw [pdiv_eq_fderiv_coord (softmax_diff (c' + 1) z)]
   rw [show (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) =
          (fun z' => Real.exp (z' j) * (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹) from by
     funext z'
@@ -173,7 +177,7 @@ theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
 
     Stated using `pdiv` on a `Vec 1`-valued wrapper (cross-entropy is
     naturally scalar, but `pdiv` is defined for `Vec → Vec`; we just
-    take the only output index). Proof: `fderiv_apply` extracts the
+    take the only output index). Proof: `pdiv_eq_fderiv_coord` extracts the
     only coord, then `HasFDerivAt.log` (with `softmax z label > 0`)
     composed with `softmax_diff` gives the derivative of the inner
     `Real.log`. Negating and evaluating at `basisVec j` reduces via
@@ -195,13 +199,8 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   have h_ce_pi_diff : Differentiable ℝ
       (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label) :=
     differentiable_pi.mpr fun _ => crossEntropy_differentiable (c' + 1) label
-  unfold pdiv
   -- Step 1: extract the single (0-th) coord of the Vec 1-valued function.
-  rw [show fderiv ℝ (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label)
-                  logits (basisVec j) 0
-        = fderiv ℝ (fun z : Vec (c' + 1) => crossEntropy (c' + 1) z label)
-                  logits (basisVec j) from by
-    rw [fderiv_apply (h_ce_pi_diff logits) 0]; rfl]
+  rw [pdiv_eq_fderiv_coord (h_ce_pi_diff logits)]
   -- Step 2: HasFDerivAt chain for crossEntropy = -log ∘ softmax_label.
   have h_softmax_at : HasFDerivAt (fun z : Vec (c' + 1) => softmax (c' + 1) z label)
       (fderiv ℝ (fun z => softmax (c' + 1) z label) logits) logits :=
@@ -221,10 +220,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   -- Step 3: simplify CLM application at basisVec j.
   simp only [neg_apply, smul_apply, smul_eq_mul]
   -- Step 4: rewrite fderiv of `softmax z label` (in z) as pdiv softmax, then apply pdiv_softmax.
-  rw [show fderiv ℝ (fun z : Vec (c' + 1) => softmax (c' + 1) z label) logits (basisVec j)
-        = pdiv (softmax (c' + 1)) logits j label from by
-    show _ = fderiv ℝ (softmax (c' + 1)) logits (basisVec j) label
-    rw [fderiv_apply ((softmax_diff (c' + 1)) logits) label]; rfl]
+  rw [← pdiv_eq_fderiv_coord (softmax_diff (c' + 1) logits)]
   rw [pdiv_softmax]
   -- Step 5: oneHot unfolds to `if j = label then 1 else 0`; algebra cancels p[label].
   rw [oneHot_apply]

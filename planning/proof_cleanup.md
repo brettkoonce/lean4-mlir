@@ -73,7 +73,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 
 **Next session, in order** (§3.1–§3.7 are done; §5 has the detail):
 
-§6 (re-audit 2026-09-24): batch 1 (§6.2), then batch 2 (§6.3). Before §6 there was no main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
+§6 (re-audit 2026-09-24): batches 1 and 2 (§6.2, §6.3) done; §6.4 is what is left from it. Before §6 there was no main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
 [`certlayer_nets.md`](certlayer_nets.md): whole nets as one `CertLayer`, which would retire the
 `r34PreK`/`r50PreK`/`mnv2PreBK` chains and bundles outright (§3.1's vocabulary item folds into it).
 Also open, not measured: §3.6's `IsShardwise`.
@@ -293,7 +293,25 @@ Planned:
   `nhw_ne_zero (Nat.mul_pos hR hN)` call sites.
 * MNv4 sync apex: the skip∘body scaled composition (19×) as one lemma.
 
-### 6.3 Batch 2 — small
+### 6.3 Batch 2 — small (done, see the result list below)
+
+Result: R50's whole-back tie peels with R34's two lemmas (2.9 s → 3.0 s); `pdiv_eq_fderiv_coord`
+(Softmax, 3 sites); `bnBatchTensor4_grad_input_eq_backward` (BatchedBackLinks, both sites, `hb`
+gone); `bnVar_add_mean_mul_mean` (BatchNorm) takes out both `key` generalisations and `hm2c`;
+the nine StableHLO sentinels are `simp only` from `simp?`; `den_bnBack`/`den_bnPerChannelBack`
+(`@[simp]`, `rfl`) replace the two `show`s; the chapter 1–4 forward writers moved to the leaf
+`Codegen/ChapterArtifacts.lean` (proofs.yml, regen script, lakefile, README repointed; artifacts
+byte-identical), the three `/tmp` writers deleted; Bf16GradNodes' eight `congr 1; apply
+Finset.sum_congr rfl; intro n _` → `refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)`;
+`softmaxCELossCot_den {K}` (LinearTrainStep) makes the six `*LossCot_den` one term each. Not done:
+
+* The MNv2 / MNv4 peel: each needs a new ~70-line variable-stage lemma (binders), and their ties
+  build in 2.5 s / 3.1 s — the closing `rfl` is cheap today (R34's was 43 s because its stem VJP
+  is `vjp_comp_at`-built). Insurance, not low-hanging; do it with `HasVJPDiffAt` (§6.4), which
+  halves those binders.
+* BatchNorm's copy of the `pdiv`-coordinate step waits for the lemma's move to `Tensor.lean`.
+
+Planned:
 
 * R50 / MNv2 / MNv4 whole-back ties still close by `rfl` through the concrete apex (the §0 trap
   shape; MNv2/MNv4 at literal widths) — give them R34's §1(f) peel; R50 reuses R34's lemmas as-is.

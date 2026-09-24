@@ -12,7 +12,7 @@ certificate. "The bf16 twins consume the same node" was written in three fold he
 false.
 
 This file is the whole bf16 op table, stated per op kind: each lemma says the node denotes the
-certified `Σ_n` gradient at the ROUNDED operands, rounded. The proofs are the f32 fold's — `congr 1`
+certified `Σ_n` gradient at the ROUNDED operands, rounded. The proofs are the f32 fold's — `congrArg rnd`
 peels the outer rounding, `Finset.sum_congr` the batch, and the inner equality is the per-example
 certificate at rounded slices.
 
@@ -56,9 +56,7 @@ theorem convWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cot
                     (Tensor3.unflatten (fun j => rnd (batchSlice N (ic * h * w) x n j)))))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   exact conv_weight_grad_bridge b
     (Tensor3.unflatten (fun j => rnd (batchSlice N (ic * h * w) x n j)))
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
@@ -75,9 +73,7 @@ theorem convStridedWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) 
                     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   exact (flatConvStride2_weight_grad_has_vjp b
     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j))).correct
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
@@ -94,9 +90,7 @@ theorem convStridedXlaWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → �
                     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j)))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   exact (flatConvStride2Xla_weight_grad_has_vjp b
     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j))).correct
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
@@ -112,9 +106,7 @@ theorem convStride4WGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) 
                     (fun j => rnd (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n j)))
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   exact (flatConvStride4_weight_grad_has_vjp b
     (fun j => rnd (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n j))).correct
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
@@ -130,9 +122,7 @@ theorem depthwiseWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xN co
                     (Tensor3.unflatten (fun j => rnd (batchSlice N (c * h * w) x n j)))))
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b
       (Tensor3.unflatten (fun j => rnd (batchSlice N (c * h * w) x n j))))).correct
       (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx]
@@ -150,9 +140,7 @@ theorem depthwiseStridedWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ)
                     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j)))
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   exact (depthwiseStride2_weight_grad_has_vjp b
     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j))).correct
     (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx
@@ -169,9 +157,7 @@ theorem depthwiseStridedXlaWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → �
                     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j)))
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   exact (depthwiseStride2Xla_weight_grad_has_vjp b
     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j))).correct
     (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx
@@ -217,9 +203,7 @@ theorem patchEmbedWGradBBf16_den {ic H W P tk D N : Nat} (rnd : ℝ → ℝ) (xN
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
             * rnd (batchSlice N ((tk + 1) * D) dy n o)) := by
   simp only [denStep, denStepApp, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
-  congr 1
-  apply Finset.sum_congr rfl
-  intro n _
+  refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
   exact vit_patchW_grad_bridge Wp bc cls pos
     (fun j => rnd (batchSlice N (ic * H * W) img n j))
     (fun j => rnd (batchSlice N ((tk + 1) * D) dy n j)) d c kh kw

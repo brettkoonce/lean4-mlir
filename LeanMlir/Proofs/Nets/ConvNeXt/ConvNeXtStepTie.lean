@@ -293,8 +293,8 @@ theorem cnx_dense_tied_totalloss {m : Nat} (aN wN lrStr dyN : String)
 theorem cnxLossCot_den (nlogN ohN : String) (logits : Vec 10) (label : Fin 10) :
     den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN logits)))
           (.operand ohN (oneHot 10 label)))
-      = fun j => softmax 10 logits j - oneHot 10 label j := by
-  funext j; simp only [denStepApp, softmax]
+      = fun j => softmax 10 logits j - oneHot 10 label j :=
+  StableHLO.softmaxCELossCot_den nlogN ohN _ label
 
 /-! ## Forward aliases (`@[irreducible]`) — thread block inputs through the real forward
 

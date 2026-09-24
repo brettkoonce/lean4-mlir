@@ -37,6 +37,14 @@ theorem lossCot_eq_softmax_sub_onehot (label : Fin n) (k : Fin n) :
   rw [lossCotGraph_isCEgrad W b x label k,
       softmaxCE_grad n (mnistLinear W b x) label k]
 
+/-- **Any emitted softmax-CE loss cotangent denotes `softmax(logits) − onehot`**, generic in the
+    class count and the logits. Every net's `*LossCot_den` is this at its forward's logits. -/
+theorem softmaxCELossCot_den {K : Nat} (nlogN ohN : String) (logits : Vec K) (label : Fin K) :
+    den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN logits)))
+          (.operand ohN (oneHot K label)))
+      = fun j => softmax K logits j - oneHot K label j := by
+  funext j; simp only [denStepApp, softmax]
+
 /-- **M1 (weight).** The emitted linear SGD weight update subtracts `lr` times the
     certified ∂logits/∂W Jacobian contracted with the certified closed-form
     softmax-CE gradient `softmax − onehot`. -/

@@ -147,6 +147,9 @@ theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
   unfold r50InputGradB
   rw [cbReluStridedBBack_eq_vjp_backward (by decide) (by decide) Ws bs εs hεs γs βs x h_stem,
       r34HeadBBack_eq_vjp_backward Wd bd (opaqueA16 (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
+  funext dy
+  rw [r34B_full_has_vjp_at_backward, r34StemB_has_vjp_at_backward]
+  repeat rw [Function.comp_apply]
   rfl
 
 /-- ⭐⭐ **The chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at every batch

@@ -44,8 +44,8 @@ theorem cifar8LossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
             (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈ W₉ b₉ Wa ba Wb bb x))))
           (.operand ohN (oneHot nClasses label)))
       = fun j => softmax nClasses (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
-                    W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j := by
-  funext j; simp only [denStepApp, softmax]
+                    W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j :=
+  StableHLO.softmaxCELossCot_den nlogN ohN _ label
 
 /-- **Dense output weight `Wb`, tied to the WHOLE softmax-CE loss through the cifar8 forward.** The
     dense head is the standard 3-layer MLP; given the forward logits = `mnistLinear Wb bb a_head`
