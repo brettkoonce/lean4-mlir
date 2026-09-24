@@ -27,8 +27,8 @@ namespace Proofs.StableHLO
 
 | forward | verdict |
 |---|---|
-| `mbStridedFwdB` | ⭐ **never a hole** — `mbDownBodyB_has_vjp` is *definitionally the same object* (`rfl`), and it already has a certified graph. A duplicate NAME, not a missing proof. |
-| `mbExpFwdB` | same shape as `mbBodyB_has_vjp`, which bakes in `ic = oc = c`; tied where the types meet |
+| `mbStridedFwdB` | ⭐ **never a hole** — `mbDownBodyBackBatchedGraph_faithful` certifies `mbStridedFwdB_has_vjp` itself |
+| `mbExpFwdB` | `mbBodyBackBatchedGraph_faithful` certifies `mbExpFwdB_has_vjp` at `ic = oc` (the graph's type) |
 | `mbNoExpFwdB` | genuine — nothing composed `projB ∘ seB ∘ dwbsB` |
 | `headFwdB` | genuine — nothing composed `dense ∘ GAP ∘ cbsB` |
 

@@ -133,46 +133,9 @@ structure B0Weights.EpsPos (w : B0Weights) : Prop where
   h : 0 < w.hε
 
 -- ════════════════════════════════════════════════════════════════
--- § The 4th block shape — MBConv6 expand + stride-1 + NO residual (`ic ≠ oc`, stages 5/7 first block)
+-- § The 4th block shape — MBConv6 expand + stride-1 + NO residual (`ic ≠ oc`, stages 5/7 first
+--   block); `mbExpFwdB` and its VJP are in `EfficientNetChainClose`
 -- ════════════════════════════════════════════════════════════════
-
-/-- MBConv6 expand, stride-1, NO residual: `project-bn ∘ SE ∘ dw-bn-swish ∘ expand-bn-swish` (the
-    `mbResidFwdB` body without the identity skip). -/
-noncomputable def mbExpFwdB (N : Nat) {ic mid oc h w kHd kWd r : Nat}
-    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (γe βe : Vec mid)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (γd βd : Vec mid)
-    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc) :
-    Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
-  projB N (h := h) (w := w) Wp bp εp γp βp ∘
-    seB N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂ ∘
-    dwbsB N (h := h) (w := w) Wd bd εd γd βd ∘
-    cbsB N (h := h) (w := w) We be εe γe βe
-
-theorem mbExpFwdB_differentiable (N : Nat) {ic mid oc h w kHd kWd r : Nat}
-    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
-    Differentiable ℝ (mbExpFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd
-      Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) := by
-  unfold mbExpFwdB cbsB dwbsB swish; fun_prop (disch := assumption)
-noncomputable def mbExpFwdB_has_vjp (N : Nat) {ic mid oc h w kHd kWd r : Nat}
-    (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
-    (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
-    (Wz₁ : Mat mid r) (bz₁ : Vec r) (Wz₂ : Mat r mid) (bz₂ : Vec mid)
-    (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) :
-    HasVJP (mbExpFwdB N (h := h) (w := w) We be εe γe βe Wd bd εd γd βd
-      Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp) := by
-  unfold mbExpFwdB
-  have dE := cbsB_differentiable N (h := h) (w := w) We be εe hεe γe βe
-  have dDw := dwbsB_differentiable N (h := h) (w := w) Wd bd εd hεd γd βd
-  have dSe := seB_differentiable N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂
-  have vEdw : HasVJP _ := vjp_comp _ _ dE dDw (cbsB_has_vjp N (h := h) (w := w) We be εe hεe γe βe)
-    (dwbsB_has_vjp N (h := h) (w := w) Wd bd εd hεd γd βd)
-  exact vjp_comp _ _ (dSe.comp (dDw.comp dE)) (projB_differentiable N (h := h) (w := w) Wp bp εp hεp γp βp)
-    (vjp_comp _ _ (dDw.comp dE) dSe vEdw (seB_has_vjp N (h := h) (w := w) Wz₁ bz₁ Wz₂ bz₂))
-    (projB_has_vjp N (h := h) (w := w) Wp bp εp hεp γp βp)
 
 namespace StableHLO
 
