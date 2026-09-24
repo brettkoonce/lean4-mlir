@@ -1006,38 +1006,21 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       (if bce then lossCodeBce else lossCode) ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r50SigList nClasses
-  let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let mSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}m: {t}"))
-  let vSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}v: {t}"))
-  -- The accumulator region `G`, named `<p>a`, present only under `.adamwAccum`. At every other
-  -- optimizer this is the empty string, so the three committed R50 artifacts re-render byte for byte.
-  let aSig := if accOn then ", " ++ String.intercalate ", "
-                              (sigList.map (fun (n, t) => s!"{n}a: {t}")) else ""
-  -- The shadow region `E`, named `<p>e`, present only under `ema`. ⚠ It follows `aSig` and never
-  -- precedes it — the `[θ|m|v|G|E]` order the driver packs, and the order that leaves both
-  -- single-axis layouts at the index they already occupy.
+  -- `G` (`<p>a`) only under `.adamwAccum`, `E` only under `ema`, in `[θ|m|v|G|E]` order.
   -- ⚠ `{n}ema`, not `{n}e` — see `optOne`'s note: `%sg` + `e` is `%sge`, the maxpool backward's
   -- own block-local name, and the artifact does not parse. The ARGUMENT and the produced value have
   -- to move together or the region has no input.
-  let eSig := if ema then ", " ++ String.intercalate ", "
-                              (sigList.map (fun (n, t) => s!"{n}ema: {t}")) else ""
-  let accSSig := (if accOn then ", %aup: tensor<f32>, %akeep: tensor<f32>" else "") ++
-                 (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "")
   let statSig := String.intercalate ", " (r50StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
   -- ⚠ The 16 drop masks go AFTER the BN stats and BEFORE `%onehot`, which is where the driver
   -- packs them (`dropSlots` trails `runningBnStats` in `trainAdamSched`'s `pbuf`). The labels ride
   -- separately, so `%onehot` stays last.
-  let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    aSig ++ eSig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++ accSSig ++ ", " ++ statSig ++
+  let inSig := s!"%x: {ty [B, 3*(32*q)*(32*q)]}, " ++
+    packedTrainSig sigList accOn ema (emaSuf := "ema") ++ ", " ++ statSig ++
     r50DropSig B sd ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
-  let accTy := (if accOn then ["tensor<f32>", "tensor<f32>"] else []) ++
-               (if ema then ["tensor<f32>", "tensor<f32>"] else [])
   let outSig := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ (if accOn then pTy else []) ++ (if ema then pTy else []) ++
-     ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accTy ++ (r50StatSigList.map (·.2)))
+    (packedTrainRetTys pTy accOn ema ++ (r50StatSigList.map (·.2)))
   let inner : String := go.run' (0, [])
   -- ⚠ Same `{slug}_{variant}_train_step` convention the shim checks; `r34AdamVariant` is reused as
   -- the single source for the variant name so R50's artifact names cannot drift from R34's rule.

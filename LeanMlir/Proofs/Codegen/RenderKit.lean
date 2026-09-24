@@ -11,6 +11,9 @@ parameter list, so the θ/m/v outputs come out in signature order. This file hol
 | `rmsOne` | MobileNetV2, EfficientNet | all-reduce + coupled L2 + mean-square + buffer + SGD |
 | `adamOneEma` | ViT, ConvNeXt | `adamOne` + the model-EMA shadow, with the clip's `preAvg` |
 
+and the train step's **packed interface** — the one positional contract the driver's blob walks:
+`packedTrainSig` (arguments) and `packedTrainRetTys` (results), used by every batched renderer.
+
 `ResNet34RenderB.optOne` is the multi-optimizer step (AdamW / LAMB / heavy-ball / accumulation /
 EMA) that ResNet-34 and ResNet-50 fold; it reads the same `PGrad`.
 
@@ -111,5 +114,38 @@ def adamOneEma (B : Nat) (replicas : Nat) (g : PGrad)
       pretty B (.adamMNextF s!"%{g.nm}e" "%emad" "%oemad" g.ds 0 z (.operand nT z))
     else pure ("", "")
   pure (arS ++ cA ++ cE, nT, nM, nV, nE)
+
+-- ════════════════════════════════════════════════════════════════
+-- § The packed train-step interface `[θ|m|v|G|E] + scalars`
+-- ════════════════════════════════════════════════════════════════
+
+/-- The packed train step's **argument list after `%x`**: the parameter regions in the order the
+    driver packs them — `θ`, `m`, `v`, then the accumulator `G` (`<p>a`, only under gradient
+    accumulation) and the model-EMA shadow `E` (`<p>{emaSuf}`, only under `ema`) — followed by the
+    runtime scalars `%lr, %bc1, %bc2`, `%aup, %akeep` (accumulation) and `%emad, %oemad` (EMA).
+    `ps` is `(%name, type)` per parameter, in signature order.
+
+    ⚠ `G` precedes `E` and never follows it: `[θ|m|v|G|E]` is the order that leaves both single-axis
+    layouts at the index they already occupy. ⚠ `emaSuf` is `"e"` except on the ResNet family, whose
+    stem BN gamma `%sg` + `e` would be `%sge` — `select_and_scatter`'s block-local name in the
+    max-pool backward — so there it is `"ema"` (`ResNet34RenderB.optOne`). -/
+def packedTrainSig (ps : List (String × String)) (acc : Bool := false) (ema : Bool := false)
+    (emaSuf : String := "e") : String :=
+  let region (suf : String) := String.intercalate ", " (ps.map fun (n, t) => s!"{n}{suf}: {t}")
+  let sufs := ["", "m", "v"] ++ (if acc then ["a"] else []) ++ (if ema then [emaSuf] else [])
+  String.intercalate ", " (sufs.map region) ++
+    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
+    (if acc then ", %aup: tensor<f32>, %akeep: tensor<f32>" else "") ++
+    (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "")
+
+/-- The packed train step's **leading result types**, in `packedTrainSig`'s order: the updated
+    regions `θ', m', v'[, G'][, E']`, then `%loss, %bc1, %bc2`, then the handed-back
+    accumulation / EMA scalars. `pTy` is the parameter types in signature order. -/
+def packedTrainRetTys (pTy : List String) (acc : Bool := false) (ema : Bool := false) :
+    List String :=
+  pTy ++ pTy ++ pTy ++ (if acc then pTy else []) ++ (if ema then pTy else []) ++
+    ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
+    (if acc then ["tensor<f32>", "tensor<f32>"] else []) ++
+    (if ema then ["tensor<f32>", "tensor<f32>"] else [])
 
 end Proofs.StableHLO

@@ -1090,9 +1090,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     let dpTys   := if sd then (List.range (cnxDropSites V)).map (fun _ => ty [cBS]) else []
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
                      ++ (if ema then ["%emad", "%oemad"] else []) ++ dpNames
-    let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
-                     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ dpTys
+    let retTys := packedTrainRetTys pTy (ema := ema) ++ dpTys
     pure <|
       (if replicas ≤ 1 then
         -- Updated 2026-07-29. This banner used to carve out the stem 4x4/s4 and the 2x2/s2
@@ -1117,14 +1115,8 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
   -- names 0..k, so the Adam ops must start at k — otherwise they collide with the backward's SSAs.
   let used := (trav.run (0, [])).2
   let inner : String := go.run' used
-  let pSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}"))
-  let mSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}m: {ty d}"))
-  let vSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}v: {ty d}"))
-  let eSig := String.intercalate ", " ((allParams nClasses V).map (fun (nm, d) => s!"%{nm}e: {ty d}"))
-  let argSig := ("%x: " ++ ty [cBS, 3*224*224]) ++ ", " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    (if ema then ", " ++ eSig else "") ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
-    (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++
+  let argSig := ("%x: " ++ ty [cBS, 3*224*224]) ++ ", " ++
+    packedTrainSig ((allParams nClasses V).map fun (nm, d) => (s!"%{nm}", ty d)) (ema := ema) ++
     -- ⚠ The drop scales go LAST, after the scalars and before `%onehot` is appended, matching the
     -- driver's blob layout (`[θ|m|v|scalars|drops]`, `%x` and `%onehot` passed separately) and
     -- `convNextFwdRenderB`'s placement. Inserted mid-list they would capture an existing positional
@@ -1133,9 +1125,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     ", %onehot: " ++ ty [cBS,nClasses]
   let pTy := (allParams nClasses V).map (fun p => ty p.2)
   let retTyL := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
-       ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-       ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+    (packedTrainRetTys pTy (ema := ema)
        ++ (if sd then (List.range (cnxDropSites V)).map (fun _ => ty [cBS]) else []))
   -- ⚠ The slug is load-bearing exactly as it is on R34 (§2k) and ViT (§2p): a 1000-class render
   -- emitted under the `convnext` slug would collide with the artifacts the 84.41% Imagenette run,

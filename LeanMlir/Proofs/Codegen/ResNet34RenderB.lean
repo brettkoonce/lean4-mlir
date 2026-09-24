@@ -1615,16 +1615,12 @@ here first"
       zeroBiasPrelude convBias [64, 128, 256, 512] ++ body ++ optConstsB opt wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := r34SigList nClasses convBias
-  let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let mSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}m: {t}"))
-  let vSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}v: {t}"))
   let statSig := String.intercalate ", " (r34StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statSig ++
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ packedTrainSig sigList ++ ", " ++ statSig ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
   let outSig := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ (r34StatSigList.map (·.2)))
+    (packedTrainRetTys pTy ++ (r34StatSigList.map (·.2)))
   let inner : String := go.run' (0, [])
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch") — which is exactly what it did the first time this was

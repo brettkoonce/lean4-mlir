@@ -1274,9 +1274,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
                      ++ (if cd then [ty [B, enetHeadWidth]] else [])
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
                      ++ (if ema then ["%emad", "%oemad"] else []) ++ statNames ++ dpNames
-    let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
-                     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ statTypes ++ dpTys
+    let retTys := packedTrainRetTys pTy (ema := ema) ++ statTypes ++ dpTys
     pure (
       (if replicas ≤ 1 then
         "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n"
@@ -1330,14 +1328,8 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- recomputed above from each layer's BN input.
   let statSig := String.intercalate ", " ((List.range bnOc.length).map (fun i =>
     s!"%bnmu{i}i: {ty [bnOc[i]!]}, %bnvar{i}i: {ty [bnOc[i]!]}"))
-  let pSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}: {ty ds}"))
-  let mSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}m: {ty ds}"))
-  let vSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}v: {ty ds}"))
-  let eSig := String.intercalate ", " (sigList.map (fun (n, ds) => s!"%{n}e: {ty ds}"))
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    (if ema then ", " ++ eSig else "") ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
-    (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++ ", " ++ statSig ++
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+    packedTrainSig (sigList.map fun (n, ds) => (s!"%{n}", ty ds)) (ema := ema) ++ ", " ++ statSig ++
     -- ⚠ The drop scales go LAST, after the BN stats and before `%onehot` is appended, matching
     -- `enetFwdSig`'s placement — inserted mid-list they would capture an existing positional slot,
     -- which is the mnv2 `convBias` failure (§2m) and is silent until the driver mis-walks the blob.
@@ -1345,9 +1337,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (fun p => ty p.2)
   let outSig := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
-     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+    (packedTrainRetTys pTy (ema := ema)
      ++ bnOc.flatMap (fun oc => [ty [oc], ty [oc]])
      ++ (if sd then enetDropIdxs.map (fun _ => ty [B]) else [])
      ++ (if cd then [ty [B, enetHeadWidth]] else []))

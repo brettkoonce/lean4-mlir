@@ -1161,16 +1161,12 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       zeroBiasPrelude false mnv4ZbWidths ++ body ++ adamWConsts ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv4SigList nClasses
-  let pSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let mSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}m: {t}"))
-  let vSig := String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}v: {t}"))
   let statSig := String.intercalate ", " (mnv4StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>, " ++ statSig ++
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ packedTrainSig sigList ++ ", " ++ statSig ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
   let outSig := String.intercalate ", "
-    (pTy ++ pTy ++ pTy ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
+    (packedTrainRetTys pTy ++
      (mnv4StatSigList.map (·.2)))
   let inner : String := go.run' (0, [])
   let fname := s!"{slug}_{mnv4AdamVariant B replicas bf16}_train_step"

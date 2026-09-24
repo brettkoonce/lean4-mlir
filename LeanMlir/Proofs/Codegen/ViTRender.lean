@@ -823,9 +823,7 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     let dpTys := if sd then (List.range vitDropSites).map (fun _ => ty [bs]) else []
     let retVals := thetaN ++ mN ++ vN ++ eN ++ ["%loss", "%bc1", "%bc2"]
                      ++ (if ema then ["%emad", "%oemad"] else []) ++ dpNames
-    let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
-                     ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-                     ++ (if ema then ["tensor<f32>", "tensor<f32>"] else []) ++ dpTys
+    let retTys := packedTrainRetTys pTy (ema := ema) ++ dpTys
     pure <|
       (if replicas <= 1 then
         "    // ── ViT-Tiny depth-12 AdamW train step: gradients + optimizer are pretty(AST) ──\n"
@@ -845,22 +843,14 @@ def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
        else "") ++
       code ++ vitAdamConsts wdExclude wdStr ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
-  let pSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}: {ty ds}"))
-  let mSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}m: {ty ds}"))
-  let vSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}v: {ty ds}"))
-  let eSig := String.intercalate ", " ((vitParamSig nClasses V).map (fun (nm, ds) => s!"%{nm}e: {ty ds}"))
-  let argSig := s!"%x: {ty [bs, 3*224*224]}, " ++ pSig ++ ", " ++ mSig ++ ", " ++ vSig ++
-    (if ema then ", " ++ eSig else "") ++
-    ", %lr: tensor<f32>, %bc1: tensor<f32>, %bc2: tensor<f32>" ++
-    (if ema then ", %emad: tensor<f32>, %oemad: tensor<f32>" else "") ++
+  let argSig := s!"%x: {ty [bs, 3*224*224]}, " ++
+    packedTrainSig ((vitParamSig nClasses V).map fun (nm, ds) => (s!"%{nm}", ty ds)) (ema := ema) ++
     -- ⚠ The drop scales go LAST, after the scalars and before `%onehot`, matching the driver's blob
     -- layout and `vitFwdRenderB`'s placement. Mid-list they capture an existing positional slot.
     vitDropSig bs sd ++
     s!", %onehot: {ty [bs, nClasses]}"
   let pTy := (vitParamSig nClasses V).map (fun (_, ds) => ty ds)
-  let retTys := pTy ++ pTy ++ pTy ++ (if ema then pTy else [])
-    ++ ["tensor<f32>", "tensor<f32>", "tensor<f32>"]
-    ++ (if ema then ["tensor<f32>", "tensor<f32>"] else [])
+  let retTys := packedTrainRetTys pTy (ema := ema)
     ++ (if sd then (List.range vitDropSites).map (fun _ => ty [bs]) else [])
   let body : String := go.run' (0, [])
   "module @m {\n" ++
