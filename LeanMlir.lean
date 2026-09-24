@@ -8,7 +8,12 @@ import LeanMlir.ViTRender
 import LeanMlir.SpecHelpers
 import LeanMlir.Train
 import LeanMlir.VerifiedTrain
+import LeanMlir.VerifiedPgdGen
+import LeanMlir.VerifiedAttack
+import LeanMlir.VerifiedSmoothing
 import LeanMlir.VerifiedSpec
+import LeanMlir.ParamLayouts
+import LeanMlir.VerifiedNetsCore
 import LeanMlir.VerifiedNets
 import LeanMlir.Ddpm
 import LeanMlir.Cam

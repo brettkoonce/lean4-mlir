@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
 import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.Nets.Small.MnistCNN
 import LeanMlir.Proofs.Nets.Small.CifarCNN
@@ -16,7 +16,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Spec → math (the verification tie), Rung 1: the linear classifier
 
-The shape `#guard` beside `resnet34Verified` in `VerifiedNets.lean` only checks the
+The shape `#guard` beside `resnet34Verified` in `VerifiedNetsCore.lean` only checks the
 *parameter interface*
 (typechecking). This file is the first rung of connecting a readable `VerifiedNetSpec`
 to the actual **math** — the proven VJP — on the simplest net, the Chapter-1 linear
@@ -35,7 +35,7 @@ at the math level, not just the shape level.
 
 open Proofs
 
-/- `linearVerified` (the single dense 784→10 spec) is imported from `LeanMlir.VerifiedNets`
+/- `linearVerified` (the single dense 784→10 spec) is imported from `LeanMlir.VerifiedNetsCore`
    — the *same* object `MainMnistLinearVerified` trains, so the VJP below is about the
    trainer's exact spec, not a copy. The shape tie (`toSpecs == …`) lives there too. -/
 

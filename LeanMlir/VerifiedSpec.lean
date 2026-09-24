@@ -1,5 +1,3 @@
-import LeanMlir.VerifiedTrain
-
 /-! # NetSpec-style layer DSL for the verified trainers (Tier-2)
 
 A verified trainer should read like the reference `MainResnetTrain.lean` — a layer
@@ -12,7 +10,7 @@ This file provides that surface:
   * `toSpecs`          — folds `layers` into the `(dims, initKind)` param layout, so the
                          layout is *derived* from the architecture rather than hand-listed
                          a second time. (Kernel-check it against the audited `XLayout.specs`
-                         with `#guard spec.toSpecs == XLayout.specs` — see `VerifiedNets.lean`'s
+                         with `#guard spec.toSpecs == XLayout.specs` — see `VerifiedNetsCore.lean`'s
                          `#guard resnet34Verified.toSpecs == ResNet34Layout.specs`.)
 
 The architecture's *faithfulness* is the audited `<net>_has_vjp` theorem, which is itself a
@@ -22,6 +20,36 @@ verified StableHLO from `layers` (folding the proven op-emitters) and folding th
 a `netVjp` term are the remaining Tier-2 / Tier-3 steps; for now the slug names the committed,
 audited render of this architecture.
 -/
+
+/-- Which dataset a verified trainer runs on. Picks the loader, the eval-split name,
+    and whether the training images need a 256²→224² center-crop per batch. -/
+inductive VerifiedData where
+  /-- MNIST idx files directly under `dataDir` (28×28×1, no crop). -/
+  | mnist
+  /-- CIFAR-10 `.bin` records under `dataDir/cifar-10` (32×32×3, no crop). -/
+  | cifar
+  /-- Imagenette under `dataDir/imagenette` — train stored at 256² (center-cropped
+      to 224² per batch), val at 224². -/
+  | imagenette
+  /-- **Full 1000-class ImageNet, streamed from the generated tfds shim** (handoff §2k).
+      1,281,167 train / 50,000 val at 224².
+
+      Unlike every case above, this one is NOT preloaded: at f32 the train split is ~938 GiB of host
+      RAM against a 188 GB box, so it cannot be. Batches arrive over a pipe from **that net's own**
+      `jax/.lake/build/generated_*_imagenet_shim.py` (`VerifiedNet.shimScript`), already
+      augmented, mean/std-normalized and flattened to `(B, 3·224·224)` — **so the Lean side does no
+      augmentation at all** for this dataset, which is the point: there is exactly one definition of
+      the transform and it is the one the JAX reference trainer uses.
+
+      ⚠ *Per net*, and that is the part that was wrong until 2026-08-02: the script was hardcoded to
+      ResNet-34's, so every net got RRC+hflip regardless of what its reference asked for. The
+      transform is still single-definition — it is generated from the same `TrainConfig` the
+      reference trainer runs — but WHICH definition is now a property of the net.
+
+      The VAL split is streamed per pass too (`spawnValStream`); 49,920 images after tfds
+      `drop_remainder`, the same count the reference run reported. -/
+  | imagenet
+deriving BEq, Repr
 
 /-- A verified-vocabulary layer. Restricted to ops with proven `HasVJP` witnesses; each
     carries enough to derive its slice of the param layout. -/
@@ -301,57 +329,5 @@ def toSpecs (s : VerifiedNetSpec) : Array (Array Nat × Nat) :=
 
 /-- Per-example flattened input width. -/
 def d0 (s : VerifiedNetSpec) : Nat := s.inC * s.imageH * s.imageW
-
-/-- Lower to the runtime `VerifiedNet` the driver consumes. -/
-def toNet (s : VerifiedNetSpec) : VerifiedNet :=
-  { name := s.name, slug := s.slug, specs := s.toSpecs, d0 := s.d0,
-    nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels,
-    dropKeeps := s.dropKeeps, dropoutKeep := s.dropoutKeep, shimScript := s.shimScript,
-    mlirDir := s.mlirDir, lossSlot := s.lossSlot }
-
-/-- Train end-to-end (delegates to the shared `VerifiedNet.train` driver). -/
-def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.train cfg dataDir
-
-/-- Train the 2-parameter linear path (Chapter 1); see `VerifiedNet.trainLinear`. -/
-def trainLinear (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.trainLinear cfg dataDir
-
-/-- Phase-3 PGD adversarial attack (Chapter 1 linear); see `VerifiedNet.attackPgd`. -/
-def attackPgd (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgd cfg dataDir
-
-/-- Phase-3 PGD attack on the MLP (Chapter 2); see `VerifiedNet.attackPgdMlp`. -/
-def attackPgdMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgdMlp cfg dataDir
-
-/-- Phase-3 PGD attack on the CNN (Chapter 3, the conv rung); see `VerifiedNet.attackPgdCnn`. -/
-def attackPgdCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgdCnn cfg dataDir
-
-/-- Spectral-norm-constrained MLP training study; see `VerifiedNet.attackPgdSpectralMlp`. -/
-def attackPgdSpectralMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (caps : List Float) : IO Unit :=
-  s.toNet.attackPgdSpectralMlp cfg dataDir caps
-
-/-- Spectral-norm-constrained CNN training study; see `VerifiedNet.attackPgdSpectralCnn`. -/
-def attackPgdSpectralCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (caps : List Float) : IO Unit :=
-  s.toNet.attackPgdSpectralCnn cfg dataDir caps
-
-/-- PGD attack on the CIFAR-10 CNN (the deeper conv rung); see `VerifiedNet.attackPgdCifar`. -/
-def attackPgdCifar (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgdCifar cfg dataDir
-
-/-- Spectral-norm-constrained CIFAR training study; see `VerifiedNet.attackPgdSpectralCifar`. -/
-def attackPgdSpectralCifar (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (caps : List Float) : IO Unit :=
-  s.toNet.attackPgdSpectralCifar cfg dataDir caps
-
-/-- Randomized-smoothing certificate (Cohen 2019, depth-independent); see
-    `VerifiedNet.smoothCertify`. Forward-only — works on any spec via its rendered fwd. -/
-def smoothCertify (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (sigmas : List Float) : IO Unit :=
-  s.toNet.smoothCertify cfg dataDir sigmas
 
 end VerifiedNetSpec

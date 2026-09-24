@@ -9112,7 +9112,7 @@ def mnv2RmsHyper : RmsHyper := { eps := 1.0, wd := 4.0e-5 }
 def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
 
 -- ▶ The DRIVER-side half of the same two recipes — peak LR, exponential decay, warmup — is
--- `RmsSchedule` in `LeanMlir/VerifiedNets.lean`, deliberately NOT here. Two reasons, and the second
+-- `RmsSchedule` in `LeanMlir/VerifiedNetsCore.lean`, deliberately NOT here. Two reasons, and the second
 -- is the load-bearing one: the four trainer entry points that read it would otherwise have to
 -- import this whole proof module, and nothing that lives in this file can reach `rmsConstsBlock`
 -- by accident. `%lr` is a runtime `tensor<f32>` argument precisely so one graph serves a whole

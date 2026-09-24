@@ -723,7 +723,7 @@ def cnxFwdBanner (V : CnxDims := bTiny) : String :=
   s!"    // ── {cnxModelName V} forward: every line is pretty(verified AST node) ──\n"
 
 /-- The SD forward's banner. Its own, and not `cnxFwdBanner`, because these bytes ARE a
-    different render and a banner claiming otherwise is the `VerifiedNets` docstring defect (§0.9
+    different render and a banner claiming otherwise is the `VerifiedNetsCore` docstring defect (§0.9
     finding 3) in the artifact itself. -/
 def cnxDropFwdBanner (V : CnxDims := bTiny) : String :=
   -- ⚠ Both the SIZE and the SITE COUNT are derived from `D`. They were literals ("ConvNeXt-T",

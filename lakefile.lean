@@ -31,8 +31,9 @@ lean_lib «LeanMlir» where
 
 -- Scoped targets, so CI and contributors can build one slice without the
 -- rest, along the seam between the proof suite and the program side. `Proofs` reaches no
--- program module. `Certs` does reach seven (VerifiedSpec/VerifiedNets/VerifiedTrain and the
--- runtime under them), through `SpecVJP`, the executable-spec ↔ proof bridge.
+-- program module. `Certs` reaches three, all import-free data (`VerifiedSpec`, `ParamLayouts`,
+-- `VerifiedNetsCore`), through `SpecVJP`, the executable-spec ↔ proof bridge — never the trainer
+-- or the FFI.
 
 /-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
     every demo's import cone actually reaches (StableHLO/IR + the per-net
@@ -562,7 +563,7 @@ lean_exe «mobilenetv2-imagenet-verified» where
     `_fwd_eval` peer and a running-stat region.
 
     ⭐ **Conv-M as of a 2026-08-26 audit — this docstring said Conv-S, and it was true when
-    written.** `mnv4ImagenetVerified` (`VerifiedNets.lean`) now carries the Conv-M block table and
+    written.** `mnv4ImagenetVerified` (`VerifiedNetsCore.lean`) now carries the Conv-M block table and
     names itself "MobileNetV4-Conv-M (ImageNet-1k)", so the chapter's 75.51% IS this network's
     target. It is not this network's RESULT: nothing here has been trained to convergence.
 
