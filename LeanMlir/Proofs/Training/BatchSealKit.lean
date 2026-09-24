@@ -559,6 +559,7 @@ theorem forall_flat_of_cell {N c h w : Nat} {v : Vec (N * (c * h * w))} {P : ℝ
 -- ════════════════════════════════════════════════════════════════
 
 /-- `bnRowLA` is continuous in the activation — it is a reindex. -/
+@[fun_prop]
 theorem bnRowLA_continuous (N oc h w : Nat) (c : Fin oc) :
     Continuous (fun v : Vec (N * (oc * h * w)) => bnRowLA N oc h w v c) := by
   refine continuous_pi (fun q => ?_)
@@ -637,6 +638,7 @@ theorem rayX_zero_add (H W : Nat) (t : ℝ) : rayX H W 0 + t • rayV H W = rayX
   rw [rayX, rayX, zero_smul, add_zero]
 
 /-- The ray is continuous in its parameter. -/
+@[fun_prop]
 theorem rayX_continuous (H W : Nat) : Continuous (rayX H W) :=
   continuous_const.add (continuous_id.smul continuous_const)
 
@@ -1111,7 +1113,8 @@ namespace R34FullBSeal
 /-! ### Stage facts first needed by ResNet-34's seal, shared by every conv-net seal
 
 The zero-kernel collapse, the relu-free strided stage, the centre-tap projection witness
-(`sealProj`) and the stage continuity lemmas. The namespace is ResNet-34's, kept so that every
+(`sealProj`). Stage continuity needs no lemma here: the op files tag their continuity facts
+`@[fun_prop]`, and each seal's `Rr_continuous` is one `fun_prop`. The namespace is ResNet-34's, kept so that every
 citation keeps its name. -/
 
 open scoped BigOperators
@@ -1154,28 +1157,6 @@ theorem sealProj_apply (N h w ic oc : Nat) (v : Vec (N * (ic * (2 * h) * (2 * w)
     sealProj N h w ic oc v
       = StableHLO.bnBatchLA N oc h w 1 (kv oc 1) (kv oc 160)
           (StableHLO.batchMap N (flatConvStride2 (ctK oc ic 1 1 1) (kv oc 0)) v) := rfl
-
-theorem projB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (projB N (h := h) (w := w) W b ε γ β) :=
-  (bnBatchLA_differentiable N oc h w ε hε γ β).continuous.comp
-    (batchMap_continuous _ (flatConv_differentiable W b).continuous)
-
-theorem cbReluB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (StableHLO.cbReluB N (h := h) (w := w) W b ε γ β) :=
-  (relu_continuous _).comp (projB_continuous N W b ε hε γ β)
-
-theorem projStridedB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
-    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (StableHLO.projStridedB N (h := h) (w := w) W b ε γ β) :=
-  (bnBatchLA_differentiable N oc h w ε hε γ β).continuous.comp
-    (batchMap_continuous _ (flatConvStride2_differentiable W b).continuous)
-
-theorem cbReluStridedB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
-    (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (StableHLO.cbReluStridedB N (h := h) (w := w) W b ε γ β) :=
-  (relu_continuous _).comp (projStridedB_continuous N W b ε hε γ β)
 
 end R34FullBSeal
 

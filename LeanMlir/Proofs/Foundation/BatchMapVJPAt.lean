@@ -175,6 +175,11 @@ theorem bnBatchLA_differentiable (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ 
   exact (reindexCLM _).differentiable.comp
     ((bnBatchTensor4_differentiable N oc h w ε hε γ β).comp (reindexCLM _).differentiable)
 
+@[fun_prop]
+theorem bnBatchLA_continuous (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    Continuous (StableHLO.bnBatchLA N oc h w ε γ β) :=
+  (bnBatchLA_differentiable N oc h w ε hε γ β).continuous
+
 /-- **True batch-norm VJP at the network's flat index.** `bnBatchLA`'s backward is the proven
     `bnBatchTensor4` VJP (batch-coupled — NOT a `batchMap`), conjugated by the reindex isos. -/
 noncomputable def bnBatchLA_has_vjp (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :

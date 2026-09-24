@@ -236,6 +236,11 @@ theorem depthwiseFlat_differentiable {c h w kH kW : Nat}
   Tensor3.flatten_differentiable.comp
     ((depthwise_differentiable W b).comp Tensor3.unflatten_differentiable)
 
+@[fun_prop]
+theorem depthwiseFlat_continuous {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c) :
+    Continuous (depthwiseFlat (h := h) (w := w) W b) :=
+  (depthwiseFlat_differentiable W b).continuous
+
 /-- **Flat depthwise conv input-VJP.** `depthwiseFlat W b` is defeq to the
     generic bridge's `fun v => flatten (depthwiseConv2d W b (unflatten v))`,
     so `hasVJP3_to_hasVJP` applied to `depthwise_has_vjp3` lands the witness
@@ -265,6 +270,11 @@ theorem depthwiseStride2Flat_differentiable {c h w kH kW : Nat}
     Differentiable ℝ (depthwiseStride2Flat W b
       : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := by
   unfold depthwiseStride2Flat; fun_prop
+
+@[fun_prop]
+theorem depthwiseStride2Flat_continuous {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+    (b : Vec c) : Continuous (depthwiseStride2Flat (h := h) (w := w) W b) :=
+  (depthwiseStride2Flat_differentiable W b).continuous
 
 /-- **Stride-2 depthwise input-VJP** — by the chain rule (`vjp_comp`) on
     `decimateFlat ∘ depthwiseFlat`, reusing the proven stride-1 depthwise input-VJP
@@ -644,6 +654,11 @@ theorem depthwiseStride2FlatXla_differentiable {c h w kH kW : Nat}
     Differentiable ℝ (depthwiseStride2FlatXla W b
       : Vec (c * (2 * h) * (2 * w)) → Vec (c * h * w)) := by
   unfold depthwiseStride2FlatXla; fun_prop
+
+@[fun_prop]
+theorem depthwiseStride2FlatXla_continuous {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+    (b : Vec c) : Continuous (depthwiseStride2FlatXla (h := h) (w := w) W b) :=
+  (depthwiseStride2FlatXla_differentiable W b).continuous
 
 /-- **Stride-2 XLA-`SAME` depthwise input-VJP.** `vjp_comp` on `decimateOddFlat ∘ depthwiseFlat`.
     The backward zero-upsamples the cotangent onto the **odd** positions, then runs the

@@ -466,11 +466,13 @@ theorem relu6_id_window (n : Nat) (y : Vec n) (hy : ∀ k, 0 < y k ∧ y k < 6) 
 
 /-- **ReLU6 is continuous** — `min (max · 0) 6` coordinatewise. The peer of
     `relu_continuous` (below), for the ray argument of a relu6 net's seal. -/
+@[fun_prop]
 theorem relu6_continuous (n : Nat) : Continuous (relu6 n) := by
   refine continuous_pi (fun k => ?_)
   exact ((continuous_apply k).max continuous_const).min continuous_const
 
 /-- `relu` is continuous everywhere — it is `max · 0`; only its *derivative* has a kink. -/
+@[fun_prop]
 theorem relu_continuous (n : Nat) : Continuous (relu n) :=
   continuous_pi fun k => by simp only [relu_apply_eq_max]; exact (continuous_apply k).max continuous_const
 

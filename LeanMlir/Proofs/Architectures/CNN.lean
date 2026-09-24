@@ -335,6 +335,11 @@ theorem flatConv_differentiable {ic oc h w kH kW : Nat}
   Tensor3.flatten_differentiable.comp
     ((conv2d_differentiable W b).comp Tensor3.unflatten_differentiable)
 
+@[fun_prop]
+theorem flatConv_continuous {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Continuous (flatConv W b : Vec (ic * h * w) → Vec (oc * h * w)) :=
+  (flatConv_differentiable W b).continuous
+
 /-- A conv with everywhere-zero kernel and bias maps anything to `0`. -/
 theorem flatConv_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (hW : ∀ o c kh kw, W o c kh kw = 0) (hb : ∀ o, b o = 0) (v : Vec (ic * h * w)) :

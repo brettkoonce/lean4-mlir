@@ -268,63 +268,6 @@ theorem sealNoExpB_eq (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h 
   rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § 6. Continuity of every block kind
---   relu6 is continuous (`relu6_continuous`), so these need no smoothness hypothesis — they
---   are for the ray argument's `Rr`, not for the VJP.
--- ════════════════════════════════════════════════════════════════
-theorem cbrB_continuous (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    Continuous (StableHLO.cbrB N (h := h) (w := w) W b ε γ β) :=
-  (relu6_continuous _).comp (projB_continuous N W b ε hε γ β)
-
-theorem dwbB_continuous (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    Continuous (StableHLO.bnBatchLA N c h w ε γ β ∘
-      StableHLO.batchMap N (depthwiseFlat (h := h) (w := w) W b)) :=
-  (bnBatchLA_differentiable N c h w ε hε γ β).continuous.comp
-    (batchMap_continuous _ (depthwiseFlat_differentiable W b).continuous)
-
-theorem dwbrB_continuous (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    Continuous (StableHLO.dwbrB N (h := h) (w := w) W b ε γ β) :=
-  (relu6_continuous _).comp (dwbB_continuous N W b ε hε γ β)
-
-theorem dwbrBstrided_continuous (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
-    (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    Continuous (StableHLO.dwbrBstrided N (h := h) (w := w) W b ε γ β) :=
-  (relu6_continuous _).comp
-    ((bnBatchLA_differentiable N c h w ε hε γ β).continuous.comp
-      (batchMap_continuous _ (depthwiseStride2FlatXla_differentiable W b).continuous))
-
-theorem mnv2StemB_continuous (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW)
-    (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) :
-    Continuous (mnv2StemB N h w Ws bs εs γs βs) :=
-  (relu6_continuous _).comp
-    ((bnBatchLA_differentiable N oc h w εs hεs γs βs).continuous.comp
-      (batchMap_continuous _ (flatConvStride2Xla_differentiable Ws bs).continuous))
-
-theorem mnv2NoExpB_continuous (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) : Continuous (mnv2NoExpB N h w p) :=
-  (projB_continuous N p.pW p.pb p.pε hp p.pγ p.pβ).comp
-    (dwbrB_continuous N p.dW p.db p.dε hd p.dγ p.dβ)
-
-theorem mnv2ExpOnlyB_continuous (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : Continuous (mnv2ExpOnlyB N h w p) :=
-  (projB_continuous N p.pW p.pb p.pε hp p.pγ p.pβ).comp
-    ((dwbrB_continuous N p.dW p.db p.dε hd p.dγ p.dβ).comp
-      (cbrB_continuous N p.eW p.eb p.eε he p.eγ p.eβ))
-
-theorem mnv2ResidB_continuous (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : Continuous (mnv2ResidB N h w p) :=
-  residual_continuous _ (mnv2ExpOnlyB_continuous N h w p he hd hp)
-
-theorem mnv2StridedB_continuous (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : Continuous (mnv2StridedB N h w p) :=
-  (projB_continuous N p.pW p.pb p.pε hp p.pγ p.pβ).comp
-    ((dwbrBstrided_continuous N p.dW p.db p.dε hd p.dγ p.dβ).comp
-      (cbrB_continuous N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε he p.eγ p.eβ))
-
--- ════════════════════════════════════════════════════════════════
 -- § 7. The witness input and the ray
 -- ════════════════════════════════════════════════════════════════
 
@@ -343,8 +286,6 @@ theorem sealX_zero_add (t : ℝ) : sealX 0 + t • sealV = sealX t := rayX_zero_
 theorem EDiff_sealX (t : ℝ) : EDiff (fun ci => if ci.val = 0 then t else 0) (sealX t) :=
   EDiff_rayX _ _ t
 
-theorem sealX_continuous : Continuous sealX := rayX_continuous _ _
-
 -- ════════════════════════════════════════════════════════════════
 -- § 8. The scalar BatchNorm factor
 --   ⭐ `rf` is the whole contribution of one carrier BatchNorm: `γ · istd` at `γ = 1/64`.
@@ -355,13 +296,6 @@ noncomputable def rf (n : Nat) (z : Vec n) : ℝ := 1 / 64 * bnIstd n z 1
 theorem rf_pos (n : Nat) (z : Vec n) : 0 < rf n z :=
   mul_pos (by norm_num) (bnIstd_pos _ 1 one_pos)
 
-theorem rf_cont (n : Nat) (k : Fin n) : Continuous (fun z : Vec n => rf n z) :=
-  continuous_const.mul (bnIstd_cont 1 one_pos k)
-
-theorem rfac_cont (oc h w : Nat) (k : Fin (2 * (h * w))) (c : Fin oc)
-    (Z : ℝ → Vec (2 * (oc * h * w))) (hZ : Continuous Z) :
-    Continuous (fun t => rf (2 * (h * w)) (bnRowLA 2 oc h w (Z t) c)) :=
-  (rf_cont _ k).comp ((bnRowLA_continuous 2 oc h w c).comp hZ)
 -- ════════════════════════════════════════════════════════════════
 -- § 9. Positivity and the 19 clause bundles, generically
 -- ════════════════════════════════════════════════════════════════
@@ -961,151 +895,6 @@ theorem edH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) :=
     (Zh nCls t) (ed17 nCls t) rfl (fun ci => by simp only [dH, rf]; ring)
 
 -- ════════════════════════════════════════════════════════════════
--- § 14. Continuity of the trunk and of every carrier activation
--- ════════════════════════════════════════════════════════════════
-
-theorem cn0 (nCls : Nat) : Continuous (mnv2PreB0 2 (sealW nCls)) :=
-  mnv2StemB_continuous 2 112 112 _ _ _ one_pos _ _
-
-theorem cn1 (nCls : Nat) : Continuous (mnv2PreB1 2 (sealW nCls)) :=
-  (mnv2NoExpB_continuous 2 112 112 (sealW nCls).b1 one_pos one_pos).comp (cn0 nCls)
-
-theorem cn2 (nCls : Nat) : Continuous (mnv2PreB2 2 (sealW nCls)) :=
-  (mnv2StridedB_continuous 2 56 56 (sealW nCls).b2 one_pos one_pos one_pos).comp (cn1 nCls)
-
-theorem cn3 (nCls : Nat) : Continuous (mnv2PreB3 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 56 56 (sealW nCls).b3 one_pos one_pos one_pos).comp (cn2 nCls)
-
-theorem cn4 (nCls : Nat) : Continuous (mnv2PreB4 2 (sealW nCls)) :=
-  (mnv2StridedB_continuous 2 28 28 (sealW nCls).b4 one_pos one_pos one_pos).comp (cn3 nCls)
-
-theorem cn5 (nCls : Nat) : Continuous (mnv2PreB5 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 28 28 (sealW nCls).b5 one_pos one_pos one_pos).comp (cn4 nCls)
-
-theorem cn6 (nCls : Nat) : Continuous (mnv2PreB6 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 28 28 (sealW nCls).b6 one_pos one_pos one_pos).comp (cn5 nCls)
-
-theorem cn7 (nCls : Nat) : Continuous (mnv2PreB7 2 (sealW nCls)) :=
-  (mnv2StridedB_continuous 2 14 14 (sealW nCls).b7 one_pos one_pos one_pos).comp (cn6 nCls)
-
-theorem cn8 (nCls : Nat) : Continuous (mnv2PreB8 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 14 14 (sealW nCls).b8 one_pos one_pos one_pos).comp (cn7 nCls)
-
-theorem cn9 (nCls : Nat) : Continuous (mnv2PreB9 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 14 14 (sealW nCls).b9 one_pos one_pos one_pos).comp (cn8 nCls)
-
-theorem cn10 (nCls : Nat) : Continuous (mnv2PreB10 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 14 14 (sealW nCls).b10 one_pos one_pos one_pos).comp (cn9 nCls)
-
-theorem cn11 (nCls : Nat) : Continuous (mnv2PreB11 2 (sealW nCls)) :=
-  (mnv2ExpOnlyB_continuous 2 14 14 (sealW nCls).b11 one_pos one_pos one_pos).comp (cn10 nCls)
-
-theorem cn12 (nCls : Nat) : Continuous (mnv2PreB12 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 14 14 (sealW nCls).b12 one_pos one_pos one_pos).comp (cn11 nCls)
-
-theorem cn13 (nCls : Nat) : Continuous (mnv2PreB13 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 14 14 (sealW nCls).b13 one_pos one_pos one_pos).comp (cn12 nCls)
-
-theorem cn14 (nCls : Nat) : Continuous (mnv2PreB14 2 (sealW nCls)) :=
-  (mnv2StridedB_continuous 2 7 7 (sealW nCls).b14 one_pos one_pos one_pos).comp (cn13 nCls)
-
-theorem cn15 (nCls : Nat) : Continuous (mnv2PreB15 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 7 7 (sealW nCls).b15 one_pos one_pos one_pos).comp (cn14 nCls)
-
-theorem cn16 (nCls : Nat) : Continuous (mnv2PreB16 2 (sealW nCls)) :=
-  (mnv2ResidB_continuous 2 7 7 (sealW nCls).b16 one_pos one_pos one_pos).comp (cn15 nCls)
-
-theorem cn17 (nCls : Nat) : Continuous (mnv2PreB17 2 (sealW nCls)) :=
-  (mnv2ExpOnlyB_continuous 2 7 7 (sealW nCls).b17 one_pos one_pos one_pos).comp (cn16 nCls)
-
-theorem Zs_continuous : Continuous Zs :=
-  (batchMap_continuous _ (flatConvStride2Xla_differentiable _ _).continuous).comp sealX_continuous
-
-theorem Z1d_continuous (nCls : Nat) : Continuous (Z1d nCls) :=
-  (batchMap_continuous _ (depthwiseFlat_differentiable _ _).continuous).comp
-    ((cn0 nCls).comp sealX_continuous)
-
-theorem Z1p_continuous (nCls : Nat) : Continuous (Z1p nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 32 112 112 1 one_pos _ _).continuous.comp (Z1d_continuous nCls))
-
-theorem Z2e_continuous (nCls : Nat) : Continuous (Z2e nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn1 nCls).comp sealX_continuous)
-
-theorem Z2d_continuous (nCls : Nat) : Continuous (Z2d nCls) :=
-  (batchMap_continuous _ (depthwiseStride2FlatXla_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 96 (2 * 56) (2 * 56) 1 one_pos _ _).continuous.comp (Z2e_continuous nCls))
-
-theorem Z2p_continuous (nCls : Nat) : Continuous (Z2p nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 96 56 56 1 one_pos _ _).continuous.comp (Z2d_continuous nCls))
-
-theorem Z4e_continuous (nCls : Nat) : Continuous (Z4e nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn3 nCls).comp sealX_continuous)
-
-theorem Z4d_continuous (nCls : Nat) : Continuous (Z4d nCls) :=
-  (batchMap_continuous _ (depthwiseStride2FlatXla_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 144 (2 * 28) (2 * 28) 1 one_pos _ _).continuous.comp (Z4e_continuous nCls))
-
-theorem Z4p_continuous (nCls : Nat) : Continuous (Z4p nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 144 28 28 1 one_pos _ _).continuous.comp (Z4d_continuous nCls))
-
-theorem Z7e_continuous (nCls : Nat) : Continuous (Z7e nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn6 nCls).comp sealX_continuous)
-
-theorem Z7d_continuous (nCls : Nat) : Continuous (Z7d nCls) :=
-  (batchMap_continuous _ (depthwiseStride2FlatXla_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 192 (2 * 14) (2 * 14) 1 one_pos _ _).continuous.comp (Z7e_continuous nCls))
-
-theorem Z7p_continuous (nCls : Nat) : Continuous (Z7p nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 192 14 14 1 one_pos _ _).continuous.comp (Z7d_continuous nCls))
-
-theorem Z11e_continuous (nCls : Nat) : Continuous (Z11e nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn10 nCls).comp sealX_continuous)
-
-theorem Z11d_continuous (nCls : Nat) : Continuous (Z11d nCls) :=
-  (batchMap_continuous _ (depthwiseFlat_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 384 14 14 1 one_pos _ _).continuous.comp (Z11e_continuous nCls))
-
-theorem Z11p_continuous (nCls : Nat) : Continuous (Z11p nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 384 14 14 1 one_pos _ _).continuous.comp (Z11d_continuous nCls))
-
-theorem Z14e_continuous (nCls : Nat) : Continuous (Z14e nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn13 nCls).comp sealX_continuous)
-
-theorem Z14d_continuous (nCls : Nat) : Continuous (Z14d nCls) :=
-  (batchMap_continuous _ (depthwiseStride2FlatXla_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 576 (2 * 7) (2 * 7) 1 one_pos _ _).continuous.comp (Z14e_continuous nCls))
-
-theorem Z14p_continuous (nCls : Nat) : Continuous (Z14p nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 576 7 7 1 one_pos _ _).continuous.comp (Z14d_continuous nCls))
-
-theorem Z17e_continuous (nCls : Nat) : Continuous (Z17e nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn16 nCls).comp sealX_continuous)
-
-theorem Z17d_continuous (nCls : Nat) : Continuous (Z17d nCls) :=
-  (batchMap_continuous _ (depthwiseFlat_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 960 7 7 1 one_pos _ _).continuous.comp (Z17e_continuous nCls))
-
-theorem Z17p_continuous (nCls : Nat) : Continuous (Z17p nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((bnBatchLA_differentiable 2 960 7 7 1 one_pos _ _).continuous.comp (Z17d_continuous nCls))
-
-theorem Zh_continuous (nCls : Nat) : Continuous (Zh nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn17 nCls).comp sealX_continuous)
-
--- ════════════════════════════════════════════════════════════════
 -- § 15. The nonlinear factor `Rr`
 -- ════════════════════════════════════════════════════════════════
 /-- ⭐⭐ **The positive, continuous nonlinear factor.** MobileNetV2's channel-changing blocks have
@@ -1164,30 +953,25 @@ theorem Rr_pos (nCls : Nat) (t : ℝ) : 0 < Rr nCls t := by
     (mul_pos (rf_pos _ _)
     (rf_pos _ _)))))))))))))))))))))
 
+/-- `R` is continuous: every block is, and `fun_prop` composes the whole seventeen-block trunk
+    once the carrier activations (`Z*`, `A*`) and the prefix chain are unfolded to their atoms.
+    Every BN on the witness has `ε = 1`. -/
 theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
-  unfold Rr
-  exact (rfac_cont 32 112 112 ⟨0, by norm_num⟩ 0 _ Zs_continuous).mul
-    ((rfac_cont 32 112 112 ⟨0, by norm_num⟩ 0 _ (Z1d_continuous nCls)).mul
-    ((rfac_cont 16 112 112 ⟨0, by norm_num⟩ 0 _ (Z1p_continuous nCls)).mul
-    ((rfac_cont 96 (2 * 56) (2 * 56) ⟨0, by norm_num⟩ 0 _ (Z2e_continuous nCls)).mul
-    ((rfac_cont 96 56 56 ⟨0, by norm_num⟩ 0 _ (Z2d_continuous nCls)).mul
-    ((rfac_cont 24 56 56 ⟨0, by norm_num⟩ 0 _ (Z2p_continuous nCls)).mul
-    ((rfac_cont 144 (2 * 28) (2 * 28) ⟨0, by norm_num⟩ 0 _ (Z4e_continuous nCls)).mul
-    ((rfac_cont 144 28 28 ⟨0, by norm_num⟩ 0 _ (Z4d_continuous nCls)).mul
-    ((rfac_cont 32 28 28 ⟨0, by norm_num⟩ 0 _ (Z4p_continuous nCls)).mul
-    ((rfac_cont 192 (2 * 14) (2 * 14) ⟨0, by norm_num⟩ 0 _ (Z7e_continuous nCls)).mul
-    ((rfac_cont 192 14 14 ⟨0, by norm_num⟩ 0 _ (Z7d_continuous nCls)).mul
-    ((rfac_cont 64 14 14 ⟨0, by norm_num⟩ 0 _ (Z7p_continuous nCls)).mul
-    ((rfac_cont 384 14 14 ⟨0, by norm_num⟩ 0 _ (Z11e_continuous nCls)).mul
-    ((rfac_cont 384 14 14 ⟨0, by norm_num⟩ 0 _ (Z11d_continuous nCls)).mul
-    ((rfac_cont 96 14 14 ⟨0, by norm_num⟩ 0 _ (Z11p_continuous nCls)).mul
-    ((rfac_cont 576 (2 * 7) (2 * 7) ⟨0, by norm_num⟩ 0 _ (Z14e_continuous nCls)).mul
-    ((rfac_cont 576 7 7 ⟨0, by norm_num⟩ 0 _ (Z14d_continuous nCls)).mul
-    ((rfac_cont 160 7 7 ⟨0, by norm_num⟩ 0 _ (Z14p_continuous nCls)).mul
-    ((rfac_cont 960 7 7 ⟨0, by norm_num⟩ 0 _ (Z17e_continuous nCls)).mul
-    ((rfac_cont 960 7 7 ⟨0, by norm_num⟩ 0 _ (Z17d_continuous nCls)).mul
-    ((rfac_cont 320 7 7 ⟨0, by norm_num⟩ 0 _ (Z17p_continuous nCls)).mul
-    ((rfac_cont 1280 7 7 ⟨0, by norm_num⟩ 0 _ (Zh_continuous nCls)))))))))))))))))))))))
+  unfold Rr rf
+  repeat
+    (first
+      | unfold Zs | unfold Z1d | unfold Z1p | unfold Z2e | unfold Z2d | unfold Z2p | unfold Z4e
+      | unfold Z4d | unfold Z4p | unfold Z7e | unfold Z7d | unfold Z7p | unfold Z11e | unfold Z11d
+      | unfold Z11p | unfold Z14e | unfold Z14d | unfold Z14p | unfold Z17e | unfold Z17d
+      | unfold Z17p | unfold Zh | unfold A1d | unfold A2e | unfold A2d | unfold A4e | unfold A4d
+      | unfold A7e | unfold A7d | unfold A11e | unfold A11d | unfold A14e | unfold A14d
+      | unfold A17e | unfold A17d)
+  unfold sealX mnv2PreB17 mnv2PreB16 mnv2PreB15 mnv2PreB14 mnv2PreB13 mnv2PreB12 mnv2PreB11
+    mnv2PreB10 mnv2PreB9 mnv2PreB8 mnv2PreB7 mnv2PreB6 mnv2PreB5 mnv2PreB4 mnv2PreB3 mnv2PreB2
+    mnv2PreB1 mnv2PreB0
+  unfold mnv2StemB mnv2NoExpB mnv2ExpOnlyB mnv2ResidB mnv2StridedB StableHLO.cbrB StableHLO.dwbrB
+    StableHLO.dwbrBstrided projB
+  fun_prop (disch := exact one_pos)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 16. The head reads the carrier off channel 0

@@ -82,6 +82,11 @@ theorem flatConvStride2_differentiable {ic oc h w kH kW : Nat}
       : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) := by
   unfold flatConvStride2; fun_prop
 
+@[fun_prop]
+theorem flatConvStride2_continuous {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc) :
+    Continuous (flatConvStride2 W b : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) :=
+  (flatConvStride2_differentiable W b).continuous
+
 /-- **Stride-2 conv input-VJP** — the centerpiece. By the chain rule
     (`vjp_comp`) on `decimateFlat ∘ flatConv`, reusing the proven stride-1 conv
     input-VJP (`conv2d_has_vjp3` via the flatten bridge) and the decimation VJP.
@@ -348,6 +353,11 @@ theorem flatConvStride2Xla_differentiable {ic oc h w kH kW : Nat}
     Differentiable ℝ (flatConvStride2Xla W b
       : Vec (ic * (2 * h) * (2 * w)) → Vec (oc * h * w)) := by
   unfold flatConvStride2Xla; fun_prop
+
+@[fun_prop]
+theorem flatConvStride2Xla_continuous {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (b : Vec oc) : Continuous (flatConvStride2Xla (h := h) (w := w) W b) :=
+  (flatConvStride2Xla_differentiable W b).continuous
 
 /-- **Stride-2 XLA-`SAME` input-VJP.** `vjp_comp` on `decimateOddFlat ∘ flatConv`, reusing the
     proven stride-1 conv input-VJP and the odd-decimation VJP. The backward zero-upsamples the

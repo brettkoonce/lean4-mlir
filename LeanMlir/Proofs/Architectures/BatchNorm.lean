@@ -895,10 +895,14 @@ theorem sqrt_lt_param (n : ℕ) (β : ℝ) (hβ : 0 ≤ β) (h : (n : ℝ) < β 
     Real.sqrt (n : ℝ) < β :=
   (Real.sqrt_lt n.cast_nonneg hβ).2 h
 
-/-- `bnIstd` is continuous in the activation (`ε > 0`). -/
-theorem bnIstd_cont {n : Nat} (ε : ℝ) (hε : 0 < ε) (k : Fin n) :
-    Continuous (fun v : Vec n => bnIstd n v ε) :=
-  (continuous_apply k).comp (bnIstdBroadcast_diff n ε hε).continuous
+/-- `bnIstd` is continuous in the activation (`ε > 0`); a `fun_prop` atom. -/
+@[fun_prop]
+theorem bnIstd_continuous {n : Nat} (ε : ℝ) (hε : 0 < ε) :
+    Continuous (fun v : Vec n => bnIstd n v ε) := by
+  have hv : Continuous (fun v : Vec n => bnVar n v + ε) := by
+    unfold bnVar bnMean; fun_prop
+  exact continuous_const.div (Real.continuous_sqrt.comp hv)
+    (fun v => (Real.sqrt_pos.2 (add_pos_of_nonneg_of_pos (bnVar_nonneg n v) hε)).ne')
 
 /-- with `ε = 1` a batch `istd` is at most `1`, which keeps the ray's gap inside the window
     `swishGap_pos` needs. -/

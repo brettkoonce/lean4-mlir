@@ -922,120 +922,14 @@ theorem gd_ray (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (hn : 0 < nCl
 
 theorem sealX_continuous (q : Nat) : Continuous (sealX q) := rayX_continuous _ _
 
-theorem r50IdB_continuous (N h w mid oc : Nat) (p : R50IdW mid oc) (h1 : 0 < p.ε₁)
-    (h2 : 0 < p.ε₂) (h3 : 0 < p.ε₃) : Continuous (r50IdB N h w p) :=
-  (relu_continuous _).comp (residual_continuous _
-    ((R34FullBSeal.projB_continuous N (h := h) (w := w) p.W₃ p.b₃ p.ε₃ h3 p.γ₃ p.β₃).comp
-      ((R34FullBSeal.cbReluB_continuous N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ h2 p.γ₂ p.β₂).comp
-        (R34FullBSeal.cbReluB_continuous N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ h1 p.γ₁ p.β₁))))
-
-theorem r50ProjB_continuous (N h w ic mid oc : Nat) (p : R50ProjW ic mid oc) (h1 : 0 < p.ε₁)
-    (h2 : 0 < p.ε₂) (h3 : 0 < p.ε₃) (hp : 0 < p.εp) : Continuous (r50ProjB N h w p) :=
-  (relu_continuous _).comp (residualProj_continuous _ _
-    (R34FullBSeal.projB_continuous N (h := h) (w := w) p.Wp p.bp p.εp hp p.γp p.βp)
-    ((R34FullBSeal.projB_continuous N (h := h) (w := w) p.W₃ p.b₃ p.ε₃ h3 p.γ₃ p.β₃).comp
-      ((R34FullBSeal.cbReluB_continuous N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ h2 p.γ₂ p.β₂).comp
-        (R34FullBSeal.cbReluB_continuous N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ h1 p.γ₁ p.β₁))))
-
-theorem r50DownB_continuous (N h w ic mid oc : Nat) (p : R50ProjW ic mid oc) (h1 : 0 < p.ε₁)
-    (h2 : 0 < p.ε₂) (h3 : 0 < p.ε₃) (hp : 0 < p.εp) : Continuous (r50DownB N h w p) :=
-  (relu_continuous _).comp (residualProj_continuous _ _
-    (R34FullBSeal.projStridedB_continuous N (h := h) (w := w) p.Wp p.bp p.εp hp p.γp p.βp)
-    ((R34FullBSeal.projB_continuous N (h := h) (w := w) p.W₃ p.b₃ p.ε₃ h3 p.γ₃ p.β₃).comp
-      ((R34FullBSeal.cbReluStridedB_continuous N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ h2 p.γ₂
-          p.β₂).comp
-        (R34FullBSeal.cbReluB_continuous N (h := 2 * h) (w := 2 * w) p.W₁ p.b₁ p.ε₁ h1 p.γ₁
-          p.β₁))))
-
-theorem cn0 (q : Nat) (nCls : Nat) : Continuous (r50Pre0 2 q (sealW nCls)) :=
-  R34FullBSeal.r34StemB_continuous 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) _ _ _ one_pos _ _
-
-theorem cn1 (q : Nat) (nCls : Nat) : Continuous (r50Pre1 2 q (sealW nCls)) :=
-  (r50ProjB_continuous 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 64 64 256 (sealW nCls).s1b0 one_pos one_pos one_pos one_pos).comp
-    (cn0 q nCls)
-
-theorem cn2 (q : Nat) (nCls : Nat) : Continuous (r50Pre2 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 64 256 (sealW nCls).s1b1 one_pos one_pos one_pos).comp (cn1 q nCls)
-
-theorem cn3 (q : Nat) (nCls : Nat) : Continuous (r50Pre3 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 64 256 (sealW nCls).s1b2 one_pos one_pos one_pos).comp (cn2 q nCls)
-
-theorem cn4 (q : Nat) (nCls : Nat) : Continuous (r50Pre4 2 q (sealW nCls)) :=
-  (r50DownB_continuous 2 (2 * (2 * q)) (2 * (2 * q)) 256 128 512 (sealW nCls).s2b0 one_pos one_pos one_pos one_pos).comp
-    (cn3 q nCls)
-
-theorem cn5 (q : Nat) (nCls : Nat) : Continuous (r50Pre5 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * (2 * q)) (2 * (2 * q)) 128 512 (sealW nCls).s2b1 one_pos one_pos one_pos).comp (cn4 q nCls)
-
-theorem cn6 (q : Nat) (nCls : Nat) : Continuous (r50Pre6 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * (2 * q)) (2 * (2 * q)) 128 512 (sealW nCls).s2b2 one_pos one_pos one_pos).comp (cn5 q nCls)
-
-theorem cn7 (q : Nat) (nCls : Nat) : Continuous (r50Pre7 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * (2 * q)) (2 * (2 * q)) 128 512 (sealW nCls).s2b3 one_pos one_pos one_pos).comp (cn6 q nCls)
-
-theorem cn8 (q : Nat) (nCls : Nat) : Continuous (r50Pre8 2 q (sealW nCls)) :=
-  (r50DownB_continuous 2 (2 * q) (2 * q) 512 256 1024 (sealW nCls).s3b0 one_pos one_pos one_pos one_pos).comp
-    (cn7 q nCls)
-
-theorem cn9 (q : Nat) (nCls : Nat) : Continuous (r50Pre9 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * q) (2 * q) 256 1024 (sealW nCls).s3b1 one_pos one_pos one_pos).comp (cn8 q nCls)
-
-theorem cn10 (q : Nat) (nCls : Nat) : Continuous (r50Pre10 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * q) (2 * q) 256 1024 (sealW nCls).s3b2 one_pos one_pos one_pos).comp (cn9 q nCls)
-
-theorem cn11 (q : Nat) (nCls : Nat) : Continuous (r50Pre11 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * q) (2 * q) 256 1024 (sealW nCls).s3b3 one_pos one_pos one_pos).comp (cn10 q nCls)
-
-theorem cn12 (q : Nat) (nCls : Nat) : Continuous (r50Pre12 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * q) (2 * q) 256 1024 (sealW nCls).s3b4 one_pos one_pos one_pos).comp (cn11 q nCls)
-
-theorem cn13 (q : Nat) (nCls : Nat) : Continuous (r50Pre13 2 q (sealW nCls)) :=
-  (r50IdB_continuous 2 (2 * q) (2 * q) 256 1024 (sealW nCls).s3b5 one_pos one_pos one_pos).comp (cn12 q nCls)
-
-theorem Zs_continuous (q : Nat) : Continuous (Zs q) :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp
-    (rayX_continuous _ _)
-
-theorem Zp1_continuous (q : Nat) (nCls : Nat) : Continuous (Zp1 q nCls) :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp
-    ((cn0 q nCls).comp (sealX_continuous q))
-
-theorem Zp2_continuous (q : Nat) (nCls : Nat) : Continuous (Zp2 q nCls) :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp
-    ((cn3 q nCls).comp (sealX_continuous q))
-
-theorem Zp3_continuous (q : Nat) (nCls : Nat) : Continuous (Zp3 q nCls) :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp
-    ((cn7 q nCls).comp (sealX_continuous q))
-
-theorem Zp4_continuous (q : Nat) (nCls : Nat) : Continuous (Zp4 q nCls) :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp
-    ((cn13 q nCls).comp (sealX_continuous q))
-
-theorem Rr_continuous (q : Nat) (hq0 : 0 < q) (nCls : Nat) : Continuous (Rr q nCls) := by
-  have c0 : Continuous (fun t : ℝ =>
-      bnIstd (2 * ((2 * (2 * (2 * (2 * q)))) * (2 * (2 * (2 * (2 * q))))))
-        (bnRowLA 2 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) (Zs q t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by positivity⟩ : Fin (2 * ((2 * (2 * (2 * (2 * q)))) * (2 * (2 * (2 * (2 * q)))))))).comp
-      ((bnRowLA_continuous 2 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) 0).comp (Zs_continuous q))
-  have c1 : Continuous (fun t : ℝ =>
-      bnIstd (2 * ((2 * (2 * (2 * q))) * (2 * (2 * (2 * q)))))
-        (bnRowLA 2 256 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (Zp1 q nCls t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by positivity⟩ : Fin (2 * ((2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))))).comp
-      ((bnRowLA_continuous 2 256 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 0).comp (Zp1_continuous q nCls))
-  have c2 : Continuous (fun t : ℝ =>
-      bnIstd (2 * ((2 * (2 * q)) * (2 * (2 * q)))) (bnRowLA 2 512 (2 * (2 * q)) (2 * (2 * q)) (Zp2 q nCls t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by positivity⟩ : Fin (2 * ((2 * (2 * q)) * (2 * (2 * q)))))).comp
-      ((bnRowLA_continuous 2 512 (2 * (2 * q)) (2 * (2 * q)) 0).comp (Zp2_continuous q nCls))
-  have c3 : Continuous (fun t : ℝ =>
-      bnIstd (2 * ((2 * q) * (2 * q))) (bnRowLA 2 1024 (2 * q) (2 * q) (Zp3 q nCls t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by positivity⟩ : Fin (2 * ((2 * q) * (2 * q))))).comp
-      ((bnRowLA_continuous 2 1024 (2 * q) (2 * q) 0).comp (Zp3_continuous q nCls))
-  have c4 : Continuous (fun t : ℝ =>
-      bnIstd (2 * (q * q)) (bnRowLA 2 2048 q q (Zp4 q nCls t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by positivity⟩ : Fin (2 * (q * q)))).comp
-      ((bnRowLA_continuous 2 2048 q q 0).comp (Zp4_continuous q nCls))
-  exact c0.mul (c1.mul (c2.mul (c3.mul c4)))
+/-- `R` is continuous: every bottleneck is, and `fun_prop` composes the thirteen-block prefix once
+    the chain is unfolded to its atoms. Every BN on the witness has `ε = 1`. -/
+theorem Rr_continuous (q : Nat) (_hq0 : 0 < q) (nCls : Nat) : Continuous (Rr q nCls) := by
+  unfold Rr Zs Zp1 Zp2 Zp3 Zp4 ctConv sealX r50Pre13 r50Pre12 r50Pre11 r50Pre10 r50Pre9 r50Pre8
+    r50Pre7 r50Pre6 r50Pre5 r50Pre4 r50Pre3 r50Pre2 r50Pre1 r50Pre0
+  unfold r50IdB r50ProjB r50DownB r34StemB projB StableHLO.cbReluB StableHLO.cbReluStridedB
+    StableHLO.projStridedB
+  fun_prop (disch := exact one_pos)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 12. The seal

@@ -321,6 +321,9 @@ lemma swishScalar_diff : Differentiable ℝ swishScalar := by
 lemma swish_diff (D : Nat) : Differentiable ℝ (swish D) := by
   unfold swish; fun_prop
 
+@[fun_prop]
+lemma swish_continuous (D : Nat) : Continuous (swish D) := (swish_diff D).continuous
+
 /-- **Partial derivative of Swish** — diagonal Jacobian: each output coord
     depends only on the corresponding input coord via `swishScalar`
     (`pdiv_elementwise`). -/

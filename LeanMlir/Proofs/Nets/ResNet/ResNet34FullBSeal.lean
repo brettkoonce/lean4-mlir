@@ -803,99 +803,20 @@ theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
 theorem sealX_continuous : Continuous sealX :=
   continuous_const.add (continuous_id.smul continuous_const)
 
-theorem r34IdB_continuous (N h w c : Nat) (p : R34IdW c) (h1 : 0 < p.ε₁) (h2 : 0 < p.ε₂) :
-    Continuous (r34IdB N h w p) :=
-  (relu_continuous _).comp (residual_continuous _
-    ((projB_continuous N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ h2 p.γ₂ p.β₂).comp
-      (cbReluB_continuous N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ h1 p.γ₁ p.β₁)))
-
-theorem r34DownB_continuous (N h w ic oc : Nat) (p : R34DownW ic oc) (h1 : 0 < p.ε₁)
-    (h2 : 0 < p.ε₂) (hp : 0 < p.εp) : Continuous (r34DownB N h w p) :=
-  (relu_continuous _).comp (residualProj_continuous _ _
-    (projStridedB_continuous N (h := h) (w := w) p.Wp p.bp p.εp hp p.γp p.βp)
-    ((projB_continuous N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ h2 p.γ₂ p.β₂).comp
-      (cbReluStridedB_continuous N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ h1 p.γ₁ p.β₁)))
-
 theorem r34StemB_continuous (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
-    (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) : Continuous (r34StemB N h w Ws bs εs γs βs) :=
-  (batchMap_continuous _ (maxPool3s2Flat_continuous oc h w)).comp
-    (cbReluStridedB_continuous N (h := 2 * h) (w := 2 * w) Ws bs εs hεs γs βs)
+    (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) : Continuous (r34StemB N h w Ws bs εs γs βs) := by
+  unfold r34StemB StableHLO.cbReluStridedB
+  fun_prop (disch := assumption)
 
-theorem cn0 (nCls : Nat) : Continuous (r34Pre0 2 (sealW nCls)) :=
-  r34StemB_continuous 2 56 56 _ _ _ one_pos _ _
-
-theorem cn1 (nCls : Nat) : Continuous (r34Pre1 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 56 56 64 (sealW nCls).a0 one_pos one_pos).comp (cn0 nCls)
-
-theorem cn2 (nCls : Nat) : Continuous (r34Pre2 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 56 56 64 (sealW nCls).a1 one_pos one_pos).comp (cn1 nCls)
-
-theorem cn3 (nCls : Nat) : Continuous (r34Pre3 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 56 56 64 (sealW nCls).a2 one_pos one_pos).comp (cn2 nCls)
-
-theorem cn4 (nCls : Nat) : Continuous (r34Pre4 2 (sealW nCls)) :=
-  (r34DownB_continuous 2 28 28 64 128 (sealW nCls).d2 one_pos one_pos one_pos).comp (cn3 nCls)
-
-theorem cn5 (nCls : Nat) : Continuous (r34Pre5 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 28 28 128 (sealW nCls).b0 one_pos one_pos).comp (cn4 nCls)
-
-theorem cn6 (nCls : Nat) : Continuous (r34Pre6 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 28 28 128 (sealW nCls).b1 one_pos one_pos).comp (cn5 nCls)
-
-theorem cn7 (nCls : Nat) : Continuous (r34Pre7 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 28 28 128 (sealW nCls).b2 one_pos one_pos).comp (cn6 nCls)
-
-theorem cn8 (nCls : Nat) : Continuous (r34Pre8 2 (sealW nCls)) :=
-  (r34DownB_continuous 2 14 14 128 256 (sealW nCls).d3 one_pos one_pos one_pos).comp (cn7 nCls)
-
-theorem cn9 (nCls : Nat) : Continuous (r34Pre9 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 14 14 256 (sealW nCls).c0 one_pos one_pos).comp (cn8 nCls)
-
-theorem cn10 (nCls : Nat) : Continuous (r34Pre10 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 14 14 256 (sealW nCls).c1 one_pos one_pos).comp (cn9 nCls)
-
-theorem cn11 (nCls : Nat) : Continuous (r34Pre11 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 14 14 256 (sealW nCls).c2 one_pos one_pos).comp (cn10 nCls)
-
-theorem cn12 (nCls : Nat) : Continuous (r34Pre12 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 14 14 256 (sealW nCls).c3 one_pos one_pos).comp (cn11 nCls)
-
-theorem cn13 (nCls : Nat) : Continuous (r34Pre13 2 (sealW nCls)) :=
-  (r34IdB_continuous 2 14 14 256 (sealW nCls).c4 one_pos one_pos).comp (cn12 nCls)
-
-theorem Zs_continuous : Continuous Zs :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp sealX_continuous
-
-theorem Zp2_continuous (nCls : Nat) : Continuous (Zp2 nCls) :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp
-    ((cn3 nCls).comp sealX_continuous)
-
-theorem Zp3_continuous (nCls : Nat) : Continuous (Zp3 nCls) :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp
-    ((cn7 nCls).comp sealX_continuous)
-
-theorem Zp4_continuous (nCls : Nat) : Continuous (Zp4 nCls) :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp
-    ((cn13 nCls).comp sealX_continuous)
-
+/-- `R` is continuous: every block is (`relu`, the pool and the residual adds included), and
+    `fun_prop` composes them through the fourteen-block prefix once the chain is unfolded to its
+    atoms. Every BN on the witness has `ε = 1`. -/
 theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
-  have c1 : Continuous (fun t : ℝ =>
-      bnIstd (2 * ((2 * 56) * (2 * 56))) (bnRowLA 2 64 (2 * 56) (2 * 56) (Zs t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by norm_num⟩ : Fin (2 * ((2 * 56) * (2 * 56))))).comp
-      ((bnRowLA_continuous 2 64 (2 * 56) (2 * 56) 0).comp Zs_continuous)
-  have c2 : Continuous (fun t : ℝ =>
-      bnIstd (2 * (28 * 28)) (bnRowLA 2 128 28 28 (Zp2 nCls t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by norm_num⟩ : Fin (2 * (28 * 28)))).comp
-      ((bnRowLA_continuous 2 128 28 28 0).comp (Zp2_continuous nCls))
-  have c3 : Continuous (fun t : ℝ =>
-      bnIstd (2 * (14 * 14)) (bnRowLA 2 256 14 14 (Zp3 nCls t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by norm_num⟩ : Fin (2 * (14 * 14)))).comp
-      ((bnRowLA_continuous 2 256 14 14 0).comp (Zp3_continuous nCls))
-  have c4 : Continuous (fun t : ℝ =>
-      bnIstd (2 * (7 * 7)) (bnRowLA 2 512 7 7 (Zp4 nCls t) 0) 1) :=
-    (bnIstd_cont 1 one_pos (⟨0, by norm_num⟩ : Fin (2 * (7 * 7)))).comp
-      ((bnRowLA_continuous 2 512 7 7 0).comp (Zp4_continuous nCls))
-  exact c1.mul (c2.mul (c3.mul c4))
+  unfold Rr Zs Zp2 Zp3 Zp4 ctConv sealX r34Pre13 r34Pre12 r34Pre11 r34Pre10 r34Pre9 r34Pre8
+    r34Pre7 r34Pre6 r34Pre5 r34Pre4 r34Pre3 r34Pre2 r34Pre1 r34Pre0
+  unfold r34IdB r34DownB r34StemB projB StableHLO.cbReluB StableHLO.cbReluStridedB
+    StableHLO.projStridedB
+  fun_prop (disch := exact one_pos)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 12. The seal

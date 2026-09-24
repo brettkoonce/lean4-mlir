@@ -79,7 +79,6 @@ open Proofs BatchSeal StableHLO R34FullBSeal
 #guard 1 + (StableHLO.mnv4Blocks.map (fun s =>
     (if s.preDWk = 0 then 0 else 1) + 1 + (if s.postDWk = 0 then 0 else 1))).sum + 2 = 54
 
-
 -- ════════════════════════════════════════════════════════════════
 -- § 1. The structural weights
 --   ⭐ One `γ = 1`, one `ε = 1` and `β = 160` at every BatchNorm a relu follows; `β = 0` at the
@@ -344,9 +343,6 @@ noncomputable def sealX (t : ℝ) : Vec (2 * (3 * (2 * 112) * (2 * 112))) := t �
 theorem sealX_zero_add (t : ℝ) : sealX 0 + t • sealV = sealX t := by
   rw [sealX, sealX, zero_smul, zero_add]
 
-theorem sealX_continuous : Continuous sealX :=
-  continuous_id.smul continuous_const
-
 /-- ⭐ the witness input is per-(example, channel) CONSTANT: `t` on example 0's channel 0, zero
     everywhere else. -/
 theorem BUnif_sealX (t : ℝ) :
@@ -519,7 +515,7 @@ theorem ed_Sw (t : ℝ) : EDiff (fun o => swishGap 160 (uF t o)) (Sw t) := by
 -- ════════════════════════════════════════════════════════════════
 -- § 9. The fifteen post-swish activations on the carrier's path
 --   ⚠ Each is written in terms of the PREVIOUS one, never in terms of `mnv4Pre_k`: §11's
---   continuity chain then runs straight off `sealX_continuous`, and `pc0`–`pc6` say which prefix
+--   continuity proof then unfolds straight back to `sealX`, and `pc0`–`pc6` say which prefix
 --   each one IS. ⚠ Spatial sizes stay in the net's own nest.
 -- ════════════════════════════════════════════════════════════════
 noncomputable def Z1p (t : ℝ) : Vec (2 * (48 * 56 * 56)) :=
@@ -637,14 +633,6 @@ noncomputable def rf (n : Nat) (z : Vec n) : ℝ := bnIstd n z 1
 
 theorem rf_pos (n : Nat) (z : Vec n) : 0 < rf n z := bnIstd_pos _ 1 one_pos
 
-theorem rf_cont (n : Nat) (k : Fin n) : Continuous (fun z : Vec n => rf n z) :=
-  bnIstd_cont 1 one_pos k
-
-theorem rfac_cont (oc h w : Nat) (k : Fin (2 * (h * w))) (c : Fin oc)
-    (Z : ℝ → Vec (2 * (oc * h * w))) (hZ : Continuous Z) :
-    Continuous (fun t => rf (2 * (h * w)) (bnRowLA 2 oc h w (Z t) c)) :=
-  (rf_cont _ k).comp ((bnRowLA_continuous 2 oc h w c).comp hZ)
-
 /-- the carrier at the swish's output — ⭐⭐ the one step of the whole chain that is NOT a
     multiple of the step before it. -/
 noncomputable def dSw (t : ℝ) : Fin 128 → ℝ := fun o => swishGap 160 (uF t o)
@@ -755,110 +743,6 @@ theorem edh2 (t : ℝ) : EDiff (dh2 t) (Ah2 t) :=
     (edh1 t) rfl (fun ci => by simp only [dh2, rf]; ring)
 
 -- ════════════════════════════════════════════════════════════════
--- § 11. Continuity along the ray — what `Rr` needs and nothing more
--- ════════════════════════════════════════════════════════════════
-theorem Zs_continuous : Continuous Zs :=
-  (batchMap_continuous _ (flatConvStride2Xla_differentiable _ _).continuous).comp sealX_continuous
-
-theorem As_continuous : Continuous As :=
-  (bnBatchLA_differentiable 2 32 112 112 1 one_pos _ _).continuous.comp Zs_continuous
-
-theorem Zf_continuous : Continuous Zf :=
-  (batchMap_continuous _ (flatConvStride2_differentiable _ _).continuous).comp As_continuous
-
-theorem Af_continuous : Continuous Af :=
-  (bnBatchLA_differentiable 2 128 56 56 1 one_pos _ _).continuous.comp Zf_continuous
-
-theorem Sw_continuous : Continuous Sw := (swish_diff _).continuous.comp Af_continuous
-
-theorem Z1p_continuous : Continuous Z1p :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Sw_continuous
-
-theorem A1p_continuous : Continuous A1p :=
-  (bnBatchLA_differentiable 2 48 56 56 1 one_pos _ _).continuous.comp Z1p_continuous
-
-theorem Zaq_continuous : Continuous Zaq :=
-  (batchMap_continuous _ (depthwiseStride2Flat_differentiable _ _).continuous).comp A1p_continuous
-
-theorem Aaq_continuous : Continuous Aaq :=
-  (bnBatchLA_differentiable 2 48 28 28 1 one_pos _ _).continuous.comp Zaq_continuous
-
-theorem Zae_continuous : Continuous Zae :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Aaq_continuous
-
-theorem Aae_continuous : Continuous Aae :=
-  (bnBatchLA_differentiable 2 192 28 28 1 one_pos _ _).continuous.comp Zae_continuous
-
-theorem Zad_continuous : Continuous Zad :=
-  (batchMap_continuous _ (depthwiseFlat_differentiable _ _).continuous).comp Aae_continuous
-
-theorem Aad_continuous : Continuous Aad :=
-  (bnBatchLA_differentiable 2 192 28 28 1 one_pos _ _).continuous.comp Zad_continuous
-
-theorem Zaz_continuous : Continuous Zaz :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Aad_continuous
-
-theorem Aaz_continuous : Continuous Aaz :=
-  (bnBatchLA_differentiable 2 80 28 28 1 one_pos _ _).continuous.comp Zaz_continuous
-
-theorem Zbq_continuous : Continuous Zbq :=
-  (batchMap_continuous _ (depthwiseStride2Flat_differentiable _ _).continuous).comp Aaz_continuous
-
-theorem Abq_continuous : Continuous Abq :=
-  (bnBatchLA_differentiable 2 80 14 14 1 one_pos _ _).continuous.comp Zbq_continuous
-
-theorem Zbe_continuous : Continuous Zbe :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Abq_continuous
-
-theorem Abe_continuous : Continuous Abe :=
-  (bnBatchLA_differentiable 2 480 14 14 1 one_pos _ _).continuous.comp Zbe_continuous
-
-theorem Zbd_continuous : Continuous Zbd :=
-  (batchMap_continuous _ (depthwiseFlat_differentiable _ _).continuous).comp Abe_continuous
-
-theorem Abd_continuous : Continuous Abd :=
-  (bnBatchLA_differentiable 2 480 14 14 1 one_pos _ _).continuous.comp Zbd_continuous
-
-theorem Zbz_continuous : Continuous Zbz :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Abd_continuous
-
-theorem Abz_continuous : Continuous Abz :=
-  (bnBatchLA_differentiable 2 160 14 14 1 one_pos _ _).continuous.comp Zbz_continuous
-
-theorem Zcq_continuous : Continuous Zcq :=
-  (batchMap_continuous _ (depthwiseStride2Flat_differentiable _ _).continuous).comp Abz_continuous
-
-theorem Acq_continuous : Continuous Acq :=
-  (bnBatchLA_differentiable 2 160 7 7 1 one_pos _ _).continuous.comp Zcq_continuous
-
-theorem Zce_continuous : Continuous Zce :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Acq_continuous
-
-theorem Ace_continuous : Continuous Ace :=
-  (bnBatchLA_differentiable 2 960 7 7 1 one_pos _ _).continuous.comp Zce_continuous
-
-theorem Zcd_continuous : Continuous Zcd :=
-  (batchMap_continuous _ (depthwiseFlat_differentiable _ _).continuous).comp Ace_continuous
-
-theorem Acd_continuous : Continuous Acd :=
-  (bnBatchLA_differentiable 2 960 7 7 1 one_pos _ _).continuous.comp Zcd_continuous
-
-theorem Zcz_continuous : Continuous Zcz :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Acd_continuous
-
-theorem Acz_continuous : Continuous Acz :=
-  (bnBatchLA_differentiable 2 256 7 7 1 one_pos _ _).continuous.comp Zcz_continuous
-
-theorem Zh1_continuous : Continuous Zh1 :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Acz_continuous
-
-theorem Ah1_continuous : Continuous Ah1 :=
-  (bnBatchLA_differentiable 2 960 7 7 1 one_pos _ _).continuous.comp Zh1_continuous
-
-theorem Zh2_continuous : Continuous Zh2 :=
-  (batchMap_continuous _ (flatConv_differentiable _ _).continuous).comp Ah1_continuous
-
--- ════════════════════════════════════════════════════════════════
 -- § 12. `Rr` — the fifteen post-swish BatchNorm factors
 --   ⭐ Seventeen BatchNorms sit on MobileNetV4's carrier: the stem's, the fused stage's two, four
 --   in each of rows 1, 3 and 11 — the only rows that change channels and so the only ones without
@@ -903,25 +787,19 @@ theorem Rr_pos (t : ℝ) : 0 < Rr t := by
     (mul_pos (rf_pos _ _)
     (rf_pos _ _))))))))))))))
 
+/-- `R` is continuous: `fun_prop` composes the carrier's fifteen post-swish activations (each
+    written off the one before, back to `sealX`) once they are unfolded. Every BN has `ε = 1`. -/
 theorem Rr_continuous : Continuous Rr := by
-  unfold Rr
-  exact (rfac_cont 48 56 56 ⟨0, by norm_num⟩ 0 _ Z1p_continuous).mul
-    ((rfac_cont 48 28 28 ⟨0, by norm_num⟩ 0 _ Zaq_continuous).mul
-    ((rfac_cont 192 28 28 ⟨0, by norm_num⟩ 0 _ Zae_continuous).mul
-    ((rfac_cont 192 28 28 ⟨0, by norm_num⟩ 0 _ Zad_continuous).mul
-    ((rfac_cont 80 28 28 ⟨0, by norm_num⟩ 0 _ Zaz_continuous).mul
-    ((rfac_cont 80 14 14 ⟨0, by norm_num⟩ 0 _ Zbq_continuous).mul
-    ((rfac_cont 480 14 14 ⟨0, by norm_num⟩ 0 _ Zbe_continuous).mul
-    ((rfac_cont 480 14 14 ⟨0, by norm_num⟩ 0 _ Zbd_continuous).mul
-    ((rfac_cont 160 14 14 ⟨0, by norm_num⟩ 0 _ Zbz_continuous).mul
-    ((rfac_cont 160 7 7 ⟨0, by norm_num⟩ 0 _ Zcq_continuous).mul
-    ((rfac_cont 960 7 7 ⟨0, by norm_num⟩ 0 _ Zce_continuous).mul
-    ((rfac_cont 960 7 7 ⟨0, by norm_num⟩ 0 _ Zcd_continuous).mul
-    ((rfac_cont 256 7 7 ⟨0, by norm_num⟩ 0 _ Zcz_continuous).mul
-    ((rfac_cont 960 7 7 ⟨0, by norm_num⟩ 0 _ Zh1_continuous).mul
-    (rfac_cont 1280 7 7 ⟨0, by norm_num⟩ 0 _ Zh2_continuous))))))))))))))
-
-
+  unfold Rr rf
+  repeat
+    (first
+      | unfold Zs | unfold As | unfold Zf | unfold Af | unfold Sw | unfold Z1p | unfold A1p
+      | unfold Zaq | unfold Aaq | unfold Zae | unfold Aae | unfold Zad | unfold Aad | unfold Zaz
+      | unfold Aaz | unfold Zbq | unfold Abq | unfold Zbe | unfold Abe | unfold Zbd | unfold Abd
+      | unfold Zbz | unfold Abz | unfold Zcq | unfold Acq | unfold Zce | unfold Ace | unfold Zcd
+      | unfold Acd | unfold Zcz | unfold Acz | unfold Zh1 | unfold Ah1 | unfold Zh2 | unfold Ah2)
+  unfold sealX
+  fun_prop (disch := exact one_pos)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 13. The collapsed trunk — which activation each prefix IS
@@ -1082,11 +960,16 @@ theorem Q0_pos (t : ℝ) : 0 < Q0 t := by
   exact div_pos (mul_pos h1 h2) two_pos
 
 theorem Q0_continuous : Continuous Q0 := by
-  have h1 : Continuous fun t => iS t 0 :=
-    rfac_cont 32 112 112 ⟨0, by norm_num⟩ 0 _ Zs_continuous
-  have h2 : Continuous fun t => iF t 0 :=
-    rfac_cont 128 56 56 ⟨0, by norm_num⟩ 0 _ Zf_continuous
-  exact (h1.mul h2).div_const 2
+  unfold Q0 iS iF
+  repeat
+    (first
+      | unfold Zs | unfold As | unfold Zf | unfold Af | unfold Sw | unfold Z1p | unfold A1p
+      | unfold Zaq | unfold Aaq | unfold Zae | unfold Aae | unfold Zad | unfold Aad | unfold Zaz
+      | unfold Aaz | unfold Zbq | unfold Abq | unfold Zbe | unfold Abe | unfold Zbd | unfold Abd
+      | unfold Zbz | unfold Abz | unfold Zcq | unfold Acq | unfold Zce | unfold Ace | unfold Zcd
+      | unfold Acd | unfold Zcz | unfold Acz | unfold Zh1 | unfold Ah1 | unfold Zh2 | unfold Ah2)
+  unfold sealX
+  fun_prop (disch := exact one_pos)
 
 theorem hasDerivAt_uF : HasDerivAt (fun t : ℝ => uF t 0) (Q0 0) 0 := by
   have h : (fun t : ℝ => uF t 0) = fun t : ℝ => t * Q0 t := funext uF_eq

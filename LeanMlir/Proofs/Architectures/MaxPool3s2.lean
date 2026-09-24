@@ -419,6 +419,7 @@ theorem maxPool3s2Flat_close {c h w : Nat} (vt va : Vec (c * (2 * h) * (2 * w)))
   exact maxPool3s2_close (Tensor3.unflatten vt) (Tensor3.unflatten va) huf _ _ _
 
 /-- `maxPool3s2Flat` is continuous (a `sup'` of coordinates). -/
+@[fun_prop]
 theorem maxPool3s2Flat_continuous (c h w : Nat) : Continuous (maxPool3s2Flat c h w) := by
   refine continuous_pi (fun k => ?_)
   show Continuous (fun v => Tensor3.flatten (maxPool3s2 (Tensor3.unflatten v)) k)
