@@ -179,7 +179,9 @@ jobs:
           # demo-cone slice; the blueprint cites corpus theorems — JacobianSeal,
           # the seals, FloatBridges, … — so it needs `Certs`, whose roots
           # subsume the slice. See planning/archive/repo_shape_deletion_audit.md §4.)
-          lake build LeanMlir Certs
+          # `Reference` too: checkdecls imports its roots, and `LeanMlir.ReferenceNets` is one
+          # no `LeanMlir` module imports — without it checkdecls dies on a missing .olean.
+          lake build LeanMlir Certs Reference
 
       - name: Install graphviz (libcgraph for leanblueprint's dep-graph plugin)
         # leanblueprint's `dep_graph` plugin imports pygraphviz, which dlopens

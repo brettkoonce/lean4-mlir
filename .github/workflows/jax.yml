@@ -404,7 +404,7 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
   optimizer:
-    name: One-step optimizer tie (§5)
+    name: One-step optimizer tie
     # ⭐⭐ Does the VERIFIED rendered optimizer take the same step as its JAX reference?
     #
     # `oracle` and `grad_tie.py` tie the two implementations at the GRADIENT; nothing tied them at
