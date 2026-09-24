@@ -25,10 +25,6 @@ def baseConfig : TrainConfig := {
   useYolov1    := true
 }
 
-/-- Substring check (Lean 4 core lacks String.containsSubstr). -/
-private def hasSubstr (s sub : String) : Bool :=
-  (s.splitOn sub).length > 1
-
 /-- Run `act`, expect it to throw `IO.userError` mentioning yolov1.
     Returns `none` on success (it threw the right error), `some msg` on
     failure. Accepts either `useYolov1` (back-compat) or `yolov1Masked`
@@ -39,7 +35,7 @@ private def expectThrow (label : String) (act : IO Unit) : IO (Option String) :=
     return some s!"FAIL [{label}]: expected throw, none happened"
   catch e =>
     let msg := toString e
-    if !(hasSubstr msg "useYolov1" || hasSubstr msg "yolov1Masked") then
+    if !(msg.contains "useYolov1" || msg.contains "yolov1Masked") then
       return some s!"FAIL [{label}]: threw, but message didn't mention 'useYolov1'/'yolov1Masked': {msg}"
     return none
 

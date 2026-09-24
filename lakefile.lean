@@ -2928,7 +2928,7 @@ def padR (s : String) (n : Nat) : String :=
 /-- Pull the steady-state (last) `(<n>ms)` epoch timing out of a trainer's stdout. -/
 def lastEpochMs (out : String) : Option Nat :=
   let eps := (out.splitOn "\n").filter fun l =>
-    (l.splitOn "epoch ").length > 1 && (l.splitOn "ms)").length > 1
+    l.contains "epoch " && l.contains "ms)"
   match eps.getLast? with
   | none => none
   | some line =>
@@ -2940,7 +2940,7 @@ def lastEpochMs (out : String) : Option Nat :=
 
 /-- Pull `<n> ms/step` out of a `PROBE:` line (the LEAN_MLIR_MAX_STEPS path). -/
 def probeMsStep (out : String) : Option Nat :=
-  match ((out.splitOn "\n").filter fun l => (l.splitOn "PROBE:").length > 1).getLast? with
+  match ((out.splitOn "\n").filter fun l => l.contains "PROBE:").getLast? with
   | none => none
   | some line => match (line.splitOn "PROBE: ").getLast? with
     | none => none
@@ -2961,7 +2961,7 @@ def gpuBusyPct (backend : String) : IO (Option Nat) := do
       pure (firstNat o.stdout)
     else
       let o ← IO.Process.output { cmd := "rocm-smi", args := #["--showuse"] }
-      pure (((o.stdout.splitOn "\n").find? (fun l => (l.splitOn "use (%)").length > 1)).bind firstNat)
+      pure (((o.stdout.splitOn "\n").find? (fun l => l.contains "use (%)")).bind firstNat)
   catch _ => pure none
 
 /-- **Direct mode's probe: measure the chapter's OWN trainer on THIS box, 3 real epochs.**

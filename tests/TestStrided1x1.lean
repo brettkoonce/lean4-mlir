@@ -188,7 +188,7 @@ private def refDb (ctl : String) (dy : ByteArray) : Array Float := Id.run do
 
 /-- Print every `stablehlo.convolution` window line — the padding §2l asks to read. -/
 private def windowLines (mlir : String) : List String :=
-  (mlir.splitOn "\n").filter (fun l => (l.splitOn "window = {").length > 1)
+  (mlir.splitOn "\n").filter (fun l => l.contains "window = {")
 
 private def renderProbe (K : Nat) (zk : Kernel4 OC IC K K) : IO Bool := do
   let mlir := probeModule K zk

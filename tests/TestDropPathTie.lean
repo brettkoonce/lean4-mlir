@@ -472,7 +472,7 @@ def main (args : List String) : IO Unit := do
   let isEval := args.contains "--eval"
   IO.println "stochastic depth — the interior gates (planning/archive/stochastic_depth.md §7)"
   let ldPath := (← IO.getEnv "LD_LIBRARY_PATH").getD ""
-  if (ldPath.splitOn "detshim").length == 1 then
+  if !ldPath.contains "detshim" then
     IO.println "  ⚠ no `detshim` on LD_LIBRARY_PATH — gate B compares two HLO programs and the \
 committed compile options AUTOTUNE on CUDA. Run `scripts/det_shim.sh /tmp/detshim` first, or read \
 B1 as a bound."

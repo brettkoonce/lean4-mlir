@@ -1276,8 +1276,8 @@ end Proofs.StableHLO
 -- ▶ And the slug must not trip the DRIVER's variant predicates, which read the same string to size
 -- the checkpoint blob. `cdOn` is the dangerous one — a SUBSTRING test for "do", and a false
 -- positive would silently add a dropout region to the layout with no error anywhere.
-#guard ("momdp64bf16".splitOn "do").length == 1
-#guard ("momdp64bf16".splitOn "acc").length == 1
+#guard !"momdp64bf16".contains "do"
+#guard !"momdp64bf16".contains "acc"
 #guard !"momdp64bf16".startsWith "ema"
 
 -- ⭐⭐ GRADIENT ACCUMULATION — `planning/archive/next_session_pipeline_then_r50.md` §4's blocker.
@@ -1535,7 +1535,7 @@ end Proofs.StableHLO
 -- ⚠ and the marker is NOT leading here, which is the whole defect: pin that fact so the spelling
 -- cannot drift back to something the prefix test would have accepted by accident.
 #guard ("lambaccdp8x64bce".startsWith "acc") == false
-#guard (("lambaccdp8x64bce".splitOn "acc").length > 1) == true
+#guard ("lambaccdp8x64bce".contains "acc") == true
 
 -- ⚠⚠ **D1's spelling, pinned on the PRODUCING side.** `clip` TRAILS `wx` and both precede the
 -- `bce` the R50 caller appends — `lambaccdp8x64wxclipbce`. The order is a CHOICE (ConvNeXt's,
@@ -1558,7 +1558,7 @@ end Proofs.StableHLO
 -- trailing markers must not disturb that parse. `lambaccdp8x64wxclipbce` still splits on "acc" and
 -- still carries `8x` between "accdp" and the batch, exactly as the un-clipped spelling does.
 #guard ("lambaccdp8x64wxclipbce".startsWith "acc") == false
-#guard (("lambaccdp8x64wxclipbce".splitOn "acc").length > 1) == true
+#guard ("lambaccdp8x64wxclipbce".contains "acc") == true
 
 -- ⭐⭐ **§3.3 CLOSED: the `bce` marker is DERIVED, and these are what make that mean something.**
 -- It used to be a `vSuffix : String` the caller spelled by hand beside a `bce : Bool` that swapped
@@ -1867,13 +1867,13 @@ end Proofs.StableHLO
 -- ⚠⚠ **THE CONCATENATIONS, not the marker.** Three collisions have already shipped in this naming
 -- and every one lived in a PAIR of markers meeting, never in the new marker alone. `clip` ++ `drop`
 -- and `drop` ++ `bce` are the two new adjacencies:
-#guard ("emalambaccdp8x64wxclipdropbce".splitOn "do").length == 1   -- `dr`, not `do`
-#guard ("emalambaccdp8x64wxclipdropbce".splitOn "drop").length > 1
-#guard ("emalambaccdp8x64wxclipdropbce".splitOn "rms").length == 1
-#guard ("emalambaccdp8x64wxclipdropbce".splitOn "acc").length > 1
+#guard !"emalambaccdp8x64wxclipdropbce".contains "do"   -- `dr`, not `do`
+#guard "emalambaccdp8x64wxclipdropbce".contains "drop"
+#guard !"emalambaccdp8x64wxclipdropbce".contains "rms"
+#guard "emalambaccdp8x64wxclipdropbce".contains "acc"
 #guard "emalambaccdp8x64wxclipdropbce".startsWith "ema"
 -- ⚠ and `drop` must not reach the `k` parse, which reads digits between `acc`/`accdp` and the `x`.
-#guard ("emalambaccdp8x64wxclipdropbcewd001".splitOn "acc").length > 1
+#guard "emalambaccdp8x64wxclipdropbcewd001".contains "acc"
 -- ▶ `accK`/`nRegions`/`sdOn` are the CONSUMING side and live in `VerifiedTrain.lean`, which imports
 -- this file — pinned for these names in `tests/TestVariantPredicates.lean`.
 
@@ -1895,10 +1895,10 @@ end Proofs.StableHLO
 #guard ("lambaccdp8x64wxclipbceema".startsWith "ema") == false
 -- ⚠ and the prefix must disturb none of the four axes it is not: `ema` ++ `lamb` spells `emalamb`,
 -- which contains no "rms", no "drop" and no "do".
-#guard ("emalambaccdp8x64wxclipbce".splitOn "rms").length == 1
-#guard ("emalambaccdp8x64wxclipbce".splitOn "drop").length == 1
-#guard ("emalambaccdp8x64wxclipbce".splitOn "do").length == 1
-#guard ("emalambaccdp8x64wxclipbce".splitOn "acc").length > 1
+#guard !"emalambaccdp8x64wxclipbce".contains "rms"
+#guard !"emalambaccdp8x64wxclipbce".contains "drop"
+#guard !"emalambaccdp8x64wxclipbce".contains "do"
+#guard "emalambaccdp8x64wxclipbce".contains "acc"
 -- ▶ `nRegions`/`nScalars`/`emaRegion` are the CONSUMING side and live in `VerifiedTrain.lean`,
 -- which imports this file — pinned for these names in `tests/TestVariantPredicates.lean`.
 
@@ -1926,11 +1926,11 @@ end Proofs.StableHLO
 -- parsed from AFTER the marker, so the new trailing markers must not disturb either — and none of
 -- the four may accidentally spell `ema` or `do`, which select the EMA shadow and classifier
 -- dropout respectively. `wd001` is the risk: it is the first marker here that ends in a digit run.
-#guard ("lambaccdp8x64wxclipbcewd001bf16".splitOn "acc").length > 1
+#guard "lambaccdp8x64wxclipbcewd001bf16".contains "acc"
 #guard ("lambaccdp8x64wxclipbcewd001bf16".startsWith "acc") == false
 #guard ("lambaccdp8x64wxclipbcewd001bf16".startsWith "ema") == false
-#guard ("lambaccdp8x64wxclipbcewd001bf16".splitOn "do").length == 1
-#guard ("lambacc8x64wxclipbcewd001bf16".splitOn "do").length == 1
+#guard !"lambaccdp8x64wxclipbcewd001bf16".contains "do"
+#guard !"lambacc8x64wxclipbcewd001bf16".contains "do"
 -- ▶ `accK` and `nRegions` are the CONSUMING side and live in `LeanMlir/VerifiedTrain.lean`, which
 -- imports this file — so they cannot be guarded from here without a cycle. They are pinned for
 -- these four names in `tests/TestVariantPredicates.lean`, which is where that file's own header

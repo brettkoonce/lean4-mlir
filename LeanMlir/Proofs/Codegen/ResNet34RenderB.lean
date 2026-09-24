@@ -1946,8 +1946,8 @@ end Proofs.StableHLO
 -- These are `cdOn`/`accOn`/`emaOn` (`VerifiedTrain.lean`) evaluated on the bf16 slug: each is a
 -- SUBSTRING test, and a false positive changes `nRegions`/`nScalars` — i.e. the checkpoint layout —
 -- with no error anywhere.
-#guard ("momdp64bf16".splitOn "do").length == 1
-#guard ("momdp64bf16".splitOn "acc").length == 1
+#guard !"momdp64bf16".contains "do"
+#guard !"momdp64bf16".contains "acc"
 #guard !"momdp64bf16".startsWith "ema"
 -- The optimizer axis. `.adamw` must keep every legacy name unchanged — that is what makes the
 -- threading a no-op for the six artifacts above — and `.heavyBall` gets its own.

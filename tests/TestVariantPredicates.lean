@@ -247,7 +247,7 @@ private def table : List (String × Bool × Bool × Bool) :=
 -- shape. Answer, RUN rather than reasoned: no existing marker ends in `d` and none begins with
 -- `o`, and no marker contains `do` internally (`drop` is d-r-o-p). So `cdOn` fires on exactly the
 -- variants that set it.
-#guard table.all (fun (v, _, _, _) => cdOn v == ((v.splitOn "do").length > 1))
+#guard table.all (fun (v, _, _, _) => cdOn v == (v.contains "do"))
 #guard cdOn "adamdo" == true
 #guard cdOn "emarms64dropdo" == true
 -- …and on NONE of the others. ⚠ This is the load-bearing half — every remaining row is a committed,
@@ -273,7 +273,7 @@ private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsd
 #guard sdOn  "emarms64dropdo" == true
 
 -- ⚠ The regression, pinned directly: the OLD `"sd"` marker fires on `rmsdp64`, the new one does not.
-#guard (("rmsdp64".splitOn "sd").length > 1) == true
+#guard ("rmsdp64".contains "sd") == true
 #guard sdOn "rmsdp64" == false
 
 -- ⚠ And why the drop marker must TRAIL: a leading one breaks the EMA test, which is defect #1's
@@ -285,8 +285,8 @@ private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsd
 -- The failure that produced this file was `rms` ++ `dp` spelling `rmsdp` ⊇ "sd"; the analogous
 -- question for `wx` is whether any pair of markers can spell it. None can — no marker ends in `w`
 -- and none begins with `x` — and these are the checks that say so rather than the reasoning.
-#guard (("adamdp128x4wx".splitOn "rms").length == 1)
-#guard (("adamdp128x4wx".splitOn "drop").length == 1)
+#guard (!"adamdp128x4wx".contains "rms")
+#guard (!"adamdp128x4wx".contains "drop")
 #guard sdOn "adamdp128x4wx" == false
 #guard rmsOn "adamdp128x4wx" == false
 -- and `wx` must not create an "ema" prefix where there was none
@@ -296,8 +296,8 @@ private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsd
 -- markers spell it? No marker ends in `c`, `cl` or `cli`, and none begins with `lip`, `ip` or `p` —
 -- but "no marker begins with p" is exactly the kind of reasoning `rms` ++ `dp` ⊇ "sd" falsified, so
 -- these run it instead. Note `clip` contains no substring of "ema"/"rms"/"drop" either way round.
-#guard (("emarmsdrop64wxclip".splitOn "rms").length > 1)     -- still finds the REAL rms
-#guard (("emarmsdrop64wxclip".splitOn "drop").length > 1)    -- still finds the REAL drop
+#guard ("emarmsdrop64wxclip".contains "rms")     -- still finds the REAL rms
+#guard ("emarmsdrop64wxclip".contains "drop")    -- still finds the REAL drop
 #guard emaOn "emarmsdrop64wxclip" == true                    -- still finds the REAL ema
 #guard rmsOn "adamdp128x4wxclip" == false                    -- and invents none of them
 #guard sdOn  "adamdp128x4wxclip" == false
@@ -308,7 +308,7 @@ private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsd
 #guard sdOn  "adamdpdrop" == true
 #guard rmsOn "adamdpdrop" == false
 #guard emaOn "adamdpdrop" == false
-#guard (("adamdpdrop".splitOn "sd").length == 1)      -- the OLD marker does not fire either
+#guard (!"adamdpdrop".contains "sd")      -- the OLD marker does not fire either
 #guard emaOn "clipema" == false
 #guard emaOn "emaclip" == true
 

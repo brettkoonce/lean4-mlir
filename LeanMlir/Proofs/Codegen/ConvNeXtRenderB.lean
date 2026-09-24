@@ -1198,7 +1198,7 @@ end Proofs.StableHLO
 -- ⚠ And the driver's own predicate is a SUBSTRING test for `"drop"`; `"sd"` would fire on every
 -- name containing `rmsdp`. ConvNeXt has no RMSProp variant, but the marker is shared with the nets
 -- that do, so the property is checked here too rather than assumed to be EfficientNet's problem.
-#guard ((Proofs.StableHLO.cnxAdamVariant 1).splitOn "drop").length == 1
+#guard !(Proofs.StableHLO.cnxAdamVariant 1).contains "drop"
 #guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true).splitOn "drop").length == 2
 
 -- ⭐ The bf16 marker. ⚠ ConvNeXt DERIVES its entry name from the variant, and this net has now
@@ -1215,9 +1215,9 @@ end Proofs.StableHLO
 -- not contain the substring "do". `bf16` adds no "do", no "acc", no "sd" and no "ema" prefix —
 -- but it is checked rather than argued, because `rmsdp` containing "sd" is exactly the collision
 -- between two OTHER markers that no placement rule would have predicted.
-#guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "do").length == 1
-#guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "acc").length == 1
-#guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "sd").length == 1
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 false true true true true).contains "do"
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 false true true true true).contains "acc"
+#guard !(Proofs.StableHLO.cnxAdamVariant 4 false true true true true).contains "sd"
 #guard !(Proofs.StableHLO.cnxAdamVariant 4 false true true true true).startsWith "ema"
 -- ⚠ And it must not BREAK `drop`'s own detection by appending after it.
 #guard ((Proofs.StableHLO.cnxAdamVariant 4 false true true true true).splitOn "drop").length == 2

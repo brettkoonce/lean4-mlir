@@ -39,7 +39,7 @@ def main : IO Unit := do
   let code := fwd.code
   let logits := fwd.logits
   let lines := code.splitOn "\n"
-  let n (pat : String) : Nat := (lines.filter (fun l => (l.splitOn pat).length > 1)).length
+  let n (pat : String) : Nat := (lines.filter (fun l => l.contains pat)).length
   -- ⚠ Parse the group count NUMERICALLY. A substring match on "feature_group_count = 1" also
   -- matches "= 160", "= 192" and "= 1024", which is how the first version of this gate reported
   -- 42 regular convs instead of 32 — a false FAILURE on a correct render, which is the more
@@ -82,7 +82,7 @@ def main : IO Unit := do
     | _ :: rest :: _ => (rest.takeWhile Char.isDigit).toNat?
     | _ => none)
   let boundZb : List Nat := mlines.filterMap (fun l =>
-    if (l.splitOn "= stablehlo.constant").length > 1 then
+    if l.contains "= stablehlo.constant" then
       match l.splitOn "%zb" with
       | _ :: rest :: _ => (rest.takeWhile Char.isDigit).toNat?
       | _ => none

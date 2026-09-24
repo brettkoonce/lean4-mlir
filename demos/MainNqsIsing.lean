@@ -487,7 +487,7 @@ J2 = {cfg.J2}, S_z = 0 sector of {M} configurations, {cfg.steps} steps, \
     ("jit_" ++ spec.sanitizedName ++ "_train_step")
     (weightDecay := 0.0) (useAdam := true)
     (useDdpm := true) (ddpmOutShape := outShape)
-  unless (trainMlir.splitOn "%loss =").length >= 2 do
+  unless trainMlir.contains "%loss =" do
     throw <| IO.userError "train step emitted without a loss"
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.FS.writeFile s!"{pfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec M)
@@ -724,7 +724,7 @@ def main (args : List String) : IO Unit := do
     ("jit_" ++ spec.sanitizedName ++ "_train_step")
     (weightDecay := 0.0) (useAdam := true)
     (useDdpm := true) (ddpmOutShape := outShape)
-  unless (trainMlir.splitOn "%loss =").length >= 2 do
+  unless trainMlir.contains "%loss =" do
     throw <| IO.userError "train step emitted without a loss — the DDPM branch did not match the output shape"
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.FS.writeFile s!"{pfx}_fwd_eval.mlir" (MlirCodegen.generateEval spec M)

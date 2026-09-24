@@ -272,7 +272,7 @@ private def gateNet (path : String) : IO Unit := do
 
   -- ── 1. the dropout site ──
   let siteIdx := (List.range lines.size).filter (fun i =>
-    (lines[i]!.splitOn "stablehlo.multiply").length > 1 && (lines[i]!.splitOn "%do").length > 1)
+    lines[i]!.contains "stablehlo.multiply" && lines[i]!.contains "%do")
   if siteIdx.length != 2 then
     die s!"GATE W: expected exactly 2 `multiply` against %do (the forward site and the cotangent \
 scale), found {siteIdx.length}. This render is not the shape this gate assumes — refusing rather \
@@ -284,15 +284,15 @@ than reporting a pass on a render it cannot read."
   let opNames := (ops.splitOn ",").map (·.trimAscii.toString) |>.filter (·.startsWith "%")
   let pooled := (opNames.filter (· != "%do")).getD 0 ""
   if lhs.isEmpty || pooled.isEmpty then die s!"GATE W: cannot parse the dropout site: {fwdLine}"
-  if (fwdLine.splitOn "broadcast_in_dim").length > 1 then
+  if fwdLine.contains "broadcast_in_dim" then
     die s!"GATE W: the dropout site BROADCASTS its mask — that is stochastic depth, not dropout"
   IO.println s!"  ① dropout site        : {lhs} = {pooled} ⊙ %do   (no broadcast)"
 
   -- ── 2 & 3. the two dot_generals that must read it ──
   let dots := (List.range lines.size).filter (fun i =>
-    (lines[i]!.splitOn "stablehlo.dot_general").length > 1)
+    lines[i]!.contains "stablehlo.dot_general")
   let fwdDot := dots.filter (fun i =>
-    (lines[i]!.splitOn "contracting_dims = [1] x [0]").length > 1 &&
+    lines[i]!.contains "contracting_dims = [1] x [0]" &&
     (dotOperands lines[i]!).getD 0 "" == lhs)
   -- ⚠ Batch contraction ALONE is not enough to identify it — EfficientNet has 33
   -- `contracting_dims = [0] x [0]` sites, because every squeeze-excite dense's weight gradient
@@ -302,7 +302,7 @@ than reporting a pass on a render it cannot read."
   -- reading its operand — which is what lets it REFUSE when neither appears, instead of silently
   -- matching an SE gradient and reporting a pass about the wrong parameter.
   let wDot := dots.filter (fun i =>
-    (lines[i]!.splitOn "contracting_dims = [0] x [0]").length > 1 &&
+    lines[i]!.contains "contracting_dims = [0] x [0]" &&
     ((dotOperands lines[i]!).getD 0 "" == lhs || (dotOperands lines[i]!).getD 0 "" == pooled))
   if fwdDot.isEmpty then
     die s!"GATE W FAILED (②): no classifier dense reads the dropped value {lhs}. The dropout site \
@@ -329,9 +329,9 @@ the dropped value {lhs} nor the pooled one {pooled}. line {wDot[0]! + 1}: {wLine
 
   -- ── the bias gradient must be UNTOUCHED, the opposite error ──
   let biasReduce := (List.range lines.size).filter (fun i =>
-    (lines[i]!.splitOn "stablehlo.reduce").length > 1 &&
-    (lines[i]!.splitOn "across dimensions = [0]").length > 1 &&
-    (lines[i]!.splitOn lhs).length > 1)
+    lines[i]!.contains "stablehlo.reduce" &&
+    lines[i]!.contains "across dimensions = [0]" &&
+    lines[i]!.contains lhs)
   if !biasReduce.isEmpty then
     die s!"GATE W FAILED: the classifier BIAS gradient reads the dropped activation. It is \
 Σ_b dy_b and depends on the mask only through dy — scaling it again double-counts the mask."

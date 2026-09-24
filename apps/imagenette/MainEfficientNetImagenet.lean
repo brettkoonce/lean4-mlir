@@ -58,7 +58,7 @@ def runEfficientNetImagenet (argv : List String) : IO Unit := do
   -- 1.0, while this file handed them AdamW's 0.001 and a cosine schedule instead of the paper's
   -- 0.016 with ×0.97 every 2.4 epochs. That split is not loud: it descends and prints a normal log.
   -- `tests/TestVariantPredicates.lean` is the collision table, and this is its case 1.
-  let rms := (variant.splitOn "rms").length > 1
+  let rms := variant.contains "rms"
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => if rms then sched.lr

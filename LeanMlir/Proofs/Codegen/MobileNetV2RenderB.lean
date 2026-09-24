@@ -1368,8 +1368,8 @@ end Proofs.StableHLO
 -- ▶ And the slug must not trip the DRIVER's substring variant predicates, which read the same
 -- string to size the checkpoint blob. `cdOn` tests for "do" — a false positive would silently add
 -- a dropout region to the layout with no error anywhere.
-#guard ("adamdp64bf16".splitOn "do").length == 1
-#guard ("adamdp64bf16".splitOn "acc").length == 1
+#guard !"adamdp64bf16".contains "do"
+#guard !"adamdp64bf16".contains "acc"
 #guard !"adamdp64bf16".startsWith "ema"
 
 -- ── ▶ RMSProp: the optimizer the MobileNetV2 reference ACTUALLY USES ──────────────────────────

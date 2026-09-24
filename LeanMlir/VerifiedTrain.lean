@@ -292,32 +292,32 @@ def emaOn (v : String) : Bool := v.startsWith "ema"
 /-- RMSProp — the mean-square slot initialises to **1.0**, not 0.
     ⚠ SUBSTRING, not prefix: the RMSProp+EMA spelling is `emarms`, which does not start with
     "rms" (`planning/archive/ema.md`'s defect). -/
-def rmsOn (v : String) : Bool := (v.splitOn "rms").length > 1
+def rmsOn (v : String) : Bool := v.contains "rms"
 
 /-- Stochastic depth — N extra `tensor<Bxf32>` scale inputs.
     ⚠ The marker is `drop` and not `sd` because `rms` ++ `dp` spells `rmsdp`, which contains
     "sd" (`planning/archive/stochastic_depth.md`'s defect). -/
-def sdOn (v : String) : Bool := (v.splitOn "drop").length > 1
+def sdOn (v : String) : Bool := v.contains "drop"
 
 /-- Classifier dropout — ONE extra `tensor<B×wxf32>` mask input.
     ⚠ The marker is `do` and not `dropout` because `dropout` contains `drop`, so a dropout-only
     variant would read as a stochastic-depth one (`recipe_gaps.md` gap C). -/
-def cdOn (v : String) : Bool := (v.splitOn "do").length > 1
+def cdOn (v : String) : Bool := v.contains "do"
 
 /-- Gradient accumulation — a FOURTH `[θ|m|v|G]` region, 5 scalars.
     ⚠⚠ SUBSTRING, not prefix: RSB-A3's composed optimizer is `lambaccdp8x64bce`, where `lamb` ++
     `acc` puts the marker in the MIDDLE. -/
-def accOn (v : String) : Bool := (v.splitOn "acc").length > 1
+def accOn (v : String) : Bool := v.contains "acc"
 
 /-- LAMB — the per-tensor trust ratio (`R34Opt.lambAccum`), RSB-A3's optimizer.
     ⚠ SUBSTRING, not prefix, for `accOn`'s reason one spelling over: the EMA form is `emalamb…`,
     which does not start with "lamb". -/
-def lambOn (v : String) : Bool := (v.splitOn "lamb").length > 1
+def lambOn (v : String) : Bool := v.contains "lamb"
 
 /-- BCE-with-logits (timm `BinaryCrossEntropy`), RSB's loss — not softmax CE.
     ⚠ SUBSTRING: the marker TRAILS the shape and is itself often trailed, by `wd001` or `bf16`
     (`lambaccdp8x64wxclipbcebf16`), so neither a prefix nor a suffix test finds it. -/
-def bceOn (v : String) : Bool := (v.splitOn "bce").length > 1
+def bceOn (v : String) : Bool := v.contains "bce"
 
 /-- `k`, read back out of the name. The graph has `1/k` BAKED in and the driver decides the apply
     cadence; a disagreement does not fail, it trains at a silently wrong effective learning rate.
@@ -1643,7 +1643,7 @@ running buffers — diagnostic only, transductive, not a reportable number."
   if !useRunning && hasBn then
     let tsTxt ← IO.FS.readFile s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
     let fwTxt ← IO.FS.readFile fwdPath
-    let batchOf (t : String) : Bool := (t.splitOn "dimensions = [0, 2, 3]").length > 1
+    let batchOf (t : String) : Bool := t.contains "dimensions = [0, 2, 3]"
     if batchOf tsTxt != batchOf fwTxt then
       throw <| IO.userError s!"BN-WORLD MISMATCH — refusing to score through a different net.\n\
   train step {net.slug}_{variant}_train_step.mlir : \

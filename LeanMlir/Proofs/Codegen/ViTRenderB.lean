@@ -726,8 +726,8 @@ def vitDropFwdBanner : String :=
 -- ⚠ And the DRIVER's three substring predicates, which size the checkpoint blob off this string.
 -- `cdOn` is a test for `"do"`, not for `"cd"` — a false positive silently adds a blob region.
 #guard !(Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").startsWith "ema"
-#guard ((Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").splitOn "do").length == 1
-#guard ((Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").splitOn "acc").length == 1
+#guard !(Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").contains "do"
+#guard !(Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").contains "acc"
 -- ⚠ `drop` must survive the append: the driver reads it to declare the 24 mask inputs, and the
 -- bf16 arm has the same 24 sites as its f32 peer.
 #guard ((Proofs.StableHLO.vitAdamVariant 32 1 false true true true ++ "bf16").splitOn "drop").length == 2
@@ -792,7 +792,7 @@ def vitDropFwdBanner : String :=
     (sd := true) (vbB := 128) (bf16 := true))
 #guard "vitin_emadp128x4wxclipdropbf16_train_step" ==
   "vitin_" ++ Proofs.StableHLO.vitAdamVariant 128 4 true true true true ++ "bf16" ++ "_train_step"
-#guard ((Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").splitOn "do").length == 1
+#guard !(Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").contains "do"
 #guard ((Proofs.StableHLO.vitAdamVariant 128 4 false true true true ++ "bf16").splitOn "drop").length == 2
 
 -- The **2-GPU** peer: 256 per replica × 2 = the same global 512 the 128×4 render above trains at,

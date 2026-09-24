@@ -49,7 +49,7 @@ def main : IO Unit := do
   let argSig := (hdr.splitOn ") -> (").getD 0 ""
   let nIn := (argSig.splitOn ": tensor").length - 1
   if !(← chk "func inputs" nIn (1 + 3*nP + 3 + nS + 1)) then bad := bad + 1
-  let retLine := (lines.filter (fun l => (l.splitOn "    return ").length > 1)).getD 0 ""
+  let retLine := (lines.filter (fun l => l.contains "    return ")).getD 0 ""
   let nRet := ((retLine.splitOn " : ").getD 0 "").splitOn ", " |>.length
   if !(← chk "return values" nRet (3*nP + 3 + nS)) then bad := bad + 1
 
@@ -57,7 +57,7 @@ def main : IO Unit := do
   -- ⚠ B=2 ⇒ variant "adam2"; only B=32 is unsuffixed. Derived, not spelled, so the two cannot
   -- drift the way a hardcoded name would.
   let entry := s!"@mnv4_{mnv4AdamVariant B 1}_train_step("
-  if (m.splitOn entry).length > 1 then
+  if m.contains entry then
     IO.println s!"  ✓ entry point {entry.dropEnd 1}"
   else
     IO.println s!"  ✗ entry point missing/renamed (expected {entry.dropEnd 1})"; bad := bad + 1
@@ -66,7 +66,7 @@ def main : IO Unit := do
   -- `mnv4FwdChainB` is called first inside the train step, so its fresh-name counter starts at 0
   -- exactly as the standalone forward's does, and the two code strings must be character-equal.
   let fwd := (mnv4FwdChainB B nClasses "1.0e-05" .train).run' (0, [])
-  if (m.splitOn fwd.code).length > 1 then
+  if m.contains fwd.code then
     IO.println s!"  ✓ train step contains @mnv4_fwd's body VERBATIM ({fwd.code.splitOn "\n" |>.length} lines)"
   else
     IO.println "  ✗ the train step's forward region is NOT the forward module's body"
@@ -104,7 +104,7 @@ def main : IO Unit := do
   -- ⚠ This is what catches masking the swish site with `selectPos`: that renders 37 selects and
   -- ONE logistic, keeps every shape and count elsewhere, type-checks, and descends. `mnv4-fwd-smoke`
   -- cannot see it (it never looks at a backward) and neither can the arity checks above.
-  let n (pat : String) : Nat := (lines.filter (fun l => (l.splitOn pat).length > 1)).length
+  let n (pat : String) : Nat := (lines.filter (fun l => l.contains pat)).length
   let nRelu := n "stablehlo.maximum"
   if !(← chk "relu forwards" nRelu 54) then bad := bad + 1
   if !(← chk "selectPos masks (= one per relu)" (n "stablehlo.select") nRelu) then bad := bad + 1

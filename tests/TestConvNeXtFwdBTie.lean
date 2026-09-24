@@ -103,7 +103,7 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
     for i in [0:min gl.size wl.size] do
       if gl[i]! != wl[i]! then
         let isPair (s : String) : Bool :=
-          (s.splitOn "stablehlo.reverse").length > 1 || (s.splitOn "stablehlo.transpose").length > 1
+          s.contains "stablehlo.reverse" || s.contains "stablehlo.transpose"
         if isPair (gl[i]!) && isPair (wl[i]!) then
           swapPair := swapPair + 1
         else
@@ -170,7 +170,7 @@ batched forms diverged from its per-example peer, which this whole-net diff cann
     for i in [0:min gl.size wl.size] do
       if gl[i]! != wl[i]! then
         let isPair (s : String) : Bool :=
-          (s.splitOn "stablehlo.reverse").length > 1 || (s.splitOn "stablehlo.transpose").length > 1
+          s.contains "stablehlo.reverse" || s.contains "stablehlo.transpose"
         if isPair (gl[i]!) && isPair (wl[i]!) then
           pairSwap := pairSwap + 1
         else

@@ -1272,8 +1272,8 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 "mnv4in" true)
 #guard Proofs.StableHLO.mnv4AdamVariant 64 4 == "adamdp64"
 #guard Proofs.StableHLO.mnv4AdamVariant 64 4 true == "adamdp64bf16"
-#guard ("adamdp64bf16".splitOn "do").length == 1
-#guard ("adamdp64bf16".splitOn "acc").length == 1
+#guard !"adamdp64bf16".contains "do"
+#guard !"adamdp64bf16".contains "acc"
 #guard !"adamdp64bf16".startsWith "ema"
 
 -- ⭐ The bf16 marker, and the wiring that actually breaks: the entry name derives from
@@ -1281,6 +1281,6 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.mnv4AdamVariant 64 1 true == "adam64bf16"
 #guard Proofs.StableHLO.mnv4AdamVariant 64 1 == "adam64"
 -- ▶ And the slug must not trip the DRIVER's substring variant predicates. `cdOn` tests for "do".
-#guard ("adam64bf16".splitOn "do").length == 1
-#guard ("adam64bf16".splitOn "acc").length == 1
+#guard !"adam64bf16".contains "do"
+#guard !"adam64bf16".contains "acc"
 #guard !"adam64bf16".startsWith "ema"

@@ -78,7 +78,7 @@ def main (args : List String) : IO Unit := do
   -- Side B is data-parallel only if it actually contains collectives; otherwise this is a plain
   -- single-device A-vs-B comparison (e.g. bs32 vs bs128 on one GPU) and the invoke must not ask
   -- for replicas it was not compiled for — the shim refuses that outright.
-  let bIsDP := ((← IO.FS.readFile pathB).splitOn "stablehlo.all_reduce").length > 1
+  let bIsDP := (← IO.FS.readFile pathB).contains "stablehlo.all_reduce"
   let repB := if bIsDP then replicas else 1
   let imgPerStepA := bsA
   let imgPerStepB := bsB * repB

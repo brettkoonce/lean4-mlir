@@ -49,7 +49,7 @@ def main : IO Unit := do
   let nIn := (argSig.splitOn ": tensor").length - 1
   if !(← chk "func inputs" nIn (1 + 3*110 + 3 + 72 + 1)) then bad := bad + 1
   let entry := s!"@resnet34_{r34AdamVariant B 1}_train_step("
-  if (m.splitOn entry).length > 1 then
+  if m.contains entry then
     IO.println s!"  ✓ entry point {entry.dropEnd 1}"
   else
     IO.println s!"  ✗ entry point missing (expected {entry.dropEnd 1})"; bad := bad + 1
@@ -63,7 +63,7 @@ def main : IO Unit := do
   if nBatch == 0 then
     IO.println "  ✗ expected BATCH BN in the Adam train step"; bad := bad + 1
   if (← IO.FS.lines "verified_mlir/resnet34_fwd.mlir").any
-      (fun l => (l.splitOn "dimensions = [0, 2, 3]").length > 1) then
+      (fun l => l.contains "dimensions = [0, 2, 3]") then
     IO.println "  ⚠ resnet34_fwd is now BATCH BN too — the two-worlds split has been CLOSED."
     IO.println "    Good news, but `scripts/grad_tie.py --net r34` and this file's docstring both"
     IO.println "    assume the split; re-read them before trusting either."

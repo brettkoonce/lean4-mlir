@@ -1535,9 +1535,9 @@ end Proofs.StableHLO
 -- markers (`rms` ++ `dp` spells `rmsdp`, which contains "sd"). `bf16` collides with none of them.
 #guard Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop false false false true == "rms64bf16"
 #guard Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop == "rms64"
-#guard ("rms64bf16".splitOn "do").length == 1
-#guard ("rms64bf16".splitOn "acc").length == 1
-#guard ("rms64bf16".splitOn "sd").length == 1
+#guard !"rms64bf16".contains "do"
+#guard !"rms64bf16".contains "acc"
+#guard !"rms64bf16".contains "sd"
 #guard !"rms64bf16".startsWith "ema"
 #eval IO.FS.writeFile "verified_mlir/efficientnetin_rmsdp64_train_step.mlir"
   (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-5"
@@ -1808,7 +1808,7 @@ end Proofs.StableHLO
 -- ⭐ The collision checks, in the driver's own predicate (`variant.splitOn "drop"`), stated as the
 -- two facts that would break if the marker were spelled `"dropout"`:
 --   a dropout-ONLY variant must NOT look like a stochastic-depth one …
-#guard ((Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false true).splitOn "drop").length == 1
+#guard !(Proofs.StableHLO.enetAdamVariant 32 1 .adamw false false true).contains "drop"
 --   … and the combined one must look like exactly ONE stochastic-depth marker, not two.
 #guard ((Proofs.StableHLO.enetAdamVariant 64 1 .rmsprop true true true).splitOn "drop").length == 2
 -- And OFF, every spelling is byte-identical to what it always was — the inertness gate in the

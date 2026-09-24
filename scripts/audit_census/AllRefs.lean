@@ -160,22 +160,6 @@ def projectMarkers : List String :=
    -- in the float second pass sat under a green gate because none carried a marker above.
    "floatBridges_", "floatClose_", "FloatBridges", "FloatClose"]
 
-/-- Substring test written by hand rather than via `splitOn`, because this toolchain is
-    mid-migration from `String` to `String.Slice` and the return type of the string helpers
-    is not stable across it. -/
-def containsSubstr (hay needle : String) : Bool := Id.run do
-  let h := hay.toList.toArray
-  let nd := needle.toList.toArray
-  if nd.size == 0 || nd.size > h.size then return false
-  let mut found := false
-  for i in [0 : h.size - nd.size + 1] do
-    if !found then
-      let mut ok := true
-      for j in [0 : nd.size] do
-        if h[i+j]! != nd[j]! then ok := false
-      if ok then found := true
-  return found
-
 def checkWorthy (_s : String) : Bool := true
 
 /-- Ruled out before the environment is consulted: never a Lean name, and cheap to reject. -/
@@ -202,7 +186,7 @@ def lastComponent : Name → String
 def endsWithComponents (full0 : Name) (parts : List String) : Bool :=
   let full := (privateToUserName? full0).getD full0
   let fc := full.components.map lastComponent
-  parts.length ≤ fc.length && (fc.drop (fc.length - parts.length) == parts)
+  parts.isSuffixOf fc
 
 /-- The ways a citation counts as live: exact, under a project namespace, as a dotted SUFFIX
     of a real declaration, by its PREFIX resolving (a field access such as
@@ -240,15 +224,9 @@ def resolves (env : Environment) (idx : Std.HashMap String (Array Name))
           || (idx.getD (pre.getLast!) #[]).any (endsWithComponents · pre)
 
 /-- Every `.lean` file under `dir`, recursively. -/
-partial def leanFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
-  let mut out : Array System.FilePath := #[]
-  for e in ← dir.readDir do
-    let p := e.path
-    if ← p.isDir then
-      out := out ++ (← leanFiles p)
-    else if p.extension == some "lean" then
-      out := out.push p
-  return out
+def leanFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
+  let all ← dir.walkDir (fun p => pure !((p.fileName.getD "").startsWith "."))
+  return all.filter (·.extension == some "lean")
 
 /-- Where a docstring's file citation must point. `blob/` for a file, `tree/` for a directory
     (the `Bestiary/*.lean`-style glob citations link their directory). -/

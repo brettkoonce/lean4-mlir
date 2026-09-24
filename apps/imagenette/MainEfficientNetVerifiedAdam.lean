@@ -75,7 +75,7 @@ def runEfficientNetAdam (argv : List String) : IO Unit := do
   let sched := enetRmsSchedule
   -- ⚠ SUBSTRING, not prefix: `emarms` (RMSProp + EMA) does not START with "rms", so a prefix test
   -- would quietly hand this net the AdamW LR and a cosine schedule. Same trap as the driver's.
-  let rms := (variant.splitOn "rms").length > 1
+  let rms := variant.contains "rms"
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
     | none   => if rms then sched.lr * bs.toFloat / 256.0 else 0.001

@@ -170,24 +170,8 @@ def projectMarkers : List String :=
    -- `Back` does not admit `backward` prose.
    "Render", "Live", "Tied", "Back", "Fwd"]
 
-/-- Substring test written by hand rather than via `splitOn`, because this toolchain is
-    mid-migration from `String` to `String.Slice` and the return type of the string helpers
-    is not stable across it. -/
-def containsSubstr (hay needle : String) : Bool := Id.run do
-  let h := hay.toList.toArray
-  let nd := needle.toList.toArray
-  if nd.size == 0 || nd.size > h.size then return false
-  let mut found := false
-  for i in [0 : h.size - nd.size + 1] do
-    if !found then
-      let mut ok := true
-      for j in [0 : nd.size] do
-        if h[i+j]! != nd[j]! then ok := false
-      if ok then found := true
-  return found
-
 def checkWorthy (s : String) : Bool :=
-  projectMarkers.any (fun m => containsSubstr s m)
+  projectMarkers.any (fun m => s.contains m)
 
 /-- Ruled out before the environment is consulted: never a Lean name, and cheap to reject. -/
 def skipRef (s : String) : Bool :=
@@ -213,12 +197,11 @@ def lastComponent : Name → String
 def endsWithComponents (full0 : Name) (parts : List String) : Bool :=
   let full := (privateToUserName? full0).getD full0
   let fc := full.components.map lastComponent
-  parts.length ≤ fc.length && (fc.drop (fc.length - parts.length) == parts)
+  parts.isSuffixOf fc
 
 /-- Does module `m`'s name end with the components `parts`? -/
 def moduleEndsWith (m : Name) (parts : List String) : Bool :=
-  let mc := m.components.map lastComponent
-  parts.length ≤ mc.length && mc.drop (mc.length - parts.length) == parts
+  parts.isSuffixOf (m.components.map lastComponent)
 
 /-- The ways a citation counts as live: exact, under a project namespace, as a dotted SUFFIX
     of a real declaration (a `private` one by its user name), as `File.decl` with `decl`
@@ -266,16 +249,9 @@ def resolves (env : Environment) (idx : Std.HashMap String (Array Name))
     because the workflow that materializes that tree (comparator.yml) is not the one that
     runs this gate (blueprint.yml). `certs.yml`'s LoC count already excludes the same
     tree for the same reason. Any dot-directory is skipped, which also covers `.git`. -/
-partial def leanFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
-  let mut out : Array System.FilePath := #[]
-  for e in ← dir.readDir do
-    let p := e.path
-    if ← p.isDir then
-      if e.fileName.startsWith "." then continue
-      out := out ++ (← leanFiles p)
-    else if p.extension == some "lean" then
-      out := out.push p
-  return out
+def leanFiles (dir : System.FilePath) : IO (Array System.FilePath) := do
+  let all ← dir.walkDir (fun p => pure !((p.fileName.getD "").startsWith "."))
+  return all.filter (·.extension == some "lean")
 
 /-- Where a docstring's file citation must point. `blob/` for a file, `tree/` for a directory
     (the `Bestiary/*.lean`-style glob citations link their directory). -/

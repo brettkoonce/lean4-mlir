@@ -196,7 +196,7 @@ def main : IO Unit := do
   -- ⚠ Getting that factor wrong is invisible to tier 1 — both homogeneity identities are SCALE
   -- INVARIANT in `g`, so a wrong `k` would sail through them and only tier 2's absolute fit would
   -- notice. That is why it is derived from the name rather than assumed.
-  let accOn := (variant.splitOn "acc").length > 1
+  let accOn := variant.contains "acc"
   let accK  := if accOn then
       (let after := (variant.splitOn "acc").getD 1 ""
        let after := if after.startsWith "dp" then after.drop 2 else after
