@@ -13,7 +13,7 @@ Structure — four gates and two controls, run in this order:
   1  each shim is the RIGHT net's   its generated banner names the reference that net is a port of
   2  the augmentation PARTITION     config flags vs generated CALL SITES, feature by feature
   3  the producer default           SHIM_MIX's baked default == the config's useMixup/useCutmix
-  C1 the count-based control        a census that counts DEFINITIONS mis-classifies 4 of 7 nets
+  C1 the count-based control        a census that counts DEFINITIONS mis-classifies 5 nets (2026-09-24)
   C2 the stream, MEASURED (--stream) SHIM_HASH: determinism, mnv2≡r34 known answer, r34≠the rest
 
 ⚠ GATE 2 CHECKS CALL SITES, NOT DEFINITIONS, AND THAT IS THE WHOLE POINT. `generateShim` emits the
@@ -348,8 +348,8 @@ for slug, _, _, _ in NETS:
             "mixup" if fl["mixup"] else "cutmix" if fl["cutmix"] else "off")
     got = shim_mix_default(p)
     check(got == want, f"{slug}: SHIM_MIX default {got!r}", f"config implies {want!r}")
-print("    ⚠ ViT and ConvNeXt default to 'both'. Before this wiring every net ran R34's shim, whose"
-      "\n      default is 'off' — so `SHIM_SOFT=1` on those two now MIXES unless SHIM_MIX=off. That is"
+print("    ⚠ ViT, ConvNeXt and R50 default to 'both'. Before this wiring every net ran R34's shim, whose"
+      "\n      default is 'off' — so `SHIM_SOFT=1` on those three now MIXES unless SHIM_MIX=off. That is"
       "\n      their reference's recipe, but it is a behaviour change, not just an augmentation one.")
 
 # ──────────────────────────────────────────────────────────────────────────────────────────────

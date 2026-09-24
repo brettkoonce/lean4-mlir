@@ -242,7 +242,7 @@ jobs:
           scripts/gen_shims.sh
           python3 scripts/shim_wiring_gate.py --break
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "✅ per-net shim wiring: 5 nets, 5 distinct shims, partition matches config" \
+          echo "✅ per-net shim wiring: 12 nets (8 base + 4 size variants), 8 distinct shims, partition matches config" \
             >> $GITHUB_STEP_SUMMARY
 
   oracle:
@@ -313,10 +313,9 @@ jobs:
     # padding being stated independently on each side). This is the standing check that stops a
     # SEVENTH being discovered a year later.
     #
-    # RATCHET, not a hard gate: three divergences are known, tracked in
-    # scripts/convention_baseline.txt, and failing on them every run would make the signal
-    # worthless. The job fails only on a divergence not already in that list — which is the
-    # regression it exists to catch. The list may shrink, never grow.
+    # RATCHET against scripts/convention_baseline.txt, which is EMPTY: every known divergence is
+    # closed. The job fails on a divergence not in that list, and on a row left in it after its
+    # divergence is gone (a stale entry would hide the regression). The list may shrink, never grow.
     #
     # No GPU, no training, no gradients: it runs each reference's forward() once on a 2x3x224x224
     # zero input with jax.lax instrumented and reads the render side out of the committed .mlir.

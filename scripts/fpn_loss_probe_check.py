@@ -14,9 +14,9 @@ This is the conv-free glue of the FPN detector: split the [B,Ntot] concat back
 per scale, run the FD-verified anchor loss on each, sum, re-concat the grads. The
 per-scale anchor loss itself is already FD-verified (anchor_loss_probe_check.py);
 this probe pins the split/sum/concat plumbing that adapts 3 scales into the
-single-output train step. Conv heads feeding this are verified convBn (ROCm).
+single-output train step. Conv heads feeding this are verified convBn.
 
-Run:  <jax-venv>/bin/python scripts/fpn_loss_probe_check.py
+Run:  ../lean4-jax/.venv/bin/python scripts/fpn_loss_probe_check.py   (a python with iree.runtime)
 """
 import os
 import subprocess

@@ -36,7 +36,7 @@ that default exists and what it costs (measured: nothing).
 
 Regenerate (only needed if the XLA/PJRT plugin version changes):
 
-    /home/skoonce/lean/claude_max/lean4-jax/.venv/bin/python3 \
+    .venv/bin/python3 \
         scripts/gen_pjrt_compile_options.py > ffi/pjrt_compile_options.h
 """
 import sys

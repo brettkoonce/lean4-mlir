@@ -22,7 +22,7 @@ validation is the `scripts/render_parity.py` ref-only smoke: compile + run on th
 updated params finite and non-zero:
   `scripts/render_parity.py --fn convnext_rep_train_step --ref .lake/build/cnxpc_train_step.mlir`
 
-Run: `IREE_BACKEND=rocm lake env lean tests/TestConvNeXtTrainPC.lean`
+Run: `lake env lean tests/TestConvNeXtTrainPC.lean`
 -/
 
 open Proofs Proofs.StableHLO

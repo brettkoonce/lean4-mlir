@@ -42,12 +42,11 @@ EPS 1.0e-6 → 1.0e-3 gives 0/180 bit-identical, worst rel 1.46e-2, rc=1 — so 
 demonstrably separates, which a 180/180 bit-identical PASS otherwise cannot be distinguished
 from (§4).
 
-  IREE_BACKEND=rocm lake env lean tests/TestConvNeXtTTrainPC.lean
-  HIP_VISIBLE_DEVICES=0 scripts/render_parity.py --fn convnext_train_step \
+  lake env lean tests/TestConvNeXtTTrainPC.lean
+  CUDA_VISIBLE_DEVICES=0 scripts/render_parity.py --fn convnext_train_step \
     --ref verified_mlir/convnext_train_step.mlir --cand /tmp/cnxtpc/train_step.mlir
 
-  ⚠ `render_parity.py` needs `iree-run-module`, which is NOT in this repo's `.venv/bin` (only
-  `iree-compile` is). It lives in `../lean4-mlir/.venv/bin` — put BOTH on PATH.
+  (`render_parity.py` finds `iree-compile` / `iree-run-module` through `scripts/_iree.py`.)
 -/
 
 open Proofs Proofs.StableHLO

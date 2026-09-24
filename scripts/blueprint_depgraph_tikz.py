@@ -326,8 +326,12 @@ def spines(chapters, nums, nodes, edges, tex, textwidth_pt=460.0):
     return '\n'.join(out), (left + colw * len(cols)) * s, (top + 2 * rowh) * s, fs * s, {name: (len(A), sorted(order(u) for u in counts[lab])) for lab, name, A in cols}
 
 if __name__ == '__main__':
+    import argparse
+    ap = argparse.ArgumentParser(description=__doc__.split('\n')[0],
+                                 formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument('outdir', nargs='?', default='blueprint/src/figures/depgraph')
+    outdir = ap.parse_args().outdir
     chapters, nums, nodes, edges = parse(open('blueprint/src/content.tex').read())
-    outdir = sys.argv[1] if len(sys.argv) > 1 else 'blueprint/src/figures/depgraph'
     import os; os.makedirs(outdir, exist_ok=True)
     tex = open('blueprint/src/content.tex').read()
     tikz, w, h, font, count, size, cited = book(chapters, nums, nodes, edges, tex)

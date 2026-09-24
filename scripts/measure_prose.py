@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Chapter prose metrics, per chapter_makeover.md §3 -- with its two documented
+"""Chapter prose metrics, per planning/archive/chapter_makeover.md §3 -- with its two documented
 over-counting bugs fixed:
   1. enumerate/itemize are stripped, so a lead-in plus its list items is not
      counted as one sentence.

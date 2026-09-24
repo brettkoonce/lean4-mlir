@@ -46,7 +46,7 @@ attention, im2col vs dilate+conv patch W-grad, 3-token vs fused LN affine):
   `scripts/render_parity.py --fn vit_train_step --ref verified_mlir/vit_train_step.mlir \
      --cand .lake/build/vitpc_train_step.mlir`
 
-Run: `IREE_BACKEND=rocm lake env lean tests/TestViTTrainPC.lean`
+Run: `lake env lean tests/TestViTTrainPC.lean`
 -/
 
 open Proofs Proofs.StableHLO

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# bf16_probe_3060.sh — steady-state ms/step on THIS box (4× RTX 3060), f32 and bf16, fed and synth.
+# bf16_probe_3060.sh — steady-state ms/step, f32 and bf16, fed and synth, on 4 cards (DEVS, default
+# 0,1,2,3). Written on the 4× RTX 3060 box; scripts/jobs/_box.sh picks the plugin and python per box.
 #
 #     scripts/bf16_probe_3060.sh /tmp/probe.tsv            # every net, both precisions, fed+synth
 #     scripts/bf16_probe_3060.sh /tmp/probe.tsv r34 vit    # just those nets
@@ -27,7 +28,7 @@
 #   here, not one tag for the whole sweep: checkpoints are per-variant and outlive their artifact,
 #   and a shared tag is an invitation for r50 to resume r34's (different region count).
 # ⚠ `PJRT_FFI_RESIDENT=1` is OFF BY DEFAULT and worth ~2×; `SHIM_WORKERS` ~6.5×. Both silent.
-# ⚠ `.venv/bin/python` DOES NOT EXIST on this box. `SHIM_PYTHON` is not optional either.
+# ⚠ On the 3060 box `.venv/bin/python` cannot run the shim; `_box.sh` supplies .venv-cuda's.
 # ⚠⚠ Every number here is a SYSTEM result — shim feed and f32 all-reduce included. For a statement
 #   about the RENDERER alone use scripts/bf16_device_step.py.
 set -u

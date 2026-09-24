@@ -301,6 +301,28 @@ of yolo_map.py with two changes" — now ~460 diff lines); `toy2d_metrics.py:57`
 `bf16_gate2.py:5` (no speedup measured); `verify_excerpt.py:4`, `measure_prose.py:2` (plan archived);
 `blueprint_depgraph_tikz.py:330` (`--help` creates a dir; argparse).
 
+### §7 status (2026-09-24)
+
+Done earlier: `yolo_map_visdrone.py:13`, `render_parity.py`, `jax_imagenet_bench.py` (deleted),
+`mixup_gate.py:32`, `bf16_gate2.py:5`, `verify_excerpt.py:4`. Done now:
+* `bf16_probe_3060.sh` header: 4 cards (DEVS 0,1,2,3), written on the 3060 box, `_box.sh` picks
+  the plugin/python; the "`.venv/bin/python` does not exist on this box" line is 3060-only now.
+* `streamed_val_gate.sh`: goldens come from a pre-8182b6e1 (drain) binary.
+* `toy2d_metrics.py`: `demos/MainDiffusion2d.lean` (no longer under archive/).
+* `fpn_loss_probe_check.py`: "(ROCm)" out; run line names a python with `iree.runtime`.
+* `gen_pjrt_compile_options.py`: regenerate with the repo `.venv` (the pinned jax).
+* `jax.yml`: shim wiring "12 nets (8 base + 4 size variants), 8 distinct shims" (measured by the
+  gate); the convention ratchet comment says the baseline is EMPTY and a stale row fails.
+* `shim_wiring_gate.py`: C1 mis-classifies 5 nets; ViT, ConvNeXt AND R50 default to mixing.
+* `convention_audit.py`: the stale "`enet` carries ONLY `activation`" note (it is clean).
+* `measure_prose.py`: `planning/archive/chapter_makeover.md`.
+* `blueprint_depgraph_tikz.py`: argparse first — `--help` prints usage and writes nothing (used
+  to create a `--help/` dir); a real run still regenerates all 13 figures byte-identically.
+* `tests/TestConvNeXt{T,}TrainPC.lean`, `tests/TestViTTrainPC.lean`: run lines without
+  `IREE_BACKEND=rocm` / `HIP_VISIBLE_DEVICES`; `render_parity` resolves IREE via `_iree.py`.
+* ⚠ Open: 45 more `tests/` files carry ROCm-era run lines (`Run (rocm)`, `IREE_BACKEND=rocm`,
+  `HIP_VISIBLE_DEVICES`, `unset HIP_VISIBLE_DEVICES`) — outside `scripts/`, not swept here.
+
 ## 8. Decided
 
 * `probe_to_eta.py`: the user chose the ImageNet default — `--stat med` is now the default and the

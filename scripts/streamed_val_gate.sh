@@ -4,7 +4,7 @@
 # 30 GB drain did — same count, same top-5, same per-image bitmap — and the gate must go red on
 # the two ways a streamed reader can be wrong without crashing.
 #
-#   scripts/streamed_val_gate.sh golden <net> <variant> <ckpt> <outdir>   # TODAY's binary (drain)
+#   scripts/streamed_val_gate.sh golden <net> <variant> <ckpt> <outdir>   # a pre-8182b6e1 binary (drain)
 #   scripts/streamed_val_gate.sh test   <net> <variant> <ckpt> <outdir>   # the streamed binary
 #
 #   e.g. scripts/streamed_val_gate.sh golden resnet50-in160 lambaccdp8x64bce \

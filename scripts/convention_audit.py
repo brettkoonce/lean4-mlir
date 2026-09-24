@@ -139,10 +139,9 @@ NETS = {
 # The ledger above, as an assertion. `--selftest` requires the audit to reproduce it: an audit that
 # cannot rediscover the findings that motivated it is not working, and a green run would be the
 # most expensive possible way to be wrong.
-# ⚠ `enet` carries ONLY `activation`. Its stem padding was switched to XLA `SAME` and re-run on
-# 2026-08-08 (`runs/enet_adam_80ep_xlapad_aug08.log`, 89.76%) — the audit found that row already
-# fixed while a hand-kept ledger still called it open, which is the whole argument for having this
-# script rather than a list in a doc.
+# (`enet`'s stem padding was found already fixed — XLA `SAME`, re-run 2026-08-08,
+# `runs/enet_adam_80ep_xlapad_aug08.log`, 89.76% — while a hand-kept ledger still called it open,
+# which is the whole argument for having this script rather than a list in a doc.)
 # The live ledger: what each net is EXPECTED to still show for padding/activation. All five are
 # now clean on both axes (and `bn-split`, the separate defect r34/mnv2 used to carry, is closed —
 # the baseline is empty). ⚠ Because this is all-clean it no longer proves the detectors work — that job
