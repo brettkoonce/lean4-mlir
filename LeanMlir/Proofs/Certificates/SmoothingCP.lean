@@ -83,6 +83,12 @@ noncomputable def hitCount (A : Set E) (N : ℕ) (ω : Fin N → E) : ℕ :=
   ∑ i, A.indicator 1 (ω i)
 
 omit [MeasurableSpace E] in
+/-- A vote count written as a sum of `if`s is `hitCount` of the voting set. -/
+lemma hitCount_setOf (P : E → Prop) [DecidablePred P] (N : ℕ) (ω : Fin N → E) :
+    (∑ i, if P (ω i) then 1 else 0) = hitCount {v | P v} N ω :=
+  Finset.sum_congr rfl fun i _ => by by_cases h : P (ω i) <;> simp [h]
+
+omit [MeasurableSpace E] in
 /-- The count is monotone in the target set. -/
 lemma hitCount_mono {A B : Set E} (hAB : A ⊆ B) (N : ℕ) (ω : Fin N → E) :
     hitCount A N ω ≤ hitCount B N ω :=
@@ -383,20 +389,14 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   classical
   set γ := stdGaussian (EuclideanSpace ℝ (Fin (n + 1))) with hγ
   set A : Set (EuclideanSpace ℝ (Fin (n + 1))) := {v | C (x + σ • v) = y} with hA_def
-  have hA : MeasurableSet A :=
-    (hC.comp (measurable_const.add (measurable_id.const_smul σ)))
-      (measurableSet_singleton y)
+  have hA : MeasurableSet A := measurableSet_smoothRegion hC x σ y
   -- the true class probability IS the Gaussian measure of A
-  have hpA : γ.real A = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ := by
-    rw [← integral_indicator_one hA]
-    refine integral_congr_ae (ae_of_all _ fun z => ?_)
-    by_cases h : C (x + σ • z) = y <;> simp [h, hA_def]
+  have hpA : γ.real A = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ :=
+    smoothProb_eq_real hC γ x σ y
   -- the driver's count IS hitCount
   have hcount : ∀ ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)),
-      (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω := by
-    intro ω
-    refine Finset.sum_congr rfl fun i _ => ?_
-    by_cases h : C (x + σ • ω i) = y <;> simp [h, hA_def]
+      (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω :=
+    hitCount_setOf (fun v => C (x + σ • v) = y) N
   -- the coverage event implies the certificate
   have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
         cpLower α N (hitCount A N ω) ≤ γ.real A}
@@ -410,19 +410,7 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     simp only [Set.mem_ofPred_eq] at hω ⊢
     intro δ hδ j hj
     rw [hcount ω] at hδ
-    set q : ℝ := cpLower α N (hitCount A N ω) with hq
-    rcases le_or_gt q 0 with hq0 | hq0
-    · rw [stdNormalQuantile_of_nonpos hq0, mul_zero] at hδ
-      exact absurd hδ (not_lt.mpr (norm_nonneg δ))
-    · have hpy := hp y x
-      have hple : q ≤ ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ :=
-        hpA ▸ hω
-      have hqIoo : q ∈ Set.Ioo (0:ℝ) 1 := ⟨hq0, lt_of_le_of_lt hple hpy.2⟩
-      have hmono := stdNormalQuantile_monotoneOn hqIoo hpy hple
-      have hδ' : ‖δ‖ < σ * stdNormalQuantile
-          (∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ) :=
-        lt_of_lt_of_le hδ (mul_le_mul_of_nonneg_left hmono hσ.le)
-      exact smoothing_certified_radius_classifier hσ hC hp hδ' j hj
+    exact smoothing_certified_of_le hσ hC hp (hω.trans_eq hpA) hδ j hj
   calc 1 - α
       ≤ (Measure.pi fun _ : Fin N => γ).real
           {ω | cpLower α N (hitCount A N ω) ≤ γ.real A} :=
@@ -456,18 +444,12 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   classical
   set γ := stdGaussian (EuclideanSpace ℝ (Fin (n + 1))) with hγ
   set A : Set (EuclideanSpace ℝ (Fin (n + 1))) := {v | C (x + σ • v) = y} with hA_def
-  have hA : MeasurableSet A :=
-    (hC.comp (measurable_const.add (measurable_id.const_smul σ)))
-      (measurableSet_singleton y)
-  have hpA : γ.real A = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ := by
-    rw [← integral_indicator_one hA]
-    refine integral_congr_ae (ae_of_all _ fun z => ?_)
-    by_cases h : C (x + σ • z) = y <;> simp [h, hA_def]
+  have hA : MeasurableSet A := measurableSet_smoothRegion hC x σ y
+  have hpA : γ.real A = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ :=
+    smoothProb_eq_real hC γ x σ y
   have hcount : ∀ ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)),
-      (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω := by
-    intro ω
-    refine Finset.sum_congr rfl fun i _ => ?_
-    by_cases h : C (x + σ • ω i) = y <;> simp [h, hA_def]
+      (∑ i, if C (x + σ • ω i) = y then 1 else 0) = hitCount A N ω :=
+    hitCount_setOf (fun v => C (x + σ • v) = y) N
   have hsub : {ω : Fin N → EuclideanSpace ℝ (Fin (n + 1)) |
         cpLower α N (hitCount A N ω) ≤ γ.real A}
       ⊆ {ω | (∑ i, if C (x + σ • ω i) = y then 1 else 0) = k₀ →
@@ -483,15 +465,7 @@ theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     have hqcp : q₀ ≤ cpLower α N (hitCount A N ω) := by
       rw [hcnt]
       exact le_cpLower_of_tail_le hα1 hk₀ (Set.Ioo_subset_Icc_self hq₀) htail
-    have hpy := hp y x
-    have hple : q₀ ≤ ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ := by
-      rw [← hpA]
-      exact hqcp.trans hω
-    have hmono := stdNormalQuantile_monotoneOn hq₀ hpy hple
-    have hδ' : ‖δ‖ < σ * stdNormalQuantile
-        (∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂γ) :=
-      lt_of_lt_of_le hδ (mul_le_mul_of_nonneg_left hmono hσ.le)
-    exact smoothing_certified_radius_classifier hσ hC hp hδ' j hj
+    exact smoothing_certified_of_le hσ hC hp ((hqcp.trans hω).trans_eq hpA) hδ j hj
   calc 1 - α
       ≤ (Measure.pi fun _ : Fin N => γ).real
           {ω | cpLower α N (hitCount A N ω) ≤ γ.real A} :=

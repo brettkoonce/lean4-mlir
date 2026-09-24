@@ -149,15 +149,7 @@ theorem argmaxNet_smoothProb_mem_Ioo {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
   set C : EuclideanSpace ℝ (Fin (n + 1)) → Fin (k + 2) := argmaxNet f with hCdef
   have hC : Measurable C := measurable_argmaxNet fun j => (hf j).measurable
   set A : Set (EuclideanSpace ℝ (Fin (n + 1))) := {v | C (x + σ • v) = c} with hA_def
-  have hA : MeasurableSet A :=
-    (hC.comp (measurable_const.add (measurable_id.const_smul σ)))
-      (measurableSet_singleton c)
-  -- the indicator-integral bridge (same shape as SmoothingCP's hpA)
-  have hpA : γ.real A = ∫ z, (if C (x + σ • z) = c then (1:ℝ) else 0) ∂γ := by
-    rw [← integral_indicator_one hA]
-    refine integral_congr_ae (ae_of_all _ fun z => ?_)
-    by_cases h : C (x + σ • z) = c <;> simp [h, hA_def]
-  rw [← hpA]
+  rw [← smoothProb_eq_real hC γ x σ c]
   -- the affine noise map and the per-class strict open regions
   have haff : Continuous fun z : EuclideanSpace ℝ (Fin (n + 1)) => x + σ • z :=
     continuous_const.add (continuous_id.const_smul σ)

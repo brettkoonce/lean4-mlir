@@ -155,18 +155,7 @@ theorem smoothing_mc_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     intro ω hω
     simp only [Set.mem_ofPred_eq] at hω ⊢
     intro δ hδ j hj
-    set q : ℝ := (∑ i, f (ω i)) / N - t with hq
-    have hδq : ‖δ‖ < σ * stdNormalQuantile q := hδ
-    rcases le_or_gt q 0 with hq0 | hq0
-    · rw [stdNormalQuantile_of_nonpos hq0, mul_zero] at hδq
-      exact absurd hδq (not_lt.mpr (norm_nonneg δ))
-    · -- 0 < q ≤ p < 1: quantile monotone on (0,1) lifts the radius
-      have hpy := hp y x
-      have hqIoo : q ∈ Set.Ioo (0:ℝ) 1 := ⟨hq0, lt_of_le_of_lt hω hpy.2⟩
-      have hmono := stdNormalQuantile_monotoneOn hqIoo hpy hω
-      have hδ' : ‖δ‖ < σ * stdNormalQuantile (∫ z, f z ∂γ) :=
-        lt_of_lt_of_le hδq (mul_le_mul_of_nonneg_left hmono hσ.le)
-      exact smoothing_certified_radius_classifier hσ hC hp hδ' j hj
+    exact smoothing_certified_of_le hσ hC hp hω hδ j hj
   calc 1 - Real.exp (-2 * N * t ^ 2)
       ≤ (Measure.pi fun _ : Fin N => γ).real
           {ω | (∑ i, f (ω i)) / N - t ≤ ∫ z, f z ∂γ} :=

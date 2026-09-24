@@ -150,14 +150,6 @@ lemma integrable_expWeight (d : ℝ) :
   rw [heq]
   exact (integrable_exp_mul_gaussianReal d).const_mul _
 
--- ── coordinate-0 pushforward of the pi measure ──
-
-lemma pi_gaussian_integral_eval {n : ℕ} {g : ℝ → ℝ} (hg : Measurable g) :
-    ∫ z, g (z 0) ∂(stdGaussianPi n) = ∫ s, g s ∂(gaussianReal 0 1) := by
-  have h := (measurePreserving_eval (fun _ : Fin (n + 1) => gaussianReal 0 1) 0).map_eq
-  conv_rhs => rw [← h]
-  rw [integral_map (measurable_pi_apply 0).aemeasurable hg.aestronglyMeasurable]
-
 -- ── the pi-space shift: only coordinate 0 moves ──
 
 lemma insertNth_zero_add_single {n : ℕ} (s d : ℝ) (w : Fin n → ℝ) :
@@ -176,19 +168,6 @@ lemma pi_gaussian_shift_eq {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm : 
   classical
   set e := MeasurableEquiv.piFinSuccAbove (fun _ : Fin (n + 1) => ℝ) 0 with he
   have hpres := measurePreserving_piFinSuccAbove (fun _ : Fin (n + 1) => gaussianReal 0 1) 0
-  -- transfer any measurable integrand to the product side
-  have htrans : ∀ G : (Fin (n + 1) → ℝ) → ℝ, Measurable G →
-      ∫ z, G z ∂(stdGaussianPi n) = ∫ y, G (e.symm y) ∂((stdGaussianPi n).map e) := by
-    intro G hG
-    have hGm : Measurable fun y : ℝ × (Fin n → ℝ) => G (e.symm y) :=
-      hG.comp e.symm.measurable
-    rw [integral_map e.measurable.aemeasurable hGm.aestronglyMeasurable]
-    simp only [MeasurableEquiv.symm_apply_apply]
-  have hmF : Measurable fun z : Fin (n + 1) → ℝ => F (z + d • Pi.single 0 1) :=
-    hFm.comp (measurable_id.add_const _)
-  have hz0 : Measurable fun z : Fin (n + 1) → ℝ => z 0 := measurable_pi_apply 0
-  have hmW : Measurable fun z : Fin (n + 1) → ℝ => Real.exp (d * z 0 - d ^ 2 / 2) * F z :=
-    (Real.measurable_exp.comp ((hz0.const_mul d).sub measurable_const)).mul hFm
   -- e.symm is insertNth at 0
   have hsymm : ∀ y : ℝ × (Fin n → ℝ), e.symm y = (0 : Fin (n + 1)).insertNth y.1 y.2 := by
     intro y; rfl
@@ -201,21 +180,11 @@ lemma pi_gaussian_shift_eq {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm : 
     simpa using hFb _
   have hprodW : Integrable (fun y : ℝ × (Fin n → ℝ) =>
       Real.exp (d * y.1 - d ^ 2 / 2) * F (e.symm y))
-      (((gaussianReal 0 1)).prod (Measure.pi fun _ : Fin n => gaussianReal 0 1)) := by
-    have hWfst : Integrable (fun y : ℝ × (Fin n → ℝ) => Real.exp (d * y.1 - d ^ 2 / 2))
-        (((gaussianReal 0 1)).prod (Measure.pi fun _ : Fin n => gaussianReal 0 1)) := by
-      exact (integrable_expWeight d).comp_fst _
-    refine hWfst.mono'
-      (((Real.measurable_exp.comp (measurable_fst.const_mul d |>.sub measurable_const)).mul
-        (hFm.comp e.symm.measurable)).aestronglyMeasurable)
-      (ae_of_all _ fun y => ?_)
-    rw [Real.norm_eq_abs, abs_mul, Real.abs_exp]
-    calc Real.exp (d * y.1 - d ^ 2 / 2) * |F (e.symm y)|
-        ≤ Real.exp (d * y.1 - d ^ 2 / 2) * 1 :=
-          mul_le_mul_of_nonneg_left (hFb _) (Real.exp_pos _).le
-      _ = Real.exp (d * y.1 - d ^ 2 / 2) := mul_one _
-  -- the chain
-  rw [htrans _ hmF, htrans _ hmW, hpres.map_eq]
+      (((gaussianReal 0 1)).prod (Measure.pi fun _ : Fin n => gaussianReal 0 1)) :=
+    ((integrable_expWeight d).comp_fst _).mul_bdd (hFm.comp e.symm.measurable).aestronglyMeasurable
+      (ae_of_all _ fun y => (Real.norm_eq_abs _).trans_le (hFb _))
+  -- the chain, on the product side
+  rw [← hpres.symm.integral_comp', ← hpres.symm.integral_comp']
   have hstep1 : ∀ y : ℝ × (Fin n → ℝ),
       F (e.symm y + d • Pi.single 0 1) = F (e.symm (y.1 + d, y.2)) := by
     intro y
@@ -224,7 +193,7 @@ lemma pi_gaussian_shift_eq {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm : 
     intro y
     rw [hsymm]
     simp
-  simp only [hstep1, hcoord]
+  simp only [← he, hstep1, hcoord]
   rw [integral_prod_symm _ hprodF, integral_prod_symm _ hprodW]
   congr 1
   funext w
@@ -277,54 +246,29 @@ theorem pi_gaussian_np_shift {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm 
   have hWm : Measurable fun s : ℝ => Real.exp (d * s - d ^ 2 / 2) :=
     Real.measurable_exp.comp ((measurable_id.const_mul d).sub measurable_const)
   have hWΓ : Integrable (fun z : Fin (n + 1) → ℝ => Real.exp (d * z 0 - d ^ 2 / 2))
-      (stdGaussianPi n) := by
-    have h₁ := integrable_expWeight d
-    rw [← (measurePreserving_eval (fun _ : Fin (n + 1) => gaussianReal 0 1) 0).map_eq] at h₁
-    exact (integrable_map_measure hWm.aestronglyMeasurable
-      (measurable_pi_apply 0).aemeasurable).mp h₁
+      (stdGaussianPi n) :=
+    (measurePreserving_eval (fun _ : Fin (n + 1) => gaussianReal 0 1) 0).integrable_comp_of_integrable
+      (integrable_expWeight d)
+  -- a `|·| ≤ 1` factor keeps the weight integrable
+  have hWbdd : ∀ {G : (Fin (n + 1) → ℝ) → ℝ}, Measurable G → (∀ z, |G z| ≤ 1) →
+      Integrable (fun z => Real.exp (d * z 0 - d ^ 2 / 2) * G z) (stdGaussianPi n) :=
+    fun hG hG1 => hWΓ.mul_bdd hG.aestronglyMeasurable
+      (ae_of_all _ fun z => (Real.norm_eq_abs _).trans_le (hG1 z))
   have hFhΓ : Integrable (fun z => F z - h z) (stdGaussianPi n) :=
-    (integrable_const 1).mono' (hFm.sub hhm).aestronglyMeasurable
-      (ae_of_all _ fun z => by rw [Real.norm_eq_abs]; exact habs_fh z)
-  have hintR : Integrable (fun z => Real.exp (d * z 0 - d ^ 2 / 2) * (F z - h z))
-      (stdGaussianPi n) := by
-    refine hWΓ.mono' (((hWm.comp hz0).mul (hFm.sub hhm)).aestronglyMeasurable)
-      (ae_of_all _ fun z => ?_)
-    rw [Real.norm_eq_abs, abs_mul, Real.abs_exp]
-    calc Real.exp (d * z 0 - d ^ 2 / 2) * |F z - h z|
-        ≤ Real.exp (d * z 0 - d ^ 2 / 2) * 1 :=
-          mul_le_mul_of_nonneg_left (habs_fh z) (Real.exp_pos _).le
-      _ = Real.exp (d * z 0 - d ^ 2 / 2) := mul_one _
+    Integrable.of_mem_Icc (-1) 1 (hFm.sub hhm).aemeasurable
+      (ae_of_all _ fun z => abs_le.mp (habs_fh z))
+  have hintR := hWbdd (hFm.sub hhm) habs_fh
   have hkey : c * ∫ z, (F z - h z) ∂(stdGaussianPi n)
       ≤ ∫ z, Real.exp (d * z 0 - d ^ 2 / 2) * (F z - h z) ∂(stdGaussianPi n) := by
     rw [← integral_const_mul]
     exact integral_mono (hFhΓ.const_mul c) hintR hpoint
   -- endpoint integrability + splitting
   have hFint : Integrable F (stdGaussianPi n) :=
-    (integrable_const 1).mono' hFm.aestronglyMeasurable
-      (ae_of_all _ fun z => by rw [Real.norm_eq_abs]; exact hFb z)
+    Integrable.of_mem_Icc 0 1 hFm.aemeasurable (ae_of_all _ fun z => ⟨hF0 z, hF1 z⟩)
   have hhint : Integrable h (stdGaussianPi n) :=
-    (integrable_const 1).mono' hhm.aestronglyMeasurable
-      (ae_of_all _ fun z => by
-        rw [Real.norm_eq_abs]; exact abs_le.mpr ⟨by linarith [hh0 z], hh1 z⟩)
-  have hWFint : Integrable (fun z => Real.exp (d * z 0 - d ^ 2 / 2) * F z)
-      (stdGaussianPi n) := by
-    refine hWΓ.mono' (((hWm.comp hz0).mul hFm).aestronglyMeasurable)
-      (ae_of_all _ fun z => ?_)
-    rw [Real.norm_eq_abs, abs_mul, Real.abs_exp]
-    calc Real.exp (d * z 0 - d ^ 2 / 2) * |F z|
-        ≤ Real.exp (d * z 0 - d ^ 2 / 2) * 1 :=
-          mul_le_mul_of_nonneg_left (hFb z) (Real.exp_pos _).le
-      _ = Real.exp (d * z 0 - d ^ 2 / 2) := mul_one _
-  have hWhint : Integrable (fun z => Real.exp (d * z 0 - d ^ 2 / 2) * h z)
-      (stdGaussianPi n) := by
-    refine hWΓ.mono' (((hWm.comp hz0).mul hhm).aestronglyMeasurable)
-      (ae_of_all _ fun z => ?_)
-    rw [Real.norm_eq_abs, abs_mul, Real.abs_exp]
-    calc Real.exp (d * z 0 - d ^ 2 / 2) * |h z|
-        ≤ Real.exp (d * z 0 - d ^ 2 / 2) * 1 :=
-          mul_le_mul_of_nonneg_left
-            (abs_le.mpr ⟨by linarith [hh0 z], hh1 z⟩) (Real.exp_pos _).le
-      _ = Real.exp (d * z 0 - d ^ 2 / 2) := mul_one _
+    Integrable.of_mem_Icc 0 1 hhm.aemeasurable (ae_of_all _ fun z => ⟨hh0 z, hh1 z⟩)
+  have hWFint := hWbdd hFm hFb
+  have hWhint := hWbdd hhm fun z => abs_le.mpr ⟨by linarith [hh0 z], hh1 z⟩
   rw [integral_sub hFint hhint] at hkey
   have hsplitR : ∫ z, Real.exp (d * z 0 - d ^ 2 / 2) * (F z - h z) ∂(stdGaussianPi n)
       = (∫ z, Real.exp (d * z 0 - d ^ 2 / 2) * F z ∂(stdGaussianPi n))
@@ -337,14 +281,14 @@ theorem pi_gaussian_np_shift {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm 
   -- endpoints: ∫ h = Φ t and ∫ w·h = Φ (t − d)
   have hhval : ∫ z, h z ∂(stdGaussianPi n) = stdNormalCDF t := by
     simp only [hh]
-    rw [pi_gaussian_integral_eval hh1d, integral_indicator_Iic_gaussianReal]
+    rw [integral_comp_eval hh1d.aestronglyMeasurable, integral_indicator_Iic_gaussianReal]
     rfl
   have hWhval : ∫ z, Real.exp (d * z 0 - d ^ 2 / 2) * h z ∂(stdGaussianPi n)
       = stdNormalCDF (t - d) := by
     simp only [hh]
-    rw [pi_gaussian_integral_eval
-      (g := fun s => Real.exp (d * s - d ^ 2 / 2) * (Set.Iic t).indicator (1 : ℝ → ℝ) s)
-      (hWm.mul hh1d), ← integral_gaussianReal_shift_eq hh1d d]
+    rw [integral_comp_eval (μ := fun _ : Fin (n + 1) => gaussianReal 0 1) (i := 0)
+      (f := fun s => Real.exp (d * s - d ^ 2 / 2) * (Set.Iic t).indicator (1 : ℝ → ℝ) s)
+      (hWm.mul hh1d).aestronglyMeasurable, ← integral_gaussianReal_shift_eq hh1d d]
     have hind : ∀ s : ℝ, (Set.Iic t).indicator (1 : ℝ → ℝ) (s + d)
         = (Set.Iic (t - d)).indicator (1 : ℝ → ℝ) s := fun s => by
       simp only [Set.indicator_apply, Set.mem_Iic, Pi.one_apply, le_sub_iff_add_le]
@@ -561,5 +505,47 @@ theorem smoothing_certified_radius_classifier {n k : ℕ} {σ : ℝ} (hσ : 0 < 
         _ = 1 := by simp
     linarith
   exact smoothing_certified_radius_cohen hσ hfm hf0 hf1 hp hrunner hδ
+
+
+/-- The decision region `{v | C (x + σ•v) = y}` of a measurable classifier is measurable. -/
+lemma measurableSet_smoothRegion {n k : ℕ} {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k}
+    (hC : Measurable C) (x : EuclideanSpace ℝ (Fin (n + 1))) (σ : ℝ) (y : Fin k) :
+    MeasurableSet {v | C (x + σ • v) = y} :=
+  (hC.comp (measurable_const.add (measurable_id.const_smul σ))) (measurableSet_singleton y)
+
+/-- **The indicator bridge**: a class probability (the integral of the vote indicator) is the
+    measure of the class's decision region. -/
+lemma smoothProb_eq_real {n k : ℕ} {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k}
+    (hC : Measurable C) (μ : Measure (EuclideanSpace ℝ (Fin (n + 1))))
+    (x : EuclideanSpace ℝ (Fin (n + 1))) (σ : ℝ) (y : Fin k) :
+    μ.real {v | C (x + σ • v) = y} = ∫ z, (if C (x + σ • z) = y then (1:ℝ) else 0) ∂μ := by
+  rw [← integral_indicator_one (measurableSet_smoothRegion hC x σ y)]
+  refine integral_congr_ae (ae_of_all _ fun z => ?_)
+  by_cases h : C (x + σ • z) = y <;> simp [h]
+
+/-- **Any lower bound certifies.** `smoothing_certified_radius_classifier` at a radius
+    `σ·Φ⁻¹(q)` for any `q` below the true class probability — the step every confidence bound
+    (Hoeffding, Clopper–Pearson) takes: `Φ⁻¹` is monotone on `(0,1)`, and `q ≤ 0` gives radius
+    0, which no `δ` beats. -/
+theorem smoothing_certified_of_le {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
+    {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k} (hC : Measurable C)
+    (hp : ∀ c x, (∫ z, (if C (x + σ • z) = c then (1:ℝ) else 0)
+      ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1))))) ∈ Set.Ioo (0:ℝ) 1)
+    {x δ : EuclideanSpace ℝ (Fin (n + 1))} {i : Fin k} {q : ℝ}
+    (hq : q ≤ ∫ z, (if C (x + σ • z) = i then (1:ℝ) else 0)
+      ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+    (hδ : ‖δ‖ < σ * stdNormalQuantile q) :
+    ∀ j, j ≠ i →
+      (∫ z, (if C (x + δ + σ • z) = j then (1:ℝ) else 0)
+          ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))))
+        < ∫ z, (if C (x + δ + σ • z) = i then (1:ℝ) else 0)
+            ∂(stdGaussian (EuclideanSpace ℝ (Fin (n + 1)))) := by
+  rcases le_or_gt q 0 with hq0 | hq0
+  · rw [stdNormalQuantile_of_nonpos hq0, mul_zero] at hδ
+    exact absurd hδ (not_lt.mpr (norm_nonneg δ))
+  · have hpi := hp i x
+    refine smoothing_certified_radius_classifier hσ hC hp (lt_of_lt_of_le hδ ?_)
+    exact mul_le_mul_of_nonneg_left
+      (stdNormalQuantile_monotoneOn ⟨hq0, lt_of_le_of_lt hq hpi.2⟩ hpi hq) hσ.le
 
 end Proofs
