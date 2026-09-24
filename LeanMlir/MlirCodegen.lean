@@ -2559,358 +2559,138 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
   code := code ++ s!"    return {curSSA} : {tensorTy curShape}\n"
   pure code
 
-/-- The forward signature's parameter list and output shape: `%x`, then the interleaved `(W, b)`
-    slots of every param-bearing layer. Shared by `emitForwardSig` and `emitForwardEvalSig`. -/
+/-- Split a layer's `ParamSlot`s into signature groups: each `W` opens a group, and a group's
+    tensors share one parameter index (`%W3, %g3, %bt3`). -/
+private def slotGroups (ss : List ParamSlot) : List (List ParamSlot) :=
+  ss.foldl (fun acc sl =>
+    if sl.nm == "W" || acc.isEmpty then acc ++ [[sl]]
+    else acc.dropLast ++ [acc.getLast! ++ [sl]]) []
+
+/-- One layer's forward-signature parameter arguments starting at index `p`,
+    `,\n    %W3: …, %g3: …, %bt3: …` per group — read off `Layer.paramSlots` — and the next index.
+    `.fpnDetect` keeps its own line layout (laterals, tower pairs, head weights, head biases);
+    `.tokenPositionEmbed` puts both tables on one line. -/
+private def fwdLayerArgs (l : Layer) (p₀ : Nat) : String × Nat := Id.run do
+  let mut out := ""
+  let mut p := p₀
+  match l with
+  | .fpnDetect oc c3 c4 c5 _ A tower =>
+    -- 9 + 6·tower params; see `fpnTowerParamSSAs` for the canonical ordering.
+    let ap := A * 15
+    let hb := fpnHeadBase p tower
+    out := out ++ s!",\n    %W{p}: {tensorTy [oc, c3]}, %W{p + 1}: {tensorTy [oc, c4]}, %W{p + 2}: {tensorTy [oc, c5]}"
+    for i in [0:3] do
+      for j in [0:tower] do
+        let q := p + 3 + i * (2 * tower) + 2 * j
+        out := out ++ s!",\n    %W{q}: {tensorTy [oc, oc, 3, 3]}, %W{q + 1}: {tensorTy [oc]}"
+    out := out ++ s!",\n    %W{hb}: {tensorTy [ap, oc]}, %W{hb + 1}: {tensorTy [ap, oc]}, %W{hb + 2}: {tensorTy [ap, oc]}"
+    out := out ++ s!",\n    %W{hb + 3}: {tensorTy [ap]}, %W{hb + 4}: {tensorTy [ap]}, %W{hb + 5}: {tensorTy [ap]}"
+    p := p + fpnNumParams tower
+  | .tokenPositionEmbed v t d _ _ posEmb =>
+    if posEmb then
+      out := out ++ s!",\n    %W{p}: {tensorTy [v, d]}, %W{p + 1}: {tensorTy [t, d]}"
+      p := p + 2
+    else
+      out := out ++ s!",\n    %W{p}: {tensorTy [v, d]}"
+      p := p + 1
+  | .layerNorm _ | .convNextStem .. => pure ()  -- no lowering here (JAX-side layers)
+  | _ =>
+    for grp in slotGroups (l.paramSlots.getD []) do
+      out := out ++ ",\n    " ++
+        ", ".intercalate (grp.map fun sl => s!"%{sl.nm}{p}: {tensorTy sl.shape}")
+      p := p + 1
+  (out, p)
+
+/-- The forward signature's parameter list and output shape: `%x`, the parameter arguments
+    (`fwdLayerArgs`), and the activation shape walked through every layer. Shared by
+    `emitForwardSig` and `emitForwardEvalSig`. -/
 private def fwdSigParts (spec : NetSpec) (batchSize : Nat) : String × List Nat := Id.run do
   let inDim := inputFlatDim spec
-  let mut params : String := s!"%x: {tensorTy [batchSize, inDim]}"
+  let mut params := s!"%x: {tensorTy [batchSize, inDim]}"
+  let mut p : Nat := 0
   let mut outShape : List Nat := [batchSize, inDim]
   let mut curShape : List Nat := [batchSize, inDim]
   -- Initial reshape if CNN
   match inputChannels spec with
   | some ic => curShape := [batchSize, ic, spec.imageH, spec.imageW]
   | none => pure ()
-  let mut pidx : Nat := 0
+  let down (s : Nat) : List Nat → List Nat
+    | [b, c, h, w] => [b, c, (h + s - 1) / s, (w + s - 1) / s]
+    | sh => sh
+  let withCh (oc : Nat) : List Nat → List Nat
+    | [b, _, h, w] => [b, oc, h, w]
+    | sh => sh
   for l in spec.layers do
+    -- ⚠ The block layers' parameters are emitted only while the activation is rank 4 — a block
+    -- stacked on a flat input loses them here (the train signature keeps them). Kept verbatim.
+    let rank4Only := match l with
+      | .residualBlock .. | .bottleneckBlock .. | .invertedResidual .. | .mbConv ..
+      | .fusedMbConv .. | .mbConvV3 .. | .uib .. => true
+      | _ => false
+    if !rank4Only || curShape.length == 4 then
+      let (a, p') := fwdLayerArgs l p
+      params := params ++ a
+      p := p'
     match l with
-    | .dense fanIn fanOut _ =>
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [fanIn, fanOut]}, %b{pidx}: {tensorTy [fanOut]}"
-      curShape := [batchSize, fanOut]
-      outShape := curShape
-      pidx := pidx + 1
-    | .conv2d ic oc kSize _ _ =>
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, kSize, kSize]}, %b{pidx}: {tensorTy [oc]}"
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, h, w]
-      | _ => pure ()
-      outShape := curShape
-      pidx := pidx + 1
-    | .convBn ic oc kSize stride _ =>
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, kSize, kSize]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-      match curShape with
-      | [b, _, h, w] =>
-        curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-      outShape := curShape
-      pidx := pidx + 1
-    | .unetDown ic oc =>
-      -- 2× convBn (ic→oc, oc→oc) then maxPool 2 (no params).
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-      pidx := pidx + 1
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, oc, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + 1) / 2, (w + 1) / 2]
-      | _ => pure ()
-      outShape := curShape
-    | .unetUp ic oc =>
-      -- bilinear ×2 (no params) + concat with skip(oc) → (ic+oc) channels +
-      -- 2× convBn ((ic+oc)→oc, oc→oc).
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic + oc, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-      pidx := pidx + 1
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, oc, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-      pidx := pidx + 1
+    | .dense _ fanOut _ => curShape := [batchSize, fanOut]
+    | .conv2d _ oc _ _ _ => curShape := withCh oc curShape
+    | .convBn _ oc _ stride _ | .invertedResidual _ oc _ stride _ | .mbConv _ oc _ _ stride _ _ _
+    | .fusedMbConv _ oc _ _ stride _ _ | .mbConvV3 _ oc _ _ stride _ _ | .uib _ oc _ stride _ _
+    | .residualBlock _ oc _ stride | .bottleneckBlock _ oc _ stride =>
+      curShape := down stride (withCh oc curShape)
+    | .unetDown _ oc => curShape := down 2 (withCh oc curShape)
+    | .unetUp _ oc =>
       match curShape with
       | [b, _, h, w] => curShape := [b, oc, h * 2, w * 2]
       | _ => pure ()
-      outShape := curShape
-    | .residualBlock ic oc nBlocks firstStride =>
-      let needsProj := !(ic == oc && firstStride == 1)
-      match curShape with
-      | [b, _, h, w] =>
-        for bi in [:nBlocks] do
-          let blockIc := if bi == 0 then ic else oc
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, blockIc, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-          pidx := pidx + 1
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, oc, 3, 3]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-          pidx := pidx + 1
-          if bi == 0 && needsProj then
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-            pidx := pidx + 1
-        curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
-      | _ => pure ()
-      outShape := curShape
-    | .fpnDetect oc c3 c4 c5 g5 A tower =>
-      -- 9 + 6·tower params; see `fpnTowerParamSSAs` for the canonical ordering.
-      let ap := A * 15
-      let hb := fpnHeadBase pidx tower
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, c3]}, %W{pidx + 1}: {tensorTy [oc, c4]}, %W{pidx + 2}: {tensorTy [oc, c5]}"
-      for i in [0:3] do
-        for j in [0:tower] do
-          let p := pidx + 3 + i * (2 * tower) + 2 * j
-          params := params ++ s!",\n    %W{p}: {tensorTy [oc, oc, 3, 3]}, %W{p + 1}: {tensorTy [oc]}"
-      params := params ++ s!",\n    %W{hb}: {tensorTy [ap, oc]}, %W{hb + 1}: {tensorTy [ap, oc]}, %W{hb + 2}: {tensorTy [ap, oc]}"
-      params := params ++ s!",\n    %W{hb + 3}: {tensorTy [ap]}, %W{hb + 4}: {tensorTy [ap]}, %W{hb + 5}: {tensorTy [ap]}"
+    | .fpnDetect _ _ _ _ g5 A _ =>
       let g4 := 2 * g5; let g3 := 4 * g5
-      curShape := [batchSize, ap * (g3 * g3 + g4 * g4 + g5 * g5)]
-      outShape := curShape
-      pidx := pidx + fpnNumParams tower
-    | .bottleneckBlock ic oc nBlocks firstStride =>
-      let mid := oc / 4
-      let needsProj := !(ic == oc && firstStride == 1)
-      match curShape with
-      | [b, _, h, w] =>
-        for bi in [:nBlocks] do
-          let blockIc := if bi == 0 then ic else oc
-          -- 1x1 reduce
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, blockIc, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-          -- 3x3
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, mid, 3, 3]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-          -- 1x1 expand
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, mid, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-          pidx := pidx + 1
-          if bi == 0 && needsProj then
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-            pidx := pidx + 1
-        curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
-      | _ => pure ()
-      outShape := curShape
-    | .invertedResidual ic oc expand stride nBlocks =>
-      match curShape with
-      | [b, _, h, w] =>
-        for bi in [:nBlocks] do
-          let blockIc := if bi == 0 then ic else oc
-          let mid := blockIc * expand
-          -- Expand 1×1 (skip if expand==1)
-          if expand != 1 then
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, blockIc, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-            pidx := pidx + 1
-          -- Depthwise 3×3
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, 1, 3, 3]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-          -- Project 1×1
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, mid, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-          pidx := pidx + 1
-        let oH := (h + stride - 1) / stride
-        let oW := (w + stride - 1) / stride
-        curShape := [b, oc, oH, oW]
-      | _ => pure ()
-      outShape := curShape
-    | .mbConv ic oc expand kSize stride nBlocks useSE _act =>
-      match curShape with
-      | [b, _, h, w] =>
-        for bi in [:nBlocks] do
-          let blockIc := if bi == 0 then ic else oc
-          let mid := blockIc * expand
-          let seMid := mbConvSeMid blockIc
-          if expand != 1 then
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, blockIc, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-            pidx := pidx + 1
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, 1, kSize, kSize]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-          if useSE then
-            -- SE reduce (conv2d-style: W + b)
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [seMid, mid, 1, 1]}, %b{pidx}: {tensorTy [seMid]}"
-            pidx := pidx + 1
-            -- SE expand
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, seMid, 1, 1]}, %b{pidx}: {tensorTy [mid]}"
-            pidx := pidx + 1
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, mid, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-          pidx := pidx + 1
-        let oH := (h + stride - 1) / stride
-        let oW := (w + stride - 1) / stride
-        curShape := [b, oc, oH, oW]
-      | _ => pure ()
-      outShape := curShape
-    | .fusedMbConv ic oc expand kSize stride nBlocks useSE =>
-      match curShape with
-      | [b, _, h, w] =>
-        for bi in [:nBlocks] do
-          let blockIc := if bi == 0 then ic else oc
-          let mid := if expand == 1 then oc else blockIc * expand
-          let seMid := Nat.max 1 (mid / 4)
-          -- Fused expand: regular k×k conv
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, blockIc, kSize, kSize]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-          if useSE then
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [seMid, mid, 1, 1]}, %b{pidx}: {tensorTy [seMid]}"
-            pidx := pidx + 1
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, seMid, 1, 1]}, %b{pidx}: {tensorTy [mid]}"
-            pidx := pidx + 1
-          if expand != 1 then
-            params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, mid, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-            pidx := pidx + 1
-        let oH := (h + stride - 1) / stride
-        let oW := (w + stride - 1) / stride
-        curShape := [b, oc, oH, oW]
-      | _ => pure ()
-      outShape := curShape
-    | .mbConvV3 ic oc expandCh kSize stride useSE _act =>
-      match curShape with
-      | [b, _, h, w] =>
-        let mid := expandCh
-        let seMid := Nat.max 1 (mid / 4)
-        if expandCh != ic then
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, ic, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, 1, kSize, kSize]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-        pidx := pidx + 1
-        if useSE then
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [seMid, mid, 1, 1]}, %b{pidx}: {tensorTy [seMid]}"
-          pidx := pidx + 1
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, seMid, 1, 1]}, %b{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, mid, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-        pidx := pidx + 1
-        let oH := (h + stride - 1) / stride
-        let oW := (w + stride - 1) / stride
-        curShape := [b, oc, oH, oW]
-      | _ => pure ()
-      outShape := curShape
-    | .uib ic oc expand stride preDWk postDWk =>
-      match curShape with
-      | [b, _, h, w] =>
-        let mid := ic * expand
-        -- preDW (if preDWk > 0)
-        if preDWk > 0 then
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [ic, 1, preDWk, preDWk]}, %g{pidx}: {tensorTy [ic]}, %bt{pidx}: {tensorTy [ic]}"
-          pidx := pidx + 1
-        -- Expand 1×1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, ic, 1, 1]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-        pidx := pidx + 1
-        -- postDW (if postDWk > 0)
-        if postDWk > 0 then
-          params := params ++ s!",\n    %W{pidx}: {tensorTy [mid, 1, postDWk, postDWk]}, %g{pidx}: {tensorTy [mid]}, %bt{pidx}: {tensorTy [mid]}"
-          pidx := pidx + 1
-        -- Project 1×1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, mid, 1, 1]}, %g{pidx}: {tensorTy [oc]}, %bt{pidx}: {tensorTy [oc]}"
-        pidx := pidx + 1
-        let oH := (h + stride - 1) / stride
-        let oW := (w + stride - 1) / stride
-        curShape := [b, oc, oH, oW]
-      | _ => pure ()
-      outShape := curShape
-    | .convNextStage channels nBlocks _norm _act =>
-      -- Per block: DW (W, b) + LN (W=γ, b=β) + 1×1 expand + 1×1 project + LayerScale (W only).
-      let c := channels
-      for _ in [:nBlocks] do
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [c, 1, 7, 7]}, %b{pidx}: {tensorTy [c]}"
-        pidx := pidx + 1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [c]}, %b{pidx}: {tensorTy [c]}"
-        pidx := pidx + 1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [4*c, c, 1, 1]}, %b{pidx}: {tensorTy [4*c]}"
-        pidx := pidx + 1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [c, 4*c, 1, 1]}, %b{pidx}: {tensorTy [c]}"
-        pidx := pidx + 1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [c]}"
-        pidx := pidx + 1
-      outShape := curShape
-    | .convNextDownsample ic oc _norm =>
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [ic]}, %b{pidx}: {tensorTy [ic]}"
-      pidx := pidx + 1
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [oc, ic, 2, 2]}, %b{pidx}: {tensorTy [oc]}"
-      pidx := pidx + 1
+      curShape := [batchSize, A * 15 * (g3 * g3 + g4 * g4 + g5 * g5)]
+    | .convNextStage .. | .timeCondAdd .. => pure ()
+    | .convNextDownsample _ oc _ =>
       match curShape with
       | [b, _, h, w] => curShape := [b, oc, h / 2, w / 2]
       | _ => pure ()
-      outShape := curShape
-    | .maxPool _size stride =>
-      match curShape with
-      | [b, c, h, w] =>
-        let oH := (h + stride - 1) / stride
-        let oW := (w + stride - 1) / stride
-        curShape := [b, c, oH, oW]
-      | _ => pure ()
-      outShape := curShape
+    | .maxPool _ stride => curShape := down stride curShape
     | .globalAvgPool =>
       match curShape with
       | [b, c, _, _] => curShape := [b, c]
       | _ => pure ()
-      outShape := curShape
     | .flatten =>
       match curShape with
       | [b, c, h, w] => curShape := [b, c * h * w]
       | _ => pure ()
-      outShape := curShape
     | .bilinearUpsample scale =>
       match curShape with
       | [b, c, h, w] => curShape := [b, c, h * scale, w * scale]
       | _ => pure ()
-      outShape := curShape
-    | .patchEmbed ic dim pSize nP =>
-      -- 3 parameter slots: W (dim, ic, p, p), b (dim,) with name %b{pidx},
-      -- then cls as %W{pidx+1} (dim,), and pos as %W{pidx+2} ((nP+1), dim)
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [dim, ic, pSize, pSize]}, %b{pidx}: {tensorTy [dim]}"
-      pidx := pidx + 1
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}"
-      pidx := pidx + 1
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [nP + 1, dim]}"
-      pidx := pidx + 1
+    | .patchEmbed _ dim _ nP =>
       match curShape with
       | [b, _, _, _] => curShape := [b, nP + 1, dim]
       | _ => pure ()
-      outShape := curShape
-    | .transformerEncoder dim _heads mlpDim nBlocks causalMask keepSequence _ _ =>
-      for _bi in [:nBlocks] do
-        -- LN1
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
-        pidx := pidx + 1
-        -- Wq, bq
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [dim, dim]}, %b{pidx}: {tensorTy [dim]}"
-        pidx := pidx + 1
-        -- Wk, bk
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [dim, dim]}, %b{pidx}: {tensorTy [dim]}"
-        pidx := pidx + 1
-        -- Wv, bv
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [dim, dim]}, %b{pidx}: {tensorTy [dim]}"
-        pidx := pidx + 1
-        -- Wo, bo
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [dim, dim]}, %b{pidx}: {tensorTy [dim]}"
-        pidx := pidx + 1
-        -- LN2
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
-        pidx := pidx + 1
-        -- Wfc1 (dim, mlpDim), bfc1 (mlpDim,)
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [dim, mlpDim]}, %b{pidx}: {tensorTy [mlpDim]}"
-        pidx := pidx + 1
-        -- Wfc2 (mlpDim, dim), bfc2 (dim,)
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [mlpDim, dim]}, %b{pidx}: {tensorTy [dim]}"
-        pidx := pidx + 1
-      -- Final LN
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [dim]}, %b{pidx}: {tensorTy [dim]}"
-      pidx := pidx + 1
+    | .transformerEncoder dim _heads _ _ causalMask keepSequence _ _ =>
       if !causalMask && !keepSequence then
         match curShape with
         | [b, _, _] => curShape := [b, dim]
         | _ => pure ()
-      outShape := curShape
-    | .tokenPositionEmbed v t d _ _ posEmb =>
-      -- Embedding W [V, D] (named %W{pidx}, no bias) + positional [T, D] (%W{pidx+1}) unless posEmb off.
-      if posEmb then
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}, %W{pidx + 1}: {tensorTy [t, d]}"
-        pidx := pidx + 2
-      else
-        params := params ++ s!",\n    %W{pidx}: {tensorTy [v, d]}"
-        pidx := pidx + 1
+    | .tokenPositionEmbed _ t d _ _ _ =>
       match curShape with
       | [b, _] => curShape := [b, t, d]
       | _ => pure ()
-      outShape := curShape
-    | .lmHead d v t =>
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [d, v]}, %b{pidx}: {tensorTy [v]}"
-      pidx := pidx + 1
+    | .lmHead _ v t =>
       match curShape with
       | [b, _, _] => curShape := [b, t * v]
       | _ => pure ()
-      outShape := curShape
-    | .timeCondAdd c nFreq =>
-      -- Dense W [2·nFreq, C] + bias [C]. Shape passes through.
-      params := params ++ s!",\n    %W{pidx}: {tensorTy [2 * nFreq, c]}, %b{pidx}: {tensorTy [c]}"
-      pidx := pidx + 1
-      outShape := curShape
     | .spatialFlatten =>
       match curShape with
       | [b, c, h, w] => curShape := [b, h * w, c]
       | _ => pure ()
-      outShape := curShape
     | .spatialUnflatten c h w =>
       match curShape with
       | [b, _, _] => curShape := [b, c, h, w]
       | _ => pure ()
-      outShape := curShape
-    | _ => pure ()
+    | _ => continue
+    outShape := curShape
   pure (params, outShape)
 
 /-- Emit function signature: interleaved (W, b) per param-bearing layer. -/
@@ -8788,6 +8568,39 @@ private def emitTrainStepBody (spec : NetSpec) (batchSize : Nat) (_moduleName : 
   code := code ++ s!"      : {String.intercalate ", " retTypes.toList}\n"
   pure code
 
+/-- The train step's parameter arguments with prefix `pfx` (`""` θ, `"m_"`, `"v_"`), one line per
+    group, and the parameter types in order — read off `Layer.paramSlots`. Two layers keep their own
+    line shapes: `.fpnDetect` numbers every tensor, one per line, and `.tokenPositionEmbed` puts its
+    embedding and positional table on one line. -/
+private def trainSigArgs (pfx : String) (spec : NetSpec) : String × Array String := Id.run do
+  let mut out := ""
+  let mut tys : Array String := #[]
+  let mut p : Nat := 0
+  for l in spec.layers do
+    match l with
+    | .fpnDetect oc c3 c4 c5 _ A tower =>
+      for (sh, i) in (fpnDetectParamShapes oc c3 c4 c5 A tower).zipIdx do
+        out := out ++ s!"      %{pfx}W{p + i}: {tensorTy sh},\n"
+        tys := tys.push (tensorTy sh)
+      p := p + fpnNumParams tower
+    | .tokenPositionEmbed v t d _ _ posEmb =>
+      if posEmb then
+        out := out ++ s!"      %{pfx}W{p}: {tensorTy [v, d]}, %{pfx}W{p + 1}: {tensorTy [t, d]},\n"
+        tys := tys.push (tensorTy [v, d]) |>.push (tensorTy [t, d])
+        p := p + 2
+      else
+        out := out ++ s!"      %{pfx}W{p}: {tensorTy [v, d]},\n"
+        tys := tys.push (tensorTy [v, d])
+        p := p + 1
+    | .layerNorm _ | .convNextStem .. => pure ()  -- no lowering here (JAX-side layers)
+    | _ =>
+      for grp in slotGroups (l.paramSlots.getD []) do
+        out := out ++ "      " ++
+          ", ".intercalate (grp.map fun sl => s!"%{pfx}{sl.nm}{p}: {tensorTy sl.shape}") ++ ",\n"
+        tys := tys ++ (grp.map fun sl => tensorTy sl.shape).toArray
+        p := p + 1
+  (out, tys)
+
 /-- Emit the train_step function signature. -/
 private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
     (useSoftLabels : Bool := false) (useSeg : Bool := false)
@@ -8799,917 +8612,10 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
   let B := batchSize
   let NC := spec.numClasses
   let inDim := inputFlatDim spec
-  let mut params : String := ""
-  let mut paramRetTypes : Array String := #[]
-  let mut mRetTypes : Array String := #[]
-  let mut vRetTypes : Array String := #[]
-  let mut pidx : Nat := 0
-  let mut curShape : List Nat := [B, inDim]
-  match inputChannels spec with
-  | some ic => curShape := [B, ic, spec.imageH, spec.imageW]
-  | none => pure ()
-  -- Helper: emit param block for one layer (used for params, m_, and v_)
-  let emitLayerParams := fun (pfx : String) (l : Layer) (idx : Nat) (retTypes : Array String) =>
-    match l with
-    | .conv2d ic oc kSize _ _ =>
-      let wTy := tensorTy [oc, ic, kSize, kSize]; let bTy := tensorTy [oc]
-      (s!"      %{pfx}W{idx}: {wTy}, %{pfx}b{idx}: {bTy},\n",
-       retTypes.push wTy |>.push bTy)
-    | .dense fanIn fanOut _ =>
-      let wTy := tensorTy [fanIn, fanOut]; let bTy := tensorTy [fanOut]
-      (s!"      %{pfx}W{idx}: {wTy}, %{pfx}b{idx}: {bTy},\n",
-       retTypes.push wTy |>.push bTy)
-    | .convBn ic oc kSize _ _ =>
-      let wTy := tensorTy [oc, ic, kSize, kSize]; let gTy := tensorTy [oc]
-      (s!"      %{pfx}W{idx}: {wTy}, %{pfx}g{idx}: {gTy}, %{pfx}bt{idx}: {gTy},\n",
-       retTypes.push wTy |>.push gTy |>.push gTy)
-    | _ => ("", retTypes)
-  -- Walk layers to build param/m/v argument lists
-  for l in spec.layers do
-    match l with
-    | .conv2d _ic oc _kSize _ _ =>
-      let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
-      params := params ++ pStr; paramRetTypes := pTys
-      mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
-      vRetTypes := (emitLayerParams "" l pidx vRetTypes).2
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, h, w]
-      | _ => pure ()
-      pidx := pidx + 1
-    | .dense _fanIn fanOut _ =>
-      let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
-      params := params ++ pStr; paramRetTypes := pTys
-      mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
-      vRetTypes := (emitLayerParams "" l pidx vRetTypes).2
-      curShape := [B, fanOut]
-      pidx := pidx + 1
-    | .convBn _ic oc _kSize stride _ =>
-      let (pStr, pTys) := emitLayerParams "" l pidx paramRetTypes
-      params := params ++ pStr; paramRetTypes := pTys
-      mRetTypes := (emitLayerParams "" l pidx mRetTypes).2
-      vRetTypes := (emitLayerParams "" l pidx vRetTypes).2
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-      pidx := pidx + 1
-    | .residualBlock ic oc nBlocks firstStride =>
-      let needsProj := !(ic == oc && firstStride == 1)
-      let gTy := tensorTy [oc]
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let wTy1 := tensorTy [oc, blockIc, 3, 3]
-        params := params ++ s!"      %W{pidx}: {wTy1}, %g{pidx}: {gTy}, %bt{pidx}: {gTy},\n"
-        paramRetTypes := paramRetTypes.push wTy1 |>.push gTy |>.push gTy
-        mRetTypes := mRetTypes.push wTy1 |>.push gTy |>.push gTy
-        vRetTypes := vRetTypes.push wTy1 |>.push gTy |>.push gTy
-        pidx := pidx + 1
-        let wTy2 := tensorTy [oc, oc, 3, 3]
-        params := params ++ s!"      %W{pidx}: {wTy2}, %g{pidx}: {gTy}, %bt{pidx}: {gTy},\n"
-        paramRetTypes := paramRetTypes.push wTy2 |>.push gTy |>.push gTy
-        mRetTypes := mRetTypes.push wTy2 |>.push gTy |>.push gTy
-        vRetTypes := vRetTypes.push wTy2 |>.push gTy |>.push gTy
-        pidx := pidx + 1
-        if bi == 0 && needsProj then
-          let pTy := tensorTy [oc, ic, 1, 1]
-          params := params ++ s!"      %W{pidx}: {pTy}, %g{pidx}: {gTy}, %bt{pidx}: {gTy},\n"
-          paramRetTypes := paramRetTypes.push pTy |>.push gTy |>.push gTy
-          mRetTypes := mRetTypes.push pTy |>.push gTy |>.push gTy
-          vRetTypes := vRetTypes.push pTy |>.push gTy |>.push gTy
-          pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
-      | _ => pure ()
-    | .bottleneckBlock ic oc nBlocks firstStride =>
-      let mid := oc / 4
-      let needsProj := !(ic == oc && firstStride == 1)
-      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let wTy1 := tensorTy [mid, blockIc, 1, 1]
-        params := params ++ s!"      %W{pidx}: {wTy1}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-        paramRetTypes := paramRetTypes.push wTy1 |>.push gTyM |>.push gTyM
-        mRetTypes := mRetTypes.push wTy1 |>.push gTyM |>.push gTyM
-        vRetTypes := vRetTypes.push wTy1 |>.push gTyM |>.push gTyM
-        pidx := pidx + 1
-        let wTy2 := tensorTy [mid, mid, 3, 3]
-        params := params ++ s!"      %W{pidx}: {wTy2}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-        paramRetTypes := paramRetTypes.push wTy2 |>.push gTyM |>.push gTyM
-        mRetTypes := mRetTypes.push wTy2 |>.push gTyM |>.push gTyM
-        vRetTypes := vRetTypes.push wTy2 |>.push gTyM |>.push gTyM
-        pidx := pidx + 1
-        let wTy3 := tensorTy [oc, mid, 1, 1]
-        params := params ++ s!"      %W{pidx}: {wTy3}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
-        paramRetTypes := paramRetTypes.push wTy3 |>.push gTyO |>.push gTyO
-        mRetTypes := mRetTypes.push wTy3 |>.push gTyO |>.push gTyO
-        vRetTypes := vRetTypes.push wTy3 |>.push gTyO |>.push gTyO
-        pidx := pidx + 1
-        if bi == 0 && needsProj then
-          let pTy := tensorTy [oc, ic, 1, 1]
-          params := params ++ s!"      %W{pidx}: {pTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
-          paramRetTypes := paramRetTypes.push pTy |>.push gTyO |>.push gTyO
-          mRetTypes := mRetTypes.push pTy |>.push gTyO |>.push gTyO
-          vRetTypes := vRetTypes.push pTy |>.push gTyO |>.push gTyO
-          pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + firstStride - 1) / firstStride, (w + firstStride - 1) / firstStride]
-      | _ => pure ()
-    | .invertedResidual ic oc expand stride nBlocks =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := blockIc * expand
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        -- Expand 1×1 (skip if expand==1)
-        if expand != 1 then
-          let wTy := tensorTy [mid, blockIc, 1, 1]
-          params := params ++ s!"      %W{pidx}: {wTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-          paramRetTypes := paramRetTypes.push wTy |>.push gTyM |>.push gTyM
-          mRetTypes := mRetTypes.push wTy |>.push gTyM |>.push gTyM
-          vRetTypes := vRetTypes.push wTy |>.push gTyM |>.push gTyM
-          pidx := pidx + 1
-        -- Depthwise 3×3
-        let dwTy := tensorTy [mid, 1, 3, 3]
-        params := params ++ s!"      %W{pidx}: {dwTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-        paramRetTypes := paramRetTypes.push dwTy |>.push gTyM |>.push gTyM
-        mRetTypes := mRetTypes.push dwTy |>.push gTyM |>.push gTyM
-        vRetTypes := vRetTypes.push dwTy |>.push gTyM |>.push gTyM
-        pidx := pidx + 1
-        -- Project 1×1
-        let pjTy := tensorTy [oc, mid, 1, 1]
-        params := params ++ s!"      %W{pidx}: {pjTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
-        paramRetTypes := paramRetTypes.push pjTy |>.push gTyO |>.push gTyO
-        mRetTypes := mRetTypes.push pjTy |>.push gTyO |>.push gTyO
-        vRetTypes := vRetTypes.push pjTy |>.push gTyO |>.push gTyO
-        pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-    | .mbConv ic oc expand kSize stride nBlocks useSE _act =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := blockIc * expand
-        let seMid := mbConvSeMid blockIc
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        if expand != 1 then
-          let wTy := tensorTy [mid, blockIc, 1, 1]
-          params := params ++ s!"      %W{pidx}: {wTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-          paramRetTypes := paramRetTypes.push wTy |>.push gTyM |>.push gTyM
-          mRetTypes := mRetTypes.push wTy |>.push gTyM |>.push gTyM
-          vRetTypes := vRetTypes.push wTy |>.push gTyM |>.push gTyM
-          pidx := pidx + 1
-        let dwTy := tensorTy [mid, 1, kSize, kSize]
-        params := params ++ s!"      %W{pidx}: {dwTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-        paramRetTypes := paramRetTypes.push dwTy |>.push gTyM |>.push gTyM
-        mRetTypes := mRetTypes.push dwTy |>.push gTyM |>.push gTyM
-        vRetTypes := vRetTypes.push dwTy |>.push gTyM |>.push gTyM
-        pidx := pidx + 1
-        if useSE then
-          let wRedTy := tensorTy [seMid, mid, 1, 1]
-          let bRedTy := tensorTy [seMid]
-          params := params ++ s!"      %W{pidx}: {wRedTy}, %b{pidx}: {bRedTy},\n"
-          paramRetTypes := paramRetTypes.push wRedTy |>.push bRedTy
-          mRetTypes := mRetTypes.push wRedTy |>.push bRedTy
-          vRetTypes := vRetTypes.push wRedTy |>.push bRedTy
-          pidx := pidx + 1
-          let wExpTy := tensorTy [mid, seMid, 1, 1]
-          let bExpTy := tensorTy [mid]
-          params := params ++ s!"      %W{pidx}: {wExpTy}, %b{pidx}: {bExpTy},\n"
-          paramRetTypes := paramRetTypes.push wExpTy |>.push bExpTy
-          mRetTypes := mRetTypes.push wExpTy |>.push bExpTy
-          vRetTypes := vRetTypes.push wExpTy |>.push bExpTy
-          pidx := pidx + 1
-        let pjTy := tensorTy [oc, mid, 1, 1]
-        params := params ++ s!"      %W{pidx}: {pjTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
-        paramRetTypes := paramRetTypes.push pjTy |>.push gTyO |>.push gTyO
-        mRetTypes := mRetTypes.push pjTy |>.push gTyO |>.push gTyO
-        vRetTypes := vRetTypes.push pjTy |>.push gTyO |>.push gTyO
-        pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-    | .fusedMbConv ic oc expand kSize stride nBlocks useSE =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := if expand == 1 then oc else blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        -- Fused expand: regular kxk convBn
-        let wTy := tensorTy [mid, blockIc, kSize, kSize]
-        params := params ++ s!"      %W{pidx}: {wTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-        paramRetTypes := paramRetTypes.push wTy |>.push gTyM |>.push gTyM
-        mRetTypes := mRetTypes.push wTy |>.push gTyM |>.push gTyM
-        vRetTypes := vRetTypes.push wTy |>.push gTyM |>.push gTyM
-        pidx := pidx + 1
-        if useSE then
-          let wRedTy := tensorTy [seMid, mid, 1, 1]
-          let bRedTy := tensorTy [seMid]
-          params := params ++ s!"      %W{pidx}: {wRedTy}, %b{pidx}: {bRedTy},\n"
-          paramRetTypes := paramRetTypes.push wRedTy |>.push bRedTy
-          mRetTypes := mRetTypes.push wRedTy |>.push bRedTy
-          vRetTypes := vRetTypes.push wRedTy |>.push bRedTy
-          pidx := pidx + 1
-          let wExpTy := tensorTy [mid, seMid, 1, 1]
-          let bExpTy := tensorTy [mid]
-          params := params ++ s!"      %W{pidx}: {wExpTy}, %b{pidx}: {bExpTy},\n"
-          paramRetTypes := paramRetTypes.push wExpTy |>.push bExpTy
-          mRetTypes := mRetTypes.push wExpTy |>.push bExpTy
-          vRetTypes := vRetTypes.push wExpTy |>.push bExpTy
-          pidx := pidx + 1
-        if expand != 1 then
-          let pjTy := tensorTy [oc, mid, 1, 1]
-          params := params ++ s!"      %W{pidx}: {pjTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
-          paramRetTypes := paramRetTypes.push pjTy |>.push gTyO |>.push gTyO
-          mRetTypes := mRetTypes.push pjTy |>.push gTyO |>.push gTyO
-          vRetTypes := vRetTypes.push pjTy |>.push gTyO |>.push gTyO
-          pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-    | .mbConvV3 ic oc expandCh kSize stride useSE _act =>
-      let mid := expandCh
-      let seMid := Nat.max 1 (mid / 4)
-      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      if expandCh != ic then
-        let wTy := tensorTy [mid, ic, 1, 1]
-        params := params ++ s!"      %W{pidx}: {wTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-        paramRetTypes := paramRetTypes.push wTy |>.push gTyM |>.push gTyM
-        mRetTypes := mRetTypes.push wTy |>.push gTyM |>.push gTyM
-        vRetTypes := vRetTypes.push wTy |>.push gTyM |>.push gTyM
-        pidx := pidx + 1
-      let dwTy := tensorTy [mid, 1, kSize, kSize]
-      params := params ++ s!"      %W{pidx}: {dwTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-      paramRetTypes := paramRetTypes.push dwTy |>.push gTyM |>.push gTyM
-      mRetTypes := mRetTypes.push dwTy |>.push gTyM |>.push gTyM
-      vRetTypes := vRetTypes.push dwTy |>.push gTyM |>.push gTyM
-      pidx := pidx + 1
-      if useSE then
-        let wRedTy := tensorTy [seMid, mid, 1, 1]
-        let bRedTy := tensorTy [seMid]
-        params := params ++ s!"      %W{pidx}: {wRedTy}, %b{pidx}: {bRedTy},\n"
-        paramRetTypes := paramRetTypes.push wRedTy |>.push bRedTy
-        mRetTypes := mRetTypes.push wRedTy |>.push bRedTy
-        vRetTypes := vRetTypes.push wRedTy |>.push bRedTy
-        pidx := pidx + 1
-        let wExpTy := tensorTy [mid, seMid, 1, 1]
-        let bExpTy := tensorTy [mid]
-        params := params ++ s!"      %W{pidx}: {wExpTy}, %b{pidx}: {bExpTy},\n"
-        paramRetTypes := paramRetTypes.push wExpTy |>.push bExpTy
-        mRetTypes := mRetTypes.push wExpTy |>.push bExpTy
-        vRetTypes := vRetTypes.push wExpTy |>.push bExpTy
-        pidx := pidx + 1
-      let pjTy := tensorTy [oc, mid, 1, 1]
-      params := params ++ s!"      %W{pidx}: {pjTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
-      paramRetTypes := paramRetTypes.push pjTy |>.push gTyO |>.push gTyO
-      mRetTypes := mRetTypes.push pjTy |>.push gTyO |>.push gTyO
-      vRetTypes := vRetTypes.push pjTy |>.push gTyO |>.push gTyO
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-    | .uib ic oc expand stride preDWk postDWk =>
-      let mid := ic * expand
-      let gTyI := tensorTy [ic]; let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      -- preDW (if preDWk > 0): W[ic, 1, k, k], gamma/beta [ic]
-      if preDWk > 0 then
-        let wTy := tensorTy [ic, 1, preDWk, preDWk]
-        params := params ++ s!"      %W{pidx}: {wTy}, %g{pidx}: {gTyI}, %bt{pidx}: {gTyI},\n"
-        paramRetTypes := paramRetTypes.push wTy |>.push gTyI |>.push gTyI
-        mRetTypes := mRetTypes.push wTy |>.push gTyI |>.push gTyI
-        vRetTypes := vRetTypes.push wTy |>.push gTyI |>.push gTyI
-        pidx := pidx + 1
-      -- Expand 1×1: W[mid, ic, 1, 1]
-      let exTy := tensorTy [mid, ic, 1, 1]
-      params := params ++ s!"      %W{pidx}: {exTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-      paramRetTypes := paramRetTypes.push exTy |>.push gTyM |>.push gTyM
-      mRetTypes := mRetTypes.push exTy |>.push gTyM |>.push gTyM
-      vRetTypes := vRetTypes.push exTy |>.push gTyM |>.push gTyM
-      pidx := pidx + 1
-      -- postDW (if postDWk > 0): W[mid, 1, k, k]
-      if postDWk > 0 then
-        let wTy := tensorTy [mid, 1, postDWk, postDWk]
-        params := params ++ s!"      %W{pidx}: {wTy}, %g{pidx}: {gTyM}, %bt{pidx}: {gTyM},\n"
-        paramRetTypes := paramRetTypes.push wTy |>.push gTyM |>.push gTyM
-        mRetTypes := mRetTypes.push wTy |>.push gTyM |>.push gTyM
-        vRetTypes := vRetTypes.push wTy |>.push gTyM |>.push gTyM
-        pidx := pidx + 1
-      -- Project 1×1: W[oc, mid, 1, 1]
-      let pjTy := tensorTy [oc, mid, 1, 1]
-      params := params ++ s!"      %W{pidx}: {pjTy}, %g{pidx}: {gTyO}, %bt{pidx}: {gTyO},\n"
-      paramRetTypes := paramRetTypes.push pjTy |>.push gTyO |>.push gTyO
-      mRetTypes := mRetTypes.push pjTy |>.push gTyO |>.push gTyO
-      vRetTypes := vRetTypes.push pjTy |>.push gTyO |>.push gTyO
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-    | .convNextStage channels nBlocks _norm _act =>
-      let c := channels
-      let cTy := tensorTy [c]
-      let dwTy := tensorTy [c, 1, 7, 7]
-      let exTy := tensorTy [4*c, c, 1, 1]
-      let exB := tensorTy [4*c]
-      let pjTy := tensorTy [c, 4*c, 1, 1]
-      for _ in [:nBlocks] do
-        -- DW (W, b)
-        params := params ++ s!"      %W{pidx}: {dwTy}, %b{pidx}: {cTy},\n"
-        paramRetTypes := paramRetTypes.push dwTy |>.push cTy
-        mRetTypes := mRetTypes.push dwTy |>.push cTy
-        vRetTypes := vRetTypes.push dwTy |>.push cTy
-        pidx := pidx + 1
-        -- LN (γ, β)
-        params := params ++ s!"      %W{pidx}: {cTy}, %b{pidx}: {cTy},\n"
-        paramRetTypes := paramRetTypes.push cTy |>.push cTy
-        mRetTypes := mRetTypes.push cTy |>.push cTy
-        vRetTypes := vRetTypes.push cTy |>.push cTy
-        pidx := pidx + 1
-        -- 1×1 expand (W, b)
-        params := params ++ s!"      %W{pidx}: {exTy}, %b{pidx}: {exB},\n"
-        paramRetTypes := paramRetTypes.push exTy |>.push exB
-        mRetTypes := mRetTypes.push exTy |>.push exB
-        vRetTypes := vRetTypes.push exTy |>.push exB
-        pidx := pidx + 1
-        -- 1×1 project (W, b)
-        params := params ++ s!"      %W{pidx}: {pjTy}, %b{pidx}: {cTy},\n"
-        paramRetTypes := paramRetTypes.push pjTy |>.push cTy
-        mRetTypes := mRetTypes.push pjTy |>.push cTy
-        vRetTypes := vRetTypes.push pjTy |>.push cTy
-        pidx := pidx + 1
-        -- LayerScale (γ only)
-        params := params ++ s!"      %W{pidx}: {cTy},\n"
-        paramRetTypes := paramRetTypes.push cTy
-        mRetTypes := mRetTypes.push cTy
-        vRetTypes := vRetTypes.push cTy
-        pidx := pidx + 1
-    | .convNextDownsample ic oc _norm =>
-      let icTy := tensorTy [ic]
-      let ocTy := tensorTy [oc]
-      let cvTy := tensorTy [oc, ic, 2, 2]
-      -- LN (γ, β)
-      params := params ++ s!"      %W{pidx}: {icTy}, %b{pidx}: {icTy},\n"
-      paramRetTypes := paramRetTypes.push icTy |>.push icTy
-      mRetTypes := mRetTypes.push icTy |>.push icTy
-      vRetTypes := vRetTypes.push icTy |>.push icTy
-      pidx := pidx + 1
-      -- 2×2 stride-2 conv (W, b)
-      params := params ++ s!"      %W{pidx}: {cvTy}, %b{pidx}: {ocTy},\n"
-      paramRetTypes := paramRetTypes.push cvTy |>.push ocTy
-      mRetTypes := mRetTypes.push cvTy |>.push ocTy
-      vRetTypes := vRetTypes.push cvTy |>.push ocTy
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, h / 2, w / 2]
-      | _ => pure ()
-    | .unetDown ic oc =>
-      -- 2× convBn (ic→oc, oc→oc) then maxPool 2 (no params).
-      let ocTy := tensorTy [oc]
-      let cv1Ty := tensorTy [oc, ic, 3, 3]
-      let cv2Ty := tensorTy [oc, oc, 3, 3]
-      params := params ++ s!"      %W{pidx}: {cv1Ty}, %g{pidx}: {ocTy}, %bt{pidx}: {ocTy},\n"
-      paramRetTypes := paramRetTypes.push cv1Ty |>.push ocTy |>.push ocTy
-      mRetTypes := mRetTypes.push cv1Ty |>.push ocTy |>.push ocTy
-      vRetTypes := vRetTypes.push cv1Ty |>.push ocTy |>.push ocTy
-      pidx := pidx + 1
-      params := params ++ s!"      %W{pidx}: {cv2Ty}, %g{pidx}: {ocTy}, %bt{pidx}: {ocTy},\n"
-      paramRetTypes := paramRetTypes.push cv2Ty |>.push ocTy |>.push ocTy
-      mRetTypes := mRetTypes.push cv2Ty |>.push ocTy |>.push ocTy
-      vRetTypes := vRetTypes.push cv2Ty |>.push ocTy |>.push ocTy
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, (h + 1) / 2, (w + 1) / 2]
-      | _ => pure ()
-    | .unetUp ic oc =>
-      -- bilinear ×2 (no params) + concat → 2× convBn ((ic+oc)→oc, oc→oc).
-      let ocTy := tensorTy [oc]
-      let cv1Ty := tensorTy [oc, ic + oc, 3, 3]
-      let cv2Ty := tensorTy [oc, oc, 3, 3]
-      params := params ++ s!"      %W{pidx}: {cv1Ty}, %g{pidx}: {ocTy}, %bt{pidx}: {ocTy},\n"
-      paramRetTypes := paramRetTypes.push cv1Ty |>.push ocTy |>.push ocTy
-      mRetTypes := mRetTypes.push cv1Ty |>.push ocTy |>.push ocTy
-      vRetTypes := vRetTypes.push cv1Ty |>.push ocTy |>.push ocTy
-      pidx := pidx + 1
-      params := params ++ s!"      %W{pidx}: {cv2Ty}, %g{pidx}: {ocTy}, %bt{pidx}: {ocTy},\n"
-      paramRetTypes := paramRetTypes.push cv2Ty |>.push ocTy |>.push ocTy
-      mRetTypes := mRetTypes.push cv2Ty |>.push ocTy |>.push ocTy
-      vRetTypes := vRetTypes.push cv2Ty |>.push ocTy |>.push ocTy
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, h, w] => curShape := [b, oc, h * 2, w * 2]
-      | _ => pure ()
-    | .maxPool _size stride =>
-      match curShape with
-      | [b, c, h, w] => curShape := [b, c, (h + stride - 1) / stride, (w + stride - 1) / stride]
-      | _ => pure ()
-    | .globalAvgPool =>
-      match curShape with
-      | [b, c, _, _] => curShape := [b, c]
-      | _ => pure ()
-    | .flatten =>
-      match curShape with
-      | [b, c, h, w] => curShape := [b, c * h * w]
-      | _ => pure ()
-    | .patchEmbed ic dim pSize nP =>
-      let wTy := tensorTy [dim, ic, pSize, pSize]; let bTy := tensorTy [dim]
-      let clsTy := tensorTy [dim]; let posTy := tensorTy [nP + 1, dim]
-      params := params ++ s!"      %W{pidx}: {wTy}, %b{pidx}: {bTy},\n"
-      paramRetTypes := paramRetTypes.push wTy |>.push bTy
-      mRetTypes := mRetTypes.push wTy |>.push bTy
-      vRetTypes := vRetTypes.push wTy |>.push bTy
-      pidx := pidx + 1
-      params := params ++ s!"      %W{pidx}: {clsTy},\n"
-      paramRetTypes := paramRetTypes.push clsTy
-      mRetTypes := mRetTypes.push clsTy
-      vRetTypes := vRetTypes.push clsTy
-      pidx := pidx + 1
-      params := params ++ s!"      %W{pidx}: {posTy},\n"
-      paramRetTypes := paramRetTypes.push posTy
-      mRetTypes := mRetTypes.push posTy
-      vRetTypes := vRetTypes.push posTy
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, _, _] => curShape := [b, nP + 1, dim]
-      | _ => pure ()
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
-      let dTy := tensorTy [dim]
-      let ddTy := tensorTy [dim, dim]
-      let fc1Ty := tensorTy [dim, mlpDim]
-      let fc2Ty := tensorTy [mlpDim, dim]
-      let mlpBTy := tensorTy [mlpDim]
-      for _bi in [:nBlocks] do
-        -- LN1
-        params := params ++ s!"      %W{pidx}: {dTy}, %b{pidx}: {dTy},\n"
-        paramRetTypes := paramRetTypes.push dTy |>.push dTy
-        mRetTypes := mRetTypes.push dTy |>.push dTy
-        vRetTypes := vRetTypes.push dTy |>.push dTy
-        pidx := pidx + 1
-        -- Wq, bq
-        params := params ++ s!"      %W{pidx}: {ddTy}, %b{pidx}: {dTy},\n"
-        paramRetTypes := paramRetTypes.push ddTy |>.push dTy
-        mRetTypes := mRetTypes.push ddTy |>.push dTy
-        vRetTypes := vRetTypes.push ddTy |>.push dTy
-        pidx := pidx + 1
-        -- Wk, bk
-        params := params ++ s!"      %W{pidx}: {ddTy}, %b{pidx}: {dTy},\n"
-        paramRetTypes := paramRetTypes.push ddTy |>.push dTy
-        mRetTypes := mRetTypes.push ddTy |>.push dTy
-        vRetTypes := vRetTypes.push ddTy |>.push dTy
-        pidx := pidx + 1
-        -- Wv, bv
-        params := params ++ s!"      %W{pidx}: {ddTy}, %b{pidx}: {dTy},\n"
-        paramRetTypes := paramRetTypes.push ddTy |>.push dTy
-        mRetTypes := mRetTypes.push ddTy |>.push dTy
-        vRetTypes := vRetTypes.push ddTy |>.push dTy
-        pidx := pidx + 1
-        -- Wo, bo
-        params := params ++ s!"      %W{pidx}: {ddTy}, %b{pidx}: {dTy},\n"
-        paramRetTypes := paramRetTypes.push ddTy |>.push dTy
-        mRetTypes := mRetTypes.push ddTy |>.push dTy
-        vRetTypes := vRetTypes.push ddTy |>.push dTy
-        pidx := pidx + 1
-        -- LN2
-        params := params ++ s!"      %W{pidx}: {dTy}, %b{pidx}: {dTy},\n"
-        paramRetTypes := paramRetTypes.push dTy |>.push dTy
-        mRetTypes := mRetTypes.push dTy |>.push dTy
-        vRetTypes := vRetTypes.push dTy |>.push dTy
-        pidx := pidx + 1
-        -- Wfc1, bfc1
-        params := params ++ s!"      %W{pidx}: {fc1Ty}, %b{pidx}: {mlpBTy},\n"
-        paramRetTypes := paramRetTypes.push fc1Ty |>.push mlpBTy
-        mRetTypes := mRetTypes.push fc1Ty |>.push mlpBTy
-        vRetTypes := vRetTypes.push fc1Ty |>.push mlpBTy
-        pidx := pidx + 1
-        -- Wfc2, bfc2
-        params := params ++ s!"      %W{pidx}: {fc2Ty}, %b{pidx}: {dTy},\n"
-        paramRetTypes := paramRetTypes.push fc2Ty |>.push dTy
-        mRetTypes := mRetTypes.push fc2Ty |>.push dTy
-        vRetTypes := vRetTypes.push fc2Ty |>.push dTy
-        pidx := pidx + 1
-      -- Final LN
-      params := params ++ s!"      %W{pidx}: {dTy}, %b{pidx}: {dTy},\n"
-      paramRetTypes := paramRetTypes.push dTy |>.push dTy
-      mRetTypes := mRetTypes.push dTy |>.push dTy
-      vRetTypes := vRetTypes.push dTy |>.push dTy
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, _] => curShape := [b, dim]
-      | _ => pure ()
-    | .tokenPositionEmbed v t d _ _ posEmb =>
-      let wTy := tensorTy [v, d]
-      let posTy := tensorTy [t, d]
-      if posEmb then
-        params := params ++ s!"      %W{pidx}: {wTy}, %W{pidx + 1}: {posTy},\n"
-        paramRetTypes := paramRetTypes.push wTy |>.push posTy
-        mRetTypes := mRetTypes.push wTy |>.push posTy
-        vRetTypes := vRetTypes.push wTy |>.push posTy
-        pidx := pidx + 2
-      else
-        params := params ++ s!"      %W{pidx}: {wTy},\n"
-        paramRetTypes := paramRetTypes.push wTy
-        mRetTypes := mRetTypes.push wTy
-        vRetTypes := vRetTypes.push wTy
-        pidx := pidx + 1
-      match curShape with
-      | [b, _] => curShape := [b, t, d]
-      | _ => pure ()
-    | .lmHead d v t =>
-      let wTy := tensorTy [d, v]
-      let bTy := tensorTy [v]
-      params := params ++ s!"      %W{pidx}: {wTy}, %b{pidx}: {bTy},\n"
-      paramRetTypes := paramRetTypes.push wTy |>.push bTy
-      mRetTypes := mRetTypes.push wTy |>.push bTy
-      vRetTypes := vRetTypes.push wTy |>.push bTy
-      pidx := pidx + 1
-      match curShape with
-      | [b, _, _] => curShape := [b, v, t, 1]
-      | _ => pure ()
-    | .timeCondAdd c nFreq =>
-      let wTy := tensorTy [2 * nFreq, c]
-      let bTy := tensorTy [c]
-      params := params ++ s!"      %W{pidx}: {wTy}, %b{pidx}: {bTy},\n"
-      paramRetTypes := paramRetTypes.push wTy |>.push bTy
-      mRetTypes := mRetTypes.push wTy |>.push bTy
-      vRetTypes := vRetTypes.push wTy |>.push bTy
-      pidx := pidx + 1
-      -- curShape unchanged (added onto the feature map)
-    | .fpnDetect oc c3 c4 c5 _ A tower =>
-      -- Neck laterals + optional tower + head convs + head biases. No BN.
-      let wtys := (fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy
-      for (wt, i) in wtys.zipIdx do
-        params := params ++ s!"      %W{pidx + i}: {wt},\n"
-        paramRetTypes := paramRetTypes.push wt
-        mRetTypes := mRetTypes.push wt
-        vRetTypes := vRetTypes.push wt
-      pidx := pidx + fpnNumParams tower
-    | _ => pure ()
-  -- m_ params (1st moment, same shapes)
-  let mut mpidx : Nat := 0
-  for l in spec.layers do
-    let (pStr, _) := emitLayerParams "m_" l mpidx #[]
-    if pStr != "" then
-      params := params ++ pStr; mpidx := mpidx + 1
-    -- Handle residual/bottleneck/invertedResidual blocks manually
-    match l with
-    | .residualBlock ic oc nBlocks firstStride =>
-      let needsProj := !(ic == oc && firstStride == 1)
-      let gTy := tensorTy [oc]
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, blockIc, 3, 3]}, %m_g{mpidx}: {gTy}, %m_bt{mpidx}: {gTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, oc, 3, 3]}, %m_g{mpidx}: {gTy}, %m_bt{mpidx}: {gTy},\n"
-        mpidx := mpidx + 1
-        if bi == 0 && needsProj then
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, ic, 1, 1]}, %m_g{mpidx}: {gTy}, %m_bt{mpidx}: {gTy},\n"
-          mpidx := mpidx + 1
-    | .bottleneckBlock ic oc nBlocks firstStride =>
-      let mid := oc / 4; let needsProj := !(ic == oc && firstStride == 1)
-      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, blockIc, 1, 1]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, mid, 3, 3]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, mid, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
-        mpidx := mpidx + 1
-        if bi == 0 && needsProj then
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, ic, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
-          mpidx := mpidx + 1
-    | .invertedResidual ic oc expand _ nBlocks =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := blockIc * expand
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        if expand != 1 then
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, blockIc, 1, 1]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-          mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, 1, 3, 3]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, mid, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
-        mpidx := mpidx + 1
-    | .mbConv ic oc expand kSize _ nBlocks useSE _act =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := blockIc * expand
-        let seMid := mbConvSeMid blockIc
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        if expand != 1 then
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, blockIc, 1, 1]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-          mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, 1, kSize, kSize]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-        mpidx := mpidx + 1
-        if useSE then
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [seMid, mid, 1, 1]}, %m_b{mpidx}: {tensorTy [seMid]},\n"
-          mpidx := mpidx + 1
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, seMid, 1, 1]}, %m_b{mpidx}: {tensorTy [mid]},\n"
-          mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, mid, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
-        mpidx := mpidx + 1
-    | .fusedMbConv ic oc expand kSize _ nBlocks useSE =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := if expand == 1 then oc else blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, blockIc, kSize, kSize]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-        mpidx := mpidx + 1
-        if useSE then
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [seMid, mid, 1, 1]}, %m_b{mpidx}: {tensorTy [seMid]},\n"
-          mpidx := mpidx + 1
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, seMid, 1, 1]}, %m_b{mpidx}: {tensorTy [mid]},\n"
-          mpidx := mpidx + 1
-        if expand != 1 then
-          params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, mid, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
-          mpidx := mpidx + 1
-    | .mbConvV3 ic oc expandCh kSize _ useSE _ =>
-      let mid := expandCh
-      let seMid := Nat.max 1 (mid / 4)
-      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      if expandCh != ic then
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, ic, 1, 1]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-        mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, 1, kSize, kSize]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-      mpidx := mpidx + 1
-      if useSE then
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [seMid, mid, 1, 1]}, %m_b{mpidx}: {tensorTy [seMid]},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, seMid, 1, 1]}, %m_b{mpidx}: {tensorTy [mid]},\n"
-        mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, mid, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
-      mpidx := mpidx + 1
-    | .uib ic oc expand _stride preDWk postDWk =>
-      let mid := ic * expand
-      let gTyI := tensorTy [ic]; let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      if preDWk > 0 then
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [ic, 1, preDWk, preDWk]}, %m_g{mpidx}: {gTyI}, %m_bt{mpidx}: {gTyI},\n"
-        mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, ic, 1, 1]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-      mpidx := mpidx + 1
-      if postDWk > 0 then
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [mid, 1, postDWk, postDWk]}, %m_g{mpidx}: {gTyM}, %m_bt{mpidx}: {gTyM},\n"
-        mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, mid, 1, 1]}, %m_g{mpidx}: {gTyO}, %m_bt{mpidx}: {gTyO},\n"
-      mpidx := mpidx + 1
-    | .convNextStage channels nBlocks _norm _act =>
-      let c := channels
-      let cTy := tensorTy [c]
-      let dwTy := tensorTy [c, 1, 7, 7]
-      let exTy := tensorTy [4*c, c, 1, 1]; let exB := tensorTy [4*c]
-      let pjTy := tensorTy [c, 4*c, 1, 1]
-      for _ in [:nBlocks] do
-        params := params ++ s!"      %m_W{mpidx}: {dwTy}, %m_b{mpidx}: {cTy},\n"; mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {cTy}, %m_b{mpidx}: {cTy},\n"; mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {exTy}, %m_b{mpidx}: {exB},\n"; mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {pjTy}, %m_b{mpidx}: {cTy},\n"; mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {cTy},\n"; mpidx := mpidx + 1
-    | .convNextDownsample ic oc _norm =>
-      let icTy := tensorTy [ic]
-      let ocTy := tensorTy [oc]
-      let cvTy := tensorTy [oc, ic, 2, 2]
-      params := params ++ s!"      %m_W{mpidx}: {icTy}, %m_b{mpidx}: {icTy},\n"; mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {cvTy}, %m_b{mpidx}: {ocTy},\n"; mpidx := mpidx + 1
-    | .unetDown ic oc =>
-      let ocTy := tensorTy [oc]
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, ic, 3, 3]}, %m_g{mpidx}: {ocTy}, %m_bt{mpidx}: {ocTy},\n"; mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, oc, 3, 3]}, %m_g{mpidx}: {ocTy}, %m_bt{mpidx}: {ocTy},\n"; mpidx := mpidx + 1
-    | .unetUp ic oc =>
-      let ocTy := tensorTy [oc]
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, ic + oc, 3, 3]}, %m_g{mpidx}: {ocTy}, %m_bt{mpidx}: {ocTy},\n"; mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [oc, oc, 3, 3]}, %m_g{mpidx}: {ocTy}, %m_bt{mpidx}: {ocTy},\n"; mpidx := mpidx + 1
-    | .patchEmbed ic dim pSize nP =>
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [dim, ic, pSize, pSize]}, %m_b{mpidx}: {tensorTy [dim]},\n"
-      mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [dim]},\n"
-      mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [nP + 1, dim]},\n"
-      mpidx := mpidx + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
-      let dTy := tensorTy [dim]
-      let ddTy := tensorTy [dim, dim]
-      let fc1Ty := tensorTy [dim, mlpDim]
-      let fc2Ty := tensorTy [mlpDim, dim]
-      let mlpBTy := tensorTy [mlpDim]
-      for _bi in [:nBlocks] do
-        params := params ++ s!"      %m_W{mpidx}: {dTy}, %m_b{mpidx}: {dTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {ddTy}, %m_b{mpidx}: {dTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {ddTy}, %m_b{mpidx}: {dTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {ddTy}, %m_b{mpidx}: {dTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {ddTy}, %m_b{mpidx}: {dTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {dTy}, %m_b{mpidx}: {dTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {fc1Ty}, %m_b{mpidx}: {mlpBTy},\n"
-        mpidx := mpidx + 1
-        params := params ++ s!"      %m_W{mpidx}: {fc2Ty}, %m_b{mpidx}: {dTy},\n"
-        mpidx := mpidx + 1
-      params := params ++ s!"      %m_W{mpidx}: {dTy}, %m_b{mpidx}: {dTy},\n"
-      mpidx := mpidx + 1
-    | .tokenPositionEmbed v t d _ _ posEmb =>
-      if posEmb then
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [v, d]}, %m_W{mpidx + 1}: {tensorTy [t, d]},\n"
-        mpidx := mpidx + 2
-      else
-        params := params ++ s!"      %m_W{mpidx}: {tensorTy [v, d]},\n"
-        mpidx := mpidx + 1
-    | .lmHead d v _ =>
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [d, v]}, %m_b{mpidx}: {tensorTy [v]},\n"
-      mpidx := mpidx + 1
-    | .timeCondAdd c nFreq =>
-      params := params ++ s!"      %m_W{mpidx}: {tensorTy [2 * nFreq, c]}, %m_b{mpidx}: {tensorTy [c]},\n"
-      mpidx := mpidx + 1
-    | .fpnDetect oc c3 c4 c5 _ A tower =>
-      let wtys := (fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy
-      for (wt, i) in wtys.zipIdx do
-        params := params ++ s!"      %m_W{mpidx + i}: {wt},\n"
-      mpidx := mpidx + fpnNumParams tower
-    | _ => pure ()
-  -- v_ params (2nd moment, same shapes)
-  let mut vpidx2 : Nat := 0
-  for l in spec.layers do
-    let (pStr, _) := emitLayerParams "v_" l vpidx2 #[]
-    if pStr != "" then
-      params := params ++ pStr; vpidx2 := vpidx2 + 1
-    match l with
-    | .residualBlock ic oc nBlocks firstStride =>
-      let needsProj := !(ic == oc && firstStride == 1)
-      let gTy := tensorTy [oc]
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, blockIc, 3, 3]}, %v_g{vpidx2}: {gTy}, %v_bt{vpidx2}: {gTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, oc, 3, 3]}, %v_g{vpidx2}: {gTy}, %v_bt{vpidx2}: {gTy},\n"
-        vpidx2 := vpidx2 + 1
-        if bi == 0 && needsProj then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {gTy}, %v_bt{vpidx2}: {gTy},\n"
-          vpidx2 := vpidx2 + 1
-    | .bottleneckBlock ic oc nBlocks firstStride =>
-      let mid := oc / 4; let needsProj := !(ic == oc && firstStride == 1)
-      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, 1, 1]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, mid, 3, 3]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
-        vpidx2 := vpidx2 + 1
-        if bi == 0 && needsProj then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
-          vpidx2 := vpidx2 + 1
-    | .invertedResidual ic oc expand _ nBlocks =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := blockIc * expand
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        if expand != 1 then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, 1, 1]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-          vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, 1, 3, 3]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
-        vpidx2 := vpidx2 + 1
-    | .mbConv ic oc expand kSize _ nBlocks useSE _act =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := blockIc * expand
-        let seMid := mbConvSeMid blockIc
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        if expand != 1 then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, 1, 1]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-          vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, 1, kSize, kSize]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-        vpidx2 := vpidx2 + 1
-        if useSE then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [seMid, mid, 1, 1]}, %v_b{vpidx2}: {tensorTy [seMid]},\n"
-          vpidx2 := vpidx2 + 1
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, seMid, 1, 1]}, %v_b{vpidx2}: {tensorTy [mid]},\n"
-          vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
-        vpidx2 := vpidx2 + 1
-    | .fusedMbConv ic oc expand kSize _ nBlocks useSE =>
-      for bi in [:nBlocks] do
-        let blockIc := if bi == 0 then ic else oc
-        let mid := if expand == 1 then oc else blockIc * expand
-        let seMid := Nat.max 1 (mid / 4)
-        let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, blockIc, kSize, kSize]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-        vpidx2 := vpidx2 + 1
-        if useSE then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [seMid, mid, 1, 1]}, %v_b{vpidx2}: {tensorTy [seMid]},\n"
-          vpidx2 := vpidx2 + 1
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, seMid, 1, 1]}, %v_b{vpidx2}: {tensorTy [mid]},\n"
-          vpidx2 := vpidx2 + 1
-        if expand != 1 then
-          params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
-          vpidx2 := vpidx2 + 1
-    | .mbConvV3 ic oc expandCh kSize _ useSE _ =>
-      let mid := expandCh
-      let seMid := Nat.max 1 (mid / 4)
-      let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      if expandCh != ic then
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, ic, 1, 1]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-        vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, 1, kSize, kSize]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-      vpidx2 := vpidx2 + 1
-      if useSE then
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [seMid, mid, 1, 1]}, %v_b{vpidx2}: {tensorTy [seMid]},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, seMid, 1, 1]}, %v_b{vpidx2}: {tensorTy [mid]},\n"
-        vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
-      vpidx2 := vpidx2 + 1
-    | .uib ic oc expand _stride preDWk postDWk =>
-      let mid := ic * expand
-      let gTyI := tensorTy [ic]; let gTyM := tensorTy [mid]; let gTyO := tensorTy [oc]
-      if preDWk > 0 then
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [ic, 1, preDWk, preDWk]}, %v_g{vpidx2}: {gTyI}, %v_bt{vpidx2}: {gTyI},\n"
-        vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, ic, 1, 1]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-      vpidx2 := vpidx2 + 1
-      if postDWk > 0 then
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [mid, 1, postDWk, postDWk]}, %v_g{vpidx2}: {gTyM}, %v_bt{vpidx2}: {gTyM},\n"
-        vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, mid, 1, 1]}, %v_g{vpidx2}: {gTyO}, %v_bt{vpidx2}: {gTyO},\n"
-      vpidx2 := vpidx2 + 1
-    | .convNextStage channels nBlocks _norm _act =>
-      let c := channels
-      let cTy := tensorTy [c]
-      let dwTy := tensorTy [c, 1, 7, 7]
-      let exTy := tensorTy [4*c, c, 1, 1]; let exB := tensorTy [4*c]
-      let pjTy := tensorTy [c, 4*c, 1, 1]
-      for _ in [:nBlocks] do
-        params := params ++ s!"      %v_W{vpidx2}: {dwTy}, %v_b{vpidx2}: {cTy},\n"; vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {cTy}, %v_b{vpidx2}: {cTy},\n"; vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {exTy}, %v_b{vpidx2}: {exB},\n"; vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {pjTy}, %v_b{vpidx2}: {cTy},\n"; vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {cTy},\n"; vpidx2 := vpidx2 + 1
-    | .convNextDownsample ic oc _norm =>
-      let icTy := tensorTy [ic]
-      let ocTy := tensorTy [oc]
-      let cvTy := tensorTy [oc, ic, 2, 2]
-      params := params ++ s!"      %v_W{vpidx2}: {icTy}, %v_b{vpidx2}: {icTy},\n"; vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {cvTy}, %v_b{vpidx2}: {ocTy},\n"; vpidx2 := vpidx2 + 1
-    | .unetDown ic oc =>
-      let ocTy := tensorTy [oc]
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic, 3, 3]}, %v_g{vpidx2}: {ocTy}, %v_bt{vpidx2}: {ocTy},\n"; vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, oc, 3, 3]}, %v_g{vpidx2}: {ocTy}, %v_bt{vpidx2}: {ocTy},\n"; vpidx2 := vpidx2 + 1
-    | .unetUp ic oc =>
-      let ocTy := tensorTy [oc]
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, ic + oc, 3, 3]}, %v_g{vpidx2}: {ocTy}, %v_bt{vpidx2}: {ocTy},\n"; vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [oc, oc, 3, 3]}, %v_g{vpidx2}: {ocTy}, %v_bt{vpidx2}: {ocTy},\n"; vpidx2 := vpidx2 + 1
-    | .patchEmbed ic dim pSize nP =>
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [dim, ic, pSize, pSize]}, %v_b{vpidx2}: {tensorTy [dim]},\n"
-      vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [dim]},\n"
-      vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [nP + 1, dim]},\n"
-      vpidx2 := vpidx2 + 1
-    | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
-      let dTy := tensorTy [dim]
-      let ddTy := tensorTy [dim, dim]
-      let fc1Ty := tensorTy [dim, mlpDim]
-      let fc2Ty := tensorTy [mlpDim, dim]
-      let mlpBTy := tensorTy [mlpDim]
-      for _bi in [:nBlocks] do
-        params := params ++ s!"      %v_W{vpidx2}: {dTy}, %v_b{vpidx2}: {dTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {ddTy}, %v_b{vpidx2}: {dTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {ddTy}, %v_b{vpidx2}: {dTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {ddTy}, %v_b{vpidx2}: {dTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {ddTy}, %v_b{vpidx2}: {dTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {dTy}, %v_b{vpidx2}: {dTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {fc1Ty}, %v_b{vpidx2}: {mlpBTy},\n"
-        vpidx2 := vpidx2 + 1
-        params := params ++ s!"      %v_W{vpidx2}: {fc2Ty}, %v_b{vpidx2}: {dTy},\n"
-        vpidx2 := vpidx2 + 1
-      params := params ++ s!"      %v_W{vpidx2}: {dTy}, %v_b{vpidx2}: {dTy},\n"
-      vpidx2 := vpidx2 + 1
-    | .tokenPositionEmbed v t d _ _ posEmb =>
-      if posEmb then
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [v, d]}, %v_W{vpidx2 + 1}: {tensorTy [t, d]},\n"
-        vpidx2 := vpidx2 + 2
-      else
-        params := params ++ s!"      %v_W{vpidx2}: {tensorTy [v, d]},\n"
-        vpidx2 := vpidx2 + 1
-    | .lmHead d v _ =>
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [d, v]}, %v_b{vpidx2}: {tensorTy [v]},\n"
-      vpidx2 := vpidx2 + 1
-    | .timeCondAdd c nFreq =>
-      params := params ++ s!"      %v_W{vpidx2}: {tensorTy [2 * nFreq, c]}, %v_b{vpidx2}: {tensorTy [c]},\n"
-      vpidx2 := vpidx2 + 1
-    | .fpnDetect oc c3 c4 c5 _ A tower =>
-      let wtys := (fpnDetectParamShapes oc c3 c4 c5 A tower).map tensorTy
-      for (wt, i) in wtys.zipIdx do
-        params := params ++ s!"      %v_W{vpidx2 + i}: {wt},\n"
-      vpidx2 := vpidx2 + fpnNumParams tower
-    | _ => pure ()
+  -- The packed `[θ|m|v]` arguments, then the inputs and labels below.
+  let (thetaArgs, pTys) := trainSigArgs "" spec
+  let mut params : String :=
+    thetaArgs ++ (trainSigArgs "m_" spec).1 ++ (trainSigArgs "v_" spec).1
   if !fpnScales.isEmpty then
     -- FPN detector: one flat target [P3|P4|P5]; the loss slices it per scale.
     -- Masks are derived from each block's obj channel (no FFI mask), so a single
@@ -9748,7 +8654,7 @@ private def emitTrainStepSig (spec : NetSpec) (batchSize : Nat)
   else
     params := params ++ s!"      %x_flat: {tensorTy [B, inDim]}, %y: tensor<{B}xi32>,\n"
   params := params ++ "      %lr: tensor<f32>, %t: tensor<f32>"
-  let mut retTypes := paramRetTypes ++ mRetTypes ++ vRetTypes |>.push "tensor<f32>"
+  let mut retTypes := pTys ++ pTys ++ pTys |>.push "tensor<f32>"
   -- BN stats return types (mean + var per BN layer)
   let bnLayers := collectBnLayers spec
   for (_, oc) in bnLayers do

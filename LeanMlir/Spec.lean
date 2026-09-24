@@ -39,27 +39,29 @@ inductive ParamInit where
   | zeroSeeded
 deriving Inhabited
 
-/-- One trainable tensor of a layer: its shape and its initialization. -/
+/-- One trainable tensor of a layer: its shape, its initialization, and its name in the emitted
+    MLIR signatures (`W` weight — also a LayerNorm's γ, `b` bias — also β, `g` / `bt` a conv's BN
+    γ / β). A `W` opens a group: the group shares one index, `%W3, %g3, %bt3`. -/
 structure ParamSlot where
   shape : List Nat
   init  : ParamInit
+  nm    : String := "W"
 deriving Inhabited
 
 private def slotsConvB (oc ic k : Nat) : List ParamSlot :=
-  [⟨[oc, ic, k, k], .he (ic * k * k)⟩, ⟨[oc], .const 0.0⟩]
+  [⟨[oc, ic, k, k], .he (ic * k * k), "W"⟩, ⟨[oc], .const 0.0, "b"⟩]
 private def slotsConvBn (oc ic k : Nat) : List ParamSlot :=
-  [⟨[oc, ic, k, k], .he (ic * k * k)⟩, ⟨[oc], .const 1.0⟩, ⟨[oc], .const 0.0⟩]
+  [⟨[oc, ic, k, k], .he (ic * k * k), "W"⟩, ⟨[oc], .const 1.0, "g"⟩, ⟨[oc], .const 0.0, "bt"⟩]
 private def slotsDense (fi fo : Nat) : List ParamSlot :=
-  [⟨[fi, fo], .he fi⟩, ⟨[fo], .const 0.0⟩]
+  [⟨[fi, fo], .he fi, "W"⟩, ⟨[fo], .const 0.0, "b"⟩]
 private def slotsLN (d : Nat) : List ParamSlot :=
-  [⟨[d], .const 1.0⟩, ⟨[d], .const 0.0⟩]
+  [⟨[d], .const 1.0, "W"⟩, ⟨[d], .const 0.0, "b"⟩]
 
 /-- **The one writer of a trainable layer's parameter layout** — the tensors in signature order,
     each with its initialization. `NetSpec.paramShapes` (the packed `[θ|m|v]` blob), `heInitLayer`
     (the initial weights) and `Layer.nParams` (hence `totalParams`) all read it, so they cannot
     disagree. `none` for layers the codegen does not train (their count is `nParamsUntrained`).
-    ⚠ The MLIR signature emitters in `MlirCodegen` (`fwdSigParts`, `emitTrainStepSig`) still spell
-    the same order by hand. -/
+    The MLIR signatures (`MlirCodegen.fwdSigParts`, `emitTrainStepSig`) render it too. -/
 def Layer.paramSlots : Layer → Option (List ParamSlot)
   | .conv2d ic oc k _ _ => some (slotsConvB oc ic k)
   | .convBn ic oc k _ _ => some (slotsConvBn oc ic k)
@@ -70,9 +72,9 @@ def Layer.paramSlots : Layer → Option (List ParamSlot)
       -- head biases reproduce the biasless head, until `applyDetPriorBias` installs the prior.
       some <| (fpnDetectParamShapes oc c3 c4 c5 A tower).map fun sh =>
         match sh with
-        | [_, i] => ⟨sh, .he i⟩
-        | [_, i, k, _] => ⟨sh, .he (i * k * k)⟩
-        | _ => ⟨sh, .const 0.0⟩
+        | [_, i] => ⟨sh, .he i, "W"⟩
+        | [_, i, k, _] => ⟨sh, .he (i * k * k), "W"⟩
+        | _ => ⟨sh, .const 0.0, "W"⟩
   | .residualBlock ic oc nBlocks firstStride =>
       let needsProj := !(ic == oc && firstStride == 1)
       some <| (List.range nBlocks).flatMap fun bi =>
@@ -124,13 +126,13 @@ def Layer.paramSlots : Layer → Option (List ParamSlot)
       let c := channels
       some <| (List.range nBlocks).flatMap fun _ =>
         slotsConvB c 1 7 ++ slotsLN c ++ slotsConvB (4 * c) c 1 ++ slotsConvB c (4 * c) 1 ++
-          [⟨[c], .const 0.000001⟩]
+          [⟨[c], .const 0.000001, "W"⟩]
   | .convNextDownsample ic oc _norm => some (slotsLN ic ++ slotsConvB oc ic 2)
   | .convNextStem ic oc p => some (slotsConvB oc ic p ++ slotsLN oc)
   | .patchEmbed ic dim p nP =>
       -- Conv (W, b), cls token = 0, positional embedding He at fan-in `nP + 1`.
-      some [⟨[dim, ic, p, p], .he (ic * p * p)⟩, ⟨[dim], .const 0.0⟩, ⟨[dim], .const 0.0⟩,
-            ⟨[nP + 1, dim], .he (nP + 1)⟩]
+      some [⟨[dim, ic, p, p], .he (ic * p * p), "W"⟩, ⟨[dim], .const 0.0, "b"⟩,
+            ⟨[dim], .const 0.0, "W"⟩, ⟨[nP + 1, dim], .he (nP + 1), "W"⟩]
   | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
       some <| ((List.range nBlocks).flatMap fun _ =>
         slotsLN dim ++ slotsDense dim dim ++ slotsDense dim dim ++ slotsDense dim dim ++
@@ -140,11 +142,11 @@ def Layer.paramSlots : Layer → Option (List ParamSlot)
   | .unetUp ic oc => some (slotsConvBn oc (ic + oc) 3 ++ slotsConvBn oc oc 3)
   | .tokenPositionEmbed v t d _ _ posEmb =>
       -- Token (and positional) embeddings ~ N(0, 0.02²), the GPT-2 / nano-GPT convention.
-      some <| [⟨[v, d], .normal 0.02⟩] ++ (if posEmb then [⟨[t, d], .normal 0.02⟩] else [])
+      some <| [⟨[v, d], .normal 0.02, "W"⟩] ++ (if posEmb then [⟨[t, d], .normal 0.02, "W"⟩] else [])
   | .lmHead d v _ => some (slotsDense d v)
   | .timeCondAdd c nFreq =>
       -- W and b start at ZERO so time conditioning begins as a no-op and grows in.
-      some [⟨[2 * nFreq, c], .zeroSeeded⟩, ⟨[c], .const 0.0⟩]
+      some [⟨[2 * nFreq, c], .zeroSeeded, "W"⟩, ⟨[c], .const 0.0, "b"⟩]
   | _ => none
 
 /-- The displayed parameter count of a layer the codegen does NOT train (`Layer.paramSlots` is
