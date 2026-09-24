@@ -77,7 +77,13 @@ if [ -z "${FORCE:-}" ] && [ -z "${RESUME:-}" ]; then
 fi
 echo "$PREC" > "$OUT/.precision"
 echo "$SEEDS" > "$OUT/.seeds"
-PLUG="${PJRT_PLUGIN:-/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so}"
+# Box detect, as the confs do: the repo .venv's xla_cuda12 plugin where it exists, else the 3060
+# box's .venv-cuda (xla_cuda13), whose repo .venv/bin/python cannot run the shim.
+ARES_PLUG=".venv/lib/python3.12/site-packages/jax_plugins/xla_cuda12/xla_cuda_plugin.so"
+if [ -f "$ARES_PLUG" ]; then BOX_PLUG="$ARES_PLUG"; BOX_PY=".venv/bin/python3"
+else BOX_PLUG="/home/skoonce/.venv-cuda/lib/python3.12/site-packages/jax_plugins/xla_cuda13/xla_cuda_plugin.so"
+     BOX_PY="/home/skoonce/.venv-cuda/bin/python3"; fi
+PLUG="${PJRT_PLUGIN:-$BOX_PLUG}"
 [ -f "$PLUG" ] || { echo "⛔ plugin not found: $PLUG"; exit 1; }
 [ -x .lake/build/bin/resnet34-ablation ] || { echo "⛔ build resnet34-ablation first"; exit 1; }
 

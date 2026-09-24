@@ -55,10 +55,8 @@ layers deep; it is accumulation, not disagreement.
 import argparse, os, re, subprocess, sys, tempfile
 import numpy as np
 
-IREE_C = os.environ.get(
-    "IREE_COMPILE", "/home/skoonce/lean4-mlir/.venv/bin/iree-compile")
-IREE_R = os.environ.get(
-    "IREE_RUN_MODULE", "/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _iree  # noqa: E402
 
 # (mlir slug, reference file). Both members of each pair are the 1000-class ImageNet artifacts.
 NETS = {
@@ -169,42 +167,27 @@ def main():
         if not os.path.exists(f):
             sys.exit(f"{f} missing — `scripts/regen_verified_mlir.sh proofs` / "
                      f"`scripts/regen_jax_generated.sh`")
-    for exe in (IREE_C, IREE_R):
-        if not os.path.exists(exe):
-            sys.exit(f"{exe} missing — set $IREE_COMPILE / $IREE_RUN_MODULE")
 
     work = tempfile.mkdtemp(prefix="cnxtie_")
-    os.makedirs(f"{work}/in", exist_ok=True)
     shapes = parse_input_shapes(mlir, fn)
     print(f"func @{fn}: {len(shapes)} inputs  (workdir {work})")
 
     rng = np.random.default_rng(args.seed)
-    arrays, in_flags = [], []
+    arrays = []
     for i, s in enumerate(shapes):
         dims = [int(d) for d in s.split("x") if d]
         a = (rng.standard_normal(dims) * args.scale).astype(np.float32)
         arrays.append(a)
-        path = f"{work}/in/i{i}.npy"
-        np.save(path, a)
-        in_flags.append(f"--input=@{path}")
 
     # ── the verified render, through IREE on the CPU backend ──
-    r = subprocess.run([IREE_C, "--iree-hal-target-backends=llvm-cpu", mlir,
-                        "-o", f"{work}/m.vmfb"], capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-compile FAILED:\n{r.stderr[:3000]}")
-    # ⚠⚠ `local-sync`, NOT `local-task`. The other three ties use `local-task` (IREE's
-    # multithreaded CPU executor) and it **SIGSEGVs** on this module — rc -11 with an empty stderr,
-    # after printing `EXEC @convnextin_fwd`, so it looks like a hang-then-die rather than a crash
-    # with a message. `local-sync` runs the identical vmfb to completion. Measured 2026-08-30 on
-    # IREE 3.12.0rc20260428; not diagnosed further, because the tie does not need the parallel
+    # ⚠⚠ `local-sync`, NOT `local-task`. `local-task` (IREE's multithreaded CPU executor)
+    # **SIGSEGVs** on this module — rc -11 with an empty stderr, after printing
+    # `EXEC @convnextin_fwd`, so it looks like a hang-then-die rather than a crash with a message.
+    # `local-sync` runs the identical vmfb to completion. Measured 2026-08-30 on IREE
+    # 3.12.0rc20260428; not diagnosed further, because the tie does not need the parallel
     # executor and a segfaulting runner is not evidence about the render.
-    r = subprocess.run([IREE_R, "--device=local-sync", f"--module={work}/m.vmfb",
-                        f"--function={fn}", *in_flags, f"--output=@{work}/out.npy"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-run-module FAILED:\n{r.stderr[:3000]}")
-    got = np.load(f"{work}/out.npy").astype(np.float64)
+    got = _iree.compile_and_run(mlir, fn, arrays, work, 1, "llvm-cpu",
+                                ["local-sync"])[0].astype(np.float64)
 
     # ── the reference, on the same weights ──
     import jax.numpy as jnp

@@ -23,11 +23,11 @@ to 2^-6, subnormals down to 2^-9. Relative rounding u_leaf ~ 2^-4 = 6.25%.
 Usage: scripts/mnist_e4m3_demo.py [mnist-idx-data-dir]
 No deps beyond numpy. Reference baseline: fp32 linear ~92% test acc.
 """
-import struct, sys
+import pathlib, struct, sys
 import numpy as np
 
 DATA = sys.argv[1] if len(sys.argv) > 1 else \
-    "/home/skoonce/lean/claude_max/mnist-lean4/data"
+    str(pathlib.Path(__file__).resolve().parent.parent / "data")
 
 
 def load_idx_images(path):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """k-means anchor priors over NEU-DET box sizes, per FPN scale.
 
-The NEU-DET twin of scripts/coco_anchors.py: the IoU metric and k-means come
+The NEU-DET twin of historical/coco_anchors.py: the IoU metric and k-means come
 from scripts/visdrone_anchors.py (imported, not copied), the box source and
 the train split come from preprocess_neu_det.py, so the priors are fitted on
 exactly the images the detector trains on and by exactly the code that fitted

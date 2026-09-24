@@ -29,7 +29,7 @@ So all three gates are known-answer or determinism gates, and none of them trust
     different NUMBERS. A paired run under mixup agrees in distribution, not per step.
 
     scripts/mixup_gate.py                 # all three gates
-    scripts/mixup_gate.py --break         # the verified-to-fail run; expect rc=1
+    scripts/mixup_gate.py --break         # + negative controls, each must be rejected; rc=0
     SHIM_PY=... SHIM_SCRIPT=... scripts/mixup_gate.py --batch 8 --batches 3
 """
 import argparse, os, subprocess, sys
@@ -98,10 +98,13 @@ def stream(mix, seed):
 
     assert rd(4) == b"LMSH", "bad preamble magic"
     ver, batch, flat, nc = np.frombuffer(rd(16), dtype=np.int32)
-    assert (ver, batch, flat, nc) == (2, A.batch, FLAT, A.nclasses), \
-        f"preamble {(ver, batch, flat, nc)} != {(2, A.batch, FLAT, A.nclasses)}"
+    # wire v4: soft targets, and every record prefixed with its int32 row count
+    assert (ver, batch, flat, nc) == (4, A.batch, FLAT, A.nclasses), \
+        f"preamble {(ver, batch, flat, nc)} != {(4, A.batch, FLAT, A.nclasses)}"
     out = []
     for _ in range(A.batches):
+        rows = int(np.frombuffer(rd(4), dtype=np.int32)[0])
+        assert rows == batch, f"record of {rows} rows on the train stream (batch {batch})"
         t = np.frombuffer(rd(4 * batch * nc), dtype=np.float32).reshape(batch, nc).copy()
         x = np.frombuffer(rd(4 * batch * flat), dtype=np.float32).reshape(batch, flat).copy()
         out.append((t, x))
@@ -209,6 +212,7 @@ for mode in ("mixup", "cutmix", "both"):
 # ── gate 3: the known answer, against the unmixed stream at the same seed ──────────────────────
 print("── gate 3: KNOWN ANSWER (mixed stream vs the off stream, same seed)")
 ref = stream("off", A.seed)
+pasted = 0                                           # cutmix batches whose box is non-empty
 for mode in ("mixup", "cutmix"):
     got = stream(mode, A.seed)
     for i, ((t, x), (tm, xm)) in enumerate(zip(ref, got)):
@@ -244,6 +248,7 @@ for mode in ("mixup", "cutmix"):
             # The label must follow the PIXELS, not the drawn lambda: the box is clipped at the
             # border, so the drawn and the effective lambda genuinely differ.
             area = float(M.sum()) / float(H * W)
+            pasted += int(M.sum() > 0)
             check(f"cutmix b{i}: L is the ACTUAL pasted area  [L={float(L):.6f}, "
                   f"1-area={1.0-area:.6f}]", abs(float(L) - (1.0 - area)) < 1e-6)
             La = np.float32(1.0 - area)
@@ -253,6 +258,11 @@ for mode in ("mixup", "cutmix"):
                   bool(np.array_equal(tm, want_t)), f"maxdiff {np.abs(tm - want_t).max():.3e}")
             check(f"cutmix b{i}: x' = x*(1-M) + flip(x)*M  — the IMAGES",
                   bool(np.array_equal(xm, want_x)), f"maxdiff {np.abs(xm - want_x).max():.3e}")
+
+# An empty box satisfies every cutmix check above (L = 1, x' = x), so a producer that never pastes
+# would pass them all. A real Beta(1,1) draw gives a non-empty box in essentially every batch.
+check(f"cutmix: a box was pasted in at least one of {A.batches} batches", pasted > 0,
+      f"{pasted} non-empty")
 
 # ── the negative controls: prove each gate can go red, and for its own reason ───────────────────
 if A.do_break:

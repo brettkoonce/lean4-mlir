@@ -25,7 +25,7 @@ import tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt  # noqa: E402
+import _iree  # noqa: E402
 sys.path.insert(0, os.path.dirname(__file__))
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 from fpn_neck_check import fpn_forward, conv1x1  # noqa: E402
@@ -34,7 +34,6 @@ import anchor_loss_probe_check as al  # noqa: E402
 al.GAMMA = 0.0                 # <-- makes the objectness weight a true constant
 P = 15                         # per-anchor channels
 PROBE = ".lake/build/bin/fpn-detect-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
 
 
 def make_runner(B, oc, c3, c4, c5, g5, A, tower=0):
@@ -46,14 +45,8 @@ def make_runner(B, oc, c3, c4, c5, g5, A, tower=0):
     if r.returncode != 0:
         print(r.stdout, r.stderr); sys.exit("probe emit failed")
     vmfb = os.path.join(td, "fd.vmfb")
-    r = subprocess.run([IREE_COMPILE, mlir, "--iree-hal-target-backends=llvm-cpu",
-                        "-o", vmfb], capture_output=True, text=True)
-    if r.returncode != 0:
-        print(r.stderr[:3000]); sys.exit("iree-compile failed")
-    ctx = rt.SystemContext(config=rt.Config("local-task"))
-    with open(vmfb, "rb") as f:
-        ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, f.read()))
-    fn = ctx.modules.fpn_detect_probe["main"]
+    _iree.compile_mlir(mlir, vmfb)
+    fn = _iree.load_function(vmfb, "fpn_detect_probe")
 
     def run(arrs):
         out = fn(*[a.astype(np.float32) for a in arrs])

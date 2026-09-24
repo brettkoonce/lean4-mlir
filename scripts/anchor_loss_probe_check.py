@@ -26,12 +26,11 @@ import tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt  # noqa: E402
+import _iree  # noqa: E402
 sys.path.insert(0, os.path.dirname(__file__))
 from diou_probe_check import np_diou_forward, np_diou_grad, sigmoid  # noqa: E402
 
 PROBE = ".lake/build/bin/anchor-loss-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
 NC, P = 10, 15
 GAMMA, LBOX, LNOOBJ = 2.0, 5.0, 0.5
 
@@ -120,14 +119,8 @@ def make_runner(B, gH, gW, A):
     if r.returncode != 0:
         print(r.stdout, r.stderr); sys.exit("probe emit failed")
     vmfb = os.path.join(td, "al.vmfb")
-    r = subprocess.run([IREE_COMPILE, mlir, "--iree-hal-target-backends=llvm-cpu",
-                        "-o", vmfb], capture_output=True, text=True)
-    if r.returncode != 0:
-        print(r.stderr[:3000]); sys.exit("iree-compile failed")
-    ctx = rt.SystemContext(config=rt.Config("local-task"))
-    with open(vmfb, "rb") as f:
-        ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, f.read()))
-    fn = ctx.modules.anchor_loss_probe["main"]
+    _iree.compile_mlir(mlir, vmfb)
+    fn = _iree.load_function(vmfb, "anchor_loss_probe")
 
     def run(pred, tgt):
         out = fn(pred.astype(np.float32), tgt.astype(np.float32))

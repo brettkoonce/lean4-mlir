@@ -36,23 +36,12 @@ Usage:
     scripts/mnv4_forward_tie.py                 # batch 2, seed 42
     scripts/mnv4_forward_tie.py --batch 4 --tol 2e-4
 """
-import argparse, os, re, subprocess, sys, tempfile
+import argparse, os, re, sys, tempfile
 import numpy as np
 
 REF_PY = "jax/.lake/build/generated_mobilenet_v4.py"
-CHIP = os.environ.get("IREE_CHIP", "gfx1100")
-# ⚠ The repo `.venv` has no `iree` package — `.venv/bin/iree-compile` does not exist on this
-# box. Overridable so the pairing that actually works can be supplied without editing:
-#   IREE_COMPILE=/home/skoonce/lean4-mlir/.venv/bin/iree-compile
-#   IREE_RUN_MODULE=/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module
-# ⛔ Do NOT pair that compiler with /home/skoonce/src/iree-build's runtime: the version
-# skew reports "hal.command_buffer.dispatch signature mismatch", which reads like a bad
-# module rather than a bad pairing (`planning/archive/mnv4_convm_ties_todo.md` §2b).
-IREE_C = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
-# ⚠ iree-run-module is NOT in this repo's .venv (only iree-compile is). It ships with the
-# lean4-jax venv — the same absolute path the PJRT plugin resolves through.
-IREE_R = os.environ.get("IREE_RUN_MODULE",
-    "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _iree  # noqa: E402
 
 
 def parse_input_shapes(mlir_path, fn):
@@ -95,7 +84,7 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--scale", type=float, default=0.1)
     ap.add_argument("--tol", type=float, default=1e-4, help="max |Δ| over the logits")
-    ap.add_argument("--backend", default="llvm-cpu", help="llvm-cpu (portable) or rocm")
+    ap.add_argument("--backend", default="llvm-cpu", choices=_iree.BACKENDS)
     ap.add_argument("--diag", action="store_true",
                     help="also evaluate the reference with a SYMMETRIC stem, to isolate padding")
     args = ap.parse_args()
@@ -105,48 +94,21 @@ def main():
                  f".lake/build/bin/mnv4-fwd-smoke` to emit it")
 
     work = tempfile.mkdtemp(prefix="mnv4tie_")
-    os.makedirs(f"{work}/in", exist_ok=True)
     shapes = parse_input_shapes(args.mlir, args.fn)
     print(f"func @{args.fn}: {len(shapes)} inputs  (workdir {work})")
 
     rng = np.random.default_rng(args.seed)
-    arrays, in_flags = [], []
+    arrays = []
     for i, s in enumerate(shapes):
         dims = [int(d) for d in s.split("x") if d]
         a = (np.asarray(rng.standard_normal(dims)).astype(np.float32) * args.scale)
         arrays.append(a)
-        p = f"{work}/in/i{i}.npy"
-        np.save(p, a)
-        in_flags.append(f"--input=@{p}")
 
     # ── the verified render ──
-    cflags = ([f"--iree-hal-target-backends=rocm", f"--iree-rocm-target={CHIP}"]
-              if args.backend == "rocm" else ["--iree-hal-target-backends=llvm-cpu"])
-    r = subprocess.run([IREE_C, *cflags, args.mlir, "-o", f"{work}/m.vmfb"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-compile FAILED:\n{r.stderr[:3000]}")
-    # ⚠⚠ `--device=local-task` SEGFAULTS on this module — exit 245 / -11 with EMPTY stderr, no
-    # output and no diagnostic — and `local-sync` runs the IDENTICAL vmfb in one second. A silent
-    # 245 is a device/threading problem, NOT a bad render. `scripts/grad_tie.py` has carried this
-    # fallback since `planning/archive/mnv4_verified.md` §3f hit it on `efficientnet_fwd`; this script did
-    # not, so the first Conv-M tie run looked like a broken artifact for as long as it took to
-    # read the other script (2026-09-07).
-    devs = ["hip"] if args.backend == "rocm" else ["local-task", "local-sync"]
-    r = None
-    for dev in devs:
-        r = subprocess.run([IREE_R, f"--device={dev}", f"--module={work}/m.vmfb",
-                            f"--function={args.fn}", *in_flags,
-                            f"--output=@{work}/out.npy"], capture_output=True, text=True)
-        if r.returncode == 0:
-            if dev != devs[0]:
-                print(f"  ran on --device={dev}")
-            break
-        print(f"  --device={dev} failed rc={r.returncode}; trying the next")
-    if r.returncode != 0:
-        sys.exit(f"iree-run-module FAILED rc={r.returncode} on every device tried "
-                 f"({', '.join(devs)}):\nSTDERR {r.stderr[:3000]}\nSTDOUT {r.stdout[:2000]}")
-    got = np.load(f"{work}/out.npy").astype(np.float64)
+    # local-task first, local-sync on a silent 245 / -11 — `_iree.devices`; the first Conv-M tie
+    # run without that fallback looked like a broken artifact (2026-09-07).
+    got = _iree.compile_and_run(args.mlir, args.fn, arrays, work, 1,
+                                args.backend)[0].astype(np.float64)
 
     # ── the reference, on the same weights ──
     import jax.numpy as jnp

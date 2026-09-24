@@ -26,7 +26,7 @@ import tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt  # noqa: E402
+import _iree  # noqa: E402
 sys.path.insert(0, os.path.dirname(__file__))
 from anchor_loss_probe_check import np_forward, np_grad, make_data, anchors_for, P  # noqa: E402
 
@@ -35,16 +35,8 @@ from anchor_loss_probe_check import np_forward, np_grad, make_data, anchors_for,
 CLSW = [0.5 + 0.25 * c for c in range(10)]
 
 PROBE = ".lake/build/bin/fpn-loss-probe"
-# The repo .venv is the PINNED JAX/cuDNN environment and must not gain an IREE
-# runtime — installing into it is what breaks every bf16 conv (see the pinned-env
-# note in the planning docs). Point IREE_COMPILE and the interpreter at a
-# throwaway venv holding a MATCHED iree-base-compiler/runtime pair:
-#   python3 -m venv /tmp/venv-iree && /tmp/venv-iree/bin/pip install numpy \
-#       iree-base-compiler==<v> iree-base-runtime==<v> \
-#       --find-links https://iree.dev/pip-release-links.html
-#   IREE_COMPILE=/tmp/venv-iree/bin/iree-compile /tmp/venv-iree/bin/python \
-#       scripts/fpn_loss_probe_check.py
-IREE_COMPILE = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
+# IREE comes from scripts/_iree.py: run under the sibling lean4-jax venv's python (it has
+# iree.runtime and the matching iree-compile); never install IREE into the pinned repo .venv.
 
 
 def make_runner(B, A, grids, clsw=False, clsfocal=False):
@@ -59,14 +51,8 @@ def make_runner(B, A, grids, clsw=False, clsfocal=False):
     if r.returncode != 0:
         print(r.stdout, r.stderr); sys.exit("probe emit failed")
     vmfb = os.path.join(td, "fl.vmfb")
-    r = subprocess.run([IREE_COMPILE, mlir, "--iree-hal-target-backends=llvm-cpu",
-                        "-o", vmfb], capture_output=True, text=True)
-    if r.returncode != 0:
-        print(r.stderr[:3000]); sys.exit("iree-compile failed")
-    ctx = rt.SystemContext(config=rt.Config("local-task"))
-    with open(vmfb, "rb") as f:
-        ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, f.read()))
-    fn = ctx.modules.fpn_loss_probe["main"]
+    _iree.compile_mlir(mlir, vmfb)
+    fn = _iree.load_function(vmfb, "fpn_loss_probe")
 
     def run(logits, tgts):
         out = fn(logits.astype(np.float32), *[t.astype(np.float32) for t in tgts])

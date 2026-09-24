@@ -25,11 +25,11 @@ worst-case 3/4); cotangent dev 2.2e-6 (vs 21/1000); W2 step dev 7.5e-9;
 ReLU flips 0/29.5M per layer; trained max|W| = 0.52 (the numeric capstones
 use |W| <= 3/5 to cover it).
 """
-import struct, sys
+import pathlib, struct, sys
 import numpy as np
 
 DATA = sys.argv[1] if len(sys.argv) > 1 else \
-    "/home/skoonce/lean/claude_max/mnist-lean4/data"
+    str(pathlib.Path(__file__).resolve().parent.parent / "data")
 
 def load_idx_images(path):
     with open(path, "rb") as f:

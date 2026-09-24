@@ -26,14 +26,12 @@ loose tolerance:
 
 Usage:  .venv/bin/python3 scripts/enet_forward_tie.py --diag
 """
-import argparse, os, re, subprocess, sys, tempfile
+import argparse, os, re, sys, tempfile
 import numpy as np
 
 REF_PY = "jax/.lake/build/generated_efficientnet_b0.py"
-CHIP = os.environ.get("IREE_CHIP", "gfx1100")
-IREE_C = ".venv/bin/iree-compile"
-IREE_R = os.environ.get("IREE_RUN_MODULE",
-    "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _iree  # noqa: E402
 
 STEM_SAME = "params[0][2], stride=(2,2), padding='SAME')"
 STEM_SYM  = "params[0][2], stride=(2,2), padding=((1,1),(1,1)))"
@@ -135,7 +133,7 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--scale", type=float, default=0.1)
     ap.add_argument("--tol", type=float, default=1e-4)
-    ap.add_argument("--backend", default="llvm-cpu")
+    ap.add_argument("--backend", default="llvm-cpu", choices=_iree.BACKENDS)
     ap.add_argument("--diag", action="store_true",
                     help="cross the padding and BN axes, so each is attributable")
     args = ap.parse_args()
@@ -146,48 +144,26 @@ def main():
                      + ("" if p != REF_PY else " — run `cd jax && lake exe efficientnet-b0`"))
 
     work = tempfile.mkdtemp(prefix="enettie_")
-    os.makedirs(f"{work}/in", exist_ok=True)
     shapes = parse_input_shapes(args.mlir, args.fn)
     batch = int(shapes[0].split("x")[0])
     print(f"func @{args.fn}: {len(shapes)} inputs, batch {batch}  (workdir {work})")
 
     rng = np.random.default_rng(args.seed)
-    arrays, in_flags = [], []
+    arrays = []
     for i, s in enumerate(shapes):
         dims = [int(d) for d in s.split("x") if d]
         a = (np.asarray(rng.standard_normal(dims)).astype(np.float32) * args.scale)
         arrays.append(a)
-        p = f"{work}/in/i{i}.npy"
-        np.save(p, a)
-        in_flags.append(f"--input=@{p}")
 
-    cflags = ([f"--iree-hal-target-backends=rocm", f"--iree-rocm-target={CHIP}"]
-              if args.backend == "rocm" else ["--iree-hal-target-backends=llvm-cpu"])
-    print(f"  iree-compile ({args.backend}) …", flush=True)
-    r = subprocess.run([IREE_C, *cflags, args.mlir, "-o", f"{work}/m.vmfb"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-compile FAILED:\n{r.stderr[:3000]}")
     # ⚠ `local-sync`, NOT `local-task` — and this cost half an hour, so it is written down.
     # `local-task` (the multithreaded CPU device the mnv2/mnv4 ties use happily) dies on THIS
     # module with **exit 245, empty stderr and no output file**, after printing `EXEC
-    # @efficientnet_fwd`. There is no error message on either stream. `local-sync` runs the same
-    # vmfb to completion in ~12 MiB. So a silent 245 here is a device/threading problem, not a
-    # problem with the render — do not go looking for a bug in the MLIR.
-    dev = "hip" if args.backend == "rocm" else "local-sync"
-    print("  iree-run-module …", flush=True)
-    r = subprocess.run([IREE_R, f"--device={dev}", f"--module={work}/m.vmfb",
-                        f"--function={args.fn}", *in_flags,
-                        f"--output=@{work}/out.npy"], capture_output=True, text=True)
-    if r.returncode != 0:
-        # ⚠ Report the code, not just stderr. A NEGATIVE returncode is a signal (-9 = OOM-killed),
-        # and it comes with EMPTY stderr — which reads exactly like "failed silently" and sends you
-        # looking for a bug in the module that is not there. This net at batch 32 is the first in
-        # the sweep big enough to hit it.
-        sys.exit(f"iree-run-module FAILED (returncode {r.returncode}"
-                 + (f", signal {-r.returncode}" if r.returncode < 0 else "") + ")\n"
-                 + (r.stderr[:3000] or "  <no stderr — killed by signal, most likely OOM>"))
-    got = np.load(f"{work}/out.npy").astype(np.float64)
+    # @efficientnet_fwd`. `local-sync` runs the same vmfb to completion in ~12 MiB. So a silent
+    # 245 here is a device/threading problem, not a problem with the render.
+    print(f"  iree-compile ({args.backend}) + iree-run-module …", flush=True)
+    devs = None if args.backend == "cuda" else ["local-sync"]
+    got = _iree.compile_and_run(args.mlir, args.fn, arrays, work, 1, args.backend,
+                                devs)[0].astype(np.float64)
 
     import jax.numpy as jnp
     x = arrays[0].reshape(batch, 3, 224, 224)

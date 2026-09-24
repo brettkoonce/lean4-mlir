@@ -37,20 +37,12 @@ Usage:
 
 ⚠ Run under a python with JAX (`JAX_PLATFORMS=cpu` is fine and is what these numbers came from).
 """
-import argparse, os, re, subprocess, sys, tempfile
+import argparse, os, re, sys, tempfile
 import numpy as np
 
-CHIP = os.environ.get("IREE_CHIP", "gfx1100")
-# ⚠ The repo `.venv` has no `iree` package — `.venv/bin/iree-compile` does not exist on this
-# box. Overridable so the pairing that actually works can be supplied without editing:
-#   IREE_COMPILE=/home/skoonce/lean4-mlir/.venv/bin/iree-compile
-#   IREE_RUN_MODULE=/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module
-# ⛔ Do NOT pair that compiler with /home/skoonce/src/iree-build's runtime: the version
-# skew reports "hal.command_buffer.dispatch signature mismatch", which reads like a bad
-# module rather than a bad pairing (`planning/archive/mnv4_convm_ties_todo.md` §2b).
-IREE_C = os.environ.get("IREE_COMPILE", ".venv/bin/iree-compile")
-IREE_R = os.environ.get("IREE_RUN_MODULE",
-    "/home/skoonce/lean/claude_max/lean4-jax/.venv/bin/iree-run-module")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _iree  # noqa: E402
+
 ALPHA = 0.1
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -209,35 +201,7 @@ def run_xla(mlir_path, fn, arrays):
 
 def run_iree(mlir_path, fn, arrays, work, backend, n_out):
     """Execute the render through IREE — a second trusted lowerer where it can take the module."""
-    os.makedirs(f"{work}/in", exist_ok=True)
-    in_flags = []
-    for i, a in enumerate(arrays):
-        q = f"{work}/in/i{i}.npy"
-        np.save(q, a)
-        in_flags.append(f"--input=@{q}")
-    cflags = ([f"--iree-hal-target-backends=rocm", f"--iree-rocm-target={CHIP}"]
-              if backend == "rocm" else ["--iree-hal-target-backends=llvm-cpu"])
-    r = subprocess.run([IREE_C, *cflags, mlir_path, "-o", f"{work}/m.vmfb"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-compile FAILED:\n{r.stderr[:3000]}")
-    outs = [f"--output=@{work}/o{j}.npy" for j in range(n_out)]
-    # ⚠ `--device=local-task` dies on big modules with **exit 245 and EMPTY stderr** — no output,
-    # no diagnostic. `planning/archive/mnv4_verified.md` §3f hit this on `efficientnet_fwd` and `local-sync`
-    # ran the identical vmfb fine. A silent 245 is a device/threading problem, NOT a bad render.
-    devs = ["hip"] if backend == "rocm" else ["local-task", "local-sync"]
-    rr = None
-    for dev in devs:
-        rr = subprocess.run([IREE_R, f"--device={dev}", f"--module={work}/m.vmfb",
-                             f"--function={fn}", *in_flags, *outs],
-                            capture_output=True, text=True)
-        if rr.returncode == 0:
-            break
-        print(f"    (--device={dev}: rc {rr.returncode}"
-              f"{', empty stderr' if not rr.stderr.strip() else ''})")
-    if rr.returncode != 0:
-        sys.exit(f"iree-run-module FAILED on every device:\n{rr.stderr[:3000]}")
-    return [np.load(f"{work}/o{j}.npy") for j in range(n_out)]
+    return _iree.compile_and_run(mlir_path, fn, arrays, work, n_out, backend)
 
 
 def main():
@@ -261,7 +225,8 @@ def main():
                          "decomposition, reduction order and IREE fusion), so an order of "
                          "magnitude is ordinary. The margin is what makes it a gate — a real "
                          "wiring bug measured 1000-10000x here, three decades clear of this line.")
-    ap.add_argument("--backend", default="llvm-cpu", help="IREE runner only: llvm-cpu or rocm")
+    ap.add_argument("--backend", default="llvm-cpu", choices=_iree.BACKENDS,
+                    help="IREE runner only")
     ap.add_argument("--runner", default=None, choices=["xla", "iree"],
                     help="which lowerer executes the render; default is the net's registry entry")
     ap.add_argument("--from-npz", default=None,

@@ -107,7 +107,8 @@ def main():
     order = sorted(range(N_CLASSES), key=lambda c: per_class[c]["acc"])
     for i in range(0, N_CLASSES, 4):
         print("  " + "   ".join(f"{per_class[c]['cls']:5s} {per_class[c]['acc']:5.1f}" for c in order[i:i + 4]))
-    print(f"  weakest: {', '.join(f'{per_class[c]['cls']} {per_class[c]['acc']:.1f}%' for c in order[:5])}")
+    weakest = ", ".join(f"{per_class[c]['cls']} {per_class[c]['acc']:.1f}%" for c in order[:5])
+    print(f"  weakest: {weakest}")
 
     # confusions, pooled: directed (true → predicted) and the symmetrised pairs
     cm = np.zeros((N_CLASSES, N_CLASSES), dtype=np.int64)

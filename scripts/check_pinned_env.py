@@ -2,6 +2,7 @@
 """check_pinned_env.py — assert the main `.venv` still IS the pinned environment.
 
     .venv/bin/python scripts/check_pinned_env.py      # exit 0 = pinned, 1 = drifted
+    .venv/bin/python scripts/check_pinned_env.py --allow-cpu   # jax version only, on a GPU-less host
 
 ⚠⚠ **THE FAILURE THIS EXISTS FOR IS SILENT-LOOKING, AND IT HAPPENED ON 2026-08-14.** Installing
 `timm` into the main venv pulled `torch`, which requires `nvidia-cudnn-cu13`. That package installs
@@ -65,7 +66,15 @@ def main() -> int:
     except Exception as e:                           # no GPU, or a broken plugin
         print(f"⚠ jax.devices() raised — {type(e).__name__}: {e}")
         devs = []
-    if devs and devs[0].platform == "gpu":
+    # ⚠ A CUDA plugin that fails to load makes JAX fall back to the CPU with only a warning, and the
+    # conv below would then pass without touching cuDNN. No GPU is itself a failure unless asked.
+    on_gpu = bool(devs) and devs[0].platform == "gpu"
+    if not on_gpu:
+        plat = devs[0].platform if devs else "none"
+        if "--allow-cpu" not in sys.argv:
+            bad.append(f"JAX's default device is {plat!r}, not a GPU — cuDNN was never loaded, so "
+                       f"nothing was checked (pass --allow-cpu on a GPU-less host)")
+    else:
         # The banner line XLA prints carries "DNN: X.Y.Z"; capture it by asking for the client's
         # own description rather than scraping stderr, which is not reliably ours to read.
         desc = getattr(devs[0].client, "platform_version", "") or ""
@@ -91,18 +100,19 @@ def main() -> int:
         print("⛔ the pinned environment has DRIFTED:")
         for b in bad:
             print(f"   • {b}")
-        print("\n   Most likely cause: something pulled torch into this venv, and torch requires\n"
-              "   nvidia-cudnn-cu13, which overwrites the pinned cu12 cuDNN in the shared\n"
-              "   nvidia/cudnn/lib/ directory. pip metadata will NOT show this.\n"
-              "   Repair:\n"
-              f"     .venv/bin/pip install --force-reinstall --no-deps nvidia-cudnn-cu12=={want_cudnn}\n"
-              "   And keep timm/torch out of here — they have their own pinned env,\n"
-              "   requirements-timm-lock.txt (CPU-only torch, zero nvidia-* packages).")
+        if on_gpu or len(bad) > 1:
+            print("\n   Most likely cause: something pulled torch into this venv, and torch requires\n"
+                  "   nvidia-cudnn-cu13, which overwrites the pinned cu12 cuDNN in the shared\n"
+                  "   nvidia/cudnn/lib/ directory. pip metadata will NOT show this.\n"
+                  "   Repair:\n"
+                  f"     .venv/bin/pip install --force-reinstall --no-deps nvidia-cudnn-cu12=={want_cudnn}\n"
+                  "   And keep timm/torch out of here — they have their own pinned env,\n"
+                  "   requirements-timm-lock.txt (CPU-only torch, zero nvidia-* packages).")
         return 1
 
     print(f"✅ pinned env OK — jax {jax.__version__}"
           + (f", cuDNN {loaded}" if loaded else "")
-          + (", bf16 conv runs" if devs else " (no GPU visible; conv not exercised)"))
+          + (", bf16 conv runs" if on_gpu else " (no GPU — --allow-cpu; cuDNN not checked)"))
     return 0
 
 

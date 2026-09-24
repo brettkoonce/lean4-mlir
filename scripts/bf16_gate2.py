@@ -2,7 +2,6 @@
 """Gate 2 for the bf16 render path: did the bf16 actually reach the hardware?
 
     .venv/bin/python scripts/bf16_gate2.py verified_mlir/resnet34in_momdp64bf16_train_step.mlir
-    .venv/bin/python scripts/bf16_gate2.py <bf16.mlir> --against <f32.mlir>   # + a speedup
 
 ⚠⚠ WHY THIS EXISTS, AND WHY IT DOES NOT GREP. A `stablehlo.convolution` line carries only its
 RESULT type. Grepping it for "bf16" reports success for a graph whose operands XLA has quietly
@@ -26,6 +25,11 @@ def _lazy():
 def compile_mlir(path, ctxs):
     jax, jex, np, xc, jmlir, jcomp, ir = ctxs
     client = jex.backend.get_backend()
+    # The verdict is about what the GPU compiler does with bf16; a CPU fallback (a broken CUDA
+    # plugin, JAX_PLATFORMS=cpu) compiles a different graph and would report on that instead.
+    if client.platform != "gpu":
+        raise SystemExit(f"⛔ JAX backend is {client.platform!r}, not gpu — gate 2 is a statement "
+                         f"about the GPU compile (wrong venv, or the CUDA plugin failed to load?)")
     dl = xc.DeviceList(tuple(client.local_devices()[:1]))
     src = open(path).read()
     # XLA insists the entry be `main`; the artifacts name theirs after the variant
@@ -116,7 +120,6 @@ def dot_operand_dtypes(exe):
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("mlir")
-    ap.add_argument("--against", help="the f32 peer, to also report a speedup")
     ap.add_argument("--expect", default="bf16", choices=["bf16", "f32"],
                     help="dtype every convolution operand must have (default bf16)")
     ap.add_argument("--dot-results", action="store_true",
@@ -178,12 +181,6 @@ def main():
             print(f"    free — see §20.1. Deliberate for small weight-gradient results; a defect")
             print(f"    for anything producing a large activation.")
 
-    if a.against:
-        jax, jex, np, *_ = ctxs
-        ref = compile_mlir(a.against, ctxs)
-        print(f"\n  ⚠ speedup not measured: it needs matching input buffers for both modules,")
-        print(f"    which this script does not synthesize. Use LEAN_MLIR_MAX_STEPS on the real")
-        print(f"    trainer instead — that is the number worth quoting anyway (§10.4 step 6).")
     return 0
 
 if __name__ == "__main__":

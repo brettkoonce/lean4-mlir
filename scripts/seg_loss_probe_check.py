@@ -25,10 +25,10 @@ import tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt  # noqa: E402
+sys.path.insert(0, os.path.dirname(__file__))
+import _iree  # noqa: E402
 
 PROBE = ".lake/build/bin/seg-loss-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
 SMOOTH = 1.0  # must match emitSegDiceBlock's default `smooth`
 
 
@@ -143,18 +143,8 @@ def build_and_run(kind, B, NC, H, W, z, y, ls=0.0):
             print(r.stdout, r.stderr)
             sys.exit(f"probe emit failed for {kind}")
         vmfb = os.path.join(td, "seg_loss.vmfb")
-        r = subprocess.run([IREE_COMPILE, mlir,
-                            "--iree-hal-target-backends=llvm-cpu",
-                            "-o", vmfb], capture_output=True, text=True)
-        if r.returncode != 0:
-            print(r.stderr[:3000])
-            sys.exit(f"iree-compile failed for {kind}")
-        cfg = rt.Config("local-task")
-        ctx = rt.SystemContext(config=cfg)
-        with open(vmfb, "rb") as f:
-            vm = rt.VmModule.copy_buffer(ctx.instance, f.read())
-        ctx.add_vm_module(vm)
-        out = ctx.modules.seg_loss_probe["main"](
+        _iree.compile_mlir(mlir, vmfb, what=kind)
+        out = _iree.load_function(vmfb, "seg_loss_probe")(
             z.astype(np.float32), y.astype(np.int32))
         loss = np.asarray(out[0]).item()
         dz = np.asarray(out[1]).astype(np.float64)

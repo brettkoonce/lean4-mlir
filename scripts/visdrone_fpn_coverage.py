@@ -31,7 +31,8 @@ from PIL import Image
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from preprocess_visdrone import parse_visdrone_txt, load_anchors
-from scripts.visdrone_anchors import wh_iou, kmeans_anchors
+# a sibling import, not `scripts.visdrone_anchors`: a site-packages `scripts` package would win
+from visdrone_anchors import wh_iou, kmeans_anchors
 
 INPUT_PX = 448
 GRIDS = {"P3": 56, "P4": 28, "P5": 14}       # strides 8 / 16 / 32

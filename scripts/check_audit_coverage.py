@@ -24,20 +24,28 @@ LAKEFILE = Path("lakefile.lean")
 AUDIT = Path("tests/AuditAxioms.lean")
 
 
+def lib_roots(text: str, lib: str) -> list[str]:
+    """Roots of one lib, e.g. «CertsHeavy»: the names inside its `roots := #[...]` only.
+
+    `--` comments are stripped first (they hold brackets like [3,4,6,3] that end a naive match
+    early), and the scan stops at the array's `]` — not at the next `lean_lib`, which would also
+    sweep in the next lib's docstring and count every backticked name there as a root.
+    """
+    try:
+        segment = text.split(f"lean_lib {lib} where", 1)[1].split("lean_lib", 1)[0]
+    except IndexError:
+        sys.exit(f"error: no `lean_lib {lib}` in lakefile.lean")
+    code = "\n".join(line.split("--", 1)[0] for line in segment.splitlines())
+    m = re.search(r"roots\s*:=\s*#\[(.*?)\]", code, re.S)
+    if not m:
+        sys.exit(f"error: `lean_lib {lib}` has no `roots := #[...]`")
+    return re.findall(r"`([A-Za-z0-9_.]+)", m.group(1))
+
+
 def proofs_roots(text: str) -> list[str]:
-    """Extract the union of the `Proofs` (per-push IR/render slice) and `Certs`
-    (certificate corpus) libs' roots, ignoring `--` comments (which contain
-    brackets like [3,4,6,3] that defeat naive `roots := #[...]` matching)."""
-    roots: list[str] = []
-    for lib in ("«Proofs»", "«Certs»"):
-        try:
-            segment = text.split(f"lean_lib {lib} where", 1)[1]
-        except IndexError:
-            sys.exit(f"error: no `lean_lib {lib}` in lakefile.lean")
-        segment = segment.split("lean_lib", 1)[0]
-        code = "\n".join(line.split("--", 1)[0] for line in segment.splitlines())
-        roots += re.findall(r"`([A-Za-z0-9_.]+)", code)
-    return roots
+    """The union of the `Proofs` (per-push IR/render slice) and `Certs` (certificate corpus)
+    libs' roots."""
+    return lib_roots(text, "«Proofs»") + lib_roots(text, "«Certs»")
 
 
 def imports_of(module: str) -> list[str]:
@@ -57,13 +65,6 @@ def reachable(roots: list[str]) -> set[str]:
         seen.add(module)
         stack += [m for m in imports_of(module) if m.startswith("LeanMlir")]
     return seen
-
-
-def lib_roots(text: str, lib: str) -> list[str]:
-    """Roots of one lib (comment-stripped), e.g. «CertsHeavy»."""
-    segment = text.split(f"lean_lib {lib} where", 1)[1].split("lean_lib", 1)[0]
-    code = "\n".join(line.split("--", 1)[0] for line in segment.splitlines())
-    return re.findall(r"`([A-Za-z0-9_.]+)", code)
 
 
 def check(audit: Path, covered: set[str], libs_desc: str, fix: str) -> int:

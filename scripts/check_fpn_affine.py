@@ -4,6 +4,7 @@ Run it after ANY change to `fpn_affine_one`, `fpn_decode_boxes` or
 `fpn_encode_boxes` in `ffi/f32_helpers.c`:
 
     scripts/../.venv/bin/python3 scripts/check_fpn_affine.py
+    scripts/../.venv/bin/python3 scripts/check_fpn_affine.py --break   # property 3 must FAIL
 
 Two rules this file exists to enforce, both learned the hard way in this repo:
 
@@ -70,7 +71,12 @@ lib.fpn_affine_one.argtypes = [
     ctypes.c_double, ctypes.c_double, ctypes.c_double,
     ctypes.c_double, ctypes.c_double, ctypes.c_double, ctypes.c_double]
 
-BXBUF = (ctypes.c_char * (12348 * 20))()
+class FpnAffBox(ctypes.Structure):          # ffi/f32_helpers.c `fpn_aff_box`
+    _fields_ = [("cx", ctypes.c_double), ("cy", ctypes.c_double), ("w", ctypes.c_double),
+                ("h", ctypes.c_double), ("cls", ctypes.c_int)]
+
+# One entry per anchor slot (NTOT / 15): the most boxes a target can decode to.
+BXBUF = (FpnAffBox * (NTOT // 15))()
 
 
 def c_affine(img, tgt, s, tx, ty, wh_thr=1.0, area_thr=0.1):
@@ -162,22 +168,31 @@ for i in range(8):
         ref = reference(tgt, s, tx, ty)
         d = float(np.abs(got - ref).max())
         if d > worst: worst, worstd = d, (i, s, tx, ty)
-        nga, nra = int((got[4::15].size and (got > 0.5).sum())), int((ref > 0.5).sum())
 print(f'   worst max|d| over 48 (record, scale, translate) draws: {worst:.3e}')
 print(f'   at {worstd}')
 print(f'   {"✅ exact" if worst == 0.0 else "⛔ MISMATCH"}')
 if worst != 0.0: FAILED.append('re-encode')
 
 print('\n3. PIXELS — warp then inverse-warp must return the interior')
+# `--break` inverts with the translation's sign flipped, a plausible bug, which must fail here.
+BREAK = '--break' in sys.argv
 img, tgt = load(3)
 s, tx, ty = 1.25, 0.07, -0.04
 w1, _ = c_affine(img, tgt, s, tx, ty)
-w2, _ = c_affine(w1, tgt, 1.0 / s, -tx / s, -ty / s)
+w2, _ = c_affine(w1, tgt, 1.0 / s, (tx if BREAK else -tx) / s, (ty if BREAK else -ty) / s)
 a = img.reshape(3, PX, PX)[:, 80:368, 80:368]
 b = w2.reshape(3, PX, PX)[:, 80:368, 80:368]
-print(f'   interior max|d| {np.abs(a - b).max():.3f}  mean {np.abs(a - b).mean():.4f}'
+mean_d, corr = float(np.abs(a - b).mean()), float(np.corrcoef(a.ravel(), b.ravel())[0, 1])
+print(f'   interior max|d| {np.abs(a - b).max():.3f}  mean {mean_d:.4f}'
       f'  (two bilinear resamples, so a blur residual is expected)')
-print(f'   correlation {np.corrcoef(a.ravel(), b.ravel())[0,1]:.6f}')
+print(f'   correlation {corr:.6f}')
+# Measured 2026-09-24: mean 0.0529, correlation 0.995385. The bounds leave room for the blur only.
+PIX_MEAN, PIX_CORR = 0.1, 0.99
+if mean_d > PIX_MEAN or corr < PIX_CORR:
+    print(f'   ⛔ outside mean ≤ {PIX_MEAN}, correlation ≥ {PIX_CORR}')
+    FAILED.append('pixels')
+else:
+    print(f'   ✅ within mean ≤ {PIX_MEAN}, correlation ≥ {PIX_CORR}')
 
 if FAILED:
     raise SystemExit(f"\n⛔ FAILED: {', '.join(FAILED)} — do not train on this "

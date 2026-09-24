@@ -31,10 +31,10 @@ import tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt  # noqa: E402
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _iree  # noqa: E402
 
 PROBE = ".lake/build/bin/seg-loss-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
 
 # Inverse-frequency weights, from scripts/brats_class_weights.py. Same vector
 # demos/MainUnetBratsTrain.lean uses; passed on the CLI rather than duplicated
@@ -64,14 +64,8 @@ def run(argv_tail, B, NC, H, W, z, y):
         subprocess.run([PROBE] + argv_tail + [str(B), str(NC), str(H), str(W), mlir],
                        capture_output=True, check=True)
         vmfb = os.path.join(td, "g.vmfb")
-        r = subprocess.run([IREE_COMPILE, mlir, "--iree-hal-target-backends=llvm-cpu",
-                            "-o", vmfb], capture_output=True, text=True)
-        if r.returncode != 0:
-            sys.exit(f"iree-compile failed for {argv_tail}:\n{r.stderr[:2000]}")
-        ctx = rt.SystemContext(config=rt.Config("local-task"))
-        with open(vmfb, "rb") as f:
-            ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, f.read()))
-        out = ctx.modules.seg_loss_probe["main"](z.astype(np.float32), y.astype(np.int32))
+        _iree.compile_mlir(mlir, vmfb, what=argv_tail)
+        out = _iree.load_function(vmfb, "seg_loss_probe")(z.astype(np.float32), y.astype(np.int32))
         return np.asarray(out[0]).item(), np.asarray(out[1]).astype(np.float64)
 
 

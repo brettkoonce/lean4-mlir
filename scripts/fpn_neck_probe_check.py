@@ -24,10 +24,10 @@ import tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt  # noqa: E402
+sys.path.insert(0, os.path.dirname(__file__))
+import _iree  # noqa: E402
 
 PROBE = ".lake/build/bin/fpn-neck-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
 
 
 # ── numpy oracle (mirrors scripts/fpn_neck_check.py + emitBilinearUpsample) ──
@@ -95,16 +95,8 @@ def make_runner(B, oc, c3, c4, c5, g5):
     if r.returncode != 0:
         print(r.stdout, r.stderr); sys.exit("probe emit failed")
     vmfb = os.path.join(td, "fpn.vmfb")
-    r = subprocess.run([IREE_COMPILE, mlir, "--iree-hal-target-backends=llvm-cpu",
-                        "-o", vmfb], capture_output=True, text=True)
-    if r.returncode != 0:
-        print(r.stderr[:3000]); sys.exit("iree-compile failed")
-    cfg = rt.Config("local-task")
-    ctx = rt.SystemContext(config=cfg)
-    with open(vmfb, "rb") as f:
-        vm = rt.VmModule.copy_buffer(ctx.instance, f.read())
-    ctx.add_vm_module(vm)
-    fn = ctx.modules.fpn_neck_probe["main"]
+    _iree.compile_mlir(mlir, vmfb)
+    fn = _iree.load_function(vmfb, "fpn_neck_probe")
 
     def run(*arrs):
         out = fn(*[a.astype(np.float32) for a in arrs])

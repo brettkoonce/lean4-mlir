@@ -40,6 +40,8 @@ Usage:  python3 scripts/batch_divisor_gate.py            # assert
 """
 import re, sys, glob, os, tempfile
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
 CONST = re.compile(r'stablehlo\.constant dense<(-?[0-9.eE+-]+)> : tensor<(\d+)x(\d+)xf32>')
 XARG  = re.compile(r'%x: tensor<(\d+)x')
 
@@ -71,7 +73,7 @@ def main():
     if "--control" in sys.argv:
         # ⚠ A gate nobody has seen FAIL is not a gate. Reproduce the real defect in a temp copy:
         # rewrite the batch divisor of the in-flight artifact to half the batch and require a catch.
-        src = "verified_mlir/convnextin_adamdpwxclipdropbf16_train_step.mlir"
+        src = f"{ROOT}/verified_mlir/convnextin_adamdpwxclipdropbf16_train_step.mlir"
         s = open(src).read()
         B = int(XARG.search(s).group(1))
         broken = s.replace(f"dense<{B}.0> : tensor<{B}x1000xf32>",
@@ -85,10 +87,14 @@ def main():
             return 0
         print("⛔ CONTROL DID NOT FIRE — this gate cannot see the defect it exists for"); return 1
 
-    rows, bad = [], []
-    for path in sorted(glob.glob("verified_mlir/*_train_step.mlir")):
+    rows, bad, skipped = [], [], []
+    paths = sorted(glob.glob(f"{ROOT}/verified_mlir/*_train_step.mlir"))
+    if not paths:
+        print(f"⛔ no verified_mlir/*_train_step.mlir under {ROOT} — nothing to check"); return 1
+    for path in paths:
         r = check(path)
-        if r is None: continue
+        if r is None:
+            skipped.append(os.path.basename(path)[:-5]); continue
         B, ks, off = r
         rows.append((os.path.basename(path)[:-5], B, ks, off))
         if off: bad.append((os.path.basename(path)[:-5], B, off))
@@ -97,7 +103,12 @@ def main():
         for n, B, ks, off in rows:
             print(f"{n:<56} {B:>6} {str(ks):>10}  {'ok' if not off else '⛔ ' + str(off)}")
         print()
-    print(f"── batch/divisor gate: {len(rows)} train-step artifacts, {len(rows)-len(bad)} ok, {len(bad)} MISMATCH")
+    print(f"── batch/divisor gate: {len(rows)} train-step artifacts, {len(rows)-len(bad)} ok, {len(bad)} MISMATCH"
+          + (f", {len(skipped)} SKIPPED (no %x or no [B x 10|1000] tensor)" if skipped else ""))
+    for n in skipped:
+        print(f"   skipped: {n}")
+    if not rows:
+        print("⛔ every artifact was skipped — the gate checked nothing"); return 1
     if bad:
         print("⛔ an integer constant on [batch x nClasses] is not the batch, B*K or 1 — the batch is")
         print("   spelled twice and the spellings disagree. Every gradient is scaled by their ratio:")

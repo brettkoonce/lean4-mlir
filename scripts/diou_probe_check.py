@@ -23,10 +23,10 @@ import tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt  # noqa: E402
+sys.path.insert(0, os.path.dirname(__file__))
+import _iree  # noqa: E402
 
 PROBE = ".lake/build/bin/diou-loss-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
 EPS = 1e-9
 
 
@@ -127,16 +127,8 @@ def make_runner(B, gH, gW, anchorW=1.0, anchorH=1.0):
     if r.returncode != 0:
         print(r.stdout, r.stderr); sys.exit("probe emit failed")
     vmfb = os.path.join(td, "diou.vmfb")
-    r = subprocess.run([IREE_COMPILE, mlir, "--iree-hal-target-backends=llvm-cpu",
-                        "-o", vmfb], capture_output=True, text=True)
-    if r.returncode != 0:
-        print(r.stderr[:3000]); sys.exit("iree-compile failed")
-    cfg = rt.Config("local-task")
-    ctx = rt.SystemContext(config=cfg)
-    with open(vmfb, "rb") as f:
-        vm = rt.VmModule.copy_buffer(ctx.instance, f.read())
-    ctx.add_vm_module(vm)
-    fn = ctx.modules.diou_probe["main"]
+    _iree.compile_mlir(mlir, vmfb)
+    fn = _iree.load_function(vmfb, "diou_probe")
 
     def run(pred, tgt, mask):
         out = fn(pred.astype(np.float32), tgt.astype(np.float32), mask.astype(np.float32))

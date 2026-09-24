@@ -142,7 +142,7 @@ echo "Preprocessing to train.bin / val.bin ..."
 # The FPN build needs per-scale anchor priors. Generate them first if absent.
 if [ ! -f "$OUT/anchors_fpn_p3.txt" ]; then
   echo "Computing per-scale k-means anchor priors ..."
-  python3 "$REPO_ROOT/scripts/coco_anchors.py" "$OUT" --save "$OUT" $VAL_ONLY
+  python3 "$REPO_ROOT/historical/coco_anchors.py" "$OUT" --save "$OUT" $VAL_ONLY
 fi
 
 python3 "$REPO_ROOT/historical/preprocess_coco.py" "$OUT" "$OUT" \

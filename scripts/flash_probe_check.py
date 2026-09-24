@@ -14,10 +14,10 @@ import os, subprocess, sys, tempfile
 import numpy as np
 
 os.environ.setdefault("JAX_PLATFORMS", "cpu")
-import iree.runtime as rt
+sys.path.insert(0, os.path.dirname(__file__))
+import _iree  # noqa: E402
 
 PROBE = ".lake/build/bin/flash-probe"
-IREE_COMPILE = ".venv/bin/iree-compile"
 
 
 def dense(Q, K, V, causal):
@@ -45,22 +45,14 @@ def dense_bwd(Q, K, V, dO, causal):
     return dQ, dK, dV
 
 
-def run_vmfb(vmfb_path):
-    ctx = rt.SystemContext(config=rt.Config("local-task"))
-    with open(vmfb_path, "rb") as f:
-        ctx.add_vm_module(rt.VmModule.copy_buffer(ctx.instance, f.read()))
-    return ctx.modules.flash_probe["main"]
-
-
 def emit_and_compile(tmp, mode_args, b, h, n, d, bk, causal):
     mlir = os.path.join(tmp, "f.mlir"); vmfb = os.path.join(tmp, "f.vmfb")
     args = [PROBE, str(b), str(h), str(n), str(d), str(bk)] + mode_args
     if causal: args.append("causal")
     args.append(mlir)
     subprocess.run(args, check=True, capture_output=True)
-    subprocess.run([IREE_COMPILE, "--iree-hal-target-backends=llvm-cpu", mlir, "-o", vmfb],
-                   check=True, capture_output=True)
-    return run_vmfb(vmfb)
+    _iree.compile_mlir(mlir, vmfb)
+    return _iree.load_function(vmfb, "flash_probe")
 
 
 def check(b, h, n, d, bk, causal):

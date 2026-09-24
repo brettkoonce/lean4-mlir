@@ -17,23 +17,23 @@ import os
 import re
 import subprocess
 import sys
+import tempfile
 
 import numpy as np
 
 EXE = "./.lake/build/bin/grad-fd-probe"
-SCRATCH = "/tmp/claude-1000/-home-skoonce-lean-proof-verify-demo-verify-v2/fdb"
+SCRATCH = tempfile.mkdtemp(prefix="grad_fd_bisect_")
 
 
 def run(rung, lr, init_load=None, init_dump=None):
     env = dict(os.environ)
-    env["IREE_BACKEND"] = "rocm"
-    env["HIP_VISIBLE_DEVICES"] = "0"
+    env.setdefault("CUDA_VISIBLE_DEVICES", "0")     # one card; the probe is MNIST-scale
     for k, v in (("LEAN_MLIR_INIT_LOAD", init_load), ("LEAN_MLIR_INIT_DUMP", init_dump)):
         if v:
             env[k] = v
         else:
             env.pop(k, None)
-    r = subprocess.run([EXE, rung, str(lr), "data/mnist16"], env=env,
+    r = subprocess.run([EXE, rung, str(lr), "data"], env=env,
                        capture_output=True, text=True)
     out = r.stdout + r.stderr
     if r.returncode != 0:
@@ -79,7 +79,6 @@ def main():
     ap.add_argument("--eps", type=float, default=1e-3)
     ap.add_argument("--lr", type=int, default=10)
     args = ap.parse_args()
-    os.makedirs(SCRATCH, exist_ok=True)
     eps_list = [args.eps, args.eps * 0.1]
 
     print(f"{'rung':>8} {'params':>9} {'analytic':>11} {'fd@1e-3':>11} "

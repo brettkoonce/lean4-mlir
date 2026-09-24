@@ -82,6 +82,63 @@ docstring (no false coverage today).
 | `margin_probe.py:32`, `mnist_e4m3_demo.py:30`, `mnist_e4m3_train_demo.py:32` | default DATA in a sibling checkout (live: cited from Lean) | default `data` |
 | `bf16_probe_3060.sh:38-39`, `run_r34_ablation.sh:80` | default venv `/home/skoonce/.venv-cuda` (absent) | box-detect as the confs do |
 
+### §2 + §3 status (2026-09-24)
+
+§2, each with its control:
+* `verify_excerpt.py`: a range with no log lines exits 1 (control: `content.tex:1-5`).
+* `batch_divisor_gate.py`: anchored on ROOT; no artifacts or all skipped → 1; skipped ones are
+  listed (none today, 193/193 checked; `--control` still fires; an empty root exits 1).
+* `eval_residency_gate.sh`: done in §1.
+* `check_pinned_env.py`: a non-GPU default device fails unless `--allow-cpu` (control:
+  `JAX_PLATFORMS=cpu` exits 1; on the GPU it passes with cuDNN loaded and the bf16 conv run).
+* `bf16_gate2.py`: refuses a non-`gpu` backend; the `--against` option, which only printed
+  "speedup not measured", is gone.
+* `mixup_gate.py`: gate 3 requires a non-empty cutmix box in at least one batch; docstring
+  `--break` → rc 0 (controls pass by being rejected). The stream reader was still on wire v2
+  and died at the preamble; now v4 (per-record row count). Gates 1b/2/3 and the controls pass.
+  ⚠ Finding, not fixed: gate 1 FAILS — the pinned mixing-off digests (`:163-164`) no longer
+  match (v1 now 8a204cd5…, v2 ad5f9e0b…). It failed before this change too. Several shim commits
+  could have moved them (wire v3/v4, 8182b6e1; per-net shims fd2d9fbe; 4a0a2781) — find which
+  one before re-pinning; a re-pin without a cause approves the change blindly.
+* `check_fpn_affine.py`: property 3 enforced (mean ≤ 0.1, correlation ≥ 0.99; measured 0.0529 /
+  0.9954); `--break` flips the inverse translation's sign and fails (0.87 / 0.14). Box buffer is
+  a ctypes `fpn_aff_box` array of NTOT/15 entries; dead `nga, nra` out.
+* `convention_audit.py`: `bn_world()` counts `[0,2,3]` vs `[2,3]` reduces, `none` without an
+  `rsqrt`. The substring rule was not only latent: it called all 13 `cifar8*_bn_*` train steps
+  (per-example, 24 vs 64) and the BN-free CIFAR/MNIST steps "batch". Audited nets unchanged.
+* `jobs/selftest.conf`: done in §1.
+* `check_audit_coverage.py`: roots read from the `roots := #[...]` array only (the old scan took
+  2–4 extra names per lib from comments/docstrings); one `lib_roots` instead of two parsers
+  (control: dropping `StableHLOParse` from the roots exits 1).
+
+§3:
+* `scripts/_iree.py`: `$IREE_COMPILE`/`$IREE_RUN_MODULE`, else the interpreter's bin, repo
+  `.venv/bin`, PATH, sibling `lean4-jax/.venv/bin` (compiler and runtime from one install);
+  backends `llvm-cpu` / `cuda` (`$IREE_CHIP`, default sm_86); local-task → local-sync fallback;
+  signals named. On it: the 7 `*_probe_check.py` (output byte-identical to the pre-change run),
+  `grad_tie`, the mnv2/mnv4/enet/convnext forward ties, `xla_pad_op_check` (numbers identical),
+  `render_parity` (now `--backend`, default cuda; self-parity 38/38 bit-identical on
+  `cifar8_bn_train_step`, eps 1e-5→1e-3 control 21/38 over 1e-3, rc 1), `seg_grad_scorecard`
+  (reproduces the `SpecHelpers.lean` row). ROCm/`gfx1100` is gone from all of them.
+* After the move, with no IREE env set: every tie reproduces its pre-change numbers
+  (mnv4 / convnext / grad_tie mnv4 pass; enet — never runnable here before — passes);
+  `convention_audit` clean on all five nets and `--selftest` passes.
+* ⚠ Finding, not fixed: `mnv2_forward_tie` fails its own 1e-4 bound at 6.2e-4 (before and after
+  the refactor). `--diag`: only the as-is/batch-BN row is small (every other ≈0.3), so the
+  structure ties; the bound is likely stale against the ~1e-3 MNv2 fp32 split (sync-BN §3.3).
+  Decide: widen the bound with a measured justification, or chase the 6e-4.
+* `grad_fd_bisect.py`: tempfile scratch, `CUDA_VISIBLE_DEVICES` default 0, data `data` (the
+  idx files live there). Not run.
+* `coco_anchors.py` → `historical/` (download_coco.sh + neu_anchors.py repointed). Its
+  `from scripts.visdrone_anchors` import — and `visdrone_fpn_coverage.py`'s — lose to anaconda's
+  site-packages `scripts` package; both now import the sibling module directly.
+* `arasl_score.py`: the nested f-string hoisted to a variable; compiles on 3.10.
+* `margin_probe.py`, `mnist_e4m3_{demo,train_demo}.py`: default DATA is ROOT/data (standard
+  MNIST, md5-checked).
+* `bf16_probe_3060.sh`, `run_r34_ablation.sh`: the confs' box detect (dry run finds the plugin).
+* Still stale: `tests/TestConvNeXt{T,}TrainPC.lean` docstrings describe the old ROCm/PATH setup
+  for `render_parity.py` (§7).
+
 ## 4. Dead — delete or move to `historical/`
 
 ~58 scripts. Delete unless marked (H) = move to `historical/` (cited as provenance or produced a

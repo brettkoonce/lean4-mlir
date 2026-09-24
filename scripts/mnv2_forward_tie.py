@@ -39,19 +39,14 @@ BN, so the batch cannot be shrunk to make this cheaper — the statistics are ov
 
 Usage:
     scripts/mnv2_forward_tie.py --diag
-    scripts/mnv2_forward_tie.py --diag --backend rocm
+    scripts/mnv2_forward_tie.py --diag --backend cuda
 """
-import argparse, os, re, subprocess, sys, tempfile
+import argparse, os, re, sys, tempfile
 import numpy as np
 
 REF_PY = "jax/.lake/build/generated_mobilenet_v2.py"
-CHIP = os.environ.get("IREE_CHIP", "gfx1100")
-# ⚠ Neither binary lives in THIS repo's .venv (memory `iree-still-works`): iree-compile ships in
-# the lean4-jax venv and iree-run-module in the source build. Both paths are env-overridable.
-IREE_C = os.environ.get("IREE_COMPILE",
-    "/home/skoonce/lean/klawd_max_power/lean4-jax/.venv/bin/iree-compile")
-IREE_R = os.environ.get("IREE_RUN_MODULE",
-    "/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _iree  # noqa: E402
 
 # ── the two reference sites that disagree with the render, patched independently ──
 STEM_SAME = "params[0][2], stride=(2,2), padding='SAME')"
@@ -155,7 +150,7 @@ def main():
     ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--scale", type=float, default=0.1)
     ap.add_argument("--tol", type=float, default=1e-4, help="max |Δ| over the logits")
-    ap.add_argument("--backend", default="llvm-cpu", help="llvm-cpu (portable) or rocm")
+    ap.add_argument("--backend", default="llvm-cpu", choices=_iree.BACKENDS)
     ap.add_argument("--eval", action="store_true",
                     help="tie @mobilenetv2_fwd_eval instead — the artifact the ADAM run scores "
                          "with, and the one that carries the new XLA-SAME padding")
@@ -185,7 +180,6 @@ def main():
                  f"the training loop for want of data/imagenette; the .py is written first)")
 
     work = tempfile.mkdtemp(prefix="mnv2tie_")
-    os.makedirs(f"{work}/in", exist_ok=True)
     shapes = parse_input_shapes(args.mlir, args.fn)
     batch = int(shapes[0].split("x")[0])       # the render pins it; batch BN forbids changing it
     print(f"func @{args.fn}: {len(shapes)} inputs, batch {batch}  (workdir {work})")
@@ -193,7 +187,7 @@ def main():
     rng = np.random.default_rng(args.seed)
     nStat = 104 if args.eval else 0            # 52 BN layers x (mu, var), the LAST inputs
     firstStat = len(shapes) - nStat
-    arrays, in_flags = [], []
+    arrays = []
     for i, s in enumerate(shapes):
         dims = [int(d) for d in s.split("x") if d]
         if args.eval and i >= firstStat:
@@ -221,30 +215,15 @@ def main():
         else:
             a = (np.asarray(rng.standard_normal(dims)).astype(np.float32) * args.scale)
         arrays.append(a)
-        p = f"{work}/in/i{i}.npy"
-        np.save(p, a)
-        in_flags.append(f"--input=@{p}")
 
     # ── the verified render ──
-    cflags = ([f"--iree-hal-target-backends=rocm", f"--iree-rocm-target={CHIP}"]
-              if args.backend == "rocm" else ["--iree-hal-target-backends=llvm-cpu"])
-    print(f"  iree-compile ({args.backend}) …", flush=True)
-    r = subprocess.run([IREE_C, *cflags, args.mlir, "-o", f"{work}/m.vmfb"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-compile FAILED:\n{r.stderr[:3000]}")
     # ⚠ `local-sync`, not `local-task`: the multithreaded CPU device dies on the larger modules
     # here with a nonzero code and EMPTY stderr (first seen on `efficientnet_fwd`, exit 245;
     # `mobilenetv2_fwd_eval` does it too). It is a device/threading problem, not a bad render.
-    dev = "hip" if args.backend == "rocm" else "local-sync"
-    print(f"  iree-run-module …", flush=True)
-    r = subprocess.run([IREE_R, f"--device={dev}", f"--module={work}/m.vmfb",
-                        f"--function={args.fn}", *in_flags,
-                        f"--output=@{work}/out.npy"], capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-run-module FAILED (returncode {r.returncode})\n"
-                 + (r.stderr[:3000] or "  <no stderr — killed by signal or device fault>"))
-    got = np.load(f"{work}/out.npy").astype(np.float64)
+    print(f"  iree-compile ({args.backend}) + iree-run-module …", flush=True)
+    devs = None if args.backend == "cuda" else ["local-sync"]
+    got = _iree.compile_and_run(args.mlir, args.fn, arrays, work, 1, args.backend,
+                                devs)[0].astype(np.float64)
 
     # ── the reference, on the same weights ──
     import jax.numpy as jnp

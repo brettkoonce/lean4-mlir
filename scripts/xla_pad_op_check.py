@@ -19,15 +19,11 @@ Three things are asserted, and the second and third matter as much as the first:
 Usage:  .venv/bin/python3 scripts/xla_pad_op_check.py
         (run `lake env lean tests/TestXlaPadOps.lean` first to emit the modules)
 """
-import os, re, subprocess, sys, tempfile
+import os, re, sys, tempfile
 import numpy as np
 
-# ⚠ Neither binary lives in THIS repo's .venv (memory `iree-still-works`): iree-compile ships in the
-# lean4-jax venv and iree-run-module in the source build. Both paths are env-overridable.
-IREE_C = os.environ.get("IREE_COMPILE",
-    "/home/skoonce/lean/klawd_max_power/lean4-jax/.venv/bin/iree-compile")
-IREE_R = os.environ.get("IREE_RUN_MODULE",
-    "/home/skoonce/lean/klawd_max_power/iree-build/tools/iree-run-module")
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _iree  # noqa: E402
 
 # (module, func, kernel-shape, grouped?, kH) — B=2, 16x16 -> 8x8 throughout.
 PROBES = [
@@ -40,21 +36,8 @@ B, HIN = 2, 16
 
 
 def run_module(mlir, fn, arrays, work):
-    flags = []
-    for i, a in enumerate(arrays):
-        p = f"{work}/{fn}_i{i}.npy"
-        np.save(p, a)
-        flags.append(f"--input=@{p}")
-    r = subprocess.run([IREE_C, "--iree-hal-target-backends=llvm-cpu", mlir,
-                        "-o", f"{work}/{fn}.vmfb"], capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-compile FAILED on {mlir}:\n{r.stderr[:2000]}")
-    r = subprocess.run([IREE_R, "--device=local-task", f"--module={work}/{fn}.vmfb",
-                        f"--function={fn}", *flags, f"--output=@{work}/{fn}_o.npy"],
-                       capture_output=True, text=True)
-    if r.returncode != 0:
-        sys.exit(f"iree-run-module FAILED on {fn}:\n{r.stderr[:2000]}")
-    return np.load(f"{work}/{fn}_o.npy").astype(np.float64)
+    vmfb = _iree.compile_mlir(mlir, f"{work}/{fn}.vmfb", what=fn)
+    return _iree.run_module(vmfb, fn, arrays, f"{work}/{fn}")[0].astype(np.float64)
 
 
 def main():

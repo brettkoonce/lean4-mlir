@@ -17,7 +17,7 @@ k-means runs within each scale — so the priors match the assignment they will
 be used under.
 
 Usage:
-  python3 scripts/coco_anchors.py <coco_dir> [--save DIR] [--num A]
+  python3 historical/coco_anchors.py <coco_dir> [--save DIR] [--num A]
                                   [--thresh LO HI] [--val-only]
 
 Without --save it reports; with --save DIR it writes
@@ -28,8 +28,9 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from scripts.visdrone_anchors import wh_iou, kmeans_anchors  # noqa: E402
+# the directory, not the `scripts` package: a site-packages `scripts` package would win
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
+from visdrone_anchors import wh_iou, kmeans_anchors  # noqa: E402
 import preprocess_coco as pc                                  # noqa: E402
 
 SCALE_NAMES = ("P3", "P4", "P5")

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Verify every quoted training-log line in a .tex excerpt against the real log.
 
-chapter_makeover.md §5: writing ch5's "Run it first" two log lines were
+planning/archive/chapter_makeover.md §5: writing ch5's "Run it first" two log lines were
 FABRICATED while hand-eliding the middle of a run, and were caught only by a
 diff like this one. Elision is exactly where invented numbers get in.
 
@@ -51,6 +51,9 @@ for i, s in logical:
     bad.append((i, s))
 
 print(f'checked {checked} quoted log lines against {logfile}')
+if checked == 0:
+    # A range with no training-output lines checks nothing — usually a wrong line range.
+    sys.exit(f'!!! no quoted log lines in content.tex:{lo}-{hi} — wrong range? nothing verified')
 if bad:
     print(f'\n!!! {len(bad)} NOT FOUND IN THE LOG — do not commit:\n')
     for i, s in bad:

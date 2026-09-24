@@ -208,6 +208,21 @@ def pad_kind(lo, hi):
 # § The RENDER side — read the conventions out of the committed MLIR
 # ═══════════════════════════════════════════════════════════════════════════
 
+def bn_world(path):
+    """Which BatchNorm a render computes: "batch", "per-example", or "none".
+
+    Counted, not tested for presence. A `[0, 2, 3]` reduce is not by itself batch BN — conv-bias
+    gradients and every BN's dgamma/dbeta reduce over it too (the BN-free `cifar8_train_step` has
+    eight). Batch statistics reduce over `[0, 2, 3]`, per-example ones over `[2, 3]`, so the BN's
+    own sites decide the majority; no `rsqrt` (the inverse std) means no BN at all.
+    """
+    txt = open(path).read()
+    if "stablehlo.rsqrt" not in txt:
+        return "none"
+    nb, npe = txt.count("dimensions = [0, 2, 3]"), txt.count("dimensions = [2, 3]")
+    return "batch" if nb > npe else "per-example"
+
+
 def render_profile(pad_src, train_path, split):
     txt = open(pad_src).read()
     prof = {}
@@ -249,11 +264,10 @@ def render_profile(pad_src, train_path, split):
         "logistic(swish/sigmoid)": len(re.findall(r"stablehlo\.logistic", txt)),
     }
 
-    prof["bn_train"] = ("batch" if "dimensions = [0, 2, 3]" in open(train_path).read()
-                        else "per-example")
+    prof["bn_train"] = bn_world(train_path)
     a, b = split
-    prof["bn_split_a"] = ("batch" if "dimensions = [0, 2, 3]" in open(a).read() else "per-example")
-    prof["bn_split_b"] = ("batch" if "dimensions = [0, 2, 3]" in open(b).read() else "per-example")
+    prof["bn_split_a"] = bn_world(a)
+    prof["bn_split_b"] = bn_world(b)
     prof["split_names"] = (a.split("/")[-1], b.split("/")[-1])
     return prof
 
