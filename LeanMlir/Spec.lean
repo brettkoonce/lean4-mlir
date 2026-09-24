@@ -29,97 +29,131 @@ def fpnDetectParamShapes (oc c3 c4 c5 A tower : Nat) : List (List Nat) := Id.run
     parameter-layout writer and emitter reads it from here. -/
 def mbConvSeMid (blockIc : Nat) : Nat := Nat.max 1 (blockIc / 4)
 
-def Layer.nParams : Layer → Nat
-  | .conv2d ic oc k _ _     => oc * ic * k * k + oc
-  | .convBn ic oc k _ _     => oc * ic * k * k + 2 * oc
-  | .layerNorm d            => 2 * d      -- γ, β
-  | .dense fi fo _           => fi * fo + fo
-  | .residualBlock ic oc n fs =>
-      let needsProj := !(ic == oc && fs == 1)
-      let idBlock := 2 * (oc * oc * 3 * 3 + 2 * oc)
-      let firstBlock := if needsProj
-        then (oc * ic * 3 * 3 + 2 * oc) + (oc * oc * 3 * 3 + 2 * oc) + (oc * ic * 1 * 1 + 2 * oc)
-        else idBlock
-      firstBlock + (n - 1) * idBlock
-  | .bottleneckBlock ic oc n fs =>
+/-- How one parameter tensor is initialized. A random draw consumes one seed; a constant does not.
+    `zeroSeeded` is zeros that still consume a seed — `.timeCondAdd`'s weight, which starts as a
+    no-op but keeps the seed stream every later layer draws from. -/
+inductive ParamInit where
+  | he (fanIn : Nat)          -- N(0, 2/fanIn)
+  | normal (σ : Float)        -- N(0, σ²)
+  | const (v : Float)
+  | zeroSeeded
+deriving Inhabited
+
+/-- One trainable tensor of a layer: its shape and its initialization. -/
+structure ParamSlot where
+  shape : List Nat
+  init  : ParamInit
+deriving Inhabited
+
+private def slotsConvB (oc ic k : Nat) : List ParamSlot :=
+  [⟨[oc, ic, k, k], .he (ic * k * k)⟩, ⟨[oc], .const 0.0⟩]
+private def slotsConvBn (oc ic k : Nat) : List ParamSlot :=
+  [⟨[oc, ic, k, k], .he (ic * k * k)⟩, ⟨[oc], .const 1.0⟩, ⟨[oc], .const 0.0⟩]
+private def slotsDense (fi fo : Nat) : List ParamSlot :=
+  [⟨[fi, fo], .he fi⟩, ⟨[fo], .const 0.0⟩]
+private def slotsLN (d : Nat) : List ParamSlot :=
+  [⟨[d], .const 1.0⟩, ⟨[d], .const 0.0⟩]
+
+/-- **The one writer of a trainable layer's parameter layout** — the tensors in signature order,
+    each with its initialization. `NetSpec.paramShapes` (the packed `[θ|m|v]` blob), `heInitLayer`
+    (the initial weights) and `Layer.nParams` (hence `totalParams`) all read it, so they cannot
+    disagree. `none` for layers the codegen does not train (their count is `nParamsUntrained`).
+    ⚠ The MLIR signature emitters in `MlirCodegen` (`fwdSigParts`, `emitTrainStepSig`) still spell
+    the same order by hand. -/
+def Layer.paramSlots : Layer → Option (List ParamSlot)
+  | .conv2d ic oc k _ _ => some (slotsConvB oc ic k)
+  | .convBn ic oc k _ _ => some (slotsConvBn oc ic k)
+  | .dense fi fo _ => some (slotsDense fi fo)
+  | .layerNorm d => some (slotsLN d)
+  | .fpnDetect oc c3 c4 c5 _ A tower =>
+      -- Rank-2 `[o,i]` and rank-4 `[o,i,k,k]` are weights (He); rank-1 are biases (zero). Zero
+      -- head biases reproduce the biasless head, until `applyDetPriorBias` installs the prior.
+      some <| (fpnDetectParamShapes oc c3 c4 c5 A tower).map fun sh =>
+        match sh with
+        | [_, i] => ⟨sh, .he i⟩
+        | [_, i, k, _] => ⟨sh, .he (i * k * k)⟩
+        | _ => ⟨sh, .const 0.0⟩
+  | .residualBlock ic oc nBlocks firstStride =>
+      let needsProj := !(ic == oc && firstStride == 1)
+      some <| (List.range nBlocks).flatMap fun bi =>
+        let blockIc := if bi == 0 then ic else oc
+        slotsConvBn oc blockIc 3 ++ slotsConvBn oc oc 3 ++
+          (if bi == 0 && needsProj then slotsConvBn oc ic 1 else [])
+  | .bottleneckBlock ic oc nBlocks firstStride =>
       let mid := oc / 4
-      let needsProj := !(ic == oc && fs == 1)
-      let idBlock := (mid * oc * 1 + 2 * mid) + (mid * mid * 9 + 2 * mid) + (oc * mid * 1 + 2 * oc)
-      let firstBlock := if needsProj
-        then (mid * ic * 1 + 2 * mid) + (mid * mid * 9 + 2 * mid) + (oc * mid * 1 + 2 * oc) +
-             (oc * ic * 1 + 2 * oc)
-        else idBlock
-      firstBlock + (n - 1) * idBlock
-  | .separableConv ic oc _ =>
-      (ic * 9 + 2 * ic) + (oc * ic + 2 * oc)
+      let needsProj := !(ic == oc && firstStride == 1)
+      some <| (List.range nBlocks).flatMap fun bi =>
+        let blockIc := if bi == 0 then ic else oc
+        slotsConvBn mid blockIc 1 ++ slotsConvBn mid mid 3 ++ slotsConvBn oc mid 1 ++
+          (if bi == 0 && needsProj then slotsConvBn oc ic 1 else [])
   | .invertedResidual ic oc expand _stride n =>
-      let mid := ic * expand
-      let expandP := if expand == 1 then 0 else (mid * ic + 2 * mid)
-      let dwP := mid * 9 + 2 * mid
-      let projP := oc * mid + 2 * oc
-      let firstBlock := expandP + dwP + projP
-      let midR := oc * expand
-      let expandR := if expand == 1 then 0 else (midR * oc + 2 * midR)
-      let dwR := midR * 9 + 2 * midR
-      let projR := oc * midR + 2 * oc
-      let restBlock := expandR + dwR + projR
-      firstBlock + (n - 1) * restBlock
-  | .mbConv ic oc expand k _stride n useSE _act =>
-      let mid := ic * expand
-      let expandP := if expand == 1 then 0 else (mid * ic + 2 * mid)
-      let dwP := mid * k * k + 2 * mid
-      let seMid := mbConvSeMid ic
-      let seP := if useSE then (seMid * mid + seMid) + (mid * seMid + mid) else 0
-      let projP := oc * mid + 2 * oc
-      let firstBlock := expandP + dwP + seP + projP
-      let midR := oc * expand
-      let expandR := if expand == 1 then 0 else (midR * oc + 2 * midR)
-      let dwR := midR * k * k + 2 * midR
-      let seMidR := mbConvSeMid oc
-      let seR := if useSE then (seMidR * midR + seMidR) + (midR * seMidR + midR) else 0
-      let projR := oc * midR + 2 * oc
-      let restBlock := expandR + dwR + seR + projR
-      firstBlock + (n - 1) * restBlock
-  | .mbConvV3 ic oc expandCh k _ useSE _act =>
-      let expandP := if expandCh == ic then 0 else (expandCh * ic + 2 * expandCh)
-      let dwP := expandCh * k * k + 2 * expandCh
-      let seMid := Nat.max 1 (expandCh / 4)
-      let seP := if useSE then (seMid * expandCh + seMid) + (expandCh * seMid + expandCh) else 0
-      let projP := oc * expandCh + 2 * oc
-      expandP + dwP + seP + projP
-  | .fusedMbConv ic oc expand k _stride n useSE =>
-      let mid := if expand == 1 then oc else ic * expand
-      let expandP := mid * ic * k * k + 2 * mid
+      some <| (List.range n).flatMap fun bi =>
+        let blockIc := if bi == 0 then ic else oc
+        let mid := blockIc * expand
+        (if expand != 1 then slotsConvBn mid blockIc 1 else []) ++
+          slotsConvBn mid 1 3 ++ slotsConvBn oc mid 1
+  | .mbConv ic oc expand kSize _stride n useSE _act =>
+      some <| (List.range n).flatMap fun bi =>
+        let blockIc := if bi == 0 then ic else oc
+        let mid := blockIc * expand
+        let seMid := mbConvSeMid blockIc
+        (if expand != 1 then slotsConvBn mid blockIc 1 else []) ++ slotsConvBn mid 1 kSize ++
+          (if useSE then slotsConvB seMid mid 1 ++ slotsConvB mid seMid 1 else []) ++
+          slotsConvBn oc mid 1
+  | .mbConvV3 ic oc expandCh kSize _stride useSE _act =>
+      let mid := expandCh
       let seMid := Nat.max 1 (mid / 4)
-      let seP := if useSE then (seMid * mid + seMid) + (mid * seMid + mid) else 0
-      let projP := if expand == 1 then 0 else (oc * mid + 2 * oc)
-      let firstBlock := expandP + seP + projP
-      let midR := if expand == 1 then oc else oc * expand
-      let expandR := midR * oc * k * k + 2 * midR
-      let seMidR := Nat.max 1 (midR / 4)
-      let seR := if useSE then (seMidR * midR + seMidR) + (midR * seMidR + midR) else 0
-      let projR := if expand == 1 then 0 else (oc * midR + 2 * oc)
-      let restBlock := expandR + seR + projR
-      firstBlock + (n - 1) * restBlock
+      some <| (if expandCh != ic then slotsConvBn mid ic 1 else []) ++ slotsConvBn mid 1 kSize ++
+        (if useSE then slotsConvB seMid mid 1 ++ slotsConvB mid seMid 1 else []) ++
+        slotsConvBn oc mid 1
+  | .fusedMbConv ic oc expand kSize _stride n useSE =>
+      some <| (List.range n).flatMap fun bi =>
+        let blockIc := if bi == 0 then ic else oc
+        let mid := if expand == 1 then oc else blockIc * expand
+        let seMid := Nat.max 1 (mid / 4)
+        slotsConvBn mid blockIc kSize ++
+          (if useSE then slotsConvB seMid mid 1 ++ slotsConvB mid seMid 1 else []) ++
+          (if expand != 1 then slotsConvBn oc mid 1 else [])
   | .uib ic oc expand _stride preDWk postDWk =>
       let mid := ic * expand
-      let preDW := if preDWk > 0 then ic * preDWk * preDWk + 2 * ic else 0
-      let expandP := mid * ic + 2 * mid
-      let postDW := if postDWk > 0 then mid * postDWk * postDWk + 2 * mid else 0
-      let projP := oc * mid + 2 * oc
-      preDW + expandP + postDW + projP
+      some <| (if preDWk > 0 then slotsConvBn ic 1 preDWk else []) ++ slotsConvBn mid ic 1 ++
+        (if postDWk > 0 then slotsConvBn mid 1 postDWk else []) ++ slotsConvBn oc mid 1
+  | .convNextStage channels nBlocks _norm _act =>
+      -- Per block: DW 7×7 (W, b) + LN (γ, β) + 1×1 expand + 1×1 project + LayerScale γ at the
+      -- paper's 1e-6 (a small residual contribution at init).
+      let c := channels
+      some <| (List.range nBlocks).flatMap fun _ =>
+        slotsConvB c 1 7 ++ slotsLN c ++ slotsConvB (4 * c) c 1 ++ slotsConvB c (4 * c) 1 ++
+          [⟨[c], .const 0.000001⟩]
+  | .convNextDownsample ic oc _norm => some (slotsLN ic ++ slotsConvB oc ic 2)
+  | .convNextStem ic oc p => some (slotsConvB oc ic p ++ slotsLN oc)
+  | .patchEmbed ic dim p nP =>
+      -- Conv (W, b), cls token = 0, positional embedding He at fan-in `nP + 1`.
+      some [⟨[dim, ic, p, p], .he (ic * p * p)⟩, ⟨[dim], .const 0.0⟩, ⟨[dim], .const 0.0⟩,
+            ⟨[nP + 1, dim], .he (nP + 1)⟩]
+  | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
+      some <| ((List.range nBlocks).flatMap fun _ =>
+        slotsLN dim ++ slotsDense dim dim ++ slotsDense dim dim ++ slotsDense dim dim ++
+          slotsDense dim dim ++ slotsLN dim ++ slotsDense dim mlpDim ++ slotsDense mlpDim dim) ++
+        slotsLN dim
+  | .unetDown ic oc => some (slotsConvBn oc ic 3 ++ slotsConvBn oc oc 3)
+  | .unetUp ic oc => some (slotsConvBn oc (ic + oc) 3 ++ slotsConvBn oc oc 3)
+  | .tokenPositionEmbed v t d _ _ posEmb =>
+      -- Token (and positional) embeddings ~ N(0, 0.02²), the GPT-2 / nano-GPT convention.
+      some <| [⟨[v, d], .normal 0.02⟩] ++ (if posEmb then [⟨[t, d], .normal 0.02⟩] else [])
+  | .lmHead d v _ => some (slotsDense d v)
+  | .timeCondAdd c nFreq =>
+      -- W and b start at ZERO so time conditioning begins as a no-op and grows in.
+      some [⟨[2 * nFreq, c], .zeroSeeded⟩, ⟨[c], .const 0.0⟩]
+  | _ => none
+
+/-- The displayed parameter count of a layer the codegen does NOT train (`Layer.paramSlots` is
+    `none`): the Bestiary's architectures, some counted approximately (`.mambaBlock`). -/
+def Layer.nParamsUntrained : Layer → Nat
+  | .separableConv ic oc _ =>
+      (ic * 9 + 2 * ic) + (oc * ic + 2 * oc)
   | .fireModule ic sq e1 e3 =>
       (sq * ic + 2 * sq) + (e1 * sq + 2 * e1) + (e3 * sq * 9 + 2 * e3)
-  | .patchEmbed ic dim p nP =>
-      dim * ic * p * p + dim + dim + (nP + 1) * dim
-  | .transformerEncoder dim _heads mlpDim nBlocks _causal _keepSeq _ _ =>
-      let perBlock := 2 * dim
-                    + 3 * (dim * dim + dim)
-                    + (dim * dim + dim)
-                    + 2 * dim
-                    + (dim * mlpDim + mlpDim)
-                    + (mlpDim * dim + dim)
-      nBlocks * perBlock + 2 * dim
   | .mambaBlock dim stateSize expand nBlocks =>
       -- Approximate per-block count (Gu & Dao 2023 structure):
       --   in_proj (D → 2·E·D) + out_proj (E·D → D): ~3·E·D²
@@ -147,16 +181,6 @@ def Layer.nParams : Layer → Nat
   | .patchMerging inDim outDim =>
       -- LN on concatenated 4·inDim + linear (4·inDim → outDim) + bias.
       (2 * 4 * inDim) + (4 * inDim * outDim + outDim)
-  | .unetDown ic oc =>
-      -- 2 × (conv3x3 + BN): ic→oc then oc→oc; maxPool adds zero params.
-      (9 * ic * oc + 2 * oc) + (9 * oc * oc + 2 * oc)
-  | .unetUp ic oc =>
-      -- Bilinear 2× upsample (no params, keeps `ic` channels) + concat with
-      -- the encoder skip (`oc` channels) → `ic + oc` channels.
-      -- Then 2 × (conv3x3 + BN): (ic+oc) → oc, then oc → oc.
-      -- Avoids transposed conv (no checkerboard artifacts; one fewer
-      -- primitive to FD-verify) — modern UNets converge here anyway.
-      (9 * (ic + oc) * oc + 2 * oc) + (9 * oc * oc + 2 * oc)
   | .transformerDecoder dim _heads mlpDim nBlocks nQueries =>
       -- Per block: 3 LayerNorms, self-attn Q/K/V/O (4·dim²+4·dim),
       -- cross-attn Q/K/V/O (4·dim²+4·dim), FFN (2·dim·mlpDim + dim + mlpDim).
@@ -220,11 +244,6 @@ def Layer.nParams : Layer → Nat
       let smoothing := 4 * (9 * target * target + target)
       -- Top-down upsample + elementwise add at each level: parameter-free.
       lateral + smoothing
-  | .fpnDetect oc c3 c4 c5 _ A tower =>
-      -- Derived from the single canonical shape list, so the count can never
-      -- disagree with what the codegen and heInit actually lay down.
-      (fpnDetectParamShapes oc c3 c4 c5 A tower).foldl
-        (fun acc sh => acc + sh.foldl (· * ·) 1) 0
   | .evoformerBlock msaChannels pairChannels nBlocks =>
       -- Per-block breakdown (approx, matching AlphaFold 2 supplementary):
       --   MSA row-attn w/ pair bias:   ~ 4·cm²          (Q/K/V/O on MSA channels)
@@ -263,22 +282,6 @@ def Layer.nParams : Layer → Nat
       let projOut   := dim * ic + 2 * ic
       let fusion    := 18 * ic * ic + 2 * ic
       localConv + projIn + txParams + projOut + fusion
-  | .convNextStage channels nBlocks _ _ =>
-      -- Per block:
-      --   DWConv 7×7 (depthwise):     49·c + c       — 50·c
-      --   LayerNorm (γ, β):           2·c
-      --   1×1 expand (c → 4c) + bias: 4·c² + 4·c
-      --   1×1 project (4c → c) + bias: 4·c² + c
-      --   LayerScale (γ per channel): c
-      -- Total per block ≈ 8·c² + 58·c
-      let c := channels
-      nBlocks * (8 * c * c + 58 * c)
-  | .convNextDownsample ic oc _ =>
-      -- LayerNorm on ic channels + 2×2 conv stride-2 (ic → oc) with bias
-      2 * ic + 4 * ic * oc + oc
-  | .convNextStem ic oc p =>
-      -- patchify p×p conv (ic → oc) with bias + channels-first LN (γ, β) on oc
-      oc * ic * p * p + oc + 2 * oc
   | .waveNetBlock residualCh skipCh nLayers =>
       -- Per dilated residual block:
       --   Dilated causal conv (kernel 2), res → 2·res (filter + gate):
@@ -349,16 +352,12 @@ def Layer.nParams : Layer → Nat
   | .transitionLayer ic oc =>
       -- BN(ic) γ/β + 1×1 (ic → oc) + bias. Avg pool has no params.
       2 * ic + ic * oc + oc
-  | .tokenPositionEmbed v t d _ _ posEmb =>
-      -- Token-embedding W [V, D] (no bias) + learnable position [T, D] (if present).
-      if posEmb then v * d + t * d else v * d
-  | .lmHead d v _ =>
-      -- Dense W [D, V] + bias [V].
-      d * v + v
-  | .timeCondAdd c nFreq =>
-      -- Dense W [2·nFreq, C] + bias [C].
-      2 * nFreq * c + c
   | _                        => 0
+
+def Layer.nParams (l : Layer) : Nat :=
+  match l.paramSlots with
+  | some slots => slots.foldl (fun acc sl => acc + sl.shape.foldl (· * ·) 1) 0
+  | none => l.nParamsUntrained
 
 def NetSpec.totalParams (s : NetSpec) : Nat :=
   s.layers.foldl (fun acc l => acc + l.nParams) 0
