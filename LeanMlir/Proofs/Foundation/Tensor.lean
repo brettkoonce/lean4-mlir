@@ -292,6 +292,41 @@ theorem HasVJP.backward_unique {m n : Nat} {f : Vec m → Vec n} (h₁ h₂ : Ha
     (x : Vec m) (dy : Vec n) : h₁.backward x dy = h₂.backward x dy :=
   HasVJP.backward_unique_of_eq rfl h₁ h₂ x dy
 
+-- ════════════════════════════════════════════════════════════════
+-- § The VJP of a coordinate reindex (every layout bridge, decimation and broadcast)
+-- ════════════════════════════════════════════════════════════════
+
+/-- **The VJP of a coordinate reindex** `y ↦ y ∘ σ` (a gather, `reindexCLM σ`): the backward
+    scatters each output cotangent back to the input cell it was read from — `pdiv_reindex`'s
+    indicator, contracted. The one witness behind every reindex-shaped layer: the BN layout
+    bridges (`reassocFwd/Back`, `bnchwFwd/Back`), the `StridedConv` decimations, and
+    `reindex_has_vjp`'s `correct`. (`broadcastFlat_has_vjp` keeps its own witness: its backward
+    is spelled the way the IR's `broadcastBack` denotes, and the SE-gate graph ties match it by
+    `rfl`.) -/
+noncomputable def reindexVJP {a b : Nat} (σ : Fin b → Fin a) :
+    HasVJP (fun y : Vec a => fun k : Fin b => y (σ k)) where
+  backward := fun _v dy => fun idx => ∑ k : Fin b, (if idx = σ k then (1 : ℝ) else 0) * dy k
+  correct _ _ _ := Finset.sum_congr rfl fun _ _ => by rw [pdiv_reindex]
+
+/-- **Along a bijection the scatter is the inverse gather**: when `τ` inverts `σ`, exactly one
+    delta survives, so `reindexVJP σ`'s backward is the reindex along `τ`. -/
+theorem reindexVJP_backward_of_inv {a b : Nat} (σ : Fin b → Fin a) (τ : Fin a → Fin b)
+    (hστ : ∀ i, σ (τ i) = i) (hτσ : ∀ k, τ (σ k) = k) (v : Vec a) (dy : Vec b) :
+    (reindexVJP σ).backward v dy = fun i => dy (τ i) := by
+  funext i
+  show ∑ k, (if i = σ k then (1 : ℝ) else 0) * dy k = dy (τ i)
+  have h : ∀ k, i = σ k ↔ τ i = k := fun k =>
+    ⟨fun h => by rw [h, hτσ], fun h => by rw [← h, hστ]⟩
+  simp only [h, ite_mul, one_mul, zero_mul, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+
+/-- The scatter written as a masked sum (`if i = σ k then dy k else 0`) — the spelling the IR's
+    scatter ops denote. -/
+theorem reindexVJP_backward {a b : Nat} (σ : Fin b → Fin a) (v : Vec a) (dy : Vec b) :
+    (reindexVJP σ).backward v dy = fun i => ∑ k : Fin b, if i = σ k then dy k else 0 := by
+  funext i
+  show ∑ k, (if i = σ k then (1 : ℝ) else 0) * dy k = _
+  simp only [ite_mul, one_mul, zero_mul]
+
 /-- **Additive fan-in** — proved, no sorry. Requires `f` and `g` to be
     differentiable everywhere. -/
 @[reducible] noncomputable def biPath {m n : Nat} (f g : Vec m → Vec n) : Vec m → Vec n :=

@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Architectures.CNN
-import LeanMlir.Proofs.Architectures.PerChannelBN
 
 /-! # Strided convolution (stride-2 SAME) — Chapter 5 Milestone B, the hard new op
 

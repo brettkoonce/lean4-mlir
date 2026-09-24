@@ -132,30 +132,6 @@ theorem bnPerChannel_grad_input_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (
       ← bn_input_grad_correct m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε]
 
 -- ════════════════════════════════════════════════════════════════
--- § The VJP of a coordinate reindex (every layout bridge and decimation below)
--- ════════════════════════════════════════════════════════════════
-
-/-- **The VJP of a coordinate reindex** `y ↦ y ∘ σ` (a gather, `reindexCLM σ`): the backward
-    scatters each output cotangent back to the input cell it was read from — `pdiv_reindex`'s
-    indicator, contracted. The one witness behind the layout bridges here (`reassocFwd/Back`,
-    `bnchwFwd/Back`) and the decimations of `StridedConv.lean`. -/
-noncomputable def reindexVJP {a b : Nat} (σ : Fin b → Fin a) :
-    HasVJP (fun y : Vec a => fun k : Fin b => y (σ k)) where
-  backward := fun _v dy => fun idx => ∑ k : Fin b, (if idx = σ k then (1 : ℝ) else 0) * dy k
-  correct _ _ _ := Finset.sum_congr rfl fun _ _ => by rw [pdiv_reindex]
-
-/-- **Along a bijection the scatter is the inverse gather**: when `τ` inverts `σ`, exactly one
-    delta survives, so `reindexVJP σ`'s backward is the reindex along `τ`. -/
-theorem reindexVJP_backward_of_inv {a b : Nat} (σ : Fin b → Fin a) (τ : Fin a → Fin b)
-    (hστ : ∀ i, σ (τ i) = i) (hτσ : ∀ k, τ (σ k) = k) (v : Vec a) (dy : Vec b) :
-    (reindexVJP σ).backward v dy = fun i => dy (τ i) := by
-  funext i
-  show ∑ k, (if i = σ k then (1 : ℝ) else 0) * dy k = dy (τ i)
-  have h : ∀ k, i = σ k ↔ τ i = k := fun k =>
-    ⟨fun h => by rw [h, hτσ], fun h => by rw [← h, hστ]⟩
-  simp only [h, ite_mul, one_mul, zero_mul, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
-
--- ════════════════════════════════════════════════════════════════
 -- § Layout bridge: Tensor3 `(oc*h)*w`  ↔  Mat-split `oc*(h*w)`  (B9 entry)
 -- ════════════════════════════════════════════════════════════════
 

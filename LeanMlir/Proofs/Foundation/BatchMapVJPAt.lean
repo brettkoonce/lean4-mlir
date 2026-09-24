@@ -145,19 +145,14 @@ noncomputable def batchMap_has_vjp {N a b : Nat} (f : Vec a → Vec b)
 -- § True batch-norm `bnBatchLA` VJP — the proven `bnBatchTensor4`, reindex-conjugated
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Generic reindex VJP.** `reindexCLM σ` (gather `y ↦ y ∘ σ`) is linear; its backward scatters each
-    output cotangent back to the inputs that map to it (the adjoint). Generalizes the manual reindex
-    VJPs (`broadcastFlat_has_vjp`, `bnchwFwd/Back_has_vjp`). -/
+/-- **Reindex VJP at `reindexCLM`** — `reindexVJP`, with the backward spelled as the masked
+    sum the IR's scatter ops denote (`reindexVJP_backward`), so the batched graph ties close by
+    `rfl`. -/
 noncomputable def reindex_has_vjp {a b : Nat} (σ : Fin b → Fin a) :
     HasVJP (reindexCLM σ) where
   backward := fun _v dy => fun i => ∑ k : Fin b, (if i = σ k then dy k else 0)
-  correct := by
-    intro v dy i
-    show (∑ k : Fin b, if i = σ k then dy k else 0)
-        = ∑ j : Fin b, pdiv (reindexCLM σ) v i j * dy j
-    have hpd : ∀ j : Fin b, pdiv (reindexCLM σ) v i j = if i = σ j then 1 else 0 := by
-      intro j; exact pdiv_reindex σ v i j
-    simp only [hpd, ite_mul, one_mul, zero_mul]
+  correct v dy i :=
+    (congrFun (reindexVJP_backward σ v dy) i).symm.trans ((reindexVJP σ).correct v dy i)
 
 /-- **`bnBatchLA` is the proven `bnBatchTensor4`, conjugated by the `mul_assoc` reindex.** Both reindex
     maps are `reindexCLM (Fin.cast …)`; the middle is the genuinely batch-coupled true batch-norm. -/
