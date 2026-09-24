@@ -725,7 +725,6 @@ structure ENetFwd where
   bnSt   : List String := []  -- every BN site's packed statistics, aligned with `bns`
   deriving Inhabited
 
-set_option maxRecDepth 4000000 in
 /-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), swish output. -/
 structure ENetStemFwdB where
   code : String
@@ -862,7 +861,6 @@ private def enetFwdSig (B nClasses : Nat) (mode : BnMode) (epsStr : String) (con
   String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats)) ++
     enetDropSig B sd ++ enetDropoutSig B cd
 
-set_option maxRecDepth 4000000 in
 /-- **`@efficientnet_fwd` rendered ENTIRELY from the verified AST** — 263 inputs (`%x` plus the 262
     params in `enetSig` order), returning logits `[B, nClasses]`. Shares `enetFwdChain` with the
     train step, so it is a byte-identical PREFIX of `efficientnet_train_step.mlir`, ending exactly
@@ -877,7 +875,6 @@ def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bo
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
-set_option maxRecDepth 4000000 in
 /-- **`@efficientnet_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward,
     every BN site consuming frozen per-channel running stats (the `bnEval` descriptor, `den` =
     `batchMap N bnPerChannelEvalTensor3`) instead of reducing statistics out of its activation.
@@ -897,7 +894,6 @@ def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias 
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
-set_option maxRecDepth 4000000 in
 /-- **The whole-net forward + cotangent + backward traversal, SHARED by the SGD and AdamW renders.**
 
     Returns `(code, params, softmax, bns)`:
@@ -1056,7 +1052,6 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     -- `@efficientnet_fwd_eval` READS are the same list — not two that happen to agree today.
     pure (fwdCode ++ bwdCode, outNames, nSm, F.bns, F.bnSt)
 
-set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 (full 16-MBConv) SGD train step rendered ENTIRELY from the verified AST**, at
     the batched index `N·(c·h·w)`. Every emitted line is `pretty` of a verified `SHlo` node. Strided
     stem 3×3/s2 (3→32, 224→112) → b1 (no-expand) → b2..b16 (4 strided downsamples 112→7, 9 residual
@@ -1157,7 +1152,6 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
   -- what caught it, before anything ran.
   (if bf16 then "bf16" else "")
 
-set_option maxRecDepth 4000000 in
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
     hand-written [`tests/TestEfficientNetTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestEfficientNetTrain.lean) render that `efficientnet-verified-adam` has
     been training on.

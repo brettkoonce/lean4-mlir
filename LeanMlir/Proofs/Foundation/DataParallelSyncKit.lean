@@ -393,11 +393,12 @@ theorem convStridedWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc k
     convStridedWeightGradB_smul, inv_mul_R R hR]
 
 theorem bnSync_of_scaled (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
-    (hM : (R * N) * (h * w) ≠ 0) (tg tb vN epsStr cotN : String) (ε : ℝ)
+    (tg tb vN epsStr cotN : String) (ε : ℝ)
     (V : Vec ((R * N) * (oc * h * w))) (cots : Fin R → Vec (N * (oc * h * w)))
     (COT : Vec ((R * N) * (oc * h * w)))
     (hc : ∀ r, cots r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * COT i) r) :
     BnSync R hR N oc h w tg tb vN epsStr cotN ε V cots COT := by
+  have hM : (R * N) * (h * w) ≠ 0 := by rw [Nat.mul_assoc]; exact Nat.mul_ne_zero hR.ne' hm
   have hV : ∀ r, den (SHlo.operand vN (reassocB N oc h w (batchShard R N (oc * h * w) V r)))
       = batchShard R N (oc * (h * w)) (reassocB (R * N) oc h w V) r :=
     fun r => reassocB_shard V r

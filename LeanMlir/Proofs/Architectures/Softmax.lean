@@ -155,6 +155,17 @@ noncomputable def softmax_has_vjp (c : Nat) : HasVJP (softmax c) where
       mul_zero, zero_mul, Finset.sum_ite_eq, Finset.mem_univ, ite_true, Finset.mul_sum]
     exact congrArg _ (Finset.sum_congr rfl fun j _ => by ring)
 
+/-- **`crossEntropy` is differentiable in the logits.** `softmax > 0` lets `Real.log` (hence
+    `crossEntropy = -log(softmax · label)`) inherit smoothness. -/
+@[fun_prop]
+theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
+    Differentiable ℝ (fun z : Vec c => crossEntropy c z label) := by
+  cases c with
+  | zero => exact label.elim0
+  | succ c' =>
+    unfold crossEntropy softmax; simp only [div_eq_mul_inv]
+    fun_prop (disch := intro z; positivity)
+
 /-- **Softmax cross-entropy scalar gradient** — proved (was an axiom in
     MLP.lean; relocated here to use `pdiv_softmax`).
 
@@ -181,15 +192,9 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   have h_softmax_label_diff : Differentiable ℝ
       (fun z : Vec (c' + 1) => softmax (c' + 1) z label) :=
     fun z => differentiableAt_pi.mp ((softmax_diff (c' + 1)) z) label
-  have h_log_diff : Differentiable ℝ
-      (fun z : Vec (c' + 1) => Real.log (softmax (c' + 1) z label)) :=
-    fun z => (h_softmax_label_diff z).log (h_softmax_pos z).ne'
   have h_ce_pi_diff : Differentiable ℝ
-      (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label) := by
-    rw [differentiable_pi]
-    intro _
-    simp only [crossEntropy_def]
-    exact h_log_diff.neg
+      (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label) :=
+    differentiable_pi.mpr fun _ => crossEntropy_differentiable (c' + 1) label
   unfold pdiv
   -- Step 1: extract the single (0-th) coord of the Vec 1-valued function.
   rw [show fderiv ℝ (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label)
@@ -225,17 +230,5 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   rw [oneHot_apply]
   field_simp
   ring
-
-/-- **`crossEntropy` is differentiable in the logits.** The standalone form of the
-    differentiability infrastructure inside `softmaxCE_grad`: `softmax > 0` lets
-    `Real.log` (hence `crossEntropy = -log(softmax · label)`) inherit smoothness. -/
-@[fun_prop]
-theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
-    Differentiable ℝ (fun z : Vec c => crossEntropy c z label) := by
-  cases c with
-  | zero => exact label.elim0
-  | succ c' =>
-    unfold crossEntropy softmax; simp only [div_eq_mul_inv]
-    fun_prop (disch := intro z; positivity)
 
 end Proofs

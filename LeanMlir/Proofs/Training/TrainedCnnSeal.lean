@@ -161,8 +161,6 @@ noncomputable def conv1wit :
 -- § S4/S3: the dense head slices
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem d4inner : ∀ k m : Fin 8,
     pdiv (relu 8 ∘ dense W4 b4) r3V k m
       = W4 k m * (if d4V m > 0 then (1:ℝ) else 0) := by
@@ -184,8 +182,6 @@ theorem d4inner : ∀ k m : Fin 8,
         (fun l => W4 k l * (if d4V l > 0 then (1:ℝ) else 0))]
   simp
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S4 : ∀ k : Fin 8,
     pdiv (dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) r3V k ⟨7, by norm_num⟩ = t4V k := by
   intro k
@@ -193,8 +189,6 @@ theorem S4 : ∀ k : Fin 8,
   simp only [d4inner, pdiv_dense]
   fin_cases k <;> (simp [W4, W5, d4V, t4V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem d3inner : ∀ (k : Fin (2*3*3)) (m : Fin 8),
     pdiv (relu 8 ∘ dense W3 b3) p2f k m
       = W3 k m * (if d3V m > 0 then (1:ℝ) else 0) := by
@@ -216,8 +210,6 @@ theorem d3inner : ∀ (k : Fin (2*3*3)) (m : Fin 8),
         (fun l => W3 k l * (if d3V l > 0 then (1:ℝ) else 0))]
   simp
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem S3 : ∀ k : Fin (2*3*3),
     pdiv ((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) p2f k ⟨7, by norm_num⟩ = t3V k := by
   intro k
@@ -232,8 +224,6 @@ theorem S3 : ∀ k : Fin (2*3*3),
 -- § S2: the max-pool stage (argmax routing), per position
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c0 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -257,8 +247,6 @@ theorem S2_c0 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c1 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -282,8 +270,6 @@ theorem S2_c1 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c2 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -307,8 +293,6 @@ theorem S2_c2 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c3 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -332,8 +316,6 @@ theorem S2_c3 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c4 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -357,8 +339,6 @@ theorem S2_c4 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c5 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -382,8 +362,6 @@ theorem S2_c5 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c6 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -407,8 +385,6 @@ theorem S2_c6 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c7 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -431,8 +407,6 @@ theorem S2_c7 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨0, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c8 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -455,8 +429,6 @@ theorem S2_c8 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨1, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c9 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -480,8 +452,6 @@ theorem S2_c9 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c10 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -504,8 +474,6 @@ theorem S2_c10 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨2, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c11 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -529,8 +497,6 @@ theorem S2_c11 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c12 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -554,8 +520,6 @@ theorem S2_c12 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c13 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -578,8 +542,6 @@ theorem S2_c13 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨3, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c14 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -603,8 +565,6 @@ theorem S2_c14 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c15 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -628,8 +588,6 @@ theorem S2_c15 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c16 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -652,8 +610,6 @@ theorem S2_c16 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨5, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c17 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -677,8 +633,6 @@ theorem S2_c17 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c18 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -702,8 +656,6 @@ theorem S2_c18 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c19 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -727,8 +679,6 @@ theorem S2_c19 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c20 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -752,8 +702,6 @@ theorem S2_c20 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c21 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -776,8 +724,6 @@ theorem S2_c21 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨4, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c22 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -801,8 +747,6 @@ theorem S2_c22 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c23 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -826,8 +770,6 @@ theorem S2_c23 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c24 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -851,8 +793,6 @@ theorem S2_c24 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c25 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -875,8 +815,6 @@ theorem S2_c25 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨6, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c26 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -900,8 +838,6 @@ theorem S2_c26 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c27 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -924,8 +860,6 @@ theorem S2_c27 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨7, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c28 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -949,8 +883,6 @@ theorem S2_c28 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c29 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -974,8 +906,6 @@ theorem S2_c29 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c30 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -999,8 +929,6 @@ theorem S2_c30 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c31 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1024,8 +952,6 @@ theorem S2_c31 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c32 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1049,8 +975,6 @@ theorem S2_c32 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c33 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1074,8 +998,6 @@ theorem S2_c33 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c34 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1098,8 +1020,6 @@ theorem S2_c34 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨8, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c35 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1123,8 +1043,6 @@ theorem S2_c35 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c36 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1148,8 +1066,6 @@ theorem S2_c36 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c37 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1173,8 +1089,6 @@ theorem S2_c37 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c38 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1198,8 +1112,6 @@ theorem S2_c38 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c39 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1223,8 +1135,6 @@ theorem S2_c39 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c40 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1248,8 +1158,6 @@ theorem S2_c40 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c41 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1273,8 +1181,6 @@ theorem S2_c41 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c42 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1298,8 +1204,6 @@ theorem S2_c42 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c43 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1322,8 +1226,6 @@ theorem S2_c43 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨9, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c44 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1346,8 +1248,6 @@ theorem S2_c44 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨10, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c45 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1371,8 +1271,6 @@ theorem S2_c45 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c46 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1395,8 +1293,6 @@ theorem S2_c46 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨11, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c47 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1420,8 +1316,6 @@ theorem S2_c47 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c48 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1445,8 +1339,6 @@ theorem S2_c48 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c49 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1469,8 +1361,6 @@ theorem S2_c49 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨12, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c50 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1493,8 +1383,6 @@ theorem S2_c50 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨13, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c51 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1518,8 +1406,6 @@ theorem S2_c51 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c52 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1542,8 +1428,6 @@ theorem S2_c52 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨14, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c53 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1567,8 +1451,6 @@ theorem S2_c53 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c54 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1592,8 +1474,6 @@ theorem S2_c54 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c55 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1617,8 +1497,6 @@ theorem S2_c55 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c56 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1642,8 +1520,6 @@ theorem S2_c56 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c57 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1667,8 +1543,6 @@ theorem S2_c57 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c58 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1692,8 +1566,6 @@ theorem S2_c58 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c59 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1717,8 +1589,6 @@ theorem S2_c59 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c60 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1742,8 +1612,6 @@ theorem S2_c60 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c61 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1767,8 +1635,6 @@ theorem S2_c61 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c62 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1792,8 +1658,6 @@ theorem S2_c62 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c63 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1817,8 +1681,6 @@ theorem S2_c63 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c64 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1842,8 +1704,6 @@ theorem S2_c64 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c65 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1867,8 +1727,6 @@ theorem S2_c65 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c66 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1892,8 +1750,6 @@ theorem S2_c66 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c67 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1916,8 +1772,6 @@ theorem S2_c67 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨15, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c68 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1941,8 +1795,6 @@ theorem S2_c68 :
     norm_num at hv)]
   show (0 : ℝ) = t2V (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c69 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1965,8 +1817,6 @@ theorem S2_c69 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨16, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c70 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -1989,8 +1839,6 @@ theorem S2_c70 :
       (simp [winRow, winCol, winRowInv, winColInv, r2V]; try norm_num))]
   show t3V (⟨17, by norm_num⟩ : Fin (2*3*3)) = t2V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3)))
   norm_num [t3V, t2V]
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
 theorem S2_c71 :
     pdiv (((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) (Tensor3.flatten r2V) (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t2V (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
@@ -2096,8 +1944,9 @@ theorem S2 : ∀ k : Fin (2 * (2*3) * (2*3)),
 -- § S2r: the conv2-side ReLU mask fold
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
+-- The mask fold's `simp` times out at the default 200000 heartbeats and passes at
+-- 1000000 (measured 2026-09-24); nothing else in this file needs a bump.
+set_option maxHeartbeats 1000000 in
 theorem S2r : ∀ m : Fin (2 * (2*3) * (2*3)),
     pdiv ((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) (Tensor3.flatten c2V) m ⟨7, by norm_num⟩ = m2V m := by
   intro m
@@ -2335,8 +2184,6 @@ theorem S2r : ∀ m : Fin (2 * (2*3) * (2*3)),
 -- § S1: the conv2 input-VJP stage, per position
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c0 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨0, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2353,8 +2200,6 @@ theorem S1_c0 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c1 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨1, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2371,8 +2216,6 @@ theorem S1_c1 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c2 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨2, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2389,8 +2232,6 @@ theorem S1_c2 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c3 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨3, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2407,8 +2248,6 @@ theorem S1_c3 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c4 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨4, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2425,8 +2264,6 @@ theorem S1_c4 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c5 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨5, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2443,8 +2280,6 @@ theorem S1_c5 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c6 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨6, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2461,8 +2296,6 @@ theorem S1_c6 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c7 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨7, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2479,8 +2312,6 @@ theorem S1_c7 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c8 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨8, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2497,8 +2328,6 @@ theorem S1_c8 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c9 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨9, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2515,8 +2344,6 @@ theorem S1_c9 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c10 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨10, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2533,8 +2360,6 @@ theorem S1_c10 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c11 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨11, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2551,8 +2376,6 @@ theorem S1_c11 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c12 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨12, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2569,8 +2392,6 @@ theorem S1_c12 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c13 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨13, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2587,8 +2408,6 @@ theorem S1_c13 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c14 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨14, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2605,8 +2424,6 @@ theorem S1_c14 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c15 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨15, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2623,8 +2440,6 @@ theorem S1_c15 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c16 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨16, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2641,8 +2456,6 @@ theorem S1_c16 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c17 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨17, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2659,8 +2472,6 @@ theorem S1_c17 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c18 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨18, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2677,8 +2488,6 @@ theorem S1_c18 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c19 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨19, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2695,8 +2504,6 @@ theorem S1_c19 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c20 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨20, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2713,8 +2520,6 @@ theorem S1_c20 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c21 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨21, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2731,8 +2536,6 @@ theorem S1_c21 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c22 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨22, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2749,8 +2552,6 @@ theorem S1_c22 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c23 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨23, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2767,8 +2568,6 @@ theorem S1_c23 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c24 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨24, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2785,8 +2584,6 @@ theorem S1_c24 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c25 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨25, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2803,8 +2600,6 @@ theorem S1_c25 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c26 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨26, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2821,8 +2616,6 @@ theorem S1_c26 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c27 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨27, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2839,8 +2632,6 @@ theorem S1_c27 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c28 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨28, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2857,8 +2648,6 @@ theorem S1_c28 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c29 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨29, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2875,8 +2664,6 @@ theorem S1_c29 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c30 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨30, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2893,8 +2680,6 @@ theorem S1_c30 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c31 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨31, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2911,8 +2696,6 @@ theorem S1_c31 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c32 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨32, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2929,8 +2712,6 @@ theorem S1_c32 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c33 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨33, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2947,8 +2728,6 @@ theorem S1_c33 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c34 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨34, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2965,8 +2744,6 @@ theorem S1_c34 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c35 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨35, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -2983,8 +2760,6 @@ theorem S1_c35 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c36 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨36, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3001,8 +2776,6 @@ theorem S1_c36 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c37 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨37, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3019,8 +2792,6 @@ theorem S1_c37 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c38 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨38, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3037,8 +2808,6 @@ theorem S1_c38 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c39 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨39, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3055,8 +2824,6 @@ theorem S1_c39 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c40 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨40, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3073,8 +2840,6 @@ theorem S1_c40 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c41 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨41, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3091,8 +2856,6 @@ theorem S1_c41 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c42 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨42, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3109,8 +2872,6 @@ theorem S1_c42 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c43 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨43, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3127,8 +2888,6 @@ theorem S1_c43 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c44 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨44, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3145,8 +2904,6 @@ theorem S1_c44 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c45 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨45, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3163,8 +2920,6 @@ theorem S1_c45 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c46 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨46, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3181,8 +2936,6 @@ theorem S1_c46 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c47 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨47, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3199,8 +2952,6 @@ theorem S1_c47 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c48 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨48, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3217,8 +2968,6 @@ theorem S1_c48 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c49 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨49, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3235,8 +2984,6 @@ theorem S1_c49 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c50 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨50, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3253,8 +3000,6 @@ theorem S1_c50 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c51 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨51, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3271,8 +3016,6 @@ theorem S1_c51 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c52 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨52, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3289,8 +3032,6 @@ theorem S1_c52 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c53 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨53, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3307,8 +3048,6 @@ theorem S1_c53 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c54 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨54, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3325,8 +3064,6 @@ theorem S1_c54 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c55 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨55, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3343,8 +3080,6 @@ theorem S1_c55 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c56 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨56, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3361,8 +3096,6 @@ theorem S1_c56 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c57 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨57, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3379,8 +3112,6 @@ theorem S1_c57 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c58 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨58, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3397,8 +3128,6 @@ theorem S1_c58 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c59 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨59, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3415,8 +3144,6 @@ theorem S1_c59 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c60 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨60, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3433,8 +3160,6 @@ theorem S1_c60 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c61 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨61, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3451,8 +3176,6 @@ theorem S1_c61 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c62 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨62, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3469,8 +3192,6 @@ theorem S1_c62 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c63 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨63, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3487,8 +3208,6 @@ theorem S1_c63 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c64 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨64, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3505,8 +3224,6 @@ theorem S1_c64 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c65 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨65, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3523,8 +3240,6 @@ theorem S1_c65 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c66 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨66, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3541,8 +3256,6 @@ theorem S1_c66 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c67 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨67, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3559,8 +3272,6 @@ theorem S1_c67 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c68 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨68, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3577,8 +3288,6 @@ theorem S1_c68 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c69 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨69, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3595,8 +3304,6 @@ theorem S1_c69 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c70 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨70, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3613,8 +3320,6 @@ theorem S1_c70 :
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
   simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S1_c71 :
     pdiv (((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) ⟨7, by norm_num⟩ = t1V (⟨71, by norm_num⟩ : Fin (2*(2*3)*(2*3))) := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
@@ -3713,8 +3418,9 @@ theorem S1 : ∀ k : Fin (2 * (2*3) * (2*3)),
 -- § S0r: the conv1-side ReLU mask fold
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
+-- The mask fold's `simp` times out at the default 200000 heartbeats and passes at
+-- 1000000 (measured 2026-09-24); nothing else in this file needs a bump.
+set_option maxHeartbeats 1000000 in
 theorem S0r : ∀ m : Fin (2 * (2*3) * (2*3)),
     pdiv ((((((dense W5 b5 ∘ (relu 8 ∘ dense W4 b4)) ∘ (relu 8 ∘ dense W3 b3)) ∘ maxPoolFlat 2 3 3) ∘ relu (2 * (2*3) * (2*3))) ∘ flatConv (h := 2*3) (w := 2*3) W2 b2) ∘ relu (2 * (2*3) * (2*3))) (Tensor3.flatten c1V) m ⟨7, by norm_num⟩ = m1V m := by
   intro m
@@ -3952,8 +3658,6 @@ theorem S0r : ∀ m : Fin (2 * (2*3) * (2*3)),
 -- § The sealed Jacobian entry
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 /-- **The whole-net Jacobian entry, exactly**: `∂ logit_7 / ∂ pixel (0,2)`
     at the trained weights and the real witness input. -/
 theorem pdiv_fwd_entry :

@@ -416,20 +416,8 @@ theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
           pdiv (StableHLO.batchMap N (Proofs.dense Wfc bfc) ∘ StableHLO.batchMap N (globalAvgPoolFlat 1280 7 7) ∘ StableHLO.cbrB N (h := 7) (w := 7) Wh bh εh γh βh
           ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1
           ∘ mnv2StemB N 112 112 Ws bs εs γs βs) x i j * dy j := by
-  rw [congrFun (mnv2InputGradB_eq_mobilenetv2B_full_vjp N Ws bs εs hεs γs βs Wh bh εh hεh γh βh
-    Wfc bfc b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x h_stem hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 h_head) dy]
-  exact (mobilenetv2PaperPC_has_vjp_at (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17
-          (StableHLO.cbrB N (h := 7) (w := 7) Wh bh εh γh βh) (StableHLO.batchMap N (globalAvgPoolFlat 1280 7 7)) (StableHLO.batchMap N (Proofs.dense Wfc bfc)) x
-          ⟨mnv2StemB_has_vjp_at N 112 112 Ws bs εs hεs γs βs x h_stem,
-            mnv2StemB_differentiableAt N 112 112 Ws bs εs hεs γs βs x h_stem⟩
-          hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17
-          ⟨StableHLO.cbrB_has_vjp_at N Wh bh εh hεh γh βh _ h_head,
-            StableHLO.cbrB_differentiableAt N Wh bh εh hεh γh βh _ h_head⟩
-          ⟨(batchMap_has_vjp _ (globalAvgPoolFlat_has_vjp 1280 7 7)
-              (globalAvgPoolFlat_differentiable 1280 7 7)).toHasVJPAt _,
-            (batchMap_differentiable _ (globalAvgPoolFlat_differentiable 1280 7 7)) _⟩
-          ⟨(batchMap_has_vjp _ (dense_has_vjp Wfc bfc) (dense_differentiable Wfc bfc)).toHasVJPAt _,
-            (batchMap_differentiable _ (dense_differentiable Wfc bfc)) _⟩).correct dy i
+  exact HasVJPAt.correct_of_backward_eq _ (mnv2InputGradB_eq_mobilenetv2B_full_vjp N Ws bs εs hεs γs βs Wh bh εh hεh γh βh
+    Wfc bfc b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x h_stem hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 h_head) dy i
 
 /-- ⭐⭐ **The head group re-associated, proved once where the terms are VARIABLES.**
     `mnv2HeadB` is three stages and the apex takes them as three slots, so the shape check below

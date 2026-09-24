@@ -366,14 +366,12 @@ def mat_lit(Wr):
 def fm(k, n):  # Fin literal
     return f"(⟨{k}, by norm_num⟩ : Fin {n})"
 
-def conv_rows(name, Wn, bn, xn, tab, hb):
+def conv_rows(name, Wn, bn, xn, tab):
     """per-row conv lemmas + aggregator for conv2d Wn bn xn = tab."""
     out = []
     for o in range(2):
         for hi in range(6):
-            out.append(f"""set_option maxRecDepth 16384 in
-set_option maxHeartbeats {hb} in
-theorem {name}_r{o}{hi} : ∀ wi : Fin 6,
+            out.append(f"""theorem {name}_r{o}{hi} : ∀ wi : Fin 6,
     conv2d {Wn} {bn} {xn} {fm(o,2)} {fm(hi,6)} wi
       = {tab} {fm(o,2)} {fm(hi,6)} wi := by
   intro wi
@@ -388,13 +386,11 @@ theorem {name}_r{o}{hi} : ∀ wi : Fin 6,
 """)
     return "\n".join(out)
 
-def smooth_rows(hb):
+def smooth_rows():
     out = []
     for ci in range(2):
         for ho in range(3):
-            out.append(f"""set_option maxRecDepth 16384 in
-set_option maxHeartbeats {hb} in
-theorem r2sm_c{ci}h{ho} : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
+            out.append(f"""theorem r2sm_c{ci}h{ho} : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V {fm(ci,2)} (winRowInv {fm(ho,3)} ab.1) (winColInv wo ab.2)
       ≠ r2V {fm(ci,2)} (winRowInv {fm(ho,3)} ab'.1) (winColInv wo ab'.2) := by
   rintro wo ⟨a, b⟩ ⟨a', b'⟩ hne
@@ -514,10 +510,9 @@ noncomputable def c1V : Fin 2 → Fin 6 → Fin 6 → ℝ :=
 
 '''
 
-mid1 = conv_rows("conv1_eq", "W1", "b1", "T0", "c1V", 8000000)
+mid1 = conv_rows("conv1_eq", "W1", "b1", "T0", "c1V")
 
 mid2 = f'''
-set_option maxRecDepth 16384 in
 theorem c1_ne : ∀ (o : Fin 2) (hi wi : Fin 6), c1V o hi wi ≠ 0 := by
   intro o hi wi
   fin_cases o <;> fin_cases hi <;> fin_cases wi <;> norm_num [c1V]
@@ -526,8 +521,6 @@ theorem c1_ne : ∀ (o : Fin 2) (hi wi : Fin 6), c1V o hi wi ≠ 0 := by
 noncomputable def z1V : Tensor3 2 6 6 :=
   {t3_lit(z1T)}
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem z1_eq :
     (fun o hi wi => if c1V o hi wi > 0 then c1V o hi wi else 0) = z1V := by
   funext o hi wi
@@ -555,10 +548,9 @@ noncomputable def c2V : Fin 2 → Fin 6 → Fin 6 → ℝ :=
 
 '''
 
-mid3 = conv_rows("conv2_eq", "W2", "b2", "z1V", "c2V", 16000000)
+mid3 = conv_rows("conv2_eq", "W2", "b2", "z1V", "c2V")
 
 mid4 = f'''
-set_option maxRecDepth 16384 in
 theorem c2_ne : ∀ (o : Fin 2) (hi wi : Fin 6), c2V o hi wi ≠ 0 := by
   intro o hi wi
   fin_cases o <;> fin_cases hi <;> fin_cases wi <;> norm_num [c2V]
@@ -567,8 +559,6 @@ theorem c2_ne : ∀ (o : Fin 2) (hi wi : Fin 6), c2V o hi wi ≠ 0 := by
 noncomputable def r2V : Tensor3 2 6 6 :=
   {t3_lit(r2T)}
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2_eq :
     (fun o hi wi => if c2V o hi wi > 0 then c2V o hi wi else 0) = r2V := by
   funext o hi wi
@@ -594,7 +584,7 @@ theorem blockZ_eq :
 
 '''
 
-mid5 = smooth_rows(8000000)
+mid5 = smooth_rows()
 
 mid6 = f'''
 -- ════════════════════════════════════════════════════════════════
@@ -604,8 +594,6 @@ mid6 = f'''
 /-- The pooled feature vector (flattened maxpool output), exact. -/
 noncomputable def p2f : Vec (2 * 3 * 3) := {vec_lit(fF)}
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem pooled_eq :
     maxPoolFlat 2 3 3 (Tensor3.flatten r2V) = p2f := by
   show Tensor3.flatten (maxPool2 (Tensor3.unflatten (Tensor3.flatten r2V))) = p2f
@@ -617,13 +605,10 @@ theorem pooled_eq :
 /-- dense3 pre-activations at the witness, exact. -/
 noncomputable def d3V : Fin 8 → ℝ := {vec_lit(d3F)}
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
   intro k
   fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
 theorem d3_ne : ∀ k, dense W3 b3 p2f k ≠ 0 := by
   intro k
   rw [d3_eq]
@@ -632,8 +617,6 @@ theorem d3_ne : ∀ k, dense W3 b3 p2f k ≠ 0 := by
 /-- relu(dense3) at the witness, exact. -/
 noncomputable def r3V : Vec 8 := {vec_lit(r3F)}
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
   funext k
   show (if dense W3 b3 p2f k > 0 then dense W3 b3 p2f k else 0) = r3V k
@@ -643,13 +626,10 @@ theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
 /-- dense4 pre-activations at the witness, exact. -/
 noncomputable def d4V : Fin 8 → ℝ := {vec_lit(d4F)}
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
   intro k
   fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
 theorem d4_ne : ∀ k, dense W4 b4 r3V k ≠ 0 := by
   intro k
   rw [d4_eq]

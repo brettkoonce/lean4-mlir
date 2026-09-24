@@ -27,7 +27,7 @@ were measured say so.
 Everything in §1 is on main. Work is done on local branch `proof-cleanup` and landed by: commit
 → fetch → rebase onto `origin/main` → re-run the gates → fast-forward `main` → push (no merge
 commits; the user says "commit" and "push" separately). Gates run before each landing: `lake
-build`, `lake build Certs CertsHeavy Proofs` (+ `Apps Codegen` when Codegen changed),
+build`, `lake build Certs CertsHeavy Proofs` (+ `Apps` when Codegen changed; there is no `Codegen` target),
 `tests/AuditAxioms.lean`, `tests/AuditAxiomsHeavy.lean` (both: no `sorry`, core three axioms
 only), `lake exe docstring-checkrefs`, `scripts/blueprint_uses.py --check`,
 `scripts/gen_comparator_tier.py --check`, and `git status verified_mlir` unchanged.
@@ -73,7 +73,7 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
 
 **Next session, in order** (§3.1–§3.7 are done; §5 has the detail):
 
-No main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
+§6 (re-audit 2026-09-24): batch 1 (§6.2), then batch 2 (§6.3). Before §6 there was no main item left (§5.1 and §5.2 are §1(s)/(t)). The next thread is
 [`certlayer_nets.md`](certlayer_nets.md): whole nets as one `CertLayer`, which would retire the
 `r34PreK`/`r50PreK`/`mnv2PreBK` chains and bundles outright (§3.1's vocabulary item folds into it).
 Also open, not measured: §3.6's `IsShardwise`.
@@ -229,3 +229,92 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 ### 5.3 Housekeeping — DONE
 
 * `planning/next_session_book_audit.md` (the finished 2026-09-13 book-audit handoff) deleted 2026-09-23.
+
+## 6. Re-audit 2026-09-24 (at `28fc373f`)
+
+Same rubric, four static reads: the 26 hand-written files added since 09-22, the Codegen files,
+the sync-BN ties + longest proofs, and a reconciliation of the six old reports against today's
+code. Reports: `proof_cleanup_audits/reaudit_2026_09_24_{open_findings,codegen,new_foundation,sync_long}.md`.
+
+Scan of the hand-written files (comments stripped), against the 09-22 table:
+
+| signal | 09-22 | 09-24 |
+|---|---|---|
+| `set_option maxHeartbeats` | 31 | 1 (`emitTok`, re-measured: needed) |
+| `change` | 19 | 2 (MnistCNN `bnMeanX`/`bnVarX`, harmless) |
+| `show` | 431 | 238 |
+| `native_decide` / stray `sorry` | 0 | 0 |
+
+Old reports: ~67 findings fixed, ~15 parked (§3/§4), ~77 still open (listed in `…_open_findings.md`).
+
+### 6.1 Measured before the edit (strip, compile, restore only what fails)
+
+Render files compiled from a scratch cwd, so their `#eval` writers missed the repo; all 197
+artifacts byte-identical to the committed ones.
+
+| where | option lines | needed |
+|---|---|---|
+| `TrainedCnnWitness` (generated) | 76 | none (28 s) |
+| `TrainedCnnSeal` (generated) | 302 | `S2r`, `S0r`: `maxHeartbeats 1000000`, no `maxRecDepth` (35 s either way) |
+| `TrainedLinearDescent` (generated) | 1 | `maxRecDepth 8192`, needed |
+| render files except `CnnRender` | 38 `maxRecDepth` (8000–4000000) | none |
+| `CnnRender` | 5 `maxRecDepth` (4000–8000) | all five (each dropped alone fails) |
+| `StableHLOPretty` `emitTok` | `maxHeartbeats 1000000` | needed (`LCNF simp` timeout without) |
+
+### 6.2 Batch 1 — trivial (done, see the result list below)
+
+Result: the generators emit 2 option lines instead of 380 (both files regenerate from the edited
+generators; unedited generators were byte-reproducible first); 38 render bumps out, CnnRender's
+two banner-separated bumps moved onto their defs; `relu6MaskB_shard`, `DecidableEq` on `Raw`/`Tok`,
+the five `hE₀0`, StableHLO's `open Classical in` and ConvNeXtFoldG's ResNet34Fold import out;
+`softmaxCE_grad` uses `crossEntropy_differentiable`; `HasVJPAt.correct_of_backward_eq`
+(OpaquePrefix) makes the four `_correct` one `exact` each (~3 s each, unchanged);
+`bnSync_of_scaled` derives `hM` itself (51 call sites, 16 `have hM` out). Not done:
+
+* ConvNeXtStepTie's two `convStrided*_den` stay in `ResNet34Fold`: they delegate to
+  `mnv2_render_stem_conv{W,b}_certified` in `Nets/MobileNet/MobileNetV2Close`, so `SgdNodes`
+  (Foundation) cannot host them, and the importer already reaches that file through
+  MobileNetV2Fold — moving them saves no build edge.
+* The MNv4 skip∘body lemma: the skip adds body output (`s.ic·h·h`) to the cotangent
+  (`s.oc·h·h`), equal only at the concrete rows; a lemma over `s` needs `ic = oc` plus casts.
+
+Planned:
+
+* The two TrainedCnn generators emit only the `S2r`/`S0r` bumps; the 38 render bumps out.
+* Dead: `relu6MaskB_shard` (MobileNetV2SyncStepTieB), `deriving DecidableEq` on `Raw`/`Tok`
+  (StableHLOPretty), the five unused `hE₀0` (FloatBridge), `open Classical in` at StableHLO
+  (`MaxPool2IsArgmax` is decidable since §1(r)).
+* ConvNeXtStepTie / ConvNeXtFoldG import `Nets/ResNet/ResNet34Fold` for two `convStrided*_den`
+  lemmas: move them to `Foundation/SgdNodes`.
+* Softmax: `softmaxCE_grad` re-proves `crossEntropy_differentiable` (same file).
+* `HasVJPAt.correct_of_backward_eq` (OpaquePrefix): the R34/R50/MNv2/MNv4 `_correct` lemmas stop
+  re-spelling the apex witness their `_eq` lemma states.
+* `bnSync_of_scaled`: `hM` follows from `hm` and `hR`; a `_pos` form for the 71
+  `nhw_ne_zero (Nat.mul_pos hR hN)` call sites.
+* MNv4 sync apex: the skip∘body scaled composition (19×) as one lemma.
+
+### 6.3 Batch 2 — small
+
+* R50 / MNv2 / MNv4 whole-back ties still close by `rfl` through the concrete apex (the §0 trap
+  shape; MNv2/MNv4 at literal widths) — give them R34's §1(f) peel; R50 reuses R34's lemmas as-is.
+* `pdiv_eq_fderiv_coord` (Softmax ×3, BatchNorm ×1, two uncommented `show`s); the BN
+  "grad-input = certified backward" step proved in BatchedBackLinks twice and in PerChannelBN.
+* StableHLO sync-BN R=1 lemmas: one statistics graph spelled 6×, `bnVar + μ·μ = bnMeanSq` 3× →
+  `bnVar_add_mean_mul_mean` in the BatchNorm leaf. Nine bare `simp` there → `simp?` pinned.
+* StableHLOPretty's `#eval` writers (and three stray `/tmp` writers) → a leaf, as CnnArtifacts.
+* Bf16GradNodes' nine near-identical `_den` bodies; six `*LossCot_den` copies (LinearTrainStep).
+
+### 6.4 Medium, later
+
+ViTBackB0 `mhsaClean_backward_collapseMH` (144 → ~40 lines); ConvNeXt/ViT ties' ~200 binders onto
+the existing weight records; R34/EffNet sync apexes onto the free-`G` shape (tier regen);
+`abbrev HasVJPDiffAt` (257 binders, tier regen); `pdiv_bnIstdBroadcast` (~175 lines).
+
+### 6.5 Patterns
+
+* A sibling net misses a fix another got (§1(f) peel, §1(o) free-`G`, weight records): when a
+  fix lands on one net, grep the siblings in the same commit.
+* Defeq across wrappers inline (`show`, `rw [show … from rfl]`): name the `rfl` lemma once.
+* Bumps get copied unmeasured: strip-and-compile after any refactor of the guarded decl, and in
+  every generator change. Keep `set_option … in` directly above the target's docstring — one
+  separated by a banner drifts onto whatever is inserted between.

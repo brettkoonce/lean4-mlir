@@ -1452,7 +1452,6 @@ inductive SHlo : Nat → Type where
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
 -- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
 -- Total in the saved input `xv` (the no-ties proof lives only in `.correct`).
-open Classical in
 noncomputable def maxPoolBackFlat (c h w : Nat)
     (xv : Vec (c*(2*h)*(2*w))) (dyv : Vec (c*h*w)) : Vec (c*(2*h)*(2*w)) :=
   fun idx =>

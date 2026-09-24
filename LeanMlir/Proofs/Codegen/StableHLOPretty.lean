@@ -278,7 +278,7 @@ inductive Raw where
   -- 4d piece 2: the cross-replica mean over `R` replicas, at the parameter shape `ds`, with the
   -- SSA tag `t` the emit names its lines by. Replica 0's skeleton is the operand.
   | allReduceMean (R : Nat) (t : String) (ds : List Nat) : Raw → Raw
-deriving DecidableEq, Repr, Inhabited
+deriving Repr, Inhabited
 
 /-- The `(tag, names, info)` skeleton descriptor of a batched per-example op — the
     discriminator + the SSA names the emit references + the shape dims. Keeps the
@@ -886,7 +886,7 @@ inductive Tok where
   | batched    (tag : String) (names : List String) (info : List Nat) : Tok
   | batched2   (tag : String) (names : List String) (info : List Nat) : Tok
   | allReduceMean (R : Nat) (t : String) (ds : List Nat) : Tok
-deriving DecidableEq, Repr
+deriving Repr
 
 /-- Postorder serialization: children, then the node's opcode token. -/
 def toToks : Raw → List Tok

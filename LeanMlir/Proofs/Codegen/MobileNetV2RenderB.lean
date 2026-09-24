@@ -564,7 +564,6 @@ def mnv2HeadFwdB (B nClasses : Nat) (epsStr xName : String) (convBias : Bool)
   pure { code := cHc ++ cHn ++ cHr ++ cGap ++ cLog, hc := nHc, hn := nHn, hst := hst, hr := nHr,
          gap := nGap, log := nLog }
 
-set_option maxRecDepth 4000000 in
 /-- **The MobileNetV2 forward chain at the BATCHED index** — one traversal, consumed by both
     `@mobilenetv2_fwd` and every train step that differentiates it.
 
@@ -621,7 +620,6 @@ def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false
          b := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17],
          sst := sst, hst := hst }
 
-set_option maxRecDepth 4000000 in
 /-- **`@mobilenetv2_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN
     train step in this file differentiates, so the net that scores and the net that trains are one
     graph by construction. Replaces the retired `MobileNetV2Render.lean` as the writer of
@@ -651,7 +649,6 @@ def mobilenetv2FwdFaithfulB (B nClasses : Nat) (epsStr : String)
 -- § The whole-net batched AdamW train step
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 4000000 in
 /-- **MobileNetV2 (17-block paper spec) AdamW train step, batch BN, rendered from the verified AST
     at `N := B`.** 739 inputs (`%x`, 210 θ, 210 m, 210 v, `%lr`/`%bc1`/`%bc2`, 104 running-stat
     slots, `%onehot`) and 737 outputs (210 θ', 210 m', 210 v', `%loss`/`%bc1`/`%bc2`, 104 batch
@@ -1155,7 +1152,6 @@ structure MNV2Fwd where
   bns    : List (String × Nat × Nat)
   deriving Inhabited
 
-set_option maxRecDepth 4000000 in
 /-- **The full 17-block paper MobileNetV2 forward as `pretty` of the verified AST**, at the
     PER-EXAMPLE index. 3x3/s2 stem (3->32, 224->112) -> the `[t,c,n,s]` inverted-residual stack
     (112->56->28->14->7) -> 1x1 head (320->1280) -> GAP(7x7) -> dense(1280->`nClasses`).
@@ -1223,7 +1219,6 @@ private def mnv2FwdSig (B nClasses : Nat) (epsStr : String) (convBias : Bool) : 
   String.intercalate ", " ((s!"%x: {ty [B, 3*224*224]}") :: (params ++ stats))
 
 
-set_option maxRecDepth 4000000 in
 /-- **`@mobilenetv2_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward,
     every BN site consuming frozen per-channel running stats (`bnPerChannelEvalF`) instead of
     reducing statistics out of its activation. Same 210 params in the same order, plus the 104 stat

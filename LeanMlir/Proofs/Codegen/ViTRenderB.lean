@@ -101,7 +101,6 @@ private def vlnFwdB (V : VitDims) (vbB : Nat) (gName btName xin : String) :
       (.operand b (zVb : Vec (vbB*(vbTok*vbD)))))
   pure (c1 ++ c2 ++ c3, o)
 
-set_option maxRecDepth 8000 in
 /-- One **transformer block** forward, batched: LN1 → Q/K/V dense → per-head SDPA
     (slice → QKᵀ → scale → softmax → ·V → pad, summed) → out dense → +res → LN2 → fc1 → GELU →
     fc2 → +res.
@@ -211,7 +210,6 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
   pure (code ++ co ++ cdA ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cdM ++ cr,
     { xin, ln1, q, k, v, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
 
-set_option maxRecDepth 8000 in
 /-- **The depth-12 ViT-Tiny forward at the batched index.** Node for node the same chain
     `vitFwd12` emits — patch embed (16×16/s16, 196 patches + CLS + pos) → 12 blocks → final
     vector-LN → CLS slice → dense head.
@@ -261,7 +259,6 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
       (.operand sl (zVb : Vec (vbB*vbD))))
   pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
 
-set_option maxRecDepth 8000 in
 /-- **`@vit_fwd_b`** — the batched-index peer of `vitFwdRenderV`, same 200-parameter signature and
     same `%x`. Not written to `verified_mlir/`: it exists to be TIED against the committed
     per-example artifact, and an artifact nothing loads is a silent-hyperparameter hazard waiting to
@@ -334,7 +331,6 @@ private def vlnBackB (V : VitDims) (vbB : Nat) (gName _btName xin dyOut : String
       (zVb : Vec (vbB*(vbTok*vbD))) (.operand da (zVb : Vec (vbB*(vbTok*vbD)))))
   pure (cb ++ cg ++ cs ++ cn, dx, ng, nb)
 
-set_option maxRecDepth 8000 in
 /-- One **transformer block backward**, batched. Returns `(code, dxin, the 16 gradient SSAs in
     `blkArgSig` order)`.
 
@@ -478,7 +474,6 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
                 nWfc1, nbfc1, nWfc2, nbfc2]
   pure (code ++ cQ ++ cK ++ cV ++ cs1 ++ cs2 ++ cl1 ++ cx, dxin, names)
 
-set_option maxRecDepth 16000 in
 /-- **The whole-net batched traversal** — forward + cotangent + all 200 parameter gradients, the
     batched peer of `vitBackAll bs nClasses lrStr true (some …)`. Returns
     `(code, gradients-in-func-arg-order, softmaxSSA)`, the same shape, so the AdamW tail in
@@ -589,7 +584,6 @@ end Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-set_option maxRecDepth 16000 in
 /-- **The ViT-Tiny AdamW train step at the batched index.** ⚠ It is the SAME renderer the
     per-example path uses — `vitAdamTrainStepFaithful` with `traversal` pointed at `vitBackAllB` —
     not a copy.

@@ -424,15 +424,14 @@ theorem r34_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN
     (hdys : ∀ r, dys r = batchShard R N (c * h * w) (fun i => (R : ℝ) * DY i) r) :
     r34IdSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_⟩
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r34IdSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r34IdCotC1_smul])
-  · exact bnSync_of_scaled R hR N c h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N c h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r34IdSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r34IdCotN1_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r34IdSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r34IdCotC2_smul])
-  · exact bnSync_of_scaled R hR N c h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N c h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r34IdSyncCotA_shard R N h w p XIN dys _ hdys, r34IdCotA_smul])
 
 /-- **Downsample basic block, DP-tied** — nine emitted collectives: the strided conv₁, the
@@ -474,19 +473,18 @@ theorem r34_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Na
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     r34DownSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact convStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r34DownSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r34DownCotC1_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r34DownSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r34DownCotN1_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r34DownSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r34DownCotC2_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r34DownSyncCotA_shard R N h w p XIN dys _ hdys, r34DownCotA_smul])
   · exact convStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r34DownSyncCotCp_shard R hR N h w hN hh hw p XIN dys _ hdys, r34DownCotCp_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r34DownSyncCotA_shard R N h w p XIN dys _ hdys, r34DownCotA_smul])
 
 /-- **Stem, DP-tied** — the 7×7/s2 conv weight and its BatchNorm's γ and β. -/
@@ -511,8 +509,7 @@ theorem r34_stem_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (h
   refine ⟨?_, ?_⟩
   · exact convStridedWSync_of_scaled R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
       rw [r34StemSyncCotC_shard R hR N h w hN hh hw Ws bs εs γs βs X dys _ hdys, r34StemCotC_smul])
-  · exact bnSync_of_scaled R hR N oc (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w)
-      (nhw_ne_zero (Nat.mul_pos hR hN) h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r34StemSyncCotN_shard R N h w Ws bs εs γs βs X dys _ hdys, r34StemCotN_smul])
 
 /-- **Head, DP-tied** — the classifier's weight and bias, at the GAP output. -/

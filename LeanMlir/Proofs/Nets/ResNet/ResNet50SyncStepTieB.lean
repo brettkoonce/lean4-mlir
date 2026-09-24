@@ -628,19 +628,18 @@ theorem r50_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     r50IdSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotC1_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotN1_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotC2_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotN2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotN2_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotC3_shard R hR N h w hN hh hw p XIN dys _ hdys, r50IdCotC3_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotA_shard R N h w p XIN dys _ hdys, r50IdCotA_smul])
 
 /-- ⭐ **Stride-1 projection bottleneck, DP-tied** — stage 1 block 0, twelve collectives: the
@@ -688,23 +687,22 @@ theorem r50_projblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     r50ProjSyncTiedB R hR N h w pfx xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotC1_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotN1_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotC2_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotN2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotN2_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotC3_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotC3_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotA_shard R N h w p XIN dys _ hdys, r50ProjCotA_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotCp_shard R hR N h w hN hh hw p XIN dys _ hdys, r50ProjCotCp_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotA_shard R N h w p XIN dys _ hdys, r50ProjCotA_smul])
 
 /-- **Strided projection bottleneck, DP-tied** — stages 2/3/4 block 0, twelve collectives. ⚠⚠ v1.5:
@@ -756,24 +754,22 @@ theorem r50_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact convWSync_of_scaled R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotC1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotC1_smul])
-  · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w)
-      (nhw_ne_zero (Nat.mul_pos hR hN) h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotN1_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotN1_smul])
   · exact convStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotC2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotC2_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotN2_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotN2_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotC3_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotC3_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotA_shard R N h w p XIN dys _ hdys, r50DownCotA_smul])
   · exact convStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotCp_shard R hR N h w hN hh hw p XIN dys _ hdys, r50DownCotCp_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50DownSyncCotA_shard R N h w p XIN dys _ hdys, r50DownCotA_smul])
 
 -- ════════════════════════════════════════════════════════════════

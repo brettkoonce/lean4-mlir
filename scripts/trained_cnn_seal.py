@@ -141,9 +141,7 @@ for k2 in range(72):
     norm_num at hv)]
   show (0 : ℝ) = t2V {fm2(k2, '2*(2*3)*(2*3)')}
   norm_num [t2V]"""
-    s2_cases.append(f"""set_option maxRecDepth 16384 in
-set_option maxHeartbeats 4000000 in
-theorem S2_c{k2} :
+    s2_cases.append(f"""theorem S2_c{k2} :
     pdiv ({G2}) (Tensor3.flatten r2V) {fm2(k2, '2*(2*3)*(2*3)')} {JCL} = t2V {fm2(k2, '2*(2*3)*(2*3)')} := by
   have hP : DifferentiableAt ℝ (maxPoolFlat 2 3 3) (Tensor3.flatten r2V) :=
     maxPoolFlat_differentiableAt (c := 2) (h := 3) (w := 3) r2V r2_smooth
@@ -168,9 +166,7 @@ s2_agg_bullets = "\n".join(f"  · exact S2_c{k}" for k in range(72))
 s1_cases = []
 for k1 in range(72):
     ci, hi, wi = k1 // 36, (k1 % 36) // 6, k1 % 6
-    s1_cases.append(f"""set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
-theorem S1_c{k1} :
+    s1_cases.append(f"""theorem S1_c{k1} :
     pdiv ({G1}) (Tensor3.flatten z1V) {fm2(k1, '2*(2*3)*(2*3)')} {JCL} = t1V {fm2(k1, '2*(2*3)*(2*3)')} := by
   have hC : DifferentiableAt ℝ (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
     (flatConv_differentiable W2 b2) _
@@ -344,8 +340,6 @@ noncomputable def conv1wit :
 -- § S4/S3: the dense head slices
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem d4inner : ∀ k m : Fin 8,
     pdiv (relu 8 ∘ dense W4 b4) r3V k m
       = W4 k m * (if d4V m > 0 then (1:ℝ) else 0) := by
@@ -367,8 +361,6 @@ theorem d4inner : ∀ k m : Fin 8,
         (fun l => W4 k l * (if d4V l > 0 then (1:ℝ) else 0))]
   simp
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem S4 : ∀ k : Fin 8,
     pdiv ({G4}) r3V k {JCL} = t4V k := by
   intro k
@@ -376,8 +368,6 @@ theorem S4 : ∀ k : Fin 8,
   simp only [d4inner, pdiv_dense]
   fin_cases k <;> (simp [W4, W5, d4V, t4V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem d3inner : ∀ (k : Fin (2*3*3)) (m : Fin 8),
     pdiv (relu 8 ∘ dense W3 b3) p2f k m
       = W3 k m * (if d3V m > 0 then (1:ℝ) else 0) := by
@@ -399,8 +389,6 @@ theorem d3inner : ∀ (k : Fin (2*3*3)) (m : Fin 8),
         (fun l => W3 k l * (if d3V l > 0 then (1:ℝ) else 0))]
   simp
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem S3 : ∀ k : Fin (2*3*3),
     pdiv ({G3}) p2f k {JCL} = t3V k := by
   intro k
@@ -426,8 +414,9 @@ theorem S2 : ∀ k : Fin (2 * (2*3) * (2*3)),
 -- § S2r: the conv2-side ReLU mask fold
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
+-- The mask fold's `simp` times out at the default 200000 heartbeats and passes at
+-- 1000000 (measured 2026-09-24); nothing else in this file needs a bump.
+set_option maxHeartbeats 1000000 in
 theorem S2r : ∀ m : Fin (2 * (2*3) * (2*3)),
     pdiv ({G2r}) (Tensor3.flatten c2V) m {JCL} = m2V m := by
   intro m
@@ -461,8 +450,9 @@ theorem S1 : ∀ k : Fin (2 * (2*3) * (2*3)),
 -- § S0r: the conv1-side ReLU mask fold
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
+-- The mask fold's `simp` times out at the default 200000 heartbeats and passes at
+-- 1000000 (measured 2026-09-24); nothing else in this file needs a bump.
+set_option maxHeartbeats 1000000 in
 theorem S0r : ∀ m : Fin (2 * (2*3) * (2*3)),
     pdiv ({G1r}) (Tensor3.flatten c1V) m {JCL} = m1V m := by
   intro m
@@ -485,8 +475,6 @@ theorem S0r : ∀ m : Fin (2 * (2*3) * (2*3)),
 -- § The sealed Jacobian entry
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 /-- **The whole-net Jacobian entry, exactly**: `∂ logit_{JC} / ∂ pixel ({HI},{WI})`
     at the trained weights and the real witness input. -/
 theorem pdiv_fwd_entry :

@@ -610,12 +610,11 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   inner ++
   "  }\n}\n"
 
-set_option maxRecDepth 8000 in
-
 -- ════════════════════════════════════════════════════════════════
 -- § cifar8 on the BATCHED op family — the unification
 -- ════════════════════════════════════════════════════════════════
 
+set_option maxRecDepth 8000 in
 /-- **`cifar8AdamTrainStepFaithfulB` — the batched peer of `cifar8AdamTrainStepFaithfulV`.**
 
     Same net, same three optimizers, same packed `[θ|m|v]` signature. The difference is the op
@@ -869,7 +868,6 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   "  }\n}\n"
 
 set_option maxRecDepth 8000 in
-
 /-- **Deeper 8-conv CIFAR-BN (cifar8-bn) train step rendered ENTIRELY from the verified
     AST.** The per-channel-BatchNorm peer of `cifar8TrainStepFaithfulV` (`(conv→BN→relu)×2→pool`
     ×4, 3 dense; 38 params). Pure reuse — NO new ops and NO new proof: conv via

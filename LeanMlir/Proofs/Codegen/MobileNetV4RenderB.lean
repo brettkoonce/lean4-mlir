@@ -596,7 +596,6 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   s!"    return {r.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
-set_option maxRecDepth 4000000 in
 /-- **`@mnv4_fwd_eval`** — the inference forward, every BN site reading frozen running stats.
     `%x` + 233 params + 154 stat inputs = **388 inputs** (counted off `mnv4_fwd_eval.mlir`). This
     is what the driver scores through.
@@ -933,7 +932,6 @@ def mnv4AdamVariant (B replicas : Nat)
 -- § The whole-net batched AdamW train step
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 4000000 in
 /-- **MobileNetV4-Conv-M AdamW train step, batch BN, rendered from the verified AST at `N := B`.**
 
     **858 inputs** (`%x`, 233 θ, 233 m, 233 v, `%lr`/`%bc1`/`%bc2`, 154 running-stat slots,

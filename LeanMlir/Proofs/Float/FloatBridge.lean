@@ -957,8 +957,6 @@ theorem mlp_w2_step_float_close {d₀ d₁ d₂ d₃ : Nat}
   have hA₁0 : 0 ≤ layerAct d₀ w₀ β₀ a := layerAct_nonneg hw₀ hβ₀ ha
   have hA₂0 : 0 ≤ layerAct d₁ w₁ β₁ (layerAct d₀ w₀ β₀ a) :=
     layerAct_nonneg hw₁ hβ₁ hA₁0
-  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
   obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   have r1 : ∀ j', |relu d₂ (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x))) j' -
       relu d₂ (Proofs.dense W₁ b₁ (relu d₁ (Proofs.dense W₀ b₀ x))) j'| ≤
@@ -1025,8 +1023,6 @@ theorem mlp_w1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
         (layerBudget M.u d₃ w₂ 0 G eg)) := by
   have hA₁0 : 0 ≤ layerAct d₀ w₀ β₀ a := layerAct_nonneg hw₀ hβ₀ ha
   have hC₁0 : 0 ≤ layerAct d₃ w₂ 0 G := layerAct_nonneg hw₂ le_rfl hG0
-  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
   obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   -- the backward cotangent through the mask, under the margin
   have hcot : ∀ j', |reluMask (M.dense W₁ b₁ (relu d₁ (M.dense W₀ b₀ x)))
@@ -1076,8 +1072,6 @@ theorem mlp_b1_step_float_close {d₀ d₁ d₂ d₃ : Nat}
           (Proofs.dense (fun j' i' => W₂ i' j') (fun _ => 0) g) j)| ≤
     sgdErr M.u lr |b₁ j| (layerAct d₃ w₂ 0 G)
       (layerBudget M.u d₃ w₂ 0 G eg) := by
-  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
   obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   have hcot := fun j' =>
     M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin j'
@@ -1128,8 +1122,6 @@ theorem mlp_w0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
   have hC₁0 : 0 ≤ layerAct d₃ w₂ 0 G := layerAct_nonneg hw₂ le_rfl hG0
   have hEC₁0 : 0 ≤ layerBudget M.u d₃ w₂ 0 G eg :=
     layerBudget_nonneg M.u_nonneg hw₂ le_rfl hG0 heg
-  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
   obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   -- layer-1 cotangent, then the layer-0 cotangent through the second mask
   have hcot := fun j' =>
@@ -1196,8 +1188,6 @@ theorem mlp_b0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
   have hC₁0 : 0 ≤ layerAct d₃ w₂ 0 G := layerAct_nonneg hw₂ le_rfl hG0
   have hEC₁0 : 0 ≤ layerBudget M.u d₃ w₂ 0 G eg :=
     layerBudget_nonneg M.u_nonneg hw₂ le_rfl hG0 heg
-  have hE₀0 : 0 ≤ layerBudget M.u d₀ w₀ β₀ a 0 :=
-    layerBudget_nonneg M.u_nonneg hw₀ hβ₀ ha le_rfl
   obtain ⟨l0, r0, ha₁, l1⟩ := M.mlp_l1_close hw₀ hβ₀ hw₁ ha hW₀ hb₀ hW₁ hb₁ hx
   have hcot := fun j' =>
     M.cot_step_close W₂ _ _ gt g hw₂ hG0 heg hW₂ hG hg l1 hmargin₁ j'

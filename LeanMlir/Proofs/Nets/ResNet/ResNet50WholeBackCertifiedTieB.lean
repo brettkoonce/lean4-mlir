@@ -237,17 +237,8 @@ theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
           pdiv (r34HeadB N q q Wd bd
           ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1
           ∘ r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) x i j * dy j := by
-  rw [congrFun (r50InputGradB_eq_r34B_full_vjp N q hq0 Ws bs εs hεs γs βs Wd bd
-    b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x h_stem h_pool hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16) dy]
-  exact (r34B_full_has_vjp_at (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16
-          (r34HeadB N q q Wd bd) x
-          ⟨r34StemB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs
-              (by norm_num) (by omega) (by omega) x h_stem h_pool,
-            r34StemB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs
-              (by norm_num) (by omega) (by omega) x h_stem h_pool⟩
-          hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16
-          ⟨(r34HeadB_has_vjp N q q Wd bd).toHasVJPAt _,
-            (r34HeadB_differentiable N q q Wd bd) _⟩).correct dy i
+  exact HasVJPAt.correct_of_backward_eq _ (r50InputGradB_eq_r34B_full_vjp N q hq0 Ws bs εs hεs γs βs Wd bd
+    b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x h_stem h_pool hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16) dy i
 
 /-- ⭐⭐ **THE SHAPE CHECK — the eighteen slots the tie is about ARE the committed forward.**
     `resnet50ForwardB_full`, regrouped into exactly the eighteen arguments `r34B_full_has_vjp_at`

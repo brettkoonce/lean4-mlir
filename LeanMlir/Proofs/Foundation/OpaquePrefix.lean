@@ -138,4 +138,12 @@ noncomputable def opaqueA24 {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s
     (stem : Vec s0 → Vec s1) (b1 : Vec s1 → Vec s2) (b2 : Vec s2 → Vec s3) (b3 : Vec s3 → Vec s4) (b4 : Vec s4 → Vec s5) (b5 : Vec s5 → Vec s6) (b6 : Vec s6 → Vec s7) (b7 : Vec s7 → Vec s8) (b8 : Vec s8 → Vec s9) (b9 : Vec s9 → Vec s10) (b10 : Vec s10 → Vec s11) (b11 : Vec s11 → Vec s12) (b12 : Vec s12 → Vec s13) (b13 : Vec s13 → Vec s14) (b14 : Vec s14 → Vec s15) (b15 : Vec s15 → Vec s16) (b16 : Vec s16 → Vec s17) (b17 : Vec s17 → Vec s18) (b18 : Vec s18 → Vec s19) (b19 : Vec s19 → Vec s20) (b20 : Vec s20 → Vec s21) (b21 : Vec s21 → Vec s22) (b22 : Vec s22 → Vec s23) (b23 : Vec s23 → Vec s24) (b24 : Vec s24 → Vec s25)
     (x : Vec s0) : Vec s25 := b24 (opaqueA23 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 b22 b23 x)
 
+/-- **`correct` through a named backward.** A whole-net tie states `B = hf.backward` for its
+    apex witness `hf`; this turns that equation into `B`'s correctness without spelling `hf`
+    out again (unification reads it off `h`). -/
+theorem HasVJPAt.correct_of_backward_eq {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
+    (hf : HasVJPAt f x) {B : Vec n → Vec m} (h : B = hf.backward) (dy : Vec n) (i : Fin m) :
+    B dy i = ∑ j : Fin n, pdiv f x i j * dy j := by
+  rw [h]; exact hf.correct dy i
+
 end Proofs

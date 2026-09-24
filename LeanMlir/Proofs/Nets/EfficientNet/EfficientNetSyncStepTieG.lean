@@ -1211,9 +1211,8 @@ theorem tail_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (h
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     tailSyncTiedG R hR N h w pfx xN cotN vN epsStr t hp DC dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotDn_shard R hR N h w hN hh hw t hp DC dys _ hdys r, tCotDn_smul])
   · exact denseSync_of_scaled R hR N _ _ _ _ _ _ _ (fun r => by
       rw [tsCotE1_shard R hR N h w hN hh hw t hp DC dys _ hdys r, tCotE1_smul])
@@ -1221,7 +1220,7 @@ theorem tail_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat} (h
       rw [tsCotE2_shard R hR N h w hN hh hw t hp DC dys _ hdys r, tCotE2_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotPbn_shard R hR N h w hN hh hw t hp DC dys _ hdys r, tCotPbn_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ hdys
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **A stride-1 MBConv6 block, DP-tied** (the nine residual blocks and the two widenings) —
     thirteen collectives: the expand conv weight, the expand BatchNorm's γ and β, the depthwise
@@ -1248,12 +1247,11 @@ theorem exp_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw :
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     expSyncTiedG R hR N h w pfx xN cotN vN epsStr p he hd hp XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr (tailOf p) hp _
     dys DY hdys⟩
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [xsCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, xCotEc_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [xsCotEn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, xCotEn_smul])
   · exact depthwiseWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys _ hdys r, tCotDc_smul])
@@ -1286,8 +1284,7 @@ theorem strided_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh 
     dys DY hdys⟩
   · exact convWSync_of_scaled R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
       rw [ssCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, sCotEc_smul])
-  · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w)
-      (nhw_ne_zero (Nat.mul_pos hR hN) h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [ssCotEn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, sCotEn_smul])
   · exact depthwiseStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys _ hdys r, tCotDc_smul])
@@ -1335,7 +1332,7 @@ theorem stem_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kHs kWs : Nat
     stemSyncTiedG R hR N h w xN cotN vN epsStr Ws bs εs hεs γs βs X dys DY :=
   ⟨convStridedXlaWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [stsCotStc_shard R hR N h w hN hh hw Ws bs εs hεs γs βs X dys _ hdys r, stCotStc_smul]),
-    bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+    bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw)
       _ _ _ _ _ _ _ _ _ (fun r => by
       rw [stsCotBnS_shard R N h w Ws bs εs γs βs X dys _ hdys r, stCotBnS_smul])⟩
 
@@ -1361,7 +1358,7 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
   ⟨convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [hdsCotHbn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc XIN gs _ hgs r,
         hdCotHbn_smul]),
-    bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw) (nhw_ne_zero (Nat.mul_pos hR hN) hh hw)
+    bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw)
       _ _ _ _ _ _ _ _ _ (fun r => by
       rw [hdsCotHsw_shard R N h w Wh bh εh γh βh Wfc XIN gs _ hgs r, hdCotHsw_smul]),
     denseSync_of_scaled R hR N _ _ _ _ _ gs G hgs⟩

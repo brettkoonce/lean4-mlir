@@ -140,96 +140,72 @@ noncomputable def c1V : Fin 2 → Fin 6 → Fin 6 → ℝ :=
       ![((1 : ℝ)/128), ((3013 : ℝ)/65280), ((13 : ℝ)/2040), ((-67777 : ℝ)/261120), ((-18263 : ℝ)/13056), ((-19639 : ℝ)/130560)],
       ![((1 : ℝ)/128), ((-112769 : ℝ)/174080), ((-7413 : ℝ)/10880), ((-110495 : ℝ)/104448), ((-188399 : ℝ)/261120), ((1 : ℝ)/128)]]]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r00 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r01 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r02 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r03 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r04 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r05 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r10 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r11 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r12 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r13 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r14 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W1, b1, T0, c1V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem conv1_eq_r15 : ∀ wi : Fin 6,
     conv2d W1 b1 T0 (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
@@ -253,7 +229,6 @@ theorem conv1_eq : ∀ (o : Fin 2) (hi wi : Fin 6),
   · exact conv1_eq_r14 wi
   · exact conv1_eq_r15 wi
 
-set_option maxRecDepth 16384 in
 theorem c1_ne : ∀ (o : Fin 2) (hi wi : Fin 6), c1V o hi wi ≠ 0 := by
   intro o hi wi
   fin_cases o <;> fin_cases hi <;> fin_cases wi <;> norm_num [c1V]
@@ -273,8 +248,6 @@ noncomputable def z1V : Tensor3 2 6 6 :=
       ![((1 : ℝ)/128), ((3013 : ℝ)/65280), ((13 : ℝ)/2040), (0 : ℝ), (0 : ℝ), (0 : ℝ)],
       ![((1 : ℝ)/128), (0 : ℝ), (0 : ℝ), (0 : ℝ), (0 : ℝ), ((1 : ℝ)/128)]]]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem z1_eq :
     (fun o hi wi => if c1V o hi wi > 0 then c1V o hi wi else 0) = z1V := by
   funext o hi wi
@@ -311,96 +284,72 @@ noncomputable def c2V : Fin 2 → Fin 6 → Fin 6 → ℝ :=
       ![((1286063 : ℝ)/6684672), ((4796603 : ℝ)/13369344), ((15225037 : ℝ)/33423360), ((58258189 : ℝ)/66846720), ((4448839 : ℝ)/6684672), ((8006981 : ℝ)/13369344)],
       ![((13588097 : ℝ)/33423360), ((8868649 : ℝ)/11141120), ((5712643 : ℝ)/4456448), ((104909539 : ℝ)/66846720), ((649945 : ℝ)/835584), ((31854857 : ℝ)/66846720)]]]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r00 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r01 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r02 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r03 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r04 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r05 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c2V (⟨0, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r10 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨0, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r11 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨1, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r12 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨2, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r13 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨3, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r14 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨4, by norm_num⟩ : Fin 6) wi := by
   intro wi
   fin_cases wi <;> (simp [conv2d, W2, b2, z1V, c2V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem conv2_eq_r15 : ∀ wi : Fin 6,
     conv2d W2 b2 z1V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi
       = c2V (⟨1, by norm_num⟩ : Fin 2) (⟨5, by norm_num⟩ : Fin 6) wi := by
@@ -424,7 +373,6 @@ theorem conv2_eq : ∀ (o : Fin 2) (hi wi : Fin 6),
   · exact conv2_eq_r14 wi
   · exact conv2_eq_r15 wi
 
-set_option maxRecDepth 16384 in
 theorem c2_ne : ∀ (o : Fin 2) (hi wi : Fin 6), c2V o hi wi ≠ 0 := by
   intro o hi wi
   fin_cases o <;> fin_cases hi <;> fin_cases wi <;> norm_num [c2V]
@@ -444,8 +392,6 @@ noncomputable def r2V : Tensor3 2 6 6 :=
       ![((1286063 : ℝ)/6684672), ((4796603 : ℝ)/13369344), ((15225037 : ℝ)/33423360), ((58258189 : ℝ)/66846720), ((4448839 : ℝ)/6684672), ((8006981 : ℝ)/13369344)],
       ![((13588097 : ℝ)/33423360), ((8868649 : ℝ)/11141120), ((5712643 : ℝ)/4456448), ((104909539 : ℝ)/66846720), ((649945 : ℝ)/835584), ((31854857 : ℝ)/66846720)]]]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2_eq :
     (fun o hi wi => if c2V o hi wi > 0 then c2V o hi wi else 0) = r2V := by
   funext o hi wi
@@ -469,8 +415,6 @@ theorem blockZ_eq :
 -- § MaxPool: no ties at the witness (trained, not engineered)
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2sm_c0h0 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
       ≠ r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 3) ab'.1) (winColInv wo ab'.2) := by
@@ -480,8 +424,6 @@ theorem r2sm_c0h0 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
       | exact absurd rfl hne
       | (simp [r2V, winRowInv, winColInv]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2sm_c0h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
       ≠ r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 3) ab'.1) (winColInv wo ab'.2) := by
@@ -491,8 +433,6 @@ theorem r2sm_c0h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
       | exact absurd rfl hne
       | (simp [r2V, winRowInv, winColInv]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2sm_c0h2 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
       ≠ r2V (⟨0, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 3) ab'.1) (winColInv wo ab'.2) := by
@@ -502,8 +442,6 @@ theorem r2sm_c0h2 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
       | exact absurd rfl hne
       | (simp [r2V, winRowInv, winColInv]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2sm_c1h0 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
       ≠ r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨0, by norm_num⟩ : Fin 3) ab'.1) (winColInv wo ab'.2) := by
@@ -513,8 +451,6 @@ theorem r2sm_c1h0 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
       | exact absurd rfl hne
       | (simp [r2V, winRowInv, winColInv]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2sm_c1h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
       ≠ r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨1, by norm_num⟩ : Fin 3) ab'.1) (winColInv wo ab'.2) := by
@@ -524,8 +460,6 @@ theorem r2sm_c1h1 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
       | exact absurd rfl hne
       | (simp [r2V, winRowInv, winColInv]; try norm_num)
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r2sm_c1h2 : ∀ (wo : Fin 3) (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
     r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 3) ab.1) (winColInv wo ab.2)
       ≠ r2V (⟨1, by norm_num⟩ : Fin 2) (winRowInv (⟨2, by norm_num⟩ : Fin 3) ab'.1) (winColInv wo ab'.2) := by
@@ -554,8 +488,6 @@ theorem r2_smooth : MaxPool2Smooth (c := 2) (h := 3) (w := 3) r2V := by
 /-- The pooled feature vector (flattened maxpool output), exact. -/
 noncomputable def p2f : Vec (2 * 3 * 3) := ![((2222167 : ℝ)/983040), ((9760537 : ℝ)/3932160), ((1722301 : ℝ)/1114112), ((1163037 : ℝ)/696320), ((55308603 : ℝ)/22282240), ((551529 : ℝ)/278528), ((44026307 : ℝ)/33423360), ((75372937 : ℝ)/33423360), ((2971943 : ℝ)/1966080), ((8334589 : ℝ)/3342336), ((109095671 : ℝ)/33423360), ((130716427 : ℝ)/66846720), ((194146829 : ℝ)/66846720), ((37172403 : ℝ)/11141120), ((101267417 : ℝ)/66846720), ((8868649 : ℝ)/11141120), ((104909539 : ℝ)/66846720), ((649945 : ℝ)/835584)]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem pooled_eq :
     maxPoolFlat 2 3 3 (Tensor3.flatten r2V) = p2f := by
   show Tensor3.flatten (maxPool2 (Tensor3.unflatten (Tensor3.flatten r2V))) = p2f
@@ -638,13 +570,10 @@ theorem pooled_eq :
 /-- dense3 pre-activations at the witness, exact. -/
 noncomputable def d3V : Fin 8 → ℝ := ![((-2206362251 : ℝ)/4278190080), ((3315505013 : ℝ)/570425344), ((663167541 : ℝ)/570425344), ((86836255423 : ℝ)/8556380160), ((-2660411417 : ℝ)/713031680), ((12288523033 : ℝ)/4278190080), ((4316132003 : ℝ)/1069547520), ((-13402606799 : ℝ)/8556380160)]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 16000000 in
 theorem d3_eq : ∀ k, dense W3 b3 p2f k = d3V k := by
   intro k
   fin_cases k <;> (simp [dense, W3, b3, p2f, d3V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
 theorem d3_ne : ∀ k, dense W3 b3 p2f k ≠ 0 := by
   intro k
   rw [d3_eq]
@@ -653,8 +582,6 @@ theorem d3_ne : ∀ k, dense W3 b3 p2f k ≠ 0 := by
 /-- relu(dense3) at the witness, exact. -/
 noncomputable def r3V : Vec 8 := ![(0 : ℝ), ((3315505013 : ℝ)/570425344), ((663167541 : ℝ)/570425344), ((86836255423 : ℝ)/8556380160), (0 : ℝ), ((12288523033 : ℝ)/4278190080), ((4316132003 : ℝ)/1069547520), (0 : ℝ)]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
   funext k
   show (if dense W3 b3 p2f k > 0 then dense W3 b3 p2f k else 0) = r3V k
@@ -664,13 +591,10 @@ theorem r3_eq : relu 8 (dense W3 b3 p2f) = r3V := by
 /-- dense4 pre-activations at the witness, exact. -/
 noncomputable def d4V : Fin 8 → ℝ := ![((-1120311628553 : ℝ)/273804165120), ((51464713991 : ℝ)/8053063680), ((-461038817003 : ℝ)/273804165120), ((15745692785629 : ℝ)/1095216660480), ((310895222713 : ℝ)/27380416512), ((490858431241 : ℝ)/219043332096), ((9816866083321 : ℝ)/1095216660480), ((-1445401761821 : ℝ)/547608330240)]
 
-set_option maxRecDepth 16384 in
-set_option maxHeartbeats 8000000 in
 theorem d4_eq : ∀ k, dense W4 b4 r3V k = d4V k := by
   intro k
   fin_cases k <;> (simp [dense, W4, b4, r3V, d4V, Fin.sum_univ_succ]; try norm_num)
 
-set_option maxRecDepth 16384 in
 theorem d4_ne : ∀ k, dense W4 b4 r3V k ≠ 0 := by
   intro k
   rw [d4_eq]

@@ -883,23 +883,22 @@ theorem mnv4_extradw_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (s 
     (hdys : ∀ r, dys r = batchShard R N (s.oc * s.h * s.h) (fun i => (R : ℝ) * DY i) r) :
     mnv4ExtraDWSyncTiedB R hR N s xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact depthwiseWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotQc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotQc_smul])
-  · exact bnSync_of_scaled R hR N s.ic s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N s.ic s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotQn_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotQn_smul])
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotEc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotEc_smul])
-  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotEn_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotEn_smul])
   · exact depthwiseWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotDc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotDc_smul])
-  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotDn_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotDn_smul])
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotPc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotPc_smul])
-  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm hM _ _ _ _ _ _ _ _ _ hdys
+  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **ConvNeXt-like block (`postDWk = 0`), DP-tied — its nine emitted collectives** (no `d`). -/
 def mnv4ConvNeXtSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec)
@@ -932,19 +931,18 @@ theorem mnv4_convnext_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (s
     (hdys : ∀ r, dys r = batchShard R N (s.oc * s.h * s.h) (fun i => (R : ℝ) * DY i) r) :
     mnv4ConvNeXtSyncTiedB R hR N s xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact depthwiseWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotQc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotQc_smul])
-  · exact bnSync_of_scaled R hR N s.ic s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N s.ic s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotQn_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotQn_smul])
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotEc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotEc_smul])
-  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotEn_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotEn_smul])
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotPc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotPc_smul])
-  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm hM _ _ _ _ _ _ _ _ _ hdys
+  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **FFN block (neither depthwise), DP-tied — its six emitted collectives** (`eW eg ebt pW pg
     pbt`). -/
@@ -973,15 +971,14 @@ theorem mnv4_ffn_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (s : Ui
     (hdys : ∀ r, dys r = batchShard R N (s.oc * s.h * s.h) (fun i => (R : ℝ) * DY i) r) :
     mnv4FfnSyncTiedB R hR N s xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   refine ⟨?_, ?_, ?_, ?_⟩
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotEc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotEc_smul])
-  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotEn_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotEn_smul])
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SyncCotPc_shard R hR N hN s hh p XIN dys _ hdys, mnv4CotPc_smul])
-  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm hM _ _ _ _ _ _ _ _ _ hdys
+  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **Pre-strided block (rows 1, 3, 11), DP-tied — its twelve emitted collectives**, the leading
     one the SYMMETRIC strided depthwise weight `depthwiseStridedWeightGradB`. -/
@@ -1021,23 +1018,22 @@ theorem mnv4_prestrided_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) 
     (hdys : ∀ r, dys r = batchShard R N (s.oc * s.h * s.h) (fun i => (R : ℝ) * DY i) r) :
     mnv4PreStridedSyncTiedB R hR N s xN cotN vN epsStr p XIN dys DY := by
   have hm := nhw_ne_zero hN hh hh
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hh
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · exact depthwiseStridedWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SSyncCotQc_shard R hR N hN s hh p XIN dys _ hdys, mnv4SCotQc_smul])
-  · exact bnSync_of_scaled R hR N s.ic s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N s.ic s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SSyncCotQn_shard R hR N hN s hh p XIN dys _ hdys, mnv4SCotQn_smul])
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SSyncCotEc_shard R hR N hN s hh p XIN dys _ hdys, mnv4SCotEc_smul])
-  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SSyncCotEn_shard R hR N hN s hh p XIN dys _ hdys, mnv4SCotEn_smul])
   · exact depthwiseWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SSyncCotDc_shard R hR N hN s hh p XIN dys _ hdys, mnv4SCotDc_smul])
-  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N (s.ic * s.expand) s.h s.h hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SSyncCotDn_shard R hR N hN s hh p XIN dys _ hdys, mnv4SCotDn_smul])
   · exact convWSync_of_scaled R hR N s.h s.h _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4SSyncCotPc_shard R hR N hN s hh p XIN dys _ hdys, mnv4SCotPc_smul])
-  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm hM _ _ _ _ _ _ _ _ _ hdys
+  · exact bnSync_of_scaled R hR N s.oc s.h s.h hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **Stem, DP-tied** — the 3×3/s2 XLA-`SAME` conv weight and its BatchNorm's γ and β. -/
 def mnv4StemSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat}
@@ -1063,8 +1059,7 @@ theorem mnv4_stem_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : 
   · exact convStridedXlaWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4StemSyncCotC_shard R hR N h w hN hh hw Ws bs εs γs βs X dys _ hdys,
         mnv4StemCotC_smul])
-  · exact bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw)
-      (nhw_ne_zero (Nat.mul_pos hR hN) hh hw) _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w (nhw_ne_zero hN hh hw) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4StemSyncCotN_shard R N h w Ws bs εs γs βs X dys _ hdys, mnv4StemCotN_smul])
 
 /-- **Fused stage, DP-tied** — its six emitted collectives: the SYMMETRIC strided conv weight
@@ -1098,18 +1093,17 @@ theorem mnv4_fused_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc kH 
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     mnv4FusedSyncTiedB R hR N h w Wc bc εc γc βc Wp bp εp γp βp xN cotN vN epsStr XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_⟩
   · exact convStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4FusedSyncCotC_shard R hR N h w hN hh hw Wc bc εc γc βc Wp bp εp γp βp XIN dys _
         hdys, mnv4FusedCotC_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4FusedSyncCotN_shard R hR N h w hN hh hw Wc bc εc γc βc Wp bp εp γp βp XIN dys _
         hdys, mnv4FusedCotN_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4FusedSyncCotPc_shard R hR N h w hN hh hw Wc bc εc γc βc Wp bp εp γp βp XIN dys _
         hdys, mnv4FusedCotPc_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ hdys
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **Head, DP-tied** — all eight emitted collectives: the two 1×1 conv weights (`h1W` 256 → 960,
     `hW` 960 → 1280), their BatchNorms' γ and β, and the classifier's weight and bias at the GAP
@@ -1147,18 +1141,17 @@ theorem mnv4_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls 
     (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * G i) r) :
     mnv4HeadSyncTiedB R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xN cotN vN epsStr XIN gs G := by
   have hm := nhw_ne_zero hN hh hw
-  have hM := nhw_ne_zero (Nat.mul_pos hR hN) hh hw
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4HeadSyncCotH1c_shard R hR N h w hN hh hw W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs
         _ hgs, mnv4HeadCotH1c_smul])
-  · exact bnSync_of_scaled R hR N mid h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4HeadSyncCotH1n_shard R hR N h w hN hh hw W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs
         _ hgs, mnv4HeadCotH1n_smul])
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4HeadSyncCotHc_shard R hR N h w hN hh hw W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs
         _ hgs, mnv4HeadCotHc_smul])
-  · exact bnSync_of_scaled R hR N oc h w hm hM _ _ _ _ _ _ _ _ _ (fun r => by
+  · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [mnv4HeadSyncCotHn_shard R N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs _ hgs,
         mnv4HeadCotHn_smul])
   · exact r34_head_syncTiedB R hR N h w xN cotN _ gs G hgs

@@ -627,7 +627,6 @@ structure CFwd where
   logits  : String                  -- dense output
   deriving Inhabited
 
-set_option maxRecDepth 8000 in
 /-- **The full ConvNeXt-T `[3,3,9,3]` forward as `pretty` of the verified AST.** 4×4/s4 patchify
     stem (3→96, 224→56) → 4 stages at 56/28/14/7 with 2×2/s2 downsamples between them → GAP(7×7)
     → head LN → dense(768→10). Every emitted line is `pretty` of a verified `SHlo` node.
@@ -672,7 +671,6 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
          blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
 
-set_option maxRecDepth 8000 in
 /-- **`@convnext_fwd` rendered ENTIRELY from the verified AST** — the peer of the train-step
     render, sharing its forward chain and its 180-parameter signature. Takes `%x` plus the 180
     params in `allParams` (= func-arg) order (181 inputs) and returns logits `[32, 10]`.
@@ -702,7 +700,6 @@ def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat :
 -- § The whole-net renderer
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 8000 in
 /-- **The whole-net forward + cotangent + backward traversal, SHARED by the SGD and AdamW renders.**
 
     Returns `(code, params, softmax)`: every emitted line; one SSA per parameter — the **updated
@@ -812,7 +809,6 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     updMap := updMap ++ [("psW", if adam then nPsW else "%psWn"), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
 
-set_option maxRecDepth 8000 in
 /-- **ConvNeXt-T (full [3,3,9,3]) SGD train step rendered from the verified AST** (except the two
     documented weight-grad gaps — the stem 4×4/s4 patchify and the even-kernel 2×2/s2 downsample,
     neither of which has a VJP-cert `SHlo` op). Every other line is `pretty` of a verified node:
@@ -910,7 +906,6 @@ private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0
    else "") ++
   adamWConsts wdStr
 
-set_option maxRecDepth 8000 in
 /-- **ConvNeXt-T AdamW train step rendered from the verified AST.** The certified peer of the
     hand-written render in [`tests/TestConvNeXtTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtTrain.lean) that `convnext-verified-adam` trains on.
 

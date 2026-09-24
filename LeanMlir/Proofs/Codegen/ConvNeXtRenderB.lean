@@ -247,7 +247,6 @@ private def fwdDownB (bB : Nat) (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool
       (.operand n zVB))
   pure (k1 ++ k2, n, o)
 
-set_option maxRecDepth 8000 in
 /-- **The full ConvNeXt-T `[3,3,9,3]` forward at the batched index.** Node for node the same chain
     `convNextFwdChain` emits — 4×4/s4 patchify stem (3→96, 224→56) → stem channel-LN → 4 stages at
     56/28/14/7 with 2×2/s2 downsamples between → GAP(7×7) → dense(768→nClasses).
@@ -305,7 +304,6 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
   pure { code := fwd ++ cG ++ cHn ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
 
-set_option maxRecDepth 8000 in
 /-- **`@convnext_fwd_b`** — the batched-index peer of `convNextFwdFaithfulV`, same 180-parameter
     signature and same `%x`. ⭐ Since 4c leg 3 (2026-09-07) this WRITES `convnext_fwd`,
     `convnextin_fwd`, `convnextsin_fwd` and `convnextbin_fwd` (the `#eval`s at the bottom of this
@@ -506,7 +504,6 @@ private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci 
   pure (cB ++ cNg ++ cNb ++ wcode,
     [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", nW), (s!"{pfx}b", nB)])
 
-set_option maxRecDepth 8000 in
 /-- **The whole-net batched traversal** — forward + cotangent + every parameter gradient, the
     batched peer of `convNextBackAll true (some …)`. Returns `(code, gradMap, softmaxSSA)` with the
     same shape, so the AdamW tail in `ConvNeXtRender.lean` can consume either.
@@ -631,7 +628,6 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     updMap := updMap ++ [("psW", nPsW), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
 
-set_option maxRecDepth 8000 in
 /-- **The ConvNeXt-T AdamW train step at the batched index.** ⚠ It is the SAME renderer the
     per-example path uses — `convNextAdamTrainStepFaithful` with `traversal` pointed at
     `convNextBackAllB` — not a copy.

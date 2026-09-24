@@ -512,24 +512,9 @@ theorem mnv4InputGradB_correct (N : Nat) {nCls : Nat}
           ∘ cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1
           ∘ b21 ∘ b20 ∘ b19 ∘ b18 ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1
           ∘ fused ∘ mnv4StemB N 112 112 Ws bs εs γs βs) x i j * dy j := by
-  rw [congrFun (mnv4InputGradB_eq_mnv4B_full_vjp N Ws bs εs hεs γs βs Wh1 bh1 εh1 hεh1 γh1 βh1
+  exact HasVJPAt.correct_of_backward_eq _ (mnv4InputGradB_eq_mnv4B_full_vjp N Ws bs εs hεs γs βs Wh1 bh1 εh1 hεh1 γh1 βh1
     Wh bh εh hεh γh βh Wd bd fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x h_stem hfused
-    hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 hb18 hb19 hb20 hb21 h_h1 h_h2) dy]
-  exact (mnv4B_full_has_vjp_at
-          (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21
-          (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1)
-          (cbReluB N (h := 7) (w := 7) Wh bh εh γh βh)
-          (r34HeadB N 7 7 Wd bd)
-          x
-          ⟨mnv4StemB_has_vjp_at N 112 112 Ws bs εs hεs γs βs x h_stem,
-            mnv4StemB_differentiableAt N 112 112 Ws bs εs hεs γs βs x h_stem⟩
-          hfused hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 hb18 hb19 hb20 hb21
-          ⟨cbReluB_has_vjp_at N Wh1 bh1 εh1 hεh1 γh1 βh1 _ h_h1,
-            cbReluB_differentiableAt N Wh1 bh1 εh1 hεh1 γh1 βh1 _ h_h1⟩
-          ⟨cbReluB_has_vjp_at N Wh bh εh hεh γh βh _ h_h2,
-            cbReluB_differentiableAt N Wh bh εh hεh γh βh _ h_h2⟩
-          ⟨(r34HeadB_has_vjp N 7 7 Wd bd).toHasVJPAt _,
-            (r34HeadB_differentiable N 7 7 Wd bd) _⟩).correct dy i
+    hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 hb18 hb19 hb20 hb21 h_h1 h_h2) dy i
 
 -- The projection lemmas this file's shape check rewrites with — `CertLayer.comp_fwd_apply`, the
 -- three layer `_fwd_apply`s, `r34HeadB_apply` and the per-group `mnv4Res*Layer_fwd_apply` — live

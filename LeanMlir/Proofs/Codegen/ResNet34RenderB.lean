@@ -180,7 +180,6 @@ structure R34Fwd where
   gap    : String        -- global-average-pool output
   logits : String        -- dense output
 
-set_option maxRecDepth 1000000 in
 /-- **The ResNet-34 `[3,4,6,3]` EVAL forward as `pretty` of the verified AST** (per-example index).
     7×7/s2 stem (3→64, 224→112) → 3×3/s2 max-pool (→56) → stages 64/128/256/512 at 56/28/14/7
     (stages 2–4 open with a strided downsample block) → GAP(7×7) → dense(512→`nClasses`). Every BN
@@ -234,7 +233,6 @@ private def r34FwdChain (B nClasses : Nat) (epsStr : String)
          blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
          gap := nGap, logits := nLog }
 
-set_option maxRecDepth 1000000 in
 /-- **`@resnet34_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward, with
     every BN site consuming frozen per-channel running stats (`bnPerChannelEvalF`) instead of
     reducing statistics out of its activation. Same net, same parameters in the same order, plus
@@ -1306,7 +1304,6 @@ def r34HeadFwdB (B nClasses : Nat) (xName : String) :
   let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z512))
   pure (cGap ++ cLog, nGap, nLog)
 
-set_option maxRecDepth 4000000 in
 /-- **The ResNet-34 forward chain at the BATCHED index** — one traversal, consumed by both
     `@resnet34_fwd` and every train step that differentiates it. -/
 def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
@@ -1341,7 +1338,6 @@ def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
          stc := nStc, stn := nStn, str := nStr, stp := nStp, sst := sst, gap := nGap, log := nLog,
          b := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16] }
 
-set_option maxRecDepth 4000000 in
 /-- **`@resnet34_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN train
     step in this file differentiates, so the net that scores and the net that trains are one graph
     by construction. Replaces the retired `ResNet34Render.lean` as the writer of
@@ -1361,7 +1357,6 @@ def resnet34FwdFaithfulB (B nClasses : Nat) (epsStr : String)
   s!"    return {F.log} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
-set_option maxRecDepth 4000000 in
 /-- **ResNet-34 `[3,4,6,3]` AdamW train step, batch-BN, rendered from the verified AST at `N := B`.**
     **407** inputs at the shipped `convBias := false` (`%x`, 110 θ, 110 m, 110 v,
     `%lr`/`%bc1`/`%bc2`, 72 running-stat slots, `%onehot`) and 408 outputs (110 θ', 110 m', 110 v',

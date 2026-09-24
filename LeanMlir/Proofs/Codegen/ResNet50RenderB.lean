@@ -493,7 +493,6 @@ private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f :
 -- § The whole-net batched train step
 -- ════════════════════════════════════════════════════════════════
 
-set_option maxRecDepth 4000000 in
 /-- Everything the whole-net render needs out of ONE forward traversal of ResNet-50: the emitted
     code, the logits, and every saved activation the backward reads.
 
@@ -549,7 +548,6 @@ def r50HeadFwdB (B q nClasses : Nat) (xName : String) :
   let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC) (.operand nGap z2048))
   pure (cGap ++ cLog, nGap, nLog)
 
-set_option maxRecDepth 4000000 in
 /-- **The ResNet-50 forward chain at the BATCHED index** — one traversal, consumed by both
     `@resnet50_fwd` and the train step that differentiates it. -/
 def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
@@ -1137,7 +1135,6 @@ private def bnkStridedFwdV (B cin mid oc hh : Nat) (epsStr p xName : String) :
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
   pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO, nO)
 
-set_option maxRecDepth 4000000 in
 /-- The R50 EVAL forward: stem → `[3,4,6,3]` bottlenecks → GAP(q×q) → dense(2048→nClasses), every
     BN at frozen running statistics (`bnEvalSite`). Writes `@resnet50in_fwd_eval`. -/
 private def r50FwdChain (B nClasses : Nat) (epsStr : String)
@@ -1180,7 +1177,6 @@ private def r50FwdChain (B nClasses : Nat) (epsStr : String)
         c1 ++ c2 ++ c3 ++ c4 ++ c5 ++ c6 ++ c7 ++ c8 ++
         c9 ++ c10 ++ c11 ++ c12 ++ c13 ++ c14 ++ c15 ++ c16 ++ cGap ++ cLog, nLog)
 
-set_option maxRecDepth 4000000 in
 /-- **`@resnet50in_fwd`** — 162 inputs (`%x` + 161 params), logits `[B, nClasses]`. Batch-statistic
     BN: rendered from `r50FwdChainB`, the traversal the train step differentiates, so
     `check_adam_prefix` holds it as a byte prefix of the train step.
@@ -1201,7 +1197,6 @@ def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   s!"    return {logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
 
-set_option maxRecDepth 4000000 in
 /-- **`@resnet50in_fwd_eval`** — the inference forward, every BN site reading frozen running stats.
     161 params + 106 stat inputs + `%x` = **268 inputs**. This is what the driver scores through,
     so its BN order must match `r50StatSigList`, which it does by sharing the chain. -/
