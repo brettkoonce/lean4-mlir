@@ -33,6 +33,7 @@ DEFINE_PTR(lowerer_train_step_adam_yolov1);
 DEFINE_PTR(lowerer_pjrt_marker);
 DEFINE_PTR(lowerer_pjrt_invoke_f32_resident_v2);
 DEFINE_PTR(lowerer_pjrt_resident_read);
+DEFINE_PTR(lowerer_pjrt_resident_read_prefix);
 DEFINE_PTR(lowerer_pjrt_invoke_f32_dp);
 
 static const char* g_active = "none";
@@ -106,6 +107,7 @@ static int bind_all(void* h) {
   OPT(lowerer_pjrt_marker,                 "pjrt_ffi_marker");
   OPT(lowerer_pjrt_invoke_f32_resident_v2, "pjrt_ffi_invoke_f32_resident_v2");
   OPT(lowerer_pjrt_resident_read,          "pjrt_ffi_resident_read");
+  OPT(lowerer_pjrt_resident_read_prefix,   "pjrt_ffi_resident_read_prefix");
   OPT(lowerer_pjrt_invoke_f32_dp,          "pjrt_ffi_invoke_f32_dp");
   return 0;
 }

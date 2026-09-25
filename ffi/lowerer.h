@@ -135,6 +135,7 @@ extern int (*lowerer_pjrt_invoke_f32_resident_v2)(
     const unsigned char*, int, const int64_t*, float* const*);
 
 extern int (*lowerer_pjrt_resident_read)(iree_ffi_session_t*, int64_t, float*);
+extern int (*lowerer_pjrt_resident_read_prefix)(iree_ffi_session_t*, int64_t, float*);
 
 extern int (*lowerer_pjrt_invoke_f32_dp)(
     iree_ffi_session_t*, const char*, int, int,
@@ -155,6 +156,7 @@ extern int (*lowerer_pjrt_invoke_f32_dp)(
 #define pjrt_ffi_marker                    lowerer_pjrt_marker
 #define pjrt_ffi_invoke_f32_resident_v2    lowerer_pjrt_invoke_f32_resident_v2
 #define pjrt_ffi_resident_read             lowerer_pjrt_resident_read
+#define pjrt_ffi_resident_read_prefix      lowerer_pjrt_resident_read_prefix
 #define pjrt_ffi_invoke_f32_dp             lowerer_pjrt_invoke_f32_dp
 
 #ifdef __cplusplus

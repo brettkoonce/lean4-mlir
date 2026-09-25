@@ -580,10 +580,17 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_softlabel(
   return lean_io_result_mk_ok(result);
 }
 
-// ---- Adam train step (f32, per-pixel segmentation labels) ----
-// `y_seg_ba` is an int32 [batch, H, W] per-pixel label tensor.
-// Routes to the codegen produced with `useSeg := true`.
-LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
+// ---- Adam train step (f32, dense f32 target: DDPM noise, DQN Bellman targets) ----
+// `y_ddpm_ba` is an f32 [batch, outC, outH, outW] target.
+// Routes to the codegen produced with `useDdpm := true`.
+//
+// `n_resident` > 0 with PJRT_FFI_RESIDENT=1 on the XLA shim keeps the leading
+// `n_resident` param tensors (`[theta|m|v]`, inputs AND outputs 0..np-1 — the graph's
+// params-in / params-out correspondence is index for index) on the device, as
+// `lean_iree_linear_train_step` does; the result's param region is then unwritten
+// and `lean_iree_read_params[_prefix]` is the way back. Zero, or any other backend,
+// is the copying path through `iree_ffi_train_step_adam_ddpm`, unchanged.
+static lean_obj_res train_step_adam_f32_ddpm_core(
     b_lean_obj_arg sess_obj,
     b_lean_obj_arg fn_name_obj,
     b_lean_obj_arg params_ba,
@@ -593,7 +600,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
     b_lean_obj_arg y_ddpm_ba,
     double lr, double t,
     b_lean_obj_arg bn_shapes_ba,
-    size_t batch, size_t outC, size_t outH, size_t outW) {
+    size_t batch, size_t outC, size_t outH, size_t outW, size_t n_resident) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -647,12 +654,58 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
   float loss_f = 0.0f;
   float* bn_out = (total_bn_stats > 0) ? rp + total_params + 1 : NULL;
 
-  int rc = iree_ffi_train_step_adam_ddpm(
-      sess, fn_name, (int)batch, (int)outC, (int)outH, (int)outW,
-      n_params, param_ranks, param_dims_flat, param_sizes,
-      p_f, x_rank, x_dims, x_f, y_ptr, (float)lr, (float)t,
-      rp, &loss_f,
-      n_bn_layers, bn_sizes, bn_out);
+  int rc;
+  if (use_resident(n_resident) && (int)n_resident == n_params) {
+    // The shim's `iree_ffi_train_step_adam_ddpm` layout, spelled here so the resident
+    // invoke can take it: inputs params, x, y [b,oC,oH,oW], lr, t (rank 0); outputs
+    // params, loss, then the BN stat pairs.
+    const int n_inputs = n_params + 4;
+    const int n_outputs = n_params + 1 + n_bn_layers * 2;
+    int32_t* ranks = (int32_t*)malloc((size_t)n_inputs * sizeof(int32_t));
+    int64_t* dims = (int64_t*)malloc((size_t)(dims_idx + x_rank + 4 + 1) * sizeof(int64_t));
+    const float** ins = (const float**)malloc((size_t)n_inputs * sizeof(float*));
+    int64_t* totes = (int64_t*)malloc((size_t)n_outputs * sizeof(int64_t));
+    float** outs = (float**)malloc((size_t)n_outputs * sizeof(float*));
+    float lr_v = (float)lr, t_v = (float)t;
+    int di = 0;
+    int64_t off = 0;
+    for (int i = 0; i < n_params; i++) {
+      ranks[i] = param_ranks[i];
+      for (int k = 0; k < param_ranks[i]; k++) { dims[di] = param_dims_flat[di]; di++; }
+      ins[i] = p_f + off;
+      totes[i] = param_sizes[i];
+      outs[i] = rp + off;
+      off += param_sizes[i];
+    }
+    ranks[n_params] = x_rank;
+    for (int k = 0; k < x_rank; k++) dims[di++] = x_dims[k];
+    ins[n_params] = x_f;
+    ranks[n_params + 1] = 4;
+    dims[di++] = (int64_t)batch; dims[di++] = (int64_t)outC;
+    dims[di++] = (int64_t)outH;  dims[di++] = (int64_t)outW;
+    ins[n_params + 1] = y_ptr;
+    ranks[n_params + 2] = 0; ins[n_params + 2] = &lr_v;
+    ranks[n_params + 3] = 0; ins[n_params + 3] = &t_v;
+    totes[n_params] = 1; outs[n_params] = &loss_f;
+    int64_t boff = 0;
+    for (int i = 0; i < n_bn_layers * 2; i++) {
+      totes[n_params + 1 + i] = bn_sizes[i];
+      outs[n_params + 1 + i] = bn_out + boff;
+      boff += bn_sizes[i];
+    }
+    rc = pjrt_ffi_invoke_f32_resident_v2(sess, fn_name, 1,
+        /*res_in=*/0, /*res_out=*/0, (int)n_resident, /*res_gen=*/0,
+        n_inputs, ranks, dims, ins, NULL,
+        n_outputs, totes, outs);
+    free(ranks); free(dims); free(ins); free(totes); free(outs);
+  } else {
+    rc = iree_ffi_train_step_adam_ddpm(
+        sess, fn_name, (int)batch, (int)outC, (int)outH, (int)outW,
+        n_params, param_ranks, param_dims_flat, param_sizes,
+        p_f, x_rank, x_dims, x_f, y_ptr, (float)lr, (float)t,
+        rp, &loss_f,
+        n_bn_layers, bn_sizes, bn_out);
+  }
 
   free(param_ranks); free(param_dims_flat); free(param_sizes);
   if (bn_sizes) free(bn_sizes);
@@ -663,6 +716,26 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
   }
   rp[total_params] = loss_f;
   return lean_io_result_mk_ok(result);
+}
+
+LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
+    b_lean_obj_arg sess_obj, b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg params_ba, b_lean_obj_arg shapes_ba,
+    b_lean_obj_arg x_ba, b_lean_obj_arg x_shape_ba, b_lean_obj_arg y_ddpm_ba,
+    double lr, double t, b_lean_obj_arg bn_shapes_ba,
+    size_t batch, size_t outC, size_t outH, size_t outW) {
+  return train_step_adam_f32_ddpm_core(sess_obj, fn_name_obj, params_ba, shapes_ba,
+      x_ba, x_shape_ba, y_ddpm_ba, lr, t, bn_shapes_ba, batch, outC, outH, outW, 0);
+}
+
+LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm_r(
+    b_lean_obj_arg sess_obj, b_lean_obj_arg fn_name_obj,
+    b_lean_obj_arg params_ba, b_lean_obj_arg shapes_ba,
+    b_lean_obj_arg x_ba, b_lean_obj_arg x_shape_ba, b_lean_obj_arg y_ddpm_ba,
+    double lr, double t, b_lean_obj_arg bn_shapes_ba,
+    size_t batch, size_t outC, size_t outH, size_t outW, size_t n_resident) {
+  return train_step_adam_f32_ddpm_core(sess_obj, fn_name_obj, params_ba, shapes_ba,
+      x_ba, x_shape_ba, y_ddpm_ba, lr, t, bn_shapes_ba, batch, outC, outH, outW, n_resident);
 }
 
 // YOLOv1 variant. y_yolo is f32 [batch, perCell, gridH, gridW] (target);
@@ -1367,6 +1440,34 @@ LEAN_EXPORT lean_obj_res lean_iree_read_params(
       lean_dec_ref(result);
       return lean_io_result_mk_error(lean_mk_io_user_error(
           lean_mk_string("resident parameter read-back failed (see stderr)")));
+    }
+  }
+  memcpy(dst, lean_sarray_cptr(packed_ba), n_bytes);
+  return lean_io_result_mk_ok(result);
+}
+
+// ---- Read the leading parameter tensors only (theta of [theta|m|v]) ----
+// `lean_iree_read_params` for a caller that wants theta EVERY step — the DQN runs
+// its online-Q forward on the current parameters before each update. Same shape:
+// with residency live it is a d2h of theta alone (Adam's m and v stay put); on the
+// copying path and on IREE it is the host copy's prefix, byte for byte. A size
+// that does not end on a tensor boundary is refused, never rounded.
+LEAN_EXPORT lean_obj_res lean_iree_read_params_prefix(
+    b_lean_obj_arg sess_obj, b_lean_obj_arg packed_ba, size_t n_bytes) {
+  size_t have = lean_sarray_size(packed_ba);
+  if (n_bytes > have) n_bytes = have;
+  lean_object* result = lean_alloc_sarray(1, n_bytes, n_bytes);
+  uint8_t* dst = lean_sarray_cptr(result);
+
+  if (resident_wanted() && pjrt_ffi_resident_read_prefix) {
+    iree_ffi_session_t* sess =
+        (iree_ffi_session_t*)lean_get_external_data(sess_obj);
+    int rc = pjrt_ffi_resident_read_prefix(sess, (int64_t)(n_bytes / 4), (float*)dst);
+    if (rc == 0) return lean_io_result_mk_ok(result);
+    if (rc != 1) {
+      lean_dec_ref(result);
+      return lean_io_result_mk_error(lean_mk_io_user_error(
+          lean_mk_string("resident parameter prefix read-back failed (see stderr)")));
     }
   }
   memcpy(dst, lean_sarray_cptr(packed_ba), n_bytes);

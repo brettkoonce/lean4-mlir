@@ -138,6 +138,23 @@ opaque trainStepAdamF32Ddpm
   (bnShapes : @& ByteArray)
   (batch : USize) (outC : USize) (outH : USize) (outW : USize) : IO ByteArray
 
+/-- `trainStepAdamF32Ddpm` with device residency (§2d.3): `nResident` = the number of
+    param tensors in `[θ|m|v]` (all of them — the graph's params-in / params-out
+    correspondence is index for index). With `PJRT_FFI_RESIDENT=1` on the XLA backend
+    they stay on the device after the first call, the result's param region is left
+    UNWRITTEN, and `readParams` / `readParamsPrefix` is the way back; `packed`'s param
+    region is ignored after the seed. Unset, or on IREE, this is `trainStepAdamF32Ddpm`. -/
+@[extern "lean_iree_train_step_adam_f32_ddpm_r"]
+opaque trainStepAdamF32DdpmR
+  (sess : @& LowererSession) (fnName : @& String)
+  (params : @& ByteArray) (shapes : @& ByteArray)
+  (x : @& ByteArray) (xShape : @& ByteArray)
+  (yDdpm : @& ByteArray)
+  (lr : Float) (t : Float)
+  (bnShapes : @& ByteArray)
+  (batch : USize) (outC : USize) (outH : USize) (outW : USize)
+  (nResident : USize) : IO ByteArray
+
 /-- YOLOv1 variant. `yYolo` is a `[batch, perCell, gridH, gridW]` f32
     target tensor (NCHW); `mYolo` is a `[batch, gridH, gridW]` f32
     per-cell objectness mask (1.0 where a GT box's center falls in
@@ -289,6 +306,14 @@ opaque mlpTrainStepV
     once-per-epoch before any of this. -/
 @[extern "lean_iree_read_params"]
 opaque readParams
+  (sess : @& LowererSession) (packed : @& ByteArray) (nBytes : USize) : IO ByteArray
+
+/-- The leading `nBytes` of the parameter state — θ of `[θ|m|v]` — for a caller that
+    needs θ every step (the DQN's online-Q forward), where `readParams` is per epoch.
+    With residency live it moves θ alone off the device; otherwise it is
+    `packed.extract 0 nBytes`. `nBytes` must end on a tensor boundary, or it throws. -/
+@[extern "lean_iree_read_params_prefix"]
+opaque readParamsPrefix
   (sess : @& LowererSession) (packed : @& ByteArray) (nBytes : USize) : IO ByteArray
 
 end LowererSession

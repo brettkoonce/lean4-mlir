@@ -1912,6 +1912,48 @@ int pjrt_ffi_resident_read(iree_ffi_session_t* sess, int64_t n_floats, float* ds
   return failed ? 2 : 0;
 }
 
+// The leading retained tensors only: `theta` out of `[theta|m|v]`, for a caller that
+// runs its own forwards on the current parameters every step (the DQN's online-Q
+// forward) and so needs theta per step, where `resident_read` is per epoch. Adam's m
+// and v stay on the device. `n_floats` must END ON A TENSOR BOUNDARY of the retained
+// set — anything else is a layout disagreement, and it is refused exactly as
+// `resident_read` refuses a partial read, not rounded to the nearest tensor.
+//
+// Same return convention: 1 = this session retains nothing (use the host copy).
+int pjrt_ffi_resident_read_prefix(iree_ffi_session_t* sess, int64_t n_floats, float* dst) {
+  if (!sess || !sess->res.n || !dst) return 1;
+  resident_t* r = &sess->res;
+  int k = 0;
+  int64_t acc = 0;
+  while (k < r->n && acc < n_floats) acc += r->elems[k++];
+  if (acc != n_floats || n_floats <= 0) {
+    fprintf(stderr,
+            "[pjrt_ffi] resident_read_prefix wants %lld floats but @%s's retained "
+            "tensors do not end there (nearest boundary %lld) — refusing\n",
+            (long long)n_floats, sess->entry, (long long)acc);
+    return 2;
+  }
+  PJRT_Event** ev = (PJRT_Event**)calloc((size_t)k, sizeof(*ev));
+  int failed = 0;
+  int64_t off = 0;
+  for (int j = 0; j < k; j++) {
+    PJRT_Buffer_ToHostBuffer_Args a = {0};
+    a.struct_size = PJRT_Buffer_ToHostBuffer_Args_STRUCT_SIZE;
+    a.src = r->buf[j];                 // replica 0, as resident_read
+    a.dst = dst + off;
+    a.dst_size = (size_t)r->elems[j] * sizeof(float);
+    if (check(g_api->PJRT_Buffer_ToHostBuffer(&a), "ToHostBuffer(resident_read_prefix)")) {
+      failed = 1; break;
+    }
+    ev[j] = a.event;
+    off += r->elems[j];
+  }
+  for (int j = 0; j < k; j++)
+    if (ev[j] && await_event(ev[j], "d2h(resident_read_prefix)")) failed = 1;
+  free(ev);
+  return failed ? 2 : 0;
+}
+
 // ─── not yet ported ────────────────────────────────────────────────────────
 // The packed-params / Adam / segmentation / DDPM / YOLO entry points are rungs
 // 1-4 of planning/archive/xla_pjrt_ladder.md. They are declared in iree_ffi.h, so they
