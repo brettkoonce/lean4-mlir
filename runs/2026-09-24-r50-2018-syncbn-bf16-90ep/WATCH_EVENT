@@ -1,0 +1,20 @@
+=== RUN ENDED at 2026-09-25 22:58:42 UTC ===
+[sup] 2026-09-24 15:18:29 cmd: .lake/build/bin/resnet50-imagenet-verified data
+[sup] 2026-09-24 15:18:29 eta: bf16 ~29 h / f32 ~46 h on 4x 4060 Ti (222 / 358 ms/step median, 90 ep)
+[sup] 2026-09-24 15:18:29 attempt 1: resuming at epoch 0/90 (next rest: 999)
+[sup] 2026-09-24 15:18:29   launched PID=1094842 PGID=1094842
+[sup]   last line: done (trained ResNet-50 (ImageNet-1k, 2018 recipe) momdp64bf16 + cosine/warmup via packed threading).
+[sup] 2026-09-25 22:54:28 ✅ COMPLETE — 90/90 epochs
+--- final evals ---
+  epoch 88: test_acc = 38539/50000 = 77.078000%  top5 = 46677/50000 = 93.354000%  [95% CI 76.71–77.44]
+  epoch 89: test_acc = 38545/50000 = 77.090000%  top5 = 46725/50000 = 93.450000%  [95% CI 76.72–77.46]
+  epoch 90: test_acc = 38580/50000 = 77.160000%  top5 = 46715/50000 = 93.430000%  [95% CI 76.79–77.53]
+--- loaders at end ---
+  pid 1097148  age  31.2 h  rss  5.24 GiB  arena  4.06 GiB  maps 363
+  pid 1097262  age  31.2 h  rss  5.11 GiB  arena  3.94 GiB  maps 340
+  pid 1097442  age  31.2 h  rss  5.06 GiB  arena  3.91 GiB  maps 330
+  pid 1097667  age  31.2 h  rss  7.69 GiB  arena  6.52 GiB  maps 400
+  pid 1097888  age  31.2 h  rss  8.68 GiB  arena  7.49 GiB  maps 402
+  pid 1098094  age  31.2 h  rss 10.66 GiB  arena  9.62 GiB  maps 456
+  pid 1098275  age  31.2 h  rss 10.20 GiB  arena  9.01 GiB  maps 437
+  pid 1098459  age  31.2 h  rss  9.91 GiB  arena  8.84 GiB  maps 432

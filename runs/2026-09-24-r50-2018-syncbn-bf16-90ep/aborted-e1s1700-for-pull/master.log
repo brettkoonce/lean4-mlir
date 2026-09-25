@@ -1,0 +1,6 @@
+[sup] 2026-09-24 15:08:57 START job=r50-2018-bf16-4gpu devs=0,1,2,3 epochs=90 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-24-r50-2018-syncbn-bf16-90ep
+[sup] 2026-09-24 15:08:57 cmd: .lake/build/bin/resnet50-imagenet-verified data
+[sup] 2026-09-24 15:08:57 eta: bf16 ~29 h / f32 ~46 h on 4x 4060 Ti (222 / 358 ms/step median, 90 ep)
+[sup] 2026-09-24 15:08:57 attempt 1: resuming at epoch 0/90 (next rest: 999)
+[sup] 2026-09-24 15:08:58   launched PID=1087535 PGID=1087535
+[sup] 2026-09-24 15:17:17 supervisor exiting — taking the run down (PID=1087535 PGID=1087535)
