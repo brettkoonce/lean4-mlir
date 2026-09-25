@@ -351,22 +351,25 @@ verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
 → 4 tumour classes. 24.5M params, plain per-pixel CE, 10 epochs.
 
 `MainUnetBratsR34.lean`, `MainBratsPredict.lean`. See
-`planning/archive/r34_brats_retrain.md`.
+`planning/archive/r34_brats_retrain.md`; logs and per-epoch curves in
+`runs/2026-09-25-brats-r34-xla/`.
 
 ```bash
 ./download_brats.sh
 python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
         --size 224 --seed 0            # same patient split as data/brats
-./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU
-lake exe brats-predict net=r34 arm=scratch,r34 out.ppm
+./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU, ~50 min
+lake exe brats-predict net=r34 arm=scratch,r34 best out.ppm   # best-by-val checkpoints
 python3 scripts/brats_figure.py out.ppm demos/figures/brats_r34_skip_transfer.png \
     --labels "T1gd,ground truth,from scratch,ImageNet R34"
 ```
 
+Best-by-val checkpoint (epoch 9 in both arms), 2,569 held-out slices from 73 patients:
+
 | arm | mIoU | WT | TC | ET |
 |---|---|---|---|---|
-| `r34` (ImageNet bootstrap) | 0.742 | 0.911 | 0.870 | 0.858 |
-| `scratch` (He-init) | 0.740 | 0.910 | 0.869 | 0.856 |
+| `r34` (ImageNet bootstrap) | 0.743 | 0.912 | 0.869 | 0.856 |
+| `scratch` (He-init) | 0.741 | 0.910 | 0.867 | 0.856 |
 
 ![The ResNet-34 UNet on four held-out BraTS patients, both arms](figures/brats_r34_skip_transfer.png)
 
@@ -378,19 +381,18 @@ ring-enhancing glioblastoma.
 **Two things this demo measures, and they are not the same size.**
 
 *Skips are worth ~10 points.* Same backbone and schedule, decoder with and
-without the encoder concat: **0.635 → 0.740 mIoU**, the largest gain on ET
+without the encoder concat: **0.633 → 0.741 mIoU**, the largest gain on ET
 (+0.12), the thinnest structure — a skipless decoder has to rebuild every
 boundary from a 7×7 bottleneck. Run the ablation with `noskip`.
 
-*Transfer buys one epoch, not a better model.* The two arms differ in exactly
-one field (`bootstrapBackboneRange`), so 86.8% of params start pretrained vs
-random and everything else is identical. At **epoch 1** the bootstrapped arm is
-already at ET Dice 0.818 while the control sits at 0.184, still collapsed on
-the hard classes. By epoch 2 the control has caught up, and the peaks above are
-a tie (+0.002, noise at n=1). The honest claim is sample-efficiency: same
-quality, one epoch sooner. Transfer's payoff scales inversely with dataset
-size, and 14,415 slices is a lot — a data-fraction sweep is the experiment that
-would show it properly.
+*Transfer buys a head start of a few points, not a better model.* The two arms
+differ in exactly one field (`bootstrapBackboneRange`), so 86.8% of params start
+pretrained vs random and everything else is identical. After **epoch 1** the
+bootstrapped arm is at ET Dice 0.805 against the control's 0.742 (mIoU 0.631
+against 0.616); by epoch 2 the control is level, and the peaks above are a tie
+(+0.002, noise at n=1). Transfer's payoff scales inversely with dataset size,
+and 14,415 slices is a lot — a data-fraction sweep is the experiment that would
+show it properly.
 
 The backbone is `.lake/build/jax_r34_imagenet.bin`, trained by this stack on
 ImageNet to 72% top-1. Nothing is downloaded. Its stem is 3-channel RGB and
