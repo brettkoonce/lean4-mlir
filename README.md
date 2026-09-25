@@ -16,8 +16,19 @@ Nature) as the follow-up to
 [Convolutional Neural Networks with Swift for TensorFlow](https://doi.org/10.1007/978-1-4842-6168-2) (2021).
 
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20402133.svg)](https://doi.org/10.5281/zenodo.20402133)
+[![Certify Corpus](https://github.com/brettkoonce/lean4-mlir/actions/workflows/certs.yml/badge.svg?branch=main)](https://github.com/brettkoonce/lean4-mlir/actions/workflows/certs.yml)
+[![Verify Proofs](https://github.com/brettkoonce/lean4-mlir/actions/workflows/proofs.yml/badge.svg?branch=main)](https://github.com/brettkoonce/lean4-mlir/actions/workflows/proofs.yml)
+[![Comparator](https://github.com/brettkoonce/lean4-mlir/actions/workflows/comparator.yml/badge.svg?branch=main)](https://github.com/brettkoonce/lean4-mlir/actions/workflows/comparator.yml)
 
 **Current version: `v0.7.1`.** Release history in [CHANGELOG.md](CHANGELOG.md).
+
+## Three ways in
+
+| to | do this | needs |
+|---|---|---|
+| read it | the [book](https://lean.brettkoonce.com/blueprint/) ([PDF](https://lean.brettkoonce.com/blueprint.pdf)), or the [API docs](https://lean.brettkoonce.com/docs/) | a browser |
+| check the proofs | `lake exe cache get && lake build ProofsMinimal` (~1 min), then `lake build Certs` for all of them; [The proofs](#the-proofs) below | Lean 4, no GPU |
+| train a net | the four setup lines in [the tour](#the-tour), then `lake run mnist` (~1 min) | an NVIDIA or AMD GPU |
 
 ## The tour
 
@@ -99,20 +110,26 @@ run` tier has an `-iree` twin. Building it is [historical/IREE_BUILD.md](histori
 
 ## Where things are
 
-- `LeanMlir/Proofs/` — the proofs, chapter by chapter; `verified_mlir/` — the committed renders
-  the tiers train on
-- `apps/` — one `Main` per exe, by tier; `demos/` — Chapter 10's eleven demos, in its order;
-  `Bestiary/` — 45 read-only `NetSpec` catalogue entries, Part 2 of the book
-- `jax/` — the JAX reference implementations the ImageNet path is ported from, and the oracle's
-  ground truth
-- `scripts/jobs/` and `scripts/supervise.sh` — the ImageNet jobs (`lake run <job>` runs one);
-  `runs/` — the logs and READMEs behind the numbers
-- `historical/` — the two earlier phases (`historical/mnist-lean4/`, pure Lean 4 with a C BLAS;
-  `historical/mlir_poc/`, the Python exporters), the survey this README used to be
+Each directory has a README that says what is in it and where to start.
+
+- [`LeanMlir/`](LeanMlir/) — the library; [`LeanMlir/Proofs/`](LeanMlir/Proofs/) — the proofs,
+  chapter by chapter; [`verified_mlir/`](verified_mlir/) — the committed renders the tiers train on
+- [`apps/`](apps/) — one `Main` per exe, by tier; [`demos/`](demos/) — Chapter 10's eleven demos,
+  in its order; [`Bestiary/`](Bestiary/) — 45 read-only `NetSpec` catalogue entries, Part 2 of
+  the book
+- [`jax/`](jax/) — the JAX reference implementations the ImageNet path is ported from, and the
+  oracle's ground truth
+- [`tests/`](tests/) — the gates: render ties, data-parallel checks, the comparator and the VJP
+  oracle; [`ffi/`](ffi/) — the C runtime the lowerers sit behind
+- [`scripts/`](scripts/) — gates, figures and the ImageNet jobs (`scripts/jobs/`, `lake run <job>`
+  runs one); [`runs/`](runs/) — the logs and READMEs behind the numbers
+- [`historical/`](historical/) — the two earlier phases (`mnist-lean4/`, pure Lean 4 with a C BLAS;
+  `mlir_poc/`, the Python exporters), the cross-backend traces, the old logs and the upstream bug
+  reproducers, the survey this README used to be
   ([README_survey.md](historical/README_survey.md)), and the reference notes:
   [RESULTS.md](historical/RESULTS.md) (per-epoch histories), [BENCHMARK.md](historical/BENCHMARK.md),
   [CUDA.md](historical/CUDA.md), [ROCM.md](historical/ROCM.md), [IREE_BUILD.md](historical/IREE_BUILD.md)
-- `blueprint/` — the book's source
+- [`blueprint/`](blueprint/) — the book's source; [`planning/`](planning/) — working notes
 
 ## Citing this work
 
