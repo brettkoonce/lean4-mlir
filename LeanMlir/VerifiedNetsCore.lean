@@ -35,11 +35,18 @@ structure RmsSchedule where
   decayRate : Float
   /-- `expLRDecayEpochs` — how many epochs one multiplication spans. ⚠ Not 1 on both nets. -/
   decayEpochs : Float := 1.0
-  /-- `warmupEpochs` — the linear ramp to `lr`. 5 on both. -/
+  /-- `warmupEpochs` — the linear ramp to `lr`. 5 unless a recipe says otherwise. -/
   warmup : Nat := 5
+  /-- `expLRStaircase` — the exponent floored (TF's `staircase=True`). -/
+  staircase : Bool := false
 
-/-- **MobileNetV2**: 0.045 peak, ×0.98 **per epoch** ([`jax/MainMobilenetV2Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV2Imagenet.lean)). -/
+/-- **MobileNetV2**: 0.045 peak, ×0.98 **per epoch**, 5-epoch warmup, continuous — the schedule the
+    Imagenette peers train with. -/
 def mnv2RmsSchedule : RmsSchedule := { lr := 0.045, decayRate := 0.98 }
+
+/-- **MobileNetV2 on ImageNet** ([`jax/MainMobilenetV2Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV2Imagenet.lean)): the paper's TF-slim
+    schedule, ×0.98 per epoch as a staircase from step 0 with no warmup (2026-09-25). -/
+def mnv2ImagenetRmsSchedule : RmsSchedule := { mnv2RmsSchedule with warmup := 0, staircase := true }
 
 /-- **EfficientNet-B0**: 0.016 peak, ×0.97 **every 2.4 epochs** — the paper's schedule, and the
     linear scaling of 0.256@4096 down to batch 256 ([`jax/MainEfficientNetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainEfficientNetImagenet.lean)). -/

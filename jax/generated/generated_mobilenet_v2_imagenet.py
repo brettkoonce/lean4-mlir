@@ -135,7 +135,7 @@ def conv2d(x, w, b, padding=None, stride=(1,1)):
           dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)
     return x + b.reshape(1, -1, 1, 1)
 
-def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.99):
+def _bn(x, gamma, beta, prev, training, eps=0.001, momentum=0.997):
     rm, rv = prev
     if training:
         bm = jnp.mean(x, axis=(0, 2, 3)); bv = jnp.var(x, axis=(0, 2, 3))
@@ -1288,7 +1288,7 @@ if __name__ == "__main__":
                 'use_adam': False,
                 'weight_decay': 0.000040,
                 'cosine': False,
-                'warmup_epochs': 5,
+                'warmup_epochs': 0,
                 'augment': True,
                 'label_smoothing': 0.000000,
                 'seed': 314159,
@@ -1331,12 +1331,8 @@ if __name__ == "__main__":
         for _ in range(steps_per_epoch):
             x, y = next(train_iter)
             # Per-step LR (warmup → exp-decay)
-            warmup_steps = steps_per_epoch * 5
-            if _global_step < warmup_steps:
-                lr = jnp.float32(LR * (_global_step + 1) / warmup_steps)
-            else:
-                _ep = _global_step / steps_per_epoch
-                lr = jnp.float32(LR * (0.980000 ** ((_ep - 5) / 1.000000)))
+            _ep = _global_step / steps_per_epoch
+            lr = jnp.float32(LR * (0.980000 ** np.floor(_ep / 1.000000)))
             params, opt_state, bn_state, loss = train_step(params, opt_state, bn_state, x, y, lr, jax.random.fold_in(_drop_base, _global_step))
             epoch_loss += loss  # jax scalar: defer the device sync to epoch end
             n_batches += 1

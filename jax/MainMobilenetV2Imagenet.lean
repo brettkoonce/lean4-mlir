@@ -44,17 +44,16 @@ def mobilenetV2Imagenet : NetSpec where
 /-- MobileNetV2 90-epoch tier (`default`); the published reference is the 350-epoch `full`
     recipe below, which is this config with only `epochs` changed.
 
-    RMSProp + momentum 0.9, base lr 0.045 at batch 256 with a 5-epoch warmup +
-    paper exp-LR-decay (×0.98 per epoch) — MobileNetV2's original optimizer. Two
-    MobileNet-specific choices:
+    RMSProp + momentum 0.9, base lr 0.045 at batch 256, and the paper's schedule: ×0.98 per
+    epoch as a staircase from step 0, with no warmup (TF-slim's `exponential_decay(staircase=True)`).
+    Two MobileNet-specific choices:
       * weight decay 4e-5 (not 1e-4): large wd hurts the tiny depthwise
-        weights; 4e-5 is the standard MobileNet value. Coupled, on every tensor
-        (BN and depthwise included, where TF-slim skips both).
+        weights; 4e-5 is the standard MobileNet value. Coupled L2, off BN γ/β and biases
+        (`wdExcludeNormBias`); depthwise kernels still decay, where TF-slim skips them.
       * no mixup/cutmix: not standard for MobileNetV2.
     RMSProp knobs: ρ=0.9 (rmspropDecay), μ=0.9 (momentum), ε=1.0 (rmspropEps —
-    MobileNetV2's value, NOT 1e-8). LR schedule is the paper's exponential decay
-    (×0.98 per epoch after warmup; cosineDecay off), continuous rather than the
-    paper's staircase. Aug is crop/flip only (MobileNetV2 used no AutoAugment).
+    MobileNetV2's value, NOT 1e-8). BatchNorm is TF-slim's: decay 0.997, ε 1e-3.
+    Aug is crop/flip only (MobileNetV2 used no AutoAugment).
     Label smoothing 0.0 and classifier dropout 0.2, as the paper. -/
 def mobilenetV2ImagenetConfig : TrainConfig where
   learningRate   := 0.045   -- MobileNetV2-native RMSProp peak (was 0.1 for SGD)
@@ -67,16 +66,19 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   weightDecay    := 4e-5
   wdExcludeNormBias := true   -- no decay on BN γ/β or biases (slim's rule for BN; the verified `wx`)
   cosineDecay      := false   -- replaced by the paper exp-decay schedule (gap B)
-  expLRDecayRate   := 0.98    -- MobileNetV2: ×0.98 per epoch (after warmup)
+  expLRDecayRate   := 0.98    -- MobileNetV2: ×0.98 per epoch
   expLRDecayEpochs := 1.0
+  expLRStaircase   := true    -- the paper's staircase, counted from step 0
   dropout          := 0.2     -- MobileNetV2 classifier dropout (gap C)
-  warmupEpochs   := 5
+  warmupEpochs   := 0         -- the paper has no warmup
   augment        := true    -- random-crop + horizontal flip (MNv2 paper aug)
   useAutoAugment := false   -- MNv2 paper used crop/flip only; AA is beyond the paper
   labelSmoothing := 0.0     -- MNv2 paper (Sandler 2018) used none
   bf16           := true
   bf16Conv       := true    -- now reaches the inverted-residual blocks
   runningBN      := true    -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
+  bnMomentum     := 0.997   -- TF-slim's BN decay (PyTorch momentum 0.003)
+  bnEps          := 1e-3    -- TF-slim's BN ε
 
 #eval mobilenetV2Imagenet.validate!
 

@@ -91,7 +91,7 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 | C3 | `supervise.sh:131`, `VerifiedTrain` | recipe → shim selection works for R50 only, so MNv4's `full` shim (RandAugment m15) cannot be reached on the verified path | `LEAN_MLIR_RECIPE` → shim for every net, in `VerifiedTrain` | S–M |
 | C4 | `VerifiedTrain.lean:200` | BN running-stat decay is 0.99 for every net except R50; timm-ported MNv4 wants 0.9 | per-net setting on both paths; decide per net in §5 | S |
 | C5 | `VerifiedTrain.lean` ~2778 (`scoreCheckpoint`) | refuses every BN net, although the `.bn` companion has been written since 09-12; the comment "~30 GB drain" is stale | read `.bn`; score BN nets | S–M |
-| C6 | `Codegen.lean:50-65, 430-443` + the shim | bilinear geometry ops; zero-fill erasing with uniform aspect; the erase box is sized from `_IMG_SIZE`, so any `trainRes` recipe with erasing breaks | bicubic geometry, `pixel` erasing with log-uniform aspect, a size taken from the actual crop. Lands **with the next reruns**, since it moves every reference | M |
+| C6 | `Codegen.lean:50-65, 430-443` + the shim (**go**, 2026-09-25) | bilinear geometry ops; zero-fill erasing with uniform aspect; the erase box is sized from `_IMG_SIZE`, so any `trainRes` recipe with erasing breaks | bicubic geometry, `pixel` erasing with log-uniform aspect, a size taken from the actual crop. Lands **with the next reruns**, since it moves every reference | M |
 | C7 | every `scripts/jobs/*.conf` | prechecks diverge: only `mnv4-half` builds its exe; mnv2, mnv4-default and vit-default have no freshness check; vit-emabf16 tests `-x` only; the ConvNeXt AutoAugment grep matches the `def _autoaugment` line (always passes, and AutoAugment isn't in that recipe) | `scripts/lib/precheck.sh`, sourced by every conf: build the exe, `regen_jax_generated.sh box`, GPU idle, render exists with the expected replica/all-reduce count, `CKPT_EPOCH_FILE` matches the variant, shim present and fresh, aug call-site grep on the call not the def | S |
 | C8 | `scripts/gen_mlir_manifest.py:56-171` | `wd<n>` not decoded; `x` means k×B after `acc` but B×replicas in `128x4`; batch suppressed whenever `acc` is present | decode `wd`; one `x` grammar (rename `dp128x4` if needed, predicates in `TestVariantPredicates` pin it) | S |
 | C9 | JAX resume (`shuffle(seed=42)`, unseeded aug) | the MNv4 JAX conf says "resumes bit for bit"; it doesn't | seed the shuffle by epoch and the aug by step, or fix the claim | S |
@@ -137,7 +137,7 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 |---|---|---|---|---|
 | G1 | ViT | `vit-dp-check` feeds every replica the same rows, so it can't see a shard-offset bug (book ~12205 admits it) | add `vitin` to `shard-check` / the genuinely sharded check | S, short GPU |
 | G2 | MNv4 | `mnv4-dp-check` uses a duplicated batch; `imagenet-syncbn-check mnv4` is hard-wired to `adamdp64` (`tests/TestImagenetSyncBnCheck.lean:167-173`) | a `renderDp` like R50's (`:141-147`): 4×128 tied against 1×512 | S, short GPU |
-| G3 | MNv2, B0, ViT | no parity gate like `scripts/mnv4_timm_parity.py`; `enet_forward_tie.py:32` ties the render to the **Imagenette** JAX file, which is how the ImageNet ReLU stem/head bug went unseen | timm/torchvision parity per net (MNv2 needs a pad-mode option for SAME vs symmetric; ViT pins LN eps and GELU); an ImageNet-spec forward tie for B0 | M, CPU |
+| G3 | MNv2, B0, ViT (**go**, 2026-09-25) | no parity gate like `scripts/mnv4_timm_parity.py`; `enet_forward_tie.py:32` ties the render to the **Imagenette** JAX file, which is how the ImageNet ReLU stem/head bug went unseen | timm/torchvision parity per net (MNv2 needs a pad-mode option for SAME vs symmetric; ViT pins LN eps and GELU); an ImageNet-spec forward tie for B0 | M, CPU |
 | G4 | MNv4 | `mnv4_timm_parity.py` and `mnv4_forward_tie.py` not in CI | add to `jax.yml` | S |
 | G5 | ConvNeXt | `opt_step_tie.py` has only ResNet-50 fixtures; the EMA variant has no numeric optimizer-step tie | AdamW + wx + clip (+EMA) row against `generated_convnext_tiny_imagenet_full.py`; run `TestConvNeXtDpCheck` on the EMA variant | M, short GPU |
 | G6 | MNv2 | the precheck doesn't assert the sync-BN render, so a relaunch silently trains different BN semantics from the book's run | covered by C7's all-reduce count (314) | S |
@@ -174,6 +174,15 @@ smoke + resume green (loss 6.97 at step 0 = ln 1000 with no smoothing). ✅ M2-2
 note dates to the JAX run's launch (07-28), so the 71.90 most likely trained at ls 0.1 like the
 verified run; both reruns are at 0. ✅ M2-3: `mnv2-full-jax-4gpu.conf`. Decision (a) taken: `wx`
 on both paths (free, both runs are redone anyway). (b)/(c) still open.
+**Decisions (b)/(c) taken, 2026-09-25 (the user): TF-slim on both.** BN decay 0.997, ε 1e-3;
+×0.98 per epoch as a staircase from step 0, no warmup. ✅ Landed: JAX `TrainConfig.bnEps` /
+`expLRStaircase` (defaults byte-identical; only the two MNv2 generated files move); verified
+`mobilenetv2in_rmsdp64wxdols0eps0001bf16` + its eval partner `mobilenetv2in_fwd_eval_eps0001`
+(ε is baked, so a new pair; each differs from its 1e-5 sibling only in the ε constants and the
+entry), `VerifiedVariant.evalTag` so the trainer and `score-checkpoint` score an `eps` variant
+through its own eval graph, `mnv2ImagenetRmsSchedule` (warmup 0, staircase) and
+`bnMomentum := 0.997` in the driver; `mnv2-default-4gpu` flipped, `mnv2-full-jax-4gpu` checks the
+emitted ε/decay/floor. The MNv2 pair's code is closed apart from C6 and G3.
 
 ### 5.2 MobileNetV4-Conv-M
 | # | fix | size |
@@ -215,6 +224,11 @@ the render docstring describes the timm net.
 Decisions: (a) staircase decay from step 0 (paper) or keep continuous-after-warmup and fix the
 book? (b) BN eps 1e-3? (c) drop-connect i/16? All three are cheap to render and ride on the same
 rerun.
+**Decisions taken, 2026-09-25 (the user): follow TF.** (a) staircase ×0.97 / 2.4 epochs counted
+from step 0 (the 5-epoch warmup stays, layered on top as in the TF code); (b) BN ε 1e-3 (TF; timm's
+own `efficientnet_b0` is 1e-5, `tf_efficientnet_b0` 1e-3); (c) drop-connect i/16; and B0-1 `wx` ON
+(the C2 note's "B0 does not" had no decision behind it). A JAX rerun rides along (R5). Not coded
+yet; ε reuses MNv2's `eps` marker and `evalTag`.
 
 **Status (2026-09-25):** ✅ B0-4 docstrings (peak lr 0.016, AutoAugment only, continuous decay,
 decay on every parameter). ✅ B0-5 header trimmed to the 2026-09-12 table plus a short history;

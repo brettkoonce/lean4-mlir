@@ -364,6 +364,16 @@ def emaRegion (v : String) : Option Nat :=
 /-- Offset of the `%emad,%oemad` pair inside the scalar tail — 3 alone, 5 behind `%aup,%akeep`. -/
 def emaScalarOff (v : String) : Nat := 3 + (if accOn v then 2 else 0)
 
+/-- The eval forward's suffix for a variant rendered at a non-default BatchNorm ε: `_eps0001` for
+    an `…eps0001…` variant (ε = 1e-3), empty otherwise. ε is baked into every BN site, so a train
+    step at one ε must be scored through an eval graph at the same ε —
+    `<slug>_fwd_eval_eps0001.mlir`, entry `@<slug>_fwd_eval_eps0001` — while every checkpoint
+    trained at 1e-5 keeps scoring through `<slug>_fwd_eval.mlir`. -/
+def evalTag (v : String) : String :=
+  match v.splitOn "eps" with
+  | _ :: rest :: _ => "_eps" ++ String.ofList (rest.toList.takeWhile Char.isDigit)
+  | _ => ""
+
 end VerifiedVariant
 
 /-- iree-compile one `.mlir` → `.vmfb`, surfacing failures. Skips when the `.vmfb` is already
@@ -1469,7 +1479,10 @@ private def fwdRenderedShape (path : String) : IO (Option (Nat × Nat)) := do
 def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam")
     (expDecayRate : Float := 0.0) (expDecayEpochs : Float := 1.0)
-    (emaDecay : Float := 0.9999) : IO Unit := do
+    (emaDecay : Float := 0.9999)
+    -- ▶ `expStaircase`: the exponent floored, TF's `exponential_decay(staircase=True)` — the
+    -- reference's `TrainConfig.expLRStaircase`. Off keeps the continuous form every run used.
+    (expStaircase : Bool := false) : IO Unit := do
   -- `variant` selects the rendered train step `@<slug>_<variant>_train_step` (and its artifact /
   -- vmfb / checkpoint names). Default "adam" = the AdamW render; "mom" = the Nesterov-momentum SGD
   -- render (same packed [θ|m|v]+lr/bc1/bc2 signature; the momentum step ignores the m/bc slots and
@@ -1612,8 +1625,10 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   -- `scripts/sharded_eval_gate.sh`: an identical correct count and bitmap at 1 and N replicas, with
   -- a control that must fail.
   let fwdSess ← mkSessionDp fwdPath replicas
+  -- ⚠ `evalTag`: a variant rendered at a non-default BN ε scores through the eval graph at THAT ε.
+  let evalStem := s!"{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}"
   let fwdEvalSess ← if hasBn then
-      mkSessionDp s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir" replicas
+      mkSessionDp s!"{net.mlirDir}/{evalStem}.mlir" replicas
     else pure fwdSess
   let synth := (← IO.getEnv "LEAN_MLIR_BENCH_SYNTH").isSome
   -- ▶ `LEAN_MLIR_EVAL_BATCHSTATS=1` — a DIAGNOSTIC, not a feature. Scores through `@<slug>_fwd`
@@ -1658,7 +1673,7 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- inside `loadData` has to allocate and read at the EVAL width, so it needs `evalD0` as an input.
   -- It used to hardcode `3*224*224`, which was right only while train and eval resolutions agreed.
   let (evalBs, evalD0) := (← fwdRenderedShape
-    (if useRunning then s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
+    (if useRunning then s!"{net.mlirDir}/{evalStem}.mlir"
      else fwdPath)).getD (bs, d0)
   -- ⚠ ANNOUNCED when it differs, because a train/eval resolution SPLIT is not visible anywhere else
   -- in the log, and a run that silently evaluated at the wrong resolution would still report a
@@ -1706,7 +1721,9 @@ differentiates (see r50FwdChainB for the pattern), or drop the env var and score
   -- ⚠ The cosine and exp spellings are byte-identical to what they were, because every
   -- Imagenette and ImageNet transcript in the book quotes this line.
   let schedName := if expDecayRate == 1.0 then "constant lr"
-    else if expDecayRate > 0.0 then s!"exp x{expDecayRate}/{expDecayEpochs}ep" else "cosine"
+    else if expDecayRate > 0.0 then
+      s!"exp x{expDecayRate}/{expDecayEpochs}ep{if expStaircase then " staircase" else ""}"
+    else "cosine"
   let schedDesc := if expDecayRate == 1.0 then s!"constant lr {baseLR}"
     else s!"{schedName}+warmup {warmupEpochs}ep, baseLR {baseLR}"
   IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} {variant} ({schedDesc}), He init"
@@ -1775,7 +1792,7 @@ was RENDERED at) != train batch {bs} — sound because eval is class-batch-indep
     -- the loop makes, not a transcription — so an accumulation run says what it is really doing
     -- rather than what it was configured with.
     let bnMomShown := cfg.bnEmaWeight (if accOn then some accK else none)
-    IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{net.slug}_fwd_eval"
+    IO.println s!"  running-stats BN: {net.bnChannels.size} layers, {nBnStats} stat floats → eval via @{evalStem}"
     IO.println s!"     decay {cfg.bnMomentum} (TF sense; = PyTorch/timm momentum {1.0 - cfg.bnMomentum}), \
 new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{accK}), compensated for grad-accum" else ""}"
   if replicas > 1 then
@@ -2245,8 +2262,8 @@ gate's control, not a configuration.")
       -- Spelled `exp ∘ log` rather than with `^` because that is what the next two lines already do.
       let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
                  else if expDecayRate > 0.0 then
-                   baseLR * Float.exp (((gstep - 1.0) / nb.toFloat - warmupEpochs.toFloat)
-                                       / expDecayEpochs * Float.log expDecayRate)
+                   let k := ((gstep - 1.0) / nb.toFloat - warmupEpochs.toFloat) / expDecayEpochs
+                   baseLR * Float.exp ((if expStaircase then k.floor else k) * Float.log expDecayRate)
                  else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
       let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)
@@ -2596,7 +2613,7 @@ gate's control, not a configuration.")
     let thetaCur := thetamv.extract (emaReg * pBytes) ((emaReg + 1) * pBytes)
     -- BN nets eval through `@<slug>_fwd_eval` with the running stats appended; others use `@<slug>_fwd`.
     let evalSess := if useRunning then fwdEvalSess else fwdSess
-    let evalFn := if useRunning then s!"m.{net.slug}_fwd_eval" else fwdFn
+    let evalFn := if useRunning then s!"m.{evalStem}" else fwdFn
     -- ⚠ EMA weights MUST be scored against the EMA-lagged stats, never the live ones — that
     -- pairing is the one the reference calls out as blowing up early eval.
     -- $LEAN_MLIR_EMA_BN=0 is a CONTROL, not a feature: it pairs the EMA weights with the LIVE
@@ -2824,7 +2841,7 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
   let sizeSuf := match evalSize with | some s => s!"_s{s}" | none => ""
   let pick (suf : String) : IO String := do
     let v := s!"{net.mlirDir}/{net.slug}_{variant}_fwd{suf}.mlir"
-    if hasBn then pure s!"{net.mlirDir}/{net.slug}_fwd_eval{suf}.mlir"
+    if hasBn then pure s!"{net.mlirDir}/{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}{suf}.mlir"
     else if (← System.FilePath.pathExists v) then pure v
     else pure s!"{net.mlirDir}/{net.slug}_fwd{suf}.mlir"
   -- A protocol that changes only the CROP (DeiT: 224 at 0.9) needs no second render: the base
@@ -2898,7 +2915,8 @@ never written. Scoring the .bin alone would normalise by zeros."
   -- its file name); the recipe-size ones keep the net's.
   let sizedStem := (System.FilePath.mk fwdPath).fileStem.getD ""
   let evalFn := if !sizeSuf.isEmpty && sizedStem.endsWith sizeSuf then s!"m.{sizedStem}"
-                else if hasBn then s!"m.{net.slug}_fwd_eval" else s!"m.{net.slug}_fwd"
+                else if hasBn then s!"m.{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}"
+                else s!"m.{net.slug}_fwd"
   (← IO.getStdout).flush
   -- ▶ `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
   -- read exactly as the trainers read it. ⭐ This is the knob `scripts/sharded_eval_gate.sh` turns:
@@ -3225,7 +3243,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
   let tsSess  ← mkSession s!"{net.mlirDir}/{net.slug}_{variant}_train_step.mlir"
   let fwdSess ← mkSession s!"{net.mlirDir}/{net.slug}_fwd.mlir"
   let fwdEvalSess ← if hasBn then
-      mkSession s!"{net.mlirDir}/{net.slug}_fwd_eval.mlir"
+      mkSession s!"{net.mlirDir}/{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}.mlir"
     else pure fwdSess
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     loadData net dataDir
@@ -3345,7 +3363,7 @@ def VerifiedNet.trainAdamSchedE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (d
     IO.println s!"Epoch {ep + 1}/{nEpochs}: loss={epochLossSum / nb.toFloat} lr={lastLr}"
     let thetaCur := thetamv.extract 0 pBytes
     let evalSess := if hasBn then fwdEvalSess else fwdSess
-    let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else fwdFn
+    let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval{VerifiedVariant.evalTag variant}" else fwdFn
     let evalParams := if hasBn then F32.concat #[thetaCur, runningBnStats] else thetaCur
     let evalShapes := if hasBn then fwdEvalShapes else fwdShapes
     let mut correct := 0

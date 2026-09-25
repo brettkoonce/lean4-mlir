@@ -6,10 +6,11 @@ The last of the five scale-tier trainers (§2p). Needed only a `slug` plus deriv
 constants — and mnv2 was the worst of the five on that axis, carrying the K=10 value in the
 COTANGENT (the gradient path, §2k's original bug) as well as in the report-only loss.
 
-⚠ Does NOT move the verification tier. The optimizer follows the variant: `rms*` (the shipping
-`rmsdp64bf16`) is the reference's RMSProp with its warmup + ×0.98 exponential decay, `adam*` is
-AdamW at 1e-3. The `rmsdp64bf16` render still differs from the JAX reference in label smoothing
-(0.1 baked against the reference's 0.0) and in having no classifier dropout
+⚠ Does NOT move the verification tier. The optimizer follows the variant: `rms*` is the
+reference's RMSProp with ×0.98 per-epoch decay, `adam*` is AdamW at 1e-3. The shipping
+`rmsdp64wxdols0eps0001bf16` is the JAX `full` recipe row for row (TF-slim BN: ε 1e-3 in the render,
+decay 0.997 here; the staircase schedule with no warmup). The older `rmsdp64bf16` differs from it in
+label smoothing (0.1), classifier dropout (none), `wx`, BN ε and the warmup
 (planning/imagenet_parity.md §2.2).
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
@@ -38,6 +39,9 @@ gone from the target name because it no longer distinguishes anything.
 def mobilenetv2ImagenetConfig : VerifiedConfig where
   epochs    := 350
   batchSize := 64
+  -- TF-slim's BN decay, the reference's `bnMomentum` (host-side EMA, no render).
+  -- ⚠ It applies to every variant this driver runs, the older 1e-5 renders included.
+  bnMomentum := 0.997
 
 /-- Entry point. Defaults to the single-device `adam64` variant, matching the other four ImageNet
     drivers — a DP default dies at the first step on a replica-count refusal, which reads as a
@@ -54,11 +58,11 @@ def runMobileNetV2Imagenet (argv : List String) : IO Unit := do
   let epochs := ((← IO.getEnv "LEAN_MLIR_EPOCHS").bind (·.toNat?)).getD mobilenetv2ImagenetConfig.epochs
   -- ▶ `rms*` selects the reference's OWN optimizer, so it also selects the reference's own schedule.
   -- At `rms64`/`rmsdp64` this driver is the MobileNetV2 recipe: RMSProp (ρ .9, μ .9, ε 1.0, coupled
-  -- wd 4e-5 — all baked by `rmsConstsBlock mnv2RmsHyper`) at peak LR 0.045 with 5-epoch warmup and
-  -- ×0.98 per epoch after it, mean-square initialised to 1.0 by the driver. Every one of those is
-  -- `mobilenetV2ImagenetConfig`'s value, and the LR/schedule half comes off `mnv2RmsSchedule` so
-  -- the Imagenette peer cannot carry a different 0.98.
-  let sched := mnv2RmsSchedule
+  -- wd 4e-5 — all baked by `rmsConstsBlock mnv2RmsHyper`) at peak LR 0.045, ×0.98 per epoch as a
+  -- staircase from step 0 with no warmup, mean-square initialised to 1.0 by the driver. Every one
+  -- of those is `mobilenetV2ImagenetConfig`'s value, and the LR/schedule half comes off
+  -- `mnv2ImagenetRmsSchedule` so the two paths cannot carry a different 0.98.
+  let sched := mnv2ImagenetRmsSchedule
   let rms := variant.startsWith "rms"
   let baseLR := match (← IO.getEnv "LEAN_MLIR_BASE_LR_U").bind (·.toNat?) with
     | some u => u.toFloat * 1e-6
@@ -68,5 +72,6 @@ def runMobileNetV2Imagenet (argv : List String) : IO Unit := do
     { mobilenetv2ImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 (if rms then sched.warmup else 5) variant
     (if rms then sched.decayRate else 0.0) sched.decayEpochs
+    (expStaircase := rms && sched.staircase)
 
 def main (argv : List String) : IO Unit := runMobileNetV2Imagenet argv

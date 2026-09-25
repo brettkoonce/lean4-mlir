@@ -957,7 +957,7 @@ structure TrainConfig where
       |---|---|---|
       | R50 / R34 | timm (RSB) — `momentum=0.1` | **0.9** |
       | EfficientNet-B0 | the TF paper (77.1/93.3) — TF's `decay=0.99` | 0.99 |
-      | MobileNetV2 | the TF-slim paper (72.0) — `decay=0.997` `[unverified]` | 0.99 today |
+      | MobileNetV2 | the TF-slim paper (72.0) — `decay=0.997` | **0.997** (2026-09-25) |
       | MNv4 | our own 100-ep JAX run, not a paper | 0.99 today |
 
       ⚠ timm itself runs **0.9 on every one of those nets**, `tf_efficientnet_b0`
@@ -972,6 +972,12 @@ structure TrainConfig where
       (`VerifiedTrain.lean`'s `bnMom`). Under gradient accumulation both sides
       compensate to `bnMomentum^(1/K)` per micro-batch. -/
   bnMomentum : Float := 0.99
+  /-- BatchNorm ε — `_bn`'s `eps`, on the running-BN path (`runningBN`). 1e-5 is PyTorch's and
+      timm's default; the TF papers (MobileNetV2 in slim, EfficientNet) use 1e-3. The default
+      keeps the emitted `eps=1e-5` literal, so every net that does not set it is byte-identical.
+      ⚠ The verified peer is the render's `epsStr`, a different artifact per ε (the `eps<d…>`
+      variant marker and its own `_fwd_eval_eps<d…>` eval graph), not a host-side knob. -/
+  bnEps : Float := 1e-5
   /-- timm/DeiT ViT weight init, replacing the generic Xavier-uniform for
       transformer-shaped nets. Off by default so every existing run is
       byte-identical; turn it on per-recipe.
@@ -1027,6 +1033,11 @@ structure TrainConfig where
       decayEpochs 1.0. Selected over cosine when `> 0`. -/
   expLRDecayRate   : Float := 0.0
   expLRDecayEpochs : Float := 1.0
+  /-- The exponential schedule as a STAIRCASE — `rate^⌊(epoch − warmup) / decayEpochs⌋`, the
+      TF `exponential_decay(staircase=True)` form both papers train with — instead of the
+      continuous exponent. Only read when `expLRDecayRate > 0`. Off keeps every net's generated
+      file byte-identical. -/
+  expLRStaircase : Bool := false
   /-- Classifier dropout (gap C): dropout rate applied before the final dense
       head during training (inverted, scaled by 1/keep so eval is drop-free).
       0 = off. EfficientNet-B0 / MobileNetV2 use 0.2. Threaded via the same

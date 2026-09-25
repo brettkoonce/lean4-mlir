@@ -277,6 +277,8 @@ jobs:
               verified_mlir/mobilenetv2in_adamdp64bf16_train_step.mlir \
               verified_mlir/mobilenetv2in_rmsdp64bf16_train_step.mlir \
               verified_mlir/mobilenetv2in_rmsdp64wxdols0bf16_train_step.mlir \
+              verified_mlir/mobilenetv2in_rmsdp64wxdols0eps0001bf16_train_step.mlir \
+              verified_mlir/mobilenetv2in_fwd_eval_eps0001.mlir \
             || { echo "::error::committed verified_mlir/{mobilenetv2,mobilenetv2in}_{fwd,*_train_step}.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean)"; exit 1; }
           # MobileNetV4-Conv-M (Conv-S until 2026-08-14; planning/archive/mnv4_verified.md §3i). Elaborating this module writes
           # ALL THREE artifacts, so all three are diffed — the fwd/fwd_eval/train_step set comes

@@ -114,6 +114,8 @@ def selftest() -> int:
         ("emalambacc4x128wxclipdropbcewd001", lambda v: decimal_marker(v, "wd"), "0.01", "`%wd` = 0.01"),
         ("adamwd00", batch_shape, None, "`wd00` is weight decay 0.0, not a batch of 00"),
         ("adamls0bf16", lambda v: decimal_marker(v, "ls"), "0", "`%lomac` = 1.0"),
+        ("rmsdp64wxdols0eps0001bf16", lambda v: decimal_marker(v, "eps"), "0.001", "BN ε = 1e-3"),
+        ("rmsdp64wxdols0eps0001bf16", batch_shape, "batch 64 per replica", "`eps0001` is not a batch"),
     ]
     bad = 0
     for v, pred, want, why in checks:
@@ -179,6 +181,9 @@ def decode(variant: str) -> str:
     ls = decimal_marker(variant, "ls")
     if ls is not None:
         bits.append(f"label smoothing {ls}")
+    eps = decimal_marker(variant, "eps")
+    if eps is not None:
+        bits.append(f"BN ε {eps}")
     shape = batch_shape(variant)
     if shape:
         bits.append(shape)
@@ -203,7 +208,7 @@ def batch_shape(v: str) -> str | None:
          <B>              single-device batch
     The precision markers and `wd`/`ls` carry digits of their own, so they are stripped first."""
     s = v.replace("bf16", "").replace("fp8", "")
-    s = re.sub(r"(?:wd|ls)\d+", "", s)
+    s = re.sub(r"(?:wd|ls|eps)\d+", "", s)
     m = re.search(r"acc(dp)?(\d+)x(\d+)", s)
     if m:
         return f"micro-batch {m.group(3)}{' per replica' if m.group(1) else ''}"
@@ -279,12 +284,19 @@ def build() -> str:
         res = re.fullmatch(r"(.*fwd(?:_eval)?)_s(\d+)", rest)
         if res:
             rest = res.group(1)
+        # `<…>fwd_eval_eps<d…>`: the eval graph at a non-default BatchNorm ε, the partner of the
+        # `…eps<d…>…` train step (`VerifiedVariant.evalTag`).
+        epsm = re.fullmatch(r"(.*fwd_eval)_eps(\d+)", rest)
+        if epsm:
+            rest = epsm.group(1)
         kind = ("fwd_eval" if rest.endswith("fwd_eval")
                 else "fwd" if rest.endswith("fwd")
                 else "train_step" if rest.endswith("train_step") else "?")
         variant = rest.removesuffix("_" + kind) if rest != kind else ""
         if res:
             kind += f" @{res.group(2)}px"
+        if epsm:
+            kind += f" BN ε {decimal_marker('eps' + epsm.group(2), 'eps')}"
         rows.append({
             "file": p.name, "slug": slug or "(unknown)", "kind": kind, "variant": variant,
             "mb": p.stat().st_size / 1048576, "writer": w.get(stem, "⛔ no writer"),

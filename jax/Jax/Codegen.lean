@@ -634,7 +634,9 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         else ""
       code := code ++
         bnMomNote ++
-        ("def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=" ++ bnMomStr ++ "):\n") ++
+        ("def _bn(x, gamma, beta, prev, training, eps=" ++
+          (if cfg.bnEps == 1e-5 then "1e-5" else pyFloat cfg.bnEps) ++
+          ", momentum=" ++ bnMomStr ++ "):\n") ++
         "    rm, rv = prev\n" ++
         "    if training:\n" ++
         "        bm = jnp.mean(x, axis=(0, 2, 3)); bv = jnp.var(x, axis=(0, 2, 3))\n" ++
@@ -3081,15 +3083,18 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    let rate := toString cfg.expLRDecayRate
    let dEp := toString cfg.expLRDecayEpochs
    -- post-warmup decay formula (exp-decay = EfficientNet/MobileNet schedule, else cosine)
+   -- `expLRStaircase`: TF's `exponential_decay(staircase=True)` — the exponent is floored, so the
+   -- rate steps once per `decayEpochs` instead of sliding.
+   let expo (e : String) := if cfg.expLRStaircase then "np.floor(" ++ e ++ ")" else "(" ++ e ++ ")"
    let decayWarmup := if hasExpLR then
        "                _ep = _global_step / steps_per_epoch\n" ++
-       "                lr = jnp.float32(LR * (" ++ rate ++ " ** ((_ep - " ++ warmup ++ ") / " ++ dEp ++ ")))\n"
+       "                lr = jnp.float32(LR * (" ++ rate ++ " ** " ++ expo ("(_ep - " ++ warmup ++ ") / " ++ dEp) ++ "))\n"
      else
        "                prog = (_global_step - warmup_steps) / max(total_steps - warmup_steps, 1)\n" ++
        "                lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
    let decayNoWarmup := if hasExpLR then
        "            _ep = _global_step / steps_per_epoch\n" ++
-       "            lr = jnp.float32(LR * (" ++ rate ++ " ** (_ep / " ++ dEp ++ ")))\n"
+       "            lr = jnp.float32(LR * (" ++ rate ++ " ** " ++ expo ("_ep / " ++ dEp) ++ "))\n"
      else
        "            prog = _global_step / max(total_steps, 1)\n" ++
        "            lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"
