@@ -146,6 +146,19 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 ### §4 status (2026-09-25)
 
 * ✅ G6: `mnv2-default-4gpu` asserts 314 all-reduces (C7); `enet-default-4gpu` asserts 360.
+* ✅ G3 for MNv2: `scripts/mnv2_timm_parity.py` (+ `_mnv2_timm_dump.py`, run from `.venv/bin/python`;
+  it drives `.venv-timm` itself) ties both JAX emitters to timm's `mobilenetv2_100` at
+  `pad_type='same'` on shared weights — Imagenette train 4.4e-6, ImageNet train 4.7e-6 / eval 3.1e-6
+  at ε 1e-3. `--controls` shows it red on symmetric padding (1.5e-1) and on ε 1e-5 (1.7e-2).
+  `scripts/mnv2_forward_tie.py --imagenet` carries it to the artifact the run scores through:
+  `@mobilenetv2in_fwd_eval_eps0001` against the ImageNet reference in its own eval mode, max |Δ|
+  3.0e-5 (2.1e-6 of scale); control `--mlir verified_mlir/mobilenetv2in_fwd_eval.mlir` (ε 1e-5)
+  fails at 1.4e-1. Neither script is in CI yet (G4's question for MNv4 too: CI has no `.venv-timm`).
+  ⚠ Pre-existing, not touched: the Imagenette `--eval` tie reports FAIL at max |Δ| 1.3e-4 against its
+  absolute 1e-4 tolerance on logits spanning ±49 (2.6e-6 of scale), identically before this change.
+  G3 for B0 and ViT still open.
+* ✅ C6 does not reach MNv2: its trainer and shim call no geometric aug or erasing, and both resizes
+  are already bicubic + antialias. **The MNv2 pair (R4) is code-complete.**
 
 ## 5. Code: per net
 

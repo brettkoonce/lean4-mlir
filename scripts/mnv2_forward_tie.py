@@ -37,14 +37,25 @@ is confirmed — which is the same shape of result the MNv4 tie produced at 1.8e
 ⚠ Batch is FIXED at 32 by the render (`%x : tensor<32x150528xf32>`) and the forward uses BATCH
 BN, so the batch cannot be shrunk to make this cheaper — the statistics are over all 32.
 
+▶ `--imagenet` (2026-09-25, planning/imagenet_parity.md G3) ties the artifact the ImageNet run
+SCORES THROUGH — `@mobilenetv2in_fwd_eval_eps0001`, 1000 classes, batch 64, BN ε 1e-3 — against the
+ImageNet reference (`generated_mobilenet_v2_imagenet_full.py`) in its own eval mode, fed the same
+frozen μ = 0 / var = 1. That reference has running BN, so no patch is needed and ε is compared as
+emitted. `scripts/mnv2_timm_parity.py` pins that reference to timm's `mobilenetv2_100`; this carries
+it to the render. The control is `--mlir verified_mlir/mobilenetv2in_fwd_eval.mlir` (ε 1e-5): it must
+FAIL against the ε-1e-3 reference.
+
 Usage:
     scripts/mnv2_forward_tie.py --diag
     scripts/mnv2_forward_tie.py --diag --backend cuda
+    scripts/mnv2_forward_tie.py --imagenet
+    scripts/mnv2_forward_tie.py --imagenet --mlir verified_mlir/mobilenetv2in_fwd_eval.mlir   # control: must fail
 """
 import argparse, os, re, sys, tempfile
 import numpy as np
 
 REF_PY = "jax/.lake/build/generated_mobilenet_v2.py"
+REF_PY_IMAGENET = "jax/.lake/build/generated_mobilenet_v2_imagenet_full.py"
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _iree  # noqa: E402
 
@@ -138,6 +149,12 @@ def load_reference_forward(stem_sym, dw_sym, bn_perex=False, bn_frozen=False):
         body = body.replace(old, new)
     mod = {}
     exec(body, mod)
+    # `mm` / `convdt` read these at call time: the ImageNet reference is emitted bf16, and f32 makes
+    # the comparison about the FUNCTION (inert on the f32 Imagenette file).
+    import jax.numpy as jnp
+    for k in ("DT", "CONV_DT"):
+        if k in mod:
+            mod[k] = jnp.float32
     if "forward" not in mod:
         sys.exit("reference prefix did not define forward()")
     return mod["forward"]
@@ -154,9 +171,20 @@ def main():
     ap.add_argument("--eval", action="store_true",
                     help="tie @mobilenetv2_fwd_eval instead — the artifact the ADAM run scores "
                          "with, and the one that carries the new XLA-SAME padding")
+    ap.add_argument("--imagenet", action="store_true",
+                    help="tie the ImageNet eval graph (default @mobilenetv2in_fwd_eval_eps0001) "
+                         "against the ImageNet reference in its own eval mode")
     ap.add_argument("--diag", action="store_true",
                     help="evaluate all four padding variants, to attribute the disagreement")
     args = ap.parse_args()
+    global REF_PY
+    if args.imagenet:
+        if args.diag:
+            sys.exit("--diag is the Imagenette padding attribution; it does not apply to --imagenet")
+        REF_PY = REF_PY_IMAGENET
+        args.eval = True
+        if args.mlir == "verified_mlir/mobilenetv2_fwd.mlir":
+            args.mlir = "verified_mlir/mobilenetv2in_fwd_eval_eps0001.mlir"
 
     # ⭐ EVAL MODE — how the NEW net gets tied without touching stat ordering.
     # `@mobilenetv2_fwd` (per-example BN) partners the SGD train step and `@mobilenetv2_fwd_eval`
@@ -173,6 +201,9 @@ def main():
         if args.mlir == "verified_mlir/mobilenetv2_fwd.mlir":
             args.mlir = "verified_mlir/mobilenetv2_fwd_eval.mlir"
         args.fn = "mobilenetv2_fwd_eval"
+    if args.imagenet:
+        # an artifact's entry is its file name
+        args.fn = os.path.splitext(os.path.basename(args.mlir))[0]
     if not os.path.exists(args.mlir):
         sys.exit(f"{args.mlir} missing")
     if not os.path.exists(REF_PY):
@@ -237,6 +268,12 @@ def main():
         sys.exit(f"expected 52 triples (stem + 17 invres + head), got {ntri} — layout drifted")
 
     def evalref(stem_sym, dw_sym, bn_perex=False):
+        if args.imagenet:
+            # The running-BN reference in EVAL mode with μ = 0, var = 1: its own `_bn`, its own ε.
+            f = load_reference_forward(False, False)
+            bn = [(jnp.zeros(p[0].shape[0], jnp.float32), jnp.ones(p[0].shape[0], jnp.float32))
+                  for p in params if len(p) == 3]
+            return np.asarray(f(params, jnp.asarray(x), bn, False)[0]).astype(np.float64)
         f = load_reference_forward(stem_sym, dw_sym, bn_perex, bn_frozen=args.eval)
         return np.asarray(f(params, jnp.asarray(x))).astype(np.float64)
 
