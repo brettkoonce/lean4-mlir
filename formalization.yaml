@@ -125,7 +125,7 @@ status:
   axioms: &core ["propext", "Quot.sound", "Classical.choice"]   # Lean/mathlib core only; no project axioms
   main_results:
     # A REPRESENTATIVE set, one row per kind of claim. The full audit is tests/AuditAxioms.lean
-    # (`#print axioms` on every declaration that says something, run in CI); 73 are
+    # (`#print axioms` on every declaration that says something, run in CI); 87 are
     # independently kernel-rechecked by the comparator, and that set covers every row below
     # (`comparator_config` names the file each one is checked in). Every row: 0 sorries, the
     # three core axioms. The per-net numbers table is fidelity 4d.
@@ -151,7 +151,7 @@ status:
     - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
     - {declaration: "Proofs.Mnv2FullBSeal.sealX_nonconstant", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2FullBSeal.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
-    # the same, on the one net whose fused stage is swish -- so the carrier crosses a non-affine activation
+    # the same on MobileNetV4-Conv-M at timm's mobilenetv4_conv_medium: 38 relu clauses, all weight-only
     - {declaration: "Proofs.Mnv4FullBSeal.sealX_backward_nontrivial", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullBSeal.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Train-step ties (T3): the fold at every gradient node, then the cotangent pinned ---
@@ -269,7 +269,7 @@ fidelity:
 
     1. STRONGEST -- layer VJP correctness. The per-layer backward formulas (dense, conv,
        batch-norm, layer-norm, softmax-CE, attention/MHSA, GELU, ...) are derived from Mathlib's
-       `fderiv` and machine-checked; they are the bulk of the 73 comparator-rechecked theorems.
+       `fderiv` and machine-checked; they are the bulk of the 87 comparator-rechecked theorems.
 
     2. CODEGEN TRUST BOUNDARY (disclosed gap). The canonical backward is the `fderiv`/`pdiv`
        expression, which at NON-smooth points (a ReLU input exactly 0, a pooling argmax tie)
@@ -351,7 +351,7 @@ fidelity:
        case the emitted program was right and a hand-written spelling of the same map had drifted.
        A `den` stated as the certified VJP cannot drift; only a theorem naming both catches it.
        The ℝ chains those ties are about live beside them, in `Foundation/BackwardMaps.lean` (the
-       per-op maps), `Architectures/ChannelLNBack.lean` and the five `Foundation/*BackChains.lean`.
+       per-op maps), `Architectures/ChannelLNBack.lean` and the five `Nets/*/*BackChains.lean`.
 
        THE PADDING CONVENTION (closed 2026-09-05): EfficientNet-B0's stem and MobileNetV2's five
        stride-2 sites are XLA-SAME in every shipped artifact and in every Proofs-tier statement;
@@ -368,8 +368,9 @@ fidelity:
        different functions; that was undisclosed until 2026-09-06. THE DECISION: port both nets'
        tiers to batch BN. DONE for every statement that says something -- T1, T2, T3 and T6 at
        `bnBatchLA` for both (4g rows 4g-4j, 4n); ResNet-50 and MobileNetV4 were batched from the
-       start. T4/T5 (the float budgets) are declined by 4d. `N` is the PER-REPLICA batch
-       throughout: nothing all-reduces BatchNorm statistics.
+       start. T4/T5 (the float budgets) are declined by 4d. `N` is the PER-REPLICA batch. The
+       sync-BN data-parallel renders of ResNet-34/50, MobileNetV2/V4 and EfficientNet-B0
+       all-reduce the statistics and are tied at batch R*N (the sync rows of main_results).
 
     4f. THE OPTIMIZER FORM, CLOSED (2026-09-06/07). Every non-SGD-inline train step -- the Adam,
        momentum, RMSProp, LAMB, EMA, clipped, accumulated, data-parallel and bf16 families, every
@@ -394,7 +395,8 @@ fidelity:
        seven nets, ResNet-50 and MobileNetV4-Conv-M from nothing; data parallelism as a theorem
        (the all-reduced mean is the gradient of the mean loss, provably NOT the global-batch
        loss under batch BN) and as the AST node `allReduceMeanF`. STILL OPEN, and disclosed:
-       no accuracy is quoted for MobileNetV4-Conv-M;
+       the quoted MobileNetV4-Conv-M accuracy (75.48%) was trained on the net before its
+       timm-parity fix, and the 100-epoch run on the fixed net has not landed;
        ConvNeXt's and ViT's SGD-inline `*_train_step.mlir` stay per-example and their `*StepTie`
        ties are at those bytes; `convBack` and `convBackBatched` -- two emitters for one VJP --
        are not tied to each other in Lean; the host-side sharding and lockstep (DP piece 3) are
@@ -410,12 +412,10 @@ fidelity:
        emulation on fp32 kernels. The binary32/E4M3 rounding models are constructed (`rndP`,
        standard model proved) rather than axiomatized; the project carries zero non-core axioms.
 
-       THE ENGINE IS MID-REWRITE. Everything since v0.6.3 (2026-08-03, the PJRT backend) has been
-       rebuilding the execution side in place -- XLA/PJRT replacing IREE as the training engine,
-       bf16 through the emitters, every net onto one batched chain, and the Proofs tier ported
-       to the artifacts that actually train (4e-4g) -- under a deliberate licence to break and
-       rethink rather than preserve. `main` is the integration branch for that work; the next
-       tag collects all of it, and nothing in this file should be read as describing v0.6.3.
+       RELEASES. v0.7.0 (2026-09-09) is the first tag with XLA/PJRT as the training engine,
+       bf16 through the emitters, every net on one batched chain and the Proofs tier on the
+       artifacts that train (4e-4g); v0.7.1 (2026-09-23) adds sync-BN data parallelism. This file
+       describes `main`, which adds MobileNetV4's timm parity since then.
 
 review:
   status: "agent-reviewed"   # also self-assessed; NOT externally peer-reviewed
@@ -426,7 +426,7 @@ review:
     fidelity caveats above, plus a `#print axioms` sweep of every audited
     declaration (tests/AuditAxioms.lean) run in CI; (2) mutation testing
     (corrupting a backward formula breaks the build at every mutation tried);
-    (3) leanprover/comparator re-running Lean's kernel typechecker on 73
+    (3) leanprover/comparator re-running Lean's kernel typechecker on 87
     theorems -- the layer-VJP floor plus every declaration listed under
     main_results above -- with a permitted-axiom allowlist of exactly
     {propext, Quot.sound, Classical.choice} (the nanoda second-kernel pass is
@@ -480,7 +480,7 @@ alignment:
       note: "genuine backward cotangent, not a free forall-cotangent; one replica, composing with allReduceMeanF (fidelity 4g); committed-spec ties for the 5 ImageNet nets in SpecVJP"
     - source: "Binary32 rounding model + certified backward ties"
       lean: "rndP_err; the *InputGrad_eq_*_vjp / *InputGradB_eq_*_vjp ties with their *_eq_slots shape checks"
-      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/Foundation/*CertifiedTie*.lean"
+      module: "LeanMlir/Proofs/Float/Binary32Instance.lean, LeanMlir/Proofs/{Architectures,Nets/*}/*CertifiedTie*.lean"
       status: "proved"
       note: "rounding model CONSTRUCTED (former hardware axioms discharged); no whole-net numeric budget and no adjoint-chain tier are stated (fidelity 4c, 4d)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
