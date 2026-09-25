@@ -47,11 +47,11 @@ fold `vitBodyKV` over `Fin k → BlockParamsV`. Neither capstone uses them. Both
 /-- block inputs / output cotangents of the depth-k chain, by recursion on k -/
 noncomputable def vitIbB  (N Np1 heads d mlpDim ε) : (k : Nat) → (Fin k → BlockParamsV (heads*d) mlpDim) → Vec (N*(Np1*(heads*d))) → Fin k → Vec (N*(Np1*(heads*d)))
 noncomputable def vitDyB  ... -- the dual fold from the top cotangent
-theorem vit_body_tiedGB (N k) (ps : Fin k → BlockParamsV (heads*d) mlpDim) (x dyTop) :
+theorem vitBody_tiedGB (N k) (ps : Fin k → BlockParamsV (heads*d) mlpDim) (x dyTop) :
     ∀ i : Fin k, vitBlockTiedGBAt N ... (ps i) (vitIbB ... k ps x i) (vitDyB ... k ps x dyTop i) :=
   fun i => vit_block_tiedGBAt N ... (ps i) _ _
 ```
-Then `vit_net_tiedGB` is `⟨vit_body_tiedGB .., vit_finalLN_tiedGB .., vit_head_tiedGB .., vit_embed_tiedGB ..⟩`,
+Then `vit_net_tiedGB` is `⟨vitBody_tiedGB .., vit_finalLN_tiedGB .., vit_head_tiedGB .., vit_embed_tiedGB ..⟩`,
 and the ViT-Tiny instance is a one-line specialisation at `k := 12`. Both `set_option`s should
 become unnecessary. Put `vitIbB`/`vitDyB` beside `vitBodyKV` in ViTDepthK.lean, which is a leaf.
 
@@ -83,26 +83,26 @@ the same unbundled shape.
 set_option maxHeartbeats 4000000 in
 theorem mhsaClean_backward_collapseMH ... := by
   funext r c
-  show (rowwise_has_vjp_mat (dense_has_vjp (mhsa_qkv_W heads d Wq Wk Wv) ...)).backward X
-        ((colSlabwise_has_vjp_mat ...).backward ... ) r c = _        -- 13 lines, no comment
-  show Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv) (fun kj => ...) c = _   -- 6 lines, no comment
+  show (rowwiseHasVJPMat (denseHasVJP (mhsaQkvW heads d Wq Wk Wv) ...)).backward X
+        ((colSlabwiseHasVJPMat ...).backward ... ) r c = _        -- 13 lines, no comment
+  show Mat.mulVec (mhsaQkvW heads d Wq Wk Wv) (fun kj => ...) c = _   -- 6 lines, no comment
   ...
-  have hdz : (fun kj => ...) = (fun kj => let p := ...; if q.1 = 0 then sdpa_back_Q ... else ...)  -- 20-line if-form (#1)
+  have hdz : (fun kj => ...) = (fun kj => let p := ...; if q.1 = 0 then sdpaBackQ ... else ...)  -- 20-line if-form (#1)
     ...
-    rw [show (mhsa_g_has_vjp_mat N d).backward ... = (let p := ...; if ... sdpa_back_Q ... ) from rfl]  -- if-form (#2)
+    rw [show (mhsaGHasVJPMat N d).backward ... = (let p := ...; if ... sdpaBackQ ... ) from rfl]  -- if-form (#2)
     rw [hproj0, hproj1, hproj2, hdY0]
-  trans (Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv) (fun kj => let p := ...; if ... ) c)   -- if-form (#3)
+  trans (Mat.mulVec (mhsaQkvW heads d Wq Wk Wv) (fun kj => let p := ...; if ... ) c)   -- if-form (#3)
 ```
-**Why it breaks:** The two leading `show`s force the kernel to check that the `vjpMat_comp` bundle
+**Why it breaks:** The two leading `show`s force the kernel to check that the `vjpMatComp` bundle
 `.backward` reduces structurally to a 13-line term, and nothing explains that reliance. Any change to
-`vjpMat_comp`, `rowwise_has_vjp_mat` or `colSlabwise_has_vjp_mat` field order breaks them silently.
-The same 20-line `if q.1 = 0 then sdpa_back_Q … else if … sdpa_back_K … else sdpa_back_V …` term is
+`vjpMatComp`, `rowwiseHasVJPMat` or `colSlabwiseHasVJPMat` field order breaks them silently.
+The same 20-line `if q.1 = 0 then sdpaBackQ … else if … sdpaBackK … else sdpaBackV …` term is
 written out three times. `hproj0/1/2` (lines 347–361) are one lemma at `c = 0, 1, 2`.
 **Suggested:** (1) Name the if-form once:
 `noncomputable def qkvSlabBack (Qg Kg Vg dA : Fin heads → Mat N d) : Mat N (heads * (3 * d)) := fun r kj => …`,
 and restate `qkv_back_fanin_MH` over it. Then `hdz`'s RHS, the `from rfl` rewrite and the `trans`
 target are each `qkvSlabBack …`. (2) Replace `hproj0/1/2` with one lemma
-`mhsa_proj_c_headSlice (c : Fin 3) : mhsa_proj_c c (fun r j => M0 r (finProdFinEquiv (h, j))) = fun r j => dense (![Wq,Wk,Wv] c) (![bq,bk,bv] c) (X r) (finProdFinEquiv (h, j))`,
+`mhsaProjC_headSlice (c : Fin 3) : mhsaProjC c (fun r j => M0 r (finProdFinEquiv (h, j))) = fun r j => dense (![Wq,Wk,Wv] c) (![bq,bk,bv] c) (X r) (finProdFinEquiv (h, j))`,
 proved by `fin_cases c <;> …`. (3) Replace the two `show`s with a named unfolding lemma
 `mhsaClean_backward_apply` (statement = the second `show`, proof `rfl`), placed right after
 `mhsaClean`, or at minimum add a comment. The heartbeat bump most likely comes from `show` and
@@ -144,7 +144,7 @@ private lemma qkv_back_fanin_MH ... := by
   rw [sum_heads_3d]
   apply Finset.sum_congr rfl; intro h _
   rw [Fin.sum_univ_three]
-  simp only [Equiv.symm_apply_apply, mhsa_qkv_W_eq0, mhsa_qkv_W_eq1, mhsa_qkv_W_eq2,
+  simp only [Equiv.symm_apply_apply, mhsaQkvW_eq0, mhsaQkvW_eq1, mhsaQkvW_eq2,
     show (1 : Fin 3) ≠ (0 : Fin 3) from by decide,
     show (2 : Fin 3) ≠ (0 : Fin 3) from by decide,
     show (2 : Fin 3) ≠ (1 : Fin 3) from by decide, ite_true, ite_false]
@@ -153,7 +153,7 @@ private lemma qkv_back_fanin_MH ... := by
 simproc does, and `ite_true`/`ite_false` are the pre-`reduceIte` names. Both are Mathlib-bump churn.
 The statement is at variable `heads d`, so 8× heartbeats means `simp only` is fighting the
 `let p := finProdFinEquiv.symm kj` binders (zeta plus `Equiv.symm_apply_apply` under `let`).
-**Suggested:** `simp only [Equiv.symm_apply_apply, mhsa_qkv_W_eq0, mhsa_qkv_W_eq1, mhsa_qkv_W_eq2, Fin.reduceEq, reduceIte]`.
+**Suggested:** `simp only [Equiv.symm_apply_apply, mhsaQkvW_eq0, mhsaQkvW_eq1, mhsaQkvW_eq2, Fin.reduceEq, reduceIte]`.
 If the heartbeats persist, state `qkv_back_fanin_MH` over the named `qkvSlabBack` from the finding
 above (no `let` in the statement) and try without the bump.
 
@@ -177,7 +177,7 @@ summand as a motive. There are 6 sites in scope.
 In `mulVec_headPadMat` and `mhsaBackFlat_eq_mhsa_vjp`, use `rw [sum_finProdFinEquiv]` (no motive
 needed). Nothing new is added to Tensor.lean, so there is no rebuild cost.
 
-### LeanMlir/Proofs/Nets/ViT/ViTVecLNBackCertifiedTie.lean:97–99 and :127–129 — `attnSubFlatTieV`, `mlpSubFlatTieV`
+### LeanMlir/Proofs/Nets/ViT/ViTVecLNBackCertifiedTie.lean:97–99 and :127–129 — `attnSubFlat_tie_v`, `mlpSubFlat_tie_v`
 
 **Smell:** undocumented-defeq, repetition
 **Current:**
@@ -211,7 +211,7 @@ The `intro i j; exact …` lines in `vit_block_tiedGB` then collapse to the lemm
 ```lean
 set_option linter.unusedSimpArgs false in
 theorem vit_cls_den (clsN lrStr cotN : String) (Wc : Kernel4 192 3 16 16) ... :=
-  ... simp only [den, batchSlice, clsSliceFlat, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
+  ... simp only [den, batchSlice, clsSliceFlat, clsTokenGrad]; rw [Fin.sum_univ_one]; rfl
 ```
 ```lean
     simp [batchSlice, batchMap, clsSliceFlat, Equiv.symm_apply_apply]      -- unrestricted, at D = 192
@@ -230,29 +230,29 @@ args that fire.
 
 ## EfficientNet
 
-### LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullWholeBackCertifiedTie.lean:109 and :186 — `efficientnetInputGradB_full_eq_efficientnetB_full_vjp`, `…_eq_efficientnetForwardB_full_vjp`
+### LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullWholeBackCertifiedTie.lean:109 and :186 — `efficientnetInputGradBFull_eq_efficientnetB_full_vjp`, `…_eq_efficientnetForwardBFull_vjp`
 
 **Smell:** heartbeats (4,000,000 + `maxRecDepth 800000`, the largest recDepth in scope), work at numeral shapes
 **Current:**
 ```lean
 set_option maxRecDepth 800000 in
 set_option maxHeartbeats 4000000 in
-theorem efficientnetInputGradB_full_eq_efficientnetB_full_vjp (N : Nat) {nCls : Nat}
+theorem efficientnetInputGradBFull_eq_efficientnetB_full_vjp (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) ... (Wh : Kernel4 1280 320 1 1) ...
     (b1 : Vec (N * (32 * 112 * 112)) → Vec (N * (16 * 112 * 112))) ... :
-    efficientnetInputGradB_full N Ws Wh Wfc (...) ... (hb16.backward (opaqueA15 (stemB N (h := 112) (w := 112) ...) b1 ... b15 x))
-      = (efficientnetB_full_has_vjp ...).backward x := by
-  unfold efficientnetInputGradB_full
+    efficientnetInputGradBFull N Ws Wh Wfc (...) ... (hb16.backward (opaqueA15 (stemB N (h := 112) (w := 112) ...) b1 ... b15 x))
+      = (efficientnetBFullHasVJP ...).backward x := by
+  unfold efficientnetInputGradBFull
   rw [stemBBack_eq_vjp_backward (N := N) (h := 112) (w := 112) (by decide) (by decide) ..., headFwdBBack_eq_vjp_backward ...]
   rfl
 ```
-**Why it breaks:** The closing `rfl` makes the kernel unfold the 17-deep `vjp_comp` chain of
-`efficientnetB_full_has_vjp` against `efficientnetInputGradB_full`. It does so at `Vec (N * (32*112*112))`,
+**Why it breaks:** The closing `rfl` makes the kernel unfold the 17-deep `vjpComp` chain of
+`efficientnetBFullHasVJP` against `efficientnetInputGradBFull`. It does so at `Vec (N * (32*112*112))`,
 `Vec (N * (1280*7*7))` and so on. Most of the 800k recursion depth is `Nat` literal arithmetic in
-those types (`32*112*112 = 401408`) during defeq checks. `efficientnetB_full_has_vjp` (line 63) is
-already width-generic (`s0 … s18`). Only `efficientnetInputGradB_full`
+those types (`32*112*112 = 401408`) during defeq checks. `efficientnetBFullHasVJP` (line 63) is
+already width-generic (`s0 … s18`). Only `efficientnetInputGradBFull`
 (EfficientNetBackChains.lean:27) fixes the literals.
-**Suggested:** Generalise `efficientnetInputGradB_full` to width binders
+**Suggested:** Generalise `efficientnetInputGradBFull` to width binders
 `{c0 … c17 h0 … : Nat}`, or add a width-generic twin `b0InputGradChain`. Prove the tie there with the
 same `unfold; rw; rfl` and instantiate at B0's widths. That follows the established "state at
 variable shapes, instantiate" rule. The second theorem (line 186) is then an instantiation plus
@@ -260,27 +260,27 @@ variable shapes, instantiate" rule. The second theorem (line 186) is then an ins
 `0 < 112` with `(by norm_num)` or `Nat.succ_pos _`. It is cheap either way, but `decide` on `Nat.lt`
 literals goes through `Nat.decLt` in the kernel.
 
-### LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullB0.lean:372 — `efficientnetForwardB_full_has_vjp`
+### LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullB0.lean:372 — `efficientnetForwardBFullHasVJP`
 
-**Smell:** repetition, known kernel trap (`vjp_comp _ _` elaborating to a concrete composed chain), recDepth bump (20000)
+**Smell:** repetition, known kernel trap (`vjpComp _ _` elaborating to a concrete composed chain), recDepth bump (20000)
 **Current:**
 ```lean
 set_option maxRecDepth 20000 in
-noncomputable def efficientnetForwardB_full_has_vjp (N : Nat) (w : B0Weights) (hsε ...) ... :
+noncomputable def efficientnetForwardBFullHasVJP (N : Nat) (w : B0Weights) (hsε ...) ... :
     HasVJP (headFwdB N ... ∘ mbExpW N 7 7 w.b16 ∘ ... ∘ stemB N ...) := by
   have dS := ...; have vS := ...; ... (36 haves)
-  have e1 := vjp_comp _ _ dS d1 vS v1;            have f1 := d1.comp dS
+  have e1 := vjpComp _ _ dS d1 vS v1;            have f1 := d1.comp dS
   ...
-  exact vjp_comp _ _ f16 dH e16 vH
+  exact vjpComp _ _ f16 dH e16 vH
 ```
-**Why it breaks:** This is the same 18-stage apex as `efficientnetB_full_has_vjp`
+**Why it breaks:** This is the same 18-stage apex as `efficientnetBFullHasVJP`
 (FullWholeBackCertifiedTie.lean:63), rewritten at the concrete blocks. Each `_` elaborates to the
 concrete composed prefix at numeral widths, which is the known kernel trap. Because the two witnesses
 are syntactically different, FullWholeBackCertifiedTie.lean:245 needs
 `.trans (funext fun dy => HasVJP.backward_unique _ _ x dy)` to bridge them.
-**Suggested:** Move `efficientnetB_full_has_vjp` into EfficientNetFullB0.lean. The only extra dependency
-it needs is `vjp_comp`. Define
-`efficientnetForwardB_full_has_vjp … := efficientnetB_full_has_vjp (stemB …) (mbNoExpW N 112 112 w.b1) … dS d1 … vS v1 … vH`,
+**Suggested:** Move `efficientnetBFullHasVJP` into EfficientNetFullB0.lean. The only extra dependency
+it needs is `vjpComp`. Define
+`efficientnetForwardBFullHasVJP … := efficientnetBFullHasVJP (stemB …) (mbNoExpW N 112 112 w.b1) … dS d1 … vS v1 … vH`,
 which is one term with no `_`. The bridge in FullWholeBackCertifiedTie then becomes `rfl`, or is
 unnecessary, and the `maxRecDepth` goes.
 
@@ -459,19 +459,19 @@ fixes both).
 **Current:** 5 copies of
 ```lean
   funext idx
-  simp only [den, batchMap, batchMap_has_vjp, flatConv_has_vjp, hasVJPMat_to_hasVJP,
-    rowwise_has_vjp_mat, hasVJP3_to_hasVJP, conv2d_has_vjp3]
+  simp only [den, batchMap, batchMapHasVJP, flatConvHasVJP, HasVJPMat.toHasVJP,
+    rowwiseHasVJPMat, HasVJP3.toHasVJP, conv2dHasVJP3]
   rfl
 ```
 **Why it breaks:** The proof unfolds five structure-building definitions by name and closes by `rfl`.
-Renaming any of `hasVJPMat_to_hasVJP`, `rowwise_has_vjp_mat` or `hasVJP3_to_hasVJP`, or changing how
-`batchMap_has_vjp` transports, breaks all five. The unfold lists also already differ between copies
-(some list `conv2d_has_vjp3`, some do not), which shows they were tuned by trial. These are per-op,
+Renaming any of `HasVJPMat.toHasVJP`, `rowwiseHasVJPMat` or `HasVJP3.toHasVJP`, or changing how
+`batchMapHasVJP` transports, breaks all five. The unfold lists also already differ between copies
+(some list `conv2dHasVJP3`, some do not), which shows they were tuned by trial. These are per-op,
 not whole-net, so `simp only` is not the 48 GB hazard here. The fragility is the terseness.
-**Suggested:** In EfficientNetChainClose.lean (where `batchMap_has_vjp` is defined), add the apply
+**Suggested:** In EfficientNetChainClose.lean (where `batchMapHasVJP` is defined), add the apply
 lemma once:
-`theorem batchMap_has_vjp_backward (f hf df v dy) : (batchMap_has_vjp f hf df).backward v dy = fun idx => hf.backward (batchSlice … v n) (batchSlice … dy n) k` (with `(n,k) := finProdFinEquiv.symm idx`), proved once.
-Each `*_faithful` then becomes `funext idx; rw [batchMap_has_vjp_backward]; rfl`, or `simp only [den, batchMap_has_vjp_backward]`.
+`theorem batchMapHasVJP_backward (f hf df v dy) : (batchMapHasVJP f hf df).backward v dy = fun idx => hf.backward (batchSlice … v n) (batchSlice … dy n) k` (with `(n,k) := finProdFinEquiv.symm idx`), proved once.
+Each `*_faithful` then becomes `funext idx; rw [batchMapHasVJP_backward]; rfl`, or `simp only [den, batchMapHasVJP_backward]`.
 
 ---
 
@@ -483,7 +483,7 @@ Each `*_faithful` then becomes `funext idx; rw [batchMap_has_vjp_backward]; rfl`
    (4M/100k each), FullB0:372 (recDepth 20k). In most of them every conjunct is an instance of a
    ∀-lemma, so the budget pays for elaborating literal-width `let` chains, not for proof. Fix by
    stating at variable widths and depth, using existing assets (`BlockParamsV`/`vitBodyKV`,
-   `efficientnetB_full_has_vjp`, `opaqueA*`), and instantiate.
+   `efficientnetBFullHasVJP`, `opaqueA*`), and instantiate.
 2. **Unbundled parameters and hypotheses:** 49 `0 < ε` binders × 7 EfficientNet statements (plus 49-arg
    positional calls); 192 ViT block binders × 2 capstones while `BlockParamsV` sits unused; 17-binder
    block signatures × 12 ViT defs; `hN hh hw` threaded through ≈25 lemmas only for `nhw_ne_zero`

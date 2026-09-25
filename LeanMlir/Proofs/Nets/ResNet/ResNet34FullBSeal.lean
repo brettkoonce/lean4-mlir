@@ -6,11 +6,11 @@ import LeanMlir.Proofs.Training.JacobianSeal
 # ResNet-34's non-degeneracy seal, on the full-width batched net (levels 2 and 3)
 
 `planning/full_width_seals.md` §4.1. `ResNet34FullBVJP.lean` proves
-`resnet34ForwardB_full_has_vjp_at`: the whole-net VJP at any `(w, x)` that satisfies 32 relu
+`resnet34ForwardBFullHasVJPAt`: the whole-net VJP at any `(w, x)` that satisfies 32 relu
 clauses, a stem clause and the stem pool's no-tie. A *conditional* theorem of that shape says
 nothing unless its hypotheses are jointly satisfiable at a point with a nonzero Jacobian — and
 until now that was exhibited only on a 2-channel per-example proxy (`ResNet34Live*`, retired with
-this file). This file exhibits it on `resnet34ForwardB_full` itself: 64→512 channels, `[3,4,6,3]`
+this file). This file exhibits it on `resnet34ForwardBFull` itself: 64→512 channels, `[3,4,6,3]`
 blocks, the 7×7/s2 stem, the 3×3/s2 pool, **batch** BatchNorm, at `224×224`.
 
 ## The witness
@@ -134,7 +134,7 @@ noncomputable def sealW (nCls : Nat) : R34BWeights nCls where
 -- substitution — no defeq at all. Same lesson as `maxPool3s2`'s header records for `rfl`.
 
 /-- The identity block's body is the constant `1`, at every input. -/
-theorem sealIdBody (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
+theorem seal_id_body (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
     (projB N (h := h) (w := w) (sealIdW c).W₂ (sealIdW c).b₂ (sealIdW c).ε₂
         (sealIdW c).γ₂ (sealIdW c).β₂ ∘
       StableHLO.cbReluB N (h := h) (w := w) (sealIdW c).W₁ (sealIdW c).b₁ (sealIdW c).ε₁
@@ -142,7 +142,7 @@ theorem sealIdBody (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h *
   projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1 (fun _ => rfl) _
 
 /-- The downsample block's body is the constant `1`, at every input. -/
-theorem sealDnBody (N h w ic oc : Nat) (hn : 0 < N * (h * w))
+theorem seal_dn_body (N h w ic oc : Nat) (hn : 0 < N * (h * w))
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
     (projB N (h := h) (w := w) (sealDnW ic oc).W₂ (sealDnW ic oc).b₂ (sealDnW ic oc).ε₂
         (sealDnW ic oc).γ₂ (sealDnW ic oc).β₂ ∘
@@ -155,7 +155,7 @@ theorem sealDnBody (N h w ic oc : Nat) (hn : 0 < N * (h * w))
 theorem sealIdB_eq (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w)))
     (hv : ∀ k, 0 ≤ v k) :
     r34IdB N h w (sealIdW c) v = fun k => v k + 1 := by
-  have hbody := sealIdBody N h w c hn v
+  have hbody := seal_id_body N h w c hn v
   have hres : ∀ k, residual
       (projB N (h := h) (w := w) (sealIdW c).W₂ (sealIdW c).b₂ (sealIdW c).ε₂
           (sealIdW c).γ₂ (sealIdW c).β₂ ∘
@@ -174,7 +174,7 @@ theorem sealDnB_eq (N h w ic oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
     r34DownB N h w (sealDnW ic oc) v = fun k => sealProj N h w ic oc v k + 1 := by
-  have hbody := sealDnBody N h w ic oc hn v
+  have hbody := seal_dn_body N h w ic oc hn v
   have hres : ∀ k, residualProj
       (StableHLO.projStridedB N (h := h) (w := w) (sealDnW ic oc).Wp (sealDnW ic oc).bp
         (sealDnW ic oc).εp (sealDnW ic oc).γp (sealDnW ic oc).βp)
@@ -236,14 +236,14 @@ theorem r34StemB_nonneg (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs
 -- ════════════════════════════════════════════════════════════════
 
 /-- Both `ε`s of a structural identity block are positive. -/
-theorem sealIdPos (c : Nat) : R34IdPos (sealIdW c) := ⟨one_pos, one_pos⟩
+theorem seal_id_pos (c : Nat) : R34IdPos (sealIdW c) := ⟨one_pos, one_pos⟩
 
 /-- All three `ε`s of a structural downsample are positive. -/
-theorem sealDnPos (ic oc : Nat) : R34DownPos (sealDnW ic oc) := ⟨one_pos, one_pos, one_pos⟩
+theorem seal_dn_pos (ic oc : Nat) : R34DownPos (sealDnW ic oc) := ⟨one_pos, one_pos, one_pos⟩
 
 /-- ⭐ **The identity block's two relu clauses**: the mid-relu sees the constant `β₁ = 1`
     (weight-only), the outer one sees `1 + activation > 0`. -/
-theorem sealIdSmooth (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w)))
+theorem seal_id_smooth (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w)))
     (hv : ∀ k, 0 ≤ v k) : R34IdSmoothAt N h w (sealIdW c) v where
   hmid := by
     intro k
@@ -255,13 +255,13 @@ theorem sealIdSmooth (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h
   hout := by
     intro k
     show _ + v k ≠ 0
-    rw [congrFun (sealIdBody N h w c hn v) k]
+    rw [congrFun (seal_id_body N h w c hn v) k]
     intro hc
     linarith [hv k]
 
 /-- ⭐ **The downsample's two relu clauses** — both weight-only: the mid-relu sees `β₁ = 1`, the
     outer one `proj + 1 > 0` with `proj > 0` by the margin. No hypothesis on the activation. -/
-theorem sealDnSmooth (N h w ic oc : Nat) (hn : 0 < N * (h * w))
+theorem seal_dn_smooth (N h w ic oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) : R34DownSmoothAt N h w (sealDnW ic oc) v where
   hmid := by
@@ -275,12 +275,12 @@ theorem sealDnSmooth (N h w ic oc : Nat) (hn : 0 < N * (h * w))
   hout := by
     intro k
     show sealProj N h w ic oc v k + _ ≠ 0
-    rw [congrFun (sealDnBody N h w ic oc hn v) k]
+    rw [congrFun (seal_dn_body N h w ic oc hn v) k]
     intro hc
     linarith [sealProj_pos N h w ic oc hm v k]
 
 /-- The stem's relu clause — weight-only, from the `β = 160` margin. -/
-theorem sealStemSmooth (N h w ic oc : Nat) (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
+theorem seal_stem_smooth (N h w ic oc : Nat) (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
     (hm : |(1 : ℝ)| * Real.sqrt ((N * ((2 * h) * (2 * w)) : ℕ) : ℝ) < 160)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
     R34StemSmoothAt N h w Ws bs 1 (kv oc 1) (kv oc 160) x :=
@@ -306,9 +306,9 @@ theorem sealX_zero_add (t : ℝ) : sealX 0 + t • sealV = sealX t := by
   rw [sealX, sealX, sealV]
   exact rayX_zero_add _ _ t
 
-theorem EDiff_sealX (t : ℝ) : EDiff (fun ci => if ci.val = 0 then t else 0) (sealX t) := by
+theorem eDiff_sealX (t : ℝ) : EDiff (fun ci => if ci.val = 0 then t else 0) (sealX t) := by
   rw [sealX]
-  exact EDiff_rayX _ _ t
+  exact eDiff_rayX _ _ t
 
 /-- The stem's centre-tap conv output — the pre-BN activation on the carrier's path. -/
 noncomputable def Zs (t : ℝ) : Vec (2 * (64 * (2 * 56) * (2 * 56))) := ctConv 64 7 7 56 56 t
@@ -333,7 +333,7 @@ theorem Zs_bn_pos (t : ℝ) (k : Fin (2 * (64 * (2 * 56) * (2 * 56)))) :
 
 /-- ⭐ The stem pool has no tie at the witness — the ramp is positionally injective and BN is
     injective within a channel. -/
-theorem sealPoolSmooth (t : ℝ) :
+theorem seal_pool_smooth (t : ℝ) :
     R34PoolSmoothAt 2 56 56
       (StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t)) := by
   rw [Zs]
@@ -507,120 +507,120 @@ theorem pc16 (nCls : Nat) (t : ℝ) :
 -- ════════════════════════════════════════════════════════════════
 
 /-- The stem's relu is off at the witness, so the pool's no-tie condition can be stated on the
-    BN output (`sealPoolSmooth`). -/
+    BN output (`seal_pool_smooth`). -/
 theorem stem_relu_off (nCls : Nat) (t : ℝ) :
     StableHLO.cbReluStridedB 2 (h := 2 * 56) (w := 2 * 56) (sealW nCls).sW (sealW nCls).sb
         (sealW nCls).sε (sealW nCls).sγ (sealW nCls).sβ (sealX t)
       = StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t) :=
   cbReluStridedB_eq _ _ _ _ _ (sealX t) (fun k => Zs_bn_pos t k)
 
-theorem sealPoolClause (nCls : Nat) (t : ℝ) :
+theorem seal_pool_clause (nCls : Nat) (t : ℝ) :
     R34PoolSmoothAt 2 56 56 (StableHLO.cbReluStridedB 2 (h := 2 * 56) (w := 2 * 56)
       (sealW nCls).sW (sealW nCls).sb (sealW nCls).sε (sealW nCls).sγ (sealW nCls).sβ
         (sealX t)) := by
   rw [stem_relu_off]
-  exact sealPoolSmooth t
+  exact seal_pool_smooth t
 
-theorem sealStemClause (nCls : Nat) (t : ℝ) :
+theorem seal_stem_clause (nCls : Nat) (t : ℝ) :
     R34StemSmoothAt 2 56 56 (sealW nCls).sW (sealW nCls).sb (sealW nCls).sε (sealW nCls).sγ
       (sealW nCls).sβ (sealX t) :=
-  sealStemSmooth 2 56 56 3 64 _ _ margin_stem (sealX t)
+  seal_stem_smooth 2 56 56 3 64 _ _ margin_stem (sealX t)
 
 theorem sc_a0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 56 56 (sealW nCls).a0 (r34Pre0 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 56 56 64 (by norm_num) _ (nn0 nCls t)
+  seal_id_smooth 2 56 56 64 (by norm_num) _ (nn0 nCls t)
 
 theorem sc_a1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 56 56 (sealW nCls).a1 (r34Pre1 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 56 56 64 (by norm_num) _ (nn1 nCls t)
+  seal_id_smooth 2 56 56 64 (by norm_num) _ (nn1 nCls t)
 
 theorem sc_a2 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 56 56 (sealW nCls).a2 (r34Pre2 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 56 56 64 (by norm_num) _ (nn2 nCls t)
+  seal_id_smooth 2 56 56 64 (by norm_num) _ (nn2 nCls t)
 
 theorem sc_d2 (nCls : Nat) (t : ℝ) :
     R34DownSmoothAt 2 28 28 (sealW nCls).d2 (r34Pre3 2 (sealW nCls) (sealX t)) :=
-  sealDnSmooth 2 28 28 64 128 (by norm_num) margin28 _
+  seal_dn_smooth 2 28 28 64 128 (by norm_num) margin28 _
 
 theorem sc_b0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 28 28 (sealW nCls).b0 (r34Pre4 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 28 28 128 (by norm_num) _ (nn4 nCls t)
+  seal_id_smooth 2 28 28 128 (by norm_num) _ (nn4 nCls t)
 
 theorem sc_b1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 28 28 (sealW nCls).b1 (r34Pre5 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 28 28 128 (by norm_num) _ (nn5 nCls t)
+  seal_id_smooth 2 28 28 128 (by norm_num) _ (nn5 nCls t)
 
 theorem sc_b2 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 28 28 (sealW nCls).b2 (r34Pre6 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 28 28 128 (by norm_num) _ (nn6 nCls t)
+  seal_id_smooth 2 28 28 128 (by norm_num) _ (nn6 nCls t)
 
 theorem sc_d3 (nCls : Nat) (t : ℝ) :
     R34DownSmoothAt 2 14 14 (sealW nCls).d3 (r34Pre7 2 (sealW nCls) (sealX t)) :=
-  sealDnSmooth 2 14 14 128 256 (by norm_num) margin14 _
+  seal_dn_smooth 2 14 14 128 256 (by norm_num) margin14 _
 
 theorem sc_c0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c0 (r34Pre8 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 14 14 256 (by norm_num) _ (nn8 nCls t)
+  seal_id_smooth 2 14 14 256 (by norm_num) _ (nn8 nCls t)
 
 theorem sc_c1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c1 (r34Pre9 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 14 14 256 (by norm_num) _ (nn9 nCls t)
+  seal_id_smooth 2 14 14 256 (by norm_num) _ (nn9 nCls t)
 
 theorem sc_c2 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c2 (r34Pre10 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 14 14 256 (by norm_num) _ (nn10 nCls t)
+  seal_id_smooth 2 14 14 256 (by norm_num) _ (nn10 nCls t)
 
 theorem sc_c3 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c3 (r34Pre11 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 14 14 256 (by norm_num) _ (nn11 nCls t)
+  seal_id_smooth 2 14 14 256 (by norm_num) _ (nn11 nCls t)
 
 theorem sc_c4 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c4 (r34Pre12 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 14 14 256 (by norm_num) _ (nn12 nCls t)
+  seal_id_smooth 2 14 14 256 (by norm_num) _ (nn12 nCls t)
 
 theorem sc_d4 (nCls : Nat) (t : ℝ) :
     R34DownSmoothAt 2 7 7 (sealW nCls).d4 (r34Pre13 2 (sealW nCls) (sealX t)) :=
-  sealDnSmooth 2 7 7 256 512 (by norm_num) margin7 _
+  seal_dn_smooth 2 7 7 256 512 (by norm_num) margin7 _
 
 theorem sc_e0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 7 7 (sealW nCls).e0 (r34Pre14 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 7 7 512 (by norm_num) _ (nn14 nCls t)
+  seal_id_smooth 2 7 7 512 (by norm_num) _ (nn14 nCls t)
 
 theorem sc_e1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 7 7 (sealW nCls).e1 (r34Pre15 2 (sealW nCls) (sealX t)) :=
-  sealIdSmooth 2 7 7 512 (by norm_num) _ (nn15 nCls t)
+  seal_id_smooth 2 7 7 512 (by norm_num) _ (nn15 nCls t)
 
 /-- Every BN `ε` of the witness is `1`. -/
-theorem sealPos (nCls : Nat) : R34PosB (sealW nCls) :=
-  ⟨one_pos, sealIdPos 64, sealIdPos 64, sealIdPos 64, sealDnPos 64 128,
-    sealIdPos 128, sealIdPos 128, sealIdPos 128, sealDnPos 128 256,
-    sealIdPos 256, sealIdPos 256, sealIdPos 256, sealIdPos 256, sealIdPos 256,
-    sealDnPos 256 512, sealIdPos 512, sealIdPos 512⟩
+theorem seal_pos (nCls : Nat) : R34PosB (sealW nCls) :=
+  ⟨one_pos, seal_id_pos 64, seal_id_pos 64, seal_id_pos 64, seal_dn_pos 64 128,
+    seal_id_pos 128, seal_id_pos 128, seal_id_pos 128, seal_dn_pos 128 256,
+    seal_id_pos 256, seal_id_pos 256, seal_id_pos 256, seal_id_pos 256, seal_id_pos 256,
+    seal_dn_pos 256 512, seal_id_pos 512, seal_id_pos 512⟩
 
 /-- The stem clause, the pool's no-tie and all 32 relu clauses at `(sealW nCls, sealX t)`. -/
-theorem sealSmooth (nCls : Nat) (t : ℝ) : R34SmoothAtB 2 (sealW nCls) (sealX t) :=
-  ⟨sealStemClause nCls t, sealPoolClause nCls t,
+theorem seal_smooth (nCls : Nat) (t : ℝ) : R34SmoothAtB 2 (sealW nCls) (sealX t) :=
+  ⟨seal_stem_clause nCls t, seal_pool_clause nCls t,
     sc_a0 nCls t, sc_a1 nCls t, sc_a2 nCls t, sc_d2 nCls t,
     sc_b0 nCls t, sc_b1 nCls t, sc_b2 nCls t, sc_d3 nCls t,
     sc_c0 nCls t, sc_c1 nCls t, sc_c2 nCls t, sc_c3 nCls t, sc_c4 nCls t,
     sc_d4 nCls t, sc_e0 nCls t, sc_e1 nCls t⟩
 
 /-- ⭐⭐ **The whole-net VJP at the witness** — every one of the 32 relu clauses, the stem clause
-    and the pool's no-tie discharged at `(sealW nCls, sealX t)`, on `resnet34ForwardB_full`
-    itself (transported through `resnet34ForwardB_full_eq_chain`). -/
+    and the pool's no-tie discharged at `(sealW nCls, sealX t)`, on `resnet34ForwardBFull`
+    itself (transported through `resnet34ForwardBFull_eq_chain`). -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
-    HasVJPAt (resnet34ForwardB_full 2 (sealW nCls)) (sealX t) := by
-  rw [show resnet34ForwardB_full 2 (sealW nCls)
+    HasVJPAt (resnet34ForwardBFull 2 (sealW nCls)) (sealX t) := by
+  rw [show resnet34ForwardBFull 2 (sealW nCls)
       = r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd ∘ r34Pre16 2 (sealW nCls)
-      from funext (resnet34ForwardB_full_eq_chain 2 (sealW nCls))]
-  exact resnet34ForwardB_full_has_vjp_at 2 (sealW nCls) (sealPos nCls) (sealX t)
-    (sealSmooth nCls t)
+      from funext (resnet34ForwardBFull_eq_chain 2 (sealW nCls))]
+  exact resnet34ForwardBFullHasVJPAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
+    (seal_smooth nCls t)
 
 /-- The net is differentiable at the witness — `fderiv_ne_zero_of_ray`'s first hypothesis. -/
-theorem sealDiffAt (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (resnet34ForwardB_full 2 (sealW nCls)) (sealX t) :=
-  resnet34ForwardB_full_differentiableAt 2 (sealW nCls) (sealPos nCls) (sealX t)
-    (sealSmooth nCls t)
+theorem seal_differentiableAt (nCls : Nat) (t : ℝ) :
+    DifferentiableAt ℝ (resnet34ForwardBFull 2 (sealW nCls)) (sealX t) :=
+  resnet34ForwardBFull_differentiableAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
+    (seal_smooth nCls t)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 8. The carrier along the ray
@@ -662,86 +662,86 @@ noncomputable def dP4 (nCls : Nat) (t : ℝ) : Fin 512 → ℝ :=
     channel, the BN scales it by `istd`, and the pool carries it through unchanged. -/
 theorem ed0 (nCls : Nat) (t : ℝ) : EDiff (dS t) (r34Pre0 2 (sealW nCls) (sealX t)) := by
   rw [pc0]
-  refine EDiff_pool 64 56 56 (dS t) _ ?_
-  refine EDiff_bn 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (fun _ => t) (dS t) (Zs t) ?_ ?_
-  · exact EDiff_convS2 (0 : Fin 3) rfl (by norm_num) (by norm_num) 1 (kv 64 0) _ (fun _ => t)
-      (sealX t) (EDiff_sealX t) (fun o => by norm_num)
+  refine eDiff_pool 64 56 56 (dS t) _ ?_
+  refine eDiff_bn 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (fun _ => t) (dS t) (Zs t) ?_ ?_
+  · exact eDiff_convS2 (0 : Fin 3) rfl (by norm_num) (by norm_num) 1 (kv 64 0) _ (fun _ => t)
+      (sealX t) (eDiff_sealX t) (fun o => by norm_num)
   · intro ci
     simp only [dS, kv_apply]
     ring
 
 theorem ed1 (nCls : Nat) (t : ℝ) : EDiff (dS t) (r34Pre1 2 (sealW nCls) (sealX t)) := by
   rw [pc1]
-  exact EDiff_shift _ _ 1 (ed0 nCls t)
+  exact eDiff_shift _ _ 1 (ed0 nCls t)
 
 theorem ed2 (nCls : Nat) (t : ℝ) : EDiff (dS t) (r34Pre2 2 (sealW nCls) (sealX t)) := by
   rw [pc2]
-  exact EDiff_shift _ _ 1 (ed1 nCls t)
+  exact eDiff_shift _ _ 1 (ed1 nCls t)
 
 theorem ed3 (nCls : Nat) (t : ℝ) : EDiff (dS t) (r34Pre3 2 (sealW nCls) (sealX t)) := by
   rw [pc3]
-  exact EDiff_shift _ _ 1 (ed2 nCls t)
+  exact eDiff_shift _ _ 1 (ed2 nCls t)
 
 theorem ed4 (nCls : Nat) (t : ℝ) : EDiff (dP2 nCls t) (r34Pre4 2 (sealW nCls) (sealX t)) := by
   rw [pc4]
-  refine EDiff_shift _ _ 1 ?_
+  refine eDiff_shift _ _ 1 ?_
   rw [sealProj_apply]
-  exact EDiff_convS2Bn (h := 28) (w := 28) (0 : Fin 64) rfl (by norm_num) (by norm_num) 1 160
+  exact eDiff_convS2Bn (h := 28) (w := 28) (0 : Fin 64) rfl (by norm_num) (by norm_num) 1 160
     (Zp2 nCls t) (ed3 nCls t) rfl (fun ci => by simp only [dP2]; ring)
 
 theorem ed5 (nCls : Nat) (t : ℝ) : EDiff (dP2 nCls t) (r34Pre5 2 (sealW nCls) (sealX t)) := by
   rw [pc5]
-  exact EDiff_shift _ _ 1 (ed4 nCls t)
+  exact eDiff_shift _ _ 1 (ed4 nCls t)
 
 theorem ed6 (nCls : Nat) (t : ℝ) : EDiff (dP2 nCls t) (r34Pre6 2 (sealW nCls) (sealX t)) := by
   rw [pc6]
-  exact EDiff_shift _ _ 1 (ed5 nCls t)
+  exact eDiff_shift _ _ 1 (ed5 nCls t)
 
 theorem ed7 (nCls : Nat) (t : ℝ) : EDiff (dP2 nCls t) (r34Pre7 2 (sealW nCls) (sealX t)) := by
   rw [pc7]
-  exact EDiff_shift _ _ 1 (ed6 nCls t)
+  exact eDiff_shift _ _ 1 (ed6 nCls t)
 
 theorem ed8 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre8 2 (sealW nCls) (sealX t)) := by
   rw [pc8]
-  refine EDiff_shift _ _ 1 ?_
+  refine eDiff_shift _ _ 1 ?_
   rw [sealProj_apply]
-  exact EDiff_convS2Bn (h := 14) (w := 14) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1 160
+  exact eDiff_convS2Bn (h := 14) (w := 14) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1 160
     (Zp3 nCls t) (ed7 nCls t) rfl (fun ci => by simp only [dP3]; ring)
 
 theorem ed9 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre9 2 (sealW nCls) (sealX t)) := by
   rw [pc9]
-  exact EDiff_shift _ _ 1 (ed8 nCls t)
+  exact eDiff_shift _ _ 1 (ed8 nCls t)
 
 theorem ed10 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre10 2 (sealW nCls) (sealX t)) := by
   rw [pc10]
-  exact EDiff_shift _ _ 1 (ed9 nCls t)
+  exact eDiff_shift _ _ 1 (ed9 nCls t)
 
 theorem ed11 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre11 2 (sealW nCls) (sealX t)) := by
   rw [pc11]
-  exact EDiff_shift _ _ 1 (ed10 nCls t)
+  exact eDiff_shift _ _ 1 (ed10 nCls t)
 
 theorem ed12 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre12 2 (sealW nCls) (sealX t)) := by
   rw [pc12]
-  exact EDiff_shift _ _ 1 (ed11 nCls t)
+  exact eDiff_shift _ _ 1 (ed11 nCls t)
 
 theorem ed13 (nCls : Nat) (t : ℝ) : EDiff (dP3 nCls t) (r34Pre13 2 (sealW nCls) (sealX t)) := by
   rw [pc13]
-  exact EDiff_shift _ _ 1 (ed12 nCls t)
+  exact eDiff_shift _ _ 1 (ed12 nCls t)
 
 theorem ed14 (nCls : Nat) (t : ℝ) : EDiff (dP4 nCls t) (r34Pre14 2 (sealW nCls) (sealX t)) := by
   rw [pc14]
-  refine EDiff_shift _ _ 1 ?_
+  refine eDiff_shift _ _ 1 ?_
   rw [sealProj_apply]
-  exact EDiff_convS2Bn (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1 160
+  exact eDiff_convS2Bn (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1 160
     (Zp4 nCls t) (ed13 nCls t) rfl (fun ci => by simp only [dP4]; ring)
 
 theorem ed15 (nCls : Nat) (t : ℝ) : EDiff (dP4 nCls t) (r34Pre15 2 (sealW nCls) (sealX t)) := by
   rw [pc15]
-  exact EDiff_shift _ _ 1 (ed14 nCls t)
+  exact eDiff_shift _ _ 1 (ed14 nCls t)
 
 theorem ed16 (nCls : Nat) (t : ℝ) : EDiff (dP4 nCls t) (r34Pre16 2 (sealW nCls) (sealX t)) := by
   rw [pc16]
-  exact EDiff_shift _ _ 1 (ed15 nCls t)
+  exact eDiff_shift _ _ 1 (ed15 nCls t)
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -786,12 +786,12 @@ theorem Rr_pos (nCls : Nat) (t : ℝ) : 0 < Rr nCls t :=
     carrier vanishes at the base (both examples carry the same ramp), so the product rule's cross
     terms all carry a factor `t`. -/
 theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
-    resnet34ForwardB_full 2 (sealW nCls) (sealX t)
+    resnet34ForwardBFull 2 (sealW nCls) (sealX t)
         (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - resnet34ForwardB_full 2 (sealW nCls) (sealX t)
+      - resnet34ForwardBFull 2 (sealW nCls) (sealX t)
         (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
       = t * Rr nCls t := by
-  rw [resnet34ForwardB_full_eq_chain, Function.comp_apply,
+  rw [resnet34ForwardBFull_eq_chain, Function.comp_apply,
     head_diff nCls hn _ (dP4 nCls t) (ed16 nCls t)]
   simp only [dP4, dP3, dP2, dS, Rr]
   ring
@@ -826,23 +826,23 @@ theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
     structural weights is NOT constant in its input. Straight from the ray: the class-0 difference
     between the two examples is `R 1 > 0` at `t = 1` and `0` at the base. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
-    resnet34ForwardB_full 2 (sealW nCls) (sealX 1)
-      ≠ resnet34ForwardB_full 2 (sealW nCls) (sealX 0) :=
+    resnet34ForwardBFull 2 (sealW nCls) (sealX 1)
+      ≠ resnet34ForwardBFull 2 (sealW nCls) (sealX 0) :=
   ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos nCls 1).ne')
 
 /-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** `fderiv_ne_zero_of_ray` at
     the readout "example 0's class 0 minus example 1's class 0": along the ray it is `t · R t` with
     `R` continuous and `R 0 > 0`, so its derivative at `0` is `R 0 ≠ 0`. -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
-    fderiv ℝ (resnet34ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 :=
+    fderiv ℝ (resnet34ForwardBFull 2 (sealW nCls)) (sealX 0) ≠ 0 :=
   fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
-    (sealDiffAt nCls 0) (Rr_pos nCls 0).ne'
+    (seal_differentiableAt nCls 0) (Rr_pos nCls 0).ne'
     (hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt)
 
 /-- ⭐⭐ **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
-    `[3,4,6,3]`, 224×224** ResNet-34 — `resnet34ForwardB_full`, the forward the ImageNet artifacts
+    `[3,4,6,3]`, 224×224** ResNet-34 — `resnet34ForwardBFull`, the forward the ImageNet artifacts
     run — is **not the zero map** at the witness. The conditional apex
-    `resnet34ForwardB_full_has_vjp_at` is therefore not vacuous, and it is not vacuous on the net
+    `resnet34ForwardBFullHasVJPAt` is therefore not vacuous, and it is not vacuous on the net
     itself rather than on a 2-channel proxy of it. -/
 theorem sealX_backward_nontrivial (nCls : Nat) (hn : 0 < nCls) :
     ∃ (j₀ : Fin (2 * nCls)) (i₀ : Fin (2 * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))),

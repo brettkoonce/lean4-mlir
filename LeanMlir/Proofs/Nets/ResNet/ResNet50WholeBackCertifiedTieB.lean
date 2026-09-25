@@ -11,19 +11,19 @@ its 161-parameter train-step tie and now its whole-net input gradient.
 
 ## ⭐⭐ Almost all of it is ResNet-34's, reused rather than rewritten
 
-`resnet50ForwardB_full` is `r34HeadB ∘ [3,4,6,3] bottlenecks ∘ r34StemB` — the stem and head are
+`resnet50ForwardBFull` is `r34HeadB ∘ [3,4,6,3] bottlenecks ∘ r34StemB` — the stem and head are
 literally ResNet-34's functions at R50's widths (§3.5b) — so §4.2d's file supplies:
 
 * `cbReluStridedBBack_eq_vjp_backward` and `r34HeadBBack_eq_vjp_backward`, the two endpoint ties;
 * `maxPool3s2FlatBackB` and its `rfl` tie, plus the `StableHLO.batchMapAux` lift the batched
   3×3/s2 pool needed;
-* `opaqueA0 … A16` and **`r34B_full_has_vjp_at` itself** — the generic eighteen-stage apex.
+* `opaqueA0 … A16` and **`r34BFullHasVJPAt` itself** — the generic eighteen-stage apex.
   [3,4,6,3] is sixteen blocks for both nets, so the chain is the same construction and a second
   copy would be two writers for one fact. ⚠ It is ResNet-34's only by where it was written; every
   dimension in it is a variable. The prefixes themselves are [`Foundation/OpaquePrefix.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/OpaquePrefix.lean)'s.
 
 What this file adds is the sixteen bottleneck slots, the tie, its `pdiv` reading, and the shape
-check `resnet50ForwardB_full_eq_slots`.
+check `resnet50ForwardBFull_eq_slots`.
 
 ## ⚠ The two things ResNet-34's file did not face
 
@@ -55,8 +55,8 @@ open scoped BigOperators
 /-- ⭐⭐ **`r50InputGradB` IS the certified whole-net ResNet-50 gradient.** The committed backward
     chain, with its stem BatchNorm and relu-mask slots filled by the certified per-op backwards,
     its saved pool activation the stem's own, and its sixteen bottlenecks left OPAQUE, equals the
-    backward of `r34B_full_has_vjp_at` at those eighteen stages. `unfold`, two `rw`s, `rfl` — the
-    pool needs no rewrite, being definitionally `batchMap_has_vjp_at`'s backward. -/
+    backward of `r34BFullHasVJPAt` at those eighteen stages. `unfold`, two `rw`s, `rfl` — the
+    pool needs no rewrite, being definitionally `batchMapHasVJPAt`'s backward. -/
 theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
     (hq0 : 0 < q)
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 64)
@@ -98,7 +98,7 @@ theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
     (hb15 : HasVJPDiffAt b15 (opaqueA14 (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 x))
     (hb16 : HasVJPDiffAt b16 (opaqueA15 (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x)) :
     r50InputGradB N q Ws Wd
-      ((bnBatchLA_has_vjp N 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) εs hεs γs βs).backward
+      ((bnBatchLAHasVJP N 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) εs hεs γs βs).backward
         (StableHLO.batchMap N (flatConvStride2 Ws bs) x))
       (StableHLO.cbReluStridedB N (h := (2 * (2 * (2 * (2 * q))))) (w := (2 * (2 * (2 * (2 * q))))) Ws bs εs γs βs x)
       hb1.fst.backward
@@ -119,26 +119,26 @@ theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
       hb16.fst.backward
       (fun i => StableHLO.bnBatchLA N 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) εs γs βs
         (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0)
-      = (r34B_full_has_vjp_at (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16
+      = (r34BFullHasVJPAt (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16
           (r34HeadB N q q Wd bd) x
-          ⟨r34StemB_has_vjp_at N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs
+          ⟨r34StemBHasVJPAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs
               (by norm_num) (by omega) (by omega) x h_stem h_pool,
             r34StemB_differentiableAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs hεs γs βs
               (by norm_num) (by omega) (by omega) x h_stem h_pool⟩
           hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16
-          ⟨(r34HeadB_has_vjp N q q Wd bd).toHasVJPAt _,
+          ⟨(r34HeadBHasVJP N q q Wd bd).toHasVJPAt _,
             (r34HeadB_differentiable N q q Wd bd) _⟩).backward := by
   unfold r50InputGradB
   rw [cbReluStridedBBack_eq_vjp_backward (by decide) (by decide) Ws bs εs hεs γs βs x h_stem,
       r34HeadBBack_eq_vjp_backward Wd bd (opaqueA16 (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x)]
   funext dy
-  rw [r34B_full_has_vjp_at_backward, r34StemB_has_vjp_at_backward]
+  rw [r34BFullHasVJPAt_backward, r34StemBHasVJPAt_backward]
   repeat rw [Function.comp_apply]
   rfl
 
 /-- ⭐⭐ **The chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at every batch
     size, every resolution, every input, every loss cotangent and every input pixel. The tie above
-    read through the apex's own `.correct`; `resnet50ForwardB_full_eq_slots` below is what says
+    read through the apex's own `.correct`; `resnet50ForwardBFull_eq_slots` below is what says
     those eighteen stages are the committed forward. -/
 theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
     (hq0 : 0 < q)
@@ -182,7 +182,7 @@ theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
     (hb16 : HasVJPDiffAt b16 (opaqueA15 (r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 x))
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
     r50InputGradB N q Ws Wd
-      ((bnBatchLA_has_vjp N 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) εs hεs γs βs).backward
+      ((bnBatchLAHasVJP N 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) εs hεs γs βs).backward
         (StableHLO.batchMap N (flatConvStride2 Ws bs) x))
       (StableHLO.cbReluStridedB N (h := (2 * (2 * (2 * (2 * q))))) (w := (2 * (2 * (2 * (2 * q))))) Ws bs εs γs βs x)
       hb1.fst.backward
@@ -212,19 +212,19 @@ theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
     b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x h_stem h_pool hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16) dy i
 
 /-- ⭐⭐ **THE SHAPE CHECK — the eighteen slots the tie is about ARE the committed forward.**
-    `resnet50ForwardB_full`, regrouped into exactly the eighteen arguments `r34B_full_has_vjp_at`
+    `resnet50ForwardBFull`, regrouped into exactly the eighteen arguments `r34BFullHasVJPAt`
     takes: ResNet-34's stem, the [3,4,6,3] bottleneck ladder as one stride-1 projection block
     (`s1b0`, the form with no ResNet-34 analogue), three strided projections and twelve identity
     bottlenecks, and ResNet-34's head.
 
     ⛔ **This is the theorem that would have caught ResNet-34's wrong pool** (§3.10) — the tie keeps
     its blocks opaque, so its subject is a chain of VARIABLES and nothing in it says which net they
-    are. It goes through `resnet50ForwardB_full_eq_chain` (§3.5b) for the depth-16 half and then
+    are. It goes through `resnet50ForwardBFull_eq_chain` (§3.5b) for the depth-16 half and then
     unfolds the named prefixes. ⭐ `q` is a binder here too, so it checks both shipped
     resolutions. -/
-theorem resnet50ForwardB_full_eq_slots (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+theorem resnet50ForwardBFull_eq_slots (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    resnet50ForwardB_full N q w x
+    resnet50ForwardBFull N q w x
       = (r34HeadB N q q w.Wd w.bd
           ∘ r50IdB N q q w.s4b2
           ∘ r50IdB N q q w.s4b1
@@ -243,7 +243,7 @@ theorem resnet50ForwardB_full_eq_slots (N q : Nat) {nCls : Nat} (w : R50BWeights
           ∘ r50IdB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1
           ∘ r50ProjB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0
           ∘ r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ) x := by
-  rw [resnet50ForwardB_full_eq_chain N q w x]
+  rw [resnet50ForwardBFull_eq_chain N q w x]
   simp only [r50Pre16, r50Pre15, r50Pre14, r50Pre13, r50Pre12, r50Pre11, r50Pre10, r50Pre9, r50Pre8, r50Pre7, r50Pre6, r50Pre5, r50Pre4, r50Pre3, r50Pre2, r50Pre1, r50Pre0]
 
 end Proofs

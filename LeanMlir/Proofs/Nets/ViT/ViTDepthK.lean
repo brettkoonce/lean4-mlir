@@ -3,15 +3,15 @@ import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 /-!
 # ViT scaling pass — depth-k (general-depth tower, distinct per-block params)
 
-The proven `transformerTower_has_vjp_mat` shares ONE param tuple across blocks. This
+The proven `transformerTowerHasVJPMat` shares ONE param tuple across blocks. This
 file builds the net with distinct per-block params at every depth, at the production form
 (vector-[D] LN + multi-head):
 
 1. **`BlockParamsV`** — the 16-field per-block param structure, and
    **`vitBodyKVFlat`** — the depth-`k` block fold (head recursion: block 0
-   first), with **`vitBodyKVFlat_has_vjp`** by induction on `k` (the chain step
-   is `vjp_comp` + the bridged `transformerBlockV_has_vjp_mat`).
-   **`vitForwardKV(_has_vjp[_correct])`** — the whole net at depth `k`,
+   first), with **`vitBodyKVFlatHasVJP`** by induction on `k` (the chain step
+   is `vjpComp` + the bridged `transformerBlockVHasVJPMat`).
+   **`vitForwardKV(HasVJP[_correct])`** — the whole net at depth `k`,
    UNCONDITIONAL except `0 < ε`.
 
 2. **`vitBodyGraphKMHV`** — the token-level fold of `vitBlockGraphMHV` with
@@ -106,40 +106,40 @@ lemma vitBodyKVFlat_eq_flatten (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
         (fun i => ps i.succ) (blockV Np1 heads d_head mlpDim ε (ps 0) A)
 
 /-- Flat differentiability of the depth-`k` body, by induction on `k`. -/
-lemma vitBodyKVFlat_diff (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) :
+lemma vitBodyKVFlat_differentiable (Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim),
       Differentiable ℝ (vitBodyKVFlat Np1 heads d_head mlpDim ε k ps)
   | 0, _ => differentiable_id
   | k + 1, ps =>
       Differentiable.comp
-        (vitBodyKVFlat_diff Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
-        (transformerBlockV_flat_diff Np1 heads d_head mlpDim ε
+        (vitBodyKVFlat_differentiable Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
+        (transformerBlockV_flat_differentiable Np1 heads d_head mlpDim ε
           (ps 0).γ1 (ps 0).β1 hε (ps 0).Wq (ps 0).Wk (ps 0).Wv (ps 0).Wo
           (ps 0).bq (ps 0).bk (ps 0).bv (ps 0).bo (ps 0).γ2 (ps 0).β2
           (ps 0).Wfc1 (ps 0).bfc1 (ps 0).Wfc2 (ps 0).bfc2)
 
 /-- **Depth-`k` body VJP** — the tower induction at distinct per-block params:
-    the chain step is `vjp_comp` gluing the bridged
-    `transformerBlockV_has_vjp_mat` onto the depth-`k` tail. Only `0 < ε`. -/
-noncomputable def vitBodyKVFlat_has_vjp (Np1 heads d_head mlpDim : Nat)
+    the chain step is `vjpComp` gluing the bridged
+    `transformerBlockVHasVJPMat` onto the depth-`k` tail. Only `0 < ε`. -/
+noncomputable def vitBodyKVFlatHasVJP (Np1 heads d_head mlpDim : Nat)
     (ε : ℝ) (hε : 0 < ε) :
     (k : Nat) → (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) →
     HasVJP (vitBodyKVFlat Np1 heads d_head mlpDim ε k ps)
-  | 0, _ => identity_has_vjp _
+  | 0, _ => identityHasVJP _
   | k + 1, ps =>
-      vjp_comp
+      vjpComp
         (blockVFlat Np1 heads d_head mlpDim ε (ps 0))
         (vitBodyKVFlat Np1 heads d_head mlpDim ε k (fun i => ps i.succ))
-        (transformerBlockV_flat_diff Np1 heads d_head mlpDim ε
+        (transformerBlockV_flat_differentiable Np1 heads d_head mlpDim ε
           (ps 0).γ1 (ps 0).β1 hε (ps 0).Wq (ps 0).Wk (ps 0).Wv (ps 0).Wo
           (ps 0).bq (ps 0).bk (ps 0).bv (ps 0).bo (ps 0).γ2 (ps 0).β2
           (ps 0).Wfc1 (ps 0).bfc1 (ps 0).Wfc2 (ps 0).bfc2)
-        (vitBodyKVFlat_diff Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
-        (hasVJPMat_to_hasVJP (transformerBlockV_has_vjp_mat Np1 heads d_head mlpDim ε
+        (vitBodyKVFlat_differentiable Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
+        (HasVJPMat.toHasVJP (transformerBlockVHasVJPMat Np1 heads d_head mlpDim ε
           (ps 0).γ1 (ps 0).β1 hε (ps 0).Wq (ps 0).Wk (ps 0).Wv (ps 0).Wo
           (ps 0).bq (ps 0).bk (ps 0).bv (ps 0).bo (ps 0).γ2 (ps 0).β2
           (ps 0).Wfc1 (ps 0).bfc1 (ps 0).Wfc2 (ps 0).bfc2))
-        (vitBodyKVFlat_has_vjp Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
+        (vitBodyKVFlatHasVJP Np1 heads d_head mlpDim ε hε k (fun i => ps i.succ))
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. The depth-k ViT forward + whole-net VJP
@@ -159,19 +159,19 @@ noncomputable def vitForwardKV
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
     Vec (ic * H * W) → Vec nClasses :=
-  (classifier_flat N (heads * d_head) nClasses Wcls bcls) ∘
+  (classifierFlat N (heads * d_head) nClasses Wcls bcls) ∘
   (fun v : Vec ((N + 1) * (heads * d_head)) =>
     Mat.flatten (fun n => layerNormVec (heads * d_head) ε γF βF
       ((Mat.unflatten v) n))) ∘
   (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps) ∘
-  (patchEmbed_flat ic H W patchSize N (heads * d_head)
+  (patchEmbedFlat ic H W patchSize N (heads * d_head)
     W_conv b_conv cls_token pos_embed)
 
 /-- **Whole-net VJP for the depth-`k` ViT (global).** All-smooth, so the only
-    hypothesis is `0 < ε` — at EVERY depth. Three `vjp_comp` steps gluing
-    `patchEmbed_flat_has_vjp`, the inductive `vitBodyKVFlat_has_vjp`, the
-    bridged per-token vector-LN, and `classifier_flat_has_vjp`. -/
-noncomputable def vitForwardKV_has_vjp
+    hypothesis is `0 < ε` — at EVERY depth. Three `vjpComp` steps gluing
+    `patchEmbedFlatHasVJP`, the inductive `vitBodyKVFlatHasVJP`, the
+    bridged per-token vector-LN, and `classifierFlatHasVJP`. -/
+noncomputable def vitForwardKVHasVJP
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -184,38 +184,38 @@ noncomputable def vitForwardKV_has_vjp
     HasVJP (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) := by
   unfold vitForwardKV
-  set PE := patchEmbed_flat ic H W patchSize N (heads * d_head)
+  set PE := patchEmbedFlat ic H W patchSize N (heads * d_head)
               W_conv b_conv cls_token pos_embed with hPE
-  have pe_diff := patchEmbed_flat_diff ic H W patchSize N (heads * d_head)
+  have pe_diff := patchEmbedFlat_differentiable ic H W patchSize N (heads * d_head)
                     W_conv b_conv cls_token pos_embed
-  have pe_vjp : HasVJP PE := patchEmbed_flat_has_vjp ic H W patchSize N
+  have pe_vjp : HasVJP PE := patchEmbedFlatHasVJP ic H W patchSize N
                     (heads * d_head) W_conv b_conv cls_token pos_embed
   set BODY := vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps with hBODY
   have body_diff : Differentiable ℝ BODY :=
-    vitBodyKVFlat_diff (N + 1) heads d_head mlpDim ε hε k ps
+    vitBodyKVFlat_differentiable (N + 1) heads d_head mlpDim ε hε k ps
   have body_vjp : HasVJP BODY :=
-    vitBodyKVFlat_has_vjp (N + 1) heads d_head mlpDim ε hε k ps
-  have s1_vjp : HasVJP (BODY ∘ PE) := vjp_comp PE BODY pe_diff body_diff pe_vjp body_vjp
+    vitBodyKVFlatHasVJP (N + 1) heads d_head mlpDim ε hε k ps
+  have s1_vjp : HasVJP (BODY ∘ PE) := vjpComp PE BODY pe_diff body_diff pe_vjp body_vjp
   have s1_diff : Differentiable ℝ (BODY ∘ PE) := body_diff.comp pe_diff
   set LNF := (fun v : Vec ((N + 1) * (heads * d_head)) =>
     Mat.flatten (fun n => layerNormVec (heads * d_head) ε γF βF
       ((Mat.unflatten v) n))) with hLNF
   have lnf_diff : Differentiable ℝ LNF :=
-    layerNormVec_per_token_flat_diff (N + 1) (heads * d_head) ε γF βF hε
+    layerNormVec_per_token_flat_differentiable (N + 1) (heads * d_head) ε γF βF hε
   have lnf_vjp : HasVJP LNF :=
-    hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat (N + 1) (heads * d_head)
+    HasVJPMat.toHasVJP (layerNormVecPerTokenHasVJPMat (N + 1) (heads * d_head)
       ε γF βF hε)
   have s2_vjp : HasVJP (LNF ∘ (BODY ∘ PE)) :=
-    vjp_comp (BODY ∘ PE) LNF s1_diff lnf_diff s1_vjp lnf_vjp
+    vjpComp (BODY ∘ PE) LNF s1_diff lnf_diff s1_vjp lnf_vjp
   have s2_diff : Differentiable ℝ (LNF ∘ (BODY ∘ PE)) := lnf_diff.comp s1_diff
-  exact vjp_comp (LNF ∘ (BODY ∘ PE))
-    (classifier_flat N (heads * d_head) nClasses Wcls bcls)
-    s2_diff (classifier_flat_diff N (heads * d_head) nClasses Wcls bcls)
-    s2_vjp (classifier_flat_has_vjp N (heads * d_head) nClasses Wcls bcls)
+  exact vjpComp (LNF ∘ (BODY ∘ PE))
+    (classifierFlat N (heads * d_head) nClasses Wcls bcls)
+    s2_diff (classifierFlat_differentiable N (heads * d_head) nClasses Wcls bcls)
+    s2_vjp (classifierFlatHasVJP N (heads * d_head) nClasses Wcls bcls)
 
-/-- **Public correctness theorem for `vitForwardKV_has_vjp`** — the depth-`k`
+/-- **Public correctness theorem for `vitForwardKVHasVJP`** — the depth-`k`
     ViT's backward equals the `pdiv`-contracted Jacobian at every input. -/
-theorem vitForwardKV_has_vjp_correct
+theorem vitForwardKVHasVJP_correct
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head))
@@ -226,12 +226,12 @@ theorem vitForwardKV_has_vjp_correct
     (γF βF : Vec (heads * d_head))
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (dy : Vec nClasses) (i : Fin (ic * H * W)) :
-    (vitForwardKV_has_vjp ic H W patchSize N mlpDim heads d_head nClasses k
+    (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x dy i =
       ∑ j : Fin nClasses,
         pdiv (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
-  (vitForwardKV_has_vjp ic H W patchSize N mlpDim heads d_head nClasses k
+  (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
@@ -240,7 +240,7 @@ theorem vitForwardKV_has_vjp_correct
 
 /-- **ViT-Tiny whole-network VJP — the production capstone.**
 
-    `vitForwardKV_has_vjp_correct` instantiated at the exact ViT-Tiny
+    `vitForwardKVHasVJP_correct` instantiated at the exact ViT-Tiny
     spec: a `3×224×224` image, `16×16` patches (`N = 196` patch tokens
     + the CLS token), embedding dim `D = 192 = 3 heads × 64`, MLP dim `768`,
     **12 transformer blocks with DISTINCT per-block parameters**
@@ -250,10 +250,10 @@ theorem vitForwardKV_has_vjp_correct
     Jacobian-transpose contracted with the cotangent, at **every** input image —
     UNCONDITIONAL except `0 < ε` (softmax / GELU / vector-LN are kink-free, so no
     smoothness witness is needed, and the statement is generic in the weights, so
-    it is non-degenerate by construction). The ViT peer of `convNextForwardTCh_has_vjp`
-    (18-block ConvNeXt-T) and `efficientnetForwardB_full_has_vjp` (16-block
+    it is non-degenerate by construction). The ViT peer of `convNextForwardTChHasVJP`
+    (18-block ConvNeXt-T) and `efficientnetForwardBFullHasVJP` (16-block
     EfficientNet-B0): a full-spec, real-architecture whole-network backward. -/
-theorem vitTiny_has_vjp_correct
+theorem vitTinyHasVJP_correct
     (W_conv : Kernel4 (3 * 64) 3 16 16)
     (b_conv : Vec (3 * 64))
     (cls_token : Vec (3 * 64))
@@ -263,12 +263,12 @@ theorem vitTiny_has_vjp_correct
     (γF βF : Vec (3 * 64))
     (Wcls : Mat (3 * 64) 10) (bcls : Vec 10)
     (x : Vec (3 * 224 * 224)) (dy : Vec 10) (i : Fin (3 * 224 * 224)) :
-    (vitForwardKV_has_vjp 3 224 224 16 196 768 3 64 10 12
+    (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 10 12
       W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward x dy i =
       ∑ j : Fin 10,
         pdiv (vitForwardKV 3 224 224 16 196 768 3 64 10 12
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) x i j * dy j :=
-  vitForwardKV_has_vjp_correct 3 224 224 16 196 768 3 64 10 12
+  vitForwardKVHasVJP_correct 3 224 224 16 196 768 3 64 10 12
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x dy i
 
 end Proofs
@@ -309,7 +309,7 @@ lemma vitBodyGraphKMHV_den {Np1 hm1 d mlpDim : Nat}
     ∀ (base k : Nat) (ps : Fin k → BlockParamsV ((hm1 + 1) * d) mlpDim)
       (e : SHlo (Np1 * ((hm1 + 1) * d))) (A : Mat Np1 ((hm1 + 1) * d)),
       den e = Mat.flatten A →
-      den (vitBodyGraphKMHV epsStr sStr oneStr zeroStr ε (sdpa_scale d)
+      den (vitBodyGraphKMHV epsStr sStr oneStr zeroStr ε (sdpaScale d)
             base k ps e) =
         Mat.flatten (vitBodyKV Np1 (hm1 + 1) d mlpDim ε k ps A)
   | _, 0, _, _, _, hA => hA
@@ -356,7 +356,7 @@ theorem vitFwdGraphKMHV_faithful
     (γF βF : Vec ((hm1 + 1) * d))
     (Wcls : Mat ((hm1 + 1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) :
-    den (vitFwdGraphKMHV epsStr sStr oneStr zeroStr ε (sdpa_scale d)
+    den (vitFwdGraphKMHV epsStr sStr oneStr zeroStr ε (sdpaScale d)
           Wc bc cls pos k ps γF βF Wcls bcls x)
       = vitForwardKV ic H W patchSize N mlpDim (hm1 + 1) d nClasses k
           Wc bc cls pos ε ps γF βF Wcls bcls x := by
@@ -365,10 +365,10 @@ theorem vitFwdGraphKMHV_faithful
   simp only [vitFwdGraphKMHV, denseF_faithful, clsSliceF_faithful, rowBiasF_faithful,
              rowScaleF_faithful, lnRowF_faithful, hbody]
   simp only [rowLNFlat_flat, rowScaleFlat_flat, rowBiasFlat_flat]
-  unfold vitForwardKV classifier_flat
+  unfold vitForwardKV classifierFlat
   simp only [Function.comp_apply]
   rw [← Mat.flatten_unflatten
-        (patchEmbed_flat ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x),
+        (patchEmbedFlat ic H W patchSize N ((hm1 + 1) * d) Wc bc cls pos x),
       vitBodyKVFlat_eq_flatten]
   simp only [Mat.unflatten_flatten]
   rfl

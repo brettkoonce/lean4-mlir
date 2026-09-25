@@ -44,7 +44,7 @@ batched index the same cast has to happen UNDER `N * ·`, which is `bnBatchLA`'s
 (`congrArg (N * ·) (Nat.mul_assoc …)`). It is a reindex, not a function change — the emitted text
 is unaffected, since `skel` never sees the index. -/
 private def reassocB {N c h : Nat} (e : SHlo (N*(c*h*h))) : SHlo (N*(c*(h*h))) :=
-  castIdx (laAssoc N c h h) e
+  castIdx (la_assoc N c h h) e
 
 private def zVB {n : Nat} : Vec n := fun _ => 0
 private def zKB {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0

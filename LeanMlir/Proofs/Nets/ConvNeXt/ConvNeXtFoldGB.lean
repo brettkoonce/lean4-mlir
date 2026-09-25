@@ -28,7 +28,7 @@ an AST without a fold.
 | `convWeightGradB` / `convBiasGradB` (18 expand + 18 project 1×1, + the stem bias) | `ResNet34PoCB.convWGradB_den` / `convBGradB_den` (`GradNodesB`) | — |
 | `depthwiseWeightGradB` / `depthwiseBiasGradB` (18 × 7×7) | `EnetPoCG.depthwiseWGradB_den` / `Mnv2PaperPoCG.depthwiseBGradB_den` (`GradNodesB`) | — |
 | `convStridedWeightGradB` / `convStridedBiasGradB` (3 × 2×2/s2 downsample) | `ResNet34PoCB.convStridedWGradB_den` / `convStridedBGradB_den` (`GradNodesB`) | — |
-| `convStride4WeightGradB` (patchify stem) | `CnxPoCGB.psWGradB_den` (`GradNodesB`) | `flatConvStride4_weight_grad_has_vjp`, per example |
+| `convStride4WeightGradB` (patchify stem) | `CnxPoCGB.psWGradB_den` (`GradNodesB`) | `flatConvStride4WeightGradHasVJP`, per example |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = h·w` (22 spatial LN sites) | `chanLnGammaGradB_den` / `chanLnBetaGradB_den` | `CnxPoCG.chanLnGammaGrad_den` / `chanLnBetaGrad_den` |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = 1` (the head LN, after GAP) | `ViTPoCGB.veclnGammaGradB_den` / `rowDenseBiasGradB_den_lnbeta` | — |
 | `weightGradB` / `biasGradB` (the classifier) | `ViTPoCGB.headWGradB_den` / `headBGradB_den` | — |

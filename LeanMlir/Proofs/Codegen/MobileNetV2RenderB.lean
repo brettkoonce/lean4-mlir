@@ -952,7 +952,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as MobileNetV2SyncTieB.mnv2_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.mobilenetv2FwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // gradient) and StableHLO.mobilenetv2FwdGraphSyncFull_shard (the forward), both in\n" ++
         "    // LeanMlir/Proofs/Nets/MobileNet/ (planning/global_bn_verified.md).\n" ++
         (if bf16 then
           "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++

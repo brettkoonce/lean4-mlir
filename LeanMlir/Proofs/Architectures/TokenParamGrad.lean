@@ -14,9 +14,9 @@ everything in a ViT is per-example separable (the EfficientNet contrast).
 | Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the M2 outer-product bridge row-lifted |
 | classifier `Wcls`/`bcls`             | dense on the CLS row       | M2 `weight/bias_grad_bridge` (**reuse** — single-vector dense) |
 | LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `vit_vecln{Gamma,Beta}_grad_bridge` (`LayerNorm`) |
-| `pos_embed`                          | additive (`patchEmbed_flat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
-| `cls_token`                          | row-0 scatter (`patchEmbed_flat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
-| patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbed_flat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
+| `pos_embed`                          | additive (`patchEmbedFlat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
+| `cls_token`                          | row-0 scatter (`patchEmbedFlat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
+| patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbedFlat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
 | attention internals (softmax, scale) | —                          | no parameters |
 
 One genuinely-new bridge family (everything else is reuse or a reindex):
@@ -29,7 +29,7 @@ One genuinely-new bridge family (everything else is reuse or a reindex):
 
 The classifier head (`dense` on the CLS vector) is VERBATIM M2 `weight/bias_grad_bridge`
 reuse at `[D, nClasses]`. The patch-embed conv `Wp`/`bp` (§ E) closes over
-`patchEmbed_flat` directly — the kernel is the VARIABLE and the pad-guarded image reads
+`patchEmbedFlat` directly — the kernel is the VARIABLE and the pad-guarded image reads
 are CONSTANT coefficients (the mirror of the input-grad case), so the forward is affine in
 the kernel and `pdiv_of_affine` applies with the CLS row masked out. 3-axiom clean by
 construction.
@@ -69,14 +69,14 @@ theorem pdiv_rowDense_W {N a c : Nat} (bb : Vec c) (X : Mat N a) (W : Mat a c)
 
 /-- The rendered **per-token dense weight gradient**: the token-axis-contracted
     outer product `dW_(i,j) = Σ_r X_(r,i)·dY_(r,j)` (one `dot_general` contracting
-    the token axis — the row-lift of `dense_weight_grad = x ⊗ dy`). -/
-noncomputable def rowDense_weight_grad {N a c : Nat} (X : Mat N a) (dY : Mat N c) :
+    the token axis — the row-lift of `denseWeightGrad = x ⊗ dy`). -/
+noncomputable def rowDenseWeightGrad {N a c : Nat} (X : Mat N a) (dY : Mat N c) :
     Mat a c :=
   fun i j => ∑ r : Fin N, X r i * dY r j
 
 /-- The rendered **per-token dense bias gradient**: the token-axis reduce
     `db_j = Σ_r dY_(r,j)`. -/
-noncomputable def rowDense_bias_grad {N c : Nat} (dY : Mat N c) : Vec c :=
+noncomputable def rowDenseBiasGrad {N c : Nat} (dY : Mat N c) : Vec c :=
   fun j => ∑ r : Fin N, dY r j
 
 /-- **Per-token dense W-gradient bridge.** The rendered token-contracted outer
@@ -84,20 +84,20 @@ noncomputable def rowDense_bias_grad {N c : Nat} (dY : Mat N c) : Vec c :=
     the flattened shared `W`) contracted with the cotangent. -/
 theorem vit_rowDenseW_grad_bridge {N a c : Nat} (bb : Vec c) (X : Mat N a)
     (W : Mat a c) (dy : Vec (N * c)) (i : Fin a) (j : Fin c) :
-    rowDense_weight_grad X (Mat.unflatten dy) i j
+    rowDenseWeightGrad X (Mat.unflatten dy) i j
       = ∑ o : Fin (N * c),
           pdiv (fun v : Vec (a * c) =>
                   Mat.flatten (fun r => dense (Mat.unflatten v) bb (X r)))
                (Mat.flatten W) (finProdFinEquiv (i, j)) o * dy o := by
   simp_rw [pdiv_rowDense_W]
   rw [sum_finProdFinEquiv (m := N) (n := c)]
-  simp [rowDense_weight_grad, Mat.unflatten]
+  simp [rowDenseWeightGrad, Mat.unflatten]
 
 /-- **Per-token dense b-gradient bridge.** The rendered token-axis reduce equals
     the certified rowwise-dense ∂/∂b contraction. -/
 theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
     (bb : Vec c) (dy : Vec (N * c)) (i : Fin c) :
-    rowDense_bias_grad (Mat.unflatten dy) i
+    rowDenseBiasGrad (Mat.unflatten dy) i
       = ∑ o : Fin (N * c),
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r)))
                bb i o * dy o := by
@@ -115,14 +115,14 @@ theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
     simp only [basisVec_apply, @eq_comm _ _ i]
   simp_rw [hpdiv]
   rw [sum_finProdFinEquiv (m := N) (n := c)]
-  simp [rowDense_bias_grad, Mat.unflatten]
+  simp [rowDenseBiasGrad, Mat.unflatten]
 
 /-- **Per-token dense W output, certified.** `Wⁿ = W − lr·(Σ_tokens xᵣ ⊗ dyᵣ)` denotes
     `W − lr·(certified ∂(rowwise dense)/∂W · cotangent)`. Covers Wq/Wk/Wv/Wo and
     Wfc1/Wfc2 at every block of the representative ViT (each at its own `[a,c]`). -/
 theorem vit_render_rowdenseW_certified {N a c : Nat} (bb : Vec c) (X : Mat N a)
     (W : Mat a c) (dy : Vec (N * c)) (lr : ℝ) (i : Fin a) (j : Fin c) :
-    W i j - lr * rowDense_weight_grad X (Mat.unflatten dy) i j
+    W i j - lr * rowDenseWeightGrad X (Mat.unflatten dy) i j
       = W i j - lr * ∑ o : Fin (N * c),
           pdiv (fun v : Vec (a * c) =>
                   Mat.flatten (fun r => dense (Mat.unflatten v) bb (X r)))
@@ -133,7 +133,7 @@ theorem vit_render_rowdenseW_certified {N a c : Nat} (bb : Vec c) (X : Mat N a)
     certified rowwise-dense ∂/∂b contraction. Covers all six per-block biases. -/
 theorem vit_render_rowdenseb_certified {N a c : Nat} (W : Mat a c) (X : Mat N a)
     (bb : Vec c) (dy : Vec (N * c)) (lr : ℝ) (i : Fin c) :
-    bb i - lr * rowDense_bias_grad (Mat.unflatten dy) i
+    bb i - lr * rowDenseBiasGrad (Mat.unflatten dy) i
       = bb i - lr * ∑ o : Fin (N * c),
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r)))
                bb i o * dy o := by
@@ -142,27 +142,27 @@ theorem vit_render_rowdenseb_certified {N a c : Nat} (W : Mat a c) (X : Mat N a)
 -- ════════════════════════════════════════════════════════════════
 -- § C. pos_embed + cls_token — the two embed-parameter reindex closes
 --
--- Both live on `patchEmbed_flat` directly: as a function of the (flattened)
+-- Both live on `patchEmbedFlat` directly: as a function of the (flattened)
 -- position embedding the output is `p + const` (identity Jacobian ⇒ dPos = dy);
 -- as a function of the CLS token it is a row-0 masked gather
 -- (⇒ dCls = the row-0 slice of the cotangent — exactly `clsSliceF`'s shape).
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Jacobian of `patchEmbed_flat` w.r.t. the (flattened) position embedding** —
+/-- **Jacobian of `patchEmbedFlat` w.r.t. the (flattened) position embedding** —
     the identity: pos is broadcast-added to every token. -/
 theorem pdiv_patchEmbed_pos {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (i j : Fin ((N + 1) * D)) :
     pdiv (fun p : Vec ((N + 1) * D) =>
-            patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
+            patchEmbedFlat ic H W P N D Wc bc cls (Mat.unflatten p) img)
       (Mat.flatten pos) i j = if i = j then 1 else 0 := by
   rw [show (fun p : Vec ((N + 1) * D) =>
-              patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
+              patchEmbedFlat ic H W P N D Wc bc cls (Mat.unflatten p) img)
         = (fun p : Vec ((N + 1) * D) => fun idx =>
             p idx +
-            patchEmbed_flat ic H W P N D Wc bc cls (fun _ _ => (0 : ℝ)) img idx) from by
+            patchEmbedFlat ic H W P N D Wc bc cls (fun _ _ => (0 : ℝ)) img idx) from by
       funext p idx
-      unfold patchEmbed_flat
+      unfold patchEmbedFlat
       simp only [Mat.unflatten, Prod.mk.eta, Equiv.apply_symm_apply, zero_add]]
   exact pdiv_id_add_const _ (Mat.flatten pos) i j
 
@@ -175,32 +175,32 @@ theorem vit_render_pos_certified {ic H W P N D : Nat}
     Mat.flatten pos i - lr * dy i
       = Mat.flatten pos i - lr * ∑ j : Fin ((N + 1) * D),
           pdiv (fun p : Vec ((N + 1) * D) =>
-                  patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
+                  patchEmbedFlat ic H W P N D Wc bc cls (Mat.unflatten p) img)
             (Mat.flatten pos) i j * dy j := by
   simp [pdiv_patchEmbed_pos]
 
 /-- The rendered **CLS-token gradient**: the row-0 slice of the patch-embed
     output cotangent (`clsSliceF`'s shape, applied to the embed cotangent). -/
-noncomputable def cls_token_grad {N D : Nat} (dy : Vec ((N + 1) * D)) : Vec D :=
+noncomputable def clsTokenGrad {N D : Nat} (dy : Vec ((N + 1) * D)) : Vec D :=
   fun i => dy (finProdFinEquiv ((0 : Fin (N + 1)), i))
 
-/-- **Jacobian of `patchEmbed_flat` w.r.t. the CLS token** — the row-0 masked
+/-- **Jacobian of `patchEmbedFlat` w.r.t. the CLS token** — the row-0 masked
     gather: `∂y_(n,k)/∂cls_i = [n = 0]·δ_(i,k)`. -/
 theorem pdiv_patchEmbed_cls {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (i : Fin D) (j : Fin ((N + 1) * D)) :
     pdiv (fun cl : Vec D =>
-            patchEmbed_flat ic H W P N D Wc bc cl pos img) cls i j
+            patchEmbedFlat ic H W P N D Wc bc cl pos img) cls i j
       = (if (finProdFinEquiv.symm j).1.val = 0 then (1 : ℝ) else 0) *
           (if i = (finProdFinEquiv.symm j).2 then 1 else 0) := by
-  rw [show (fun cl : Vec D => patchEmbed_flat ic H W P N D Wc bc cl pos img)
+  rw [show (fun cl : Vec D => patchEmbedFlat ic H W P N D Wc bc cl pos img)
         = (fun cl : Vec D => fun idx : Fin ((N + 1) * D) =>
             (fun o : Fin ((N + 1) * D) =>
               if (finProdFinEquiv.symm o).1.val = 0 then (1 : ℝ) else 0) idx *
               cl ((fun o : Fin ((N + 1) * D) => (finProdFinEquiv.symm o).2) idx) +
-            patchEmbed_flat ic H W P N D Wc bc (fun _ => (0 : ℝ)) pos img idx) from by
+            patchEmbedFlat ic H W P N D Wc bc (fun _ => (0 : ℝ)) pos img idx) from by
       funext cl idx
-      unfold patchEmbed_flat
+      unfold patchEmbedFlat
       by_cases h : (finProdFinEquiv.symm idx).1.val = 0
       · simp only [h, ite_true]
         ring
@@ -213,25 +213,25 @@ theorem pdiv_patchEmbed_cls {ic H W P N D : Nat}
 theorem vit_render_cls_certified {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ) (i : Fin D) :
-    cls i - lr * cls_token_grad dy i
+    cls i - lr * clsTokenGrad dy i
       = cls i - lr * ∑ j : Fin ((N + 1) * D),
           pdiv (fun cl : Vec D =>
-                  patchEmbed_flat ic H W P N D Wc bc cl pos img) cls i j * dy j := by
+                  patchEmbedFlat ic H W P N D Wc bc cl pos img) cls i j * dy j := by
   simp_rw [pdiv_patchEmbed_cls]
   rw [sum_finProdFinEquiv (m := N + 1) (n := D)]
-  simp [cls_token_grad]
+  simp [clsTokenGrad]
 
 -- ════════════════════════════════════════════════════════════════
 -- § E. Patch-projection conv Wp/bp — the embed kernel close
 --
--- The KEY structural fact: as a function of the (flattened) kernel, `patchEmbed_flat`
+-- The KEY structural fact: as a function of the (flattened) kernel, `patchEmbedFlat`
 -- is linear with CONSTANT coefficients — the pad-guarded image reads sit in the
 -- coefficient, not the variable (the mirror of the input-grad case, where the
 -- pad-eval calculus was needed). So `pdiv_of_affine` reads the Jacobian off the basis
 -- vector, as in §A, with the CLS row's coefficient zero.
 -- ════════════════════════════════════════════════════════════════
 
-/-- The pad-guarded patch read of `patchEmbed_flat`, named: input pixel
+/-- The pad-guarded patch read of `patchEmbedFlat`, named: input pixel
     `(c, h'·P + kh, w'·P + kw)` of patch `p` (row-major patch grid of width
     `W/P`), zero out of range. Constant in the kernel. -/
 noncomputable def patchRead (ic H W P : Nat) (img : Vec (ic * H * W))
@@ -245,14 +245,14 @@ noncomputable def patchRead (ic H W P : Nat) (img : Vec (ic * H * W))
     img (finProdFinEquiv (finProdFinEquiv (c, ⟨hh, hpad.1⟩), ⟨ww, hpad.2⟩))
   else 0
 
-/-- **Jacobian of `patchEmbed_flat` w.r.t. the (flattened) patch kernel** —
+/-- **Jacobian of `patchEmbedFlat` w.r.t. the (flattened) patch kernel** —
     `∂y_(n,dd)/∂W_(d,c,kh,kw) = [n ≠ 0]·δ_(dd,d)·read(c,kh,kw, patch n−1)`. -/
 theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W))
     (d : Fin D) (c : Fin ic) (kh kw : Fin P) (idx : Fin ((N + 1) * D)) :
     pdiv (fun v : Vec (D * ic * P * P) =>
-            patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
+            patchEmbedFlat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
       (Kernel4.flatten Wc)
       (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) idx
       = if (finProdFinEquiv.symm idx).2 = d then
@@ -262,17 +262,17 @@ theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
   -- Linear in the kernel (the pad-guarded reads are constant coefficients, zero on the CLS
   -- row) plus the kernel-free part, so `pdiv_of_affine` reads the entry off the basis vector.
   rw [show (fun v : Vec (D * ic * P * P) =>
-              patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img) =
+              patchEmbedFlat ic H W P N D (Kernel4.unflatten v) bc cls pos img) =
         fun v => (fun o : Fin ((N + 1) * D) =>
           if (finProdFinEquiv.symm o).1.val = 0 then 0 else
             ∑ c' : Fin ic, ∑ kh' : Fin P, ∑ kw' : Fin P,
               v (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv
                   ((finProdFinEquiv.symm o).2, c'), kh'), kw')) *
                 patchRead ic H W P img c' kh' kw' ((finProdFinEquiv.symm o).1.val - 1)) +
-          patchEmbed_flat ic H W P N D (fun _ _ _ _ => 0) bc cls pos img from by
+          patchEmbedFlat ic H W P N D (fun _ _ _ _ => 0) bc cls pos img from by
       funext v o
       by_cases h : (finProdFinEquiv.symm o).1.val = 0 <;>
-        simp only [patchEmbed_flat, patchRead, Kernel4.unflatten, Pi.add_apply, h, ite_true,
+        simp only [patchEmbedFlat, patchRead, Kernel4.unflatten, Pi.add_apply, h, ite_true,
           ite_false, zero_mul, Finset.sum_const_zero, add_zero, zero_add]
       ring,
     pdiv_of_affine _ _
@@ -289,7 +289,7 @@ theorem pdiv_patchEmbed_W {ic H W P N D : Nat}
 /-- The rendered **patch-kernel gradient**: for each tap `(d,c,kh,kw)`, the
     patch-grid reduce `Σ_p read(c,kh,kw,p)·dy_(p+1,d)` — the "dilate dy /
     valid conv" weight grad, with the CLS row (token 0) excluded. -/
-noncomputable def patchEmbed_weight_grad (ic H W P N D : Nat)
+noncomputable def patchEmbedWeightGrad (ic H W P N D : Nat)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) : Kernel4 D ic P P :=
   fun d c kh kw =>
     ∑ n : Fin N, patchRead ic H W P img c kh kw n.val *
@@ -297,7 +297,7 @@ noncomputable def patchEmbed_weight_grad (ic H W P N D : Nat)
 
 /-- The rendered **patch bias gradient**: `db_d = Σ_p dy_(p+1,d)` (the CLS row
     excluded — token 0 carries no conv bias). -/
-noncomputable def patchEmbed_bias_grad (N D : Nat) (dy : Vec ((N + 1) * D)) : Vec D :=
+noncomputable def patchEmbedBiasGrad (N D : Nat) (dy : Vec ((N + 1) * D)) : Vec D :=
   fun d => ∑ n : Fin N, dy (finProdFinEquiv (n.succ, d))
 
 /-- **Patch-kernel gradient bridge.** The rendered patch-grid reduce equals the
@@ -306,16 +306,16 @@ theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D))
     (d : Fin D) (c : Fin ic) (kh kw : Fin P) :
-    patchEmbed_weight_grad ic H W P N D img dy d c kh kw
+    patchEmbedWeightGrad ic H W P N D img dy d c kh kw
       = ∑ o : Fin ((N + 1) * D),
           pdiv (fun v : Vec (D * ic * P * P) =>
-                  patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
+                  patchEmbedFlat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
             (Kernel4.flatten Wc)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
             * dy o := by
   simp_rw [pdiv_patchEmbed_W]
   rw [sum_finProdFinEquiv (m := N + 1) (n := D)]
-  simp [patchEmbed_weight_grad, Fin.sum_univ_succ]
+  simp [patchEmbedWeightGrad, Fin.sum_univ_succ]
 
 /-- **Patch-kernel output, certified.** `Wpⁿ = Wp − lr·(patch-grid reduce)`
     denotes the certified ∂(patchEmbed)/∂Wp contraction. -/
@@ -323,32 +323,32 @@ theorem vit_render_patchW_certified {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ)
     (d : Fin D) (c : Fin ic) (kh kw : Fin P) :
-    Wc d c kh kw - lr * patchEmbed_weight_grad ic H W P N D img dy d c kh kw
+    Wc d c kh kw - lr * patchEmbedWeightGrad ic H W P N D img dy d c kh kw
       = Wc d c kh kw - lr * ∑ o : Fin ((N + 1) * D),
           pdiv (fun v : Vec (D * ic * P * P) =>
-                  patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
+                  patchEmbedFlat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
             (Kernel4.flatten Wc)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
             * dy o := by
   rw [vit_patchW_grad_bridge Wc bc cls pos img dy d c kh kw]
 
-/-- **Jacobian of `patchEmbed_flat` w.r.t. the patch bias** — the row-masked
+/-- **Jacobian of `patchEmbedFlat` w.r.t. the patch bias** — the row-masked
     gather `∂y_(n,k)/∂bc_i = [n ≠ 0]·δ_(i,k)` (token 0 is the CLS row). -/
 theorem pdiv_patchEmbed_b {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (i : Fin D) (j : Fin ((N + 1) * D)) :
     pdiv (fun b' : Vec D =>
-            patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i j
+            patchEmbedFlat ic H W P N D Wc b' cls pos img) bc i j
       = (if (finProdFinEquiv.symm j).1.val = 0 then (0 : ℝ) else 1) *
           (if i = (finProdFinEquiv.symm j).2 then 1 else 0) := by
-  rw [show (fun b' : Vec D => patchEmbed_flat ic H W P N D Wc b' cls pos img)
+  rw [show (fun b' : Vec D => patchEmbedFlat ic H W P N D Wc b' cls pos img)
         = (fun b' : Vec D => fun o : Fin ((N + 1) * D) =>
             (fun o' : Fin ((N + 1) * D) =>
               if (finProdFinEquiv.symm o').1.val = 0 then (0 : ℝ) else 1) o *
               b' ((fun o' : Fin ((N + 1) * D) => (finProdFinEquiv.symm o').2) o) +
-            patchEmbed_flat ic H W P N D Wc (fun _ => (0 : ℝ)) cls pos img o) from by
+            patchEmbedFlat ic H W P N D Wc (fun _ => (0 : ℝ)) cls pos img o) from by
       funext b' o
-      unfold patchEmbed_flat
+      unfold patchEmbedFlat
       by_cases h : (finProdFinEquiv.symm o).1.val = 0
       · simp only [h, ite_true]
         ring
@@ -361,27 +361,27 @@ theorem pdiv_patchEmbed_b {ic H W P N D : Nat}
 theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (i : Fin D) :
-    patchEmbed_bias_grad N D dy i
+    patchEmbedBiasGrad N D dy i
       = ∑ o : Fin ((N + 1) * D),
           pdiv (fun b' : Vec D =>
-                  patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
+                  patchEmbedFlat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
   simp_rw [pdiv_patchEmbed_b]
   rw [sum_finProdFinEquiv (m := N + 1) (n := D)]
-  simp [patchEmbed_bias_grad, Fin.sum_univ_succ]
+  simp [patchEmbedBiasGrad, Fin.sum_univ_succ]
 
 /-- **Patch bias output, certified.** -/
 theorem vit_render_patchb_certified {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ) (i : Fin D) :
-    bc i - lr * patchEmbed_bias_grad N D dy i
+    bc i - lr * patchEmbedBiasGrad N D dy i
       = bc i - lr * ∑ o : Fin ((N + 1) * D),
           pdiv (fun b' : Vec D =>
-                  patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
+                  patchEmbedFlat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
   rw [vit_patchb_grad_bridge Wc bc cls pos img dy i]
 
 -- The classifier head (`dense Wcls bcls` on the CLS vector) is covered VERBATIM by the
--- existing M2 `weight_grad_bridge`/`bias_grad_bridge` (`dense_weight_grad_correct`/
--- `dense_bias_grad_correct`) at the `[D, nClasses]` shape — single-vector dense, nothing
+-- existing M2 `weight_grad_bridge`/`bias_grad_bridge` (`denseWeightGrad_correct`/
+-- `denseBiasGrad_correct`) at the `[D, nClasses]` shape — single-vector dense, nothing
 -- to row-lift. Softmax and the 1/√d scale carry no parameters. With the per-token dense
 -- W/b family (§ A), the row-lifted scalar-LN γ/β (§ B), pos/cls (§ C), and the patch
 -- conv Wp/bp (§ E), EVERY parameter family of the representative ViT train step is

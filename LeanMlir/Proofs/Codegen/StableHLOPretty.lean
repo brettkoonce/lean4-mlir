@@ -4437,7 +4437,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       | "bnSyncBack", [gN, xN, es], [_N, oc, h, w] => do
           -- dx = istd·(dx̂ − mdy − x̂·mdyx), all four statistics sliced out of the all-reduced
           -- `[4·oc]` operand. ⚠ The MEAN form: no `·B·h·w` then `÷B·h·w` round trip, because
-          -- the reductions arrive already divided — see `bnSync_grad_input`.
+          -- the reductions arrive already divided — see `bnSyncGradInput`.
           let xr ← fresh; let mus ← fresh; let vs ← fresh; let mdys ← fresh; let mdyxs ← fresh
           let mub ← fresh; let vb ← fresh; let mdyb ← fresh; let mdyxb ← fresh
           let ep ← fresh; let ve ← fresh; let istd ← fresh

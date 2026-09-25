@@ -8,7 +8,7 @@ against 1536 and 768, and everything else identical — same depth 12, same 16×
 block structure, same drop-path ramp. 86,567,656 parameters — DeiT-B's published 86.57M — in the
 SAME 200 tensors as Ti and S.
 
-⭐⭐ **The proof side needed nothing.** `Proofs.vitForwardKV_has_vjp` is already
+⭐⭐ **The proof side needed nothing.** `Proofs.vitForwardKVHasVJP` is already
 `∀ heads d_head mlpDim k`, and it is a GLOBAL `HasVJP` rather than the pointwise `_at` form the
 relu-family nets carry, because GELU/softmax/LayerNorm have no kink. The same theorem covers Tiny,
 Small and Base at different arguments. What changed was the RENDERER: `ViTRenderB.lean`'s six

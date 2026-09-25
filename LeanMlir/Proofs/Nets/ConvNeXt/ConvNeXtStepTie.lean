@@ -47,7 +47,7 @@ forward → loss → backward, no free activations, no symbolic cotangent.
   and of the chain cotangent, while the certified Jacobian is `chanLNTensor3`'s in the `c·h·w`
   activation layout (`ChannelLN`'s permutation argument bridges the two).
 * **the channel-LN input-VJP** in the cotangent chain: `chanLNTensor3Back` where the scalar
-  version had `bn_grad_input`. It is the certified VJP —
+  version had `bnGradInput`. It is the certified VJP —
   `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`.
 * **the stem LN**, which the scalar version did not have at all: `psng`/`psnbt` tie at the
   stem-LN output cotangent, and the stem conv's own gradients now see the LN input-VJP of it.
@@ -57,7 +57,7 @@ forward → loss → backward, no free activations, no symbolic cotangent.
 * **the four even-kernel weight grads are no longer a gap.** The three downsample 2×2/s2 weights
   are `convStridedWeightSgd` (`ResNet34PoC.convStridedW_den` is kernel-generic), and the stem
   4×4/s4 weight is `convStride4WeightGrad`, whose `den` is
-  `flatConvStride4_weight_grad_has_vjp`.
+  `flatConvStride4WeightGradHasVJP`.
 
 ## Coverage / honest residual
 
@@ -178,7 +178,7 @@ def cnxDownChTied {ci co h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin n : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) : Prop :=
-    let cotN' : Vec (ci*(2*h)*(2*w)) := (flatConvStride2_has_vjp Wd bd).backward n dyOut
+    let cotN' : Vec (ci*(2*h)*(2*w)) := (flatConvStride2HasVJP Wd bd).backward n dyOut
     CnxPoC.ChanLNGammaSgdTied (2 * h) (2 * w) gN xN epsStr lrStr cotN ε dnbt xin dng cotN' lr
   ∧ CnxPoC.ChanLNBetaSgdTied (2 * h) (2 * w) bN lrStr cotN ε dng xin dnbt cotN' lr
   ∧ (∀ idx : Fin (co*ci*2*2),
@@ -243,7 +243,7 @@ theorem cnx_stem_ch_tied {c h w : Nat}
   · exact chanLNGammaSgdTied_holds
   · exact chanLNBetaSgdTied_holds
   · exact convBSgdTied_holds
-  · intro idx; exact flatConvStride4_weight_grad_has_vjp_correct psb x (Kernel4.flatten Wst) cotPatch idx
+  · intro idx; exact flatConvStride4WeightGradHasVJP_correct psb x (Kernel4.flatten Wst) cotPatch idx
 
 /-! ## Head — GAP → vector-LN at one row → dense
 
@@ -258,7 +258,7 @@ argument), which is the annotation trap the render carries in its own comment. -
 def cnxHeadChTied (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 10) (bfc : Vec 10)
     (gap : Vec (1*768)) (hn : Vec 768) (g : Vec 10) (lr : ℝ) : Prop :=
-    let cotHn : Vec (1*768) := (dense_has_vjp Wfc bfc).backward hn g
+    let cotHn : Vec (1*768) := (denseHasVJP Wfc bfc).backward hn g
     ViTPoC.VecLNGammaSgdTied 1 gN xN epsStr lrStr cotN ε hnbt gap hng cotHn lr
   ∧ ViTPoC.VecLNBetaSgdTied 1 bN lrStr cotN ε hng gap hnbt cotHn lr
   ∧ (∀ i : Fin 10,
@@ -339,7 +339,7 @@ noncomputable def cnxBlockCotInChAt {c cExp h w : Nat} (ε : ℝ)
   let e := flatConv (h := h) (w := w) Wex bex nl
   let g := gelu (cExp*h*w) e
   let cotD := chanLNTensor3Back c h w ε ng d (cnxCotN γlsB Wex bex Wpr bpr nl g e dyOut)
-  fun i => (depthwiseFlat_has_vjp (h := h) (w := w) Wdw bdw).backward xin cotD i + dyOut i
+  fun i => (depthwiseFlatHasVJP (h := h) (w := w) Wdw bdw).backward xin cotD i + dyOut i
 
 /-- Downsample input cotangent (at `ci·(2h)·(2w)`): the channel-LN input-VJP of the
     strided-conv-back. No skip. -/
@@ -347,7 +347,7 @@ noncomputable def cnxDownCotInChAt {ci co h w : Nat} (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) : Vec (ci*(2*h)*(2*w)) :=
   let n := chanLNTensor3 ci (2*h) (2*w) ε dng dnbt xin
-  let cotN := (flatConvStride2_has_vjp Wd bd).backward n dyOut
+  let cotN := (flatConvStride2HasVJP Wd bd).backward n dyOut
   chanLNTensor3Back ci (2*h) (2*w) ε dng xin cotN
 
 /-- The cotangent at the last block output `xhead` (= s3b2's `dyOut`): `gap-back(headLN-back(
@@ -358,9 +358,9 @@ noncomputable def cnxHeadDyXheadCh {h w : Nat} (ε : ℝ)
     (xhead : Vec (768*h*w)) (g : Vec 10) : Vec (768*h*w) :=
   let gap : Vec (1*768) := globalAvgPoolFlat 768 h w xhead
   let hn : Vec 768 := rowLNVecFlat 1 768 ε hng hnbt gap
-  let cotHn : Vec (1*768) := (dense_has_vjp Wfc bfc).backward hn g
+  let cotHn : Vec (1*768) := (denseHasVJP Wfc bfc).backward hn g
   let cotGap : Vec 768 := rowLNVecFlatBack 1 768 ε hng gap cotHn
-  (globalAvgPoolFlat_has_vjp 768 h w).backward xhead cotGap
+  (globalAvgPoolFlatHasVJP 768 h w).backward xhead cotGap
 
 /-! ## Input-only `*TiedAt` wrappers — compute internals from a block's input
 
@@ -520,7 +520,7 @@ abbrev TiedAt {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
   cnxBlockChTiedAt xN wN bN gN epsStr lrStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL
     xin dyOut lr
 
-theorem tiedAt {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
+theorem tied_at {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (xin dyOut : Vec (c*h*w)) (lr : ℝ) : p.TiedAt xN wN bN gN epsStr lrStr cotN ε xin dyOut lr :=
   cnx_block_ch_tiedAt xN wN bN gN epsStr lrStr cotN ε _ _ _ _ _ _ _ _ _ xin dyOut lr
 
@@ -542,7 +542,7 @@ abbrev TiedAt {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) : Prop :=
   cnxDownChTiedAt xN wN bN gN epsStr lrStr cotN ε p.G p.T p.W p.B xin dyOut lr
 
-theorem tiedAt {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
+theorem tied_at {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) :
     p.TiedAt xN wN bN gN epsStr lrStr cotN ε xin dyOut lr :=
   cnx_down_ch_tiedAt xN wN bN gN epsStr lrStr cotN ε _ _ _ _ xin dyOut lr
@@ -553,8 +553,8 @@ end CnxTieDown
 
 The `convNextTrainStepFaithfulV` forward threaded: block inputs are the forward prefixes
 (`cnxStemFwdO` / `cnxBlockFwdChO` / `cnxDownFwdChO`), and the backward cotangents are composed
-from the loss `g = softmax(logits) − onehot` down through dense (`dense_has_vjp`) + the head LN +
-GAP (`globalAvgPoolFlat_has_vjp`) + every block's backward, with the residual fan-in `+ dyOut` at
+from the loss `g = softmax(logits) − onehot` down through dense (`denseHasVJP`) + the head LN +
+GAP (`globalAvgPoolFlatHasVJP`) + every block's backward, with the residual fan-in `+ dyOut` at
 each of the eighteen identity-skip merges, the channel-LN-back at each of the three downsamples,
 and the stem LN's own back before the patchify conv's gradients. Each stem / block / down / head
 tie then holds at its real input + threaded cotangent. The full §1a tie: the whole [3,3,9,3]
@@ -659,27 +659,27 @@ theorem cnx_net_tied_certified
   intro ib1 ib2 ib3 ibD0 ib4 ib5 ib6 ibD1 ib7 ib8 ib9 ib10 ib11 ib12 ib13 ib14 ib15 ibD2 ib16 ib17 ib18 xhead gap hn g dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
   refine ⟨cnx_stem_ch_tiedAt xN wN bN gN epsStr lrStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem lr,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact w.b1.tiedAt xN wN bN gN epsStr lrStr cotN ε ib1 dyO1 lr
-  · exact w.b2.tiedAt xN wN bN gN epsStr lrStr cotN ε ib2 dyO2 lr
-  · exact w.b3.tiedAt xN wN bN gN epsStr lrStr cotN ε ib3 dyO3 lr
-  · exact w.d0.tiedAt xN wN bN gN epsStr lrStr cotN ε ibD0 dyD0 lr
-  · exact w.b4.tiedAt xN wN bN gN epsStr lrStr cotN ε ib4 dyO4 lr
-  · exact w.b5.tiedAt xN wN bN gN epsStr lrStr cotN ε ib5 dyO5 lr
-  · exact w.b6.tiedAt xN wN bN gN epsStr lrStr cotN ε ib6 dyO6 lr
-  · exact w.d1.tiedAt xN wN bN gN epsStr lrStr cotN ε ibD1 dyD1 lr
-  · exact w.b7.tiedAt xN wN bN gN epsStr lrStr cotN ε ib7 dyO7 lr
-  · exact w.b8.tiedAt xN wN bN gN epsStr lrStr cotN ε ib8 dyO8 lr
-  · exact w.b9.tiedAt xN wN bN gN epsStr lrStr cotN ε ib9 dyO9 lr
-  · exact w.b10.tiedAt xN wN bN gN epsStr lrStr cotN ε ib10 dyO10 lr
-  · exact w.b11.tiedAt xN wN bN gN epsStr lrStr cotN ε ib11 dyO11 lr
-  · exact w.b12.tiedAt xN wN bN gN epsStr lrStr cotN ε ib12 dyO12 lr
-  · exact w.b13.tiedAt xN wN bN gN epsStr lrStr cotN ε ib13 dyO13 lr
-  · exact w.b14.tiedAt xN wN bN gN epsStr lrStr cotN ε ib14 dyO14 lr
-  · exact w.b15.tiedAt xN wN bN gN epsStr lrStr cotN ε ib15 dyO15 lr
-  · exact w.d2.tiedAt xN wN bN gN epsStr lrStr cotN ε ibD2 dyD2 lr
-  · exact w.b16.tiedAt xN wN bN gN epsStr lrStr cotN ε ib16 dyO16 lr
-  · exact w.b17.tiedAt xN wN bN gN epsStr lrStr cotN ε ib17 dyO17 lr
-  · exact w.b18.tiedAt xN wN bN gN epsStr lrStr cotN ε ib18 dyO18 lr
+  · exact w.b1.tied_at xN wN bN gN epsStr lrStr cotN ε ib1 dyO1 lr
+  · exact w.b2.tied_at xN wN bN gN epsStr lrStr cotN ε ib2 dyO2 lr
+  · exact w.b3.tied_at xN wN bN gN epsStr lrStr cotN ε ib3 dyO3 lr
+  · exact w.d0.tied_at xN wN bN gN epsStr lrStr cotN ε ibD0 dyD0 lr
+  · exact w.b4.tied_at xN wN bN gN epsStr lrStr cotN ε ib4 dyO4 lr
+  · exact w.b5.tied_at xN wN bN gN epsStr lrStr cotN ε ib5 dyO5 lr
+  · exact w.b6.tied_at xN wN bN gN epsStr lrStr cotN ε ib6 dyO6 lr
+  · exact w.d1.tied_at xN wN bN gN epsStr lrStr cotN ε ibD1 dyD1 lr
+  · exact w.b7.tied_at xN wN bN gN epsStr lrStr cotN ε ib7 dyO7 lr
+  · exact w.b8.tied_at xN wN bN gN epsStr lrStr cotN ε ib8 dyO8 lr
+  · exact w.b9.tied_at xN wN bN gN epsStr lrStr cotN ε ib9 dyO9 lr
+  · exact w.b10.tied_at xN wN bN gN epsStr lrStr cotN ε ib10 dyO10 lr
+  · exact w.b11.tied_at xN wN bN gN epsStr lrStr cotN ε ib11 dyO11 lr
+  · exact w.b12.tied_at xN wN bN gN epsStr lrStr cotN ε ib12 dyO12 lr
+  · exact w.b13.tied_at xN wN bN gN epsStr lrStr cotN ε ib13 dyO13 lr
+  · exact w.b14.tied_at xN wN bN gN epsStr lrStr cotN ε ib14 dyO14 lr
+  · exact w.b15.tied_at xN wN bN gN epsStr lrStr cotN ε ib15 dyO15 lr
+  · exact w.d2.tied_at xN wN bN gN epsStr lrStr cotN ε ibD2 dyD2 lr
+  · exact w.b16.tied_at xN wN bN gN epsStr lrStr cotN ε ib16 dyO16 lr
+  · exact w.b17.tied_at xN wN bN gN epsStr lrStr cotN ε ib17 dyO17 lr
+  · exact w.b18.tied_at xN wN bN gN epsStr lrStr cotN ε ib18 dyO18 lr
   · exact cnx_head_ch_tiedAt gN xN bN dN epsStr lrStr cotN cotN ε w.hG w.hT w.Wfc w.bfc xhead g lr
   · exact fun i j => cnx_dense_tied_totalloss xN wN lrStr cotN w.Wfc w.bfc hn label lr i j
   · exact cnxLossCot_den nlogN ohN (mnistLinear w.Wfc w.bfc hn) label

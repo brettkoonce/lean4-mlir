@@ -7,7 +7,7 @@ ViT-S is ViT-Ti widened: `D = 384 = 6 heads × 64` against Tiny's `192 = 3 × 64
 768, and everything else identical — same depth 12, same 16×16 patch grid, same block structure,
 same drop-path ramp. 22,050,664 parameters against Tiny's 5,717,416.
 
-⭐⭐ **The proof side needed nothing.** `Proofs.vitForwardKV_has_vjp` is already
+⭐⭐ **The proof side needed nothing.** `Proofs.vitForwardKVHasVJP` is already
 `∀ heads d_head mlpDim k`, and it is a GLOBAL `HasVJP` rather than the pointwise `_at` form the
 relu-family nets carry, because GELU/softmax/LayerNorm have no kink. The same theorem covers Tiny
 and Small at different arguments. What changed was the RENDERER: `ViTRenderB.lean`'s six

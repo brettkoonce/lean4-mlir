@@ -82,14 +82,14 @@ noncomputable def layerNormForward (n : Nat) (ε : ℝ) (γ β : ℝ)
 
     where `dxhat_i = gamma * dy_i`.
 
-    If you built `layerNorm_has_vjp` you'd discover it's `bn_has_vjp`
+    If you built `layerNormHasVJP` you'd discover it's `bnHasVJP`
     with the exact same proof. Rather than restate, we just reuse:
 -/
-noncomputable def layerNorm_has_vjp (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
+noncomputable def layerNormHasVJP (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     HasVJP (layerNormForward n ε γ β) := by
   -- layerNormForward is definitionally bnForward, so the BN VJP works as-is.
   show HasVJP (bnForward n ε γ β)
-  exact bn_has_vjp n ε γ β hε
+  exact bnHasVJP n ε γ β hε
 
 /-! ## Why this isn't a new chapter
 
@@ -204,11 +204,11 @@ theorem geluScalarDeriv_eq (x : ℝ) :
 
 /-- Differentiability of `geluScalar` as a scalar function. -/
 @[fun_prop]
-lemma geluScalar_diff : Differentiable ℝ geluScalar := by
+lemma geluScalar_differentiable : Differentiable ℝ geluScalar := by
   unfold geluScalar; fun_prop
 
 /-- Differentiability of `gelu D` as a function on `Vec D`. -/
-lemma gelu_diff (D : Nat) : Differentiable ℝ (gelu D) := by
+lemma gelu_differentiable (D : Nat) : Differentiable ℝ (gelu D) := by
   unfold gelu; fun_prop
 
 /-- **Partial derivative of GELU** — proved (planning/archive/VJP.md follow-up E).
@@ -220,16 +220,16 @@ lemma gelu_diff (D : Nat) : Differentiable ℝ (gelu D) := by
 theorem pdiv_gelu (n : Nat) (x : Vec n) (i j : Fin n) :
     pdiv (gelu n) x i j =
     if i = j then geluScalarDeriv (x i) else 0 :=
-  pdiv_elementwise geluScalar x (fun _ => geluScalar_diff _) i j
+  pdiv_elementwise geluScalar x (fun _ => geluScalar_differentiable _) i j
 
 /-- **GELU VJP**: elementwise multiply by the scalar derivative.
 
     `back(x, dy)_i = dy_i * geluScalarDeriv(x_i)`
 
-    Same template as ReLU (`relu_has_vjp`), Swish, h-swish. If your
+    Same template as ReLU (`reluHasVJP`), Swish, h-swish. If your
     activation has a diagonal Jacobian, this is the only proof you
     need — "collapse the diagonal sum." -/
-noncomputable def gelu_has_vjp (n : Nat) : HasVJP (gelu n) where
+noncomputable def geluHasVJP (n : Nat) : HasVJP (gelu n) where
   backward := fun x dy i => dy i * geluScalarDeriv (x i)
   correct := by
     intro x dy i
@@ -256,23 +256,23 @@ instance is pure boilerplate. For the book, we show the template once
 (ReLU, in `MLP.lean`) and assert that GELU follows the same pattern.
 -/
 
-/-- **Public correctness theorem for `gelu_has_vjp`**: the GELU
+/-- **Public correctness theorem for `geluHasVJP`**: the GELU
 backward (diagonal scaling by `geluScalarDeriv`) equals the
 `pdiv`-contracted Jacobian. -/
-theorem gelu_has_vjp_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (gelu_has_vjp n).backward x dy i =
+theorem geluHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
+    (geluHasVJP n).backward x dy i =
     ∑ j : Fin n, pdiv (gelu n) x i j * dy j :=
-  (gelu_has_vjp n).correct x dy i
+  (geluHasVJP n).correct x dy i
 
-/-- **Public correctness theorem for `layerNorm_has_vjp`**: LayerNorm
+/-- **Public correctness theorem for `layerNormHasVJP`**: LayerNorm
 reuses the BN proof template (LayerNorm is BN on a different axis), so
 the contract is identical — backward equals the `pdiv`-contracted
 Jacobian of `layerNormForward`. -/
-theorem layerNorm_has_vjp_correct (n : Nat) (ε γ β : ℝ) (hε : 0 < ε)
+theorem layerNormHasVJP_correct (n : Nat) (ε γ β : ℝ) (hε : 0 < ε)
     (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (layerNorm_has_vjp n ε γ β hε).backward x dy i =
+    (layerNormHasVJP n ε γ β hε).backward x dy i =
     ∑ j : Fin n, pdiv (layerNormForward n ε γ β) x i j * dy j :=
-  (layerNorm_has_vjp n ε γ β hε).correct x dy i
+  (layerNormHasVJP n ε γ β hε).correct x dy i
 
 /-! ## Swish (a.k.a. SiLU)
 
@@ -314,18 +314,18 @@ theorem swishScalarDeriv_eq (x : ℝ) :
 /-- Differentiability of `swishScalar`. The denominator `1 + exp(-x)` is
     always positive, so the quotient is smooth everywhere. -/
 @[fun_prop]
-lemma swishScalar_diff : Differentiable ℝ swishScalar := by
+lemma swishScalar_differentiable : Differentiable ℝ swishScalar := by
   rw [swishScalar_eq_mul_sigmoid]; fun_prop
 
 theorem hasDerivAt_swishScalar (x : ℝ) : HasDerivAt swishScalar (swishScalarDeriv x) x :=
-  (swishScalar_diff x).hasDerivAt
+  (swishScalar_differentiable x).hasDerivAt
 
 /-- Differentiability of `swish D` as a function on `Vec D`. -/
-lemma swish_diff (D : Nat) : Differentiable ℝ (swish D) := by
+lemma swish_differentiable (D : Nat) : Differentiable ℝ (swish D) := by
   unfold swish; fun_prop
 
 @[fun_prop]
-lemma swish_continuous (D : Nat) : Continuous (swish D) := (swish_diff D).continuous
+lemma swish_continuous (D : Nat) : Continuous (swish D) := (swish_differentiable D).continuous
 
 /-- **Partial derivative of Swish** — diagonal Jacobian: each output coord
     depends only on the corresponding input coord via `swishScalar`
@@ -333,25 +333,25 @@ lemma swish_continuous (D : Nat) : Continuous (swish D) := (swish_diff D).contin
 theorem pdiv_swish (n : Nat) (x : Vec n) (i j : Fin n) :
     pdiv (swish n) x i j =
     if i = j then swishScalarDeriv (x i) else 0 :=
-  pdiv_elementwise swishScalar x (fun _ => swishScalar_diff _) i j
+  pdiv_elementwise swishScalar x (fun _ => swishScalar_differentiable _) i j
 
 /-- **Swish VJP**: elementwise multiply by the scalar derivative.
     Same template as ReLU/GELU. The codegen emits the closed-form
     `σ(x)·(1 + x·(1 - σ(x)))` directly; `swishScalarDeriv_eq` equates it
     with `swishScalarDeriv = deriv swishScalar`. -/
-noncomputable def swish_has_vjp (n : Nat) : HasVJP (swish n) where
+noncomputable def swishHasVJP (n : Nat) : HasVJP (swish n) where
   backward := fun x dy i => dy i * swishScalarDeriv (x i)
   correct := by
     intro x dy i
     simp [pdiv_swish, mul_comm]
 
-/-- **Public correctness theorem for `swish_has_vjp`**: diagonal scaling
+/-- **Public correctness theorem for `swishHasVJP`**: diagonal scaling
     by `swishScalarDeriv` equals the `pdiv`-contracted Jacobian of
     `swish n`. -/
-theorem swish_has_vjp_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (swish_has_vjp n).backward x dy i =
+theorem swishHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
+    (swishHasVJP n).backward x dy i =
     ∑ j : Fin n, pdiv (swish n) x i j * dy j :=
-  (swish_has_vjp n).correct x dy i
+  (swishHasVJP n).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Layer scale (per-channel learnable elementwise scale)
@@ -377,18 +377,18 @@ theorem pdiv_layerScale {n : Nat} (γ : Vec n) (x : Vec n) (i j : Fin n) :
   · simp [layerScale, h, Ne.symm h]
 
 /-- **Layer scale VJP**: `back(x, dy)_i = γ i * dy i`. -/
-noncomputable def layerScale_has_vjp {n : Nat} (γ : Vec n) :
+noncomputable def layerScaleHasVJP {n : Nat} (γ : Vec n) :
     HasVJP (layerScale γ) where
   backward := fun _x dy i => γ i * dy i
   correct := by
     intro x dy i
     simp [pdiv_layerScale]
 
-theorem layerScale_has_vjp_correct {n : Nat} (γ : Vec n)
+theorem layerScaleHasVJP_correct {n : Nat} (γ : Vec n)
     (x dy : Vec n) (i : Fin n) :
-    (layerScale_has_vjp γ).backward x dy i =
+    (layerScaleHasVJP γ).backward x dy i =
     ∑ j : Fin n, pdiv (layerScale γ) x i j * dy j :=
-  (layerScale_has_vjp γ).correct x dy i
+  (layerScaleHasVJP γ).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Vector-[D] LayerNorm — per-token forward + VJP, and its per-token (rowwise) lift
@@ -400,7 +400,7 @@ theorem layerScale_has_vjp_correct {n : Nat} (γ : Vec n)
 noncomputable def layerNormVec (D : Nat) (ε : ℝ) (γv βv : Vec D) (x : Vec D) : Vec D :=
   fun k => γv k * layerNormForward D ε 1 0 x k + βv k
 
-lemma layerNormVec_diff (D : Nat) (ε : ℝ) (γv βv : Vec D) (hε : 0 < ε) :
+lemma layerNormVec_differentiable (D : Nat) (ε : ℝ) (γv βv : Vec D) (hε : 0 < ε) :
     Differentiable ℝ (layerNormVec D ε γv βv) := by
   have h : Differentiable ℝ (layerNormForward D ε 1 0) := bnForward_differentiable D ε 1 0 hε
   unfold layerNormVec; fun_prop
@@ -425,7 +425,7 @@ theorem pdiv_maskGather_add_const {m D : Nat} (mask : Vec m) (σ : Fin m → Fin
   simp only [basisVec_apply, @eq_comm _ (σ j) i]
 
 /-- The bias translation's VJP — backward is the identity (`dx = dy`). -/
-noncomputable def biasAdd_has_vjp {n : Nat} (βv : Vec n) :
+noncomputable def biasAddHasVJP {n : Nat} (βv : Vec n) :
     HasVJP (fun z : Vec n => fun k => z k + βv k) where
   backward := fun _z dy => dy
   correct := by
@@ -433,39 +433,39 @@ noncomputable def biasAdd_has_vjp {n : Nat} (βv : Vec n) :
     simp [pdiv_id_add_const βv z]
 
 /-- **Vector-LN VJP** — `(+β) ∘ layerScale γ ∘ LN(1,0)`, three proven pieces glued
-    by `vjp_comp`. Only `0 < ε`. -/
-noncomputable def layerNormVec_has_vjp (D : Nat) (ε : ℝ) (γv βv : Vec D)
+    by `vjpComp`. Only `0 < ε`. -/
+noncomputable def layerNormVecHasVJP (D : Nat) (ε : ℝ) (γv βv : Vec D)
     (hε : 0 < ε) : HasVJP (layerNormVec D ε γv βv) :=
   have h1 : Differentiable ℝ (layerNormForward D ε 1 0) :=
     bnForward_differentiable D ε 1 0 hε
   have h2 : Differentiable ℝ (layerScale γv) := layerScale_differentiable γv
   have h3 : Differentiable ℝ (fun z : Vec D => fun k => z k + βv k) := by fun_prop
-  vjp_comp _ (fun z : Vec D => fun k => z k + βv k) (h2.comp h1) h3
-    (vjp_comp (layerNormForward D ε 1 0) (layerScale γv) h1 h2
-      (layerNorm_has_vjp D ε 1 0 hε) (layerScale_has_vjp γv))
-    (biasAdd_has_vjp βv)
+  vjpComp _ (fun z : Vec D => fun k => z k + βv k) (h2.comp h1) h3
+    (vjpComp (layerNormForward D ε 1 0) (layerScale γv) h1 h2
+      (layerNormHasVJP D ε 1 0 hε) (layerScaleHasVJP γv))
+    (biasAddHasVJP βv)
 
 /-- Per-token vector-LN across a sequence — the rowwise lift. -/
-noncomputable def layerNormVec_per_token_has_vjp_mat (N D : Nat) (ε : ℝ)
+noncomputable def layerNormVecPerTokenHasVJPMat (N D : Nat) (ε : ℝ)
     (γv βv : Vec D) (hε : 0 < ε) :
     HasVJPMat (fun X : Mat N D => fun r => layerNormVec D ε γv βv (X r)) :=
-  rowwise_has_vjp_mat (layerNormVec_has_vjp D ε γv βv hε)
-    (layerNormVec_diff D ε γv βv hε)
+  rowwiseHasVJPMat (layerNormVecHasVJP D ε γv βv hε)
+    (layerNormVec_differentiable D ε γv βv hε)
 
 /-- Generic flat differentiability of a rowwise lift — each output coordinate
     is a coordinate of the per-row map applied to one row of the input. -/
-lemma rowwise_flat_diff {N D P : Nat} (g : Vec D → Vec P)
+lemma rowwise_flat_differentiable {N D P : Nat} (g : Vec D → Vec P)
     (hg : Differentiable ℝ g) :
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten ((fun X : Mat N D => fun n => g (X n)) (Mat.unflatten v))) := by
   unfold Mat.flatten Mat.unflatten; fun_prop
 
-lemma layerNormVec_per_token_flat_diff (N D : Nat) (ε : ℝ) (γv βv : Vec D)
+lemma layerNormVec_per_token_flat_differentiable (N D : Nat) (ε : ℝ) (γv βv : Vec D)
     (hε : 0 < ε) :
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten ((fun X : Mat N D => fun n => layerNormVec D ε γv βv (X n))
                    (Mat.unflatten v))) :=
-  rowwise_flat_diff _ (layerNormVec_diff D ε γv βv hε)
+  rowwise_flat_differentiable _ (layerNormVec_differentiable D ε γv βv hε)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Vector-LN γ/β parameter gradients
@@ -518,43 +518,43 @@ theorem pdiv_vecLN_beta {N D : Nat} (ε : ℝ) (γv : Vec D) (X : Mat N D)
 
 /-- The rendered **vector-LN γ gradient**: per-channel, the batch+token reduce
     `dγ_k = Σ_r dY_(r,k)·x̂_r(k)` (KEEPS the channel axis — `ViTRender`'s form). -/
-noncomputable def vecLN_grad_gamma (N D : Nat) (ε : ℝ) (X dY : Mat N D) : Vec D :=
+noncomputable def vecLNGradGamma (N D : Nat) (ε : ℝ) (X dY : Mat N D) : Vec D :=
   fun i => ∑ r : Fin N, dY r i * layerNormForward D ε 1 0 (X r) i
 
 /-- The rendered **vector-LN β gradient**: `dβ_k = Σ_r dY_(r,k)`. -/
-noncomputable def vecLN_grad_beta (N D : Nat) (dY : Mat N D) : Vec D :=
+noncomputable def vecLNGradBeta (N D : Nat) (dY : Mat N D) : Vec D :=
   fun i => ∑ r : Fin N, dY r i
 
 /-- **Vector-LN γ-gradient bridge.** -/
 theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Vec D)
     (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
-    vecLN_grad_gamma N D ε X (Mat.unflatten dy) i
+    vecLNGradGamma N D ε X (Mat.unflatten dy) i
       = ∑ o : Fin (N * D),
           pdiv (fun gv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
             * dy o := by
   simp_rw [pdiv_vecLN_gamma]
   rw [sum_finProdFinEquiv (m := N) (n := D)]
-  simp [vecLN_grad_gamma, Mat.unflatten, mul_comm]
+  simp [vecLNGradGamma, Mat.unflatten, mul_comm]
 
 /-- **Vector-LN β-gradient bridge.** -/
 theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec D)
     (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
-    vecLN_grad_beta N D (Mat.unflatten dy) i
+    vecLNGradBeta N D (Mat.unflatten dy) i
       = ∑ o : Fin (N * D),
           pdiv (fun bv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
             * dy o := by
   simp_rw [pdiv_vecLN_beta]
   rw [sum_finProdFinEquiv (m := N) (n := D)]
-  simp [vecLN_grad_beta, Mat.unflatten]
+  simp [vecLNGradBeta, Mat.unflatten]
 
 /-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes
     the certified rowwise vector-LN ∂/∂γv contraction. Covers all five LN sites of
     the vector-LN representative (and is the `ViTRender` per-channel LN-γ reduce). -/
 theorem vit_render_veclngamma_certified {N D : Nat} (ε : ℝ) (βv : Vec D)
     (γ : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
-    γ i - lr * vecLN_grad_gamma N D ε X (Mat.unflatten dy) i
+    γ i - lr * vecLNGradGamma N D ε X (Mat.unflatten dy) i
       = γ i - lr * ∑ o : Fin (N * D),
           pdiv (fun gv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
@@ -564,7 +564,7 @@ theorem vit_render_veclngamma_certified {N D : Nat} (ε : ℝ) (βv : Vec D)
 /-- **Vector-LN β output, certified.** -/
 theorem vit_render_veclnbeta_certified {N D : Nat} (ε : ℝ) (γv : Vec D)
     (β : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
-    β i - lr * vecLN_grad_beta N D (Mat.unflatten dy) i
+    β i - lr * vecLNGradBeta N D (Mat.unflatten dy) i
       = β i - lr * ∑ o : Fin (N * D),
           pdiv (fun bv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o

@@ -160,7 +160,7 @@ theorem patchEmbedWeightGradB_den {ic H W P tk D N : Nat} (xN cotN : String)
         (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw))
       = ∑ n : Fin N, ∑ o : Fin ((tk + 1) * D),
           pdiv (fun v : Vec (D * ic * P * P) =>
-                  patchEmbed_flat ic H W P tk D (Kernel4.unflatten v) bc cls pos
+                  patchEmbedFlat ic H W P tk D (Kernel4.unflatten v) bc cls pos
                     (batchSlice N (ic * H * W) img n))
             (Kernel4.flatten Wp)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
@@ -179,7 +179,7 @@ theorem patchEmbedBiasGradB_den {ic H W P tk D N : Nat} (cotN : String)
     den (SHlo.patchEmbedBiasGradB (N := N) (tk := tk) (c := D) (.operand cotN dy)) i
       = ∑ n : Fin N, ∑ o : Fin ((tk + 1) * D),
           pdiv (fun b' : Vec D =>
-                  patchEmbed_flat ic H W P tk D Wc b' cls pos
+                  patchEmbedFlat ic H W P tk D Wc b' cls pos
                     (batchSlice N (ic * H * W) img n)) bc i o
             * batchSlice N ((tk + 1) * D) dy n o := by
   simp only [denStep, denStepApp]
@@ -198,7 +198,7 @@ theorem posEmbedGradB_den {ic H W P tk D N : Nat} (cotN : String)
     den (SHlo.posEmbedGradB (N := N) (tk := tk) (D := D) (.operand cotN dy)) i
       = ∑ n : Fin N, ∑ o : Fin ((tk + 1) * D),
           pdiv (fun p : Vec ((tk + 1) * D) =>
-                  patchEmbed_flat ic H W P tk D Wc bc cls (Mat.unflatten p)
+                  patchEmbedFlat ic H W P tk D Wc bc cls (Mat.unflatten p)
                     (batchSlice N (ic * H * W) img n))
             (Mat.flatten pos) i o
             * batchSlice N ((tk + 1) * D) dy n o := by
@@ -228,7 +228,7 @@ theorem clsGrad_denB {N : Nat} (cotN : String)
             (.operand cotN (batchMap N (clsSliceFlat 196 192) dyEmbed))) i
       = ∑ n : Fin N, ∑ j : Fin (197 * 192),
           pdiv (fun cl : Vec 192 =>
-                  patchEmbed_flat 3 224 224 16 196 192 Wc bc cl pos
+                  patchEmbedFlat 3 224 224 16 196 192 Wc bc cl pos
                     (batchSlice N (3 * 224 * 224) img n)) cls i j
             * batchSlice N (197 * 192) dyEmbed n j := by
   simp only [denStep, denStepApp]
@@ -262,7 +262,7 @@ theorem headWGradB_den {N D nC : Nat} (aN cotN : String)
   simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
-  exact dense_weight_grad_correct Wc bc (batchSlice N D a n) (batchSlice N nC cot n) i j
+  exact denseWeightGrad_correct Wc bc (batchSlice N D a n) (batchSlice N nC cot n) i j
 
 /-- **Batched classifier bias GRADIENT denotes the certified cotangent, PER EXAMPLE.**
 
@@ -275,7 +275,7 @@ theorem headBGradB_den {N D nC : Nat} (cotN : String)
     batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN cot))) n i
       = ∑ j : Fin nC, pdiv (fun b' : Vec nC => dense Wc b' a) bc i j * batchSlice N nC cot n j := by
   simp only [denStep]
-  exact dense_bias_grad_correct Wc bc a (batchSlice N nC cot n) i
+  exact denseBiasGrad_correct Wc bc a (batchSlice N nC cot n) i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one batched gradient node each (each its `_den` lemma's statement with the index

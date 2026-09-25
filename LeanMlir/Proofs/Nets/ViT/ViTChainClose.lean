@@ -13,7 +13,7 @@ The chain composes the *rendered* backward denotations — exactly the Item B re
 backward tokens: per-token dense input-VJP (`denseRowBack`'s denotation
 `rowDenseBackFlat` = rowwise `dX = W·dy`), the GELU mask (`dy ⊙ geluScalarDeriv` at the
 saved pre-GELU), the rowwise scalar-LN input-VJP (`lnRowBack`'s denotation
-`rowLNBackFlat` = rowwise `bn_grad_input`), the row-softmax backward (`softmaxRowBack`'s
+`rowLNBackFlat` = rowwise `bnGradInput`), the row-softmax backward (`softmaxRowBack`'s
 denotation `rowSoftmaxBackFlat`, recomputing the weights from the saved pre-softmax
 scores), and the **SDPA matmuls spelled with the forward `matmulF`/`transposeF` on
 cotangents** (`matMulFlat`/`transposeFlat`):
@@ -28,7 +28,7 @@ cotangents SUM (`vitCotLn1`), the `biPath` fan-in at width 3.
 
 **The substantive new ties** (`vitCotD{Q,K,V}_eq_sdpa_back_{Q,K,V}`): at the pinned saved
 activations (pre-softmax scores = the scaled `Q·Kᵀ`, post-softmax weights =
-`sdpa_weights`), the matmul-spelled chain segments ARE the proven closed forms
+`sdpaWeights`), the matmul-spelled chain segments ARE the proven closed forms
 `sdpa_back_{Q,K,V}` (Attention.lean) — `dP = dO·Vᵀ → softmax-back → ·1/√d → dQ = dS·K /
 dK = dSᵀ·Q / dV = Pᵀ·dO`, flattened. So the rendered attention backward is pinned to the
 audited SDPA backward suite. 3-axiom clean.
@@ -78,13 +78,13 @@ noncomputable def vitCotDS {Np1 D : Nat} (ss : Vec (Np1 * Np1))
 /-- `dQ = (1/√d · dS)·K` against the saved `k`. -/
 noncomputable def vitCotDQ {Np1 D : Nat} (d : Nat) (ss : Vec (Np1 * Np1))
     (k v dAtt : Vec (Np1 * D)) : Vec (Np1 * D) :=
-  matMulFlat Np1 Np1 D (fun i => sdpa_scale d * vitCotDS ss v dAtt i) k
+  matMulFlat Np1 Np1 D (fun i => sdpaScale d * vitCotDS ss v dAtt i) k
 
 /-- `dK = (1/√d · dS)ᵀ·Q` against the saved `q`. -/
 noncomputable def vitCotDK {Np1 D : Nat} (d : Nat) (ss : Vec (Np1 * Np1))
     (q v dAtt : Vec (Np1 * D)) : Vec (Np1 * D) :=
   matMulFlat Np1 Np1 D
-    (transposeFlat Np1 Np1 (fun i => sdpa_scale d * vitCotDS ss v dAtt i)) q
+    (transposeFlat Np1 Np1 (fun i => sdpaScale d * vitCotDS ss v dAtt i)) q
 
 /-- `dV = Pᵀ·dAtt` against the saved post-softmax weights `p`. -/
 noncomputable def vitCotDV {Np1 D : Nat} (p : Vec (Np1 * Np1))
@@ -110,54 +110,54 @@ noncomputable def vitCotFl (N D nClasses : Nat) (Wcls : Mat D nClasses)
 -- ════════════════════════════════════════════════════════════════
 
 /-- `dP`-segment tie: the rendered `matmulF(dOut, transposeF V)` is the proven
-    `sdpa_dWeights V dOut = dOut·Vᵀ`, flattened. -/
-theorem vitCotDP_eq_sdpa_dWeights (Np1 d : Nat) (V dOut : Mat Np1 d) :
+    `sdpaDWeights V dOut = dOut·Vᵀ`, flattened. -/
+theorem vitCotDP_eq_sdpaDWeights (Np1 d : Nat) (V dOut : Mat Np1 d) :
     vitCotDP (Mat.flatten V) (Mat.flatten dOut)
-      = Mat.flatten (sdpa_dWeights V dOut) := by
-  unfold vitCotDP sdpa_dWeights
+      = Mat.flatten (sdpaDWeights V dOut) := by
+  unfold vitCotDP sdpaDWeights
   rw [transposeFlat_flat, matMulFlat_flat]
 
-/-- **`dV` tie**: at the saved post-softmax weights (`sdpa_weights Q K`), the rendered
-    `matmulF(transposeF P, dOut)` IS the proven `sdpa_back_V = weightsᵀ·dOut`. -/
-theorem vitCotDV_eq_sdpa_back_V (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
-    vitCotDV (Mat.flatten (sdpa_weights Np1 d Q K)) (Mat.flatten dOut)
-      = Mat.flatten (sdpa_back_V Np1 d Q K V dOut) := by
-  unfold vitCotDV sdpa_back_V
+/-- **`dV` tie**: at the saved post-softmax weights (`sdpaWeights Q K`), the rendered
+    `matmulF(transposeF P, dOut)` IS the proven `sdpaBackV = weightsᵀ·dOut`. -/
+theorem vitCotDV_eq_sdpaBackV (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
+    vitCotDV (Mat.flatten (sdpaWeights Np1 d Q K)) (Mat.flatten dOut)
+      = Mat.flatten (sdpaBackV Np1 d Q K V dOut) := by
+  unfold vitCotDV sdpaBackV
   rw [transposeFlat_flat, matMulFlat_flat]
 
 /-- `dS`-segment tie: `softmaxRowBack`'s denotation, recomputing the weights from the
-    saved pre-softmax scaled scores, applied to the flattened `sdpa_dWeights`, IS the
-    proven `sdpa_dScaled` (the per-row `pᵢ⊙(dwᵢ − ⟨pᵢ,dwᵢ⟩)` closed form). -/
-theorem vitCotDS_eq_sdpa_dScaled (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
-    vitCotDS (Mat.flatten (fun i j => sdpa_scale d * Mat.mul Q (Mat.transpose K) i j))
+    saved pre-softmax scaled scores, applied to the flattened `sdpaDWeights`, IS the
+    proven `sdpaDScaled` (the per-row `pᵢ⊙(dwᵢ − ⟨pᵢ,dwᵢ⟩)` closed form). -/
+theorem vitCotDS_eq_sdpaDScaled (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
+    vitCotDS (Mat.flatten (fun i j => sdpaScale d * Mat.mul Q (Mat.transpose K) i j))
         (Mat.flatten V) (Mat.flatten dOut)
-      = Mat.flatten (sdpa_dScaled Np1 d Q K V dOut) := by
+      = Mat.flatten (sdpaDScaled Np1 d Q K V dOut) := by
   unfold vitCotDS
-  rw [vitCotDP_eq_sdpa_dWeights]
-  unfold rowSoftmaxBackFlat sdpa_dScaled sdpa_weights rowSoftmax
+  rw [vitCotDP_eq_sdpaDWeights]
+  unfold rowSoftmaxBackFlat sdpaDScaled sdpaWeights rowSoftmax
   rw [Mat.unflatten_flatten, Mat.unflatten_flatten]
 
 /-- **`dQ` tie**: at the saved activations, the rendered
     `matmulF(scaleF(softmaxRowBack(matmulF(dOut, transposeF V))), K)` IS the proven
-    `sdpa_back_Q = (1/√d · softmax-back(dOut·Vᵀ))·K`. -/
-theorem vitCotDQ_eq_sdpa_back_Q (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
-    vitCotDQ d (Mat.flatten (fun i j => sdpa_scale d * Mat.mul Q (Mat.transpose K) i j))
+    `sdpaBackQ = (1/√d · softmax-back(dOut·Vᵀ))·K`. -/
+theorem vitCotDQ_eq_sdpaBackQ (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
+    vitCotDQ d (Mat.flatten (fun i j => sdpaScale d * Mat.mul Q (Mat.transpose K) i j))
         (Mat.flatten K) (Mat.flatten V) (Mat.flatten dOut)
-      = Mat.flatten (sdpa_back_Q Np1 d Q K V dOut) := by
+      = Mat.flatten (sdpaBackQ Np1 d Q K V dOut) := by
   unfold vitCotDQ
-  rw [vitCotDS_eq_sdpa_dScaled, scale_flat, matMulFlat_flat]
-  unfold sdpa_back_Q sdpa_dScores
+  rw [vitCotDS_eq_sdpaDScaled, scale_flat, matMulFlat_flat]
+  unfold sdpaBackQ sdpaDScores
   rfl
 
 /-- **`dK` tie**: likewise the rendered transposed chain IS the proven
-    `sdpa_back_K = (1/√d · softmax-back(dOut·Vᵀ))ᵀ·Q`. -/
-theorem vitCotDK_eq_sdpa_back_K (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
-    vitCotDK d (Mat.flatten (fun i j => sdpa_scale d * Mat.mul Q (Mat.transpose K) i j))
+    `sdpaBackK = (1/√d · softmax-back(dOut·Vᵀ))ᵀ·Q`. -/
+theorem vitCotDK_eq_sdpaBackK (Np1 d : Nat) (Q K V dOut : Mat Np1 d) :
+    vitCotDK d (Mat.flatten (fun i j => sdpaScale d * Mat.mul Q (Mat.transpose K) i j))
         (Mat.flatten Q) (Mat.flatten V) (Mat.flatten dOut)
-      = Mat.flatten (sdpa_back_K Np1 d Q K V dOut) := by
+      = Mat.flatten (sdpaBackK Np1 d Q K V dOut) := by
   unfold vitCotDK
-  rw [vitCotDS_eq_sdpa_dScaled, scale_flat, transposeFlat_flat, matMulFlat_flat]
-  unfold sdpa_back_K sdpa_dScores
+  rw [vitCotDS_eq_sdpaDScaled, scale_flat, transposeFlat_flat, matMulFlat_flat]
+  unfold sdpaBackK sdpaDScores
   rfl
 
 end Proofs

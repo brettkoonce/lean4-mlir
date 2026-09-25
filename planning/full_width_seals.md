@@ -47,7 +47,7 @@ ResNet-34 exists three times in the proof tree:
 |---|---|---|---|
 | parametric apex `Nets/ResNet/ResNet34.lean` | generic in stem / pool / chains / downsamples | ∀ pieces with VJPs | n/a — a lemma |
 | live 2-channel family `Nets/ResNet/ResNet34Live*`, `Training/ResNet34Live*Seal` (7 files, 1,992 lines) | structural instantiation of the apex: zero bodies, identity projections, whole-vector BN | at an exhibited point | levels 2 + 3, split across a depth × resolution grid no cell of which has both |
-| full-width batched `Nets/ResNet/ResNet34FullB` + `FullBVJP` + `BackCertifiedTieB` + `StepTieB` | 64→512, batch BN, 7×7/s2 stem, 3×3/s2 pool, [3,4,6,3]; the ImageNet artifacts | `resnet34ForwardB_full_has_vjp_at`: ∀ `w`, ∀ `x`, under 32 relu clauses + a stem clause + a pool no-tie, all pointwise in `(w, x)` | none |
+| full-width batched `Nets/ResNet/ResNet34FullB` + `FullBVJP` + `BackCertifiedTieB` + `StepTieB` | 64→512, batch BN, 7×7/s2 stem, 3×3/s2 pool, [3,4,6,3]; the ImageNet artifacts | `resnet34ForwardBFullHasVJPAt`: ∀ `w`, ∀ `x`, under 32 relu clauses + a stem clause + a pool no-tie, all pointwise in `(w, x)` | none |
 
 The seals sit on the proxy for a historical reason. The live family was built in August
 (`planning/archive/whole_network_backward.md`, Items A/B/D) to show the *apex's* clauses are
@@ -56,7 +56,7 @@ GAP is provably constant. The full-width batched tier landed in September with t
 clauses, and the question was never re-asked of it. MobileNetV2 has the same split — `Mnv2Live`
 (`Nets/MobileNet/MobileNetV2.lean:531-918`, on the per-example, whole-vector-BN, two-block
 `mobilenetv2Forward`) plus three `Training/MobileNetV2*Seal*` files — against
-`mobilenetv2ForwardB_full`. ResNet-50 and MobileNetV4 have no witness at all. `formalization.yaml`
+`mobilenetv2ForwardBFull`. ResNet-50 and MobileNetV4 have no witness at all. `formalization.yaml`
 §4 discloses exactly this.
 
 The fix is not to fill the proxy's grid (full depth × 224 on the live net, ~200 lines): it would
@@ -67,7 +67,7 @@ proxies. Everything transfers except the carrier (§3.2), which the real BatchNo
 
 Unchanged from archive §0. For a kinked net (relu / relu6 / maxpool) the honest targets are:
 
-1. **Conditional apex** `*_has_vjp_at` — the VJP at any `(w, x)` whose pre-activations dodge the
+1. **Conditional apex** `*HasVJPAt` — the VJP at any `(w, x)` whose pre-activations dodge the
    kinks. Done, full depth, for every net.
 2. **A non-degenerate witness** — one concrete `(w, x)` that discharges the whole clause bundle
    with genuine nonzero weights and has a non-constant forward.
@@ -85,13 +85,13 @@ numeric fact about millions of floats (archive Item F) and is what the training 
 
 | net | activations | whole-net VJP | pointwise clauses | witness today | action |
 |---|---|---|---|---|---|
-| ResNet-34 | relu, maxpool | `resnet34ForwardB_full_has_vjp_at` | 32 (`R34IdSmoothAt`/`R34DownSmoothAt`, two relus each) + `R34StemSmoothAt` + `R34PoolSmoothAt` | ✅ `ResNet34FullBSeal` | §4.1 done |
-| ResNet-50 | relu, maxpool | `resnet50ForwardB_full_has_vjp_at` (`q` binder: 224 and 160 px) | 48 (`R50IdSmoothAt`/`R50ProjSmoothAt`/`R50DownSmoothAt`, three relus each) + stem + pool | ✅ `ResNet50FullBSeal`, both resolutions | §4.2 done |
-| MobileNetV2 | relu6 | `mobilenetv2ForwardB_full_has_vjp_at` | 19 bundles: stem + `IVNoExpSmoothAtB` + `IVStridedSmoothAtB` ×4 + `IVSmoothAtB` ×12 + head, 35 relu6 sites, each a window `≠ 0 ∧ ≠ 6` — all weight-only | ✅ `MobileNetV2FullBSeal`; the `Mnv2Live` proxy is deleted | §4.3 done |
-| MobileNetV4-Conv-M | relu (UIB), swish (fused stage) | `mobilenetv4ForwardB_full_has_vjp_at` | one bundle `Mnv4SmoothAt`, 8 fields; per-group `.ok` unfolds per row; `fused` vacuous (swish); ⭐ every clause a relu on a BN output, so weight-only | ✅ `MobileNetV4FullBSeal` | §4.4 done |
-| EfficientNet-B0 | SiLU, sigmoid (SE) | `efficientnetForwardB_full_has_vjp` | none — `HasVJP`, only `0 < ε` | — | nothing |
-| ConvNeXt-T | GELU, LN | `convNextForwardTChB_has_vjp_at` | none — holds at every `x`, only `0 < ε` | — | nothing |
-| ViT-Tiny | GELU, softmax, LN | `vitTiny_has_vjp_correct` | none — only `0 < ε` | — | nothing |
+| ResNet-34 | relu, maxpool | `resnet34ForwardBFullHasVJPAt` | 32 (`R34IdSmoothAt`/`R34DownSmoothAt`, two relus each) + `R34StemSmoothAt` + `R34PoolSmoothAt` | ✅ `ResNet34FullBSeal` | §4.1 done |
+| ResNet-50 | relu, maxpool | `resnet50ForwardBFullHasVJPAt` (`q` binder: 224 and 160 px) | 48 (`R50IdSmoothAt`/`R50ProjSmoothAt`/`R50DownSmoothAt`, three relus each) + stem + pool | ✅ `ResNet50FullBSeal`, both resolutions | §4.2 done |
+| MobileNetV2 | relu6 | `mobilenetv2ForwardBFullHasVJPAt` | 19 bundles: stem + `IVNoExpSmoothAtB` + `IVStridedSmoothAtB` ×4 + `IVSmoothAtB` ×12 + head, 35 relu6 sites, each a window `≠ 0 ∧ ≠ 6` — all weight-only | ✅ `MobileNetV2FullBSeal`; the `Mnv2Live` proxy is deleted | §4.3 done |
+| MobileNetV4-Conv-M | relu (UIB), swish (fused stage) | `mobilenetv4ForwardBFullHasVJPAt` | one bundle `Mnv4SmoothAt`, 8 fields; per-group `.ok` unfolds per row; `fused` vacuous (swish); ⭐ every clause a relu on a BN output, so weight-only | ✅ `MobileNetV4FullBSeal` | §4.4 done |
+| EfficientNet-B0 | SiLU, sigmoid (SE) | `efficientnetForwardBFullHasVJP` | none — `HasVJP`, only `0 < ε` | — | nothing |
+| ConvNeXt-T | GELU, LN | `convNextForwardTChBHasVJPAt` | none — holds at every `x`, only `0 < ε` | — | nothing |
+| ViT-Tiny | GELU, softmax, LN | `vitTinyHasVJP_correct` | none — only `0 < ε` | — | nothing |
 
 **Why the three smooth nets need nothing.** A statement quantified over every weight and every
 input has no witness to be degenerate; the non-degeneracy program exists for pointwise
@@ -200,11 +200,11 @@ With `<net>` ∈ {`resnet34`, `resnet50`, `mobilenetv2`, `mobilenetv4`}, in a ne
 ```
 noncomputable def <net>SealW (nCls) : <Net>BWeights nCls        -- §3.1
 noncomputable def <net>SealX (t : ℝ) : Vec (2 * (3 * 224 * 224)) -- ramp + t • V
-theorem <net>Seal_clauses : <every hypothesis of *_has_vjp_at at (SealW, SealX 0)>
-noncomputable def <net>ForwardB_full_seal_has_vjp_at : HasVJPAt (<net>ForwardB_full 2 SealW) (SealX 0)
+theorem <net>Seal_clauses : <every hypothesis of *HasVJPAt at (SealW, SealX 0)>
+noncomputable def <net>ForwardB_full_sealHasVJPAt : HasVJPAt (<net>ForwardB_full 2 SealW) (SealX 0)
 theorem <net>ForwardB_full_nonconstant : <net>ForwardB_full 2 SealW (SealX 1) ≠ <net>ForwardB_full 2 SealW (SealX 0)
 theorem <net>ForwardB_full_jacobian_nonzero : fderiv ℝ (<net>ForwardB_full 2 SealW) (SealX 0) ≠ 0
-theorem <net>ForwardB_full_backward_nontrivial : ∃ j₀ i₀, (…seal_has_vjp_at).backward (basisVec j₀) i₀ ≠ 0
+theorem <net>ForwardB_full_backward_nontrivial : ∃ j₀ i₀, (…sealHasVJPAt).backward (basisVec j₀) i₀ ≠ 0
 ```
 
 The class count is a binder (`nCls`, with `Wd 0 0 = 1` needing `0 < nCls`); ResNet-50's `q` is
@@ -221,7 +221,7 @@ compositions, and it dies: "deep recursion" at `oc = 64, h = 112`, a determinist
 at `h = 16`, and 14 s of kernel time even at `h = 8`. The same statement with `N, ic, oc, h, w, kH,
 kW` all variables elaborates and kernel-checks instantly, and *instantiating a proved lemma is
 substitution* — no defeq at all. So: every block collapse, every nonnegativity, every clause
-bundle is a lemma at variables (`sealIdB_eq`, `sealDnB_eq`, `r34StemB_eq`, `sealIdSmooth`, …), and
+bundle is a lemma at variables (`sealIdB_eq`, `sealDnB_eq`, `r34StemB_eq`, `seal_id_smooth`, …), and
 the witness's numerals appear only in one-line applications of them. The same rule is why
 `sealStem_eq` was dropped in favour of a generic `r34StemB_eq`.
 
@@ -256,7 +256,7 @@ apex; consumed by `ResNet34BackCertifiedTie.lean` and `VerifiedNets.lean`) and
 `Training/JacobianSeal.lean` (the bridge). `ResNet34LiveGeneric`'s "∀ downsample kernels"
 generality is subsumed: the batched apex is already ∀ `w`.
 
-⚠ `resnet34_has_vjp_at`, the *parametric* per-example apex, now has no concrete instantiation —
+⚠ `resnet34HasVJPAt`, the *parametric* per-example apex, now has no concrete instantiation —
 the proxies were it. It stays audited as the skeleton and as `ResNet34BackCertifiedTie`'s fold
 target, and its docstring says so; the clause bundle it shares with the batched apex is what
 `ResNet34FullBSeal` discharges.
@@ -266,7 +266,7 @@ target, and its docstring says so; the clause bundle it shares with the batched 
 consequences (`bnBatchLA_const`, `bnBatchLA_abs_sub_le`/`_pos`, `bnBatchLA_exdiff`,
 `bnBatchLA_cell_inj`), `ctK` and its conv values, `maxPool3s2_shift`, `globalAvgPool_shift`, and
 the continuity odds and ends. `Nets/ResNet/ResNet34FullBSeal.lean` (1,194): weights, the collapses,
-the 35 discharged clauses, `sealVJP`, `sealDiffAt`, the `EDiff` chain, and
+the 35 discharged clauses, `sealVJP`, `seal_differentiableAt`, the `EDiff` chain, and
 `sealX_nonconstant` / `sealX_jacobian_nonzero` / `sealX_backward_nontrivial`. ⭐ The clause
 discharge turned out nearly **input-independent**: the identity block's mid-relu sees the constant
 `β₁ = 1` and the downsample's two clauses are weight-only, so only the pool's no-tie and the
@@ -276,7 +276,7 @@ transparent to a batch-uniform `+1` without the BN having to remove it.
 
 ### 4.2 ResNet-50 — DONE 2026-09-20
 
-`Nets/ResNet/ResNet50FullBSeal.lean` (1,135 lines), on `resnet50ForwardB_full` itself. Retires
+`Nets/ResNet/ResNet50FullBSeal.lean` (1,135 lines), on `resnet50ForwardBFull` itself. Retires
 nothing (no proxy existed); closes the "ResNet-50 has no witness" gap, which §4.1 had made the yaml
 disclose.
 
@@ -287,14 +287,14 @@ disclose.
   wants a bound at all. ⚠ Every shape is written as the net's own `2 * (…)` nest, never a product
   like `8 * q`, for the reason `ResNet50FullB.lean`'s header records;
 * **a stride-1 projection.** Stage 1 block 0's skip is `projB`, so the carrier needs the kit's
-  stride-1 `EDiff_conv` beside the strided one — and it is the fifth carrier BN (§3.2);
+  stride-1 `eDiff_conv` beside the strided one — and it is the fifth carrier BN (§3.2);
 * **three relu clauses per block, two of them weight-only.** The bottleneck's `hm2` sits after the
   3×3, but with `W₂` zeroed it sees a constant channel, so it is `β₂ = 1 ≠ 0` and needs nothing of
   the activation. As at ResNet-34, only the post-residual clause does, and only through `0 ≤ ·`.
 
 **The kit absorbed the shared half** on the way (this is what makes 4.3/4.4 cheap):
 `Training/BatchSealKit.lean` now holds `kv`/`zk`, the `margin160` check, the ray
-(`rayRamp`/`rayBase`/`rayV`/`rayX` and `EDiff_rayX`), the carrier `EDiff` with all five per-op
+(`rayRamp`/`rayBase`/`rayV`/`rayX` and `eDiff_rayX`), the carrier `EDiff` with all five per-op
 steps, the stem's centre-tap conv with its positional injectivity and the pool's no-tie
 (`ctConv`/`ctConv_inj`/`ctConv_pool_smooth`), and the head (`head_diff_ct`) — all generic in the
 shapes. ResNet-50 reuses ResNet-34's block-level generics by name (`projB_zero_const`,
@@ -362,7 +362,7 @@ feed a conv, not a relu6, so they carry no margin at all; `γ = 1/64` there too 
 
 **Structural weights**, typed at `MNV2BWeights nCls`: `ε = 1` and `γ = kv _ (1/64)` everywhere;
 `β = kv _ 3` at every BN followed by a relu6, `β = kv _ 0` at the project BNs (unconstrained —
-a zeroed residual body then makes the block the exact identity, `EDiff_shift` at `s = 0`); stem,
+a zeroed residual body then makes the block the exact identity, `eDiff_shift` at `s = 0`); stem,
 expand, depthwise and project kernels on the carrier are centre taps; every residual block's three
 kernels and biases are zero; `fcW 0 0 = 1`, rest zero, `fcb = 0`.
 
@@ -372,16 +372,16 @@ original list missed the depthwise family entirely, and the stem is a *regular* 
 which is a third op again:
 
 1. `decimateOdd_unflatten` — the odd peer of `decimate_unflatten`, reading `(2i+1, 2j+1)`;
-2. `flatConvStride2Xla_ctK`, `bcell_convS2Xla_ctK`, `EDiff_convS2Xla` — the stem (new §3b).
+2. `flatConvStride2Xla_ctK`, `bcell_convS2Xla_ctK`, `eDiff_convS2Xla` — the stem (new §3b).
    ⭐ Cheap, as predicted: `flatConvStride2Xla = decimateOddFlat ∘ flatConv`, so these are
    `flatConvStride2_ctK`'s proofs with `decimate_unflatten` swapped for (1), unchanged otherwise;
 3. `ctDW` (the centre-tap **depthwise** kernel), `depthwise2d_ctDW`, `depthwiseFlat_ctDW`,
-   `bcell_dw_ctDW`, `EDiff_dw` (new §3c) — `depthwiseConv2d`'s pad guard is `conv2d`'s, so
+   `bcell_dw_ctDW`, `eDiff_dw` (new §3c) — `depthwiseConv2d`'s pad guard is `conv2d`'s, so
    `depthwise2d_ctDW` is `conv2d_ctK`'s proof with the channel sum deleted. ⭐ The interesting
    difference is semantic, not proof-theoretic: a depthwise **cannot broadcast**, so where
-   `EDiff_conv` collapses the carrier to `fun _ => s · δ c₀`, `EDiff_dw` scales `δ` channel by
+   `eDiff_conv` collapses the carrier to `fun _ => s · δ c₀`, `eDiff_dw` scales `δ` channel by
    channel and the whole function survives;
-4. `depthwiseStride2FlatXla_ctDW`, `bcell_dwS2Xla_ctDW`, `EDiff_dwS2Xla` — same, decimated odd;
+4. `depthwiseStride2FlatXla_ctDW`, `bcell_dwS2Xla_ctDW`, `eDiff_dwS2Xla` — same, decimated odd;
 5. `batchMap_depthwiseFlat_zero` — the residual bodies' depthwise, from the existing
    `depthwiseFlat_eq_zero`. ⛔ No strided zero lemma is needed: all four strided blocks are on the
    carrier, so no zeroed kernel ever meets a stride;
@@ -433,7 +433,7 @@ Three things the plan did not anticipate, all small:
 1. ⚠ **`rw` does not see through a structure projection.** `sealExpB_eq`'s `show` had to spell the
    witness's BN parameters as literals (`1`, `kv mid (1/64)`, `kv mid 3`); with `_` placeholders the
    goal keeps `(sealIVW ic mid oc).eε` and `cbrB_eq`'s syntactic pattern misses. Same fix in all
-   three block collapses and in `headA`;
+   three block collapses and in `head_eq_dense`;
 2. ⛔ **`repeat' apply mul_pos` splits inside `rf`.** `rf` is itself `1/64 * bnIstd …`, so the
    tactic keeps going and leaves `0 < 1/64` goals that `rf_pos` cannot close. `Rr_pos` is an
    explicit 22-deep `mul_pos (rf_pos _ _) (…)` chain instead, with a comment saying why;
@@ -449,7 +449,7 @@ two thirds generated from a 17-row site table rather than typed. Total: four err
 `MobileNetV2.lean`: either rebuilds `StableHLO.lean` (322 s) and everything downstream.
 
 **The base input.** Reuse `rayX (2*112) (2*112)`: the types line up (`Vec (2 * (3 * 224 * 224))`),
-`EDiff_rayX` is proved, and since every clause is weight-only the ramp is doing no work beyond
+`eDiff_rayX` is proved, and since every clause is weight-only the ramp is doing no work beyond
 keeping one witness shape across the four nets.
 
 Effort: ~1k lines plus ~150 of kit, one session.
@@ -480,7 +480,7 @@ per-example two-block net) still has consumers is a census question, not this pa
 
 ### 4.4 MobileNetV4-Conv-M — DONE 2026-09-20
 
-`Nets/MobileNet/MobileNetV4FullBSeal.lean` (1,238 lines), on `mobilenetv4ForwardB_full` itself, plus
+`Nets/MobileNet/MobileNetV4FullBSeal.lean` (1,238 lines), on `mobilenetv4ForwardBFull` itself, plus
 205 lines of kit and 19 in `JacobianSeal.lean`. Retires nothing (no proxy existed); closes the last disclosed gap, as §4.2 did.
 With it every kinked net in the book is sealed on the forward its artifacts run.
 
@@ -522,7 +522,7 @@ stages up to the fused BatchNorm:
   ramp, and the ramp is what breaks;
 * `BUnif a v` says each example's slab is constant over the grid, one value per channel. Centre-tap
   convs preserve it (`BUnif_convS2Xla`, `BUnif_convS2`), pointwise activations preserve it
-  (`BUnif_map`), and `EDiff_of_BUnif` hands the carrier back on the far side;
+  (`BUnif_map`), and `eDiff_of_bUnif` hands the carrier back on the far side;
 * ⭐⭐ `bnBatchLA_pair` is the lemma that makes it work: on a `BUnif` slab the channel's mean is the
   two values' midpoint, so batch BN outputs `β ± γ·(gap/2)·istd` — **symmetric about `β`**. The
   swish's two outputs are then a function of the half-gap `u` alone, and their difference is
@@ -571,7 +571,7 @@ table. Total elaboration 3.1 s. The shipped file imports only `MobileNetV4FullBV
   sentence names the batched seals and drops "no seal has both depth and resolution". The
   ResNet-34 witness row (lines ~368-369) re-points at `<Net>FullBSeal.lean`. 4.3 replaces the
   `Mnv2Live.mnv2Live_forward_nonconstant` `main_results` row with
-  `mobilenetv2ForwardB_full_jacobian_nonzero` (or `_backward_nontrivial`), keeping
+  `mobilenetv2ForwardBFull_jacobian_nonzero` (or `_backward_nontrivial`), keeping
   `comparator_config: tests/comparator/config-tier.json`. House style: no emoji, one-line comments.
 * **Comparator tier.** Every yaml `main_results` row must be in a comparator config
   (`gen_comparator_tier.py --check` enforces it). So a yaml row change is a `DECLS` change:

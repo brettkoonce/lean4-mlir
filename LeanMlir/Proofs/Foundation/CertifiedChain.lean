@@ -10,7 +10,7 @@ induction term for term). The head layers shared across nets are in `HeadLayers`
 
 ⭐ **The obstacle was never the mathematics; it was that the chaining was open-coded.** Look at any
 `<body>BackBatchedGraph_faithful`: it builds `G₁ x (G₂ (f₁ x) e)`, rewrites with the two component
-faithfulness lemmas, and closes by `rfl` on `vjp_comp_at`'s definitional
+faithfulness lemmas, and closes by `rfl` on `vjpCompAt`'s definitional
 `backward dy = f₁.backward (f₂.backward dy)`. That argument is **identical every time** and is
 re-typed per composition, so a 16-block net would be 16 copies of it with ever-larger terms.
 
@@ -53,7 +53,7 @@ structure CertLayer (m n : Nat) where
   fwd : Vec m → Vec n
   /-- Where this layer is certified — the smoothness hypotheses, as a predicate on the input. -/
   ok : Vec m → Prop
-  /-- Differentiability at any certified point (needed to compose via `vjp_comp_at`). -/
+  /-- Differentiability at any certified point (needed to compose via `vjpCompAt`). -/
   diff : ∀ x, ok x → DifferentiableAt ℝ fwd x
   /-- The proven VJP at any certified point. -/
   vjp : ∀ x, ok x → HasVJPAt fwd x
@@ -71,7 +71,7 @@ noncomputable def id' (n : Nat) : CertLayer n n where
   fwd := fun y => y
   ok := fun _ => True
   diff := fun _ _ => differentiable_id.differentiableAt
-  vjp := fun x _ => identity_has_vjp_at n x
+  vjp := fun x _ => identityHasVJPAt n x
   graph := fun _ e => e
   faithful := by intro _ _ _; rfl
 
@@ -79,7 +79,7 @@ noncomputable def id' (n : Nat) : CertLayer n n where
 
     Two certified layers compose into a certified layer. The backward graph nests (`L₁`'s graph
     fed `L₂`'s graph at `L₁`'s output), the smoothness preconditions conjoin, and faithfulness
-    follows from the components' faithfulness plus `vjp_comp_at`'s definitional backward.
+    follows from the components' faithfulness plus `vjpCompAt`'s definitional backward.
 
     This is the argument every `<body>BackBatchedGraph_faithful` in the repo writes out by hand.
     Proven once here, a chain of any length costs nothing. -/
@@ -88,7 +88,7 @@ noncomputable def comp {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n 
   ok := fun x => L₁.ok x ∧ L₂.ok (L₁.fwd x)
   diff := fun x hx => (L₂.diff _ hx.2).comp x (L₁.diff x hx.1)
   vjp := fun x hx =>
-    vjp_comp_at L₁.fwd L₂.fwd x (L₁.diff x hx.1) (L₂.diff _ hx.2) (L₁.vjp x hx.1) (L₂.vjp _ hx.2)
+    vjpCompAt L₁.fwd L₂.fwd x (L₁.diff x hx.1) (L₂.diff _ hx.2) (L₁.vjp x hx.1) (L₂.vjp _ hx.2)
   graph := fun x e => L₁.graph x (L₂.graph (L₁.fwd x) e)
   faithful := by
     intro x hx e
@@ -105,7 +105,7 @@ noncomputable def residual {n : Nat} (L : CertLayer n n) : CertLayer n n where
   fwd := Proofs.residual L.fwd
   ok := L.ok
   diff := fun x hx => (L.diff x hx).add differentiable_id.differentiableAt
-  vjp := fun x hx => residual_has_vjp_at L.fwd x (L.diff x hx) (L.vjp x hx)
+  vjp := fun x hx => residualHasVJPAt L.fwd x (L.diff x hx) (L.vjp x hx)
   graph := fun x e => .addV (L.graph x e) e
   faithful := by
     intro x hx e
@@ -122,7 +122,7 @@ noncomputable def residualProj {m n : Nat} (P F : CertLayer m n) : CertLayer m n
   fwd := Proofs.residualProj P.fwd F.fwd
   ok := fun x => P.ok x ∧ F.ok x
   diff := fun x hx => (P.diff x hx.1).add (F.diff x hx.2)
-  vjp := fun x hx => residualProj_has_vjp_at P.fwd F.fwd x (P.diff x hx.1) (F.diff x hx.2)
+  vjp := fun x hx => residualProjHasVJPAt P.fwd F.fwd x (P.diff x hx.1) (F.diff x hx.2)
     (P.vjp x hx.1) (F.vjp x hx.2)
   graph := fun x e => .addV (P.graph x e) (F.graph x e)
   faithful := by
@@ -140,7 +140,7 @@ noncomputable def reluOut (n : Nat) : CertLayer n n where
   fwd := relu n
   ok := fun x => ∀ k, x k ≠ 0
   diff := fun x hx => relu_differentiableAt_of_smooth n x hx
-  vjp := fun x hx => relu_has_vjp_at n x hx
+  vjp := fun x hx => reluHasVJPAt n x hx
   graph := fun x e => .selectPos "%outR" x e
   faithful := fun x hx e => selectPos_faithful _ x hx e
 

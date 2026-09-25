@@ -54,7 +54,7 @@ The chain runs at `N·(c·h·w)`, the BN nodes at `N·(c·(h·w))`; the replica 
 
 ⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (r50Pre_k (R*N) q w X)`); that the sync forward graph computes exactly those is
-`StableHLO.resnet50FwdGraphSync_full_shard`, the forward half. ⚠ No stochastic depth (drop-path):
+`StableHLO.resnet50FwdGraphSyncFull_shard`, the forward half. ⚠ No stochastic depth (drop-path):
 the chain is the drop-free one, as T3's is. ⚠ The f32 nodes — the bf16 conv twins are not this
 statement. ⚠ The render has no conv-bias gradient ops, so there are none here. ⚠ That the replicas'
 inputs are the shards of one batch is the driver's. ⚠ The gradient accumulator and the optimizers
@@ -1004,9 +1004,9 @@ theorem r50_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < 
     (T : Vec ((R * N) * (1 * nCls))) :
     r50NetSyncTiedB R hR N q xN cotN vN epsStr w X
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
-        bStr logN ohN (rowB (R * N) nCls (resnet50ForwardB_full (R * N) q w X)) T)))
+        bStr logN ohN (rowB (R * N) nCls (resnet50ForwardBFull (R * N) q w X)) T)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (resnet50ForwardB_full (R * N) q w X) r))
+        (rowB N nCls (batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r))
         (batchShard R N (1 * nCls) T r)))) :=
   r50_net_syncTiedB R hR N hN q hq xN cotN vN epsStr w X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
@@ -1023,9 +1023,9 @@ theorem r50_net_syncTiedB_bce (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q :
     (T : Vec ((R * N) * (1 * nCls))) :
     r50NetSyncTiedB R hR N q xN cotN vN epsStr w X
       (unrowB (R * N) nCls (den (bceLossCotGraph (R * N) nCls (((R * N : Nat) : ℝ) * (nCls : ℝ))
-        bStr logN ohN (rowB (R * N) nCls (resnet50ForwardB_full (R * N) q w X)) T)))
+        bStr logN ohN (rowB (R * N) nCls (resnet50ForwardBFull (R * N) q w X)) T)))
       (fun r => unrowB N nCls (den (bceLossCotGraph N nCls ((N : ℝ) * (nCls : ℝ)) bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (resnet50ForwardB_full (R * N) q w X) r))
+        (rowB N nCls (batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r))
         (batchShard R N (1 * nCls) T r)))) := by
   have hdiv : ((R * N : Nat) : ℝ) * (nCls : ℝ) = (R : ℝ) * ((N : ℝ) * (nCls : ℝ)) := by
     push_cast; ring

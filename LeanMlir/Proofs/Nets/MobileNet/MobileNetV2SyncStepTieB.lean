@@ -51,7 +51,7 @@ are not tied here (`mnv2_net_tiedB` keeps them for the flag).
 
 ⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (mnv2PreB{k} (R*N) w X)`); that the sync forward graph computes exactly those is
-`StableHLO.mobilenetv2FwdGraphSync_full_shard`, the forward half. ⚠ That the replicas' inputs are
+`StableHLO.mobilenetv2FwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are
 the shards of one batch is the driver's. ⚠ The lowerer's `all_reduce` is trusted as every other
 op's lowering is.
 -/
@@ -1089,9 +1089,9 @@ theorem mnv2_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 <
     (T : Vec ((R * N) * (1 * nCls))) :
     mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
-        bStr logN ohN (rowB (R * N) nCls (mobilenetv2ForwardB_full (R * N) w X)) T)))
+        bStr logN ohN (rowB (R * N) nCls (mobilenetv2ForwardBFull (R * N) w X)) T)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (mobilenetv2ForwardB_full (R * N) w X) r))
+        (rowB N nCls (batchShard R N nCls (mobilenetv2ForwardBFull (R * N) w X) r))
         (batchShard R N (1 * nCls) T r)))) :=
   mnv2_net_syncTiedB R hR N hN xN cotN vN epsStr w X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)

@@ -28,8 +28,8 @@ with an identity skip, so the brick is `residualBackGraph (bodyBack …) dy`, cl
 
 The block body is `layerScale ∘ project(1×1) ∘ gelu ∘ expand(1×1) ∘ LN ∘
 depthwise(7×7)`; everything is smooth (GELU is smooth, conv/layerScale linear, LN
-smooth given `ε>0`), so the body VJP is the unconditional `vjp_comp` chain
-`convNextBlockBody_has_vjp` and the only side condition is the LayerNorm positivity
+smooth given `ε>0`), so the body VJP is the unconditional `vjpComp` chain
+`convNextBlockBodyHasVJP` and the only side condition is the LayerNorm positivity
 `0 < εn`. The LN backward is the one non-`rfl` op, closed by `chanLNBackGraph_eq_vjp`.
 -/
 
@@ -93,13 +93,13 @@ theorem chanLNBackGraph_faithful (gN xN epsStr : String) {c h w : Nat} (ε : ℝ
 /-- **The channel-LN backward graph denotes the CERTIFIED VJP.** `chanLNBackGraph_faithful` lands
     on `chanLNTensor3Back`, the hand-composed reverse chain; §B's
     `chanLNTensor3Back_eq_chanLN_vjp` carries it the last step onto
-    `(chanLNTensor3_has_vjp …).backward`. This is the statement every capstone below is built on,
+    `(chanLNTensor3HasVJP …).backward`. This is the statement every capstone below is built on,
     and the reason landing §B first was worth doing — without it these would tie the graph to
     another hand-written chain rather than to the certified gradient. β-free on both sides. -/
 theorem chanLNBackGraph_eq_vjp (gN xN epsStr : String) {c h w : Nat} (ε : ℝ) (hε : 0 < ε)
     (γ β : Vec c) (x : Vec (c * h * w)) (e : SHlo (c * h * w)) :
     den (chanLNBackGraph gN xN epsStr ε γ x e)
-      = (chanLNTensor3_has_vjp c h w ε γ β hε).backward x (den e) := by
+      = (chanLNTensor3HasVJP c h w ε γ β hε).backward x (den e) := by
   rw [chanLNBackGraph_faithful, chanLNTensor3Back_eq_chanLN_vjp (β := β) ε hε γ x]
 
 /-- The channel-LN block-body backward graph — the block body's reverse chain with
@@ -124,7 +124,7 @@ noncomputable def cnxBlockBodyChBackGraph {c cExp h w kH kW : Nat}
             (.layerScaleF "%cnxGls" γls e)))))
 
 /-- **Channel-LN block-body backward-graph faithfulness.** The reverse-order graph denotes
-    `cnxBodyWith_has_vjp`'s backward at the shipped LayerNorm, under `0 < εn`. Same proof as the
+    `cnxBodyWithHasVJP`'s backward at the shipped LayerNorm, under `0 < εn`. Same proof as the
     scalar peer with `chanLNBackGraph_eq_vjp` where `bnBack_faithful_fn` was — the LN is still the
     one non-`rfl` op, it is just a whole subtree now instead of a token. -/
 theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
@@ -135,12 +135,12 @@ theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
     (γls : Vec (c * h * w))
     (x : Vec (c * h * w)) (e : SHlo (c * h * w)) :
     den (cnxBlockBodyChBackGraph Wdw bdw εn γn βn Wex bex Wpr bpr γls x e)
-      = (cnxBodyWith_has_vjp (chanLNTensor3_diff c h w εn γn βn hεn)
-          (chanLNTensor3_has_vjp c h w εn γn βn hεn)
+      = (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w εn γn βn hεn)
+          (chanLNTensor3HasVJP c h w εn γn βn hεn)
           Wdw bdw Wex bex Wpr bpr γls).backward x (den e) := by
   unfold cnxBlockBodyChBackGraph
   rw [depthwiseBack_faithful, chanLNBackGraph_eq_vjp (β := βn) (hε := hεn)]
-  simp only [cnxBodyWith_has_vjp, convBack_faithful, geluBack_faithful,
+  simp only [cnxBodyWithHasVJP, convBack_faithful, geluBack_faithful,
     layerScaleF_faithful]
   rfl
 
@@ -153,18 +153,18 @@ noncomputable def cnxResidBlockChBackGraph {c cExp h w kH kW : Nat}
 
 /-- **The whole channel-LN ConvNeXt residual block: backward graph ↔ proven VJP** — the capstone
     the shipped net was missing, at the block the shipped stages are built from. Assembles the
-    body backward graph + the identity skip into `cnxBlockChW_has_vjp`'s backward via
+    body backward graph + the identity skip into `cnxBlockChWHasVJP`'s backward via
     `residualBackGraph_faithful`, no hypotheses beyond `0 < p.εn`. -/
 theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) :
-    den (cnxResidBlockChBackGraph p x ecot) = (cnxBlockChW_has_vjp p hε).backward x (den ecot) :=
+    den (cnxResidBlockChBackGraph p x ecot) = (cnxBlockChWHasVJP p hε).backward x (den ecot) :=
   residualBackGraph_faithful
     (cnxBodyWith (chanLNTensor3 c h w p.εn p.γn p.βn) p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr
       (cnxGlsCh p))
-    (cnxBodyWith_diff (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
+    (cnxBodyWith_differentiable (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
-    (cnxBodyWith_has_vjp (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
-      (chanLNTensor3_has_vjp c h w p.εn p.γn p.βn hε)
+    (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
+      (chanLNTensor3HasVJP c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
     x ecot
     (cnxBlockBodyChBackGraph p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
@@ -188,10 +188,10 @@ noncomputable def cnxDownChBackGraph (h w : Nat) {cin cout : Nat}
 theorem cnxDownChBackGraph_faithful (h w : Nat) {cin cout : Nat}
     (p : CnxDownParamsCh cin cout) (hε : 0 < p.ε)
     (x : Vec (cin * (2 * h) * (2 * w))) (e : SHlo (cout * h * w)) :
-    den (cnxDownChBackGraph h w p x e) = (cnxDownChW_has_vjp h w p hε).backward x (den e) := by
+    den (cnxDownChBackGraph h w p x e) = (cnxDownChWHasVJP h w p hε).backward x (den e) := by
   unfold cnxDownChBackGraph
   rw [chanLNBackGraph_eq_vjp (β := p.β) (hε := hε), convStridedBack_faithful]
-  simp only [cnxDownChW_has_vjp]
+  simp only [cnxDownChWHasVJP]
   rfl
 
 /-- ⭐ The **channel-LN** ConvNeXt block as a `CertLayer` — the form the *shipped* net's stages are
@@ -203,8 +203,8 @@ noncomputable def cnxBlockChLayer {c cExp h w kH kW : Nat}
     CertLayer (c * h * w) (c * h * w) where
   fwd := cnxBlockChW p
   ok := fun _ => True
-  diff := fun x _ => (cnxBlockChW_diff p hε) x
-  vjp := fun x _ => (cnxBlockChW_has_vjp p hε).toHasVJPAt x
+  diff := fun x _ => (cnxBlockChW_differentiable p hε) x
+  vjp := fun x _ => (cnxBlockChWHasVJP p hε).toHasVJPAt x
   graph := fun x e => cnxResidBlockChBackGraph p x e
   faithful := fun x _ e => cnxResidBlockChBackGraph_faithful p hε x e
 

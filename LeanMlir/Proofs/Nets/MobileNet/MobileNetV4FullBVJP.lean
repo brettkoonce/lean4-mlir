@@ -12,7 +12,7 @@ run; what pins the artifact to the reference's function is the pair of ties re-r
 
 ## ⭐⭐ Eight fields, not thirty-five
 
-ResNet-50's apex (`resnet50ForwardB_full_has_vjp_at`) takes two structures, `R50PosB` and
+ResNet-50's apex (`resnet50ForwardBFullHasVJPAt`) takes two structures, `R50PosB` and
 `R50SmoothAtB`, whose 35 hand-written fields are a positivity bundle and a smoothness bundle per
 block plus the stem's and the pool's, each smoothness field stated at its own hand-written
 `r50Pre_k` prefix. MobileNetV4's smoothness hypothesis has **eight** fields — one per prefix — and the
@@ -35,10 +35,10 @@ ResNet-50's own shape at seven stages rather than eighteen.
 
 ⚠⚠ `CertLayer` demands a backward graph and **no render emits a gradient into `%x`**: the
 artifact's backward ends at the stem conv's WEIGHT gradient. That is EfficientNet-B0's situation
-exactly, so MNv4's stem stays a plain function and the apex is one `vjp_comp_at`.
+exactly, so MNv4's stem stays a plain function and the apex is one `vjpCompAt`.
 
 ⭐ **No new `Foundation` lemma was needed.** The stem is ResNet's symmetric strided conv-bn-relu
-(`cbReluStridedB`), so its VJP is `cbReluStridedB_has_vjp_at` — itself `bnReluStage_has_vjp_at` at
+(`cbReluStridedB`), so its VJP is `cbReluStridedBHasVJPAt` — itself `bnReluStageHasVJPAt` at
 `flatConvStride2`.
 
 ⚠ Pointwise (`HasVJPAt`), not global, and necessarily: relu is kinked, at every stage including
@@ -65,14 +65,14 @@ def Mnv4StemSmoothAtB (N h w : Nat) {ic oc kH kW : Nat}
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) : Prop :=
   ∀ k, bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2 Ws bs) x) k ≠ 0
 
-/-- ⭐ The stem's VJP: `cbReluStridedB_has_vjp_at`, the symmetric strided conv-bn-relu — zero new
+/-- ⭐ The stem's VJP: `cbReluStridedBHasVJPAt`, the symmetric strided conv-bn-relu — zero new
     analytic content. -/
-noncomputable def mnv4StemB_has_vjp_at (N h w : Nat) {ic oc kH kW : Nat}
+noncomputable def mnv4StemBHasVJPAt (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : Mnv4StemSmoothAtB N h w Ws bs εs γs βs x) :
     HasVJPAt (mnv4StemB N h w Ws bs εs γs βs) x :=
-  cbReluStridedB_has_vjp_at N Ws bs εs hεs γs βs x hs
+  cbReluStridedBHasVJPAt N Ws bs εs hεs γs βs x hs
 
 theorem mnv4StemB_differentiableAt (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
@@ -115,40 +115,40 @@ structure Mnv4SmoothAt (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
 -- § The apex
 -- ════════════════════════════════════════════════════════════════
 
-/-- The chain's VJP and its differentiability together, one `vjp_comp_diff_at` per join: the apex
-    is `.fst`, `mobilenetv4ForwardB_full_differentiableAt` is `.snd`. -/
+/-- The chain's VJP and its differentiability together, one `vjpCompDiffAt` per join: the apex
+    is `.fst`, `mobilenetv4ForwardBFull_differentiableAt` is `.snd`. -/
 private noncomputable def mnv4ChainB (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x) :
-    HasVJPDiffAt (mobilenetv4ForwardB_full N w) x :=
+    HasVJPDiffAt (mobilenetv4ForwardBFull N w) x :=
   let p0 : HasVJPDiffAt (mnv4Pre0 N w) x :=
-    ⟨mnv4StemB_has_vjp_at N 112 112 w.sW w.sb w.sE w.hsE w.sg w.sbt x hx.stem,
+    ⟨mnv4StemBHasVJPAt N 112 112 w.sW w.sb w.sE w.hsE w.sg w.sbt x hx.stem,
       mnv4StemB_differentiableAt N 112 112 w.sW w.sb w.sE w.hsE w.sg w.sbt x hx.stem⟩
   let p1 : HasVJPDiffAt (mnv4Pre1 N w) x :=
-    vjp_comp_diff_at _ _ x p0
+    vjpCompDiffAt _ _ x p0
       ⟨(mnv4FusedStack N w).vjp _ hx.fused, (mnv4FusedStack N w).diff _ hx.fused⟩
   let p2 : HasVJPDiffAt (mnv4Pre2 N w) x :=
-    vjp_comp_diff_at _ _ x p1
+    vjpCompDiffAt _ _ x p1
       ⟨(mnv4Res28Layer N w).vjp _ hx.g28, (mnv4Res28Layer N w).diff _ hx.g28⟩
   let p3 : HasVJPDiffAt (mnv4Pre3 N w) x :=
-    vjp_comp_diff_at _ _ x p2
+    vjpCompDiffAt _ _ x p2
       ⟨(mnv4Res14aLayer N w).vjp _ hx.g14a, (mnv4Res14aLayer N w).diff _ hx.g14a⟩
   let p4 : HasVJPDiffAt (mnv4Pre4 N w) x :=
-    vjp_comp_diff_at _ _ x p3
+    vjpCompDiffAt _ _ x p3
       ⟨(mnv4Res14bLayer N w).vjp _ hx.g14b, (mnv4Res14bLayer N w).diff _ hx.g14b⟩
   let p5 : HasVJPDiffAt (mnv4Pre5 N w) x :=
-    vjp_comp_diff_at _ _ x p4
+    vjpCompDiffAt _ _ x p4
       ⟨(mnv4Res7aLayer N w).vjp _ hx.g7a, (mnv4Res7aLayer N w).diff _ hx.g7a⟩
   let p6 : HasVJPDiffAt (mnv4Pre6 N w) x :=
-    vjp_comp_diff_at _ _ x p5
+    vjpCompDiffAt _ _ x p5
       ⟨(mnv4Res7bLayer N w).vjp _ hx.g7b, (mnv4Res7bLayer N w).diff _ hx.g7b⟩
-  vjp_comp_diff_at _ _ x p6
+  vjpCompDiffAt _ _ x p6
     ⟨(mnv4HeadStack N w).vjp _ hx.head, (mnv4HeadStack N w).diff _ hx.head⟩
 
 /-- ⭐⭐ **MobileNetV4-Conv-M at TRUE BATCH-NORM has a certified input-VJP at a smooth point — the
     fused stage, all 21 UIB blocks and the two-conv head.** T1's VJP half, and the first net-level
     tier this net has ever had.
 
-    A bottom-up chain of seven `vjp_comp_diff_at`s: the stem, the fused stage, the five resolution
+    A bottom-up chain of seven `vjpCompDiffAt`s: the stem, the fused stage, the five resolution
     groups, the head. Every step below the stem is a group's `.vjp` — `CertLayer.comp`'s
     composition theorem already applied within it, which is `CertifiedChain.lean`'s whole reason
     for existing; only the seven joins are made here.
@@ -156,27 +156,27 @@ private noncomputable def mnv4ChainB (N : Nat) {nCls : Nat} (w : Mnv4BWeights nC
     ⚠ Pointwise, and necessarily: relu is kinked. ⭐ `N` and `nCls` are both binders, so this
     covers the 10-class Imagenette artifacts and the 1000-class `mnv4in` ones at every batch size,
     and no `0 < ε` hypothesis appears — those live in the weight records. -/
-noncomputable def mobilenetv4ForwardB_full_has_vjp_at (N : Nat) {nCls : Nat}
+noncomputable def mobilenetv4ForwardBFullHasVJPAt (N : Nat) {nCls : Nat}
     (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x) :
-    HasVJPAt (mobilenetv4ForwardB_full N w) x :=
+    HasVJPAt (mobilenetv4ForwardBFull N w) x :=
   (mnv4ChainB N w x hx).fst
 
 /-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`. What the
-    seal's `sealDiffAt` needs. -/
-theorem mobilenetv4ForwardB_full_differentiableAt (N : Nat) {nCls : Nat}
+    seal's `seal_differentiableAt` needs. -/
+theorem mobilenetv4ForwardBFull_differentiableAt (N : Nat) {nCls : Nat}
     (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x) :
-    DifferentiableAt ℝ (mobilenetv4ForwardB_full N w) x :=
+    DifferentiableAt ℝ (mobilenetv4ForwardBFull N w) x :=
   (mnv4ChainB N w x hx).snd
 
 /-- ⭐ And it IS the `pdiv`-contracted Jacobian of the whole net, at every batch size and both
     shipped class counts. The reading that says the object above is the gradient rather than
     merely a function of the right type. -/
-theorem mobilenetv4ForwardB_full_has_vjp_at_correct (N : Nat) {nCls : Nat}
+theorem mobilenetv4ForwardBFullHasVJPAt_correct (N : Nat) {nCls : Nat}
     (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * 224 * 224))) :
-    (mobilenetv4ForwardB_full_has_vjp_at N w x hx).backward dy i
-      = ∑ j : Fin (N * nCls), pdiv (mobilenetv4ForwardB_full N w) x i j * dy j :=
-  (mobilenetv4ForwardB_full_has_vjp_at N w x hx).correct dy i
+    (mobilenetv4ForwardBFullHasVJPAt N w x hx).backward dy i
+      = ∑ j : Fin (N * nCls), pdiv (mobilenetv4ForwardBFull N w) x i j * dy j :=
+  (mobilenetv4ForwardBFullHasVJPAt N w x hx).correct dy i
 
 end StableHLO
 

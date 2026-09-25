@@ -58,7 +58,7 @@ def enetImagenetRmsSchedule : RmsSchedule := { enetRmsSchedule with staircase :=
 
 /-- The Chapter-1 linear classifier: a single dense 784→10. Trained by
     `MainMnistLinearVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
-    (`linearVerified_has_vjp`) — both over *this* object. -/
+    (`linearVerifiedHasVJP`) — both over *this* object. -/
 def linearVerified : VerifiedNetSpec where
   name     := "MNIST-Linear"
   slug     := "linear"
@@ -75,7 +75,7 @@ def linearVerified : VerifiedNetSpec where
 
 /-- The Chapter-2 MLP: dense 784→512 → relu → dense 512→512 → relu → dense 512→10.
     Trained by `MainMnistMlpVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
-    (`mlpVerified_has_vjp` / `_at`) — both over *this* object. -/
+    (`mlpVerifiedHasVJP` / `_at`) — both over *this* object. -/
 def mlpVerified : VerifiedNetSpec where
   name     := "MNIST-MLP"
   slug     := "mlp"
@@ -95,7 +95,7 @@ def mlpVerified : VerifiedNetSpec where
 
 /-- **Width-parametric MNIST MLP** `dense 784→d₁ → relu → dense d₁→d₂ → relu → dense d₂→10`.
     The canonical `mlpVerified` is `mlpG 512 512`. Every instance shares the exact same
-    architecture shape as the proven `mlpForward {d₀ d₁ d₂ d₃}` (VJP: `mlp_has_vjp`, which is
+    architecture shape as the proven `mlpForward {d₀ d₁ d₂ d₃}` (VJP: `mlpHasVJP`, which is
     polymorphic in all four dims), so any `(d₁, d₂)` is covered by that one theorem — the
     grid is a single proof instantiated, not a new proof per point. `mnist-mlp-grid` renders
     `verified_mlir/mlp_{d₁}x{d₂}_{train_step,fwd}.mlir` from the faithful renderer at run time
@@ -131,7 +131,7 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
 /-- The Chapter-3 MNIST CNN (no BN): conv 1→32 → relu → conv 32→32 → relu → maxpool
     28→14 → flatten(6272) → dense 6272→512 → relu → dense 512→512 → relu → dense 512→10.
     Trained by `MainMnistCnnVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
-    (`cnnVerified_has_vjp_at`, folded through conv/maxpool/dense). -/
+    (`cnnVerifiedHasVJPAt`, folded through conv/maxpool/dense). -/
 def cnnVerified : VerifiedNetSpec where
   name     := "MNIST-CNN"
   slug     := "cnn"
@@ -187,7 +187,7 @@ def cnnG (d : Nat) : VerifiedNetSpec where
 
 /-- The Chapter-4 CIFAR-10 CNN (no BN): conv 3→32 → relu → conv 32→32 → relu → maxpool
     → conv 32→64 → relu → conv 64→64 → relu → maxpool → flatten(4096) → dense 4096→512
-    → relu → dense 512→512 → relu → dense 512→10. VJP: `cifarCnn_has_vjp_at` (Proofs/SpecVJP). -/
+    → relu → dense 512→512 → relu → dense 512→10. VJP: `cifarCnnHasVJPAt` (Proofs/SpecVJP). -/
 def cifarVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN"
   slug     := "cifar"
@@ -209,7 +209,7 @@ def cifarVerified : VerifiedNetSpec where
 /-- The deeper **8-conv CIFAR-10 CNN (no BN)** — the pedagogical BN-demo backbone: four
     `conv→conv→pool` stages, channels `[16,16,32,32]`, 32→16→8→4→2 spatial, then the
     reused 3-dense head (`d1=64`): flatten 128 → 64 → relu → 64 → relu → 10. VJP:
-    `Proofs.cifarCnn8_has_vjp_at` (12 ReLU kinks + 4 maxpools), 3-axiom clean. -/
+    `Proofs.cifarCnn8HasVJPAt` (12 ReLU kinks + 4 maxpools), 3-axiom clean. -/
 def cifar8Verified : VerifiedNetSpec where
   name     := "CIFAR-CNN8"
   slug     := "cifar8"
@@ -242,7 +242,7 @@ def cifar8Verified : VerifiedNetSpec where
 
 /-- The deeper **8-conv CIFAR-10 CNN with per-channel BatchNorm** — `cifar8Verified` + a
     `.bnPerChannel` after each of the 8 convs (γ=1/β=0 init, before relu). The pedagogical
-    BN-acceleration demo. VJP: `Proofs.cifarCnnBn8_has_vjp_at` (12 ReLU kinks + 4 maxpools +
+    BN-acceleration demo. VJP: `Proofs.cifarCnnBn8HasVJPAt` (12 ReLU kinks + 4 maxpools +
     `0<εᵢ` ×8), 3-axiom clean. Per-channel BN is per-example ⇒ train=eval. -/
 def cifar8BnVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN8-BN"
@@ -307,7 +307,7 @@ def cifar8BnG (d : Nat) : VerifiedNetSpec where
 
 /-- `cifar8Verified` with the MNIST-style **wide 2×512 dense head** (`d1=512`): flatten 128 →
     512 → relu → 512 → relu → 10. Same 8-conv backbone; the head jumps from 13K to 334K floats
-    (whole net 52,858 → 373,626). Same parametric VJP `Proofs.cifarCnn8_has_vjp_at` (the dense
+    (whole net 52,858 → 373,626). Same parametric VJP `Proofs.cifarCnn8HasVJPAt` (the dense
     bridge is generic in width). Slug `cifar8w` (render [`LeanMlir/Proofs/Codegen/CnnRender.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Codegen/CnnRender.lean) at `d1 := 512`). -/
 def cifar8wVerified : VerifiedNetSpec where
   name     := "CIFAR-CNN8-wide"
@@ -389,8 +389,8 @@ def cifar8wbBnVerified : VerifiedNetSpec :=
 /-- ch6 **ResNet-34** on Imagenette 224²: 7×7-s2 stem → BN → relu → maxpool →
     [3,4,6,3] basic-block stages (per-channel BN, strided downsample at the first block of
     stages 2–4) → GAP → dense. **110 params** (§2l step B: no conv biases). Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
-    (`resnet34VerifiedB_denote_eq` → `resnet34ForwardB_full` at batch BN, every batch size, + rung E
-    `resnet34VerifiedB_fwd_faithful`); the honest pointwise VJP is `resnet34ForwardB_full_has_vjp_at`
+    (`resnet34VerifiedB_denote_eq` → `resnet34ForwardBFull` at batch BN, every batch size, + rung E
+    `resnet34VerifiedB_fwd_faithful`); the honest pointwise VJP is `resnet34ForwardBFullHasVJPAt`
     (`ResNet34FullBVJP.lean`). -/
 def resnet34Verified : VerifiedNetSpec where
   name     := "ResNet-34"
@@ -744,12 +744,12 @@ def resnet50ImagenetA1Verified : VerifiedNetSpec :=
     blocks (full-paper `[t,c,n,s]` config, strided depthwise downsamples, per-channel BN,
     relu6, linear bottleneck) → 1×1 head conv (320→1280) → BN → relu6 → GAP → dense.
     (Tied at the FULL paper spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean): `mobilenetv2VerifiedB_denote_eq`
-    → `mobilenetv2ForwardB_full` at batch BN, every batch size, + rung E
+    → `mobilenetv2ForwardBFull` at batch BN, every batch size, + rung E
     `mobilenetv2VerifiedB_fwd_faithful`. The VJP fold is at full depth too:
-    `Proofs.mobilenetv2ForwardB_full_has_vjp_at` (`MobileNetV2FullBVJP.lean`) covers stem + all
+    `Proofs.mobilenetv2ForwardBFullHasVJPAt` (`MobileNetV2FullBVJP.lean`) covers stem + all
     17 blocks + head. ⚠ It is POINTWISE, and stays that way — relu6 is kinked, so each of the 35
     activation sites carries a `≠ 0 ∧ ≠ 6` side condition at every example.
-    `Proofs.mobilenetv2_has_vjp_at` is the older stem+2-block fold.) -/
+    `Proofs.mobilenetv2HasVJPAt` is the older stem+2-block fold.) -/
 def mobilenetv2Verified : VerifiedNetSpec where
   name     := "MobileNetV2"
   slug     := "mobilenetv2"
@@ -856,8 +856,8 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
     1000-class peer below is 5,288,548, i.e. B0's canonical 5.29M). The 16 `mbConvSE ic mid oc r k`
     args are the B0 generator unrolled (mid=t·ic, r=ic/4, ic threads stage→stage). Tied at the
     FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean) (`efficientnetVerified_denote_eq` →
-    `efficientnetForwardB_full`, batched ∀N, + rung E `efficientnetVerified_fwd_faithful`);
-    the honest pointwise VJP witness is the representative `Proofs.efficientnet_has_vjp`. -/
+    `efficientnetForwardBFull`, batched ∀N, + rung E `efficientnetVerified_fwd_faithful`);
+    the honest pointwise VJP witness is the representative `Proofs.efficientnetHasVJP`. -/
 def efficientnetVerified : VerifiedNetSpec where
   name     := "EfficientNet-B0"
   slug     := "efficientnet"
@@ -1006,8 +1006,8 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
     Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean) (`convnextVerified_denote_eq` →
     `convNextForwardTCh`, the committed channel-LN config, + rung E
     `convnextVerified_fwd_faithful`); the full-depth REAL VJP is
-    `Proofs.convNextForwardTCh_has_vjp_correct` (`ConvNeXtFullT`), whose `HasVJP` is
-    `Proofs.convNextForwardTCh_has_vjp` — GLOBAL, not the pointwise `_at` form MobileNetV2
+    `Proofs.convNextForwardTChHasVJP_correct` (`ConvNeXtFullT`), whose `HasVJP` is
+    `Proofs.convNextForwardTChHasVJP` — GLOBAL, not the pointwise `_at` form MobileNetV2
     is stuck with, because GELU is smooth where relu6 kinks. Its only hypotheses are the 22 LN
     positivities (stem + 18 blocks + 3 downsamples; there is no head LN).
     ⚠ Three things above were stale or wrong until 2026-08-12 and all three typeset fine: the LN
@@ -1275,7 +1275,7 @@ def convnextBImagenetVerified : VerifiedNetSpec where
     blocks (dim 192, 3 heads, MLP 768), final per-channel LayerNorm, CLS-slice dense head 192→10.
     200 params. Tied at the FULL spec in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean) (`vitVerified_denote_eq` →
     `vitForwardKV` depth-12 distinct-param vector-LN, retiring the old weight-shared
-    scalar-LN caveats), with the REAL whole-net VJP `vitVerified_has_vjp`
+    scalar-LN caveats), with the REAL whole-net VJP `vitVerifiedHasVJP`
     (all-smooth, `0 < ε` only) and rung E `vitVerified_fwd_faithful` (the depth-12
     multi-head vector-LN graph `vitFwdGraphKMHV`). -/
 def vitVerified : VerifiedNetSpec where
@@ -1328,7 +1328,7 @@ def vitVerified : VerifiedNetSpec where
     augmentation at all** — one definition of the transform, and it is the reference's.
 
     ⚠ **Claim ceiling, and it is lower here than the name suggests.** The proof-carrying tier stops
-    at Imagenette: `vitVerified_denote_eq` / `vitVerified_has_vjp` / rung E are stated about the
+    at Imagenette: `vitVerified_denote_eq` / `vitVerifiedHasVJP` / rung E are stated about the
     10-class net. What carries to this one is *provenance* — the artifacts are `pretty(provenGraph)`
     off the same renderer, since `nClasses`, `bs` and `replicas` are ordinary parameters of it —
     plus whatever a matched-pair comparison against [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean) shows. Say "one
@@ -1383,7 +1383,7 @@ def vitImagenetVerified : VerifiedNetSpec where
 /-- **ViT-Small on full ImageNet-1k** — the first net in this repo added by WIDENING an existing
     one rather than by writing a new chain.
 
-    ⭐⭐ **Nothing on the proof side was needed.** `Proofs.vitForwardKV_has_vjp` is already
+    ⭐⭐ **Nothing on the proof side was needed.** `Proofs.vitForwardKVHasVJP` is already
     `∀ heads d_head mlpDim k`, and it is a GLOBAL `HasVJP` rather than the pointwise `_at` form the
     relu-family nets carry, because GELU/softmax/LayerNorm have no kink. So S is covered by the
     same theorem that covers Tiny, at different arguments.

@@ -1320,7 +1320,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as EnetSyncTieG.efficientnet_net_syncTiedG (every all-reduced\n" ++
-        "    // gradient) and StableHLO.efficientnetFwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // gradient) and StableHLO.efficientnetFwdGraphSyncFull_shard (the forward), both in\n" ++
         "    // LeanMlir/Proofs/Nets/EfficientNet/ (planning/global_bn_verified.md).\n" ++
         (if sd || cd then
           "    // (Both are stated without drop-path and dropout; this artifact's per-example masks\n" ++

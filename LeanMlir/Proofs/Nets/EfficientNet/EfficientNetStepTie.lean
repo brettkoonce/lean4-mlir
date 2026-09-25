@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 /-! # EfficientNet-B0 train-step tie (§1a, fused SGD) — `efficientnet_net_tied`
 
 Every one of B0's 262 parameters' SGD ops, at the cotangent the rendered net's own backward chain
-hands it: the real forward (`efficientnetForwardB_full`) threaded through every parameter op, the
+hands it: the real forward (`efficientnetForwardBFull`) threaded through every parameter op, the
 loss cotangent composed back through all 16 MBConv blocks, the residual fan-in at each stride-1
 skip and the squeeze-excite gate fan-in included. The batched, un-fused peer (tied at the
 `*GradB` nodes) is `EnetTiePoCG.efficientnet_net_tiedG` in `EfficientNetStepTieG`.
@@ -21,7 +21,7 @@ skip and the squeeze-excite gate fan-in included. The batched, un-fused peer (ti
 * the strided depthwise back (`dStridedInB`); `reassocB` bridges the conv/swish `(oc·h·w)` and
   BN `(oc·(h·w))` layouts.
 
-`EfficientNetChainClose`'s whole-net backward is `vjp_comp` of the per-block `_has_vjp`s, so the
+`EfficientNetChainClose`'s whole-net backward is `vjpComp` of the per-block `HasVJP`s, so the
 tie builds explicit chain-cotangent constructors rather than reading them off.
 
 ## Contents
@@ -37,7 +37,7 @@ tie builds explicit chain-cotangent constructors rather than reading them off.
     cotangent `g`.
 * `efficientnet_net_tied` — the whole-net thread. Block inputs are the forward's prefixes
   (`a0..a16`); the per-block output cotangents (`dy0..dy16`) are composed top-down by the proven
-  block VJPs (`headFwdB_has_vjp`, `mb{Exp,Resid,Strided,NoExp}W_has_vjp`) from `g`. The residual
+  block VJPs (`headFwdBHasVJP`, `mb{Exp,Resid,Strided,NoExp}WHasVJP`) from `g`. The residual
   fan-in is in `mbResidW`'s own VJP (it includes the `+ x`). One `*TiedAt` wrapper per block type
   takes the `B0Weights` block bundle.
 
@@ -439,25 +439,25 @@ theorem enet_noexp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r
   exact enet_noexp_tied xN wN bN gN vN epsStr lrStr cotN p.dε hd p.pε hp
     p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
 
-/-! ## The whole-net thread — all 262 params tied through the REAL `efficientnetForwardB_full`
+/-! ## The whole-net thread — all 262 params tied through the REAL `efficientnetForwardBFull`
 
-The capstone: `efficientnetForwardB_full`'s prefixes are the block inputs (`a0..a16` = stem, then the
+The capstone: `efficientnetForwardBFull`'s prefixes are the block inputs (`a0..a16` = stem, then the
 16 MBConv blocks), and the per-block output cotangents (`dy0..dy16`) are composed TOP-DOWN by the
-proven block VJPs (`headFwdB_has_vjp`, `mb{Exp,Resid,Strided,NoExp}W_has_vjp`) from the loss cotangent
+proven block VJPs (`headFwdBHasVJP`, `mb{Exp,Resid,Strided,NoExp}WHasVJP`) from the loss cotangent
 `g = rowSoftmax(logits) − onehot`. Each block's tie then holds at its real input + threaded `dyOut`.
 The full §1a tie: the WHOLE 16-MBConv (262-param) EfficientNet-B0 train step is den-composed
 forward→loss→backward, no free activations, no symbolic cotangent. The residual fan-in at the 9
 identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so it is automatic. -/
 
 /-- **The whole 16-MBConv EfficientNet-B0 train step, tied.** Threading the real batched (true-BN + SE)
-    forward `efficientnetForwardB_full` and the loss-driven backward cotangent chain (swish masks, SE
+    forward `efficientnetForwardBFull` and the loss-driven backward cotangent chain (swish masks, SE
     gate fan-in, true-BN backs, the residual fan-in folded into the block VJPs), the stem, all 16
     MBConv blocks, the conv-bn-swish head, and the dense head all denote the certified batched Σ_n
     loss-descent step. -/
 theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N : Nat) (w : B0Weights)
     (hεw : w.EpsPos)
     (x : Vec (N * (3 * 224 * 224))) (onehot : Vec (N * 10)) (lr : ℝ) :
-    -- forward block inputs (the prefixes of efficientnetForwardB_full)
+    -- forward block inputs (the prefixes of efficientnetForwardBFull)
     let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
     let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
     let a2  : Vec (N * (24 * 56 * 56))   := mbStridedW N 56 56 w.b2 a1
@@ -479,23 +479,23 @@ theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N 
     let g    : Vec (N * 10) := fun idx =>
       rowSoftmaxFlat N 10 (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16) idx
         - onehot idx
-    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdB_has_vjp N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
-    let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpW_has_vjp N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
-    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
-    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
-    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidW_has_vjp N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
-    let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedW_has_vjp N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
-    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
-    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidW_has_vjp N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
-    let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpW_has_vjp N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
-    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
-    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidW_has_vjp N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
-    let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedW_has_vjp N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
-    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidW_has_vjp N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
-    let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedW_has_vjp N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
-    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidW_has_vjp N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
-    let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedW_has_vjp N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
-    let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpW_has_vjp N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
+    let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
+    let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
+    let dy14 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+    let dy13 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+    let dy12 : Vec (N * (192 * 7 * 7))   := (mbResidWHasVJP N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+    let dy11 : Vec (N * (112 * 14 * 14)) := (mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
+    let dy10 : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+    let dy9  : Vec (N * (112 * 14 * 14)) := (mbResidWHasVJP N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+    let dy8  : Vec (N * (80 * 14 * 14))  := (mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
+    let dy7  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+    let dy6  : Vec (N * (80 * 14 * 14))  := (mbResidWHasVJP N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+    let dy5  : Vec (N * (40 * 28 * 28))  := (mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
+    let dy4  : Vec (N * (40 * 28 * 28))  := (mbResidWHasVJP N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+    let dy3  : Vec (N * (24 * 56 * 56))  := (mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
+    let dy2  : Vec (N * (24 * 56 * 56))  := (mbResidWHasVJP N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+    let dy1  : Vec (N * (16 * 112 * 112)) := (mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
+    let dy0  : Vec (N * (32 * 112 * 112)) := (mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
     -- every block + stem + head tied at its real input + threaded output cotangent
     enetStemTied xN wN bN gN vN epsStr lrStr cotN w.sε hεw.s w.sW w.sb w.sγ w.sβ x dy0 lr
   ∧ enetNoExpTiedAt xN wN bN gN vN epsStr lrStr cotN 112 112 w.b1 hεw.b1.d hεw.b1.p a0 dy1 lr

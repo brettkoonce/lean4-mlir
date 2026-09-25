@@ -89,7 +89,7 @@ one and the others read the same:
 | **T6** whole-net backward | BackCertifiedTieB | WholeBackCertifiedTieB | WholeBackCertifiedTieB | WholeBackCertifiedTieB | FullWholeBackCertifiedTie | WholeBackCertifiedTieB | WholeBackCertifiedTieB |
 | data-parallel (sync BN) | SyncB / SyncStepTieB | same | same | same | SyncB / SyncStepTieG | — | — |
 
-**Tiers.** T1 = the whole-net VJP exists (`*_has_vjp_at`); T2 = the emitted forward graph denotes
+**Tiers.** T1 = the whole-net VJP exists (`*HasVJPAt`); T2 = the emitted forward graph denotes
 the net's forward (`*FwdGraph*_faithful`); T3 = every emitted parameter-update node denotes the
 certified gradient step (`*_net_tied*`); T6 = the emitted whole-net backward denotes the net's VJP.
 
@@ -158,17 +158,17 @@ Tensor.lean                    ← pdiv (def via fderiv) + VJP framework
   │  pdiv_add  (sum rule)           ← theorem
   │  pdiv_mul  (product rule)       ← theorem
   │  pdiv_id   (identity)           ← theorem
-  │  vjp_comp  (VJP composition)    ← theorem
+  │  vjpComp  (VJP composition)    ← theorem
   │  biPath    (additive fan-in)    ← theorem
   │  elemwiseProduct                ← theorem
   │  pdivMat_rowIndep               ← theorem (was the last surviving Mat-axiom)
   │
   ├── MLP.lean                 dense (proved both sides) + ReLU (pdiv_relu proved,
-  │                            relu/mlp _has_vjp = canonical-witness defs)
+  │                            relu/mlp HasVJP = canonical-witness defs)
   │                            + relu6; softmax CE is proved in Softmax.lean
   │
   ├── CNN.lean                 conv2d (def) + maxPool (def) + weight/bias grads (theorems)
-  │                            conv2d_has_vjp3 (theorem); maxPool2_has_vjp3
+  │                            conv2dHasVJP3 (theorem); maxPool2HasVJP3
   │                            (canonical-witness def — codegen substitutes argmax)
   │
   ├── BatchNorm.lean           BN (every axiom proved from foundation)
@@ -176,7 +176,7 @@ Tensor.lean                    ← pdiv (def via fderiv) + VJP framework
   ├── Residual.lean            skip connections (biPath; zero new axioms)
   │
   ├── Depthwise.lean           depthwise conv (def) + weight/bias grads (theorems)
-  │                            depthwise_has_vjp3 (theorem)
+  │                            depthwiseHasVJP3 (theorem)
   │
   ├── SE.lean                  squeeze-and-excitation (elemwiseProduct; zero new axioms)
   │
@@ -192,13 +192,13 @@ Two forms, set by the architecture's activations:
 
 - **Unconditional** (ViT, ConvNeXt, EfficientNet) — only smooth ops
   (GELU/Swish/sigmoid, softmax, LayerNorm, convolution; no ReLU, no
-  max-pool), so `vit_full_has_vjp` / `convnext_has_vjp` /
-  `efficientnet_has_vjp` are global `HasVJP`: correct at *every* input, with
+  max-pool), so `vitFullHasVJP` / `convnextHasVJP` /
+  `efficientnetHasVJP` are global `HasVJP`: correct at *every* input, with
   the `0 < ε` LayerNorm/BatchNorm positivity as the only side condition.
 
 - **Conditional + concretely instantiated** (MLP, MNIST-CNN, ResNet,
   MobileNetV2/V4) — ReLU/ReLU6/max-pool have genuine kinks, so the generic
-  whole-network VJP is pointwise (`*_has_vjp_at`, under per-site
+  whole-network VJP is pointwise (`*HasVJPAt`, under per-site
   off-the-kink hypotheses). Each is instantiated at a point with every
   hypothesis discharged (`MlpConcrete`, `TrainedCnn`, `CnnConcrete`,
   and for ResNet-34/50 and MobileNetV2/V4 the full-width batched nets
@@ -221,12 +221,12 @@ witness (one value per example and channel) and 38 kink clauses, all weight-only
 
 ## Axioms (0 project)
 
-Pure-Mathlib closure on every theorem. `#print axioms vit_full_has_vjp`
+Pure-Mathlib closure on every theorem. `#print axioms vitFullHasVJP`
 shows only `propext`, `Classical.choice`, `Quot.sound` (Lean core).
 
 The earlier 4-axiom floor was retired in Phase 7 (Apr 2026):
 
-- `relu_has_vjp`, `mlp_has_vjp`, `maxPool2_has_vjp3` — converted from
+- `reluHasVJP`, `mlpHasVJP`, `maxPool2HasVJP3` — converted from
   `axiom` to `noncomputable def` with the canonical pdiv-derived
   witness. `HasVJP.correct` holds by `rfl` since `pdiv` is a `def`
   over `fderiv` (post-foundation-flip). At non-smooth points the
@@ -249,45 +249,45 @@ hypothesis on the per-row function.
 
 **MLP.lean** — dense layers: **0 axioms.**
 
-> `pdiv_dense`, `pdiv_dense_W`, `dense_weight_grad_correct`,
-> `dense_bias_grad_correct`, and `pdiv_relu` are theorems.
-> `relu_has_vjp` and `mlp_has_vjp` are `def`s over the canonical
+> `pdiv_dense`, `pdiv_dense_W`, `denseWeightGrad_correct`,
+> `denseBiasGrad_correct`, and `pdiv_relu` are theorems.
+> `reluHasVJP` and `mlpHasVJP` are `def`s over the canonical
 > pdiv-derived witness. `softmaxCE_grad` is a theorem (in `Softmax.lean`, next to
 > `pdiv_softmax`).
 
 **CNN.lean** — convolution and pooling: **0 axioms.**
 
 > `conv2d` and `maxPool2` are concrete `def`s. The weight-grad and
-> bias-grad VJPs (`conv2d_weight_grad_has_vjp`,
-> `conv2d_bias_grad_has_vjp`) are theorems proved from foundation
-> via `unfold + fun_prop`. `conv2d_has_vjp3` is a theorem (Phase 1,
+> bias-grad VJPs (`conv2dWeightGradHasVJP`,
+> `conv2dBiasGradHasVJP`) are theorems proved from foundation
+> via `unfold + fun_prop`. `conv2dHasVJP3` is a theorem (Phase 1,
 > Apr 2026) — proved via `pdiv_finset_sum` × 3 +
 > `pdiv_const_mul_pi_pad_eval` per-summand + Σ_(c, kh, kw) collapse.
-> `maxPool2_has_vjp3` is a `def` over the canonical pdiv-derived
+> `maxPool2HasVJP3` is a `def` over the canonical pdiv-derived
 > witness.
 
 **BatchNorm.lean** — the hard one: **0 axioms.**
 
 > Every BN Jacobian is now a theorem. `pdiv_bnAffine` and
 > `pdiv_bnCentered` were proved in Stage 1; `pdiv_bnIstdBroadcast`
-> and the smoothness lemma `bnIstdBroadcast_diff` were the last to
+> and the smoothness lemma `bnIstdBroadcast_differentiable` were the last to
 > fall in the diff-threading branch — the centering CLM,
 > `HasFDerivAt.sqrt` (under `bnVar + ε > 0`), and
 > `(hasDerivAt_inv).comp_hasFDerivAt` close the chain. Every BN
 > proof now carries a `(hε : 0 < ε)` hypothesis.
 
 **Residual.lean** — skip connections: **0 axioms.** Pure composition
-over `biPath_has_vjp` + `identity_has_vjp` from `Tensor.lean`.
+over `biPathHasVJP` + `identityHasVJP` from `Tensor.lean`.
 
 **Depthwise.lean** — depthwise conv: **0 axioms.**
 
 > `depthwiseConv2d` is now a concrete `def`, weight and bias
-> gradients are theorems via `unfold + fun_prop`. `depthwise_has_vjp3`
+> gradients are theorems via `unfold + fun_prop`. `depthwiseHasVJP3`
 > is now a theorem (Phase 2, Apr 2026) — same recipe as conv2d with
 > one fewer Σ level (no cross-channel mixing in depthwise).
 
 **SE.lean** — squeeze-and-excitation: **0 axioms.** Pure composition
-over `elemwiseProduct_has_vjp` + `dense_has_vjp` + `identity_has_vjp`.
+over `elemwiseProductHasVJP` + `denseHasVJP` + `identityHasVJP`.
 
 **LayerNorm.lean** — layer norm and GELU: **0 axioms.**
 
@@ -298,25 +298,25 @@ over `elemwiseProduct_has_vjp` + `dense_has_vjp` + `identity_has_vjp`.
 > `fderiv_eq_smul_deriv` to convert scalar `fderiv` ↔ `deriv`. A
 > new `Proofs.differentiable_tanh` `@[fun_prop]` lemma (derived from
 > `Real.tanh_eq_sinh_div_cosh` + `Real.cosh_pos`) carries the
-> smoothness through. `layerNorm_has_vjp` reuses the BN proof
+> smoothness through. `layerNormHasVJP` reuses the BN proof
 > template on a different axis.
 
 **Attention.lean** — softmax, attention, ViT: **0 axioms.**
 
 > `pdiv_softmax`, `softmaxCE_grad`, the three `sdpa_back_*_correct`
-> theorems, `rowSoftmax_flat_diff`, and **every** transformer-level
-> chain (`transformerMlp_has_vjp_mat`,
-> `transformerAttnSublayer_has_vjp_mat`,
-> `transformerMlpSublayer_has_vjp_mat`,
-> `transformerBlock_has_vjp_mat`,
-> `transformerTower_has_vjp_mat`, `vit_body_has_vjp_mat`,
-> `mhsa_has_vjp_mat`, `mhsa_layer_flat_diff`,
-> `classifier_flat_has_vjp`, `vit_full_has_vjp`) are theorems.
-> `patchEmbed_flat`, `patchEmbed_flat_diff`, and
-> `patchEmbed_flat_has_vjp` were the last to fall: Phase 6a (Apr 2026)
+> theorems, `rowSoftmax_flat_differentiable`, and **every** transformer-level
+> chain (`transformerMlpHasVJPMat`,
+> `transformerAttnSublayerHasVJPMat`,
+> `transformerMlpSublayerHasVJPMat`,
+> `transformerBlockHasVJPMat`,
+> `transformerTowerHasVJPMat`, `vitBodyHasVJPMat`,
+> `mhsaHasVJPMat`, `mhsaLayer_flat_differentiable`,
+> `classifierFlatHasVJP`, `vitFullHasVJP`) are theorems.
+> `patchEmbedFlat`, `patchEmbedFlat_differentiable`, and
+> `patchEmbedFlatHasVJP` were the last to fall: Phase 6a (Apr 2026)
 > de-opaqued the forward and proved Diff via `differentiableAt_pad_eval`;
 > Phase 6b (Apr 2026) proved the closed-form input-VJP via the same
-> recipe used for `conv2d_has_vjp3`/`depthwise_has_vjp3`, with one new
+> recipe used for `conv2dHasVJP3`/`depthwiseHasVJP3`, with one new
 > wrinkle: split `Σ n : Fin (N+1)` into the n=0 (CLS row, zero img-grad
 > contribution) and `Σ p : Fin N` (n = p.succ, conv projection).
 
@@ -384,9 +384,9 @@ at its baseline.
 All of backpropagation:
 
 ```
-vjp_comp              f ∘ g  →  back_f(x, back_g(f(x), dy))
-biPath_has_vjp        f + g  →  back_f(x, dy) + back_g(x, dy)
-elemwiseProduct_has_vjp  f * g  →  back_f(x, g·dy) + back_g(x, f·dy)
+vjpComp              f ∘ g  →  back_f(x, back_g(f(x), dy))
+biPathHasVJP        f + g  →  back_f(x, dy) + back_g(x, dy)
+elemwiseProductHasVJP  f * g  →  back_f(x, g·dy) + back_g(x, f·dy)
 ```
 
 ## The five Jacobian tricks
@@ -413,7 +413,7 @@ convention for the canonical Lean witness. Typical max-error is
 `tests/comparator/` runs
 [leanprover/comparator](https://github.com/leanprover/comparator) on
 73 theorems spanning the foundation rules, every chapter's headline
-Jacobian, the public `*_has_vjp_correct` wrappers, and the five
+Jacobian, the public `*HasVJP_correct` wrappers, and the five
 whole-network VJPs (ViT, ResNet, MobileNetV2, ConvNeXt, EfficientNet).
 comparator
 re-runs Lean's kernel typechecker independently

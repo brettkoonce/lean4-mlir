@@ -11,7 +11,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
 /-! # FwdGraphTextTies — the rendered forward blocks are `pretty` of the T2 block graphs
 
-A net's T2 theorem (`resnet34FwdGraphB_full_faithful`, …) says a typed graph denotes the proven
+A net's T2 theorem (`resnet34FwdGraphBFull_faithful`, …) says a typed graph denotes the proven
 forward. The artifact in `verified_mlir/` is written by the renderer's forward chain
 (`r34FwdChainB`, …), a separate definition that emits one block at a time. This module ties the
 two by TEXT: for every block kind, the renderer's block emitter and `pretty` of the T2 block graph —
@@ -54,7 +54,7 @@ def prettyText (B : Nat) {k : Nat} (g : SHlo k) : String :=
 def leaf (nm : String) (n : Nat) : SHlo n := .operand nm (fun _ => 0)
 
 -- ════════════════════════════════════════════════════════════════
--- § ResNet-34 — `r34FwdChainB` vs `resnet34FwdGraphB_full`
+-- § ResNet-34 — `r34FwdChainB` vs `resnet34FwdGraphBFull`
 -- ════════════════════════════════════════════════════════════════
 
 def r34IdW0 (c : Nat) : R34IdW c :=
@@ -85,7 +85,7 @@ def r34DownW0 (ic oc : Nat) : R34DownW ic oc :=
     (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
--- § ResNet-50 — `r50FwdChainB` vs `resnet50FwdGraphB_full` (q = 7)
+-- § ResNet-50 — `r50FwdChainB` vs `resnet50FwdGraphBFull` (q = 7)
 -- ════════════════════════════════════════════════════════════════
 
 def r50IdW0 (mid oc : Nat) : R50IdW mid oc :=
@@ -122,7 +122,7 @@ def r50ProjW0 (ic mid oc : Nat) : R50ProjW ic mid oc :=
     (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
--- § MobileNetV2 — `mnv2FwdChainB` vs `mobilenetv2FwdGraphB_full`
+-- § MobileNetV2 — `mnv2FwdChainB` vs `mobilenetv2FwdGraphBFull`
 -- ════════════════════════════════════════════════════════════════
 
 def mnv2IVW0 (ic mid oc : Nat) : IVW ic mid oc :=
@@ -162,7 +162,7 @@ def mnv2NoExpW0 (ic oc : Nat) : IVWNoExp ic oc :=
     (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
--- § MobileNetV4-Conv-M — `mnv4FwdChainB` vs `mnv4FwdGraphB_full`
+-- § MobileNetV4-Conv-M — `mnv4FwdChainB` vs `mnv4FwdGraphBFull`
 -- ════════════════════════════════════════════════════════════════
 
 /-- Zero weights for one table row; the BN ε's are `1` so the record's positivity fields hold. -/
@@ -172,7 +172,7 @@ def mnv4UibW0 (s : UibSpec) : UibParams s :=
    fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0,
    fun _ _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩
 
-/-- `pretty` of the T2 graph for one table row, dispatched as `mnv4FwdGraphB_full` builds it: a
+/-- `pretty` of the T2 graph for one table row, dispatched as `mnv4FwdGraphBFull` builds it: a
     stride-2 row is `mnv4StridedGraphB` (the post-DW carries the stride; all three of Conv-M's have
     a pre-DW); a stride-1 row is its family's body plus the identity skip (`mnv4SkipGraphB`, spelled
     out here because the leaf is width-polymorphic and a skip row has `ic = oc` only numerically).
@@ -217,7 +217,7 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
     (fun _ _ => 0) (fun _ => 0) (leaf "%in" _))
 
 -- ════════════════════════════════════════════════════════════════
--- § EfficientNet-B0 — `enetFwdChain` vs `efficientnetFwdGraphB_full`
+-- § EfficientNet-B0 — `enetFwdChain` vs `efficientnetFwdGraphBFull`
 -- ════════════════════════════════════════════════════════════════
 
 -- Stem: 3×3/s2 XLA-SAME (3 → 32, 224 → 112) → BN → swish.

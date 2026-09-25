@@ -16,7 +16,7 @@ exactly the idealization the old axiom's docstring said it modeled ("the `∀x` 
 abstracts away overflow and the subnormal floor") — and `rndP_err` PROVES the standard
 model `|rndP p x − x| ≤ 2⁻¹⁻ᵖ·|x|` (Higham §2.2) from Mathlib alone: scale into the
 binade via `Int.zpow_log_le_self`, `|t − round t| ≤ 1/2`, unscale. `binary32` = the
-`p = 23` grid at `u32 = 2⁻²⁴`; `fp8E4M3` = the `p = 3` grid at `u_e4m3 = 2⁻⁴`.
+`p = 23` grid at `u32 = 2⁻²⁴`; `fp8E4M3` = the `p = 3` grid at `uE4M3 = 2⁻⁴`.
 
 With the named models in hand, the 2026-06 audit's gaps 2 and 3 stay realized:
 * **gap 2** — `binary32_e4m3_argmax_preserved`: the fp8 argmax-preservation theorem, an
@@ -60,14 +60,14 @@ noncomputable def gridModel (p : ℕ) (u : ℝ) (hu : ((2 : ℝ) ^ (p + 1))⁻¹
 noncomputable def binary32 : FloatModel := gridModel 23 u32 (by norm_num [u32])
 
 /-- **fp8 E4M3** (the low-precision leaf): the `p = 3` grid (3 mantissa bits) at
-    unit roundoff `u_e4m3 = 2⁻⁴`, normal-range model. -/
-noncomputable def fp8E4M3 : FloatModel := gridModel 3 u_e4m3 (by norm_num [u_e4m3])
+    unit roundoff `uE4M3 = 2⁻⁴`, normal-range model. -/
+noncomputable def fp8E4M3 : FloatModel := gridModel 3 uE4M3 (by norm_num [uE4M3])
 
 @[simp] theorem binary32_u : binary32.u = u32 := rfl
-@[simp] theorem fp8E4M3_u : fp8E4M3.u = u_e4m3 := rfl
+@[simp] theorem fp8E4M3_u : fp8E4M3.u = uE4M3 := rfl
 
-/-- `u32 ≤ u_e4m3`: fp32 is at least as precise as fp8 (`2⁻²⁴ ≤ 2⁻⁴`). -/
-theorem u32_le_u_e4m3 : u32 ≤ u_e4m3 := by norm_num [u32, u_e4m3]
+/-- `u32 ≤ uE4M3`: fp32 is at least as precise as fp8 (`2⁻²⁴ ≤ 2⁻⁴`). -/
+theorem u32_le_uE4M3 : u32 ≤ uE4M3 := by norm_num [u32, uE4M3]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Gap 2 — fp8 argmax preservation, now unconditional on the models
@@ -93,7 +93,7 @@ theorem binary32_e4m3_argmax_preserved {n : ℕ}
 
 /-- **Gap 2, the "loose 122" is a fan-in artifact.** The worst-case fp8 logit budget at
     the MNIST input dimension (784) is `≤ 61`, forcing a `> 122` margin. That figure is
-    `≈ 2·u_e4m3 · (m·w·a)` — *linear in the input dimension `m`*. At a small input
+    `≈ 2·uE4M3 · (m·w·a)` — *linear in the input dimension `m`*. At a small input
     (`m = 4`) the same worst-case budget is already `≤ 1/2`, so a margin of just `> 1`
     certifies the prediction. This makes precise why the deployed net (errors not aligned,
     activations far below the `m·w·a` ceiling) needs only the measured `0.38` drift, not
@@ -101,7 +101,7 @@ theorem binary32_e4m3_argmax_preserved {n : ℕ}
 theorem binary32_e4m3_budget_small :
     FloatModel.denseMixedBudget binary32.u fp8E4M3.u 4 (3 / 5) 1 1 ≤ 1 / 2 := by
   simp only [binary32_u, fp8E4M3_u, FloatModel.denseMixedBudget]
-  norm_num [u32, u_e4m3]
+  norm_num [u32, uE4M3]
 
 /-- The matching argmax corollary at the small input: a margin `> 1` (vs `> 122` at 784)
     suffices for the fp8 forward to preserve the prediction. -/

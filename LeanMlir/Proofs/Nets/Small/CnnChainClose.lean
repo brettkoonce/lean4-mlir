@@ -97,7 +97,7 @@ theorem cnn_render_convW2_chain_certified {c h w d1 nClasses kH kW : Nat}
     (W₃ : Mat (c * h * w) d1) (W₄ : Mat d1 d1) (W₅ : Mat d1 nClasses) (h3 h4 : Vec d1)
     (ac2 : Tensor3 c (2 * h) (2 * w)) (hc2 : Vec (c * (2 * h) * (2 * w))) (dy : Vec nClasses)
     (v : Vec (c * c * kH * kW)) (lr : ℝ) (idx : Fin (c * c * kH * kW)) :
-    v idx - lr * (conv2d_weight_grad_has_vjp b₂ ac1).backward v
+    v idx - lr * (conv2dWeightGradHasVJP b₂ ac1).backward v
         (cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy) idx
       = v idx - lr * ∑ j : Fin (c * (2 * h) * (2 * w)),
           pdiv (fun v' : Vec (c * c * kH * kW) =>
@@ -111,7 +111,7 @@ theorem cnn_render_convb2_chain_certified {c h w d1 nClasses kH kW : Nat}
     (W₃ : Mat (c * h * w) d1) (W₄ : Mat d1 d1) (W₅ : Mat d1 nClasses) (h3 h4 : Vec d1)
     (ac2 : Tensor3 c (2 * h) (2 * w)) (hc2 : Vec (c * (2 * h) * (2 * w))) (dy : Vec nClasses)
     (lr : ℝ) (o : Fin c) :
-    b₂ o - lr * (conv2d_bias_grad_has_vjp W₂ ac1).backward b₂
+    b₂ o - lr * (conv2dBiasGradHasVJP W₂ ac1).backward b₂
         (cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy) o
       = b₂ o - lr * ∑ j : Fin (c * (2 * h) * (2 * w)),
           pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₂ b' ac1)) b₂ o j
@@ -126,7 +126,7 @@ theorem cnn_render_convW1_chain_certified {ic c h w kH kW : Nat}
     (hc1 : Vec (c * (2 * h) * (2 * w))) (cotW2 : Vec (c * (2 * h) * (2 * w)))
     (W₂ : Kernel4 c c kH kW) (v : Vec (c * ic * kH * kW)) (lr : ℝ)
     (idx : Fin (c * ic * kH * kW)) :
-    v idx - lr * (conv2d_weight_grad_has_vjp b₁ x).backward v (cnnChainCotW1 W₂ hc1 cotW2) idx
+    v idx - lr * (conv2dWeightGradHasVJP b₁ x).backward v (cnnChainCotW1 W₂ hc1 cotW2) idx
       = v idx - lr * ∑ j : Fin (c * (2 * h) * (2 * w)),
           pdiv (fun v' : Vec (c * ic * kH * kW) =>
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b₁ x))
@@ -138,7 +138,7 @@ theorem cnn_render_convb1_chain_certified {ic c h w kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (x : Tensor3 ic (2 * h) (2 * w))
     (hc1 : Vec (c * (2 * h) * (2 * w))) (cotW2 : Vec (c * (2 * h) * (2 * w)))
     (W₂ : Kernel4 c c kH kW) (lr : ℝ) (o : Fin c) :
-    b₁ o - lr * (conv2d_bias_grad_has_vjp W₁ x).backward b₁ (cnnChainCotW1 W₂ hc1 cotW2) o
+    b₁ o - lr * (conv2dBiasGradHasVJP W₁ x).backward b₁ (cnnChainCotW1 W₂ hc1 cotW2) o
       = b₁ o - lr * ∑ j : Fin (c * (2 * h) * (2 * w)),
           pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₁ b' x)) b₁ o j
             * cnnChainCotW1 W₂ hc1 cotW2 j :=

@@ -14,8 +14,8 @@ SE blocks, multi-head outputs, anywhere a tensor is consumed by more
 than one downstream op.
 
 This file builds on the proved foundations in `Tensor.lean`:
-- `biPath f g` and `biPath_has_vjp` (additive fan-in, proved)
-- `identity_has_vjp` (identity VJP, proved)
+- `biPath f g` and `biPathHasVJP` (additive fan-in, proved)
+- `identityHasVJP` (identity VJP, proved)
 - `pdiv_add` and `pdiv_id` (calculus facts, proved from Mathlib's `fderiv`)
 
 With those in hand, the residual definitions are one-liners — no sorry's.
@@ -57,12 +57,12 @@ noncomputable def residual {n : Nat} (f : Vec n → Vec n) : Vec n → Vec n :=
       The "skip grad" is added to the first convBn of the block — exactly
       `f.back(x, dy) + dy_skip`, where `dy_skip = dy` here.
 
-    Proof: immediate from `biPath_has_vjp` and `identity_has_vjp`,
+    Proof: immediate from `biPathHasVJP` and `identityHasVJP`,
     both proved in `Tensor.lean`. -/
-noncomputable def residual_has_vjp {n : Nat}
+noncomputable def residualHasVJP {n : Nat}
     (f : Vec n → Vec n) (hf_diff : Differentiable ℝ f) (hf : HasVJP f) :
     HasVJP (residual f) :=
-  biPath_has_vjp f (fun x => x) hf_diff differentiable_id hf (identity_has_vjp n)
+  biPathHasVJP f (fun x => x) hf_diff differentiable_id hf (identityHasVJP n)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Projected residual: y = proj(x) + f(x)
@@ -89,13 +89,13 @@ noncomputable def residualProj {m n : Nat}
     where the projection's VJP is emitted alongside the main block's,
     and both gradients accumulate into the same incoming-grad SSA.
 
-    Proof: immediate from `biPath_has_vjp`, proved in `Tensor.lean`. -/
-noncomputable def residualProj_has_vjp {m n : Nat}
+    Proof: immediate from `biPathHasVJP`, proved in `Tensor.lean`. -/
+noncomputable def residualProjHasVJP {m n : Nat}
     (proj f : Vec m → Vec n)
     (hproj_diff : Differentiable ℝ proj) (hf_diff : Differentiable ℝ f)
     (hproj : HasVJP proj) (hf : HasVJP f) :
     HasVJP (residualProj proj f) :=
-  biPath_has_vjp proj f hproj_diff hf_diff hproj hf
+  biPathHasVJP proj f hproj_diff hf_diff hproj hf
 
 -- ════════════════════════════════════════════════════════════════
 -- § The pattern, in plain English
@@ -118,31 +118,31 @@ every modern architecture:
   • **Two-tower models** — independent encoders → joint loss. Even more
     extreme fan-out.
 
-If you understand `biPath_has_vjp`, you understand backprop through any
+If you understand `biPathHasVJP`, you understand backprop through any
 DAG. Composition (chain rule) handles the "linear" part; bi-path handles
 the joins. Together they're enough for any computation graph.
 -/
 
-/-- **Public correctness theorem for `residual_has_vjp`**: skip-connection
+/-- **Public correctness theorem for `residualHasVJP`**: skip-connection
 backward equals the `pdiv`-contracted Jacobian of `f + id`. -/
-theorem residual_has_vjp_correct {n : Nat}
+theorem residualHasVJP_correct {n : Nat}
     (f : Vec n → Vec n) (hf_diff : Differentiable ℝ f) (hf : HasVJP f)
     (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (residual_has_vjp f hf_diff hf).backward x dy i =
+    (residualHasVJP f hf_diff hf).backward x dy i =
     ∑ j : Fin n, pdiv (residual f) x i j * dy j :=
-  (residual_has_vjp f hf_diff hf).correct x dy i
+  (residualHasVJP f hf_diff hf).correct x dy i
 
-/-- **Public correctness theorem for `residualProj_has_vjp`**: same as
-`residual_has_vjp_correct` but for the projected variant where the skip
+/-- **Public correctness theorem for `residualProjHasVJP`**: same as
+`residualHasVJP_correct` but for the projected variant where the skip
 isn't identity. -/
-theorem residualProj_has_vjp_correct {m n : Nat}
+theorem residualProjHasVJP_correct {m n : Nat}
     (proj f : Vec m → Vec n)
     (hproj_diff : Differentiable ℝ proj) (hf_diff : Differentiable ℝ f)
     (hproj : HasVJP proj) (hf : HasVJP f)
     (x : Vec m) (dy : Vec n) (i : Fin m) :
-    (residualProj_has_vjp proj f hproj_diff hf_diff hproj hf).backward x dy i =
+    (residualProjHasVJP proj f hproj_diff hf_diff hproj hf).backward x dy i =
     ∑ j : Fin n, pdiv (residualProj proj f) x i j * dy j :=
-  (residualProj_has_vjp proj f hproj_diff hf_diff hproj hf).correct x dy i
+  (residualProjHasVJP proj f hproj_diff hf_diff hproj hf).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Smooth-point variants (for the CNN/ResNet composition)
@@ -150,14 +150,14 @@ theorem residualProj_has_vjp_correct {m n : Nat}
 
 /-! ResNet residual bodies contain ReLU, which is only `DifferentiableAt`
 at smooth points (see `MLP.lean`), not `Differentiable` globally. So the
-end-to-end CNN VJP (`cnn_has_vjp_at`, future) must chain through the
-pointwise `HasVJPAt` framework — `vjp_comp_at` + the witnesses below —
-exactly as `mlp_has_vjp_at` does for the MLP. These mirror the everywhere
+end-to-end CNN VJP (`cnnHasVJPAt`, future) must chain through the
+pointwise `HasVJPAt` framework — `vjpCompAt` + the witnesses below —
+exactly as `mlpHasVJPAt` does for the MLP. These mirror the everywhere
 versions above, at a fixed `x`; `pdiv_add` is already stated at-point so
 the proof is the everywhere one with `intro x` dropped. -/
 
-/-- **Additive fan-in at a point** — smooth-point analog of `biPath_has_vjp`. -/
-noncomputable def biPath_has_vjp_at {m n : Nat}
+/-- **Additive fan-in at a point** — smooth-point analog of `biPathHasVJP`. -/
+noncomputable def biPathHasVJPAt {m n : Nat}
     (f g : Vec m → Vec n) (x : Vec m)
     (hf_diff : DifferentiableAt ℝ f x) (hg_diff : DifferentiableAt ℝ g x)
     (hf : HasVJPAt f x) (hg : HasVJPAt g x) :
@@ -171,13 +171,13 @@ noncomputable def biPath_has_vjp_at {m n : Nat}
 /-- **Residual VJP at a point**: `dx = f.back(dy) + dy`. The skip
     (identity) is differentiable everywhere, so only `f` needs the
     smooth-point hypothesis. -/
-noncomputable def residual_has_vjp_at {n : Nat}
+noncomputable def residualHasVJPAt {n : Nat}
     (f : Vec n → Vec n) (x : Vec n)
     (hf_diff : DifferentiableAt ℝ f x) (hf : HasVJPAt f x) :
     HasVJPAt (residual f) x :=
-  biPath_has_vjp_at f (fun x => x) x
+  biPathHasVJPAt f (fun x => x) x
     hf_diff differentiable_id.differentiableAt
-    hf ((identity_has_vjp n).toHasVJPAt x)
+    hf ((identityHasVJP n).toHasVJPAt x)
 
 theorem residual_apply {n : Nat} (f : Vec n → Vec n) (v : Vec n) (k : Fin n) :
     residual f v k = f v k + v k := rfl
@@ -189,12 +189,12 @@ theorem residual_differentiableAt {n : Nat} {f : Vec n → Vec n} {x : Vec n}
 /-- **Projected residual VJP at a point**: both paths carry smooth-point
     hypotheses (the 1×1 stride-2 projection is linear, but stated at-point
     for uniformity with the composition). -/
-noncomputable def residualProj_has_vjp_at {m n : Nat}
+noncomputable def residualProjHasVJPAt {m n : Nat}
     (proj f : Vec m → Vec n) (x : Vec m)
     (hproj_diff : DifferentiableAt ℝ proj x) (hf_diff : DifferentiableAt ℝ f x)
     (hproj : HasVJPAt proj x) (hf : HasVJPAt f x) :
     HasVJPAt (residualProj proj f) x :=
-  biPath_has_vjp_at proj f x hproj_diff hf_diff hproj hf
+  biPathHasVJPAt proj f x hproj_diff hf_diff hproj hf
 
 /-- A residual branch is continuous when its body is. -/
 @[fun_prop]

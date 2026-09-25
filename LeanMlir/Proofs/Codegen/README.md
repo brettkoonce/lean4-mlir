@@ -23,11 +23,11 @@ its text is `pretty` of an `SHlo` term. The theorems about what that term *means
 
 | net | renderer | T2: forward graph = forward | T3: train step = certified step | T6: backward graph = VJP |
 |---|---|---|---|---|
-| ResNet-34 | `ResNet34RenderB` | `resnet34FwdGraphB_full_faithful` | `r34_net_tiedB` (sync-BN DP: `r34_net_syncTiedB`) | `r34InputGradB_eq_r34B_full_vjp` |
-| ResNet-50 | `ResNet50RenderB` | `resnet50FwdGraphB_full_faithful` | `r50_net_tiedB` | `r50InputGradB_eq_r34B_full_vjp` |
-| MobileNetV2 | `MobileNetV2RenderB` | `mobilenetv2FwdGraphB_full_faithful` | `mnv2_net_tiedB` | `mnv2InputGradB_eq_mobilenetv2B_full_vjp` |
-| MobileNetV4 | `MobileNetV4RenderB` | `mnv4FwdGraphB_full_faithful` | `mnv4_net_tiedB` | `mnv4InputGradB_eq_mnv4B_full_vjp` |
-| EfficientNet-B0 | `EfficientNetRender` | `efficientnetFwdGraphB_full_faithful` | `efficientnet_net_tiedG` | `efficientnetInputGradB_full_eq_efficientnetForwardB_full_vjp` |
+| ResNet-34 | `ResNet34RenderB` | `resnet34FwdGraphBFull_faithful` | `r34_net_tiedB` (sync-BN DP: `r34_net_syncTiedB`) | `r34InputGradB_eq_r34B_full_vjp` |
+| ResNet-50 | `ResNet50RenderB` | `resnet50FwdGraphBFull_faithful` | `r50_net_tiedB` | `r50InputGradB_eq_r34B_full_vjp` |
+| MobileNetV2 | `MobileNetV2RenderB` | `mobilenetv2FwdGraphBFull_faithful` | `mnv2_net_tiedB` | `mnv2InputGradB_eq_mobilenetv2B_full_vjp` |
+| MobileNetV4 | `MobileNetV4RenderB` | `mnv4FwdGraphBFull_faithful` | `mnv4_net_tiedB` | `mnv4InputGradB_eq_mnv4B_full_vjp` |
+| EfficientNet-B0 | `EfficientNetRender` | `efficientnetFwdGraphBFull_faithful` | `efficientnet_net_tiedG` | `efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp` |
 | ConvNeXt-T | `ConvNeXtRenderB` | `convNextFwdGraphTCh_faithful` | `cnx_net_tiedGB` | `convnextInputGradB_eq_convNextForwardTChB_vjp` |
 | ViT-Tiny | `ViTRenderB` | `vitFwdGraphKMHV_faithful` | `vit_net_tiedGB` | `vitInputGradKB_eq_vitKVB_vjp` |
 

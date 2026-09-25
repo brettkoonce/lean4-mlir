@@ -22,7 +22,7 @@ plain width `N·K`, at a GENERAL target arriving as `%onehot`. The fused file pi
 `softmax − oneHot`.
 
 ⭐ **Axis 3 — the INDEX.** `N` is a binder. Every activation is `batchMap N` of the per-example
-prefix the fused file threads (`patchEmbed_flat`, `vitBlockFwdOMHV`, the final LN, `clsSliceFlat`)
+prefix the fused file threads (`patchEmbedFlat`, `vitBlockFwdOMHV`, the final LN, `clsSliceFlat`)
 and every cotangent is `batchMapAux N` of the per-example chain (`vitCotB2outV`,
 `vitBlockCotInAtMHV`, the `vitCot*` family). Honest for this net because no ViT op couples
 examples — LayerNorm, attention, GELU and the denses are all per-example, and the `*B`
@@ -92,7 +92,7 @@ noncomputable def blkSaves {Np1 heads d mlpDim : Nat} (ε : ℝ)
   let K    : Mat Np1 (heads * d) := fun r => dense Wk bk (ln1 r)
   let V    : Mat Np1 (heads * d) := fun r => dense Wv bv (ln1 r)
   let att  : Mat Np1 (heads * d) := ∑ hh : Fin heads, headPadMat Np1 heads d hh
-    (Mat.mul (rowSoftmax (fun i j => sdpa_scale d *
+    (Mat.mul (rowSoftmax (fun i j => sdpaScale d *
         Mat.mul (headSliceMat Np1 heads d hh Q) (Mat.transpose (headSliceMat Np1 heads d hh K)) i j))
       (headSliceMat Np1 heads d hh V))
   let h    : Mat Np1 (heads * d) := fun r s => X r s + dense Wo bo (att r) s
@@ -295,7 +295,7 @@ def vitEmbedTiedGB (N : Nat) (xN cotN : String)
           (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (dd, c), kh), kw))
         = ∑ n : Fin N, ∑ o : Fin ((196 + 1) * 192),
             pdiv (fun v : Vec (192 * 3 * 16 * 16) =>
-                    patchEmbed_flat 3 224 224 16 196 192 (Kernel4.unflatten v) bc cls pos
+                    patchEmbedFlat 3 224 224 16 196 192 (Kernel4.unflatten v) bc cls pos
                       (batchSlice N (3 * 224 * 224) img n))
               (Kernel4.flatten Wc)
               (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (dd, c), kh), kw)) o
@@ -304,7 +304,7 @@ def vitEmbedTiedGB (N : Nat) (xN cotN : String)
       den (SHlo.patchEmbedBiasGradB (N := N) (tk := 196) (c := 192) (.operand cotN dyEmbed)) i
         = ∑ n : Fin N, ∑ o : Fin ((196 + 1) * 192),
             pdiv (fun b' : Vec 192 =>
-                    patchEmbed_flat 3 224 224 16 196 192 Wc b' cls pos
+                    patchEmbedFlat 3 224 224 16 196 192 Wc b' cls pos
                       (batchSlice N (3 * 224 * 224) img n)) bc i o
               * batchSlice N ((196 + 1) * 192) dyEmbed n o)
   ∧ (∀ i : Fin 192,
@@ -312,14 +312,14 @@ def vitEmbedTiedGB (N : Nat) (xN cotN : String)
             (.operand cotN (batchMap N (clsSliceFlat 196 192) dyEmbed))) i
         = ∑ n : Fin N, ∑ j : Fin (197 * 192),
             pdiv (fun cl : Vec 192 =>
-                    patchEmbed_flat 3 224 224 16 196 192 Wc bc cl pos
+                    patchEmbedFlat 3 224 224 16 196 192 Wc bc cl pos
                       (batchSlice N (3 * 224 * 224) img n)) cls i j
               * batchSlice N (197 * 192) dyEmbed n j)
   ∧ (∀ i : Fin ((196 + 1) * 192),
       den (SHlo.posEmbedGradB (N := N) (tk := 196) (D := 192) (.operand cotN dyEmbed)) i
         = ∑ n : Fin N, ∑ o : Fin ((196 + 1) * 192),
             pdiv (fun p : Vec ((196 + 1) * 192) =>
-                    patchEmbed_flat 3 224 224 16 196 192 Wc bc cls (Mat.unflatten p)
+                    patchEmbedFlat 3 224 224 16 196 192 Wc bc cls (Mat.unflatten p)
                       (batchSlice N (3 * 224 * 224) img n))
               (Mat.flatten pos) i o
               * batchSlice N ((196 + 1) * 192) dyEmbed n o)
@@ -351,7 +351,7 @@ abbrev _root_.Proofs.BlockParamsV.TiedGB {Np1 heads d mlpDim : Nat}
   vitBlockTiedGB N xN epsStr cotN ε p.γ1 p.β1 p.γ2 p.β2 p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo
     p.Wfc1 p.bfc1 p.Wfc2 p.bfc2 xin dyOut
 
-theorem _root_.Proofs.BlockParamsV.tiedGB {Np1 heads d mlpDim : Nat}
+theorem _root_.Proofs.BlockParamsV.tied_gb {Np1 heads d mlpDim : Nat}
     (p : BlockParamsV (heads * d) mlpDim) (N : Nat) (xN epsStr cotN : String) (ε : ℝ)
     (xin dyOut : Vec (N * (Np1 * (heads * d)))) : p.TiedGB N xN epsStr cotN ε xin dyOut :=
   vit_block_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ xin dyOut
@@ -375,7 +375,7 @@ theorem vit_net_tiedGB (N : Nat) {nC : Nat}
     (xN aN epsStr cotN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
     (w : ViTTieWeights nC)
     (img : Vec (N * (3 * 224 * 224))) (t : Vec (N * nC)) :
-    let ib1    : Vec (N * (197 * 192)) := batchMap N (patchEmbed_flat 3 224 224 16 196 192 w.Wc w.bc w.cls w.pos) img
+    let ib1    : Vec (N * (197 * 192)) := batchMap N (patchEmbedFlat 3 224 224 16 196 192 w.Wc w.bc w.cls w.pos) img
     let ib2    : Vec (N * (197 * 192)) := batchMap N (w.b1.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib1
     let ib3    : Vec (N * (197 * 192)) := batchMap N (w.b2.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib2
     let ib4    : Vec (N * (197 * 192)) := batchMap N (w.b3.fwdO (Np1 := 197) (heads := 3) (d := 64) ε) ib3
@@ -425,18 +425,18 @@ theorem vit_net_tiedGB (N : Nat) {nC : Nat}
   ∧ vitEmbedTiedGB N xN cotN w.Wc w.bc w.cls w.pos img dyEmbed := by
   intro ib1 ib2 ib3 ib4 ib5 ib6 ib7 ib8 ib9 ib10 ib11 ib12 b12out flB hnB logitsB g dy12 dy11 dy10 dy9 dy8 dy7 dy6 dy5 dy4 dy3 dy2 dy1 dyEmbed
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact w.b1.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib1 dy1
-  · exact w.b2.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib2 dy2
-  · exact w.b3.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib3 dy3
-  · exact w.b4.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib4 dy4
-  · exact w.b5.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib5 dy5
-  · exact w.b6.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib6 dy6
-  · exact w.b7.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib7 dy7
-  · exact w.b8.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib8 dy8
-  · exact w.b9.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib9 dy9
-  · exact w.b10.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib10 dy10
-  · exact w.b11.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib11 dy11
-  · exact w.b12.tiedGB N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib12 dy12
+  · exact w.b1.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib1 dy1
+  · exact w.b2.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib2 dy2
+  · exact w.b3.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib3 dy3
+  · exact w.b4.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib4 dy4
+  · exact w.b5.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib5 dy5
+  · exact w.b6.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib6 dy6
+  · exact w.b7.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib7 dy7
+  · exact w.b8.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib8 dy8
+  · exact w.b9.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib9 dy9
+  · exact w.b10.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib10 dy10
+  · exact w.b11.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib11 dy11
+  · exact w.b12.tied_gb N (Np1 := 197) (heads := 3) (d := 64) xN epsStr cotN ε ib12 dy12
   · exact vit_finalLN_tiedGB N xN epsStr cotN ε w.γF w.βF w.Wcls b12out g
   · exact vit_head_tiedGB N aN cotN hnB w.Wcls w.bcls g
   · exact vit_embed_tiedGB N xN cotN w.Wc w.bc w.cls w.pos img dyEmbed

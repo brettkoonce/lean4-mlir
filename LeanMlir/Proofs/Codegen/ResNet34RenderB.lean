@@ -1556,7 +1556,7 @@ here first"
         "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as ResNet34SyncTieB.r34_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.resnet34FwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // gradient) and StableHLO.resnet34FwdGraphSyncFull_shard (the forward), both in\n" ++
         "    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).\n" ++
         (if bf16 then
           "    // (Both are stated at the f32 nodes. At bf16 the conv forward and input-VJP nodes\n" ++

@@ -4,14 +4,14 @@ import LeanMlir.Proofs.Nets.ViT.ViTBackB0
 /-! # §B: the ViT MHSA backward chain IS the certified VJP (the sdpa adjoint)
 
 The substantive vit-specific §B leaf: the hand-composed multi-head self-attention backward `mhsaBackFlat`
-(`ViTBackChains.lean`) IS the certified MHSA input-gradient VJP `mhsa_has_vjp_mat` (`Attention.lean`),
+(`ViTBackChains.lean`) IS the certified MHSA input-gradient VJP `mhsaHasVJPMat` (`Attention.lean`),
 flattened — the attention analogue of the depthwise/conv adjoint gates.
 
 Unlike the CNN `convFlatBack` (a free reversed-kernel conv that needed a gate), the ViT sdpa cores are
 ALREADY certified-`sdpa_back`-grounded by construction (`coreQFlat = flatten ∘ mhsaSdpaBackQ ∘ unflatten`,
-`mhsaSdpaBackQ = sdpa_back_Q` per `headSliceMat` head). What this file closes is the **assembly reconciliation**:
+`mhsaSdpaBackQ = sdpaBackQ` per `headSliceMat` head). What this file closes is the **assembly reconciliation**:
 `mhsaBackFlat` is a flat per-head fan-in with SEPARATE `dense Wᵀq/Wᵀk/Wᵀv` projection-backwards
-(`perRowFlat`), while the certified `mhsa_has_vjp_mat.backward` is a Mat-space VJP over the qkv-MERGED
+(`perRowFlat`), while the certified `mhsaHasVJPMat.backward` is a Mat-space VJP over the qkv-MERGED
 projection. ViTBackB0's `mhsa_backward_collapseMH` already collapses the certified Mat backward to the clean
 per-head merged sum `mhsaBackCollapsedMH = ∑ₕ (Σⱼ Wq c (h,j)·dQ + Σⱼ Wk·dK + Σⱼ Wv·dV)`; this file shows
 `mhsaBackFlat` (Q/K/V pinned to the actual projections `dense W· bq (X·)`) equals that, coordinatewise:
@@ -54,7 +54,7 @@ theorem woback_unflatten (Wo : Mat (h * dh) (h * dh)) (dconcat : Vec (N * (h * d
 
 /-- **THE ViT MHSA BACKWARD §B TIE.** The MHSA backward chain `mhsaBackFlat`, with its saved Q/K/V
     projections pinned to the actual `dense W· b· (X·)` projections at the saved block input `X`, IS the
-    certified MHSA input-gradient VJP `(mhsa_has_vjp_mat …).backward X`, flattened. So the attention
+    certified MHSA input-gradient VJP `(mhsaHasVJPMat …).backward X`, flattened. So the attention
     backward the ViT chain is spelled in IS the certified attention gradient, not a look-alike.
     Closes under `[propext, Classical.choice, Quot.sound]`. -/
 theorem mhsaBackFlat_eq_mhsa_vjp
@@ -63,7 +63,7 @@ theorem mhsaBackFlat_eq_mhsa_vjp
         (fun r => Proofs.dense Wq bq (X r)) (fun r => Proofs.dense Wk bk (X r))
         (fun r => Proofs.dense Wv bv (X r))
       = (fun dconcat => Mat.flatten
-          ((mhsa_has_vjp_mat N h dh Wq Wk Wv Wo bq bk bv bo).backward X (Mat.unflatten dconcat))) := by
+          ((mhsaHasVJPMat N h dh Wq Wk Wv Wo bq bk bv bo).backward X (Mat.unflatten dconcat))) := by
   funext dconcat
   rw [StableHLO.mhsa_backward_collapseMH N h dh Wq Wk Wv Wo bq bk bv bo X (Mat.unflatten dconcat)]
   funext idx
@@ -113,7 +113,7 @@ theorem mhsaBackFlat_eq_mhsa_vjp
 -- ════════════════════════════════════════════════════════════════
 
 /-- The chain's dense input-VJP `dense (Wᵀ) 0` IS the certified contraction `Mat.mulVec W`
-    (the certified `dense_has_vjp.backward`, which ignores its affine activation); `mul_comm` per
+    (the certified `denseHasVJP.backward`, which ignores its affine activation); `mul_comm` per
     term. The function-level form (no `x` arg) the `simp` matches against. -/
 theorem dense_transpose_eq_mulVec {m n : Nat} (W : Mat m n) :
     Proofs.dense (Mat.transpose W) (0 : Vec m) = Mat.mulVec W := by
@@ -121,24 +121,24 @@ theorem dense_transpose_eq_mulVec {m n : Nat} (W : Mat m n) :
   simp only [Proofs.dense, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
   exact Finset.sum_congr rfl fun j _ => mul_comm _ _
 
-/-- The chain's GELU backward `diagBack (act'(s))` IS the certified `gelu_has_vjp.backward`
-    at the saved pre-activation `s` (the elementwise derivative scaling — `gelu_has_vjp.backward s
+/-- The chain's GELU backward `diagBack (act'(s))` IS the certified `geluHasVJP.backward`
+    at the saved pre-activation `s` (the elementwise derivative scaling — `geluHasVJP.backward s
     dy i = dy i · geluScalarDeriv (s i)`, `diagBack` is the same scaling, `mul_comm`). -/
 theorem diagBack_eq_gelu_vjp {n : Nat} (s : Vec n) :
-    diagBack (fun c => geluScalarDeriv (s c)) = (gelu_has_vjp n).backward s := by
+    diagBack (fun c => geluScalarDeriv (s c)) = (geluHasVJP n).backward s := by
   funext dy i
-  simp only [diagBack, gelu_has_vjp, mul_comm]
+  simp only [diagBack, geluHasVJP, mul_comm]
 
-/-- **The `transformerMlp` backward in explicit per-token form.** The nested `vjpMat_comp`
+/-- **The `transformerMlp` backward in explicit per-token form.** The nested `vjpMatComp`
     (`dense₂ ∘ gelu ∘ dense₁`, per token) reduces to: each token's `dz r` runs `mulVec Wfc2`,
     the GELU backward at the saved pre-activation `dense₁(Y r)`, then `mulVec Wfc1`. Pure
-    `rfl` (the per-token VJPs are `rowwise`/`vjpMat_comp` structure projections). -/
+    `rfl` (the per-token VJPs are `rowwise`/`vjpMatComp` structure projections). -/
 theorem transformerMlp_backward_pertoken (N D dff : Nat)
     (Wfc1 : Mat D dff) (bfc1 : Vec dff) (Wfc2 : Mat dff D) (bfc2 : Vec D)
     (Y : Mat N D) (dz : Mat N D) :
-    (transformerMlp_has_vjp_mat N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y dz
+    (transformerMlpHasVJPMat N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y dz
       = fun r => Mat.mulVec Wfc1
-          ((gelu_has_vjp dff).backward (Proofs.dense Wfc1 bfc1 (Y r)) (Mat.mulVec Wfc2 (dz r))) := by
+          ((geluHasVJP dff).backward (Proofs.dense Wfc1 bfc1 (Y r)) (Mat.mulVec Wfc2 (dz r))) := by
   rfl
 
 /-- **L2 — the `transformerMlp` backward, flattened, IS `perRowFlatPR` of the flat chain.**
@@ -147,7 +147,7 @@ theorem transformerMlp_backward_pertoken (N D dff : Nat)
 theorem transformerMlp_back_flat_eq_perRowFlatPR (N D dff : Nat)
     (Wfc1 : Mat D dff) (bfc1 : Vec dff) (Wfc2 : Mat dff D) (bfc2 : Vec D)
     (Y : Mat N D) (v : Vec (N * D)) :
-    Mat.flatten ((transformerMlp_has_vjp_mat N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y (Mat.unflatten v))
+    Mat.flatten ((transformerMlpHasVJPMat N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y (Mat.unflatten v))
       = perRowFlatPR N D
           (fun r => Proofs.dense (Mat.transpose Wfc1) (0 : Vec D)
             ∘ diagBack (fun c => geluScalarDeriv (Proofs.dense Wfc1 bfc1 (Y r) c))

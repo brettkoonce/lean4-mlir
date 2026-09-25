@@ -15,8 +15,8 @@ definitional step across the chain. Item 4 is a separate memory regression.
    EITHER toolchain (killed at 250 s on 4.32.2); 4.32.2 only got through the apex by some path
    4.34 no longer takes. Fix: `cnxSavedB_k` point-free `abbrev`s (`batchMap B stage ∘ cnxSavedB_{k-1} B w`)
    named as each level's inner map — apex 2 s.
-2. **TieB tie** — `simp only [Function.comp_apply, convNextForwardTChB_has_vjp_at,
-   vjp_comp_diff_at_fst_backward]` is pure `dsimp` (all three are `rfl`), so simp recorded no
+2. **TieB tie** — `simp only [Function.comp_apply, convNextForwardTChBHasVJPAt,
+   vjpCompDiffAt_fst_backward]` is pure `dsimp` (all three are `rfl`), so simp recorded no
    step and the kernel unfolded the whole net under the witnesses' `.backward`s: 40+ GB. Fix:
    the same steps as `rw`s. Whole module: timeout → 2.6 s, 2.7 GB.
 3. **Per-example Tie** (`ConvNeXtWholeBackCertifiedTie.lean`, never failed, so the 09-16 run did
@@ -62,9 +62,9 @@ can be backported: the new names exist in neither Lean 4.32.2/4.33.x core nor Ma
 
 ## 3. The blocker
 
-`convNextForwardTChB_has_vjp_at` (the twelve-stage batched VJP apex, eleven nested
-`vjp_comp_diff_at`s) fails with `(kernel) deterministic timeout`. The three
-`unknown constant 'Proofs.convNextForwardTChB_has_vjp_at'` errors that follow are **cascade** — the
+`convNextForwardTChBHasVJPAt` (the twelve-stage batched VJP apex, eleven nested
+`vjpCompDiffAt`s) fails with `(kernel) deterministic timeout`. The three
+`unknown constant 'Proofs.convNextForwardTChBHasVJPAt'` errors that follow are **cascade** — the
 decl never entered the environment — not separate failures.
 
 Bisection (truncate the apex to k levels above the stem pair):
@@ -111,7 +111,7 @@ is only 3 backport commits (InfoTree/editor + mimalloc), so this is present thro
   `setsid nohup nice -n 19 ionice -c3 lake build <target> > log 2>&1 < /dev/null &`
   (harness-tracked background tasks get reaped under low free memory; detached ones do not).
 * **`set_option … in` must precede the docstring**, or the docstring detaches from the decl.
-* **The batched witnesses (`cnxStemB_at`, `cnxStageB_at`, `cnxSavedB*`) live INSIDE `TieB`**, not in
+* **The batched witnesses (`cnxStemBAt`, `cnxStageBAt`, `cnxSavedB*`) live INSIDE `TieB`**, not in
   its import cone — truncate in place, a standalone importer cannot see them.
 * **Stale oleans.** This worktree was first built on the rc2-era flat layout, so `.lake` holds ~123
   orphaned oleans from before `main`'s `Proofs/Nets/<family>/` reorg. A naive `find` counts 349

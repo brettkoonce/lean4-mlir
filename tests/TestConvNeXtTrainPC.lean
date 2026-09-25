@@ -13,7 +13,7 @@ dw 7×7, 10 classes. Forward AND the whole backward cotangent chain are proof-re
 layer-scale backward IS the forward token applied to the cotangent (`layerScale`'s input-VJP is
 `γ ⊙ dy` — diagonal/symmetric), so no new backward token. Only the no-SHlo-constructor pieces
 are hand-emitted: the GAP backward, conv/depthwise/dense weight+bias grads, layer-scale
-`dγ = Σ_b x⊙dy`, and scalar-LN `dγ = Σ dy·x̂`, `dβ = Σ dy` (`bn_grad_gamma/beta`); reshape glue
+`dγ = Σ_b x⊙dy`, and scalar-LN `dγ = Σ dy·x̂`, `dβ = Σ dy` (`bnGradGamma/beta`); reshape glue
 (flat→NCHW) only at those.
 
 Unlike the MNV2/r34 peers there is no committed same-signature renderer (the committed
@@ -83,7 +83,7 @@ private def lsGrad (o xFlat dyFlat : String) (n : Nat) : String :=
 
 /-- scalar-LN dγ = Σ_{b,k} dy·x̂, dβ = Σ_{b,k} dy; recompute x̂ from the saved LN input
     `inFlat` (per-example mean/var over [1] — `bnF`'s own emission text). The rendered
-    `bn_grad_gamma`/`bn_grad_beta` (certified `cnx_render_ln{gamma,beta}_certified`). -/
+    `bnGradGamma`/`bnGradBeta` (certified `cnx_render_ln{gamma,beta}_certified`). -/
 private def lnParamGrad (dgr dbe inFlat dyFlat : String) (n : Nat) : String :=
   let tn := ty [BS, n]
   s!"    {dgr}nf = stablehlo.constant dense<{n}.0> : {tn}\n" ++

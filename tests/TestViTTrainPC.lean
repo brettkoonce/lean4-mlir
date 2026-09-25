@@ -93,7 +93,7 @@ private def rowDenseBGrad (o dyFlat : String) (c : Nat) : String :=
 /-- vector-LN dγ_k = Σ_(b,tok) dy·x̂ (KEEPS the channel axis), dβ_k = Σ_(b,tok) dy —
     `ViTRender`'s per-channel LN param reduces, off the SAVED normalize output x̂ (the
     `lnRowF`(1,0) SSA value — no recompute needed at the decomposed form). The rendered
-    `vecLN_grad_gamma/beta` (`vit_render_vecln{gamma,beta}_certified`). -/
+    `vecLNGradGamma/beta` (`vit_render_vecln{gamma,beta}_certified`). -/
 private def vecLNParamGrad (dgr dbe xhFlat dyFlat : String) (t f : Nat) : String :=
   let tn := ty [BS, t, f]
   rs3 s!"{dgr}xh" xhFlat t f ++ rs3 s!"{dgr}dyi" dyFlat t f ++

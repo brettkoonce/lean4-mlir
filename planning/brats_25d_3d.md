@@ -67,7 +67,7 @@ OOM at 11.68 GiB; else re-plan at 96³ or drop.
   (:54) list-ifies; `imageD : Nat := 1` on `NetSpec`; 7 hardcoded `ic*imageH*imageW` sites;
   58 four-element pattern matches; 6 dispatch walkers grow arms (parameterize `Layer` by rank,
   do not add `conv3d`/`maxPool3d` constructors). **Gate: emitted MLIR byte-identical for every
-  existing 2D spec.** Make the `conv2d_has_vjp3` / `maxPool2_has_vjp3` citations at :4130-4131 /
+  existing 2D spec.** Make the `conv2dHasVJP3` / `maxPool2HasVJP3` citations at :4130-4131 /
   :7769 rank-conditional or the 3D MLIR states theorems that do not exist.
 * **E, ops one at a time behind FD probes (~2 weeks):** maxPool3d fwd+VJP first (the unknown),
   conv3d fwd/dW/dx (transpose `[1,0,2,3,4]`, `reverse [2,3,4]`), trilinear fwd/VJP

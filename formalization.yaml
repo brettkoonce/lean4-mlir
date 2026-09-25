@@ -134,21 +134,21 @@ status:
     # the chain rule for pdiv: composition, additive and multiplicative fan-in, finset sums
     - {declaration: "Proofs.pdiv_comp", file: "LeanMlir/Proofs/Foundation/Tensor.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config.json", literature_dependencies: []}
     # 2D convolution (the strided, depthwise and stride-4 forms are its siblings)
-    - {declaration: "Proofs.conv2d_has_vjp3_correct", file: "LeanMlir/Proofs/Architectures/CNN.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
+    - {declaration: "Proofs.conv2dHasVJP3_correct", file: "LeanMlir/Proofs/Architectures/CNN.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
     # batch-norm's three-term backward (layer-norm is the same lemma at one row)
     - {declaration: "Proofs.bn_input_grad_correct", file: "LeanMlir/Proofs/Architectures/BatchNorm.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # softmax cross-entropy
     - {declaration: "Proofs.softmaxCE_grad", file: "LeanMlir/Proofs/Architectures/Softmax.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
     # multi-head self-attention
-    - {declaration: "Proofs.mhsa_has_vjp_mat_correct", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
+    - {declaration: "Proofs.mhsaHasVJPMat_correct", file: "LeanMlir/Proofs/Architectures/Attention.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-arch.json", literature_dependencies: []}
     #
     # --- Whole nets: forward + VJP at the net the artifact runs (T1), the typed graph (T2) ---
     # a kinked net at batch BN: ResNet-50's [3,4,6,3] bottlenecks, 48 relu clauses, q a binder (224 and 160 px)
-    - {declaration: "Proofs.resnet50ForwardB_full_has_vjp_at_correct", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50FullBVJP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.resnet50ForwardBFullHasVJPAt_correct", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50FullBVJP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a smooth net: ViT-Tiny at its real dimensions -- depth 12 with distinct per-block parameters, 3 heads, vector LayerNorm; HasVJP at every input (0 < eps)
-    - {declaration: "Proofs.vitTiny_has_vjp_correct", file: "LeanMlir/Proofs/Nets/ViT/ViTDepthK.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.vitTinyHasVJP_correct", file: "LeanMlir/Proofs/Nets/ViT/ViTDepthK.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a typed SHlo graph at the render's own tokens denotes the whole-net forward (MobileNetV4, 26 stages; every net has one)
-    - {declaration: "Proofs.StableHLO.mnv4FwdGraphB_full_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.StableHLO.mnv4FwdGraphBFull_faithful", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4FullB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # non-degeneracy: a non-constant forward and a nonzero whole-net Jacobian at a witness (fidelity 4)
     - {declaration: "Proofs.Mnv2FullBSeal.sealX_nonconstant", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2FullBSeal.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the same on MobileNetV4-Conv-M at timm's mobilenetv4_conv_medium: 38 relu clauses, all weight-only
@@ -176,23 +176,23 @@ status:
     # at bf16 the all-reduced conv weight gradient differs from the batch-R*N node only by rounding each replica's partial sum
     - {declaration: "Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global", file: "LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ResNet-34's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
-    - {declaration: "Proofs.StableHLO.resnet34FwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.StableHLO.resnet34FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 110 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, loss divided by R*B
     - {declaration: "Proofs.ResNet34SyncTieB.r34_net_syncTiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # MobileNetV2's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
-    - {declaration: "Proofs.StableHLO.mobilenetv2FwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 158 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, loss divided by R*B
     - {declaration: "Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV2SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # EfficientNet-B0's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
-    - {declaration: "Proofs.StableHLO.efficientnetFwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetSyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.StableHLO.efficientnetFwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetSyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 213 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N (no drop-path or dropout)
     - {declaration: "Proofs.EnetSyncTieG.efficientnet_net_syncTiedG", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetSyncStepTieG.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ResNet-50's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N, both resolutions
-    - {declaration: "Proofs.StableHLO.resnet50FwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.StableHLO.resnet50FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 161 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, for any cotangent sharded as R x the global one
     - {declaration: "Proofs.ResNet50SyncTieB.r50_net_syncTiedB", file: "LeanMlir/Proofs/Nets/ResNet/ResNet50SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # MobileNetV4's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
-    - {declaration: "Proofs.StableHLO.mnv4FwdGraphSync_full_shard", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.StableHLO.mnv4FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 233 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, for any cotangent sharded as R x the global one
     - {declaration: "Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the collective as an AST node: den (adamW tail (allReduceMeanF R g)) = adamWStep at the replica mean
@@ -200,10 +200,10 @@ status:
     #
     # --- Certified backward ties (T6): the float tier's hand-written backward chain IS the
     #     certified whole-net VJP (fidelity 4d) ---
-    # a kinked net: blocks opaque plus the shape check resnet34ForwardB_full_eq_slots
+    # a kinked net: blocks opaque plus the shape check resnet34ForwardBFull_eq_slots
     - {declaration: "Proofs.r34InputGradB_eq_r34B_full_vjp", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34BackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a smooth net one step further: the chain IS the pdiv-contracted Jacobian of the committed forward, via backward_unique
-    - {declaration: "Proofs.efficientnetInputGradB_full_correct", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.efficientnetInputGradBFull_correct", file: "LeanMlir/Proofs/Nets/EfficientNet/EfficientNetFullWholeBackCertifiedTie.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the last batched T6: ConvNeXt-T at a variable batch B and the ImageNet head, every slot a batchMapAux lift of the per-example slot
     - {declaration: "Proofs.convnextImagenetInputGradB_eq_vjp", file: "LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtWholeBackCertifiedTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
@@ -278,25 +278,25 @@ fidelity:
        `maxPool2_codegen_matches_canonical`); see LeanMlir/Proofs/README.md.
 
     3. SMOOTH-INPUT CONDITIONING. The strongest backprop-correctness results are pointwise
-       (`HasVJPAt`, `vjp_comp_at`) under an explicit smooth-input hypothesis -- no ReLU kink, no
+       (`HasVJPAt`, `vjpCompAt`) under an explicit smooth-input hypothesis -- no ReLU kink, no
        pooling tie -- so every kinked net's whole-net VJP carries those clauses in its statement
        (32 for ResNet-34, 48 for ResNet-50, 35 relu6 for MobileNetV2, 38 for MobileNetV4). The
-       global instances (`relu_has_vjp`, `mlp_has_vjp`, `maxPool2_has_vjp3`) are codegen-shaped
+       global instances (`reluHasVJP`, `mlpHasVJP`, `maxPool2HasVJP3`) are codegen-shaped
        witnesses whose `correct` closes by `rfl`; the measure-zero non-smooth points are (2).
 
     4. FULL-NET RESULTS are "the network composes and has a VJP at a witness point". Separate
        non-degeneracy proofs rule out a vacuous witness: a non-constant forward and a nonzero
-       whole-net Jacobian. ResNet-34's is on the net the artifacts run, `resnet34ForwardB_full`
+       whole-net Jacobian. ResNet-34's is on the net the artifacts run, `resnet34ForwardBFull`
        itself (`ResNet34FullBSeal`): 64-512 channels, [3,4,6,3] blocks, 7x7/s2 stem, 3x3/s2 pool,
        batch BatchNorm, 224x224, at structural weights and N = 2 -- the carrier is a difference
        between the two EXAMPLES, which per-channel batch BN preserves and a channel difference is
-       not. ResNet-50's is the same construction on `resnet50ForwardB_full` (`ResNet50FullBSeal`), with
+       not. ResNet-50's is the same construction on `resnet50ForwardBFull` (`ResNet50FullBSeal`), with
        the spatial size left a BINDER, so one statement covers both shipped resolutions -- 224 px
-       and the 160 px net the 76.66% run trains. MobileNetV2's is on `mobilenetv2ForwardB_full`
+       and the 160 px net the 76.66% run trains. MobileNetV2's is on `mobilenetv2ForwardBFull`
        (`MobileNetV2FullBSeal`), all seventeen bottlenecks at 224x224 -- and there every one of the
        35 relu6 clauses is weight-only, because each relu6 sits on a BatchNorm output whose margin
        holds at every input; the 2-channel per-example proxies it replaces are deleted.
-       MobileNetV4-Conv-M's is on `mobilenetv4ForwardB_full` (`MobileNetV4FullBSeal`), all 21 UIB
+       MobileNetV4-Conv-M's is on `mobilenetv4ForwardBFull` (`MobileNetV4FullBSeal`), all 21 UIB
        blocks, the fused stage and the two-conv head, on timm's `mobilenetv4_conv_medium` (the
        pinned spec, `scripts/parity/mnv4_timm_parity.py`) -- its 38 relu clauses are weight-only for the
        same reason, and its witness is grid-constant (one value per example and channel). With it
@@ -336,7 +336,7 @@ fidelity:
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
        VJP, with a shape check that the opaque-block chain IS the committed forward: the
        per-example `convnextInputGrad_eq_convNextForwardTCh_vjp`,
-       `efficientnetInputGradB_full_correct` (16 blocks, through `HasVJP.backward_unique`) and
+       `efficientnetInputGradBFull_correct` (16 blocks, through `HasVJP.backward_unique`) and
        `vitInputGradK_eq_vitForwardKV_vjp` (depth 12, 3 heads, vector LN), and the batched
        `*InputGradB_eq_*_vjp` family of 4g (`r34InputGradB_eq_r34B_full_vjp` at batch BN and the
        full [3,4,6,3] depth, and its MobileNetV2/V4 and ResNet-50 peers) — ViT's and
@@ -439,12 +439,12 @@ alignment:
   namespace: "Proofs"
   statements:
     - source: "Dense layer backward (weight + bias gradients)"
-      lean: "dense_weight_grad_correct / dense_bias_grad_correct"
+      lean: "denseWeightGrad_correct / denseBiasGrad_correct"
       module: "LeanMlir/Proofs/Foundation/MLP.lean"
       status: "proved"
       note: ""
     - source: "2D convolution backward"
-      lean: "conv2d_has_vjp3_correct"
+      lean: "conv2dHasVJP3_correct"
       module: "LeanMlir/Proofs/Architectures/CNN.lean"
       status: "proved"
       note: ""
@@ -454,7 +454,7 @@ alignment:
       status: "proved"
       note: ""
     - source: "Multi-head self-attention backward (Q/K/V) + full ViT body"
-      lean: "mhsa_has_vjp_mat_correct / vit_full_has_vjp_correct (the weight-shared scalar-LN tower) / vitTiny_has_vjp_correct (depth 12, distinct blocks, vector LN)"
+      lean: "mhsaHasVJPMat_correct / vitFullHasVJP_correct (the weight-shared scalar-LN tower) / vitTinyHasVJP_correct (depth 12, distinct blocks, vector LN)"
       module: "LeanMlir/Proofs/Architectures/Attention.lean, LeanMlir/Proofs/Nets/ViT/ViTDepthK.lean"
       status: "proved"
       note: ""
@@ -467,12 +467,12 @@ alignment:
       lean: "sealX_nonconstant / sealX_jacobian_nonzero + sealX_backward_nontrivial"
       module: "LeanMlir/Proofs/Nets/ResNet/ResNet34FullBSeal.lean, LeanMlir/Proofs/Training/BatchSealKit.lean"
       status: "proved"
-      note: "on resnet34ForwardB_full itself (64-512 channels, [3,4,6,3], batch BN, N=2, structural weights); the carrier is the difference between the two examples, the only kink left is the stem pool, and it shifts with the carrier; retired the 2-channel proxies 2026-09-20"
+      note: "on resnet34ForwardBFull itself (64-512 channels, [3,4,6,3], batch BN, N=2, structural weights); the carrier is the difference between the two examples, the only kink left is the stem pool, and it shifts with the carrier; retired the 2-channel proxies 2026-09-20"
     - source: "Whole-net non-degeneracy + nonzero-Jacobian seal (ResNet-50, full width, batch BN, both shipped resolutions)"
       lean: "sealX_nonconstant / sealX_jacobian_nonzero + sealX_backward_nontrivial"
       module: "LeanMlir/Proofs/Nets/ResNet/ResNet50FullBSeal.lean, LeanMlir/Proofs/Training/BatchSealKit.lean"
       status: "proved"
-      note: "on resnet50ForwardB_full itself (the [3,4,6,3] bottleneck ladder, batch BN, N=2, structural weights), q a binder with 0 < q and q <= 7 so 224 px and 160 px are instances; 48 relu clauses discharged, five carrier BNs (stem + one projection per stage). ResNet-50 had no witness of any kind before 2026-09-20"
+      note: "on resnet50ForwardBFull itself (the [3,4,6,3] bottleneck ladder, batch BN, N=2, structural weights), q a binder with 0 < q and q <= 7 so 224 px and 160 px are instances; 48 relu clauses discharged, five carrier BNs (stem + one projection per stage). ResNet-50 had no witness of any kind before 2026-09-20"
     - source: "Committed train step = real loss-driven backward (per-net ties: the seven ImageNet-scale nets at their batched steps, the ten SGD-inline steps)"
       lean: "<net>_net_tiedB / _tiedG / _tiedGB (batched, un-fused gradient node, smoothed loss, N a binder); the <net>_net_tied_certified family (SGD-inline)"
       module: "LeanMlir/Proofs/Nets/*/*StepTieB.lean, LeanMlir/Proofs/Nets/*/*StepTieG*.lean, LeanMlir/Proofs/Nets/*/*StepTie.lean"

@@ -50,7 +50,7 @@ def lnFwd (p x g b : String) (bb n d : Nat) (eps : String) : String :=
     from a preceding `lnFwd p`. `dy` is the output cotangent, `g` the γ `[d]`.
     Produces `%{p}dx` `[b,n,d]`, `%{p}dg` `[d]`, `%{p}db` `[d]`.
     Affine back: `dx̂ = dy⊙γ`, `dγ = Σ dy⊙x̂`, `dβ = Σ dy`. Normalize back (γ=1):
-    `dx = istd·(dx̂ − mean_d(dx̂) − x̂·mean_d(dx̂⊙x̂))` (= `bn_grad_input` with γ=1).
+    `dx = istd·(dx̂ − mean_d(dx̂) − x̂·mean_d(dx̂⊙x̂))` (= `bnGradInput` with γ=1).
     (No `x` arg — the LN input is not needed; `x̂`/`istd` come from the fwd recompute.) -/
 def lnBack (p g dy : String) (bb n d : Nat) : String :=
   -- affine back

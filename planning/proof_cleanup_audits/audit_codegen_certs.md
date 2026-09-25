@@ -81,7 +81,7 @@ Proposed split, cheapest first:
 
 | new module | contents (current lines) | who imports it | effect |
 |---|---|---|---|
-| `Codegen/StableHLOArtifacts.lean` (leaf) | `*ModuleV` renderers + `#eval` writers (9269–9582), plus the chapter-specific graphs and theorems nobody else uses: `cnnBackGraph`/`_faithful` (4152–4237, which carries the 2M heartbeat option), `cifar8FwdGraph`, `cifar8BnFwdGraph`, `mobilenetv2FwdGraph` and their `_faithful` (3959–4142). Grepping `LeanMlir`/`tests`/`apps` finds **0 external references** to `backGraph`, `cnnBackGraph`, `cifar8FwdGraph`, `cifar8BnFwdGraph`, `mobilenetv2FwdGraph` | `regen_verified_mlir.sh` module list and the proofs.yml render guard only (see memory notes "regen script's module list" and "Render guard on a new artifact") | Removes about 650 lines, all file I/O, and the root's only uses of `Nets.Small.CifarCNN` (`cifarCnnForward`, `cifarCnn8Forward`, `cifarCnnBn8Forward` appear only at 3926–4060). That import can then go, so edits to CifarCNN/MnistCNN no longer rebuild 241 modules. `Nets.MobileNet.MobileNetV2` stays, because `den` uses `relu6`/`relu6_has_vjp_at`. Moving `relu6` down to an `Architectures` file would free that one too. |
+| `Codegen/StableHLOArtifacts.lean` (leaf) | `*ModuleV` renderers + `#eval` writers (9269–9582), plus the chapter-specific graphs and theorems nobody else uses: `cnnBackGraph`/`_faithful` (4152–4237, which carries the 2M heartbeat option), `cifar8FwdGraph`, `cifar8BnFwdGraph`, `mobilenetv2FwdGraph` and their `_faithful` (3959–4142). Grepping `LeanMlir`/`tests`/`apps` finds **0 external references** to `backGraph`, `cnnBackGraph`, `cifar8FwdGraph`, `cifar8BnFwdGraph`, `mobilenetv2FwdGraph` | `regen_verified_mlir.sh` module list and the proofs.yml render guard only (see memory notes "regen script's module list" and "Render guard on a new artifact") | Removes about 650 lines, all file I/O, and the root's only uses of `Nets.Small.CifarCNN` (`cifarCnnForward`, `cifarCnn8Forward`, `cifarCnnBn8Forward` appear only at 3926–4060). That import can then go, so edits to CifarCNN/MnistCNN no longer rebuild 241 modules. `Nets.MobileNet.MobileNetV2` stays, because `den` uses `relu6`/`relu6HasVJPAt`. Moving `relu6` down to an `Architectures` file would free that one too. |
 | `Codegen/StableHLOPretty.lean` | `Raw`, `skel`, `Tok`, `toToks`, 4-D helpers, `emitTok`, `serializeToks`, `pretty`, `renderModule`, `fmt6`, `OptKind` (4238–9268, about 4,270 code+comment lines) | renderers, `StableHLOParse`, `DataParallelNode`, tests | The 83 semantic-only modules stop waiting for about 4,300 lines of serial def elaboration and code generation. Emitter-only edits (bf16 emit shapes, formatting), which are frequent according to MEMORY, stop rebuilding them. Adding a *new op* still touches both halves, since the constructor lives in Core. |
 | (follow-up) split graph-builders from text renderers in `CnnRender`, `LinearTrainStep`, `SyncBnSites` | the `SHlo`-valued graph defs go to a proof-side file; the `String` renderers and `#eval`s go to a leaf | — | This is what would move most of the remaining 158 importers off `StableHLOPretty`. |
 
@@ -114,7 +114,7 @@ need it. The next arm that pushes a tenth proof over will not be noticed until i
 **Current:** `set_option maxHeartbeats 2000000 in theorem cnnBackGraph_faithful …`
 **Why it breaks:** The file floor is 4M, so this option *lowers* the budget. The L75 comment
 ("keeps its own larger `2000000` bump") is out of date. The proof is
-`simp only [cnnBackGraph, den, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at, … ]; rw [HasVJPAt.backward_unique …]; rfl`.
+`simp only [cnnBackGraph, den, mnistCnnNoBnHasVJPAt, convReluHasVJPAt, … ]; rw [HasVJPAt.backward_unique …]; rfl`.
 Its cost comes from unfolding `den` and the `HasVJPAt` structures, then closing with a defeq `rfl`.
 **Suggested:** Move it to the leaf module (A.2). There is no external user. Replace `den` in the
 simp set with the `@[simp]` node lemmas (`den_convBack`/`convBack_faithful`, `den_selectPos`,
@@ -135,10 +135,10 @@ This also makes the downstream proofs robust to arm additions.
 
 ### LeanMlir/Proofs/Codegen/StableHLO.lean:3254, 3705 — `bnBack_faithful`, `bnPerChannelBack_faithful`
 **Smell:** undocumented-defeq
-**Current:** `show bn_grad_input n ε γ x (den e) i = _` / `show bnPerChannelTensor3_grad_input … = _`
+**Current:** `show bnGradInput n ε γ x (den e) i = _` / `show bnPerChannelTensor3GradInput … = _`
 **Why it breaks:** This only works because `den (.bnBack …)` reduces by defeq to the helper. A
 refactor of that `den` arm, such as moving it into a descriptor, changes the reduct silently.
-**Suggested:** Add `@[simp] theorem den_bnBack … : den (.bnBack gN xN es ε γ x e) = bn_grad_input n ε γ x (den e) := rfl`
+**Suggested:** Add `@[simp] theorem den_bnBack … : den (.bnBack gN xN es ε γ x e) = bnGradInput n ε γ x (den e) := rfl`
 and write `rw [den_bnBack]; exact bn_input_grad_correct …`. Do the same for the per-channel case.
 
 ### LeanMlir/Proofs/Codegen/StableHLO.lean:4492, 5100 — `Raw`, `Tok`

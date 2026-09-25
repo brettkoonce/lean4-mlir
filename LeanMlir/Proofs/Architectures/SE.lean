@@ -51,8 +51,8 @@ it, attention is downhill.
 
 All foundational definitions and proofs live in `Tensor.lean`:
   - `elemwiseProduct f g` — pointwise product of two vector functions
-  - `elemwiseProduct_has_vjp` — the bi-cotangent VJP (proved, no sorry)
-  - `identity_has_vjp` — identity backward is passthrough (proved)
+  - `elemwiseProductHasVJP` — the bi-cotangent VJP (proved, no sorry)
+  - `identityHasVJP` — identity backward is passthrough (proved)
   - `pdiv_mul` — product rule for partial derivatives (theorem)
 
 This file specializes to the SE pattern: `f = identity`, `g = gate`.
@@ -96,13 +96,13 @@ noncomputable def seBlock {n : Nat} (gate : Vec n → Vec n) : Vec n → Vec n :
     The MLIR emits exactly this two-path backward: `gate(x) * dy` plus
     the gate's own backward chain with cotangent `x * dy`.
 
-    **No sorry** — this delegates to `elemwiseProduct_has_vjp` and
-    `identity_has_vjp`, both proved in `Tensor.lean`. -/
-noncomputable def seBlock_has_vjp {n : Nat}
+    **No sorry** — this delegates to `elemwiseProductHasVJP` and
+    `identityHasVJP`, both proved in `Tensor.lean`. -/
+noncomputable def seBlockHasVJP {n : Nat}
     (gate : Vec n → Vec n) (hg_diff : Differentiable ℝ gate) (hg : HasVJP gate) :
     HasVJP (seBlock gate) :=
-  elemwiseProduct_has_vjp (fun x => x) gate
-    differentiable_id hg_diff (identity_has_vjp n) hg
+  elemwiseProductHasVJP (fun x => x) gate
+    differentiable_id hg_diff (identityHasVJP n) hg
 
 -- ════════════════════════════════════════════════════════════════
 -- § Sketching the concrete SE gate (the proved one is `seGate`, at the end of this file)
@@ -136,9 +136,9 @@ If you wanted a fully formalized SE, you'd build `gate` as a composition:
 
     gate = broadcast ∘ sigmoid ∘ dense_exp ∘ swish ∘ dense_red ∘ globalAvgPool
 
-and use `vjp_comp` (chain rule from `Tensor.lean`) to assemble its VJP.
+and use `vjpComp` (chain rule from `Tensor.lean`) to assemble its VJP.
 The dense and sigmoid VJPs are already in `MLP.lean`; you'd need to add
-`globalAvgPool_has_vjp` (linear, easy) and `broadcast_has_vjp` (also
+`globalAvgPoolHasVJP` (linear, easy) and `broadcastHasVJP` (also
 linear — it's the adjoint of GAP, in fact).
 
 That's a few hours of mechanical work. The interesting part — the
@@ -153,20 +153,20 @@ self-attention:
 
 The structural pattern is identical: a main tensor multiplied by a
 side-computed scalar (or vector) per element. The bi-cotangent rule
-(`elemwiseProduct_has_vjp`) is the right tool for both. SE is the
+(`elemwiseProductHasVJP`) is the right tool for both. SE is the
 on-ramp; once you've internalized this VJP shape, attention falls out
 of the same theorem.
 -/
 
-/-- **Public correctness theorem for `seBlock_has_vjp`**: the SE-block
+/-- **Public correctness theorem for `seBlockHasVJP`**: the SE-block
 backward (input × gate Jacobian via the product rule) equals the
 `pdiv`-contracted Jacobian of `seBlock gate`. -/
-theorem seBlock_has_vjp_correct {n : Nat}
+theorem seBlockHasVJP_correct {n : Nat}
     (gate : Vec n → Vec n) (hg_diff : Differentiable ℝ gate) (hg : HasVJP gate)
     (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (seBlock_has_vjp gate hg_diff hg).backward x dy i =
+    (seBlockHasVJP gate hg_diff hg).backward x dy i =
     ∑ j : Fin n, pdiv (seBlock gate) x i j * dy j :=
-  (seBlock_has_vjp gate hg_diff hg).correct x dy i
+  (seBlockHasVJP gate hg_diff hg).correct x dy i
 
 open Finset BigOperators
 
@@ -187,7 +187,7 @@ noncomputable def sigmoidScalarDeriv (x : ℝ) : ℝ :=
 theorem sigmoidScalar_eq_sigmoid : sigmoidScalar = Real.sigmoid := by
   funext x; simp [sigmoidScalar, Real.sigmoid]
 
-/-- The closed form σ' = σ·(1 − σ). `sigmoid_has_vjp`'s backward is stated with `deriv`; the
+/-- The closed form σ' = σ·(1 − σ). `sigmoidHasVJP`'s backward is stated with `deriv`; the
     emitted `sigmoidBack` text computes `σ(x)·(1 − σ(x))` — this is the equation between them,
     so it stays pinned in the axiom audit although no Lean proof consumes it. -/
 theorem sigmoidScalarDeriv_eq (x : ℝ) :
@@ -195,27 +195,27 @@ theorem sigmoidScalarDeriv_eq (x : ℝ) :
   simp [sigmoidScalarDeriv, sigmoidScalar_eq_sigmoid, Real.deriv_sigmoid]
 
 @[fun_prop]
-lemma sigmoidScalar_diff : Differentiable ℝ sigmoidScalar := by
+lemma sigmoidScalar_differentiable : Differentiable ℝ sigmoidScalar := by
   rw [sigmoidScalar_eq_sigmoid]; exact differentiable_sigmoid
 
-lemma sigmoid_diff (D : Nat) : Differentiable ℝ (sigmoid D) := by
+lemma sigmoid_differentiable (D : Nat) : Differentiable ℝ (sigmoid D) := by
   unfold sigmoid; fun_prop
 
 theorem pdiv_sigmoid (n : Nat) (x : Vec n) (i j : Fin n) :
     pdiv (sigmoid n) x i j =
     if i = j then sigmoidScalarDeriv (x i) else 0 :=
-  pdiv_elementwise sigmoidScalar x (fun _ => sigmoidScalar_diff _) i j
+  pdiv_elementwise sigmoidScalar x (fun _ => sigmoidScalar_differentiable _) i j
 
-noncomputable def sigmoid_has_vjp (n : Nat) : HasVJP (sigmoid n) where
+noncomputable def sigmoidHasVJP (n : Nat) : HasVJP (sigmoid n) where
   backward := fun x dy i => dy i * sigmoidScalarDeriv (x i)
   correct := by
     intro x dy i
     simp [pdiv_sigmoid, mul_comm]
 
-theorem sigmoid_has_vjp_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (sigmoid_has_vjp n).backward x dy i =
+theorem sigmoidHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
+    (sigmoidHasVJP n).backward x dy i =
     ∑ j : Fin n, pdiv (sigmoid n) x i j * dy j :=
-  (sigmoid_has_vjp n).correct x dy i
+  (sigmoidHasVJP n).correct x dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Broadcast: per-channel scalar → spatial (adjoint of GAP)
@@ -235,7 +235,7 @@ theorem broadcastFlat_differentiable (c h w : Nat) :
 
 /-- **Broadcast VJP** — linear reindex; backward sums each channel's
     spatial cotangents (the adjoint of broadcast = sum-over-spatial). -/
-noncomputable def broadcastFlat_has_vjp (c h w : Nat) :
+noncomputable def broadcastFlatHasVJP (c h w : Nat) :
     HasVJP (broadcastFlat c h w) where
   backward := fun _v dy => fun k =>
     ∑ idx : Fin (c * h * w), (if flatChannel c h w idx = k then dy idx else 0)
@@ -274,40 +274,40 @@ theorem seGate_differentiable {c h w r : Nat}
     Differentiable ℝ (seGate (h := h) (w := w) W₁ b₁ W₂ b₂) := by
   unfold seGate broadcastFlat sigmoid swish; fun_prop
 
-noncomputable def seGate_has_vjp {c h w r : Nat}
+noncomputable def seGateHasVJP {c h w r : Nat}
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
     HasVJP (seGate (h := h) (w := w) W₁ b₁ W₂ b₂) :=
-  vjp_comp _ (broadcastFlat c h w)
-    ((sigmoid_diff c).comp
+  vjpComp _ (broadcastFlat c h w)
+    ((sigmoid_differentiable c).comp
       ((dense_differentiable W₂ b₂).comp
-        ((swish_diff r).comp
+        ((swish_differentiable r).comp
           ((dense_differentiable W₁ b₁).comp
             (globalAvgPoolFlat_differentiable c h w)))))
     (broadcastFlat_differentiable c h w)
-    (vjp_comp _ (sigmoid c)
+    (vjpComp _ (sigmoid c)
       ((dense_differentiable W₂ b₂).comp
-        ((swish_diff r).comp
+        ((swish_differentiable r).comp
           ((dense_differentiable W₁ b₁).comp
             (globalAvgPoolFlat_differentiable c h w))))
-      (sigmoid_diff c)
-      (vjp_comp _ (dense W₂ b₂)
-        ((swish_diff r).comp
+      (sigmoid_differentiable c)
+      (vjpComp _ (dense W₂ b₂)
+        ((swish_differentiable r).comp
           ((dense_differentiable W₁ b₁).comp
             (globalAvgPoolFlat_differentiable c h w)))
         (dense_differentiable W₂ b₂)
-        (vjp_comp _ (swish r)
+        (vjpComp _ (swish r)
           ((dense_differentiable W₁ b₁).comp
             (globalAvgPoolFlat_differentiable c h w))
-          (swish_diff r)
-          (vjp_comp _ (dense W₁ b₁)
+          (swish_differentiable r)
+          (vjpComp _ (dense W₁ b₁)
             (globalAvgPoolFlat_differentiable c h w)
             (dense_differentiable W₁ b₁)
-            (globalAvgPoolFlat_has_vjp c h w)
-            (dense_has_vjp W₁ b₁))
-          (swish_has_vjp r))
-        (dense_has_vjp W₂ b₂))
-      (sigmoid_has_vjp c))
-    (broadcastFlat_has_vjp c h w)
+            (globalAvgPoolFlatHasVJP c h w)
+            (denseHasVJP W₁ b₁))
+          (swishHasVJP r))
+        (denseHasVJP W₂ b₂))
+      (sigmoidHasVJP c))
+    (broadcastFlatHasVJP c h w)
 
 /-- **The full SE block** with the concrete gate: `x ⊙ seGate(x)`. -/
 noncomputable def seBlockFull {c h w r : Nat}
@@ -315,12 +315,12 @@ noncomputable def seBlockFull {c h w r : Nat}
     Vec (c * h * w) → Vec (c * h * w) :=
   seBlock (seGate (h := h) (w := w) W₁ b₁ W₂ b₂)
 
-noncomputable def seBlockFull_has_vjp {c h w r : Nat}
+noncomputable def seBlockFullHasVJP {c h w r : Nat}
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c) :
     HasVJP (seBlockFull (h := h) (w := w) W₁ b₁ W₂ b₂) :=
-  seBlock_has_vjp (seGate (h := h) (w := w) W₁ b₁ W₂ b₂)
+  seBlockHasVJP (seGate (h := h) (w := w) W₁ b₁ W₂ b₂)
     (seGate_differentiable W₁ b₁ W₂ b₂)
-    (seGate_has_vjp W₁ b₁ W₂ b₂)
+    (seGateHasVJP W₁ b₁ W₂ b₂)
 
 @[fun_prop]
 theorem seBlockFull_differentiable {c h w r : Nat}

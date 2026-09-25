@@ -70,7 +70,7 @@ trap on the emitter side.
 ⚠ `N` stays a variable throughout, as at r34: T1 carries no numerals. On the data-parallel
 artifacts the render's `N` is the PER-REPLICA batch; since 2026-09-21 their BatchNorm is
 synchronised, and `ResNet50SyncB.lean` is this file's twin for them: replica `r`'s forward graph
-denotes shard `r` of `resnet50ForwardB_full (R * N) q`, this file's forward at the global batch.
+denotes shard `r` of `resnet50ForwardBFull (R * N) q`, this file's forward at the global batch.
 
 ⭐ **The census is 161 updated parameters**, which is `ResNet50RenderB`'s own docstring ("161 θ /
 161 m / 161 v"): stem 3 (`sW`, `sγ`, `sβ`) + 12 identity bottlenecks × 9 + 4 projection
@@ -81,7 +81,7 @@ census and are `∀`-quantified over — `bias = 0` is one instance. The 106 run
 render's signature also carries belong to inference and do not appear here, since training-mode
 BatchNorm computes its statistics from the batch.
 
-✅ **The typed forward graph (T2) is the second half of this file** — `resnet50FwdGraphB_full` and
+✅ **The typed forward graph (T2) is the second half of this file** — `resnet50FwdGraphBFull` and
 its `_faithful`, over four per-block-kind graphs at `r50FwdChainB`'s own tokens. ✅ Checked against
 the committed bytes: `verified_mlir/resnet50_fwd.mlir`'s signature is **162 arguments = `%x` + 161
 parameters**, with 12 projection slots, and every name this file writes (`%sW`, `%sg`, `%sbt`,
@@ -222,12 +222,12 @@ structure R50BWeights (nCls : Nat) where
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The full batch-BN ResNet-50 forward**, `N*(3*32q*32q) -> N*nCls`, at the [3,4,6,3] bottleneck
-    ladder. Nested-application form, as `resnet34ForwardB_full` and `efficientnetForwardB_full`
+    ladder. Nested-application form, as `resnet34ForwardBFull` and `efficientnetForwardBFull`
     both are, so a later tie can peel it one block at a time.
 
     ⭐ `q` is a binder: `q = 7` is `resnet50in_fwd` and `q = 5` is `resnet50in160_fwd`, the net the
     quoted 76.66% trains. ⭐ The stem and head are ResNet-34's functions at R50's widths. -/
-noncomputable def resnet50ForwardB_full (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+noncomputable def resnet50ForwardBFull (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
     Vec (N * nCls) :=
   r34HeadB N q q w.Wd w.bd
@@ -268,11 +268,11 @@ noncomputable def resnet50ForwardB_full (N q : Nat) {nCls : Nat} (w : R50BWeight
 -- point of the `q` binder is that both shipped resolutions are instances, so it is CHECKED here
 -- rather than asserted in the header.
 example (N : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    resnet50ForwardB_full N 7 w x = resnet50ForwardB_full N 7 w x := rfl
+    resnet50ForwardBFull N 7 w x = resnet50ForwardBFull N 7 w x := rfl
 
 -- ⭐ And `q = 5` IS the 160-px net -- `resnet50in160_*`, where the quoted 76.66% comes from.
 example (N : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * 160 * 160))) :
-    resnet50ForwardB_full N 5 w x = resnet50ForwardB_full N 5 w x := rfl
+    resnet50ForwardBFull N 5 w x = resnet50ForwardBFull N 5 w x := rfl
 
 
 namespace StableHLO
@@ -417,7 +417,7 @@ theorem r50StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
     (`s1b0` … `s4b2`) and the head's are `%Wd`/`%bd`, so the typed graph diffs against
     `resnet50_fwd` and its ImageNet twins name for name. ⭐ The head graph is ResNet-34's,
     unchanged: `r34HeadGraphB` is generic in `{c nCls}` and emits the same two tokens. -/
-def resnet50FwdGraphB_full (N q : Nat) (epsStr : String) {nCls : Nat} (w : R50BWeights nCls)
+def resnet50FwdGraphBFull (N q : Nat) (epsStr : String) {nCls : Nat} (w : R50BWeights nCls)
     (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : SHlo (N * nCls) :=
   r34HeadGraphB N q q w.Wd w.bd
     (r50IdGraphB "s4b2" epsStr N q q w.s4b2
@@ -442,10 +442,10 @@ def resnet50FwdGraphB_full (N q : Nat) (epsStr : String) {nCls : Nat} (w : R50BW
 /-- ⭐ **T2 for ResNet-50 at batch BN**: the typed graph denotes the whole-net forward. One `rw`
     per block over the four per-kind faithfulness lemmas — the first graph-level tier this net has
     ever had. -/
-theorem resnet50FwdGraphB_full_faithful (N q : Nat) (epsStr : String) {nCls : Nat}
+theorem resnet50FwdGraphBFull_faithful (N q : Nat) (epsStr : String) {nCls : Nat}
     (w : R50BWeights nCls) (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    den (resnet50FwdGraphB_full N q epsStr w e) = resnet50ForwardB_full N q w (den e) := by
-  unfold resnet50FwdGraphB_full resnet50ForwardB_full
+    den (resnet50FwdGraphBFull N q epsStr w e) = resnet50ForwardBFull N q w (den e) := by
+  unfold resnet50FwdGraphBFull resnet50ForwardBFull
   rw [r34HeadGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50ProjGraphB_faithful,
       r50StemGraphB_faithful]
 

@@ -101,7 +101,7 @@ See \leandocref{Proofs.CifarPoC.cifar\_conv\_tied\_certified}.
   cotangent \(c\), the two emitted updates denote the certified steps
   \(\gamma - \alpha \sum \pdiv(\mathrm{bn})\cdot c\) and
   \(\beta - \alpha \sum \pdiv(\mathrm{bn})\cdot c\) --- the scale and shift each
-  take the gradient of Theorem~\ref{thm:bn_has_vjp}'s forward.
+  take the gradient of Theorem~\ref{thm:bnHasVJP}'s forward.
 \end{theorem}
 
 \begin{proof}
@@ -161,13 +161,13 @@ See \leandocref{Proofs.cifar8\_lastConv\_sgd\_descends}.
 
 % ===== chapter 5: insert before  \section{Example: ResNet-34 on Imagenette}
 \begin{theorem}[ResNet-34 at batch \(N\) has the VJP]
-  \label{thm:resnet34_full_has_vjp}
-  \lean{Proofs.resnet34ForwardB_full_has_vjp_at_correct}
+  \label{thm:resnet34FullHasVJP}
+  \lean{Proofs.resnet34ForwardBFullHasVJPAt_correct}
   \leanok
   \Assume{} the eighteen smooth-point bundles: no ReLU pre-activation of the
   stem, of any residual block, or of the pooled features sits at zero for the
   batch. \Prove{} the backward of the full-width ResNet-34 at training
-  BatchNorm and batch \(N\) (\texttt{resnet34ForwardB\_full}, \(3 \times 224
+  BatchNorm and batch \(N\) (\texttt{resnet34ForwardBFull}, \(3 \times 224
   \times 224\)) equals the \(\pdiv\)-contracted Jacobian of the forward at
   every input, cotangent and index. The statement is generic in \(N\) and in
   the weights.
@@ -175,23 +175,23 @@ See \leandocref{Proofs.cifar8\_lastConv\_sgd\_descends}.
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.resnet34ForwardB\_full\_has\_vjp\_at\_correct}.
+See \leandocref{Proofs.resnet34ForwardBFullHasVJPAt\_correct}.
 \end{proof}
 
 \begin{theorem}[ResNet-50 at batch \(N\) has the VJP]
-  \label{thm:resnet50_full_has_vjp}
-  \lean{Proofs.resnet50ForwardB_full_has_vjp_at_correct}
+  \label{thm:resnet50FullHasVJP}
+  \lean{Proofs.resnet50ForwardBFullHasVJPAt_correct}
   \leanok
   The same for ResNet-50: with \(0 < q\) --- the image side is \(32q\), so
   \(q = 7\) is the 224-pixel net and \(q = 5\) the 160-pixel one --- and the
   eighteen bottleneck bundles, \Prove{} the backward of
-  \texttt{resnet50ForwardB\_full} at batch \(N\) equals its \(\pdiv\)
+  \texttt{resnet50ForwardBFull} at batch \(N\) equals its \(\pdiv\)
   Jacobian at every input, cotangent and index.
 \end{theorem}
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.resnet50ForwardB\_full\_has\_vjp\_at\_correct}.
+See \leandocref{Proofs.resnet50ForwardBFullHasVJPAt\_correct}.
 \end{proof}
 
 \begin{theorem}[The rendered ResNet-50 backward is the VJP]
@@ -203,7 +203,7 @@ See \leandocref{Proofs.resnet50ForwardB\_full\_has\_vjp\_at\_correct}.
   \texttt{resnet50in\_*} artifact renders --- is the backward of the VJP above,
   and so equals
   \[
-    \sum_j \pdiv(\texttt{resnet50ForwardB\_full})\, x\, i\, j
+    \sum_j \pdiv(\texttt{resnet50ForwardBFull})\, x\, i\, j
   \cdot dy_j
   \]
   for every batch, cotangent and pixel.
@@ -310,13 +310,13 @@ See \leandocref{Proofs.ResNet50SyncTieB.r50\_net\_syncTiedB}.
 
 % ===== chapter 6: insert before  \section{Example: MobileNet V2 on Imagenette}
 \begin{theorem}[MobileNetV2 at batch \(N\) has the VJP]
-  \label{thm:mobilenetv2_full_has_vjp}
-  \lean{Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct}
+  \label{thm:mobilenetv2FullHasVJP}
+  \lean{Proofs.mobilenetv2ForwardBFullHasVJPAt_correct}
   \leanok
   \Assume{} the nineteen ReLU6 bundles --- an expand clause and a depthwise
   clause per block, none after the residual add --- and the BatchNorm
   positivity conditions. \Prove{} the backward of the full-width MobileNetV2
-  at training BatchNorm and batch \(N\) (\texttt{mobilenetv2ForwardB\_full},
+  at training BatchNorm and batch \(N\) (\texttt{mobilenetv2ForwardBFull},
   seventeen blocks, \(3 \times 224 \times 224\)) equals the
   \(\pdiv\)-contracted Jacobian of the forward at every input, cotangent and
   index; generic in \(N\) and in the weights.
@@ -324,14 +324,14 @@ See \leandocref{Proofs.ResNet50SyncTieB.r50\_net\_syncTiedB}.
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.mobilenetv2ForwardB\_full\_has\_vjp\_at\_correct}.
+See \leandocref{Proofs.mobilenetv2ForwardBFullHasVJPAt\_correct}.
 \end{proof}
 
 \begin{theorem}[MobileNetV4-Conv-M at batch \(N\) has the VJP]
-  \label{thm:mobilenetv4_full_has_vjp}
-  \lean{Proofs.StableHLO.mobilenetv4ForwardB_full_has_vjp_at_correct}
+  \label{thm:mobilenetv4FullHasVJP}
+  \lean{Proofs.StableHLO.mobilenetv4ForwardBFullHasVJPAt_correct}
   \leanok
-  The same for MobileNetV4-Conv-M (\texttt{mobilenetv4ForwardB\_full}: the
+  The same for MobileNetV4-Conv-M (\texttt{mobilenetv4ForwardBFull}: the
   fused-IB stage and the universal inverted bottlenecks of
   \S~\ref{sec:mnv4_side_quest}) under one smooth-point bundle: \Prove{} its
   backward at batch \(N\) equals the \(\pdiv\) Jacobian at every input,
@@ -340,7 +340,7 @@ See \leandocref{Proofs.mobilenetv2ForwardB\_full\_has\_vjp\_at\_correct}.
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.StableHLO.mobilenetv4ForwardB\_full\_has\_vjp\_at\_correct}.
+See \leandocref{Proofs.StableHLO.mobilenetv4ForwardBFullHasVJPAt\_correct}.
 \end{proof}
 
 \begin{theorem}[The rendered MobileNetV2 backward is the VJP]
@@ -351,7 +351,7 @@ See \leandocref{Proofs.StableHLO.mobilenetv4ForwardB\_full\_has\_vjp\_at\_correc
   \texttt{mnv2InputGradB} is the backward of the twenty-one-stage VJP and
   equals
   \[
-    \sum_j \pdiv(\texttt{mobilenetv2ForwardB\_full})\, x\, i\, j \cdot
+    \sum_j \pdiv(\texttt{mobilenetv2ForwardBFull})\, x\, i\, j \cdot
   dy_j
   \]
   for every batch, cotangent and pixel.
@@ -469,38 +469,38 @@ See \leandocref{Proofs.MobileNetV4SyncTieB.mnv4\_net\_syncTiedB}.
 
 % ===== chapter 7: insert before  \section{Example: EfficientNet-B0 on Imagenette}
 \begin{theorem}[EfficientNet-B0 at batch \(N\): VJP and graph]
-  \label{thm:efficientnet_full_has_vjp}
-  \lean{Proofs.efficientnetForwardB_full_has_vjp_correct, Proofs.StableHLO.efficientnetFwdGraphB_full_faithful}
+  \label{thm:efficientnetFullHasVJP}
+  \lean{Proofs.efficientnetForwardBFullHasVJP_correct, Proofs.StableHLO.efficientnetFwdGraphBFull_faithful}
   \leanok
   \Assume{} the fifty BatchNorm positivities. \Prove{} the batched
   EfficientNet-B0 --- all sixteen MBConv blocks with squeeze-and-excitation
   and swish, at training BatchNorm and batch \(N\) --- has the VJP: its
   backward equals the \(\pdiv\)-contracted Jacobian of
-  \texttt{efficientnetForwardB\_full} at every input, cotangent and pixel;
+  \texttt{efficientnetForwardBFull} at every input, cotangent and pixel;
   and the emitted forward graph denotes exactly that forward
-  (\texttt{efficientnetFwdGraphB\_full\_faithful}).
+  (\texttt{efficientnetFwdGraphBFull\_faithful}).
 \end{theorem}
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.efficientnetForwardB\_full\_has\_vjp\_correct}.
+See \leandocref{Proofs.efficientnetForwardBFullHasVJP\_correct}.
 \end{proof}
 
 \begin{theorem}[The rendered backward is the VJP]
   \label{thm:efficientnet_whole_back}
-  \lean{Proofs.efficientnetInputGradB_full_correct}
+  \lean{Proofs.efficientnetInputGradBFull_correct}
   \leanok
   \Prove{} the hand-written sixteen-block reverse chain
-  \texttt{efficientnetInputGradB\_full} equals
+  \texttt{efficientnetInputGradBFull} equals
   \[
-    \sum_j \pdiv(\texttt{efficientnetForwardB\_full})\, x\, i\, j \cdot dy_j
+    \sum_j \pdiv(\texttt{efficientnetForwardBFull})\, x\, i\, j \cdot dy_j
   \]
   for every batch, cotangent and pixel.
 \end{theorem}
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.efficientnetInputGradB\_full\_correct}.
+See \leandocref{Proofs.efficientnetInputGradBFull\_correct}.
 \end{proof}
 
 \begin{theorem}[Emitted train step is the certified step]
@@ -577,8 +577,8 @@ See \leandocref{Proofs.CnxTiePoCGB.cnx\_net\_tiedGB}.
 
 % ===== chapter 9: insert before  \begin{theorem}[ViT-Tiny, the whole network]
 \begin{theorem}[The depth-\(k\) tower has a VJP]
-  \label{thm:vitForwardKV_has_vjp}
-  \lean{Proofs.vitForwardKV_has_vjp_correct}
+  \label{thm:vitForwardKVHasVJP}
+  \lean{Proofs.vitForwardKVHasVJP_correct}
   \leanok
   \Assume{} \(\varepsilon > 0\). \Prove{} the depth-\(k\) transformer tower
   with distinct parameters per block --- patch embedding, CLS and position
@@ -590,7 +590,7 @@ See \leandocref{Proofs.CnxTiePoCGB.cnx\_net\_tiedGB}.
 
 \begin{proof}
 \leanok
-See \leandocref{Proofs.vitForwardKV\_has\_vjp\_correct}.
+See \leandocref{Proofs.vitForwardKVHasVJP\_correct}.
 \end{proof}
 
 \begin{theorem}[The depth-\(k\) graph denotes the tower]

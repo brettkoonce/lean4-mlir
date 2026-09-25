@@ -36,7 +36,7 @@ Each ImageNet net carries roughly the same file stack (counts from `ls LeanMlir/
 
 * 17–18 prefix definitions (`r34Pre0…16`, `r50Pre0…16`, `mnv2PreB0…17`) and their `_apply` lemmas;
 * a positivity bundle (`R34PosB`, `R50PosB`, `MNV2PosB`) and a smoothness bundle (`…SmoothAtB`);
-* a `vjp_comp_diff_at` chain (`r34ChainB`, …) and a chain equation (`…_eq_chain`).
+* a `vjpCompDiffAt` chain (`r34ChainB`, …) and a chain equation (`…_eq_chain`).
 
 ## 2. What already exists
 
@@ -75,10 +75,10 @@ In a scratch module (not wired into any lib):
 
 1. `r50NetLayer N q w hp : CertLayer _ _` := stem `.comp` the sixteen existing bottleneck layers
    `.comp` the head (the head is global — build a CertLayer with `ok := True`).
-2. Prove `(r50NetLayer …).fwd = resnet50ForwardB_full N q w` — by `rw` with `comp_fwd` one level
+2. Prove `(r50NetLayer …).fwd = resnet50ForwardBFull N q w` — by `rw` with `comp_fwd` one level
    at a time, never a closing `rfl` through the concrete chain.
-3. Derive the existing statements from it: `resnet50ForwardB_full_has_vjp_at_correct` and
-   `resnet50ForwardB_full_differentiableAt`. The hypothesis becomes `(r50NetLayer …).ok x`; decide
+3. Derive the existing statements from it: `resnet50ForwardBFullHasVJPAt_correct` and
+   `resnet50ForwardBFull_differentiableAt`. The hypothesis becomes `(r50NetLayer …).ok x`; decide
    whether to keep `R50SmoothAtB` as the public statement (prove `R50SmoothAtB → .ok`) so the
    comparator tier does not move, or to switch the tier to `.ok`.
 4. **Measure**: elaboration + kernel time of steps 1–3 under `-Dtrace.profiler=true`, and
@@ -130,8 +130,8 @@ Scratch module (outside the repo), importing `ResNet50WholeBackCertifiedTieB`; `
 |---|---|
 | `r50NetLayer N q hq0 w hp` — stem (`cbReluStridedLayer.comp` a new pool layer) `.comp` 16 blocks `.comp` head (GAP + dense layers) | elaborates, < 100 ms |
 | pool layer's `faithful` — the batched `maxPool3s2BackB` | `rw [den_maxPool3s2BackB_eq_flatBackB]; rfl`, 2 lines (the stem is no longer outside the chain) |
-| `(r50NetLayer …).fwd x = resnet50ForwardB_full N q w x` — `rw [comp_fwd_apply]` ×18 then the per-block `_fwd` (`rfl` at variable shapes) | < 100 ms |
-| `_has_vjp_at_correct`, `_differentiableAt`, whole-net backward-graph faithfulness | one-line projections, < 100 ms each |
+| `(r50NetLayer …).fwd x = resnet50ForwardBFull N q w x` — `rw [comp_fwd_apply]` ×18 then the per-block `_fwd` (`rfl` at variable shapes) | < 100 ms |
+| `HasVJPAt_correct`, `_differentiableAt`, whole-net backward-graph faithfulness | one-line projections, < 100 ms each |
 | `R50SmoothAtB → (r50NetLayer …).ok` (keeps the comparator tier fixed) | 0.16 s, see ⚠ below |
 | the same peel at the LITERAL `q = 7`, and the theorems at `q = 7` / `q = 5` | < 100 ms; no timeout |
 | whole file, including import load | 2.8 s wall, 2.8 GB — same as today's `ResNet50FullBVJP.lean` (3.2 s) |
@@ -152,7 +152,7 @@ numerals themselves.
 **⛔ The payoff §2 predicted is wrong for R50.** `r50Pre0…16` are not only `FullBVJP` scaffolding:
 they name activations in public statements. `ResNet50StepTieB` (T3, in `ChallengeTier.lean`),
 `ResNet50SyncStepTieB`, `ResNet50WholeBackCertifiedTieB` and the seal's `nnK` positivity lemmas all
-use them, and the seal also uses the `_apply` lemmas and `resnet50ForwardB_full_eq_chain`. So
+use them, and the seal also uses the `_apply` lemmas and `resnet50ForwardBFull_eq_chain`. So
 `R50SmoothAtB`, `R50PosB`, the prefixes and their `_apply` lemmas **stay**. What goes is `r50ChainB`
 (~60 lines) and the six block delegation lemmas (~45 lines); what comes in is the generic pool / GAP
 / dense / stem / head layers, the three record-level block layers and the bridge (~90 lines).

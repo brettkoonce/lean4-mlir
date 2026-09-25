@@ -43,7 +43,7 @@ chains and ties over them.
 
 ⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (r34Pre_k (R*N) w X)`); that the sync forward graph computes exactly those is
-`ResNet34SyncB.resnet34FwdGraphSync_full_shard`, the forward half. ⚠ That the replicas' inputs are
+`ResNet34SyncB.resnet34FwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are
 the shards of one batch is the driver's. ⚠ The emitted artifacts run `convBias := false`, so the
 conv-bias nodes are not emitted and are not tied here (`r34_net_tiedB` keeps them for the flag).
 ⚠ The lowerer's `all_reduce` is trusted as every other op's lowering is.
@@ -681,9 +681,9 @@ theorem r34_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < 
     (T : Vec ((R * N) * (1 * nCls))) :
     r34NetSyncTiedB R hR N xN cotN vN epsStr w X
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
-        bStr logN ohN (rowB (R * N) nCls (resnet34ForwardB_full (R * N) w X)) T)))
+        bStr logN ohN (rowB (R * N) nCls (resnet34ForwardBFull (R * N) w X)) T)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (resnet34ForwardB_full (R * N) w X) r))
+        (rowB N nCls (batchShard R N nCls (resnet34ForwardBFull (R * N) w X) r))
         (batchShard R N (1 * nCls) T r)))) :=
   r34_net_syncTiedB R hR N hN xN cotN vN epsStr w X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)

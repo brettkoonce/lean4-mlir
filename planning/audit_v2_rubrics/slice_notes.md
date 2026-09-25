@@ -29,20 +29,20 @@ B4 softmax Jacobian/CE grad inside Attention.lean → Architectures/Softmax.lean
 B5 stale docs: MaxPool3s2:53 "nothing downstream references" (18 do); 14 MlirCodegen line-number cites all wrong → cite fn names; Attention TOC; BatchNorm header omits sync half; README:60
 B6 14 layer facts in BatchSeal namespace → BatchNorm / Continuity leaf
 B7 activations 4 homes → Architectures/Activations.lean
-B8 13 dead decls ~105 lines (list in report); forwarders dense_diff, rowSoftmax_has_vjp_mat', sum_s2
+B8 13 dead decls ~105 lines (list in report); forwarders dense_differentiable, rowSoftmaxHasVJPMat', sum_s2
 B9 descent naming legend (cnn1_ vs cnn_conv1_)
 B10 depthwise*SgdDen in layer file (lead, low value)
 ## foundation_float (inline; scratch foundation_float/t1–t6)
 A1 pdiv_lift_sum: softCE_grad 45→17, bceLogits ~12; ~40 verified
-A2 mlp_has_vjp_at onto vjp_comp_diff_at 44→16, backward rfl-equal; ~28
+A2 mlpHasVJPAt onto vjpCompDiffAt 44→16, backward rfl-equal; ~28
 A3 MLP pdiv_dense_b/dense_*_grad_correct/pdiv_relu ~30 (root, batch)
 A4 IBP uniform-box collapse ×6 → ite_sign_lo/hi ~45 (keep names; generated cite)
-A5 EfficientNetChainClose reindex_has_vjp ≡ PerChannelBN reindexVJP ~12
+A5 EfficientNetChainClose reindexHasVJP ≡ PerChannelBN reindexVJP ~12
 A6 sum_finProdFinEquiv₃ (sum_flat3, Tensor3.sum_flatten, sum_w3; sum_s2) ~12
 A7 pdiv_finset_sum unused DecidableEq (pinned + comparator; user call)
 A8 relu_apply_eq_max = (max_def_lt' _ 0).symm, move to MLP (dup of arch A3)
 B1 ⭐ FloatClose defined atop 39-module/37k-line cone through SgdDescentCnn+MobileNetV2Close; compiles on FloatBridge alone (t3) → Float/FloatClose.lean + Float/ConvFloat.lean (same as arch B1)
-B2 ⭐ Foundation not a layer: 13/29 import Nets/Certs/Codegen (SpecVJP imports 12 nets, IR imports EfficientNet, IntervalBound imports LipschitzCertInstance…); batchMap_has_vjp in EfficientNetChainClose; crossEntropy_differentiable in LinearTrainStep
+B2 ⭐ Foundation not a layer: 13/29 import Nets/Certs/Codegen (SpecVJP imports 12 nets, IR imports EfficientNet, IntervalBound imports LipschitzCertInstance…); batchMapHasVJP in EfficientNetChainClose; crossEntropy_differentiable in LinearTrainStep
 B3 Tensor.lean: ~230 lines SDPA calculus → Attention; stale "§ The mean the collective computes" header; history-first docstring → TOC
 B4 rank-3 kit (vjp3_comp etc.) 0 proof consumers; pdiv_clm, HasVJPMat.backward_unique 0 uses; MlirCodegen comments cite biPath3 wrongly → document or retire (~120, 2 blueprint nodes)
 B5 BackNetFolds.lean = one audit-only def + import barrel → delete file
@@ -54,15 +54,15 @@ B9 softmax def in MLP, derivative in Attention (dup of arch B4) → Softmax.lean
 A1 ⭐ seals' *_continuous by hand → tag BatchSealKit atoms @[fun_prop] + 3 atoms; Zp4 all 14 blocks <1s verified; ~120 slice / ~250 across 4 seals
 A2 ConvNeXtFoldGB 10 pinned alias fold lemmas (+4 EfficientNetFoldG) ~140; 10(+4) pins audit-only — user call
 A3 den_cast ≡ den_castIdx
-A4 CifarBnClose sum_channel_fibre → Equiv.sum_comp + Fintype.sum_prod_type (v1 verified, never landed) ~15; chanOf dead
+A4 CifarBnClose sum_channel_fiber → Equiv.sum_comp + Fintype.sum_prod_type (v1 verified, never landed) ~15; chanOf dead
 A5 relu_nonneg / relu_continuous via relu_apply_eq_max (dup)
-A6 transposeFlat_diff alias; r50StemGraphB forwarder (1 pin)
+A6 transposeFlat_differentiable alias; r50StemGraphB forwarder (1 pin)
 B1 ⭐ suite-wide kits live in ResNet-34 files/namespaces (FoldB=ResNet34PoCB ~340 refs/17 files/5 families; StepTieB helpers; SyncStepTieB 25 decls; SyncB castIdx; BackCertifiedTie leaf ties; FullBSeal pieces; small-net Cifar8PoC declared in MlpTrainStep) → move files keep namespaces
 B2 ⭐ suffix scheme table (B, G, GB, B0 fossil, namespace≠file); README:73–76 legend wrong → replace with table
 B3 unused imports of Nets/ResNet/ResNet34 in BackwardMaps, BatchSealKit, SpecVJP (verified); SmoothedLossCot→LinearTrainStep for crossEntropy_differentiable only
 B4 stale headers: LinearTrainStep (first Start-here file!) says lemma "doesn't exist yet"; ResNet34.lean; ConvNeXt; "per-example only" ConvNeXt claims; 181 planning-section refs, 26/31 paths archived; T-tier glossary missing
-B5 c·h·w seam 5 spellings (castIdx/laAssoc, den_cast, reassoc/reassocB private, EnetTiePoC.reassocB, reassocFwd) → one leaf
-B6 dead: ResNet34.lean ~190 of 351 lines; LinearTrainStep render scaffold ~80; resnet34_has_vjp_at audit-only (census)
+B5 c·h·w seam 5 spellings (castIdx/la_assoc, den_cast, reassoc/reassocB private, EnetTiePoC.reassocB, reassocFwd) → one leaf
+B6 dead: ResNet34.lean ~190 of 351 lines; LinearTrainStep render scaffold ~80; resnet34HasVJPAt audit-only (census)
 B7 CertLayer.comp_ok_of + r34PoolLayer in ResNet34FullBVJP → CertifiedChain / HeadLayers (overlaps certlayer §4.2)
 B8 Cifar8Fold.lean docstring-only hub → delete
 ## codegen (inline; scratch codegen/)
@@ -106,11 +106,11 @@ D1 ⚠ totalParams vs paramShapes on mbConv+SE (ENet-B0 4.02M vs 7.16M); Train.l
 A1 ENet MBConv VJP twice under two names (mbStridedFwdB=mbDownBodyB, mbExpFwdB=mbBodyB, rfl) ~50
 A2 BatchSealKit swish (dup of arch A2)
 A3 ⚠ sigmoidScalarDeriv_eq deleted by fb00989c sweep → v1 defect 6 REGRESSED; restore via Real.deriv_sigmoid + pin; swishScalarDeriv_eq also unpinned/exposed
-A4 broadcastFlat_has_vjp / reindex_has_vjp → reindexVJP (rfl site at EfficientNetBackB0:397)
+A4 broadcastFlatHasVJP / reindexHasVJP → reindexVJP (rfl site at EfficientNetBackB0:397)
 A5 relu6 linearisation copies relu's (v1 §7 verified never landed) ~30
 A6 mhSlab = headSliceMat rfl
 A7 small: mulVec_headPadMat, ViTVecLN h3 fun_prop; dead vitBlockBack, comp_ok, Ah2_continuous; rf dup MNv2/MNv4 seals
-B1 ⭐ generic batched VJP code in three ENet files (ChainClose batchMap_has_vjp 62 refs; EnetTiePoC reassocB 324 refs/cInB 90 in the fused-SGD tie; EfficientNetBackB0 generic *_faithful) → BatchMapVJPAt + Foundation/BatchedBackLinks
+B1 ⭐ generic batched VJP code in three ENet files (ChainClose batchMapHasVJP 62 refs; EnetTiePoC reassocB 324 refs/cInB 90 in the fused-SGD tie; EfficientNetBackB0 generic *_faithful) → BatchMapVJPAt + Foundation/BatchedBackLinks
 B2 relu6/sigmoid/SE/broadcastFlat/layerNormVec/layerScale in net files (dup crosscut B1)
 B3 ⭐ canonical conv-net chain exists (R34/R50/MNv2/MNv4): BackB0→FullB→FullBVJP→FullBSeal→StepTieB→BackChains+WholeBackCertifiedTieB→SyncB/SyncStepTieB; ENet/ViT deviate; tier table; legend not renames (~350 audit, 225 comparator refs)
 B4 MNv2 retired per-example files wired in via dead imports (verified)
@@ -120,4 +120,4 @@ B7 sync twin kit split R34/ENet; P4 collective proof ×8
 B8 BN-ε positivity bundles 4 spellings
 B9 ViTVecLN five jobs
 B10 generic fused folds with mnv2 names
-B11 rename mobilenetv2PaperPC_has_vjp_at → mnv2B_full_has_vjp_at (6 refs)
+B11 rename mobilenetv2PaperPCHasVJPAt → mnv2B_fullHasVJPAt (6 refs)

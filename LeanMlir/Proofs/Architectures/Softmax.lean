@@ -6,7 +6,7 @@ import Mathlib.Analysis.Calculus.Deriv.Inv
 /-! # Softmax and the softmax–cross-entropy gradient
 
 `softmax` and `crossEntropy` are defined in `MLP.lean`; this file differentiates them:
-`softmax_diff`, the Jacobian `pdiv_softmax`, the global `softmax_has_vjp`, and
+`softmax_differentiable`, the Jacobian `pdiv_softmax`, the global `softmaxHasVJP`, and
 `softmaxCE_grad` — ∂(crossEntropy ∘ softmax)/∂logits = softmax − onehot, the cotangent every
 classifier's train step starts from. Attention (`rowSoftmax`) and the small-net IR build on it.
 -/
@@ -17,7 +17,7 @@ namespace Proofs
 
 /-- Differentiability of `softmax c`: each coordinate is `exp(z k) · (Σ_j exp(z j))⁻¹`, and the
     denominator is positive. -/
-lemma softmax_diff (c : Nat) : Differentiable ℝ (softmax c) := by
+lemma softmax_differentiable (c : Nat) : Differentiable ℝ (softmax c) := by
   match c with
   | 0 => rw [Subsingleton.elim (softmax 0) fun _ => 0]; exact differentiable_const _
   | c + 1 =>
@@ -58,7 +58,7 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
   cases c with
   | zero => exact j.elim0
   | succ c' =>
-  rw [pdiv_eq_fderiv_coord (softmax_diff (c' + 1) z)]
+  rw [pdiv_eq_fderiv_coord (softmax_differentiable (c' + 1) z)]
   rw [show (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) =
          (fun z' => Real.exp (z' j) * (∑ k : Fin (c' + 1), Real.exp (z' k))⁻¹) from by
     funext z'
@@ -137,7 +137,7 @@ theorem pdiv_softmax (c : Nat) (z : Vec c) (i j : Fin c) :
     This is the one place where "softmax means softly select one thing"
     maps directly to "softmax backward selectively amplifies the
     gradient for the winning class." -/
-noncomputable def softmax_has_vjp (c : Nat) : HasVJP (softmax c) where
+noncomputable def softmaxHasVJP (c : Nat) : HasVJP (softmax c) where
   backward := fun z dy =>
     let p : Vec c := softmax c z
     let s : ℝ := ∑ j : Fin c, p j * dy j  -- <p, dy>
@@ -169,7 +169,7 @@ theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
     naturally scalar, but `pdiv` is defined for `Vec → Vec`; we just
     take the only output index). Proof: `pdiv_eq_fderiv_coord` extracts the
     only coord, then `HasFDerivAt.log` (with `softmax z label > 0`)
-    composed with `softmax_diff` gives the derivative of the inner
+    composed with `softmax_differentiable` gives the derivative of the inner
     `Real.log`. Negating and evaluating at `basisVec j` reduces via
     `pdiv_softmax` to the expected formula. -/
 theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
@@ -185,7 +185,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   -- Differentiability infrastructure.
   have h_softmax_label_diff : Differentiable ℝ
       (fun z : Vec (c' + 1) => softmax (c' + 1) z label) :=
-    fun z => differentiableAt_pi.mp ((softmax_diff (c' + 1)) z) label
+    fun z => differentiableAt_pi.mp ((softmax_differentiable (c' + 1)) z) label
   have h_ce_pi_diff : Differentiable ℝ
       (fun z : Vec (c' + 1) => fun _ : Fin 1 => crossEntropy (c' + 1) z label) :=
     differentiable_pi.mpr fun _ => crossEntropy_differentiable (c' + 1) label
@@ -210,7 +210,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   -- Step 3: simplify CLM application at basisVec j.
   simp only [neg_apply, smul_apply, smul_eq_mul]
   -- Step 4: rewrite fderiv of `softmax z label` (in z) as pdiv softmax, then apply pdiv_softmax.
-  rw [← pdiv_eq_fderiv_coord (softmax_diff (c' + 1) logits)]
+  rw [← pdiv_eq_fderiv_coord (softmax_differentiable (c' + 1) logits)]
   rw [pdiv_softmax]
   -- Step 5: oneHot unfolds to `if j = label then 1 else 0`; algebra cancels p[label].
   rw [oneHot_apply]

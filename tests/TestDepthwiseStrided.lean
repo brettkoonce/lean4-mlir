@@ -7,7 +7,7 @@ import LeanMlir.Types
     `window_strides=[2,2]` (feature_group_count=c, [c,1,3,3] kernel); backward
     zero-upsamples the cotangent (`stablehlo.pad` interior=1) then runs the
     reversed-kernel stride-1 depthwise. den via the proven `depthwiseStride2Flat`
-    / `depthwiseStride2Flat_has_vjp` (= decimate ∘ depthwise). Values are placeholders.
+    / `depthwiseStride2FlatHasVJP` (= decimate ∘ depthwise). Values are placeholders.
 
     Run (needs iree-compile on PATH):
       lake env lean tests/TestDepthwiseStrided.lean

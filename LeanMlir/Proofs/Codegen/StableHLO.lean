@@ -122,7 +122,7 @@ inductive BatchableOp : Nat → Nat → Type where
   --
   -- `den` is `flatConvStride2Xla` = `decimateOddFlat ∘ flatConv` — the SAME stride-1 conv, read at
   -- the odd phase. So this adds no proof obligation: the forward, input-VJP, weight-VJP and
-  -- bias-VJP are all `vjp_comp`s of results already proven (`Architectures/StridedConv.lean`).
+  -- bias-VJP are all `vjpComp`s of results already proven (`Architectures/StridedConv.lean`).
   | convStridedXla {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (bias : Vec oc)            : BatchableOp (ic*(2*h)*(2*w)) (oc*h*w)
   -- ⭐ bf16 peer of `convStridedXla` — MobileNetV2's stem. Same asymmetric `((k-2)/2, k/2)` pad;
@@ -426,9 +426,9 @@ inductive SHlo : Nat → Type where
   | maxPool3s2Back {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- Chapter 3 (CNN) param-SGD tail (the conv train step, folded into the AST):
   -- the fused conv kernel/bias update ops — the conv analogue of `weightSgd`/`biasSgd`.
-  -- `convWeightSgd`: `W − lr·(conv2d_weight_grad(b,x)·dy)` via the transpose-trick conv
+  -- `convWeightSgd`: `W − lr·(conv2dWeightGrad(b,x)·dy)` via the transpose-trick conv
   -- (transpose→transpose→convolution→transpose, then const→multiply→subtract), `den`
-  -- = `cnn_render_convW_certified`. `convBiasSgd`: `b − lr·(conv2d_bias_grad(W,x)·dy)`
+  -- = `cnn_render_convW_certified`. `convBiasSgd`: `b − lr·(conv2dBiasGrad(W,x)·dy)`
   -- (reduce over batch+spatial [0,2,3], then SGD). `xName`/`wName`/`bName` are the saved
   -- activation/kernel/bias SSA names; `W,x,b,lr` carry the den. CnnFold proves
   -- both `den`s = the certified loss-descent step (via the conv VJP bridges).
@@ -452,7 +452,7 @@ inductive SHlo : Nat → Type where
   -- vec (reduce mean/var over axis [1], scalar γ/β). `gName,bName` are the γ,β
   -- scalar SSA inputs, `epsStr` the rendered ε literal; ε,γ,β carry the den.
   | bnF        {n : Nat} (gName bName epsStr : String) (ε γ β : ℝ)   : SHlo n → SHlo n
-  -- BN input-VJP — the consolidated O(N) three-term gradient (`bn_grad_input`),
+  -- BN input-VJP — the consolidated O(N) three-term gradient (`bnGradInput`),
   -- recomputing x̂/istd from the saved BN input `x` (`xName`). Total in `x`;
   -- faithful (= pdiv-Jacobian) under `0 < ε` (`bn_input_grad_correct`).
   | bnBack     {n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec n) : SHlo n → SHlo n
@@ -475,7 +475,7 @@ inductive SHlo : Nat → Type where
   -- Chapter 5 Milestone B (ResNet-34 downsampling): stride-2 SAME conv forward
   -- (`stablehlo.convolution` with `window_strides=[2,2]`) and its input-VJP
   -- (zero-upsample the cotangent — `lhs_dilation` — then the reversed-kernel
-  -- conv). `den` via the proven `flatConvStride2` / `flatConvStride2_has_vjp`.
+  -- conv). `den` via the proven `flatConvStride2` / `flatConvStride2HasVJP`.
   | flatConvStridedF {ic oc h w kH kW : Nat} (wName bName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc)              : SHlo (ic*(2*h)*(2*w)) → SHlo (oc*h*w)
   -- The XLA-`SAME` peer, for the TF-origin nets' per-example chains (`planning/archive/mnv4_verified.md`
@@ -517,7 +517,7 @@ inductive SHlo : Nat → Type where
   -- conv (`batch_group_count = c`, output [1,c,kH,kW]→[c,1,kH,kW]); `den` =
   -- `Mnv2PoC.depthwiseW_den`. `depthwiseStridedWeightSgd` (stride-2, blocks b1/b3/b5/b6):
   -- zero-upsample dy (interior=1 → 2h×2w) then the SAME per-channel weight-grad on the 2h×2w grid;
-  -- `den` = `W − lr·` `depthwiseStride2_weight_grad_has_vjp`'s backward. The depthwise bias grad is stride-INDEPENDENT
+  -- `den` = `W − lr·` `depthwiseStride2WeightGradHasVJP`'s backward. The depthwise bias grad is stride-INDEPENDENT
   -- (`Σ_{batch,spatial} dy`), so both bias ops emit the SAME `reduce` text as `convBiasSgd` (their
   -- `skel` aliases that op's Raw); only their `den` differs. MobileNetV2Fold proves all four
   -- `den`s = the certified loss-descent step.
@@ -593,7 +593,7 @@ inductive SHlo : Nat → Type where
   -- channel-slice over its h·w spatial cells with its OWN `(γ_c, β_c)`, γ/β : `Vec oc`
   -- (rank-1, `broadcast dims=[1]` — vs `bnF`'s rank-0 scalars). `den` via the proven
   -- `bnPerChannelTensor3` (the Mat-split block-diagonal BN bridged into the `(oc*h)*w`
-  -- activation layout) / its renderable backward `bnPerChannelTensor3_grad_input`.
+  -- activation layout) / its renderable backward `bnPerChannelTensor3GradInput`.
   | bnPerChannelF    {oc h w : Nat} (gName bName epsStr : String) (ε : ℝ) (γ β : Vec oc)
                                                            : SHlo (oc*h*w) → SHlo (oc*h*w)
   | bnPerChannelBack {oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
@@ -609,7 +609,7 @@ inductive SHlo : Nat → Type where
   -- `feature_group_count = c` and a `[c, 1, kH, kW]` kernel — one filter per channel,
   -- no cross-channel mixing) and its input-VJP (the SAME-pad reversed-kernel depthwise
   -- conv — spatial flip only, since the per-channel groups are 1×1; same
-  -- `feature_group_count`). `den` via the proven `depthwiseFlat` / `depthwiseFlat_has_vjp`.
+  -- `feature_group_count`). `den` via the proven `depthwiseFlat` / `depthwiseFlatHasVJP`.
   | depthwiseF    {c h w kH kW : Nat} (wName bName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*h*w) → SHlo (c*h*w)
   | depthwiseBack {c h w kH kW : Nat} (wName : String)
@@ -619,7 +619,7 @@ inductive SHlo : Nat → Type where
   -- downsampling op) and its input-VJP (zero-upsample the cotangent via
   -- `stablehlo.pad` interior=1 then the reversed-kernel stride-1 depthwise — the
   -- `convStridedBack` shape, per-channel). `den` via the proven `depthwiseStride2Flat`
-  -- / `depthwiseStride2Flat_has_vjp` (= decimate ∘ depthwise).
+  -- / `depthwiseStride2FlatHasVJP` (= decimate ∘ depthwise).
   | depthwiseStridedF    {c h w kH kW : Nat} (wName bName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c)            : SHlo (c*(2*h)*(2*w)) → SHlo (c*h*w)
   | depthwiseStridedXlaF {c h w kH kW : Nat} (wName bName : String)
@@ -629,21 +629,21 @@ inductive SHlo : Nat → Type where
   -- The XLA-`SAME` per-example input-VJP (MobileNetV2's SGD train step). ⚠ Its transposed-conv
   -- pad is `[p+1, p-1]` — the OPPOSITE shift from the two weight grads, because the kernel is
   -- reversed here; the batched `depthwiseStridedXlaBackBatched` carries the full note and
-  -- `scripts/gates/xla_pad_op_check.py` checks both. `den` is `depthwiseStride2FlatXla_has_vjp`.
+  -- `scripts/gates/xla_pad_op_check.py` checks both. `den` is `depthwiseStride2FlatXlaHasVJP`.
   | depthwiseStridedXlaBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- Chapter 7 (EfficientNet): swish forward (`x · σ(x)`, σ = `stablehlo.logistic`)
   -- and its input-VJP (`dy · swish'(x)`, closed form `σ(x)·(1 + x·(1−σ(x)))`).
   -- Swish is SMOOTH everywhere (no kink, NO smoothness hyp — unlike relu6); the
-  -- VJP is the GLOBAL `swish_has_vjp` (no `_at`). `swishBack`'s `xName`/`x` is the
-  -- saved pre-activation. `den` via the proven `swish` / `swish_has_vjp` (LayerNorm.lean).
+  -- VJP is the GLOBAL `swishHasVJP` (no `_at`). `swishBack`'s `xName`/`x` is the
+  -- saved pre-activation. `den` via the proven `swish` / `swishHasVJP` (LayerNorm.lean).
   | swishF     {n : Nat}                                        : SHlo n → SHlo n
   | swishBack  {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
   -- Chapter 7 (EfficientNet): sigmoid forward (`σ(x) = stablehlo.logistic`, the SE
   -- gate's output nonlinearity) and its input-VJP (`dy · σ(x)·(1−σ(x))`). Like swish,
-  -- SMOOTH everywhere (no kink, NO smoothness hyp — GLOBAL `sigmoid_has_vjp`, not `_at`).
+  -- SMOOTH everywhere (no kink, NO smoothness hyp — GLOBAL `sigmoidHasVJP`, not `_at`).
   -- `sigmoidBack`'s `xName`/`x` is the saved pre-activation. `den` via the proven
-  -- `sigmoid` / `sigmoid_has_vjp` (SE.lean).
+  -- `sigmoid` / `sigmoidHasVJP` (SE.lean).
   | sigmoidF     {n : Nat}                                      : SHlo n → SHlo n
   | sigmoidBack  {n : Nat} (xName : String) (x : Vec n)         : SHlo n → SHlo n
   -- The BATCHED peers of `swishBack`/`sigmoidBack`. Identical `den` — the SAME
@@ -764,7 +764,7 @@ inductive SHlo : Nat → Type where
   | lnRowBackB   {N m n : Nat} (gName xName epsStr : String) (ε γ : ℝ) (x : Vec (N*(m*n)))
       : SHlo (N*(m*n)) → SHlo (N*(m*n))
   -- ⭐ The BATCHED forward sigmoid, for **BCE-with-logits** (RSB-A2/A3's loss). `sigmoidF` already
-  --    denotes `Proofs.sigmoid` and already carries a global hypothesis-free `sigmoid_has_vjp`, but
+  --    denotes `Proofs.sigmoid` and already carries a global hypothesis-free `sigmoidHasVJP`, but
   --    it is indexed PER EXAMPLE and emits at `ty [B, n]`; the loss cotangent lives at `SHlo (N*n)`
   --    with the `*B` family (`subB`, `divConstB`). So this is the same function at the batched
   --    index — one constructor, and `planning/archive/next_session_pipeline_then_r50.md` §4 estimated
@@ -847,8 +847,8 @@ inductive SHlo : Nat → Type where
   -- `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))`, via `stablehlo.tanh`) and its
   -- input-VJP (`dy · gelu'(x)`, closed form from the tanh-approx derivative).
   -- Like swish/sigmoid, SMOOTH everywhere (no kink, NO smoothness hyp — the VJP is
-  -- the GLOBAL `gelu_has_vjp`, not `_at`). `geluBack`'s `xName`/`x` is the saved
-  -- pre-activation. `den` via the proven `gelu` / `gelu_has_vjp` (LayerNorm.lean).
+  -- the GLOBAL `geluHasVJP`, not `_at`). `geluBack`'s `xName`/`x` is the saved
+  -- pre-activation. `den` via the proven `gelu` / `geluHasVJP` (LayerNorm.lean).
   | geluF      {n : Nat}                                        : SHlo n → SHlo n
   | geluBack   {n : Nat} (xName : String) (x : Vec n)           : SHlo n → SHlo n
   -- Chapter 8 (ConvNeXt): per-element layer-scale `γ ⊙ x` (diagonal linear, `γ : Vec n`
@@ -867,7 +867,7 @@ inductive SHlo : Nat → Type where
   -- ROW-softmax input-VJP — per row the proven closed form `pᵢ⊙(dyᵢ − ⟨pᵢ,dyᵢ⟩)`
   -- with `p = softmax(preActᵢ)` recomputed from the saved pre-softmax scores
   -- (`xName`/`preAct`). SMOOTH everywhere (softmax has no kink). `den` via
-  -- `rowSoftmaxBackFlat` (= `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward ∘ Mat.unflatten`).
+  -- `rowSoftmaxBackFlat` (= `Mat.flatten ∘ rowSoftmaxHasVJPMat.backward ∘ Mat.unflatten`).
   | softmaxRowBack {m n : Nat} (xName : String) (preAct : Vec (m*n)) : SHlo (m*n) → SHlo (m*n)
   -- Chapter 9 (ViT): matrix multiply `C = A·B` on row-major flattened operands
   -- (reshape both to rank-3, `stablehlo.dot_general` batching dim 0, contract A's
@@ -898,12 +898,12 @@ inductive SHlo : Nat → Type where
   | denseRowF  {N a c : Nat} (wName bName : String) (W : Mat a c) (b : Vec c) : SHlo (N*a) → SHlo (N*c)
   -- PER-TOKEN dense input-VJP `dX = dY·Wᵀ` (`dot_general` contracting dy's feature
   -- axis with W's OUTPUT axis `[2] x [1]`). `den` via `rowDenseBackFlat` (rowwise
-  -- `Mat.mulVec W` = the proven `dense_has_vjp` backward). Linear — global VJP.
+  -- `Mat.mulVec W` = the proven `denseHasVJP` backward). Linear — global VJP.
   | denseRowBack {N a c : Nat} (wName : String) (W : Mat a c)   : SHlo (N*c) → SHlo (N*a)
   -- ViT patch embedding (one coarse token, like `seBlock`): stride-P VALID conv
   -- (kernel `[D,ic,P,P]`, the non-overlapping patch projection) + bias, channels-
   -- last transpose + flatten to `[N,D]` tokens, prepend the CLS token, add the
-  -- position embedding. `den` via `patchEmbedFlat` (= the proven `patchEmbed_flat`,
+  -- position embedding. `den` via `patchEmbedFlat` (= the proven `patchEmbedFlat`,
   -- Attention.lean).
   | patchEmbedF {ic H W P N D : Nat} (wName bName clsName posName : String)
       (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N+1) D) :
@@ -912,7 +912,7 @@ inductive SHlo : Nat → Type where
   -- (reversed-kernel `conv_transpose` on the patch-token rows of the `[N+1,D]`
   -- cotangent; the CLS row and position-add contribute nothing — input-VJP = id
   -- on a +constant). `den` via `patchEmbedBackFlat` (= the proven
-  -- `patchEmbed_input_grad_formula` = `patchEmbed_flat_has_vjp.backward`). Linear
+  -- `patchEmbedInputGradFormula` = `patchEmbedFlatHasVJP.backward`). Linear
   -- in the cotangent — activation-independent, so
   -- it routes through the generic `batched` Raw/Tok tag (like the strided-conv
   -- backward batched ops) rather than a bespoke top-level Raw/Tok constructor.
@@ -921,16 +921,16 @@ inductive SHlo : Nat → Type where
       SHlo ((N+1)*D) → SHlo (ic*H*W)
   -- CLS-token gather: row 0 of the `[N+1,D]` flat (`stablehlo.slice` after
   -- reshape) — the classifier head's input. `den` via `clsSliceFlat` (= the
-  -- proven `cls_slice_flat`, Attention.lean).
+  -- proven `clsTokenFlat`, Attention.lean).
   | clsSliceF  {N D : Nat}                                      : SHlo ((N+1)*D) → SHlo D
   -- CLS-slice VJP: scatter `dy` to row 0, zeros elsewhere (`stablehlo.pad` with
   -- `high = [0, N, 0]`). `den` via `clsPadFlat` (= the proven
-  -- `cls_slice_flat_has_vjp.backward`). Linear — global VJP.
+  -- `clsTokenFlatHasVJP.backward`). Linear — global VJP.
   | clsPadF    {N D : Nat}                                      : SHlo D → SHlo ((N+1)*D)
   -- Multi-head (ch10 scaling pass): per-head column slice — head `h`'s `[N,d]`
   -- block of the `[N,heads·d]` flat (columns `[h·d,(h+1)·d)` are contiguous in the
   -- row-major layout: `stablehlo.slice` on the feature axis after reshape).
-  -- `den` via `headSliceFlat` (= `mhsa_layer`'s `finProdFinEquiv (h, ·)` column
+  -- `den` via `headSliceFlat` (= `mhsaLayer`'s `finProdFinEquiv (h, ·)` column
   -- gather). Linear reindex.
   | headSliceF {N heads d : Nat} (h : Fin heads)                : SHlo (N*(heads*d)) → SHlo (N*d)
   -- Multi-head: per-head column scatter — pad an `[N,d]` head block into head `h`'s
@@ -960,7 +960,7 @@ inductive SHlo : Nat → Type where
   | bnBatchF {N oc h w : Nat} (gName bName epsStr : String) (ε : ℝ) (γ β : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (oc * h * w))
   -- True batch-norm BACKWARD (VJP), `[N,C,H,W]` layout: the renderable three-term
-  -- `bnBatchTensor4_grad_input` (reduce over [0,2,3] per channel). `den` is the
+  -- `bnBatchTensor4GradInput` (reduce over [0,2,3] per channel). `den` is the
   -- proven `bnBatchTensor4` VJP backward (batch-coupled). Routes through the
   -- generic `batched` Raw/Tok tag like the forward batched ops.
   | bnBatchBack {N oc h w : Nat} (gName xName epsStr : String) (ε : ℝ) (γ : Vec oc)
@@ -973,7 +973,7 @@ inductive SHlo : Nat → Type where
       (W : Kernel4 oc ic kH kW) (b : Vec oc) :
       SHlo (N * (oc * h * w)) → SHlo (N * (ic * h * w))
   -- Batched STRIDE-2 conv input-VJP: `batchMap N` of the proven per-example
-  -- strided-conv input-grad (`flatConvStride2_has_vjp` — activation-independent,
+  -- strided-conv input-grad (`flatConvStride2HasVJP` — activation-independent,
   -- strided conv = `decimate ∘ conv` is linear). The downsample basic-block's
   -- stride-2 conv1 backward; halves spatial vs `convBackBatched`. Routes through
   -- the generic `batched` tag like the stride-1 batched ops.
@@ -1006,7 +1006,7 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * h * w))
   -- Batched STRIDE-2 depthwise input-VJP: `batchMap N` of the proven per-example
-  -- strided-depthwise input-grad (`depthwiseStride2Flat_has_vjp` — activation-
+  -- strided-depthwise input-grad (`depthwiseStride2FlatHasVJP` — activation-
   -- independent, strided depthwise = `decimate ∘ depthwise` is linear). The
   -- EfficientNet downsample MBConv's stride-2 depthwise backward; halves spatial
   -- vs `depthwiseBackBatched` (the depthwise analog of `convStridedBackBatched`).
@@ -1051,11 +1051,11 @@ inductive SHlo : Nat → Type where
   -- ENTRY POINT: feeds `sigmoidBack → denseWeightSgdB(W₂)/denseBiasSgdB + denseRowBack(W₂)
   -- → swishBack → denseWeightSgdB(W₁)/denseBiasSgdB`, exposing the SE dense param grads the
   -- fused `seBackBatched` (input-cotangent only) cannot. `x` = the SE input (saved by name),
-  -- `e` = the SE-output cotangent. `den` = batched `broadcastFlat_has_vjp.backward (x⊙dy)`.
+  -- `e` = the SE-output cotangent. `den` = batched `broadcastFlatHasVJP.backward (x⊙dy)`.
   | seReduceB {N c h w : Nat} (xName : String) (x : Vec (N * (c * h * w))) :
       SHlo (N * (c * h * w)) → SHlo (N * c)
   -- Batched GLOBAL-AVERAGE-POOL backward (VJP): `dx[n,c,h,w] = dgap[n,c]/(h·w)` — the
-  -- per-example `globalAvgPoolFlat_has_vjp` backward (broadcast over spatial, ÷h·w),
+  -- per-example `globalAvgPoolFlatHasVJP` backward (broadcast over spatial, ÷h·w),
   -- lifted by `batchMap N`. The head's GAP backward (`gapBack` is per-example, not a
   -- `BatchableOp`, so it needs its own batched ctor). `den` = `batchMap N (gap-adjoint)`.
   | gapBackBatched {N c h w : Nat} : SHlo (N * c) → SHlo (N * (c * h * w))
@@ -1174,7 +1174,7 @@ inductive SHlo : Nat → Type where
   --    low half and appends the two dy-reductions. Re-averaging μ/σ² over replicas is the
   --    identity (they are already global), so that pass-through is free — and it buys the
   --    second collective: ONE `allReduceMeanF` then carries everything `bnSyncBack` needs.
-  --    ⚠ Both reductions are MEANS, not sums. `bn_grad_input` is
+  --    ⚠ Both reductions are MEANS, not sums. `bnGradInput` is
   --    `istd·(dx̂ − mean(dx̂) − x̂·mean(x̂·dx̂))`, and a mean over equal shards is the mean of the
   --    shards' means (`bnMean_shard`) — which is exactly why a plain mean-collective suffices.
   --    ⚠ `x` rides as a host literal (`xName` + `Vec`), as in `bnBatchBack`: it is the saved
@@ -1191,8 +1191,8 @@ inductive SHlo : Nat → Type where
   --    the global ones — a different function, and the wrong gradient. This one slices μ/σ² out
   --    of the same packed `[oc+oc]` operand the forward read, so its `x̂` is the forward's.
   --    ⚠ β's gradient is `Σ dy`, reads no statistic, and `bnBetaGradB` stays as it is.
-  --    `den` is `bnSyncPerChannel_grad_gamma`; its `R = 1` anchor
-  --    (`bnSyncPerChannel_grad_gamma_at_own_stats`) is `bnPerChannel_grad_gamma`. ══
+  --    `den` is `bnSyncPerChannelGradGamma`; its `R = 1` anchor
+  --    (`bnSyncPerChannelGradGamma_at_own_stats`) is `bnPerChannelGradGamma`. ══
   | bnSyncGammaGradB {N oc h w : Nat} (xName epsStr : String) (ε : ℝ)
       (x : Vec (N * (oc * (h * w)))) :
       SHlo (N * (oc * (h * w))) → SHlo (oc + oc) → SHlo oc
@@ -1238,7 +1238,7 @@ inductive SHlo : Nat → Type where
   | rowDenseBiasSgd   {N c : Nat} (bName lrStr : String) (b : Vec c) (lr : ℝ)
                                                           : SHlo (N * c) → SHlo c
   -- Batched conv weight SGD (1×1 expand/project/head; the transpose-trick wgrad).
-  -- `den` = flatten W − lr·(Σ_n per-example `conv2d_weight_grad` on `batchSlice n`).
+  -- `den` = flatten W − lr·(Σ_n per-example `conv2dWeightGrad` on `batchSlice n`).
   | convWeightSgdB {N ic oc h w kH kW : Nat} (xName wName lrStr : String)
       (b : Vec oc) (x : Vec (N * (ic * h * w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
                                                           : SHlo (N * (oc * h * w)) → SHlo (oc * ic * kH * kW)
@@ -1279,8 +1279,8 @@ inductive SHlo : Nat → Type where
                                                      : SHlo (oc*h*w) → SHlo (oc*ic*kH*kW)
   -- The STRIDE-4 weight gradient — ConvNeXt's 4×4/s4 patchify stem (`psW`), the last
   -- hand-written weight grad in that render. `flatConvStride4` (forward) and
-  -- `flatConvStride4_has_vjp` (input) were already proven; this op's `den` is the matching
-  -- `flatConvStride4_weight_grad_has_vjp`, which is two `vjp_comp` steps over the stride-1
+  -- `flatConvStride4HasVJP` (input) were already proven; this op's `den` is the matching
+  -- `flatConvStride4WeightGradHasVJP`, which is two `vjpComp` steps over the stride-1
   -- weight-VJP and the two decimations. Exercised only at 4×4 (nothing else in the kit is
   -- stride-4) and gated numerically by `convnext-adam-tie`, not by an emit-prefix case — there is
   -- no fused `convStride4WeightSgd` peer to be a prefix OF.
@@ -1450,7 +1450,7 @@ inductive SHlo : Nat → Type where
   | lambScaleF {n : Nat} (ds : List Nat)                        : SHlo 1 → SHlo n → SHlo n
 
 -- Total argmax-routing max-pool backward (the `select_and_scatter` formula),
--- matching `maxPool2_has_vjp_at3.backward` lifted through the flatten bridge.
+-- matching `maxPool2HasVJPAt3.backward` lifted through the flatten bridge.
 -- Total in the saved input `xv` (the no-ties proof lives only in `.correct`).
 noncomputable def maxPoolBackFlat (c h w : Nat)
     (xv : Vec (c*(2*h)*(2*w))) (dyv : Vec (c*h*w)) : Vec (c*(2*h)*(2*w)) :=
@@ -1461,7 +1461,7 @@ noncomputable def maxPoolBackFlat (c h w : Nat)
     then (Tensor3.unflatten dyv : Tensor3 c h w) q.1 (winRow q.2) (winCol p.2) else 0
 
 /-- **3×3/s2 max-pool backward (flattened)** — the peer of `maxPoolBackFlat` at He et al.'s stem
-    pool, matching `maxPool3s2_has_vjp_at3.backward` lifted through `hasVJPAt3_to_hasVJPAt`. Total
+    pool, matching `maxPool3s2HasVJPAt3.backward` lifted through `HasVJPAt3.toHasVJPAt`. Total
     in the saved input `xv` (the no-ties proof lives only in `.correct`).
 
     ⚠⚠ **This is a SUM where the 2×2 peer is a lookup, and that is the whole difference between the
@@ -1490,8 +1490,8 @@ noncomputable def rowSoftmaxFlat (m n : Nat) (v : Vec (m*n)) : Vec (m*n) :=
 
 /-- **Row-softmax backward (flattened)** — per row, the proven closed form
     `pᵢ⊙(dyᵢ − ⟨pᵢ,dyᵢ⟩)` with `pᵢ = softmax(preActᵢ)`. Definitionally equal to
-    `Mat.flatten ∘ rowSoftmax_has_vjp_mat.backward (Mat.unflatten preAct) ∘ Mat.unflatten`
-    (since `softmax_has_vjp.backward z dy i = let p := softmax z; p i·(dy i − ⟨p,dy⟩)`). -/
+    `Mat.flatten ∘ rowSoftmaxHasVJPMat.backward (Mat.unflatten preAct) ∘ Mat.unflatten`
+    (since `softmaxHasVJP.backward z dy i = let p := softmax z; p i·(dy i − ⟨p,dy⟩)`). -/
 noncomputable def rowSoftmaxBackFlat (m n : Nat) (preAct dy : Vec (m*n)) : Vec (m*n) :=
   Mat.flatten (fun i =>
     let p := softmax n ((Mat.unflatten preAct) i)
@@ -1518,9 +1518,9 @@ noncomputable def rowLNFlat (m n : Nat) (ε γ β : ℝ) (v : Vec (m*n)) : Vec (
   Mat.flatten (fun i => bnForward n ε γ β ((Mat.unflatten v) i))
 
 /-- **Row-wise LayerNorm input-VJP (flattened)** — per row the consolidated
-    three-term `bn_grad_input`, recomputing x̂/istd from the saved pre-LN input. -/
+    three-term `bnGradInput`, recomputing x̂/istd from the saved pre-LN input. -/
 noncomputable def rowLNBackFlat (m n : Nat) (ε γ : ℝ) (x dy : Vec (m*n)) : Vec (m*n) :=
-  Mat.flatten (fun i => bn_grad_input n ε γ ((Mat.unflatten x) i) ((Mat.unflatten dy) i))
+  Mat.flatten (fun i => bnGradInput n ε γ ((Mat.unflatten x) i) ((Mat.unflatten dy) i))
 
 /-- **Per-token dense (flattened)** — every row of the `[N,a]` flat through the
     same `dense W b`. -/
@@ -1529,27 +1529,22 @@ noncomputable def rowDenseFlat (N a c : Nat) (W : Mat a c) (b : Vec c) (v : Vec 
   Mat.flatten (fun i => dense W b ((Mat.unflatten v) i))
 
 /-- **Per-token dense input-VJP (flattened)** — per row `dX = W·dy` (=
-    `(dense_has_vjp W b).backward`'s `Mat.mulVec W`, MLP.lean). -/
+    `(denseHasVJP W b).backward`'s `Mat.mulVec W`, MLP.lean). -/
 noncomputable def rowDenseBackFlat (N a c : Nat) (W : Mat a c) (dy : Vec (N*c)) :
     Vec (N*a) :=
   Mat.flatten (fun i => Mat.mulVec W ((Mat.unflatten dy) i))
 
-/-- **ViT patch embedding (flattened)** — the proven `patchEmbed_flat` (Attention.lean). Output
-    row `n`: CLS token at `n = 0`, else conv-projection of patch `n−1` + bias; plus the position
-    embedding everywhere. -/
-noncomputable abbrev patchEmbedFlat := @patchEmbed_flat
-
-/-- **ViT patch-embedding input-VJP (flattened)** — the proven `patchEmbed_input_grad_formula`
-    (Attention.lean), i.e. `patchEmbed_flat_has_vjp.backward`: the strided patchify conv's input-VJP
+/-- **ViT patch-embedding input-VJP (flattened)** — the proven `patchEmbedInputGradFormula`
+    (Attention.lean), i.e. `patchEmbedFlatHasVJP.backward`: the strided patchify conv's input-VJP
     on the patch-token rows of the cotangent. The CLS row and the position-add (a +constant)
     contribute nothing. -/
-noncomputable abbrev patchEmbedBackFlat := @patchEmbed_input_grad_formula
+noncomputable abbrev patchEmbedBackFlat := @patchEmbedInputGradFormula
 
-/-- **ViT patch-embedding weight-grad (flattened)** — `TokenParamGrad`'s `patchEmbed_weight_grad`,
+/-- **ViT patch-embedding weight-grad (flattened)** — `TokenParamGrad`'s `patchEmbedWeightGrad`,
     flattened (that file is downstream of this one; the tie is the §1-fold
     `vit_render_patchW_certified`). The non-overlapping 16×16/s16 patchify conv's weight-VJP:
     `dW_(d,c,kh,kw) = Σ_patches (patch pixel read)·dy_(patch.succ, d)` — token 0 is the CLS row
-    (excluded); the pixel read mirrors `patchEmbed_flat`'s, and `dy (finProdFinEquiv (p.succ, d))`
+    (excluded); the pixel read mirrors `patchEmbedFlat`'s, and `dy (finProdFinEquiv (p.succ, d))`
     mirrors `patchEmbedBackFlat`. -/
 noncomputable def patchEmbedWeightGradFlat
     (ic H W patchSize N D : Nat)
@@ -1567,7 +1562,7 @@ noncomputable def patchEmbedWeightGradFlat
        else 0)
       * dy (finProdFinEquiv (p.succ, d)))
 
-/-- **ViT patch embedding at bf16 operands (flattened)** — `patchEmbed_flat`'s body with the three
+/-- **ViT patch embedding at bf16 operands (flattened)** — `patchEmbedFlat`'s body with the three
     roundings the emit actually performs, and nothing else.
 
     ⚠⚠ **The placement of each `rnd` is the whole content of this definition**, so read it against
@@ -1613,19 +1608,19 @@ noncomputable def patchEmbedFlatBf16
                    else 0)))
 
 /-- **CLS slice (flattened)** — gather row 0 of the `[N+1,D]` flat (= the proven
-    `cls_slice_flat`, Attention.lean; tie is `rfl` in ViTFwdGraph). -/
+    `clsTokenFlat`, Attention.lean; tie is `rfl` in ViTFwdGraph). -/
 noncomputable def clsSliceFlat (N D : Nat) (v : Vec ((N+1)*D)) : Vec D :=
   fun k => v (finProdFinEquiv ((0 : Fin (N + 1)), k))
 
 /-- **CLS pad (flattened)** — scatter `dy` to row 0, zeros elsewhere (= the proven
-    `cls_slice_flat_has_vjp.backward`; tie is `rfl` in ViTFwdGraph). -/
+    `clsTokenFlatHasVJP.backward`; tie is `rfl` in ViTFwdGraph). -/
 noncomputable def clsPadFlat (N D : Nat) (dy : Vec D) : Vec ((N+1)*D) :=
   fun idx =>
     let p := finProdFinEquiv.symm idx
     if p.1 = (0 : Fin (N + 1)) then dy p.2 else 0
 
 /-- **Per-head column slice (flattened)** — head `h`'s `[N,d]` block of the
-    `[N,heads·d]` flat: the `finProdFinEquiv (h, ·)` column gather `mhsa_layer`
+    `[N,heads·d]` flat: the `finProdFinEquiv (h, ·)` column gather `mhsaLayer`
     uses to feed each head's SDPA. -/
 noncomputable def headSliceFlat (N heads d : Nat) (h : Fin heads)
     (v : Vec (N*(heads*d))) : Vec (N*d) :=
@@ -1633,7 +1628,7 @@ noncomputable def headSliceFlat (N heads d : Nat) (h : Fin heads)
     (Mat.unflatten v) r (finProdFinEquiv (h, j)))
 
 /-- **Per-head column pad (flattened)** — scatter an `[N,d]` head block into head
-    `h`'s columns of a zero `[N,heads·d]`. `mhsa_layer`'s concat is the sum of
+    `h`'s columns of a zero `[N,heads·d]`. `mhsaLayer`'s concat is the sum of
     these over heads; it is also `headSliceFlat`'s VJP. -/
 noncomputable def headPadFlat (N heads d : Nat) (h : Fin heads)
     (v : Vec (N*d)) : Vec (N*(heads*d)) :=
@@ -1802,24 +1797,24 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .biasSgd _ _ b lr e       => fun j => b j - lr * den e j
   | _, .convWeightSgd _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx
-        - lr * (conv2d_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) idx
+        - lr * (conv2dWeightGradHasVJP b x).backward (Kernel4.flatten W) (den e) idx
   | _, .convBiasSgd _ _ W x b lr e =>
-      fun o => b o - lr * (conv2d_bias_grad_has_vjp W x).backward b (den e) o
+      fun o => b o - lr * (conv2dBiasGradHasVJP W x).backward b (den e) o
   -- Param gradients, un-fused (the `*Sgd` bodies above with `θ − lr·` stripped off).
   | _, .weightGrad _ x e     => Mat.flatten (fun i j => x i * den e j)
   | _, .biasGrad e           => den e
   | _, .convWeightGrad _ b x W e =>
-      (conv2d_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e)
-  | _, .convBiasGrad W x b e => (conv2d_bias_grad_has_vjp W x).backward b (den e)
+      (conv2dWeightGradHasVJP b x).backward (Kernel4.flatten W) (den e)
+  | _, .convBiasGrad W x b e => (conv2dBiasGradHasVJP W x).backward b (den e)
   | _, .convStridedWeightGrad _ b x W e =>
-      (flatConvStride2_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e)
+      (flatConvStride2WeightGradHasVJP b x).backward (Kernel4.flatten W) (den e)
   | _, .convStride4WeightGrad _ b x W e =>
-      (flatConvStride4_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e)
-  | _, .convStridedBiasGrad W x b e => (flatConvStride2_bias_grad_has_vjp W x).backward b (den e)
+      (flatConvStride4WeightGradHasVJP b x).backward (Kernel4.flatten W) (den e)
+  | _, .convStridedBiasGrad W x b e => (flatConvStride2BiasGradHasVJP W x).backward b (den e)
   | _, .bnGammaGrad (oc := oc) (h := h) (w := w) _ _ ε v e =>
-      bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e))
+      bnPerChannelGradGamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e))
   | _, .bnBetaGrad (oc := oc) (h := h) (w := w) e =>
-      bnPerChannel_grad_beta oc (h*w) (reassocFwd oc h w (den e))
+      bnPerChannelGradBeta oc (h*w) (reassocFwd oc h w (den e))
   -- AdamW: the proven ℝ optimizer (AdamStep.lean) applied to the child's gradient.
   | _, .adamMNextF _ _ _ _ β₁ m e => adamMNext β₁ m (den e)
   | _, .adamVNextF _ _ _ _ β₂ v e => adamVNext β₂ v (den e)
@@ -1847,15 +1842,15 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .lambScaleF _ s e           => lambScale (scalarOf (den s)) (den e)
   | _, .bnGammaSgd (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
-        bnPerChannel_grad_gamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
+        bnPerChannelGradGamma oc (h*w) ε (reassocFwd oc h w v) (reassocFwd oc h w (den e)) c
   | _, .bnBetaSgd (oc := oc) (h := h) (w := w) _ _ β lr e =>
-      fun c => β c - lr * bnPerChannel_grad_beta oc (h*w) (reassocFwd oc h w (den e)) c
+      fun c => β c - lr * bnPerChannelGradBeta oc (h*w) (reassocFwd oc h w (den e)) c
   | _, .layerScaleChGammaSgd (c := c) (h := h) (w := w) _ _ _ x γ lr e =>
       fun cc => γ cc - lr * ∑ k : Fin (c*h*w), (if chanIdx c h w k = cc then x k * den e k else 0)
   | _, .lnGammaSgd (n := n) _ _ _ _ ε x γ lr e =>
-      fun _ => γ 0 - lr * bn_grad_gamma n ε x (den e)
+      fun _ => γ 0 - lr * bnGradGamma n ε x (den e)
   | _, .lnBetaSgd (n := n) _ _ β lr e =>
-      fun _ => β 0 - lr * bn_grad_beta n (den e)
+      fun _ => β 0 - lr * bnGradBeta n (den e)
   | _, .veclnGammaSgd (N := N) (D := D) _ _ _ _ ε x γ lr e =>
       fun k => γ k - lr * ∑ r : Fin N,
         Mat.unflatten (den e) r k * layerNormForward D ε 1 0 (Mat.unflatten x r) k
@@ -1875,64 +1870,64 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .posEmbedGrad e => fun i => (den e) i
   | _, .bnGammaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ _ _ ε γ v lr e =>
       fun c => γ c - lr *
-        bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
+        bnPerChannelGradGamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
   | _, .bnBetaSgdB (N := N) (oc := oc) (h := h) (w := w) _ _ β lr e =>
-      fun c => β c - lr * bnPerChannel_grad_beta oc (N*(h*w)) (bnchwFwd N oc h w (den e)) c
+      fun c => β c - lr * bnPerChannelGradBeta oc (N*(h*w)) (bnchwFwd N oc h w (den e)) c
   | _, .denseWeightSgdB (N := N) (a := a) (c := c) _ _ _ x W lr e =>
       Mat.flatten (fun i j => W i j - lr * ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .denseBiasSgdB (N := N) (c := c) _ _ b lr e =>
       fun j => b j - lr * ∑ n : Fin N, batchSlice N c (den e) n j
   | _, .convWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
-        (conv2d_weight_grad_has_vjp b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
+        (conv2dWeightGradHasVJP b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   | _, .convStridedWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
-        (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
+        (flatConvStride2WeightGradHasVJP b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   | _, .convWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        (conv2d_weight_grad_has_vjp b
+        (conv2dWeightGradHasVJP b
           (Tensor3.unflatten (fun j => rnd (batchSlice N (ic*h*w) x n j)))).backward
           (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .convWeightGradBF8 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        (conv2d_weight_grad_has_vjp b
+        (conv2dWeightGradHasVJP b
           (Tensor3.unflatten (fun j => rnd (batchSlice N (ic*h*w) x n j)))).backward
           (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .convStridedWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        (flatConvStride2_weight_grad_has_vjp b
+        (flatConvStride2WeightGradHasVJP b
           (fun j => rnd (batchSlice N (ic*(2*h)*(2*w)) x n j))).backward
           (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .convBiasGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) W x b e =>
       fun o => ∑ n : Fin N,
-        (conv2d_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
+        (conv2dBiasGradHasVJP W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
           (batchSlice N (oc*h*w) (den e) n) o
   | _, .convStridedBiasGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) W x b e =>
       fun o => ∑ n : Fin N,
-        (flatConvStride2_bias_grad_has_vjp W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
+        (flatConvStride2BiasGradHasVJP W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
           (batchSlice N (oc*h*w) (den e) n) o
   -- The XLA-`SAME` peers. ⚠ Only the CERT changes (`…Xla…`); the shape of the batch sum is
   -- identical, which is precisely why this is easy to get wrong by copy-paste.
   | _, .convStridedXlaWeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
-        (flatConvStride2Xla_weight_grad_has_vjp b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
+        (flatConvStride2XlaWeightGradHasVJP b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   | _, .convStridedXlaWeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        (flatConvStride2Xla_weight_grad_has_vjp b
+        (flatConvStride2XlaWeightGradHasVJP b
           (fun j => rnd (batchSlice N (ic*(2*h)*(2*w)) x n j))).backward
           (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .convStridedXlaBiasGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) W x b e =>
       fun o => ∑ n : Fin N,
-        (flatConvStride2Xla_bias_grad_has_vjp W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
+        (flatConvStride2XlaBiasGradHasVJP W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
           (batchSlice N (oc*h*w) (den e) n) o
   | _, .bnGammaGradB (N := N) (oc := oc) (h := h) (w := w) _ _ ε v e =>
       fun c =>
-        bnPerChannel_grad_gamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
+        bnPerChannelGradGamma oc (N*(h*w)) ε (bnchwFwd N oc h w v) (bnchwFwd N oc h w (den e)) c
   | _, .bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) e =>
-      fun c => bnPerChannel_grad_beta oc (N*(h*w)) (bnchwFwd N oc h w (den e)) c
+      fun c => bnPerChannelGradBeta oc (N*(h*w)) (bnchwFwd N oc h w (den e)) c
   | _, .denseWeightGradB (N := N) (a := a) (c := c) _ x e =>
       Mat.flatten (fun i j => ∑ n : Fin N, batchSlice N a x n i * batchSlice N c (den e) n j)
   | _, .denseBiasGradB (N := N) (c := c) e =>
@@ -1957,7 +1952,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
                 (Mat.unflatten (bnchwFwd N oc h w x) c) k
               * (γ c * Mat.unflatten (bnchwFwd N oc h w (den dy)) c k))))
   | _, .bnSyncBack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x dy ds =>
-      bnSyncTensor4_grad_input N oc h w ε γ
+      bnSyncTensor4GradInput N oc h w ε γ
         (fun c => den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c)))
         (fun c => den ds (Fin.castAdd (oc+oc) (Fin.natAdd  oc c))
                   + den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c))
@@ -1975,7 +1970,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
         (fun c => den st (Fin.natAdd  oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
         (den x)
   | _, .bnSyncGammaGradB (N := N) (oc := oc) (h := h) (w := w) _ _ ε x dy st =>
-      bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
+      bnSyncPerChannelGradGamma oc (N*(h*w)) ε
         (fun c => den st (Fin.castAdd oc c))
         (fun c => den st (Fin.natAdd  oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
         (bnchwFwd N oc h w x) (bnchwFwd N oc h w (den dy))
@@ -1995,76 +1990,76 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
       fun j => ∑ n : Fin N, batchSlice N c (den e) n j
   | _, .convWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
-        (conv2d_weight_grad_has_vjp b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
+        (conv2dWeightGradHasVJP b (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   | _, .convStridedWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
-        (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
+        (flatConvStride2WeightGradHasVJP b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   | _, .convStridedXlaWeightSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx - lr * ∑ n : Fin N,
-        (flatConvStride2Xla_weight_grad_has_vjp b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
+        (flatConvStride2XlaWeightGradHasVJP b (batchSlice N (ic*(2*h)*(2*w)) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   | _, .depthwiseWeightSgdB (N := N) (c := c) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Tensor3.flatten W idx - lr * ∑ n : Fin N,
-        Tensor3.flatten ((depthwise_weight_grad_has_vjp3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
+        Tensor3.flatten ((depthwiseWeightGradHasVJP3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
           W (Tensor3.unflatten (batchSlice N (c*h*w) (den e) n))) idx
   | _, .depthwiseStridedWeightSgdB (N := N) (c := c) (h := h) (w := w) _ _ _ b x W lr e =>
       fun idx => Tensor3.flatten W idx - lr * ∑ n : Fin N,
-        (depthwiseStride2_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
+        (depthwiseStride2WeightGradHasVJP b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
           (Tensor3.flatten W) (batchSlice N (c*h*w) (den e) n) idx
   | _, .depthwiseWeightGradB (N := N) (c := c) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
-        Tensor3.flatten ((depthwise_weight_grad_has_vjp3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
+        Tensor3.flatten ((depthwiseWeightGradHasVJP3 b (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward
           W (Tensor3.unflatten (batchSlice N (c*h*w) (den e) n))) idx
   -- ⚠ `rnd` OUTSIDE the `Σ_n`: the emit makes the batch the convolution's contraction dim, so the
   -- whole sum is ONE convolution and therefore ONE bf16 store. Inside would model N stores.
   | _, .depthwiseWeightGradBBf16 (N := N) (c := c) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        Tensor3.flatten ((depthwise_weight_grad_has_vjp3 b
+        Tensor3.flatten ((depthwiseWeightGradHasVJP3 b
           (Tensor3.unflatten (fun j => rnd (batchSlice N (c*h*w) x n j)))).backward
           W (Tensor3.unflatten (fun j => rnd (batchSlice N (c*h*w) (den e) n j)))) idx)
   -- The ConvNeXt five. Each is exactly the gradient half of its `*Sgd` peer's `den`, so the
   -- `*Sgd_eq_grad` theorems below are `rfl`.
   | _, .depthwiseWeightGrad _ b x W e =>
       fun idx => Tensor3.flatten
-        ((depthwise_weight_grad_has_vjp3 b x).backward W (Tensor3.unflatten (den e))) idx
-  | _, .depthwiseBiasGrad W x b e => fun o => (depthwise_bias_grad_has_vjp W x).backward b (den e) o
-  | _, .lnGammaGrad (n := n) _ _ ε x e => fun _ => bn_grad_gamma n ε x (den e)
-  | _, .lnBetaGrad (n := n) e => fun _ => bn_grad_beta n (den e)
+        ((depthwiseWeightGradHasVJP3 b x).backward W (Tensor3.unflatten (den e))) idx
+  | _, .depthwiseBiasGrad W x b e => fun o => (depthwiseBiasGradHasVJP W x).backward b (den e) o
+  | _, .lnGammaGrad (n := n) _ _ ε x e => fun _ => bnGradGamma n ε x (den e)
+  | _, .lnBetaGrad (n := n) e => fun _ => bnGradBeta n (den e)
   | _, .layerScaleChGammaGrad (c := c) (h := h) (w := w) _ x e =>
       fun cc => ∑ k : Fin (c*h*w), (if chanIdx c h w k = cc then x k * den e k else 0)
   | _, .depthwiseStridedWeightGradB (N := N) (c := c) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
-        (depthwiseStride2_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
+        (depthwiseStride2WeightGradHasVJP b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
           (Tensor3.flatten W) (batchSlice N (c*h*w) (den e) n) idx
   | _, .depthwiseStridedWeightGradBBf16 (N := N) (c := c) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        (depthwiseStride2_weight_grad_has_vjp b
+        (depthwiseStride2WeightGradHasVJP b
           (fun j => rnd (batchSlice N (c*(2*h)*(2*w)) x n j))).backward
           (Tensor3.flatten W) (fun j => rnd (batchSlice N (c*h*w) (den e) n j)) idx)
   -- The depthwise bias grads: the shared-parameter batch sum every `*GradB` takes, `Σ_n dβ_n`.
   -- Same shape as `convBiasGradB`/`convStridedBiasGradB` one row up, with the depthwise VJP certs.
   | _, .depthwiseBiasGradB (N := N) (c := c) (h := h) (w := w) W x b e =>
       fun o => ∑ n : Fin N,
-        (depthwise_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward b
+        (depthwiseBiasGradHasVJP W (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward b
           (batchSlice N (c*h*w) (den e) n) o
   | _, .depthwiseStridedBiasGradB (N := N) (c := c) (h := h) (w := w) W x b e =>
       fun o => ∑ n : Fin N,
-        (depthwiseStride2_bias_grad_has_vjp W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
+        (depthwiseStride2BiasGradHasVJP W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
           (batchSlice N (c*h*w) (den e) n) o
   | _, .depthwiseStridedXlaWeightGradB (N := N) (c := c) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
-        (depthwiseStride2Xla_weight_grad_has_vjp b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
+        (depthwiseStride2XlaWeightGradHasVJP b (batchSlice N (c*(2*h)*(2*w)) x n)).backward
           (Tensor3.flatten W) (batchSlice N (c*h*w) (den e) n) idx
   | _, .depthwiseStridedXlaWeightGradBBf16 (N := N) (c := c) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        (depthwiseStride2Xla_weight_grad_has_vjp b
+        (depthwiseStride2XlaWeightGradHasVJP b
           (fun j => rnd (batchSlice N (c*(2*h)*(2*w)) x n j))).backward
           (Tensor3.flatten W) (fun j => rnd (batchSlice N (c*h*w) (den e) n j)) idx)
   | _, .depthwiseStridedXlaBiasGradB (N := N) (c := c) (h := h) (w := w) W x b e =>
       fun o => ∑ n : Fin N,
-        (depthwiseStride2Xla_bias_grad_has_vjp W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
+        (depthwiseStride2XlaBiasGradHasVJP W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
           (batchSlice N (c*h*w) (den e) n) o
   | _, .reluF e        => fun i => max (den e i) 0
   | _, .selectPos _ x e => fun i => if x i > 0 then den e i else 0
@@ -2078,33 +2073,33 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
                + Tensor3.flatten (fun o _ _ => b o) i
   | _, .maxPoolF (c := c) (h := h) (w := w) e => maxPoolFlat c h w (den e)
   | _, .maxPool3s2F (c := c) (h := h) (w := w) e => maxPool3s2Flat c h w (den e)
-  | _, .convBack _ W b v e => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e)
+  | _, .convBack _ W b v e => (HasVJP3.toHasVJP (conv2dHasVJP3 W b)).backward v (den e)
   | _, .maxPoolBack (c := c) (h := h) (w := w) _ x e => maxPoolBackFlat c h w x (den e)
   | _, .maxPool3s2Back (c := c) (h := h) (w := w) _ x e => maxPool3s2BackFlat c h w x (den e)
   | _, .bnF (n := n) _ _ _ ε γ β e => bnForward n ε γ β (den e)
-  | _, .bnBack (n := n) _ _ _ ε γ x e => bn_grad_input n ε γ x (den e)
+  | _, .bnBack (n := n) _ _ _ ε γ x e => bnGradInput n ε γ x (den e)
   | _, .addV a b       => fun j => den a j + den b j
   | _, .addVB a b      => fun j => den a j + den b j
   | _, .subB a b       => fun j => den a j - den b j
   | _, .gapF (c := c) (h := h) (w := w) e => globalAvgPoolFlat c h w (den e)
   | _, .gapBack (c := c) (h := h) (w := w) e =>
-      (globalAvgPoolFlat_has_vjp c h w).backward (fun _ => 0) (den e)
+      (globalAvgPoolFlatHasVJP c h w).backward (fun _ => 0) (den e)
   | _, .broadcastBack (c := c) (h := h) (w := w) e =>
       fun k => ∑ idx : Fin (c * h * w), if flatChannel c h w idx = k then den e idx else 0
   | _, .flatConvStridedF _ _ W b e => flatConvStride2 W b (den e)
   | _, .flatConvStridedXlaF _ _ W b e => flatConvStride2Xla W b (den e)
   | _, .flatConvStride4F _ _ W b e => flatConvStride4 W b (den e)
-  | _, .convStridedBack _ W b v e => (flatConvStride2_has_vjp W b).backward v (den e)
+  | _, .convStridedBack _ W b v e => (flatConvStride2HasVJP W b).backward v (den e)
   | _, .convStridedWeightSgd _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx
-        - lr * (flatConvStride2_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) idx
+        - lr * (flatConvStride2WeightGradHasVJP b x).backward (Kernel4.flatten W) (den e) idx
   | _, .convStridedBiasSgd _ _ W x b lr e =>
-      fun o => b o - lr * (flatConvStride2_bias_grad_has_vjp W x).backward b (den e) o
+      fun o => b o - lr * (flatConvStride2BiasGradHasVJP W x).backward b (den e) o
   | _, .convStridedXlaWeightSgd _ _ _ b x W lr e =>
       fun idx => Kernel4.flatten W idx
-        - lr * (flatConvStride2Xla_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) idx
+        - lr * (flatConvStride2XlaWeightGradHasVJP b x).backward (Kernel4.flatten W) (den e) idx
   | _, .convStridedXlaBiasSgd _ _ W x b lr e =>
-      fun o => b o - lr * (flatConvStride2Xla_bias_grad_has_vjp W x).backward b (den e) o
+      fun o => b o - lr * (flatConvStride2XlaBiasGradHasVJP W x).backward b (den e) o
   | _, .depthwiseWeightSgd _ _ _ b x W lr e => depthwiseWeightSgdDen b x W lr (den e)
   | _, .depthwiseBiasSgd _ _ W x b lr e => depthwiseBiasSgdDen W x b lr (den e)
   | _, .depthwiseStridedWeightSgd _ _ _ b x W lr e => depthwiseStridedWeightSgdDen b x W lr (den e)
@@ -2114,44 +2109,44 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .bnPerChannelF (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
       bnPerChannelTensor3 oc h w ε γ β (den e)
   | _, .bnPerChannelBack (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
-      bnPerChannelTensor3_grad_input oc h w ε γ x (den e)
+      bnPerChannelTensor3GradInput oc h w ε γ x (den e)
   | _, .bnPerChannelEvalF (oc := oc) (h := h) (w := w) _ _ _ _ _ ε γ β μ var e =>
       bnPerChannelEvalTensor3 oc h w ε γ β μ var (den e)
   | _, .depthwiseF _ _ W b e => depthwiseFlat W b (den e)
-  | _, .depthwiseBack _ W b v e => (depthwiseFlat_has_vjp W b).backward v (den e)
+  | _, .depthwiseBack _ W b v e => (depthwiseFlatHasVJP W b).backward v (den e)
   | _, .depthwiseStridedF _ _ W b e => depthwiseStride2Flat W b (den e)
   | _, .depthwiseStridedXlaF _ _ W b e => depthwiseStride2FlatXla W b (den e)
-  | _, .depthwiseStridedBack _ W b v e => (depthwiseStride2Flat_has_vjp W b).backward v (den e)
-  | _, .depthwiseStridedXlaBack _ W b v e => (depthwiseStride2FlatXla_has_vjp W b).backward v (den e)
+  | _, .depthwiseStridedBack _ W b v e => (depthwiseStride2FlatHasVJP W b).backward v (den e)
+  | _, .depthwiseStridedXlaBack _ W b v e => (depthwiseStride2FlatXlaHasVJP W b).backward v (den e)
   | _, .swishF (n := n) e => swish n (den e)
-  | _, .swishBack (n := n) _ x e => (swish_has_vjp n).backward x (den e)
+  | _, .swishBack (n := n) _ x e => (swishHasVJP n).backward x (den e)
   | _, .sigmoidF (n := n) e => sigmoid n (den e)
-  | _, .sigmoidBack (n := n) _ x e => (sigmoid_has_vjp n).backward x (den e)
+  | _, .sigmoidBack (n := n) _ x e => (sigmoidHasVJP n).backward x (den e)
   | _, .maxPoolBackB (N := N) (c := c) (h := h) (w := w) _ x e =>
       batchMapAux N (maxPoolBackFlat c h w) x (den e)
   | _, .maxPool3s2BackB (N := N) (c := c) (h := h) (w := w) _ x e =>
       batchMapAux N (maxPool3s2BackFlat c h w) x (den e)
   | _, .convBiasSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ W x b lr e =>
       fun o => b o - lr * ∑ n : Fin N,
-        (conv2d_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
+        (conv2dBiasGradHasVJP W (Tensor3.unflatten (batchSlice N (ic*h*w) x n))).backward b
           (batchSlice N (oc*h*w) (den e) n) o
   | _, .convStridedBiasSgdB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ _ W x b lr e =>
       fun o => b o - lr * ∑ n : Fin N,
-        (flatConvStride2_bias_grad_has_vjp W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
+        (flatConvStride2BiasGradHasVJP W (batchSlice N (ic*(2*h)*(2*w)) x n)).backward b
           (batchSlice N (oc*h*w) (den e) n) o
   | _, .selectPosB _ x e => fun i => if x i > 0 then den e i else 0
   | _, .selectMidB _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
   | _, .dropPathB (N := N) (n := n) _ s e => Proofs.dropPath N n s (den e)
   | _, .dropoutB (N := N) (n := n) _ mask e => Proofs.dropout N n mask (den e)
-  | _, .swishBackB (N := N) (n := n) _ x e => (swish_has_vjp (N*n)).backward x (den e)
+  | _, .swishBackB (N := N) (n := n) _ x e => (swishHasVJP (N*n)).backward x (den e)
   -- `gelu` is POINTWISE, so its VJP at the batched width `N*n` is already the batch-lift of the
   -- per-example one — the same argument `swishBackB` rests on, and why neither needs `batchMapAux`.
-  | _, .geluBackB (N := N) (n := n) _ x e => (gelu_has_vjp (N*n)).backward x (den e)
+  | _, .geluBackB (N := N) (n := n) _ x e => (geluHasVJP (N*n)).backward x (den e)
   -- The `Σ_n` shape, verbatim from `convWeightGradB`: a shared parameter's batched gradient is the
   -- sum over examples of the per-example gradient on `batchSlice n`.
   | _, .convStride4WeightGradB (N := N) (ic := ic) (oc := oc) (h := h) (w := w) _ b x W e =>
       fun idx => ∑ n : Fin N,
-        (flatConvStride4_weight_grad_has_vjp b
+        (flatConvStride4WeightGradHasVJP b
             (batchSlice N (ic*(2*(2*h))*(2*(2*w))) x n)).backward
           (Kernel4.flatten W) (batchSlice N (oc*h*w) (den e) n) idx
   -- The bf16 peer. ⚠ `rnd` OUTSIDE the `Σ_n`: the emit contracts the batch inside one convolution
@@ -2159,7 +2154,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   -- than the hardware performs — the same reason `convWeightGradBBf16` is written this way.
   | _, .convStride4WeightGradBBf16 (N := N) (ic := ic) (oc := oc) (h := h) (w := w) rnd _ b x W e =>
       fun idx => rnd (∑ n : Fin N,
-        (flatConvStride4_weight_grad_has_vjp b
+        (flatConvStride4WeightGradHasVJP b
             (fun j => rnd (batchSlice N (ic*(2*(2*h))*(2*(2*w))) x n j))).backward
           (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc*h*w) (den e) n j)) idx)
   | _, .layerScaleChGammaGradB (N := N) (c := c) (h := h) (w := w) _ x e =>
@@ -2239,9 +2234,9 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .lnRowBackB (N := N) (m := m) (n := n) _ _ _ ε γ x e =>
       batchMapAux N (rowLNBackFlat m n ε γ) x (den e)
   | _, .sigmoidB (N := N) (n := n) e => sigmoid (N*n) (den e)
-  | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoid_has_vjp (N*n)).backward x (den e)
+  | _, .sigmoidBackB (N := N) (n := n) _ x e => (sigmoidHasVJP (N*n)).backward x (den e)
   | _, .geluF (n := n) e => gelu n (den e)
-  | _, .geluBack (n := n) _ x e => (gelu_has_vjp n).backward x (den e)
+  | _, .geluBack (n := n) _ x e => (geluHasVJP n).backward x (den e)
   | _, .layerScaleF (n := n) _ γ e => layerScale γ (den e)
   | _, .layerScaleChF (c := c) (h := h) (w := w) _ γ e =>
       layerScale (fun k => γ (chanIdx c h w k)) (den e)
@@ -2268,57 +2263,57 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .bnBatchF (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ β e =>
       bnBatchLA N oc h w ε γ β (den e)
   | _, .bnBatchBack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
-      bnBatchTensor4_grad_input N oc h w ε γ x (den e)
+      bnBatchTensor4GradInput N oc h w ε γ x (den e)
   | _, .convBackBatched (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) _ W b e =>
-      batchMap N (fun dy => (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
+      batchMap N (fun dy => (HasVJP3.toHasVJP (conv2dHasVJP3 W b)).backward (fun _ => 0) dy) (den e)
   | _, .convStridedBackBatched (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) _ W b e =>
-      batchMap N (fun dy => (flatConvStride2_has_vjp W b).backward (fun _ => 0) dy) (den e)
+      batchMap N (fun dy => (flatConvStride2HasVJP W b).backward (fun _ => 0) dy) (den e)
   | _, .convBackBatchedBf16 (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) rnd _ W b e =>
-      batchMap N (fun dy i => rnd ((hasVJP3_to_hasVJP
-        (conv2d_has_vjp3 (fun o c a d => rnd (W o c a d)) b)).backward
+      batchMap N (fun dy i => rnd ((HasVJP3.toHasVJP
+        (conv2dHasVJP3 (fun o c a d => rnd (W o c a d)) b)).backward
           (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
   | _, .convBackBatchedF8 (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) rnd _ W b e =>
-      batchMap N (fun dy i => rnd ((hasVJP3_to_hasVJP
-        (conv2d_has_vjp3 (fun o c a d => rnd (W o c a d)) b)).backward
+      batchMap N (fun dy i => rnd ((HasVJP3.toHasVJP
+        (conv2dHasVJP3 (fun o c a d => rnd (W o c a d)) b)).backward
           (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
   | _, .convStridedBackBatchedBf16 (N := N) (ic := ic) (oc := _oc) (h := h) (w := w) rnd _ W b e =>
-      batchMap N (fun dy i => rnd ((flatConvStride2_has_vjp
+      batchMap N (fun dy i => rnd ((flatConvStride2HasVJP
         (fun o c a d => rnd (W o c a d)) b).backward
           (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
   | _, .depthwiseBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
-      batchMap N (fun dy => (hasVJP3_to_hasVJP (depthwise_has_vjp3 W b)).backward (fun _ => 0) dy) (den e)
+      batchMap N (fun dy => (HasVJP3.toHasVJP (depthwiseHasVJP3 W b)).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseBackBatchedBf16 (N := N) (c := c) (h := h) (w := w) rnd _ W b e =>
-      batchMap N (fun dy i => rnd ((hasVJP3_to_hasVJP
-        (depthwise_has_vjp3 (fun cc a d => rnd (W cc a d)) b)).backward
+      batchMap N (fun dy i => rnd ((HasVJP3.toHasVJP
+        (depthwiseHasVJP3 (fun cc a d => rnd (W cc a d)) b)).backward
           (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
   | _, .depthwiseStridedBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
-      batchMap N (fun dy => (depthwiseStride2Flat_has_vjp W b).backward (fun _ => 0) dy) (den e)
+      batchMap N (fun dy => (depthwiseStride2FlatHasVJP W b).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseStridedBackBatchedBf16 (N := N) (c := c) (h := h) (w := w) rnd _ W b e =>
-      batchMap N (fun dy i => rnd ((depthwiseStride2Flat_has_vjp
+      batchMap N (fun dy i => rnd ((depthwiseStride2FlatHasVJP
         (fun cc a d => rnd (W cc a d)) b).backward
           (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
   | _, .depthwiseStridedXlaBackBatched (N := N) (c := c) (h := h) (w := w) _ W b e =>
-      batchMap N (fun dy => (depthwiseStride2FlatXla_has_vjp W b).backward (fun _ => 0) dy) (den e)
+      batchMap N (fun dy => (depthwiseStride2FlatXlaHasVJP W b).backward (fun _ => 0) dy) (den e)
   | _, .depthwiseStridedXlaBackBatchedBf16 (N := N) (c := c) (h := h) (w := w) rnd _ W b e =>
-      batchMap N (fun dy i => rnd ((depthwiseStride2FlatXla_has_vjp
+      batchMap N (fun dy i => rnd ((depthwiseStride2FlatXlaHasVJP
         (fun cc a d => rnd (W cc a d)) b).backward
           (fun _ => 0) (fun j => rnd (dy j)) i)) (den e)
   | _, .bnBatchLABack (N := N) (oc := oc) (h := h) (w := w) _ _ _ ε γ x e =>
       fun i => ∑ k, if i = (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) k then
-        bnBatchTensor4_grad_input N oc h w ε γ
+        bnBatchTensor4GradInput N oc h w ε γ
           (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
           (fun i' => ∑ k', if i' = (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w))) k'
                            then den e k' else 0) k
         else 0
   | _, .seBackBatched (h := h) (w := w) _ _ _ _ _ W₁ b₁ W₂ b₂ v e =>
       fun idx =>
-        (seBlockFull_has_vjp (h := h) (w := w) W₁ b₁ W₂ b₂).backward
+        (seBlockFullHasVJP (h := h) (w := w) W₁ b₁ W₂ b₂).backward
           (Mat.unflatten v (finProdFinEquiv.symm idx).1)
           (Mat.unflatten (den e) (finProdFinEquiv.symm idx).1)
           (finProdFinEquiv.symm idx).2
   | _, .seReduceB (N := N) (c := c) (h := h) (w := w) _ x e =>
       -- the SE gate cotangent: per example, the broadcast-adjoint of `x ⊙ dy`
-      -- (`broadcastFlat_has_vjp.backward` = sum each channel's spatial Hadamard).
+      -- (`broadcastFlatHasVJP.backward` = sum each channel's spatial Hadamard).
       fun idx =>
         ∑ q : Fin (c * h * w),
           if flatChannel c h w q = (finProdFinEquiv.symm idx).2 then
@@ -2326,7 +2321,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
               * batchSlice N (c * h * w) (den e) (finProdFinEquiv.symm idx).1 q
           else 0
   | _, .gapBackBatched (N := N) (c := c) (h := h) (w := w) e =>
-      batchMap N (fun dgap => (globalAvgPoolFlat_has_vjp c h w).backward (fun _ => 0) dgap) (den e)
+      batchMap N (fun dgap => (globalAvgPoolFlatHasVJP c h w).backward (fun _ => 0) dgap) (den e)
 
 open Lean Meta in
 /-- `den e` (and `den e i`) one constructor deep, by smart unfolding at default transparency: the
@@ -2492,7 +2487,7 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
     (γ : Vec oc) (x : Vec (N * (oc * (h * w)))) (dy : SHlo (N * (oc * (h * w))))
     (ds : SHlo (oc + oc + (oc + oc))) :
     den (.bnSyncBack gName xName epsStr ε γ x dy ds)
-      = bnSyncTensor4_grad_input N oc h w ε γ
+      = bnSyncTensor4GradInput N oc h w ε γ
           (fun c => den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c)))
           (fun c => den ds (Fin.castAdd (oc+oc) (Fin.natAdd  oc c))
                     + den ds (Fin.castAdd (oc+oc) (Fin.castAdd oc c))
@@ -2503,7 +2498,7 @@ theorem den_batchOp_clsSlice_per_example {N tk D : Nat} (e : SHlo (N * ((tk+1)*D
 @[simp] theorem den_bnSyncGammaGradB {N oc h w : Nat} (xName epsStr : String) (ε : ℝ)
     (x : Vec (N * (oc * (h * w)))) (dy : SHlo (N * (oc * (h * w)))) (st : SHlo (oc + oc)) :
     den (.bnSyncGammaGradB xName epsStr ε x dy st)
-      = bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε
+      = bnSyncPerChannelGradGamma oc (N*(h*w)) ε
           (fun c => den st (Fin.castAdd oc c))
           (fun c => den st (Fin.natAdd  oc c) + den st (Fin.castAdd oc c) * den st (Fin.castAdd oc c))
           (bnchwFwd N oc h w x) (bnchwFwd N oc h w (den dy)) := rfl
@@ -2560,7 +2555,7 @@ theorem den_bnSyncF_allReduce_R1 {N oc h w : Nat} (gN bN es t t' : String) (ds d
   exact bnSyncTensor4_at_own_stats N oc h w hm ε γ β (den x)
 
 /-- ⭐⭐ **THE DROP-IN, backward half: at `R = 1` the sync-BN backward subgraph denotes
-    `bnBatchTensor4_grad_input`.**
+    `bnBatchTensor4GradInput`.**
 
     The peer of `den_bnSyncF_allReduce_R1`. The graph is the one a sync render emits — an outer
     `allReduceMeanF` over `bnSyncDyStatsB`, itself fed by the packed forward statistics — and at
@@ -2577,13 +2572,13 @@ theorem den_bnSyncBack_allReduce_R1 {N oc h w : Nat} (gN xN es t t' t'' : String
               (.bnPackB (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB xg))
                 (.allReduceMeanF 1 Nat.one_pos t' ds' (fun _ => .bnBatchVarAtB xg
                   (.allReduceMeanF 1 Nat.one_pos t ds (fun _ => .bnBatchMeanB xg))))))))
-      = bnBatchTensor4_grad_input N oc h w ε γ x (den dy) := by
+      = bnBatchTensor4GradInput N oc h w ε γ x (den dy) := by
   subst hx
   rw [den_bnSyncBack]
   simp only [den_allReduceMeanF_one, den_bnSyncDyStatsB, Fin.append_left, Fin.append_right,
              (den_syncStats_R1 t t' ds ds' xg _).1, (den_syncStats_R1 t t' ds ds' xg _).2,
              bnVar_add_mean_mul_mean _ hm, bnSyncXhat_at_own_stats _ hm]
-  exact bnSyncTensor4_grad_input_at_own_stats N oc h w hm ε γ _ (den dy)
+  exact bnSyncTensor4GradInput_at_own_stats N oc h w hm ε γ _ (den dy)
 
 /-- ⭐⭐ **THE DROP-IN, γ half: at `R = 1` the sync γ-gradient node denotes `bnGammaGradB`.**
     The third anchor beside `den_bnSyncF_allReduce_R1` / `den_bnSyncBack_allReduce_R1`: fed the
@@ -2602,7 +2597,7 @@ theorem den_bnSyncGammaGradB_allReduce_R1 {N oc h w : Nat} (xN es t t' : String)
   rw [den_bnSyncGammaGradB]
   simp only [(den_syncStats_R1 t t' ds ds' xg _).1, (den_syncStats_R1 t t' ds ds' xg _).2,
     bnVar_add_mean_mul_mean _ hm]
-  exact bnSyncPerChannel_grad_gamma_at_own_stats oc (N*(h*w)) hm ε _ _
+  exact bnSyncPerChannelGradGamma_at_own_stats oc (N*(h*w)) hm ε _ _
 
 /-- **`R = 1`: the handed-back sync mean IS `bnBatchMeanB`.** -/
 theorem den_bnStatsMeanB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : List Nat)
@@ -2650,9 +2645,9 @@ theorem den_bnStatsVarB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : 
 @[simp] theorem den_dropoutB {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo (N*n)) :
     den (.dropoutB mN mask e) = Proofs.dropout N n mask (den e) := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.swishBackB xN x e) = (swish_has_vjp (N*n)).backward x (den e) := rfl
+    den (.swishBackB xN x e) = (swishHasVJP (N*n)).backward x (den e) := rfl
 @[simp] theorem den_geluBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.geluBackB xN x e) = (gelu_has_vjp (N*n)).backward x (den e) := rfl
+    den (.geluBackB xN x e) = (geluHasVJP (N*n)).backward x (den e) := rfl
 @[simp] theorem den_rowDenseBiasGradB {N R c : Nat} (e : SHlo (N*(R*c))) :
     den (.rowDenseBiasGradB (N := N) (R := R) (c := c) e)
       = fun j => ∑ n : Fin N, ∑ r : Fin R, batchSlice R c (batchSlice N (R*c) (den e) n) r j := rfl
@@ -2681,7 +2676,7 @@ theorem den_lnRowBackB_per_example {N m n : Nat} (gN xN es : String) (ε γ : �
       = rowLNBackFlat m n ε γ (batchSlice N (m*n) x k) (batchSlice N (m*n) (den e) k) i := by
   simp only [den_lnRowBackB, batchMapAux, Equiv.symm_apply_apply]
 @[simp] theorem den_sigmoidBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.sigmoidBackB xN x e) = (sigmoid_has_vjp (N*n)).backward x (den e) := rfl
+    den (.sigmoidBackB xN x e) = (sigmoidHasVJP (N*n)).backward x (den e) := rfl
 
 /-- **`sigmoidB` denotes `Proofs.sigmoid` at the batched index** — `rfl`, the same function
     `sigmoidF_faithful` states one index down. This is BCE-with-logits' only new op. -/
@@ -2775,10 +2770,10 @@ theorem fwdGraph_faithful : den (fwdGraph W b x) = mnistLinear W b x := by
   funext j; simp only [fwdGraph, denStepApp, mnistLinear, dense]
 
 /-- **Dense input-VJP faithfulness.** The backward graph denotes the proven
-    dense VJP backward `(dense_has_vjp W b).backward x = Mat.mulVec W`. -/
+    dense VJP backward `(denseHasVJP W b).backward x = Mat.mulVec W`. -/
 theorem backGraph_faithful (dy : Vec n) :
-    den (backGraph W dy) = (dense_has_vjp W b).backward x dy := by
-  funext i; simp only [backGraph, denStepApp, dense_has_vjp, Mat.mulVec]
+    den (backGraph W dy) = (denseHasVJP W b).backward x dy := by
+  funext i; simp only [backGraph, denStepApp, denseHasVJP, Mat.mulVec]
 
 /-- The softmax sub-graph denotes the proven `softmax`. -/
 theorem softmaxDiv_expe_faithful (z : Vec n) :
@@ -2868,7 +2863,7 @@ theorem sgdB_isCertifiedGradStep (lr : ℝ) (label : Fin n) (j : Fin n) :
 --
 -- The forward adds ReLU (`maximum(·,0)`); the backward chains the proven
 -- per-layer VJPs through `select(x>0,·,0)` ReLU masks. ReLU has a kink, so the
--- whole-MLP VJP is *conditional* (`mlp_has_vjp_at`, off the kink) — exactly the
+-- whole-MLP VJP is *conditional* (`mlpHasVJPAt`, off the kink) — exactly the
 -- regime the codegen's subgradient (`relu'(0)=0`) targets. The parameter grads
 -- and SGD update reuse the layer-agnostic `wGrad`/`bGrad`/`sgd*` theorems above.
 -- ════════════════════════════════════════════════════════════════
@@ -2884,10 +2879,10 @@ theorem reluF_faithful {k : Nat} (e : SHlo k) : den (.reluF e) = relu k (den e) 
   funext i; simp only [denStepApp, relu]; exact max_zero_eq _
 
 /-- **ReLU backward faithfulness (smooth point).** `select(x>0,·,0)` denotes the
-    proven `relu_has_vjp_at` backward — the codegen's `relu'(0)=0` convention. -/
+    proven `reluHasVJPAt` backward — the codegen's `relu'(0)=0` convention. -/
 theorem selectPos_faithful {k : Nat} (s : String) (x : Vec k) (hx : ∀ i, x i ≠ 0)
     (e : SHlo k) :
-    den (.selectPos s x e) = (relu_has_vjp_at k x hx).backward (den e) := rfl
+    den (.selectPos s x e) = (reluHasVJPAt k x hx).backward (den e) := rfl
 
 /-- The `relu` descriptor denotes exactly what the descriptor-less `reluF` denoted at the same
     index: the batched graph computes the same function, only the emit width now travels
@@ -2898,12 +2893,12 @@ theorem den_batchOp_relu_eq_reluF {N n : Nat} (e : SHlo (N * n)) :
   exact batchMap_pointwise (fun y => if y > 0 then y else 0) (den e)
 
 /-- **Batched ReLU backward faithfulness.** `selectPosB` denotes the same proven
-    `relu_has_vjp_at` backward as `selectPos`, now over the whole batch — which is what the
+    `reluHasVJPAt` backward as `selectPos`, now over the whole batch — which is what the
     emitted `xName` holds. This is the statement that would be FALSE had `selectPos` been made
     a `BatchableOp` descriptor (that `den` would apply one example's mask to all `N`). -/
 theorem selectPosB_faithful {N n : Nat} (s : String) (x : Vec (N*n)) (hx : ∀ i, x i ≠ 0)
     (e : SHlo (N*n)) :
-    den (.selectPosB s x e) = (relu_has_vjp_at (N*n) x hx).backward (den e) := rfl
+    den (.selectPosB s x e) = (reluHasVJPAt (N*n) x hx).backward (den e) := rfl
 
 /-- **ReLU6 forward faithfulness.** `min(max(·,0),6)` denotes the proven `relu6`
     (MLP.lean). (`rfl` — `relu6` is defined as exactly this clamp.) -/
@@ -2911,11 +2906,11 @@ theorem selectPosB_faithful {N n : Nat} (s : String) (x : Vec (N*n)) (hx : ∀ i
     den (.relu6F e) = relu6 k (den e) := rfl
 
 /-- **ReLU6 backward faithfulness (smooth point).** `select(0<x<6,·,0)` denotes the
-    proven `relu6_has_vjp_at` backward — the two-sided kink's mask, smooth iff
+    proven `relu6HasVJPAt` backward — the two-sided kink's mask, smooth iff
     `x≠0 ∧ x≠6` (both bounds, unlike ReLU's one-sided `x≠0`). -/
 theorem selectMid_faithful {k : Nat} (s : String) (x : Vec k)
     (h_smooth : ∀ i, x i ≠ 0 ∧ x i ≠ 6) (e : SHlo k) :
-    den (.selectMid s x e) = (relu6_has_vjp_at k x h_smooth).backward (den e) := rfl
+    den (.selectMid s x e) = (relu6HasVJPAt k x h_smooth).backward (den e) := rfl
 
 /-- **Batched ReLU6 forward faithfulness (§2f).** The `relu6` descriptor at the batched index
     denotes exactly `relu6F`'s per-example clamp applied across the batch — the MobileNetV2 peer
@@ -2927,13 +2922,13 @@ theorem den_batchOp_relu6_eq_relu6F {N n : Nat} (e : SHlo (N * n)) :
   exact batchMap_pointwise (fun y => min (max y 0) 6) (den e)
 
 /-- **Batched ReLU6 backward faithfulness.** `selectMidB` denotes the same proven
-    `relu6_has_vjp_at` backward as `selectMid`, now over the whole batch — which is what the
+    `relu6HasVJPAt` backward as `selectMid`, now over the whole batch — which is what the
     emitted `xName` holds. FALSE had `selectMid` been made a `BatchableOp` descriptor beside
     `relu6` (that `den` would apply one example's two-sided mask to all `N`). Note the smoothness
     hypothesis is TWO-sided (`x ≠ 0 ∧ x ≠ 6`), unlike `selectPosB_faithful`'s `x ≠ 0`. -/
 theorem selectMidB_faithful {N n : Nat} (s : String) (x : Vec (N*n))
     (h_smooth : ∀ i, x i ≠ 0 ∧ x i ≠ 6) (e : SHlo (N*n)) :
-    den (.selectMidB s x e) = (relu6_has_vjp_at (N*n) x h_smooth).backward (den e) := rfl
+    den (.selectMidB s x e) = (relu6HasVJPAt (N*n) x h_smooth).backward (den e) := rfl
 
 /-- **Stochastic-depth forward faithfulness.** `dropPathB` denotes `Proofs.dropPath`, the per-sample
     residual-branch scale. `rfl`, because `dropPath` is `layerScale` at a per-example-broadcast
@@ -2947,7 +2942,7 @@ theorem dropPathB_faithful {N n : Nat} (mN : String) (s : Vec N) (e : SHlo (N*n)
     which is the whole reason this feature costs one op rather than two. -/
 theorem dropPathB_back_faithful {N n : Nat} (mN : String) (s : Vec N)
     (x : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.dropPathB mN s e) = (Proofs.dropPath_has_vjp N n s).backward x (den e) := rfl
+    den (.dropPathB mN s e) = (Proofs.dropPathHasVJP N n s).backward x (den e) := rfl
 
 @[simp] theorem den_dropPathB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     den (.dropPathB mN (fun _ => 1) e) = den e := by
@@ -2965,7 +2960,7 @@ theorem dropoutB_faithful {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo
     and must therefore read the DROPPED activation. -/
 theorem dropoutB_back_faithful {N n : Nat} (mN : String) (mask : Vec (N*n))
     (x : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.dropoutB mN mask e) = (Proofs.dropout_has_vjp N n mask).backward x (den e) := rfl
+    den (.dropoutB mN mask e) = (Proofs.dropoutHasVJP N n mask).backward x (den e) := rfl
 
 /-- ⭐ **The ones-mask identity on the AST**, which is what licenses emitting the dropout site in
     the FORWARD artifact: `@efficientnet_do_fwd` and `@efficientnet_adamdo_train_step` are then one
@@ -3013,7 +3008,7 @@ def mlpBackGraph (W₀ : Mat e₀ e₁) (W₁ : Mat e₁ e₂) (W₂ : Mat e₂ 
     (.selectPos "%h1" p₁ (.dotOut "%W2" W₂ (.operand "%dy" dy)))))
 
 /-- **MLP backward faithfulness (smooth point).** The backward graph denotes
-    the proven `mlp_has_vjp_at.backward` — the per-op `dot_general`/`select`
+    the proven `mlpHasVJPAt.backward` — the per-op `dot_general`/`select`
     ops assembled into the proven whole-network VJP (cf. `IR.mlp_whole_bridge`). -/
 theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : Mat e₁ e₂) (b₁ : Vec e₂)
     (W₂ : Mat e₂ e₃) (b₂ : Vec e₃) (x : Vec e₀)
@@ -3021,8 +3016,8 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
     (h1 : ∀ k, dense W₁ b₁ (relu e₁ (dense W₀ b₀ x)) k ≠ 0) (dy : Vec e₃) :
     den (mlpBackGraph W₀ W₁ W₂ (dense W₀ b₀ x)
           (dense W₁ b₁ (relu e₁ (dense W₀ b₀ x))) dy)
-      = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
-  simp only [mlpBackGraph, denStep, denStepApp, mlp_has_vjp_at, dense_has_vjp, relu_has_vjp_at,
+      = (mlpHasVJPAt W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
+  simp only [mlpBackGraph, denStep, denStepApp, mlpHasVJPAt, denseHasVJP, reluHasVJPAt,
              HasVJP.toHasVJPAt, Function.comp_apply]
   rfl
 
@@ -3032,7 +3027,7 @@ theorem mlpBackGraph_faithful (W₀ : Mat e₀ e₁) (b₀ : Vec e₁) (W₁ : M
 -- The conv/maxpool *forward* ops, denoted by the proofs' flattened forms
 -- `flatConv`/`maxPoolFlat`. The whole MNIST-CNN forward graph denotes the
 -- proven `mnistCnnNoBnForward`. (The backward VJP — conv input-grad via the
--- reversed kernel + maxpool select_and_scatter, = `mnistCnnNoBn_has_vjp_at` —
+-- reversed kernel + maxpool select_and_scatter, = `mnistCnnNoBnHasVJPAt` —
 -- is the next phase.)
 -- ════════════════════════════════════════════════════════════════
 
@@ -3081,28 +3076,28 @@ theorem maxPool3s2F_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
 
 /-- **Conv backward faithfulness.** The reversed-kernel `stablehlo.convolution`
     (transpose+reverse+conv) denotes the proven conv input-VJP — the flattened
-    `conv2d_has_vjp3` backward (conv is linear, so this is a global VJP). -/
+    `conv2dHasVJP3` backward (conv is linear, so this is a global VJP). -/
 theorem convBack_faithful {ic oc h w kH kW : Nat} (wN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*h*w)) (e : SHlo (oc*h*w)) :
     den (.convBack wN W b v e)
-      = (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v (den e) := rfl
+      = (HasVJP3.toHasVJP (conv2dHasVJP3 W b)).backward v (den e) := rfl
 
 /-- **Max-pool backward faithfulness (smooth point).** The emitted
-    `select_and_scatter` graph denotes the proven `maxPoolFlat_has_vjp_at`
+    `select_and_scatter` graph denotes the proven `maxPoolFlatHasVJPAt`
     backward — routing the cotangent to each window's argmax (the codegen's
     no-ties convention), under the MaxPool smoothness hypothesis. -/
 theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)))
     (h_smooth : MaxPool2Smooth (Tensor3.unflatten x : Tensor3 c (2*h) (2*w)))
     (e : SHlo (c*h*w)) :
     den (.maxPoolBack xN x e)
-      = (maxPoolFlat_has_vjp_at (Tensor3.unflatten x) h_smooth).backward (den e) := by
+      = (maxPoolFlatHasVJPAt (Tensor3.unflatten x) h_smooth).backward (den e) := by
   funext idx
-  simp only [denStepApp, maxPoolBackFlat, maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
-             maxPool2_has_vjp_at3]
+  simp only [denStepApp, maxPoolBackFlat, maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt,
+             maxPool2HasVJPAt3]
 
 /-- ⭐ **3×3/s2 max-pool backward faithfulness (smooth point).** The emitted `select_and_scatter`
     graph at window 3 / stride 2 / symmetric padding 1 denotes the proven
-    `maxPool3s2Flat_has_vjp_at` backward, under `MaxPool3s2Smooth`.
+    `maxPool3s2FlatHasVJPAt` backward, under `MaxPool3s2Smooth`.
 
     ⚠ The hypothesis is stated over **positions**, not window offsets, and that is not a stylistic
     difference from `maxPoolBack_faithful`: with overlapping windows two offsets can name one input
@@ -3113,10 +3108,10 @@ theorem maxPool3s2Back_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2
     (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten x : Tensor3 c (2*h) (2*w)))
     (e : SHlo (c*h*w)) :
     den (.maxPool3s2Back xN x e)
-      = (maxPool3s2Flat_has_vjp_at (Tensor3.unflatten x) h_smooth).backward (den e) := by
+      = (maxPool3s2FlatHasVJPAt (Tensor3.unflatten x) h_smooth).backward (den e) := by
   funext idx
-  simp only [denStepApp, maxPool3s2BackFlat, maxPool3s2Flat_has_vjp_at, hasVJPAt3_to_hasVJPAt,
-             maxPool3s2_has_vjp_at3]
+  simp only [denStepApp, maxPool3s2BackFlat, maxPool3s2FlatHasVJPAt, HasVJPAt3.toHasVJPAt,
+             maxPool3s2HasVJPAt3]
 
 /-- **BN forward faithfulness.** The per-example reduce/normalize/affine graph
     (γ·(x−μ)·istd + β, μ/var over the feature axis) denotes the proven
@@ -3148,10 +3143,10 @@ theorem addV_faithful {n : Nat} (a b : SHlo n) :
     den (.flatConvStridedXlaF wN bN W b e) = flatConvStride2Xla W b (den e) := rfl
 
 /-- **Strided-conv input-VJP faithfulness.** The zero-upsample (`lhs_dilation`)
-    + reversed-kernel conv denotes the proven `flatConvStride2_has_vjp` backward. -/
+    + reversed-kernel conv denotes the proven `flatConvStride2HasVJP` backward. -/
 theorem convStridedBack_faithful {ic oc h w kH kW : Nat} (wN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*(2*h)*(2*w))) (e : SHlo (oc*h*w)) :
-    den (.convStridedBack wN W b v e) = (flatConvStride2_has_vjp W b).backward v (den e) := rfl
+    den (.convStridedBack wN W b v e) = (flatConvStride2HasVJP W b).backward v (den e) := rfl
 
 /-- **Stride-4 conv forward faithfulness.** The `window_strides=[4,4]`
     `stablehlo.convolution` (the ConvNeXt 4×4/s4 patchify stem) denotes the proven
@@ -3162,7 +3157,7 @@ theorem convStridedBack_faithful {ic oc h w kH kW : Nat} (wN : String)
 
 /-- The scalar-BN backward node denotes the grad-input helper at its cotangent. -/
 @[simp] theorem den_bnBack {n : Nat} (gN xN es : String) (ε γ : ℝ) (x : Vec n) (e : SHlo n) :
-    den (.bnBack gN xN es ε γ x e) = bn_grad_input n ε γ x (den e) := rfl
+    den (.bnBack gN xN es ε γ x e) = bnGradInput n ε γ x (den e) := rfl
 
 /-- **BN backward faithfulness.** The consolidated three-term graph denotes the
     proven BN input-VJP — equal to the `pdiv`-contracted Jacobian of `bnForward`
@@ -3191,16 +3186,16 @@ theorem bnBack_faithful {n : Nat} (gN xN es : String) (ε γ β : ℝ) (hε : 0 
 @[simp] theorem weightGrad_faithful {m n : Nat} (xN : String) (x : Vec m) (e : SHlo n) :
     den (.weightGrad xN x e) = Mat.flatten (fun i j => x i * den e j) := rfl
 
-/-- **Conv weight-gradient faithfulness** — the proven `conv2d_weight_grad` VJP. -/
+/-- **Conv weight-gradient faithfulness** — the proven `conv2dWeightGrad` VJP. -/
 @[simp] theorem convWeightGrad_faithful {ic oc h w kH kW : Nat} (xN : String)
     (b : Vec oc) (x : Tensor3 ic h w) (W : Kernel4 oc ic kH kW) (e : SHlo (oc*h*w)) :
     den (.convWeightGrad xN b x W e)
-      = (conv2d_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) := rfl
+      = (conv2dWeightGradHasVJP b x).backward (Kernel4.flatten W) (den e) := rfl
 
-/-- **Conv bias-gradient faithfulness** — the proven `conv2d_bias_grad` VJP. -/
+/-- **Conv bias-gradient faithfulness** — the proven `conv2dBiasGrad` VJP. -/
 @[simp] theorem convBiasGrad_faithful {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) (b : Vec oc) (e : SHlo (oc*h*w)) :
-    den (.convBiasGrad W x b e) = (conv2d_bias_grad_has_vjp W x).backward b (den e) := rfl
+    den (.convBiasGrad W x b e) = (conv2dBiasGradHasVJP W x).backward b (den e) := rfl
 
 /-! **The gradient ops agree with the SGD ops they were split out of.** Each says
 `den (θSgd …) = θ − lr · den (θGrad …)` coordinatewise — so un-fusing the update did not
@@ -3267,7 +3262,7 @@ shared-parameter batch sum of the proven per-example depthwise bias VJP, which i
     (e : SHlo (N*(c*h*w))) (o : Fin c) :
     den (.depthwiseBiasGradB W x b e) o
       = ∑ n : Fin N,
-          (depthwise_bias_grad_has_vjp W (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward b
+          (depthwiseBiasGradHasVJP W (Tensor3.unflatten (batchSlice N (c*h*w) x n))).backward b
             (batchSlice N (c*h*w) (den e) n) o := rfl
 
 @[simp] theorem depthwiseStridedBiasGradB_faithful {N c h w kH kW : Nat}
@@ -3275,7 +3270,7 @@ shared-parameter batch sum of the proven per-example depthwise bias VJP, which i
     (e : SHlo (N*(c*h*w))) (o : Fin c) :
     den (.depthwiseStridedBiasGradB W x b e) o
       = ∑ n : Fin N,
-          (depthwiseStride2_bias_grad_has_vjp W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
+          (depthwiseStride2BiasGradHasVJP W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
             (batchSlice N (c*h*w) (den e) n) o := rfl
 
 /-! ## The ConvNeXt five — same statement, the last `*Sgd`/`*Grad` pairs the kit was missing (§2f)
@@ -3340,14 +3335,14 @@ to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, neve
       = Kernel4.flatten W idx - lr * den (.convStridedWeightGrad xN b x W e) idx := rfl
 
 /-- **Stride-4 weight-gradient faithfulness** (ConvNeXt's patchify stem). `den` IS the proven
-    `flatConvStride4_weight_grad_has_vjp` backward. There is no fused `convStride4WeightSgd` peer —
+    `flatConvStride4WeightGradHasVJP` backward. There is no fused `convStride4WeightSgd` peer —
     nothing but ConvNeXt's stem is stride-4, and its AdamW render consumes the un-fused gradient
     directly — so this, not a `*Sgd_eq_grad` statement, is what pins the op's `den`. -/
 @[simp] theorem convStride4WeightGrad_faithful {ic oc h w kH kW : Nat} (xN : String)
     (b : Vec oc) (x : Vec (ic*(2*(2*h))*(2*(2*w)))) (W : Kernel4 oc ic kH kW)
     (e : SHlo (oc*h*w)) :
     den (.convStride4WeightGrad xN b x W e)
-      = (flatConvStride4_weight_grad_has_vjp b x).backward (Kernel4.flatten W) (den e) := rfl
+      = (flatConvStride4WeightGradHasVJP b x).backward (Kernel4.flatten W) (den e) := rfl
 
 @[simp] theorem convStridedBiasSgd_eq_grad {ic oc h w kH kW : Nat} (bN lrS : String)
     (W : Kernel4 oc ic kH kW) (x : Vec (ic*(2*h)*(2*w))) (b : Vec oc) (lr : ℝ)
@@ -3618,19 +3613,19 @@ theorem clipScaleF_id_below {n : Nat} (clipS epsS : String) (c ε : ℝ) (ds : L
 /-- The per-channel BN backward node denotes the per-channel grad-input helper at its cotangent. -/
 @[simp] theorem den_bnPerChannelBack {oc h w : Nat} (gN xN es : String) (ε : ℝ) (γ : Vec oc)
     (x : Vec (oc*h*w)) (e : SHlo (oc*h*w)) :
-    den (.bnPerChannelBack gN xN es ε γ x e) = bnPerChannelTensor3_grad_input oc h w ε γ x (den e) :=
+    den (.bnPerChannelBack gN xN es ε γ x e) = bnPerChannelTensor3GradInput oc h w ε γ x (den e) :=
   rfl
 
 /-- **Per-channel BN backward faithfulness.** The block-diagonal three-term graph
     (per-channel, reducing over the spatial axes) denotes the proven per-channel BN
     input-VJP — equal to the `pdiv`-contracted (block-diagonal) Jacobian of
-    `bnPerChannelTensor3` (`bnPerChannelTensor3_grad_input_correct`), under `0 < ε`. -/
+    `bnPerChannelTensor3` (`bnPerChannelTensor3GradInput_correct`), under `0 < ε`. -/
 theorem bnPerChannelBack_faithful {oc h w : Nat} (gN xN es : String) (ε : ℝ) (hε : 0 < ε)
     (γ β : Vec oc) (x : Vec (oc*h*w)) (e : SHlo (oc*h*w)) (i : Fin (oc*h*w)) :
     den (.bnPerChannelBack gN xN es ε γ x e) i
       = ∑ j : Fin (oc*h*w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * den e j := by
   rw [den_bnPerChannelBack]
-  exact bnPerChannelTensor3_grad_input_correct oc h w ε hε γ β x (den e) i
+  exact bnPerChannelTensor3GradInput_correct oc h w ε hε γ β x (den e) i
 
 /-- **Depthwise-conv forward faithfulness.** The `feature_group_count = c`
     `stablehlo.convolution` (with a `[c,1,kH,kW]` kernel, one filter per channel)
@@ -3644,11 +3639,11 @@ theorem bnPerChannelBack_faithful {oc h w : Nat} (gN xN es : String) (ε : ℝ) 
 /-- **Depthwise-conv input-VJP faithfulness.** The reversed-kernel depthwise
     `stablehlo.convolution` (reverse the per-channel filters over the spatial axes
     `[2,3]`; the channel groups are 1×1 so no o↔i transpose, same
-    `feature_group_count = c`) denotes the proven `depthwiseFlat_has_vjp` backward
+    `feature_group_count = c`) denotes the proven `depthwiseFlatHasVJP` backward
     (depthwise is linear, so this is a global VJP). -/
 theorem depthwiseBack_faithful {c h w kH kW : Nat} (wN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*h*w)) (e : SHlo (c*h*w)) :
-    den (.depthwiseBack wN W b v e) = (depthwiseFlat_has_vjp W b).backward v (den e) := rfl
+    den (.depthwiseBack wN W b v e) = (depthwiseFlatHasVJP W b).backward v (den e) := rfl
 
 /-- **Strided-depthwise forward faithfulness.** The `window_strides=[2,2]`,
     `feature_group_count = c` `stablehlo.convolution` denotes the proven
@@ -3662,10 +3657,10 @@ theorem depthwiseBack_faithful {c h w kH kW : Nat} (wN : String)
 
 /-- **Strided-depthwise input-VJP faithfulness.** The zero-upsample (`stablehlo.pad`
     interior=1) + reversed-kernel stride-1 depthwise denotes the proven
-    `depthwiseStride2Flat_has_vjp` backward. -/
+    `depthwiseStride2FlatHasVJP` backward. -/
 theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) (e : SHlo (c*h*w)) :
-    den (.depthwiseStridedBack wN W b v e) = (depthwiseStride2Flat_has_vjp W b).backward v (den e) := rfl
+    den (.depthwiseStridedBack wN W b v e) = (depthwiseStride2FlatHasVJP W b).backward v (den e) := rfl
 
 /-- **Swish forward faithfulness.** The `multiply(x, logistic(x))` graph denotes
     the proven `swish` (= `x · σ(x)`, LayerNorm.lean). Smooth everywhere; no kink,
@@ -3676,10 +3671,10 @@ theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
 
 /-- **Swish input-VJP faithfulness.** The closed-form `dy ⊙ σ(x)·(1 + x·(1−σ(x)))`
     graph (recomputing σ from the saved pre-activation `x`) denotes the proven GLOBAL
-    `swish_has_vjp` backward (`dy ⊙ swishScalarDeriv x`; swish is smooth everywhere, so
+    `swishHasVJP` backward (`dy ⊙ swishScalarDeriv x`; swish is smooth everywhere, so
     this is a global VJP — no smoothness hypothesis). -/
 theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
-    den (.swishBack xN x e) = (swish_has_vjp n).backward x (den e) := rfl
+    den (.swishBack xN x e) = (swishHasVJP n).backward x (den e) := rfl
 
 /-- **Sigmoid forward faithfulness.** The `stablehlo.logistic(x)` graph denotes the
     proven `sigmoid` (= σ(x), SE.lean) — the SE gate's output nonlinearity.
@@ -3689,10 +3684,10 @@ theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 
 /-- **Sigmoid input-VJP faithfulness.** The closed-form `dy ⊙ σ(x)·(1−σ(x))` graph
     (recomputing σ from the saved pre-activation `x`) denotes the proven GLOBAL
-    `sigmoid_has_vjp` backward (`dy ⊙ sigmoidScalarDeriv x`; sigmoid is smooth
+    `sigmoidHasVJP` backward (`dy ⊙ sigmoidScalarDeriv x`; sigmoid is smooth
     everywhere, so this is a global VJP — no smoothness hypothesis). -/
 theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
-    den (.sigmoidBack xN x e) = (sigmoid_has_vjp n).backward x (den e) := rfl
+    den (.sigmoidBack xN x e) = (sigmoidHasVJP n).backward x (den e) := rfl
 
 /-- **GELU forward faithfulness.** The tanh-approximation graph
     `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))` denotes the proven `gelu`
@@ -3714,10 +3709,10 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 
 /-- **GELU input-VJP faithfulness.** The closed-form `dy ⊙ gelu'(x)` graph
     (recomputing `tanh(u(x))` from the saved pre-activation `x`) denotes the proven
-    GLOBAL `gelu_has_vjp` backward (`dy ⊙ geluScalarDeriv x`; GELU is smooth
+    GLOBAL `geluHasVJP` backward (`dy ⊙ geluScalarDeriv x`; GELU is smooth
     everywhere, so this is a global VJP — no smoothness hypothesis). -/
 theorem geluBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
-    den (.geluBack xN x e) = (gelu_has_vjp n).backward x (den e) := rfl
+    den (.geluBack xN x e) = (geluHasVJP n).backward x (den e) := rfl
 
 /-- **Row-softmax forward faithfulness.** The per-row `exp / reduce[last] / divide`
     graph denotes `rowSoftmaxFlat` (= flattened `rowSoftmax`, Attention.lean). Plain
@@ -3728,7 +3723,7 @@ theorem geluBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 
 /-- **Row-softmax input-VJP faithfulness.** The per-row closed-form
     `p ⊙ (dy − ⟨p,dy⟩)` graph (recomputing `p` from the saved pre-softmax scores)
-    denotes `rowSoftmaxBackFlat` (= flattened `rowSoftmax_has_vjp_mat.backward`).
+    denotes `rowSoftmaxBackFlat` (= flattened `rowSoftmaxHasVJPMat.backward`).
     Softmax is smooth, so this is a global VJP — no smoothness hypothesis. -/
 theorem softmaxRowBack_faithful {m n : Nat} (xN : String) (preAct : Vec (m*n)) (e : SHlo (m*n)) :
     den (.softmaxRowBack xN preAct e) = rowSoftmaxBackFlat m n preAct (den e) := rfl
@@ -3760,7 +3755,7 @@ theorem softmaxRowBack_faithful {m n : Nat} (xN : String) (preAct : Vec (m*n)) (
 
 /-- **Row-LayerNorm input-VJP faithfulness.** The per-row consolidated three-term
     graph (recomputing x̂/istd from the saved pre-LN input, reductions over the row
-    axis) denotes `rowLNBackFlat` (rowwise `bn_grad_input` — faithful to the
+    axis) denotes `rowLNBackFlat` (rowwise `bnGradInput` — faithful to the
     pdiv-Jacobian per row under `0 < ε`, `bn_input_grad_correct`). -/
 theorem lnRowBack_faithful {m n : Nat} (gN xN es : String) (ε γ : ℝ) (x : Vec (m*n))
     (e : SHlo (m*n)) :
@@ -3774,13 +3769,13 @@ theorem lnRowBack_faithful {m n : Nat} (gN xN es : String) (ε γ : ℝ) (x : Ve
 
 /-- **Per-token dense input-VJP faithfulness.** The `dot_general [2] x [1]` graph
     (dy against W's output axis) denotes `rowDenseBackFlat` (rowwise `Mat.mulVec W`
-    = the proven `dense_has_vjp` backward; dense is affine — global VJP). -/
+    = the proven `denseHasVJP` backward; dense is affine — global VJP). -/
 theorem denseRowBack_faithful {N a c : Nat} (wN : String) (W : Mat a c) (e : SHlo (N*c)) :
     den (.denseRowBack wN W e) = rowDenseBackFlat N a c W (den e) := rfl
 
 /-- **Patch-embedding faithfulness.** The stride-P VALID conv + channels-last
     flatten + CLS concatenate + position-embed add graph denotes `patchEmbedFlat`
-    (the local re-spelling of the proven `patchEmbed_flat`; the tie is `rfl` in
+    (the local re-spelling of the proven `patchEmbedFlat`; the tie is `rfl` in
     ViTFwdGraph). (`rfl`, coarse-token like `seBlock`.) -/
 @[simp] theorem patchEmbedF_faithful {ic H W P N D : Nat} (wN bN cN pN : String)
     (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (N+1) D) (e : SHlo (ic*H*W)) :
@@ -3788,17 +3783,17 @@ theorem denseRowBack_faithful {N a c : Nat} (wN : String) (W : Mat a c) (e : SHl
       = patchEmbedFlat ic H W P N D Wc bc cls pos (den e) := rfl
 
 /-- **CLS-slice faithfulness.** The row-0 `stablehlo.slice` denotes `clsSliceFlat`
-    (= the proven `cls_slice_flat`). (`rfl`.) -/
+    (= the proven `clsTokenFlat`). (`rfl`.) -/
 @[simp] theorem clsSliceF_faithful {N D : Nat} (e : SHlo ((N+1)*D)) :
     den (.clsSliceF e) = clsSliceFlat N D (den e) := rfl
 
 /-- **CLS-pad faithfulness.** The zero-pad scatter-to-row-0 denotes `clsPadFlat`
-    (= the proven `cls_slice_flat_has_vjp.backward`; linear — global VJP). (`rfl`.) -/
+    (= the proven `clsTokenFlatHasVJP.backward`; linear — global VJP). (`rfl`.) -/
 @[simp] theorem clsPadF_faithful {N D : Nat} (e : SHlo D) :
     den (.clsPadF (N := N) e) = clsPadFlat N D (den e) := rfl
 
 /-- **Per-head slice faithfulness.** The feature-axis `stablehlo.slice` of head `h`'s
-    contiguous column block denotes `headSliceFlat` (= `mhsa_layer`'s per-head column
+    contiguous column block denotes `headSliceFlat` (= `mhsaLayer`'s per-head column
     gather). Linear reindex. (`rfl`.) -/
 @[simp] theorem headSliceF_faithful {N heads d : Nat} (h : Fin heads)
     (e : SHlo (N*(heads*d))) :
@@ -3806,7 +3801,7 @@ theorem denseRowBack_faithful {N a c : Nat} (wN : String) (W : Mat a c) (e : SHl
 
 /-- **Per-head pad faithfulness.** The feature-axis zero-pad into head `h`'s column
     block denotes `headPadFlat` (the slice's VJP; summed over heads it is
-    `mhsa_layer`'s concat). Linear. (`rfl`.) -/
+    `mhsaLayer`'s concat). Linear. (`rfl`.) -/
 @[simp] theorem headPadF_faithful {N heads d : Nat} (h : Fin heads) (e : SHlo (N*d)) :
     den (.headPadF h e) = headPadFlat N heads d h (den e) := rfl
 
@@ -3927,7 +3922,7 @@ def cifar8BnFwdGraph {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat} (epsStr : Stri
 
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter 3 — CNN: the whole-chain backward graph (the MLP-analog of `mlpBackGraph`).
---   That it denotes `mnistCnnNoBn_has_vjp_at.backward`, and that the chapter 3–4 forward graphs
+--   That it denotes `mnistCnnNoBnHasVJPAt.backward`, and that the chapter 3–4 forward graphs
 --   above denote their nets, is `Nets/Small/ChapterGraphTies` — the IR imports no net.
 -- ════════════════════════════════════════════════════════════════
 

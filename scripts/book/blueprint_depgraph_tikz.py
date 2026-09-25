@@ -24,7 +24,7 @@ AMBIENT = 4
 ENVS = ("theorem", "lemma", "definition", "axiom")
 # A section too deep for one page is cut at these nodes: the node and everything
 # downstream of it (within the section) become the second figure.
-CUTS = {"Attention proofs": ["ax:mhsa_has_vjp_mat"]}
+CUTS = {"Attention proofs": ["ax:mhsaHasVJPMat"]}
 BASE = 7.0          # label font size at scale 1, points (portals 5.5)
 
 def parse(tex):
@@ -270,9 +270,9 @@ def book(chapters, nums, nodes, edges, tex, textwidth_pt=460.0, textheight_pt=38
 # on, chapter by chapter, from the same \uses lines. One column per chapter net, in chapter
 # order — the side quests (ResNet-50, MobileNetV4) have the same kind of certificate but
 # belong to their chapters, not to the map. Nodes are the blueprint labels.
-SPINES = [('thm:resnet34_full_has_vjp', 'ResNet-34'), ('thm:mobilenetv2_full_has_vjp', 'MobileNetV2'),
-          ('thm:efficientnet_full_has_vjp', 'EfficientNet-B0'), ('thm:convnext_whole_back', 'ConvNeXt-T'),
-          ('thm:vitTiny_has_vjp_correct', 'ViT-Tiny')]
+SPINES = [('thm:resnet34FullHasVJP', 'ResNet-34'), ('thm:mobilenetv2FullHasVJP', 'MobileNetV2'),
+          ('thm:efficientnetFullHasVJP', 'EfficientNet-B0'), ('thm:convnext_whole_back', 'ConvNeXt-T'),
+          ('thm:vitTinyHasVJP_correct', 'ViT-Tiny')]
 
 def spines(chapters, nums, nodes, edges, tex, textwidth_pt=460.0):
     """A grid, not a dot layout: one column per whole-network certificate, one row per

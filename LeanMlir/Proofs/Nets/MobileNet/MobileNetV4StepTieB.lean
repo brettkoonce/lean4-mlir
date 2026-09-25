@@ -586,14 +586,14 @@ theorem mnv4_fused_tiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid
 
 
 /-! The head, timm's order: `cn_960` conv-bn-relu at `h×w`, GAP, `conv_head` conv-bn-relu on the
-pooled `[N, mid, 1, 1]`, dense. The two `1×1` relabellings (`mnv4Pool11`) are no-ops in the render
+pooled `[N, mid, 1, 1]`, dense. The two `1×1` relabellings (`mnv4_pool11`) are no-ops in the render
 and `Fin.cast` reads here. -/
 
 /-- The pooled `[N, c]` read at `[N, c, 1, 1]` and back — `castLayer`'s forward and backward. -/
 noncomputable def mnv4To11 {N c : Nat} (v : Vec (N * c)) : Vec (N * (c * 1 * 1)) :=
-  fun i => v (Fin.cast (mnv4Pool11 N c).symm i)
+  fun i => v (Fin.cast (mnv4_pool11 N c).symm i)
 noncomputable def mnv4From11 {N c : Nat} (v : Vec (N * (c * 1 * 1))) : Vec (N * c) :=
-  fun i => v (Fin.cast (mnv4Pool11 N c) i)
+  fun i => v (Fin.cast (mnv4_pool11 N c) i)
 
 /-- The pooled head features at `[N, mid, 1, 1]`: GAP of the first head stage, relabelled. -/
 noncomputable def mnv4HeadPool (N h w : Nat) {c mid : Nat}
@@ -917,13 +917,13 @@ theorem mnv4_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (n : Fin N) (j : Fin nCls)
     (ht : ∑ k : Fin nCls, Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1) k = 1) :
     den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-          (rowB N nCls (mobilenetv4ForwardB_full N w x)) t)
+          (rowB N nCls (mobilenetv4ForwardBFull N w x)) t)
         (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = (pdiv (fun z' : Vec nCls => fun _ : Fin 1 =>
             softCE nCls (smoothTarget nCls α
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
-            (rowB N nCls (mobilenetv4ForwardB_full N w x)) n) (0 : Fin 1)) j 0) / B :=
+            (rowB N nCls (mobilenetv4ForwardBFull N w x)) n) (0 : Fin 1)) j 0) / B :=
   smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.Mnv4TieB

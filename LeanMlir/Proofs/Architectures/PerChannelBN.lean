@@ -8,11 +8,11 @@ normalize each channel-slice independently with its *own* `(γ_c, β_c)`, `γ/β
 
 Because each channel is independent, the whole Jacobian is **block-diagonal** across
 the channel axis — the genuinely-new piece. We get it for free by generalizing the
-existing `rowwise_has_vjp_mat` (Tensor.lean, multi-head attention) from a *single*
+existing `rowwiseHasVJPMat` (Tensor.lean, multi-head attention) from a *single*
 per-row map to a **per-row family** `g : Fin m → (Vec n → Vec p)`: viewing the
 activation as `Mat oc (h·w)` (row = channel), per-channel BN is exactly
 `fun A => fun c => bnForward (h·w) ε (γ c) (β c) (A c)`. Its VJP runs each channel's
-`bn_has_vjp` on that channel's cotangent slice; the cross-channel blocks vanish.
+`bnHasVJP` on that channel's cotangent slice; the cross-channel blocks vanish.
 
 The file also holds inference BN (frozen statistics), batch BN on the `[N,C,H,W]` layout
 (`bnBatchTensor4`, chapter 7) and the sync-BN op at supplied statistics (`bnSyncTensor4`, its
@@ -32,8 +32,8 @@ namespace Proofs
 
 /-- **Row-wise lifting of a per-row `HasVJP` family.** Each row `r` gets its own map
     `g r` (with its own VJP); the matrix backward runs `(g r).backward` on row `r`'s
-    cotangent. The per-row peer of `rowwise_has_vjp_mat`. -/
-noncomputable def rowwisePerRow_has_vjp_mat {m n p : Nat} (g : Fin m → (Vec n → Vec p))
+    cotangent. The per-row peer of `rowwiseHasVJPMat`. -/
+noncomputable def rowwisePerRowHasVJPMat {m n p : Nat} (g : Fin m → (Vec n → Vec p))
     (hg : ∀ r, HasVJP (g r)) (hg_diff : ∀ r, Differentiable ℝ (g r)) :
     HasVJPMat (fun A : Mat m n => fun r => g r (A r)) where
   backward := fun A dY => fun r c => (hg r).backward (A r) (dY r) c
@@ -44,7 +44,7 @@ noncomputable def rowwisePerRow_has_vjp_mat {m n p : Nat} (g : Fin m → (Vec n 
     exact (hg i).correct (A i) (dY i) j
 
 /-- **A per-row family flattens to a differentiable `Vec → Vec` map.** The
-    `Differentiable` witness `vjp_comp_at` / the network composition needs to thread a
+    `Differentiable` witness `vjpCompAt` / the network composition needs to thread a
     per-channel BN through a block. -/
 theorem rowwisePerRow_flat_differentiable {m n p : Nat} (g : Fin m → (Vec n → Vec p))
     (h_g_diff : ∀ r, Differentiable ℝ (g r)) :
@@ -63,12 +63,12 @@ noncomputable def bnPerChannelMat (oc m : Nat) (ε : ℝ) (γ β : Vec oc) :
     Mat oc m → Mat oc m :=
   fun A => fun c => bnForward m ε (γ c) (β c) (A c)
 
-/-- **Per-channel BN VJP (block-diagonal).** Each channel runs its own `bn_has_vjp`;
+/-- **Per-channel BN VJP (block-diagonal).** Each channel runs its own `bnHasVJP`;
     the cross-channel Jacobian blocks vanish (`pdivMat_rowIndep_perRow_at`). -/
-noncomputable def bnPerChannelMat_has_vjp (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+noncomputable def bnPerChannelMatHasVJP (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     HasVJPMat (bnPerChannelMat oc m ε γ β) :=
-  rowwisePerRow_has_vjp_mat (fun c => bnForward m ε (γ c) (β c))
-    (fun c => bn_has_vjp m ε (γ c) (β c) hε)
+  rowwisePerRowHasVJPMat (fun c => bnForward m ε (γ c) (β c))
+    (fun c => bnHasVJP m ε (γ c) (β c) hε)
     (fun c => bnForward_differentiable m ε (γ c) (β c) hε)
 
 /-- Per-channel BN as a flat-vector op `Vec (oc·m) → Vec (oc·m)` (row-major, channel
@@ -78,9 +78,9 @@ noncomputable def bnPerChannelFlat (oc m : Nat) (ε : ℝ) (γ β : Vec oc) :
   fun v => Mat.flatten (bnPerChannelMat oc m ε γ β (Mat.unflatten v))
 
 /-- **Per-channel BN flat VJP** — the block-diagonal matrix VJP bridged to `Vec`. -/
-noncomputable def bnPerChannelFlat_has_vjp (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+noncomputable def bnPerChannelFlatHasVJP (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     HasVJP (bnPerChannelFlat oc m ε γ β) :=
-  hasVJPMat_to_hasVJP (bnPerChannelMat_has_vjp oc m ε hε γ β)
+  HasVJPMat.toHasVJP (bnPerChannelMatHasVJP oc m ε hε γ β)
 
 /-- **Per-channel BN is differentiable everywhere** (`ε > 0`). The composition witness. -/
 theorem bnPerChannelFlat_differentiable (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
@@ -90,25 +90,25 @@ theorem bnPerChannelFlat_differentiable (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (
 
 /-- **Per-channel BN VJP correctness** (ℝ-headline): the flat backward equals the
     `pdiv`-contracted (block-diagonal) Jacobian of per-channel BN. -/
-theorem bnPerChannelFlat_has_vjp_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnPerChannelFlatHasVJP_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (v dy : Vec (oc * m)) (i : Fin (oc * m)) :
-    (bnPerChannelFlat_has_vjp oc m ε hε γ β).backward v dy i =
+    (bnPerChannelFlatHasVJP oc m ε hε γ β).backward v dy i =
       ∑ j : Fin (oc * m), pdiv (bnPerChannelFlat oc m ε γ β) v i j * dy j :=
-  (bnPerChannelFlat_has_vjp oc m ε hε γ β).correct v dy i
+  (bnPerChannelFlatHasVJP oc m ε hε γ β).correct v dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Renderable closed-form backward (the per-channel consolidated gradient)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Per-channel consolidated BN input-gradient** — the renderable closed form: run
-    the per-example three-term `bn_grad_input` on each channel-slice (`m = h·w` spatial
+    the per-example three-term `bnGradInput` on each channel-slice (`m = h·w` spatial
     cells), reusing that channel's `γ_c`. This is exactly what a `bnPerChannelBack` SHlo
-    op / `renderLNBack`-per-channel emits; the abstract `bnPerChannelFlat_has_vjp.backward`
+    op / `renderLNBack`-per-channel emits; the abstract `bnPerChannelFlatHasVJP.backward`
     is the spec it must match. -/
-noncomputable def bnPerChannel_grad_input (oc m : Nat) (ε : ℝ) (γ : Vec oc)
+noncomputable def bnPerChannelGradInput (oc m : Nat) (ε : ℝ) (γ : Vec oc)
     (x dy : Vec (oc * m)) : Vec (oc * m) :=
   fun idx =>
-    bn_grad_input m ε (γ (finProdFinEquiv.symm idx).1)
+    bnGradInput m ε (γ (finProdFinEquiv.symm idx).1)
       (Mat.unflatten x (finProdFinEquiv.symm idx).1)
       (Mat.unflatten dy (finProdFinEquiv.symm idx).1)
       (finProdFinEquiv.symm idx).2
@@ -117,18 +117,18 @@ noncomputable def bnPerChannel_grad_input (oc m : Nat) (ε : ℝ) (γ : Vec oc)
     gradient equals the `pdiv`-contracted Jacobian of per-channel BN, under `0 < ε`.
     Each channel reduces to the per-example `bn_input_grad_correct`. The licence to
     render per-channel BN's backward as the three-term formula per channel. -/
-theorem bnPerChannel_grad_input_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnPerChannelGradInput_correct (oc m : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (oc * m)) (i : Fin (oc * m)) :
-    bnPerChannel_grad_input oc m ε γ x dy i =
+    bnPerChannelGradInput oc m ε γ x dy i =
       ∑ j : Fin (oc * m), pdiv (bnPerChannelFlat oc m ε γ β) x i j * dy j := by
-  rw [← bnPerChannelFlat_has_vjp_correct oc m ε hε γ β]
-  show bn_grad_input m ε (γ (finProdFinEquiv.symm i).1)
+  rw [← bnPerChannelFlatHasVJP_correct oc m ε hε γ β]
+  show bnGradInput m ε (γ (finProdFinEquiv.symm i).1)
         (Mat.unflatten x (finProdFinEquiv.symm i).1) (Mat.unflatten dy (finProdFinEquiv.symm i).1)
         (finProdFinEquiv.symm i).2
-      = (bn_has_vjp m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).backward
+      = (bnHasVJP m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).backward
           (Mat.unflatten x (finProdFinEquiv.symm i).1) (Mat.unflatten dy (finProdFinEquiv.symm i).1)
           (finProdFinEquiv.symm i).2
-  rw [(bn_has_vjp m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).correct,
+  rw [(bnHasVJP m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε).correct,
       ← bn_input_grad_correct m ε (γ (finProdFinEquiv.symm i).1) (β (finProdFinEquiv.symm i).1) hε]
 
 -- ════════════════════════════════════════════════════════════════
@@ -142,7 +142,7 @@ the same size; they differ only in how `finProdFinEquiv` associates the product.
 the bridge is a pure **re-association reindex** (a permutation of coordinates) — a
 `reindexCLM` whose VJP is the scatter `pdiv_reindex` gives, exactly like
 `decimateFlat`. Conjugating `bnPerChannelFlat` by this bridge yields per-channel BN
-acting on the network's Tensor3 activations, with its VJP for free via `vjp_comp`. -/
+acting on the network's Tensor3 activations, with its VJP for free via `vjpComp`. -/
 
 /-- Re-association index `Fin (oc*(h*w)) → Fin (oc*h*w)`: a Mat-split flat index
     `(c, s)` with `s ↔ (hi, wi)` maps to the Tensor3 flat index `((c, hi), wi)`. A
@@ -250,11 +250,11 @@ theorem bnEvalForward_differentiable (m : Nat) (ε γ β μ v : ℝ) :
     `reduce` over batch/spatial of `dy·x̂` that the `bnGammaSgd` op emits).
     `x̂` is recomputed from the saved BN input `v` (the conv output). Lives here (not
     `PerChannelBNGrad`) so the `bnGammaSgd` `SHlo` op's `den` can reference it. -/
-noncomputable def bnPerChannel_grad_gamma (oc m : Nat) (ε : ℝ) (v dy : Vec (oc * m)) : Vec oc :=
+noncomputable def bnPerChannelGradGamma (oc m : Nat) (ε : ℝ) (v dy : Vec (oc * m)) : Vec oc :=
   fun c => ∑ s : Fin m, dy (finProdFinEquiv (c, s)) * bnXhat m ε (Mat.unflatten v c) s
 
 /-- The rendered **per-channel β gradient**: `dβ_c = Σ_{s} dy_(c,s)`. -/
-noncomputable def bnPerChannel_grad_beta (oc m : Nat) (dy : Vec (oc * m)) : Vec oc :=
+noncomputable def bnPerChannelGradBeta (oc m : Nat) (dy : Vec (oc * m)) : Vec oc :=
   fun c => ∑ s : Fin m, dy (finProdFinEquiv (c, s))
 
 theorem reassocFwd_differentiable (oc h w : Nat) :
@@ -266,27 +266,27 @@ theorem reassocBack_differentiable (oc h w : Nat) :
   (reindexCLM (reassocBackIdx oc h w)).differentiable
 
 /-- VJP of the forward reindex — the scatter `pdiv_reindex` gives. Mirrors
-    `decimateFlat_has_vjp`. -/
-noncomputable def reassocFwd_has_vjp (oc h w : Nat) :
+    `decimateFlatHasVJP`. -/
+noncomputable def reassocFwdHasVJP (oc h w : Nat) :
     HasVJP (reassocFwd oc h w) :=
   reindexVJP (reassocFwdIdx oc h w)
 
-noncomputable def reassocBack_has_vjp (oc h w : Nat) :
+noncomputable def reassocBackHasVJP (oc h w : Nat) :
     HasVJP (reassocBack oc h w) :=
   reindexVJP (reassocBackIdx oc h w)
 
 /-- The bridge is a permutation, so each reindex's VJP backward is just the *inverse*
     reindex (the single matching delta survives the scatter). These two collapse the
-    `vjp_comp` backwards into a clean closed form for `bnPerChannelTensor3`. -/
-theorem reassocBack_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * (h * w)))
+    `vjpComp` backwards into a clean closed form for `bnPerChannelTensor3`. -/
+theorem reassocBackHasVJP_backward_eq (oc h w : Nat) (v : Vec (oc * (h * w)))
     (dy : Vec (oc * h * w)) :
-    (reassocBack_has_vjp oc h w).backward v dy = reassocFwd oc h w dy :=
+    (reassocBackHasVJP oc h w).backward v dy = reassocFwd oc h w dy :=
   reindexVJP_backward_of_inv _ _ (reassocBackIdx_reassocFwdIdx oc h w)
     (reassocFwdIdx_reassocBackIdx oc h w) v dy
 
-theorem reassocFwd_has_vjp_backward_eq (oc h w : Nat) (v : Vec (oc * h * w))
+theorem reassocFwdHasVJP_backward_eq (oc h w : Nat) (v : Vec (oc * h * w))
     (dy : Vec (oc * (h * w))) :
-    (reassocFwd_has_vjp oc h w).backward v dy = reassocBack oc h w dy :=
+    (reassocFwdHasVJP oc h w).backward v dy = reassocBack oc h w dy :=
   reindexVJP_backward_of_inv _ _ (reassocFwdIdx_reassocBackIdx oc h w)
     (reassocBackIdx_reassocFwdIdx oc h w) v dy
 
@@ -311,72 +311,72 @@ theorem bnPerChannelTensor3_differentiable (oc h w : Nat) (ε : ℝ) (hε : 0 < 
       (reassocFwd_differentiable oc h w))
 
 /-- **Per-channel BN (Tensor3 layout) VJP** — block-diagonal across channels, lifted
-    through the layout bridge by `vjp_comp` (twice). -/
-noncomputable def bnPerChannelTensor3_has_vjp (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+    through the layout bridge by `vjpComp` (twice). -/
+noncomputable def bnPerChannelTensor3HasVJP (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     HasVJP (bnPerChannelTensor3 oc h w ε γ β) :=
   let inner : Vec (oc * h * w) → Vec (oc * (h * w)) :=
     bnPerChannelFlat oc (h * w) ε γ β ∘ reassocFwd oc h w
   let inner_diff : Differentiable ℝ inner :=
     (bnPerChannelFlat_differentiable oc (h * w) ε hε γ β).comp (reassocFwd_differentiable oc h w)
   let inner_vjp : HasVJP inner :=
-    vjp_comp (reassocFwd oc h w) (bnPerChannelFlat oc (h * w) ε γ β)
+    vjpComp (reassocFwd oc h w) (bnPerChannelFlat oc (h * w) ε γ β)
       (reassocFwd_differentiable oc h w) (bnPerChannelFlat_differentiable oc (h * w) ε hε γ β)
-      (reassocFwd_has_vjp oc h w) (bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β)
+      (reassocFwdHasVJP oc h w) (bnPerChannelFlatHasVJP oc (h * w) ε hε γ β)
   show HasVJP (reassocBack oc h w ∘ inner) from
-  vjp_comp inner (reassocBack oc h w) inner_diff (reassocBack_differentiable oc h w)
-    inner_vjp (reassocBack_has_vjp oc h w)
+  vjpComp inner (reassocBack oc h w) inner_diff (reassocBack_differentiable oc h w)
+    inner_vjp (reassocBackHasVJP oc h w)
 
 /-- **Per-channel BN (Tensor3 layout) VJP correctness** (ℝ-headline): the backward
     equals the `pdiv`-contracted (block-diagonal) Jacobian of per-channel BN on the
     network's activation layout. The licence to wire per-channel BN into ResNet-34. -/
-theorem bnPerChannelTensor3_has_vjp_correct (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnPerChannelTensor3HasVJP_correct (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (oc * h * w)) (i : Fin (oc * h * w)) :
-    (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward x dy i =
+    (bnPerChannelTensor3HasVJP oc h w ε hε γ β).backward x dy i =
       ∑ j : Fin (oc * h * w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * dy j :=
-  (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).correct x dy i
+  (bnPerChannelTensor3HasVJP oc h w ε hε γ β).correct x dy i
 
-/-- The composed `vjp_comp` backward collapses (the bridge reindexes are permutations):
+/-- The composed `vjpComp` backward collapses (the bridge reindexes are permutations):
     per-channel BN's Tensor3 backward is the Mat-split block-diagonal backward,
     conjugated by the layout bridge. -/
-theorem bnPerChannelTensor3_has_vjp_backward_eq (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnPerChannelTensor3HasVJP_backward_eq (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (oc * h * w)) :
-    (bnPerChannelTensor3_has_vjp oc h w ε hε γ β).backward x dy =
+    (bnPerChannelTensor3HasVJP oc h w ε hε γ β).backward x dy =
       reassocBack oc h w
-        ((bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward
+        ((bnPerChannelFlatHasVJP oc (h * w) ε hε γ β).backward
           (reassocFwd oc h w x) (reassocFwd oc h w dy)) := by
-  unfold bnPerChannelTensor3_has_vjp
-  rw [vjp_comp_backward, vjp_comp_backward, reassocBack_has_vjp_backward_eq,
-    reassocFwd_has_vjp_backward_eq]
+  unfold bnPerChannelTensor3HasVJP
+  rw [vjpComp_backward, vjpComp_backward, reassocBackHasVJP_backward_eq,
+    reassocFwdHasVJP_backward_eq]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Renderable closed-form backward in the Tensor3 layout (B8b's `den` target)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Renderable per-channel BN backward on the Tensor3 `(oc*h)*w` layout** — relabel
-    to Mat-split, run the per-channel consolidated three-term `bnPerChannel_grad_input`,
+    to Mat-split, run the per-channel consolidated three-term `bnPerChannelGradInput`,
     relabel back. This is exactly what the `bnPerChannelBack` SHlo op emits (per-channel
     `renderLNBack`, reducing over the spatial axis); its faithfulness spec is below. -/
-noncomputable def bnPerChannelTensor3_grad_input (oc h w : Nat) (ε : ℝ) (γ : Vec oc)
+noncomputable def bnPerChannelTensor3GradInput (oc h w : Nat) (ε : ℝ) (γ : Vec oc)
     (x dy : Vec (oc * h * w)) : Vec (oc * h * w) :=
   reassocBack oc h w
-    (bnPerChannel_grad_input oc (h * w) ε γ (reassocFwd oc h w x) (reassocFwd oc h w dy))
+    (bnPerChannelGradInput oc (h * w) ε γ (reassocFwd oc h w x) (reassocFwd oc h w dy))
 
 /-- **Renderable Tensor3 backward is faithful** (ℝ-headline): equals the
     `pdiv`-contracted (block-diagonal) Jacobian of per-channel BN on the network's
     activation layout, under `0 < ε`. The licence to render per-channel BN's backward
     in ResNet-34. -/
-theorem bnPerChannelTensor3_grad_input_correct (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnPerChannelTensor3GradInput_correct (oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (oc * h * w)) (i : Fin (oc * h * w)) :
-    bnPerChannelTensor3_grad_input oc h w ε γ x dy i =
+    bnPerChannelTensor3GradInput oc h w ε γ x dy i =
       ∑ j : Fin (oc * h * w), pdiv (bnPerChannelTensor3 oc h w ε γ β) x i j * dy j := by
-  rw [← bnPerChannelTensor3_has_vjp_correct oc h w ε hε γ β,
-      bnPerChannelTensor3_has_vjp_backward_eq oc h w ε hε γ β]
-  show bnPerChannel_grad_input oc (h * w) ε γ (reassocFwd oc h w x) (reassocFwd oc h w dy)
+  rw [← bnPerChannelTensor3HasVJP_correct oc h w ε hε γ β,
+      bnPerChannelTensor3HasVJP_backward_eq oc h w ε hε γ β]
+  show bnPerChannelGradInput oc (h * w) ε γ (reassocFwd oc h w x) (reassocFwd oc h w dy)
         (reassocBackIdx oc h w i)
-      = (bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward
+      = (bnPerChannelFlatHasVJP oc (h * w) ε hε γ β).backward
           (reassocFwd oc h w x) (reassocFwd oc h w dy) (reassocBackIdx oc h w i)
-  rw [bnPerChannel_grad_input_correct oc (h * w) ε hε γ β,
-      bnPerChannelFlat_has_vjp_correct oc (h * w) ε hε γ β]
+  rw [bnPerChannelGradInput_correct oc (h * w) ε hε γ β,
+      bnPerChannelFlatHasVJP_correct oc (h * w) ε hε γ β]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Chapter 7 (EfficientNet) — BATCH norm per channel on the [N,C,H,W] layout
@@ -441,23 +441,23 @@ theorem bnchwBack_differentiable (N oc h w : Nat) :
     Differentiable ℝ (bnchwBack N oc h w) :=
   (reindexCLM (bnchwBackIdx N oc h w)).differentiable
 
-noncomputable def bnchwFwd_has_vjp (N oc h w : Nat) :
+noncomputable def bnchwFwdHasVJP (N oc h w : Nat) :
     HasVJP (bnchwFwd N oc h w) :=
   reindexVJP (bnchwFwdIdx N oc h w)
 
-noncomputable def bnchwBack_has_vjp (N oc h w : Nat) :
+noncomputable def bnchwBackHasVJP (N oc h w : Nat) :
     HasVJP (bnchwBack N oc h w) :=
   reindexVJP (bnchwBackIdx N oc h w)
 
-theorem bnchwBack_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (oc * (N * (h * w))))
+theorem bnchwBackHasVJP_backward_eq (N oc h w : Nat) (v : Vec (oc * (N * (h * w))))
     (dy : Vec (N * (oc * (h * w)))) :
-    (bnchwBack_has_vjp N oc h w).backward v dy = bnchwFwd N oc h w dy :=
+    (bnchwBackHasVJP N oc h w).backward v dy = bnchwFwd N oc h w dy :=
   reindexVJP_backward_of_inv _ _ (bnchwBackIdx_bnchwFwdIdx N oc h w)
     (bnchwFwdIdx_bnchwBackIdx N oc h w) v dy
 
-theorem bnchwFwd_has_vjp_backward_eq (N oc h w : Nat) (v : Vec (N * (oc * (h * w))))
+theorem bnchwFwdHasVJP_backward_eq (N oc h w : Nat) (v : Vec (N * (oc * (h * w))))
     (dy : Vec (oc * (N * (h * w)))) :
-    (bnchwFwd_has_vjp N oc h w).backward v dy = bnchwBack N oc h w dy :=
+    (bnchwFwdHasVJP N oc h w).backward v dy = bnchwBack N oc h w dy :=
   reindexVJP_backward_of_inv _ _ (bnchwFwdIdx_bnchwBackIdx N oc h w)
     (bnchwBackIdx_bnchwFwdIdx N oc h w) v dy
 
@@ -525,52 +525,52 @@ theorem bnBatchTensor4_differentiable (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε)
 
 /-- **Batch-norm (network layout) VJP** — block-diagonal across channels (now coupling
     the whole batch within each channel), lifted through the transpose bridge. -/
-noncomputable def bnBatchTensor4_has_vjp (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
+noncomputable def bnBatchTensor4HasVJP (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     HasVJP (bnBatchTensor4 N oc h w ε γ β) :=
   let inner : Vec (N * (oc * (h * w))) → Vec (oc * (N * (h * w))) :=
     bnPerChannelFlat oc (N * (h * w)) ε γ β ∘ bnchwFwd N oc h w
   let inner_diff : Differentiable ℝ inner :=
     (bnPerChannelFlat_differentiable oc (N * (h * w)) ε hε γ β).comp (bnchwFwd_differentiable N oc h w)
   let inner_vjp : HasVJP inner :=
-    vjp_comp (bnchwFwd N oc h w) (bnPerChannelFlat oc (N * (h * w)) ε γ β)
+    vjpComp (bnchwFwd N oc h w) (bnPerChannelFlat oc (N * (h * w)) ε γ β)
       (bnchwFwd_differentiable N oc h w) (bnPerChannelFlat_differentiable oc (N * (h * w)) ε hε γ β)
-      (bnchwFwd_has_vjp N oc h w) (bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β)
+      (bnchwFwdHasVJP N oc h w) (bnPerChannelFlatHasVJP oc (N * (h * w)) ε hε γ β)
   show HasVJP (bnchwBack N oc h w ∘ inner) from
-  vjp_comp inner (bnchwBack N oc h w) inner_diff (bnchwBack_differentiable N oc h w)
-    inner_vjp (bnchwBack_has_vjp N oc h w)
+  vjpComp inner (bnchwBack N oc h w) inner_diff (bnchwBack_differentiable N oc h w)
+    inner_vjp (bnchwBackHasVJP N oc h w)
 
-theorem bnBatchTensor4_has_vjp_correct (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnBatchTensor4HasVJP_correct (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (N * (oc * (h * w)))) (i : Fin (N * (oc * (h * w)))) :
-    (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x dy i =
+    (bnBatchTensor4HasVJP N oc h w ε hε γ β).backward x dy i =
       ∑ j : Fin (N * (oc * (h * w))), pdiv (bnBatchTensor4 N oc h w ε γ β) x i j * dy j :=
-  (bnBatchTensor4_has_vjp N oc h w ε hε γ β).correct x dy i
+  (bnBatchTensor4HasVJP N oc h w ε hε γ β).correct x dy i
 
-theorem bnBatchTensor4_has_vjp_backward_eq (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnBatchTensor4HasVJP_backward_eq (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (N * (oc * (h * w)))) :
-    (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x dy =
+    (bnBatchTensor4HasVJP N oc h w ε hε γ β).backward x dy =
       bnchwBack N oc h w
-        ((bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β).backward
+        ((bnPerChannelFlatHasVJP oc (N * (h * w)) ε hε γ β).backward
           (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy)) := by
-  unfold bnBatchTensor4_has_vjp
-  rw [vjp_comp_backward, vjp_comp_backward, bnchwBack_has_vjp_backward_eq,
-    bnchwFwd_has_vjp_backward_eq]
+  unfold bnBatchTensor4HasVJP
+  rw [vjpComp_backward, vjpComp_backward, bnchwBackHasVJP_backward_eq,
+    bnchwFwdHasVJP_backward_eq]
 
 /-- **Renderable batch-norm backward on the `[N,C,H,W]` layout** — relabel to the
-    per-channel Mat, run the consolidated three-term `bnPerChannel_grad_input` over the
+    per-channel Mat, run the consolidated three-term `bnPerChannelGradInput` over the
     whole batch (`m = N·h·w`), relabel back. Exactly what the batched batch-norm backward
     StableHLO fragment emits (reduce over `[0,2,3]` per channel). -/
-noncomputable def bnBatchTensor4_grad_input (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
+noncomputable def bnBatchTensor4GradInput (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
     (x dy : Vec (N * (oc * (h * w)))) : Vec (N * (oc * (h * w))) :=
   bnchwBack N oc h w
-    (bnPerChannel_grad_input oc (N * (h * w)) ε γ (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy))
+    (bnPerChannelGradInput oc (N * (h * w)) ε γ (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy))
 
-/-- **Per-channel SYNC backward (flat layout)** — `bnPerChannel_grad_input`'s peer, with each
+/-- **Per-channel SYNC backward (flat layout)** — `bnPerChannelGradInput`'s peer, with each
     channel's `μ`, `E[x²]` and two reduction means supplied rather than reduced out of `x`/`dy`.
     Under data parallelism those are the all-reduced global ones. -/
-noncomputable def bnSyncPerChannel_grad_input (oc m : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
+noncomputable def bnSyncPerChannelGradInput (oc m : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
     (x dy : Vec (oc * m)) : Vec (oc * m) :=
   fun idx =>
-    bnSync_grad_input m ε (γ (finProdFinEquiv.symm idx).1) (μ (finProdFinEquiv.symm idx).1)
+    bnSyncGradInput m ε (γ (finProdFinEquiv.symm idx).1) (μ (finProdFinEquiv.symm idx).1)
       (m2 (finProdFinEquiv.symm idx).1) (mdy (finProdFinEquiv.symm idx).1)
       (mdyx (finProdFinEquiv.symm idx).1)
       (Mat.unflatten x (finProdFinEquiv.symm idx).1)
@@ -578,43 +578,43 @@ noncomputable def bnSyncPerChannel_grad_input (oc m : Nat) (ε : ℝ) (γ μ m2 
       (finProdFinEquiv.symm idx).2
 
 /-- ⭐⭐ **The per-channel γ gradient with `x̂` at HANDED-IN statistics** —
-    `bnPerChannel_grad_gamma`'s peer. Under sync-BN the forward normalised with the all-reduced
-    global `μ`/`E[x²]`, so `∂L/∂γ_c = Σ dy·x̂` must use the SAME `x̂`; `bnPerChannel_grad_gamma`
+    `bnPerChannelGradGamma`'s peer. Under sync-BN the forward normalised with the all-reduced
+    global `μ`/`E[x²]`, so `∂L/∂γ_c = Σ dy·x̂` must use the SAME `x̂`; `bnPerChannelGradGamma`
     rebuilds it from the shard's own statistics (`bnXhat`), which is a different function once
     `R > 1`. β's gradient reads no statistic and needs no peer. -/
-noncomputable def bnSyncPerChannel_grad_gamma (oc m : Nat) (ε : ℝ) (μ m2 : Vec oc)
+noncomputable def bnSyncPerChannelGradGamma (oc m : Nat) (ε : ℝ) (μ m2 : Vec oc)
     (v dy : Vec (oc * m)) : Vec oc :=
   fun c => ∑ s : Fin m, Mat.unflatten dy c s * bnSyncXhat m ε (μ c) (m2 c) (Mat.unflatten v c) s
 
-/-- **`R = 1`: the sync γ gradient at its own statistics IS `bnPerChannel_grad_gamma`.** The
+/-- **`R = 1`: the sync γ gradient at its own statistics IS `bnPerChannelGradGamma`.** The
     γ-gradient anchor beside `bnSyncTensor4_at_own_stats`: a single-device sync render's γ node
     denotes what today's `bnGammaGradB` denotes. -/
-theorem bnSyncPerChannel_grad_gamma_at_own_stats (oc m : Nat) (hm : m ≠ 0) (ε : ℝ)
+theorem bnSyncPerChannelGradGamma_at_own_stats (oc m : Nat) (hm : m ≠ 0) (ε : ℝ)
     (v dy : Vec (oc * m)) :
-    bnSyncPerChannel_grad_gamma oc m ε
+    bnSyncPerChannelGradGamma oc m ε
         (fun c => bnMean m (Mat.unflatten v c)) (fun c => bnMeanSq m (Mat.unflatten v c)) v dy
-      = bnPerChannel_grad_gamma oc m ε v dy := by
+      = bnPerChannelGradGamma oc m ε v dy := by
   funext c
-  simp only [bnSyncPerChannel_grad_gamma, bnPerChannel_grad_gamma, bnSyncXhat_at_own_stats m hm,
+  simp only [bnSyncPerChannelGradGamma, bnPerChannelGradGamma, bnSyncXhat_at_own_stats m hm,
              Mat.unflatten]
 
-/-- ⭐⭐ **The SYNC batch-norm input-VJP on `[N,C,H,W]`** — `bnBatchTensor4_grad_input`'s peer,
+/-- ⭐⭐ **The SYNC batch-norm input-VJP on `[N,C,H,W]`** — `bnBatchTensor4GradInput`'s peer,
     through the same `bnchwFwd`/`bnchwBack` bridge. What a replica emits for its shard of the
     backward, given the four all-reduced per-channel statistic vectors. -/
-noncomputable def bnSyncTensor4_grad_input (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
+noncomputable def bnSyncTensor4GradInput (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
     (x dy : Vec (N * (oc * (h * w)))) : Vec (N * (oc * (h * w))) :=
   bnchwBack N oc h w
-    (bnSyncPerChannel_grad_input oc (N * (h * w)) ε γ μ m2 mdy mdyx
+    (bnSyncPerChannelGradInput oc (N * (h * w)) ε γ μ m2 mdy mdyx
       (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy))
 
-/-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bnBatchTensor4_grad_input`.**
+/-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bnBatchTensor4GradInput`.**
 
-    The `[N,C,H,W]` lift of `bnSync_grad_input_at_own_stats`, and the backward half of the
+    The `[N,C,H,W]` lift of `bnSyncGradInput_at_own_stats`, and the backward half of the
     drop-in claim: a single-device sync render computes the same gradient the committed tier is
     tied to, so the `R = 1` artifacts need not move. `planning/global_bn_verified.md` §2c. -/
-theorem bnSyncTensor4_grad_input_at_own_stats (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
+theorem bnSyncTensor4GradInput_at_own_stats (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
     (ε : ℝ) (γ : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
-    bnSyncTensor4_grad_input N oc h w ε γ
+    bnSyncTensor4GradInput N oc h w ε γ
         (fun c => bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
         (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
         (fun c => bnMean (N*(h*w))
@@ -623,27 +623,27 @@ theorem bnSyncTensor4_grad_input_at_own_stats (N oc h w : Nat) (hm : N * (h * w)
           (fun k => bnXhat (N*(h*w)) ε (Mat.unflatten (bnchwFwd N oc h w x) c) k
                       * (γ c * Mat.unflatten (bnchwFwd N oc h w dy) c k)))
         x dy
-      = bnBatchTensor4_grad_input N oc h w ε γ x dy := by
-  unfold bnSyncTensor4_grad_input bnBatchTensor4_grad_input
+      = bnBatchTensor4GradInput N oc h w ε γ x dy := by
+  unfold bnSyncTensor4GradInput bnBatchTensor4GradInput
   congr 1
   funext idx
-  exact congrFun (bnSync_grad_input_at_own_stats _ hm _ _ _ _) _
+  exact congrFun (bnSyncGradInput_at_own_stats _ hm _ _ _ _) _
 
 /-- **Renderable batch-norm backward is faithful** (ℝ-headline): equals the
     `pdiv`-contracted (block-diagonal-across-channels, batch-coupled) Jacobian of
     batch-norm on the network's `[N,C,H,W]` layout, under `0 < ε`. The licence to render
     EfficientNet's batch-norm backward as the per-channel three-term formula over the batch. -/
-theorem bnBatchTensor4_grad_input_correct (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+theorem bnBatchTensor4GradInput_correct (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (N * (oc * (h * w)))) (i : Fin (N * (oc * (h * w)))) :
-    bnBatchTensor4_grad_input N oc h w ε γ x dy i =
+    bnBatchTensor4GradInput N oc h w ε γ x dy i =
       ∑ j : Fin (N * (oc * (h * w))), pdiv (bnBatchTensor4 N oc h w ε γ β) x i j * dy j := by
-  rw [← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β,
-      bnBatchTensor4_has_vjp_backward_eq N oc h w ε hε γ β]
-  show bnPerChannel_grad_input oc (N * (h * w)) ε γ (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy)
+  rw [← bnBatchTensor4HasVJP_correct N oc h w ε hε γ β,
+      bnBatchTensor4HasVJP_backward_eq N oc h w ε hε γ β]
+  show bnPerChannelGradInput oc (N * (h * w)) ε γ (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy)
         (bnchwBackIdx N oc h w i)
-      = (bnPerChannelFlat_has_vjp oc (N * (h * w)) ε hε γ β).backward
+      = (bnPerChannelFlatHasVJP oc (N * (h * w)) ε hε γ β).backward
           (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy) (bnchwBackIdx N oc h w i)
-  rw [bnPerChannel_grad_input_correct oc (N * (h * w)) ε hε γ β,
-      bnPerChannelFlat_has_vjp_correct oc (N * (h * w)) ε hε γ β]
+  rw [bnPerChannelGradInput_correct oc (N * (h * w)) ε hε γ β,
+      bnPerChannelFlatHasVJP_correct oc (N * (h * w)) ε hε γ β]
 
 end Proofs

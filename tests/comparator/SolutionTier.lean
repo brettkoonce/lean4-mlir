@@ -56,13 +56,13 @@ theorem chk_bn_input_grad_correct :
     ∀ (n : ℕ) (ε γ β : ℝ),
       (0 : ℝ) < ε →
         ∀ (x dy : Proofs.Vec n) (i : Fin n),
-          Proofs.bn_grad_input n ε γ x dy i = ∑ j : Fin n, Proofs.pdiv (Proofs.bnForward n ε γ β) x i j * dy j :=
+          Proofs.bnGradInput n ε γ x dy i = ∑ j : Fin n, Proofs.pdiv (Proofs.bnForward n ε γ β) x i j * dy j :=
   Proofs.bn_input_grad_correct
 
-/-- `Proofs.resnet50ForwardB_full_has_vjp_at_correct` -/
-theorem chk_resnet50ForwardB_full_has_vjp_at_correct :
-    ∀ (N q : ℕ) (hq0 : (0 : ℕ) < q) {nCls : ℕ}
-      (w : Proofs.R50BWeights nCls) (hp : Proofs.R50PosB w)
+/-- `Proofs.resnet50ForwardBFullHasVJPAt_correct` -/
+theorem chk_resnet50ForwardBFullHasVJPAt_correct :
+    ∀ (N q : ℕ) (hq0 : (0 : ℕ) < q) {nCls : ℕ} (w : Proofs.R50BWeights nCls)
+      (hp : Proofs.R50PosB w)
       (x :
         Proofs.Vec
           (N *
@@ -74,12 +74,12 @@ theorem chk_resnet50ForwardB_full_has_vjp_at_correct :
           (N *
             ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))) *
               ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q)))))))),
-      (Proofs.resnet50ForwardB_full_has_vjp_at N q hq0 w hp x hx).backward dy i =
-        ∑ j : Fin (N * nCls), Proofs.pdiv (Proofs.resnet50ForwardB_full N q w) x i j * dy j :=
-  Proofs.resnet50ForwardB_full_has_vjp_at_correct
+      (Proofs.resnet50ForwardBFullHasVJPAt N q hq0 w hp x hx).backward dy i =
+        ∑ j : Fin (N * nCls), Proofs.pdiv (Proofs.resnet50ForwardBFull N q w) x i j * dy j :=
+  Proofs.resnet50ForwardBFullHasVJPAt_correct
 
-/-- `Proofs.vitTiny_has_vjp_correct` -/
-theorem chk_vitTiny_has_vjp_correct :
+/-- `Proofs.vitTinyHasVJP_correct` -/
+theorem chk_vitTinyHasVJP_correct :
     ∀ (W_conv : Proofs.Kernel4 ((3 : ℕ) * (64 : ℕ)) (3 : ℕ) (16 : ℕ) (16 : ℕ))
       (b_conv cls_token : Proofs.Vec ((3 : ℕ) * (64 : ℕ)))
       (pos_embed : Proofs.Mat ((196 : ℕ) + (1 : ℕ)) ((3 : ℕ) * (64 : ℕ))) (ε : ℝ) (hε : (0 : ℝ) < ε)
@@ -87,8 +87,8 @@ theorem chk_vitTiny_has_vjp_correct :
       (Wcls : Proofs.Mat ((3 : ℕ) * (64 : ℕ)) (10 : ℕ)) (bcls : Proofs.Vec (10 : ℕ))
       (x : Proofs.Vec ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))) (dy : Proofs.Vec (10 : ℕ))
       (i : Fin ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))),
-      (Proofs.vitForwardKV_has_vjp (3 : ℕ) (224 : ℕ) (224 : ℕ) (16 : ℕ) (196 : ℕ) (768 : ℕ) (3 : ℕ) (64 : ℕ) (10 : ℕ)
-              (12 : ℕ) W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward
+      (Proofs.vitForwardKVHasVJP (3 : ℕ) (224 : ℕ) (224 : ℕ) (16 : ℕ) (196 : ℕ) (768 : ℕ) (3 : ℕ) (64 : ℕ) (10 : ℕ) (12 : ℕ)
+              W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls).backward
           x dy i =
         ∑ j : Fin (10 : ℕ),
           Proofs.pdiv
@@ -96,22 +96,22 @@ theorem chk_vitTiny_has_vjp_correct :
                 (12 : ℕ) W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
               x i j *
             dy j :=
-  Proofs.vitTiny_has_vjp_correct
+  Proofs.vitTinyHasVJP_correct
 
-/-- `Proofs.StableHLO.mnv4FwdGraphB_full_faithful` -/
-theorem chk_mnv4FwdGraphB_full_faithful :
+/-- `Proofs.StableHLO.mnv4FwdGraphBFull_faithful` -/
+theorem chk_mnv4FwdGraphBFull_faithful :
     ∀ (N : ℕ) (epsStr : String) {nCls : ℕ}
       (w : Proofs.StableHLO.Mnv4BWeights nCls) (e : Proofs.StableHLO.SHlo (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
-      Proofs.StableHLO.den (Proofs.StableHLO.mnv4FwdGraphB_full N epsStr w e) =
-        Proofs.StableHLO.mobilenetv4ForwardB_full N w (Proofs.StableHLO.den e) :=
-  Proofs.StableHLO.mnv4FwdGraphB_full_faithful
+      Proofs.StableHLO.den (Proofs.StableHLO.mnv4FwdGraphBFull N epsStr w e) =
+        Proofs.StableHLO.mobilenetv4ForwardBFull N w (Proofs.StableHLO.den e) :=
+  Proofs.StableHLO.mnv4FwdGraphBFull_faithful
 
 /-- `Proofs.Mnv2FullBSeal.sealX_nonconstant` -/
 theorem chk_sealX_nonconstant :
     ∀ (nCls : ℕ),
       (0 : ℕ) < nCls →
-        Proofs.mobilenetv2ForwardB_full (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (1 : ℝ)) ≠
-          Proofs.mobilenetv2ForwardB_full (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (0 : ℝ)) :=
+        Proofs.mobilenetv2ForwardBFull (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (1 : ℝ)) ≠
+          Proofs.mobilenetv2ForwardBFull (2 : ℕ) (Proofs.Mnv2FullBSeal.sealW nCls) (Proofs.Mnv2FullBSeal.sealX (0 : ℝ)) :=
   Proofs.Mnv2FullBSeal.sealX_nonconstant
 
 /-- `Proofs.Mnv4FullBSeal.sealX_backward_nontrivial` -/
@@ -240,7 +240,7 @@ theorem chk_vit_net_tied_certified :
             (@OfNat.ofNat Nat (nat_lit 224) (instOfNatNat (nat_lit 224)))))
       (label : Fin (@OfNat.ofNat Nat (nat_lit 10) (instOfNatNat (nat_lit 10)))) (lr : Real),
       have ib1 :=
-        Proofs.patchEmbed_flat (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
+        Proofs.patchEmbedFlat (@OfNat.ofNat Nat (nat_lit 3) (instOfNatNat (nat_lit 3)))
           (@OfNat.ofNat Nat (nat_lit 224) (instOfNatNat (nat_lit 224)))
           (@OfNat.ofNat Nat (nat_lit 224) (instOfNatNat (nat_lit 224)))
           (@OfNat.ofNat Nat (nat_lit 16) (instOfNatNat (nat_lit 16)))
@@ -724,7 +724,7 @@ theorem chk_den_bnSyncBack_allReduce :
                         (Proofs.StableHLO.SHlo.allReduceMeanF R hR t'' ds'' fun (r' : Fin R) =>
                           Proofs.StableHLO.SHlo.bnSyncDyStatsB gN xN es ε γ (xv r') (dy r')
                             (Proofs.syncStats R hR t t' ds ds' x))) =
-                    Proofs.batchShard R N (oc * (h * w)) (Proofs.bnBatchTensor4_grad_input (R * N) oc h w ε γ X DY) r :=
+                    Proofs.batchShard R N (oc * (h * w)) (Proofs.bnBatchTensor4GradInput (R * N) oc h w ε γ X DY) r :=
   Proofs.den_bnSyncBack_allReduce
 
 /-- `Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global` -/
@@ -747,8 +747,8 @@ theorem chk_den_allReduceMeanF_convWeightGradBBf16_sub_global :
                 rnd (∑ r : Fin R, Proofs.convWGradShardSum rnd xN cotN b X W DY r idx)) :=
   Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global
 
-/-- `Proofs.StableHLO.resnet34FwdGraphSync_full_shard` -/
-theorem chk_resnet34FwdGraphSync_full_shard :
+/-- `Proofs.StableHLO.resnet34FwdGraphSyncFull_shard` -/
+theorem chk_resnet34FwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
         ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.R34BWeights nCls)
@@ -760,9 +760,9 @@ theorem chk_resnet34FwdGraphSync_full_shard :
               Proofs.StableHLO.den (e r) =
                 Proofs.batchShard R N ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ)))) X r) →
             ∀ (r : Fin R),
-              Proofs.StableHLO.den (Proofs.StableHLO.resnet34FwdGraphSync_full R hR N epsStr w e r) =
-                Proofs.batchShard R N nCls (Proofs.resnet34ForwardB_full (R * N) w X) r :=
-  Proofs.StableHLO.resnet34FwdGraphSync_full_shard
+              Proofs.StableHLO.den (Proofs.StableHLO.resnet34FwdGraphSyncFull R hR N epsStr w e r) =
+                Proofs.batchShard R N nCls (Proofs.resnet34ForwardBFull (R * N) w X) r :=
+  Proofs.StableHLO.resnet34FwdGraphSyncFull_shard
 
 /-- `Proofs.ResNet34SyncTieB.r34_net_syncTiedB` -/
 theorem chk_r34_net_syncTiedB :
@@ -775,8 +775,8 @@ theorem chk_r34_net_syncTiedB :
             Proofs.ResNet34SyncTieB.r34NetSyncTiedB R hR N xN cotN vN epsStr w X G gs :=
   Proofs.ResNet34SyncTieB.r34_net_syncTiedB
 
-/-- `Proofs.StableHLO.mobilenetv2FwdGraphSync_full_shard` -/
-theorem chk_mobilenetv2FwdGraphSync_full_shard :
+/-- `Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard` -/
+theorem chk_mobilenetv2FwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
         ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.MNV2BWeights nCls)
@@ -786,9 +786,9 @@ theorem chk_mobilenetv2FwdGraphSync_full_shard :
               Proofs.StableHLO.den (e r) =
                 Proofs.batchShard R N ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))) X r) →
             ∀ (r : Fin R),
-              Proofs.StableHLO.den (Proofs.StableHLO.mobilenetv2FwdGraphSync_full R hR N epsStr w e r) =
-                Proofs.batchShard R N nCls (Proofs.mobilenetv2ForwardB_full (R * N) w X) r :=
-  Proofs.StableHLO.mobilenetv2FwdGraphSync_full_shard
+              Proofs.StableHLO.den (Proofs.StableHLO.mobilenetv2FwdGraphSyncFull R hR N epsStr w e r) =
+                Proofs.batchShard R N nCls (Proofs.mobilenetv2ForwardBFull (R * N) w X) r :=
+  Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard
 
 /-- `Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB` -/
 theorem chk_mnv2_net_syncTiedB :
@@ -801,8 +801,8 @@ theorem chk_mnv2_net_syncTiedB :
             Proofs.MobileNetV2SyncTieB.mnv2NetSyncTiedB R hR N xN cotN vN epsStr w X G gs :=
   Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB
 
-/-- `Proofs.StableHLO.efficientnetFwdGraphSync_full_shard` -/
-theorem chk_efficientnetFwdGraphSync_full_shard :
+/-- `Proofs.StableHLO.efficientnetFwdGraphSyncFull_shard` -/
+theorem chk_efficientnetFwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
         ∀ (epsStr : String) (w : Proofs.B0Weights)
@@ -810,9 +810,9 @@ theorem chk_efficientnetFwdGraphSync_full_shard :
           (X : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
           (∀ (r : Fin R), Proofs.StableHLO.den (e r) = Proofs.batchShard R N ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)) X r) →
             ∀ (r : Fin R),
-              Proofs.StableHLO.den (Proofs.StableHLO.efficientnetFwdGraphSync_full R hR N epsStr w e r) =
-                Proofs.batchShard R N (10 : ℕ) (Proofs.efficientnetForwardB_full (R * N) w X) r :=
-  Proofs.StableHLO.efficientnetFwdGraphSync_full_shard
+              Proofs.StableHLO.den (Proofs.StableHLO.efficientnetFwdGraphSyncFull R hR N epsStr w e r) =
+                Proofs.batchShard R N (10 : ℕ) (Proofs.efficientnetForwardBFull (R * N) w X) r :=
+  Proofs.StableHLO.efficientnetFwdGraphSyncFull_shard
 
 /-- `Proofs.EnetSyncTieG.efficientnet_net_syncTiedG` -/
 theorem chk_efficientnet_net_syncTiedG :
@@ -825,8 +825,8 @@ theorem chk_efficientnet_net_syncTiedG :
             Proofs.EnetSyncTieG.enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x g gs :=
   Proofs.EnetSyncTieG.efficientnet_net_syncTiedG
 
-/-- `Proofs.StableHLO.resnet50FwdGraphSync_full_shard` -/
-theorem chk_resnet50FwdGraphSync_full_shard :
+/-- `Proofs.StableHLO.resnet50FwdGraphSyncFull_shard` -/
+theorem chk_resnet50FwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
         ∀ (q : ℕ),
@@ -850,9 +850,9 @@ theorem chk_resnet50FwdGraphSync_full_shard :
                         ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * q))))))
                       X r) →
                 ∀ (r : Fin R),
-                  Proofs.StableHLO.den (Proofs.StableHLO.resnet50FwdGraphSync_full R hR N q epsStr w e r) =
-                    Proofs.batchShard R N nCls (Proofs.resnet50ForwardB_full (R * N) q w X) r :=
-  Proofs.StableHLO.resnet50FwdGraphSync_full_shard
+                  Proofs.StableHLO.den (Proofs.StableHLO.resnet50FwdGraphSyncFull R hR N q epsStr w e r) =
+                    Proofs.batchShard R N nCls (Proofs.resnet50ForwardBFull (R * N) q w X) r :=
+  Proofs.StableHLO.resnet50FwdGraphSyncFull_shard
 
 /-- `Proofs.ResNet50SyncTieB.r50_net_syncTiedB` -/
 theorem chk_r50_net_syncTiedB :
@@ -871,8 +871,8 @@ theorem chk_r50_net_syncTiedB :
                 Proofs.ResNet50SyncTieB.r50NetSyncTiedB R hR N q xN cotN vN epsStr w X G gs :=
   Proofs.ResNet50SyncTieB.r50_net_syncTiedB
 
-/-- `Proofs.StableHLO.mnv4FwdGraphSync_full_shard` -/
-theorem chk_mnv4FwdGraphSync_full_shard :
+/-- `Proofs.StableHLO.mnv4FwdGraphSyncFull_shard` -/
+theorem chk_mnv4FwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
         ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.StableHLO.Mnv4BWeights nCls)
@@ -880,9 +880,9 @@ theorem chk_mnv4FwdGraphSync_full_shard :
           (X : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
           (∀ (r : Fin R), Proofs.StableHLO.den (e r) = Proofs.batchShard R N ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)) X r) →
             ∀ (r : Fin R),
-              Proofs.StableHLO.den (Proofs.StableHLO.mnv4FwdGraphSync_full R hR N epsStr w e r) =
-                Proofs.batchShard R N nCls (Proofs.StableHLO.mobilenetv4ForwardB_full (R * N) w X) r :=
-  Proofs.StableHLO.mnv4FwdGraphSync_full_shard
+              Proofs.StableHLO.den (Proofs.StableHLO.mnv4FwdGraphSyncFull R hR N epsStr w e r) =
+                Proofs.batchShard R N nCls (Proofs.StableHLO.mobilenetv4ForwardBFull (R * N) w X) r :=
+  Proofs.StableHLO.mnv4FwdGraphSyncFull_shard
 
 /-- `Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB` -/
 theorem chk_mnv4_net_syncTiedB :
@@ -965,8 +965,7 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
           (Proofs.opaqueA15 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13
             b14 b15 x)),
       (Proofs.r34InputGradB N Ws Wd
-          (Proofs.HasVJP.backward
-            (Proofs.bnBatchLA_has_vjp N (64 : ℕ) ((2 : ℕ) * (56 : ℕ)) ((2 : ℕ) * (56 : ℕ)) εs hεs γs βs)
+          (Proofs.HasVJP.backward (Proofs.bnBatchLAHasVJP N (64 : ℕ) ((2 : ℕ) * (56 : ℕ)) ((2 : ℕ) * (56 : ℕ)) εs hεs γs βs)
             (Proofs.StableHLO.batchMap N (Proofs.flatConvStride2 Ws bs) x))
           (Proofs.StableHLO.cbReluStridedB N Ws bs εs γs βs x) hb16.fst.backward hb15.fst.backward hb14.fst.backward
           hb13.fst.backward hb12.fst.backward hb11.fst.backward hb10.fst.backward hb9.fst.backward hb8.fst.backward
@@ -975,9 +974,9 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
           Proofs.StableHLO.bnBatchLA N (64 : ℕ) ((2 : ℕ) * (56 : ℕ)) ((2 : ℕ) * (56 : ℕ)) εs γs βs
               (Proofs.StableHLO.batchMap N (Proofs.flatConvStride2 Ws bs) x) i >
             (0 : ℝ)) =
-        (Proofs.r34B_full_has_vjp_at (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11
-            b12 b13 b14 b15 b16 (Proofs.r34HeadB N (7 : ℕ) (7 : ℕ) Wd bd) x
-            ⟨Proofs.r34StemB_has_vjp_at N (56 : ℕ) (56 : ℕ) Ws bs εs hεs γs βs
+        (Proofs.r34BFullHasVJPAt (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12
+            b13 b14 b15 b16 (Proofs.r34HeadB N (7 : ℕ) (7 : ℕ) Wd bd) x
+            ⟨Proofs.r34StemBHasVJPAt N (56 : ℕ) (56 : ℕ) Ws bs εs hεs γs βs
                 (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
                   (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (64 : ℕ))) (Eq.refl false))
                 (Mathlib.Meta.NormNum.isNat_lt_true (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (0 : ℕ)))
@@ -994,7 +993,7 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
                   (Mathlib.Meta.NormNum.isNat_ofNat ℕ (Eq.refl (56 : ℕ))) (Eq.refl false))
                 x h_stem h_pool⟩
             hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16
-            ⟨(Proofs.r34HeadB_has_vjp N (7 : ℕ) (7 : ℕ) Wd bd).toHasVJPAt
+            ⟨(Proofs.r34HeadBHasVJP N (7 : ℕ) (7 : ℕ) Wd bd).toHasVJPAt
                 (Proofs.opaqueA16 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11
                   b12 b13 b14 b15 b16 x),
               Proofs.r34HeadB_differentiable N (7 : ℕ) (7 : ℕ) Wd bd
@@ -1002,20 +1001,20 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
                   b12 b13 b14 b15 b16 x)⟩).backward :=
   Proofs.r34InputGradB_eq_r34B_full_vjp
 
-/-- `Proofs.efficientnetInputGradB_full_correct` -/
-theorem chk_efficientnetInputGradB_full_correct :
+/-- `Proofs.efficientnetInputGradBFull_correct` -/
+theorem chk_efficientnetInputGradBFull_correct :
     ∀ (N : ℕ) (w : Proofs.B0Weights) (hεw : w.EpsPos)
       (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (dy : Proofs.Vec (N * (10 : ℕ)))
       (i : Fin (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
-      Proofs.efficientnetInputGradB_full N w.sW w.hW w.fcW
+      Proofs.efficientnetInputGradBFull N w.sW w.hW w.fcW
           (Proofs.HasVJP.backward (f := Proofs.StableHLO.bnBatchLA N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε w.sγ w.sβ)
-            (Proofs.bnBatchLA_has_vjp N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε hεw.s w.sγ w.sβ)
+            (Proofs.bnBatchLAHasVJP N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε hεw.s w.sγ w.sβ)
             (Proofs.StableHLO.batchMap N (Proofs.flatConvStride2Xla w.sW w.sb) x))
-          (Proofs.HasVJP.backward (Proofs.swish_has_vjp (N * ((32 : ℕ) * (112 : ℕ) * (112 : ℕ))))
+          (Proofs.HasVJP.backward (Proofs.swishHasVJP (N * ((32 : ℕ) * (112 : ℕ) * (112 : ℕ))))
             (Proofs.StableHLO.bnBatchLA N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε w.sγ w.sβ
               (Proofs.StableHLO.batchMap N (Proofs.flatConvStride2Xla w.sW w.sb) x)))
           (Proofs.HasVJP.backward (f := Proofs.StableHLO.bnBatchLA N (1280 : ℕ) (7 : ℕ) (7 : ℕ) w.hε w.hγ w.hβ)
-            (Proofs.bnBatchLA_has_vjp N (1280 : ℕ) (7 : ℕ) (7 : ℕ) w.hε hεw.h w.hγ w.hβ)
+            (Proofs.bnBatchLAHasVJP N (1280 : ℕ) (7 : ℕ) (7 : ℕ) w.hε hεw.h w.hγ w.hβ)
             (Proofs.StableHLO.batchMap N (Proofs.flatConv w.hW w.hb)
               (Proofs.opaqueA16 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
                 (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
@@ -1026,7 +1025,7 @@ theorem chk_efficientnetInputGradB_full_correct :
                 (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13)
                 (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b14) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b15)
                 (Proofs.mbExpW N (7 : ℕ) (7 : ℕ) w.b16) x)))
-          (Proofs.HasVJP.backward (Proofs.swish_has_vjp (N * ((1280 : ℕ) * (7 : ℕ) * (7 : ℕ))))
+          (Proofs.HasVJP.backward (Proofs.swishHasVJP (N * ((1280 : ℕ) * (7 : ℕ) * (7 : ℕ))))
             (Proofs.StableHLO.bnBatchLA N (1280 : ℕ) (7 : ℕ) (7 : ℕ) w.hε w.hγ w.hβ
               (Proofs.StableHLO.batchMap N (Proofs.flatConv w.hW w.hb)
                 (Proofs.opaqueA16 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
@@ -1038,61 +1037,61 @@ theorem chk_efficientnetInputGradB_full_correct :
                   (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13)
                   (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b14) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b15)
                   (Proofs.mbExpW N (7 : ℕ) (7 : ℕ) w.b16) x))))
-          ((Proofs.mbNoExpW_has_vjp N (112 : ℕ) (112 : ℕ) w.b1 hεw.b1.d hεw.b1.p).backward
+          ((Proofs.mbNoExpWHasVJP N (112 : ℕ) (112 : ℕ) w.b1 hεw.b1.d hεw.b1.p).backward
             (Proofs.opaqueA0 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) x))
-          ((Proofs.mbStridedW_has_vjp N (56 : ℕ) (56 : ℕ) w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward
+          ((Proofs.mbStridedWHasVJP N (56 : ℕ) (56 : ℕ) w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward
             (Proofs.opaqueA1 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1) x))
-          ((Proofs.mbResidW_has_vjp N (56 : ℕ) (56 : ℕ) w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward
+          ((Proofs.mbResidWHasVJP N (56 : ℕ) (56 : ℕ) w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward
             (Proofs.opaqueA2 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) x))
-          ((Proofs.mbStridedW_has_vjp N (28 : ℕ) (28 : ℕ) w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward
+          ((Proofs.mbStridedWHasVJP N (28 : ℕ) (28 : ℕ) w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward
             (Proofs.opaqueA3 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3) x))
-          ((Proofs.mbResidW_has_vjp N (28 : ℕ) (28 : ℕ) w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward
+          ((Proofs.mbResidWHasVJP N (28 : ℕ) (28 : ℕ) w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward
             (Proofs.opaqueA4 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) x))
-          ((Proofs.mbStridedW_has_vjp N (14 : ℕ) (14 : ℕ) w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward
+          ((Proofs.mbStridedWHasVJP N (14 : ℕ) (14 : ℕ) w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward
             (Proofs.opaqueA5 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward
+          ((Proofs.mbResidWHasVJP N (14 : ℕ) (14 : ℕ) w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward
             (Proofs.opaqueA6 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward
+          ((Proofs.mbResidWHasVJP N (14 : ℕ) (14 : ℕ) w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward
             (Proofs.opaqueA7 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7) x))
-          ((Proofs.mbExpW_has_vjp N (14 : ℕ) (14 : ℕ) w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward
+          ((Proofs.mbExpWHasVJP N (14 : ℕ) (14 : ℕ) w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward
             (Proofs.opaqueA8 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward
+          ((Proofs.mbResidWHasVJP N (14 : ℕ) (14 : ℕ) w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward
             (Proofs.opaqueA9 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9) x))
-          ((Proofs.mbResidW_has_vjp N (14 : ℕ) (14 : ℕ) w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward
+          ((Proofs.mbResidWHasVJP N (14 : ℕ) (14 : ℕ) w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward
             (Proofs.opaqueA10 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) x))
-          ((Proofs.mbStridedW_has_vjp N (7 : ℕ) (7 : ℕ) w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward
+          ((Proofs.mbStridedWHasVJP N (7 : ℕ) (7 : ℕ) w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward
             (Proofs.opaqueA11 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
               (Proofs.mbStridedW N (14 : ℕ) (14 : ℕ) w.b6) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b7)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11) x))
-          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward
+          ((Proofs.mbResidWHasVJP N (7 : ℕ) (7 : ℕ) w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward
             (Proofs.opaqueA12 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
@@ -1100,7 +1099,7 @@ theorem chk_efficientnetInputGradB_full_correct :
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11)
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) x))
-          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward
+          ((Proofs.mbResidWHasVJP N (7 : ℕ) (7 : ℕ) w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward
             (Proofs.opaqueA13 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
@@ -1108,7 +1107,7 @@ theorem chk_efficientnetInputGradB_full_correct :
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b8) (Proofs.mbExpW N (14 : ℕ) (14 : ℕ) w.b9)
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11)
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13) x))
-          ((Proofs.mbResidW_has_vjp N (7 : ℕ) (7 : ℕ) w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward
+          ((Proofs.mbResidWHasVJP N (7 : ℕ) (7 : ℕ) w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward
             (Proofs.opaqueA14 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
@@ -1117,7 +1116,7 @@ theorem chk_efficientnetInputGradB_full_correct :
               (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b10) (Proofs.mbResidW N (14 : ℕ) (14 : ℕ) w.b11)
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13)
               (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b14) x))
-          ((Proofs.mbExpW_has_vjp N (7 : ℕ) (7 : ℕ) w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward
+          ((Proofs.mbExpWHasVJP N (7 : ℕ) (7 : ℕ) w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward
             (Proofs.opaqueA15 (Proofs.stemB N w.sW w.sb w.sε w.sγ w.sβ) (Proofs.mbNoExpW N (112 : ℕ) (112 : ℕ) w.b1)
               (Proofs.mbStridedW N (56 : ℕ) (56 : ℕ) w.b2) (Proofs.mbResidW N (56 : ℕ) (56 : ℕ) w.b3)
               (Proofs.mbStridedW N (28 : ℕ) (28 : ℕ) w.b4) (Proofs.mbResidW N (28 : ℕ) (28 : ℕ) w.b5)
@@ -1127,8 +1126,8 @@ theorem chk_efficientnetInputGradB_full_correct :
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13)
               (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b14) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b15) x))
           dy i =
-        ∑ j : Fin (N * (10 : ℕ)), Proofs.pdiv (Proofs.efficientnetForwardB_full N w) x i j * dy j :=
-  Proofs.efficientnetInputGradB_full_correct
+        ∑ j : Fin (N * (10 : ℕ)), Proofs.pdiv (Proofs.efficientnetForwardBFull N w) x i j * dy j :=
+  Proofs.efficientnetInputGradBFull_correct
 
 /-- `Proofs.convnextImagenetInputGradB_eq_vjp` -/
 theorem chk_convnextImagenetInputGradB_eq_vjp :
@@ -1153,7 +1152,7 @@ theorem chk_convnextImagenetInputGradB_eq_vjp :
               (Proofs.chanLNTensor3Back (384 : ℕ) (14 : ℕ) (14 : ℕ) w.d3.ε w.d3.γ u))
           (Proofs.cnxSavedB6 B w x) (Proofs.cnxStageChKBack (3 : ℕ) w.s4) (Proofs.cnxSavedB7 B w x) =
         Proofs.HasVJP.backward
-          (Proofs.batchMap_has_vjp
+          (Proofs.batchMapHasVJP
             (Proofs.dense w.Wd w.bd ∘
               Proofs.rowLNVecFlat (1 : ℕ) (768 : ℕ) w.hε w.hγ w.hβ ∘
                 Proofs.globalAvgPoolFlat (768 : ℕ) (7 : ℕ) (7 : ℕ) ∘
@@ -1166,7 +1165,7 @@ theorem chk_convnextImagenetInputGradB_eq_vjp :
                               Proofs.convNextStageChK (3 : ℕ) w.s1 ∘
                                 Proofs.chanLNTensor3 (96 : ℕ) (56 : ℕ) (56 : ℕ) w.sε w.sγ w.sβ ∘
                                   Proofs.flatConvStride4 w.sW w.sb)
-            (Proofs.convNextForwardTCh_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
+            (Proofs.convNextForwardTChHasVJP w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
             (Proofs.convNextForwardTCh_differentiable w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε))
           x :=
   Proofs.convnextImagenetInputGradB_eq_vjp
@@ -1175,7 +1174,7 @@ theorem chk_convnextImagenetInputGradB_eq_vjp :
 theorem chk_linear_e4m3_argmax_preserved :
     ∀ (M L : Proofs.FloatModel),
       M.u ≤ Proofs.u32 →
-        L.u ≤ Proofs.u_e4m3 →
+        L.u ≤ Proofs.uE4M3 →
           ∀ {n : ℕ} {W : Proofs.Mat (784 : ℕ) n} {b : Proofs.Vec n} {x : Proofs.Vec (784 : ℕ)},
             (∀ (i : Fin (784 : ℕ)) (j : Fin n), |W i j| ≤ (3 / 5 : ℝ)) →
               (∀ (j : Fin n), |b j| ≤ (1 : ℝ)) →

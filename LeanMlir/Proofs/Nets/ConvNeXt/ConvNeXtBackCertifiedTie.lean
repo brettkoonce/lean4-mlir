@@ -32,81 +32,81 @@ namespace Proofs
 
 /-! `chanLNTensor3Back` (`ChannelLNBack.lean`) is not an abstract slot — it is a concrete
 five-factor chain, the row map conjugated by the forward's four layout permutations. So it owes a
-tie of its own: that the chain IS `chanLNTensor3_has_vjp`'s backward. That is what this section
+tie of its own: that the chain IS `chanLNTensor3HasVJP`'s backward. That is what this section
 proves.
 
 The proof is piecewise, and every piece is already in the repo:
 
-* the two re-associations collapse by `reassoc{Fwd,Back}_has_vjp_backward_eq` (a permutation's
+* the two re-associations collapse by `reassoc{Fwd,Back}HasVJP_backward_eq` (a permutation's
   scatter has exactly one surviving delta);
-* the transpose collapses by `rfl` — `transpose_has_vjp`'s backward is `fun i j => dY j i`, which
-  through `hasVJPMat_to_hasVJP` is the flat transpose back;
+* the transpose collapses by `rfl` — `transposeHasVJP`'s backward is `fun i j => dY j i`, which
+  through `HasVJPMat.toHasVJP` is the flat transpose back;
 * the row map is ViT's vector-LN, whose VJP is `(+β)` (identity backward) after `layerScale γ`
   (`diagBack γ`) after `LN(1,0)` — and the LN backward meets the concrete three-term
-  `bn_grad_input` through the canonical `∑ pdiv` form, NOT by `rfl` (the `bn_has_vjp` witness is
+  `bnGradInput` through the canonical `∑ pdiv` form, NOT by `rfl` (the `bnHasVJP` witness is
   built through a `rw [bnForward_eq_compose]` cast — the trap `bnBack_faithful_fn` documents).
 
 **The tie is β-free**: the certified backward does not depend on the LN bias, and neither does
 the chain — the `+β` translation's VJP is the identity, which is why `chanLNTensor3Back` never
 took a `β` in the first place. -/
 
-/-- **The concrete three-term BN/LN input gradient IS the certified VJP backward.** `bn_grad_input`
-    is not `rfl`-equal to `(bn_has_vjp …).backward` — the witness is built through a
+/-- **The concrete three-term BN/LN input gradient IS the certified VJP backward.** `bnGradInput`
+    is not `rfl`-equal to `(bnHasVJP …).backward` — the witness is built through a
     `rw [bnForward_eq_compose]` cast — but both reduce to the canonical `∑ pdiv` form
     (`bn_input_grad_correct` and `.correct`). The function-level peer of `bnBack_faithful_fn`. -/
-theorem bn_grad_input_eq_vjp_backward {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) :
-    bn_grad_input n ε γ x dy = (bn_has_vjp n ε γ β hε).backward x dy := by
+theorem bnGradInput_eq_vjp_backward {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) :
+    bnGradInput n ε γ x dy = (bnHasVJP n ε γ β hε).backward x dy := by
   funext i
   rw [bn_input_grad_correct n ε γ β hε x dy i]
-  exact ((bn_has_vjp n ε γ β hε).correct x dy i).symm
+  exact ((bnHasVJP n ε γ β hε).correct x dy i).symm
 
-/-- **The flat transpose's VJP backward is the flat transpose back** — `transpose_has_vjp`'s
-    backward is `fun i j => dY j i`, and `hasVJPMat_to_hasVJP` reads it at the row-major split, so
+/-- **The flat transpose's VJP backward is the flat transpose back** — `transposeHasVJP`'s
+    backward is `fun i j => dY j i`, and `HasVJPMat.toHasVJP` reads it at the row-major split, so
     this is definitional. The permutation adjoint the channel-LN conjugation needs, alongside
-    `reassoc{Fwd,Back}_has_vjp_backward_eq`. -/
-theorem transposeFlat_has_vjp_backward_eq (m n : Nat) (v : Vec (m * n)) (dy : Vec (n * m)) :
-    (transposeFlat_has_vjp m n).backward v dy = StableHLO.transposeFlat n m dy := rfl
+    `reassoc{Fwd,Back}HasVJP_backward_eq`. -/
+theorem transposeFlatHasVJP_backward_eq (m n : Nat) (v : Vec (m * n)) (dy : Vec (n * m)) :
+    (transposeFlatHasVJP m n).backward v dy = StableHLO.transposeFlat n m dy := rfl
 
-/-- **The vector-LN row backward is `bn_grad_input` after the `γ` scale.** `layerNormVec` is
+/-- **The vector-LN row backward is `bnGradInput` after the `γ` scale.** `layerNormVec` is
     `(+β) ∘ layerScale γ ∘ LN(1,0)`, so its VJP applies: the bias translation's identity backward,
     then `diagBack γ`, then the LN input gradient at `γ = 1`. The `+β` drops out — this is where
     the whole channel-LN backward story becomes β-free. -/
-theorem layerNormVec_has_vjp_backward_eq {D : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec D)
+theorem layerNormVecHasVJP_backward_eq {D : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec D)
     (x dy : Vec D) :
-    (layerNormVec_has_vjp D ε γ β hε).backward x dy
-      = bn_grad_input D ε 1 x (diagBack γ dy) := by
-  rw [bn_grad_input_eq_vjp_backward ε 1 0 hε x (diagBack γ dy)]
+    (layerNormVecHasVJP D ε γ β hε).backward x dy
+      = bnGradInput D ε 1 x (diagBack γ dy) := by
+  rw [bnGradInput_eq_vjp_backward ε 1 0 hε x (diagBack γ dy)]
   rfl
 
-/-- **The rowwise vector-LN backward is `rowLNVecFlatBack`.** `rowLNVecFlat_has_vjp` is the
-    `rowwise_has_vjp_mat` lift of the row VJP through `hasVJPMat_to_hasVJP`, and
+/-- **The rowwise vector-LN backward is `rowLNVecFlatBack`.** `rowLNVecFlatHasVJP` is the
+    `rowwiseHasVJPMat` lift of the row VJP through `HasVJPMat.toHasVJP`, and
     `rowLNVecFlatBack` is `perRowFlatPR` of the row's closed form — the same per-row map at the
     same row of the saved input, so this is the row lemma read at each `(row, col)`. -/
-theorem rowLNVecFlat_has_vjp_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+theorem rowLNVecFlatHasVJP_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (X dy : Vec (s * c)) :
-    (rowLNVecFlat_has_vjp s c ε γ β hε).backward X dy = rowLNVecFlatBack s c ε γ X dy := by
+    (rowLNVecFlatHasVJP s c ε γ β hε).backward X dy = rowLNVecFlatBack s c ε γ X dy := by
   funext idx
-  show (layerNormVec_has_vjp c ε γ β hε).backward
+  show (layerNormVecHasVJP c ε γ β hε).backward
       (Mat.unflatten X (finProdFinEquiv.symm idx).1)
       (Mat.unflatten dy (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2 = _
-  rw [layerNormVec_has_vjp_backward_eq ε hε γ β]
+  rw [layerNormVecHasVJP_backward_eq ε hε γ β]
   rfl
 
 /-- **THE §2n §B TIE: the channel-LN backward chain IS the certified VJP.** `chanLNTensor3Back` —
-    the hand-composed reverse of `chanLNTensor3` — equals `(chanLNTensor3_has_vjp …).backward` at
+    the hand-composed reverse of `chanLNTensor3` — equals `(chanLNTensor3HasVJP …).backward` at
     every saved input and cotangent, so the chain is **the certified gradient**.
 
-    Proof: the witness is a term-mode `vjp_comp` chain, so its backward unfolds to the nested
+    Proof: the witness is a term-mode `vjpComp` chain, so its backward unfolds to the nested
     chain; rewrite its five factors (two reassoc collapses, two transposes by `rfl`, the row map
-    through `bn_grad_input`). 3-axiom-clean. -/
+    through `bnGradInput`). 3-axiom-clean. -/
 theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (c * h * w)) :
-    chanLNTensor3Back c h w ε γ x = (chanLNTensor3_has_vjp c h w ε γ β hε).backward x := by
+    chanLNTensor3Back c h w ε γ x = (chanLNTensor3HasVJP c h w ε γ β hε).backward x := by
   funext dy
-  simp only [chanLNTensor3_has_vjp, vjp_comp_backward]
-  rw [reassocBack_has_vjp_backward_eq, transposeFlat_has_vjp_backward_eq,
-      rowLNVecFlat_has_vjp_backward_eq (β := β) ε hε,
-      transposeFlat_has_vjp_backward_eq, reassocFwd_has_vjp_backward_eq]
+  simp only [chanLNTensor3HasVJP, vjpComp_backward]
+  rw [reassocBackHasVJP_backward_eq, transposeFlatHasVJP_backward_eq,
+      rowLNVecFlatHasVJP_backward_eq (β := β) ε hε,
+      transposeFlatHasVJP_backward_eq, reassocFwdHasVJP_backward_eq]
   rfl
 
 /-- **The §B channel-LN BODY tie: the block-body backward chain = the certified VJP**, for the net
@@ -114,7 +114,7 @@ theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) 
     its LayerNorm slot filled by the CONCRETE `chanLNTensor3Back` (at the saved post-depthwise
     activation) and its
     layer-scale / GELU slots pinned to the certified backwards equals
-    `(cnxBodyWith_has_vjp (chanLNTensor3 …) …).backward`.
+    `(cnxBodyWithHasVJP (chanLNTensor3 …) …).backward`.
 
     Note what fills the LN slot: not a certified object but the concrete five-factor chain, which
     has to go through `chanLNTensor3Back_eq_chanLN_vjp` to earn its place. The proof rewrites the
@@ -130,15 +130,15 @@ theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
     (γls : Vec (c * h * w)) (v : Vec (c * h * w)) :
     cnxBlockBodyBack Wdw Wex Wpr
       (chanLNTensor3Back c h w εn γn (depthwiseFlat (h := h) (w := w) Wdw bdw v))
-      ((layerScale_has_vjp γls).backward
+      ((layerScaleHasVJP γls).backward
         ((flatConv (h := h) (w := w) Wpr bpr ∘ gelu (cExp * h * w) ∘
           flatConv (h := h) (w := w) Wex bex ∘ chanLNTensor3 c h w εn γn βn ∘
           depthwiseFlat (h := h) (w := w) Wdw bdw) v))
-      ((gelu_has_vjp (cExp * h * w)).backward
+      ((geluHasVJP (cExp * h * w)).backward
         ((flatConv (h := h) (w := w) Wex bex ∘ chanLNTensor3 c h w εn γn βn ∘
           depthwiseFlat (h := h) (w := w) Wdw bdw) v))
-      = (cnxBodyWith_has_vjp (chanLNTensor3_diff c h w εn γn βn hεn)
-          (chanLNTensor3_has_vjp c h w εn γn βn hεn)
+      = (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w εn γn βn hεn)
+          (chanLNTensor3HasVJP c h w εn γn βn hεn)
           Wdw bdw Wex bex Wpr bpr γls).backward v := by
   funext dy
   unfold cnxBlockBodyBack
@@ -156,7 +156,7 @@ theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
 
 /-- **The §B channel-LN BLOCK tie (residual-wrapped).** `cnxBlockChW` is `residual` of the body, so
     the block backward chain is `residual (cnxBlockBodyBack …)` and equals
-    `(cnxBlockChW_has_vjp …).backward` — the additive skip's backward being `dy`. Immediate from the
+    `(cnxBlockChWHasVJP …).backward` — the additive skip's backward being `dy`. Immediate from the
     body tie. With this, the channel-LN net's §B coverage matches the scalar net's: body, block, and
     (new, because the LN slot is no longer abstract) the LayerNorm op itself. -/
 theorem cnxBlockChBack_eq_vjp {c cExp h w kHd kWd : Nat}
@@ -164,14 +164,14 @@ theorem cnxBlockChBack_eq_vjp {c cExp h w kHd kWd : Nat}
     (p : CnxBlockParamsCh c cExp h w kHd kWd) (hε : 0 < p.εn) (v : Vec (c * h * w)) :
     Proofs.residual (cnxBlockBodyBack p.Wdw p.Wex p.Wpr
       (chanLNTensor3Back c h w p.εn p.γn (depthwiseFlat (h := h) (w := w) p.Wdw p.bdw v))
-      ((layerScale_has_vjp (cnxGlsCh p)).backward
+      ((layerScaleHasVJP (cnxGlsCh p)).backward
         ((flatConv (h := h) (w := w) p.Wpr p.bpr ∘ gelu (cExp * h * w) ∘
           flatConv (h := h) (w := w) p.Wex p.bex ∘ chanLNTensor3 c h w p.εn p.γn p.βn ∘
           depthwiseFlat (h := h) (w := w) p.Wdw p.bdw) v))
-      ((gelu_has_vjp (cExp * h * w)).backward
+      ((geluHasVJP (cExp * h * w)).backward
         ((flatConv (h := h) (w := w) p.Wex p.bex ∘ chanLNTensor3 c h w p.εn p.γn p.βn ∘
           depthwiseFlat (h := h) (w := w) p.Wdw p.bdw) v)))
-      = (cnxBlockChW_has_vjp p hε).backward v := by
+      = (cnxBlockChWHasVJP p hε).backward v := by
   rw [cnxBodyWithChanLNBack_eq_vjp hkHd hkWd p.Wdw p.bdw p.εn hε p.γn p.βn p.Wex p.bex
         p.Wpr p.bpr (cnxGlsCh p) v]
   rfl

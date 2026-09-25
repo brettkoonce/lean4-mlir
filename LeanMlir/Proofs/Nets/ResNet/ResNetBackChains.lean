@@ -4,8 +4,8 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # The ResNet-34 / ResNet-50 backward chains — the ℝ maps the ResNet ties are about
 
 The hand-composed reverse of the committed ResNet forwards, as plain `def`s on the cotangent:
-the batched chains `r34InputGradB` / `r50InputGradB` (the reverses of `resnet34ForwardB_full` /
-`resnet50ForwardB_full`, at a variable batch `N`, R50 also at a variable resolution `q`). Each
+the batched chains `r34InputGradB` / `r50InputGradB` (the reverses of `resnet34ForwardBFull` /
+`resnet50ForwardBFull`, at a variable batch `N`, R50 also at a variable resolution `q`). Each
 chain keeps its block backwards and its BatchNorm backwards as *supplied* maps and spells only
 the endpoints — the stem's strided conv-back, the 3×3/s2 pool-back, the GAP-back and the
 dense-back — so that the certified tie (`ResNet34BackCertifiedTieB`,
@@ -34,7 +34,7 @@ namespace Proofs
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The batched whole-net input-gradient backward of ResNet-34** — the exact reverse of
-    `resnet34ForwardB_full = head ∘ [3,4,6,3] ∘ stem`: dense-back → GAP-back → the sixteen basic
+    `resnet34ForwardBFull = head ∘ [3,4,6,3] ∘ stem`: dense-back → GAP-back → the sixteen basic
     blocks' backwards → the 3×3/s2 pool back → the stem's relu mask, BatchNorm back and 7×7/s2
     conv back. The block backwards and the stem's BatchNorm back are supplied; the conv, pool, GAP
     and dense leaves are concrete and lifted over the `N` examples. ⭐ `N` is a variable: this chain
@@ -66,7 +66,7 @@ noncomputable def r34InputGradB (N : Nat) {nCls : Nat}
   ∘ StableHLO.batchMap N (Proofs.dense (Mat.transpose Wd) (0 : Vec 512))
 
 /-- **The batched whole-net input-gradient backward of ResNet-50** — the exact reverse of
-    `resnet50ForwardB_full = head ∘ [3,4,6,3] bottlenecks ∘ stem`: dense-back → GAP-back → the
+    `resnet50ForwardBFull = head ∘ [3,4,6,3] bottlenecks ∘ stem`: dense-back → GAP-back → the
     sixteen bottleneck backwards → the 3×3/s2 pool back → the stem's relu mask, BatchNorm back
     and 7×7/s2 conv back. The bottleneck backwards and the stem's BatchNorm back are supplied;
     the conv, pool, GAP and dense leaves are concrete and lifted over the `N` examples. ⭐ `q` is a

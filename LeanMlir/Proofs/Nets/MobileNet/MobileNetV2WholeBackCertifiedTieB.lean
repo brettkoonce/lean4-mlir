@@ -7,13 +7,13 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 
 The per-example seventeen-bottleneck tie (retired 2026-09-19 with `MobileNetV2PaperWholeBackCertifiedTie.lean`)
 closed this for the forward the retired `MobileNetV2Render.lean` emitted. This file closes it for
-the net the shipped trainers run: `mobilenetv2ForwardB_full`, the same `[t,c,n,s]` ladder at
+the net the shipped trainers run: `mobilenetv2ForwardBFull`, the same `[t,c,n,s]` ladder at
 **`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
 `planning/archive/proofs_tier_to_paper_nets.md` §4.2, alongside `ResNet34BackCertifiedTieB.lean`.
 
 ## ⭐⭐ One apex, every stage opaque
 
-`mobilenetv2PaperPC_has_vjp_at` (below; it moved here from the retired per-example tie, whose apex
+`mobilenetv2PaperPCHasVJPAt` (below; it moved here from the retired per-example tie, whose apex
 it was) is a twenty-one-stage chain generic in every dimension and in every stage, so the batched
 net instantiates it directly: `stem` at `mnv2StemB`, the seventeen bottlenecks at the batched
 block maps, and the head's three stages at `cbrB` / `batchMap gap` / `batchMap dense`.
@@ -30,8 +30,8 @@ its head into one stage.
 2. `mnv2InputGradB_eq_mobilenetv2B_full_vjp` and `mnv2InputGradB_correct` — the tie, and its
    reading as `∑ pdiv … * dy`: the chain IS the Jacobian-transpose of the twenty-one-stage
    composition, at every batch size.
-3. `mobilenetv2ForwardB_full_eq_slots` — the shape check: those twenty-one stages ARE
-   `mobilenetv2ForwardB_full`, the forward `mobilenetv2FwdGraphB_full_faithful` (4.2b) says the
+3. `mobilenetv2ForwardBFull_eq_slots` — the shape check: those twenty-one stages ARE
+   `mobilenetv2ForwardBFull`, the forward `mobilenetv2FwdGraphBFull_faithful` (4.2b) says the
    typed graph denotes. Without it the tie would be a statement about variables.
 
 ⛔ **Why the blocks stay opaque, measured on ResNet-34's peer.** Instantiating a tie of this shape
@@ -58,11 +58,11 @@ namespace Proofs
 -- § The apex — a straight 21-stage chain, every stage opaque (generic in every dimension)
 -- ═══════════════════════════════════════════════════════════════
 
-/-- **The whole-network MobileNetV2 VJP at opaque stages** (moved here 2026-09-19 from the retired per-example tie, whose apex it was). `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`. Twenty `vjp_comp_diff_at`s and nothing else:
+/-- **The whole-network MobileNetV2 VJP at opaque stages** (moved here 2026-09-19 from the retired per-example tie, whose apex it was). `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`. Twenty `vjpCompDiffAt`s and nothing else:
     MobileNetV2's skips live INSIDE the block maps and its strides inside the strided bodies, so
     there is no list of blocks and no separate downsample slot at any depth. Dimension-generic
     and parametric in every component. -/
-noncomputable def mobilenetv2PaperPC_has_vjp_at
+noncomputable def mobilenetv2PaperPCHasVJPAt
     {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 : Nat}
     (stem : Vec s0 → Vec s1)
     (b1 : Vec s1 → Vec s2)
@@ -106,32 +106,32 @@ noncomputable def mobilenetv2PaperPC_has_vjp_at
     (hgap : HasVJPDiffAt gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
     (hdns : HasVJPDiffAt dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
     : HasVJPAt (dns ∘ gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) x :=
-  let p1 := vjp_comp_diff_at stem b1 x hstem hb1
-  let p2 := vjp_comp_diff_at (b1 ∘ stem) b2 x p1 hb2
-  let p3 := vjp_comp_diff_at (b2 ∘ b1 ∘ stem) b3 x p2 hb3
-  let p4 := vjp_comp_diff_at (b3 ∘ b2 ∘ b1 ∘ stem) b4 x p3 hb4
-  let p5 := vjp_comp_diff_at (b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b5 x p4 hb5
-  let p6 := vjp_comp_diff_at (b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b6 x p5 hb6
-  let p7 := vjp_comp_diff_at (b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b7 x p6 hb7
-  let p8 := vjp_comp_diff_at (b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b8 x p7 hb8
-  let p9 := vjp_comp_diff_at (b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b9 x p8 hb9
-  let p10 := vjp_comp_diff_at (b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b10 x p9 hb10
-  let p11 := vjp_comp_diff_at (b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b11 x p10 hb11
-  let p12 := vjp_comp_diff_at (b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b12 x p11 hb12
-  let p13 := vjp_comp_diff_at (b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b13 x p12 hb13
-  let p14 := vjp_comp_diff_at (b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b14 x p13 hb14
-  let p15 := vjp_comp_diff_at (b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b15 x p14 hb15
-  let p16 := vjp_comp_diff_at (b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b16 x p15 hb16
-  let p17 := vjp_comp_diff_at (b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b17 x p16 hb17
-  let p18 := vjp_comp_diff_at (b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) head x p17 hhead
-  let p19 := vjp_comp_diff_at (head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) gap x p18 hgap
-  let p20 := vjp_comp_diff_at (gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) dns x p19 hdns
+  let p1 := vjpCompDiffAt stem b1 x hstem hb1
+  let p2 := vjpCompDiffAt (b1 ∘ stem) b2 x p1 hb2
+  let p3 := vjpCompDiffAt (b2 ∘ b1 ∘ stem) b3 x p2 hb3
+  let p4 := vjpCompDiffAt (b3 ∘ b2 ∘ b1 ∘ stem) b4 x p3 hb4
+  let p5 := vjpCompDiffAt (b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b5 x p4 hb5
+  let p6 := vjpCompDiffAt (b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b6 x p5 hb6
+  let p7 := vjpCompDiffAt (b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b7 x p6 hb7
+  let p8 := vjpCompDiffAt (b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b8 x p7 hb8
+  let p9 := vjpCompDiffAt (b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b9 x p8 hb9
+  let p10 := vjpCompDiffAt (b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b10 x p9 hb10
+  let p11 := vjpCompDiffAt (b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b11 x p10 hb11
+  let p12 := vjpCompDiffAt (b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b12 x p11 hb12
+  let p13 := vjpCompDiffAt (b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b13 x p12 hb13
+  let p14 := vjpCompDiffAt (b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b14 x p13 hb14
+  let p15 := vjpCompDiffAt (b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b15 x p14 hb15
+  let p16 := vjpCompDiffAt (b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b16 x p15 hb16
+  let p17 := vjpCompDiffAt (b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) b17 x p16 hb17
+  let p18 := vjpCompDiffAt (b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) head x p17 hhead
+  let p19 := vjpCompDiffAt (head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) gap x p18 hgap
+  let p20 := vjpCompDiffAt (gap ∘ head ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1 ∘ stem) dns x p19 hdns
   p20.fst
 
 /-- **The apex's backward, peeled** — each stage's backward in turn, head first. `rfl` over
     VARIABLE stages; the tie below instantiates it by `rw`, so the kernel never re-derives the
-    concrete chain (the ResNet-34 apex's `r34B_full_has_vjp_at_backward`). -/
-theorem mobilenetv2PaperPC_has_vjp_at_backward
+    concrete chain (the ResNet-34 apex's `r34BFullHasVJPAt_backward`). -/
+theorem mobilenetv2PaperPCHasVJPAt_backward
     {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 : Nat}
     (stem : Vec s0 → Vec s1)
     (b1 : Vec s1 → Vec s2)
@@ -175,7 +175,7 @@ theorem mobilenetv2PaperPC_has_vjp_at_backward
     (hgap : HasVJPDiffAt gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
     (hdns : HasVJPDiffAt dns (gap (head (opaqueA17 stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))))
     (dy : Vec s21) :
-    (mobilenetv2PaperPC_has_vjp_at stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 head gap dns x hstem hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 hhead hgap hdns).backward dy
+    (mobilenetv2PaperPCHasVJPAt stem b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 head gap dns x hstem hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 hhead hgap hdns).backward dy
       =
       hstem.fst.backward
         (hb1.fst.backward
@@ -207,7 +207,7 @@ open scoped BigOperators
 
 /-- **The STEM tie.** `batchMap (flatConvStride2XlaBack) ∘ bnBack ∘ reluMaskBack` IS `mnv2StemB`'s
     certified backward at a smooth point. One `rw` of the odd-kernel XLA-`SAME` strided leaf tie,
-    then `rfl` — the stage's VJP is `vjp_comp_at`-built so its backward is already the
+    then `rfl` — the stage's VJP is `vjpCompAt`-built so its backward is already the
     composition, and a convolution's backward ignores its primal argument, so the row-wise
     `batchMap` lift matches at every saved input. -/
 theorem mnv2StemBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
@@ -216,14 +216,14 @@ theorem mnv2StemBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
     (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : MNV2StemSmoothAtB N h w Ws bs ε γ β x) :
     (StableHLO.batchMap N (flatConvStride2XlaBack (h := h) (w := w) Ws)
-        ∘ (bnBatchLA_has_vjp N oc h w ε hε γ β).backward
+        ∘ (bnBatchLAHasVJP N oc h w ε hε γ β).backward
             (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x)
         ∘ reluMaskBack (fun i =>
             0 < StableHLO.bnBatchLA N oc h w ε γ β
               (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x) i ∧
             StableHLO.bnBatchLA N oc h w ε γ β
               (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x) i < 6))
-      = (mnv2StemB_has_vjp_at N h w Ws bs ε hε γ β x hs).backward := by
+      = (mnv2StemBHasVJPAt N h w Ws bs ε hε γ β x hs).backward := by
   rw [flatConvStride2XlaBack_eq_vjp_backward hkH hkW Ws bs (fun _ => 0)]
   rfl
 
@@ -240,14 +240,14 @@ theorem cbrBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
          StableHLO.bnBatchLA N oc h w ε γ β
            (StableHLO.batchMap N (flatConv Wh bh) v) k ≠ 6) :
     (StableHLO.batchMap N (convFlatBack (h := h) (w := w) Wh)
-        ∘ (bnBatchLA_has_vjp N oc h w ε hε γ β).backward
+        ∘ (bnBatchLAHasVJP N oc h w ε hε γ β).backward
             (StableHLO.batchMap N (flatConv Wh bh) v)
         ∘ reluMaskBack (fun i =>
             0 < StableHLO.bnBatchLA N oc h w ε γ β
               (StableHLO.batchMap N (flatConv Wh bh) v) i ∧
             StableHLO.bnBatchLA N oc h w ε γ β
               (StableHLO.batchMap N (flatConv Wh bh) v) i < 6))
-      = (StableHLO.cbrB_has_vjp_at N Wh bh ε hε γ β v hs).backward := by
+      = (StableHLO.cbrBHasVJPAt N Wh bh ε hε γ β v hs).backward := by
   rw [convFlatBack_eq_vjp_backward hkH hkW Wh bh (fun _ => 0)]
   rfl
 
@@ -258,7 +258,7 @@ theorem cbrBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
 /-- ⭐⭐ **`mnv2InputGradB` IS the certified whole-net batch-BN MobileNetV2 gradient.** The
     committed backward chain, with its two BatchNorm and two relu6-mask slots filled by the
     certified per-op backwards and its seventeen bottlenecks left OPAQUE, equals the backward of
-    `mobilenetv2PaperPC_has_vjp_at` at those twenty-one stages. `unfold`, three `rw`s, `rfl`. -/
+    `mobilenetv2PaperPCHasVJPAt` at those twenty-one stages. `unfold`, three `rw`s, `rfl`. -/
 theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 32)
     (Wh : Kernel4 1280 320 1 1) (bh : Vec 1280) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec 1280)
@@ -301,9 +301,9 @@ theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
     (hb17 : HasVJPDiffAt b17 (opaqueA16 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x))
     (h_head : MNV2HeadSmoothAtB N 7 7 Wh bh εh γh βh (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) :
     mnv2InputGradB N Ws Wh Wfc
-      ((bnBatchLA_has_vjp N 32 112 112 εs hεs γs βs).backward
+      ((bnBatchLAHasVJP N 32 112 112 εs hεs γs βs).backward
         (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x))
-      ((bnBatchLA_has_vjp N 1280 7 7 εh hεh γh βh).backward
+      ((bnBatchLAHasVJP N 1280 7 7 εh hεh γh βh).backward
         (StableHLO.batchMap N (flatConv Wh bh) (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
       hb1.fst.backward
       hb2.fst.backward
@@ -332,30 +332,30 @@ theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
           (StableHLO.batchMap N (flatConv Wh bh) (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) i ∧
         StableHLO.bnBatchLA N 1280 7 7 εh γh βh
           (StableHLO.batchMap N (flatConv Wh bh) (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)) i < 6)
-      = (mobilenetv2PaperPC_has_vjp_at (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17
+      = (mobilenetv2PaperPCHasVJPAt (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17
           (StableHLO.cbrB N (h := 7) (w := 7) Wh bh εh γh βh) (StableHLO.batchMap N (globalAvgPoolFlat 1280 7 7)) (StableHLO.batchMap N (Proofs.dense Wfc bfc)) x
-          ⟨mnv2StemB_has_vjp_at N 112 112 Ws bs εs hεs γs βs x h_stem,
+          ⟨mnv2StemBHasVJPAt N 112 112 Ws bs εs hεs γs βs x h_stem,
             mnv2StemB_differentiableAt N 112 112 Ws bs εs hεs γs βs x h_stem⟩
           hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17
-          ⟨StableHLO.cbrB_has_vjp_at N Wh bh εh hεh γh βh _ h_head,
+          ⟨StableHLO.cbrBHasVJPAt N Wh bh εh hεh γh βh _ h_head,
             StableHLO.cbrB_differentiableAt N Wh bh εh hεh γh βh _ h_head⟩
-          ⟨(batchMap_has_vjp _ (globalAvgPoolFlat_has_vjp 1280 7 7)
+          ⟨(batchMapHasVJP _ (globalAvgPoolFlatHasVJP 1280 7 7)
               (globalAvgPoolFlat_differentiable 1280 7 7)).toHasVJPAt _,
             (batchMap_differentiable _ (globalAvgPoolFlat_differentiable 1280 7 7)) _⟩
-          ⟨(batchMap_has_vjp _ (dense_has_vjp Wfc bfc) (dense_differentiable Wfc bfc)).toHasVJPAt _,
+          ⟨(batchMapHasVJP _ (denseHasVJP Wfc bfc) (dense_differentiable Wfc bfc)).toHasVJPAt _,
             (batchMap_differentiable _ (dense_differentiable Wfc bfc)) _⟩).backward := by
   unfold mnv2InputGradB
   rw [mnv2StemBBack_eq_vjp_backward (by decide) (by decide) Ws bs εs hεs γs βs x h_stem,
       cbrBBack_eq_vjp_backward (by decide) (by decide) Wh bh εh hεh γh βh _ h_head,
       dense_transpose_eq_vjp_backward Wfc bfc (fun _ => 0)]
   funext dy
-  rw [mobilenetv2PaperPC_has_vjp_at_backward]
+  rw [mobilenetv2PaperPCHasVJPAt_backward]
   repeat rw [Function.comp_apply]
   rfl
 
 /-- ⭐⭐ **The batched chain IS the `pdiv`-contracted Jacobian of the twenty-one-stage net** — at
     every batch size, every input, every loss cotangent and every input pixel. The tie above read
-    through the apex's own `.correct`; `mobilenetv2ForwardB_full_eq_slots` below is what says
+    through the apex's own `.correct`; `mobilenetv2ForwardBFull_eq_slots` below is what says
     those twenty-one stages are the committed forward. -/
 theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 32)
@@ -400,9 +400,9 @@ theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
     (h_head : MNV2HeadSmoothAtB N 7 7 Wh bh εh γh βh (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x))
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * 112) * (2 * 112)))) :
     mnv2InputGradB N Ws Wh Wfc
-      ((bnBatchLA_has_vjp N 32 112 112 εs hεs γs βs).backward
+      ((bnBatchLAHasVJP N 32 112 112 εs hεs γs βs).backward
         (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x))
-      ((bnBatchLA_has_vjp N 1280 7 7 εh hεh γh βh).backward
+      ((bnBatchLAHasVJP N 1280 7 7 εh hεh γh βh).backward
         (StableHLO.batchMap N (flatConv Wh bh) (opaqueA17 (mnv2StemB N 112 112 Ws bs εs γs βs) b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x)))
       hb1.fst.backward
       hb2.fst.backward
@@ -451,19 +451,19 @@ private theorem comp3_assoc {m a b c n : Nat} (f : Vec c → Vec n) (g : Vec b �
     (h : Vec a → Vec b) (k : Vec m → Vec a) : (f ∘ g ∘ h) ∘ k = f ∘ g ∘ h ∘ k := rfl
 
 /-- ⭐⭐ **THE SHAPE CHECK — the twenty-one slots the tie is about ARE the committed forward.**
-    `mobilenetv2ForwardB_full`, regrouped into exactly the twenty-one arguments
-    `mobilenetv2PaperPC_has_vjp_at` takes: the XLA-`SAME` stem, `b1` the `t = 1` bottleneck,
+    `mobilenetv2ForwardBFull`, regrouped into exactly the twenty-one arguments
+    `mobilenetv2PaperPCHasVJPAt` takes: the XLA-`SAME` stem, `b1` the `t = 1` bottleneck,
     `b3/b5/b6/b8/b9/b10/b12/b13/b15/b16` the bodies under the identity skip, `b2/b4/b7/b14` the
     stride-2 downsamplers, `b11/b17` the stride-1 bodies whose channels change, and the head's
     three stages.
 
     ⛔ **This is the theorem that would have caught ResNet-34's wrong pool** (§3.10) — the tie
     keeps its blocks opaque, so its subject is a chain of VARIABLES and nothing in it says which
-    net they are. It goes through `mobilenetv2ForwardB_full_eq_chain` (4.2b) for the depth-17 half
+    net they are. It goes through `mobilenetv2ForwardBFull_eq_chain` (4.2b) for the depth-17 half
     and then unfolds the named prefixes and the head. -/
-theorem mobilenetv2ForwardB_full_eq_slots (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+theorem mobilenetv2ForwardBFull_eq_slots (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
-    mobilenetv2ForwardB_full N w x
+    mobilenetv2ForwardBFull N w x
       = (StableHLO.batchMap N (Proofs.dense w.fcW w.fcb)
           ∘ StableHLO.batchMap N (globalAvgPoolFlat 1280 7 7)
           ∘ StableHLO.cbrB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ
@@ -485,7 +485,7 @@ theorem mobilenetv2ForwardB_full_eq_slots (N : Nat) {nCls : Nat} (w : MNV2BWeigh
           ∘ mnv2StridedB N 56 56 w.b2
           ∘ mnv2NoExpB N 112 112 w.b1
           ∘ mnv2StemB N 112 112 w.sW w.sb w.sε w.sγ w.sβ) x := by
-  rw [mobilenetv2ForwardB_full_eq_chain N w x]
+  rw [mobilenetv2ForwardBFull_eq_chain N w x]
   simp only [mnv2HeadB, mnv2PreB17, mnv2PreB16, mnv2PreB15, mnv2PreB14, mnv2PreB13, mnv2PreB12, mnv2PreB11, mnv2PreB10, mnv2PreB9, mnv2PreB8, mnv2PreB7, mnv2PreB6, mnv2PreB5, mnv2PreB4, mnv2PreB3, mnv2PreB2, mnv2PreB1, mnv2PreB0]
   rw [comp3_assoc]
 

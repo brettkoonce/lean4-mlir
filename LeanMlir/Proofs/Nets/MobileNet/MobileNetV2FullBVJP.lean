@@ -8,18 +8,18 @@ forward a certified `HasVJPAt` at the paper depth — the MobileNetV2 peer of
 
 ## No new mathematics, and no new lemma one tier down either
 
-Every block VJP is already proven at `bnBatchLA`: `mnv2BodyB_has_vjp_at` and
-`mnv2DownBodyB_has_vjp_at` (`MobileNetV2BackB0.lean`) are exactly the two body shapes
-`mnv2ExpOnlyB` / `mnv2StridedB` unfold to, and `residual_has_vjp_at` wraps the first for the ten
+Every block VJP is already proven at `bnBatchLA`: `mnv2BodyBHasVJPAt` and
+`mnv2DownBodyBHasVJPAt` (`MobileNetV2BackB0.lean`) are exactly the two body shapes
+`mnv2ExpOnlyB` / `mnv2StridedB` unfold to, and `residualHasVJPAt` wraps the first for the ten
 skip blocks. The bundle lemmas below are delegations in the `EfficientNetFullB0` style.
 
 ⭐ **Where r34 needed a new `Foundation` lemma, this net needs none.** ResNet-34's stem ends in
 `batchMap N (maxPool3s2Flat …)` and a max-pool has no derivative at a tie, so 4.1c had to write
-`batchMap_has_vjp_at`. MobileNetV2 has NO stem pool — the stem is conv-BN-relu6 and downsamples
-once — and its head's GAP and dense are smooth, so `batchMap_has_vjp` (the global one) covers
+`batchMapHasVJPAt`. MobileNetV2 has NO stem pool — the stem is conv-BN-relu6 and downsamples
+once — and its head's GAP and dense are smooth, so `batchMapHasVJP` (the global one) covers
 every `batchMap` in the net.
 
-⭐ Three shapes are `bnRelu6Stage_has_vjp_at` at a different inner op, and that lemma is already
+⭐ Three shapes are `bnRelu6StageHasVJPAt` at a different inner op, and that lemma is already
 generic in it: the stem is that stage at `flatConvStride2Xla`, the head's first stage is `cbrB`,
 and the expand/depthwise stages are `cbrB` / `dwbrB` / `dwbrBstrided`. The `t = 1` block
 `projB ∘ dwbrB` (b1) has no `mnv2*BodyB` peer; it is `dwbrLayer ; projLayer`.
@@ -44,7 +44,7 @@ activation and `bnBatchLA` is a different activation from `bnPerChannelTensor3`.
 
 The running activations are named `mnv2PreB0 … mnv2PreB17` so each bundle can be STATED at the
 activation entering its block without a seventeen-deep nested application inline; `mnv2PreB17`
-doubles as the trunk, and `mobilenetv2ForwardB_full_eq_chain` bridges it back to the committed
+doubles as the trunk, and `mobilenetv2ForwardBFull_eq_chain` bridges it back to the committed
 nested-application forward.
 
 ⭐ `N` is a variable throughout: this tier carries no numerals.
@@ -121,15 +121,15 @@ def MNV2HeadSmoothAtB (N h w : Nat) {ic oc : Nat}
 -- § Stem, block and head bundle lemmas (delegation)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Stem VJP: `bnRelu6Stage_has_vjp_at` at the XLA-`SAME` strided conv. That lemma takes the inner
+/-- Stem VJP: `bnRelu6StageHasVJPAt` at the XLA-`SAME` strided conv. That lemma takes the inner
     op as a parameter, so the stride-2 stem is the same construction as every stride-1 stage. -/
-noncomputable def mnv2StemB_has_vjp_at (N h w : Nat) {ic oc kH kW : Nat}
+noncomputable def mnv2StemBHasVJPAt (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : MNV2StemSmoothAtB N h w Ws bs εs γs βs x) :
     HasVJPAt (mnv2StemB N h w Ws bs εs γs βs) x :=
-  StableHLO.bnRelu6Stage_has_vjp_at N (flatConvStride2Xla Ws bs)
-    (flatConvStride2Xla_differentiable Ws bs) (flatConvStride2Xla_has_vjp Ws bs) εs hεs γs βs x hs
+  StableHLO.bnRelu6StageHasVJPAt N (flatConvStride2Xla Ws bs)
+    (flatConvStride2Xla_differentiable Ws bs) (flatConvStride2XlaHasVJP Ws bs) εs hεs γs βs x hs
 
 theorem mnv2StemB_differentiableAt (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
@@ -141,7 +141,7 @@ theorem mnv2StemB_differentiableAt (N h w : Nat) {ic oc kH kW : Nat}
 
 /-- `t = 1` bottleneck VJP (b1): `projB ∘ dwbrB`, the VJP of `dwbrLayer ; projLayer`. The one
     block shape with no `mnv2*BodyB` lemma to delegate to. -/
-noncomputable def mnv2NoExpB_has_vjp_at (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
+noncomputable def mnv2NoExpBHasVJPAt (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (v : Vec (N * (ic * h * w))) (hs : IVNoExpSmoothAtB N h w p v) :
     HasVJPAt (mnv2NoExpB N h w p) v :=
   ((StableHLO.dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
@@ -153,11 +153,11 @@ theorem mnv2NoExpB_differentiableAt (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic
   ((StableHLO.dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
     (StableHLO.projLayer N p.pW p.pb p.pε hq.hp p.pγ p.pβ)).diff v ⟨hs.hd, trivial⟩
 
-/-- Stride-1 no-skip bottleneck VJP (b11, b17) — `mnv2BodyB_has_vjp_at` at the bundle's fields. -/
-noncomputable def mnv2ExpOnlyB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
+/-- Stride-1 no-skip bottleneck VJP (b11, b17) — `mnv2BodyBHasVJPAt` at the bundle's fields. -/
+noncomputable def mnv2ExpOnlyBHasVJPAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
     (hq : IVPos p) (v : Vec (N * (ic * h * w))) (hs : IVSmoothAtB N h w p v) :
     HasVJPAt (mnv2ExpOnlyB N h w p) v :=
-  StableHLO.mnv2BodyB_has_vjp_at N p.eW p.eb p.eε hq.he p.eγ p.eβ
+  StableHLO.mnv2BodyBHasVJPAt N p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ v hs.he hs.hd
 
 theorem mnv2ExpOnlyB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
@@ -166,25 +166,25 @@ theorem mnv2ExpOnlyB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW i
   StableHLO.mnv2BodyB_differentiableAt N p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ v hs.he hs.hd
 
-/-- Stride-1 skip bottleneck VJP — the body VJP under `residual_has_vjp_at`. The identity arm is
+/-- Stride-1 skip bottleneck VJP — the body VJP under `residualHasVJPAt`. The identity arm is
     smooth everywhere, so the skip adds no hypothesis. -/
-noncomputable def mnv2ResidB_has_vjp_at (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
+noncomputable def mnv2ResidBHasVJPAt (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
     (hq : IVPos p) (v : Vec (N * (c * h * w))) (hs : IVSmoothAtB N h w p v) :
     HasVJPAt (mnv2ResidB N h w p) v :=
-  residual_has_vjp_at _ v (mnv2ExpOnlyB_differentiableAt N h w p hq v hs)
-    (mnv2ExpOnlyB_has_vjp_at N h w p hq v hs)
+  residualHasVJPAt _ v (mnv2ExpOnlyB_differentiableAt N h w p hq v hs)
+    (mnv2ExpOnlyBHasVJPAt N h w p hq v hs)
 
 theorem mnv2ResidB_differentiableAt (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
     (hq : IVPos p) (v : Vec (N * (c * h * w))) (hs : IVSmoothAtB N h w p v) :
     DifferentiableAt ℝ (mnv2ResidB N h w p) v := by
   exact residual_differentiableAt (mnv2ExpOnlyB_differentiableAt N h w p hq v hs)
 
-/-- Stride-2 downsampling bottleneck VJP — `mnv2DownBodyB_has_vjp_at` at the bundle's fields. -/
-noncomputable def mnv2StridedB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
+/-- Stride-2 downsampling bottleneck VJP — `mnv2DownBodyBHasVJPAt` at the bundle's fields. -/
+noncomputable def mnv2StridedBHasVJPAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
     (hq : IVPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : IVStridedSmoothAtB N h w p v) :
     HasVJPAt (mnv2StridedB N h w p) v :=
-  StableHLO.mnv2DownBodyB_has_vjp_at N p.eW p.eb p.eε hq.he p.eγ p.eβ
+  StableHLO.mnv2DownBodyBHasVJPAt N p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ v hs.he hs.hd
 
 theorem mnv2StridedB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
@@ -195,28 +195,28 @@ theorem mnv2StridedB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW i
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ v hs.he hs.hd
 
 /-- Head VJP: the 1x1 conv-bn-relu6 stage (`cbrB`, pointwise), then GAP and dense — both smooth,
-    both `batchMap` of a per-example op, so both lift with the GLOBAL `batchMap_has_vjp`.
+    both `batchMap` of a per-example op, so both lift with the GLOBAL `batchMapHasVJP`.
     ⚠ Unlike r34's, this head is NOT hypothesis-free: MobileNetV2 puts a relu6 in front of the
     pool, so the head carries the net's 35th kink site. -/
-noncomputable def mnv2HeadB_has_vjp_at (N h w : Nat) {ic oc nCls : Nat}
+noncomputable def mnv2HeadBHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (v : Vec (N * (ic * h * w)))
     (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh v) :
     HasVJPAt (mnv2HeadB N h w Wh bh εh γh βh Wd bd) v := by
-  have c_vjp := StableHLO.cbrB_has_vjp_at N Wh bh εh hεh γh βh v hs
+  have c_vjp := StableHLO.cbrBHasVJPAt N Wh bh εh hεh γh βh v hs
   have c_diff := StableHLO.cbrB_differentiableAt N Wh bh εh hεh γh βh v hs
   have g_vjp : HasVJPAt (StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
       StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh) v :=
-    vjp_comp_at _ _ v c_diff
+    vjpCompAt _ _ v c_diff
       ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _) c_vjp
-      ((batchMap_has_vjp _ (globalAvgPoolFlat_has_vjp oc h w)
+      ((batchMapHasVJP _ (globalAvgPoolFlatHasVJP oc h w)
         (globalAvgPoolFlat_differentiable oc h w)).toHasVJPAt _)
   have g_diff : DifferentiableAt ℝ (StableHLO.batchMap N (globalAvgPoolFlat oc h w) ∘
       StableHLO.cbrB N (h := h) (w := w) Wh bh εh γh βh) v :=
     ((batchMap_differentiable _ (globalAvgPoolFlat_differentiable oc h w)) _).comp v c_diff
-  exact vjp_comp_at _ (StableHLO.batchMap N (dense Wd bd)) v g_diff
+  exact vjpCompAt _ (StableHLO.batchMap N (dense Wd bd)) v g_diff
     ((batchMap_differentiable _ (dense_differentiable Wd bd)) _) g_vjp
-    ((batchMap_has_vjp _ (dense_has_vjp Wd bd) (dense_differentiable Wd bd)).toHasVJPAt _)
+    ((batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd)).toHasVJPAt _)
 
 theorem mnv2HeadB_differentiableAt (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
@@ -343,71 +343,71 @@ structure MNV2SmoothAtB (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
 -- § The apex
 -- ════════════════════════════════════════════════════════════════
 
-/-- The chain's VJP and its differentiability together, one `vjp_comp_diff_at` per block: the
-    apex is `.fst`, `mobilenetv2ForwardB_full_differentiableAt` is `.snd`. -/
+/-- The chain's VJP and its differentiability together, one `vjpCompDiffAt` per block: the
+    apex is `.fst`, `mobilenetv2ForwardBFull_differentiableAt` is `.snd`. -/
 private noncomputable def mnv2ChainB (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) :
     HasVJPDiffAt (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x :=
   let p0 : HasVJPDiffAt (mnv2PreB0 N w) x :=
-    ⟨mnv2StemB_has_vjp_at N 112 112 w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem,
+    ⟨mnv2StemBHasVJPAt N 112 112 w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem,
       mnv2StemB_differentiableAt N 112 112 w.sW w.sb w.sε hq.s w.sγ w.sβ x hx.stem⟩
   let p1 : HasVJPDiffAt (mnv2PreB1 N w) x :=
-    vjp_comp_diff_at _ _ x p0 ⟨mnv2NoExpB_has_vjp_at N 112 112 w.b1 hq.b1 _ hx.b1,
+    vjpCompDiffAt _ _ x p0 ⟨mnv2NoExpBHasVJPAt N 112 112 w.b1 hq.b1 _ hx.b1,
       mnv2NoExpB_differentiableAt N 112 112 w.b1 hq.b1 _ hx.b1⟩
   let p2 : HasVJPDiffAt (mnv2PreB2 N w) x :=
-    vjp_comp_diff_at _ _ x p1 ⟨mnv2StridedB_has_vjp_at N 56 56 w.b2 hq.b2 _ hx.b2,
+    vjpCompDiffAt _ _ x p1 ⟨mnv2StridedBHasVJPAt N 56 56 w.b2 hq.b2 _ hx.b2,
       mnv2StridedB_differentiableAt N 56 56 w.b2 hq.b2 _ hx.b2⟩
   let p3 : HasVJPDiffAt (mnv2PreB3 N w) x :=
-    vjp_comp_diff_at _ _ x p2 ⟨mnv2ResidB_has_vjp_at N 56 56 w.b3 hq.b3 _ hx.b3,
+    vjpCompDiffAt _ _ x p2 ⟨mnv2ResidBHasVJPAt N 56 56 w.b3 hq.b3 _ hx.b3,
       mnv2ResidB_differentiableAt N 56 56 w.b3 hq.b3 _ hx.b3⟩
   let p4 : HasVJPDiffAt (mnv2PreB4 N w) x :=
-    vjp_comp_diff_at _ _ x p3 ⟨mnv2StridedB_has_vjp_at N 28 28 w.b4 hq.b4 _ hx.b4,
+    vjpCompDiffAt _ _ x p3 ⟨mnv2StridedBHasVJPAt N 28 28 w.b4 hq.b4 _ hx.b4,
       mnv2StridedB_differentiableAt N 28 28 w.b4 hq.b4 _ hx.b4⟩
   let p5 : HasVJPDiffAt (mnv2PreB5 N w) x :=
-    vjp_comp_diff_at _ _ x p4 ⟨mnv2ResidB_has_vjp_at N 28 28 w.b5 hq.b5 _ hx.b5,
+    vjpCompDiffAt _ _ x p4 ⟨mnv2ResidBHasVJPAt N 28 28 w.b5 hq.b5 _ hx.b5,
       mnv2ResidB_differentiableAt N 28 28 w.b5 hq.b5 _ hx.b5⟩
   let p6 : HasVJPDiffAt (mnv2PreB6 N w) x :=
-    vjp_comp_diff_at _ _ x p5 ⟨mnv2ResidB_has_vjp_at N 28 28 w.b6 hq.b6 _ hx.b6,
+    vjpCompDiffAt _ _ x p5 ⟨mnv2ResidBHasVJPAt N 28 28 w.b6 hq.b6 _ hx.b6,
       mnv2ResidB_differentiableAt N 28 28 w.b6 hq.b6 _ hx.b6⟩
   let p7 : HasVJPDiffAt (mnv2PreB7 N w) x :=
-    vjp_comp_diff_at _ _ x p6 ⟨mnv2StridedB_has_vjp_at N 14 14 w.b7 hq.b7 _ hx.b7,
+    vjpCompDiffAt _ _ x p6 ⟨mnv2StridedBHasVJPAt N 14 14 w.b7 hq.b7 _ hx.b7,
       mnv2StridedB_differentiableAt N 14 14 w.b7 hq.b7 _ hx.b7⟩
   let p8 : HasVJPDiffAt (mnv2PreB8 N w) x :=
-    vjp_comp_diff_at _ _ x p7 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b8 hq.b8 _ hx.b8,
+    vjpCompDiffAt _ _ x p7 ⟨mnv2ResidBHasVJPAt N 14 14 w.b8 hq.b8 _ hx.b8,
       mnv2ResidB_differentiableAt N 14 14 w.b8 hq.b8 _ hx.b8⟩
   let p9 : HasVJPDiffAt (mnv2PreB9 N w) x :=
-    vjp_comp_diff_at _ _ x p8 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b9 hq.b9 _ hx.b9,
+    vjpCompDiffAt _ _ x p8 ⟨mnv2ResidBHasVJPAt N 14 14 w.b9 hq.b9 _ hx.b9,
       mnv2ResidB_differentiableAt N 14 14 w.b9 hq.b9 _ hx.b9⟩
   let p10 : HasVJPDiffAt (mnv2PreB10 N w) x :=
-    vjp_comp_diff_at _ _ x p9 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b10 hq.b10 _ hx.b10,
+    vjpCompDiffAt _ _ x p9 ⟨mnv2ResidBHasVJPAt N 14 14 w.b10 hq.b10 _ hx.b10,
       mnv2ResidB_differentiableAt N 14 14 w.b10 hq.b10 _ hx.b10⟩
   let p11 : HasVJPDiffAt (mnv2PreB11 N w) x :=
-    vjp_comp_diff_at _ _ x p10 ⟨mnv2ExpOnlyB_has_vjp_at N 14 14 w.b11 hq.b11 _ hx.b11,
+    vjpCompDiffAt _ _ x p10 ⟨mnv2ExpOnlyBHasVJPAt N 14 14 w.b11 hq.b11 _ hx.b11,
       mnv2ExpOnlyB_differentiableAt N 14 14 w.b11 hq.b11 _ hx.b11⟩
   let p12 : HasVJPDiffAt (mnv2PreB12 N w) x :=
-    vjp_comp_diff_at _ _ x p11 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b12 hq.b12 _ hx.b12,
+    vjpCompDiffAt _ _ x p11 ⟨mnv2ResidBHasVJPAt N 14 14 w.b12 hq.b12 _ hx.b12,
       mnv2ResidB_differentiableAt N 14 14 w.b12 hq.b12 _ hx.b12⟩
   let p13 : HasVJPDiffAt (mnv2PreB13 N w) x :=
-    vjp_comp_diff_at _ _ x p12 ⟨mnv2ResidB_has_vjp_at N 14 14 w.b13 hq.b13 _ hx.b13,
+    vjpCompDiffAt _ _ x p12 ⟨mnv2ResidBHasVJPAt N 14 14 w.b13 hq.b13 _ hx.b13,
       mnv2ResidB_differentiableAt N 14 14 w.b13 hq.b13 _ hx.b13⟩
   let p14 : HasVJPDiffAt (mnv2PreB14 N w) x :=
-    vjp_comp_diff_at _ _ x p13 ⟨mnv2StridedB_has_vjp_at N 7 7 w.b14 hq.b14 _ hx.b14,
+    vjpCompDiffAt _ _ x p13 ⟨mnv2StridedBHasVJPAt N 7 7 w.b14 hq.b14 _ hx.b14,
       mnv2StridedB_differentiableAt N 7 7 w.b14 hq.b14 _ hx.b14⟩
   let p15 : HasVJPDiffAt (mnv2PreB15 N w) x :=
-    vjp_comp_diff_at _ _ x p14 ⟨mnv2ResidB_has_vjp_at N 7 7 w.b15 hq.b15 _ hx.b15,
+    vjpCompDiffAt _ _ x p14 ⟨mnv2ResidBHasVJPAt N 7 7 w.b15 hq.b15 _ hx.b15,
       mnv2ResidB_differentiableAt N 7 7 w.b15 hq.b15 _ hx.b15⟩
   let p16 : HasVJPDiffAt (mnv2PreB16 N w) x :=
-    vjp_comp_diff_at _ _ x p15 ⟨mnv2ResidB_has_vjp_at N 7 7 w.b16 hq.b16 _ hx.b16,
+    vjpCompDiffAt _ _ x p15 ⟨mnv2ResidBHasVJPAt N 7 7 w.b16 hq.b16 _ hx.b16,
       mnv2ResidB_differentiableAt N 7 7 w.b16 hq.b16 _ hx.b16⟩
   let p17 : HasVJPDiffAt (mnv2PreB17 N w) x :=
-    vjp_comp_diff_at _ _ x p16 ⟨mnv2ExpOnlyB_has_vjp_at N 7 7 w.b17 hq.b17 _ hx.b17,
+    vjpCompDiffAt _ _ x p16 ⟨mnv2ExpOnlyBHasVJPAt N 7 7 w.b17 hq.b17 _ hx.b17,
       mnv2ExpOnlyB_differentiableAt N 7 7 w.b17 hq.b17 _ hx.b17⟩
-  vjp_comp_diff_at _ _ x p17
-    ⟨mnv2HeadB_has_vjp_at N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head,
+  vjpCompDiffAt _ _ x p17
+    ⟨mnv2HeadBHasVJPAt N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head,
       mnv2HeadB_differentiableAt N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head⟩
 
 /-- ⭐⭐ **MobileNetV2 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all
-    seventeen bottlenecks.** Chains stem → the `[t,c,n,s]` ladder → head with `vjp_comp_diff_at`
+    seventeen bottlenecks.** Chains stem → the `[t,c,n,s]` ladder → head with `vjpCompDiffAt`
     under two hypotheses: `MNV2PosB` (every `ε > 0`) and `MNV2SmoothAtB` (every relu6 clause, each
     at its block's own input). T1's VJP half for
     `formalization.yaml` 4e's port (the per-example fold it was the batched peer of was retired
@@ -422,7 +422,7 @@ private noncomputable def mnv2ChainB (N : Nat) {nCls : Nat} (w : MNV2BWeights nC
     ⚠ Unlike r34's, the head is NOT hypothesis-free: its 1x1 conv-BN is followed by a relu6.
 
     ⭐ `N` is a variable: this tier carries no numerals. -/
-noncomputable def mobilenetv2ForwardB_full_has_vjp_at (N : Nat) {nCls : Nat}
+noncomputable def mobilenetv2ForwardBFullHasVJPAt (N : Nat) {nCls : Nat}
     (w : MNV2BWeights nCls) (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
     (hx : MNV2SmoothAtB N w x) :
     HasVJPAt (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x :=
@@ -510,37 +510,37 @@ theorem mnv2PreB17_apply (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
 
 /-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** —
     the batched peer of the retired per-example shape check, and what lets the VJP be about
-    `mobilenetv2ForwardB_full` rather than about a re-spelling of it. -/
-theorem mobilenetv2ForwardB_full_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    `mobilenetv2ForwardBFull` rather than about a re-spelling of it. -/
+theorem mobilenetv2ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
-    mobilenetv2ForwardB_full N w x
+    mobilenetv2ForwardBFull N w x
       = (mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w) x := by
-  rw [mobilenetv2ForwardB_full, Function.comp_apply, mnv2PreB17_apply, mnv2PreB16_apply, mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]
+  rw [mobilenetv2ForwardBFull, Function.comp_apply, mnv2PreB17_apply, mnv2PreB16_apply, mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]
 
 
 /-- ⭐⭐ **Public correctness theorem**: the seventeen-bottleneck batch-BN backward equals the
-    `pdiv`-contracted Jacobian of `mobilenetv2ForwardB_full` ITSELF — the committed
+    `pdiv`-contracted Jacobian of `mobilenetv2ForwardBFull` ITSELF — the committed
     nested-application forward `MobileNetV2FullB.lean` defines and
-    `mobilenetv2FwdGraphB_full_faithful` proves the typed graph denotes — not of the layered chain
-    the VJP is assembled on. Tied back through `mobilenetv2ForwardB_full_eq_chain`. -/
-theorem mobilenetv2ForwardB_full_has_vjp_at_correct (N : Nat) {nCls : Nat}
+    `mobilenetv2FwdGraphBFull_faithful` proves the typed graph denotes — not of the layered chain
+    the VJP is assembled on. Tied back through `mobilenetv2ForwardBFull_eq_chain`. -/
+theorem mobilenetv2ForwardBFullHasVJPAt_correct (N : Nat) {nCls : Nat}
     (w : MNV2BWeights nCls) (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
     (hx : MNV2SmoothAtB N w x) (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * 112) * (2 * 112)))) :
-    (mobilenetv2ForwardB_full_has_vjp_at N w hq x hx).backward dy i =
-      ∑ j : Fin (N * nCls), pdiv (mobilenetv2ForwardB_full N w) x i j * dy j := by
-  have h := (mobilenetv2ForwardB_full_has_vjp_at N w hq x hx).correct dy i
-  rwa [show mobilenetv2ForwardB_full N w
+    (mobilenetv2ForwardBFullHasVJPAt N w hq x hx).backward dy i =
+      ∑ j : Fin (N * nCls), pdiv (mobilenetv2ForwardBFull N w) x i j * dy j := by
+  have h := (mobilenetv2ForwardBFullHasVJPAt N w hq x hx).correct dy i
+  rwa [show mobilenetv2ForwardBFull N w
       = mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w
-    from funext (mobilenetv2ForwardB_full_eq_chain N w)]
+    from funext (mobilenetv2ForwardBFull_eq_chain N w)]
 
 /-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`, read
-    back through `mobilenetv2ForwardB_full_eq_chain`. What the seal's `sealDiffAt` needs. -/
-theorem mobilenetv2ForwardB_full_differentiableAt (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    back through `mobilenetv2ForwardBFull_eq_chain`. What the seal's `seal_differentiableAt` needs. -/
+theorem mobilenetv2ForwardBFull_differentiableAt (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) :
-    DifferentiableAt ℝ (mobilenetv2ForwardB_full N w) x := by
-  rw [show mobilenetv2ForwardB_full N w
+    DifferentiableAt ℝ (mobilenetv2ForwardBFull N w) x := by
+  rw [show mobilenetv2ForwardBFull N w
       = mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w
-    from funext (mobilenetv2ForwardB_full_eq_chain N w)]
+    from funext (mobilenetv2ForwardBFull_eq_chain N w)]
   exact (mnv2ChainB N w hq x hx).snd
 
 end Proofs

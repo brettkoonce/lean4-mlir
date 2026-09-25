@@ -13,7 +13,7 @@ kernel-`#guard`ed against the audited `ViTLayout`. Trains on `verified_mlir/vit_
 fwd}.mlir` (rendered by tests/TestViT*) through the packed-params `VerifiedNet.train` driver
 (`mlpTrainStepV`, per-channel LayerNorm, He-init). Each op fragment is a proven-faithful
 emitter (row-softmax / batched multi-head SDPA / per-channel LN / GELU / patch conv); the
-whole-net VJP `vit_full_has_vjp_correct` is the scalar-LN witness (full B/C deferred).
+whole-net VJP `vitFullHasVJP_correct` is the scalar-LN witness (full B/C deferred).
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/vit-verified data`
 -/

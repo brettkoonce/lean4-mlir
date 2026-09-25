@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Execution-side check for the denoted-IR bridge (planning/archive/verified_codegen.md, Loop A).
 
-Lean side (proven): ⟦emitMlpBack⟧ = mlp_has_vjp_at.backward  (IR.mlp_whole_bridge),
+Lean side (proven): ⟦emitMlpBack⟧ = mlpHasVJPAt.backward  (IR.mlp_whole_bridge),
 the per-op bridges (dense_at_bridge, relu_at_bridge, …), and the parameter
 gradients weight_grad_bridge / bias_grad_bridge (dW = outer(x, dy), db = Σ dy).
 
@@ -210,7 +210,7 @@ def sdpa_fwd_ref(Q, K, V, d):
     return softmax_np(Q @ K.T / np.sqrt(d)) @ V
 
 def sdpa_back_ref(Q, K, V, dOut, d):
-    """Proven SDPA input grads (sdpa_back_Q/K/V)."""
+    """Proven SDPA input grads (sdpaBackQ/K/V)."""
     scale = 1.0 / np.sqrt(d)
     w = softmax_np(Q @ K.T * scale)
     dW = dOut @ V.T
@@ -614,7 +614,7 @@ e = max_err(outs, [sdpa_fwd_ref(aQ, aK, aV, ad)]); ok &= e < TOL
 print(f"sdpa_fwd        ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (softmax(QKᵀ/√d)·V)")
 outs, nb = compile_run("/tmp/sdpa_back.mlir", "sdpa_back", [aQ, aK, aV, aD])
 e = max_err(outs, sdpa_back_ref(aQ, aK, aV, aD, ad)); ok &= e < TOL
-print(f"sdpa_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dQ,dK,dV vs proven sdpa_back_Q/K/V)")
+print(f"sdpa_back       ({nb}B): max_err={e:.2e}  {'PASS' if e < TOL else 'FAIL'}  (dQ,dK,dV vs proven sdpaBackQ/K/V)")
 
 # ── Pointwise activations (Phase 3 sweep): fwd + proven dy⊙act'(x) backward ──
 ax = rng.standard_normal((8,)).astype(np.float32)

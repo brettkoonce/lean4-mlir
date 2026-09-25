@@ -24,8 +24,8 @@ per-net DP twin walks its chain with.
 * ⭐⭐ **P1 / P2 / P2γ at the GRAPH, for any `R`** — `den_bnSyncF_allReduce`,
   `den_bnSyncBack_allReduce`, `den_allReduceMeanF_bnSyncGammaGradB`. The sync-BN subgraphs a
   DP render emits, fed by that statistics subgraph, denote
-  `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4_grad_input` at `N := R·N` (forward and
-  input-VJP) and `1/R` of `bnPerChannel_grad_gamma` at `N := R·N` (the γ parameter gradient).
+  `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4GradInput` at `N := R·N` (forward and
+  input-VJP) and `1/R` of `bnPerChannelGradGamma` at `N := R·N` (the γ parameter gradient).
   These are the BN cases of the chain induction; `StableHLO.lean`'s `*_allReduce_R1` anchors are
   their `R := 1` instances.
 * **The handed-back statistics are the global batch's own**: `den_bnStatsMeanB_allReduce` /
@@ -258,14 +258,14 @@ theorem bnSyncTensor4_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0) (hm : N 
     at the same handed-in statistics** — a sum, not a mean, because this is a parameter
     gradient: the parameter collective's `1/R` is what turns it into the global-batch mean. The
     row split `bnchwFwd_row_batchShard`, under `Σ` instead of `bnMean`. -/
-theorem bnSyncPerChannel_grad_gamma_row_shard (R N oc h w : Nat) (ε : ℝ) (μ m2 : Vec oc)
+theorem bnSyncPerChannelGradGamma_row_shard (R N oc h w : Nat) (ε : ℝ) (μ m2 : Vec oc)
     (X DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
-    bnSyncPerChannel_grad_gamma oc ((R*N)*(h*w)) ε μ m2
+    bnSyncPerChannelGradGamma oc ((R*N)*(h*w)) ε μ m2
         (bnchwFwd (R*N) oc h w X) (bnchwFwd (R*N) oc h w DY) c
-      = ∑ r : Fin R, bnSyncPerChannel_grad_gamma oc (N*(h*w)) ε μ m2
+      = ∑ r : Fin R, bnSyncPerChannelGradGamma oc (N*(h*w)) ε μ m2
           (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r))
           (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c := by
-  unfold bnSyncPerChannel_grad_gamma
+  unfold bnSyncPerChannelGradGamma
   rw [← Equiv.sum_comp (bnShardEquiv R N (h*w)), Fintype.sum_prod_type]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro k _
@@ -273,12 +273,12 @@ theorem bnSyncPerChannel_grad_gamma_row_shard (R N oc h w : Nat) (ε : ℝ) (μ 
 
 /-- **…and so is the β gradient**, which reads no statistic at all: `Σ dy` over the global
     channel row is the sum of the shards' `Σ dy`. -/
-theorem bnPerChannel_grad_beta_row_shard (R N oc h w : Nat)
+theorem bnPerChannelGradBeta_row_shard (R N oc h w : Nat)
     (DY : Vec ((R * N) * (oc * (h * w)))) (c : Fin oc) :
-    bnPerChannel_grad_beta oc ((R*N)*(h*w)) (bnchwFwd (R*N) oc h w DY) c
-      = ∑ r : Fin R, bnPerChannel_grad_beta oc (N*(h*w))
+    bnPerChannelGradBeta oc ((R*N)*(h*w)) (bnchwFwd (R*N) oc h w DY) c
+      = ∑ r : Fin R, bnPerChannelGradBeta oc (N*(h*w))
           (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r)) c := by
-  unfold bnPerChannel_grad_beta
+  unfold bnPerChannelGradBeta
   rw [← Equiv.sum_comp (bnShardEquiv R N (h*w)), Fintype.sum_prod_type]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro k _
@@ -286,9 +286,9 @@ theorem bnPerChannel_grad_beta_row_shard (R N oc h w : Nat)
 
 /-- **The sync backward is POINTWISE too**, with the channel read off the index — it reads only
     `x idx` and `dy idx`. Both its reductions were hoisted into the collective. -/
-theorem bnSyncPerChannel_grad_input_apply (oc m : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
+theorem bnSyncPerChannelGradInput_apply (oc m : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
     (x dy : Vec (oc * m)) (idx : Fin (oc * m)) :
-    bnSyncPerChannel_grad_input oc m ε γ μ m2 mdy mdyx x dy idx
+    bnSyncPerChannelGradInput oc m ε γ μ m2 mdy mdyx x dy idx
       = (1 / Real.sqrt (m2 (finProdFinEquiv.symm idx).1
              - μ (finProdFinEquiv.symm idx).1 * μ (finProdFinEquiv.symm idx).1 + ε))
           * (γ (finProdFinEquiv.symm idx).1 * dy idx
@@ -297,14 +297,14 @@ theorem bnSyncPerChannel_grad_input_apply (oc m : Nat) (ε : ℝ) (γ μ m2 mdy 
                 * (1 / Real.sqrt (m2 (finProdFinEquiv.symm idx).1
                      - μ (finProdFinEquiv.symm idx).1 * μ (finProdFinEquiv.symm idx).1 + ε)))
                * mdyx (finProdFinEquiv.symm idx).1) := by
-  unfold bnSyncPerChannel_grad_input bnSync_grad_input bnSyncXhat Mat.unflatten
+  unfold bnSyncPerChannelGradInput bnSyncGradInput bnSyncXhat Mat.unflatten
   simp only [Prod.mk.eta, Equiv.apply_symm_apply]
 
 /-- The `[N,C,H,W]` lift: cell `t` of the sync backward depends only on `x t`, `dy t` and its
     own channel's four statistics. -/
-theorem bnSyncTensor4_grad_input_apply (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
+theorem bnSyncTensor4GradInput_apply (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
     (x dy : Vec (N * (oc * (h * w)))) (t : Fin (N * (oc * (h * w)))) :
-    bnSyncTensor4_grad_input N oc h w ε γ μ m2 mdy mdyx x dy t
+    bnSyncTensor4GradInput N oc h w ε γ μ m2 mdy mdyx x dy t
       = (1 / Real.sqrt (m2 (bnchwChan N oc h w t)
              - μ (bnchwChan N oc h w t) * μ (bnchwChan N oc h w t) + ε))
           * (γ (bnchwChan N oc h w t) * dy t
@@ -313,9 +313,9 @@ theorem bnSyncTensor4_grad_input_apply (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy
                 * (1 / Real.sqrt (m2 (bnchwChan N oc h w t)
                      - μ (bnchwChan N oc h w t) * μ (bnchwChan N oc h w t) + ε)))
                * mdyx (bnchwChan N oc h w t)) := by
-  unfold bnSyncTensor4_grad_input
+  unfold bnSyncTensor4GradInput
   simp only [bnchwBack]
-  rw [bnSyncPerChannel_grad_input_apply]
+  rw [bnSyncPerChannelGradInput_apply]
   have hx : bnchwFwd N oc h w x (bnchwBackIdx N oc h w t) = x t := by
     rw [bnchwFwd_apply, bnchwFwdIdx_bnchwBackIdx]
   have hd : bnchwFwd N oc h w dy (bnchwBackIdx N oc h w t) = dy t := by
@@ -329,22 +329,22 @@ theorem bnSyncTensor4_grad_input_apply (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy
 /-- ⭐⭐ **P2a — the sync backward COMMUTES WITH SHARDING, for any statistics at all.**
     The backward twin of `bnSyncTensor4_batchShard`, and equally free of mathematics: pointwise
     plus channel-preserving reindex. -/
-theorem bnSyncTensor4_grad_input_batchShard (R N oc h w : Nat) (ε : ℝ)
+theorem bnSyncTensor4GradInput_batchShard (R N oc h w : Nat) (ε : ℝ)
     (γ μ m2 mdy mdyx : Vec oc) (X DY : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) :
     batchShard R N (oc * (h * w))
-        (bnSyncTensor4_grad_input (R*N) oc h w ε γ μ m2 mdy mdyx X DY) r
-      = bnSyncTensor4_grad_input N oc h w ε γ μ m2 mdy mdyx
+        (bnSyncTensor4GradInput (R*N) oc h w ε γ μ m2 mdy mdyx X DY) r
+      = bnSyncTensor4GradInput N oc h w ε γ μ m2 mdy mdyx
           (batchShard R N (oc * (h * w)) X r) (batchShard R N (oc * (h * w)) DY r) := by
   funext idx
   unfold batchShard
-  rw [bnSyncTensor4_grad_input_apply, bnSyncTensor4_grad_input_apply, bnchwChan_batchShard]
+  rw [bnSyncTensor4GradInput_apply, bnSyncTensor4GradInput_apply, bnchwChan_batchShard]
 
 /-- The `R = 1` backward anchor restated with `bnSyncXhat` in the `mdyx` reduction — the form
     the sync GRAPH produces, since `bnSyncDyStatsB` builds `x̂` from the statistics handed to it
     rather than from `x` directly. -/
-theorem bnSyncTensor4_grad_input_at_own_stats' (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
+theorem bnSyncTensor4GradInput_at_own_stats' (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
     (ε : ℝ) (γ : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
-    bnSyncTensor4_grad_input N oc h w ε γ
+    bnSyncTensor4GradInput N oc h w ε γ
         (fun c => bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
         (fun c => bnMeanSq (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
         (fun c => bnMean (N*(h*w)) (fun k =>
@@ -356,7 +356,7 @@ theorem bnSyncTensor4_grad_input_at_own_stats' (N oc h w : Nat) (hm : N * (h * w
             (Mat.unflatten (bnchwFwd N oc h w x) c) k
           * (γ c * Mat.unflatten (bnchwFwd N oc h w dy) c k)))
         x dy
-      = bnBatchTensor4_grad_input N oc h w ε γ x dy := by
+      = bnBatchTensor4GradInput N oc h w ε γ x dy := by
   have hxh : (fun c => bnMean (N*(h*w)) (fun k =>
               bnSyncXhat (N*(h*w)) ε
                 (bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))
@@ -369,14 +369,14 @@ theorem bnSyncTensor4_grad_input_at_own_stats' (N oc h w : Nat) (hm : N * (h * w
     funext c
     rw [bnSyncXhat_at_own_stats _ hm]
   rw [hxh]
-  exact bnSyncTensor4_grad_input_at_own_stats N oc h w hm ε γ x dy
+  exact bnSyncTensor4GradInput_at_own_stats N oc h w hm ε γ x dy
 
 /-- ⭐⭐⭐ **P2 — THE SYNC BACKWARD ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH
     INPUT-VJP.**
 
     Handed the four all-reduced statistics — each literally `(1/R)·Σ_r'` of a per-replica
     quantity, which is what `syncStats`, then `allReduceMeanF` of `bnSyncDyStatsB`,
-    denotes — replica `r`'s sync backward equals `batchShard r` of `bnBatchTensor4_grad_input`
+    denotes — replica `r`'s sync backward equals `batchShard r` of `bnBatchTensor4GradInput`
     run on the whole `R·N` batch.
 
     ⭐ **Including the cross-shard terms.** `mdyx` averages `x̂·dx̂` with `x̂` built from the GLOBAL
@@ -386,8 +386,8 @@ theorem bnSyncTensor4_grad_input_at_own_stats' (N oc h w : Nat) (hm : N * (h * w
     PARAMETER gradient exact rather than approximate.
 
     ⭐ **The spec does not move**: the right-hand side is the existing
-    `bnBatchTensor4_grad_input` at `N := R·N`. -/
-theorem bnSyncTensor4_grad_input_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0)
+    `bnBatchTensor4GradInput` at `N := R·N`. -/
+theorem bnSyncTensor4GradInput_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0)
     (hm : N * (h * w) ≠ 0) (ε : ℝ) (γ : Vec oc)
     (X DY : Vec ((R * N) * (oc * (h * w)))) (r : Fin R) (μg m2g mdyg mdyxg : Vec oc)
     (hμ : μg = fun c => (1 / (R : ℝ)) * ∑ r' : Fin R, bnMean (N*(h*w))
@@ -400,9 +400,9 @@ theorem bnSyncTensor4_grad_input_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 
       bnSyncXhat (N*(h*w)) ε (μg c) (m2g c)
         (Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) X r')) c) k
       * (γ c * Mat.unflatten (bnchwFwd N oc h w (batchShard R N (oc * (h * w)) DY r')) c k))) :
-    bnSyncTensor4_grad_input N oc h w ε γ μg m2g mdyg mdyxg
+    bnSyncTensor4GradInput N oc h w ε γ μg m2g mdyg mdyxg
         (batchShard R N (oc * (h * w)) X r) (batchShard R N (oc * (h * w)) DY r)
-      = batchShard R N (oc * (h * w)) (bnBatchTensor4_grad_input (R*N) oc h w ε γ X DY) r := by
+      = batchShard R N (oc * (h * w)) (bnBatchTensor4GradInput (R*N) oc h w ε γ X DY) r := by
   have hM := mulR_nhw_ne_zero (Nat.pos_of_ne_zero hR) hm
   -- 1. the forward statistics are the global row's own (P1b)
   have hμ' : μg = fun c => bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) := by
@@ -430,9 +430,9 @@ theorem bnSyncTensor4_grad_input_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 
               * bnMean ((R*N)*(h*w)) (Mat.unflatten (bnchwFwd (R*N) oc h w X) c) + ε))
         * (γ c * dv))).symm
   -- 3. P2a composed with the R = 1 anchor at the global batch
-  rw [hμ', hm2', hmdy', hmdyx', ← bnSyncTensor4_grad_input_batchShard]
+  rw [hμ', hm2', hmdy', hmdyx', ← bnSyncTensor4GradInput_batchShard]
   exact congrArg (fun z => batchShard R N (oc * (h * w)) z r)
-    (bnSyncTensor4_grad_input_at_own_stats' (R*N) oc h w hM ε γ X DY)
+    (bnSyncTensor4GradInput_at_own_stats' (R*N) oc h w hM ε γ X DY)
 
 -- ════════════════════════════════════════════════════════════════
 -- § P3 — sharding commutes with the per-example lifts
@@ -552,7 +552,7 @@ theorem den_bnSyncF_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
 
 /-- ⭐⭐ **P2 on the graph, any `R`.** Replica `r`'s `bnSyncBack`, fed by the collective over the
     replicas' `bnSyncDyStatsB` (each reading the packed forward statistics), denotes
-    `batchShard r` of the batch-`R·N` `bnBatchTensor4_grad_input` — given that each replica's
+    `batchShard r` of the batch-`R·N` `bnBatchTensor4GradInput` — given that each replica's
     saved activation and its incoming cotangent are its shards of the global ones (`hx` / `hxv`,
     `hdy`). `den_bnSyncBack_allReduce_R1` is this at `R := 1`. -/
 theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
@@ -566,7 +566,7 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
     den (.bnSyncBack gN xN es ε γ (xv r) (dy r)
           (.allReduceMeanF R hR t'' ds'' (fun r' => .bnSyncDyStatsB gN xN es ε γ (xv r') (dy r')
             (syncStats R hR t t' ds ds' x))))
-      = batchShard R N (oc * (h * w)) (bnBatchTensor4_grad_input (R * N) oc h w ε γ X DY) r := by
+      = batchShard R N (oc * (h * w)) (bnBatchTensor4GradInput (R * N) oc h w ε γ X DY) r := by
   have hM := mulR_nhw_ne_zero hR hm
   have hRne : R ≠ 0 := Nat.pos_iff_ne_zero.mp hR
   have hRr : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hRne
@@ -576,7 +576,7 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
              den_syncStats_left R hR hm t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM,
              hxv, hdy, dpMean_const_mul hRr]
-  exact bnSyncTensor4_grad_input_shard_eq_global R N oc h w hRne hm ε γ X DY r
+  exact bnSyncTensor4GradInput_shard_eq_global R N oc h w hRne hm ε γ X DY r
     _ _ _ _ (by funext c; exact bnMean_row_shard R N oc h w hRne hm X c)
     (by funext c; exact bnMeanSq_row_shard R N oc h w hRne hm X c) rfl rfl
 
@@ -586,7 +586,7 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
 
 /-- ⭐⭐ **P2γ on the graph, any `R`, already all-reduced.** The parameter collective over the
     replicas' `bnSyncGammaGradB` — each at its shard, its shard's cotangent and the packed global
-    statistics — is `1/R` of `bnPerChannel_grad_gamma` at `N := R·N`: the committed γ gradient
+    statistics — is `1/R` of `bnPerChannelGradGamma` at `N := R·N`: the committed γ gradient
     at the global batch. The BN γ node is the one parameter gradient sync-BN changes, because it
     is the one that reads `x̂`. -/
 theorem den_allReduceMeanF_bnSyncGammaGradB {N oc h w : Nat} (R : Nat) (hR : 0 < R)
@@ -599,15 +599,15 @@ theorem den_allReduceMeanF_bnSyncGammaGradB {N oc h w : Nat} (R : Nat) (hR : 0 <
     (hdy : ∀ r, den (dy r) = batchShard R N (oc * (h * w)) DY r) (c : Fin oc) :
     den (.allReduceMeanF R hR t'' ds'' (fun r => .bnSyncGammaGradB xN es ε (xv r) (dy r)
           (syncStats R hR t t' ds ds' x))) c
-      = (1 / (R : ℝ)) * bnPerChannel_grad_gamma oc ((R * N) * (h * w)) ε
+      = (1 / (R : ℝ)) * bnPerChannelGradGamma oc ((R * N) * (h * w)) ε
           (bnchwFwd (R * N) oc h w X) (bnchwFwd (R * N) oc h w DY) c := by
   have hM := mulR_nhw_ne_zero hR hm
   simp only [den_allReduceMeanF, den_bnSyncGammaGradB,
              den_syncStats_left R hR hm t t' ds ds' x X hx,
              den_syncStats_right R hR hm t t' ds ds' x X hx, global_var_add_sq R hM, hxv, hdy]
   -- the shard sums are the global row sum, and at the global statistics that is the γ gradient
-  rw [← bnSyncPerChannel_grad_gamma_row_shard,
-      congrFun (bnSyncPerChannel_grad_gamma_at_own_stats oc ((R*N)*(h*w)) hM ε
+  rw [← bnSyncPerChannelGradGamma_row_shard,
+      congrFun (bnSyncPerChannelGradGamma_at_own_stats oc ((R*N)*(h*w)) hM ε
         (bnchwFwd (R*N) oc h w X) (bnchwFwd (R*N) oc h w DY)) c]
 
 /-- **The handed-back running MEAN under sync-BN is the global batch's own** — `bnStatsMeanB`
@@ -676,7 +676,7 @@ theorem den_allReduceMeanF_bnBetaGradB_shard {N oc h w : Nat} (R : Nat) (hR : 0 
   simp only [den_allReduceMeanF]
   congr 1
   simp only [denStep, denStepApp, hdy]
-  exact (bnPerChannel_grad_beta_row_shard R N oc h w DY c).symm
+  exact (bnPerChannelGradBeta_row_shard R N oc h w DY c).symm
 
 -- ════════════════════════════════════════════════════════════════
 -- § The divisor step

@@ -27,7 +27,7 @@ open Proofs Proofs.StableHLO
 
 /-- **Vector-LN γ op denotes the certified step.** `den(veclnGammaSgd)` = `γ − lr·(Σ_tokens dy·x̂)`,
     the certified ∂(rowwise vector-LN)/∂γ contraction. Covers all 25 LN-γ sites (LN1/LN2 × 12 + final).
-    One-line delegation to `vit_render_veclngamma_certified` (the den's sum IS `vecLN_grad_gamma`). -/
+    One-line delegation to `vit_render_veclngamma_certified` (the den's sum IS `vecLNGradGamma`). -/
 theorem veclnGammaSgd_den {N D : Nat} (gN xN epsStr lrStr cotN : String)
     (ε : ℝ) (βv : Vec D) (x : Vec (N * D)) (γ : Vec D) (dy : Vec (N * D)) (lr : ℝ) (k : Fin D) :
     den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε x γ lr (.operand cotN dy)) k
@@ -83,7 +83,7 @@ theorem patchEmbedWeightSgd_den {ic H W P N D : Nat} (wN xN lrStr cotN : String)
         (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw))
       = Wp d c kh kw - lr * ∑ o : Fin ((N + 1) * D),
           pdiv (fun v : Vec (D * ic * P * P) =>
-                  patchEmbed_flat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
+                  patchEmbedFlat ic H W P N D (Kernel4.unflatten v) bc cls pos img)
             (Kernel4.flatten Wp)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o * dy o := by
   simp only [denStepApp, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
@@ -96,7 +96,7 @@ theorem patchEmbedBiasSgd_den {ic H W P N D : Nat} (bN lrStr cotN : String)
     (dy : Vec ((N + 1) * D)) (lr : ℝ) (i : Fin D) :
     den (SHlo.patchEmbedBiasSgd bN lrStr bc lr (.operand cotN dy)) i
       = bc i - lr * ∑ o : Fin ((N + 1) * D),
-          pdiv (fun b' : Vec D => patchEmbed_flat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
+          pdiv (fun b' : Vec D => patchEmbedFlat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
   simp only [denStep, denStepApp]
   exact vit_render_patchb_certified Wc bc cls pos img dy lr i
 
@@ -108,7 +108,7 @@ theorem posEmbedSgd_den {ic H W P N D : Nat} (pN lrStr cotN : String)
     den (SHlo.posEmbedSgd pN lrStr pos lr (.operand cotN dy)) i
       = Mat.flatten pos i - lr * ∑ j : Fin ((N + 1) * D),
           pdiv (fun p : Vec ((N + 1) * D) =>
-                  patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
+                  patchEmbedFlat ic H W P N D Wc bc cls (Mat.unflatten p) img)
             (Mat.flatten pos) i j * dy j := by
   simp only [denStepApp]
   exact vit_render_pos_certified Wc bc cls pos img dy lr i

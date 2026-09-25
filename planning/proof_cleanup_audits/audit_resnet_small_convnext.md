@@ -31,8 +31,8 @@ theorem r34InputGradB_eq_r34B_full_vjp ... := by
       r34HeadBBack_eq_vjp_backward Wd bd (opaqueA16 ...)]
   rfl
 ```
-The apex it closes against (`:145-218`) is a 17-deep `let p1 := vjp_comp_diff_at …; … p17.fst`.
-**Why it breaks:** the closing `rfl` has the kernel unfold 17 nested `vjp_comp_diff_at`/`vjp_comp_at`
+The apex it closes against (`:145-218`) is a 17-deep `let p1 := vjpCompDiffAt …; … p17.fst`.
+**Why it breaks:** the closing `rfl` has the kernel unfold 17 nested `vjpCompDiffAt`/`vjpCompAt`
 records and match `PProd.fst` projections through the `let` chain. The file's own docstring
 (`:18-20`) says this is "~60 s, an order more than the other four nets' ties", and CI measures
 the module at 102 s, the slowest hand-written module in scope. ConvNeXt hit the same wall and
@@ -40,20 +40,20 @@ fixed it. `ConvNeXtWholeBackCertifiedTieB.lean:398` adds a peel lemma, and `:442
 Its header (`:40-47`) records the measured result: ~18 min on 4.32.2 and a kernel timeout on
 4.34.0 became "checks in seconds".
 ```lean
-theorem vjp_comp_diff_at_fst_backward ... :
-    (vjp_comp_diff_at f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
+theorem vjpCompDiffAt_fst_backward ... :
+    (vjpCompDiffAt f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
 ...
   funext dy
   repeat rw [Function.comp_apply]
-  rw [convNextForwardTChB_has_vjp_at]
-  repeat rw [vjp_comp_diff_at_fst_backward]
+  rw [convNextForwardTChBHasVJPAt]
+  repeat rw [vjpCompDiffAt_fst_backward]
 ```
 ResNet-34 and ResNet-50 did not get that fix.
 **Suggested:**
-1. Restate `r34B_full_has_vjp_at` as one nested term with no `let`s (each `p_k` is used once, so
+1. Restate `r34BFullHasVJPAt` as one nested term with no `let`s (each `p_k` is used once, so
    the nested form stays linear in size).
-2. Close both ties with `funext dy; repeat rw [Function.comp_apply]; rw [r34B_full_has_vjp_at];
-   repeat rw [vjp_comp_diff_at_fst_backward]`. ⛔ Do not use `simp only`: the peel lemma is `rfl`,
+2. Close both ties with `funext dy; repeat rw [Function.comp_apply]; rw [r34BFullHasVJPAt];
+   repeat rw [vjpCompDiffAt_fst_backward]`. ⛔ Do not use `simp only`: the peel lemma is `rfl`,
    so simp would record nothing for the kernel to replay (the established 48 GB hazard). This is
    one of the places where `rw` is right and `simp` is wrong.
 3. Drop both `set_option`s and measure. Predicted: the module falls from 102 s to the ~10 s range
@@ -62,14 +62,14 @@ ResNet-34 and ResNet-50 did not get that fix.
 `r34InputGradB_correct` (`:324-421`) carries the same two bumps only because it rewrites with
 the tie and then re-elaborates the apex term. The bumps should go once the tie is fixed.
 
-### ResNet34BackCertifiedTieB.lean:145-218 — `r34B_full_has_vjp_at`, and the parallel prefix systems
+### ResNet34BackCertifiedTieB.lean:145-218 — `r34BFullHasVJPAt`, and the parallel prefix systems
 
 **Smell:** repetition
 **Current:** two separate constructions of one VJP:
-- `resnet34ForwardB_full_has_vjp_at` (ResNet34FullBVJP.lean:253-336) is built over `r34Pre0 … r34Pre16`
+- `resnet34ForwardBFullHasVJPAt` (ResNet34FullBVJP.lean:253-336) is built over `r34Pre0 … r34Pre16`
   (FullBVJP:187-238), 17 point-free `def`s, plus 17 `r34PreK_apply` lemmas (`:376-443`), each
   `rw [r34PreK, Function.comp_apply]`.
-- `r34B_full_has_vjp_at` is built over `Foundation/OpaquePrefix.lean`'s `opaqueA0 … opaqueA16`.
+- `r34BFullHasVJPAt` is built over `Foundation/OpaquePrefix.lean`'s `opaqueA0 … opaqueA16`.
 
 ResNet-50 duplicates the first system (`r50Pre0 … r50Pre16` + 17 `_apply` lemmas,
 ResNet50FullBVJP.lean:174-415). That makes 68 declarations whose only job is to be prefixes.
@@ -77,10 +77,10 @@ ResNet50FullBVJP.lean:174-415). That makes 68 declarations whose only job is to 
 blocks is "a kernel deterministic timeout at six minutes". The reason it gives is "the witnesses
 a caller has are at `r34Pre{k-1} N w x` — sixteen defeq checks between two sixteen-deep nested
 applications spelled through different definition chains". The mismatch exists because two
-prefix vocabularies exist. As long as it does, a `resnet34ForwardB_full_eq_slots` shape check is
+prefix vocabularies exist. As long as it does, a `resnet34ForwardBFull_eq_slots` shape check is
 needed, with its unrestricted `simp only [r34Pre16, …, r34Pre0]` (`:460`; ResNet-50 at WholeBackCertifiedTieB:289).
 **Suggested:** define `r34PreK N w := opaqueA_K (r34StemB N 56 56 w.sW …) (r34IdB N 56 56 w.a0) … (block_K)`.
-Build `resnet34ForwardB_full_has_vjp_at` as `r34B_full_has_vjp_at` at those slots (term mode).
+Build `resnet34ForwardBFullHasVJPAt` as `r34BFullHasVJPAt` at those slots (term mode).
 The kernel's per-level check then compares identical spellings. The 34 `_apply` lemmas become
 equation lemmas of `opaqueA_K` (one `rw [opaqueA_K]`), and `_eq_slots` collapses to `rfl` or a
 `rw` chain. Measure first: the prediction is that the 6-minute timeout goes away because its
@@ -216,54 +216,54 @@ mainstream option, but it is more invasive.
 `rw [r34PreK, Function.comp_apply]` one-liners. It hides which declaration (presumably the apex)
 actually needs it, and any future slow proof added to these files is silently absorbed.
 **Suggested:** delete the file-wide option. Put `set_option maxHeartbeats N in` on the one
-declaration that fails without it. That is probably `resnet34ForwardB_full_has_vjp_at`
+declaration that fails without it. That is probably `resnet34ForwardBFullHasVJPAt`
 (`:253-336`), and the next finding may remove the need altogether.
 
-### ResNet34FullBVJP.lean:253-336 — `resnet34ForwardB_full_has_vjp_at` (same shape: ResNet50FullBVJP.lean:241, CifarCNN.lean:77/441/803, ConvNeXtFullT.lean:101/214/294)
+### ResNet34FullBVJP.lean:253-336 — `resnet34ForwardBFullHasVJPAt` (same shape: ResNet50FullBVJP.lean:241, CifarCNN.lean:77/441/803, ConvNeXtFullT.lean:101/214/294)
 
 **Smell:** long-proof / non-mainstream idiom (data built in tactic mode)
 **Current:**
 ```lean
-noncomputable def resnet34ForwardB_full_has_vjp_at ... : HasVJPAt (...) x := by
+noncomputable def resnet34ForwardBFullHasVJPAt ... : HasVJPAt (...) x := by
   have dS : DifferentiableAt ℝ (r34Pre0 N w) x := ...
   have vS : HasVJPAt (r34Pre0 N w) x := ...
-  have e1 : HasVJPAt (r34Pre1 N w) x := vjp_comp_at _ _ x dS d1 vS (...)
+  have e1 : HasVJPAt (r34Pre1 N w) x := vjpCompAt _ _ x dS d1 vS (...)
   ... (84 lines, 16 × {d_k, e_k, f_k})
 ```
 **Why it breaks:** `HasVJPAt` is data (it has a `backward` field). A `have` of data elaborates to
 `letFun`, and `.backward` then does not reduce. ConvNeXtWholeBackCertifiedTie.lean:89-94
-documents the cost: "`convNextForwardTCh_has_vjp` is a tactic proof, so its eleven `have`s are
+documents the cost: "`convNextForwardTChHasVJP` is a tactic proof, so its eleven `have`s are
 `letFun` and its `.backward` does not reduce; the whole-net `rfl` against it returned no result
 at `maxHeartbeats 8000000`, twice, ~8 min each." That is why ConvNeXt carries a second,
-term-mode copy (`cnxV0 … cnxV11`, `cnxT1 … cnxT11`, `convNextForwardTCh_vjp_chain`,
-`:264-520`) and why ResNet carries `r34B_full_has_vjp_at`. Every net pays for a second apex.
+term-mode copy (`cnxV0 … cnxV11`, `cnxV1_backward … cnxV11_backward`, `convNextForwardTChVjpChain`,
+`:264-520`) and why ResNet carries `r34BFullHasVJPAt`. Every net pays for a second apex.
 **Suggested:** follow the mainstream convention: data in term mode, `have` only for `Prop`s.
-Write the apex as one nested `vjp_comp_at`/`vjp_comp_diff_at` term, or as the generic apex at
-the slots (see the `r34B_full_has_vjp_at` finding). Keep the differentiability facts as `Prop`
+Write the apex as one nested `vjpCompAt`/`vjpCompDiffAt` term, or as the generic apex at
+the slots (see the `r34BFullHasVJPAt` finding). Keep the differentiability facts as `Prop`
 side terms. The duplicate term-mode chains can then be deleted after measurement.
 
 ---
 
 ## LeanMlir/Proofs/Nets/ResNet/ResNet34FullBSeal.lean, ResNet50FullBSeal.lean
 
-### ResNet34FullBSeal.lean:647-686 — `sealDiffAt` (ResNet50FullBSeal.lean:719, 65 lines; MobileNetV2/V4 FullBSeal have a third and fourth copy)
+### ResNet34FullBSeal.lean:647-686 — `seal_differentiableAt` (ResNet50FullBSeal.lean:719, 65 lines; MobileNetV2/V4 FullBSeal have a third and fourth copy)
 
 **Smell:** repetition / long-proof
 **Current:**
 ```lean
-theorem sealDiffAt (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (resnet34ForwardB_full 2 (sealW nCls)) (sealX t) := by
-  rw [show resnet34ForwardB_full 2 (sealW nCls) = ... from funext (resnet34ForwardB_full_eq_chain 2 (sealW nCls))]
+theorem seal_differentiableAt (nCls : Nat) (t : ℝ) :
+    DifferentiableAt ℝ (resnet34ForwardBFull 2 (sealW nCls)) (sealX t) := by
+  rw [show resnet34ForwardBFull 2 (sealW nCls) = ... from funext (resnet34ForwardBFull_eq_chain 2 (sealW nCls))]
   have f0 : DifferentiableAt ℝ (r34Pre0 2 (sealW nCls)) (sealX t) := ...
-  have f1 := (r34IdB_differentiableAt 2 56 56 (sealW nCls).a0 (sealIdPos 64) _ (sc_a0 nCls t)).comp (sealX t) f0
+  have f1 := (r34IdB_differentiableAt 2 56 56 (sealW nCls).a0 (seal_id_pos 64) _ (sc_a0 nCls t)).comp (sealX t) f0
   ... f16
 ```
 **Why it breaks:** this is line for line the `f_k` half of the apex's own proof. The apex builds
 the same differentiability internally (FullBVJP:292-336) but does not export it, so all four
 seals rebuild it at the net's numerals.
-**Suggested:** export `resnet34ForwardB_full_differentiableAt` from ResNet34FullBVJP.lean with
+**Suggested:** export `resnet34ForwardBFull_differentiableAt` from ResNet34FullBVJP.lean with
 the apex's hypotheses, or have the apex return a `PProd (HasVJPAt …) (DifferentiableAt …)` as
-`vjp_comp_diff_at` already does. `sealDiffAt` becomes one application. Do the same in R50,
+`vjpCompDiffAt` already does. `seal_differentiableAt` becomes one application. Do the same in R50,
 MNv2 and MNv4.
 
 ### ResNet34FullBSeal.lean:382-622 and :934-973 — `nn0 … nn15`, `pc0 … pc16`, `sc_a0 … sc_e1`, `ed0 … ed16`, `cn0 … cn13`
@@ -275,7 +275,7 @@ example
 theorem nn9 (nCls : Nat) (t : ℝ) : ∀ k, 0 ≤ r34Pre9 2 (sealW nCls) (sealX t) k := by
   intro k; rw [r34Pre9_apply]; exact r34IdB_nonneg 2 14 14 256 _ _ k
 theorem pc9 ... := by rw [r34Pre9_apply]; exact sealIdB_eq 2 14 14 256 (by norm_num) _ (nn8 nCls t)
-theorem ed9 ... := by rw [pc9]; exact EDiff_shift _ _ 1 (ed8 nCls t)
+theorem ed9 ... := by rw [pc9]; exact eDiff_shift _ _ 1 (ed8 nCls t)
 theorem cn9 ... := (r34IdB_continuous 2 14 14 256 (sealW nCls).c0 one_pos one_pos).comp (cn8 nCls)
 ```
 The comm of the two files' name lists shows ~70 of these names shared with ResNet50FullBSeal.lean.
@@ -333,17 +333,17 @@ residual block with a constant body on a nonnegative input is a shift" into one 
   rfl
 ```
 **Why it breaks:** every copy hard-codes the internal index layout of `batchMapAux` and of
-`batchMap_has_vjp_at`'s `backward` field (`Foundation/BatchMapVJPAt.lean:83-90`). Changing
+`batchMapHasVJPAt`'s `backward` field (`Foundation/BatchMapVJPAt.lean:83-90`). Changing
 `finProdFinEquiv` to `Fin.divNat`/`modNat`, or `Mat.unflatten` to `batchSlice`, breaks nine
 proofs in two files.
 **Suggested:** state the row-lift once, in the leaf `Foundation/BatchMapVJPAt.lean` (3 direct
 importers):
 ```lean
-theorem batchMapAux_eq_batchMap_has_vjp_at_backward {N a b : Nat} (f : Vec a → Vec b)
+theorem batchMapAux_eq_batchMapHasVJPAt_backward {N a b : Nat} (f : Vec a → Vec b)
     (g : Vec a → Vec b → Vec a) (v : Vec (N * a))
     (hf : ∀ r, HasVJPAt f (Mat.unflatten v r)) (hd : ∀ r, DifferentiableAt ℝ f (Mat.unflatten v r))
     (hg : ∀ r, g (Mat.unflatten v r) = (hf r).backward) :
-    StableHLO.batchMapAux N g v = (batchMap_has_vjp_at f v hf hd).backward := by
+    StableHLO.batchMapAux N g v = (batchMapHasVJPAt f v hf hd).backward := by
   funext dy idx; exact congrFun (congrFun (hg _) _) _
 ```
 Add a `batchMap` twin for point-independent backwards (the stem and dense cases). Each leaf tie
@@ -365,11 +365,11 @@ fail (at most the `cnxT*`/`cnxSavedB*` iotas).
 
 ## LeanMlir/Proofs/Nets/ResNet/ResNet34.lean (+ Foundation/BackwardMaps.lean import)
 
-### ResNet34.lean:74 — `vjp_comp_diff_at`, and ConvNeXtWholeBackCertifiedTieB.lean:398 — `vjp_comp_diff_at_fst_backward`
+### ResNet34.lean:74 — `vjpCompDiffAt`, and ConvNeXtWholeBackCertifiedTieB.lean:398 — `vjpCompDiffAt_fst_backward`
 
 **Smell:** repetition / layering (hidden shared lemma in per-net files)
 **Current:** the generic two-stage composition (no ResNet content) is defined in a ResNet file,
-and its peel lemma is defined in a ConvNeXt file. `vjp_comp_diff_at` is used by 6 files
+and its peel lemma is defined in a ConvNeXt file. `vjpCompDiffAt` is used by 6 files
 (ViT, MobileNetV2, MobileNetV4, EfficientNet, ResNet ties); `_fst_backward` is used only by
 ConvNeXt. Related: `Foundation/BackwardMaps.lean:2` imports `Nets.ResNet.ResNet34`. A grep of
 every declaration name in ResNet34.lean and MnistCNN.lean shows BackwardMaps uses only
@@ -378,8 +378,8 @@ depends on a per-net file, and every BackwardMaps consumer (9 direct importers) 
 ResNet34.lean changes.
 **Why it breaks:** nets that need the peel (ResNet-34 and ResNet-50, first finding) cannot find
 it without importing ConvNeXt. Any edit to ResNet34.lean rebuilds the Foundation tier above it.
-**Suggested:** move `vjp_comp_diff_at` and `vjp_comp_diff_at_fst_backward` into
-`Foundation/OpaquePrefix.lean`. It imports only `Foundation/Tensor` (where `vjp_comp_at` is) and
+**Suggested:** move `vjpCompDiffAt` and `vjpCompDiffAt_fst_backward` into
+`Foundation/OpaquePrefix.lean`. It imports only `Foundation/Tensor` (where `vjpCompAt` is) and
 has 4 direct importers, so it is a leaf. Change BackwardMaps' import to
 `Foundation.StridedConv` (plus whatever `lake build Certs` proves missing). This is not a root
 file, so it is not a 300-module rebuild. The same smell appears in `ResNet34BackCertifiedTie.lean:1`
@@ -412,7 +412,7 @@ or a record-valued forward, e.g. `cifar8Acts … : Cifar8Acts` with fields `cc1 
 `CnnChainClose.lean`, where both Props are defined). Each conv then costs one conjunct term.
 Drop the bumps.
 
-### CifarCNN.lean:441-690 — `cifarCnn8_has_vjp_at` (and `cifarCnnBn8_has_vjp_at` :803-1026, `cifarCnn_has_vjp_at` :77-198)
+### CifarCNN.lean:441-690 — `cifarCnn8HasVJPAt` (and `cifarCnnBn8HasVJPAt` :803-1026, `cifarCnnHasVJPAt` :77-198)
 
 **Smell:** long-proof + repetition
 **Current:** the hypotheses restate the whole forward prefix inline, so each is quadratic in
@@ -421,15 +421,15 @@ repeats this pool step 4× per net (20 sites in the file, plus 2 in MnistCNN):
 ```lean
   have hpt1 : Tensor3.flatten (Tensor3.unflatten z1 : Tensor3 c1 ...) = z1 := Tensor3.flatten_unflatten z1
   have mp1_v : HasVJPAt (maxPoolFlat c1 ...) z1 := by
-    rw [← hpt1]; exact maxPoolFlat_has_vjp_at _ hp1
+    rw [← hpt1]; exact maxPoolFlatHasVJPAt _ hp1
   have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 ...) z1 := by
     rw [← hpt1]; exact maxPoolFlat_differentiableAt _ hp1 hc1 (by omega) (by omega)
 ```
-**Why it breaks:** a raw-point pool VJP `maxPoolFlat_has_vjp_at'` already exists
+**Why it breaks:** a raw-point pool VJP `maxPoolFlatHasVJPAt'` already exists
 (Codegen/StableHLO.lean:4152), but CifarCNN does not import it and re-derives it with
 `rw [← hpt]` 20 times. The inlined hypotheses break on any change to the forward's spelling.
 **Suggested:** add `maxPoolFlat_differentiableAt'` (raw point `v`, `MaxPool2Smooth (Tensor3.unflatten v)`)
-and move `maxPoolFlat_has_vjp_at'` out of the root file into `Nets/Small/MnistCNN.lean`, which
+and move `maxPoolFlatHasVJPAt'` out of the root file into `Nets/Small/MnistCNN.lean`, which
 CifarCNN already imports (5 direct importers). Name the prefixes (`cifar8PreK`), as
 ResNet34FullBVJP does, so each `hf_k` is `∀ k, flatConv … (cifar8Pre_{k-1} … x) k ≠ 0`. Write the
 three apexes in term mode (see the tactic-mode data finding).
@@ -463,7 +463,7 @@ explicit `rw` argument (CifarFold.lean:177-184), which breaks on any forward ref
 **Smell:** fragile-simpa (definitional `simp only`)
 **Current:**
 ```lean
-  simp only [cbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [cbReluBHasVJPAt, bnReluStageHasVJPAt, stageHasVJPAt, vjpCompAt,
     HasVJP.toHasVJPAt, Function.comp_apply]
 ```
 **Why it breaks:** every lemma in the set is a definition unfolding, so this is a pure `dsimp`
@@ -471,11 +471,11 @@ and the kernel re-derives the equality by unfolding. At these variable-shape lea
 today. It is the same construct the project measured at 48 GB in a whole-net tie, and it breaks
 if any of the four VJP builders is refactored from a structure literal to a transported term
 (the `▸` issue noted at BatchMapVJPAt.lean:80-82).
-**Suggested:** add a `vjp_comp_at_backward : (vjp_comp_at f g x … hf hg).backward dy = hf.backward (hg.backward dy) := rfl`
-peel lemma, the `HasVJPAt` twin of `vjp_comp_diff_at_fst_backward`, in the file that defines
-`vjp_comp_at`. Note that Foundation/Tensor.lean is a root (~420-module rebuild), so park the
+**Suggested:** add a `vjpCompAt_backward : (vjpCompAt f g x … hf hg).backward dy = hf.backward (hg.backward dy) := rfl`
+peel lemma, the `HasVJPAt` twin of `vjpCompDiffAt_fst_backward`, in the file that defines
+`vjpCompAt`. Note that Foundation/Tensor.lean is a root (~420-module rebuild), so park the
 lemma in `Foundation/OpaquePrefix.lean` with the other peel. Then close with
-`rw [cbReluB_has_vjp_at, vjp_comp_at_backward, …]` or plain `rfl`.
+`rw [cbReluBHasVJPAt, vjpCompAt_backward, …]` or plain `rfl`.
 
 ---
 
@@ -506,13 +506,13 @@ as `R34IdPos` already does per block. The corollaries then drop to 3-5 lines eac
    name the activations and cotangents as `def`s or records instead of `let`s; take weights as a
    structure (`CnxTWeightsCh`, which exists); use `Fin k`-indexed stage recursion
    (`cnxStageChKBack_eq_vjp` already proves the ConvNeXt stage by induction on `k`). For VJP
-   chains, peel with `rw [vjp_comp_diff_at_fst_backward]` rather than `rfl` (ConvNeXt measured
+   chains, peel with `rw [vjpCompDiffAt_fst_backward]` rather than `rfl` (ConvNeXt measured
    18 min → seconds; ResNet has not been ported).
 2. **Two copies of each whole-net apex, because the first was built in tactic mode.** `HasVJP`/`HasVJPAt`
    data is assembled with `have` chains (letFun) at 8 sites: R34/R50 FullBVJP, CifarCNN ×3,
    ConvNeXtFullT ×3. Every whole-back tie then carries a second, term-mode apex
-   (`r34B_full_has_vjp_at` + `opaqueA*` alongside `r34Pre*` + `r34Pre*_apply`; `cnxV0…11` + `cnxT1…11`),
-   and every seal re-derives the hidden differentiability (`sealDiffAt` ×4 nets). That is ≈150
+   (`r34BFullHasVJPAt` + `opaqueA*` alongside `r34Pre*` + `r34Pre*_apply`; `cnxV0…11` + `cnxV1_backward…11`),
+   and every seal re-derives the hidden differentiability (`seal_differentiableAt` ×4 nets). That is ≈150
    declarations across ResNet/ConvNeXt/MNv2/MNv4. The fix: data in term mode; one prefix
    vocabulary (define `r34PreK` as `opaqueA_K` at the slots); export
    `*_differentiableAt` next to each apex.

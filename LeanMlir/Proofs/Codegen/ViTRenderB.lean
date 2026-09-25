@@ -822,7 +822,7 @@ def vitDropFwdBanner : String :=
 -- ⭐ **Nothing above this line changed to add these two artifacts except the `V` parameter.** S is
 -- Tiny widened: `D = 384 = 6 × 64` instead of `192 = 3 × 64`, MLP 1536 instead of 768. Same depth
 -- (12), same patch grid (196 + CLS), same block chain, same backward. That is why the proof side
--- needs nothing: `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k` and it is a GLOBAL
+-- needs nothing: `vitForwardKVHasVJP` is already `∀ heads d_head mlpDim k` and it is a GLOBAL
 -- `HasVJP`, since GELU/softmax/LayerNorm carry no kink.
 --
 -- ⚠ Only the DP train step and the forward are rendered, and that is the complete set for this

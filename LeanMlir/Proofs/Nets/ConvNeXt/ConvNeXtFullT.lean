@@ -21,7 +21,7 @@ Per the handoff recipe (`planning/archive/convnext_close.md` §"Scaling handoff"
    pad-0 `Conv2d(4, s=4)`) + the `flatConvStride4F` token.
 
 GELU/LN/conv are smooth, so the whole-net VJP is GLOBAL (unconditional except the 22 LN
-positivities) — ConvNeXt-T joins `efficientnetForwardB_full_has_vjp` and `vitForwardKV`.
+positivities) — ConvNeXt-T joins `efficientnetForwardBFullHasVJP` and `vitForwardKV`.
 The `ConvNeXtFold`/`ConvNeXtChainClose` param bridges are dim-generic and cover all 18 blocks
 verbatim; the downsample conv W/b reuse the proven stride-2 bridges.
 
@@ -65,7 +65,7 @@ decomposition test and not an architecture check. -/
 
 /-- The ConvNeXt block body with the LN left as a parameter. Written once and instantiated at
     `chanLNTensor3`, so the channel-LN world costs one definition rather than a second copy of
-    `convNextBlockBody`'s six-piece `vjp_comp` chain. -/
+    `convNextBlockBody`'s six-piece `vjpComp` chain. -/
 noncomputable def cnxBodyWith {c cExp h w kH kW : Nat}
     (LN : Vec (c * h * w) → Vec (c * h * w))
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
@@ -80,7 +80,7 @@ noncomputable def cnxBodyWith {c cExp h w kH kW : Nat}
   LN ∘
   (depthwiseFlat (h := h) (w := w) Wdw bdw)
 
-theorem cnxBodyWith_diff {c cExp h w kH kW : Nat}
+theorem cnxBodyWith_differentiable {c cExp h w kH kW : Nat}
     {LN : Vec (c * h * w) → Vec (c * h * w)} (hLN : Differentiable ℝ LN)
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
@@ -90,8 +90,8 @@ theorem cnxBodyWith_diff {c cExp h w kH kW : Nat}
   unfold cnxBodyWith layerScale gelu; fun_prop
 
 /-- The body VJP, given the LN's. Only the LN carries a hypothesis — gelu is smooth and
-    conv/layerScale are linear, so this is global exactly as `convNextBlockBody_has_vjp` is. -/
-noncomputable def cnxBodyWith_has_vjp {c cExp h w kH kW : Nat}
+    conv/layerScale are linear, so this is global exactly as `convNextBlockBodyHasVJP` is. -/
+noncomputable def cnxBodyWithHasVJP {c cExp h w kH kW : Nat}
     {LN : Vec (c * h * w) → Vec (c * h * w)}
     (hLN : Differentiable ℝ LN) (vLN : HasVJP LN)
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
@@ -102,19 +102,19 @@ noncomputable def cnxBodyWith_has_vjp {c cExp h w kH kW : Nat}
   unfold cnxBodyWith
   have hdw := depthwiseFlat_differentiable (h := h) (w := w) Wdw bdw
   have hex := flatConv_differentiable (h := h) (w := w) Wex bex
-  have hge := gelu_diff (cExp * h * w)
+  have hge := gelu_differentiable (cExp * h * w)
   have hpr := flatConv_differentiable (h := h) (w := w) Wpr bpr
   have hls := layerScale_differentiable γls
-  have e1 := vjp_comp _ _ hdw hLN
-    (depthwiseFlat_has_vjp (h := h) (w := w) Wdw bdw) vLN
+  have e1 := vjpComp _ _ hdw hLN
+    (depthwiseFlatHasVJP (h := h) (w := w) Wdw bdw) vLN
   have f1 := hLN.comp hdw
-  have e2 := vjp_comp _ _ f1 hex e1 (hasVJP3_to_hasVJP (conv2d_has_vjp3 Wex bex))
+  have e2 := vjpComp _ _ f1 hex e1 (HasVJP3.toHasVJP (conv2dHasVJP3 Wex bex))
   have f2 := hex.comp f1
-  have e3 := vjp_comp _ _ f2 hge e2 (gelu_has_vjp (cExp * h * w))
+  have e3 := vjpComp _ _ f2 hge e2 (geluHasVJP (cExp * h * w))
   have f3 := hge.comp f2
-  have e4 := vjp_comp _ _ f3 hpr e3 (hasVJP3_to_hasVJP (conv2d_has_vjp3 Wpr bpr))
+  have e4 := vjpComp _ _ f3 hpr e3 (HasVJP3.toHasVJP (conv2dHasVJP3 Wpr bpr))
   have f4 := hpr.comp f3
-  exact vjp_comp _ _ f4 hls e4 (layerScale_has_vjp γls)
+  exact vjpComp _ _ f4 hls e4 (layerScaleHasVJP γls)
 
 -- ── per-block params + the stage fold, at the channel LN ──
 
@@ -144,21 +144,21 @@ noncomputable def cnxBlockChW {c cExp h w kH kW : Nat}
   residual (cnxBodyWith (chanLNTensor3 c h w p.εn p.γn p.βn)
     p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
 
-theorem cnxBlockChW_diff {c cExp h w kH kW : Nat}
+theorem cnxBlockChW_differentiable {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
     Differentiable ℝ (cnxBlockChW p) := by
   unfold cnxBlockChW residual
-  exact (cnxBodyWith_diff (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
+  exact (cnxBodyWith_differentiable (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
     p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p)).add differentiable_id
 
-noncomputable def cnxBlockChW_has_vjp {c cExp h w kH kW : Nat}
+noncomputable def cnxBlockChWHasVJP {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
     HasVJP (cnxBlockChW p) :=
-  residual_has_vjp _
-    (cnxBodyWith_diff (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
+  residualHasVJP _
+    (cnxBodyWith_differentiable (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
-    (cnxBodyWith_has_vjp (chanLNTensor3_diff c h w p.εn p.γn p.βn hε)
-      (chanLNTensor3_has_vjp c h w p.εn p.γn p.βn hε)
+    (cnxBodyWithHasVJP (chanLNTensor3_differentiable c h w p.εn p.γn p.βn hε)
+      (chanLNTensor3HasVJP c h w p.εn p.γn p.βn hε)
       p.Wdw p.bdw p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p))
 
 /-- **Depth-`k` channel-LN stage fold** (head recursion — block `0` runs first). -/
@@ -168,24 +168,24 @@ noncomputable def convNextStageChK {c cExp h w kH kW : Nat} :
   | 0, _ => fun v => v
   | k + 1, ps => convNextStageChK k (fun i => ps i.succ) ∘ cnxBlockChW (ps 0)
 
-theorem convNextStageChK_diff {c cExp h w kH kW : Nat} :
+theorem convNextStageChK_differentiable {c cExp h w kH kW : Nat} :
     ∀ (k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW),
       (∀ i, 0 < (ps i).εn) → Differentiable ℝ (convNextStageChK k ps)
   | 0, _, _ => differentiable_id
   | k + 1, ps, hε =>
-      (convNextStageChK_diff k (fun i => ps i.succ) (fun i => hε i.succ)).comp
-        (cnxBlockChW_diff (ps 0) (hε 0))
+      (convNextStageChK_differentiable k (fun i => ps i.succ) (fun i => hε i.succ)).comp
+        (cnxBlockChW_differentiable (ps 0) (hε 0))
 
-noncomputable def convNextStageChK_has_vjp {c cExp h w kH kW : Nat} :
+noncomputable def convNextStageChKHasVJP {c cExp h w kH kW : Nat} :
     (k : Nat) → (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW) →
     (∀ i, 0 < (ps i).εn) → HasVJP (convNextStageChK k ps)
-  | 0, _, _ => identity_has_vjp _
+  | 0, _, _ => identityHasVJP _
   | k + 1, ps, hε =>
-      vjp_comp (cnxBlockChW (ps 0)) (convNextStageChK k (fun i => ps i.succ))
-        (cnxBlockChW_diff (ps 0) (hε 0))
-        (convNextStageChK_diff k (fun i => ps i.succ) (fun i => hε i.succ))
-        (cnxBlockChW_has_vjp (ps 0) (hε 0))
-        (convNextStageChK_has_vjp k (fun i => ps i.succ) (fun i => hε i.succ))
+      vjpComp (cnxBlockChW (ps 0)) (convNextStageChK k (fun i => ps i.succ))
+        (cnxBlockChW_differentiable (ps 0) (hε 0))
+        (convNextStageChK_differentiable k (fun i => ps i.succ) (fun i => hε i.succ))
+        (cnxBlockChWHasVJP (ps 0) (hε 0))
+        (convNextStageChKHasVJP k (fun i => ps i.succ) (fun i => hε i.succ))
 
 -- ── the stage-boundary downsample, at the channel LN ──
 
@@ -204,20 +204,20 @@ noncomputable def cnxDownChW (h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh c
   flatConvStride2 (h := h) (w := w) p.W p.b ∘
     chanLNTensor3 cin (2 * h) (2 * w) p.ε p.γ p.β
 
-theorem cnxDownChW_diff (h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
+theorem cnxDownChW_differentiable (h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
     (hε : 0 < p.ε) : Differentiable ℝ (cnxDownChW h w p) := by
   unfold cnxDownChW
   exact (flatConvStride2_differentiable p.W p.b).comp
-    (chanLNTensor3_diff cin (2 * h) (2 * w) p.ε p.γ p.β hε)
+    (chanLNTensor3_differentiable cin (2 * h) (2 * w) p.ε p.γ p.β hε)
 
-noncomputable def cnxDownChW_has_vjp (h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
+noncomputable def cnxDownChWHasVJP (h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
     (hε : 0 < p.ε) : HasVJP (cnxDownChW h w p) := by
   unfold cnxDownChW
-  exact vjp_comp _ _
-    (chanLNTensor3_diff cin (2 * h) (2 * w) p.ε p.γ p.β hε)
+  exact vjpComp _ _
+    (chanLNTensor3_differentiable cin (2 * h) (2 * w) p.ε p.γ p.β hε)
     (flatConvStride2_differentiable p.W p.b)
-    (chanLNTensor3_has_vjp cin (2 * h) (2 * w) p.ε p.γ p.β hε)
-    (flatConvStride2_has_vjp p.W p.b)
+    (chanLNTensor3HasVJP cin (2 * h) (2 * w) p.ε p.γ p.β hε)
+    (flatConvStride2HasVJP p.W p.b)
 
 -- ── the whole channel-LN ConvNeXt-T ──
 
@@ -255,7 +255,7 @@ structure CnxTWeightsCh (nC : Nat) where
       ⚠ Plain `layerNormVec`, NOT `chanLNTensor3`: after GAP the tensor is `[768]`, one row, so
       the channel LN and the vector LN are the same function and this is the cheaper spelling —
       it is also `rowLNVecFlat 1 768`, i.e. ViT's per-token LN at ONE row, whose `_diff` and
-      `_has_vjp` are already proven and whose graph mirror is `rowLN_affine_eq` — so the head LN
+      `HasVJP` are already proven and whose graph mirror is `rowLN_affine_eq` — so the head LN
       needed no new mathematics at all, only a link in the chain. -/
   hε : ℝ
   hγ : Vec 768
@@ -291,7 +291,7 @@ noncomputable def convNextForwardTCh {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec 
     the third place that stale number had been copied to, each copy citing the last as its
     justification. ⛔ `docstring-checkrefs` cannot catch this: it
     resolves cited identifiers, and a stale COUNT cites nothing. -/
-noncomputable def convNextForwardTCh_has_vjp {nC : Nat} (w : CnxTWeightsCh nC)
+noncomputable def convNextForwardTChHasVJP {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
@@ -311,46 +311,46 @@ noncomputable def convNextForwardTCh_has_vjp {nC : Nat} (w : CnxTWeightsCh nC)
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) := by
   have st_diff := flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb
-  have st_vjp := flatConvStride4_has_vjp (h := 56) (w := 56) w.sW w.sb
-  have lns_diff := chanLNTensor3_diff 96 56 56 w.sε w.sγ w.sβ hsε
-  have lns_vjp := chanLNTensor3_has_vjp 96 56 56 w.sε w.sγ w.sβ hsε
-  have e1 := vjp_comp _ _ st_diff lns_diff st_vjp lns_vjp
+  have st_vjp := flatConvStride4HasVJP (h := 56) (w := 56) w.sW w.sb
+  have lns_diff := chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε
+  have lns_vjp := chanLNTensor3HasVJP 96 56 56 w.sε w.sγ w.sβ hsε
+  have e1 := vjpComp _ _ st_diff lns_diff st_vjp lns_vjp
   have f1 := lns_diff.comp st_diff
-  have s1d := convNextStageChK_diff 3 w.s1 h1
-  have e2 := vjp_comp _ _ f1 s1d e1 (convNextStageChK_has_vjp 3 w.s1 h1)
+  have s1d := convNextStageChK_differentiable 3 w.s1 h1
+  have e2 := vjpComp _ _ f1 s1d e1 (convNextStageChKHasVJP 3 w.s1 h1)
   have f2 := s1d.comp f1
-  have d1d := cnxDownChW_diff 28 28 w.d1 hd1
-  have e3 := vjp_comp _ _ f2 d1d e2 (cnxDownChW_has_vjp 28 28 w.d1 hd1)
+  have d1d := cnxDownChW_differentiable 28 28 w.d1 hd1
+  have e3 := vjpComp _ _ f2 d1d e2 (cnxDownChWHasVJP 28 28 w.d1 hd1)
   have f3 := d1d.comp f2
-  have s2d := convNextStageChK_diff 3 w.s2 h2
-  have e4 := vjp_comp _ _ f3 s2d e3 (convNextStageChK_has_vjp 3 w.s2 h2)
+  have s2d := convNextStageChK_differentiable 3 w.s2 h2
+  have e4 := vjpComp _ _ f3 s2d e3 (convNextStageChKHasVJP 3 w.s2 h2)
   have f4 := s2d.comp f3
-  have d2d := cnxDownChW_diff 14 14 w.d2 hd2
-  have e5 := vjp_comp _ _ f4 d2d e4 (cnxDownChW_has_vjp 14 14 w.d2 hd2)
+  have d2d := cnxDownChW_differentiable 14 14 w.d2 hd2
+  have e5 := vjpComp _ _ f4 d2d e4 (cnxDownChWHasVJP 14 14 w.d2 hd2)
   have f5 := d2d.comp f4
-  have s3d := convNextStageChK_diff 9 w.s3 h3
-  have e6 := vjp_comp _ _ f5 s3d e5 (convNextStageChK_has_vjp 9 w.s3 h3)
+  have s3d := convNextStageChK_differentiable 9 w.s3 h3
+  have e6 := vjpComp _ _ f5 s3d e5 (convNextStageChKHasVJP 9 w.s3 h3)
   have f6 := s3d.comp f5
-  have d3d := cnxDownChW_diff 7 7 w.d3 hd3
-  have e7 := vjp_comp _ _ f6 d3d e6 (cnxDownChW_has_vjp 7 7 w.d3 hd3)
+  have d3d := cnxDownChW_differentiable 7 7 w.d3 hd3
+  have e7 := vjpComp _ _ f6 d3d e6 (cnxDownChWHasVJP 7 7 w.d3 hd3)
   have f7 := d3d.comp f6
-  have s4d := convNextStageChK_diff 3 w.s4 h4
-  have e8 := vjp_comp _ _ f7 s4d e7 (convNextStageChK_has_vjp 3 w.s4 h4)
+  have s4d := convNextStageChK_differentiable 3 w.s4 h4
+  have e8 := vjpComp _ _ f7 s4d e7 (convNextStageChKHasVJP 3 w.s4 h4)
   have f8 := s4d.comp f7
   have gap_diff := globalAvgPoolFlat_differentiable 768 7 7
-  have e9 := vjp_comp _ _ f8 gap_diff e8 (globalAvgPoolFlat_has_vjp 768 7 7)
+  have e9 := vjpComp _ _ f8 gap_diff e8 (globalAvgPoolFlatHasVJP 768 7 7)
   have f9 := gap_diff.comp f8
   -- ▶ the HEAD LN, restored 2026-08-30 (the paper's `norm(x.mean([-2,-1]))`). One more
-  -- `vjp_comp` link and one more positivity — `layerNormVec` is ViT's final-LN primitive and
-  -- carries its own `_diff`/`_has_vjp`, so nothing new had to be proven here.
-  have hln_diff := rowLNVecFlat_diff 1 768 w.hε w.hγ w.hβ hhε
-  have e10 := vjp_comp _ _ f9 hln_diff e9 (rowLNVecFlat_has_vjp 1 768 w.hε w.hγ w.hβ hhε)
+  -- `vjpComp` link and one more positivity — `layerNormVec` is ViT's final-LN primitive and
+  -- carries its own `_diff`/`HasVJP`, so nothing new had to be proven here.
+  have hln_diff := rowLNVecFlat_differentiable 1 768 w.hε w.hγ w.hβ hhε
+  have e10 := vjpComp _ _ f9 hln_diff e9 (rowLNVecFlatHasVJP 1 768 w.hε w.hγ w.hβ hhε)
   have f10 := hln_diff.comp f9
-  exact vjp_comp _ _ f10 (dense_differentiable w.Wd w.bd) e10 (dense_has_vjp w.Wd w.bd)
+  exact vjpComp _ _ f10 (dense_differentiable w.Wd w.bd) e10 (denseHasVJP w.Wd w.bd)
 
 /-- **The chain is differentiable everywhere** (the 23 LayerNorm positivities only) — the
-    `Differentiable` peer of `convNextForwardTCh_has_vjp`, on the same twelve-factor chain, which
-    `batchMap_has_vjp` asks for beside the `HasVJP` when the net is lifted over a batch
+    `Differentiable` peer of `convNextForwardTChHasVJP`, on the same twelve-factor chain, which
+    `batchMapHasVJP` asks for beside the `HasVJP` when the net is lifted over a batch
     (`ConvNeXtWholeBackCertifiedTieB.lean`). -/
 theorem convNextForwardTCh_differentiable {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
@@ -372,16 +372,16 @@ theorem convNextForwardTCh_differentiable {nC : Nat} (w : CnxTWeightsCh nC)
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) :=
   (dense_differentiable w.Wd w.bd).comp
-    ((rowLNVecFlat_diff 1 768 w.hε w.hγ w.hβ hhε).comp
+    ((rowLNVecFlat_differentiable 1 768 w.hε w.hγ w.hβ hhε).comp
       ((globalAvgPoolFlat_differentiable 768 7 7).comp
-        ((convNextStageChK_diff 3 w.s4 h4).comp
-          ((cnxDownChW_diff 7 7 w.d3 hd3).comp
-            ((convNextStageChK_diff 9 w.s3 h3).comp
-              ((cnxDownChW_diff 14 14 w.d2 hd2).comp
-                ((convNextStageChK_diff 3 w.s2 h2).comp
-                  ((cnxDownChW_diff 28 28 w.d1 hd1).comp
-                    ((convNextStageChK_diff 3 w.s1 h1).comp
-                      ((chanLNTensor3_diff 96 56 56 w.sε w.sγ w.sβ hsε).comp
+        ((convNextStageChK_differentiable 3 w.s4 h4).comp
+          ((cnxDownChW_differentiable 7 7 w.d3 hd3).comp
+            ((convNextStageChK_differentiable 9 w.s3 h3).comp
+              ((cnxDownChW_differentiable 14 14 w.d2 hd2).comp
+                ((convNextStageChK_differentiable 3 w.s2 h2).comp
+                  ((cnxDownChW_differentiable 28 28 w.d1 hd1).comp
+                    ((convNextStageChK_differentiable 3 w.s1 h1).comp
+                      ((chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε).comp
                         (flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb)))))))))))
 
 /-- The nested↔chain bridge (see `convNextForwardTCh_eq_chain` for why the proof shape matters —
@@ -406,16 +406,16 @@ theorem convNextForwardTCh_eq_chain {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (
       Function.comp_apply, Function.comp_apply, Function.comp_apply]
 
 /-- Correctness on `convNextForwardTCh` itself (via the bridge). -/
-theorem convNextForwardTCh_has_vjp_correct {nC : Nat} (w : CnxTWeightsCh nC)
+theorem convNextForwardTChHasVJP_correct {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
     (h3 : ∀ i, 0 < (w.s3 i).εn) (hd3 : 0 < w.d3.ε)
     (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε)
     (x : Vec (3 * 224 * 224)) (dy : Vec nC) (i : Fin (3 * 224 * 224)) :
-    (convNextForwardTCh_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy i =
+    (convNextForwardTChHasVJP w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy i =
       ∑ j : Fin nC, pdiv (convNextForwardTCh w) x i j * dy j := by
-  have h := (convNextForwardTCh_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
+  have h := (convNextForwardTChHasVJP w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).correct x dy i
   rwa [show convNextForwardTCh w =
         (dense w.Wd w.bd ∘
           rowLNVecFlat 1 768 w.hε w.hγ w.hβ ∘

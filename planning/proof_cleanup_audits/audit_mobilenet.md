@@ -10,7 +10,7 @@ copy-paste skeletons listed under **Recurring patterns**.
 
 Two things the files already get right and that the fixes below reuse: `MobileNetV4FullBVJP`'s
 `Mnv4SmoothAt` structure plus `CertLayer` groups (the V2 apex is the long-hand version of this),
-and `ConvNeXtWholeBackCertifiedTieB.lean:398` `vjp_comp_diff_at_fst_backward` (the rw-peel that
+and `ConvNeXtWholeBackCertifiedTieB.lean:398` `vjpCompDiffAt_fst_backward` (the rw-peel that
 avoids a whole-chain closing `rfl`).
 
 ---
@@ -33,11 +33,11 @@ theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
       dense_transpose_eq_vjp_backward Wfc bfc (fun _ => 0)]
   rfl
 ```
-**Why it breaks:** the closing `rfl` has to unfold all twenty `vjp_comp_diff_at` levels of
-`mobilenetv2PaperPC_has_vjp_at` (a `let`-chain of `PProd`s, lines 129–149) and match them against
+**Why it breaks:** the closing `rfl` has to unfold all twenty `vjpCompDiffAt` levels of
+`mobilenetv2PaperPCHasVJPAt` (a `let`-chain of `PProd`s, lines 129–149) and match them against
 `mnv2InputGradB`'s `∘`-chain. That is the kernel re-deriving the whole composition by unfolding —
 the known 48 GB hazard in its `rfl` form — and it happens at literal widths (`32`, `112`, `1280`,
-`7`), which is why `maxRecDepth` had to go to 800k. Any change to how `vjp_comp_diff_at` is
+`7`), which is why `maxRecDepth` had to go to 800k. Any change to how `vjpCompDiffAt` is
 spelled (or to `mnv2InputGradB`'s association) silently moves the cost.
 **Suggested:** peel with a lemma proved *between variables*, then `rw` — the ConvNeXt method.
 Add, next to `opaqueA*` in `Foundation/OpaquePrefix.lean` (4 direct importers — a leaf), or move
@@ -45,7 +45,7 @@ the apex there with it:
 ```lean
 theorem mobilenetv2PaperPC_backward {s0 … s21 : Nat} (stem : Vec s0 → Vec s1) … (dns : Vec s20 → Vec s21)
     (x : Vec s0) (hstem …) (hb1 …) … (hdns …) :
-    (mobilenetv2PaperPC_has_vjp_at stem b1 … dns x hstem hb1 … hdns).backward
+    (mobilenetv2PaperPCHasVJPAt stem b1 … dns x hstem hb1 … hdns).backward
       = hstem.fst.backward ∘ hb1.fst.backward ∘ … ∘ hdns.fst.backward := rfl
 ```
 (`rfl` is free here: every term is a variable.) The tie becomes
@@ -66,7 +66,7 @@ set_option maxHeartbeats 1000000 in
 theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat} ... -- all 40 binders of the tie, retyped
   rw [congrFun (mnv2InputGradB_eq_mobilenetv2B_full_vjp N Ws bs εs hεs γs βs Wh bh εh hεh γh βh
     Wfc bfc b1 b2 … b17 x h_stem hb1 … hb17 h_head) dy]
-  exact (mobilenetv2PaperPC_has_vjp_at (mnv2StemB N 112 112 Ws bs εs γs βs) b1 … x
+  exact (mobilenetv2PaperPCHasVJPAt (mnv2StemB N 112 112 Ws bs εs γs βs) b1 … x
           ⟨…⟩ hb1 … ⟨…⟩ ⟨…⟩ ⟨…⟩).correct dy i
 ```
 **Why it breaks:** the statement re-spells the 21-slot apex term from the tie (lines 425–436 are a
@@ -84,34 +84,34 @@ Then each `_correct` is `(apex …).correct_of_eq (tie …) dy i`, or better, is
 use `.correct_of_eq` directly. (Not in `Foundation/Tensor.lean` even though `HasVJPAt` lives
 there: 423 downstream modules.)
 
-### MobileNetV2WholeBackCertifiedTieB.lean:65 — `mobilenetv2PaperPC_has_vjp_at`
+### MobileNetV2WholeBackCertifiedTieB.lean:65 — `mobilenetv2PaperPCHasVJPAt`
 
 **Smell:** repetition (97 lines; third copy of one construction)
 **Current:**
 ```lean
-  let p1 := vjp_comp_diff_at stem b1 x hstem hb1
-  let p2 := vjp_comp_diff_at (b1 ∘ stem) b2 x p1 hb2
+  let p1 := vjpCompDiffAt stem b1 x hstem hb1
+  let p2 := vjpCompDiffAt (b1 ∘ stem) b2 x p1 hb2
   …
-  let p20 := vjp_comp_diff_at (gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem) dns x p19 hdns
+  let p20 := vjpCompDiffAt (gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem) dns x p19 hdns
   p20.fst
 ```
 **Why it breaks:** the same N-stage apex exists at 18 stages (`ResNet34BackCertifiedTieB.lean:145`
-`r34B_full_has_vjp_at`), 21 (here) and 26 (`MobileNetV4WholeBackCertifiedTieB.lean:131`
-`mnv4B_full_has_vjp_at`, whose own docstring says "MobileNetV4 needs its own because Conv-M's
+`r34BFullHasVJPAt`), 21 (here) and 26 (`MobileNetV4WholeBackCertifiedTieB.lean:131`
+`mnv4BFullHasVJPAt`, whose own docstring says "MobileNetV4 needs its own because Conv-M's
 ladder is longer, not because anything differs"). Every prefix is spelled out explicitly — the
-`vjp_comp_diff_at _ g x` trap is avoided, good — but the three copies must be kept in lockstep
+`vjpCompDiffAt _ g x` trap is avoided, good — but the three copies must be kept in lockstep
 with `OpaquePrefix`'s `opaqueA*` by hand.
 **Suggested:** move all three apexes into `Foundation/OpaquePrefix.lean` beside the `opaqueA*` they
 are stated over (that file's header already records collapsing four private copies of the
 prefixes into one), each with its `_backward` rfl-peel lemma from the first finding. If a fourth
 net appears, generate them from the same script as `opaqueA*`.
 
-### MobileNetV2WholeBackCertifiedTieB.lean:460 — `mobilenetv2ForwardB_full_eq_slots`
+### MobileNetV2WholeBackCertifiedTieB.lean:460 — `mobilenetv2ForwardBFull_eq_slots`
 
 **Smell:** fragile-simpa (dsimp-only `simp only` over 19 defs) + repetition
 **Current:**
 ```lean
-  rw [mobilenetv2ForwardB_full_eq_chain N w x]
+  rw [mobilenetv2ForwardBFull_eq_chain N w x]
   simp only [mnv2HeadB, mnv2PreB17, mnv2PreB16, …, mnv2PreB1, mnv2PreB0]
   rw [comp3_assoc]
 ```
@@ -124,7 +124,7 @@ into exactly the target (hence the trailing `comp3_assoc`). The V4 peer
 `comp3_assoc` is `Function.comp_assoc f (g ∘ h) k` (Mathlib `Logic/Function/Defs.lean:28`).
 **Suggested:** mirror V4: add `chain21_apply` (the 21-stage composition applied equals the nested
 application, `rfl` at variable stages) next to the apex, and prove the shape check by
-`rw [chain21_apply, mobilenetv2ForwardB_full_eq_chain, mnv2PreB17_apply, …]` or, after the
+`rw [chain21_apply, mobilenetv2ForwardBFull_eq_chain, mnv2PreB17_apply, …]` or, after the
 `MobileNetV2FullBVJP` refactor below, by the group-level `rfl` V4 uses. Replace the private
 `comp3_assoc` by `Function.comp_assoc` with its arguments given explicitly (same statement, same
 kernel cost), or delete it if `chain21_apply` removes the need.
@@ -153,7 +153,7 @@ capstone" — true of the stage ties and the apex, but this tie itself binds `Ke
 **Suggested:** exactly the V2 fix: an `mnv4B_full_backward` rfl-peel lemma between variables,
 `rw` it, drop the `rfl`; restate at variable widths and instantiate. `mnv4InputGradB_correct`
 (line 393, 150 lines, same bumps) becomes `.correct_of_eq`.
-Separately, `mobilenetv4ForwardB_full_eq_slots` (line 609) carries `maxRecDepth 800000` although
+Separately, `mobilenetv4ForwardBFull_eq_slots` (line 609) carries `maxRecDepth 800000` although
 its docstring says it is seven rewrites of variable-proved lemmas taking two seconds — the bump is
 likely vestigial; try deleting it.
 
@@ -171,15 +171,15 @@ open scoped BigOperators
 set_option maxHeartbeats 1000000
 ```
 **Why it breaks:** no `in`, so every one of the file's ~55 declarations — including one-line
-delegations like `mnv2ExpOnlyB_has_vjp_at` — runs at 5× budget, and a future regression anywhere
+delegations like `mnv2ExpOnlyBHasVJPAt` — runs at 5× budget, and a future regression anywhere
 in the file is masked. Mathlib forbids file-level heartbeat options for this reason. The docstring
 also claims "this tier carries no numerals", but `mnv2PreB0 … mnv2PreB17` and the apex are stated
 at `112/56/28/14/7`.
-**Suggested:** delete the line; if `mobilenetv2ForwardB_full_has_vjp_at` (the only plausible
+**Suggested:** delete the line; if `mobilenetv2ForwardBFullHasVJPAt` (the only plausible
 consumer) then fails, scope it `set_option maxHeartbeats … in` on that one declaration and state
 the measured value.
 
-### MobileNetV2FullBVJP.lean:277 — `mobilenetv2ForwardB_full_has_vjp_at`
+### MobileNetV2FullBVJP.lean:277 — `mobilenetv2ForwardBFullHasVJPAt`
 
 **Smell:** long-proof (127 lines) + repetition
 **Current:**
@@ -188,21 +188,21 @@ the measured value.
     (x : …) (h_stem : …) (sb1 : IVNoExpSmoothAtB N 112 112 w.b1 (mnv2PreB0 N w x)) … (sb17 : …) (h_head : …) :
   have d1 := mnv2NoExpB_differentiableAt N 112 112 w.b1 qb1 _ sb1
   have e1 : HasVJPAt (mnv2PreB1 N w) x :=
-    vjp_comp_at _ _ x dS d1 vS (mnv2NoExpB_has_vjp_at N 112 112 w.b1 qb1 _ sb1)
+    vjpCompAt _ _ x dS d1 vS (mnv2NoExpBHasVJPAt N 112 112 w.b1 qb1 _ sb1)
   have f1 : DifferentiableAt ℝ (mnv2PreB1 N w) x := d1.comp x dS
   … (×17)
 ```
 **Why it breaks:** 38 hypothesis binders, 51 `have`s, and the same 38 binders re-typed in
-`mobilenetv2ForwardB_full_has_vjp_at_correct` (line 492). Every consumer must pass 38 arguments
-(the seal needs 19 helper lemmas `scStem, sc1 … sc17, scHead` just to produce them, and
-`sealDiffAt` re-derives the 18 `DifferentiableAt` steps — see below). The V4 peer
+`mobilenetv2ForwardBFullHasVJPAt_correct` (line 492). Every consumer must pass 38 arguments
+(the seal needs 19 helper lemmas `sc_stem, sc1 … sc17, sc_head` just to produce them, and
+`seal_differentiableAt` re-derives the 18 `DifferentiableAt` steps — see below). The V4 peer
 (`MobileNetV4FullBVJP.lean:92,135`) does the same job with one `Mnv4SmoothAt` structure and seven
 `CertLayer` group joins.
 **Suggested:** port V4's architecture: an `MNV2SmoothAtB N w x : Prop` structure (stem, one field
 per block, head) and `CertLayer` block layers (`MobileNetV2BackB0.lean` already has
 `mnv2BodyLayer`/`mnv2DownBodyLayer`). Short of that, fold each `d/e/f` triple into one
-`vjp_comp_diff_at` (which already returns the `PProd` of both), halving the proof, and export
-`mobilenetv2ForwardB_full_differentiableAt` under the same hypotheses so the seal can reuse it.
+`vjpCompDiffAt` (which already returns the `PProd` of both), halving the proof, and export
+`mobilenetv2ForwardBFull_differentiableAt` under the same hypotheses so the seal can reuse it.
 
 ### MobileNetV2FullBVJP.lean:203 — `mnv2PreB0 … mnv2PreB17` and `mnv2PreB*_apply` (line 404)
 
@@ -212,13 +212,13 @@ per block, head) and `CertLayer` block layers (`MobileNetV2BackB0.lean` already 
 theorem mnv2PreB5_apply … : mnv2PreB5 N w x = mnv2ResidB N 28 28 w.b5 (mnv2PreB4 N w x) := by
   rw [mnv2PreB5, Function.comp_apply]
 …
-  rw [mobilenetv2ForwardB_full, Function.comp_apply, mnv2PreB17_apply, mnv2PreB16_apply, …, mnv2PreB0_apply]
+  rw [mobilenetv2ForwardBFull, Function.comp_apply, mnv2PreB17_apply, mnv2PreB16_apply, …, mnv2PreB0_apply]
 ```
 **Why it breaks:** 18 prefix defs duplicate `Foundation/OpaquePrefix.lean`'s `opaqueA*` (which
 were introduced precisely to stop per-net copies) and 18 `_apply` lemmas are each `rfl`. The
-19-name `rw` in `mobilenetv2ForwardB_full_eq_chain` must be kept in reverse block order by hand.
+19-name `rw` in `mobilenetv2ForwardBFull_eq_chain` must be kept in reverse block order by hand.
 **Suggested:** one generic `chain18_apply` (`rfl` at variable stages, like `mnv4Chain_apply`), and
-`mobilenetv2ForwardB_full_eq_chain := by rw [mobilenetv2ForwardB_full, chain18_apply]`. If the
+`mobilenetv2ForwardBFull_eq_chain := by rw [mobilenetv2ForwardBFull, chain18_apply]`. If the
 prefix names are kept for the hypothesis bundles, define them as `abbrev mnv2PreBk N w :=
 opaqueAk (stem) (b1) … ` so the two vocabularies coincide.
 
@@ -234,9 +234,9 @@ opaqueAk (stem) (b1) … ` so the two vocabularies coincide.
 files, `Architectures/Residual.lean:46`, `Foundation/Tensor.lean:291`). Same `show` at
 `MobileNetV2.lean:315`; the same unfolding is done by `show … + v k = v k` in
 `MobileNetV2FullBSeal.lean:213` and `MobileNetV4FullBSeal.lean:252`, and by
-`unfold residual biPath; rfl` in `MobileNetV2FullB.lean:274`. There is `residual_has_vjp_at`
+`unfold residual biPath; rfl` in `MobileNetV2FullB.lean:274`. There is `residualHasVJPAt`
 but no `residual_differentiableAt` and no `residual_apply`.
-**Suggested:** add to `Architectures/Residual.lean` (beside `residual_has_vjp_at`, line 174):
+**Suggested:** add to `Architectures/Residual.lean` (beside `residualHasVJPAt`, line 174):
 ```lean
 @[simp] theorem residual_apply {n} (f : Vec n → Vec n) (v : Vec n) (k : Fin n) :
     residual f v k = f v k + v k := rfl
@@ -260,7 +260,7 @@ set_option maxHeartbeats 1600000 in
 theorem mnv2_net_tiedB (N : Nat) … (x : …) (t : Vec (N * (1 * nCls))) :
     let g : Vec (N * nCls) :=
       unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (mobilenetv2ForwardB_full N w x)) t))
+        (rowB N nCls (mobilenetv2ForwardBFull N w x)) t))
     let dy17 := …
     …
   intro g dy17 … cotStem
@@ -268,7 +268,7 @@ theorem mnv2_net_tiedB (N : Nat) … (x : …) (t : Vec (N * (1 * nCls))) :
 ```
 **Why it breaks:** the proof is 19 closed instances of `∀ cot` lemmas; nothing in it needs work.
 The budget goes into elaborating/defeq-checking the statement, whose `g` embeds the whole literal
-forward `mobilenetv2ForwardB_full N w x`. The V4 peer `mnv4_net_tiedB`
+forward `mobilenetv2ForwardBFull N w x`. The V4 peer `mnv4_net_tiedB`
 (`MobileNetV4StepTieB.lean:852`) takes `g : Vec (N * nCls)` as a **binder** and puts the loss in a
 separate `mnv4_lossCot_is_smoothedCE_grad` — and has no bump. (Hypothesis from the diff between
 the two files; confirm by removing the bump after the change.)
@@ -283,7 +283,7 @@ line 770). Same fix for `MobileNetV2SyncStepTieB.lean:925` `mnv2_net_syncTiedB` 
 **Current:**
 ```lean
 theorem mnv2NoExpCotIn_eq_vjp … (hs : IVNoExpSmoothAtB N h w p xin) (cotN : String) :
-    mnv2NoExpCotIn N h w p xin dyOut = (mnv2NoExpB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+    mnv2NoExpCotIn N h w p xin dyOut = (mnv2NoExpBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := mnv2NoExpBackGraph_faithful p hq xin (.operand cotN dyOut) hs
   have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
   rw [hd] at h
@@ -370,15 +370,15 @@ only mention is the module docstring). If either mask or `batchShard` changes re
 
 ## MobileNetV2FullBSeal.lean / MobileNetV4FullBSeal.lean (29 s CI for V2)
 
-### MobileNetV2FullBSeal.lean:797–1060 (`ed0 … edH`, 22 lemmas); MobileNetV4FullBSeal.lean:698–818 (15)
+### MobileNetV2FullBSeal.lean:797–1060 (`ed0 … eDiff_dH`, 22 lemmas); MobileNetV4FullBSeal.lean:698–818 (15)
 
 **Smell:** repetition
 **Current:**
 ```lean
 theorem ed2e (nCls : Nat) (t : ℝ) : EDiff (d2e nCls t) (A2e nCls t) := by
-  refine EDiff_bn 96 (2 * 56) (2 * 56) 1 (kv 96 (1 / 64)) (kv 96 3) (fun _ => 1 * d1p nCls t 0)
+  refine eDiff_bn 96 (2 * 56) (2 * 56) 1 (kv 96 (1 / 64)) (kv 96 3) (fun _ => 1 * d1p nCls t 0)
     (d2e nCls t) (Z2e nCls t) ?_ ?_
-  · exact EDiff_conv (h := (2 * 56)) (w := (2 * 56)) (0 : Fin 16) rfl (by norm_num) (by norm_num) 1
+  · exact eDiff_conv (h := (2 * 56)) (w := (2 * 56)) (0 : Fin 16) rfl (by norm_num) (by norm_num) 1
       (kv 96 0) (d1p nCls t) _ (mnv2PreB1 2 (sealW nCls) (sealX t)) (ed1 nCls t) (fun o => rfl)
   · intro ci
     simp only [d2e, rf, kv_apply]
@@ -388,7 +388,7 @@ theorem ed2e (nCls : Nat) (t : ℝ) : EDiff (d2e nCls t) (A2e nCls t) := by
 at literal shapes with two `(by norm_num)` kernel-size discharges and a `simp only … ; ring` that
 re-proves the same scalar identity `1/64 * δ * istd = δ * rf …`. This is also the bulk of the V2
 seal's 29 s (not measured per-declaration — static reading).
-**Suggested:** two kit lemmas in `Training/BatchSealKit.lean` (beside `EDiff_bn`, line 783), stated
+**Suggested:** two kit lemmas in `Training/BatchSealKit.lean` (beside `eDiff_bn`, line 783), stated
 at variable shapes with the carrier update baked in:
 ```lean
 theorem EDiff_ctConvBn {ic oc h w : Nat} (γ0 β0 : ℝ) {δ : Fin ic → ℝ} {v : Vec (2 * (ic * h * w))}
@@ -415,7 +415,7 @@ theorem sealX_nonconstant … := by
   rw [one_mul, zero_mul] at hz
   linarith [Rr_pos nCls 1]
 theorem sealX_jacobian_nonzero … := by
-  refine fderiv_ne_zero_of_ray sealV (sealDiffAt nCls 0) (fun y => y (…) - y (…)) (by fun_prop) … ?_
+  refine fderiv_ne_zero_of_ray sealV (seal_differentiableAt nCls 0) (fun y => y (…) - y (…)) (by fun_prop) … ?_
   have heq : (fun t => F (sealX 0 + t • sealV) (…) - F (sealX 0 + t • sealV) (…)) = fun t => t * Rr nCls t := …
 ```
 identical in `ResNet34FullBSeal.lean:1017` and R50.
@@ -426,20 +426,20 @@ taking `F`, the ray `x0 v`, the readout indices, `g : ℝ → ℝ` with
 and `DifferentiableAt ℝ F x0`, returning the conjunction (nonconstant ∧ `fderiv ≠ 0`); each seal
 supplies `gd_ray` and its slope.
 
-### MobileNetV2FullBSeal.lean:1333 — `sealDiffAt` (also MobileNetV4FullBSeal.lean:1201)
+### MobileNetV2FullBSeal.lean:1333 — `seal_differentiableAt` (also MobileNetV4FullBSeal.lean:1201)
 
 **Smell:** repetition
 **Current:**
 ```lean
   have f0 : DifferentiableAt ℝ (mnv2PreB0 2 (sealW nCls)) (sealX t) := mnv2StemB_differentiableAt …
-  have f1 : … := (mnv2NoExpB_differentiableAt 2 112 112 (sealW nCls).b1 (sealNoExpPos 32 16) _ (sc1 nCls t)).comp (sealX t) f0
+  have f1 : … := (mnv2NoExpB_differentiableAt 2 112 112 (sealW nCls).b1 (seal_noExp_pos 32 16) _ (sc1 nCls t)).comp (sealX t) f0
   … (×18)
 ```
 **Why it breaks:** a second copy of the `f1 … f17` chain already inside
-`mobilenetv2ForwardB_full_has_vjp_at`; any change to block order must be made in both.
-**Suggested:** export `mobilenetv2ForwardB_full_differentiableAt` from `MobileNetV2FullBVJP.lean`
-(same hypotheses as the apex; or have the apex return the `PProd`) and make `sealDiffAt` a single
-application. Same for V4 with `mobilenetv4ForwardB_full_differentiableAt … hx`.
+`mobilenetv2ForwardBFullHasVJPAt`; any change to block order must be made in both.
+**Suggested:** export `mobilenetv2ForwardBFull_differentiableAt` from `MobileNetV2FullBVJP.lean`
+(same hypotheses as the apex; or have the apex return the `PProd`) and make `seal_differentiableAt` a single
+application. Same for V4 with `mobilenetv4ForwardBFull_differentiableAt … hx`.
 
 ### MobileNetV2FullBSeal.lean:220, 238, 258 — `sealExpB_eq` / `sealStridedB_eq` / `sealNoExpB_eq`
 
@@ -492,7 +492,7 @@ proved once by the `by_cases`. For `Rr`, define it as a product
 
 ## MobileNetV2.lean
 
-### MobileNetV2.lean:60 — `relu6LinearPart_apply`; :100 `pdiv_relu6`; :115 `relu6_has_vjp_at`
+### MobileNetV2.lean:60 — `relu6LinearPart_apply`; :100 `pdiv_relu6`; :115 `relu6HasVJPAt`
 
 **Smell:** undocumented-defeq + brittle-chain
 **Current:**
@@ -516,7 +516,7 @@ the definition. The relu peer (`Foundation/MLP.lean:160`) is already idiomatic:
 `rw [reluLinearPart, ContinuousLinearMap.pi_apply]; split_ifs <;> rfl`.
 **Suggested:** `relu6LinearPart_apply := by rw [relu6LinearPart, ContinuousLinearMap.pi_apply]; split_ifs <;> rfl`;
 `pdiv_relu6`'s tail `by split_ifs <;> simp_all` (or `by_cases hij : i = j <;> simp [hij]`);
-`relu6_has_vjp_at.correct` via `Finset.sum_ite_eq'` then `split_ifs <;> ring`. Longer-term, relu
+`relu6HasVJPAt.correct` via `Finset.sum_ite_eq'` then `split_ifs <;> ring`. Longer-term, relu
 and relu6 are both "diagonal 0/1 mask at a smooth point": one `pdiv_of_hasFDerivAt_diagMask`
 lemma (new leaf, not `Foundation/MLP.lean` if that is widely imported) would serve both.
 
@@ -524,7 +524,7 @@ lemma (new leaf, not `Foundation/MLP.lean` if that is widely imported) would ser
 
 ## MobileNetV2BackB0.lean
 
-### MobileNetV2BackB0.lean:94 — `bnRelu6Stage_has_vjp_at`; :188, :209, :235 `*BackBatchedGraph_faithful`
+### MobileNetV2BackB0.lean:94 — `bnRelu6StageHasVJPAt`; :188, :209, :235 `*BackBatchedGraph_faithful`
 
 **Smell:** repetition
 **Current:**
@@ -533,16 +533,16 @@ theorem cbrBackBatchedGraph_faithful … := by
   rw [cbrBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [cbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at,
+  simp only [cbrBHasVJPAt, bnRelu6StageHasVJPAt, stageHasVJPAt, vjpCompAt,
     HasVJP.toHasVJPAt, Function.comp_apply]
 ```
 (×3 here with `depthwise`/`depthwiseStridedXla` swapped in; ×2 in `MobileNetV4BackB0.lean`, ×2 in
-`ResNet34BackB0.lean`), and `bnRelu6Stage_has_vjp_at` is `ResNet34BackB0.lean:90`
-`bnReluStage_has_vjp_at` with `relu6` for `relu`.
+`ResNet34BackB0.lean`), and `bnRelu6StageHasVJPAt` is `ResNet34BackB0.lean:90`
+`bnReluStageHasVJPAt` with `relu6` for `relu`.
 **Why it breaks:** seven copies of one skeleton; the trailing `simp only` is a pure `dsimp` unfold
 of VJP defs. At stage level and variable shapes that is cheap and acceptable (this is NOT the
 whole-net hazard — keep it `simp only`, not `rw`, here), but it is repeated rather than proved once.
-**Suggested:** `bnActStage_has_vjp_at (act) (hact : HasVJPAt act (bn (batchMap op x)))
+**Suggested:** `bnActStageHasVJPAt (act) (hact : HasVJPAt act (bn (batchMap op x)))
 (hactd : DifferentiableAt …)` and one `bnActStageBackGraph_faithful` parametric in the op's
 `*BackBatched` token and its faithfulness lemma, in a new leaf imported by the three BackB0 files.
 
@@ -574,12 +574,12 @@ the block kinds already have), `unfold` both sides, and close with the rewrite c
 
 ## MobileNetV2FullB.lean
 
-### MobileNetV2FullB.lean:353 — `mobilenetv2FwdGraphB_full_faithful`
+### MobileNetV2FullB.lean:353 — `mobilenetv2FwdGraphBFull_faithful`
 
 **Smell:** brittle-chain
 **Current:**
 ```lean
-  unfold mobilenetv2FwdGraphB_full mobilenetv2ForwardB_full
+  unfold mobilenetv2FwdGraphBFull mobilenetv2ForwardBFull
   rw [mnv2HeadGraphB_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,
       mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful, … (19 entries, 6 distinct names) …,
       mnv2StemGraphB_faithful]
@@ -590,7 +590,7 @@ block breaks it with a motive error. These six are propositional lemmas proved b
 apply.
 **Suggested:** `simp only [mnv2HeadGraphB_faithful, mnv2ExpOnlyGraphB_faithful,
 mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful, mnv2NoExpGraphB_faithful,
-mnv2StemGraphB_faithful]` (6 names, order-free). Same for `mnv4FwdGraphB_full_faithful`
+mnv2StemGraphB_faithful]` (6 names, order-free). Same for `mnv4FwdGraphBFull_faithful`
 (`MobileNetV4FullB.lean:848`). Measure once; if the kernel cost rises, keep `rw`.
 
 ---
@@ -617,7 +617,7 @@ mnv2StemGraphB_faithful]` (6 names, order-free). Same for `mnv4FwdGraphB_full_fa
      `HasVJPAt.correct_of_eq` for every `_correct`.
    - Homogeneity `_smul` lemmas: 53 here, 134 repo-wide. Fix: a `Homog` predicate with `.comp`
      (or `→ₗ[ℝ]` cotangent maps and `map_smul`).
-   - Seal carrier steps `refine EDiff_bn … · exact EDiff_conv/dw … · simp only […]; ring`: 37 here,
+   - Seal carrier steps `refine eDiff_bn … · exact eDiff_conv/dw … · simp only […]; ring`: 37 here,
      46 repo-wide. Fix: `EDiff_ctConvBn` / `EDiff_ctDwBn` kit lemmas at variable shapes. Plus the
      seal tail verbatim ×4 nets → one `JacobianSeal` lemma.
    - V2 vs V4 inverted-residual cotangent chain (plain / `_smul` / `Sync` / `_shard` / `_scaled`):
@@ -629,7 +629,7 @@ mnv2StemGraphB_faithful]` (6 names, order-free). Same for `mnv4FwdGraphB_full_fa
    declarations (V2 tie + `_correct` at 1M, V4 tie + `_correct` at 2M, PaperEval `maxRecDepth
    20000`) plus 1 file-wide 1M bump and 1 apparently vestigial `maxRecDepth 800000`. Each closes a
    statement at literal widths with an `rfl` that re-derives a composition. Fix: peel with
-   `rw` by lemmas proved between variables (ConvNeXt's `vjp_comp_diff_at_fst_backward` is the
+   `rw` by lemmas proved between variables (ConvNeXt's `vjpCompDiffAt_fst_backward` is the
    in-repo template), state the tie at variable widths, instantiate. Do NOT substitute
    `simp only [rfl-lemmas]` in these ties. Separately, the two V2 train-step capstones (1.6M each)
    look to be paying for embedding the literal forward in the statement; V4 takes the cotangent as
@@ -639,7 +639,7 @@ mnv2StemGraphB_faithful]` (6 names, order-free). Same for `mnv4FwdGraphB_full_fa
    `CertLayer` groups, a generic `*Chain_apply`, and a named-`Prop` capstone with a free
    cotangent, V2 uses 38 positional binders, 18 prefix defs + 18 `_apply` lemmas, a 19-def `simp
    only` unfold, and inline `let`-telescopes. 9 of the findings above are "port V4's shape to V2".
-   Porting it removes `sc1…sc17`, the duplicated `sealDiffAt` chain, both V2 capstone bumps, and
+   Porting it removes `sc1…sc17`, the duplicated `seal_differentiableAt` chain, both V2 capstone bumps, and
    `comp3_assoc`.
    Smaller recurring idiom: `show`-based defeq unfolding of `residual`/`biPath` (5 sites, no
    `residual_apply` / `residual_differentiableAt` lemma exists) and bare `rfl` closing shard

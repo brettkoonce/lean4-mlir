@@ -111,7 +111,7 @@ noncomputable def decimateBack (oc h w : Nat) (dy : Vec (oc * h * w)) :
     the VJP backward ignores its primal argument). -/
 theorem decimateBack_eq_vjp (oc h w : Nat) (v : Vec (oc * (2 * h) * (2 * w)))
     (dy : Vec (oc * h * w)) :
-    decimateBack oc h w dy = (decimateFlat_has_vjp oc h w).backward v dy := rfl
+    decimateBack oc h w dy = (decimateFlatHasVJP oc h w).backward v dy := rfl
 
 /-- **Odd-decimation backward (zero-upsampling scatter at the odd positions)** — the certified
     `decimateOddFlat` VJP: route `dy k` to the odd position `decimateOddIdx k`, 0 elsewhere.
@@ -124,7 +124,7 @@ noncomputable def decimateOddBack (oc h w : Nat) (dy : Vec (oc * h * w)) :
 /-- `decimateOddBack` is exactly the certified `decimateOddFlat` VJP backward (by definition). -/
 theorem decimateOddBack_eq_vjp (oc h w : Nat) (v : Vec (oc * (2 * h) * (2 * w)))
     (dy : Vec (oc * h * w)) :
-    decimateOddBack oc h w dy = (decimateOddFlat_has_vjp oc h w).backward v dy := rfl
+    decimateOddBack oc h w dy = (decimateOddFlatHasVJP oc h w).backward v dy := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § The strided conv backwards: a scatter, then the reversed-kernel conv
@@ -193,8 +193,8 @@ noncomputable def depthwiseStride2FlatXlaBack {c h w kH kW : Nat} (W : Depthwise
 
 /-- **Global-average-pool backward** — the certified GAP VJP: route `dy(channel)` to every spatial
     cell of that channel, divided by `h·w`. `Vec c → Vec (c·h·w)`. The head endpoint of every conv
-    net's backward chain (`r34InputGradB`, `mnv2InputGradB`, `efficientnetInputGradB_full`, …); the
-    emitted `SHlo.gapBack` denotes `globalAvgPoolFlat_has_vjp`'s backward, which is this map. -/
+    net's backward chain (`r34InputGradB`, `mnv2InputGradB`, `efficientnetInputGradBFull`, …); the
+    emitted `SHlo.gapBack` denotes `globalAvgPoolFlatHasVJP`'s backward, which is this map. -/
 noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
   fun idx => dy (flatChannel c h w idx) / ((h : ℝ) * (w : ℝ))
 
@@ -206,7 +206,7 @@ noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
     collects `dy` from every output whose 3×3 window selects it. ⛔ `maxPool2`'s windows TILE, so
     the 2×2 pool's backward (`StableHLO.maxPoolBackFlat`) is a lookup; 3×3/s2 windows OVERLAP, so
     an input cell can be the argmax of up to four outputs and this is a reduction. Spelled as the
-    masked sum the kernel performs, which is `maxPool3s2_has_vjp_at3`'s backward reindexed
+    masked sum the kernel performs, which is `maxPool3s2HasVJPAt3`'s backward reindexed
     (`maxPool3s2FlatBack_eq_vjp_backward`). Found 2026-08 because the per-example r34 chain
     (retired 2026-09-19) had been written as the reverse of the 2×2 pool while its docstring
     claimed the committed forward. -/
@@ -215,12 +215,12 @@ noncomputable def maxPool3s2FlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
   fun dy idx => ∑ k : Fin (c*h*w), (if maxPool3s2LocalReindex x k = idx then dy k else 0)
 
 /-- **3×3/s2 pool input-VJP leaf tie (smooth point).** `maxPool3s2FlatBack x` IS the certified
-    pool input-VJP `(maxPool3s2Flat_has_vjp_at x h_smooth).backward`: the certified backward is the
+    pool input-VJP `(maxPool3s2FlatHasVJPAt x h_smooth).backward`: the certified backward is the
     triple sum `∑_{co,ho,wo} [σ(co,ho,wo) = idx]·dy(co,ho,wo)`, and this is that sum re-indexed
     row-major (`sum_finProdFinEquiv₃`). The 3×3/s2 peer of the 2×2 bridge `StableHLO.maxPoolBack_faithful`. -/
 theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool3s2Smooth x) :
-    maxPool3s2FlatBack x = (maxPool3s2Flat_has_vjp_at x h_smooth).backward := by
+    maxPool3s2FlatBack x = (maxPool3s2FlatHasVJPAt x h_smooth).backward := by
   funext dy idx
   show (∑ k : Fin (c*h*w), (if maxPool3s2LocalReindex x k = idx then dy k else 0)) = _
   rw [sum_finProdFinEquiv₃ (fun k => if maxPool3s2LocalReindex x k = idx then dy k else 0)]
@@ -229,7 +229,7 @@ theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2
         (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
         (finProdFinEquiv.symm idx).2) = idx := by
     rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
-  simp only [maxPool3s2Flat_has_vjp_at, hasVJPAt3_to_hasVJPAt, maxPool3s2_has_vjp_at3,
+  simp only [maxPool3s2FlatHasVJPAt, HasVJPAt3.toHasVJPAt, maxPool3s2HasVJPAt3,
     Tensor3.unflatten]
   refine Finset.sum_congr rfl fun co _ => Finset.sum_congr rfl fun ho _ =>
     Finset.sum_congr rfl fun wo _ => ?_
@@ -237,24 +237,24 @@ theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2
   split <;> simp
 
 /-- ⭐ **The pool VJP at a `Vec` point, with its backward DEFINITIONALLY `maxPool3s2FlatBack`.**
-    `maxPool3s2Flat_has_vjp_at` is stated at `Tensor3.flatten x`, and a whole-net chain needs it at
+    `maxPool3s2FlatHasVJPAt` is stated at `Tensor3.flatten x`, and a whole-net chain needs it at
     the stem's `Vec` output. ⛔ Transporting with `▸`/`rwa` would work for the TYPE and leave a
     `backward` field behind an `Eq.mpr` that will not reduce. Building the structure field-by-field
     instead keeps `backward` the leaf itself, which is what lets the whole-net ties
     (`ResNet34BackCertifiedTieB`, `ResNet34FullBVJP`'s batched pool) close by `rfl` at this stage
     rather than by a rewrite. -/
-noncomputable def maxPool3s2Flat_has_vjp_at_vec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))
+noncomputable def maxPool3s2FlatHasVJPAtVec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))
     (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
     HasVJPAt (maxPool3s2Flat c h w) v where
   backward := maxPool3s2FlatBack (Tensor3.unflatten v)
   correct := by
     intro dy i
-    have hc := (maxPool3s2Flat_has_vjp_at (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))
+    have hc := (maxPool3s2FlatHasVJPAt (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))
       h_smooth).correct dy i
     rw [← maxPool3s2FlatBack_eq_vjp_backward _ h_smooth] at hc
     rwa [Tensor3.flatten_unflatten] at hc
 
-/-- The `Vec`-point differentiability companion of `maxPool3s2Flat_has_vjp_at_vec`. -/
+/-- The `Vec`-point differentiability companion of `maxPool3s2FlatHasVJPAtVec`. -/
 theorem maxPool3s2Flat_differentiableAt_vec {c h w : Nat} (v : Vec (c * (2*h) * (2*w)))
     (h_smooth : MaxPool3s2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w)))
     (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :

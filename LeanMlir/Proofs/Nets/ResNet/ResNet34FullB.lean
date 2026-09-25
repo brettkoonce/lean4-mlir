@@ -50,7 +50,7 @@ paid for.
 pinning here; it is pinned only where a `Maps` envelope turns a width into a rational (T4/T5).
 On the data-parallel artifacts the render's `N` is the PER-REPLICA batch (64); since 2026-09-21
 their BatchNorm is synchronised, and `ResNet34SyncB.lean` is this file's twin for them: replica
-`r`'s forward graph denotes shard `r` of `resnet34ForwardB_full (R * N)`, this file's forward at
+`r`'s forward graph denotes shard `r` of `resnet34ForwardBFull (R * N)`, this file's forward at
 the global batch.
 -/
 
@@ -169,9 +169,9 @@ theorem r34HeadB_apply (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec 
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The full batch-BN ResNet-34 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of the
-    retired per-example forward; nested-application form, as `efficientnetForwardB_full` and
-    `mobilenetv2ForwardB_full` both are, so the T6 tie can peel it one block at a time. -/
-noncomputable def resnet34ForwardB_full (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+    retired per-example forward; nested-application form, as `efficientnetForwardBFull` and
+    `mobilenetv2ForwardBFull` both are, so the T6 tie can peel it one block at a time. -/
+noncomputable def resnet34ForwardBFull (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Vec (N * nCls) :=
   r34HeadB N 7 7 w.Wd w.bd
     (r34IdB N 7 7 w.e1
@@ -283,7 +283,7 @@ theorem r34HeadGraphB_faithful (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (b
 /-- **The full batch-BN ResNet-34 forward graph.** Block prefixes are the render's
     (`s1b0`/`d2`/`s2b0`/... ), so the typed graph diffs against `resnet34_fwd`'s batched peers
     name for name. -/
-def resnet34FwdGraphB_full (N : Nat) (epsStr : String) {nCls : Nat} (w : R34BWeights nCls)
+def resnet34FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : R34BWeights nCls)
     (e : SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : SHlo (N * nCls) :=
   r34HeadGraphB N 7 7 w.Wd w.bd
     (r34IdGraphB "s4b1" epsStr N 7 7 w.e1
@@ -307,10 +307,10 @@ def resnet34FwdGraphB_full (N : Nat) (epsStr : String) {nCls : Nat} (w : R34BWei
 
 /-- ⭐ **T2 for ResNet-34 at batch BN**: the typed graph denotes the whole-net forward. One `rw`
     per block over the eighteen per-kind faithfulness lemmas. -/
-theorem resnet34FwdGraphB_full_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+theorem resnet34FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : R34BWeights nCls) (e : SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
-    den (resnet34FwdGraphB_full N epsStr w e) = resnet34ForwardB_full N w (den e) := by
-  unfold resnet34FwdGraphB_full resnet34ForwardB_full
+    den (resnet34FwdGraphBFull N epsStr w e) = resnet34ForwardBFull N w (den e) := by
+  unfold resnet34FwdGraphBFull resnet34ForwardBFull
   rw [r34HeadGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful, r34DownGraphB_faithful,
       r34IdGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful,
       r34IdGraphB_faithful, r34DownGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful,

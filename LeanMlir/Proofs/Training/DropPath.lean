@@ -24,7 +24,7 @@ graph INPUT), not here.
 | piece | where it comes from |
 |---|---|
 | forward | `layerScale (dropScale …)` — `rfl` |
-| VJP | **`layerScale_has_vjp`, verbatim.** The map is diagonal, so its own transpose |
+| VJP | **`layerScaleHasVJP`, verbatim.** The map is diagonal, so its own transpose |
 | the backward emitter | **none needed** — `dropPath_vjp_is_self` says the backward IS the forward at the same mask |
 | float story | none stated |
 
@@ -132,9 +132,9 @@ theorem dropPath_eq_reference (N n : Nat) (keep : Vec N) (kp : ℝ) (x : Vec (N 
 /-- **The VJP, and it is `layerScale`'s verbatim.** A diagonal linear map is its own transpose, so
     there is no second emitter, no `*Grad` peer and no new certificate — the whole backward story
     for stochastic depth is this line. -/
-noncomputable def dropPath_has_vjp (N n : Nat) (s : Vec N) :
+noncomputable def dropPathHasVJP (N n : Nat) (s : Vec N) :
     HasVJP (dropPath N n s) :=
-  layerScale_has_vjp (dropScale N n s)
+  layerScaleHasVJP (dropScale N n s)
 
 /-- ⭐ **THE BACKWARD IS THE FORWARD.** `y = c ⊙ x ⇒ dx = c ⊙ dy` at the same `c`, so the renderer
     emits the *same op* on the cotangent that it emitted on the activation — the same mask, the same
@@ -142,14 +142,14 @@ noncomputable def dropPath_has_vjp (N n : Nat) (s : Vec N) :
     exactly the kind of step that is obvious right up until the mask is per-example and someone
     reaches for a transposed index. -/
 theorem dropPath_vjp_is_self (N n : Nat) (s : Vec N) (x dy : Vec (N * n)) :
-    (dropPath_has_vjp N n s).backward x dy = dropPath N n s dy := rfl
+    (dropPathHasVJP N n s).backward x dy = dropPath N n s dy := rfl
 
-/-- The `correct` field spelled out, matching every other `_has_vjp_correct` in the kit. -/
-theorem dropPath_has_vjp_correct (N n : Nat) (s : Vec N)
+/-- The `correct` field spelled out, matching every other `*HasVJP_correct` in the kit. -/
+theorem dropPathHasVJP_correct (N n : Nat) (s : Vec N)
     (x dy : Vec (N * n)) (i : Fin (N * n)) :
-    (dropPath_has_vjp N n s).backward x dy i =
+    (dropPathHasVJP N n s).backward x dy i =
       ∑ j : Fin (N * n), pdiv (dropPath N n s) x i j * dy j :=
-  (dropPath_has_vjp N n s).correct x dy i
+  (dropPathHasVJP N n s).correct x dy i
 
 /-- **The keep-probability ramp**, `keep_i = 1 − dropPath · i / (totalDrop − 1)`.
 
@@ -265,9 +265,9 @@ theorem dropout_eq_reference (N n : Nat) {m : Nat} (keep : Vec m) (kp : ℝ) (x 
 
 /-- **The VJP, `layerScale`'s verbatim again.** No second emitter, no `*Grad` peer, no new
     certificate. -/
-noncomputable def dropout_has_vjp (N n : Nat) {m : Nat} (mask : Vec m) :
+noncomputable def dropoutHasVJP (N n : Nat) {m : Nat} (mask : Vec m) :
     HasVJP (dropout N n mask) :=
-  layerScale_has_vjp mask
+  layerScaleHasVJP mask
 
 /-- ⭐ **THE BACKWARD IS THE FORWARD**, at the same mask — `dropPath_vjp_is_self` one rank up.
 
@@ -280,14 +280,14 @@ noncomputable def dropout_has_vjp (N n : Nat) {m : Nat} (mask : Vec m) :
     `planning/archive/xla_pjrt_handoff.md` §0.10's LayerScale-γ defect in the same shape: *when an op is
     spliced into a chain, list every CONSUMER of the value it displaced.* -/
 theorem dropout_vjp_is_self (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m) :
-    (dropout_has_vjp N n mask).backward x dy = dropout N n mask dy := rfl
+    (dropoutHasVJP N n mask).backward x dy = dropout N n mask dy := rfl
 
-/-- The `correct` field spelled out, matching every other `_has_vjp_correct` in the kit. -/
-theorem dropout_has_vjp_correct (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m)
+/-- The `correct` field spelled out, matching every other `*HasVJP_correct` in the kit. -/
+theorem dropoutHasVJP_correct (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m)
     (i : Fin m) :
-    (dropout_has_vjp N n mask).backward x dy i =
+    (dropoutHasVJP N n mask).backward x dy i =
       ∑ j : Fin m, pdiv (dropout N n mask) x i j * dy j :=
-  (dropout_has_vjp N n mask).correct x dy i
+  (dropoutHasVJP N n mask).correct x dy i
 
 /-- ⭐⭐ **`dropPath` IS `dropout` AT A LIFTED MASK** — the bridge, and it is `rfl`.
 

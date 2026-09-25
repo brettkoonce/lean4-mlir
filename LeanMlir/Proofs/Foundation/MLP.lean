@@ -50,7 +50,7 @@ theorem pdiv_dense_W {m n : Nat} (b : Vec n) (x : Vec m) (W : Mat m n)
   · simp [Prod.ext_iff, h]
 
 /-- Dense VJP — proved. -/
-noncomputable def dense_has_vjp {m n : Nat} (W : Mat m n) (b : Vec n) :
+noncomputable def denseHasVJP {m n : Nat} (W : Mat m n) (b : Vec n) :
     HasVJP (dense W b) where
   backward := fun _x dy => Mat.mulVec W dy
   correct := by
@@ -63,17 +63,17 @@ noncomputable def mnistLinear {m n : Nat} (W : Mat m n) (b : Vec n) : Vec m → 
   dense W b
 
 /-- Whole-model VJP contract for the linear classifier — the degenerate
-simplest case of the per-architecture `*_has_vjp_correct` capstones, built
+simplest case of the per-architecture `*HasVJP_correct` capstones, built
 straight from the Chapter-1 kit. -/
-theorem mnistLinear_has_vjp_correct {m n : Nat} (W : Mat m n) (b : Vec n)
+theorem mnistLinearHasVJP_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (dy : Vec n) (i : Fin m) :
-    (dense_has_vjp W b).backward x dy i =
+    (denseHasVJP W b).backward x dy i =
       ∑ j : Fin n, pdiv (mnistLinear W b) x i j * dy j :=
-  (dense_has_vjp W b).correct x dy i
+  (denseHasVJP W b).correct x dy i
 
 /-- **Dense is everywhere differentiable.** `dense W b` is affine in
     `x`, hence smooth; this is the underlying `Differentiable ℝ`
-    statement that `vjp_comp_at` needs when composing through dense
+    statement that `vjpCompAt` needs when composing through dense
     layers. -/
 @[fun_prop]
 theorem dense_differentiable {m n : Nat} (W : Mat m n) (b : Vec n) :
@@ -88,7 +88,7 @@ theorem dense_differentiable {m n : Nat} (W : Mat m n) (b : Vec n) :
     to the actual weight gradient of `dense`.
 
     `(Mat.outer x dy) i j = ∑ k, pdiv (…) (Mat.flatten W) (fPF (i, j)) k · dy k` -/
-theorem dense_weight_grad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
+theorem denseWeightGrad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (dy : Vec n) (i : Fin m) (j : Fin n) :
     Mat.outer x dy i j =
       ∑ k : Fin n,
@@ -108,7 +108,7 @@ theorem pdiv_dense_b {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
       pdiv_of_affine (fun w => w) _ (fun _ _ => rfl) (fun _ _ => rfl)]
   simp [eq_comm]
 
-theorem dense_bias_grad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
+theorem denseBiasGrad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (dy : Vec n) (i : Fin n) :
     dy i =
       ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' x) b i j * dy j := by
@@ -116,12 +116,12 @@ theorem dense_bias_grad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
 
 /-- **Dense weight backward** — named accessor.
     `dW = x ⊗ dy` (outer product). -/
-noncomputable def dense_weight_grad {m n : Nat}
+noncomputable def denseWeightGrad {m n : Nat}
     (x : Vec m) (dy : Vec n) : Mat m n :=
   Mat.outer x dy
 
 /-- **Dense bias backward** — named accessor. `db = dy`. -/
-def dense_bias_grad {n : Nat} (dy : Vec n) : Vec n := dy
+def denseBiasGrad {n : Nat} (dy : Vec n) : Vec n := dy
 
 -- ════════════════════════════════════════════════════════════════
 -- § ReLU:  y = max(x, 0)
@@ -188,7 +188,7 @@ theorem relu_hasFDerivAt (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) :
   funext k; simp only [relu, reluLinearPart_apply, hy k]
 
 /-- **ReLU is `DifferentiableAt` at smooth points.** Corollary of
-    `relu_hasFDerivAt`; lets `vjp_comp_at` chain through ReLU. -/
+    `relu_hasFDerivAt`; lets `vjpCompAt` chain through ReLU. -/
 @[fun_prop]
 theorem relu_differentiableAt_of_smooth (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) : DifferentiableAt ℝ (relu n) x :=
@@ -219,9 +219,9 @@ theorem pdiv_relu (n : Nat) (x : Vec n)
     `relu_codegen_matches_canonical` below. The Lean-vs-codegen gap at
     the kinks is the codegen trust boundary — see
     `LeanMlir/Proofs/README.md`. -/
-noncomputable def relu_has_vjp (n : Nat) : HasVJP (relu n) := HasVJP.canonical _
+noncomputable def reluHasVJP (n : Nat) : HasVJP (relu n) := HasVJP.canonical _
 
-/-- **Bridge: `relu_has_vjp`'s canonical backward matches the codegen
+/-- **Bridge: `reluHasVJP`'s canonical backward matches the codegen
     formula at smooth points.**
 
     At any point where no coordinate of `x` is zero, the canonical
@@ -232,17 +232,17 @@ noncomputable def relu_has_vjp (n : Nat) : HasVJP (relu n) := HasVJP.canonical _
     convention. -/
 theorem relu_codegen_matches_canonical (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
-    (relu_has_vjp n).backward x dy i = if x i > 0 then dy i else 0 := by
+    (reluHasVJP n).backward x dy i = if x i > 0 then dy i else 0 := by
   show ∑ j : Fin n, pdiv (relu n) x i j * dy j = _
   simp_rw [pdiv_relu n x h_smooth i]; simp
 
 /-- **Diagonal-indicator restatement of the smooth-point bridge.**
-    `relu_has_vjp.backward x dy i = 1_{x i > 0} · dy i` at smooth
+    `reluHasVJP.backward x dy i = 1_{x i > 0} · dy i` at smooth
     points — same content as `relu_codegen_matches_canonical`,
     factored as ``(indicator) · dy i`` for downstream use. -/
 theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
-    (relu_has_vjp n).backward x dy i =
+    (reluHasVJP n).backward x dy i =
     (if x i > 0 then (1 : ℝ) else 0) * dy i := by
   rw [relu_codegen_matches_canonical n x h_smooth dy i, ite_mul, one_mul, zero_mul]
 
@@ -252,7 +252,7 @@ theorem relu_canonical_diagonal (n : Nat) (x : Vec n)
     is the codegen-shape `if x i > 0 then dy i else 0` directly; the
     `correct` field is a real proof via `pdiv_relu` (the smooth-point
     Jacobian) + sum-collapse, not `rfl`. -/
-noncomputable def relu_has_vjp_at (n : Nat) (x : Vec n)
+noncomputable def reluHasVJPAt (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) : HasVJPAt (relu n) x where
   backward dy i := if x i > 0 then dy i else 0
   correct dy i := by simp_rw [pdiv_relu n x h_smooth]; simp
@@ -281,7 +281,7 @@ theorem oneHot_apply (c : Nat) (label j : Fin c) :
 theorem crossEntropy_def (c : Nat) (logits : Vec c) (label : Fin c) :
     crossEntropy c logits label = -(Real.log (softmax c logits label)) := rfl
 
--- `softmaxCE_grad` (and `pdiv_softmax`, `softmax_has_vjp`) are in `Softmax.lean`, which
+-- `softmaxCE_grad` (and `pdiv_softmax`, `softmaxHasVJP`) are in `Softmax.lean`, which
 -- imports this file; this file keeps the `softmax`, `oneHot` and `crossEntropy` definitions.
 
 -- ════════════════════════════════════════════════════════════════
@@ -298,13 +298,13 @@ noncomputable def mlpForward {d₀ d₁ d₂ d₃ : Nat}
 /-- **MLP composition VJP — canonical witness.**
 
     The MLP forward composes `dense W b` (everywhere `Differentiable`)
-    with `relu` (non-`Differentiable` at the kinks). `vjp_comp` would
+    with `relu` (non-`Differentiable` at the kinks). `vjpComp` would
     require `Differentiable ℝ (relu n)`, which doesn't hold globally,
     so the chain-rule route is blocked. The canonical pdiv-derived
     backward inhabits `HasVJP.correct` directly via `rfl` — the
     codegen substitutes the subgradient formula at the kinks (see
     `LeanMlir/Proofs/README.md` for the trust-boundary discussion). -/
-noncomputable def mlp_has_vjp {d₀ d₁ d₂ d₃ : Nat}
+noncomputable def mlpHasVJP {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) :
@@ -312,14 +312,14 @@ noncomputable def mlp_has_vjp {d₀ d₁ d₂ d₃ : Nat}
 
 /-- **MLP pointwise VJP — no canonical-witness escape.**
 
-    Constructs `HasVJPAt (mlpForward …) x` by chaining `vjp_comp_at`
+    Constructs `HasVJPAt (mlpForward …) x` by chaining `vjpCompAt`
     through `dense → relu_at → dense → relu_at → dense`. Requires the
     intermediate pre-activations `dense W₀ b₀ x` and `dense W₁ b₁ z₀`
     to avoid zero (no coordinate ties the ReLU kink) — exactly the
     "smooth input" condition. Replaces the vacuous
-    `mlp_has_vjp.correct := rfl` with a real chain-rule proof at
+    `mlpHasVJP.correct := rfl` with a real chain-rule proof at
     smooth inputs. -/
-noncomputable def mlp_has_vjp_at {d₀ d₁ d₂ d₃ : Nat}
+noncomputable def mlpHasVJPAt {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
@@ -328,60 +328,60 @@ noncomputable def mlp_has_vjp_at {d₀ d₁ d₂ d₃ : Nat}
     (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0) :
     HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x :=
   let dn := fun {a c : Nat} (W : Mat a c) (b : Vec c) (y : Vec a) =>
-    (⟨(dense_has_vjp W b).toHasVJPAt y, dense_differentiable W b y⟩ :
+    (⟨(denseHasVJP W b).toHasVJPAt y, dense_differentiable W b y⟩ :
       HasVJPDiffAt (dense W b) y)
-  (vjp_comp_diff_at _ _ x
-    (vjp_comp_diff_at _ _ x
-      (vjp_comp_diff_at _ _ x
-        (vjp_comp_diff_at _ _ x (dn W₀ b₀ x)
-          ⟨relu_has_vjp_at d₁ _ h_smooth_0, relu_differentiableAt_of_smooth d₁ _ h_smooth_0⟩)
+  (vjpCompDiffAt _ _ x
+    (vjpCompDiffAt _ _ x
+      (vjpCompDiffAt _ _ x
+        (vjpCompDiffAt _ _ x (dn W₀ b₀ x)
+          ⟨reluHasVJPAt d₁ _ h_smooth_0, relu_differentiableAt_of_smooth d₁ _ h_smooth_0⟩)
         (dn W₁ b₁ _))
-      ⟨relu_has_vjp_at d₂ _ h_smooth_1, relu_differentiableAt_of_smooth d₂ _ h_smooth_1⟩)
+      ⟨reluHasVJPAt d₂ _ h_smooth_1, relu_differentiableAt_of_smooth d₂ _ h_smooth_1⟩)
     (dn W₂ b₂ _)).fst
 
 /-! ## Public correctness theorems for the canonical-witness defs
 
-Each `_has_vjp` def above bundles a backward function with a `.correct`
+Each `HasVJP` def above bundles a backward function with a `.correct`
 field; these `_correct` theorems expose that field as a top-level
 proposition so consumers (downstream code, `tests/comparator/`,
 doc-gen4) can refer to the contract directly without reaching into
 record internals. -/
 
-/-- **Public correctness theorem for `relu_has_vjp`**: the canonical
+/-- **Public correctness theorem for `reluHasVJP`**: the canonical
 witness's backward equals the `pdiv`-contracted Jacobian by definition. -/
-theorem relu_has_vjp_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
-    (relu_has_vjp n).backward x dy i =
+theorem reluHasVJP_correct (n : Nat) (x : Vec n) (dy : Vec n) (i : Fin n) :
+    (reluHasVJP n).backward x dy i =
     ∑ j : Fin n, pdiv (relu n) x i j * dy j :=
-  (relu_has_vjp n).correct x dy i
+  (reluHasVJP n).correct x dy i
 
-/-- **Public correctness theorem for `mlp_has_vjp`**: same pattern as
-`relu_has_vjp_correct`, lifted to the three-layer MLP forward. -/
-theorem mlp_has_vjp_correct {d₀ d₁ d₂ d₃ : Nat}
+/-- **Public correctness theorem for `mlpHasVJP`**: same pattern as
+`reluHasVJP_correct`, lifted to the three-layer MLP forward. -/
+theorem mlpHasVJP_correct {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
     (x : Vec d₀) (dy : Vec d₃) (i : Fin d₀) :
-    (mlp_has_vjp W₀ b₀ W₁ b₁ W₂ b₂).backward x dy i =
+    (mlpHasVJP W₀ b₀ W₁ b₁ W₂ b₂).backward x dy i =
     ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
-  (mlp_has_vjp W₀ b₀ W₁ b₁ W₂ b₂).correct x dy i
+  (mlpHasVJP W₀ b₀ W₁ b₁ W₂ b₂).correct x dy i
 
-/-- **Public correctness theorem for `relu_has_vjp_at`** — the
-pointwise (smooth-input) variant. Unlike `relu_has_vjp_correct`, this
+/-- **Public correctness theorem for `reluHasVJPAt`** — the
+pointwise (smooth-input) variant. Unlike `reluHasVJP_correct`, this
 wrapper's underlying `.correct` field is a real proof
 (`pdiv_relu` + sum-collapse), not `rfl`; the wrapper exposes it as
 a top-level proposition for `tests/comparator/` re-verification. -/
-theorem relu_has_vjp_at_correct (n : Nat) (x : Vec n)
+theorem reluHasVJPAt_correct (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) (i : Fin n) :
-    (relu_has_vjp_at n x h_smooth).backward dy i =
+    (reluHasVJPAt n x h_smooth).backward dy i =
     ∑ j : Fin n, pdiv (relu n) x i j * dy j :=
-  (relu_has_vjp_at n x h_smooth).correct dy i
+  (reluHasVJPAt n x h_smooth).correct dy i
 
-/-- **Public correctness theorem for `mlp_has_vjp_at`** — the
-pointwise variant composed via `vjp_comp_at` through
+/-- **Public correctness theorem for `mlpHasVJPAt`** — the
+pointwise variant composed via `vjpCompAt` through
 `dense → relu_at → dense → relu_at → dense`. The underlying
 `.correct` field chains real chain-rule proofs (no `rfl` escape at
 the ReLU kinks). -/
-theorem mlp_has_vjp_at_correct {d₀ d₁ d₂ d₃ : Nat}
+theorem mlpHasVJPAt_correct {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
@@ -389,9 +389,9 @@ theorem mlp_has_vjp_at_correct {d₀ d₁ d₂ d₃ : Nat}
     (h_smooth_0 : ∀ k, dense W₀ b₀ x k ≠ 0)
     (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0)
     (dy : Vec d₃) (i : Fin d₀) :
-    (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy i =
+    (mlpHasVJPAt W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy i =
     ∑ j : Fin d₃, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
-  (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).correct dy i
+  (mlpHasVJPAt W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § ReLU6  y = min(max(x,0), 6)   (MobileNetV2 activation)
@@ -446,7 +446,7 @@ theorem pdiv_relu6 (n : Nat) (x : Vec n)
       if i = j then (if 0 < x i ∧ x i < 6 then 1 else 0) else 0 :=
   pdiv_of_hasFDerivAt_mask _ x _ (relu6_hasFDerivAt n x h_smooth) i j
 
-noncomputable def relu6_has_vjp_at (n : Nat) (x : Vec n)
+noncomputable def relu6HasVJPAt (n : Nat) (x : Vec n)
     (h_smooth : ∀ k, x k ≠ 0 ∧ x k ≠ 6) : HasVJPAt (relu6 n) x where
   backward dy i := if 0 < x i ∧ x i < 6 then dy i else 0
   correct := by

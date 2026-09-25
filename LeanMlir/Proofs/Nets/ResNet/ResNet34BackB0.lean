@@ -17,9 +17,9 @@ output): r34 wraps the residual add in one more relu.
 ## The relu wrinkle (vs relu6 / swish)
 
 r34 uses **relu** (one kink, at 0): its VJP is only the *pointwise*
-`relu_has_vjp_at`, conditioned on the smoothness hypothesis `∀ k, x k ≠ 0` at the
+`reluHasVJPAt`, conditioned on the smoothness hypothesis `∀ k, x k ≠ 0` at the
 pre-activation — simpler than relu6's two-sided `x k ≠ 0 ∧ x k ≠ 6`, but the same
-`_at` machinery (`vjp_comp_at` + `HasVJP.toHasVJPAt`). Its per-op backward token
+`_at` machinery (`vjpCompAt` + `HasVJP.toHasVJPAt`). Its per-op backward token
 is `.selectPos` (the mask `if x>0 then dy else 0`), whose denotation faithfulness
 is the already-proven (`rfl`) `StableHLO.selectPos_faithful`.
 
@@ -41,7 +41,7 @@ one at the outer relu's pre-activation `residual(F)(x)`.
 * `r34BasicBlockBackBatchedGraph_faithful` — the **CAPSTONE**: the whole batched
   ResNet-34 identity basic block backward graph (outer-relu `selectPos` ∘
   residual-fan-in(body-back) + identity skip) denotes the proven
-  `relu ∘ residual(F)` VJP (`vjp_comp_at(residual_has_vjp_at(body), relu)`),
+  `relu ∘ residual(F)` VJP (`vjpCompAt(residualHasVJPAt(body), relu)`),
   threaded through both relu smoothness hypotheses.
 * `cbReluLayer` / `projLayer` (from `MobileNetV2BackB0`) / `cbReluStridedLayer` /
   `projStridedLayer` — the four stages as `CertLayer`s. `r34BasicBlockLayer` / `r34DownBlockLayer` compose them with
@@ -56,7 +56,7 @@ new **strided** batched-conv backward primitive `convStridedBackBatched`
 in `EfficientNetBackB0`). The body `F_s = projB ∘ cbReluStridedB` has a stride-2
 conv1 (`cbReluStridedB`, the strided sibling of `cbReluB`) and a stride-1 conv2
 (`projB`); the projection skip `projStridedB` is a stride-2 conv-bn. The whole
-block composes `vjp_comp_at(residualProj_has_vjp_at(proj, F_s), relu)` exactly like
+block composes `vjpCompAt(residualProjHasVJPAt(proj, F_s), relu)` exactly like
 the identity block, but with the *projection* skip (`residualProj`, both paths
 nontrivial) instead of the identity skip (`residual`), and the strided convs in the
 body+skip.
@@ -102,7 +102,7 @@ noncomputable def r34BasicBlockLayer (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : 
 
     `h_s1` is the body's mid-relu smoothness; `h_out` is the outer-relu smoothness
     (at `residual(F)(x)`). -/
-noncomputable def r34BasicBlockB_has_vjp_at (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+noncomputable def r34BasicBlockBHasVJPAt (N : Nat) {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
     (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec c)
     (x : Vec (N * (c * h * w)))
@@ -142,16 +142,16 @@ noncomputable def r34BasicBlockBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂
     ↔ the proven VJP.** The two batched stage backward graphs (`cbReluB`/`projB`)
     chained at their forward activations, wrapped in the residual additive fan-in
     (body cotangent + identity skip) and the OUTER post-residual relu, proven
-    equal to `r34BasicBlockB_has_vjp_at` (= `vjp_comp_at(residual_has_vjp_at(F),
+    equal to `r34BasicBlockBHasVJPAt` (= `vjpCompAt(residualHasVJPAt(F),
     relu)`). The ResNet-34 analogue of `mbResidBlockBackBatchedGraph_faithful` /
     `mnv2ResidBlockBackBatchedGraph_faithful`, with the extra outer-relu factor,
     threaded through both relu smoothness hypotheses. It is `r34BasicBlockLayer`'s
     `faithful`.
 
     Key fact: the outer relu's `.selectPos` mask is applied ONCE to the incoming
-    `dy` (giving `masked = relu_has_vjp_at.backward (den ecot)`), and that masked cotangent
+    `dy` (giving `masked = reluHasVJPAt.backward (den ecot)`), and that masked cotangent
     is what the residual fan-in (`r34BodyBackBatchedGraph` + identity skip) sees —
-    exactly matching `vjp_comp_at(residual, relu)`'s structure: first apply relu's
+    exactly matching `vjpCompAt(residual, relu)`'s structure: first apply relu's
     backward, then residual's backward to the result. -/
 theorem r34BasicBlockBackBatchedGraph_faithful {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec c)
@@ -161,7 +161,7 @@ theorem r34BasicBlockBackBatchedGraph_faithful {N c h w kH₁ kW₁ kH₂ kW₂ 
     (h_out : ∀ k, residual (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                     cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r34BasicBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ x ecot)
-      = (r34BasicBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1 h_out).backward (den ecot) :=
+      = (r34BasicBlockBHasVJPAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂ x h_s1 h_out).backward (den ecot) :=
   (r34BasicBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂).faithful x
     ⟨⟨h_s1, trivial⟩, h_out⟩ ecot
 
@@ -203,11 +203,11 @@ noncomputable def r34DownBlockLayer (N : Nat) {ic oc h w kH₁ kW₁ kH₂ kW₂
     body), then the OUTER relu's pointwise VJP at the pre-relu activation
     `residualProj(proj, F_s)(x)` (`r34DownBlockLayer`'s VJP).
 
-    The strided sibling of `r34BasicBlockB_has_vjp_at`: `residualProj` (BOTH paths
+    The strided sibling of `r34BasicBlockBHasVJPAt`: `residualProj` (BOTH paths
     nontrivial) for `residual` (identity skip), strided convs in body+skip.
 
     `h_s1` is the body's mid-relu smoothness; `h_out` is the outer-relu smoothness. -/
-noncomputable def r34DownBlockB_has_vjp_at (N : Nat) {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
+noncomputable def r34DownBlockBHasVJPAt (N : Nat) {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
     (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec oc)
     (Wp : Kernel4 oc ic kHp kWp) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
@@ -257,16 +257,16 @@ noncomputable def r34DownBlockBackBatchedGraph {N ic oc h w kH₁ kW₁ kH₂ kW
     (`cbReluStridedB`/`projB`) chained at their forward activations, wrapped in the
     PROJECTED-residual additive fan-in (body cotangent + STRIDED projection-skip
     cotangent) and the OUTER post-residual relu, proven equal to
-    `r34DownBlockB_has_vjp_at` (= `vjp_comp_at(residualProj_has_vjp_at(proj, F_s),
+    `r34DownBlockBHasVJPAt` (= `vjpCompAt(residualProjHasVJPAt(proj, F_s),
     relu)`). The strided sibling of `r34BasicBlockBackBatchedGraph_faithful`:
     `residualProj` (both backward paths nontrivial) for `residual` (identity skip),
     `convStridedBackBatched` in the body's conv1 and the whole projection skip. It is
     `r34DownBlockLayer`'s `faithful`.
 
     Key fact: the outer relu's `.selectPos` mask is applied ONCE to the incoming
-    `dy` (giving `masked = relu_has_vjp_at.backward (den ecot)`), and that masked cotangent
+    `dy` (giving `masked = reluHasVJPAt.backward (den ecot)`), and that masked cotangent
     is what BOTH residualProj fan-in operands see — matching
-    `vjp_comp_at(residualProj, relu)`'s structure: first relu's backward, then
+    `vjpCompAt(residualProj, relu)`'s structure: first relu's backward, then
     `residualProj`'s backward (= `proj.backward + body.backward` at the masked
     cotangent). -/
 theorem r34DownBlockBackBatchedGraph_faithful {N ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
@@ -279,7 +279,7 @@ theorem r34DownBlockBackBatchedGraph_faithful {N ic oc h w kH₁ kW₁ kH₂ kW�
                     (projB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                      cbReluStridedB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r34DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ Wp bp εp γp βp x ecot)
-      = (r34DownBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
+      = (r34DownBlockBHasVJPAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
           Wp bp εp hεp γp βp x h_s1 h_out).backward (den ecot) :=
   (r34DownBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
     Wp bp εp hεp γp βp).faithful x ⟨⟨trivial, h_s1, trivial⟩, h_out⟩ ecot

@@ -17,7 +17,7 @@ hypothesis discharged from the exact rational pre-activations (7 units strictly
 on, 1 strictly off; nothing sits on a kink), rather than engineered by synthetic
 β-shifts as in `ResNet34FullBSeal`/`Mnv2FullBSeal`. Levels:
 
-* level 1 — `trainedMlp_has_vjp_at` (+ `.correct`): the whole-net backward exists
+* level 1 — `trainedMlpHasVJPAt` (+ `.correct`): the whole-net backward exists
   and equals the `fderiv`-contracted Jacobian at the witness;
 * level 3 — `trainedMlp_backward_nontrivial`: the backward is not the zero map
   (via the explicit Jacobian entry `pdiv = -85017/8192 ≈ -10.38`);
@@ -66,29 +66,29 @@ theorem preact_ne : ∀ k, dense W1V b8 xtV k ≠ 0 := by
 
 /-- **Level 1: the trained-weight whole-net VJP witness** — `HasVJPAt fwd xtV`,
     every hypothesis discharged (dense layers globally smooth, ReLU off-kink by
-    `preact_ne`). The 2-layer analogue of `mlp_has_vjp_at`, at trained weights
+    `preact_ne`). The 2-layer analogue of `mlpHasVJPAt`, at trained weights
     and a real input. -/
-noncomputable def trainedMlp_has_vjp_at : HasVJPAt fwd xtV := by
+noncomputable def trainedMlpHasVJPAt : HasVJPAt fwd xtV := by
   unfold fwd
   have step1 : HasVJPAt (relu 8 ∘ dense W1V b8) xtV :=
-    vjp_comp_at (dense W1V b8) (relu 8) xtV
+    vjpCompAt (dense W1V b8) (relu 8) xtV
       ((dense_differentiable W1V b8) xtV)
       (relu_differentiableAt_of_smooth 8 _ preact_ne)
-      ((dense_has_vjp W1V b8).toHasVJPAt xtV)
-      (relu_has_vjp_at 8 _ preact_ne)
+      ((denseHasVJP W1V b8).toHasVJPAt xtV)
+      (reluHasVJPAt 8 _ preact_ne)
   have step1_diff : DifferentiableAt ℝ (relu 8 ∘ dense W1V b8) xtV :=
     (relu_differentiableAt_of_smooth 8 _ preact_ne).comp xtV
       ((dense_differentiable W1V b8) xtV)
-  exact vjp_comp_at (relu 8 ∘ dense W1V b8) (dense W2V b10) xtV
+  exact vjpCompAt (relu 8 ∘ dense W1V b8) (dense W2V b10) xtV
     step1_diff
     ((dense_differentiable W2V b10) _)
     step1
-    ((dense_has_vjp W2V b10).toHasVJPAt _)
+    ((denseHasVJP W2V b10).toHasVJPAt _)
 
 /-- The witness's contract, exposed: backward = the `pdiv`-contracted Jacobian. -/
-theorem trainedMlp_has_vjp_correct (dy : Vec 10) (i : Fin 49) :
-    trainedMlp_has_vjp_at.backward dy i = ∑ j, pdiv fwd xtV i j * dy j :=
-  trainedMlp_has_vjp_at.correct dy i
+theorem trainedMlpHasVJP_correct (dy : Vec 10) (i : Fin 49) :
+    trainedMlpHasVJPAt.backward dy i = ∑ j, pdiv fwd xtV i j * dy j :=
+  trainedMlpHasVJPAt.correct dy i
 
 /-- The whole-net Jacobian in closed form at the witness: dense → masked-ReLU →
     dense collapses to `Σ_k W1[k,j]·mask_k·W2[c,k]` (chain rule through the two
@@ -143,8 +143,8 @@ theorem pdiv_fwd_ne : pdiv fwd xtV 23 1 ≠ 0 := by
 /-- **Level 3: the trained-weight backward is not the zero map** — the seal the
     synthetic witnesses carry, at trained weights. -/
 theorem trainedMlp_backward_nontrivial :
-    trainedMlp_has_vjp_at.backward (basisVec 1) 23 ≠ 0 :=
-  trainedMlp_has_vjp_at.backward_ne_zero_of_pdiv_ne pdiv_fwd_ne
+    trainedMlpHasVJPAt.backward (basisVec 1) 23 ≠ 0 :=
+  trainedMlpHasVJPAt.backward_ne_zero_of_pdiv_ne pdiv_fwd_ne
 
 /-- The `fderiv` form: the whole-net Jacobian at the trained witness is nonzero. -/
 theorem trainedMlp_jacobian_nonzero : fderiv ℝ fwd xtV ≠ 0 := by

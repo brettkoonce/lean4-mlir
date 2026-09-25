@@ -6,8 +6,8 @@ self-maintaining: the `\uses` lines are generated from a Lean dependency walk an
 draws chapters in order with portal nodes, and every theorems section opens with its chapter's graph
 as TikZ (`scripts/book/blueprint_depgraph_tikz.py` → `blueprint/src/figures/depgraph/`). What the graph
 *covers* has not moved since the original suite: 87 proof nodes, all on the per-layer-VJP spine —
-the calculus of chapter 1, one `*_has_vjp` per layer, and a net-level `*_has_vjp_at` (ViT:
-`vitTiny_has_vjp_correct`) as each chapter's last node. Everything the suite grew since 2026-08 has
+the calculus of chapter 1, one `*HasVJP` per layer, and a net-level `*HasVJPAt` (ViT:
+`vitTinyHasVJP_correct`) as each chapter's last node. Everything the suite grew since 2026-08 has
 no node: the full-width batched nets, the folds, the step ties, the seals, the sync-BN twins, the
 descent capstones. The book names them in `\texttt` prose only (§2 lists where). This session adds
 them, chapter by chapter, so that each chapter's figure ends where the chapter's argument ends —
@@ -59,7 +59,7 @@ believed (2026-09-21: a local run walked 255 edges, CI 274 — the 19 were the V
 
 ## 2. The ladder, per chapter — what to add
 
-Each net's chapter should carry these rungs above its existing `*_has_vjp_at` node. Modules are
+Each net's chapter should carry these rungs above its existing `*HasVJPAt` node. Modules are
 under `LeanMlir/Proofs/`; the capstone is the theorem the module's docstring names as such — the
 "probable" names below came from the last theorem in each file and MUST be checked against the
 module (several are `*_den` lemmas that sit after the capstone). `\lean{}` takes the fully qualified
@@ -68,7 +68,7 @@ part of the name.
 
 | rung | what it says | module pattern | probable capstone |
 |---|---|---|---|
-| batched net | the full-width net at batch B has the VJP | `Nets/<f>/<Net>FullBVJP.lean` | `<net>ForwardB_full_has_vjp_at_correct` |
+| batched net | the full-width net at batch B has the VJP | `Nets/<f>/<Net>FullBVJP.lean` | `<net>ForwardB_fullHasVJPAt_correct` |
 | fold | the emitted train step denotes the certified gradient step | `Nets/<f>/<Net>Fold*.lean` | Small: `mlp_train_step_tied_certified`, `cnn_conv_tied_certified`, `cifar_conv_tied_certified`, `poc_train_step_tail_certified` (Linear); others: check the module |
 | step tie | the whole-net step ties to the batched spec at the loss | `Nets/<f>/<Net>StepTie*.lean` | `<net>_net_tied*` (`cnx_net_tiedGB`, `efficientnet_net_tiedG`, `vit_net_tiedGB`), ResNet/MobileNet: `*_lossCot_is_*_grad` |
 | seal | non-degeneracy on the full-width net | `Nets/<f>/<Net>FullBSeal.lean` | `…sealX_backward_nontrivial` (namespaced) |
@@ -85,11 +85,11 @@ resolves; `lean_deps` for the whole set is 938 edges). The drafted environments 
 | 2 | 2 | `thm:mlp_fold` -> `Proofs.MlpPoC.mlp_train_step_tied_certified`; `thm:mlp_sgd_descends` -> `Proofs.mlp_input_sgd_descends, Proofs.mlp_input_float_sgd_descends` |
 | 3 | 2 | `thm:cnn_fold` -> `Proofs.CnnPoC.cnn_conv_tied_certified`; `thm:cnn_sgd_descends` -> `Proofs.cnn_conv2_sgd_descends, Proofs.cnn_conv2_float_sgd_descends` (the header's capstone is conv2, not the conv1-bias rung) |
 | 4 | 5 | `thm:cifar_fold` -> `Proofs.CifarPoC.cifar_conv_tied_certified`; `thm:cifar_bn_fold` -> `Proofs.CifarBnPoC.bnSgdPairTied_holds`; `thm:cifar8_step_tie` -> `Proofs.Cifar8PoC.cifar8_convs_tied_certified`; `thm:cifar8bn_step_tie` -> `Proofs.Cifar8BnPoC.cifar8Bn_convbn_tied_certified`; `thm:cifar8_sgd_descends` -> `Proofs.cifar8_lastConv_sgd_descends`. `Cifar8Fold.lean` has NO declarations |
-| 5 | 9 | `resnet34/50ForwardB_full_has_vjp_at_correct`; `Proofs.r50InputGradB_eq_r34B_full_vjp, Proofs.r50InputGradB_correct`; `Proofs.ResNet34TieB.r34_net_tiedB`; `Proofs.ResNet50TieB.r50_net_tiedB, ...r50_lossCot_is_bce_grad`; `Proofs.R34FullBSeal.sealX_backward_nontrivial`; `Proofs.R50FullBSeal.sealX_backward_nontrivial`; `Proofs.ResNet34SyncTieB.r34_net_syncTiedB`; `Proofs.ResNet50SyncTieB.r50_net_syncTiedB, ...r50_net_syncTiedB_bce`. Retitle the section "The theorems" |
-| 6 | 10 | `Proofs.mobilenetv2ForwardB_full_has_vjp_at_correct`; `Proofs.StableHLO.mobilenetv4ForwardB_full_has_vjp_at_correct`; `Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp, Proofs.mnv2InputGradB_correct`; `Proofs.mnv4InputGradB_eq_mnv4B_full_vjp, Proofs.mnv4InputGradB_correct`; `Proofs.MobileNetV2TieB.mnv2_net_tiedB`; `Proofs.Mnv4TieB.mnv4_net_tiedB, ...mnv4_lossCot_is_smoothedCE_grad`; `Proofs.Mnv2FullBSeal.sealX_backward_nontrivial`; `Proofs.Mnv4FullBSeal.sealX_backward_nontrivial`; `Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB`; `Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB, ...mnv4_net_syncTiedB_smoothedCE`. MNv4 is the chapter's side quest; its nodes measured inside that section come out as a row of islands, so they stay in "The theorems" |
-| 7 | 4 | `Proofs.efficientnetForwardB_full_has_vjp_correct, Proofs.StableHLO.efficientnetFwdGraphB_full_faithful`; `Proofs.efficientnetInputGradB_full_correct`; `Proofs.EnetTiePoCG.efficientnet_net_tiedG`; `Proofs.EnetSyncTieG.efficientnet_net_syncTiedG`. Retitle the section "The theorems" |
+| 5 | 9 | `resnet34/50ForwardB_fullHasVJPAt_correct`; `Proofs.r50InputGradB_eq_r34B_full_vjp, Proofs.r50InputGradB_correct`; `Proofs.ResNet34TieB.r34_net_tiedB`; `Proofs.ResNet50TieB.r50_net_tiedB, ...r50_lossCot_is_bce_grad`; `Proofs.R34FullBSeal.sealX_backward_nontrivial`; `Proofs.R50FullBSeal.sealX_backward_nontrivial`; `Proofs.ResNet34SyncTieB.r34_net_syncTiedB`; `Proofs.ResNet50SyncTieB.r50_net_syncTiedB, ...r50_net_syncTiedB_bce`. Retitle the section "The theorems" |
+| 6 | 10 | `Proofs.mobilenetv2ForwardBFullHasVJPAt_correct`; `Proofs.StableHLO.mobilenetv4ForwardBFullHasVJPAt_correct`; `Proofs.mnv2InputGradB_eq_mobilenetv2B_full_vjp, Proofs.mnv2InputGradB_correct`; `Proofs.mnv4InputGradB_eq_mnv4B_full_vjp, Proofs.mnv4InputGradB_correct`; `Proofs.MobileNetV2TieB.mnv2_net_tiedB`; `Proofs.Mnv4TieB.mnv4_net_tiedB, ...mnv4_lossCot_is_smoothedCE_grad`; `Proofs.Mnv2FullBSeal.sealX_backward_nontrivial`; `Proofs.Mnv4FullBSeal.sealX_backward_nontrivial`; `Proofs.MobileNetV2SyncTieB.mnv2_net_syncTiedB`; `Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB, ...mnv4_net_syncTiedB_smoothedCE`. MNv4 is the chapter's side quest; its nodes measured inside that section come out as a row of islands, so they stay in "The theorems" |
+| 7 | 4 | `Proofs.efficientnetForwardBFullHasVJP_correct, Proofs.StableHLO.efficientnetFwdGraphBFull_faithful`; `Proofs.efficientnetInputGradBFull_correct`; `Proofs.EnetTiePoCG.efficientnet_net_tiedG`; `Proofs.EnetSyncTieG.efficientnet_net_syncTiedG`. Retitle the section "The theorems" |
 | 8 | 2 | `Proofs.convnextInputGradB_correct, Proofs.convnextImagenetInputGradB_eq_vjp`; `Proofs.CnxTiePoCGB.cnx_net_tiedGB` |
-| 9 | 4 | before the finale: `Proofs.vitForwardKV_has_vjp_correct`; `Proofs.StableHLO.vitFwdGraphKMHV_faithful`; after it: `Proofs.vitTinyInputGradB_eq_vitTiny_vjp, Proofs.vitInputGradKB_correct`; `Proofs.ViTTiePoCGB.vit_net_tiedGB` |
+| 9 | 4 | before the finale: `Proofs.vitForwardKVHasVJP_correct`; `Proofs.StableHLO.vitFwdGraphKMHV_faithful`; after it: `Proofs.vitTinyInputGradB_eq_vitTiny_vjp, Proofs.vitInputGradKB_correct`; `Proofs.ViTTiePoCGB.vit_net_tiedGB` |
 
 Two rungs of the original table are gone and one was added. Gone: the "fold" rung for every ImageNet net,
 because each `*Fold*`/`*FoldB`/`*FoldG(B)` module is an op table of per-op `*_den` lemmas with no capstone
@@ -99,8 +99,8 @@ which the doc had not listed and which are real whole-net theorems. Total 2 + 38
 
 **Finding (2026-09-22): the rungs are not stacked in Lean.** No ResNet certificate cites another: the sync
 tie does not cite the step tie, the step tie does not cite the batched VJP, the seal cites neither. Each
-is proved directly from the same 11–16 layer theorems of chapters 1, 3, 4 and 9 (`conv2d_has_vjp3`,
-`bn_has_vjp`, `dense_has_vjp`, `rowwise_has_vjp_mat`, `vjp_comp`, …). The chapter's shape is a fan, and
+is proved directly from the same 11–16 layer theorems of chapters 1, 3, 4 and 9 (`conv2dHasVJP3`,
+`bnHasVJP`, `denseHasVJP`, `rowwiseHasVJPMat`, `vjpComp`, …). The chapter's shape is a fan, and
 the fan pushes 16 existing nodes over the generator's `AMBIENT = 4` threshold, which hid them as portals
 everywhere — ch 5 rendered as nine islands with nothing listed. Fixed in `blueprint_depgraph_tikz.py`: a
 node whose every source is hidden (ambient, listed or heavy) hangs from the figure's one shared box,
@@ -153,7 +153,7 @@ the chapter's last VJP node** — one figure per chapter, ending at the capstone
 (ch 1: 460 × 398 pt at 5.6 pt). The alternative, nodes in the section that tells their story
 ("MLIR: Training Step"), was measured on a scratch copy: its two-node figure sets at 7.0 pt but the
 fold node has four imports, so the ≥ 4 rule lists them and draws it as an island. When a chapter's
-figure falls under 5.5 pt, cut at the net's `*_has_vjp_at` node (`CUTS`) rather than move nodes.
+figure falls under 5.5 pt, cut at the net's `*HasVJPAt` node (`CUTS`) rather than move nodes.
 The descent node carries both names, `\lean{Proofs.linear_sgd_descends,
 Proofs.linear_float_sgd_descends}`; the walker gives a two-name block the union of their edges.
 

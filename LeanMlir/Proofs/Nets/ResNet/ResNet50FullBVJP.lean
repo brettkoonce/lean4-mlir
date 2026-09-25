@@ -9,15 +9,15 @@ Proofs tier (`planning/archive/proofs_tier_to_paper_nets.md` §3.5(a)).
 
 ## No new mathematics, and nothing new one tier down
 
-Every block VJP is already proven at `bnBatchLA`: `r50BottleneckB_has_vjp_at`,
-`r50ProjBlockB_has_vjp_at` and `r50DownBlockB_has_vjp_at` (`ResNet50BackB0.lean`) are exactly the
+Every block VJP is already proven at `bnBatchLA`: `r50BottleneckBHasVJPAt`,
+`r50ProjBlockBHasVJPAt` and `r50DownBlockBHasVJPAt` (`ResNet50BackB0.lean`) are exactly the
 three shapes `r50IdB` / `r50ProjB` / `r50DownB` unfold to. The bundle lemmas below are delegations
 in `ResNet34FullBVJP.lean`'s style, and the whole net is those blocks' `CertLayer`s composed.
 
 ⭐ **And unlike ResNet-34's, this file needed no new `Foundation` lemma.** r34's T1 was blocked on
-`batchMap_has_vjp_at` (4.1c) for its stem pool. ResNet-50 has the same stem — and reuses
-`r34StemB_has_vjp_at` verbatim, so that lemma is spent rather than re-derived. The head is
-ResNet-34's too (`r34HeadB_has_vjp`, GLOBAL: GAP and dense are smooth and each is `batchMap` of a
+`batchMapHasVJPAt` (4.1c) for its stem pool. ResNet-50 has the same stem — and reuses
+`r34StemBHasVJPAt` verbatim, so that lemma is spent rather than re-derived. The head is
+ResNet-34's too (`r34HeadBHasVJP`, GLOBAL: GAP and dense are smooth and each is `batchMap` of a
 per-example op, so no hypothesis appears).
 
 ## The hypothesis budget
@@ -38,7 +38,7 @@ output grid nonempty. At `q = 0` the net is degenerate and the statement says so
 
 The running activations are named `r50Pre1 … r50Pre16` so each bundle can be STATED at the
 activation entering its block without a sixteen-deep nested application inline; `r50Pre16` doubles
-as the trunk, and `resnet50ForwardB_full_eq_chain` bridges it back to the committed
+as the trunk, and `resnet50ForwardBFull_eq_chain` bridges it back to the committed
 nested-application forward.
 
 ⭐ `N` and `q` are both variables: this tier carries no numerals, so ONE statement covers
@@ -114,31 +114,31 @@ structure R50DownSmoothAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid o
 
 -- ════════════════════════════════════════════════════════════════
 -- § Block bundle lemmas (delegation)
---   The stem and head are ResNet-34's — `r34StemB_has_vjp_at` and `r34HeadB_has_vjp` apply at
+--   The stem and head are ResNet-34's — `r34StemBHasVJPAt` and `r34HeadBHasVJP` apply at
 --   R50's widths with no restatement, so nothing appears here for them.
 -- ════════════════════════════════════════════════════════════════
 
-/-- Identity bottleneck VJP — `r50BottleneckB_has_vjp_at` at the bundle's fields. -/
-noncomputable def r50IdB_has_vjp_at (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
+/-- Identity bottleneck VJP — `r50BottleneckBHasVJPAt` at the bundle's fields. -/
+noncomputable def r50IdBHasVJPAt (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
     (hq : R50IdPos p) (v : Vec (N * (oc * h * w))) (hs : R50IdSmoothAt N h w p v) :
     HasVJPAt (r50IdB N h w p) v :=
-  StableHLO.r50BottleneckB_has_vjp_at N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+  StableHLO.r50BottleneckBHasVJPAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ v hs.hm1 hs.hm2 hs.hout
 
-/-- Stride-1 projection bottleneck VJP — `r50ProjBlockB_has_vjp_at` at the bundle's fields. -/
-noncomputable def r50ProjB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+/-- Stride-1 projection bottleneck VJP — `r50ProjBlockBHasVJPAt` at the bundle's fields. -/
+noncomputable def r50ProjBHasVJPAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (v : Vec (N * (ic * h * w))) (hs : R50ProjSmoothAt N h w p v) :
     HasVJPAt (r50ProjB N h w p) v :=
-  StableHLO.r50ProjBlockB_has_vjp_at N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+  StableHLO.r50ProjBlockBHasVJPAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
     p.Wp p.bp p.εp hq.hp p.γp p.βp v hs.hm1 hs.hm2 hs.hout
 
-/-- Strided projection bottleneck VJP — `r50DownBlockB_has_vjp_at` at the bundle's fields. -/
-noncomputable def r50DownB_has_vjp_at (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
+/-- Strided projection bottleneck VJP — `r50DownBlockBHasVJPAt` at the bundle's fields. -/
+noncomputable def r50DownBHasVJPAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : R50DownSmoothAt N h w p v) :
     HasVJPAt (r50DownB N h w p) v :=
-  StableHLO.r50DownBlockB_has_vjp_at N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+  StableHLO.r50DownBlockBHasVJPAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
     p.Wp p.bp p.εp hq.hp p.γp p.βp v hs.hm1 hs.hm2 hs.hout
 
@@ -332,12 +332,12 @@ theorem r50Pre16_apply (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec 
   rw [r50Pre16, Function.comp_apply]
 
 /-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** — the
-    ResNet-50 peer of `resnet34ForwardB_full_eq_chain`, and what lets the VJP be about
-    `resnet50ForwardB_full` rather than about a re-spelling of it. -/
-theorem resnet50ForwardB_full_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
+    ResNet-50 peer of `resnet34ForwardBFull_eq_chain`, and what lets the VJP be about
+    `resnet50ForwardBFull` rather than about a re-spelling of it. -/
+theorem resnet50ForwardBFull_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    resnet50ForwardB_full N q w x = (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x := by
-  rw [resnet50ForwardB_full, Function.comp_apply, r50Pre16_apply, r50Pre15_apply, r50Pre14_apply, r50Pre13_apply, r50Pre12_apply, r50Pre11_apply, r50Pre10_apply, r50Pre9_apply, r50Pre8_apply, r50Pre7_apply, r50Pre6_apply, r50Pre5_apply, r50Pre4_apply, r50Pre3_apply, r50Pre2_apply, r50Pre1_apply, r50Pre0_apply]
+    resnet50ForwardBFull N q w x = (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x := by
+  rw [resnet50ForwardBFull, Function.comp_apply, r50Pre16_apply, r50Pre15_apply, r50Pre14_apply, r50Pre13_apply, r50Pre12_apply, r50Pre11_apply, r50Pre10_apply, r50Pre9_apply, r50Pre8_apply, r50Pre7_apply, r50Pre6_apply, r50Pre5_apply, r50Pre4_apply, r50Pre3_apply, r50Pre2_apply, r50Pre1_apply, r50Pre0_apply]
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -377,13 +377,13 @@ noncomputable def r50NetLayer (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWe
     at a time, then each layer's forward by its `rfl` lemma. -/
 theorem r50NetLayer_fwd_apply (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    (r50NetLayer N q hq0 w hp).fwd x = resnet50ForwardB_full N q w x := by
+    (r50NetLayer N q hq0 w hp).fwd x = resnet50ForwardBFull N q w x := by
   rw [r50NetLayer]
   repeat rw [StableHLO.CertLayer.comp_fwd_apply]
   rw [r34StemLayer_fwd, r50ProjLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50DownLayer_fwd,
     r50IdLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50DownLayer_fwd, r50IdLayer_fwd,
     r50IdLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50IdLayer_fwd, r50DownLayer_fwd,
-    r50IdLayer_fwd, r50IdLayer_fwd, r34HeadLayer_fwd, resnet50ForwardB_full]
+    r50IdLayer_fwd, r50IdLayer_fwd, r34HeadLayer_fwd, resnet50ForwardBFull]
 
 /-- `R50SmoothAtB` is the layer's `.ok`: one `comp_ok_of` per block, each naming its block's
     input `r50PreK`, so every step is a one-level `rfl`. -/
@@ -420,33 +420,33 @@ theorem r50SmoothAtB_ok (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights 
 
     ⭐ The head takes no hypothesis at all, and `N` and `q` are both variables, so this covers the
     224-px and 160-px artifacts at every batch size. ⛔ `0 < q` is needed for the stem pool. -/
-noncomputable def resnet50ForwardB_full_has_vjp_at (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+noncomputable def resnet50ForwardBFullHasVJPAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) :
     HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x :=
-  (funext fun v => (r50NetLayer_fwd_apply N q hq0 w hp v).trans (resnet50ForwardB_full_eq_chain N q w v)
+  (funext fun v => (r50NetLayer_fwd_apply N q hq0 w hp v).trans (resnet50ForwardBFull_eq_chain N q w v)
     : (r50NetLayer N q hq0 w hp).fwd = _) ▸ (r50NetLayer N q hq0 w hp).vjp x (r50SmoothAtB_ok N q hq0 w hp x hx)
 
 /-- ⭐⭐ **Public correctness theorem**: the sixteen-bottleneck batch-BN backward equals the
-    `pdiv`-contracted Jacobian of `resnet50ForwardB_full` ITSELF — the committed
+    `pdiv`-contracted Jacobian of `resnet50ForwardBFull` ITSELF — the committed
     nested-application forward `ResNet50FullB.lean` defines — not of the layered chain the VJP is
-    assembled on. Tied back through `resnet50ForwardB_full_eq_chain`. -/
-theorem resnet50ForwardB_full_has_vjp_at_correct (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    assembled on. Tied back through `resnet50ForwardBFull_eq_chain`. -/
+theorem resnet50ForwardBFullHasVJPAt_correct (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
-    (resnet50ForwardB_full_has_vjp_at N q hq0 w hp x hx).backward dy i =
-      ∑ j : Fin (N * nCls), pdiv (resnet50ForwardB_full N q w) x i j * dy j := by
-  have h := (resnet50ForwardB_full_has_vjp_at N q hq0 w hp x hx).correct dy i
-  rwa [show resnet50ForwardB_full N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
-      from funext (resnet50ForwardB_full_eq_chain N q w)]
+    (resnet50ForwardBFullHasVJPAt N q hq0 w hp x hx).backward dy i =
+      ∑ j : Fin (N * nCls), pdiv (resnet50ForwardBFull N q w) x i j * dy j := by
+  have h := (resnet50ForwardBFullHasVJPAt N q hq0 w hp x hx).correct dy i
+  rwa [show resnet50ForwardBFull N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
+      from funext (resnet50ForwardBFull_eq_chain N q w)]
 
 /-- ⭐ The committed forward is differentiable at every smooth point — the layer's `.diff`. What
-    the seal's `sealDiffAt` needs. -/
-theorem resnet50ForwardB_full_differentiableAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
+    the seal's `seal_differentiableAt` needs. -/
+theorem resnet50ForwardBFull_differentiableAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) :
-    DifferentiableAt ℝ (resnet50ForwardB_full N q w) x := by
+    DifferentiableAt ℝ (resnet50ForwardBFull N q w) x := by
   rw [← funext (r50NetLayer_fwd_apply N q hq0 w hp)]
   exact (r50NetLayer N q hq0 w hp).diff x (r50SmoothAtB_ok N q hq0 w hp x hx)
 

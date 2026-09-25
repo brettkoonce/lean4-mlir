@@ -32,7 +32,7 @@ timm's `mobilenetv4_conv_medium` (the pinned spec, `planning/mnv4_timm_parity.md
 (`dw_start`) is depthwise → BN with **no activation** (`dwbB`, globally certified); the post-DW
 (`dw_mid`) is depthwise → BN → **relu** (`dwbReluB`, and its strided peer `dwbReluBstrided`).
 Relu, not relu6 — MobileNetV2 uses relu6 one file over. The relu stage is
-`bnReluStage_has_vjp_at` (`Foundation/BatchedStageLayers`, generic in the op) at `depthwiseFlat`;
+`bnReluStageHasVJPAt` (`Foundation/BatchedStageLayers`, generic in the op) at `depthwiseFlat`;
 its backward graph masks with `.selectPos`, relu's one-sided mask.
 
 ## Contents
@@ -49,7 +49,7 @@ The net level consumes these block by block: T1 and T2 are `MobileNetV4FullB` /
 `MobileNetV4FullBVJP`, T3 is `MobileNetV4StepTieB`, T6 is `MobileNetV4WholeBackCertifiedTieB`.
 
 ⚠ The stem is not here and is not a `CertLayer`: no render emits a gradient into `%x`, so there is
-no backward graph for it, and a net-level forward composes the stem's VJP by `vjp_comp_at` rather
+no backward graph for it, and a net-level forward composes the stem's VJP by `vjpCompAt` rather
 than `CertLayer.comp`.
 -/
 
@@ -71,11 +71,11 @@ theorem dwbB_differentiable (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c
     Differentiable ℝ (dwbB N (h := h) (w := w) W b ε γ β) :=
   bnStage_differentiable N (depthwiseFlat W b) (depthwiseFlat_differentiable W b) ε hε γ β
 
-noncomputable def dwbB_has_vjp (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+noncomputable def dwbBHasVJP (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
     (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
     HasVJP (dwbB N (h := h) (w := w) W b ε γ β) :=
-  bnStage_has_vjp N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
-    (depthwiseFlat_has_vjp W b) ε hε γ β
+  bnStageHasVJP N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
+    (depthwiseFlatHasVJP W b) ε hε γ β
 
 /-- `dwbB`'s backward graph: the BN backward, then the depthwise input-VJP — no mask. -/
 noncomputable def dwbBackBatchedGraph {N c h w kH kW : Nat}
@@ -88,10 +88,10 @@ theorem dwbBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
     den (dwbBackBatchedGraph W b ε γ β x e)
-      = (dwbB_has_vjp N W b ε hε γ β).backward x (den e) := by
+      = (dwbBHasVJP N W b ε hε γ β).backward x (den e) := by
   rw [dwbBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε)]
-  simp only [dwbB_has_vjp, bnStage_has_vjp, vjp_comp_backward]
+  simp only [dwbBHasVJP, bnStageHasVJP, vjpComp_backward]
 
 /-- The pre-DW stage as a `CertLayer`. Globally certified (`ok = True`): with no activation there
     is no kink — the `projLayer` situation, at a depthwise. -/
@@ -101,7 +101,7 @@ noncomputable def mnv4DWBnLayer (N : Nat) {c h w kH kW : Nat}
   fwd := dwbB N (h := h) (w := w) W b ε γ β
   ok := fun _ => True
   diff := fun x _ => (dwbB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (dwbB_has_vjp N W b ε hε γ β).toHasVJPAt x
+  vjp := fun x _ => (dwbBHasVJP N W b ε hε γ β).toHasVJPAt x
   graph := fun x e => dwbBackBatchedGraph W b ε γ β x e
   faithful := fun x _ e => dwbBackBatchedGraph_faithful W b ε hε γ β x e
 
@@ -123,15 +123,15 @@ noncomputable def mnv4DWBnLayer (N : Nat) {c h w kH kW : Nat}
     Vec (N * (c * (2 * h) * (2 * w))) → Vec (N * (c * h * w)) :=
   relu (N * (c * h * w)) ∘ bnBatchLA N c h w ε γ β ∘ batchMap N (depthwiseStride2Flat W b)
 
-/-- `dwbReluB`'s `_at` VJP — ⭐ one instantiation of `bnReluStage_has_vjp_at` at `depthwiseFlat`.
-    The same lemma `cbReluB_has_vjp_at` uses at `flatConv`; nothing analytic is new. -/
-noncomputable def dwbReluB_has_vjp_at (N : Nat) {c h w kH kW : Nat}
+/-- `dwbReluB`'s `_at` VJP — ⭐ one instantiation of `bnReluStageHasVJPAt` at `depthwiseFlat`.
+    The same lemma `cbReluBHasVJPAt` uses at `flatConv`; nothing analytic is new. -/
+noncomputable def dwbReluBHasVJPAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0) :
     HasVJPAt (dwbReluB N (h := h) (w := w) W b ε γ β) x :=
-  bnReluStage_has_vjp_at N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
-    (depthwiseFlat_has_vjp W b) ε hε γ β x h_smooth
+  bnReluStageHasVJPAt N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
+    (depthwiseFlatHasVJP W b) ε hε γ β x h_smooth
 
 theorem dwbReluB_differentiableAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
@@ -141,13 +141,13 @@ theorem dwbReluB_differentiableAt (N : Nat) {c h w kH kW : Nat}
   bnReluStage_differentiableAt N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
     ε hε γ β x h_smooth
 
-noncomputable def dwbReluBstrided_has_vjp_at (N : Nat) {c h w kH kW : Nat}
+noncomputable def dwbReluBstridedHasVJPAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w))))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0) :
     HasVJPAt (dwbReluBstrided N (h := h) (w := w) W b ε γ β) x :=
-  bnReluStage_has_vjp_at N (depthwiseStride2Flat W b) (depthwiseStride2Flat_differentiable W b)
-    (depthwiseStride2Flat_has_vjp W b) ε hε γ β x h_smooth
+  bnReluStageHasVJPAt N (depthwiseStride2Flat W b) (depthwiseStride2Flat_differentiable W b)
+    (depthwiseStride2FlatHasVJP W b) ε hε γ β x h_smooth
 
 theorem dwbReluBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
@@ -172,11 +172,11 @@ theorem dwbReluBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0) :
     den (dwbReluBackBatchedGraph W b ε γ β x e)
-      = (dwbReluB_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+      = (dwbReluBHasVJPAt N W b ε hε γ β x h_smooth).backward (den e) := by
   rw [dwbReluBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [dwbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
+  simp only [dwbReluBHasVJPAt, bnReluStageHasVJPAt, stageHasVJPAt, vjpCompAt_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The strided depthwise-relu stage's backward graph. -/
@@ -194,11 +194,11 @@ theorem dwbReluBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0) :
     den (dwbReluBstridedBackBatchedGraph W b ε γ β x e)
-      = (dwbReluBstrided_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+      = (dwbReluBstridedHasVJPAt N W b ε hε γ β x h_smooth).backward (den e) := by
   rw [dwbReluBstridedBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [dwbReluBstrided_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
+  simp only [dwbReluBstridedHasVJPAt, bnReluStageHasVJPAt, stageHasVJPAt, vjpCompAt_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
@@ -213,7 +213,7 @@ noncomputable def mnv4DWReluLayer (N : Nat) {c h w kH kW : Nat}
   fwd := dwbReluB N (h := h) (w := w) W b ε γ β
   ok := fun x => ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0
   diff := fun x hx => dwbReluB_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => dwbReluB_has_vjp_at N W b ε hε γ β x hx
+  vjp := fun x hx => dwbReluBHasVJPAt N W b ε hε γ β x hx
   graph := fun x e => dwbReluBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => dwbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
 
@@ -272,7 +272,7 @@ noncomputable def mnv4DWReluStridedLayer (N : Nat) {c h w kH kW : Nat}
   fwd := dwbReluBstrided N (h := h) (w := w) W b ε γ β
   ok := fun x => ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0
   diff := fun x hx => dwbReluBstrided_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => dwbReluBstrided_has_vjp_at N W b ε hε γ β x hx
+  vjp := fun x hx => dwbReluBstridedHasVJPAt N W b ε hε γ β x hx
   graph := fun x e => dwbReluBstridedBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => dwbReluBstridedBackBatchedGraph_faithful W b ε hε γ β x e hx
 
@@ -315,7 +315,7 @@ normalises over the batch alone. Until 2026-09-24 `conv_head` ran at 7×7 before
 batch BN and relu do not commute with. -/
 
 /-- **An index relabelling as a `CertLayer`**: the same vector read at `m` instead of `n` along a
-    proved `n = m`. The forward is the `Fin.cast` gather, the VJP `reindex_has_vjp`, and the graph
+    proved `n = m`. The forward is the `Fin.cast` gather, the VJP `reindexHasVJP`, and the graph
     `castIdx`, which emits no text (`skel` erases indices). The head needs two: the pooled `[N, c]`
     is `conv_head`'s `[N, c, 1, 1]`, and its `[N, oc, 1, 1]` output is the classifier's `[N, oc]`;
     `c * 1 * 1` and `c` are equal but not definitionally so at a variable `c`. -/
@@ -323,7 +323,7 @@ noncomputable def castLayer {n m : Nat} (h : n = m) : CertLayer n m where
   fwd := reindexCLM (Fin.cast h.symm)
   ok := fun _ => True
   diff := fun x _ => (reindexCLM (Fin.cast h.symm)).differentiableAt
-  vjp := fun x _ => (reindex_has_vjp (Fin.cast h.symm)).toHasVJPAt x
+  vjp := fun x _ => (reindexHasVJP (Fin.cast h.symm)).toHasVJPAt x
   graph := fun _ e => castIdx h.symm e
   faithful := fun x _ e => by
     funext i
@@ -339,7 +339,7 @@ theorem castLayer_fwd_apply {n m : Nat} (h : n = m) (v : Vec n) :
     (castLayer h).fwd v = fun j => v (Fin.cast h.symm j) := rfl
 
 /-- The pooled `[N, c]` read as `[N, c, 1, 1]`. -/
-theorem mnv4Pool11 (N c : Nat) : N * c = N * (c * 1 * 1) := by rw [Nat.mul_one, Nat.mul_one]
+theorem mnv4_pool11 (N c : Nat) : N * c = N * (c * 1 * 1) := by rw [Nat.mul_one, Nat.mul_one]
 
 /-- ⭐ **MNv4's head**: conv-bn-relu, GAP, `conv_head`-bn-relu on the pooled features, classifier,
     with the two `1×1` relabellings between. Only the two conv stages carry a smoothness condition
@@ -350,8 +350,8 @@ noncomputable def mnv4Head (N : Nat) {c mid oc nC h w : Nat}
     (convHead : CertLayer (N * (mid * 1 * 1)) (N * (oc * 1 * 1)))
     (cls : CertLayer (N * oc) (N * nC)) :
     CertLayer (N * (c * h * w)) (N * nC) :=
-  headConv.comp (gap.comp ((castLayer (mnv4Pool11 N mid)).comp
-    (convHead.comp ((castLayer (mnv4Pool11 N oc).symm).comp cls))))
+  headConv.comp (gap.comp ((castLayer (mnv4_pool11 N mid)).comp
+    (convHead.comp ((castLayer (mnv4_pool11 N oc).symm).comp cls))))
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller

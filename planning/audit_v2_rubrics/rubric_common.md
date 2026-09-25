@@ -50,7 +50,7 @@ the CertLayer re-spelling (`planning/certlayer_nets.md`). 106 commits, ~22k line
   as "overlaps certlayer_nets".
 - Consequential lesson from v1: every hand-rolled lemma it found was ALREADY in Mathlib when written.
   "Mathlib didn't have it yet" is not an excuse. Also v1 found the repo's own shared kits (`CertLayer`,
-  `pdiv_clm`, `flat_diff_comp`, `stage_has_vjp_at`, `BnPairTiedB`, …) under-used — check whether
+  `pdiv_clm`, `flat_differentiable_comp`, `stageHasVJPAt`, `BnPairTiedB`, …) under-used — check whether
   NEW code since v1 bypasses them.
 
 ## Pinned names are expensive

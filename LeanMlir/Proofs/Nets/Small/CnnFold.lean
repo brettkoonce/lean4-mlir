@@ -17,8 +17,8 @@ biases — structurally a 3-layer MLP over the flattened pool output) and the
 via the M2 `weight_grad_bridge`/`bias_grad_bridge` at the `mlpCotOut`-style chain
 cotangents — the head is a 3-layer MLP, so the IR `mlpCotOut0/1` apply verbatim).
 The conv layers use the **new core ops** `convWeightSgd`/`convBiasSgd`
-(StableHLO.lean): their `den` is `flatten(W − lr·conv2d_weight_grad…)` /
-`b − lr·conv2d_bias_grad…`, proven = certified by the chain-pinned conv bridges
+(StableHLO.lean): their `den` is `flatten(W − lr·conv2dWeightGrad…)` /
+`b − lr·conv2dBiasGrad…`, proven = certified by the chain-pinned conv bridges
 `cnn_render_conv{W,b}{1,2}_chain_certified` (CnnChainClose.lean) at the cotangents
 the CNN backward chain actually delivers (`cnnChainCotW1`/`cnnChainCotW2`).
 
@@ -54,7 +54,7 @@ namespace Proofs.CnnPoC
 /-! ## Convolution layers — the new `convWeightSgd`/`convBiasSgd` ops denote certified
 
 `den (convWeightSgd … (.operand _ c))` is by construction
-`flatten W − lr·conv2d_weight_grad(b,x)·c` (and likewise for the bias); pinning
+`flatten W − lr·conv2dWeightGrad(b,x)·c` (and likewise for the bias); pinning
 `c` to the cotangent the chain delivers and applying the chain-certified conv
 bridge gives `θ − lr·(certified ∂conv/∂θ · the-chain-cotangent)`. (The `den`
 reduction is definitional — `rfl` — exactly as `LinPoC.poc_weightSgd_den_eq`.) -/

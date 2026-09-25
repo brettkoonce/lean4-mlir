@@ -15,7 +15,7 @@ layout is kernel-`#guard`ed against the audited `EfficientNetLayout`. Trains on
 `verified_mlir/efficientnet_{train_step,fwd}.mlir` (rendered by tests/TestEfficientNet*)
 through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, batch-norm, He-init).
 Each op fragment is a proven-faithful emitter (swish/sigmoid/SE/depthwise k×k/batch-norm);
-the whole-net VJP `efficientnet_has_vjp` is a representative witness (full B/C deferred).
+the whole-net VJP `efficientnetHasVJP` is a representative witness (full B/C deferred).
 
 Run (GPU): `.lake/build/bin/efficientnet-verified data`
 

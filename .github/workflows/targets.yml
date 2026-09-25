@@ -53,3 +53,22 @@ jobs:
             fi
           } >> $GITHUB_STEP_SUMMARY
           exit $rc
+      - name: Declaration names follow LeanMlir/NAMING.md (ratchet)
+        run: |
+          set -o pipefail
+          rc=0
+          python3 scripts/gates/name_lint.py 2>&1 | tee /tmp/names.log || rc=$?
+          {
+            echo "## Name lint"
+            echo ""
+            if [ $rc -eq 0 ]; then
+              sed -n 's/^✓ /✅ /p' /tmp/names.log
+            else
+              echo "❌ **New names outside the naming convention** — see \`LeanMlir/NAMING.md\`."
+              echo ""
+              echo '```'
+              grep '✗' /tmp/names.log
+              echo '```'
+            fi
+          } >> $GITHUB_STEP_SUMMARY
+          exit $rc

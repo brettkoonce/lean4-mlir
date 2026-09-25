@@ -28,13 +28,13 @@ theorem posEmbedGrad_den {ic H W P N D : Nat} (cotN : String)
     den (SHlo.posEmbedGrad (.operand cotN dy)) i
       = ∑ j : Fin ((N + 1) * D),
           pdiv (fun p : Vec ((N + 1) * D) =>
-                  patchEmbed_flat ic H W P N D Wc bc cls (Mat.unflatten p) img)
+                  patchEmbedFlat ic H W P N D Wc bc cls (Mat.unflatten p) img)
             (Mat.flatten pos) i j * dy j := by
   simp [denStepApp, pdiv_patchEmbed_pos]
 
 /-- **CLS-token GRADIENT denotes the certified gradient.** The render slices row 0 of the embed
     cotangent (`clsSliceF`) and then reduces it as a `[1, D]` batch, so the op is
-    `denseBiasGradB` at `N = 1` and its `den` IS `cls_token_grad`. ⚠ Stated at the committed
+    `denseBiasGradB` at `N = 1` and its `den` IS `clsTokenGrad`. ⚠ Stated at the committed
     ViT-Tiny dims rather than generically, for the reason `ViTTiePoC.vit_cls_den` is: the operand's
     type is `Vec (1 * D)`, which reduces to `Vec D` only at a literal `D`.
 
@@ -48,10 +48,10 @@ theorem clsGrad_den (cotN : String)
             (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i
       = ∑ j : Fin (197 * 192),
           pdiv (fun cl : Vec 192 =>
-                  patchEmbed_flat 3 224 224 16 196 192 Wc bc cl pos img) cls i j * dyEmbed j := by
+                  patchEmbedFlat 3 224 224 16 196 192 Wc bc cl pos img) cls i j * dyEmbed j := by
   have hstep : den (SHlo.denseBiasGradB (N := 1) (c := 192)
-            (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i = cls_token_grad dyEmbed i := by
-    simp only [denStepApp, batchSlice, cls_token_grad]; rw [Fin.sum_univ_one]; rfl
+            (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i = clsTokenGrad dyEmbed i := by
+    simp only [denStepApp, batchSlice, clsTokenGrad]; rw [Fin.sum_univ_one]; rfl
   rw [hstep]
   have h := vit_render_cls_certified Wc bc cls pos img dyEmbed 1 i
   linarith

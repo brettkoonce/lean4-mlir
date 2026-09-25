@@ -50,8 +50,8 @@ and `bnBatchLA_bcell` is the bridge. Everything after it is the usual BN algebra
   `MaxPool3s2`), GAP shifts likewise (`globalAvgPool_shift`, `CNN`), and `relu`, `residual`, the
   pool, `batchMap` and `bnIstd` are continuous (`MLP`, `Residual`, `MaxPool3s2`, `Batched`,
   `BatchNorm`). §5 keeps `bnRowLA_continuous`, which is about this file's own reindex.
-* §11 the SYMMETRIC strided depthwise (`EDiff_dwS2`), MobileNetV4's; §3c's is the XLA one.
-* §12 `BUnif`, a grid-constant slab, and `EDiff_of_BUnif`, the carrier it starts.
+* §11 the SYMMETRIC strided depthwise (`eDiff_dwS2`), MobileNetV4's; §3c's is the XLA one.
+* §12 `BUnif`, a grid-constant slab, and `eDiff_of_bUnif`, the carrier it starts.
 -/
 
 namespace Proofs
@@ -645,14 +645,14 @@ def EDiff {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w))) : Prop 
     bcell v 0 ci i j = bcell v 1 ci i j + δ ci
 
 /-- The ray's carrier: `t` in channel 0, nothing elsewhere. -/
-theorem EDiff_rayX (H W : Nat) (t : ℝ) :
+theorem eDiff_rayX (H W : Nat) (t : ℝ) :
     EDiff (fun ci => if ci.val = 0 then t else 0) (rayX H W t) := by
   intro ci i j
   rw [bcell_rayX, bcell_rayX]
   by_cases h : ci.val = 0 <;> simp [h]
 
 /-- A batch-uniform shift (a zeroed residual body) is transparent to the carrier. -/
-theorem EDiff_shift {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w))) (s : ℝ)
+theorem eDiff_shift {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w))) (s : ℝ)
     (hv : EDiff δ v) : EDiff δ (fun k => v k + s) := by
   intro ci i j
   rw [bcell_shift, bcell_shift, hv ci i j]
@@ -660,7 +660,7 @@ theorem EDiff_shift {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w)
 
 /-- ⭐⭐ **Batch BN scales the carrier by `γ_c · istd_c`** — the two examples share the channel's
     mean and `istd`, so centring keeps their difference (`bnBatchLA_exdiff`). -/
-theorem EDiff_bn (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (δ δ' : Fin oc → ℝ)
+theorem eDiff_bn (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (δ δ' : Fin oc → ℝ)
     (v : Vec (2 * (oc * h * w))) (hv : EDiff δ v)
     (hδ : ∀ ci, δ' ci = γ ci * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 oc h w v ci) ε) :
     EDiff δ' (StableHLO.bnBatchLA 2 oc h w ε γ β v) := by
@@ -673,7 +673,7 @@ theorem EDiff_bn (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (δ δ' : Fin oc →
 
 /-- A centre-tap conv copies channel 0's offset to **every** output channel, and is transparent to
     the zero padding because only the centre tap is nonzero. -/
-theorem EDiff_conv {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+theorem eDiff_conv {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (δ : Fin ic → ℝ) (δ' : Fin oc → ℝ)
     (v : Vec (2 * (ic * h * w))) (hv : EDiff δ v) (hδ : ∀ o, δ' o = s * δ c₀) :
     EDiff δ' (StableHLO.batchMap 2 (flatConv (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
@@ -682,8 +682,8 @@ theorem EDiff_conv {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0
     bcell_conv_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
   ring
 
-/-- The strided peer of `EDiff_conv`. -/
-theorem EDiff_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+/-- The strided peer of `eDiff_conv`. -/
+theorem eDiff_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (δ : Fin ic → ℝ) (δ' : Fin oc → ℝ)
     (v : Vec (2 * (ic * (2 * h) * (2 * w)))) (hv : EDiff δ v) (hδ : ∀ o, δ' o = s * δ c₀) :
     EDiff δ'
@@ -693,8 +693,8 @@ theorem EDiff_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val =
     bcell_convS2_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
   ring
 
-/-- The XLA-`SAME` strided peer of `EDiff_conv` — MobileNetV2's stem. -/
-theorem EDiff_convS2Xla {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+/-- The XLA-`SAME` strided peer of `eDiff_conv` — MobileNetV2's stem. -/
+theorem eDiff_convS2Xla {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (δ : Fin ic → ℝ) (δ' : Fin oc → ℝ)
     (v : Vec (2 * (ic * (2 * h) * (2 * w)))) (hv : EDiff δ v) (hδ : ∀ o, δ' o = s * δ c₀) :
     EDiff δ'
@@ -704,10 +704,10 @@ theorem EDiff_convS2Xla {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.va
     bcell_convS2Xla_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
   ring
 
-/-- ⭐ **A centre-tap depthwise scales the carrier channel by channel.** Unlike `EDiff_conv`, which
+/-- ⭐ **A centre-tap depthwise scales the carrier channel by channel.** Unlike `eDiff_conv`, which
     collapses δ to the single value `s * δ c₀` at every output channel, a depthwise reads only its
     own channel, so the whole function δ survives, scaled. -/
-theorem EDiff_dw {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+theorem eDiff_dw {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * h * w))) (hv : EDiff δ v)
     (hδ : ∀ ch, δ' ch = s * δ ch) :
     EDiff δ' (StableHLO.batchMap 2 (depthwiseFlat (h := h) (w := w) (ctDW c kH kW s) b) v) := by
@@ -716,9 +716,9 @@ theorem EDiff_dw {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b 
     hv ch i j]
   ring
 
-/-- The strided XLA-`SAME` peer of `EDiff_dw`. The carrier is spatially uniform, so decimation —
+/-- The strided XLA-`SAME` peer of `eDiff_dw`. The carrier is spatially uniform, so decimation —
     whichever phase it keeps — is transparent to it. -/
-theorem EDiff_dwS2Xla {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+theorem eDiff_dwS2Xla {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w)))) (hv : EDiff δ v)
     (hδ : ∀ ch, δ' ch = s * δ ch) :
     EDiff δ'
@@ -729,7 +729,7 @@ theorem EDiff_dwS2Xla {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ
   ring
 
 /-- The 3×3/s2 pool keeps the carrier, at every `t`. -/
-theorem EDiff_pool (c h w : Nat) (δ : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w))))
+theorem eDiff_pool (c h w : Nat) (δ : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w))))
     (hv : EDiff δ v) : EDiff δ (StableHLO.batchMap 2 (maxPool3s2Flat c h w) v) := by
   intro ci i j
   rw [bcell_pool, bcell_pool]
@@ -849,7 +849,7 @@ theorem head_diff_ct {c h w nCls : Nat} (hh : 0 < h) (hw : 0 < w) (c₀ : Fin c)
   · simp [hc₀]
 
 -- ════════════════════════════════════════════════════════════════
--- § 11. The SYMMETRIC strided depthwise — `EDiff_dwS2Xla`'s peer
+-- § 11. The SYMMETRIC strided depthwise — `eDiff_dwS2Xla`'s peer
 --   ⚠ MobileNetV2's strided depthwises are XLA-`SAME` (odd decimation); MobileNetV4's are
 --   symmetric (even). One lemma per padding token, as at the strided convs.
 -- ════════════════════════════════════════════════════════════════
@@ -871,7 +871,7 @@ theorem bcell_dwS2_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s :
   rw [bcell_batchMap]
   exact depthwiseStride2Flat_ctDW hkH hkW s b _ ch i j
 
-theorem EDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+theorem eDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w)))) (hv : EDiff δ v)
     (hδ : ∀ ch, δ' ch = s * δ ch) :
     EDiff δ'
@@ -883,7 +883,7 @@ theorem EDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (
 
 -- ════════════════════════════════════════════════════════════════
 -- § 12. `BUnif` — a slab constant over the grid, one value per (example, channel)
---   The seals' inputs are built this way (`t • rayV`); `EDiff_of_BUnif` reads the carrier off one.
+--   The seals' inputs are built this way (`t • rayV`); `eDiff_of_bUnif` reads the carrier off one.
 -- ════════════════════════════════════════════════════════════════
 def BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (v : Vec (2 * (c * h * w))) : Prop :=
   ∀ (n : Fin 2) (ci : Fin c) (i : Fin h) (j : Fin w), bcell v n ci i j = a n ci
@@ -891,25 +891,25 @@ def BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (v : Vec (2 * (c * h * w))
 -- ════════════════════════════════════════════════════════════════
 -- § One carrier stage: a centre-tap op at scale 1, bias 0, then its BatchNorm at ε = 1
 --   The per-net seals walk the carrier through ~45 of these; each is the op's `EDiff`, fed to
---   `EDiff_bn` with `γ = kv γ0`. `Z` is the BN input as the net spells it (`hZ` by `rfl`).
+--   `eDiff_bn` with `γ = kv γ0`. `Z` is the BN input as the net spells it (`hZ` by `rfl`).
 -- ════════════════════════════════════════════════════════════════
 
 /-- A centre-tap 1×1 (or `kH×kW`) conv, then its BatchNorm: the carrier is channel `c₀`'s offset
     times `γ0 · istd`, at every output channel. -/
-theorem EDiff_convBn {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0) (hkH : 0 < kH)
+theorem eDiff_convBn {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0) (hkH : 0 < kH)
     (hkW : 0 < kW) (γ0 β0 : ℝ) (Z : Vec (2 * (oc * h * w))) {δ : Fin ic → ℝ}
     {δ' : Fin oc → ℝ} {v : Vec (2 * (ic * h * w))} (hv : EDiff δ v)
     (hZ : Z = StableHLO.batchMap 2 (flatConv (h := h) (w := w) (ctK oc ic kH kW 1) (kv oc 0)) v)
     (hδ : ∀ ci, δ' ci = γ0 * δ c₀ * bnIstd (2 * (h * w)) (bnRowLA 2 oc h w Z ci) 1) :
     EDiff δ' (StableHLO.bnBatchLA 2 oc h w 1 (kv oc γ0) (kv oc β0) Z) := by
   subst hZ
-  refine EDiff_bn oc h w 1 (kv oc γ0) (kv oc β0) (fun _ => 1 * δ c₀) δ' _
-    (EDiff_conv c₀ hc₀ hkH hkW 1 (kv oc 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  refine eDiff_bn oc h w 1 (kv oc γ0) (kv oc β0) (fun _ => 1 * δ c₀) δ' _
+    (eDiff_conv c₀ hc₀ hkH hkW 1 (kv oc 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
   rw [hδ ci, kv_apply]
   ring
 
-/-- The strided peer of `EDiff_convBn`. -/
-theorem EDiff_convS2Bn {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0) (hkH : 0 < kH)
+/-- The strided peer of `eDiff_convBn`. -/
+theorem eDiff_convS2Bn {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0) (hkH : 0 < kH)
     (hkW : 0 < kW) (γ0 β0 : ℝ) (Z : Vec (2 * (oc * h * w))) {δ : Fin ic → ℝ}
     {δ' : Fin oc → ℝ} {v : Vec (2 * (ic * (2 * h) * (2 * w)))} (hv : EDiff δ v)
     (hZ : Z = StableHLO.batchMap 2
@@ -917,25 +917,25 @@ theorem EDiff_convS2Bn {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val
     (hδ : ∀ ci, δ' ci = γ0 * δ c₀ * bnIstd (2 * (h * w)) (bnRowLA 2 oc h w Z ci) 1) :
     EDiff δ' (StableHLO.bnBatchLA 2 oc h w 1 (kv oc γ0) (kv oc β0) Z) := by
   subst hZ
-  refine EDiff_bn oc h w 1 (kv oc γ0) (kv oc β0) (fun _ => 1 * δ c₀) δ' _
-    (EDiff_convS2 c₀ hc₀ hkH hkW 1 (kv oc 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  refine eDiff_bn oc h w 1 (kv oc γ0) (kv oc β0) (fun _ => 1 * δ c₀) δ' _
+    (eDiff_convS2 c₀ hc₀ hkH hkW 1 (kv oc 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
   rw [hδ ci, kv_apply]
   ring
 
 /-- A centre-tap depthwise conv, then its BatchNorm: channel by channel, `δ ci · γ0 · istd`. -/
-theorem EDiff_dwBn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
+theorem eDiff_dwBn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
     (Z : Vec (2 * (c * h * w))) {δ δ' : Fin c → ℝ} {v : Vec (2 * (c * h * w))} (hv : EDiff δ v)
     (hZ : Z = StableHLO.batchMap 2 (depthwiseFlat (h := h) (w := w) (ctDW c kH kW 1) (kv c 0)) v)
     (hδ : ∀ ci, δ' ci = γ0 * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 c h w Z ci) 1) :
     EDiff δ' (StableHLO.bnBatchLA 2 c h w 1 (kv c γ0) (kv c β0) Z) := by
   subst hZ
-  refine EDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
-    (EDiff_dw hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  refine eDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
+    (eDiff_dw hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
   rw [hδ ci, kv_apply]
   ring
 
-/-- The strided peer of `EDiff_dwBn`. -/
-theorem EDiff_dwS2Bn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
+/-- The strided peer of `eDiff_dwBn`. -/
+theorem eDiff_dwS2Bn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
     (Z : Vec (2 * (c * h * w))) {δ δ' : Fin c → ℝ} {v : Vec (2 * (c * (2 * h) * (2 * w)))}
     (hv : EDiff δ v)
     (hZ : Z = StableHLO.batchMap 2
@@ -943,13 +943,13 @@ theorem EDiff_dwS2Bn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 
     (hδ : ∀ ci, δ' ci = γ0 * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 c h w Z ci) 1) :
     EDiff δ' (StableHLO.bnBatchLA 2 c h w 1 (kv c γ0) (kv c β0) Z) := by
   subst hZ
-  refine EDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
-    (EDiff_dwS2 hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  refine eDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
+    (eDiff_dwS2 hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
   rw [hδ ci, kv_apply]
   ring
 
-/-- The XLA-`SAME` strided peer of `EDiff_dwBn`. -/
-theorem EDiff_dwS2XlaBn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
+/-- The XLA-`SAME` strided peer of `eDiff_dwBn`. -/
+theorem eDiff_dwS2XlaBn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 β0 : ℝ)
     (Z : Vec (2 * (c * h * w))) {δ δ' : Fin c → ℝ} {v : Vec (2 * (c * (2 * h) * (2 * w)))}
     (hv : EDiff δ v)
     (hZ : Z = StableHLO.batchMap 2
@@ -957,12 +957,12 @@ theorem EDiff_dwS2XlaBn {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (γ0 �
     (hδ : ∀ ci, δ' ci = γ0 * δ ci * bnIstd (2 * (h * w)) (bnRowLA 2 c h w Z ci) 1) :
     EDiff δ' (StableHLO.bnBatchLA 2 c h w 1 (kv c γ0) (kv c β0) Z) := by
   subst hZ
-  refine EDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
-    (EDiff_dwS2Xla hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
+  refine eDiff_bn c h w 1 (kv c γ0) (kv c β0) (fun ch => 1 * δ ch) δ' _
+    (eDiff_dwS2Xla hkH hkW 1 (kv c 0) δ _ v hv (fun _ => rfl)) (fun ci => ?_)
   rw [hδ ci, kv_apply]
   ring
 
-theorem EDiff_of_BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (δ : Fin c → ℝ)
+theorem eDiff_of_bUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (δ : Fin c → ℝ)
     (v : Vec (2 * (c * h * w))) (hv : BUnif (h := h) (w := w) a v)
     (hδ : ∀ ci, δ ci = a 0 ci - a 1 ci) : EDiff δ v := by
   intro ci i j

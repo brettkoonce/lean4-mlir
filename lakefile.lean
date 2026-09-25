@@ -653,7 +653,7 @@ lean_exe «vit-imagenet-verified» where
 
 /-- **ViT-Small on ImageNet-1k** — ViT-Tiny widened (D 384 = 6 heads × 64, MLP 1536, same depth
     12), 22,050,664 parameters. The first net added by widening rather than by a new chain: the
-    proof side needed nothing, since `vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k`
+    proof side needed nothing, since `vitForwardKVHasVJP` is already `∀ heads d_head mlpDim k`
     and global (GELU/softmax/LayerNorm carry no kink).
     ⚠ FOUR-REPLICA ONLY — `adamdp128x4wxclipdrop` is the sole rendered variant, so this needs
     `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`; there is no single-device peer. At 128 per
@@ -1824,7 +1824,7 @@ lean_exe «test-resnet-residual» where
 -- Dischargeability sanity check: 11 examples confirming every
 -- Differentiable hypothesis the proofs propagate is satisfiable for
 -- the architecture functions (dense, softmax, layerNorm, the flat
--- transformer pieces, mhsa_layer_flat). If any goes vacuous on a
+-- transformer pieces, mhsaLayer_flat). If any goes vacuous on a
 -- refactor, this will fail at build time.
 lean_exe «test-diff-sanity» where
   root := `tests.TestDifferentiableSanity
@@ -2137,7 +2137,7 @@ script «mnist-iree» do
     behind §4.1's listing and `runs/2026-08-12-cifar8w-6arm-xla-cuda/`. It used to
     be the narrow `d1 = 64` pair, so the demo trained a different net from the one
     the chapter's tables reported. The narrow nets are still built and still
-    proved — `cifarCnn8_has_vjp_at` is parametric in the head width, so neither
+    proved — `cifarCnn8HasVJPAt` is parametric in the head width, so neither
     needs its own proof — they are just no longer what `lake run cifar` shows. -/
 script «cifar-iree» do
   runDemoGroup ["cifar8w-ablation", "cifar8w-bn-ablation"]

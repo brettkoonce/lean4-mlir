@@ -993,7 +993,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as ResNet50SyncTieB.r50_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.resnet50FwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // gradient) and StableHLO.resnet50FwdGraphSyncFull_shard (the forward), both in\n" ++
         "    // LeanMlir/Proofs/Nets/ResNet/ (planning/global_bn_verified.md).\n" ++
         (if accOn then
           "    // Under accumulation that holds per MICRO-step: BN normalises over the replicas'\n" ++

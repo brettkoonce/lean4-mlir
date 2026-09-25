@@ -57,7 +57,7 @@ noncomputable def u32 : ℝ := ((2 : ℝ) ^ (24 : ℕ))⁻¹
     `2⁻⁴ = 1/16` (6.25%) — the leaf precision of the §3c E4M3 MNIST demo
     (`scripts/demos/mnist_e4m3_demo.py`). Outside the normal range (subnormals,
     near the 448 max) the relative model degrades; see §2/§5 of the plan. -/
-noncomputable def u_e4m3 : ℝ := ((2 : ℝ) ^ (4 : ℕ))⁻¹
+noncomputable def uE4M3 : ℝ := ((2 : ℝ) ^ (4 : ℕ))⁻¹
 
 namespace FloatModel
 
@@ -1801,11 +1801,11 @@ theorem denseMixedBudget_le_of {uacc uleaf : ℝ} {m : ℕ} {w β a g P Q U : �
     drift at `max|Δlogit| = 0.38` (errors cancel), the a-posteriori `B`; both
     feed `argmax_preserved`. -/
 theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
-    (hLu : L.u ≤ u_e4m3) :
+    (hLu : L.u ≤ uE4M3) :
     denseMixedBudget M.u L.u 784 (3 / 5) 1 1 ≤ 61 := by
   have hu := M.u_nonneg
   have hLu0 := L.u_nonneg
-  have hue : (u_e4m3 : ℝ) = 1 / 16 := by norm_num [u_e4m3]
+  have hue : (uE4M3 : ℝ) = 1 / 16 := by norm_num [uE4M3]
   rw [hue] at hLu
   -- a clean coarse accumulate bound keeps the assembly out of 2⁻²⁴-land
   have hu6 : M.u ≤ 1 / 1000000 := hMu.trans (by norm_num [u32])
@@ -1836,7 +1836,7 @@ theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
     92.89% of the MNIST test set (`scripts/demos/mnist_e4m3_demo.py`). fp32 ≈ exact-ℝ
     (within `u_acc`), so the demo's fp32 margins are the relevant quantity. -/
 theorem linear_e4m3_argmax_preserved (L : FloatModel) (hMu : M.u ≤ u32)
-    (hLu : L.u ≤ u_e4m3) {n : ℕ} {W : Mat 784 n} {b : Vec n} {x : Vec 784}
+    (hLu : L.u ≤ uE4M3) {n : ℕ} {W : Mat 784 n} {b : Vec n} {x : Vec 784}
     (hW : ∀ i j, |W i j| ≤ 3 / 5) (hb : ∀ j, |b j| ≤ 1) (hx : ∀ i, |x i| ≤ 1)
     (k : Fin n)
     (hmargin : ∀ i, i ≠ k →

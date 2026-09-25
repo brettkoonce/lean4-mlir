@@ -309,25 +309,25 @@ to clean up. The round-trips `Mat.unflatten_flatten` and `flatten_unflatten` are
 48 GB dsimp-replay hazard. Adding `@[simp]` also changes what every bare `simp` downstream does, so
 land it on a branch and let CI (`lake build Certs`) show the fallout.
 
-### Tensor.lean:404–408 — `vjp_comp` has no `backward` lemma
+### Tensor.lean:404–408 — `vjpComp` has no `backward` lemma
 
 **Smell:** undocumented-defeq
 **Current:** The consumers `show` their way through the `where`-built field:
 ```lean
-  show (reassocFwd_has_vjp oc h w).backward x                       -- PerChannelBN.lean:366
-        ((bnPerChannelFlat_has_vjp oc (h * w) ε hε γ β).backward (reassocFwd oc h w x)
-          ((reassocBack_has_vjp oc h w).backward …)) = _
-  show (bnchwFwd_has_vjp N oc h w).backward x …                     -- PerChannelBN.lean:751
+  show (reassocFwdHasVJP oc h w).backward x                       -- PerChannelBN.lean:366
+        ((bnPerChannelFlatHasVJP oc (h * w) ε hε γ β).backward (reassocFwd oc h w x)
+          ((reassocBackHasVJP oc h w).backward …)) = _
+  show (bnchwFwdHasVJP N oc h w).backward x …                     -- PerChannelBN.lean:751
 ```
 `Nets/ConvNeXt/ConvNeXtWholeBackCertifiedTieB.lean:398–401` had to restate the `_at` version
-locally as `vjp_comp_diff_at_fst_backward` so it could be `rw`'d. The docstring there explains why.
+locally as `vjpCompDiffAt_fst_backward` so it could be `rw`'d. The docstring there explains why.
 **Why it breaks:** The `show` restates a 3–4 line nested `.backward` term by hand. It depends on the
-unfolding order of two nested `vjp_comp` structures.
-**Suggested:** Add next to `vjp_comp` and `vjp_comp_at`:
+unfolding order of two nested `vjpComp` structures.
+**Suggested:** Add next to `vjpComp` and `vjpCompAt`:
 ```lean
-theorem vjp_comp_backward … : (vjp_comp f g hf' hg' hf hg).backward x dy
+theorem vjpComp_backward … : (vjpComp f g hf' hg' hf hg).backward x dy
     = hf.backward x (hg.backward (f x) dy) := rfl
-theorem vjp_comp_at_backward … : (vjp_comp_at f g x hf' hg' hf hg).backward dy
+theorem vjpCompAt_backward … : (vjpCompAt f g x hf' hg' hf hg).backward dy
     = hf.backward (hg.backward dy) := rfl
 ```
 Use them with `rw` in the ties. The ConvNeXt local copy then becomes a one-line corollary.
@@ -406,7 +406,7 @@ Both theorems then become `funext _; simp only [meanLoss_apply]; exact mean_mean
   congr 1
   apply Finset.sum_congr rfl
   intro n _
-  exact (flatConvStride2_weight_grad_has_vjp b (fun j => rnd (batchSlice …))).correct
+  exact (flatConvStride2WeightGradHasVJP b (fun j => rnd (batchSlice …))).correct
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
 ```
 **Why it breaks:** Nine hand-copied bodies, each restating two `batchSlice` lambdas. When a tenth
@@ -419,7 +419,7 @@ theorem rnd_sum_backward {N a P : ℕ} (rnd : ℝ → ℝ) (F : Fin N → Vec P 
     rnd (∑ n, (H n).backward w (c n) idx) = rnd (∑ n, ∑ j, pdiv (F n) w idx j * c n j) :=
   congrArg rnd (Finset.sum_congr rfl fun n _ => (H n).correct w (c n) idx)
 ```
-Each theorem then becomes `by simp only [den]; exact rnd_sum_backward rnd _ (fun n => …_has_vjp …) _ _ idx`.
+Each theorem then becomes `by simp only [den]; exact rnd_sum_backward rnd _ (fun n => …HasVJP …) _ _ idx`.
 
 ---
 
@@ -510,7 +510,7 @@ Separately, `hMle` at 196 (`nlinarith [hMsq]`) is `le_of_sq_le_sq (by rwa [one_p
 
 1. **Missing `_apply` / field API lemmas, so defs get unfolded by `show` or `simp [defName]`.** About 41 tactic `show`s in scope, plus roughly 265 repo-wide `simp`/`unfold` sites that name `Mat.flatten`/`unflatten`/`Tensor3.flatten`/`unflatten` directly. Specific gaps:
    - `Mat.flatten_apply`, `Mat.unflatten_apply`, `Tensor3.flatten_apply`, and `@[simp]` on the round-trips (Tensor.lean);
-   - `vjp_comp_backward` and `vjp_comp_at_backward` (Tensor.lean);
+   - `vjpComp_backward` and `vjpCompAt_backward` (Tensor.lean);
    - `bnchwFwd_apply` (PerChannelBN);
    - `meanLoss_apply`, `dpMean_apply`, `lossGrad_apply` (DataParallel).
 

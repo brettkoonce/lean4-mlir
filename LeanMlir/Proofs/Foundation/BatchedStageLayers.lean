@@ -52,20 +52,20 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Generic relu6-on-batched-bn-stage `_at` VJP.** The relu6 analogue of
-    `bnSwishStage_has_vjp`, but `_at` (relu6 only has a pointwise VJP): compose the
+    `bnSwishStageHasVJP`, but `_at` (relu6 only has a pointwise VJP): compose the
     batched-op VJP, the true-BN VJP (both global, lifted via `.toHasVJPAt`), and
     relu6's pointwise VJP at the pre-relu6 activation. -/
-noncomputable def bnRelu6Stage_has_vjp_at (N : Nat) {a oc h w : Nat}
+noncomputable def bnRelu6StageHasVJPAt (N : Nat) {a oc h w : Nat}
     (op : Vec a → Vec (oc * h * w)) (hop : Differentiable ℝ op) (hopv : HasVJP op)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * a))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 0 ∧
                      bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 6) :
     HasVJPAt (relu6 (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-  stage_has_vjp_at (batchMap N op) (bnBatchLA N oc h w ε γ β) (relu6 (N * (oc * h * w))) x
-    (batchMap_differentiable op hop) (batchMap_has_vjp op hopv hop)
-    (bnBatchLA_differentiable N oc h w ε hε γ β) (bnBatchLA_has_vjp N oc h w ε hε γ β)
+  stageHasVJPAt (batchMap N op) (bnBatchLA N oc h w ε γ β) (relu6 (N * (oc * h * w))) x
+    (batchMap_differentiable op hop) (batchMapHasVJP op hopv hop)
+    (bnBatchLA_differentiable N oc h w ε hε γ β) (bnBatchLAHasVJP N oc h w ε hε γ β)
     (relu6_differentiableAt_of_smooth (N * (oc * h * w)) _ h_smooth)
-    (relu6_has_vjp_at (N * (oc * h * w)) _ h_smooth)
+    (relu6HasVJPAt (N * (oc * h * w)) _ h_smooth)
 
 /-- Differentiability of the generic relu6-on-batched-bn-stage at a smooth point. -/
 theorem bnRelu6Stage_differentiableAt (N : Nat) {a oc h w : Nat}
@@ -77,14 +77,14 @@ theorem bnRelu6Stage_differentiableAt (N : Nat) {a oc h w : Nat}
   fun_prop (disch := assumption)
 
 /-- `cbrB` (conv-bn-relu6) `_at` VJP at a smooth point. -/
-noncomputable def cbrB_has_vjp_at (N : Nat) {ic oc h w kH kW : Nat}
+noncomputable def cbrBHasVJPAt (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * h * w)))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0 ∧
                      bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 6) :
     HasVJPAt (cbrB N (h := h) (w := w) W b ε γ β) x :=
-  bnRelu6Stage_has_vjp_at N (flatConv W b) (flatConv_differentiable W b)
-    (flatConv_has_vjp W b) ε hε γ β x h_smooth
+  bnRelu6StageHasVJPAt N (flatConv W b) (flatConv_differentiable W b)
+    (flatConvHasVJP W b) ε hε γ β x h_smooth
 
 theorem cbrB_differentiableAt (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
@@ -95,14 +95,14 @@ theorem cbrB_differentiableAt (N : Nat) {ic oc h w kH kW : Nat}
   bnRelu6Stage_differentiableAt N (flatConv W b) (flatConv_differentiable W b) ε hε γ β x h_smooth
 
 /-- `dwbrB` (depthwise-bn-relu6) `_at` VJP at a smooth point. -/
-noncomputable def dwbrB_has_vjp_at (N : Nat) {c h w kH kW : Nat}
+noncomputable def dwbrBHasVJPAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0 ∧
                      bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 6) :
     HasVJPAt (dwbrB N (h := h) (w := w) W b ε γ β) x :=
-  bnRelu6Stage_has_vjp_at N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
-    (depthwiseFlat_has_vjp W b) ε hε γ β x h_smooth
+  bnRelu6StageHasVJPAt N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
+    (depthwiseFlatHasVJP W b) ε hε γ β x h_smooth
 
 theorem dwbrB_differentiableAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
@@ -114,16 +114,16 @@ theorem dwbrB_differentiableAt (N : Nat) {c h w kH kW : Nat}
     ε hε γ β x h_smooth
 
 /-- `dwbrBstrided` (STRIDE-2 depthwise-bn-relu6) `_at` VJP at a smooth point. The
-    stride-2 analogue of `dwbrB_has_vjp_at`: lifts `depthwiseStride2FlatXla_has_vjp`
+    stride-2 analogue of `dwbrBHasVJPAt`: lifts `depthwiseStride2FlatXlaHasVJP`
     (the strided per-channel conv input-VJP) through the generic relu6-bn stage. -/
-noncomputable def dwbrBstrided_has_vjp_at (N : Nat) {c h w kH kW : Nat}
+noncomputable def dwbrBstridedHasVJPAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w))))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 0 ∧
                      bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 6) :
     HasVJPAt (dwbrBstrided N (h := h) (w := w) W b ε γ β) x :=
-  bnRelu6Stage_has_vjp_at N (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXla_differentiable W b)
-    (depthwiseStride2FlatXla_has_vjp W b) ε hε γ β x h_smooth
+  bnRelu6StageHasVJPAt N (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXla_differentiable W b)
+    (depthwiseStride2FlatXlaHasVJP W b) ε hε γ β x h_smooth
 
 theorem dwbrBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
@@ -146,7 +146,7 @@ noncomputable def cbrBackBatchedGraph {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
   .convBackBatched (N := N) "%cbrW" W b
-    (.bnBatchLABack "%cbrG" "%cbrX" "cbrE" ε γ (batchMap N (flatConv W b) x)
+    (.bnBatchLABack "%cbrG" "%cbr_x" "cbrE" ε γ (batchMap N (flatConv W b) x)
       (.selectMid "%cbrR6" (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x)) e))
 
 theorem cbrBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
@@ -155,11 +155,11 @@ theorem cbrBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0 ∧
                      bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 6) :
     den (cbrBackBatchedGraph W b ε γ β x e)
-      = (cbrB_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+      = (cbrBHasVJPAt N W b ε hε γ β x h_smooth).backward (den e) := by
   rw [cbrBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [cbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
+  simp only [cbrBHasVJPAt, bnRelu6StageHasVJPAt, stageHasVJPAt, vjpCompAt_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- Batched **depthwise → bn → relu6** stage backward graph (MobileNetV2 depthwise). -/
@@ -176,11 +176,11 @@ theorem dwbrBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0 ∧
                      bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 6) :
     den (dwbrBackBatchedGraph W b ε γ β x e)
-      = (dwbrB_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+      = (dwbrBHasVJPAt N W b ε hε γ β x h_smooth).backward (den e) := by
   rw [dwbrBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [dwbrB_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
+  simp only [dwbrBHasVJPAt, bnRelu6StageHasVJPAt, stageHasVJPAt, vjpCompAt_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- Batched **STRIDE-2 depthwise → bn → relu6** stage backward graph (MobileNetV2
@@ -202,11 +202,11 @@ theorem dwbrBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 0 ∧
                      bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 6) :
     den (dwbrBstridedBackBatchedGraph W b ε γ β x e)
-      = (dwbrBstrided_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+      = (dwbrBstridedHasVJPAt N W b ε hε γ β x h_smooth).backward (den e) := by
   rw [dwbrBstridedBackBatchedGraph, depthwiseStridedXlaBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectMid_faithful _ _ h_smooth]
-  simp only [dwbrBstrided_has_vjp_at, bnRelu6Stage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
+  simp only [dwbrBstridedHasVJPAt, bnRelu6StageHasVJPAt, stageHasVJPAt, vjpCompAt_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 -- ════════════════════════════════════════════════════════════════
@@ -222,7 +222,7 @@ noncomputable def cbrLayer (N : Nat) {ic oc h w kH kW : Nat}
   ok := fun x => ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0 ∧
                       bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 6
   diff := fun x hx => cbrB_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => cbrB_has_vjp_at N W b ε hε γ β x hx
+  vjp := fun x hx => cbrBHasVJPAt N W b ε hε γ β x hx
   graph := fun x e => cbrBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => cbrBackBatchedGraph_faithful W b ε hε γ β x e hx
 
@@ -234,7 +234,7 @@ noncomputable def dwbrLayer (N : Nat) {c h w kH kW : Nat}
   ok := fun x => ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0 ∧
                       bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 6
   diff := fun x hx => dwbrB_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => dwbrB_has_vjp_at N W b ε hε γ β x hx
+  vjp := fun x hx => dwbrBHasVJPAt N W b ε hε γ β x hx
   graph := fun x e => dwbrBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => dwbrBackBatchedGraph_faithful W b ε hε γ β x e hx
 
@@ -247,7 +247,7 @@ noncomputable def dwbrStridedLayer (N : Nat) {c h w kH kW : Nat}
     ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 0 ∧
          bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2FlatXla W b) x) k ≠ 6
   diff := fun x hx => dwbrBstrided_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => dwbrBstrided_has_vjp_at N W b ε hε γ β x hx
+  vjp := fun x hx => dwbrBstridedHasVJPAt N W b ε hε γ β x hx
   graph := fun x e => dwbrBstridedBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => dwbrBstridedBackBatchedGraph_faithful W b ε hε γ β x e hx
 
@@ -259,7 +259,7 @@ noncomputable def projLayer (N : Nat) {ic oc h w kH kW : Nat}
   fwd := projB N (h := h) (w := w) W b ε γ β
   ok := fun _ => True
   diff := fun x _ => (projB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (projB_has_vjp N W b ε hε γ β).toHasVJPAt x
+  vjp := fun x _ => (projBHasVJP N W b ε hε γ β).toHasVJPAt x
   graph := fun x e => projBackBatchedGraph W b ε γ β x e
   faithful := fun x _ e => projBackBatchedGraph_faithful W b ε hε γ β x e
 
@@ -280,20 +280,20 @@ noncomputable def projLayer (N : Nat) {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Generic relu-on-batched-bn-stage `_at` VJP.** The relu analogue of
-    `bnRelu6Stage_has_vjp_at` (and of `bnSwishStage_has_vjp`, but `_at` — relu
+    `bnRelu6StageHasVJPAt` (and of `bnSwishStageHasVJP`, but `_at` — relu
     only has a pointwise VJP): compose the batched-op VJP, the true-BN VJP (both
     global, lifted via `.toHasVJPAt`), and relu's pointwise VJP at the pre-relu
     activation. The smoothness hypothesis is the one-sided `≠ 0`. -/
-noncomputable def bnReluStage_has_vjp_at (N : Nat) {a oc h w : Nat}
+noncomputable def bnReluStageHasVJPAt (N : Nat) {a oc h w : Nat}
     (op : Vec a → Vec (oc * h * w)) (hop : Differentiable ℝ op) (hopv : HasVJP op)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * a))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N op x) k ≠ 0) :
     HasVJPAt (relu (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N op) x :=
-  stage_has_vjp_at (batchMap N op) (bnBatchLA N oc h w ε γ β) (relu (N * (oc * h * w))) x
-    (batchMap_differentiable op hop) (batchMap_has_vjp op hopv hop)
-    (bnBatchLA_differentiable N oc h w ε hε γ β) (bnBatchLA_has_vjp N oc h w ε hε γ β)
+  stageHasVJPAt (batchMap N op) (bnBatchLA N oc h w ε γ β) (relu (N * (oc * h * w))) x
+    (batchMap_differentiable op hop) (batchMapHasVJP op hopv hop)
+    (bnBatchLA_differentiable N oc h w ε hε γ β) (bnBatchLAHasVJP N oc h w ε hε γ β)
     (relu_differentiableAt_of_smooth (N * (oc * h * w)) _ h_smooth)
-    (relu_has_vjp_at (N * (oc * h * w)) _ h_smooth)
+    (reluHasVJPAt (N * (oc * h * w)) _ h_smooth)
 
 /-- Differentiability of the generic relu-on-batched-bn-stage at a smooth point. -/
 theorem bnReluStage_differentiableAt (N : Nat) {a oc h w : Nat}
@@ -304,13 +304,13 @@ theorem bnReluStage_differentiableAt (N : Nat) {a oc h w : Nat}
   fun_prop (disch := assumption)
 
 /-- `cbReluB` (conv-bn-relu) `_at` VJP at a smooth point. -/
-noncomputable def cbReluB_has_vjp_at (N : Nat) {ic oc h w kH kW : Nat}
+noncomputable def cbReluBHasVJPAt (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * h * w)))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0) :
     HasVJPAt (cbReluB N (h := h) (w := w) W b ε γ β) x :=
-  bnReluStage_has_vjp_at N (flatConv W b) (flatConv_differentiable W b)
-    (flatConv_has_vjp W b) ε hε γ β x h_smooth
+  bnReluStageHasVJPAt N (flatConv W b) (flatConv_differentiable W b)
+    (flatConvHasVJP W b) ε hε γ β x h_smooth
 
 theorem cbReluB_differentiableAt (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
@@ -331,7 +331,7 @@ noncomputable def cbReluBackBatchedGraph {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
   .convBackBatched (N := N) "%cbrW" W b
-    (.bnBatchLABack "%cbrG" "%cbrX" "cbrE" ε γ (batchMap N (flatConv W b) x)
+    (.bnBatchLABack "%cbrG" "%cbr_x" "cbrE" ε γ (batchMap N (flatConv W b) x)
       (.selectPos "%cbrR" (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x)) e))
 
 theorem cbReluBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
@@ -339,11 +339,11 @@ theorem cbReluBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w)))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0) :
     den (cbReluBackBatchedGraph W b ε γ β x e)
-      = (cbReluB_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+      = (cbReluBHasVJPAt N W b ε hε γ β x h_smooth).backward (den e) := by
   rw [cbReluBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [cbReluB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
+  simp only [cbReluBHasVJPAt, bnReluStageHasVJPAt, stageHasVJPAt, vjpCompAt_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The conv → bn → relu stage as a `CertLayer`, certified where its pre-relu activation misses 0.
@@ -354,7 +354,7 @@ noncomputable def cbReluLayer (N : Nat) {ic oc h w kH kW : Nat}
   fwd := cbReluB N (h := h) (w := w) W b ε γ β
   ok := fun x => ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x) k ≠ 0
   diff := fun x hx => cbReluB_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => cbReluB_has_vjp_at N W b ε hε γ β x hx
+  vjp := fun x hx => cbReluBHasVJPAt N W b ε hε γ β x hx
   graph := fun x e => cbReluBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => cbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
 
@@ -379,14 +379,14 @@ theorem cbReluLayer_fwd_apply (N : Nat) {ic oc h w kH kW : Nat}
   relu (N * (oc * h * w)) ∘ bnBatchLA N oc h w ε γ β ∘ batchMap N (flatConvStride2 W b)
 
 /-- `cbReluStridedB` (strided conv-bn-relu) `_at` VJP at a smooth point. The strided
-    sibling of `cbReluB_has_vjp_at` (`flatConvStride2` for `flatConv`). -/
-noncomputable def cbReluStridedB_has_vjp_at (N : Nat) {ic oc h w kH kW : Nat}
+    sibling of `cbReluBHasVJPAt` (`flatConvStride2` for `flatConv`). -/
+noncomputable def cbReluStridedBHasVJPAt (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConvStride2 W b) x) k ≠ 0) :
     HasVJPAt (cbReluStridedB N (h := h) (w := w) W b ε γ β) x :=
-  bnReluStage_has_vjp_at N (flatConvStride2 W b) (flatConvStride2_differentiable W b)
-    (flatConvStride2_has_vjp W b) ε hε γ β x h_smooth
+  bnReluStageHasVJPAt N (flatConvStride2 W b) (flatConvStride2_differentiable W b)
+    (flatConvStride2HasVJP W b) ε hε γ β x h_smooth
 
 theorem cbReluStridedB_differentiableAt (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
@@ -414,11 +414,11 @@ theorem cbReluStridedBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w)))
     (h_smooth : ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConvStride2 W b) x) k ≠ 0) :
     den (cbReluStridedBackBatchedGraph W b ε γ β x e)
-      = (cbReluStridedB_has_vjp_at N W b ε hε γ β x h_smooth).backward (den e) := by
+      = (cbReluStridedBHasVJPAt N W b ε hε γ β x h_smooth).backward (den e) := by
   rw [cbReluStridedBackBatchedGraph, convStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε),
       selectPos_faithful _ _ h_smooth]
-  simp only [cbReluStridedB_has_vjp_at, bnReluStage_has_vjp_at, stage_has_vjp_at, vjp_comp_at_backward,
+  simp only [cbReluStridedBHasVJPAt, bnReluStageHasVJPAt, stageHasVJPAt, vjpCompAt_backward,
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The strided conv → bn → relu stage as a `CertLayer` — `cbReluLayer` with `flatConvStride2`. -/
@@ -428,7 +428,7 @@ noncomputable def cbReluStridedLayer (N : Nat) {ic oc h w kH kW : Nat}
   fwd := cbReluStridedB N (h := h) (w := w) W b ε γ β
   ok := fun x => ∀ k, bnBatchLA N oc h w ε γ β (batchMap N (flatConvStride2 W b) x) k ≠ 0
   diff := fun x hx => cbReluStridedB_differentiableAt N W b ε hε γ β x hx
-  vjp := fun x hx => cbReluStridedB_has_vjp_at N W b ε hε γ β x hx
+  vjp := fun x hx => cbReluStridedBHasVJPAt N W b ε hε γ β x hx
   graph := fun x e => cbReluStridedBackBatchedGraph W b ε γ β x e
   faithful := fun x hx e => cbReluStridedBackBatchedGraph_faithful W b ε hε γ β x e hx
 
@@ -450,11 +450,11 @@ theorem projStridedB_differentiable (N : Nat) {ic oc h w kH kW : Nat}
     Differentiable ℝ (projStridedB N (h := h) (w := w) W b ε γ β) :=
   bnStage_differentiable N (flatConvStride2 W b) (flatConvStride2_differentiable W b) ε hε γ β
 
-noncomputable def projStridedB_has_vjp (N : Nat) {ic oc h w kH kW : Nat}
+noncomputable def projStridedBHasVJP (N : Nat) {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
     HasVJP (projStridedB N (h := h) (w := w) W b ε γ β) :=
-  bnStage_has_vjp N (flatConvStride2 W b) (flatConvStride2_differentiable W b)
-    (flatConvStride2_has_vjp W b) ε hε γ β
+  bnStageHasVJP N (flatConvStride2 W b) (flatConvStride2_differentiable W b)
+    (flatConvStride2HasVJP W b) ε hε γ β
 
 /-- Batched **strided conv → bn** projection-skip backward graph:
     `convStridedBackBatched ∘ bnBatchLABack`, at the skip's forward activation. The
@@ -470,10 +470,10 @@ theorem projStridedBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
     den (projStridedBackBatchedGraph W b ε γ β x e)
-      = (projStridedB_has_vjp N W b ε hε γ β).backward x (den e) := by
+      = (projStridedBHasVJP N W b ε hε γ β).backward x (den e) := by
   rw [projStridedBackBatchedGraph, convStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε)]
-  simp only [projStridedB_has_vjp, bnStage_has_vjp, vjp_comp_backward]
+  simp only [projStridedBHasVJP, bnStageHasVJP, vjpComp_backward]
 
 /-- The strided conv → bn projection skip as a `CertLayer` — `projLayer` with `flatConvStride2`,
     globally certified. -/
@@ -483,7 +483,7 @@ noncomputable def projStridedLayer (N : Nat) {ic oc h w kH kW : Nat}
   fwd := projStridedB N (h := h) (w := w) W b ε γ β
   ok := fun _ => True
   diff := fun x _ => (projStridedB_differentiable N W b ε hε γ β) x
-  vjp := fun x _ => (projStridedB_has_vjp N W b ε hε γ β).toHasVJPAt x
+  vjp := fun x _ => (projStridedBHasVJP N W b ε hε γ β).toHasVJPAt x
   graph := fun x e => projStridedBackBatchedGraph W b ε γ β x e
   faithful := fun x _ e => projStridedBackBatchedGraph_faithful W b ε hε γ β x e
 

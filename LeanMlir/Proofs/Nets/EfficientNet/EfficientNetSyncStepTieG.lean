@@ -53,7 +53,7 @@ DP artifacts do not emit them and they are not tied here.
 
 ⚠ The replicas' saved forward activations enter as the shards of the single-device forward's;
 that the sync forward graph computes exactly those is `EfficientNetSyncB`'s
-`efficientnetFwdGraphSync_full_shard`, the forward half. ⚠ That the replicas' inputs are the
+`efficientnetFwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are the
 shards of one batch is the driver's. ⚠ T3 states the chain without stochastic depth or classifier
 dropout, so this does too: the `drop` / `dropdo` DP variants add a `dropPathB` on each residual
 branch and a `dropoutB` before the classifier — per-example diagonal scalings, which shard and are
@@ -345,7 +345,7 @@ theorem den_bnBatchLABack_eq_bnBackB {N oc h w : Nat} (gN xN es : String) (ε : 
 
 theorem cbsB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
-    (cbsB_has_vjp N (h := h) (w := w) W b ε hε γ β).backward x dy
+    (cbsBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
       = cInB N (h := h) (w := w) W b (bnBackB N oc h w ε hε γ β (batchMap N (flatConv W b) x)
           (swBackB (N * (oc * h * w)) (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x)) dy)) := by
   have hg := cbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
@@ -357,7 +357,7 @@ theorem cbsB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
 
 theorem dwbsB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) (x dy : Vec (N * (c * h * w))) :
-    (dwbsB_has_vjp N (h := h) (w := w) W b ε hε γ β).backward x dy
+    (dwbsBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
       = dInB N W b (bnBackB N c h w ε hε γ β (batchMap N (depthwiseFlat W b) x)
           (swBackB (N * (c * h * w)) (bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x)) dy)) := by
   have hg := dwbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
@@ -370,7 +370,7 @@ theorem dwbsB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW
 theorem dwbsSB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w))))
     (dy : Vec (N * (c * h * w))) :
-    (dwbsSB_has_vjp N (h := h) (w := w) W b ε hε γ β).backward x dy
+    (dwbsSBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
       = dStridedInB N W b (bnBackB N c h w ε hε γ β (batchMap N (depthwiseStride2Flat W b) x)
           (swBackB (N * (c * h * w))
             (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) dy)) := by
@@ -383,7 +383,7 @@ theorem dwbsSB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH k
 
 theorem projB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
-    (projB_has_vjp N (h := h) (w := w) W b ε hε γ β).backward x dy
+    (projBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
       = cInB N (h := h) (w := w) W b (bnBackB N oc h w ε hε γ β (batchMap N (flatConv W b) x) dy) := by
   have hg := projBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
   rw [den_operand] at hg
@@ -402,19 +402,19 @@ for the unfolded one, which is then the stage composition by `rfl`. -/
 theorem xCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
     (dy : Vec (N * (oc * h * w))) :
-    (mbExpW_has_vjp N h w p he hd hp).backward xin dy = xCotIn N h w p he hd hp xin dy := by
-  rw [HasVJP.backward_unique (mbExpW_has_vjp N h w p he hd hp)
-    (mbExpFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ p.dβ
+    (mbExpWHasVJP N h w p he hd hp).backward xin dy = xCotIn N h w p he hd hp xin dy := by
+  rw [HasVJP.backward_unique (mbExpWHasVJP N h w p he hd hp)
+    (mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ p.dβ
       p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  have hc : (mbExpFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
+  have hc : (mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
       p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = (cbsB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
-          ((dwbsB_has_vjp N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
+      = (cbsBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
+          ((dwbsBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
             (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin)
-            ((seB_has_vjp N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
+            ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
               (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
                 (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))
-              ((projB_has_vjp N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
+              ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
                 (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
                   (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
                     (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))) dy))) := rfl
@@ -423,19 +423,19 @@ theorem xCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid o
 
 theorem rCotIn_eq_vjp (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin dy : Vec (N * (c * h * w))) :
-    (mbResidW_has_vjp N h w p he hd hp).backward xin dy = rCotIn N h w p he hd hp xin dy := by
-  rw [HasVJP.backward_unique (mbResidW_has_vjp N h w p he hd hp)
-    (mbResidFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ p.dβ
+    (mbResidWHasVJP N h w p he hd hp).backward xin dy = rCotIn N h w p he hd hp xin dy := by
+  rw [HasVJP.backward_unique (mbResidWHasVJP N h w p he hd hp)
+    (mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ p.dβ
       p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  have hc : (mbResidFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
+  have hc : (mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
       p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = fun i => (cbsB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
-          ((dwbsB_has_vjp N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
+      = fun i => (cbsBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
+          ((dwbsBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
             (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin)
-            ((seB_has_vjp N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
+            ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
               (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
                 (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))
-              ((projB_has_vjp N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
+              ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
                 (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
                   (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
                     (cbsB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ xin))) dy))) i + dy i := rfl
@@ -445,19 +445,19 @@ theorem rCotIn_eq_vjp (N h w : Nat) {c mid rd kh kw : Nat} (p : MBW c mid c rd k
 theorem sCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dy : Vec (N * (oc * h * w))) :
-    (mbStridedW_has_vjp N h w p he hd hp).backward xin dy = sCotIn N h w p he hd hp xin dy := by
-  rw [HasVJP.backward_unique (mbStridedW_has_vjp N h w p he hd hp)
-    (mbStridedFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ
+    (mbStridedWHasVJP N h w p he hd hp).backward xin dy = sCotIn N h w p he hd hp xin dy := by
+  rw [HasVJP.backward_unique (mbStridedWHasVJP N h w p he hd hp)
+    (mbStridedFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd p.dγ
       p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  have hc : (mbStridedFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
+  have hc : (mbStridedFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ p.dW p.db p.dε hd
       p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = (cbsB_has_vjp N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
-          ((dwbsSB_has_vjp N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
+      = (cbsBHasVJP N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε he p.eγ p.eβ).backward xin
+          ((dwbsSBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward
             (cbsB N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε p.eγ p.eβ xin)
-            ((seB_has_vjp N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
+            ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
               (dwbsSB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
                 (cbsB N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε p.eγ p.eβ xin))
-              ((projB_has_vjp N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
+              ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
                 (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
                   (dwbsSB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ
                     (cbsB N (h := 2 * h) (w := 2 * w) p.eW p.eb p.eε p.eγ p.eβ xin))) dy))) := rfl
@@ -466,16 +466,16 @@ theorem sCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid o
 
 theorem nCotIn_eq_vjp (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc rd kh kw)
     (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
-    (mbNoExpW_has_vjp N h w p hd hp).backward xin dy = nCotIn N h w p hd hp xin dy := by
-  rw [HasVJP.backward_unique (mbNoExpW_has_vjp N h w p hd hp)
-    (mbNoExpFwdB_has_vjp N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
+    (mbNoExpWHasVJP N h w p hd hp).backward xin dy = nCotIn N h w p hd hp xin dy := by
+  rw [HasVJP.backward_unique (mbNoExpWHasVJP N h w p hd hp)
+    (mbNoExpFwdBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
       p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ)]
-  have hc : (mbNoExpFwdB_has_vjp N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
+  have hc : (mbNoExpFwdBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
       p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ).backward xin dy
-      = (dwbsB_has_vjp N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward xin
-          ((seB_has_vjp N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
+      = (dwbsBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ).backward xin
+          ((seBHasVJP N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2).backward
             (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ xin)
-            ((projB_has_vjp N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
+            ((projBHasVJP N (h := h) (w := w) p.pW p.pb p.pε hp p.pγ p.pβ).backward
               (seB N (h := h) (w := w) p.z1 p.zb1 p.z2 p.zb2
                 (dwbsB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ xin)) dy)) := rfl
   rw [hc, projB_back_eq, dwbsB_back_eq]
@@ -484,7 +484,7 @@ theorem nCotIn_eq_vjp (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc r
 theorem hdCotIn_eq_vjp (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh : Vec oc)
     (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC)
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nC)) :
-    (headFwdB_has_vjp N (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc).backward xin g
+    (headFwdBHasVJP N (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc).backward xin g
       = hdCotIn N h w Wh bh εh hεh γh βh Wfc xin g := by
   have hg := headBackBatchedGraph_faithful Wh bh εh hεh γh βh Wfc bfc xin (.operand "" g)
   rw [den_operand] at hg
@@ -547,7 +547,7 @@ theorem gateCotB_shard {R N : Nat} (c h w : Nat) (X DY : Vec ((R * N) * (c * h *
 theorem seInB_eq_batchMapAux (N : Nat) {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd)
     (W₂ : Mat rd c) (b₂ : Vec c) (x dy : Vec (N * (c * h * w))) :
     seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x dy
-      = batchMapAux N (seBlockFull_has_vjp (h := h) (w := w) W₁ b₁ W₂ b₂).backward x dy := by
+      = batchMapAux N (seBlockFullHasVJP (h := h) (w := w) W₁ b₁ W₂ b₂).backward x dy := by
   have hg := seBackBatched_faithful "" "" "" "" "" W₁ b₁ W₂ b₂ x (.operand "" dy)
   rw [den_operand] at hg
   exact hg.symm
@@ -1127,7 +1127,7 @@ theorem xsCotIn_scaled {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw 
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     xsCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * h * w)
-          (fun i => (R : ℝ) * (mbExpW_has_vjp (R * N) h w p he hd hp).backward XIN DY i) r := by
+          (fun i => (R : ℝ) * (mbExpWHasVJP (R * N) h w p he hd hp).backward XIN DY i) r := by
   rw [xsCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, ← xCotIn_eq_vjp,
     HasVJP.backward_smul]
 
@@ -1138,7 +1138,7 @@ theorem rsCotIn_scaled {c mid rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 
     (hdys : ∀ r, dys r = batchShard R N (c * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     rsCotIn R hR N h w p XIN dys r
       = batchShard R N (c * h * w)
-          (fun i => (R : ℝ) * (mbResidW_has_vjp (R * N) h w p he hd hp).backward XIN DY i) r := by
+          (fun i => (R : ℝ) * (mbResidWHasVJP (R * N) h w p he hd hp).backward XIN DY i) r := by
   rw [rsCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, ← rCotIn_eq_vjp,
     HasVJP.backward_smul]
 
@@ -1149,7 +1149,7 @@ theorem ssCotIn_scaled {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw 
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     ssCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * (2 * h) * (2 * w))
-          (fun i => (R : ℝ) * (mbStridedW_has_vjp (R * N) h w p he hd hp).backward XIN DY i) r := by
+          (fun i => (R : ℝ) * (mbStridedWHasVJP (R * N) h w p he hd hp).backward XIN DY i) r := by
   rw [ssCotIn_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, ← sCotIn_eq_vjp,
     HasVJP.backward_smul]
 
@@ -1160,7 +1160,7 @@ theorem nsCotIn_scaled {ic oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
     nsCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * h * w)
-          (fun i => (R : ℝ) * (mbNoExpW_has_vjp (R * N) h w p hd hp).backward XIN DY i) r := by
+          (fun i => (R : ℝ) * (mbNoExpWHasVJP (R * N) h w p hd hp).backward XIN DY i) r := by
   rw [nsCotIn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, ← nCotIn_eq_vjp,
     HasVJP.backward_smul]
 
@@ -1171,7 +1171,7 @@ theorem hdsCotIn_scaled {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
     (r : Fin R) :
     hdsCotIn R hR N h w Wh bh εh γh βh Wfc XIN gs r
       = batchShard R N (c * h * w) (fun i => (R : ℝ) *
-          (headFwdB_has_vjp (R * N) (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc).backward XIN G i)
+          (headFwdBHasVJP (R * N) (h := h) (w := w) Wh bh εh hεh γh βh Wfc bfc).backward XIN G i)
           r := by
   rw [hdsCotIn_shard R hR N h w hN hh hw Wh bh εh hεh γh βh Wfc XIN gs _ hgs r,
     ← hdCotIn_eq_vjp (bfc := bfc), HasVJP.backward_smul]
@@ -1391,40 +1391,40 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
   let a14 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b14 a13
   let a15 : Vec ((R * N) * (192 * 7 * 7))    := mbResidW (R * N) 7 7 w.b15 a14
   let a16 : Vec ((R * N) * (320 * 7 * 7))    := mbExpW (R * N) 7 7 w.b16 a15
-  let dy16 : Vec ((R * N) * (320 * 7 * 7))   := (headFwdB_has_vjp (R * N) (h := 7) (w := 7)
+  let dy16 : Vec ((R * N) * (320 * 7 * 7))   := (headFwdBHasVJP (R * N) (h := 7) (w := 7)
     w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
   let dy15 : Vec ((R * N) * (192 * 7 * 7))   :=
-    (mbExpW_has_vjp (R * N) 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
+    (mbExpWHasVJP (R * N) 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16
   let dy14 : Vec ((R * N) * (192 * 7 * 7))   :=
-    (mbResidW_has_vjp (R * N) 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
+    (mbResidWHasVJP (R * N) 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward a14 dy15
   let dy13 : Vec ((R * N) * (192 * 7 * 7))   :=
-    (mbResidW_has_vjp (R * N) 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
+    (mbResidWHasVJP (R * N) 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p).backward a13 dy14
   let dy12 : Vec ((R * N) * (192 * 7 * 7))   :=
-    (mbResidW_has_vjp (R * N) 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
+    (mbResidWHasVJP (R * N) 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p).backward a12 dy13
   let dy11 : Vec ((R * N) * (112 * 14 * 14)) :=
-    (mbStridedW_has_vjp (R * N) 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
+    (mbStridedWHasVJP (R * N) 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p).backward a11 dy12
   let dy10 : Vec ((R * N) * (112 * 14 * 14)) :=
-    (mbResidW_has_vjp (R * N) 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
+    (mbResidWHasVJP (R * N) 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p).backward a10 dy11
   let dy9  : Vec ((R * N) * (112 * 14 * 14)) :=
-    (mbResidW_has_vjp (R * N) 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
+    (mbResidWHasVJP (R * N) 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p).backward a9 dy10
   let dy8  : Vec ((R * N) * (80 * 14 * 14))  :=
-    (mbExpW_has_vjp (R * N) 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
+    (mbExpWHasVJP (R * N) 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p).backward a8 dy9
   let dy7  : Vec ((R * N) * (80 * 14 * 14))  :=
-    (mbResidW_has_vjp (R * N) 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
+    (mbResidWHasVJP (R * N) 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p).backward a7 dy8
   let dy6  : Vec ((R * N) * (80 * 14 * 14))  :=
-    (mbResidW_has_vjp (R * N) 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
+    (mbResidWHasVJP (R * N) 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p).backward a6 dy7
   let dy5  : Vec ((R * N) * (40 * 28 * 28))  :=
-    (mbStridedW_has_vjp (R * N) 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
+    (mbStridedWHasVJP (R * N) 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p).backward a5 dy6
   let dy4  : Vec ((R * N) * (40 * 28 * 28))  :=
-    (mbResidW_has_vjp (R * N) 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
+    (mbResidWHasVJP (R * N) 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p).backward a4 dy5
   let dy3  : Vec ((R * N) * (24 * 56 * 56))  :=
-    (mbStridedW_has_vjp (R * N) 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
+    (mbStridedWHasVJP (R * N) 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p).backward a3 dy4
   let dy2  : Vec ((R * N) * (24 * 56 * 56))  :=
-    (mbResidW_has_vjp (R * N) 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
+    (mbResidWHasVJP (R * N) 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p).backward a2 dy3
   let dy1  : Vec ((R * N) * (16 * 112 * 112)) :=
-    (mbStridedW_has_vjp (R * N) 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
+    (mbStridedWHasVJP (R * N) 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p).backward a1 dy2
   let dy0  : Vec ((R * N) * (32 * 112 * 112)) :=
-    (mbNoExpW_has_vjp (R * N) 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
+    (mbNoExpWHasVJP (R * N) 112 112 w.b1 hεw.b1.d hεw.b1.p).backward a0 dy1
   -- ── the replicas' sync-BN chain, driven by the family `gs` ──
   let e16 := hdsCotIn R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW a16 gs
   let e15 := xsCotIn R hR N 7 7 w.b16 a15 e16
@@ -1548,9 +1548,9 @@ theorem efficientnet_net_syncTiedG_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (
     (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * 10))) :
     enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x
       (unrowB (R * N) 10 (den (smoothedLossCotGraph (R * N) 10 α ((R : ℝ) * B) aStr negAK bStr
-        logN ohN (rowB (R * N) 10 (efficientnetForwardB_full (R * N) w x)) t)))
+        logN ohN (rowB (R * N) 10 (efficientnetForwardBFull (R * N) w x)) t)))
       (fun r => unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
-        (rowB N 10 (batchShard R N 10 (efficientnetForwardB_full (R * N) w x) r))
+        (rowB N 10 (batchShard R N 10 (efficientnetForwardBFull (R * N) w x) r))
         (batchShard R N (1 * 10) t r)))) :=
   efficientnet_net_syncTiedG R hR N hN xN vN epsStr cotN dN w hεw x _ _
     (fun r => replicaLossCot_eq R N 10 hR α B aStr negAK bStr logN ohN _ t r)

@@ -11,10 +11,10 @@ delivers — the depthwise peers of `CifarPoC.convW_den`/`convB_den`, delegating
 per-example fold; ConvNeXt-T's 7×7 depthwise ties (`ConvNeXtStepTie`) are what use them now.
 
 `depthwiseB_den` delegates to `mnv2_render_depthwiseb_certified`. The **weight** is the one needing a
-bridge: the stride-1 depthwise weight VJP is 3-index (`depthwise_weight_grad_has_vjp3`), and the
+bridge: the stride-1 depthwise weight VJP is 3-index (`depthwiseWeightGradHasVJP3`), and the
 emitted op's `den` carries it flat (`Tensor3.flatten (… .backward W (unflatten c))`), so
 `depthwiseW_den` first routes through `mnv2_render_depthwiseW_flat_certified` — the flat
-pdiv-Jacobian form via `hasVJP3_to_hasVJP.correct`, modulo the `unflatten ∘ flatten = id`
+pdiv-Jacobian form via `HasVJP3.toHasVJP.correct`, modulo the `unflatten ∘ flatten = id`
 round-trip on `W`.
 
 ## Honest residual
@@ -30,21 +30,21 @@ open scoped BigOperators
 
 /-- **Flat stride-1 depthwise weight render bridge.** The emitted op's flat weight grad
     `flatten W − lr·flatten((dwconv_weight_grad₃ b x).backward W (unflatten c))` equals the flat
-    pdiv-Jacobian form. Via `hasVJP3_to_hasVJP.correct` (the triple→flat reindex), modulo
+    pdiv-Jacobian form. Via `HasVJP3.toHasVJP.correct` (the triple→flat reindex), modulo
     `unflatten (flatten W) = W`. The stride-1 depthwise peer of `cnn_render_convW_certified`. -/
 theorem mnv2_render_depthwiseW_flat_certified {c h w kH kW : Nat}
     (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW)
     (cot : Vec (c*h*w)) (lr : ℝ) (idx : Fin (c*kH*kW)) :
     Tensor3.flatten W idx
         - lr * Tensor3.flatten
-            ((depthwise_weight_grad_has_vjp3 b x).backward W (Tensor3.unflatten cot)) idx
+            ((depthwiseWeightGradHasVJP3 b x).backward W (Tensor3.unflatten cot)) idx
       = Tensor3.flatten W idx - lr * ∑ j : Fin (c*h*w),
           pdiv (fun v' : Vec (c*kH*kW) => Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b x))
                (Tensor3.flatten W) idx j * cot j := by
   congr 1
   congr 1
-  rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b x)).correct (Tensor3.flatten W) cot idx]
-  simp only [hasVJP3_to_hasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
+  rw [← (HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 b x)).correct (Tensor3.flatten W) cot idx]
+  simp only [HasVJP3.toHasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
 
 /-- **Stride-1 depthwise weight op = certified.** The `depthwiseWeightSgd` op denotes
     `flatten W − lr·(certified ∂(depthwiseConv2d)/∂W · c)` (flat pdiv form). The stride-1 depthwise

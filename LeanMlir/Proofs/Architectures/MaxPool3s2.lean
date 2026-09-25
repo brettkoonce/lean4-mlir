@@ -48,8 +48,8 @@ collapses to ≤4. The generic route (`maxPool2LocalReindex` → `reindexCLM` �
 indifferent: at a smooth point the pool is locally a reindexing map, and overlap only makes that
 map non-injective, which `reindexCLM`'s adjoint already handles by summing over preimages.
 
-The witness is `maxPool3s2_has_vjp_at3` (mirroring `maxPool2_has_vjp_at3` in `CNN.lean`), with
-its flat form `maxPool3s2Flat_has_vjp_at`; the ResNet-34/50 stems, their seals and the float
+The witness is `maxPool3s2HasVJPAt3` (mirroring `maxPool2HasVJPAt3` in `CNN.lean`), with
+its flat form `maxPool3s2FlatHasVJPAt`; the ResNet-34/50 stems, their seals and the float
 stem bridge build on it. -/
 
 namespace Proofs
@@ -121,7 +121,7 @@ theorem maxPool3s2_attained {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
 -- `floatClose_maxPool3s2`, `FloatComposeBridge.lean`) supplies its pool CONCRETELY where it supplies
 -- all 16 blocks abstractly. So moving the net's pool moved a `rfl` that had nothing to do with the
 -- codegen, and it surfaced as a **`(deterministic) timeout at whnf`** on the forward's shape check
--- (the per-example one, since retired; today `resnet34ForwardB_full_eq_slots`) rather than as a type error. ⚠ Raising the heartbeat budget — the recorded fix for the superficially identical
+-- (the per-example one, since retired; today `resnet34ForwardBFull_eq_slots`) rather than as a type error. ⚠ Raising the heartbeat budget — the recorded fix for the superficially identical
 -- symptom in `xla_pjrt_handoff.md` §0.2 increment 2 — would have spent unbounded compute on a
 -- proposition that was FALSE. *A `whnf` timeout on an `rfl` is not evidence about the budget; the
 -- first question is whether the two sides should be equal at all.*
@@ -174,7 +174,7 @@ def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
       x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)
 
 /-- ⭐ **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the 3×3/s2 stem
-    pool's smoothness hypothesis (`maxPool3s2Flat_has_vjp_at`, the R34 back ties), the peer of
+    pool's smoothness hypothesis (`maxPool3s2FlatHasVJPAt`, the R34 back ties), the peer of
     `MnistCNN`'s `maxPool2Smooth_of_injective`. No whole-net witness discharges it yet: the R34
     Live/Seal witnesses pool 2×2 and use the `MnistCNN` lemma. One injectivity
     argument in place of `36·c·h·w` per-window `decide`s (9 offsets pairwise, against 2×2's 6), which
@@ -359,7 +359,7 @@ theorem pdiv3_maxPool3s2_smooth {c h w : Nat}
 /-- **The VJP witness.** The backward accumulates `dy` over every output whose window selects
     this input — at most 4 of them (`win3Row_mem_le_two` squared). `maxPool2`'s peer is a single
     lookup; this is the same statement without the disjointness collapse. -/
-noncomputable def maxPool3s2_has_vjp_at3 {c h w : Nat}
+noncomputable def maxPool3s2HasVJPAt3 {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x) :
     HasVJPAt3 (maxPool3s2 : Tensor3 c (2 * h) (2 * w) → Tensor3 c h w) x where
   backward dy ci hi_in wi_in :=
@@ -387,10 +387,10 @@ theorem maxPool3s2Flat_differentiableAt {c h w : Nat}
     DifferentiableAt ℝ (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
   (maxPool3s2_flat_hasFDerivAt x h_smooth hc hh hw).differentiableAt
 
-noncomputable def maxPool3s2Flat_has_vjp_at {c h w : Nat}
+noncomputable def maxPool3s2FlatHasVJPAt {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool3s2Smooth x) :
     HasVJPAt (maxPool3s2Flat c h w) (Tensor3.flatten x) :=
-  hasVJPAt3_to_hasVJPAt (maxPool3s2_has_vjp_at3 x h_smooth)
+  HasVJPAt3.toHasVJPAt (maxPool3s2HasVJPAt3 x h_smooth)
 
 /-- Flattened magnitude bound — the form `floatClose_maxPool3s2` (`FloatComposeBridge.lean`)
     threads (`maxPoolFlat_abs_le`'s peer). -/

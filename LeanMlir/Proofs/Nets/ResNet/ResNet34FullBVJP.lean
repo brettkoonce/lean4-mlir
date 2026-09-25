@@ -12,15 +12,15 @@ for MobileNetV2's seventeen bottlenecks, and the last piece of T1 in `formalizat
 
 ## No new mathematics, and one new lemma one tier down
 
-Every block VJP is already proven at `bnBatchLA`: `r34BasicBlockB_has_vjp_at` and
-`r34DownBlockB_has_vjp_at` (`ResNet34BackB0.lean`) are exactly the two block shapes
+Every block VJP is already proven at `bnBatchLA`: `r34BasicBlockBHasVJPAt` and
+`r34DownBlockBHasVJPAt` (`ResNet34BackB0.lean`) are exactly the two block shapes
 `ResNet34FullB.lean`'s `r34IdB` / `r34DownB` unfold to. The bundle lemmas below are delegations
 in the `EfficientNetFullB0` style, and the whole net is those blocks' `CertLayer`s composed.
 
-⭐ The one thing that did not exist is `batchMap_has_vjp_at` ([`Foundation/BatchMapVJPAt.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/BatchMapVJPAt.lean),
+⭐ The one thing that did not exist is `batchMapHasVJPAt` ([`Foundation/BatchMapVJPAt.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/BatchMapVJPAt.lean),
 written for this): r34's stem ends in `batchMap N (maxPool3s2Flat 64 56 56)` and a max-pool has no
-derivative at a tie, so the GLOBAL `batchMap_has_vjp` cannot lift it. The per-example pool VJP at a
-`Vec` point was already there (`maxPool3s2Flat_has_vjp_at_vec`), so the batched pool is two lines.
+derivative at a tie, so the GLOBAL `batchMapHasVJP` cannot lift it. The per-example pool VJP at a
+`Vec` point was already there (`maxPool3s2FlatHasVJPAtVec`), so the batched pool is two lines.
 
 ## The hypothesis budget
 
@@ -34,11 +34,11 @@ binds two hypotheses, exactly as `MobileNetV2FullBVJP.lean`'s `MNV2SmoothAtB` / 
 
 ⚠ The pool's condition is **per example** (`∀ r : Fin N, MaxPool3s2Smooth …` on that example's
 row), because a tie is a property of one image's window, not of the batch. That is the shape
-`batchMap_has_vjp_at` consumes.
+`batchMapHasVJPAt` consumes.
 
 The running activations are named `r34Pre1 … r34Pre16` so each bundle can be STATED at the
 activation entering its block without a sixteen-deep nested application inline; `r34Pre16` doubles
-as the trunk, and `resnet34ForwardB_full_eq_chain` bridges it back to the committed
+as the trunk, and `resnet34ForwardBFull_eq_chain` bridges it back to the committed
 nested-application forward.
 
 ⭐ `N` is a variable throughout: this tier carries no numerals.
@@ -95,24 +95,24 @@ def R34StemSmoothAt (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : V
 -- § Block, stem and head bundle lemmas (delegation)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Identity basic block VJP — `r34BasicBlockB_has_vjp_at` at the bundle's fields. -/
-noncomputable def r34IdB_has_vjp_at (N h w : Nat) {c : Nat} (p : R34IdW c)
+/-- Identity basic block VJP — `r34BasicBlockBHasVJPAt` at the bundle's fields. -/
+noncomputable def r34IdBHasVJPAt (N h w : Nat) {c : Nat} (p : R34IdW c)
     (hq : R34IdPos p) (v : Vec (N * (c * h * w))) (hs : R34IdSmoothAt N h w p v) :
     HasVJPAt (r34IdB N h w p) v :=
-  StableHLO.r34BasicBlockB_has_vjp_at N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+  StableHLO.r34BasicBlockBHasVJPAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ v hs.hmid hs.hout
 
-/-- Downsample basic block VJP — `r34DownBlockB_has_vjp_at` at the bundle's fields. -/
-noncomputable def r34DownB_has_vjp_at (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+/-- Downsample basic block VJP — `r34DownBlockBHasVJPAt` at the bundle's fields. -/
+noncomputable def r34DownBHasVJPAt (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (hq : R34DownPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : R34DownSmoothAt N h w p v) :
     HasVJPAt (r34DownB N h w p) v :=
-  StableHLO.r34DownBlockB_has_vjp_at N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
+  StableHLO.r34DownBlockBHasVJPAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp v hs.hmid hs.hout
 
 /-- ⭐ Stem VJP: the 7×7/s2 conv-bn-relu, then the batched 3×3/s2 pool. The pool half is where
-    `batchMap_has_vjp_at` earns its existence. -/
-noncomputable def r34StemB_has_vjp_at (N h w : Nat) {ic oc : Nat}
+    `batchMapHasVJPAt` earns its existence. -/
+noncomputable def r34StemBHasVJPAt (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
@@ -120,13 +120,13 @@ noncomputable def r34StemB_has_vjp_at (N h w : Nat) {ic oc : Nat}
     (hpool : R34PoolSmoothAt N h w
       (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) :
     HasVJPAt (r34StemB N h w Ws bs εs γs βs) x :=
-  vjp_comp_at _ (StableHLO.batchMap N (maxPool3s2Flat oc h w)) x
+  vjpCompAt _ (StableHLO.batchMap N (maxPool3s2Flat oc h w)) x
     (StableHLO.cbReluStridedB_differentiableAt N Ws bs εs hεs γs βs x hrelu)
     (batchMap_differentiableAt _ _
       (fun r => maxPool3s2Flat_differentiableAt_vec _ (hpool r) hc hh hw))
-    (StableHLO.cbReluStridedB_has_vjp_at N Ws bs εs hεs γs βs x hrelu)
-    (batchMap_has_vjp_at _ _
-      (fun r => maxPool3s2Flat_has_vjp_at_vec _ (hpool r))
+    (StableHLO.cbReluStridedBHasVJPAt N Ws bs εs hεs γs βs x hrelu)
+    (batchMapHasVJPAt _ _
+      (fun r => maxPool3s2FlatHasVJPAtVec _ (hpool r))
       (fun r => maxPool3s2Flat_differentiableAt_vec _ (hpool r) hc hh hw))
 
 theorem r34StemB_differentiableAt (N h w : Nat) {ic oc : Nat}
@@ -142,14 +142,14 @@ theorem r34StemB_differentiableAt (N h w : Nat) {ic oc : Nat}
     (StableHLO.cbReluStridedB_differentiableAt N Ws bs εs hεs γs βs x hrelu)
 
 /-- ⭐ The head is GLOBAL — GAP and dense are both smooth everywhere, and each is `batchMap` of a
-    per-example op, so `batchMap_has_vjp` suffices and no smoothness hypothesis appears. -/
-noncomputable def r34HeadB_has_vjp (N h w : Nat) {c nCls : Nat}
+    per-example op, so `batchMapHasVJP` suffices and no smoothness hypothesis appears. -/
+noncomputable def r34HeadBHasVJP (N h w : Nat) {c nCls : Nat}
     (Wd : Mat c nCls) (bd : Vec nCls) : HasVJP (r34HeadB N h w Wd bd) :=
-  vjp_comp _ _
+  vjpComp _ _
     (batchMap_differentiable _ (globalAvgPoolFlat_differentiable c h w))
     (batchMap_differentiable _ (dense_differentiable Wd bd))
-    (batchMap_has_vjp _ (globalAvgPoolFlat_has_vjp c h w) (globalAvgPoolFlat_differentiable c h w))
-    (batchMap_has_vjp _ (dense_has_vjp Wd bd) (dense_differentiable Wd bd))
+    (batchMapHasVJP _ (globalAvgPoolFlatHasVJP c h w) (globalAvgPoolFlat_differentiable c h w))
+    (batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd))
 
 theorem r34HeadB_differentiable (N h w : Nat) {c nCls : Nat}
     (Wd : Mat c nCls) (bd : Vec nCls) : Differentiable ℝ (r34HeadB N h w Wd bd) :=
@@ -384,12 +384,12 @@ theorem r34Pre16_apply (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
   rw [r34Pre16, Function.comp_apply]
 
 /-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** —
-    the r34 peer of `mobilenetv2ForwardB_full_eq_chain`, and what lets the VJP be about
-    `resnet34ForwardB_full` rather than about a re-spelling of it. -/
-theorem resnet34ForwardB_full_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+    the r34 peer of `mobilenetv2ForwardBFull_eq_chain`, and what lets the VJP be about
+    `resnet34ForwardBFull` rather than about a re-spelling of it. -/
+theorem resnet34ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
-    resnet34ForwardB_full N w x = (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x := by
-  rw [resnet34ForwardB_full, Function.comp_apply, r34Pre16_apply, r34Pre15_apply, r34Pre14_apply, r34Pre13_apply, r34Pre12_apply, r34Pre11_apply, r34Pre10_apply, r34Pre9_apply, r34Pre8_apply, r34Pre7_apply, r34Pre6_apply, r34Pre5_apply, r34Pre4_apply, r34Pre3_apply, r34Pre2_apply, r34Pre1_apply, r34Pre0_apply]
+    resnet34ForwardBFull N w x = (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x := by
+  rw [resnet34ForwardBFull, Function.comp_apply, r34Pre16_apply, r34Pre15_apply, r34Pre14_apply, r34Pre13_apply, r34Pre12_apply, r34Pre11_apply, r34Pre10_apply, r34Pre9_apply, r34Pre8_apply, r34Pre7_apply, r34Pre6_apply, r34Pre5_apply, r34Pre4_apply, r34Pre3_apply, r34Pre2_apply, r34Pre1_apply, r34Pre0_apply]
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -428,11 +428,11 @@ noncomputable def r34NetLayer (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq 
     at a time, then each layer's forward by its `rfl` lemma. -/
 theorem r34NetLayer_fwd_apply (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq : R34PosB w)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
-    (r34NetLayer N w hq).fwd x = resnet34ForwardB_full N w x := by
+    (r34NetLayer N w hq).fwd x = resnet34ForwardBFull N w x := by
   rw [r34NetLayer]
   repeat rw [StableHLO.CertLayer.comp_fwd_apply]
   rw [r34StemLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34DownLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34DownLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34DownLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd,
-    r34HeadLayer_fwd, resnet34ForwardB_full]
+    r34HeadLayer_fwd, resnet34ForwardBFull]
 
 /-- `R34SmoothAtB` is the layer's `.ok`: one `comp_ok_of` per block, each naming its block's
     input `r34PreK`. ⚠ At the literal widths the activation step must be a `rw`: the same step
@@ -485,31 +485,31 @@ theorem r34SmoothAtB_ok (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq : R34P
 
     ⭐ The head takes no hypothesis at all (GAP and dense are smooth, and each is `batchMap` of a
     per-example op), and `N` is a variable: this tier carries no numerals. -/
-noncomputable def resnet34ForwardB_full_has_vjp_at (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+noncomputable def resnet34ForwardBFullHasVJPAt (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :
     HasVJPAt (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x :=
-  (funext fun v => (r34NetLayer_fwd_apply N w hq v).trans (resnet34ForwardB_full_eq_chain N w v)
+  (funext fun v => (r34NetLayer_fwd_apply N w hq v).trans (resnet34ForwardBFull_eq_chain N w v)
     : (r34NetLayer N w hq).fwd = _) ▸ (r34NetLayer N w hq).vjp x (r34SmoothAtB_ok N w hq x hx)
 
 /-- ⭐⭐ **Public correctness theorem**: the sixteen-block batch-BN backward equals the
-    `pdiv`-contracted Jacobian of `resnet34ForwardB_full` ITSELF — the committed
+    `pdiv`-contracted Jacobian of `resnet34ForwardBFull` ITSELF — the committed
     nested-application forward `ResNet34FullB.lean` defines and
-    `resnet34FwdGraphB_full_faithful` proves the typed graph denotes — not of the layered chain
-    the VJP is assembled on. Tied back through `resnet34ForwardB_full_eq_chain`. -/
-theorem resnet34ForwardB_full_has_vjp_at_correct (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+    `resnet34FwdGraphBFull_faithful` proves the typed graph denotes — not of the layered chain
+    the VJP is assembled on. Tied back through `resnet34ForwardBFull_eq_chain`. -/
+theorem resnet34ForwardBFullHasVJPAt_correct (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
-    (resnet34ForwardB_full_has_vjp_at N w hq x hx).backward dy i =
-      ∑ j : Fin (N * nCls), pdiv (resnet34ForwardB_full N w) x i j * dy j := by
-  have h := (resnet34ForwardB_full_has_vjp_at N w hq x hx).correct dy i
-  rwa [show resnet34ForwardB_full N w = r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w
-      from funext (resnet34ForwardB_full_eq_chain N w)]
+    (resnet34ForwardBFullHasVJPAt N w hq x hx).backward dy i =
+      ∑ j : Fin (N * nCls), pdiv (resnet34ForwardBFull N w) x i j * dy j := by
+  have h := (resnet34ForwardBFullHasVJPAt N w hq x hx).correct dy i
+  rwa [show resnet34ForwardBFull N w = r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w
+      from funext (resnet34ForwardBFull_eq_chain N w)]
 
 /-- ⭐ The committed forward is differentiable at every smooth point — the layer's `.diff`. What
-    the seal's `sealDiffAt` needs. -/
-theorem resnet34ForwardB_full_differentiableAt (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
+    the seal's `seal_differentiableAt` needs. -/
+theorem resnet34ForwardBFull_differentiableAt (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :
-    DifferentiableAt ℝ (resnet34ForwardB_full N w) x := by
+    DifferentiableAt ℝ (resnet34ForwardBFull N w) x := by
   rw [← funext (r34NetLayer_fwd_apply N w hq)]
   exact (r34NetLayer N w hq).diff x (r34SmoothAtB_ok N w hq x hx)
 

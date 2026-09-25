@@ -9,9 +9,9 @@ backward-cotangent tables:
   t3 (18) = ... ∘ relu∘dense3                  at p2f
   t2 (72) = ... ∘ maxPoolFlat                  at flatten r2V (argmax routing)
   m2 (72) = relu mask2 ⊙ t2                    (relu fold at flatten c2V)
-  t1 (72) = conv2d_input_grad_formula W2 m2    (conv2 input-VJP)
+  t1 (72) = conv2dInputGradFormula W2 m2    (conv2 input-VJP)
   m1 (72) = relu mask1 ⊙ t1
-  pd      = conv2d_input_grad_formula W1 m1 [ic]
+  pd      = conv2dInputGradFormula W1 m1 [ic]
 
 Each pool/conv stage converts its pdiv_comp sum into the layer witness's
 explicit backward via HasVJPAt.correct, then evaluates it in-kernel.
@@ -63,7 +63,7 @@ for ci in range(C):
 M2 = np.vectorize(lambda m, v: v if m else Fraction(0))(mask2, t2)
 
 def input_grad(Wr, cin, dyT):
-    """mirror of conv2d_input_grad_formula (pH=pW=1, 3x3):
+    """mirror of conv2dInputGradFormula (pH=pW=1, 3x3):
     out[ci,hi,wi] = sum_{co,ho,wo} [ho<=hi+1 & hi+1-ho<3 & wo<=wi+1 & wi+1-wo<3]
                     Wr[co, ci*9 + (hi+1-ho)*3 + (wi+1-wo)] * dyT[co,ho,wo]"""
     oc = dyT.shape[0]
@@ -156,7 +156,7 @@ for k2 in range(72):
   rw [pdiv_comp _ _ _ hP hG]
   simp only [pooled_eq]
   simp only [S3]
-  rw [← (maxPoolFlat_has_vjp_at r2V r2_smooth).correct t3V {fm2(k2, '2*(2*3)*(2*3)')}]
+  rw [← (maxPoolFlatHasVJPAt r2V r2_smooth).correct t3V {fm2(k2, '2*(2*3)*(2*3)')}]
   show (if MaxPool2IsArgmax (c := 2) (h := 3) (w := 3) r2V
         {fm2(ci, 2)} {fm2(hi, 6)} {fm2(wi, 6)}
       then Tensor3.unflatten t3V {fm2(ci, 2)}
@@ -182,10 +182,10 @@ for k1 in range(72):
   simp only [c2flat_eq]
   simp only [S2r]
   rw [← conv2wit.correct m2V {fm2(k1, '2*(2*3)*(2*3)')}]
-  show conv2d_input_grad_formula W2 (Tensor3.unflatten m2V)
+  show conv2dInputGradFormula W2 (Tensor3.unflatten m2V)
       {fm2(ci, 2)} {fm2(hi, 6)} {fm2(wi, 6)} = t1V {fm2(k1, '2*(2*3)*(2*3)')}
   rw [show (Tensor3.unflatten m2V : Tensor3 2 6 6) = M2T from Tensor3.unflatten_flatten M2T]
-  simp [conv2d_input_grad_formula, W2, M2T, t1V, Fin.sum_univ_succ]
+  simp [conv2dInputGradFormula, W2, M2T, t1V, Fin.sum_univ_succ]
   try norm_num
 """)
 
@@ -216,7 +216,7 @@ from the output side. Exact backward-cotangent tables (all in-kernel
 rationals): dense head slices (`t4V`/`t3V`), the max-pool argmax routing
 (`t2V`, via `MaxPool2IsArgmax` at each of the 72 positions), the ReLU mask
 folds (`m2V`/`m1V`), and the conv input-VJPs (`t1V` and the final entry,
-via `conv2d_input_grad_formula` through `HasVJPAt.correct`).
+via `conv2dInputGradFormula` through `HasVJPAt.correct`).
 
 The sealed entry: `∂ logit_{JC} / ∂ pixel ({HI},{WI})` at the witness =
 `{PD.numerator}/{PD.denominator}` ≈ {float(PD):.4f} ≠ 0, hence
@@ -333,13 +333,13 @@ theorem c1flat_eq :
 /-- The conv2 layer witness, type-ascribed at `flatConv` (defeq). -/
 noncomputable def conv2wit :
     HasVJPAt (flatConv (h := 2*3) (w := 2*3) W2 b2) (Tensor3.flatten z1V) :=
-  (hasVJP3_to_hasVJP (conv2d_has_vjp3 (h := 2*3) (w := 2*3) W2 b2)).toHasVJPAt
+  (HasVJP3.toHasVJP (conv2dHasVJP3 (h := 2*3) (w := 2*3) W2 b2)).toHasVJPAt
     (Tensor3.flatten z1V)
 
 /-- The conv1 layer witness, type-ascribed at `flatConv` (defeq). -/
 noncomputable def conv1wit :
     HasVJPAt (flatConv (h := 2*3) (w := 2*3) W1 b1) X :=
-  (hasVJP3_to_hasVJP (conv2d_has_vjp3 (h := 2*3) (w := 2*3) W1 b1)).toHasVJPAt X
+  (HasVJP3.toHasVJP (conv2dHasVJP3 (h := 2*3) (w := 2*3) W1 b1)).toHasVJPAt X
 
 -- ════════════════════════════════════════════════════════════════
 -- § S4/S3: the dense head slices
@@ -499,10 +499,10 @@ theorem pdiv_fwd_entry :
   simp only [c1flat_eq]
   simp only [S0r]
   rw [← conv1wit.correct m1V {fm2(IC, '1 * (2*3) * (2*3)')}]
-  show conv2d_input_grad_formula W1 (Tensor3.unflatten m1V)
+  show conv2dInputGradFormula W1 (Tensor3.unflatten m1V)
       (⟨0, by norm_num⟩ : Fin 1) {fm2(HI, 6)} {fm2(WI, 6)} = {lit(PD)}
   rw [show (Tensor3.unflatten m1V : Tensor3 2 6 6) = M1T from Tensor3.unflatten_flatten M1T]
-  simp [conv2d_input_grad_formula, W1, M1T, Fin.sum_univ_succ]
+  simp [conv2dInputGradFormula, W1, M1T, Fin.sum_univ_succ]
   try norm_num
 
 theorem pdiv_fwd_entry_ne :
@@ -513,8 +513,8 @@ theorem pdiv_fwd_entry_ne :
 /-- **Level 3: the trained-weight CNN backward is not the zero map** —
     the seal the MLP rung carries, now at the convolutional witness. -/
 theorem trainedCnn_backward_nontrivial :
-    trainedCnn_has_vjp_at.backward (basisVec {JCL}) {fm2(IC, '1 * (2*3) * (2*3)')} ≠ 0 :=
-  trainedCnn_has_vjp_at.backward_ne_zero_of_pdiv_ne pdiv_fwd_entry_ne
+    trainedCnnHasVJPAt.backward (basisVec {JCL}) {fm2(IC, '1 * (2*3) * (2*3)')} ≠ 0 :=
+  trainedCnnHasVJPAt.backward_ne_zero_of_pdiv_ne pdiv_fwd_entry_ne
 
 /-- The `fderiv` form: the whole-net Jacobian at the trained CNN witness is nonzero. -/
 theorem trainedCnn_jacobian_nonzero :

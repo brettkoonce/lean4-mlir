@@ -74,7 +74,7 @@ theorem convStridedWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) 
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  exact (flatConvStride2_weight_grad_has_vjp b
+  exact (flatConvStride2WeightGradHasVJP b
     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j))).correct
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
 
@@ -91,7 +91,7 @@ theorem convStridedXlaWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → �
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  exact (flatConvStride2Xla_weight_grad_has_vjp b
+  exact (flatConvStride2XlaWeightGradHasVJP b
     (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j))).correct
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
 
@@ -107,7 +107,7 @@ theorem convStride4WGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) 
                (Kernel4.flatten W) idx j * rnd (batchSlice N (oc * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  exact (flatConvStride4_weight_grad_has_vjp b
+  exact (flatConvStride4WeightGradHasVJP b
     (fun j => rnd (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n j))).correct
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
 
@@ -123,10 +123,10 @@ theorem depthwiseWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xN co
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b
+  rw [← (HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 b
       (Tensor3.unflatten (fun j => rnd (batchSlice N (c * h * w) x n j))))).correct
       (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx]
-  simp only [hasVJP3_to_hasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
+  simp only [HasVJP3.toHasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
 
 /-- **bf16 SYMMETRIC strided depthwise weight GRADIENT**, rounded once. B0's stride-2 MBConvs and
     MobileNetV4's rows 1, 3, 11. -/
@@ -141,7 +141,7 @@ theorem depthwiseStridedWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ)
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  exact (depthwiseStride2_weight_grad_has_vjp b
+  exact (depthwiseStride2WeightGradHasVJP b
     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j))).correct
     (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx
 
@@ -158,7 +158,7 @@ theorem depthwiseStridedXlaWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → �
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  exact (depthwiseStride2Xla_weight_grad_has_vjp b
+  exact (depthwiseStride2XlaWeightGradHasVJP b
     (fun j => rnd (batchSlice N (c * (2 * h) * (2 * w)) x n j))).correct
     (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx
 
@@ -197,7 +197,7 @@ theorem patchEmbedWGradBBf16_den {ic H W P tk D N : Nat} (rnd : ℝ → ℝ) (xN
         (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw))
       = rnd (∑ n : Fin N, ∑ o : Fin ((tk + 1) * D),
           pdiv (fun v : Vec (D * ic * P * P) =>
-                  patchEmbed_flat ic H W P tk D (Kernel4.unflatten v) bc cls pos
+                  patchEmbedFlat ic H W P tk D (Kernel4.unflatten v) bc cls pos
                     (fun j => rnd (batchSlice N (ic * H * W) img n j)))
             (Kernel4.flatten Wp)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o

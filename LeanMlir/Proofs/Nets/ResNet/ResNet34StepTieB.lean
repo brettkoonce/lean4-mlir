@@ -16,7 +16,7 @@ exercised it once `resnet34_train_step.mlir` was retired), and four things about
 ⭐⭐ **The block cotangents are NOT derived here.** The per-example close (`ResNet34ChainClose.lean`,
 deleted 2026-09-08) spelled per-block cotangent vectors out by hand, because no whole-block VJP
 existed when it was written. 4.1d's
-`r34IdB_has_vjp_at` / `r34DownB_has_vjp_at` ARE the certified block backwards, so a block's input
+`r34IdBHasVJPAt` / `r34DownBHasVJPAt` ARE the certified block backwards, so a block's input
 cotangent is a `.backward` application — and `r34{BasicBlock,DownBlock}BackBatchedGraph_faithful`
 already proves the emitted backward subgraph denotes exactly it. `r34IdCotIn_eq_vjp` and
 `r34DownCotIn_eq_vjp` below are that statement in the vocabulary this file threads, and they are
@@ -124,18 +124,18 @@ noncomputable def r34IdCotIn (N h w : Nat) {c : Nat} (p : R34IdW c)
     + r34IdCotA N h w p xin dyOut i
 
 /-- ⭐⭐ **The emitted fan-in IS the certified block VJP's backward.** Not a re-derivation: the
-    render's seven-node backward subgraph denotes `(r34IdB_has_vjp_at …).backward dyOut`, which is
+    render's seven-node backward subgraph denotes `(r34IdBHasVJPAt …).backward dyOut`, which is
     `r34BasicBlockBackBatchedGraph_faithful` read in this file's vocabulary. This is what makes the
     cross-block thread a composition of certified VJPs. -/
 theorem r34IdCotIn_eq_vjp (N h w : Nat) {c : Nat} (p : R34IdW c) (hq : R34IdPos p)
     (xin dyOut : Vec (N * (c * h * w))) (hs : R34IdSmoothAt N h w p xin) :
     r34IdCotIn N h w p xin dyOut
-      = (r34IdB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (r34IdBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := r34BasicBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ xin (.operand "" dyOut) hs.hmid hs.hout
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  rw [r34IdB_has_vjp_at, ← h]
+  rw [r34IdBHasVJPAt, ← h]
   rfl
 
 
@@ -216,13 +216,13 @@ theorem r34DownCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc) (hq
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w)))
     (hs : R34DownSmoothAt N h w p xin) :
     r34DownCotIn N h w p xin dyOut
-      = (r34DownB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (r34DownBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := r34DownBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand "" dyOut)
     hs.hmid hs.hout
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  rw [r34DownB_has_vjp_at, ← h]
+  rw [r34DownBHasVJPAt, ← h]
   funext i
   exact add_comm _ _
 
@@ -378,11 +378,11 @@ theorem r34_stem_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
 
 /-- **The head's block-side cotangent**, as the CERTIFIED head backward delivers it. The head is
     `batchMap(dense) ∘ batchMap(GAP)` — both smooth, both `batchMap` of a per-example op — so
-    `r34HeadB_has_vjp` is global and this needs no smoothness hypothesis, which is the one place in
+    `r34HeadBHasVJP` is global and this needs no smoothness hypothesis, which is the one place in
     the whole net where that is true. -/
 noncomputable def r34HeadCotBlk (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
     (xin : Vec (N * (c * h * w))) (dy : Vec (N * nCls)) : Vec (N * (c * h * w)) :=
-  (r34HeadB_has_vjp N h w Wd bd).backward xin dy
+  (r34HeadBHasVJP N h w Wd bd).backward xin dy
 
 /-- **Head, tied.** The classifier's weight and bias nodes denote the certified batched `Σ_n`
     gradient at the real GAP output and the loss cotangent. ⚠ The bias conjunct's Jacobian witness
@@ -407,7 +407,7 @@ theorem r34_head_tiedB (N h w : Nat) {c nCls : Nat} (xN cotN : String) (Wd : Mat
 -- § The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The whole batch-BN ResNet-34 train step, tied.** Threading `resnet34ForwardB_full`'s own
+/-- ⭐⭐ **The whole batch-BN ResNet-34 train step, tied.** Threading `resnet34ForwardBFull`'s own
     prefixes as the block inputs and the label-smoothed loss cotangent down through the certified
     head backward and the sixteen certified block backwards, every parameter GRADIENT node of the
     net — stem 4, thirteen identity blocks × 8, three downsample blocks × 12, dense 2 — denotes the
@@ -432,7 +432,7 @@ theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     -- the label-smoothed loss cotangent at the real logits and a general target
     let g : Vec (N * nCls) :=
       unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (resnet34ForwardB_full N w x)) t))
+        (rowB N nCls (resnet34ForwardBFull N w x)) t))
     -- the backward chain: the certified head backward, then the certified block backwards
     let dyE1 := r34HeadCotBlk N 7 7 w.Wd w.bd (r34Pre16 N w x) g
     let dyE0 := r34IdCotIn N 7 7 w.e1 (r34Pre15 N w x) dyE1
@@ -502,13 +502,13 @@ theorem r34_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (n : Fin N) (j : Fin nCls)
     (ht : ∑ k : Fin nCls, Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1) k = 1) :
     den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-          (rowB N nCls (resnet34ForwardB_full N w x)) t)
+          (rowB N nCls (resnet34ForwardBFull N w x)) t)
         (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = (pdiv (fun z' : Vec nCls => fun _ : Fin 1 =>
             softCE nCls (smoothTarget nCls α
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
-            (rowB N nCls (resnet34ForwardB_full N w x)) n) (0 : Fin 1)) j 0) / B :=
+            (rowB N nCls (resnet34ForwardBFull N w x)) n) (0 : Fin 1)) j 0) / B :=
   smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.ResNet34TieB

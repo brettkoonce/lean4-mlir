@@ -16,7 +16,7 @@ moves, the twelve hardcoded `768`s and thirteen `96`s in the head and the GAP ba
 correct untouched.
 
 ⭐ **The proof side needed nothing**, and for a different reason than ViT-S's. ViT's was that
-`vitForwardKV_has_vjp` is already `∀ heads d_head mlpDim k`. ConvNeXt's is more basic: the
+`vitForwardKVHasVJP` is already `∀ heads d_head mlpDim k`. ConvNeXt's is more basic: the
 certificates are per-SITE and generic in `c`/`e`/`h` already, so 18 more blocks is 18 more uses of
 theorems that were never indexed by depth. Depth was not a hypothesis.
 

@@ -36,7 +36,7 @@ of top-1). The leading 1×1 therefore runs at the input resolution `(2*h)×(2*w)
 
 ## Relu, and why every statement is `_at`
 
-R50 is relu throughout, so the VJPs are pointwise and hypothesis-threaded via `vjp_comp_at`. A
+R50 is relu throughout, so the VJPs are pointwise and hypothesis-threaded via `vjpCompAt`. A
 bottleneck has three kinks: the two interior relus (`h_s1`, `h_s2`) and the post-residual relu
 (`h_out`). The backward token is `.selectPos`, faithful by `selectPos_faithful`.
 
@@ -93,9 +93,9 @@ noncomputable def r50BottleneckLayer (N : Nat) {c mid h w kH₁ kW₁ kH₂ kW�
     at the SECOND stage's pre-relu activation, which lives at `cbReluB … x` — writing it at `x`
     typechecks nowhere.
 
-    Three smoothness families, where `r34BasicBlockB_has_vjp_at` needs two: the bottleneck's extra
+    Three smoothness families, where `r34BasicBlockBHasVJPAt` needs two: the bottleneck's extra
     interior conv brings its own relu. -/
-noncomputable def r50BottleneckB_has_vjp_at (N : Nat) {c mid h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ : Nat}
+noncomputable def r50BottleneckBHasVJPAt (N : Nat) {c mid h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ : Nat}
     (W₁ : Kernel4 mid c kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 c mid kH₃ kW₃) (b₃ : Vec c) (ε₃ : ℝ) (hε₃ : 0 < ε₃) (γ₃ β₃ : Vec c)
@@ -135,7 +135,7 @@ noncomputable def r50BottleneckBackBatchedGraph {N c mid h w kH₁ kW₁ kH₂ k
 
     The three batched stage backward graphs chained at their forward activations, wrapped in the
     residual additive fan-in (body cotangent + identity skip) and the OUTER post-residual relu,
-    proven equal to `r50BottleneckB_has_vjp_at`. The 3-conv peer of
+    proven equal to `r50BottleneckBHasVJPAt`. The 3-conv peer of
     `r34BasicBlockBackBatchedGraph_faithful`, threaded through all three relu smoothness families.
 
     Key fact, unchanged from R34: the outer relu's `.selectPos` mask is applied ONCE to the
@@ -155,7 +155,7 @@ theorem r50BottleneckBackBatchedGraph_faithful
                     cbReluB N (h := h) (w := w) W₂ b₂ ε₂ γ₂ β₂ ∘
                     cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r50BottleneckBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃ x ecot)
-      = (r50BottleneckB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
+      = (r50BottleneckBHasVJPAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
           W₃ b₃ ε₃ hε₃ γ₃ β₃ x h_s1 h_s2 h_out).backward (den ecot) :=
   (r50BottleneckLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
     W₃ b₃ ε₃ hε₃ γ₃ β₃).faithful x ⟨⟨⟨h_s1, h_s2⟩, trivial⟩, h_out⟩ ecot
@@ -190,7 +190,7 @@ noncomputable def r50ProjBlockLayer (N : Nat)
 
     Structurally it is CAPSTONE 1 with `residual` (identity skip) replaced by `residualProj` (both
     paths nontrivial), and CAPSTONE 3 with every stride-2 op replaced by its stride-1 peer. -/
-noncomputable def r50ProjBlockB_has_vjp_at (N : Nat)
+noncomputable def r50ProjBlockBHasVJPAt (N : Nat)
     {ic mid oc h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ kHp kWp : Nat}
     (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
@@ -253,7 +253,7 @@ theorem r50ProjBlockBackBatchedGraph_faithful
                      cbReluB N (h := h) (w := w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r50ProjBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃
           Wp bp εp γp βp x ecot)
-      = (r50ProjBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
+      = (r50ProjBlockBHasVJPAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
           W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x h_s1 h_s2 h_out).backward (den ecot) :=
   (r50ProjBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
     W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp).faithful x ⟨⟨trivial, ⟨h_s1, h_s2⟩, trivial⟩, h_out⟩ ecot
@@ -300,9 +300,9 @@ noncomputable def r50DownBlockLayer (N : Nat)
       (projLayer N W₃ b₃ ε₃ hε₃ γ₃ β₃))).comp (CertLayer.reluOut _)
 
 /-- The batched R50 **strided projection** bottleneck's VJP at a smooth point —
-    `relu ∘ residualProj(projStridedB, F_s)`. The R50 peer of `r34DownBlockB_has_vjp_at`, with the
+    `relu ∘ residualProj(projStridedB, F_s)`. The R50 peer of `r34DownBlockBHasVJPAt`, with the
     bottleneck's third conv and its extra relu family. -/
-noncomputable def r50DownBlockB_has_vjp_at (N : Nat)
+noncomputable def r50DownBlockBHasVJPAt (N : Nat)
     {ic mid oc h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ kHp kWp : Nat}
     (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (hε₂ : 0 < ε₂) (γ₂ β₂ : Vec mid)
@@ -367,7 +367,7 @@ theorem r50DownBlockBackBatchedGraph_faithful
                      cbReluB N (h := 2 * h) (w := 2 * w) W₁ b₁ ε₁ γ₁ β₁) x k ≠ 0) :
     den (r50DownBlockBackBatchedGraph W₁ b₁ ε₁ γ₁ β₁ W₂ b₂ ε₂ γ₂ β₂ W₃ b₃ ε₃ γ₃ β₃
           Wp bp εp γp βp x ecot)
-      = (r50DownBlockB_has_vjp_at N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
+      = (r50DownBlockBHasVJPAt N W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
           W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp x h_s1 h_s2 h_out).backward (den ecot) :=
   (r50DownBlockLayer N (h := h) (w := w) W₁ b₁ ε₁ hε₁ γ₁ β₁ W₂ b₂ ε₂ hε₂ γ₂ β₂
     W₃ b₃ ε₃ hε₃ γ₃ β₃ Wp bp εp hεp γp βp).faithful x ⟨⟨trivial, ⟨h_s1, h_s2⟩, trivial⟩, h_out⟩ ecot

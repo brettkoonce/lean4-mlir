@@ -27,10 +27,10 @@ and each is now certified by the bridge in the right column:
 The reuse families need no new theorem — the generic M2/M3/CIFAR-BN bridges apply verbatim at
 the MobileNetV2 shapes. This file supplies the genuinely-new pieces:
 
-* **Depthwise (stride-1) b** — the `.correct` field of the proven `depthwise_bias_grad_has_vjp`
+* **Depthwise (stride-1) b** — the `.correct` field of the proven `depthwiseBiasGradHasVJP`
   (`Depthwise.lean`), SGD-wrapped (the W twin, superseded by `Mnv2PoC.depthwiseW_den`, was retired). The "one genuinely-new bridge
   family" of the plan — instantiation, the VJP itself is already proven 3-axiom-clean.
-* **Stem strided conv W/b** — wrappers of `flatConvStride2_weight_grad_has_vjp` (ch6) and a new
+* **Stem strided conv W/b** — wrappers of `flatConvStride2WeightGradHasVJP` (ch6) and a new
   strided-conv *bias* VJP.
 
 The shipped MobileNetV2 is batched, with XLA-`SAME` stride-2 layers. `mnv2_net_tiedB` certifies its
@@ -50,7 +50,7 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 -- § A. Depthwise (stride-1) parameter bridges — the genuinely-new family
 --
--- `depthwise_weight_grad_has_vjp3` / `depthwise_bias_grad_has_vjp` (Depthwise.lean) are the
+-- `depthwiseWeightGradHasVJP3` / `depthwiseBiasGradHasVJP` (Depthwise.lean) are the
 -- proven, foundation-rule depthwise param VJPs. Their `.correct` fields are the bridges: the
 -- rendered `dwconvWGrad` (per-channel transpose trick) / `convBiasGrad` (spatial reduce) equal
 -- the certified Jacobian of `depthwiseConv2d` (as a function of W / of b) contracted with the
@@ -59,21 +59,21 @@ open scoped BigOperators
 
 /-- **Depthwise bias-gradient bridge.** Likewise the per-channel depthwise bias gradient
     (`db[c] = Σ_spatial dy`) is the certified Jacobian of `depthwiseConv2d` wrt the bias, contracted
-    with `dy` — the `.correct` field of `depthwise_bias_grad_has_vjp`. -/
+    with `dy` — the `.correct` field of `depthwiseBiasGradHasVJP`. -/
 theorem mnv2_depthwise_bias_grad_bridge {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w)
     (b : Vec c) (dy : Vec (c * h * w)) (cc : Fin c) :
-    (depthwise_bias_grad_has_vjp W x).backward b dy cc
+    (depthwiseBiasGradHasVJP W x).backward b dy cc
       = ∑ j : Fin (c * h * w),
           pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc j * dy j :=
-  (depthwise_bias_grad_has_vjp W x).correct b dy cc
+  (depthwiseBiasGradHasVJP W x).correct b dy cc
 
 /-- **Depthwise bias output, certified.** Likewise `bⁿ = b − lr·(spatial reduce)` denotes
     `b − lr·(certified ∂(depthwiseConv2d)/∂b · cotangent)`. -/
 theorem mnv2_render_depthwiseb_certified {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w)
     (b : Vec c) (dy : Vec (c * h * w)) (lr : ℝ) (cc : Fin c) :
-    b cc - lr * (depthwise_bias_grad_has_vjp W x).backward b dy cc
+    b cc - lr * (depthwiseBiasGradHasVJP W x).backward b dy cc
       = b cc - lr * ∑ j : Fin (c * h * w),
           pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc j * dy j := by
   rw [mnv2_depthwise_bias_grad_bridge]
@@ -81,28 +81,28 @@ theorem mnv2_render_depthwiseb_certified {c h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § B. Stem strided 3×3 conv — weight reuses ch6, bias is new
 --
--- The stem (`conv3WGradStrided`) reuses `flatConvStride2_weight_grad_has_vjp` (StridedConv.lean)
+-- The stem (`conv3WGradStrided`) reuses `flatConvStride2WeightGradHasVJP` (StridedConv.lean)
 -- for the kernel; the SGD wrapper is the only new content. The stem bias needs a strided-conv
 -- *bias* VJP (§ C).
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Stem conv weight output, certified.** `sWⁿ = sW − lr·(strided transpose-trick grad)` denotes
-    `sW − lr·(certified ∂(flatConvStride2)/∂sW · cotangent)`, via `flatConvStride2_weight_grad_has_vjp`
+    `sW − lr·(certified ∂(flatConvStride2)/∂sW · cotangent)`, via `flatConvStride2WeightGradHasVJP`
     (the ch6 strided conv weight VJP). -/
 theorem mnv2_render_stem_convW_certified {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
     (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (lr : ℝ)
     (i : Fin (oc * ic * kH * kW)) :
-    v i - lr * (flatConvStride2_weight_grad_has_vjp b x).backward v dy i
+    v i - lr * (flatConvStride2WeightGradHasVJP b x).backward v dy i
       = v i - lr * ∑ j : Fin (oc * h * w),
           pdiv (fun v' : Vec (oc * ic * kH * kW) => flatConvStride2 (Kernel4.unflatten v') b x)
             v i j * dy j := by
-  rw [flatConvStride2_weight_grad_has_vjp_correct]
+  rw [flatConvStride2WeightGradHasVJP_correct]
 
 -- ════════════════════════════════════════════════════════════════
 -- § C. Stem strided-conv bias (`sb`)
 --
--- `conv2d_bias_differentiable` and `flatConvStride2_bias_grad_has_vjp` were RELOCATED to
+-- `conv2d_bias_differentiable` and `flatConvStride2BiasGradHasVJP` were RELOCATED to
 -- `StridedConv.lean` (next to their weight peers) so the `convStridedBiasSgd` op's `den` in
 -- `StableHLO` can reference the bias-VJP upstream; they are still in scope here by import.
 -- ════════════════════════════════════════════════════════════════
@@ -112,9 +112,9 @@ theorem mnv2_render_stem_convW_certified {ic oc h w kH kW : Nat}
 theorem mnv2_render_stem_convb_certified {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Vec (ic * (2 * h) * (2 * w)))
     (b : Vec oc) (dy : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :
-    b o - lr * (flatConvStride2_bias_grad_has_vjp W x).backward b dy o
+    b o - lr * (flatConvStride2BiasGradHasVJP W x).backward b dy o
       = b o - lr * ∑ j : Fin (oc * h * w),
           pdiv (fun b' : Vec oc => flatConvStride2 W b' x) b o j * dy j := by
-  rw [(flatConvStride2_bias_grad_has_vjp W x).correct]
+  rw [(flatConvStride2BiasGradHasVJP W x).correct]
 
 end Proofs

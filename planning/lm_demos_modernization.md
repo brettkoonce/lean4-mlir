@@ -40,7 +40,7 @@ TinyGPT book entry was rewritten the same day (`3c8c5dce`) on a fresh run; this 
 | convention | status | effort |
 |---|---|---|
 | bf16 | ⛔ structurally unavailable: `MlirCodegen.lean` has zero bf16; `cfg.bf16 := true` on a `NetSpec` demo is silently ignored | high (a bf16 arm in the generic walk) |
-| verified-render tier | attention/LN hand-rolled; `Proofs/Nets/ViT/*` (`mhsa_has_vjp_mat`, `layerNormVec_has_vjp`, `transformerBlockV_has_vjp_mat`) unused; causal mask has no proven analogue; `content.tex`'s "same VJP machinery" is loose | very high (a project) |
+| verified-render tier | attention/LN hand-rolled; `Proofs/Nets/ViT/*` (`mhsaHasVJPMat`, `layerNormVecHasVJP`, `transformerBlockVHasVJPMat`) unused; causal mask has no proven analogue; `content.tex`'s "same VJP machinery" is loose | very high (a project) |
 | JAX twin | none (`jax/` has no GPT; `Jax/Codegen.lean` hardcodes NCHW). The gather path's only validation is a loss-sequence tie against the one-hot path — good but self-referential | medium |
 | `runs/` dir | ✅ nano since 2026-09-09; none for `tiny` or TinyStories | low + GPU |
 | CI | not in any workflow; §5's RoPE extrapolation check is the closest gate | medium |

@@ -11,7 +11,7 @@ MobileNetV2 train step `den`-faithful for an arbitrary cotangent. This file remo
 train step is `den`-composed forward → loss → backward with no free activation and no symbolic
 cotangent. With 4.2b it completes MobileNetV2's T3, and it is `ResNet34StepTieB.lean`'s peer.
 
-⭐⭐ **The block cotangents are NOT derived here.** 4.2b's `mnv2{ExpOnly,Resid,Strided,NoExp}B_has_vjp_at`
+⭐⭐ **The block cotangents are NOT derived here.** 4.2b's `mnv2{ExpOnly,Resid,Strided,NoExp}BHasVJPAt`
 ARE the certified block backwards, and `mnv2{Body,DownBody,ResidBlock}BackBatchedGraph_faithful`
 (`MobileNetV2BackB0.lean`) already prove the emitted backward subgraphs denote exactly them. The
 four `*CotIn_eq_vjp` lemmas below are those statements in this file's vocabulary, and they are what
@@ -92,7 +92,7 @@ noncomputable def relu6MaskB (n : Nat) (pre dy : Vec n) : Vec n :=
     side. -/
 noncomputable def dStridedXlaInB (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
     (b : Vec c) (dy : Vec (N * (c * h * w))) : Vec (N * (c * (2 * h) * (2 * w))) :=
-  batchMap N (fun d => (depthwiseStride2FlatXla_has_vjp W b).backward (fun _ => 0) d) dy
+  batchMap N (fun d => (depthwiseStride2FlatXlaHasVJP W b).backward (fun _ => 0) d) dy
 
 -- ════════════════════════════════════════════════════════════════
 -- § The `t = 1` block (b1) — `projB ∘ dwbrB`, no expand and no skip
@@ -150,7 +150,7 @@ noncomputable def mnv2NoExpBackGraph {N ic oc h w : Nat} (p : IVWNoExp ic oc)
 theorem mnv2NoExpBackGraph_faithful {N ic oc h w : Nat} (p : IVWNoExp ic oc) (hq : IVNoExpPos p)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w)))
     (hs : IVNoExpSmoothAtB N h w p x) :
-    den (mnv2NoExpBackGraph p x e) = (mnv2NoExpB_has_vjp_at N h w p hq x hs).backward (den e) :=
+    den (mnv2NoExpBackGraph p x e) = (mnv2NoExpBHasVJPAt N h w p hq x hs).backward (den e) :=
   ((dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
     (projLayer N p.pW p.pb p.pε hq.hp p.pγ p.pβ)).faithful x ⟨hs.hd, trivial⟩ e
 
@@ -158,7 +158,7 @@ theorem mnv2NoExpBackGraph_faithful {N ic oc h w : Nat} (p : IVWNoExp ic oc) (hq
 theorem mnv2NoExpCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
     (hs : IVNoExpSmoothAtB N h w p xin) :
-    mnv2NoExpCotIn N h w p xin dyOut = (mnv2NoExpB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+    mnv2NoExpCotIn N h w p xin dyOut = (mnv2NoExpBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := mnv2NoExpBackGraph_faithful p hq xin (.operand "" dyOut) hs
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
@@ -243,13 +243,13 @@ theorem mnv2ExpOnlyCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid 
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
     (hs : IVSmoothAtB N h w p xin) :
     mnv2CotInBody N h w p xin dyOut
-      = (mnv2ExpOnlyB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (mnv2ExpOnlyBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := mnv2BodyBackBatchedGraph_faithful (N := N) p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand "" dyOut)
     hs.he hs.hd
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  rw [mnv2ExpOnlyB_has_vjp_at, ← h]
+  rw [mnv2ExpOnlyBHasVJPAt, ← h]
   rfl
 
 /-- **The SKIP block's input cotangent**: the body branch plus the identity skip, the `addVB`
@@ -265,13 +265,13 @@ noncomputable def mnv2ResidCotIn (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
 theorem mnv2ResidCotIn_eq_vjp (N h w : Nat) {c mid : Nat} (p : IVW c mid c) (hq : IVPos p)
     (xin dyOut : Vec (N * (c * h * w))) (hs : IVSmoothAtB N h w p xin) :
     mnv2ResidCotIn N h w p xin dyOut
-      = (mnv2ResidB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (mnv2ResidBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := mnv2ResidBlockBackBatchedGraph_faithful (N := N) p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand "" dyOut)
     hs.he hs.hd
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  -- ⚠ `rw [← h]` cannot close this one: `mnv2ResidB_has_vjp_at` unfolds to `residual_has_vjp_at`
+  -- ⚠ `rw [← h]` cannot close this one: `mnv2ResidBHasVJPAt` unfolds to `residualHasVJPAt`
   -- at `mnv2ExpOnlyB`, while the graph lemma states it at that abbreviation's own unfolding. The
   -- two are definitionally equal but not syntactically, so the step goes through `Eq.trans`.
   refine Eq.trans ?_ h
@@ -344,13 +344,13 @@ theorem mnv2StridedCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid 
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w)))
     (hs : IVStridedSmoothAtB N h w p xin) :
     mnv2StridedCotIn N h w p xin dyOut
-      = (mnv2StridedB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (mnv2StridedBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := mnv2DownBodyBackBatchedGraph_faithful (N := N) p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ xin (.operand "" dyOut)
     hs.he hs.hd
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  rw [mnv2StridedB_has_vjp_at, ← h]
+  rw [mnv2StridedBHasVJPAt, ← h]
   rfl
 
 
@@ -643,7 +643,7 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
 -- ════════════════════════════════════════════════════════════════
 
 /-- ⭐⭐ **The whole batch-BN MobileNetV2 train step, tied.** Threading
-    `mobilenetv2ForwardB_full`'s own prefixes as the block inputs and an arbitrary loss cotangent
+    `mobilenetv2ForwardBFull`'s own prefixes as the block inputs and an arbitrary loss cotangent
     `g` down through the head chain and the seventeen certified block backwards, every parameter
     GRADIENT node of the net — stem 4, `b1` 8, sixteen blocks x 12, head 4, dense 2 — denotes the
     certified batched `Σ_n` gradient. No free activation and no symbolic cotangent below the loss.
@@ -744,13 +744,13 @@ theorem mnv2_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (n : Fin N) (j : Fin nCls)
     (ht : ∑ k : Fin nCls, Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1) k = 1) :
     den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-          (rowB N nCls (mobilenetv2ForwardB_full N w x)) t)
+          (rowB N nCls (mobilenetv2ForwardBFull N w x)) t)
         (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = (pdiv (fun z' : Vec nCls => fun _ : Fin 1 =>
             softCE nCls (smoothTarget nCls α
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
-            (rowB N nCls (mobilenetv2ForwardB_full N w x)) n) (0 : Fin 1)) j 0) / B :=
+            (rowB N nCls (mobilenetv2ForwardBFull N w x)) n) (0 : Fin 1)) j 0) / B :=
   smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
 
 end Proofs.MobileNetV2TieB

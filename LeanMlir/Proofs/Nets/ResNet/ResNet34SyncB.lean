@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # ResNet-34's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
-`ResNet34FullB.lean` (T2) says the typed batch-BN graph denotes `resnet34ForwardB_full N w` on
+`ResNet34FullB.lean` (T2) says the typed batch-BN graph denotes `resnet34ForwardBFull N w` on
 one device. `ResNet34RenderB` renders the data-parallel step differently since 2026-09-21: at
 `replicas > 1` every BatchNorm site is `bnFwdSite`'s sync-BN composition — this replica's mean
 all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed, then `bnSyncF` — so the
@@ -11,11 +11,11 @@ statistics each replica normalises by are the GLOBAL batch's. This file is T2's 
 twin: that forward graph, stated as a family over the `R` replicas, denotes on replica `r`
 exactly `batchShard r` of the single-device forward at the global batch `R·N`.
 
-    den (resnet34FwdGraphSync_full R hR N epsStr w e r)
-      = batchShard R N nCls (resnet34ForwardB_full (R * N) w X) r
+    den (resnet34FwdGraphSyncFull R hR N epsStr w e r)
+      = batchShard R N nCls (resnet34ForwardBFull (R * N) w X) r
 
 given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
-move**: the right-hand side is the committed `resnet34ForwardB_full`, at `N := R·N`.
+move**: the right-hand side is the committed `resnet34ForwardBFull`, at `N := R·N`.
 
 ## How it is proved
 
@@ -183,9 +183,9 @@ theorem r34HeadGraphSync_shard {R : Nat} (N h w : Nat) {c nCls : Nat} (Wd : Mat 
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The sync-BN data-parallel ResNet-34 forward graph, over the replica family.** T2's
-    `resnet34FwdGraphB_full` with every BatchNorm a `bnSyncSiteLA` over all `R` replicas; block
+    `resnet34FwdGraphBFull` with every BatchNorm a `bnSyncSiteLA` over all `R` replicas; block
     prefixes and collective tags are `ResNet34RenderB`'s. -/
-def resnet34FwdGraphSync_full (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
+def resnet34FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
     (w : R34BWeights nCls) (e : Fin R → SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
     Fin R → SHlo (N * nCls) :=
   r34HeadGraphSync N 7 7 w.Wd w.bd
@@ -210,16 +210,16 @@ def resnet34FwdGraphSync_full (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String)
 
 /-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` examples,
-    the sync-BN graph on replica `r` denotes `batchShard r` of `resnet34ForwardB_full (R * N) w X`
+    the sync-BN graph on replica `r` denotes `batchShard r` of `resnet34ForwardBFull (R * N) w X`
     — the committed batch-BN forward, at the global batch. One block lemma per stage, the shard
     hypothesis threaded from each into the next. -/
-theorem resnet34FwdGraphSync_full_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+theorem resnet34FwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : R34BWeights nCls)
     (e : Fin R → SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
     (X : Vec ((R * N) * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
     (he : ∀ r, den (e r) = batchShard R N (3 * (2 * (2 * 56)) * (2 * (2 * 56))) X r) (r : Fin R) :
-    den (resnet34FwdGraphSync_full R hR N epsStr w e r)
-      = batchShard R N nCls (resnet34ForwardB_full (R * N) w X) r := by
+    den (resnet34FwdGraphSyncFull R hR N epsStr w e r)
+      = batchShard R N nCls (resnet34ForwardBFull (R * N) w X) r := by
   have h56 : 0 < 56 := by norm_num
   have h28 : 0 < 28 := by norm_num
   have h14 : 0 < 14 := by norm_num

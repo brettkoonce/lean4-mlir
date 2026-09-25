@@ -168,8 +168,8 @@ and patch-embed leaves, `batchMapAux B` for the tower and final-LN backwards at 
 activations, saved stage by stage (`batchMap B (f ∘ g)` and `batchMap B f ∘ batchMap B g` agree
 only up to `batchMap_comp`, not `rfl`). `ViTWholeBackCertifiedTieB.lean`: four leaf ties (the
 patch-embed one `rfl`, the others one rewrite of the per-example tie at one example's row), a
-`vjp_comp_diff_at` apex over `batchMap_has_vjp_at` witnesses, the tie, the shape check
-`vitForwardKVB_eq_chain`, the transfer to the committed `batchMap_has_vjp (vitForwardKV …)`
+`vjpCompDiffAt` apex over `batchMapHasVJPAt` witnesses, the tie, the shape check
+`vitForwardKVB_eq_chain`, the transfer to the committed `batchMapHasVJP (vitForwardKV …)`
 through `HasVJPAt.backward_unique_of_eq`, the `∑ pdiv` reading, and the ViT-Tiny capstone with
 `B` a binder. Thirteen declarations, all on the three axioms; no smoothness hypothesis, only
 `0 < ε`. ⚠ The claim above was off by one: ConvNeXt has no batched T6 either (its ImageNet
@@ -322,7 +322,7 @@ T3 tie (`ConvNeXtStepTieGB`) already lifts every activation and cotangent with `
 examples. Close it exactly as §7 did: a stage-wise batched chain beside the per-example one, a
 tie file with one leaf tie per factor (stem, four stages, three downsamples, head LN, GAP, dense —
 about twelve, each one rewrite of the per-example leaf tie at one example's row then `rfl`), the
-`vjp_comp_diff_at` apex over `batchMap_has_vjp_at`, the shape check through `batchMap_comp`, and
+`vjpCompDiffAt` apex over `batchMapHasVJPAt`, the shape check through `batchMap_comp`, and
 the transfer through `HasVJPAt.backward_unique_of_eq`. Move `batchMap_comp` and
 `HasVJPAt.backward_unique_of_eq` from `ViTWholeBackCertifiedTieB.lean` into `BatchMapVJPAt.lean`
 first; both nets then share them. ⚠ `convNextForwardTCh` is stated at Imagenette's `Vec 10` head
@@ -332,7 +332,7 @@ About 300 lines and one corpus rebuild.
 
 **DONE 2026-09-08.** `ConvNeXtWholeBackCertifiedTieB.lean` (≈560 lines): the eleven batched saved
 activations `cnxSavedB0 … cnxSavedB10` (stage by stage), twelve batched stage witnesses, the leaf
-ties, the apex `convNextForwardTChB_has_vjp_at` (eleven `vjp_comp_diff_at`s), the tie, the shape
+ties, the apex `convNextForwardTChBHasVJPAt` (eleven `vjpCompDiffAt`s), the tie, the shape
 check `convNextForwardTChB_eq_chain` (`simp only [batchMap_comp]` then `rfl`), the transfer
 `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp` through `HasVJPAt.backward_unique_of_eq`,
 the `∑ pdiv` reading on `convNextForwardTCh` itself, and `convnextImagenetInputGradB_eq_vjp` at
@@ -345,7 +345,7 @@ Prerequisites landed as planned: `batchMap_comp` and `HasVJPAt.backward_unique_o
 `CnxTWeightsCh (nC : Nat)` and `convNextForwardTCh`, its VJP, chain, graph and faithfulness are
 generic in the class count (`SpecVJP` pins `CnxTWeightsCh 10` at the committed spec; nothing
 else named the structure), plus the new `convNextForwardTCh_differentiable` beside the VJP; the
-per-example tie's `cnxDn1 … cnxDn3` / `cnxLNh` wrappers, `cnxD0` / `cnxV0` and the four normalised
+per-example tie's `cnxDn1 … cnxDn3` / `cnxLNh` wrappers, `cnxSavedA0_differentiable` / `cnxV0` and the four normalised
 leaf ties went public because the batched file lifts exactly those spellings.
 ⚠ Two things the ViT template did NOT predict, both the "two spellings of one numeral" rule one
 batch index over: (i) a batched leaf tie whose `rfl` runs at a LITERAL `96·56·56` or `192·28·28`
@@ -353,7 +353,7 @@ recurses past `maxRecDepth 100000` (the `384·14·14` one squeaks through), so t
 downsample leaves are proven at variable dims (`cnxChanLNBackB_eq_vjp`, `cnxDownBackB_eq_vjp`)
 and instantiated by term; (ii) the twelve-level closing `rfl` times out at 10⁶ heartbeats
 (the unifier looks for the unfolding through the concrete witnesses first), so the apex is peeled
-by the one-step `vjp_comp_diff_at_fst_backward` under `simp only`. Registered: lakefile `Certs`
+by the one-step `vjpCompDiffAt_fst_backward` under `simp only`. Registered: lakefile `Certs`
 root (202 roots, 236 modules), audit import + 19 prints (the two hoisted lemmas' prints moved to
 the `BatchMapVJPAt` section; 1773 prints), the yaml's T6 row and paragraph. Gates: Certs 3933,
 audit 1773/1773, docstring 1548 across 501, coverage 192/236, `verified_mlir/` untouched,
@@ -478,9 +478,9 @@ also why none of this could be run end-to-end on this box (6.8.0).
 
 | # | Finding | Fix |
 |---|---|---|
-| 1 | `relu_has_vjp_at_correct`, `mlp_has_vjp_at_correct`, `maxPool2_has_vjp_at3_correct` were in the comparator set but NOT in `tests/AuditAxioms.lean` — checked only by the slow, path-filtered, non-required workflow, and they are exactly the three the book singles out as the pointwise variants whose `.correct` is a real proof | added; 1,377 → 1,380 prints, all three 3-axiom clean |
+| 1 | `reluHasVJPAt_correct`, `mlpHasVJPAt_correct`, `maxPool2HasVJPAt3_correct` were in the comparator set but NOT in `tests/AuditAxioms.lean` — checked only by the slow, path-filtered, non-required workflow, and they are exactly the three the book singles out as the pointwise variants whose `.correct` is a real proof | added; 1,377 → 1,380 prints, all three 3-axiom clean |
 | 2 | `comparator_config:` was `""` on all 25 yaml rows — schema present, information zero, while four WERE checked | every row names its config, and `--check` now fails if a row stops resolving |
-| 3 | Three yaml `declaration:` strings do not resolve as written (`Mnv2Live.…`, `efficientnetInputGradB_full_correct`, `FloatModel.…` are relative to an implicit `open Proofs`) | fully qualified |
+| 3 | Three yaml `declaration:` strings do not resolve as written (`Mnv2Live.…`, `efficientnetInputGradBFull_correct`, `FloatModel.…` are relative to an implicit `open Proofs`) | fully qualified |
 | 4 | `tool_setup` claimed the nanoda kernel; `notes` correctly disclosed it is disabled, and both configs say `enable_nanoda: false` | `tool_setup` now matches the configs |
 | 5 | The README's bucket table listed 46 of the 52; "the last three `_at_correct`" was true when the list ended there and there are seven now; "the five whole-network VJPs" was six | table regenerated to exactly 73, checked name-for-name against all three configs |
 | 6 | The workflow header said "keep NON-REQUIRED until it has gone green a few times" | 100 runs 2026-08-13 → 2026-09-20: 94 success / 2 cancelled / 4 failure, last failure 2026-08-30 and it failed in `lake build Certs`, not in comparator; streak of 10 spans the 4.34 bump and the ~24.7k-line refactor. Header records the promotion; ⚠ flipping it is a GitHub branch-protection setting, not a file |

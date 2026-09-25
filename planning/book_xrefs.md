@@ -37,7 +37,7 @@ All 21 fixed the same day, staged with the §5.7 update:
 
 | where | was | now |
 |---|---|---|
-| front matter "Target: ViT", §9.1 lead-in | ViT "the first and only chapter" to use the matrix kit; "every earlier chapter routes around it" | the kit is proved in §9.1; the row-wise lift is in every batched certificate (`thm:*_sync_tie` `\uses thm:rowwise_has_vjp_mat`), which the generated Figure 1.1 / C.1 already showed |
+| front matter "Target: ViT", §9.1 lead-in | ViT "the first and only chapter" to use the matrix kit; "every earlier chapter routes around it" | the kit is proved in §9.1; the row-wise lift is in every batched certificate (`thm:*_sync_tie` `\uses thm:rowwiseHasVJPMat`), which the generated Figure 1.1 / C.1 already showed |
 | Figure C.1 caption | 308 / 622 hand-carried | generator macros (312 / 626 today) |
 | §5.5 | "the `bare` arm of §5.6 at 83.20 ± 1.57" | no such arm; "what each one is worth is measured in §5.6" |
 | §5.7 lead-in | "§5.9 is the table that says which is which" | the paper/polish split stated locally |
@@ -45,7 +45,7 @@ All 21 fixed the same day, staged with the §5.7 update:
 | §6.5 | "the way Chapter 5 built ResNet-50's" | §5.7 built ResNet-34's (the only head swap shown) |
 | §6.7 | `.fusedMbConvNB` (§6.7) | the ref moved to "MobileNetV4's stage 0" |
 | Bestiary WRN | "same `.residualBlock` as Chapter 5" | "the residual block of Chapter 5" (ch 5 spells `.residualStage`) |
-| §4, §7 ×2 | dense theorems credited to Chapter 2 | `Theorem~\ref{ax:pdiv_dense}` / `thm:dense_has_vjp` (ch 1) |
+| §4, §7 ×2 | dense theorems credited to Chapter 2 | `Theorem~\ref{ax:pdiv_dense}` / `thm:denseHasVJP` (ch 1) |
 | §9.6 | "first network since Chapter 2's dense-only graphs to reproduce exactly" | ch 2 never claims it; the XLA-algorithm reason stands alone |
 | §6.7, §7.7 | tables "closing" Chapters 7 / 8 | "the recipe tables of" / "recipe table is" |
 | §4.6, §6.1, §1.x, Bestiary GW, §6 proof, §9.1 | the six doubtful (forward promise, unsourced 98.46 top-5, inference-statistics clause, 0.83M "as ch 4 spells it", "three steps" vs four, "both halves are the same fact") | claim dropped, pointer kept |
@@ -58,12 +58,12 @@ most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:c
 `app:verification` 8.
 
 (a) Proof steps that restate the cited theorem's statement or discharge its hypothesis
-    (~60, nearly all against `ax:pdiv_*`, `thm:vjp_comp`, `thm:biPath_has_vjp`, the conv2d
+    (~60, nearly all against `ax:pdiv_*`, `thm:vjpComp`, `thm:biPathHasVJP`, the conv2d
     VJPs). Keep. A label is stable; the statement is what the proof needs.
 
 (b) "Theorem T of Chapter N" — the chapter named as the theorem's address (~20, chapters 2–3,
     5–9 and the Bestiary, almost all at `chap:tensor`). Cite the label, drop "Chapter N's":
-    `Theorem~\ref{thm:dense_has_vjp}` says where it lives.
+    `Theorem~\ref{thm:denseHasVJP}` says where it lives.
 
 (c) Numbers restated through a ref (~25). Chapter 1's 92.10 % / 224 ms / 604 ms compile cited
     from chapter 2; §5.4's 89.99 ± 0.32 cited from chapters 6, 7, 8, 9 and the Bestiary; §5.7's

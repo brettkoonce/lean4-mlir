@@ -44,7 +44,7 @@ emitted shapes, so only the certificate distinguishes them, and MobileNetV2 is t
 stated.
 
 ⚠ **There is no max-pool.** MobileNetV2's stem is conv-BN-relu6 and downsamples once; r34's stem is
-conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMap_has_vjp_at`.
+conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMapHasVJPAt`.
 
 ## Conventions this net runs at
 
@@ -65,7 +65,7 @@ conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMap_has_vj
 pinning here; it is pinned only where a `Maps` envelope turns a width into a rational (T4/T5).
 On the data-parallel artifacts the render's `N` is the PER-REPLICA batch (64); since 2026-09-21
 their BatchNorm is synchronised, and `MobileNetV2SyncB.lean` is this file's twin for them: replica
-`r`'s forward graph denotes shard `r` of `mobilenetv2ForwardB_full (R * N)`, this file's forward at
+`r`'s forward graph denotes shard `r` of `mobilenetv2ForwardBFull (R * N)`, this file's forward at
 the global batch.
 
 ⚠ **The bias operand names are the render's DEFAULT `convBias := false` ones** — `%zb{c}`, the
@@ -174,9 +174,9 @@ structure MNV2BWeights (nCls : Nat) where
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The full batch-BN MobileNetV2 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of the
-    retired per-example forward; nested-application form, as `resnet34ForwardB_full` and
-    `efficientnetForwardB_full` both are, so a T6 tie can peel it one block at a time. -/
-noncomputable def mobilenetv2ForwardB_full (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
+    retired per-example forward; nested-application form, as `resnet34ForwardBFull` and
+    `efficientnetForwardBFull` both are, so a T6 tie can peel it one block at a time. -/
+noncomputable def mobilenetv2ForwardBFull (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) : Vec (N * nCls) :=
   mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mnv2ExpOnlyB N 7 7 w.b17
@@ -325,7 +325,7 @@ theorem mnv2HeadGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc nCls : Na
 /-- **The full batch-BN MobileNetV2 forward graph.** Block prefixes are the render's (`b1` … `b17`,
     each parameter `%b{k}{e,d,p}{W,g,bt}`), so the typed graph diffs against
     `mobilenetv2_adam_train_step`'s forward half name for name. -/
-def mobilenetv2FwdGraphB_full (N : Nat) (epsStr : String) {nCls : Nat} (w : MNV2BWeights nCls)
+def mobilenetv2FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : MNV2BWeights nCls)
     (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) : SHlo (N * nCls) :=
   mnv2HeadGraphB epsStr N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mnv2ExpOnlyGraphB "17" epsStr N 7 7 w.b17
@@ -350,10 +350,10 @@ def mobilenetv2FwdGraphB_full (N : Nat) (epsStr : String) {nCls : Nat} (w : MNV2
 
 /-- ⭐ **T2 for MobileNetV2 at batch BN**: the typed graph denotes the whole-net forward. One `rw`
     per block over the six per-kind faithfulness lemmas. -/
-theorem mobilenetv2FwdGraphB_full_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+theorem mobilenetv2FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : MNV2BWeights nCls) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :
-    den (mobilenetv2FwdGraphB_full N epsStr w e) = mobilenetv2ForwardB_full N w (den e) := by
-  unfold mobilenetv2FwdGraphB_full mobilenetv2ForwardB_full
+    den (mobilenetv2FwdGraphBFull N epsStr w e) = mobilenetv2ForwardBFull N w (den e) := by
+  unfold mobilenetv2FwdGraphBFull mobilenetv2ForwardBFull
   rw [mnv2HeadGraphB_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,
       mnv2ResidGraphB_faithful, mnv2StridedGraphB_faithful, mnv2ResidGraphB_faithful,
       mnv2ResidGraphB_faithful, mnv2ExpOnlyGraphB_faithful, mnv2ResidGraphB_faithful,

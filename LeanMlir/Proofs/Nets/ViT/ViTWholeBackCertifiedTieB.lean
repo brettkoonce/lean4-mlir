@@ -15,7 +15,7 @@ batched whole-net tie; with this the `*InputGradB_eq_*_vjp` family covers all se
 
 Nothing here is new mathematics, and it is lighter than ResNet-34's batched tie because ViT is
 smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
-`batchMap_has_vjp_at` (4.1c's field-by-field lift, `BatchMapVJPAt.lean`) over
+`batchMapHasVJPAt` (4.1c's field-by-field lift, `BatchMapVJPAt.lean`) over
 `HasVJP.toHasVJPAt` at each row — no smooth-point hypothesis anywhere, only `0 < ε`.
 
 1. `batchMap_comp` (`BatchMapVJPAt.lean`, shared with ConvNeXt's batched tie) — `batchMap B
@@ -23,16 +23,16 @@ smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
    chain saves its activations stage by stage: the two spellings agree only up to
    `finProdFinEquiv.symm_apply_apply`, which is not `rfl`.
 2. The batched leaf ties. The patch-embed stage needs none (its backward is `rfl`); the other
-   three are `batchMapAux_eq_batchMap_has_vjp_at` (the head: its `batchMap` form, after
+   three are `batchMapAux_eq_batchMapHasVJPAt` (the head: its `batchMap` form, after
    `batchMap_comp`) over the per-example tie at each row (`vitTowerBackK_eq_vjp`,
    `vitFinalLNBack_eq_vjp`, `vitHeadBack_eq_classifier_vjp`).
-3. `vitKVB_has_vjp_at` — the four-stage apex, three `vjp_comp_diff_at`s over the batched stage
+3. `vitKVBHasVJPAt` — the four-stage apex, three `vjpCompDiffAt`s over the batched stage
    witnesses — and `vitInputGradKB_eq_vitKVB_vjp`, the tie: three leaf rewrites, then `rfl`.
 4. `vitForwardKVB_eq_chain` — the shape check: the four batched stages compose to
    `batchMap B vitForwardKV`, by `vitForwardKV_eq_chain` and three `batchMap_comp`s — and
    `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`, the tie carried to the committed GLOBAL
-   witness `batchMap_has_vjp (vitForwardKV …)` through `HasVJPAt.backward_unique_of_eq`
-   (`BatchMapVJPAt.lean`; `batchMap_has_vjp` is `▸`-transported, so its `.backward` does not
+   witness `batchMapHasVJP (vitForwardKV …)` through `HasVJPAt.backward_unique_of_eq`
+   (`BatchMapVJPAt.lean`; `batchMapHasVJP` is `▸`-transported, so its `.backward` does not
    reduce; uniqueness is the escape every whole-net tie in this repo takes), plus the `∑ pdiv`
    reading.
 5. `vitTinyInputGradB_eq_vitTiny_vjp` — the capstone at ViT-Tiny's literal dims, `B` a binder.
@@ -46,52 +46,52 @@ open scoped BigOperators
 -- § The four batched stage witnesses, and their leaf ties
 -- ═════════════════════════════════════════════════
 
-/-- The batched patch-embed witness at `x`: `batchMap_has_vjp_at` over the global per-example
+/-- The batched patch-embed witness at `x`: `batchMapHasVJPAt` over the global per-example
     witness at each row. -/
-noncomputable def vitEmbedB_at (B ic H W patchSize N D : Nat)
+noncomputable def vitEmbedBAt (B ic H W patchSize N D : Nat)
     (W_conv : Kernel4 D ic patchSize patchSize) (b_conv cls_token : Vec D)
     (pos_embed : Mat (N + 1) D) (x : Vec (B * (ic * H * W))) :
     HasVJPAt (StableHLO.batchMap B
-      (patchEmbed_flat ic H W patchSize N D W_conv b_conv cls_token pos_embed)) x :=
-  batchMap_has_vjp_at _ x
-    (fun _ => (patchEmbed_flat_has_vjp ic H W patchSize N D W_conv b_conv cls_token
+      (patchEmbedFlat ic H W patchSize N D W_conv b_conv cls_token pos_embed)) x :=
+  batchMapHasVJPAt _ x
+    (fun _ => (patchEmbedFlatHasVJP ic H W patchSize N D W_conv b_conv cls_token
       pos_embed).toHasVJPAt _)
-    (fun _ => (patchEmbed_flat_diff ic H W patchSize N D W_conv b_conv cls_token
+    (fun _ => (patchEmbedFlat_differentiable ic H W patchSize N D W_conv b_conv cls_token
       pos_embed).differentiableAt)
 
 /-- The batched tower witness at `v`. -/
-noncomputable def vitTowerB_at (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
+noncomputable def vitTowerBAt (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) (v : Vec (B * (Np1 * (heads * d_head)))) :
     HasVJPAt (StableHLO.batchMap B (vitBodyKVFlat Np1 heads d_head mlpDim ε k ps)) v :=
-  batchMap_has_vjp_at _ v
-    (fun _ => (vitBodyKVFlat_has_vjp Np1 heads d_head mlpDim ε hε k ps).toHasVJPAt _)
-    (fun _ => (vitBodyKVFlat_diff Np1 heads d_head mlpDim ε hε k ps).differentiableAt)
+  batchMapHasVJPAt _ v
+    (fun _ => (vitBodyKVFlatHasVJP Np1 heads d_head mlpDim ε hε k ps).toHasVJPAt _)
+    (fun _ => (vitBodyKVFlat_differentiable Np1 heads d_head mlpDim ε hε k ps).differentiableAt)
 
 /-- The batched final-LayerNorm witness at `v`. -/
-noncomputable def vitLNB_at (B n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
+noncomputable def vitLNBAt (B n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
     (v : Vec (B * (n * D))) :
     HasVJPAt (StableHLO.batchMap B (fun v : Vec (n * D) =>
       Mat.flatten (fun r => layerNormVec D ε γF βF ((Mat.unflatten v) r)))) v :=
-  batchMap_has_vjp_at _ v
-    (fun _ => (hasVJPMat_to_hasVJP
-      (layerNormVec_per_token_has_vjp_mat n D ε γF βF hε)).toHasVJPAt _)
-    (fun _ => (layerNormVec_per_token_flat_diff n D ε γF βF hε).differentiableAt)
+  batchMapHasVJPAt _ v
+    (fun _ => (HasVJPMat.toHasVJP
+      (layerNormVecPerTokenHasVJPMat n D ε γF βF hε)).toHasVJPAt _)
+    (fun _ => (layerNormVec_per_token_flat_differentiable n D ε γF βF hε).differentiableAt)
 
 /-- The batched classifier-head witness at `v`. -/
-noncomputable def vitHeadB_at (B N D nClasses : Nat) (Wcls : Mat D nClasses)
+noncomputable def vitHeadBAt (B N D nClasses : Nat) (Wcls : Mat D nClasses)
     (bcls : Vec nClasses) (v : Vec (B * ((N + 1) * D))) :
-    HasVJPAt (StableHLO.batchMap B (classifier_flat N D nClasses Wcls bcls)) v :=
-  batchMap_has_vjp_at _ v
-    (fun _ => (classifier_flat_has_vjp N D nClasses Wcls bcls).toHasVJPAt _)
-    (fun _ => (classifier_flat_diff N D nClasses Wcls bcls).differentiableAt)
+    HasVJPAt (StableHLO.batchMap B (classifierFlat N D nClasses Wcls bcls)) v :=
+  batchMapHasVJPAt _ v
+    (fun _ => (classifierFlatHasVJP N D nClasses Wcls bcls).toHasVJPAt _)
+    (fun _ => (classifierFlat_differentiable N D nClasses Wcls bcls).differentiableAt)
 
 /-- **The batched tower tie.** `batchMapAux B` of the depth-`k` tower backward at the batched
     saved input IS the lift's backward: `vitTowerBackK_eq_vjp` at each row. -/
 theorem vitTowerBackB_eq_vjp (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε : 0 < ε) (k : Nat)
     (ps : Fin k → BlockParamsV (heads * d_head) mlpDim) (v : Vec (B * (Np1 * (heads * d_head)))) :
     StableHLO.batchMapAux B (vitTowerBackK Np1 heads d_head mlpDim ε k ps) v
-      = (vitTowerB_at B Np1 heads d_head mlpDim ε hε k ps v).backward :=
-  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ =>
+      = (vitTowerBAt B Np1 heads d_head mlpDim ε hε k ps v).backward :=
+  batchMapAux_eq_batchMapHasVJPAt _ _ v _ _ fun _ =>
     vitTowerBackK_eq_vjp Np1 heads d_head mlpDim ε hε k ps _
 
 /-- **The batched final-LayerNorm tie.** `batchMapAux B` of `rowLNVecFlatBack` at the batched
@@ -99,8 +99,8 @@ theorem vitTowerBackB_eq_vjp (B Np1 heads d_head mlpDim : Nat) (ε : ℝ) (hε :
 theorem vitLNBackB_eq_vjp (B n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : Vec D)
     (v : Vec (B * (n * D))) :
     StableHLO.batchMapAux B (rowLNVecFlatBack n D ε γF) v
-      = (vitLNB_at B n D ε hε γF βF v).backward :=
-  batchMapAux_eq_batchMap_has_vjp_at _ _ v _ _ fun _ => vitFinalLNBack_eq_vjp n D ε hε γF βF _
+      = (vitLNBAt B n D ε hε γF βF v).backward :=
+  batchMapAux_eq_batchMapHasVJPAt _ _ v _ _ fun _ => vitFinalLNBack_eq_vjp n D ε hε γF βF _
 
 /-- **The batched head tie.** `batchMap B` of the CLS scatter after `batchMap B` of the free dense
     backward IS the lift's backward at any saved `v` (the head is linear): fuse the two lifts by
@@ -109,18 +109,18 @@ theorem vitHeadBackB_eq_vjp (B N D nClasses : Nat) (Wcls : Mat D nClasses)
     (bcls : Vec nClasses) (v : Vec (B * ((N + 1) * D))) :
     StableHLO.batchMap B (clsScatter N D)
         ∘ StableHLO.batchMap B (Proofs.dense (Mat.transpose Wcls) (0 : Vec D))
-      = (vitHeadB_at B N D nClasses Wcls bcls v).backward := by
+      = (vitHeadBAt B N D nClasses Wcls bcls v).backward := by
   rw [← batchMap_comp]
-  exact batchMap_eq_batchMap_has_vjp_at _ _ v _ _ fun _ =>
+  exact batchMap_eq_batchMapHasVJPAt _ _ v _ _ fun _ =>
     vitHeadBack_eq_classifier_vjp N D nClasses Wcls bcls _
 
 -- ═════════════════════════════════════════════════
 -- § The batched apex, the tie, and the shape check
 -- ═════════════════════════════════════════════════
 
-/-- **The batched whole-net witness**, four batched stages composed by `vjp_comp_diff_at`, each
+/-- **The batched whole-net witness**, four batched stages composed by `vjpCompDiffAt`, each
     at the batched saved activation the chain uses (`vitSavedPEB`, `vitSavedBodyB`). -/
-noncomputable def vitKVB_has_vjp_at (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
+noncomputable def vitKVBHasVJPAt (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
     (pos_embed : Mat (N + 1) (heads * d_head))
@@ -130,34 +130,34 @@ noncomputable def vitKVB_has_vjp_at (B ic H W patchSize N mlpDim heads d_head nC
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses)
     (x : Vec (B * (ic * H * W))) :
     HasVJPAt
-      (StableHLO.batchMap B (classifier_flat N (heads * d_head) nClasses Wcls bcls)
+      (StableHLO.batchMap B (classifierFlat N (heads * d_head) nClasses Wcls bcls)
         ∘ StableHLO.batchMap B (fun v : Vec ((N + 1) * (heads * d_head)) =>
             Mat.flatten (fun r => layerNormVec (heads * d_head) ε γF βF ((Mat.unflatten v) r)))
         ∘ StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)
-        ∘ StableHLO.batchMap B (patchEmbed_flat ic H W patchSize N (heads * d_head)
+        ∘ StableHLO.batchMap B (patchEmbedFlat ic H W patchSize N (heads * d_head)
             W_conv b_conv cls_token pos_embed)) x :=
-  (vjp_comp_diff_at _ (StableHLO.batchMap B (classifier_flat N (heads * d_head) nClasses Wcls bcls)) x
-    (vjp_comp_diff_at _
+  (vjpCompDiffAt _ (StableHLO.batchMap B (classifierFlat N (heads * d_head) nClasses Wcls bcls)) x
+    (vjpCompDiffAt _
       (StableHLO.batchMap B (fun v : Vec ((N + 1) * (heads * d_head)) =>
         Mat.flatten (fun r => layerNormVec (heads * d_head) ε γF βF ((Mat.unflatten v) r)))) x
-      (vjp_comp_diff_at
-        (StableHLO.batchMap B (patchEmbed_flat ic H W patchSize N (heads * d_head)
+      (vjpCompDiffAt
+        (StableHLO.batchMap B (patchEmbedFlat ic H W patchSize N (heads * d_head)
           W_conv b_conv cls_token pos_embed))
         (StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)) x
-        ⟨vitEmbedB_at B ic H W patchSize N (heads * d_head) W_conv b_conv cls_token pos_embed x,
-         batchMap_differentiableAt _ x (fun _ => (patchEmbed_flat_diff ic H W patchSize N
+        ⟨vitEmbedBAt B ic H W patchSize N (heads * d_head) W_conv b_conv cls_token pos_embed x,
+         batchMap_differentiableAt _ x (fun _ => (patchEmbedFlat_differentiable ic H W patchSize N
            (heads * d_head) W_conv b_conv cls_token pos_embed).differentiableAt)⟩
-        ⟨vitTowerB_at B (N + 1) heads d_head mlpDim ε hε k ps
+        ⟨vitTowerBAt B (N + 1) heads d_head mlpDim ε hε k ps
            (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x),
-         batchMap_differentiableAt _ _ (fun _ => (vitBodyKVFlat_diff (N + 1) heads d_head mlpDim
+         batchMap_differentiableAt _ _ (fun _ => (vitBodyKVFlat_differentiable (N + 1) heads d_head mlpDim
            ε hε k ps).differentiableAt)⟩)
-      ⟨vitLNB_at B (N + 1) (heads * d_head) ε hε γF βF
+      ⟨vitLNBAt B (N + 1) (heads * d_head) ε hε γF βF
          (vitSavedBodyB B ic H W patchSize N mlpDim heads d_head k
            W_conv b_conv cls_token pos_embed ε ps x),
-       batchMap_differentiableAt _ _ (fun _ => (layerNormVec_per_token_flat_diff (N + 1)
+       batchMap_differentiableAt _ _ (fun _ => (layerNormVec_per_token_flat_differentiable (N + 1)
          (heads * d_head) ε γF βF hε).differentiableAt)⟩)
-    ⟨vitHeadB_at B N (heads * d_head) nClasses Wcls bcls _,
-     batchMap_differentiableAt _ _ (fun _ => (classifier_flat_diff N (heads * d_head) nClasses
+    ⟨vitHeadBAt B N (heads * d_head) nClasses Wcls bcls _,
+     batchMap_differentiableAt _ _ (fun _ => (classifierFlat_differentiable N (heads * d_head) nClasses
        Wcls bcls).differentiableAt)⟩).fst
 
 /-- ⭐⭐ **THE BATCHED TIE.** `vitInputGradKB` — the five-stage batched chain, every slot a lift of
@@ -174,7 +174,7 @@ theorem vitInputGradKB_eq_vitKVB_vjp (B ic H W patchSize N mlpDim heads d_head n
     (x : Vec (B * (ic * H * W))) :
     vitInputGradKB B ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (vitKVB_has_vjp_at B ic H W patchSize N mlpDim heads d_head nClasses k
+      = (vitKVBHasVJPAt B ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x).backward := by
   unfold vitInputGradKB
   rw [vitTowerBackB_eq_vjp B (N + 1) heads d_head mlpDim ε hε k ps,
@@ -198,11 +198,11 @@ theorem vitForwardKVB_eq_chain (B ic H W patchSize N mlpDim heads d_head nClasse
     (Wcls : Mat (heads * d_head) nClasses) (bcls : Vec nClasses) :
     StableHLO.batchMap B (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-      = StableHLO.batchMap B (classifier_flat N (heads * d_head) nClasses Wcls bcls)
+      = StableHLO.batchMap B (classifierFlat N (heads * d_head) nClasses Wcls bcls)
         ∘ StableHLO.batchMap B (fun v : Vec ((N + 1) * (heads * d_head)) =>
             Mat.flatten (fun r => layerNormVec (heads * d_head) ε γF βF ((Mat.unflatten v) r)))
         ∘ StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)
-        ∘ StableHLO.batchMap B (patchEmbed_flat ic H W patchSize N (heads * d_head)
+        ∘ StableHLO.batchMap B (patchEmbedFlat ic H W patchSize N (heads * d_head)
             W_conv b_conv cls_token pos_embed) := by
   rw [vitForwardKV_eq_chain, batchMap_comp, batchMap_comp, batchMap_comp]
 
@@ -218,14 +218,14 @@ theorem vitForwardKV_differentiable (ic H W patchSize N mlpDim heads d_head nCla
     Differentiable ℝ (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls) := by
   rw [vitForwardKV_eq_chain]
-  exact (classifier_flat_diff N (heads * d_head) nClasses Wcls bcls).comp
-    ((layerNormVec_per_token_flat_diff (N + 1) (heads * d_head) ε γF βF hε).comp
-      ((vitBodyKVFlat_diff (N + 1) heads d_head mlpDim ε hε k ps).comp
-        (patchEmbed_flat_diff ic H W patchSize N (heads * d_head)
+  exact (classifierFlat_differentiable N (heads * d_head) nClasses Wcls bcls).comp
+    ((layerNormVec_per_token_flat_differentiable (N + 1) (heads * d_head) ε γF βF hε).comp
+      ((vitBodyKVFlat_differentiable (N + 1) heads d_head mlpDim ε hε k ps).comp
+        (patchEmbedFlat_differentiable ic H W patchSize N (heads * d_head)
           W_conv b_conv cls_token pos_embed)))
 
 /-- ⭐⭐ **THE APEX, at the committed batched witness.** `vitInputGradKB` IS
-    `(batchMap_has_vjp (vitForwardKV …) …).backward x` — the certified gradient of the per-example
+    `(batchMapHasVJP (vitForwardKV …) …).backward x` — the certified gradient of the per-example
     net lifted whole over `B` examples. Carried from the chain-shaped apex by
     `HasVJPAt.backward_unique_of_eq` along the shape check. -/
 theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp
@@ -240,10 +240,10 @@ theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp
     (x : Vec (B * (ic * H * W))) :
     vitInputGradKB B ic H W patchSize N mlpDim heads d_head nClasses k
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (batchMap_has_vjp (N := B)
+      = (batchMapHasVJP (N := B)
           (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-          (vitForwardKV_has_vjp ic H W patchSize N mlpDim heads d_head nClasses k
+          (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)
           (vitForwardKV_differentiable ic H W patchSize N mlpDim heads d_head nClasses k
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)).backward x := by
@@ -253,12 +253,12 @@ theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp
   exact HasVJPAt.backward_unique_of_eq
     (vitForwardKVB_eq_chain B ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls).symm
-    (vitKVB_has_vjp_at B ic H W patchSize N mlpDim heads d_head nClasses k
+    (vitKVBHasVJPAt B ic H W patchSize N mlpDim heads d_head nClasses k
       W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls x)
-    ((batchMap_has_vjp (N := B)
+    ((batchMapHasVJP (N := B)
         (vitForwardKV ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-        (vitForwardKV_has_vjp ic H W patchSize N mlpDim heads d_head nClasses k
+        (vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)
         (vitForwardKV_differentiable ic H W patchSize N mlpDim heads d_head nClasses k
           W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)).toHasVJPAt x) dy
@@ -281,7 +281,7 @@ theorem vitInputGradKB_correct (B ic H W patchSize N mlpDim heads d_head nClasse
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)) x i j * dy j := by
   rw [vitInputGradKB_eq_batchMap_vitForwardKV_vjp (βF := βF) (bcls := bcls) B ic H W patchSize N
         mlpDim heads d_head nClasses k W_conv b_conv cls_token pos_embed ε hε ps γF Wcls x]
-  exact (batchMap_has_vjp (N := B) _ _ _).correct x dy i
+  exact (batchMapHasVJP (N := B) _ _ _).correct x dy i
 
 -- ═════════════════════════════════════════════════
 -- § The production capstone — ViT-Tiny at its real dimensions, `B` a binder
@@ -300,10 +300,10 @@ theorem vitTinyInputGradB_eq_vitTiny_vjp (B : Nat)
     (Wcls : Mat (3 * 64) 10) (bcls : Vec 10) (x : Vec (B * (3 * 224 * 224))) :
     vitInputGradKB B 3 224 224 16 196 768 3 64 10 12
         W_conv b_conv cls_token pos_embed ε ps γF Wcls x
-      = (batchMap_has_vjp (N := B)
+      = (batchMapHasVJP (N := B)
           (vitForwardKV 3 224 224 16 196 768 3 64 10 12
             W_conv b_conv cls_token pos_embed ε ps γF βF Wcls bcls)
-          (vitForwardKV_has_vjp 3 224 224 16 196 768 3 64 10 12
+          (vitForwardKVHasVJP 3 224 224 16 196 768 3 64 10 12
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)
           (vitForwardKV_differentiable 3 224 224 16 196 768 3 64 10 12
             W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls)).backward x :=

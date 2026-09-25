@@ -36,7 +36,7 @@ both backward graphs are activation-independent. (ResNet-34/50 now fold image �
 
 So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head` is one `CertLayer`, assembled by `comp` alone,
 and `vitNetBackGraph_faithful` (the whole-net capstone) follows from it —
-including that the fold's VJP **is** the shipped `vitForwardKV_has_vjp`, not merely another VJP of
+including that the fold's VJP **is** the shipped `vitForwardKVHasVJP`, not merely another VJP of
 the same map. That last step is `HasVJPAt.backward_unique_of_eq` along the forward equation
 `vitNetLayer_fwd`: the two witnesses are VJPs of propositionally equal maps, so both backwards are
 the same `pdiv` contraction.
@@ -63,7 +63,7 @@ namespace Proofs.StableHLO
 /-- **A vec-LN multi-head transformer block as a `CertLayer`**, at the flat index.
 
     The bridge from ViT's per-token `Mat` world to `CertLayer`'s `Vec → Vec` one is
-    `hasVJPMat_to_hasVJP`, whose statement `HasVJP (fun v => Mat.flatten (f (Mat.unflatten v)))`
+    `HasVJPMat.toHasVJP`, whose statement `HasVJP (fun v => Mat.flatten (f (Mat.unflatten v)))`
     is *definitionally* `blockVFlat` — so the lift costs nothing. The backward graph is the
     committed `transformerBlockVBackGraphMHP` at the unflattened saved activation.
 
@@ -75,9 +75,9 @@ noncomputable def vitBlockVLayer {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < 
   fwd := blockVFlat Np1 (hm1+1) d mlpDim ε p
   ok := fun _ => True
   diff := fun x _ =>
-    (transformerBlockV_flat_diff Np1 (hm1+1) d mlpDim ε p.γ1 p.β1 hε
+    (transformerBlockV_flat_differentiable Np1 (hm1+1) d mlpDim ε p.γ1 p.β1 hε
       p.Wq p.Wk p.Wv p.Wo p.bq p.bk p.bv p.bo p.γ2 p.β2 p.Wfc1 p.bfc1 p.Wfc2 p.bfc2) x
-  vjp := fun x _ => (hasVJPMat_to_hasVJP (transformerBlockV_has_vjp_matP ε hε p)).toHasVJPAt x
+  vjp := fun x _ => (HasVJPMat.toHasVJP (transformerBlockVHasVJPMatP ε hε p)).toHasVJPAt x
   graph := fun v e => transformerBlockVBackGraphMHP ε p (Mat.unflatten v) e
   faithful := by
     intro v _ e
@@ -170,10 +170,10 @@ are linear and their backward graphs are activation-independent. -/
 noncomputable def vitPatchEmbedLayer (ic H W patchSize N D : Nat)
     (Wc : Kernel4 D ic patchSize patchSize) (bc cls : Vec D) (pos : Mat (N + 1) D) :
     CertLayer (ic * H * W) ((N + 1) * D) where
-  fwd := patchEmbed_flat ic H W patchSize N D Wc bc cls pos
+  fwd := patchEmbedFlat ic H W patchSize N D Wc bc cls pos
   ok := fun _ => True
-  diff := fun x _ => (patchEmbed_flat_diff ic H W patchSize N D Wc bc cls pos) x
-  vjp := fun x _ => (patchEmbed_flat_has_vjp ic H W patchSize N D Wc bc cls pos).toHasVJPAt x
+  diff := fun x _ => (patchEmbedFlat_differentiable ic H W patchSize N D Wc bc cls pos) x
+  vjp := fun x _ => (patchEmbedFlatHasVJP ic H W patchSize N D Wc bc cls pos).toHasVJPAt x
   graph := fun _ e => patchEmbedBackGraph ic H W patchSize N D Wc e
   faithful := fun x _ e =>
     patchEmbedBackGraph_faithful ic H W patchSize N D Wc bc cls pos x e
@@ -183,9 +183,9 @@ noncomputable def vitFinalLNLayer (N D : Nat) (ε : ℝ) (γF βF : Vec D) (hε 
     CertLayer ((N + 1) * D) ((N + 1) * D) where
   fwd := fun v => Mat.flatten (fun n => layerNormVec D ε γF βF ((Mat.unflatten v) n))
   ok := fun _ => True
-  diff := fun x _ => (layerNormVec_per_token_flat_diff (N + 1) D ε γF βF hε) x
+  diff := fun x _ => (layerNormVec_per_token_flat_differentiable (N + 1) D ε γF βF hε) x
   vjp := fun x _ =>
-    (hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat (N + 1) D ε γF βF hε)).toHasVJPAt x
+    (HasVJPMat.toHasVJP (layerNormVecPerTokenHasVJPMat (N + 1) D ε γF βF hε)).toHasVJPAt x
   graph := fun v e => finalLNBackGraph N D ε γF v e
   faithful := by
     intro v _ e
@@ -198,10 +198,10 @@ noncomputable def vitFinalLNLayer (N D : Nat) (ε : ℝ) (γF βF : Vec D) (hε 
 noncomputable def vitClassifierLayer (N D nClasses : Nat)
     (Wcls : Mat D nClasses) (bcls : Vec nClasses) :
     CertLayer ((N + 1) * D) nClasses where
-  fwd := classifier_flat N D nClasses Wcls bcls
+  fwd := classifierFlat N D nClasses Wcls bcls
   ok := fun _ => True
-  diff := fun x _ => (classifier_flat_diff N D nClasses Wcls bcls) x
-  vjp := fun x _ => (classifier_flat_has_vjp N D nClasses Wcls bcls).toHasVJPAt x
+  diff := fun x _ => (classifierFlat_differentiable N D nClasses Wcls bcls) x
+  vjp := fun x _ => (classifierFlatHasVJP N D nClasses Wcls bcls).toHasVJPAt x
   graph := fun _ e => classifierBackGraph N D nClasses Wcls e
   faithful := fun v _ e => classifierBackGraph_faithful N D nClasses Wcls bcls v e
 
@@ -237,8 +237,8 @@ theorem vitNetLayer_fwd (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
   show (vitClassifierLayer N ((hm1+1) * d) nClasses Wcls bcls).fwd
         ((vitFinalLNLayer N ((hm1+1) * d) ε γF βF hε).fwd
           ((vitTrunkV (Np1 := N + 1) ε hε k ps).fwd
-            (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))) = _
-  rw [vitTrunkV_fwd ε hε k ps (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)]
+            (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))) = _
+  rw [vitTrunkV_fwd ε hε k ps (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)]
   rfl
 
 /-- ⭐⭐ **The whole-net chain's backward graph IS `vitNetBackGraph`.** The stem/trunk/LN/head
@@ -257,12 +257,12 @@ theorem vitNetLayer_graph (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (vitNetLayer ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls).graph x e
       = vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
-          (Mat.unflatten (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
+          (Mat.unflatten (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
           (Mat.unflatten
             (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
-              (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
+              (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
           e := by
-  set PE := patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x with hPE
+  set PE := patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x with hPE
   show patchEmbedBackGraph ic H W patchSize N ((hm1+1) * d) Wc
         ((vitTrunkV (Np1 := N + 1) ε hε k ps).graph PE
           (finalLNBackGraph N ((hm1+1) * d) ε γF
@@ -299,7 +299,7 @@ theorem vitNetLayer_ok (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
   ⟨trivial, vitTrunkV_ok ε hε k ps _, trivial, trivial⟩
 
 /-- ⭐⭐⭐ **Whole-net backward-graph faithfulness.** The reverse-composed backward graph
-    `vitNetBackGraph` denotes the proven whole-net VJP `vitForwardKV_has_vjp.backward` at every
+    `vitNetBackGraph` denotes the proven whole-net VJP `vitForwardKVHasVJP.backward` at every
     input image and output cotangent, at every depth `k` (multi-head, vector-LN). It falls out of
     `CertLayer.faithful` at `vitNetLayer` plus `vitNetLayer_graph` — the composition argument is
     `comp`'s, proven once for all seven nets, and the only ViT-specific input is the forward
@@ -313,12 +313,12 @@ theorem vitNetBackGraph_faithful
     (Wcls : Mat ((hm1+1) * d) nClasses) (bcls : Vec nClasses)
     (x : Vec (ic * H * W)) (e : SHlo nClasses) :
     den (vitNetBackGraph ic H W patchSize N mlpDim hm1 d nClasses k ε Wc ps γF Wcls
-          (Mat.unflatten (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
+          (Mat.unflatten (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x))
           (Mat.unflatten
             (vitBodyKVFlat (N + 1) (hm1+1) d mlpDim ε k ps
-              (patchEmbed_flat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
+              (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)))
           e)
-      = (vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
+      = (vitForwardKVHasVJP ic H W patchSize N mlpDim (hm1+1) d nClasses k
           Wc bc cls pos ε hε ps γF βF Wcls bcls).backward x (den e) := by
   rw [← vitNetLayer_graph ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls x e,
@@ -326,12 +326,12 @@ theorem vitNetBackGraph_faithful
         Wc bc cls pos ps γF βF Wcls bcls).faithful x
       (vitNetLayer_ok ic H W patchSize N mlpDim hm1 d nClasses k ε hε
         Wc bc cls pos ps γF βF Wcls bcls x) e]
-  -- The fold's VJP is a `vjp_comp_at` chain and the shipped one a `vjp_comp` chain: different
+  -- The fold's VJP is a `vjpCompAt` chain and the shipped one a `vjpComp` chain: different
   -- terms for maps that are equal only propositionally (`vitNetLayer_fwd`).
   exact HasVJPAt.backward_unique_of_eq
     (funext (vitNetLayer_fwd ic H W patchSize N mlpDim hm1 d nClasses k ε hε
       Wc bc cls pos ps γF βF Wcls bcls)) _
-    ((vitForwardKV_has_vjp ic H W patchSize N mlpDim (hm1+1) d nClasses k
+    ((vitForwardKVHasVJP ic H W patchSize N mlpDim (hm1+1) d nClasses k
       Wc bc cls pos ε hε ps γF βF Wcls bcls).toHasVJPAt x) (den e)
 
 -- ════════════════════════════════════════════════════════════════

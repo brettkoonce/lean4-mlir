@@ -49,7 +49,7 @@ widths of ConvNeXt-T; S and B are other nets. ⛔ ONE REPLICA: in `convnextin_ad
 gradient node feeds `allReduceMeanF`, the collective as an AST node since 4d piece 2 (2026-09-07);
 `DataParallelNode.lean` composes the per-replica statement with the replica mean.
 ⛔ The `%dgi…%dgapf` GAP backward is hand-written text on both chains (a declared carve-out); its
-value here is `globalAvgPoolFlat_has_vjp.backward`, as in the fused file.
+value here is `globalAvgPoolFlatHasVJP.backward`, as in the fused file.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -102,7 +102,7 @@ noncomputable def blkCotD {c cExp h w : Nat} (ε : ℝ)
 noncomputable def dnCotN {ci co h w : Nat} (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) : Vec (ci*(2*h)*(2*w)) :=
-  (flatConvStride2_has_vjp Wd bd).backward (chanLNTensor3 ci (2*h) (2*w) ε dng dnbt xin) dyOut
+  (flatConvStride2HasVJP Wd bd).backward (chanLNTensor3 ci (2*h) (2*w) ε dng dnbt xin) dyOut
 
 /-- Stem: cotangent at the patchify output, the stem LN's input-VJP of `dyStem`. -/
 noncomputable def stemCotPatch {c h w : Nat} (ε : ℝ)
@@ -113,7 +113,7 @@ noncomputable def stemCotPatch {c h w : Nat} (ε : ℝ)
 /-- Head: the dense backward at one example's LN output and loss cotangent. -/
 noncomputable def headCotHn {nC : Nat} (Wfc : Mat 768 nC) (bfc : Vec nC)
     (hn : Vec 768) (g : Vec nC) : Vec (1*768) :=
-  (dense_has_vjp Wfc bfc).backward hn g
+  (denseHasVJP Wfc bfc).backward hn g
 
 /-- The cotangent at the last block output, per example, at a GENERAL class count —
     `CnxTiePoC.cnxHeadDyXheadCh` with `nC` a binder (that one is at the literal 10). -/
@@ -122,9 +122,9 @@ noncomputable def cnxHeadDyXheadChN {h w nC : Nat} (ε : ℝ)
     (xhead : Vec (768*h*w)) (g : Vec nC) : Vec (768*h*w) :=
   let gap : Vec (1*768) := globalAvgPoolFlat 768 h w xhead
   let hn : Vec 768 := rowLNVecFlat 1 768 ε hng hnbt gap
-  let cotHn : Vec (1*768) := (dense_has_vjp Wfc bfc).backward hn g
+  let cotHn : Vec (1*768) := (denseHasVJP Wfc bfc).backward hn g
   let cotGap : Vec 768 := rowLNVecFlatBack 1 768 ε hng gap cotHn
-  (globalAvgPoolFlat_has_vjp 768 h w).backward xhead cotGap
+  (globalAvgPoolFlatHasVJP 768 h w).backward xhead cotGap
 
 /-! ## ConvNeXt block — all 9 gradient nodes, batched -/
 
@@ -331,7 +331,7 @@ abbrev _root_.Proofs.CnxTiePoC.CnxTieBlk.TiedGB {c cExp h w : Nat} (p : CnxTiePo
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) : Prop :=
   cnxBlockChTiedGB N xN epsStr cotN ε p.aW p.aB p.nG p.nB p.eW p.eB p.pW p.pB p.sL xin dyOut
 
-theorem _root_.Proofs.CnxTiePoC.CnxTieBlk.tiedGB {c cExp h w : Nat} (p : CnxTiePoC.CnxTieBlk c cExp)
+theorem _root_.Proofs.CnxTiePoC.CnxTieBlk.tied_gb {c cExp h w : Nat} (p : CnxTiePoC.CnxTieBlk c cExp)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin dyOut : Vec (N * (c*h*w))) :
     p.TiedGB N xN epsStr cotN ε xin dyOut :=
   cnx_block_ch_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ xin dyOut
@@ -342,7 +342,7 @@ abbrev _root_.Proofs.CnxTiePoC.CnxTieDown.TiedGB {ci co h w : Nat} (p : CnxTiePo
     (dyOut : Vec (N * (co*h*w))) : Prop :=
   cnxDownChTiedGB N xN epsStr cotN ε p.G p.T p.W p.B xin dyOut
 
-theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tiedGB {ci co h w : Nat} (p : CnxTiePoC.CnxTieDown ci co)
+theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tied_gb {ci co h w : Nat} (p : CnxTiePoC.CnxTieDown ci co)
     (N : Nat) (xN epsStr cotN : String) (ε : ℝ) (xin : Vec (N * (ci*(2*h)*(2*w))))
     (dyOut : Vec (N * (co*h*w))) : p.TiedGB N xN epsStr cotN ε xin dyOut :=
   cnx_down_ch_tiedGB N xN epsStr cotN ε _ _ _ _ xin dyOut
@@ -450,27 +450,27 @@ theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
   intro ib1 ib2 ib3 ibD0 ib4 ib5 ib6 ibD1 ib7 ib8 ib9 ib10 ib11 ib12 ib13 ib14 ib15 ibD2 ib16 ib17 ib18 xhead gapB hnB logitsB g dyO18 dyO17 dyO16 dyD2 dyO15 dyO14 dyO13 dyO12 dyO11 dyO10 dyO9 dyO8 dyO7 dyD1 dyO6 dyO5 dyO4 dyD0 dyO3 dyO2 dyO1 dyStem
   refine ⟨cnx_stem_ch_tiedGBAt N xN epsStr cotN ε w.sW w.sb w.sγ w.sβ x xstem dyStem,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · exact w.b1.tiedGB N xN epsStr cotN ε ib1 dyO1
-  · exact w.b2.tiedGB N xN epsStr cotN ε ib2 dyO2
-  · exact w.b3.tiedGB N xN epsStr cotN ε ib3 dyO3
-  · exact w.d0.tiedGB N xN epsStr cotN ε ibD0 dyD0
-  · exact w.b4.tiedGB N xN epsStr cotN ε ib4 dyO4
-  · exact w.b5.tiedGB N xN epsStr cotN ε ib5 dyO5
-  · exact w.b6.tiedGB N xN epsStr cotN ε ib6 dyO6
-  · exact w.d1.tiedGB N xN epsStr cotN ε ibD1 dyD1
-  · exact w.b7.tiedGB N xN epsStr cotN ε ib7 dyO7
-  · exact w.b8.tiedGB N xN epsStr cotN ε ib8 dyO8
-  · exact w.b9.tiedGB N xN epsStr cotN ε ib9 dyO9
-  · exact w.b10.tiedGB N xN epsStr cotN ε ib10 dyO10
-  · exact w.b11.tiedGB N xN epsStr cotN ε ib11 dyO11
-  · exact w.b12.tiedGB N xN epsStr cotN ε ib12 dyO12
-  · exact w.b13.tiedGB N xN epsStr cotN ε ib13 dyO13
-  · exact w.b14.tiedGB N xN epsStr cotN ε ib14 dyO14
-  · exact w.b15.tiedGB N xN epsStr cotN ε ib15 dyO15
-  · exact w.d2.tiedGB N xN epsStr cotN ε ibD2 dyD2
-  · exact w.b16.tiedGB N xN epsStr cotN ε ib16 dyO16
-  · exact w.b17.tiedGB N xN epsStr cotN ε ib17 dyO17
-  · exact w.b18.tiedGB N xN epsStr cotN ε ib18 dyO18
+  · exact w.b1.tied_gb N xN epsStr cotN ε ib1 dyO1
+  · exact w.b2.tied_gb N xN epsStr cotN ε ib2 dyO2
+  · exact w.b3.tied_gb N xN epsStr cotN ε ib3 dyO3
+  · exact w.d0.tied_gb N xN epsStr cotN ε ibD0 dyD0
+  · exact w.b4.tied_gb N xN epsStr cotN ε ib4 dyO4
+  · exact w.b5.tied_gb N xN epsStr cotN ε ib5 dyO5
+  · exact w.b6.tied_gb N xN epsStr cotN ε ib6 dyO6
+  · exact w.d1.tied_gb N xN epsStr cotN ε ibD1 dyD1
+  · exact w.b7.tied_gb N xN epsStr cotN ε ib7 dyO7
+  · exact w.b8.tied_gb N xN epsStr cotN ε ib8 dyO8
+  · exact w.b9.tied_gb N xN epsStr cotN ε ib9 dyO9
+  · exact w.b10.tied_gb N xN epsStr cotN ε ib10 dyO10
+  · exact w.b11.tied_gb N xN epsStr cotN ε ib11 dyO11
+  · exact w.b12.tied_gb N xN epsStr cotN ε ib12 dyO12
+  · exact w.b13.tied_gb N xN epsStr cotN ε ib13 dyO13
+  · exact w.b14.tied_gb N xN epsStr cotN ε ib14 dyO14
+  · exact w.b15.tied_gb N xN epsStr cotN ε ib15 dyO15
+  · exact w.d2.tied_gb N xN epsStr cotN ε ibD2 dyD2
+  · exact w.b16.tied_gb N xN epsStr cotN ε ib16 dyO16
+  · exact w.b17.tied_gb N xN epsStr cotN ε ib17 dyO17
+  · exact w.b18.tied_gb N xN epsStr cotN ε ib18 dyO18
   · exact cnx_head_ch_tiedGB N xN epsStr cotN dN ε w.hG w.hT w.Wfc w.bfc xhead g
 
 end Proofs.CnxTiePoCGB

@@ -206,10 +206,10 @@ noncomputable def mbExpEvalW (N h w : Nat) (ε : ℝ) {ic mid oc kh kw r : Nat}
 -- § The full B0 inference ℝ-forward — all 16 MBConv blocks, nested-application form
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The sixteen-block EfficientNet-B0 inference forward** — `efficientnetForwardB_full`'s ladder
+/-- **The sixteen-block EfficientNet-B0 inference forward** — `efficientnetForwardBFull`'s ladder
     with frozen running statistics at all 49 BatchNorm sites, at one shared `ε`. Nested-application
     form (NOT `∘`), as the training twin, so the faithfulness proof closes by `rw` and `rfl`. -/
-noncomputable def efficientnetForwardB_fullEval (N : Nat) (ε : ℝ) (w : B0WeightsEval nCls)
+noncomputable def efficientnetForwardBFullEval (N : Nat) (ε : ℝ) (w : B0WeightsEval nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * nCls) :=
   headFwdBEval N (h := 7) (w := 7) ε w.hW w.hb w.hγ w.hβ w.hμ w.hv w.fcW w.fcb
     (mbExpEvalW N 7 7 ε w.b16
@@ -287,8 +287,8 @@ theorem mbExpGraphEvalW_faithful (pfx epsStr : String) (N h w : Nat) (ε : ℝ) 
 /-- The **sixteen-block EfficientNet-B0 inference forward graph** at the batched index
     `N·(c·h·w)`: stem → 16 MBConv blocks → head → GAP → dense, every one of the 49 BatchNorm sites
     reading frozen running statistics through the `bnEval` descriptor. The eval twin of
-    `efficientnetFwdGraphB_full`, and the typed form of the shipped `efficientnet_fwd_eval`. -/
-def efficientnetFwdGraphB_fullEval (N : Nat) (epsStr : String) (ε : ℝ) (w : B0WeightsEval nCls)
+    `efficientnetFwdGraphBFull`, and the typed form of the shipped `efficientnet_fwd_eval`. -/
+def efficientnetFwdGraphBFullEval (N : Nat) (epsStr : String) (ε : ℝ) (w : B0WeightsEval nCls)
     (x : Vec (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
   headGraphBEval epsStr (h := 7) (w := 7) ε w.hW w.hb w.hγ w.hβ w.hμ w.hv w.fcW w.fcb
     (mbExpGraphEvalW "b16" epsStr N 7 7 ε w.b16
@@ -311,12 +311,12 @@ def efficientnetFwdGraphB_fullEval (N : Nat) (epsStr : String) (ε : ℝ) (w : B
                                       (.operand "%x" x))))))))))))))))))
 
 /-- ⭐ **Sixteen-block inference EfficientNet-B0 forward faithfulness.** The typed graph denotes
-    `efficientnetForwardB_fullEval`: one `rw` per block with the `*GraphEvalW_faithful` lemmas
+    `efficientnetForwardBFullEval`: one `rw` per block with the `*GraphEvalW_faithful` lemmas
     (outermost → innermost), then a structural `rfl` — the training twin's recipe. -/
-theorem efficientnetFwdGraphB_fullEval_faithful (N : Nat) (epsStr : String) (ε : ℝ)
+theorem efficientnetFwdGraphBFullEval_faithful (N : Nat) (epsStr : String) (ε : ℝ)
     (w : B0WeightsEval nCls) (x : Vec (N * (3 * 224 * 224))) :
-    den (efficientnetFwdGraphB_fullEval N epsStr ε w x) = efficientnetForwardB_fullEval N ε w x := by
-  rw [efficientnetFwdGraphB_fullEval, headGraphBEval_faithful,
+    den (efficientnetFwdGraphBFullEval N epsStr ε w x) = efficientnetForwardBFullEval N ε w x := by
+  rw [efficientnetFwdGraphBFullEval, headGraphBEval_faithful,
       mbExpGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbStridedGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbExpGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbStridedGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbStridedGraphEvalW_faithful, mbResidGraphEvalW_faithful, mbStridedGraphEvalW_faithful, mbNoExpGraphEvalW_faithful,
       stemGraphBEval_faithful, den_operand]
   rfl

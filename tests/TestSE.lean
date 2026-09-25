@@ -13,14 +13,14 @@ each line is what the proven-faithful emitter (`emitTok`) produces for that op:
   forward  se = x ⊙ broadcast(σ(W₂·swish(W₁·GAP(x)+b₁)+b₂))   (`seGate`, `seBlock`)
     squeeze GAP[2,3]÷H·W → dense₁ C→r → swish → dense₂ r→C → sigmoid gate → bcast×x
 
-  backward (the elemwise-product VJP, `seBlock_has_vjp`: gate⊙dy + gate.back(x,x⊙dy))
+  backward (the elemwise-product VJP, `seBlockHasVJP`: gate⊙dy + gate.back(x,x⊙dy))
     main : broadcast(gate) ⊙ dse
     gate : Σ_spatial(x⊙dse) → sigmoid'(gate·(1−gate)) → dense₂ back (+dWs₂,+dbs₂)
            → swish back → dense₁ back (+dWs₁,+dbs₁) → GAP back (bcast ÷H·W)
     dx   = main + gate-path   (the two fan-in contributions summed)
 
 The squeeze GAP-back (`÷H·W` then broadcast) and the gate broadcast-back (sum over
-spatial) are adjoints of each other's forward steps (`broadcastFlat_has_vjp`).
+spatial) are adjoints of each other's forward steps (`broadcastFlatHasVJP`).
 
 Run (needs iree-compile on PATH): lake env lean tests/TestSE.lean
 -/

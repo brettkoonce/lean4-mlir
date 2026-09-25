@@ -4,9 +4,9 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # The MobileNetV2 / MobileNetV4 backward chains — the ℝ maps the MobileNet ties are about
 
 The hand-composed reverse of the committed MobileNet forwards, as plain `def`s on the cotangent:
-the batched chains `mnv2InputGradB` (seventeen bottlenecks, the reverse of `mobilenetv2ForwardB_full`) and
+the batched chains `mnv2InputGradB` (seventeen bottlenecks, the reverse of `mobilenetv2ForwardBFull`) and
 `mnv4InputGradB` (MobileNetV4-Conv-M: the fused stage, twenty-one UIB blocks and two head convs,
-the reverse of `mobilenetv4ForwardB_full`), both at a variable batch `N` and class count. Each
+the reverse of `mobilenetv4ForwardBFull`), both at a variable batch `N` and class count. Each
 chain keeps its block backwards and its BatchNorm backwards as *supplied* maps and spells only the
 endpoints, so that the certified tie (`MobileNetV2WholeBackCertifiedTieB`,
 `MobileNetV4WholeBackCertifiedTieB`) is a statement about a NAMED chain of the forward's shape.
@@ -32,7 +32,7 @@ namespace Proofs
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The batched whole-net input-gradient backward of the seventeen-bottleneck MobileNetV2** —
-    the exact reverse of `mobilenetv2ForwardB_full = head ∘ b17 ∘ … ∘ b1 ∘ stem`: dense-back →
+    the exact reverse of `mobilenetv2ForwardBFull = head ∘ b17 ∘ … ∘ b1 ∘ stem`: dense-back →
     GAP-back → the head's relu6 mask, BatchNorm back and 1×1 conv back → the seventeen bottleneck
     backwards → the stem's relu6 mask, BatchNorm back and XLA-`SAME` 3×3/s2 conv back. The block
     backwards and the two BatchNorm backs are supplied; the conv, GAP and dense leaves are
@@ -70,7 +70,7 @@ noncomputable def mnv2InputGradB (N : Nat) {nCls : Nat}
   ∘ StableHLO.batchMap N (Proofs.dense (Mat.transpose Wfc) (0 : Vec 1280))
 
 /-- **The batched whole-net input-gradient backward of MobileNetV4-Conv-M** — the exact reverse
-    of `mobilenetv4ForwardB_full` (timm's `mobilenetv4_conv_medium`): dense-back, relabelled to
+    of `mobilenetv4ForwardBFull` (timm's `mobilenetv4_conv_medium`): dense-back, relabelled to
     `[N, 1280, 1, 1]` → `conv_head`'s relu mask, BatchNorm back and 1×1 conv back at `1×1` →
     relabelled to `[N, 960]`, GAP-back → the first head conv's relu mask, BatchNorm back and 1×1
     conv back at 7×7 → the twenty-one UIB block backwards → the fused stage's → the stem's relu

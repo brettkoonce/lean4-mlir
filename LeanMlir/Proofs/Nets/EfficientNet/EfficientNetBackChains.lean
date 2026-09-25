@@ -4,8 +4,8 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # The EfficientNet-B0 backward chain — the ℝ map the B0 whole-net tie is about
 
 The hand-composed reverse of the committed EfficientNet-B0 forward, as a plain `def` on the
-cotangent: the batched sixteen-block paper net `efficientnetInputGradB_full` (the reverse of
-`efficientnetForwardB_full`, at a variable batch `N` and class count). The chain keeps its block
+cotangent: the batched sixteen-block paper net `efficientnetInputGradBFull` (the reverse of
+`efficientnetForwardBFull`, at a variable batch `N` and class count). The chain keeps its block
 backwards, its BatchNorm backwards and its swish backwards as *supplied* maps and spells only the
 endpoints, so that the certified tie (`EfficientNetFullWholeBackCertifiedTie`) is a statement
 about a NAMED chain of the forward's shape.
@@ -20,11 +20,11 @@ No number is stated about this chain. -/
 namespace Proofs
 
 /-- **The batched whole-net input-gradient backward of the sixteen-block EfficientNet-B0** —
-    the reverse of `efficientnetForwardB_full = head ∘ b16 ∘ … ∘ b1 ∘ stem`: classifier-back →
+    the reverse of `efficientnetForwardBFull = head ∘ b16 ∘ … ∘ b1 ∘ stem`: classifier-back →
     GAP-back → head-conv-bn-swish-back → the sixteen MBConv block backs → stem-conv-bn-swish-back.
     The block backs and the stem/head BN+swish backs are supplied; the conv/GAP/dense leaves are
     concrete, `batchMap`-lifted over the `N` examples, the stem at the XLA-`SAME` phase. -/
-noncomputable def efficientnetInputGradB_full {nCls : Nat} (N : Nat)
+noncomputable def efficientnetInputGradBFull {nCls : Nat} (N : Nat)
     (Ws : Kernel4 32 3 3 3) (Wh : Kernel4 1280 320 1 1) (Wfc : Mat 1280 nCls)
     (bnBs swBs : Vec (N * (32 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
     (bnBh swBh : Vec (N * (1280 * 7 * 7)) → Vec (N * (1280 * 7 * 7)))

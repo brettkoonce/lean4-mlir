@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 The `TrainedMlpWitness` program extended to a CONVOLUTIONAL net (the 2026-07
 audit's gap #3): the Chapter-3 `mnistCnnNoBn` conditional whole-net VJP
-(`mnistCnnNoBn_has_vjp_at`) instantiated at TRAINED, /128-rationalized
+(`mnistCnnNoBnHasVJPAt`) instantiated at TRAINED, /128-rationalized
 weights and a REAL test input, with every smoothness hypothesis discharged
 by exact in-kernel rational arithmetic — inherited from training, not
 engineered:
@@ -607,10 +607,10 @@ theorem d4_ne : ∀ k, dense W4 b4 r3V k ≠ 0 := by
 /-- **Level 1: the trained-weight whole-net CNN VJP witness** —
     `HasVJPAt (mnistCnnNoBnForward …) X` with every one of the five
     smoothness hypotheses discharged at the trained weights and the real
-    test input. The convolutional sibling of `trainedMlp_has_vjp_at`. -/
-noncomputable def trainedCnn_has_vjp_at :
+    test input. The convolutional sibling of `trainedMlpHasVJPAt`. -/
+noncomputable def trainedCnnHasVJPAt :
     HasVJPAt (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X :=
-  mnistCnnNoBn_has_vjp_at W1 b1 W2 b2 W3 b3 W4 b4 W5 b5
+  mnistCnnNoBnHasVJPAt W1 b1 W2 b2 W3 b3 W4 b4 W5 b5
     (by norm_num) (by norm_num) (by norm_num) X
     -- h1: conv1 pre-activations nonzero
     (by intro k
@@ -644,11 +644,11 @@ noncomputable def trainedCnn_has_vjp_at :
 
 /-- The witness's contract, exposed: the whole-net backward equals the
     `pdiv`-contracted Jacobian at the trained weights and real input. -/
-theorem trainedCnn_has_vjp_correct (dy : Vec 10) (i : Fin (1 * (2*3) * (2*3))) :
-    trainedCnn_has_vjp_at.backward dy i =
+theorem trainedCnnHasVJP_correct (dy : Vec 10) (i : Fin (1 * (2*3) * (2*3))) :
+    trainedCnnHasVJPAt.backward dy i =
       ∑ j : Fin 10,
         pdiv (mnistCnnNoBnForward W1 b1 W2 b2 W3 b3 W4 b4 W5 b5) X i j * dy j :=
-  trainedCnn_has_vjp_at.correct dy i
+  trainedCnnHasVJPAt.correct dy i
 
 end TrainedCnn
 end Proofs

@@ -9,7 +9,7 @@ module @m {
     // ── ConvNeXt-T AdamW train step: gradients + optimizer are pretty(AST node) ──
     // All 182 params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample
     // WEIGHT GRADIENTS — the two documented gaps, closed 2026-07-28 (new cert
-    // flatConvStride4_weight_grad_has_vjp; emit-side odd/even split sWGradGeom).
+    // flatConvStride4WeightGradHasVJP; emit-side odd/even split sWGradGeom).
     %v0 = stablehlo.reshape %x : (tensor<64x150528xf32>) -> tensor<64x3x224x224xf32>
     %v1 = stablehlo.convert %v0 : (tensor<64x3x224x224xf32>) -> tensor<64x3x224x224xbf16>
     %v2 = stablehlo.convert %psW : (tensor<96x3x4x4xf32>) -> tensor<96x3x4x4xbf16>

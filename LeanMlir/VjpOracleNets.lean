@@ -23,7 +23,7 @@ def cfg : TrainConfig where
   augment      := false
 
 /-- **`dense_only`** — the minimal net: one dense layer 784→10, no activation, so the only
-    gradient math that runs is `dense_has_vjp`. Step 2 is the first step whose loss depends on
+    gradient math that runs is `denseHasVJP`. Step 2 is the first step whose loss depends on
     the backward pass; a small cross-backend Δ there means the hand-derived VJP matches JAX's
     `value_and_grad` at f32. -/
 def denseOnly : NetSpec where
@@ -34,7 +34,7 @@ def denseOnly : NetSpec where
     .dense 784 10 .identity
   ]
 
-/-- **`dense_relu`** — tests `relu_has_vjp` + `vjp_comp`. -/
+/-- **`dense_relu`** — tests `reluHasVJP` + `vjpComp`. -/
 def denseRelu : NetSpec where
   name   := "vjp-oracle-dense-relu"
   imageH := 28
@@ -44,7 +44,7 @@ def denseRelu : NetSpec where
     .dense 64 10 .identity
   ]
 
-/-- **`conv`** — tests `conv2d_has_vjp3` + `flatten_has_vjp`. -/
+/-- **`conv`** — tests `conv2dHasVJP3` + `flattenHasVJP`. -/
 def convOnly : NetSpec where
   name   := "vjp-oracle-conv"
   imageH := 28
@@ -55,7 +55,7 @@ def convOnly : NetSpec where
     .dense 3136 10 .identity
   ]
 
-/-- **`convbn`** — tests `convBn_has_vjp` (conv + BN + ReLU). -/
+/-- **`convbn`** — tests `convBnHasVJP` (conv + BN + ReLU). -/
 def convBnOnly : NetSpec where
   name   := "vjp-oracle-convbn"
   imageH := 28
@@ -66,7 +66,7 @@ def convBnOnly : NetSpec where
     .dense 3136 10 .identity
   ]
 
-/-- **`conv_pool`** — tests `maxPool_has_vjp` in a realistic context. -/
+/-- **`conv_pool`** — tests `maxPoolHasVJP` in a realistic context. -/
 def convPool : NetSpec where
   name   := "vjp-oracle-conv-pool"
   imageH := 28
@@ -78,7 +78,7 @@ def convPool : NetSpec where
     .dense 784 10 .identity
   ]
 
-/-- **`residual`** — tests `biPath_has_vjp` (additive fan-in VJP) via
+/-- **`residual`** — tests `biPathHasVJP` (additive fan-in VJP) via
     a single residualBlock with no projection. Stem is `.convBn` so both
     phases reshape NCHW correctly. -/
 def residualNet : NetSpec where
@@ -108,7 +108,7 @@ def depthwiseNet : NetSpec where
   ]
 
 /-- **`attention`** — smallest ViT-shaped net exercising
-    `transformerBlock_has_vjp_mat` (which bundles LN, MHA with
+    `transformerBlockHasVJPMat` (which bundles LN, MHA with
     scaled-dot-product attention, residuals, and the MLP sublayer).
     MNIST 28×28 → 7×7 patches → 1 block → classifier. -/
 def attentionNet : NetSpec where
@@ -121,7 +121,7 @@ def attentionNet : NetSpec where
     .dense 16 10 .identity                  -- classifier off CLS token
   ]
 
-/-- **`mbConv`** — tests `elemwiseProduct_has_vjp` (SE gate) plus
+/-- **`mbConv`** — tests `elemwiseProductHasVJP` (SE gate) plus
     the MBConv composition (expand + depthwise + SE + project with Swish).
     This is the one axiom family not already covered by the other oracle
     cases. -/

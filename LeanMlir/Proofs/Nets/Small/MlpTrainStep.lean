@@ -180,7 +180,7 @@ theorem mlp_hidden_total_loss_grad {d₁ d₂ d₃ : Nat}
 
 /-- **Input-layer total-loss fold (conditional, deepest).** The same fold for the
     first layer `W₀`, whose chain runs back through *both* ReLUs — so it carries both
-    smoothness hypotheses (the same pair as `mlp_has_vjp_at`). The total loss gradient
+    smoothness hypotheses (the same pair as `mlpHasVJPAt`). The total loss gradient
     wrt `W₀` = certified `∂p₀/∂W₀` contracted with the loss gradient at `p₀` (the
     deepest cotangent the backward chain delivers, cf. `mlpCotOut0_denote`). -/
 theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
@@ -222,7 +222,7 @@ theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
 -- § Whole-net capstone — every weight layer's total-loss gradient at once
 --
 -- One statement for the whole MLP's training: at a smooth point (both hidden
--- pre-activations off the ReLU kinks — the same pair `mlp_has_vjp_at` uses), the
+-- pre-activations off the ReLU kinks — the same pair `mlpHasVJPAt` uses), the
 -- gradient of the WHOLE softmax-CE loss `crossEntropy ∘ mlpForward` with respect to
 -- every weight layer is the certified assembled gradient. Output layer unconditionally,
 -- the two hidden layers conditionally — folded from the per-layer results, with the

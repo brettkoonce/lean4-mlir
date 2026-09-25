@@ -237,7 +237,7 @@ theorem bnForward_const {n : Nat} (hn : 0 < n) (ε γ β c : ℝ) :
       %cbg_gn = multiply %effGrad, %cbn_norm
       %d_g    = reduce add %cbg_gn across dimensions = [0, 2, 3]
 -/
-noncomputable def bn_grad_gamma (n : Nat) (ε : ℝ) (x : Vec n) (dy : Vec n) : ℝ :=
+noncomputable def bnGradGamma (n : Nat) (ε : ℝ) (x : Vec n) (dy : Vec n) : ℝ :=
   ∑ i : Fin n, dy i * bnXhat n ε x i
 
 /-- **β gradient**: `dβ = Σᵢ dyᵢ`
@@ -248,7 +248,7 @@ noncomputable def bn_grad_gamma (n : Nat) (ε : ℝ) (x : Vec n) (dy : Vec n) : 
     MLIR (same function):
       %d_bt = reduce add %effGrad across dimensions = [0, 2, 3]
 -/
-noncomputable def bn_grad_beta (n : Nat) (dy : Vec n) : ℝ := ∑ i : Fin n, dy i
+noncomputable def bnGradBeta (n : Nat) (dy : Vec n) : ℝ := ∑ i : Fin n, dy i
 
 -- ════════════════════════════════════════════════════════════════
 -- § Input gradient — the derivation
@@ -323,7 +323,7 @@ instead of O(N²). And it's exactly what the MLIR emits.
       %cbg_t5 = istd * %cbg_t4
       %cbg_dconv = (1/N) * %cbg_t5
 -/
-noncomputable def bn_grad_input
+noncomputable def bnGradInput
     (n : Nat) (ε γ : ℝ) (x : Vec n) (dy : Vec n) : Vec n :=
   let xh : Vec n := bnXhat n ε x
   let dxhat : Vec n := fun i => γ * dy i
@@ -358,40 +358,40 @@ theorem bnSyncXhat_at_own_stats (n : Nat) (hn : n ≠ 0) (ε : ℝ) (x : Vec n) 
 
 /-- ⭐⭐ **The SYNCHRONISED batch-norm input-VJP — every reduction HANDED IN.**
 
-    `bn_grad_input` computes all four of its scalars from `x` and `dy`: the mean, the inverse
+    `bnGradInput` computes all four of its scalars from `x` and `dy`: the mean, the inverse
     standard deviation, and the two sums. This one takes `μ`, `E[x²]` and the two reduction
     MEANS as arguments, so under data parallelism they can be the all-reduced global ones and
     a replica can produce the shard-`r` block of the global-batch gradient.
 
-    ⭐ Why this is expressible at all: rewrite `bn_grad_input` as
+    ⭐ Why this is expressible at all: rewrite `bnGradInput` as
     `istd · (dx̂ᵢ − mean(dx̂) − x̂ᵢ · mean(x̂·dx̂))`. Both reductions are **means**, and a mean over
     equal shards is the mean of the shards' means (`bnMean_shard`) — so both survive an
     `allReduceMeanF`, exactly as `μ` and `E[x²]` do in the forward. Nothing here needs a sum,
     which is the whole reason one collective per direction suffices. -/
-noncomputable def bnSync_grad_input (n : Nat) (ε γ μ m2 mdy mdyx : ℝ) (x dy : Vec n) : Vec n :=
+noncomputable def bnSyncGradInput (n : Nat) (ε γ μ m2 mdy mdyx : ℝ) (x dy : Vec n) : Vec n :=
   fun i => (1 / Real.sqrt (m2 - μ * μ + ε))
              * (γ * dy i - mdy - bnSyncXhat n ε μ m2 x i * mdyx)
 
-/-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bn_grad_input`.**
+/-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bnGradInput`.**
 
     The backward peer of `bnEvalForward_at_own_stats`, and the `R = 1` anchor for P2: handed the
     statistics and reductions the batch would itself have computed, the sync backward denotes
     the existing three-term formula. So a single-device sync render computes the function the
     committed tiers are already tied to. `planning/global_bn_verified.md` §2c. -/
-theorem bnSync_grad_input_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x dy : Vec n) :
-    bnSync_grad_input n ε γ (bnMean n x) (bnMeanSq n x)
+theorem bnSyncGradInput_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x dy : Vec n) :
+    bnSyncGradInput n ε γ (bnMean n x) (bnMeanSq n x)
       (bnMean n (fun i => γ * dy i))
       (bnMean n (fun i => bnXhat n ε x i * (γ * dy i))) x dy
-      = bn_grad_input n ε γ x dy := by
+      = bnGradInput n ε γ x dy := by
   have hnR : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn
   have hv : bnMeanSq n x - bnMean n x * bnMean n x = bnVar n x :=
     (bnVar_eq_bnMeanSq_sub_sq n hn x).symm
   funext i
   -- ⚠ `hv` must fire BEFORE `bnMean` unfolds, or the `m2 − μ²` pattern is gone and the two
   -- sides end up with different arguments under the square root.
-  simp only [bnSync_grad_input, bnSyncXhat]
+  simp only [bnSyncGradInput, bnSyncXhat]
   rw [hv]
-  simp only [bn_grad_input, bnXhat, bnIstd, bnMean]
+  simp only [bnGradInput, bnXhat, bnIstd, bnMean]
   field_simp
 
 -- ════════════════════════════════════════════════════════════════
@@ -400,7 +400,7 @@ theorem bnSync_grad_input_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x
 
 /- **A note on the parameter gradients**
 
-   `bn_grad_gamma` and `bn_grad_beta` are scalar-valued derivatives w.r.t.
+   `bnGradGamma` and `bnGradBeta` are scalar-valued derivatives w.r.t.
    scalar (per-channel) parameters, which doesn't fit our `pdiv` /
    `HasVJP` framework cleanly (everything in `Tensor.lean` is sized over
    `Vec`). The mathematical content of "these are the correct gradients"
@@ -409,12 +409,12 @@ theorem bnSync_grad_input_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x
        ∂(γ · x̂ᵢ + β)/∂γ = x̂ᵢ        →  dγ = Σᵢ dyᵢ · x̂ᵢ
        ∂(γ · x̂ᵢ + β)/∂β ​​= 1          →  dβ = Σᵢ dyᵢ
 
-   We state these as the *definitions* `bn_grad_gamma` and `bn_grad_beta`
+   We state these as the *definitions* `bnGradGamma` and `bnGradBeta`
    above; the sum-over-i is the bookkeeping that turns "per-output
    gradient" into "per-parameter gradient."
 -/
 
--- See `bn_input_grad_correct` below `bn_has_vjp` for the headline correctness theorem.
+-- See `bn_input_grad_correct` below `bnHasVJP` for the headline correctness theorem.
 
 -- ════════════════════════════════════════════════════════════════
 -- § Decomposition: bn = affine ∘ xhat
@@ -430,7 +430,7 @@ The BN forward is really two steps glued together:
      The parameters γ, β live here.
 
 If we had a `HasVJP` instance for each, we could compose them with
-`vjp_comp` from `Tensor.lean` and get the full BN VJP "for free."
+`vjpComp` from `Tensor.lean` and get the full BN VJP "for free."
 
 The affine VJP is trivial:
   ∂(γ · vᵢ + β)/∂vⱼ = γ · δᵢⱼ
@@ -439,7 +439,7 @@ The affine VJP is trivial:
 The normalize VJP is the consolidated three-term formula above (with
 `γ = 1`, since the affine has been factored out).
 
-We state both as `HasVJP` instances. Their composition (via `vjp_comp`)
+We state both as `HasVJP` instances. Their composition (via `vjpComp`)
 gives the full BN input gradient — and the parameter gradients are
 collected at the affine layer alongside.
 -/
@@ -532,7 +532,7 @@ theorem pdiv_bnCentered (n : Nat) (x : Vec n) (i j : Fin n) :
     (`Differentiable.sqrt` with non-zero hypothesis), and its
     reciprocal is differentiable too. -/
 @[fun_prop]
-theorem bnIstdBroadcast_diff (n : Nat) (ε : ℝ) (hε : 0 < ε) :
+theorem bnIstdBroadcast_differentiable (n : Nat) (ε : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (bnIstdBroadcast n ε) := by
   have hpos : ∀ x : Vec n, 0 < bnVar n x + ε := fun x => by linarith [bnVar_nonneg n x]
   have hsqrt : Differentiable ℝ fun x : Vec n => Real.sqrt (bnVar n x + ε) :=
@@ -617,7 +617,7 @@ theorem pdiv_bnIstdBroadcast (n : Nat) (ε : ℝ) (hε : 0 < ε) (x : Vec n) (i 
   have h_sqrt_ne : Real.sqrt (bnVar n x + ε) ≠ 0 := (Real.sqrt_pos.mpr h_arg_pos).ne'
   have hn : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp (Fin.pos i))
   -- the `j`-th output is the scalar `istd` itself (the broadcast is constant in `j`)
-  have h_swap := pdiv_eq_fderiv_coord (bnIstdBroadcast_diff n ε hε x) i j
+  have h_swap := pdiv_eq_fderiv_coord (bnIstdBroadcast_differentiable n ε hε x) i j
   have hfun : (fun x' : Vec n => bnIstdBroadcast n ε x' j)
       = fun x' => (Real.sqrt (bnVar n x' + ε))⁻¹ := by
     funext x'; simp only [bnIstdBroadcast, bnIstd, one_div]
@@ -648,11 +648,11 @@ theorem pdiv_bnNormalize (n : Nat) (ε : ℝ) (hε : 0 < ε)
   rw [show bnNormalize n ε = bnNormalize n ε from rfl, hfactor]
   -- Step 2: apply pdiv_mul. Both factors are Differentiable: bnCentered is
   -- linear (proved via fun_prop), bnIstdBroadcast is smooth when ε > 0
-  -- (proved as bnIstdBroadcast_diff).
+  -- (proved as bnIstdBroadcast_differentiable).
   have h_centered_diff : DifferentiableAt ℝ (bnCentered n) x := by
     unfold bnCentered bnMean; fun_prop
   have h_istd_diff : DifferentiableAt ℝ (bnIstdBroadcast n ε) x :=
-    (bnIstdBroadcast_diff n ε hε) x
+    (bnIstdBroadcast_differentiable n ε hε) x
   rw [pdiv_mul _ _ _ h_centered_diff h_istd_diff]
   -- Step 3: substitute the two elementary Jacobians.
   rw [pdiv_bnCentered, pdiv_bnIstdBroadcast n ε hε]
@@ -673,7 +673,7 @@ theorem pdiv_bnNormalize (n : Nat) (ε : ℝ) (hε : 0 < ε)
 
     Each input enters one output multiplied by `γ`; the gradient comes
     back scaled by `γ`. -/
-noncomputable def bnAffine_has_vjp (n : Nat) (γ β : ℝ) :
+noncomputable def bnAffineHasVJP (n : Nat) (γ β : ℝ) :
     HasVJP (bnAffine n γ β) where
   backward := fun _v dy => fun i => γ * dy i
   correct := by
@@ -683,7 +683,7 @@ noncomputable def bnAffine_has_vjp (n : Nat) (γ β : ℝ) :
 /-- **Normalize VJP** (the hard half): the consolidated formula with γ = 1.
 
     `back(x, dx̂)ᵢ = (1/N) · istd · (N · dx̂ᵢ − Σⱼ dx̂ⱼ − x̂ᵢ · Σⱼ x̂ⱼ · dx̂ⱼ)` -/
-noncomputable def bnNormalize_has_vjp (n : Nat) (ε : ℝ) (hε : 0 < ε) :
+noncomputable def bnNormalizeHasVJP (n : Nat) (ε : ℝ) (hε : 0 < ε) :
     HasVJP (bnNormalize n ε) where
   backward := fun x dxhat =>
     let xh := bnXhat n ε x
@@ -721,19 +721,19 @@ noncomputable def bnNormalize_has_vjp (n : Nat) (ε : ℝ) (hε : 0 < ε) :
 
 /-- **The BN VJP from the composition** — chain rule glues affine ∘ normalize.
 
-    This is the structural payoff: once `bnNormalize_has_vjp` and
-    `bnAffine_has_vjp` are in hand, the full BN input gradient comes
-    from one application of `vjp_comp`. The chain rule mechanically
+    This is the structural payoff: once `bnNormalizeHasVJP` and
+    `bnAffineHasVJP` are in hand, the full BN input gradient comes
+    from one application of `vjpComp`. The chain rule mechanically
     threads `dy → dx̂ → dx`:
 
-        dx̂ᵢ = γ · dyᵢ                           (from bnAffine_has_vjp)
-        dxᵢ = (1/N · istd) · (N · dx̂ᵢ − …)     (from bnNormalize_has_vjp)
+        dx̂ᵢ = γ · dyᵢ                           (from bnAffineHasVJP)
+        dxᵢ = (1/N · istd) · (N · dx̂ᵢ − …)     (from bnNormalizeHasVJP)
 
     The composition is exactly the two-step backward pass that the
     MLIR emits (`MlirCodegen.emitConvBnBackward`): `d_norm = grad * gamma_bc` followed by
     the consolidated three-term formula.
 -/
-noncomputable def bn_has_vjp (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
+noncomputable def bnHasVJP (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     HasVJP (bnForward n ε γ β) := by
   rw [bnForward_eq_compose]
   have h_normalize_diff : Differentiable ℝ (bnNormalize n ε) := by
@@ -746,38 +746,38 @@ noncomputable def bn_has_vjp (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
                   fun x => fun j => x j - (∑ i, x i) * ((n : ℝ))⁻¹ := by
         funext x j; unfold bnCentered bnMean; ring
       rw [h_eq]; fun_prop
-    exact h_centered.mul (bnIstdBroadcast_diff n ε hε)
+    exact h_centered.mul (bnIstdBroadcast_differentiable n ε hε)
   have h_affine_diff : Differentiable ℝ (bnAffine n γ β) := by
     unfold bnAffine; fun_prop
-  exact vjp_comp (bnNormalize n ε) (bnAffine n γ β)
+  exact vjpComp (bnNormalize n ε) (bnAffine n γ β)
     h_normalize_diff h_affine_diff
-    (bnNormalize_has_vjp n ε hε) (bnAffine_has_vjp n γ β)
+    (bnNormalizeHasVJP n ε hε) (bnAffineHasVJP n γ β)
 
 /-- **`bnForward` is differentiable everywhere (for `ε > 0`).**
 
-    Reuses the exact differentiability argument inside `bn_has_vjp`:
+    Reuses the exact differentiability argument inside `bnHasVJP`:
     `bnForward = bnAffine ∘ bnNormalize`, where `bnNormalize` is the
     product of `bnCentered` (affine, hence smooth) and `bnIstdBroadcast`
     (smooth because `bnVar + ε > 0` keeps the `Real.sqrt` away from its
-    kink — see `bnIstdBroadcast_diff`), and `bnAffine` is affine. The
+    kink — see `bnIstdBroadcast_differentiable`), and `bnAffine` is affine. The
     `ε > 0` hypothesis is what licenses the inverse-sqrt smoothness. This
-    is the differentiability witness `vjp_comp_at` needs to chain `bn`
+    is the differentiability witness `vjpCompAt` needs to chain `bn`
     into the conv→bn→relu block. -/
 @[fun_prop]
 theorem bnForward_differentiable (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (bnForward n ε γ β) := by
-  have h := bnIstdBroadcast_diff n ε hε
+  have h := bnIstdBroadcast_differentiable n ε hε
   show Differentiable ℝ fun x i => γ * ((x i - bnMean n x) * bnIstdBroadcast n ε x i) + β
   unfold bnMean
   fun_prop
 
-/-- The standalone end-to-end theorem: `bn_grad_input` is the correct VJP
-    of `bnForward`. Follows from `bn_has_vjp` by definitional unfolding. -/
+/-- The standalone end-to-end theorem: `bnGradInput` is the correct VJP
+    of `bnForward`. Follows from `bnHasVJP` by definitional unfolding. -/
 theorem bn_input_grad_correct (n : Nat) (ε γ β : ℝ) (hε : 0 < ε)
     (x : Vec n) (dy : Vec n) (i : Fin n) :
-    bn_grad_input n ε γ x dy i =
+    bnGradInput n ε γ x dy i =
     ∑ j : Fin n, pdiv (bnForward n ε γ β) x i j * dy j := by
-  exact (bn_has_vjp n ε γ β hε).correct x dy i
+  exact (bnHasVJP n ε γ β hε).correct x dy i
 
 /-- **BN acts on coordinate differences by `γ·istd`** — the exact identity that propagates the
     carrier undamped through every BN, and the reason no BN-variance derivative is ever taken:

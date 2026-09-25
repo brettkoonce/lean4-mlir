@@ -59,8 +59,8 @@ capstone that had to become `rw` instead of `simp only`.
 `CertLayer` demands a backward graph, and **no render emits a gradient into `%x`**: the
 artifact's backward ends at the stem conv's WEIGHT gradient. B0's stem sits outside its chain for
 the same reason. So `mnv4StemB` is a plain function here (ResNet's `cbReluStridedB` at the stem's
-widths), its VJP is `cbReluStridedB_has_vjp_at`, and the net-level VJP composes the two with
-`vjp_comp_at`.
+widths), its VJP is `cbReluStridedBHasVJPAt`, and the net-level VJP composes the two with
+`vjpCompAt`.
 
 ## Conventions this net runs at
 
@@ -80,7 +80,7 @@ widths), its VJP is `cbReluStridedB_has_vjp_at`, and the net-level VJP composes 
 ⚠ `N` stays a binder throughout, as at r34/R50: this tier carries no batch numeral. On the
 data-parallel artifacts the render's `N` is the PER-REPLICA batch; since 2026-09-21 their
 BatchNorm is synchronised, and `MobileNetV4SyncB.lean` is this file's twin for them: replica `r`'s
-forward graph denotes shard `r` of `mobilenetv4ForwardB_full (R * N)`, this file's forward at the
+forward graph denotes shard `r` of `mobilenetv4ForwardBFull (R * N)`, this file's forward at the
 global batch. Unlike R50 there is no `q` binder — MNv4 ships one resolution.
 
 ⚠ **Rows 4/5/10, 12/18 and 15/19/20 are shape-identical**, so their `UibParams` records have the
@@ -397,7 +397,7 @@ conditions at their own activations, so ~60 relu clauses are still never written
     establish, now carried to the net. The eighteen skips are `CertLayer.residual`, which
     typechecks with no transport because `s.oc` and `s.ic` reduce to the same literal at every
     stride-1 row (guarded there). -/
-noncomputable def mobilenetv4ForwardB_full (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+noncomputable def mobilenetv4ForwardBFull (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * nCls) :=
   (mnv4HeadStack N w).fwd (mnv4Pre6 N w x)
 
@@ -409,9 +409,9 @@ noncomputable def mobilenetv4ForwardB_full (N : Nat) {nCls : Nat} (w : Mnv4BWeig
 #guard 2 * 14 == 28
 #guard 2 * 7 == 14
 
--- ⭐ `mobilenetv4ForwardB_full` really does bind at the literal 224-px image type.
+-- ⭐ `mobilenetv4ForwardBFull` really does bind at the literal 224-px image type.
 example (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) :
-    mobilenetv4ForwardB_full N w x = mobilenetv4ForwardB_full N w x := rfl
+    mobilenetv4ForwardBFull N w x = mobilenetv4ForwardBFull N w x := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § T2 — the typed forward graph, at `mnv4FwdChainB`'s own tokens
@@ -601,7 +601,7 @@ theorem mnv4StridedGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     ⚠⚠ **This is why it is a named combinator and not an inline `.addVB`.** The residual add needs
     the block's input subtree TWICE, and MNv4 has eighteen of them. Written inline — or hidden
     behind a `let` in the whole-net graph, which is what this file did first — the term doubles at
-    every skip the moment anything unfolds it, and `simp only [mnv4FwdGraphB_full]` ZETA-EXPANDS
+    every skip the moment anything unfolds it, and `simp only [mnv4FwdGraphBFull]` ZETA-EXPANDS
     lets, so the `let` form bought nothing at all: the whole-net faithfulness proof elaborated and
     then died in the KERNEL with a deterministic timeout.
 
@@ -630,11 +630,11 @@ def mnv4HeadGraphB (epsStr : String) (N h w : Nat) {c mid oc nCls : Nat}
     (Wd : Mat oc nCls) (bd : Vec nCls)
     (e : SHlo (N * (c * h * w))) : SHlo (N * nCls) :=
   .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
-    (castIdx (mnv4Pool11 N oc).symm
+    (castIdx (mnv4_pool11 N oc).symm
       (.batchOp (N := N) (.relu (n := oc * 1 * 1))
         (.bnBatchF "%hg" "%hbt" epsStr ε2 γ2 β2
           (.batchOp (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
-            (castIdx (mnv4Pool11 N mid)
+            (castIdx (mnv4_pool11 N mid)
               (.batchOp (N := N) (.gap (c := mid) (h := h) (w := w))
                 (.batchOp (N := N) (.relu (n := mid * h * w))
                   (.bnBatchF "%h1g" "%h1bt" epsStr ε1 γ1 β1
@@ -811,7 +811,7 @@ theorem mnv4StemB_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
 
     ⚠ The eighteen skip rows go through `mnv4SkipGraphB`, which is what keeps this term LINEAR in
     the depth — see that combinator's docstring for the failure mode it exists to prevent. -/
-def mnv4FwdGraphB_full (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+def mnv4FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : SHlo (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
   mnv4HeadGraphB epsStr N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
     w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd
@@ -832,15 +832,15 @@ def mnv4FwdGraphB_full (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeight
     ⚠ Each group's proof discharges its blocks' dispatch hypotheses by `decide` at the concrete
     row, so what selects ExtraDW / ConvNeXt / FFN is the TABLE, not this file. A row wired to the
     wrong builder fails to elaborate rather than proving something about a different net. -/
-theorem mnv4FwdGraphB_full_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+theorem mnv4FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (3 * 224 * 224))) :
-    den (mnv4FwdGraphB_full N epsStr w e) = mobilenetv4ForwardB_full N w (den e) := by
+    den (mnv4FwdGraphBFull N epsStr w e) = mobilenetv4ForwardBFull N w (den e) := by
   -- ⚠⚠ `rw`, NOT `simp only`, and the difference is not cosmetic: the `simp only` spelling of
   -- this same chain elaborates for ~9 minutes and then dies in the KERNEL with a deterministic
   -- timeout. `simp only` traverses and rebuilds the whole term at each step, and at MNv4's literal
   -- resolutions that is enough for `den` to start unfolding into the graph itself. Outside-in
   -- `rw` never forms those terms.
-  unfold mnv4FwdGraphB_full mobilenetv4ForwardB_full
+  unfold mnv4FwdGraphBFull mobilenetv4ForwardBFull
     mnv4Pre6 mnv4Pre5 mnv4Pre4 mnv4Pre3 mnv4Pre2 mnv4Pre1 mnv4Pre0
   rw [mnv4HeadStack_graph_faithful, mnv4Res7bGraphB_faithful, mnv4Res7aGraphB_faithful,
       mnv4Res14bGraphB_faithful, mnv4Res14aGraphB_faithful, mnv4Res28GraphB_faithful,

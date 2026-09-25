@@ -22,11 +22,11 @@ the SHlo param-SGD ops, which BUNDLE the gradient + SGD wrap into one op (produc
 **The two weight-gradient residuals are CLOSED (2026-07-28); all 180 params are now SHlo ops.**
 They were never the same kind of gap:
 * the **stem 4×4/s4 weight** (`psW`) needed a genuinely missing cert. `flatConvStride4` (forward)
-  and `flatConvStride4_has_vjp` (input) already existed; `flatConvStride4_weight_grad_has_vjp` is
-  new — two `vjp_comp` steps over the stride-1 weight-VJP and the two decimations, mirroring the
+  and `flatConvStride4HasVJP` (input) already existed; `flatConvStride4WeightGradHasVJP` is
+  new — two `vjpComp` steps over the stride-1 weight-VJP and the two decimations, mirroring the
   stride-2 sibling. It backs the new `.convStride4WeightGrad` op.
 * the **2×2/s2 downsample** (`d{i}W`) needed NO new cert.
-  `flatConvStride2_weight_grad_has_vjp` is kernel-generic and `.convStridedWeightGrad` already
+  `flatConvStride2WeightGradHasVJP` is kernel-generic and `.convStridedWeightGrad` already
   existed; the blocker was purely emit-side — `(kH−1)/2` symmetric SAME padding floors to 0 at
   `kH = 2` and emitted a 1×1 convolution against a declared 2×2 result, i.e. type-invalid MLIR.
   `StableHLO.sWGradGeom` splits odd/even (odd byte-for-byte unchanged) and the site is now certified.
@@ -237,7 +237,7 @@ def cnxDropSig (B : Nat) (sd : Bool) (V : CnxDims := cnxTiny) : String :=
 --    for the 4×4/s4 patchify stem, `downWGrad` for the even-kernel 2×2/s2 downsample) are
 --    DELETED, not left dormant — a retired emitter that can still be called is one more
 --    thing to drift (§2b-quater). Both are now certified `SHlo` ops:
---      * `psW` → `.convStride4WeightGrad`, `den` = the NEW `flatConvStride4_weight_grad_has_vjp`;
+--      * `psW` → `.convStride4WeightGrad`, `den` = the NEW `flatConvStride4WeightGradHasVJP`;
 --      * `d{i}W` → `.convStridedWeightGrad` at 2×2, which needed no new cert at all — only
 --        `StableHLO.sWGradGeom`, the emitter's odd/even padding split.
 --    Recover from `git show 5920848:LeanMlir/Proofs/Codegen/ConvNeXtRender.lean` if needed.
@@ -495,8 +495,8 @@ private def downParamSgd (cBS : Nat) (adam : Bool) (pfx downLn downIn cot_n dy :
   -- dXb (channel-sum) + dXng/dXnbt + dXW: ALL FOUR are now SHlo ops.
   --
   -- **`dXW` used to be the hand-written `downWGrad` — the "even-kernel gap".** It was never a
-  -- missing certificate: `flatConvStride2_weight_grad_has_vjp {ic oc h w kH kW}` is kernel-generic
-  -- (no parity assumption — it is `vjp_comp (conv2d_weight_grad_has_vjp) decimateFlat`), and this
+  -- missing certificate: `flatConvStride2WeightGradHasVJP {ic oc h w kH kW}` is kernel-generic
+  -- (no parity assumption — it is `vjpComp (conv2dWeightGradHasVJP) decimateFlat`), and this
   -- block's forward and input-VJP already used certified ops at 2×2. The blocker was that
   -- `convStridedWeightGrad`'s EMITTER hardcoded symmetric SAME padding `[[p,p]]` with
   -- `p = (kH−1)/2`, which floors to 0 at `kH = 2` and emitted a 1×1 convolution against a declared
@@ -788,7 +788,7 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     -- stem: psb via convBiasSgd (channel-sum), psW via the certified stride-4 weight grad.
     -- `psW` WAS the last hand-written weight gradient in this render (`patchWGrad`, "the stride-4
     -- gap"). It is now `.convStride4WeightGrad`, whose `den` is the proven
-    -- `flatConvStride4_weight_grad_has_vjp` — the cert that was genuinely missing, unlike the
+    -- `flatConvStride4WeightGradHasVJP` — the cert that was genuinely missing, unlike the
     -- downsample's (see `downParamSgd`). In `adam` mode the update is the proven AdamW triple; the
     -- SGD path still wraps it in the hand-written `sgd` helper, so SGD is certified-gradient +
     -- hand-written-update there.
@@ -919,7 +919,7 @@ private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0
 
     **What this certifies.** As of 2026-07-28 **all 180 params are `pretty(AST)` end to end** —
     the two weight-grad gaps this render used to carry (the stem 4×4/s4 patchify and the even-kernel
-    2×2/s2 downsample) are closed, by a new cert (`flatConvStride4_weight_grad_has_vjp`) and an
+    2×2/s2 downsample) are closed, by a new cert (`flatConvStride4WeightGradHasVJP`) and an
     emit-side odd/even padding split (`StableHLO.sWGradGeom`) respectively. Licensed by
     `convnext-adam-tie` against the previously committed hand-written render: **bit-exact on all
     83,434,629 returned floats**, spread 0/180, against a bit-exact A-vs-A floor.
@@ -1093,7 +1093,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
         s!"    // ── {cnxModelName V} AdamW train step: gradients + optimizer are pretty(AST node) ──\n" ++
         s!"    // All {(allParams nClasses V).length} params, including the stem 4x4/s4 patchify and the 2x2/s2 downsample\n" ++
         "    // WEIGHT GRADIENTS — the two documented gaps, closed 2026-07-28 (new cert\n" ++
-        "    // flatConvStride4_weight_grad_has_vjp; emit-side odd/even split sWGradGeom).\n"
+        "    // flatConvStride4WeightGradHasVJP; emit-side odd/even split sWGradGeom).\n"
        else
         s!"    // ── {cnxModelName V} AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
         "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++

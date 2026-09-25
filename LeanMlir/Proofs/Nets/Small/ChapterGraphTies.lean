@@ -7,7 +7,7 @@ import LeanMlir.Proofs.Nets.Small.CifarCNN
 `cifar8FwdGraph`, `cifar8BnFwdGraph`) and the MNIST-CNN backward graph (`cnnBackGraph`) as `SHlo`
 terms, and writes their artifacts. This file proves each denotes its net: the forwards are
 `mnistCnnNoBnForward` / `cifarCnnForward` / `cifarCnn8Forward` / `cifarCnnBn8Forward`, and the
-backward is the whole-network VJP `mnistCnnNoBn_has_vjp_at.backward` at a smooth point. Kept out of
+backward is the whole-network VJP `mnistCnnNoBnHasVJPAt.backward` at a smooth point. Kept out of
 `StableHLO` so the IR imports no net. -/
 
 open Finset BigOperators
@@ -82,30 +82,30 @@ theorem cifar8BnFwdGraph_faithful {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat} (
 
 /-- Max-pool VJP at a *raw* flattened point (no `flatten ∘ unflatten` index), so
     it composes without a transport cast; `backward` is `maxPoolBackFlat`. The
-    `correct` field reuses `maxPoolFlat_has_vjp_at.correct`, aligning the point
+    `correct` field reuses `maxPoolFlatHasVJPAt.correct`, aligning the point
     via `Tensor3.flatten_unflatten`. -/
-noncomputable def maxPoolFlat_has_vjp_at' {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
+noncomputable def maxPoolFlatHasVJPAt' {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
     (hs : MaxPool2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
     HasVJPAt (maxPoolFlat c h w) v where
   backward := maxPoolBackFlat c h w v
   correct := fun dy i => by
     have hbk : maxPoolBackFlat c h w v dy i
-                = (maxPoolFlat_has_vjp_at (Tensor3.unflatten v) hs).backward dy i := by
-      simp only [maxPoolFlat_has_vjp_at, hasVJPAt3_to_hasVJPAt, maxPool2_has_vjp_at3, maxPoolBackFlat]
-    rw [hbk, (maxPoolFlat_has_vjp_at (Tensor3.unflatten v) hs).correct dy i,
+                = (maxPoolFlatHasVJPAt (Tensor3.unflatten v) hs).backward dy i := by
+      simp only [maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt, maxPool2HasVJPAt3, maxPoolBackFlat]
+    rw [hbk, (maxPoolFlatHasVJPAt (Tensor3.unflatten v) hs).correct dy i,
         Tensor3.flatten_unflatten]
 
-@[simp] theorem maxPoolFlat_has_vjp_at'_backward {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
+@[simp] theorem maxPoolFlatHasVJPAt'_backward {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
     (hs : MaxPool2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
-    (maxPoolFlat_has_vjp_at' v hs).backward = maxPoolBackFlat c h w v := rfl
+    (maxPoolFlatHasVJPAt' v hs).backward = maxPoolBackFlat c h w v := rfl
 
 -- **CNN backward faithfulness (smooth point) — A2c.** The whole-chain backward
 -- graph denotes the proven conditional whole-network VJP
--- `mnistCnnNoBn_has_vjp_at.backward` (the Chapter-3 peer of
+-- `mnistCnnNoBnHasVJPAt.backward` (the Chapter-3 peer of
 -- `mlpBackGraph_faithful`). The per-op `convBack`/`selectPos`/`dotOut` ops
--- assemble through `vjp_comp_at`; the one `maxPoolBack` matches via VJP
+-- assemble through `vjpCompAt`; the one `maxPoolBack` matches via VJP
 -- uniqueness (`HasVJPAt.backward_unique`) — sidestepping the `flatten∘unflatten`
--- transport in `mnistCnnNoBn_has_vjp_at`'s maxpool step.
+-- transport in `mnistCnnNoBnHasVJPAt`'s maxpool step.
 theorem cnnBackGraph_faithful
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
@@ -130,12 +130,12 @@ theorem cnnBackGraph_faithful
               ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)) x))) k ≠ 0)
     (dy : Vec nClasses) :
     den (cnnBackGraph W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ x dy)
-      = (mnistCnnNoBn_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
+      = (mnistCnnNoBnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
           hc hh hw x h1 h2 h_mp h3 h4).backward dy := by
-  simp only [cnnBackGraph, denStep, denStepApp, mnistCnnNoBn_has_vjp_at, convRelu_has_vjp_at,
-    denseRelu_has_vjp_at, vjp_comp_at_backward, dense_has_vjp, relu_has_vjp_at,
-    hasVJP3_to_hasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]
-  rw [HasVJPAt.backward_unique _ (maxPoolFlat_has_vjp_at'
+  simp only [cnnBackGraph, denStep, denStepApp, mnistCnnNoBnHasVJPAt, convReluHasVJPAt,
+    denseReluHasVJPAt, vjpCompAt_backward, denseHasVJP, reluHasVJPAt,
+    HasVJP3.toHasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]
+  rw [HasVJPAt.backward_unique _ (maxPoolFlatHasVJPAt'
         ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
           ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁) x)) h_mp)]
   rfl

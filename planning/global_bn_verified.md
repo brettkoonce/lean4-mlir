@@ -112,7 +112,7 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
 **Gotchas that cost time.**
 * Editing `StableHLO.lean` is a 6-minute rebuild plus the corpus; `PerChannelBN.lean` rebuilds
   ~290 modules — batch changes to either.
-* `simp` cannot rewrite inside `conv2d_weight_grad_has_vjp b x` (dependent position) — `rw`.
+* `simp` cannot rewrite inside `conv2dWeightGradHasVJP b x` (dependent position) — `rw`.
 * Plain `simp` turns `Fin.natAdd` into `Fin.addNat` before `Fin.append_right` can fire — `simp only`.
 * ⭐ Twins compile in 2–4 s: block lemmas at VARIABLE shapes, whole-net proofs as `have`-chains,
   each block's input passed explicitly (unification cannot recover it). Keep that shape.
@@ -302,7 +302,7 @@ render and its faithfulness proofs, not the mathematics they are tied to.
   driver, and `den` is by construction the statistic `bnBatchTensor4` normalises by.
 * `bnBatchF` = `bnBatchLA` = `bnBatchTensor4 N oc h w`, which is
   `bnPerChannelFlat oc (N*(h*w))` conjugated by the `[N,C,H,W] → [C, N·H·W]` reindex: **each
-  channel normalised over all its `N·h·w` cells**. `bnBatchBack` = `bnBatchTensor4_grad_input`,
+  channel normalised over all its `N·h·w` cells**. `bnBatchBack` = `bnBatchTensor4GradInput`,
   the three-term formula with its two reductions over the same `N·h·w`.
 
 So the only thing missing is "normalise with statistics handed in", forward and backward.
@@ -354,13 +354,13 @@ The ℝ-level API stays at `(μ, m2)`: a consumer's `den` hands `bnSyncTensor4` 
 
 ⛔⛔ **A FIFTH op, found 2026-09-21 while stating P4.** `bnGammaGradB`'s emit recomputes μ/σ²
 from its own operand — `reduce … [0,2,3]` over `B·h·w`, i.e. the SHARD — and builds `x̂` from
-them; its `den` is `bnPerChannel_grad_gamma`, whose `x̂` is `bnXhat` of the shard's row. Under
+them; its `den` is `bnPerChannelGradGamma`, whose `x̂` is `bnXhat` of the shard's row. Under
 sync-BN the forward normalised with the GLOBAL `x̂`, and `∂L/∂γ_c = Σ dy·x̂` has to use the same
 one, so a sync render that kept `bnGammaGradB` would emit the wrong γ gradient with every other
 node right. `bnSyncGammaGradB` reads μ/m2 off the same packed operand the forward read
 (`bnSync`'s prologue verbatim, then `bnGammaGrad`'s tail); `den` is
-`bnSyncPerChannel_grad_gamma`, anchored at `R = 1` by
-`bnSyncPerChannel_grad_gamma_at_own_stats` and `den_bnSyncGammaGradB_allReduce_R1`. β's
+`bnSyncPerChannelGradGamma`, anchored at `R = 1` by
+`bnSyncPerChannelGradGamma_at_own_stats` and `den_bnSyncGammaGradB_allReduce_R1`. β's
 gradient is `Σ dy`, reads no statistic, and `bnBetaGradB` stays. §3.2's emit count per net is
 therefore the BN-forward sites PLUS the γ-gradient sites.
 
@@ -432,9 +432,9 @@ arbitrary one; the contiguous cut the shim makes is `finProdFinEquiv`), lifted t
   means, likewise the second moment, and `bnVar = meanSq − mean²`. One lemma, generic in
   `R N oc h w`.
 * **P2, backward.** `den (bnSyncBack … μ_g m2_g mdy_g mdyx_g (dy r)) = shard_r
-  (bnBatchTensor4_grad_input (R*N) … (concat x) (concat dy))`. The three-term formula's two
+  (bnBatchTensor4GradInput (R*N) … (concat x) (concat dy))`. The three-term formula's two
   reductions are means over the global batch, which are means of the per-shard means. Same shape
-  as P1. `bnBatchTensor4_grad_input_correct` then says the global backward is the VJP of the
+  as P1. `bnBatchTensor4GradInput_correct` then says the global backward is the VJP of the
   global forward, so the sync backward on shard `r` is the shard-`r` block of the true
   global-batch input-VJP — including the cross-shard terms, which is what makes the all-reduced
   parameter gradient below exact.
@@ -520,14 +520,14 @@ new theorem on the standard 3 axioms.
 | `bnMeanSq` | the second moment |
 | `bnVar_eq_bnMeanSq_sub_sq` | `σ² = E[x²] − μ²` |
 | `bnMean_shard` / `bnMeanSq_shard` | statistic of the whole = mean of the shards' statistics |
-| `bnSync_grad_input` | the three-term backward, every reduction handed in |
-| `bnSync_grad_input_at_own_stats` | …at its own statistics it IS `bn_grad_input` |
+| `bnSyncGradInput` | the three-term backward, every reduction handed in |
+| `bnSyncGradInput_at_own_stats` | …at its own statistics it IS `bnGradInput` |
 
 | in `Architectures/PerChannelBN.lean` | |
 |---|---|
 | `bnEvalForward_at_own_stats` | frozen-stats BN at own stats IS `bnForward` |
 | `bnSyncTensor4` + `_at_own_stats` | sync forward at `[N,C,H,W]`, and the `R=1` anchor |
-| `bnSyncPerChannel_grad_input`, `bnSyncTensor4_grad_input` + `_at_own_stats` | ditto backward |
+| `bnSyncPerChannelGradInput`, `bnSyncTensor4GradInput` + `_at_own_stats` | ditto backward |
 
 ⭐⭐ **The four `*_at_own_stats` anchors are the drop-in licence.** At `R = 1` every
 `allReduceMeanF` threads its operand, so the sync render hands in exactly the statistics the
@@ -539,7 +539,7 @@ SHARDS, not about BatchNorm.
 variance has no such sibling and cannot: that is the asymmetry forcing the design, now visible
 in the code rather than asserted in prose.
 
-⚠ In `bnSync_grad_input_at_own_stats` the variance rewrite must fire BEFORE `bnMean` unfolds, or
+⚠ In `bnSyncGradInput_at_own_stats` the variance rewrite must fire BEFORE `bnMean` unfolds, or
 the two sides get different arguments under the square root. P2 will bite the same way.
 
 ▶ **The ops landed 2026-09-21**, each 5 sites, parser untouched. After §3.2's Chan rework the set
@@ -550,7 +550,7 @@ is eight: `bnBatchVarAtB`, `bnPackB`, `bnSyncF`, `bnSyncDyStatsB`, `bnSyncBack`,
 
     StableHLO.den_bnSyncF_allReduce_R1     -- bnSyncF ∘ (R=1 syncStats) = bnBatchTensor4
     StableHLO.den_bnSyncBack_allReduce_R1  -- bnSyncBack ∘ allReduceMeanF 1 ∘ bnSyncDyStatsB
-                                           --   ∘ (R=1 syncStats) = bnBatchTensor4_grad_input
+                                           --   ∘ (R=1 syncStats) = bnBatchTensor4GradInput
 
 These are the graphs a sync render actually emits. At `R = 1` both collectives collapse to their
 single operand and what is left is exactly what today's `bnBatchF`/`bnBatchBack` renders denote.
@@ -570,11 +570,11 @@ and `ResNet34RenderB` already carries BOTH zero-vectors (`zin` at `c*hh*ww`, `zb
 ▶ ⭐⭐⭐ **P1 AND P2 LANDED 2026-09-21.** `Certs` 4,018 exit 0; audit 1,392/1,392, no `sorryAx`.
 
     bnSyncTensor4_shard_eq_global             -- P1
-    bnSyncTensor4_grad_input_shard_eq_global  -- P2
+    bnSyncTensor4GradInput_shard_eq_global  -- P2
 
 Handed the global statistics — each `(1/R)·Σ_r'` of a per-replica quantity, i.e. what
 `syncStats` (then `allReduceMeanF` of `bnSyncDyStatsB`) denotes — replica `r`'s sync
-forward/backward equals `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4_grad_input` run on
+forward/backward equals `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4GradInput` run on
 the whole `R·N` batch. ⭐ **The spec does not move: both right-hand sides are the EXISTING
 definitions at `N := R·N`**, exactly as §2c predicted.
 
@@ -582,8 +582,8 @@ definitions at `N := R·N`**, exactly as §2c predicted.
 mathematics:
 
 * **(a) pointwise ⇒ sharding commutes** (`bnSyncTensor4_batchShard`,
-  `bnSyncTensor4_grad_input_batchShard`). Once the statistics are FIXED, sync-BN reads only
-  `x t` and `dy t` (`bnSyncTensor4_apply`, `bnSyncTensor4_grad_input_apply`) — cells mix only
+  `bnSyncTensor4GradInput_batchShard`). Once the statistics are FIXED, sync-BN reads only
+  `x t` and `dy t` (`bnSyncTensor4_apply`, `bnSyncTensor4GradInput_apply`) — cells mix only
   when statistics are computed, and sync-BN has hoisted that into the collective. Sharding
   preserves a cell's channel (`bnchwChan_batchShard`), so this half is pure index bookkeeping
   and holds for ANY statistics, right or wrong. Three-line proofs.
@@ -640,8 +640,8 @@ positive twin beside its negative one in `Foundation/DataParallel.lean`, plus th
   render emits (`bnSyncF` fed by `syncStats`; `bnSyncBack` fed by the outer collective over the
   replicas' `bnSyncDyStatsB`, each fed by `syncStats`), under the
   induction hypothesis `∀ r, den (x r) = batchShard r X` (and its `xv`/`dy` twins), denote
-  `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4_grad_input` at `N := R·N`, and the γ
-  collective denotes `1/R` of `bnPerChannel_grad_gamma` at `N := R·N`. The `*_allReduce_R1`
+  `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4GradInput` at `N := R·N`, and the γ
+  collective denotes `1/R` of `bnPerChannelGradGamma` at `N := R·N`. The `*_allReduce_R1`
   anchors are these at `R := 1`. ⭐ The pass-through in `bnSyncDyStatsB` costs one lemma,
   `dpMean_const_mul` — re-averaging a replica-independent value is the identity — and nothing
   else.
@@ -720,7 +720,7 @@ emitted MLIR.
 
   | file | capstone | says |
   |---|---|---|
-  | `Nets/ResNet/ResNet34SyncB.lean` | `StableHLO.resnet34FwdGraphSync_full_shard` | the sync-BN forward graph, as a family over `R` replicas, denotes on replica `r` `batchShard r` of `resnet34ForwardB_full (R * N) w X` |
+  | `Nets/ResNet/ResNet34SyncB.lean` | `StableHLO.resnet34FwdGraphSyncFull_shard` | the sync-BN forward graph, as a family over `R` replicas, denotes on replica `r` `batchShard r` of `resnet34ForwardBFull (R * N) w X` |
   | `Nets/ResNet/ResNet34SyncStepTieB.lean` | `ResNet34SyncTieB.r34_net_syncTiedB` | every one of the 110 all-reduced parameter gradients — replicas at loss divisor `B`, their own sync-BN backward chain — IS the single-device gradient node at batch `R·N`, loss divisor `R·B`, at T3's chain there |
 
   The right-hand sides are the existing definitions at `N := R·N`, so `r34_net_tiedB` at that
@@ -740,7 +740,7 @@ emitted MLIR.
   the single-device step by `R·B`, so replica `r`'s loss cotangent is `R ×` its shard of the
   global one (`replicaLossCot_eq`). The proof carries that as its invariant — each replica family
   equals `R ×` the shards of the global cotangent — down the chain: sharding (§2 of the file,
-  `bnSyncInB_shard` the one real case) plus homogeneity (§1: `bn_grad_input_smul`,
+  `bnSyncInB_shard` the one real case) plus homogeneity (§1: `bnGradInput_smul`,
   `maxPool3s2BackFlat_smul`, `HasVJP.backward_smul` for the conv and head links — no `0 < ε`
   needed, the three-term formula is linear in `dy` as written). At each parameter the collective's
   `1/R` (`den_allReduceMeanF_*_shard`, three new: strided conv, dense weight, dense bias) cancels
@@ -797,14 +797,14 @@ The two BN-dense nets with a pair already in the book (§6, §7).
   collective (sum, not mean) still moves `m` by ~1. Both pass at 8.4–8.6e-4.
 
 ▶ **Proofs.** MobileNetV2 LANDED: `Nets/MobileNet/MobileNetV2SyncB.lean`
-(`StableHLO.mobilenetv2FwdGraphSync_full_shard`) and `MobileNetV2SyncStepTieB.lean`
+(`StableHLO.mobilenetv2FwdGraphSyncFull_shard`) and `MobileNetV2SyncStepTieB.lean`
 (`MobileNetV2SyncTieB.mnv2_net_syncTiedB` — all 158 emitted gradients; the 52 conv / depthwise /
 project biases are not emitted at `convBias := false`). New pieces beyond R34's: relu6 shard +
 mask homogeneity, depthwise and XLA-strided-depthwise input-VJPs, the three XLA-strided / depthwise
 weight collectives, and `hasVJP3_backward_smul`. Both elaborate in ~3–4 s.
 
 EfficientNet-B0 LANDED: `Nets/EfficientNet/EfficientNetSyncB.lean`
-(`StableHLO.efficientnetFwdGraphSync_full_shard`) and `EfficientNetSyncStepTieG.lean`
+(`StableHLO.efficientnetFwdGraphSyncFull_shard`) and `EfficientNetSyncStepTieG.lean`
 (`EnetSyncTieG.efficientnet_net_syncTiedG` — all 213 emitted gradients; the 49 conv-bias
 conjuncts of `efficientnet_net_tiedG` are not emitted at `convBias := false`). It carries that
 tie's 50 `0 < ε` hypotheses, because B0's single-device chain threads each block's cotangent as
@@ -941,9 +941,9 @@ heartbeat override — the R34 and MNv2 twins and the R50 and MNv4 single-device
 
 | file | lines | capstone |
 |---|---|---|
-| `Nets/ResNet/ResNet50SyncB.lean` | 367 | `StableHLO.resnet50FwdGraphSync_full_shard` — `q` stays a binder (both resolutions) |
+| `Nets/ResNet/ResNet50SyncB.lean` | 367 | `StableHLO.resnet50FwdGraphSyncFull_shard` — `q` stays a binder (both resolutions) |
 | `Nets/ResNet/ResNet50SyncStepTieB.lean` | 1044 | `ResNet50SyncTieB.r50_net_syncTiedB` — all 161 gradients; corollaries `_smoothedCE`, `_bce` (+ `replicaBceLossCot_eq`, BCE's peer of `replicaLossCot_eq`) |
-| `Nets/MobileNet/MobileNetV4SyncB.lean` | 693 | `StableHLO.mnv4FwdGraphSync_full_shard` |
+| `Nets/MobileNet/MobileNetV4SyncB.lean` | 693 | `StableHLO.mnv4FwdGraphSyncFull_shard` |
 | `Nets/MobileNet/MobileNetV4SyncStepTieB.lean` | 1455 | `MobileNetV4SyncTieB.mnv4_net_syncTiedB` — all 233 gradients; corollary `_smoothedCE` |
 
 Both T3s bind the loss cotangent, so each capstone takes the scaled-shard hypothesis

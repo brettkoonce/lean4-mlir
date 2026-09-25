@@ -5,12 +5,12 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 # MobileNetV2's non-degeneracy seal, on the full-width batched net (levels 2 and 3)
 
 `planning/full_width_seals.md` §4.3. `MobileNetV2FullBVJP.lean` proves
-`mobilenetv2ForwardB_full_has_vjp_at`: the whole-net VJP at any `(w, x)` satisfying **19 clause
+`mobilenetv2ForwardBFullHasVJPAt`: the whole-net VJP at any `(w, x)` satisfying **19 clause
 bundles** — the stem's relu6, one per bottleneck, and the head's — covering 35 relu6 sites, each a
 two-sided window `≠ 0 ∧ ≠ 6`. A conditional theorem of that shape says nothing unless its
 hypotheses are jointly satisfiable at a point with a nonzero Jacobian, and until now that was
 exhibited only on a per-example, two-block, 2-channel proxy, deleted when this file landed.
-This file exhibits it on `mobilenetv2ForwardB_full` itself: the seventeen bottlenecks of the
+This file exhibits it on `mobilenetv2ForwardBFull` itself: the seventeen bottlenecks of the
 `[t,c,n,s]` table, 32→1280 channels, XLA-`SAME` stride-2 padding, **batch** BatchNorm, at 224×224.
 
 ## The witness
@@ -45,7 +45,7 @@ MobileNetV2's channel-changing blocks have **no skip** — the body *is* the blo
 ResNet's carrier, which saw only the projection of each downsample, this one crosses every BN
 inside them: `1 (stem) + 2 (b1) + 3 × 6 + 1 (head)`. The ten residual blocks pass it through
 untouched. `BatchSeal.EDiff` is the invariant, `BatchSeal.bnBatchLA_exdiff` the step that survives
-per-channel batch BN, and ⭐ `BatchSeal.EDiff_dw` is the one genuinely new shape: a depthwise
+per-channel batch BN, and ⭐ `BatchSeal.eDiff_dw` is the one genuinely new shape: a depthwise
 cannot broadcast, so where a centre-tap conv collapses the carrier to `fun _ => s · δ 0` at every
 output channel, a centre-tap depthwise scales the whole function `δ` channel by channel. The
 class-0 output difference between the two examples is `t · Rr t` with `Rr` a 22-fold product of
@@ -204,14 +204,14 @@ theorem mnv2StemB_eq {N h w ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : 
 -- ════════════════════════════════════════════════════════════════
 -- § 4. The residual blocks are the exact identity
 -- ════════════════════════════════════════════════════════════════
-theorem sealResBody (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
+theorem seal_res_body (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
     mnv2ExpOnlyB N h w (sealResW c mid) v = fun _ => (0 : ℝ) :=
   projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 0 (fun _ => rfl) _
 
 theorem sealResB_eq (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
     mnv2ResidB N h w (sealResW c mid) v = v := by
   funext k
-  rw [mnv2ResidB, residual_apply, congrFun (sealResBody N h w c mid hn v) k]
+  rw [mnv2ResidB, residual_apply, congrFun (seal_res_body N h w c mid hn v) k]
   ring
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The three channel-changing block collapses
@@ -283,8 +283,8 @@ noncomputable def sealV : Vec (2 * (3 * (2 * 112) * (2 * 112))) := rayV (2 * 112
 
 theorem sealX_zero_add (t : ℝ) : sealX 0 + t • sealV = sealX t := rayX_zero_add _ _ t
 
-theorem EDiff_sealX (t : ℝ) : EDiff (fun ci => if ci.val = 0 then t else 0) (sealX t) :=
-  EDiff_rayX _ _ t
+theorem eDiff_sealX (t : ℝ) : EDiff (fun ci => if ci.val = 0 then t else 0) (sealX t) :=
+  eDiff_rayX _ _ t
 
 -- ════════════════════════════════════════════════════════════════
 -- § 8. The scalar BatchNorm factor
@@ -299,38 +299,38 @@ theorem rf_pos (n : Nat) (z : Vec n) : 0 < rf n z :=
 -- ════════════════════════════════════════════════════════════════
 -- § 9. Positivity and the 19 clause bundles, generically
 -- ════════════════════════════════════════════════════════════════
-theorem sealIVPos (ic mid oc : Nat) : IVPos (sealIVW ic mid oc) := ⟨one_pos, one_pos, one_pos⟩
+theorem seal_iv_pos (ic mid oc : Nat) : IVPos (sealIVW ic mid oc) := ⟨one_pos, one_pos, one_pos⟩
 
-theorem sealResPos (c mid : Nat) : IVPos (sealResW c mid) := ⟨one_pos, one_pos, one_pos⟩
+theorem seal_res_pos (c mid : Nat) : IVPos (sealResW c mid) := ⟨one_pos, one_pos, one_pos⟩
 
-theorem sealNoExpPos (ic oc : Nat) : IVNoExpPos (sealNoExpW ic oc) := ⟨one_pos, one_pos⟩
+theorem seal_noExp_pos (ic oc : Nat) : IVNoExpPos (sealNoExpW ic oc) := ⟨one_pos, one_pos⟩
 
-theorem sealIVSmooth (N h w ic mid oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
+theorem seal_iv_smooth (N h w ic mid oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     IVSmoothAtB N h w (sealIVW ic mid oc) v where
   he := win6 N mid h w hm _
   hd := win6 N mid h w hm _
 
-theorem sealResSmooth (N h w c mid : Nat) (hm : Mg N h w) (v : Vec (N * (c * h * w))) :
+theorem seal_res_smooth (N h w c mid : Nat) (hm : Mg N h w) (v : Vec (N * (c * h * w))) :
     IVSmoothAtB N h w (sealResW c mid) v where
   he := win6 N mid h w hm _
   hd := win6 N mid h w hm _
 
-theorem sealStridedSmooth (N h w ic mid oc : Nat) (hme : Mg N (2 * h) (2 * w)) (hmd : Mg N h w)
+theorem seal_strided_smooth (N h w ic mid oc : Nat) (hme : Mg N (2 * h) (2 * w)) (hmd : Mg N h w)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
     IVStridedSmoothAtB N h w (sealIVW ic mid oc) v where
   he := win6 N mid (2 * h) (2 * w) hme _
   hd := win6 N mid h w hmd _
 
-theorem sealNoExpSmooth (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
+theorem seal_noExp_smooth (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     IVNoExpSmoothAtB N h w (sealNoExpW ic oc) v where
   hd := win6 N ic h w hm _
 
-theorem sealStemSmooth (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
+theorem seal_stem_smooth (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
     (hm : Mg N h w) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
     MNV2StemSmoothAtB N h w Ws bs 1 (kv oc (1 / 64)) (kv oc 3) x :=
   win6 N oc h w hm _
 
-theorem sealHeadSmooth (N h w : Nat) {ic oc : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
+theorem seal_head_smooth (N h w : Nat) {ic oc : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
     (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     MNV2HeadSmoothAtB N h w Wh bh 1 (kv oc (1 / 64)) (kv oc 3) v :=
   win6 N oc h w hm _
@@ -339,108 +339,108 @@ theorem sealHeadSmooth (N h w : Nat) {ic oc : Nat} (Wh : Kernel4 oc ic 1 1) (bh 
 --   ⭐⭐ Every one of these is weight-only: not one reads `sealX t`, and none of them mentions
 --   `t` at all beyond carrying it through the activation's type.
 -- ════════════════════════════════════════════════════════════════
-theorem scStem (nCls : Nat) (t : ℝ) :
+theorem sc_stem (nCls : Nat) (t : ℝ) :
     MNV2StemSmoothAtB 2 112 112 (sealW nCls).sW (sealW nCls).sb (sealW nCls).sε
       (sealW nCls).sγ (sealW nCls).sβ (sealX t) :=
-  sealStemSmooth 2 112 112 _ _ (margin192 _ (by norm_num)) (sealX t)
+  seal_stem_smooth 2 112 112 _ _ (margin192 _ (by norm_num)) (sealX t)
 
 theorem sc1 (nCls : Nat) (t : ℝ) :
     IVNoExpSmoothAtB 2 112 112 (sealW nCls).b1 (mnv2PreB0 2 (sealW nCls) (sealX t)) :=
-  sealNoExpSmooth 2 112 112 32 16 (margin192 _ (by norm_num)) _
+  seal_noExp_smooth 2 112 112 32 16 (margin192 _ (by norm_num)) _
 
 theorem sc2 (nCls : Nat) (t : ℝ) :
     IVStridedSmoothAtB 2 56 56 (sealW nCls).b2 (mnv2PreB1 2 (sealW nCls) (sealX t)) :=
-  sealStridedSmooth 2 56 56 16 96 24 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
+  seal_strided_smooth 2 56 56 16 96 24 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
 
 theorem sc3 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 56 56 (sealW nCls).b3 (mnv2PreB2 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 56 56 24 144 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 56 56 24 144 (margin192 _ (by norm_num)) _
 
 theorem sc4 (nCls : Nat) (t : ℝ) :
     IVStridedSmoothAtB 2 28 28 (sealW nCls).b4 (mnv2PreB3 2 (sealW nCls) (sealX t)) :=
-  sealStridedSmooth 2 28 28 24 144 32 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
+  seal_strided_smooth 2 28 28 24 144 32 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
 
 theorem sc5 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 28 28 (sealW nCls).b5 (mnv2PreB4 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 28 28 32 192 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 28 28 32 192 (margin192 _ (by norm_num)) _
 
 theorem sc6 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 28 28 (sealW nCls).b6 (mnv2PreB5 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 28 28 32 192 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 28 28 32 192 (margin192 _ (by norm_num)) _
 
 theorem sc7 (nCls : Nat) (t : ℝ) :
     IVStridedSmoothAtB 2 14 14 (sealW nCls).b7 (mnv2PreB6 2 (sealW nCls) (sealX t)) :=
-  sealStridedSmooth 2 14 14 32 192 64 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
+  seal_strided_smooth 2 14 14 32 192 64 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
 
 theorem sc8 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b8 (mnv2PreB7 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
 
 theorem sc9 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b9 (mnv2PreB8 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
 
 theorem sc10 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b10 (mnv2PreB9 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
 
 theorem sc11 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b11 (mnv2PreB10 2 (sealW nCls) (sealX t)) :=
-  sealIVSmooth 2 14 14 64 384 96 (margin192 _ (by norm_num)) _
+  seal_iv_smooth 2 14 14 64 384 96 (margin192 _ (by norm_num)) _
 
 theorem sc12 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b12 (mnv2PreB11 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 14 14 96 576 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 14 14 96 576 (margin192 _ (by norm_num)) _
 
 theorem sc13 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b13 (mnv2PreB12 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 14 14 96 576 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 14 14 96 576 (margin192 _ (by norm_num)) _
 
 theorem sc14 (nCls : Nat) (t : ℝ) :
     IVStridedSmoothAtB 2 7 7 (sealW nCls).b14 (mnv2PreB13 2 (sealW nCls) (sealX t)) :=
-  sealStridedSmooth 2 7 7 96 576 160 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
+  seal_strided_smooth 2 7 7 96 576 160 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
 
 theorem sc15 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 7 7 (sealW nCls).b15 (mnv2PreB14 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 7 7 160 960 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 7 7 160 960 (margin192 _ (by norm_num)) _
 
 theorem sc16 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 7 7 (sealW nCls).b16 (mnv2PreB15 2 (sealW nCls) (sealX t)) :=
-  sealResSmooth 2 7 7 160 960 (margin192 _ (by norm_num)) _
+  seal_res_smooth 2 7 7 160 960 (margin192 _ (by norm_num)) _
 
 theorem sc17 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 7 7 (sealW nCls).b17 (mnv2PreB16 2 (sealW nCls) (sealX t)) :=
-  sealIVSmooth 2 7 7 160 960 320 (margin192 _ (by norm_num)) _
+  seal_iv_smooth 2 7 7 160 960 320 (margin192 _ (by norm_num)) _
 
-theorem scHead (nCls : Nat) (t : ℝ) :
+theorem sc_head (nCls : Nat) (t : ℝ) :
     MNV2HeadSmoothAtB 2 7 7 (sealW nCls).hW (sealW nCls).hb (sealW nCls).hε (sealW nCls).hγ
       (sealW nCls).hβ (mnv2PreB17 2 (sealW nCls) (sealX t)) :=
-  sealHeadSmooth 2 7 7 _ _ (margin192 _ (by norm_num)) _
+  seal_head_smooth 2 7 7 _ _ (margin192 _ (by norm_num)) _
 
 /-- Every `ε` of the witness is `1`. -/
-theorem sealPos (nCls : Nat) : MNV2PosB (sealW nCls) :=
-  ⟨one_pos, one_pos, sealNoExpPos 32 16, sealIVPos 16 96 24, sealResPos 24 144,
-    sealIVPos 24 144 32, sealResPos 32 192, sealResPos 32 192, sealIVPos 32 192 64,
-    sealResPos 64 384, sealResPos 64 384, sealResPos 64 384, sealIVPos 64 384 96,
-    sealResPos 96 576, sealResPos 96 576, sealIVPos 96 576 160, sealResPos 160 960,
-    sealResPos 160 960, sealIVPos 160 960 320⟩
+theorem seal_pos (nCls : Nat) : MNV2PosB (sealW nCls) :=
+  ⟨one_pos, one_pos, seal_noExp_pos 32 16, seal_iv_pos 16 96 24, seal_res_pos 24 144,
+    seal_iv_pos 24 144 32, seal_res_pos 32 192, seal_res_pos 32 192, seal_iv_pos 32 192 64,
+    seal_res_pos 64 384, seal_res_pos 64 384, seal_res_pos 64 384, seal_iv_pos 64 384 96,
+    seal_res_pos 96 576, seal_res_pos 96 576, seal_iv_pos 96 576 160, seal_res_pos 160 960,
+    seal_res_pos 160 960, seal_iv_pos 160 960 320⟩
 
 /-- The nineteen bundles above, as the apex's one smoothness hypothesis. -/
-theorem sealSmooth (nCls : Nat) (t : ℝ) : MNV2SmoothAtB 2 (sealW nCls) (sealX t) :=
-  ⟨scStem nCls t, sc1 nCls t, sc2 nCls t, sc3 nCls t, sc4 nCls t, sc5 nCls t, sc6 nCls t,
+theorem seal_smooth (nCls : Nat) (t : ℝ) : MNV2SmoothAtB 2 (sealW nCls) (sealX t) :=
+  ⟨sc_stem nCls t, sc1 nCls t, sc2 nCls t, sc3 nCls t, sc4 nCls t, sc5 nCls t, sc6 nCls t,
     sc7 nCls t, sc8 nCls t, sc9 nCls t, sc10 nCls t, sc11 nCls t, sc12 nCls t, sc13 nCls t,
-    sc14 nCls t, sc15 nCls t, sc16 nCls t, sc17 nCls t, scHead nCls t⟩
+    sc14 nCls t, sc15 nCls t, sc16 nCls t, sc17 nCls t, sc_head nCls t⟩
 
 /-- ⭐⭐ **The whole-net VJP at the witness** — all 19 bundles discharged, on
-    `mobilenetv2ForwardB_full` itself (through `mobilenetv2ForwardB_full_eq_chain`). -/
+    `mobilenetv2ForwardBFull` itself (through `mobilenetv2ForwardBFull_eq_chain`). -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
-    HasVJPAt (mobilenetv2ForwardB_full 2 (sealW nCls)) (sealX t) := by
-  rw [show mobilenetv2ForwardB_full 2 (sealW nCls)
+    HasVJPAt (mobilenetv2ForwardBFull 2 (sealW nCls)) (sealX t) := by
+  rw [show mobilenetv2ForwardBFull 2 (sealW nCls)
       = mnv2HeadB 2 7 7 (sealW nCls).hW (sealW nCls).hb (sealW nCls).hε (sealW nCls).hγ
           (sealW nCls).hβ (sealW nCls).fcW (sealW nCls).fcb ∘ mnv2PreB17 2 (sealW nCls)
-      from funext (mobilenetv2ForwardB_full_eq_chain 2 (sealW nCls))]
-  exact mobilenetv2ForwardB_full_has_vjp_at 2 (sealW nCls) (sealPos nCls) (sealX t)
-    (sealSmooth nCls t)
+      from funext (mobilenetv2ForwardBFull_eq_chain 2 (sealW nCls))]
+  exact mobilenetv2ForwardBFullHasVJPAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
+    (seal_smooth nCls t)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. The 22 pre-BatchNorm activations on the carrier's path
@@ -668,7 +668,7 @@ theorem pc17 (nCls : Nat) (t : ℝ) :
 
 -- ════════════════════════════════════════════════════════════════
 -- § 13. The carrier: 22 `EDiff` steps from the ray to the head
---   ⭐ `EDiff_dw` is the shape ResNet never needed: a depthwise cannot broadcast, so it scales
+--   ⭐ `eDiff_dw` is the shape ResNet never needed: a depthwise cannot broadcast, so it scales
 --   the carrier channel by channel where a centre-tap conv collapses it to `fun _ => s · δ 0`.
 -- ════════════════════════════════════════════════════════════════
 
@@ -740,34 +740,34 @@ noncomputable def dH (nCls : Nat) (t : ℝ) : Fin 1280 → ℝ :=
 
 theorem ed0 (nCls : Nat) (t : ℝ) : EDiff (dS t) (mnv2PreB0 2 (sealW nCls) (sealX t)) := by
   rw [pc0]
-  refine EDiff_bn 32 112 112 1 (kv 32 (1 / 64)) (kv 32 3) (fun _ => 1 * t) (dS t) (Zs t) ?_ ?_
-  · exact EDiff_convS2Xla (h := 112) (w := 112) (0 : Fin 3) rfl (by norm_num) (by norm_num) 1
-      (kv 32 0) _ _ (sealX t) (EDiff_sealX t) (fun o => by norm_num)
+  refine eDiff_bn 32 112 112 1 (kv 32 (1 / 64)) (kv 32 3) (fun _ => 1 * t) (dS t) (Zs t) ?_ ?_
+  · exact eDiff_convS2Xla (h := 112) (w := 112) (0 : Fin 3) rfl (by norm_num) (by norm_num) 1
+      (kv 32 0) _ _ (sealX t) (eDiff_sealX t) (fun o => by norm_num)
   · intro ci
     simp only [dS, rf, kv_apply]
     ring
 
 theorem ed1d (nCls : Nat) (t : ℝ) : EDiff (d1d nCls t) (A1d nCls t) :=
-  EDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z1d nCls t) (ed0 nCls t) rfl
+  eDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z1d nCls t) (ed0 nCls t) rfl
     (fun ci => by simp only [d1d, rf]; ring)
 
 theorem ed1 (nCls : Nat) (t : ℝ) : EDiff (d1p nCls t) (mnv2PreB1 2 (sealW nCls) (sealX t)) := by
   rw [pc1]
-  exact EDiff_convBn (h := 112) (w := 112) (0 : Fin 32) rfl (by norm_num) (by norm_num) (1 / 64) 0
+  exact eDiff_convBn (h := 112) (w := 112) (0 : Fin 32) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z1p nCls t) (ed1d nCls t) rfl (fun ci => by simp only [d1p, rf]; ring)
 
 theorem ed2e (nCls : Nat) (t : ℝ) : EDiff (d2e nCls t) (A2e nCls t) :=
-  EDiff_convBn (h := (2 * 56)) (w := (2 * 56)) (0 : Fin 16) rfl (by norm_num) (by norm_num)
+  eDiff_convBn (h := (2 * 56)) (w := (2 * 56)) (0 : Fin 16) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z2e nCls t) (ed1 nCls t) rfl (fun ci => by simp only [d2e, rf]; ring)
 
 theorem ed2d (nCls : Nat) (t : ℝ) : EDiff (d2d nCls t) (A2d nCls t) :=
-  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z2d nCls t) (ed2e nCls t) rfl
+  eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z2d nCls t) (ed2e nCls t) rfl
     (fun ci => by simp only [d2d, rf]; ring)
 
 theorem ed2 (nCls : Nat) (t : ℝ) :
     EDiff (d2p nCls t) (mnv2PreB2 2 (sealW nCls) (sealX t)) := by
   rw [pc2]
-  exact EDiff_convBn (h := 56) (w := 56) (0 : Fin 96) rfl (by norm_num) (by norm_num) (1 / 64) 0
+  exact eDiff_convBn (h := 56) (w := 56) (0 : Fin 96) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z2p nCls t) (ed2d nCls t) rfl (fun ci => by simp only [d2p, rf]; ring)
 
 theorem ed3 (nCls : Nat) (t : ℝ) :
@@ -776,17 +776,17 @@ theorem ed3 (nCls : Nat) (t : ℝ) :
   exact ed2 nCls t
 
 theorem ed4e (nCls : Nat) (t : ℝ) : EDiff (d4e nCls t) (A4e nCls t) :=
-  EDiff_convBn (h := (2 * 28)) (w := (2 * 28)) (0 : Fin 24) rfl (by norm_num) (by norm_num)
+  eDiff_convBn (h := (2 * 28)) (w := (2 * 28)) (0 : Fin 24) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z4e nCls t) (ed3 nCls t) rfl (fun ci => by simp only [d4e, rf]; ring)
 
 theorem ed4d (nCls : Nat) (t : ℝ) : EDiff (d4d nCls t) (A4d nCls t) :=
-  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z4d nCls t) (ed4e nCls t) rfl
+  eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z4d nCls t) (ed4e nCls t) rfl
     (fun ci => by simp only [d4d, rf]; ring)
 
 theorem ed4 (nCls : Nat) (t : ℝ) :
     EDiff (d4p nCls t) (mnv2PreB4 2 (sealW nCls) (sealX t)) := by
   rw [pc4]
-  exact EDiff_convBn (h := 28) (w := 28) (0 : Fin 144) rfl (by norm_num) (by norm_num) (1 / 64) 0
+  exact eDiff_convBn (h := 28) (w := 28) (0 : Fin 144) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z4p nCls t) (ed4d nCls t) rfl (fun ci => by simp only [d4p, rf]; ring)
 
 theorem ed5 (nCls : Nat) (t : ℝ) :
@@ -800,17 +800,17 @@ theorem ed6 (nCls : Nat) (t : ℝ) :
   exact ed5 nCls t
 
 theorem ed7e (nCls : Nat) (t : ℝ) : EDiff (d7e nCls t) (A7e nCls t) :=
-  EDiff_convBn (h := (2 * 14)) (w := (2 * 14)) (0 : Fin 32) rfl (by norm_num) (by norm_num)
+  eDiff_convBn (h := (2 * 14)) (w := (2 * 14)) (0 : Fin 32) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z7e nCls t) (ed6 nCls t) rfl (fun ci => by simp only [d7e, rf]; ring)
 
 theorem ed7d (nCls : Nat) (t : ℝ) : EDiff (d7d nCls t) (A7d nCls t) :=
-  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z7d nCls t) (ed7e nCls t) rfl
+  eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z7d nCls t) (ed7e nCls t) rfl
     (fun ci => by simp only [d7d, rf]; ring)
 
 theorem ed7 (nCls : Nat) (t : ℝ) :
     EDiff (d7p nCls t) (mnv2PreB7 2 (sealW nCls) (sealX t)) := by
   rw [pc7]
-  exact EDiff_convBn (h := 14) (w := 14) (0 : Fin 192) rfl (by norm_num) (by norm_num) (1 / 64) 0
+  exact eDiff_convBn (h := 14) (w := 14) (0 : Fin 192) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z7p nCls t) (ed7d nCls t) rfl (fun ci => by simp only [d7p, rf]; ring)
 
 theorem ed8 (nCls : Nat) (t : ℝ) :
@@ -829,17 +829,17 @@ theorem ed10 (nCls : Nat) (t : ℝ) :
   exact ed9 nCls t
 
 theorem ed11e (nCls : Nat) (t : ℝ) : EDiff (d11e nCls t) (A11e nCls t) :=
-  EDiff_convBn (h := 14) (w := 14) (0 : Fin 64) rfl (by norm_num) (by norm_num) (1 / 64) 3
+  eDiff_convBn (h := 14) (w := 14) (0 : Fin 64) rfl (by norm_num) (by norm_num) (1 / 64) 3
     (Z11e nCls t) (ed10 nCls t) rfl (fun ci => by simp only [d11e, rf]; ring)
 
 theorem ed11d (nCls : Nat) (t : ℝ) : EDiff (d11d nCls t) (A11d nCls t) :=
-  EDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z11d nCls t) (ed11e nCls t) rfl
+  eDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z11d nCls t) (ed11e nCls t) rfl
     (fun ci => by simp only [d11d, rf]; ring)
 
 theorem ed11 (nCls : Nat) (t : ℝ) :
     EDiff (d11p nCls t) (mnv2PreB11 2 (sealW nCls) (sealX t)) := by
   rw [pc11]
-  exact EDiff_convBn (h := 14) (w := 14) (0 : Fin 384) rfl (by norm_num) (by norm_num) (1 / 64) 0
+  exact eDiff_convBn (h := 14) (w := 14) (0 : Fin 384) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z11p nCls t) (ed11d nCls t) rfl (fun ci => by simp only [d11p, rf]; ring)
 
 theorem ed12 (nCls : Nat) (t : ℝ) :
@@ -853,17 +853,17 @@ theorem ed13 (nCls : Nat) (t : ℝ) :
   exact ed12 nCls t
 
 theorem ed14e (nCls : Nat) (t : ℝ) : EDiff (d14e nCls t) (A14e nCls t) :=
-  EDiff_convBn (h := (2 * 7)) (w := (2 * 7)) (0 : Fin 96) rfl (by norm_num) (by norm_num)
+  eDiff_convBn (h := (2 * 7)) (w := (2 * 7)) (0 : Fin 96) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z14e nCls t) (ed13 nCls t) rfl (fun ci => by simp only [d14e, rf]; ring)
 
 theorem ed14d (nCls : Nat) (t : ℝ) : EDiff (d14d nCls t) (A14d nCls t) :=
-  EDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z14d nCls t) (ed14e nCls t) rfl
+  eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z14d nCls t) (ed14e nCls t) rfl
     (fun ci => by simp only [d14d, rf]; ring)
 
 theorem ed14 (nCls : Nat) (t : ℝ) :
     EDiff (d14p nCls t) (mnv2PreB14 2 (sealW nCls) (sealX t)) := by
   rw [pc14]
-  exact EDiff_convBn (h := 7) (w := 7) (0 : Fin 576) rfl (by norm_num) (by norm_num) (1 / 64) 0
+  exact eDiff_convBn (h := 7) (w := 7) (0 : Fin 576) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z14p nCls t) (ed14d nCls t) rfl (fun ci => by simp only [d14p, rf]; ring)
 
 theorem ed15 (nCls : Nat) (t : ℝ) :
@@ -877,21 +877,21 @@ theorem ed16 (nCls : Nat) (t : ℝ) :
   exact ed15 nCls t
 
 theorem ed17e (nCls : Nat) (t : ℝ) : EDiff (d17e nCls t) (A17e nCls t) :=
-  EDiff_convBn (h := 7) (w := 7) (0 : Fin 160) rfl (by norm_num) (by norm_num) (1 / 64) 3
+  eDiff_convBn (h := 7) (w := 7) (0 : Fin 160) rfl (by norm_num) (by norm_num) (1 / 64) 3
     (Z17e nCls t) (ed16 nCls t) rfl (fun ci => by simp only [d17e, rf]; ring)
 
 theorem ed17d (nCls : Nat) (t : ℝ) : EDiff (d17d nCls t) (A17d nCls t) :=
-  EDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z17d nCls t) (ed17e nCls t) rfl
+  eDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z17d nCls t) (ed17e nCls t) rfl
     (fun ci => by simp only [d17d, rf]; ring)
 
 theorem ed17 (nCls : Nat) (t : ℝ) :
     EDiff (d17p nCls t) (mnv2PreB17 2 (sealW nCls) (sealX t)) := by
   rw [pc17]
-  exact EDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) (1 / 64) 0
+  exact eDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z17p nCls t) (ed17d nCls t) rfl (fun ci => by simp only [d17p, rf]; ring)
 
-theorem edH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) :=
-  EDiff_convBn (h := 7) (w := 7) (0 : Fin 320) rfl (by norm_num) (by norm_num) (1 / 64) 3
+theorem eDiff_dH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) :=
+  eDiff_convBn (h := 7) (w := 7) (0 : Fin 320) rfl (by norm_num) (by norm_num) (1 / 64) 3
     (Zh nCls t) (ed17 nCls t) rfl (fun ci => by simp only [dH, rf]; ring)
 
 -- ════════════════════════════════════════════════════════════════
@@ -980,7 +980,7 @@ theorem sealW_fcW (nCls : Nat) :
     (sealW nCls).fcW = fun (i : Fin 1280) (j : Fin nCls) =>
       if i.val = 0 ∧ j.val = 0 then (1 : ℝ) else 0 := rfl
 
-theorem headA (nCls : Nat) (t : ℝ) :
+theorem head_eq_dense (nCls : Nat) (t : ℝ) :
     mnv2HeadB 2 7 7 (sealW nCls).hW (sealW nCls).hb (sealW nCls).hε (sealW nCls).hγ
         (sealW nCls).hβ (sealW nCls).fcW (sealW nCls).fcb (mnv2PreB17 2 (sealW nCls) (sealX t))
       = StableHLO.batchMap 2 (dense (sealW nCls).fcW (sealW nCls).fcb)
@@ -1005,40 +1005,40 @@ theorem head_diff (nCls : Nat) (hn : 0 < nCls) (v : Vec (2 * (1280 * 7 * 7)))
 
 /-- ⭐⭐ **The class-0 difference between the two examples, along the ray, is `t · Rr t`.** -/
 theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
-    mobilenetv2ForwardB_full 2 (sealW nCls) (sealX t)
+    mobilenetv2ForwardBFull 2 (sealW nCls) (sealX t)
         (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - mobilenetv2ForwardB_full 2 (sealW nCls) (sealX t)
+      - mobilenetv2ForwardBFull 2 (sealW nCls) (sealX t)
         (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
       = t * Rr nCls t := by
-  rw [mobilenetv2ForwardB_full_eq_chain, Function.comp_apply, headA,
-    head_diff nCls hn _ (dH nCls t) (edH nCls t)]
+  rw [mobilenetv2ForwardBFull_eq_chain, Function.comp_apply, head_eq_dense,
+    head_diff nCls hn _ (dH nCls t) (eDiff_dH nCls t)]
   simp only [dH, d17p, d17d, d17e, d14p, d14d, d14e, d11p, d11d, d11e, d7p, d7d, d7e, d4p, d4d, d4e, d2p, d2d, d2e, d1p, d1d, dS, Rr]
   ring
 
 -- ════════════════════════════════════════════════════════════════
 -- § 17. The seal
 -- ════════════════════════════════════════════════════════════════
-theorem sealDiffAt (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (mobilenetv2ForwardB_full 2 (sealW nCls)) (sealX t) :=
-  mobilenetv2ForwardB_full_differentiableAt 2 (sealW nCls) (sealPos nCls) (sealX t)
-    (sealSmooth nCls t)
+theorem seal_differentiableAt (nCls : Nat) (t : ℝ) :
+    DifferentiableAt ℝ (mobilenetv2ForwardBFull 2 (sealW nCls)) (sealX t) :=
+  mobilenetv2ForwardBFull_differentiableAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
+    (seal_smooth nCls t)
 
 /-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV2 at the
     structural weights is NOT constant in its input. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
-    mobilenetv2ForwardB_full 2 (sealW nCls) (sealX 1)
-      ≠ mobilenetv2ForwardB_full 2 (sealW nCls) (sealX 0) :=
+    mobilenetv2ForwardBFull 2 (sealW nCls) (sealX 1)
+      ≠ mobilenetv2ForwardBFull 2 (sealW nCls) (sealX 0) :=
   ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos nCls 1).ne')
 
 /-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
-    fderiv ℝ (mobilenetv2ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 :=
+    fderiv ℝ (mobilenetv2ForwardBFull 2 (sealW nCls)) (sealX 0) ≠ 0 :=
   fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
-    (sealDiffAt nCls 0) (Rr_pos nCls 0).ne'
+    (seal_differentiableAt nCls 0) (Rr_pos nCls 0).ne'
     (hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt)
 
 /-- ⭐⭐ **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
-    seventeen-bottleneck, 224×224 MobileNetV2 — `mobilenetv2ForwardB_full`, the forward every
+    seventeen-bottleneck, 224×224 MobileNetV2 — `mobilenetv2ForwardBFull`, the forward every
     MobileNetV2 artifact runs — is **not the zero map** at the witness. -/
 theorem sealX_backward_nontrivial (nCls : Nat) (hn : 0 < nCls) :
     ∃ (j₀ : Fin (2 * nCls)) (i₀ : Fin (2 * (3 * (2 * 112) * (2 * 112)))),

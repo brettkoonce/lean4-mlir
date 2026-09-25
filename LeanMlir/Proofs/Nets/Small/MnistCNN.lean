@@ -8,12 +8,12 @@ The Chapter-3 demo model `mnistCnnNoBn`:
   conv2d 1→c (relu) → conv2d c→c (relu) → maxPool 2×2 → flatten
     → dense (relu) → dense (relu) → dense (identity)
 
-`mnistCnnNoBn_has_vjp_at` is the **structural** whole-network VJP: the
+`mnistCnnNoBnHasVJPAt` is the **structural** whole-network VJP: the
 composed backward equals the `pdiv`-Jacobian VJP of the full forward
 pass, *conditional* on smoothness hypotheses (no ReLU kink / MaxPool
 tie at the running activations). The Chapter-3 sibling of
-`cnn_has_vjp_at`, minus BN and residual blocks.
-`TrainedCnn.trainedCnn_has_vjp_at` discharges every hypothesis at trained
+`cnnHasVJPAt`, minus BN and residual blocks.
+`TrainedCnn.trainedCnnHasVJPAt` discharges every hypothesis at trained
 weights and a real MNIST test input. -/
 
 namespace Proofs
@@ -24,18 +24,18 @@ namespace Proofs
 
 /-- **conv → relu block VJP at a smooth point** (no BatchNorm).
     `relu ∘ flatConv W b`. The plain-conv analogue of
-    `convBnRelu_has_vjp_at` — conv is linear (global VJP via the
+    `convBnReluHasVJPAt` — conv is linear (global VJP via the
     `HasVJP3` bridge), relu carries the smoothness hypothesis. -/
-noncomputable def convRelu_has_vjp_at {ic oc h w kH kW : Nat}
+noncomputable def convReluHasVJPAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, flatConv W b v k ≠ 0) :
     HasVJPAt (relu (oc * h * w) ∘ flatConv W b) v :=
-  vjp_comp_at (flatConv W b) (relu (oc * h * w)) v
+  vjpCompAt (flatConv W b) (relu (oc * h * w)) v
     ((flatConv_differentiable W b) v)
     (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    ((hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).toHasVJPAt v)
-    (relu_has_vjp_at (oc * h * w) _ h_smooth)
+    ((HasVJP3.toHasVJP (conv2dHasVJP3 W b)).toHasVJPAt v)
+    (reluHasVJPAt (oc * h * w) _ h_smooth)
 
 /-- `relu ∘ flatConv W b` is differentiable at a smooth point. -/
 theorem convRelu_differentiableAt {ic oc h w kH kW : Nat}
@@ -46,15 +46,15 @@ theorem convRelu_differentiableAt {ic oc h w kH kW : Nat}
     ((flatConv_differentiable W b) v)
 
 /-- **dense → relu block VJP at a smooth point.** `relu ∘ dense W b`. -/
-noncomputable def denseRelu_has_vjp_at {m n : Nat}
+noncomputable def denseReluHasVJPAt {m n : Nat}
     (W : Mat m n) (b : Vec n) (v : Vec m)
     (h_smooth : ∀ k, dense W b v k ≠ 0) :
     HasVJPAt (relu n ∘ dense W b) v :=
-  vjp_comp_at (dense W b) (relu n) v
+  vjpCompAt (dense W b) (relu n) v
     ((dense_differentiable W b) v)
     (relu_differentiableAt_of_smooth n _ h_smooth)
-    ((dense_has_vjp W b).toHasVJPAt v)
-    (relu_has_vjp_at n _ h_smooth)
+    ((denseHasVJP W b).toHasVJPAt v)
+    (reluHasVJPAt n _ h_smooth)
 
 /-- `relu ∘ dense W b` is differentiable at a smooth point. -/
 theorem denseRelu_differentiableAt {m n : Nat}
@@ -94,10 +94,10 @@ noncomputable def mnistCnnNoBnForward
     The composed backward of the full Chapter-3 forward equals the
     `pdiv`-contracted Jacobian (Jacobian-transpose applied to the
     cotangent), conditional on smoothness at the four ReLU kinks and
-    the one MaxPool. Built by `vjp_comp_at` through
+    the one MaxPool. Built by `vjpCompAt` through
     `convRelu → convRelu → maxPool → denseRelu → denseRelu → dense`.
-    The Chapter-3 sibling of `cnn_has_vjp_at` (BN-free, no resblocks). -/
-noncomputable def mnistCnnNoBn_has_vjp_at
+    The Chapter-3 sibling of `cnnHasVJPAt` (BN-free, no resblocks). -/
+noncomputable def mnistCnnNoBnHasVJPAt
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -122,12 +122,12 @@ noncomputable def mnistCnnNoBn_has_vjp_at
     HasVJPAt (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) x := by
   unfold mnistCnnNoBnForward
   -- conv→relu block 1 at x
-  have s1 := convRelu_has_vjp_at W₁ b₁ x h1
+  have s1 := convReluHasVJPAt W₁ b₁ x h1
   have s1d := convRelu_differentiableAt W₁ b₁ x h1
   -- conv→relu block 2 at (block-1 output)
-  have s2v := convRelu_has_vjp_at W₂ b₂ _ h2
+  have s2v := convReluHasVJPAt W₂ b₂ _ h2
   have s2d2 := convRelu_differentiableAt W₂ b₂ _ h2
-  have s2 := vjp_comp_at _ _ x s1d s2d2 s1 s2v
+  have s2 := vjpCompAt _ _ x s1d s2d2 s1 s2v
   have s2d := s2d2.comp x s1d
   -- maxpool at (block-2 output); align the point via flatten ∘ unflatten = id
   set zmp := (((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
@@ -135,30 +135,30 @@ noncomputable def mnistCnnNoBn_has_vjp_at
   have hpt : Tensor3.flatten (Tensor3.unflatten zmp : Tensor3 c (2*h) (2*w)) = zmp :=
     Tensor3.flatten_unflatten zmp
   have mp_v : HasVJPAt (maxPoolFlat c h w) zmp := by
-    rw [← hpt]; exact maxPoolFlat_has_vjp_at _ h_mp
+    rw [← hpt]; exact maxPoolFlatHasVJPAt _ h_mp
   have mp_d : DifferentiableAt ℝ (maxPoolFlat c h w) zmp := by
     rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp hc hh hw
-  have s3 := vjp_comp_at _ _ x s2d mp_d s2 mp_v
+  have s3 := vjpCompAt _ _ x s2d mp_d s2 mp_v
   have s3d := mp_d.comp x s2d
   -- dense→relu block 3
   set zd3 := maxPoolFlat c h w zmp with hzd3
-  have s4v := denseRelu_has_vjp_at W₃ b₃ zd3 h3
+  have s4v := denseReluHasVJPAt W₃ b₃ zd3 h3
   have s4d3 := denseRelu_differentiableAt W₃ b₃ zd3 h3
-  have s4 := vjp_comp_at _ _ x s3d s4d3 s3 s4v
+  have s4 := vjpCompAt _ _ x s3d s4d3 s3 s4v
   have s4d := s4d3.comp x s3d
   -- dense→relu block 4
   set zd4 := (relu d1 ∘ dense W₃ b₃) zd3 with hzd4
-  have s5v := denseRelu_has_vjp_at W₄ b₄ zd4 h4
+  have s5v := denseReluHasVJPAt W₄ b₄ zd4 h4
   have s5d4 := denseRelu_differentiableAt W₄ b₄ zd4 h4
-  have s5 := vjp_comp_at _ _ x s4d s5d4 s4 s5v
+  have s5 := vjpCompAt _ _ x s4d s5d4 s4 s5v
   have s5d := s5d4.comp x s4d
   -- final dense (linear, no smoothness)
-  exact vjp_comp_at _ _ x s5d ((dense_differentiable W₅ b₅) _) s5
-    ((dense_has_vjp W₅ b₅).toHasVJPAt _)
+  exact vjpCompAt _ _ x s5d ((dense_differentiable W₅ b₅) _) s5
+    ((denseHasVJP W₅ b₅).toHasVJPAt _)
 
-/-- **Public correctness theorem for `mnistCnnNoBn_has_vjp_at`** — the
+/-- **Public correctness theorem for `mnistCnnNoBnHasVJPAt`** — the
     Chapter-3 CNN's backward equals the `pdiv`-contracted Jacobian. -/
-theorem mnistCnnNoBn_has_vjp_at_correct
+theorem mnistCnnNoBnHasVJPAt_correct
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -181,11 +181,11 @@ theorem mnistCnnNoBn_has_vjp_at_correct
             (((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
               ∘ (relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁)) x))) k ≠ 0)
     (dy : Vec nClasses) (i : Fin (ic * (2*h) * (2*w))) :
-    (mnistCnnNoBn_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
+    (mnistCnnNoBnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
         hc hh hw x h1 h2 h_mp h3 h4).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) x i j * dy j :=
-  (mnistCnnNoBn_has_vjp_at W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
+  (mnistCnnNoBnHasVJPAt W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
       hc hh hw x h1 h2 h_mp h3 h4).correct dy i
 
 -- ════════════════════════════════════════════════════════════════
@@ -271,7 +271,7 @@ theorem conv2d_1x1 {ic oc h w : Nat} (W : Kernel4 oc ic 1 1) (b : Vec oc)
 -- ════════════════════════════════════════════════════════════════
 -- Chapter-2 MLP: a concrete whole-network instance with every ReLU
 -- smoothness hypothesis discharged (the simplest kinked capstone — one
--- non-smooth op, `relu`, two sites). Closes the gap that `mlp_has_vjp_at`
+-- non-smooth op, `relu`, two sites). Closes the gap that `mlpHasVJPAt`
 -- is never instantiated. Inside the three-axiom closure.
 -- ════════════════════════════════════════════════════════════════
 
@@ -280,7 +280,7 @@ namespace MlpConcrete
 /-- A concrete 3-layer MLP (`dense → relu → dense → relu → dense`) with
     all-ones weights/biases and a positive input. Every ReLU pre-activation
     is then strictly positive (hence `≠ 0`), so both smoothness hypotheses
-    of `mlp_has_vjp_at` discharge. The net is non-constant, so this is a
+    of `mlpHasVJPAt` discharge. The net is non-constant, so this is a
     *live* witness (non-trivial Jacobian), not a degenerate one. -/
 noncomputable def W₀ : Mat 2 2 := fun _ _ => 1
 noncomputable def b₀ : Vec 2 := fun _ => 1
@@ -298,9 +298,9 @@ theorem preact0_pos (k : Fin 2) : 0 < dense W₀ b₀ x k :=
     ReLU `≠ 0` hypotheses are discharged via `dense_pos_of_nonneg`
     (positive bias + nonnegative weights/input propagate strict
     positivity), with `relu_id_of_pos` collapsing the inner ReLU. -/
-noncomputable def mlpConcrete_has_vjp_at :
+noncomputable def mlpConcreteHasVJPAt :
     HasVJPAt (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x :=
-  mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x
+  mlpHasVJPAt W₀ b₀ W₁ b₁ W₂ b₂ x
     (fun k => ne_of_gt (preact0_pos k))
     (by
       intro k
@@ -310,16 +310,16 @@ noncomputable def mlpConcrete_has_vjp_at :
 
 /-- **Public unconditional correctness theorem** — the concrete MLP's
     backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
-theorem mlpConcrete_has_vjp_correct (dy : Vec 2) (i : Fin 2) :
-    mlpConcrete_has_vjp_at.backward dy i =
+theorem mlpConcreteHasVJP_correct (dy : Vec 2) (i : Fin 2) :
+    mlpConcreteHasVJPAt.backward dy i =
       ∑ j : Fin 2, pdiv (mlpForward W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
-  mlpConcrete_has_vjp_at.correct dy i
+  mlpConcreteHasVJPAt.correct dy i
 
 end MlpConcrete
 
 -- ════════════════════════════════════════════════════════════════
 -- ResNet-style CNN *with* BatchNorm: a concrete whole-network instance
--- with every smoothness hypothesis of `cnn_has_vjp_at` discharged. The maxpool `MaxPool2Smooth`
+-- with every smoothness hypothesis of `cnnHasVJPAt` discharged. The maxpool `MaxPool2Smooth`
 -- forbids the constant trick (constant ties every window), so the stem
 -- must be genuinely injective: a 1×1 identity conv on an injective input,
 -- with ε chosen so BN's istd is exact (var+ε a perfect square), giving
@@ -358,7 +358,7 @@ noncomputable def Wd  : Mat 1 2 := fun _ _ => 0
 noncomputable def bd  : Vec 2 := fun _ => 0
 
 /-- The 1×1 identity stem conv is the identity on the (flattened) input. -/
-theorem flatConvWs : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
+theorem flatConv_ws : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
   have hc : conv2d Ws bs (Tensor3.unflatten X) = Tensor3.unflatten X := by
     funext o hi wi
     rw [conv2d_1x1]
@@ -367,25 +367,25 @@ theorem flatConvWs : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
     exact (Fin.fin_one_eq_zero o).symm ▸ rfl
   simp only [flatConv, hc, Tensor3.flatten_unflatten]
 
-theorem bnMeanX : bnMean (1 * (2*1) * (2*1)) X = 3/2 := by
+theorem bnMean_x : bnMean (1 * (2*1) * (2*1)) X = 3/2 := by
   unfold bnMean
   change (∑ i : Fin 4, X i) / ((4:ℕ):ℝ) = 3/2
   rw [Fin.sum_univ_four]; norm_num [X]
 
-theorem bnVarX : bnVar (1 * (2*1) * (2*1)) X = 5/4 := by
+theorem bnVar_x : bnVar (1 * (2*1) * (2*1)) X = 5/4 := by
   unfold bnVar
-  rw [bnMeanX]
+  rw [bnMean_x]
   change (∑ i : Fin 4, (X i - 3/2) * (X i - 3/2)) / ((4:ℕ):ℝ) = 5/4
   rw [Fin.sum_univ_four]; norm_num [X]
 
-theorem bnIstdX : bnIstd (1 * (2*1) * (2*1)) X (11/4) = 1/2 := by
+theorem bnIstd_x : bnIstd (1 * (2*1) * (2*1)) X (11/4) = 1/2 := by
   unfold bnIstd
-  rw [bnVarX, show (5/4 + 11/4 : ℝ) = 2^2 by norm_num, Real.sqrt_sq (by norm_num)]
+  rw [bnVar_x, show (5/4 + 11/4 : ℝ) = 2^2 by norm_num, Real.sqrt_sq (by norm_num)]
 
 theorem bnX_eq (k : Fin (1 * (2*1) * (2*1))) :
     bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X k = (X k - 3/2) * (1/2) + 10 := by
   unfold bnForward bnXhat
-  rw [bnMeanX, bnIstdX]; ring
+  rw [bnMean_x, bnIstd_x]; ring
 
 theorem bnX_pos (k : Fin (1 * (2*1) * (2*1))) :
     0 < bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X k := by
@@ -401,29 +401,29 @@ theorem bnX_inj : Function.Injective (bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 
   exact Fin.ext (by exact_mod_cast this)
 
 /-- `cbr X` collapses to `bn X` (identity conv, then relu of a positive). -/
-theorem cbrX : cbr (h := 2*1) (w := 2*1) Ws bs (11/4) 1 10 X
+theorem cbr_x : cbr (h := 2*1) (w := 2*1) Ws bs (11/4) 1 10 X
     = bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X := by
   show relu _ (bnForward _ (11/4) 1 10 (flatConv Ws bs X)) = _
-  rw [flatConvWs]
+  rw [flatConv_ws]
   exact relu_id_of_pos (fun k => bnX_pos k)
 
 /-- **Whole-network VJP for a concrete ResNet-style CNN with BatchNorm** —
     every smoothness hypothesis discharged: the stem produces distinct
     positive BN outputs (so maxpool has no ties and `bn ≠ 0`), and the
     resblock BNs use γ=0 (constant). -/
-noncomputable def cnnConcrete_has_vjp_at :
+noncomputable def cnnConcreteHasVJPAt :
     HasVJPAt (cnnForward Ws bs (11/4) 1 10 W₁ b₁ W₂ b₂ 1 0 1 1 0 1
       W₁' b₁' W₂' b₂' Wp bp 1 0 1 1 0 1 1 0 1 Wd bd) X :=
-  cnn_has_vjp_at Ws bs (11/4) 1 10 (by norm_num)
+  cnnHasVJPAt Ws bs (11/4) 1 10 (by norm_num)
     W₁ b₁ W₂ b₂ 1 0 1 1 0 1 (by norm_num) (by norm_num)
     W₁' b₁' W₂' b₂' Wp bp
     1 0 1 1 0 1 1 0 1 (by norm_num) (by norm_num) (by norm_num)
     Wd bd (by norm_num) (by norm_num) (by norm_num) X
     -- h_stem
-    (fun k => ne_of_gt (by rw [flatConvWs]; exact bnX_pos k))
+    (fun k => ne_of_gt (by rw [flatConv_ws]; exact bnX_pos k))
     -- h_mp (maxpool no ties): the stem output is positionally injective
     (by
-      rw [cbrX]
+      rw [cbr_x]
       apply maxPool2Smooth_of_injective
       intro ci r r' s s' heq
       simp only [Tensor3.unflatten] at heq
@@ -436,7 +436,7 @@ noncomputable def cnnConcrete_has_vjp_at :
         flatten_pos_of_pos (fun ci hi wi =>
           maxPool2_pos (fun _ _ _ => bnX_pos _) ci hi wi) k
       simp only [Function.comp_apply]
-      rw [bnForward_gamma_zero, flatConvWs, relu_id_of_pos (fun k => bnX_pos k)]
+      rw [bnForward_gamma_zero, flatConv_ws, relu_id_of_pos (fun k => bnX_pos k)]
       show (1:ℝ) + maxPoolFlat 1 1 1 (bnForward (1*(2*1)*(2*1)) (11/4) 1 10 X) k ≠ 0
       exact ne_of_gt (by linarith))
     -- h_rb2
@@ -448,11 +448,11 @@ noncomputable def cnnConcrete_has_vjp_at :
 
 /-- **Public unconditional correctness theorem** — the concrete CNN's
     backward equals the `pdiv`-Jacobian VJP, no hypotheses. -/
-theorem cnnConcrete_has_vjp_correct (dy : Vec 2) (i : Fin (1 * (2*1) * (2*1))) :
-    cnnConcrete_has_vjp_at.backward dy i =
+theorem cnnConcreteHasVJP_correct (dy : Vec 2) (i : Fin (1 * (2*1) * (2*1))) :
+    cnnConcreteHasVJPAt.backward dy i =
       ∑ j : Fin 2, pdiv (cnnForward Ws bs (11/4) 1 10 W₁ b₁ W₂ b₂ 1 0 1 1 0 1
         W₁' b₁' W₂' b₂' Wp bp 1 0 1 1 0 1 1 0 1 Wd bd) X i j * dy j :=
-  cnnConcrete_has_vjp_at.correct dy i
+  cnnConcreteHasVJPAt.correct dy i
 
 end CnnConcrete
 

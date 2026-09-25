@@ -62,7 +62,7 @@ def scalarOf (v : Vec 1) : ℝ := v ⟨0, Nat.zero_lt_one⟩
     This is the reference's `jnp.sum(g * g)` for a single tree leaf. It is deliberately the SQUARED
     norm and deliberately per-leaf: the reference sums these across every leaf and takes ONE square
     root at the end, so a per-leaf `Real.sqrt` here would be a different function (and the usual
-    `√(a+b) ≠ √a + √b`). `noncomputable` for `bn_grad_beta`'s reason — `Vec` is `Fin n → ℝ`. -/
+    `√(a+b) ≠ √a + √b`). `noncomputable` for `bnGradBeta`'s reason — `Vec` is `Fin n → ℝ`. -/
 noncomputable def gradSumSq (g : Vec n) : ℝ := ∑ i : Fin n, (g i) ^ 2
 
 /-- **The clip factor**, `min 1 (c / (√s + ε))`, where `s` is the summed squared norm across ALL

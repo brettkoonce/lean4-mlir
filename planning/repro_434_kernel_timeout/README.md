@@ -9,10 +9,10 @@
 
 ## What
 `LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtWholeBackCertifiedTieB.lean` builds on Lean **4.32.2** and
-fails on **4.34.0** with `(kernel) deterministic timeout` on `convNextForwardTChB_has_vjp_at`
-(the twelve-stage batched VJP apex, eleven nested `vjp_comp_diff_at`s).
+fails on **4.34.0** with `(kernel) deterministic timeout` on `convNextForwardTChBHasVJPAt`
+(the twelve-stage batched VJP apex, eleven nested `vjpCompDiffAt`s).
 
-The three `unknown constant 'Proofs.convNextForwardTChB_has_vjp_at'` errors that follow are
+The three `unknown constant 'Proofs.convNextForwardTChBHasVJPAt'` errors that follow are
 **cascade** — the decl never entered the environment — not independent failures.
 
 ## Bisection (truncate the apex to k composition levels above the stem pair)

@@ -13,7 +13,7 @@ import LeanMlir.Types
     values are render-irrelevant placeholders.
 
     Also closes the **faithfulness tie**: the new ops' `den` equals the PROVEN
-    `rowSoftmax` / `rowSoftmax_has_vjp_mat.backward` (Attention.lean) by `rfl` —
+    `rowSoftmax` / `rowSoftmaxHasVJPMat.backward` (Attention.lean) by `rfl` —
     `StableHLO` itself spells the den with MLP's `softmax` to avoid importing the
     capstone `Attention` (no import cycle); this file (which imports both) certifies
     the tie. rfl-faithful ⇒ stays OUT of the axiom audit (`roundtrip` covers it).
@@ -34,22 +34,22 @@ open Proofs Proofs.StableHLO
 theorem rowSoftmaxFlat_eq_rowSoftmax (m n : Nat) (v : Vec (m*n)) :
     rowSoftmaxFlat m n v = Mat.flatten (rowSoftmax (Mat.unflatten v)) := rfl
 
-/-- **`rowSoftmaxBackFlat` IS the proven `rowSoftmax_has_vjp_mat.backward`**
+/-- **`rowSoftmaxBackFlat` IS the proven `rowSoftmaxHasVJPMat.backward`**
     (flattened). The closed form `p ⊙ (dy − ⟨p,dy⟩)` per row equals the proven
     block-diagonal row-softmax VJP backward applied to the unflattened matrices. -/
 theorem rowSoftmaxBackFlat_eq_vjp (m n : Nat) (preAct dy : Vec (m*n)) :
     rowSoftmaxBackFlat m n preAct dy =
-      Mat.flatten ((rowSoftmax_has_vjp_mat (m := m) (n := n)).backward
+      Mat.flatten ((rowSoftmaxHasVJPMat (m := m) (n := n)).backward
                      (Mat.unflatten preAct) (Mat.unflatten dy)) := rfl
 
 /-- The forward op `den` denotes the proven `rowSoftmax`. -/
 theorem softmaxRowF_den_rowSoftmax {m n : Nat} (e : SHlo (m*n)) :
     den (.softmaxRowF e) = Mat.flatten (rowSoftmax (Mat.unflatten (den e))) := rfl
 
-/-- The backward op `den` denotes the proven `rowSoftmax_has_vjp_mat.backward`. -/
+/-- The backward op `den` denotes the proven `rowSoftmaxHasVJPMat.backward`. -/
 theorem softmaxRowBack_den_vjp {m n : Nat} (xN : String) (preAct : Vec (m*n)) (e : SHlo (m*n)) :
     den (.softmaxRowBack xN preAct e) =
-      Mat.flatten ((rowSoftmax_has_vjp_mat (m := m) (n := n)).backward
+      Mat.flatten ((rowSoftmaxHasVJPMat (m := m) (n := n)).backward
                      (Mat.unflatten preAct) (Mat.unflatten (den e))) := rfl
 
 -- ════════════════════════════════════════════════════════════════

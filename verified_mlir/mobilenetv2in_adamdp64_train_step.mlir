@@ -10,7 +10,7 @@ module @m {
     // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes
     // its shard of the GLOBAL-batch function, and this step IS the single-device step at the
     // global batch N x b: proved as MobileNetV2SyncTieB.mnv2_net_syncTiedB (every all-reduced
-    // gradient) and StableHLO.mobilenetv2FwdGraphSync_full_shard (the forward), both in
+    // gradient) and StableHLO.mobilenetv2FwdGraphSyncFull_shard (the forward), both in
     // LeanMlir/Proofs/Nets/MobileNet/ (planning/global_bn_verified.md).
     // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a

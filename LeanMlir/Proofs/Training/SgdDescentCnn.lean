@@ -520,7 +520,7 @@ theorem pool_relu_input_grad {c h w d₃ d₄ nC : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Closed form of the conv weight-map `pdiv`** — extracted from the
-    certified VJP (`conv2d_weight_grad_has_vjp`) by contracting its
+    certified VJP (`conv2dWeightGradHasVJP`) by contracting its
     `.correct` field against a basis vector. Kernel entry `(o,cc,kh,kw)`
     touches output `(co,hi,wi)` iff `co = o`, with coefficient the padded
     input read `convPad`. NB the right-hand side does not mention `v`:
@@ -547,7 +547,7 @@ theorem conv2d_weight_pdiv {ic oc h w kH kW : Nat} (b : Vec oc)
     simp
   rw [← hsum, ← hb]
   -- evaluate the transpose-trick backward at the basis vector
-  simp only [conv2d_weight_grad_has_vjp, k4Idx, Equiv.symm_apply_apply,
+  simp only [conv2dWeightGradHasVJP, k4Idx, Equiv.symm_apply_apply,
     basisVec_apply, convPad]
   simp only [t3Idx_def]
   simp [ite_and, @eq_comm _ o co]
@@ -2583,7 +2583,7 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
 -- LINEAR in its input; the Jacobian entry pairing input `(ci,hi,wi)`
 -- with output `(co,ho,wo)` is a single kernel tap (`convTap`, the
 -- input-side peer of `convPad`), extracted from the certified input-VJP
--- (`conv2d_has_vjp3`) by contracting `.correct` against a basis
+-- (`conv2dHasVJP3`) by contracting `.correct` against a basis
 -- cotangent — point-free, exactly like `conv2d_weight_pdiv`. Each
 -- input entry feeds at most `oc·kH·kW` outputs (`convTap_out_l1`): the
 -- `ℓ1` operator factor of a conv crossing is `(channels)·kH·kW·w₂ᶜ`,
@@ -2718,7 +2718,7 @@ theorem convTap_out_l1 {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
     _ = ((oc * kH * kW : ℕ) : ℝ) * wK := by simp [mul_assoc]
 
 /-- **Closed form of the conv input-map `pdiv3`** — extracted from the
-    certified input-VJP (`conv2d_has_vjp3`) by contracting its
+    certified input-VJP (`conv2dHasVJP3`) by contracting its
     `.correct` field against a basis cotangent. Point-free in `x`:
     conv is linear in its input. -/
 theorem conv2d_input_pdiv3 {ic oc h w kH kW : Nat}
@@ -2727,7 +2727,7 @@ theorem conv2d_input_pdiv3 {ic oc h w kH kW : Nat}
     (co : Fin oc) (ho : Fin h) (wo : Fin w) :
     pdiv3 (conv2d W b) x ci hi wi co ho wo =
       convTap W ci hi wi co ho wo := by
-  have hb := (conv2d_has_vjp3 W b).correct x
+  have hb := (conv2dHasVJP3 W b).correct x
     (fun co' ho' wo' =>
       if co' = co ∧ ho' = ho ∧ wo' = wo then (1:ℝ) else 0) ci hi wi
   have hsum : ∑ co' : Fin oc, ∑ ho' : Fin h, ∑ wo' : Fin w,
@@ -2737,7 +2737,7 @@ theorem conv2d_input_pdiv3 {ic oc h w kH kW : Nat}
     simp [ite_and, mul_ite]
   rw [← hsum, ← hb]
   -- evaluate the explicit input-gradient formula at the basis cotangent
-  simp only [conv2d_has_vjp3, conv2d_input_grad_formula]
+  simp only [conv2dHasVJP3, conv2dInputGradFormula]
   rw [Fintype.sum_eq_single co fun co' hne => Finset.sum_eq_zero fun ho' _ =>
       Finset.sum_eq_zero fun wo' _ => by simp [hne],
     Fintype.sum_eq_single ho fun ho' hne => Finset.sum_eq_zero fun wo' _ => by simp [hne],
@@ -4668,7 +4668,7 @@ theorem conv2d_flat_bias_drift_sum {ic oc h w kH kW : Nat}
     _ = ((h * w : ℕ) : ℝ) * ∑ idx, |e idx| := by simp [Finset.mul_sum, mul_assoc]
 
 /-- **Closed form of the conv bias-map `pdiv`** — extracted from the
-    certified VJP (`conv2d_bias_grad_has_vjp`) by contracting its
+    certified VJP (`conv2dBiasGradHasVJP`) by contracting its
     `.correct` field against a basis vector, exactly as
     `conv2d_weight_pdiv`. Bias entry `o` touches output `(co,hi,wi)`
     iff `co = o`, with coefficient 1 — the Kronecker channel indicator.
@@ -4689,7 +4689,7 @@ theorem conv2d_bias_pdiv {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
     simp
   rw [← hsum, ← hb]
   -- evaluate the spatial-sum backward at the basis vector
-  simp only [conv2d_bias_grad_has_vjp, basisVec_apply]
+  simp only [conv2dBiasGradHasVJP, basisVec_apply]
   simp only [t3Idx_def]
   simp [ite_and, @eq_comm _ o co]
 

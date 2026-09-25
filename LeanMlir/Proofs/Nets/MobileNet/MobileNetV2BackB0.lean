@@ -14,15 +14,15 @@ from the EfficientNet file (they are global/clean — no smoothness wrinkle).
 
 ## The relu6 wrinkle
 
-Unlike swish (smooth everywhere, GLOBAL `swish_has_vjp`), relu6 has a TWO-SIDED kink
-(at 0 and at 6), so its VJP is only the *pointwise* `relu6_has_vjp_at`, conditioned
+Unlike swish (smooth everywhere, GLOBAL `swishHasVJP`), relu6 has a TWO-SIDED kink
+(at 0 and at 6), so its VJP is only the *pointwise* `relu6HasVJPAt`, conditioned
 on the smoothness hypothesis `∀ k, x k ≠ 0 ∧ x k ≠ 6` at the pre-activation. Its
 per-op backward token is `.selectMid` (the mask `if 0<x<6 then dy else 0`), whose
 denotation faithfulness is the already-proven (`rfl`) `StableHLO.selectMid_faithful`.
 
 Because relu6's VJP is `_at`, the whole MobileNetV2 stage/body VJP and its backward-
 graph faithfulness are stated in the **`_at` / hypothesis-threaded** form (via
-`vjp_comp_at`, lifting the global `bnBatchLA`/`batchMap`/conv/depthwise VJPs through
+`vjpCompAt`, lifting the global `bnBatchLA`/`batchMap`/conv/depthwise VJPs through
 `HasVJP.toHasVJPAt`), NOT the EfficientNet *global* form. The relu6 smoothness
 hypothesis at the pre-relu6 activation `bnBatchLA(…)(batchMap(conv)(x))` is threaded
 through; the bn/conv/depthwise pieces stay activation-independent (linear) or global.
@@ -36,16 +36,16 @@ through; the bn/conv/depthwise pieces stay activation-independent (linear) or gl
   `CertLayer`s. `mnv2BodyLayer` / `mnv2DownBodyLayer` compose them with `CertLayer.comp`,
   and each body VJP, differentiability lemma and graph `_faithful` is that layer's
   `vjp` / `diff` / `faithful`.
-* `mnv2BodyB_has_vjp_at` — the SE-less body `projB ∘ dwbrB ∘ cbrB` at the relu6
+* `mnv2BodyBHasVJPAt` — the SE-less body `projB ∘ dwbrB ∘ cbrB` at the relu6
   smoothness families, with its backward graph `mnv2BodyBackBatchedGraph` + `…_faithful`.
   ⚠ This family takes `ic` and `oc` SEPARATELY (2026-09-06). It was written for the residual block and pinned them
   equal, which is right there but wrong one level up: the paper ladder's `b11`
   (64 → 96) and `b17` (160 → 320) are stride-1 bodies with `ic ≠ oc`, and
   `MobileNetV2FullB.lean`'s `mnv2ExpOnlyB` is exactly that shape. Generalising
-  changed no proof — the downsample body (`mnv2DownBodyB_has_vjp_at`) already had this shape.
+  changed no proof — the downsample body (`mnv2DownBodyBHasVJPAt`) already had this shape.
 * `mnv2ResidBlockBackBatchedGraph_faithful` — the **CAPSTONE**: the whole batched
   MobileNetV2 inverted-residual block backward graph (body + identity skip) denotes
-  the proven `residual_has_vjp_at` of the SE-less body. Mirrors the EfficientNet
+  the proven `residualHasVJPAt` of the SE-less body. Mirrors the EfficientNet
   `mbResidBlockBackBatchedGraph_faithful` without the `seB` factor, threaded through
   the relu6 smoothness hypotheses; `CertLayer.residual mnv2BodyLayer`'s `faithful`.
 -/
@@ -76,7 +76,7 @@ noncomputable def mnv2BodyLayer (N : Nat) {ic mid oc h w kHd kWd : Nat}
     `h_se` is the expand relu6 smoothness (at the cbrB pre-relu6 activation);
     `h_sd` is the depthwise relu6 smoothness (at the dwbrB pre-relu6 activation,
     fed the cbrB output). -/
-noncomputable def mnv2BodyB_has_vjp_at (N : Nat) {ic mid oc h w kHd kWd : Nat}
+noncomputable def mnv2BodyBHasVJPAt (N : Nat) {ic mid oc h w kHd kWd : Nat}
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
@@ -133,7 +133,7 @@ theorem mnv2BodyBackBatchedGraph_faithful {N ic mid oc h w kHd kWd : Nat}
                  bnBatchLA N mid h w εd γd βd
                     (batchMap N (depthwiseFlat Wd bd) (cbrB N (h := h) (w := w) We be εe γe βe x)) k ≠ 6) :
     den (mnv2BodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x e)
-      = (mnv2BodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd
+      = (mnv2BodyBHasVJPAt N We be εe hεe γe βe Wd bd εd hεd γd βd
           Wp bp εp hεp γp βp x h_se h_sd).backward (den e) :=
   (mnv2BodyLayer N (h := h) (w := w) We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp).faithful
     x ⟨⟨h_se, h_sd⟩, trivial⟩ e
@@ -155,7 +155,7 @@ noncomputable def mnv2DownBodyLayer (N : Nat) {ic mid oc h w kHd kWd : Nat}
 
 /-- The batched MobileNetV2 DOWNSAMPLE inverted-residual body's VJP at a smooth
     point — `projB ∘ dwbrBstrided ∘ cbrB`, the stride-2 analogue of
-    `mnv2BodyB_has_vjp_at` (swaps the stride-1 `dwbrB` depthwise stage for the
+    `mnv2BodyBHasVJPAt` (swaps the stride-1 `dwbrB` depthwise stage for the
     STRIDED `dwbrBstrided`). The expand `cbrB` runs at the larger `2h×2w` (1×1
     conv keeps spatial), the strided depthwise then halves spatial to `h×w`; project
     runs at `h×w`. NO residual (spatial/channels change), so this is the body alone:
@@ -164,7 +164,7 @@ noncomputable def mnv2DownBodyLayer (N : Nat) {ic mid oc h w kHd kWd : Nat}
     `h_se` is the expand relu6 smoothness (at the cbrB pre-relu6 activation, at
     `2h×2w`); `h_sd` is the strided-depthwise relu6 smoothness (at the dwbrBstrided
     pre-relu6 activation, fed the cbrB output). -/
-noncomputable def mnv2DownBodyB_has_vjp_at (N : Nat) {ic mid oc h w kHd kWd : Nat}
+noncomputable def mnv2DownBodyBHasVJPAt (N : Nat) {ic mid oc h w kHd kWd : Nat}
     (We : Kernel4 mid ic 1 1) (be : Vec mid) (εe : ℝ) (hεe : 0 < εe) (γe βe : Vec mid)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd : ℝ) (hεd : 0 < εd) (γd βd : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
@@ -215,7 +215,7 @@ noncomputable def mnv2DownBodyBackBatchedGraph {N ic mid oc h w kHd kWd : Nat}
       (projBackBatchedGraph Wp bp εp γp βp xD e))
 
 /-- **CAPSTONE — the batched MobileNetV2 DOWNSAMPLE inverted-residual body: backward
-    graph ↔ the proven `mnv2DownBodyB_has_vjp_at`.** The three batched stage backward
+    graph ↔ the proven `mnv2DownBodyBHasVJPAt`.** The three batched stage backward
     graphs (`cbrB`/`dwbrBstrided`/`projB`) chained at their forward activations,
     proven equal to the downsample-body VJP. The stride-2 analogue of
     `mnv2BodyBackBatchedGraph_faithful` (no residual skip — the downsample block
@@ -235,7 +235,7 @@ theorem mnv2DownBodyBackBatchedGraph_faithful {N ic mid oc h w kHd kWd : Nat}
                  bnBatchLA N mid h w εd γd βd
                     (batchMap N (depthwiseStride2FlatXla Wd bd) (cbrB N (h := 2 * h) (w := 2 * w) We be εe γe βe x)) k ≠ 6) :
     den (mnv2DownBodyBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x e)
-      = (mnv2DownBodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd
+      = (mnv2DownBodyBHasVJPAt N We be εe hεe γe βe Wd bd εd hεd γd βd
           Wp bp εp hεp γp βp x h_se h_sd).backward (den e) :=
   (mnv2DownBodyLayer N (h := h) (w := w) We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp).faithful
     x ⟨⟨h_se, h_sd⟩, trivial⟩ e
@@ -258,7 +258,7 @@ noncomputable def mnv2ResidBlockBackBatchedGraph {N c mid h w kHd kWd : Nat}
 /-- **CAPSTONE — the whole batched MobileNetV2 inverted-residual block: backward
     graph ↔ the proven VJP.** The three batched stage backward graphs
     (`cbrB`/`dwbrB`/`projB`) chained at their forward activations + the identity
-    skip, proven equal to `residual_has_vjp_at` of the SE-less body
+    skip, proven equal to `residualHasVJPAt` of the SE-less body
     `projB ∘ dwbrB ∘ cbrB`. The MobileNetV2 analogue of the EfficientNet
     `mbResidBlockBackBatchedGraph_faithful`, without the `seB` factor, threaded
     through the relu6 smoothness hypotheses (relu6's VJP is only `_at`).
@@ -277,12 +277,12 @@ theorem mnv2ResidBlockBackBatchedGraph_faithful {N c mid h w kHd kWd : Nat}
                  bnBatchLA N mid h w εd γd βd
                     (batchMap N (depthwiseFlat Wd bd) (cbrB N (h := h) (w := w) We be εe γe βe x)) k ≠ 6) :
     den (mnv2ResidBlockBackBatchedGraph We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp x ecot)
-      = (residual_has_vjp_at
+      = (residualHasVJPAt
           (projB N (h := h) (w := w) Wp bp εp γp βp ∘
             dwbrB N (h := h) (w := w) Wd bd εd γd βd ∘ cbrB N (h := h) (w := w) We be εe γe βe)
           x
           (mnv2BodyB_differentiableAt N We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp x h_se h_sd)
-          (mnv2BodyB_has_vjp_at N We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp x h_se h_sd)).backward (den ecot) :=
+          (mnv2BodyBHasVJPAt N We be εe hεe γe βe Wd bd εd hεd γd βd Wp bp εp hεp γp βp x h_se h_sd)).backward (den ecot) :=
   (CertLayer.residual (mnv2BodyLayer N (h := h) (w := w) We be εe hεe γe βe Wd bd εd hεd γd βd
     Wp bp εp hεp γp βp)).faithful x ⟨⟨h_se, h_sd⟩, trivial⟩ ecot
 

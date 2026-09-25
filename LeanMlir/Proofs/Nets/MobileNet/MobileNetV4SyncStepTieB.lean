@@ -76,7 +76,7 @@ no conv-bias gradients to exclude: the render has no `convBias` flag, binds ever
 
 ⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (mnv4Blk{k} (R*N) w X)`); that the sync forward graph computes exactly those is
-`StableHLO.mnv4FwdGraphSync_full_shard`, the forward half. ⚠ That the replicas' inputs are the
+`StableHLO.mnv4FwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are the
 shards of one batch is the driver's. ⚠ The statement is at the f32 nodes: the `*bf16` artifact's
 bf16 conv twins are outside it, as for every other net. ⚠ The lowerer's `all_reduce` is trusted as
 every other op's lowering is.
@@ -1441,9 +1441,9 @@ theorem mnv4_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 <
     (T : Vec ((R * N) * (1 * nCls))) :
     mnv4NetSyncTiedB R hR N xN cotN vN epsStr w X
       (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK
-        bStr logN ohN (rowB (R * N) nCls (mobilenetv4ForwardB_full (R * N) w X)) T)))
+        bStr logN ohN (rowB (R * N) nCls (mobilenetv4ForwardBFull (R * N) w X)) T)))
       (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-        (rowB N nCls (batchShard R N nCls (mobilenetv4ForwardB_full (R * N) w X) r))
+        (rowB N nCls (batchShard R N nCls (mobilenetv4ForwardBFull (R * N) w X) r))
         (batchShard R N (1 * nCls) T r)))) :=
   mnv4_net_syncTiedB R hR N hN xN cotN vN epsStr w X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)

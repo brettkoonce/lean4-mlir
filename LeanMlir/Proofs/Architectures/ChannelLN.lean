@@ -19,9 +19,9 @@ Every piece below is already proven and shipping:
 | piece | from |
 |---|---|
 | `reassocFwd`/`reassocBack` + VJPs | `PerChannelBN.lean` (the per-channel BN layout bridge) |
-| `transpose_has_vjp` | `Tensor.lean` |
-| `layerNormVec` + `layerNormVec_per_token_has_vjp_mat` | `LayerNorm` (ViT's `[192]` LN uses the same op) |
-| `hasVJPMat_to_hasVJP` | `Tensor.lean` |
+| `transposeHasVJP` | `Tensor.lean` |
+| `layerNormVec` + `layerNormVecPerTokenHasVJPMat` | `LayerNorm` (ViT's `[192]` LN uses the same op) |
+| `HasVJPMat.toHasVJP` | `Tensor.lean` |
 
 Settled on device before any of this was written (`lake build channel-ln`): the composition ties
 the closed form at rel 0 forward and on all three backward pieces, the incumbent `.bnF` control
@@ -80,24 +80,24 @@ noncomputable def rowLNVecFlat (s c : Nat) (ε : ℝ) (γ β : Vec c) :
   fun v => Mat.flatten ((fun X : Mat s c => fun r => layerNormVec c ε γ β (X r))
                           (Mat.unflatten v))
 
-theorem rowLNVecFlat_diff (s c : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
+theorem rowLNVecFlat_differentiable (s c : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
     Differentiable ℝ (rowLNVecFlat s c ε γ β) :=
-  layerNormVec_per_token_flat_diff s c ε γ β hε
+  layerNormVec_per_token_flat_differentiable s c ε γ β hε
 
-/-- ViT's per-token LN VJP, bridged to the flat layout. No new proof — `layerNormVec_has_vjp`
+/-- ViT's per-token LN VJP, bridged to the flat layout. No new proof — `layerNormVecHasVJP`
     is `(+β) ∘ layerScale γ ∘ LN(1,0)` and needs only `0 < ε`. -/
-noncomputable def rowLNVecFlat_has_vjp (s c : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
+noncomputable def rowLNVecFlatHasVJP (s c : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
     HasVJP (rowLNVecFlat s c ε γ β) :=
-  hasVJPMat_to_hasVJP (layerNormVec_per_token_has_vjp_mat s c ε γ β hε)
+  HasVJPMat.toHasVJP (layerNormVecPerTokenHasVJPMat s c ε γ β hε)
 
-/-- `transposeFlat` is a coordinate permutation — Attention's `transpose_flat_diff`. -/
-theorem transposeFlat_diff (m n : Nat) : Differentiable ℝ (transposeFlat m n) := by
-  exact transpose_flat_diff
+/-- `transposeFlat` is a coordinate permutation — Attention's `transpose_flat_differentiable`. -/
+theorem transposeFlat_differentiable (m n : Nat) : Differentiable ℝ (transposeFlat m n) := by
+  exact transpose_flat_differentiable
 
-/-- `transposeFlat`'s VJP is `Tensor.lean`'s `transpose_has_vjp` through the flatten bijection —
+/-- `transposeFlat`'s VJP is `Tensor.lean`'s `transposeHasVJP` through the flatten bijection —
     the flat form is definitionally the bridged Mat form, so this is a re-typing, not a proof. -/
-noncomputable def transposeFlat_has_vjp (m n : Nat) : HasVJP (transposeFlat m n) :=
-  hasVJPMat_to_hasVJP (transpose_has_vjp (m := m) (n := n))
+noncomputable def transposeFlatHasVJP (m n : Nat) : HasVJP (transposeFlat m n) :=
+  HasVJPMat.toHasVJP (transposeHasVJP (m := m) (n := n))
 
 -- ════════════════════════════════════════════════════════════════
 -- § Channel LayerNorm at the network's Tensor3 layout
@@ -120,31 +120,31 @@ noncomputable def chanLNTensor3 (c h w : Nat) (ε : ℝ) (γ β : Vec c) :
     reassocFwd c h w
 
 /-- Everywhere-differentiable given `0 < ε` — four permutations and one LN. -/
-theorem chanLNTensor3_diff (c h w : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
+theorem chanLNTensor3_differentiable (c h w : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
     Differentiable ℝ (chanLNTensor3 c h w ε γ β) := by
   unfold chanLNTensor3
   exact (reassocBack_differentiable c h w).comp
-    ((transposeFlat_diff (h * w) c).comp
-      ((rowLNVecFlat_diff (h * w) c ε γ β hε).comp
-        ((transposeFlat_diff c (h * w)).comp (reassocFwd_differentiable c h w))))
+    ((transposeFlat_differentiable (h * w) c).comp
+      ((rowLNVecFlat_differentiable (h * w) c ε γ β hε).comp
+        ((transposeFlat_differentiable c (h * w)).comp (reassocFwd_differentiable c h w))))
 
-/-- **Channel-LN VJP (global)** — `vjp_comp` over the five proven pieces. The only hypothesis
-    is the LN positivity `0 < ε`, exactly as the scalar `layerNorm_has_vjp` it replaces. A term,
+/-- **Channel-LN VJP (global)** — `vjpComp` over the five proven pieces. The only hypothesis
+    is the LN positivity `0 < ε`, exactly as the scalar `layerNormHasVJP` it replaces. A term,
     not a tactic proof, so its `.backward` unfolds to the nested chain. -/
-noncomputable def chanLNTensor3_has_vjp (c h w : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
+noncomputable def chanLNTensor3HasVJP (c h w : Nat) (ε : ℝ) (γ β : Vec c) (hε : 0 < ε) :
     HasVJP (chanLNTensor3 c h w ε γ β) :=
   let d0 := reassocFwd_differentiable c h w
-  let d1 := transposeFlat_diff c (h * w)
-  let d2 := rowLNVecFlat_diff (h * w) c ε γ β hε
-  let d3 := transposeFlat_diff (h * w) c
+  let d1 := transposeFlat_differentiable c (h * w)
+  let d2 := rowLNVecFlat_differentiable (h * w) c ε γ β hε
+  let d3 := transposeFlat_differentiable (h * w) c
   let d4 := reassocBack_differentiable c h w
-  vjp_comp _ _ (d3.comp (d2.comp (d1.comp d0))) d4
-    (vjp_comp _ _ (d2.comp (d1.comp d0)) d3
-      (vjp_comp _ _ (d1.comp d0) d2
-        (vjp_comp _ _ d0 d1 (reassocFwd_has_vjp c h w) (transposeFlat_has_vjp c (h * w)))
-        (rowLNVecFlat_has_vjp (h * w) c ε γ β hε))
-      (transposeFlat_has_vjp (h * w) c))
-    (reassocBack_has_vjp c h w)
+  vjpComp _ _ (d3.comp (d2.comp (d1.comp d0))) d4
+    (vjpComp _ _ (d2.comp (d1.comp d0)) d3
+      (vjpComp _ _ (d1.comp d0) d2
+        (vjpComp _ _ d0 d1 (reassocFwdHasVJP c h w) (transposeFlatHasVJP c (h * w)))
+        (rowLNVecFlatHasVJP (h * w) c ε γ β hε))
+      (transposeFlatHasVJP (h * w) c))
+    (reassocBackHasVJP c h w)
 
 /-- **The emitted three-op affine tail IS the per-token vector-LN.** The chain normalises with
     `lnRowF` at scalar γ=1/β=0 and then applies the REAL `[c]` affine with `rowScaleF`/`rowBiasF`

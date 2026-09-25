@@ -87,7 +87,7 @@ def test_softmax_ce():
 # ════════════════════════════════════════════════════════════════
 # Conv2d input grad: dx = conv(dy, reversed transposed W)
 # ════════════════════════════════════════════════════════════════
-def test_conv2d_input_grad():
+def test_conv2dInputGrad():
     ic, oc, h, w, kH, kW = 2, 3, 6, 6, 3, 3
     W = np.random.randn(oc, ic, kH, kW)
     b = np.random.randn(oc)
@@ -108,10 +108,10 @@ def test_conv2d_input_grad():
             out[o] += b[o]
         return out.ravel()
 
-    # This test is superseded by test_conv2d_input_grad_formula below
+    # This test is superseded by test_conv2dInputGradFormula below
     pass
 
-def test_conv2d_input_grad_formula():
+def test_conv2dInputGradFormula():
     """Check that conv(dy, reverse(W^T)) gives the correct input gradient."""
     ic, oc, h, w, kH, kW = 2, 3, 6, 6, 3, 3
     W = np.random.randn(oc, ic, kH, kW)
@@ -162,7 +162,7 @@ def test_conv2d_input_grad_formula():
 # ════════════════════════════════════════════════════════════════
 # Conv2d weight grad: dW = conv(x^T, dy^T) transposed
 # ════════════════════════════════════════════════════════════════
-def test_conv2d_weight_grad():
+def test_conv2dWeightGrad():
     ic, oc, h, w, kH, kW = 2, 3, 6, 6, 3, 3
     W = np.random.randn(oc, ic, kH, kW)
     b = np.random.randn(oc)
@@ -224,9 +224,9 @@ def test_conv2d_weight_grad():
 
 # ════════════════════════════════════════════════════════════════
 # Dense weight grad: dW = outer(x, dy). ∂(xW+b)_j/∂W_{i,j'} = x_i if j=j' else 0
-# (Phase 7: new axiom pdiv_dense_W + theorem dense_weight_grad_correct.)
+# (Phase 7: new axiom pdiv_dense_W + theorem denseWeightGrad_correct.)
 # ════════════════════════════════════════════════════════════════
-def test_dense_weight_grad():
+def test_denseWeightGrad():
     m, n = 4, 3
     W = np.random.randn(m, n)
     b = np.random.randn(n)
@@ -255,7 +255,7 @@ def test_dense_weight_grad():
 # Dense bias grad: db = dy. ∂(xW+b)_j/∂b_i = δ(i,j)
 # (Phase 7: theorem pdiv_dense_b, derived from pdiv_add + pdiv_const + pdiv_id.)
 # ════════════════════════════════════════════════════════════════
-def test_dense_bias_grad():
+def test_denseBiasGrad():
     m, n = 4, 3
     W = np.random.randn(m, n)
     b = np.random.randn(n)
@@ -278,9 +278,9 @@ def test_dense_bias_grad():
 
 # ════════════════════════════════════════════════════════════════
 # Conv2d bias grad: db = sum output cotangent over spatial, per channel
-# (Phase 9: new axiom conv2d_bias_grad_has_vjp.)
+# (Phase 9: new axiom conv2dBiasGradHasVJP.)
 # ════════════════════════════════════════════════════════════════
-def test_conv2d_bias_grad():
+def test_conv2dBiasGrad():
     ic, oc, h, w, kH, kW = 2, 3, 6, 6, 3, 3
     W = np.random.randn(oc, ic, kH, kW)
     pad = (kH - 1) // 2
@@ -527,7 +527,7 @@ def test_depthwise_input_grad():
 
 # ════════════════════════════════════════════════════════════════
 # Depthwise weight grad: per-channel transpose trick
-# (Phase 7: new axiom depthwise_weight_grad_has_vjp3.)
+# (Phase 7: new axiom depthwiseWeightGradHasVJP3.)
 # ════════════════════════════════════════════════════════════════
 def test_depthwise_weight_grad():
     """Depthwise weight VJP: per-channel transpose trick. Unlike regular
@@ -581,11 +581,11 @@ def test_depthwise_weight_grad():
     return err < TOL
 
 # ════════════════════════════════════════════════════════════════
-# NOTE — Phase 8: `mhsa_has_vjp_mat` (Attention.lean) is a bundled
+# NOTE — Phase 8: `mhsaHasVJPMat` (Attention.lean) is a bundled
 # existence axiom (HasVJPMat), not a specific-formula claim. It's a
 # composition of primitives that ARE tested here individually:
 # - Q/K/V/O projections → gradient-checked via pdiv_dense / pdiv_dense_W
-# - per-head SDPA       → gradient-checked via sdpa_back_Q/K/V below
+# - per-head SDPA       → gradient-checked via sdpaBackQ/K/V below
 # - reshape / concat    → sparse pdiv_reindex, non-falsifiable at the
 #                         formula level (just index permutations)
 # So we intentionally don't add a direct mhsa gradient check — the axiom's
@@ -594,7 +594,7 @@ def test_depthwise_weight_grad():
 # ════════════════════════════════════════════════════════════════
 
 # ════════════════════════════════════════════════════════════════
-# SDPA backwards: sdpa_back_Q / sdpa_back_K / sdpa_back_V
+# SDPA backwards: sdpaBackQ / sdpaBackK / sdpaBackV
 #
 # These mirror the concrete definitions in Attention.lean. We check
 # each of dQ, dK, dV against finite-difference Jacobians of
@@ -613,7 +613,7 @@ def _sdpa_forward(Q, K, V):
     weights = e / e.sum(axis=1, keepdims=True)  # (n, n)
     return weights @ V                # (n, d)
 
-def _sdpa_back_Q(Q, K, V, dOut):
+def _sdpaBackQ(Q, K, V, dOut):
     n, d = Q.shape
     scale = 1.0 / np.sqrt(d)
     scores = Q @ K.T
@@ -628,7 +628,7 @@ def _sdpa_back_Q(Q, K, V, dOut):
     dScores = scale * dScaled
     return dScores @ K
 
-def _sdpa_back_K(Q, K, V, dOut):
+def _sdpaBackK(Q, K, V, dOut):
     n, d = Q.shape
     scale = 1.0 / np.sqrt(d)
     scores = Q @ K.T
@@ -642,7 +642,7 @@ def _sdpa_back_K(Q, K, V, dOut):
     dScores = scale * dScaled
     return dScores.T @ Q
 
-def _sdpa_back_V(Q, K, V, dOut):
+def _sdpaBackV(Q, K, V, dOut):
     n, d = Q.shape
     scale = 1.0 / np.sqrt(d)
     scores = Q @ K.T
@@ -677,9 +677,9 @@ def _test_sdpa_back(var, n=4, d=3):
     dOut = np.random.randn(n, d)
     fd = _sdpa_fd_grad(var, Q, K, V, dOut)
     claimed = {
-        "Q": _sdpa_back_Q(Q, K, V, dOut),
-        "K": _sdpa_back_K(Q, K, V, dOut),
-        "V": _sdpa_back_V(Q, K, V, dOut),
+        "Q": _sdpaBackQ(Q, K, V, dOut),
+        "K": _sdpaBackK(Q, K, V, dOut),
+        "V": _sdpaBackV(Q, K, V, dOut),
     }[var]
     err = np.max(np.abs(fd - claimed))
     status = "PASS" if err < TOL else "FAIL"
@@ -689,9 +689,9 @@ def _test_sdpa_back(var, n=4, d=3):
         print(f"         worst at {idx}: fd={fd[idx]:.8f} claimed={claimed[idx]:.8f}")
     return err < TOL
 
-def test_sdpa_back_Q(): return _test_sdpa_back("Q")
-def test_sdpa_back_K(): return _test_sdpa_back("K")
-def test_sdpa_back_V(): return _test_sdpa_back("V")
+def test_sdpaBackQ(): return _test_sdpa_back("Q")
+def test_sdpaBackK(): return _test_sdpa_back("K")
+def test_sdpaBackV(): return _test_sdpa_back("V")
 
 # ════════════════════════════════════════════════════════════════
 # GELU: diagonal Jacobian
@@ -712,7 +712,7 @@ def test_gelu():
 # ════════════════════════════════════════════════════════════════
 # PatchEmbed (ViT): conv2d (stride=patchSize) + reshape to (N, D) +
 # CLS prepend + add pos_embed → flatten. Bundled VJP for the whole
-# composition (Attention.lean: patchEmbed_flat_has_vjp).
+# composition (Attention.lean: patchEmbedFlatHasVJP).
 #
 # Strategy: verify the input-image gradient. The conv-on-tiles is
 # stride=patchSize with no overlap, so the input grad has a clean
@@ -782,7 +782,7 @@ def test_patch_embed_flat():
 
 # ════════════════════════════════════════════════════════════════
 # MLP composition: Dense → ReLU → Dense → ReLU → Dense + softmax CE.
-# Tests the bundled `mlp_has_vjp` axiom by composing the chain-rule
+# Tests the bundled `mlpHasVJP` axiom by composing the chain-rule
 # input gradient and comparing it to FD on the full network's loss.
 # Catches composition errors that the per-axiom checks can't see.
 # ════════════════════════════════════════════════════════════════
@@ -834,7 +834,7 @@ def test_mlp_full():
 
     err = np.max(np.abs(dx_fd - dx_claimed))
     status = "PASS" if err < TOL else "FAIL"
-    print(f"  {status}: {'mlp_has_vjp (full network)':30s} max_err={err:.2e}")
+    print(f"  {status}: {'mlpHasVJP (full network)':30s} max_err={err:.2e}")
     if err >= TOL:
         idx = int(np.argmax(np.abs(dx_fd - dx_claimed)))
         print(f"         worst at {idx}: fd={dx_fd[idx]:.8f} claimed={dx_claimed[idx]:.8f}")
@@ -842,7 +842,7 @@ def test_mlp_full():
 
 # ════════════════════════════════════════════════════════════════
 # Multi-head SDPA: H independent single-head SDPAs stacked along the
-# head axis. The bundled `mhsa_has_vjp_mat` axiom asserts the VJP
+# head axis. The bundled `mhsaHasVJPMat` axiom asserts the VJP
 # factors per head; this test confirms that the per-head sdpa_back_*
 # stacked over heads matches FD on the full multi-head forward.
 # ════════════════════════════════════════════════════════════════
@@ -864,9 +864,9 @@ def test_mhsa_full():
     dK_claimed = np.zeros_like(K)
     dV_claimed = np.zeros_like(V)
     for h in range(H):
-        dQ_claimed[h] = _sdpa_back_Q(Q[h], K[h], V[h], dOut[h])
-        dK_claimed[h] = _sdpa_back_K(Q[h], K[h], V[h], dOut[h])
-        dV_claimed[h] = _sdpa_back_V(Q[h], K[h], V[h], dOut[h])
+        dQ_claimed[h] = _sdpaBackQ(Q[h], K[h], V[h], dOut[h])
+        dK_claimed[h] = _sdpaBackK(Q[h], K[h], V[h], dOut[h])
+        dV_claimed[h] = _sdpaBackV(Q[h], K[h], V[h], dOut[h])
 
     def fd_grad(base):
         g = np.zeros_like(base)
@@ -890,7 +890,7 @@ def test_mhsa_full():
         fd = fd_grad(base)
         err = np.max(np.abs(fd - claimed))
         status = "PASS" if err < TOL else "FAIL"
-        print(f"  {status}: {f'mhsa_has_vjp_mat ({label})':30s} max_err={err:.2e}")
+        print(f"  {status}: {f'mhsaHasVJPMat ({label})':30s} max_err={err:.2e}")
         if err >= TOL:
             all_ok = False
     return all_ok
@@ -1176,25 +1176,25 @@ if __name__ == "__main__":
     results = []
     results.append(("Tensor.lean",  "pdiv_id",              True))  # trivial
     results.append(("MLP.lean",     "pdiv_dense",           test_dense()))
-    results.append(("MLP.lean",     "pdiv_dense_W",         test_dense_weight_grad()))
-    results.append(("MLP.lean",     "pdiv_dense_b",         test_dense_bias_grad()))
+    results.append(("MLP.lean",     "pdiv_dense_W",         test_denseWeightGrad()))
+    results.append(("MLP.lean",     "pdiv_dense_b",         test_denseBiasGrad()))
     results.append(("MLP.lean",     "pdiv_relu",            test_relu()))
     results.append(("MLP.lean",     "softmaxCE_grad",       test_softmax_ce()))
-    results.append(("MLP.lean",     "mlp_has_vjp",          test_mlp_full()))
-    results.append(("CNN.lean",     "conv2d_input_grad",    test_conv2d_input_grad_formula()))
-    results.append(("CNN.lean",     "conv2d_weight_grad",   test_conv2d_weight_grad()))
-    results.append(("CNN.lean",     "conv2d_bias_grad",     test_conv2d_bias_grad()))
-    results.append(("CNN.lean",     "maxPool2_input_grad",  test_maxpool2()))
+    results.append(("MLP.lean",     "mlpHasVJP",          test_mlp_full()))
+    results.append(("CNN.lean",     "conv2dInputGrad",    test_conv2dInputGradFormula()))
+    results.append(("CNN.lean",     "conv2dWeightGrad",   test_conv2dWeightGrad()))
+    results.append(("CNN.lean",     "conv2dBiasGrad",     test_conv2dBiasGrad()))
+    results.append(("CNN.lean",     "maxPool2InputGrad",  test_maxpool2()))
     results.append(("BatchNorm",    "pdiv_bnNormalize",     test_bn_normalize()))
     results.append(("BatchNorm",    "pdiv_bnCentered",      test_bn_centered()))
     results.append(("BatchNorm",    "pdiv_bnIstdBroadcast", test_bn_istd_broadcast()))
     results.append(("BatchNorm",    "pdiv_bnAffine",        test_bn_affine()))
     results.append(("Attention",    "pdiv_softmax",         test_softmax()))
-    results.append(("Attention",    "sdpa_back_Q",          test_sdpa_back_Q()))
-    results.append(("Attention",    "sdpa_back_K",          test_sdpa_back_K()))
-    results.append(("Attention",    "sdpa_back_V",          test_sdpa_back_V()))
-    results.append(("Attention",    "patchEmbed_flat",      test_patch_embed_flat()))
-    results.append(("Attention",    "mhsa_has_vjp_mat",     test_mhsa_full()))
+    results.append(("Attention",    "sdpaBackQ",          test_sdpaBackQ()))
+    results.append(("Attention",    "sdpaBackK",          test_sdpaBackK()))
+    results.append(("Attention",    "sdpaBackV",          test_sdpaBackV()))
+    results.append(("Attention",    "patchEmbedFlat",      test_patch_embed_flat()))
+    results.append(("Attention",    "mhsaHasVJPMat",     test_mhsa_full()))
     results.append(("Depthwise",    "depthwise_input_grad", test_depthwise_input_grad()))
     results.append(("Depthwise",    "depthwise_weight_grad", test_depthwise_weight_grad()))
     results.append(("Depthwise",    "depthwise_bias_grad",   test_depthwise_bias_grad()))

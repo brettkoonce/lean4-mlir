@@ -175,7 +175,7 @@ private def dwconvWGrad (o inp dy : String) (c Hh Ww k : Nat) : String :=
 private def convBiasGrad (o dy : String) (oc Hh Ww : Nat) : String :=
   s!"    %{o} = stablehlo.reduce({dy} init: %sc) applies stablehlo.add across dimensions = [0, 2, 3] : ({ty [BS,oc,Hh,Ww]}, tensor<f32>) -> {ty [oc]}\n"
 
-/-- LayerNorm backward (global scalar): input-grad (3-term `bn_grad_input`) recomputed
+/-- LayerNorm backward (global scalar): input-grad (3-term `bnGradInput`) recomputed
     from the saved LN input `xin`, plus scalar γ-grad `%{o}dg` and β-grad `%{o}db`. -/
 private def lnBack (o xin dy g : String) (c Hh Ww : Nat) : String :=
   let n := c*Hh*Ww

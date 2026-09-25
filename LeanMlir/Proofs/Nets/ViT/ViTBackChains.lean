@@ -13,7 +13,7 @@ from the attention core outwards:
   `finProdFinEquiv` column layout, and its flattened forms `coreQFlat`/`coreKFlat`/`coreVFlat`;
 * the full MHSA input-gradient backward `mhsaBackFlat` — output-projection backward, the three
   cores, the three projection backwards fanning in at `X` (`mhsaBackFlat_eq_mhsa_vjp` ties it to
-  `mhsa_has_vjp_mat`);
+  `mhsaHasVJPMat`);
 * the encoder-block backward `vitBlockBackV` (the vector-`[D]` LayerNorm the shipped net runs,
   with `rowLNVecFlatBack` in both LN slots, tied by `vitBlockBackV_eq_transformerBlockV_vjp`);
 * `vitBlockBackVAt`, `vitTowerBackK` (the head-first depth-`k` tower fold), the two saved
@@ -40,11 +40,11 @@ namespace Proofs
 -- § The multi-head sdpa backward — the certified single-head adjoint on each head slab
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Multi-head sdpa backward w.r.t. V** — per head, the certified `sdpa_back_V` on the head
+/-- **Multi-head sdpa backward w.r.t. V** — per head, the certified `sdpaBackV` on the head
     slabs; concatenated by the `finProdFinEquiv` column layout. -/
 noncomputable def mhsaSdpaBackV {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
   fun i j =>
-    sdpa_back_V N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
+    sdpaBackV N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 K)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 V)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 dOut) i (finProdFinEquiv.symm j).2
@@ -52,7 +52,7 @@ noncomputable def mhsaSdpaBackV {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : M
 /-- **Multi-head sdpa backward w.r.t. Q.** -/
 noncomputable def mhsaSdpaBackQ {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
   fun i j =>
-    sdpa_back_Q N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
+    sdpaBackQ N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 K)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 V)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 dOut) i (finProdFinEquiv.symm j).2
@@ -60,7 +60,7 @@ noncomputable def mhsaSdpaBackQ {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : M
 /-- **Multi-head sdpa backward w.r.t. K.** -/
 noncomputable def mhsaSdpaBackK {h N dh : Nat} (Q K V dOut : Mat N (h * dh)) : Mat N (h * dh) :=
   fun i j =>
-    sdpa_back_K N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
+    sdpaBackK N dh (headSliceMat N h dh (finProdFinEquiv.symm j).1 Q)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 K)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 V)
       (headSliceMat N h dh (finProdFinEquiv.symm j).1 dOut) i (finProdFinEquiv.symm j).2
@@ -86,7 +86,7 @@ noncomputable def coreKFlat (Q K V : Mat N (h * dh)) (v : Vec (N * (h * dh))) : 
 /-- **The full multi-head self-attention input-gradient backward** (cotangent `dY ↦ dX`):
     output-projection backward (`dense Woᵀ 0`, per token) → the three sdpa cores → Q/K/V projection
     backwards (`dense Wᵀ 0`, per token), fanning in at `X` (the three paths add). The certified
-    MHSA backward at the input (`mhsa_layer`, `Attention.lean`) is
+    MHSA backward at the input (`mhsaLayer`, `Attention.lean`) is
     `dconcat = dY·Woᵀ`, `(dQ, dK, dV) = sdpa_back(dconcat)` per head,
     `dX = dQ·Wqᵀ + dK·Wkᵀ + dV·Wvᵀ`; `mhsaBackFlat_eq_mhsa_vjp` says this chain is that. -/
 noncomputable def mhsaBackFlat (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh)) :
@@ -180,21 +180,21 @@ noncomputable def vitTowerBackK (Np1 heads d_head mlpDim : Nat) (ε : ℝ) :
 -- § The endpoints: the CLS-slice scatter, the two saved prefixes, and the whole-net chain
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The CLS-slice backward** — the adjoint of `cls_slice_flat` (gather row 0 of the `(N+1)×D`
+/-- **The CLS-slice backward** — the adjoint of `clsTokenFlat` (gather row 0 of the `(N+1)×D`
     sequence): scatter the head cotangent `dy` back to row 0 (the CLS token), zero on the patch rows.
-    The certified `cls_slice_flat_has_vjp.backward`. -/
+    The certified `clsTokenFlatHasVJP.backward`. -/
 noncomputable def clsScatter (N D : Nat) (dy : Vec D) : Vec ((N + 1) * D) :=
   fun idx =>
     if (finProdFinEquiv.symm idx).1 = (0 : Fin (N + 1)) then dy (finProdFinEquiv.symm idx).2 else 0
 
 /-- The patch-embed output — the encoder tower's saved input. Named as a FUNCTION of the image so
     that the same constant is both the activation the tower's slots are saved at and the `f`
-    argument of the chain's first `vjp_comp` (`cnxSavedA0 … cnxSavedA10`'s reason). -/
+    argument of the chain's first `vjpComp` (`cnxSavedA0 … cnxSavedA10`'s reason). -/
 noncomputable def vitSavedPE (ic H W patchSize N heads d_head : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))
     (cls_token : Vec (heads * d_head)) (pos_embed : Mat (N + 1) (heads * d_head))
     (x : Vec (ic * H * W)) : Vec ((N + 1) * (heads * d_head)) :=
-  patchEmbed_flat ic H W patchSize N (heads * d_head) W_conv b_conv cls_token pos_embed x
+  patchEmbedFlat ic H W patchSize N (heads * d_head) W_conv b_conv cls_token pos_embed x
 
 /-- The encoder tower's output — the final LayerNorm's saved input. -/
 noncomputable def vitSavedBody (ic H W patchSize N mlpDim heads d_head k : Nat)
@@ -206,12 +206,12 @@ noncomputable def vitSavedBody (ic H W patchSize N mlpDim heads d_head k : Nat)
     (vitSavedPE ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
 
 /-- **THE WHOLE-NET ViT-TINY INPUT GRADIENT**, at the depth, head count and LayerNorm spelling the
-    net runs. The reverse of `vitForwardKV = classifier_flat ∘ LNᵥ ∘ vitBodyKVFlat ∘ patchEmbed`:
+    net runs. The reverse of `vitForwardKV = classifierFlat ∘ LNᵥ ∘ vitBodyKVFlat ∘ patchEmbed`:
 
       patchEmbedBack ∘ towerBack ∘ finalLNBack ∘ clsScatter ∘ dense Wclsᵀ
 
-    with every slot concrete — the patch-embed backward is `patchEmbed_input_grad_formula` (which
-    IS `patchEmbed_flat_has_vjp`'s backward, definitionally), the head is the free `dense Wᵀ 0`
+    with every slot concrete — the patch-embed backward is `patchEmbedInputGradFormula` (which
+    IS `patchEmbedFlatHasVJP`'s backward, definitionally), the head is the free `dense Wᵀ 0`
     followed by the CLS scatter, the final LN is `rowLNVecFlatBack` at the tower's output, and the
     tower is `vitTowerBackK`. `vitInputGradK_eq_vitForwardKV_vjp` is the apex that says this is the
     certified whole-net gradient. -/
@@ -221,7 +221,7 @@ noncomputable def vitInputGradK (ic H W patchSize N mlpDim heads d_head nClasses
     (ε : ℝ) (ps : Fin k → BlockParamsV (heads * d_head) mlpDim)
     (γF : Vec (heads * d_head)) (Wcls : Mat (heads * d_head) nClasses)
     (x : Vec (ic * H * W)) : Vec nClasses → Vec (ic * H * W) :=
-  patchEmbed_input_grad_formula ic H W patchSize N (heads * d_head) W_conv
+  patchEmbedInputGradFormula ic H W patchSize N (heads * d_head) W_conv
     ∘ vitTowerBackK (N + 1) heads d_head mlpDim ε k ps
         (vitSavedPE ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
     ∘ rowLNVecFlatBack (N + 1) (heads * d_head) ε γF
@@ -271,7 +271,7 @@ noncomputable def vitInputGradKB (B ic H W patchSize N mlpDim heads d_head nClas
     (γF : Vec (heads * d_head)) (Wcls : Mat (heads * d_head) nClasses)
     (x : Vec (B * (ic * H * W))) : Vec (B * nClasses) → Vec (B * (ic * H * W)) :=
   StableHLO.batchMap B
-      (patchEmbed_input_grad_formula ic H W patchSize N (heads * d_head) W_conv)
+      (patchEmbedInputGradFormula ic H W patchSize N (heads * d_head) W_conv)
   ∘ StableHLO.batchMapAux B (vitTowerBackK (N + 1) heads d_head mlpDim ε k ps)
       (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
   ∘ StableHLO.batchMapAux B (rowLNVecFlatBack (N + 1) (heads * d_head) ε γF)

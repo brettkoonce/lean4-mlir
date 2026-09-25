@@ -1128,7 +1128,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
         "    // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes\n" ++
         "    // its shard of the GLOBAL-batch function, and this step IS the single-device step at the\n" ++
         "    // global batch N x b: proved as MobileNetV4SyncTieB.mnv4_net_syncTiedB (every all-reduced\n" ++
-        "    // gradient) and StableHLO.mnv4FwdGraphSync_full_shard (the forward), both in\n" ++
+        "    // gradient) and StableHLO.mnv4FwdGraphSyncFull_shard (the forward), both in\n" ++
         "    // LeanMlir/Proofs/Nets/MobileNet/ (planning/global_bn_verified.md).\n" ++
         (if bf16 then
           "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
@@ -1285,7 +1285,7 @@ end Proofs.StableHLO
 -- ⭐⭐ **SYNC-BN SINCE 2026-09-21** (`planning/global_bn_verified.md` §3.4): every BN layer
 -- all-reduces its statistics — 77 × 3 = 231 collectives beside the 233 gradient ones — so a DP step
 -- IS the single-device step at batch 256 (`MobileNetV4SyncTieB.mnv4_net_syncTiedB`, the forward
--- `StableHLO.mnv4FwdGraphSync_full_shard`). That falsifies the asymmetric-batch identity above by
+-- `StableHLO.mnv4FwdGraphSyncFull_shard`). That falsifies the asymmetric-batch identity above by
 -- design, so `shard-check mnv4in` is retired; `imagenet-syncbn-check mnv4` is the split-batch gate
 -- (4×64 against 1×256, both precisions), and `mnv4-dp-check`'s gradient bound is 1e-2 / 5e-2
 -- (sync-BN backward against the two-pass one). `runs/2026-09-21-syncbn-r50-mnv4/` has the logs.

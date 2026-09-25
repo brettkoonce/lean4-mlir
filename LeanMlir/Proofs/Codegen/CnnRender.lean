@@ -632,8 +632,8 @@ set_option maxRecDepth 8000 in
     instead of a parallel dialect. See planning/archive/cifar_lowprec_stability.md §4.1.
 
     ⭐ **The migration is semantically free, not a re-derivation.** Both families denote the SAME
-    proven VJP — `StableHLO.lean` l.2016 vs l.2200 are `(conv2d_has_vjp3 W b).backward v …` and
-    `batchMap N (… (conv2d_has_vjp3 W b)).backward (fun _ => 0) …`. The only difference is the
+    proven VJP — `StableHLO.lean` l.2016 vs l.2200 are `(conv2dHasVJP3 W b).backward v …` and
+    `batchMap N (… (conv2dHasVJP3 W b)).backward (fun _ => 0) …`. The only difference is the
     primal argument, and l.2990 records why it is free: *conv is linear, so this is a global VJP*
     — the input-VJP ignores the primal. That is why `.convBack`'s primal argument is simply
     dropped below rather than threaded.

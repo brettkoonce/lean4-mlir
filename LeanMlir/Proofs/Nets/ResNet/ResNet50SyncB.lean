@@ -3,18 +3,18 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 
 /-! # ResNet-50's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
-`ResNet50FullB` (T2) says the typed batch-BN graph denotes `resnet50ForwardB_full N q w` on one
+`ResNet50FullB` (T2) says the typed batch-BN graph denotes `resnet50ForwardBFull N q w` on one
 device. At `replicas > 1` the data-parallel render makes every BatchNorm site `bnFwdSite`'s sync-BN
 composition — this replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed,
 then `bnSyncF` — so the statistics each replica normalises by are the GLOBAL batch's. This file is
 T2's data-parallel twin: that forward graph, stated as a family over the `R` replicas, denotes on
 replica `r` exactly `batchShard r` of the single-device forward at the global batch `R·N`.
 
-    den (resnet50FwdGraphSync_full R hR N q epsStr w e r)
-      = batchShard R N nCls (resnet50ForwardB_full (R * N) q w X) r
+    den (resnet50FwdGraphSyncFull R hR N q epsStr w e r)
+      = batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r
 
 given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
-move**: the right-hand side is the committed `resnet50ForwardB_full`, at `N := R·N`. ⭐ The
+move**: the right-hand side is the committed `resnet50ForwardBFull`, at `N := R·N`. ⭐ The
 resolution stays a binder: one statement covers `q = 7` (224 px) and `q = 5` (160 px), the ladder
 written as T2 writes it, `2 * (…)` nests throughout.
 
@@ -262,10 +262,10 @@ theorem r50DownGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The sync-BN data-parallel ResNet-50 forward graph, over the replica family.** T2's
-    `resnet50FwdGraphB_full` with every BatchNorm a `bnSyncSiteLA` over all `R` replicas; block
+    `resnet50FwdGraphBFull` with every BatchNorm a `bnSyncSiteLA` over all `R` replicas; block
     prefixes (`s1b0` … `s4b2`) and collective tags are the render's. The stem and head are
     ResNet-34's sync graphs, whose names R50 shares. -/
-def resnet50FwdGraphSync_full (R : Nat) (hR : 0 < R) (N q : Nat) (epsStr : String) {nCls : Nat}
+def resnet50FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N q : Nat) (epsStr : String) {nCls : Nat}
     (w : R50BWeights nCls)
     (e : Fin R → SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
     Fin R → SHlo (N * nCls) :=
@@ -295,20 +295,20 @@ def resnet50FwdGraphSync_full (R : Nat) (hR : 0 < R) (N q : Nat) (epsStr : Strin
 
 /-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` examples,
-    the sync-BN graph on replica `r` denotes `batchShard r` of `resnet50ForwardB_full (R * N) q w X`
+    the sync-BN graph on replica `r` denotes `batchShard r` of `resnet50ForwardBFull (R * N) q w X`
     — the committed batch-BN forward, at the global batch, at the same resolution binder `q`
     (`q = 7` the 224-px net, `q = 5` the 160-px one). One block lemma per block, the shard
     hypothesis threaded from each into the next. `0 < q` is what makes every BatchNorm's reduction
     width nonzero. -/
-theorem resnet50FwdGraphSync_full_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat)
+theorem resnet50FwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat)
     (hq : 0 < q) (epsStr : String) {nCls : Nat} (w : R50BWeights nCls)
     (e : Fin R → SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (X : Vec ((R * N) * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (he : ∀ r, den (e r)
       = batchShard R N (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))) X r)
     (r : Fin R) :
-    den (resnet50FwdGraphSync_full R hR N q epsStr w e r)
-      = batchShard R N nCls (resnet50ForwardB_full (R * N) q w X) r := by
+    den (resnet50FwdGraphSyncFull R hR N q epsStr w e r)
+      = batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r := by
   have h1 : 0 < q := hq
   have h2 : 0 < 2 * q := by omega
   have h4 : 0 < 2 * (2 * q) := by omega
@@ -346,17 +346,17 @@ example (R N : Nat) (hR : 0 < R) (hN : 0 < N) (epsStr : String) {nCls : Nat}
     (w : R50BWeights nCls) (e : Fin R → SHlo (N * (3 * 224 * 224)))
     (X : Vec ((R * N) * (3 * 224 * 224)))
     (he : ∀ r, den (e r) = batchShard R N (3 * 224 * 224) X r) (r : Fin R) :
-    den (resnet50FwdGraphSync_full R hR N 7 epsStr w e r)
-      = batchShard R N nCls (resnet50ForwardB_full (R * N) 7 w X) r :=
-  resnet50FwdGraphSync_full_shard R hR N hN 7 (by norm_num) epsStr w e X he r
+    den (resnet50FwdGraphSyncFull R hR N 7 epsStr w e r)
+      = batchShard R N nCls (resnet50ForwardBFull (R * N) 7 w X) r :=
+  resnet50FwdGraphSyncFull_shard R hR N hN 7 (by norm_num) epsStr w e X he r
 
 example (R N : Nat) (hR : 0 < R) (hN : 0 < N) (epsStr : String) {nCls : Nat}
     (w : R50BWeights nCls) (e : Fin R → SHlo (N * (3 * 160 * 160)))
     (X : Vec ((R * N) * (3 * 160 * 160)))
     (he : ∀ r, den (e r) = batchShard R N (3 * 160 * 160) X r) (r : Fin R) :
-    den (resnet50FwdGraphSync_full R hR N 5 epsStr w e r)
-      = batchShard R N nCls (resnet50ForwardB_full (R * N) 5 w X) r :=
-  resnet50FwdGraphSync_full_shard R hR N hN 5 (by norm_num) epsStr w e X he r
+    den (resnet50FwdGraphSyncFull R hR N 5 epsStr w e r)
+      = batchShard R N nCls (resnet50ForwardBFull (R * N) 5 w X) r :=
+  resnet50FwdGraphSyncFull_shard R hR N hN 5 (by norm_num) epsStr w e X he r
 
 end StableHLO
 

@@ -66,8 +66,8 @@ declaration and the step (`-Dprofiler=true` gives category totals only). Two rea
   parsers break first.
 * `LipschitzCertScorecardSDPFull`/`…Uncon` are in no lib — build them by name after a regen (§3.3).
 * A peel lemma's pattern does not instantiate when a witness is typed at a function only
-  DEFEQ to the one in the lemma (EfficientNet's `convBn_has_vjp`: `fun v => (conv2d W b
-  (unflatten v)).flatten` vs `flatConv W b`) — there `simp only [vjp_comp]` stays (§1(m)).
+  DEFEQ to the one in the lemma (EfficientNet's `convBnHasVJP`: `fun v => (conv2d W b
+  (unflatten v)).flatten` vs `flatConv W b`) — there `simp only [vjpComp]` stays (§1(m)).
 * `trace.profiler` allocates: a heartbeat bump sized without it can fail under it (§1(g):
   `emitTok` at 400k).
 
@@ -92,21 +92,21 @@ Parked (low payoff): the StableHLO printer split
 | `6f4d5716` (c) | SmoothingDec generator: six of seven bumps out (the 3300-entry literal keeps `maxRecDepth`) | 7 modules green; regeneration byte-identical before the edit |
 | `6f4d5716` (d) | `nlinarith` → `linarith` where it closes: 21 of 28 in FloatBridge, 1 of 4 in CrownBound | FloatBridge 7.4 s → 5.3 s |
 | `6f4d5716` (e) | IBP/CROWN scorecards: shared prelude (per-row ℓ1 facts, fallback images) → new `LipschitzCertScorecardIBPData`; IBP, IBPUncon, Crown, CrownUncon import it and not each other; both generators now emit the doc links the committed files carried by hand | local: data 6 s, then IBP 165 / IBPUncon 158 / Crown 254 / CrownUncon 302 in parallel — the tail after FullImgsA was IBP → IBPUncon → CrownUncon ≈ 625 s serial |
-| `3a545713` (f) | §3.1 ResNet-34 apex: nested apex body, `r34B_full_has_vjp_at_backward` (the peel, `rfl` at variable stages) and `r34StemB_has_vjp_at_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
+| `3a545713` (f) | §3.1 ResNet-34 apex: nested apex body, `r34BFullHasVJPAt_backward` (the peel, `rfl` at variable stages) and `r34StemBHasVJPAt_backward`; the tie `rw`s with both. Statements unchanged (comparator tier, R50 untouched); both `maxRecDepth 800000` / `maxHeartbeats 1000000` pairs out — the last hand-written bumps in Nets | ResNet34BackCertifiedTieB 43 s / 8.2 GB → 3.2 s / 2.9 GB |
 | `bb38c790` (g) | §3.2 `den.eq_def` never built: `denStep`/`denStepApp` dsimprocs (smart unfolding, one constructor) replace `den` in all 118 `simp only` sets (29 files); StableHLO's file-wide `maxHeartbeats 4000000` and `cnnBackGraph_faithful`'s 2M out, `emitTok` alone keeps 1M (its compile needs ~2×; tracing trips 400k) | `den.eq_def` was 233 s on StableHLO's critical path (profiler); StableHLO 343 s → 83 s standalone, 91 s under lake; full `Proofs Certs` rebuild 2 m 20 s |
 | `7fe1f006` (h) | §3.3 conv IBP scorecard by reflection: new `Foundation/IntervalBoundConvQ.lean` (the layers over ℚ, cast lemmas, `convNetCheckQ` + `convNetCheckQ_sound`); the generator emits ℚ data, the ℝ net as its cast, and one `decide +kernel` per image — the intermediate tensors and their ~900 goals per image are gone (−1,640 lines); statements and the aggregate unchanged | profiled first: all simp (box ~250 s, conv eval ~180 s per image); ImgsA–D each 281 s / 9.9 GB → 11 s / 3.6 GB; generator byte-reproducible before the edit |
 | `d9356c38` (i) | §3.3 Gram identities by one kernel check: new `Foundation/GramQ.lean` (`castM`, `gram_eq_of_check`, `abs_le_of_check`); Instance, base Scorecard (generator), Float (generator) emit ℚ data with the ℝ matrices as `castM` of it; the 8 `G*_eq`/`H*_eq` and the two entrywise `|W| ≤ c` bounds become `decide +kernel` checks and their 1.6M–16M heartbeat bumps go; consumers' simp sets gain `…Q, castM` (SmoothingNetWitness, pair-SDP, TrainedMlpWitness) | profiled first: Instance's `G1t_eq` 139 s, Float's `W1sV_abs_le` 110 s; LipschitzCertInstance 145 s → 17 s, LipschitzCertFloat 113 s → 4.5 s, LipschitzCertScorecard 26 s under lake; generators byte-reproducible before the edit (pair-SDP: 7.6 min) |
 | `3f22bb47` (j) | §3.3 FullNets on the (i) shape: `W2`/`G1`/`H1`/`G2`/`H2` for both nets as ℚ data + `castM`, `H1`/`G2`/`H2` identities by `gram_eq_of_check` (their 12.8M bumps out); `G1` keeps its per-entry `dotZ` proofs, each entry value now `rfl` on the ℚ side + `norm_num`; the 784-wide `W1` untouched; `…Q, castM` added in the IBP, pair-SDP-full and CROWN generators (the CROWN one also parses the ℚ block) | FullNets 326 s / 8.8 GB → 61 s / 5.5 GB standalone (73 s under lake); CrownUncon standalone 237 s → 213 s (not slower); four generators byte-reproducible before the edit (pair-SDP-full 11 min) |
 | `714dd89b` (k) | §3.3 strip-and-compile across the Lipschitz tier: the shared `HEADER_OPTS` (`maxRecDepth 100000` / `maxHeartbeats 3200000` in 9 modules), CROWN's header, FullNets' 12.8M `_lip` bumps, the pair-SDP 1.6M–64M bumps (incl. the 64M `hS*`) and the float tier's per-image 8M — 281 option lines out of 14 modules. Kept: IBP/IBPUncon's per-decl 6.4M (32 + 18 `whnf` timeouts without them; their file header was dead) | every stripped module compiled standalone before the generators changed; the regenerated diff is deletions only |
 | (l) | §3.7: `rndP`/`rndP_zero`/`rndP_err` → leaf `Float/RndP.lean` (Mathlib only), so `DataParallelSyncBf16` no longer imports `Binary32Instance` → FloatBridge, SgdDescentLinear; the three `#print axioms` out of `Binary32Instance` (already in `tests/AuditAxioms.lean`); `Proofs.Real.differentiable_tanh`/`…hasDerivAt_tanh` → `Proofs.differentiable_tanh`/`hasDerivAt_tanh` (Mathlib has neither; the docstring said it had one); file-scope `Classical` out of the audit's six files: four need nothing, CNN's three maxpool decls and SgdDescentCnn's 25 get `open scoped Classical in` (all for `if MaxPool2IsArgmax`, which has no `Decidable` instance); the ten `nlinarith` → `nlinarith only […]` (one → `positivity`) | RndP 1.2 s; DataParallelSyncBf16 12 s; FloatBridge 5.3 s → 5.0 s |
-| (m) | §3.4 root batch, one corpus rebuild. `Tensor.lean`: `Mat`/`Tensor3` `flatten` bodies without `let`s, `flatten_apply`/`unflatten_apply` for both, the four round-trips `@[simp]`, `vjp_comp_backward`/`vjp_comp_at_backward`, and `vjp_comp_diff_at` + `vjp_comp_diff_at_fst_backward` moved in from `ResNet34.lean` / ConvNeXt's tie (the §3.1 leftover). Leaves: `softmax_apply`/`oneHot_apply`/`crossEntropy_def` (MLP), `bnchwFwd_apply` (PerChannelBN), `residual_apply`/`residual_differentiableAt` (Residual). Sites: PerChannelBN's two nested-`.backward` `show`s → `unfold; rw [vjp_comp_backward, …]` and two `bnchwFwd` `show`s; Attention's four softmax/CE/oneHot `show`s; seven residual `show`/`unfold` sites; the 27 `simp only [… vjp_comp(_at) …]` peels → the `_backward` lemmas, where 9 turned out dead (the proof closes by `rfl` once the outer builder unfolds) and EfficientNet's two conv sites keep `vjp_comp` (defeq-typed witness, see traps) | the `@[simp]` round-trips and `let`-free bodies broke nothing in the 4,175-job corpus |
-| (n) | §3.6 seal kits: `ne_of_ray_readout` / `fderiv_ne_zero_of_ray_readout` (JacobianSeal) make the four nets' `sealX_nonconstant` / `sealX_jacobian_nonzero` one term each; `EDiff_convBn` / `convS2Bn` / `dwBn` / `dwS2Bn` / `dwS2XlaBn` (BatchSealKit) fuse op + BatchNorm, so 43 of the 46 carrier steps are one call (the three stems keep their own shape) | −176 lines net; the four seals build in ~3 s each |
-| (o) | §3.6 statement ports. EfficientNet: `B0Weights.EpsPos` (with `MBW.EpsPos`, `MBWNoExp.EpsPos`) replaces the 49 `0 < ε` binders in 7 statements. MobileNetV2 on V4's shape: `MNV2PosB` + `MNV2SmoothAtB` replace the apex's 38 binders, built on `vjp_comp_diff_at`, which also yields the new `mobilenetv2ForwardB_full_differentiableAt` (the seal's 45-line `sealDiffAt` is one term); `mnv2_net_tiedB` takes `g` free; `mnv2_net_syncTiedB` is the free-`G`/`hgs` form over a named `mnv2NetSyncTiedB` Prop, with `_smoothedCE` restoring the old instantiated statement. Tier regenerated (`mnv2_net_syncTiedB` and both EfficientNet entries), blueprint entries mirror V4's | the local comparator run: all three configs "Your solution is okay!" (5 min); ports + (n) together −558 lines |
+| (m) | §3.4 root batch, one corpus rebuild. `Tensor.lean`: `Mat`/`Tensor3` `flatten` bodies without `let`s, `flatten_apply`/`unflatten_apply` for both, the four round-trips `@[simp]`, `vjpComp_backward`/`vjpCompAt_backward`, and `vjpCompDiffAt` + `vjpCompDiffAt_fst_backward` moved in from `ResNet34.lean` / ConvNeXt's tie (the §3.1 leftover). Leaves: `softmax_apply`/`oneHot_apply`/`crossEntropy_def` (MLP), `bnchwFwd_apply` (PerChannelBN), `residual_apply`/`residual_differentiableAt` (Residual). Sites: PerChannelBN's two nested-`.backward` `show`s → `unfold; rw [vjpComp_backward, …]` and two `bnchwFwd` `show`s; Attention's four softmax/CE/oneHot `show`s; seven residual `show`/`unfold` sites; the 27 `simp only [… vjpComp(_at) …]` peels → the `_backward` lemmas, where 9 turned out dead (the proof closes by `rfl` once the outer builder unfolds) and EfficientNet's two conv sites keep `vjpComp` (defeq-typed witness, see traps) | the `@[simp]` round-trips and `let`-free bodies broke nothing in the 4,175-job corpus |
+| (n) | §3.6 seal kits: `ne_of_ray_readout` / `fderiv_ne_zero_of_ray_readout` (JacobianSeal) make the four nets' `sealX_nonconstant` / `sealX_jacobian_nonzero` one term each; `eDiff_convBn` / `convS2Bn` / `dwBn` / `dwS2Bn` / `dwS2XlaBn` (BatchSealKit) fuse op + BatchNorm, so 43 of the 46 carrier steps are one call (the three stems keep their own shape) | −176 lines net; the four seals build in ~3 s each |
+| (o) | §3.6 statement ports. EfficientNet: `B0Weights.EpsPos` (with `MBW.EpsPos`, `MBWNoExp.EpsPos`) replaces the 49 `0 < ε` binders in 7 statements. MobileNetV2 on V4's shape: `MNV2PosB` + `MNV2SmoothAtB` replace the apex's 38 binders, built on `vjpCompDiffAt`, which also yields the new `mobilenetv2ForwardBFull_differentiableAt` (the seal's 45-line `seal_differentiableAt` is one term); `mnv2_net_tiedB` takes `g` free; `mnv2_net_syncTiedB` is the free-`G`/`hgs` form over a named `mnv2NetSyncTiedB` Prop, with `_smoothedCE` restoring the old instantiated statement. Tier regenerated (`mnv2_net_syncTiedB` and both EfficientNet entries), blueprint entries mirror V4's | the local comparator run: all three configs "Your solution is okay!" (5 min); ports + (n) together −558 lines |
 | (p) | §3.6 `_smul` kit: `IsHomog` (an `abbrev`, so `rw [h]`/`h s v` see the equation) + `IsHomog.comp` in DataParallelSync; 128 `X_smul` lemmas across 6 sync files restated `IsHomog (X …)` under the same name, `batchMap_smul` / `batchMapAux_smul` lift `IsHomog`, one-term delegates η-reduce (`batchMap_smul _ (HasVJP.backward_smul _ _)`); 21 explicit `… dy s` call sites swapped to `… s dy`. EfficientNetSyncStepTieG (the only sync file without them) got `variable` sections, `include hN hh hw` where the shard proofs need them | `IsHomog`: −55 lines. Sections: +21 lines but −6% of the file's bytes (97.1 → 90.9 kB) — the survey's "~300 lines from `variable`s" does not hold at this file's shape |
 | (q) | §3.5 training files. The conv2d / depthwise input-VJP proofs (CNN.lean, Depthwise.lean) share `sum_fin_ite_add_eq` + `padTap_indicator`: `simp` rewrites every Kronecker to "`c = ci` and the tap lands", collapses `(c, kh, kw)`, and `split_ifs` closes — the 25-line `show (let …)` restatements, the 55-line injectivity blocks and the triple `sum_eq_single`s are gone (−288 lines). `stepRadius` (SgdDescent) + nine named losses (`cnnConv2KernelLoss`, …, `linearLoss`, `cifar8LastConvLoss`) state the 16 `*_sgd_descends` rungs; each proof opens `simp only [stepRadius] at *; unfold <loss> at *` and is otherwise unchanged (`simp only [loss]` misses the partial application `gradAt (loss …)`; `unfold` does not). `TrainedLinearDescent`'s generator unfolds `linearLoss` after its `refine` (byte-reproducible before the edit). `Conv2Slot.loss_grad_lipschitz`: `set δ` for the drift constant (17 copies), `gcongr` for the 7-deep `mul_le_mul_of_nonneg_left` chain; margin3/4 the same | −763 lines net; CNN 5.9 → 6.2 s, SgdDescentCnn 20 s → 20 s — the audit's "statement elaboration is the 95 s" guess does not hold locally |
 | (s) | §5.1 generator paths. `trained_cnn_{witness,seal}.py` and `lipschitz_cert_{witness_s8,rationalize,power_iter}.py` read `data/` and write under this repo's root (`trained_linear_descent.py`'s `ROOT`); the three Lipschitz scratch snippets go to `SNIPPET_DIR` (default: the system temp dir) instead of a dead scratchpad path. Hand edits ported back so both witnesses and the seal regenerate byte-identically: `ite_eq_left`/`ite_eq_right`/`ite_true` (CNN seal, MLP witness), MLP witness's reduced-model banner, `norm_num [hpreVals]` and §1(i)'s `…Q, castM` simp set. Then `TrainedCnnSeal`'s `open Classical` out through the generator (§3.7's last). `xla_pad_op_check.py` / `mnv2_forward_tie.py` keep the sibling venv's `iree-compile` (a tool binary, env-overridable, never written to) | MNIST in `data/` is byte-identical to the sibling's; `../lean4-jax` has no modified files after every run; TrainedCnnSeal 37 s under lake, audit clean |
-| (t) | §5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape. `R34PosB`/`R34SmoothAtB` and `R50PosB`/`R50SmoothAtB` (stem + pool + one bundle per block; `0 < q` stays its own binder — a shape fact, not a weight fact) replace the apexes' 35 positional hypotheses each; each apex is `.fst` of a private `vjp_comp_diff_at` chain (`r34ChainB`/`r50ChainB`), and the new `resnet34ForwardB_full_differentiableAt`/`resnet50ForwardB_full_differentiableAt` are its `.snd` (audited). The seals gain `sealPos`/`sealSmooth`; `sealVJP` is one call and `sealDiffAt` (~40 lines each) one term. Statement changes: both apexes + `_correct`; the R50 one is in the comparator tier (regenerated). MobileNetV4's "R50 binds 33" prose restated as fields | −203 lines net; all four files ~3 s standalone before and after |
-| (r) | Polish. `MaxPool2IsArgmax.decidable` (CNN.lean) retires the 28 `open scoped Classical in` of §1(l); file-scope `open Classical` is out of IR, MLP, EvenKernelConvBack and the R34/ConvNeXt×2 ties (nothing else needed it). MobileNetV4's apex on `vjp_comp_diff_at` exports `mobilenetv4ForwardB_full_differentiableAt`, so its `sealDiffAt` is one term. The eight float rungs state their radius as `stepRadius … lr (budget)` (37 sites); the TrainedLinearDescent generator unfolds it | −221 lines; full corpus + comparator green |
+| (t) | §5.2 ResNet-34 / ResNet-50 on MobileNetV2's shape. `R34PosB`/`R34SmoothAtB` and `R50PosB`/`R50SmoothAtB` (stem + pool + one bundle per block; `0 < q` stays its own binder — a shape fact, not a weight fact) replace the apexes' 35 positional hypotheses each; each apex is `.fst` of a private `vjpCompDiffAt` chain (`r34ChainB`/`r50ChainB`), and the new `resnet34ForwardBFull_differentiableAt`/`resnet50ForwardBFull_differentiableAt` are its `.snd` (audited). The seals gain `seal_pos`/`seal_smooth`; `sealVJP` is one call and `seal_differentiableAt` (~40 lines each) one term. Statement changes: both apexes + `_correct`; the R50 one is in the comparator tier (regenerated). MobileNetV4's "R50 binds 33" prose restated as fields | −203 lines net; all four files ~3 s standalone before and after |
+| (r) | Polish. `MaxPool2IsArgmax.decidable` (CNN.lean) retires the 28 `open scoped Classical in` of §1(l); file-scope `open Classical` is out of IR, MLP, EvenKernelConvBack and the R34/ConvNeXt×2 ties (nothing else needed it). MobileNetV4's apex on `vjpCompDiffAt` exports `mobilenetv4ForwardBFull_differentiableAt`, so its `seal_differentiableAt` is one term. The eight float rungs state their radius as `stepRadius … lr (budget)` (37 sites); the TrainedLinearDescent generator unfolds it | −221 lines; full corpus + comparator green |
 
 ## 2. Build-time map (CI wall seconds, latest build of each module; ~7,200 s serial over 252)
 
@@ -132,15 +132,15 @@ rebuilding IBPUncon and both CROWN files.
 
 The plan below (restate the witnesses at point-free `r34SavedB_k` abbrevs) was not needed and
 would have changed the tie's statement. What worked: keep every statement, change proofs only.
-The apex body nests its seventeen `vjp_comp_diff_at`s (no `let`s); a generic peel lemma over
+The apex body nests its seventeen `vjpCompDiffAt`s (no `let`s); a generic peel lemma over
 VARIABLE stages closes by `rfl`, since there each witness's `opaqueA` point is the same term on
 both sides; the tie instantiates it by `rw`, where the witnesses' `opaqueA` types match on the
-nose. The remaining gap was the stem (`r34StemB_has_vjp_at` is `vjp_comp_at` of stage + pool):
+nose. The remaining gap was the stem (`r34StemBHasVJPAt` is `vjpCompAt` of stage + pool):
 the tie's closing `rfl` hit `maxRecDepth` there at the net's numerals, so it gets its own `rfl`
 lemma at variable widths, used by `rw`.
 
 Still open from the old plan, independent of speed: retire the `r34PreK` + `_apply` vocabulary
-(audit_resnet_small_convnext.md findings 1 and 3). (`vjp_comp_diff_at` and its `_fst_backward`
+(audit_resnet_small_convnext.md findings 1 and 3). (`vjpCompDiffAt` and its `_fst_backward`
 peel moved to `Tensor.lean` in §1(m).)
 
 ### 3.2 `Codegen/StableHLO.lean` — the slow part DONE as §1(g); the split is optional now
@@ -200,7 +200,7 @@ fun_prop` (a global `Differentiable`, which `fun_prop` needs unfolded) and the `
 * MobileNetV2 `eq_slots` / the 18 `mnv2PreB*_apply` lemmas stay: a generic 21-stage apply lemma is
   longer than what it replaces, and its closing `rfl` would have the kernel compare the concrete
   chain (the timeout `comp3_assoc`'s comment records). The `simp only` over the prefix defs is fast.
-* ~~`sealDiffAt` for R34/R50~~ — done as §1(t), bundles first (the unbundled try was +99 lines).
+* ~~`seal_differentiableAt` for R34/R50~~ — done as §1(t), bundles first (the unbundled try was +99 lines).
 * ~~`IsShardwise` for the `_shard` family~~ — surveyed in §6.8 and not built: the op-level lemmas
   are already one term each and the net-level ones are chain steps over named replica defs. The
   repetition that was there (the global count `hM`) went instead. `[NeZero N]` for the
@@ -245,7 +245,7 @@ Scan of the hand-written files (comments stripped), against the 09-22 table:
 | signal | 09-22 | 09-24 |
 |---|---|---|
 | `set_option maxHeartbeats` | 31 | 1 (`emitTok`, re-measured: needed) |
-| `change` | 19 | 2 (MnistCNN `bnMeanX`/`bnVarX`, harmless) |
+| `change` | 19 | 2 (MnistCNN `bnMean_x`/`bnVar_x`, harmless) |
 | `show` | 431 | 238 |
 | `native_decide` / stray `sorry` | 0 | 0 |
 
@@ -300,7 +300,7 @@ Planned:
 ### 6.3 Batch 2 — small (done, see the result list below)
 
 Result: R50's whole-back tie peels with R34's two lemmas (2.9 s → 3.0 s); `pdiv_eq_fderiv_coord`
-(Softmax, 3 sites); `bnBatchTensor4_grad_input_eq_backward` (BatchedBackLinks, both sites, `hb`
+(Softmax, 3 sites); `bnBatchTensor4GradInput_eq_backward` (BatchedBackLinks, both sites, `hb`
 gone); `bnVar_add_mean_mul_mean` (BatchNorm) takes out both `key` generalisations and `hm2c`;
 the nine StableHLO sentinels are `simp only` from `simp?`; `den_bnBack`/`den_bnPerChannelBack`
 (`@[simp]`, `rfl`) replace the two `show`s; the chapter 1–4 forward writers moved to the leaf
@@ -311,7 +311,7 @@ Finset.sum_congr rfl; intro n _` → `refine congrArg rnd (Finset.sum_congr rfl 
 
 * The MNv2 / MNv4 peel: each needs a new ~70-line variable-stage lemma (binders), and their ties
   build in 2.5 s / 3.1 s — the closing `rfl` is cheap today (R34's was 43 s because its stem VJP
-  is `vjp_comp_at`-built). Insurance, not low-hanging; do it with `HasVJPDiffAt` (§6.4), which
+  is `vjpCompAt`-built). Insurance, not low-hanging; do it with `HasVJPDiffAt` (§6.4), which
   halves those binders.
 * BatchNorm's copy of the `pdiv`-coordinate step waits for the lemma's move to `Tensor.lean`.
 
@@ -334,22 +334,22 @@ Result, all statements checked by the tier regen + comparator:
   `sum_sub_bnMean`, `bnVarDeriv`, `bnVar_hasFDerivAt`, `bnVarDeriv_basisVec`; the nine
   CLM-coercion `show`s are gone.
 * ViTBackB0 −116 lines: `sdpaBackSel` (entrywise — an `ite` of matrices applied to `r j` is not
-  defeq to the `ite` of entries), `mhsa_g_backward_eq_sel`, `mhsa_proj_c_qkv_slab` (one lemma for
+  defeq to the `ite` of entries), `mhsaG_backward_eq_sel`, `mhsaProjC_qkv_slab` (one lemma for
   `hproj0/1/2`), `mhsaClean_backward_apply` (`rfl`, replaces the two bare `show`s),
   `qkv_back_fanin_MH` over a selector family; `mhsaBackGraphMH_faithful` loses its 12-line `show`
   and 20-line `rw [show …]` to a `conv_lhs => arg 2; ext h; rw [...]`.
-* `abbrev HasVJPDiffAt` in `Tensor.lean` (with `vjp_comp_diff_at` stated over it): 253 binder
+* `abbrev HasVJPDiffAt` in `Tensor.lean` (with `vjpCompDiffAt` stated over it): 253 binder
   pairs across the four whole-back ties, the two FullBVJP files and MLP; none reach the tier.
   `pdiv_eq_fderiv_coord` moved to `Tensor.lean` in the same root batch; BatchNorm uses it.
-* MNv2 / MNv4 whole-back ties peel (`mobilenetv2PaperPC_has_vjp_at_backward`,
-  `mnv4B_full_has_vjp_at_backward`, generated from the apex binder lists, `rfl` at variable
+* MNv2 / MNv4 whole-back ties peel (`mobilenetv2PaperPCHasVJPAt_backward`,
+  `mnv4BFullHasVJPAt_backward`, generated from the apex binder lists, `rfl` at variable
   stages); every whole-back tie now closes the same way.
 * R34 / EfficientNet sync apexes on the free-`G` shape: `r34NetSyncTiedB` / `enetNetSyncTiedG`
   (the latter takes `hεw`, its chain's VJP witnesses need it) + `_smoothedCE` corollaries
-  (EfficientNet's states the forward as `efficientnetForwardB_full`, defeq to the `let` chain).
+  (EfficientNet's states the forward as `efficientnetForwardBFull`, defeq to the `let` chain).
 * ConvNeXt / ViT ties over records: `CnxTieBlk` / `CnxTieDown` / `CnxTieWeights` (ε-free — the
   ties share one `ε`) and `ViTTieWeights` over ViTDepthK's `BlockParamsV`; dot-notation `abbrev`
-  wrappers (`w.b7.fwdO ε`, `w.b7.cotIn ε`, `w.b7.TiedAt …`, `w.b7.tiedGB …`) over the
+  wrappers (`w.b7.fwdO ε`, `w.b7.cotIn ε`, `w.b7.TiedAt …`, `w.b7.tied_gb …`) over the
   `@[irreducible]` constructors, so each 9- / 16-argument run is one term. ViTStepTie now imports
   ViTDepthK (adds that one module).
 
@@ -386,7 +386,7 @@ Result, statements unchanged except where noted (−88 lines net, 24 files):
 * `ConvBBetaTiedB` + `convBBetaTiedB_holds` (EfficientNetStepTieG) replace the 10 spelled-out
   conv-bias clauses and their `intro o; exact bnBetaGradB_den …` proofs. Statement spelling
   change inside the `enet*TiedG` Props.
-* `batchMapAux_eq_batchMap_has_vjp_at` / `batchMap_eq_batchMap_has_vjp_at` (BatchMapVJPAt):
+* `batchMapAux_eq_batchMapHasVJPAt` / `batchMap_eq_batchMapHasVJPAt` (BatchMapVJPAt):
   the nine batched leaf ties (ConvNeXt ×6, ViT ×3) are one term each; their 4-line
   `show … batchMapAux layout` blocks are gone.
 * `mlp_gap_eq` via `mlp_out_eq`; `mlpT_logit_continuous`'s `show` → `simp only [mlpT, …]`.

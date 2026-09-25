@@ -189,16 +189,16 @@ is spelled out in **six** statements: `den_syncStats_R1` (twice), `den_bnSyncF_a
 **Smell:** undocumented-defeq (carried over from the first audit, still open)
 **Current:**
 ```
-  show bn_grad_input n ε γ x (den e) i = _
+  show bnGradInput n ε γ x (den e) i = _
   exact bn_input_grad_correct n ε γ β hε x (den e) i
 ```
 and
 ```
-  show bnPerChannelTensor3_grad_input oc h w ε γ x (den e) i = _
-  exact bnPerChannelTensor3_grad_input_correct oc h w ε hε γ β x (den e) i
+  show bnPerChannelTensor3GradInput oc h w ε γ x (den e) i = _
+  exact bnPerChannelTensor3GradInput_correct oc h w ε hε γ β x (den e) i
 ```
 **Why it breaks:** The proof relies on the `den (.bnBack …)` arm reducing to exactly that helper. If the arm moves into a `BatchableOp` descriptor, which is the old audit's A.2 direction and how the batched BN already works, the `show` fails with a defeq error far from its cause. These are the only two `show`s in the file.
-**Suggested:** add `@[simp] theorem den_bnBack … : den (.bnBack gN xN es ε γ x e) = bn_grad_input n ε γ x (den e) := rfl` and its per-channel twin, then write `rw [den_bnBack]; exact …`. Batch this with item 3.
+**Suggested:** add `@[simp] theorem den_bnBack … : den (.bnBack gN xN es ε γ x e) = bnGradInput n ε γ x (den e) := rfl` and its per-channel twin, then write `rw [den_bnBack]; exact …`. Batch this with item 3.
 
 ### LeanMlir/Proofs/Codegen/StableHLO.lean:2432, 2519, 2685, 2699, 2726, 2741, 2760, 2971, 2992
 **Smell:** fragile-simpa (bare `simp [...]` closing through the default simp set)

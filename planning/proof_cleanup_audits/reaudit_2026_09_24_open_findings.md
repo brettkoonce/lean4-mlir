@@ -88,7 +88,7 @@ the "SDPA 15 s" and SgdDescentCnn "95 s statement elaboration" timing guesses (�
 | F10 | Binary32Instance `#print axioms` ×3 | FIXED §1(l) (only a docstring mention at :82) | — | — |
 | F11 | `binary32_linear_sgd_descends_concrete`: `show` dense, non-terminal `simp`, `hSabs`/`hSsq` twin, `hη`/`hη0` twin | STILL OPEN | Float/Binary32Instance.lean:172, 191–207, 209–216 | small / low |
 | F12 | `Mat`/`Tensor3` `flatten` `let`s, `_apply`, `@[simp]` round-trips | FIXED §1(m) (Tensor.lean:526–540, 933–947); site migration PARKED §3.4 | — | — |
-| F13 | `vjp_comp_backward` / `vjp_comp_at_backward` | FIXED §1(m) (Tensor.lean:456, 462) | — | — |
+| F13 | `vjpComp_backward` / `vjpCompAt_backward` | FIXED §1(m) (Tensor.lean:456, 462) | — | — |
 | F14a | PerChannelBN `bnchwFwd_apply` (replace `show`s) | FIXED §1(m) (Architectures/PerChannelBN.lean:428) | — | — |
 | F14b | PerChannelBN `reassoc*Idx` / `bnchw*Idx` as `let`-defs, 4 copies of the `Prod.mk.eta` round-trip → one `Equiv` | STILL OPEN | Architectures/PerChannelBN.lean:150–177, 397–421 | small / low |
 | F15a | DataParallel `meanLoss_apply`/`dpMean_apply`/`lossGrad_apply` | PARKED §3.4 ("Also left … §3.6 territory") | — | — |
@@ -131,7 +131,7 @@ Counts: FIXED 10 (F1, F5, F10, F12, F13, F14a, F19a–c; F12 site-migration part
    congr 1
    apply Finset.sum_congr rfl
    intro n _
-   exact (flatConvStride2_weight_grad_has_vjp b
+   exact (flatConvStride2WeightGradHasVJP b
      (fun j => rnd (batchSlice N (ic * (2 * h) * (2 * w)) x n j))).correct
      (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
    ```
@@ -202,11 +202,11 @@ moved to `Architectures/Softmax.lean` (4530a0df).
 | A9 | file-scope `open … Classical` in 6 files | FIXED §1(l) + §1(r) (`MaxPool2IsArgmax.decidable`). Sub-point "drop `BigOperators`" not done (136 `open … BigOperators` repo-wide; no-op, not a fragility) | — | trivial / very low |
 | A10 | `sum_swap_12_3`, `sum_swap_pair_pair` hand calc; `sum_window_cells` 46 lines | STILL OPEN | Cnn:2601, :2611 (`sum_swap_triple_triple` :2626 already on `Fintype.sum_prod_type`); `sum_window_cells` → Architectures/ConvIndex.lean:106 | trivial–small / low |
 | A11 | Cifar `maxHeartbeats 1000000` | FIXED §1(b); statement on `cifar8LastConvLoss` + `stepRadius` §1(q) | Training/SgdDescentCifar.lean:83–184 | — |
-| A12 | CNN/Depthwise `has_vjp3.correct` near-copies (~290 lines) | FIXED §1(q) (`padTap_indicator`, `sum_fin_ite_add_eq`) | Architectures/CNN.lean:176, :189, :287; Depthwise.lean:187 | — |
+| A12 | CNN/Depthwise `hasVJP3.correct` near-copies (~290 lines) | FIXED §1(q) (`padTap_indicator`, `sum_fin_ite_add_eq`) | Architectures/CNN.lean:176, :189, :287; Depthwise.lean:187 | — |
 | A13 | `pdiv_bnIstdBroadcast` 174 lines, 9 CLM-coercion `show`s | STILL OPEN (unchanged) | Architectures/BatchNorm.lean:558 (shows at :576, :597–603, :624, :661) | medium / med |
 | A14 | softmax/CE/oneHot defeq `show`s; `rw [fderiv_apply …]; rfl` ×4 | `_apply` lemmas FIXED §1(m) (Foundation/MLP.lean:275–281). STILL OPEN: `pdiv_eq_fderiv_coord` helper (4 sites) and one RHS `show` unfolding `softmax` | Architectures/Softmax.lean:65–66, :110, :199, :222; BatchNorm.lean:579 | small / low-med |
-| A15 | `mhsa_qkv_W/b` if-chain + six `@[simp]` lemmas with redundant `show … from by decide` | STILL OPEN | Architectures/Attention.lean:1042–1110; consumers Nets/ViT/ViTBackB0.lean:249, :349–359 | trivial (drop the `decide` args) / small–med (`![Wq,Wk,Wv]`) ; low |
-| A16 | `sdpa_back_{Q,K,V}_correct`: `unfold …; rfl` through `vjpMat_comp` | STILL OPEN; the "large share of 15 s" was a static guess, not measured | Architectures/Attention.lean:535–547, :619–630, :652–667; `vjpMat_comp` Foundation/Tensor.lean:638 (no `_backward` lemma) | medium / low (unmeasured) |
+| A15 | `mhsaQkvW/b` if-chain + six `@[simp]` lemmas with redundant `show … from by decide` | STILL OPEN | Architectures/Attention.lean:1042–1110; consumers Nets/ViT/ViTBackB0.lean:249, :349–359 | trivial (drop the `decide` args) / small–med (`![Wq,Wk,Wv]`) ; low |
+| A16 | `sdpa_back_{Q,K,V}_correct`: `unfold …; rfl` through `vjpMatComp` | STILL OPEN; the "large share of 15 s" was a static guess, not measured | Architectures/Attention.lean:535–547, :619–630, :652–667; `vjpMatComp` Foundation/Tensor.lean:638 (no `_backward` lemma) | medium / low (unmeasured) |
 | A17 | `Proofs.Real.hasDerivAt_tanh` name collision | FIXED §1(l) | Architectures/LayerNorm.lean:152, :162 | — |
 | A18 | `head_diff_ct`: `rfl` across `globalAvgPoolFlat`/`bcell`, restated summand | STILL OPEN | Training/BatchSealKit.lean:820–860 | small / low |
 | A19 | `ctConv_inj` `Nat.mul_comm` rw chain | STILL OPEN | Training/BatchSealKit.lean:790–793 | trivial / low |
@@ -319,7 +319,7 @@ Architectures/Softmax.lean:63–66:
 ```lean
   have h_swap : fderiv ℝ (softmax (c' + 1)) z (basisVec i) j =
                 fderiv ℝ (fun z' : Vec (c' + 1) => softmax (c' + 1) z' j) z (basisVec i) := by
-    rw [fderiv_apply (softmax_diff (c' + 1) z) j]
+    rw [fderiv_apply (softmax_differentiable (c' + 1) z) j]
     rfl
 ```
 Same step at Softmax.lean:199, :222 and BatchNorm.lean:579. Also Softmax.lean:110 still
@@ -387,14 +387,14 @@ Stating `sgd_descends` / the `margin*_keeps_offkink` lemmas on `stepRadius` and 
 would delete them; touches the non-rung lemmas §3.5 chose to keep on closures, so it is a
 statement-level change to shared Training lemmas, not a local edit.
 
-### 14. A16 — `vjpMat_comp_backward` for the SDPA ties (medium, unmeasured)
+### 14. A16 — `vjpMatComp_backward` for the SDPA ties (medium, unmeasured)
 
 Architectures/Attention.lean:543–547:
 ```lean
-  rw [← (sdpa_Q_chain_has_vjp n d K V).correct Q dOut i j]
-  -- Goal: sdpa_back_Q ... = (sdpa_Q_chain_has_vjp ...).backward Q dOut i j
-  unfold sdpa_back_Q sdpa_dScores sdpa_dScaled sdpa_dWeights sdpa_weights
-    sdpa_Q_chain_has_vjp
+  rw [← (sdpaQChainHasVJP n d K V).correct Q dOut i j]
+  -- Goal: sdpaBackQ ... = (sdpaQChainHasVJP ...).backward Q dOut i j
+  unfold sdpaBackQ sdpaDScores sdpaDScaled sdpaDWeights sdpaWeights
+    sdpaQChainHasVJP
   rfl
 ```
 Robustness only; profile Attention before claiming a speed win (the audit's 15 s attribution was
@@ -480,8 +480,8 @@ Counts: FIXED 15 · PARKED 1 · REJECTED/out-of-scope 2 · no-action 1 · STILL 
 
 4. **BN backward `show`s → `den_*` rfl lemmas (A.3-4)**
    ```
-   StableHLO.lean:3188  show bn_grad_input n ε γ x (den e) i = _
-   StableHLO.lean:3639  show bnPerChannelTensor3_grad_input oc h w ε γ x (den e) i = _
+   StableHLO.lean:3188  show bnGradInput n ε γ x (den e) i = _
+   StableHLO.lean:3639  show bnPerChannelTensor3GradInput oc h w ε γ x (den e) i = _
    ```
    → add `@[simp] theorem bnBack_den … := rfl` beside the other 69 `den_*`/`*_faithful` rfl lemmas and `rw`. ⚠ StableHLO is a root file (205 transitive dependents): batch with other root edits (§0). trivial / low.
 
@@ -531,11 +531,11 @@ smell below is FIXED; what is left is the non-budget part of each finding.
 | V6a | `sum_heads_3d` hand-rolls the `finProdFinEquiv` reindex | STILL OPEN | `ViTBackB0.lean:215–225` | trivial / low |
 | V6b | `mulVec_headPadMat` hand-rolled reindex | FIXED (uses `sum_finProdFinEquiv`, audit v2 §6 72dfe870) | `ViTBackB0.lean:495` | — |
 | V6c | `mhsaBackFlat_eq_mhsa_vjp`: 3× `← Equiv.sum_comp` with explicit motives + `Fintype.sum_prod_type` ×3 | STILL OPEN | `ViTMhsaBackCertifiedTie.lean:92–103` | small / low-med (−12 lines; rw order needs one try) |
-| V7 | `attnSubFlatTieV` / `mlpSubFlatTieV`: `show w (finProdFinEquiv …)` + `rw [Prod.mk.eta, Equiv.apply_symm_apply]` ×2 | STILL OPEN | `ViTVecLNBackCertifiedTie.lean:97–99, 127–129` | trivial / low-med (undocumented defeq; `Mat.unflatten_apply` now exists, Tensor.lean:529) |
+| V7 | `attnSubFlat_tie_v` / `mlpSubFlat_tie_v`: `show w (finProdFinEquiv …)` + `rw [Prod.mk.eta, Equiv.apply_symm_apply]` ×2 | STILL OPEN | `ViTVecLNBackCertifiedTie.lean:97–99, 127–129` | trivial / low-med (undocumented defeq; `Mat.unflatten_apply` now exists, Tensor.lean:529) |
 | V8 | `*TiedB` Props restate their `_den` lemma verbatim (4 in ViTFoldGB, 4 in ViTFold) | STILL OPEN | `ViTFoldGB.lean:285–330` vs `:79–150`; `ViTFold.lean:145–181` vs `:31–140`; 22 `intro …; exact …_den` lines in ViTStepTieGB, 13 in ViTStepTie | small / med |
 | V9 | `vit_cls_den` under `linter.unusedSimpArgs false`; `clsGrad_denB`'s unrestricted `simp` at 192/197; numeral shapes | STILL OPEN (linter + `simp`); variable-`D` part low payoff | `ViTStepTie.lean:195`; `ViTFoldGB.lean:241` | trivial (linter/simp) / low; variable D = medium/low |
-| E1 | `efficientnetInputGradB_full_eq_efficientnetB_full_vjp` + `…ForwardB_full_vjp`: 4M/800k bumps; closing `rfl` at numerals; `(by decide)` for `0 < 112` | bumps FIXED (§1(b)); `(by decide)` ×2 remains | `EfficientNetFullWholeBackCertifiedTie.lean:168` | trivial / negligible (don't bother) |
-| E2 | `efficientnetForwardB_full_has_vjp` re-derives the generic apex with 36 `have`s + 16 `vjp_comp _ _`; bridged by `backward_unique` | recDepth bump FIXED; duplication STILL OPEN | `EfficientNetFullB0.lean:371–440` (def), bridge `EfficientNetFullWholeBackCertifiedTie.lean:210–219` | small–medium / med (−~60 lines, bridge → rfl; move `efficientnetB_full_has_vjp` into FullB0) |
+| E1 | `efficientnetInputGradBFull_eq_efficientnetB_full_vjp` + `…ForwardB_full_vjp`: 4M/800k bumps; closing `rfl` at numerals; `(by decide)` for `0 < 112` | bumps FIXED (§1(b)); `(by decide)` ×2 remains | `EfficientNetFullWholeBackCertifiedTie.lean:168` | trivial / negligible (don't bother) |
+| E2 | `efficientnetForwardBFullHasVJP` re-derives the generic apex with 36 `have`s + 16 `vjpComp _ _`; bridged by `backward_unique` | recDepth bump FIXED; duplication STILL OPEN | `EfficientNetFullB0.lean:371–440` (def), bridge `EfficientNetFullWholeBackCertifiedTie.lean:210–219` | small–medium / med (−~60 lines, bridge → rfl; move `efficientnetBFullHasVJP` into FullB0) |
 | E3 | ENet capstones (`efficientnet_net_syncTiedG`, `_tiedG`, `_tied`): 4M/100k bumps; 37–55 lets at literal widths | bumps FIXED (§1(b)); statement shape OPEN but not low-hanging | `EfficientNetSyncStepTieG.lean` (comparator-tier decl), `EfficientNetStepTieG.lean`, `EfficientNetStepTie.lean` | large / low (statement change; syncTiedG is in tests/comparator tier) |
 | E4 | 49 `0 < ε` binders × 7 statements | FIXED §1(o) (`B0Weights.EpsPos`) | — | — |
 | E5 | `cbsB_back_eq` / `dwbsB_back_eq` / `dwbsSB_back_eq` / `projB_back_eq` / `hdCotIn_eq_vjp`: same 6-line proof with an undocumented `show` ×5 | STILL OPEN | `EfficientNetSyncStepTieG.lean:346–397, 484–495` | small / med |
@@ -545,7 +545,7 @@ smell below is FIXED; what is left is the non-budget part of each finding.
 | E7 | `hN hh hw` threaded for `nhw_ne_zero` → `[NeZero _]` | PARKED §3.6 ("`[NeZero N]` … was not done") | — | — |
 | E8 | MBConv tail chain written 7× (StepTie ×3, StepTieG ×3, Sync `EnTail`); `EnTail` → leaf, `enetTailTiedG` once | STILL OPEN | `EfficientNetStepTieG.lean:58–341`, `EfficientNetStepTie.lean:66–360`, `EnTail` at `EfficientNetSyncStepTieG.lean:82` | medium–large / med |
 | E9 | BN-β clause inline (no `BnBetaTiedB` Prop) | STILL OPEN | 10 × `den (SHlo.bnBetaGradB` in `EfficientNetStepTieG.lean` (e.g. :93–97); lemma `bnBetaGradB_den` now in `Foundation/GradNodesB.lean:140` | small / low-med |
-| E10 | 5 × `simp only [den, batchMap, batchMap_has_vjp, …]; rfl` with drifting unfold lists | STILL OPEN (moved; `den` → `denStepApp`) | `Foundation/BatchedBackLinks.lean:84–180`; `batchMap_has_vjp` at `Foundation/BatchMapVJPAt.lean:139` | small / low-med |
+| E10 | 5 × `simp only [den, batchMap, batchMapHasVJP, …]; rfl` with drifting unfold lists | STILL OPEN (moved; `den` → `denStepApp`) | `Foundation/BatchedBackLinks.lean:84–180`; `batchMapHasVJP` at `Foundation/BatchMapVJPAt.lean:139` | small / low-med |
 
 Counts: FIXED 4 whole (V6b, E4, E6a, E6c) + heartbeat halves of V1/V3/V4/V5/E1/E2/E3 all fixed; PARKED 2 (E6b, E7);
 STILL OPEN 14 rows (V1-shape, V2, V3, V4, V5, V6a, V6c, V7, V8, V9, E2, E5, E8, E9, E10 — V1/E3 shape = large, not
@@ -579,7 +579,7 @@ recommended); E1 residue negligible.
 
 3. **V9 — `vit_cls_den` linter switch + `clsGrad_denB` bare `simp`** (trivial, one compile to prune).
    `ViTStepTie.lean:195`: `set_option linter.unusedSimpArgs false in` over
-   `simp only [denStep, denStepApp, batchSlice, clsSliceFlat, cls_token_grad]; rw [Fin.sum_univ_one]; rfl`;
+   `simp only [denStep, denStepApp, batchSlice, clsSliceFlat, clsTokenGrad]; rw [Fin.sum_univ_one]; rfl`;
    `ViTFoldGB.lean:241`: `simp [batchSlice, batchMap, clsSliceFlat, Equiv.symm_apply_apply]`. Drop the switch and
    prune; `simp?` → `simp only`. Needs one `lake env lean` to see which args fire.
 
@@ -598,7 +598,7 @@ recommended); E1 residue negligible.
 5. **V4 — restated 18-line sum in `mhsaBackGraphMH_faithful`** (small). `ViTBackB0.lean:666–678`:
    ```lean
    rw [show (∑ h : Fin (hm1 + 1), ((den (SHlo.denseRowBack "%Wq" Wq …) j + …) + …))
-       = ∑ h : Fin (hm1 + 1), ((Mat.flatten (fun r c => …sdpa_back_Q…) j + …) + …)
+       = ∑ h : Fin (hm1 + 1), ((Mat.flatten (fun r c => …sdpaBackQ…) j + …) + …)
      from by
        apply Finset.sum_congr rfl; intro h _; rw [hQbr h, hKbr h, hVbr h]]
    ```
@@ -610,13 +610,13 @@ recommended); E1 residue negligible.
    then `rw [Fintype.sum_prod_type, ×3]`. Fix: `simp only [sum_finProdFinEquiv (m := h) (n := dh)]` or three
    `rw [sum_finProdFinEquiv]` (rewrite order to check).
 
-7. **E10 — five `simp only [denStepApp, batchMap, batchMap_has_vjp, …]; rfl`** (small). `Foundation/BatchedBackLinks.lean:97–99`:
+7. **E10 — five `simp only [denStepApp, batchMap, batchMapHasVJP, …]; rfl`** (small). `Foundation/BatchedBackLinks.lean:97–99`:
    ```lean
-   simp only [denStepApp, batchMap, batchMap_has_vjp, flatConv_has_vjp, hasVJPMat_to_hasVJP,
-     rowwise_has_vjp_mat, hasVJP3_to_hasVJP, conv2d_has_vjp3]
+   simp only [denStepApp, batchMap, batchMapHasVJP, flatConvHasVJP, HasVJPMat.toHasVJP,
+     rowwiseHasVJPMat, HasVJP3.toHasVJP, conv2dHasVJP3]
    rfl
    ```
-   (lists differ: :121, :143, :160 omit the per-op `_has_vjp3`). Fix: `batchMap_has_vjp_backward` apply lemma at
+   (lists differ: :121, :143, :160 omit the per-op `HasVJP3`). Fix: `batchMapHasVJP_backward` apply lemma at
    `BatchMapVJPAt.lean:139`, proved once. ⚠ Foundation file: check its importer count first (§0 rule).
 
 8. **E9 — `BnBetaTiedB`** (small). `EfficientNetStepTieG.lean:93–97` (10 copies):
@@ -636,8 +636,8 @@ recommended); E1 residue negligible.
    Check `tests/AuditAxioms*` pins of the `_den` names first.
 
 10. **E2 — duplicate B0 apex** (small–medium, med). `EfficientNetFullB0.lean:371–440` builds the witness with 36
-    `have`s and `have e1 := vjp_comp _ _ dS d1 vS v1 …`; `EfficientNetFullWholeBackCertifiedTie.lean:219`
-    bridges with `(funext fun dy => HasVJP.backward_unique _ _ x dy)`. Fix: move `efficientnetB_full_has_vjp`
+    `have`s and `have e1 := vjpComp _ _ dS d1 vS v1 …`; `EfficientNetFullWholeBackCertifiedTie.lean:219`
+    bridges with `(funext fun dy => HasVJP.backward_unique _ _ x dy)`. Fix: move `efficientnetBFullHasVJP`
     (FullWholeBackCertifiedTie.lean:57) into FullB0 and define the concrete witness as its instance. ⚠ the §1(m)
     trap: ENet's conv witnesses are defeq-typed, so an instantiation may not unify syntactically — try it, keep
     `backward_unique` if it doesn't close.
@@ -662,14 +662,14 @@ Static read + grep only. Directory: `LeanMlir/Proofs/Nets/MobileNet/` (25 files,
 | # | finding (audit line) | status | current location | effort / payoff |
 |---|---|---|---|---|
 | 1 | V2 tie `mnv2InputGradB_eq_mobilenetv2B_full_vjp` — 1M hb + maxRecDepth 800k | FIXED (bumps out, §1(b)) | `MobileNetV2WholeBackCertifiedTieB.lean:211` | — |
-| 1b | …its whole-chain closing `rfl` → rfl-peel `_backward` lemma at variable stages (R34 template `r34B_full_has_vjp_at_backward`, §1(f)) | STILL OPEN (residue) | `MobileNetV2WholeBackCertifiedTieB.lean:313-317` | small / low (compiles without bumps; robustness only) |
+| 1b | …its whole-chain closing `rfl` → rfl-peel `_backward` lemma at variable stages (R34 template `r34BFullHasVJPAt_backward`, §1(f)) | STILL OPEN (residue) | `MobileNetV2WholeBackCertifiedTieB.lean:313-317` | small / low (compiles without bumps; robustness only) |
 | 2 | V2 `mnv2InputGradB_correct` bump + 119-line restatement → `HasVJPAt.correct_of_eq` | bump FIXED; `correct_of_eq` STILL OPEN | `MobileNetV2WholeBackCertifiedTieB.lean:323-432` (proof body 418-432) | small / low (statement is pinned in blueprint + AuditAxioms, so only the 12-line `exact (apex …).correct` term shrinks; same shape in R34 `ResNet34BackCertifiedTieB.lean:524` and V4 `:395`) |
 | 3 | three N-stage apexes (R34/V2/V4) → `OpaquePrefix` | PARKED — `certlayer_nets.md` (the "next thread" in proof_cleanup ▶ Start here); R34/R50 already one CertLayer (6778f8c9); certlayer_nets.md:195 "MNv2 would not change that [line count]" | `MobileNetV2WholeBackCertifiedTieB.lean:65`, `MobileNetV4WholeBackCertifiedTieB.lean:131` | — |
-| 4 | `mobilenetv2ForwardB_full_eq_slots` 19-def `simp only` + private `comp3_assoc` | PARKED — proof_cleanup §3.6 ("MobileNetV2 `eq_slots` / the 18 `mnv2PreB*_apply` lemmas stay"); `comp3_assoc` now carries a docstring explaining the variable-level trick | `MobileNetV2WholeBackCertifiedTieB.lean:442, 456-482` | — |
+| 4 | `mobilenetv2ForwardBFull_eq_slots` 19-def `simp only` + private `comp3_assoc` | PARKED — proof_cleanup §3.6 ("MobileNetV2 `eq_slots` / the 18 `mnv2PreB*_apply` lemmas stay"); `comp3_assoc` now carries a docstring explaining the variable-level trick | `MobileNetV2WholeBackCertifiedTieB.lean:442, 456-482` | — |
 | 5 | V4 tie `mnv4InputGradB_eq_mnv4B_full_vjp` 2M hb; `_correct` 2M; `eq_slots` maxRecDepth | FIXED (bumps out); closing `rfl` residue same as 1b | `MobileNetV4WholeBackCertifiedTieB.lean:251, 378-389, 395, 620` | 1b-style peel: small / low |
 | 6 | `MobileNetV2FullBVJP` file-wide `maxHeartbeats 1000000` | FIXED | — | — |
 | 6b | …its docstring "this tier carries no numerals" is false (`mnv2PreB*` are at 112/56/28/14/7) | STILL OPEN | `MobileNetV2FullBVJP.lean:50` vs `:237-290` | trivial / low |
-| 7 | `mobilenetv2ForwardB_full_has_vjp_at` 38 binders / 51 `have`s → V4 shape | FIXED — §1(o) (`MNV2PosB`, `MNV2SmoothAtB`, `vjp_comp_diff_at`, `…_differentiableAt` exported) | `MobileNetV2FullBVJP.lean:297, 320, 347` | — |
+| 7 | `mobilenetv2ForwardBFullHasVJPAt` 38 binders / 51 `have`s → V4 shape | FIXED — §1(o) (`MNV2PosB`, `MNV2SmoothAtB`, `vjpCompDiffAt`, `…_differentiableAt` exported) | `MobileNetV2FullBVJP.lean:297, 320, 347` | — |
 | 8 | `mnv2PreB0…17` + 18 `_apply` + 19-name `rw` | PARKED — §3.6 | `MobileNetV2FullBVJP.lean:237-290, 440-520` | — |
 | 9 | `mnv2ResidB_differentiableAt` `show biPath` / no `residual_apply`/`residual_differentiableAt` | FIXED — §1(m) (`Architectures/Residual.lean:182,185`; `MobileNetV2FullBVJP.lean:180` uses it, `MobileNetV2FullBSeal.lean:216` uses `residual_apply`) | residue: `MobileNetV2FullPaperEval.lean:238` `unfold ivExpOnlyEvalW residual biPath`; V4 `resid_id` `MobileNetV4FullBSeal.lean:250` `show L.fwd v k + v k = v k` (CertLayer.residual; `CertLayer.residual_fwd` exists) | trivial / low |
 | 10 | `mnv2_net_tiedB` 1.6M hb, `g` embedded → binder; same for `mnv2_net_syncTiedB` | FIXED — §1(o) | `MobileNetV2StepTieB.lean`, `MobileNetV2SyncStepTieB.lean` | — |
@@ -678,16 +678,16 @@ Static read + grep only. Directory: `LeanMlir/Proofs/Nets/MobileNet/` (25 files,
 | 13 | 53 `*_smul` hand chains → `Homog` predicate | FIXED — §1(p) (`IsHomog`, 25 uses V2 Sync, 27 V4 Sync); the per-link `rw` chains remain as the proofs of `IsHomog` statements, by design | `MobileNetV2SyncStepTieB.lean:110-113` | — |
 | 14a | `*_shard` lemmas close with bare `rfl`; `relu6MaskB_shard` declared but never used | STILL OPEN | 11 bare `rfl`s in `MobileNetV2SyncStepTieB.lean` (e.g. `:295, 308, 382, 395, 408, 420, 488, 501, 516, 598`), 13 in `MobileNetV4SyncStepTieB.lean`; `relu6MaskB_shard` at `MobileNetV2SyncStepTieB.lean:221` (only other mention: docstring `:30`) | trivial / low — either cite it (`exact relu6MaskB_shard _ _ r`) or delete it as dead (audit_v2 §4 already deleted the R34 twin `reluMaskB_shard`) |
 | 14b | `nhw_ne_zero hN hh hw` pair re-derived 23× → one `nhw_pair` | PARKED — §3.6 (`[NeZero N]`/threading not done; `IsShardwise` parked) | `MobileNetV2SyncStepTieB.lean:287, 300, 374, …` | — |
-| 15 | seal `ed*` carrier steps (22 V2 / 15 V4) → `EDiff_ctConvBn`/`ctDwBn` kit | FIXED — §1(n) (`EDiff_convBn`/`dwBn`/`dwS2Bn`/…) | — | — |
+| 15 | seal `ed*` carrier steps (22 V2 / 15 V4) → `EDiff_ctConvBn`/`ctDwBn` kit | FIXED — §1(n) (`eDiff_convBn`/`dwBn`/`dwS2Bn`/…) | — | — |
 | 16 | seal tail (`sealX_nonconstant`/`_jacobian_nonzero`) ×4 nets | FIXED — §1(n) (`ne_of_ray_readout`, `fderiv_ne_zero_of_ray_readout`) | `MobileNetV2FullBSeal.lean:1028-1036`, V4 `:1026-1034` | — |
-| 17 | `sealDiffAt` re-derives the 18-step chain | FIXED — §1(o)/(r) (one term each) | `MobileNetV2FullBSeal.lean:1021`, V4 `:1020` | — |
-| 18 | `sealExpB_eq`/`sealStridedB_eq`/`sealNoExpB_eq` undocumented 5-line `show` re-spelling the block | STILL OPEN | `MobileNetV2FullBSeal.lean:229, 249, 264` (+ `headA` `:988`, V4 `sealCTStrided_eq` `:277`); V4's `pc*` `show`s (`:813-907`) now carry a section comment (`:801-806`) — acceptable | small / low (add `mnv2ExpOnlyB_apply`/`mnv2StridedB_apply`/`mnv2NoExpB_apply` rfl lemmas at variable shapes, or one comment per site) |
+| 17 | `seal_differentiableAt` re-derives the 18-step chain | FIXED — §1(o)/(r) (one term each) | `MobileNetV2FullBSeal.lean:1021`, V4 `:1020` | — |
+| 18 | `sealExpB_eq`/`sealStridedB_eq`/`sealNoExpB_eq` undocumented 5-line `show` re-spelling the block | STILL OPEN | `MobileNetV2FullBSeal.lean:229, 249, 264` (+ `head_eq_dense` `:988`, V4 `sealCTStrided_eq` `:277`); V4's `pc*` `show`s (`:813-907`) now carry a section comment (`:801-806`) — acceptable | small / low (add `mnv2ExpOnlyB_apply`/`mnv2StridedB_apply`/`mnv2NoExpB_apply` rfl lemmas at variable shapes, or one comment per site) |
 | 19a | V4 `sealUib_ok`/`sealUibStrided_ok` slot discharge written out 3× | STILL OPEN | `MobileNetV4FullBSeal.lean:302-306, 308-312, 324-328` | small / low (`postDWSlot_ok`/`preDWSlot_ok` lemma) |
 | 19b | `Rr_pos` 15/22-deep hand-nested `mul_pos` | STILL OPEN (documented — comment explains why not `repeat' apply mul_pos`) | `MobileNetV2FullBSeal.lean:929-…`, `MobileNetV4FullBSeal.lean:770-…` | trivial / low: `repeat' (first \| exact rf_pos _ _ \| apply mul_pos)` tries `rf_pos` before splitting, which is exactly the objection the comment raises (unmeasured) |
-| 20 | `relu6LinearPart_apply` / `pdiv_relu6` / `relu6_has_vjp_at` `ite_eq_*` chains | FIXED — moved to `Foundation/MLP.lean:409-455`: `split_ifs <;> rfl`, `pdiv_of_hasFDerivAt_mask`, `simp_rw …; simp` | — | — |
-| 21 | 7 copies of stage VJP + back-graph faithfulness skeleton | STILL OPEN (co-located now: `Foundation/BatchedStageLayers.lean` §2.5 of audit_v2, but still separate `bnRelu6Stage_has_vjp_at` `:58` / `bnReluStage_has_vjp_at` `:287` and `cbr…`/`dwbr…`/`cbRelu…` `_faithful` `:152, 173, 199, 337, 412, 469`) | medium / low (each copy is 6-10 lines; a generic `bnActStage` saves little) |
+| 20 | `relu6LinearPart_apply` / `pdiv_relu6` / `relu6HasVJPAt` `ite_eq_*` chains | FIXED — moved to `Foundation/MLP.lean:409-455`: `split_ifs <;> rfl`, `pdiv_of_hasFDerivAt_mask`, `simp_rw …; simp` | — | — |
+| 21 | 7 copies of stage VJP + back-graph faithfulness skeleton | STILL OPEN (co-located now: `Foundation/BatchedStageLayers.lean` §2.5 of audit_v2, but still separate `bnRelu6StageHasVJPAt` `:58` / `bnReluStageHasVJPAt` `:287` and `cbr…`/`dwbr…`/`cbRelu…` `_faithful` `:152, 173, 199, 337, 412, 469`) | medium / low (each copy is 6-10 lines; a generic `bnActStage` saves little) |
 | 22 | `mobilenetv2FwdGraphPaperEval_faithful` maxRecDepth 20000 + closing whole-net `rfl` | bump FIXED; closing `rfl` at 224/112 literals remains | `MobileNetV2FullPaperEval.lean:305-312` | medium / low (stem/head graph lemmas; compiles without the bump) |
-| 23 | `mobilenetv2FwdGraphB_full_faithful` 19-entry ordered `rw` → order-free `simp only` | REJECTED by measurement — `MobileNetV4FullB.lean:847-850`: the `simp only` spelling "elaborates for ~9 minutes and then dies in the KERNEL"; the audit itself said "if the kernel cost rises, keep `rw`" | `MobileNetV2FullB.lean:356-363`, `MobileNetV4FullB.lean:844` | — |
+| 23 | `mobilenetv2FwdGraphBFull_faithful` 19-entry ordered `rw` → order-free `simp only` | REJECTED by measurement — `MobileNetV4FullB.lean:847-850`: the `simp only` spelling "elaborates for ~9 minutes and then dies in the KERNEL"; the audit itself said "if the kernel cost rises, keep `rw`" | `MobileNetV2FullB.lean:356-363`, `MobileNetV4FullB.lean:844` | — |
 | M1 | `have h112 : 0 < 112 := by norm_num` ×5 per capstone | STILL OPEN | `MobileNetV2SyncB.lean:308-312`, `MobileNetV2SyncStepTieB.lean:1011…`, `MobileNetV4SyncStepTieB.lean:1303-1305`, `MobileNetV4SyncB.lean:679` | trivial / very low (idiom) |
 | M2 | `MobileNetV2Fold.lean` `show depthwiseWeightSgdDen …` relies on `den` unfolding | STILL OPEN — ⚠ the audit's `simp only [den]` fix is now FORBIDDEN (§1(g) / proof_cleanup ▶ trap 2: 233 s `den.eq_def`); correct fix is a one-line comment or `denStep` | `MobileNetV2Fold.lean:58, 68` | trivial / low |
 | M3 | `congr 1; congr 1` → `congr 2` | STILL OPEN | `MobileNetV2Fold.lean:43-44` | trivial / very low |
@@ -704,7 +704,7 @@ PARKED/REJECTED 5 (3, 4, 8, 14b, 23) · STILL OPEN 14 (1b, 2-correct_of_eq, 5-pe
 theorem mnv2NoExpCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
     (hs : IVNoExpSmoothAtB N h w p xin) (cotN : String) :
-    mnv2NoExpCotIn N h w p xin dyOut = (mnv2NoExpB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+    mnv2NoExpCotIn N h w p xin dyOut = (mnv2NoExpBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := mnv2NoExpBackGraph_faithful p hq xin (.operand cotN dyOut) hs
   have hd : den (SHlo.operand cotN dyOut) = dyOut := rfl
   rw [hd] at h
@@ -781,7 +781,7 @@ use the audit's `simp only [den]` (233 s `den.eq_def`, proof_cleanup §1(g)).
 `ResNet34BackCertifiedTieB.lean:524-535` all do
 ```lean
   rw [congrFun (mnv2InputGradB_eq_mobilenetv2B_full_vjp N Ws … h_head) dy]
-  exact (mobilenetv2PaperPC_has_vjp_at (mnv2StemB N 112 112 Ws bs εs γs βs) b1 … x
+  exact (mobilenetv2PaperPCHasVJPAt (mnv2StemB N 112 112 Ws bs εs γs βs) b1 … x
           ⟨…⟩ hb1 … ⟨…⟩ ⟨…⟩ ⟨…⟩).correct dy i
 ```
 re-typing the 12-line apex term from the tie's statement. A `HasVJPAt.correct_of_eq (hf) (hB : B = hf.backward)`
@@ -797,7 +797,7 @@ stay (blueprint + AuditAxioms pin them). Cross-net (R34 is another fork's file).
       dense_transpose_eq_vjp_backward Wfc bfc (fun _ => 0)]
   rfl
 ```
-(V4 `:378-389` same.) Template: `r34B_full_has_vjp_at_backward` (`ResNet34BackCertifiedTieB.lean:259`, §1(f)).
+(V4 `:378-389` same.) Template: `r34BFullHasVJPAt_backward` (`ResNet34BackCertifiedTieB.lean:259`, §1(f)).
 Bumps are already gone, so this is robustness against the §0 "never a closing `rfl` through the
 concrete chain" rule, not speed. Overlaps certlayer_nets.md (if V2/V4 become one CertLayer, it goes).
 
@@ -843,7 +843,7 @@ NOTHING — every heartbeat/recDepth finding in this report is gone (§1(b), §1
 
 | # | finding (audit line) | status | current location | effort / payoff |
 |---|---|---|---|---|
-| 1 | R34/R50 whole-back tie: 800k recDepth + 1–2M heartbeats, closing `rfl` (:21) | FIXED — §1(f) (R34 peel `r34B_full_has_vjp_at_backward`), §1(b) (R50 bumps out) | `ResNet34BackCertifiedTieB.lean:259, 345`; R50 tie `ResNet50WholeBackCertifiedTieB.lean:150` still closes by bare `rfl` but at binder `q`, no bump | — |
+| 1 | R34/R50 whole-back tie: 800k recDepth + 1–2M heartbeats, closing `rfl` (:21) | FIXED — §1(f) (R34 peel `r34BFullHasVJPAt_backward`), §1(b) (R50 bumps out) | `ResNet34BackCertifiedTieB.lean:259, 345`; R50 tie `ResNet50WholeBackCertifiedTieB.lean:150` still closes by bare `rfl` but at binder `q`, no bump | — |
 | 2 | two prefix vocabularies `r34PreK`/`r50PreK` + `_apply` vs `opaqueA_K` (:65) | PARKED — proof_cleanup §3.1 → certlayer_nets.md §4.3 "Retiring the prefixes" (public vocab, comparator-tier change) | `ResNet34FullBVJP.lean:210-…`, `Foundation/OpaquePrefix.lean` | — |
 | 3 | ConvNeXt capstones 16M/400k + ~160 loose binders (:93) | FIXED (the smell: bumps out, §1(b); speed premise disproved — capstones elaborate in ~s). Residual: binder list still loose, not over `CnxTWeightsCh` — large, low payoff, `cnx_net_tiedGB` is in the comparator tier | `ConvNeXtStepTie.lean:461`, `ConvNeXtStepTieGB.lean:381` | (large / low) |
 | 4 | hand-rolled `@[irreducible]` wrappers + `unfold` (:121) | STILL OPEN | `ConvNeXtStepTieGB.lean:302-352` (4 `*TiedGBAt`), `ConvNeXtStepTie.lean:305-426` (11) | small / low (needs a measure: are they still needed without the bumps?) |
@@ -851,18 +851,18 @@ NOTHING — every heartbeat/recDepth finding in this report is gone (§1(b), §1
 | 6 | `*TiedB` Props restate `_den` lemmas; 218 `intro idx; exact …_den` delegations (:158) | STILL OPEN (the `_den` lemmas moved to `Foundation/GradNodesB.lean`, audit_v2 §2.4; the duplication did not change) | `Foundation/GradNodesB.lean:48` (`convWGradB_den`) vs `:209` (`ConvWTiedB`); 218 sites / 13 files (EffNet 68, ViT 38, MNv2 22, Cifar8(Bn) 32, R34 14, R50 11, CNX 21, Cifar/Cnn 12) | medium / medium |
 | 7 | 151 `_smul` lemmas with spelled-out `fun i => s * dy i` (:182) | FIXED — §1(p) (`IsHomog`) | `Foundation/DataParallelSync.lean` | — |
 | 8 | file-wide `maxHeartbeats 1000000` in R34/R50 FullBVJP (:211) | FIXED — §1(b) | — | — |
-| 9 | whole-net `HasVJPAt` built in tactic mode (`have` of data), forcing a 2nd term-mode apex (:222) | ResNet FIXED (6778f8c9: apex = `(r34NetLayer …).vjp`, `ResNet34FullBVJP.lean:488`, `ResNet50FullBVJP.lean:423`). STILL OPEN for `CifarCNN.lean:77/441/803` and `ConvNeXtFullT.lean:294` (+ its term-mode twin `convNextForwardTCh_vjp_chain`, `ConvNeXtWholeBackCertifiedTie.lean:520`) | see left | medium / low (compiles fine; duplication only) |
-| 10 | `sealDiffAt` rebuilds the apex's differentiability (:249) | FIXED — §1(t) (+ §1(r) MNv4, §1(o) MNv2) | — | — |
+| 9 | whole-net `HasVJPAt` built in tactic mode (`have` of data), forcing a 2nd term-mode apex (:222) | ResNet FIXED (6778f8c9: apex = `(r34NetLayer …).vjp`, `ResNet34FullBVJP.lean:488`, `ResNet50FullBVJP.lean:423`). STILL OPEN for `CifarCNN.lean:77/441/803` and `ConvNeXtFullT.lean:294` (+ its term-mode twin `convNextForwardTChVjpChain`, `ConvNeXtWholeBackCertifiedTie.lean:520`) | see left | medium / low (compiles fine; duplication only) |
+| 10 | `seal_differentiableAt` rebuilds the apex's differentiability (:249) | FIXED — §1(t) (+ §1(r) MNv4, §1(o) MNv2) | — | — |
 | 11 | ~77 per-slot seal lemmas `nn/pc/sc/ed/cn` ×2 nets (:269) | `cn*` GONE (3550f132, continuity by `fun_prop`); `nn/pc/sc_/ed` STILL OPEN: 63 in R34, 62 in R50 | `ResNet34FullBSeal.lean:392-713` | medium / low (fast today; line count only) |
 | 12 | seal `show`s over `r34IdB = relu ∘ residual`, no `relu_residual_const` (:297) | PARTIAL: `residual_apply` (Architectures/Residual.lean:182) now used; `projB_zero_const` moved to BatchSealKit (audit_v2 §2.5). STILL OPEN: the `show relu (…) (residual _ v) k = …` unfolds + 4 copies of the relu-shift closing | `ResNet34FullBSeal.lean:168, 187, 190`; `ResNet50FullBSeal.lean:202, 237, 240, 264, 267, 299-365` | small / low |
-| 13 | batched leaf ties `show` the `batchMapAux` index layout (6 CNX + 3 ViT) (:323) | STILL OPEN | `ConvNeXtWholeBackCertifiedTieB.lean:205, 221, 241, 258, 299, 311`; `ViTWholeBackCertifiedTieB.lean:97, 110, 126`; lemma would go in `Foundation/BatchMapVJPAt.lean` (after `batchMap_has_vjp_at`, :83) | small / medium |
+| 13 | batched leaf ties `show` the `batchMapAux` index layout (6 CNX + 3 ViT) (:323) | STILL OPEN | `ConvNeXtWholeBackCertifiedTieB.lean:205, 221, 241, 258, 299, 311`; `ViTWholeBackCertifiedTieB.lean:97, 110, 126`; lemma would go in `Foundation/BatchMapVJPAt.lean` (after `batchMapHasVJPAt`, :83) | small / medium |
 | 14 | file-wide `maxRecDepth 100000` in both CNX whole-back ties (:352) | FIXED — §1(b) | — | — |
-| 15 | `vjp_comp_diff_at`(+peel) in net files; `BackwardMaps` imports `Nets.ResNet.ResNet34` (:368) | FIXED — §1(m) (both in `Foundation/Tensor.lean:456-481`); BackwardMaps imports no net (audit_v2 §2.6; ResNet34.lean deleted 5c4c9101); `ResNet34BackCertifiedTie → CifarCNN` edge gone (now `Architectures/ConvBackCertifiedTie`) | — | — |
+| 15 | `vjpCompDiffAt`(+peel) in net files; `BackwardMaps` imports `Nets.ResNet.ResNet34` (:368) | FIXED — §1(m) (both in `Foundation/Tensor.lean:456-481`); BackwardMaps imports no net (audit_v2 §2.6; ResNet34.lean deleted 5c4c9101); `ResNet34BackCertifiedTie → CifarCNN` edge gone (now `Architectures/ConvBackCertifiedTie`) | — | — |
 | 15b | (same finding's tail) ConvNeXt files import `ResNet34Fold` for shared leaf lemmas | STILL OPEN | `ConvNeXtStepTie.lean:4`, `ConvNeXtFoldG.lean:4` → `Nets/ResNet/ResNet34Fold.lean` (85 lines, a RETIRED-artifact file whose only content is `convStridedW_den`/`convStridedB_den`, used only by ConvNeXtStepTie ×4) | trivial / low-med |
 | 16 | Small `*_conv_tied_certified` maxRecDepth 4k→32k doubling with let depth (:393) | FIXED — §1(b) (no option left in Nets/Small) | — | — |
-| 17 | CifarCNN re-derives the raw-point pool VJP with `rw [← hpt]` (:415) | STILL OPEN (22 sites). `maxPoolFlat_has_vjp_at'` now lives in `Nets/Small/ChapterGraphTies.lean:87` (audit_v2 §2.6), which IMPORTS CifarCNN — still unreachable from it | `CifarCNN.lean:151-156, 603-608, 936-…`; `MnistCNN.lean:138-140` | small / low-med (⚠ changes the apexes' `.backward` spelling — check `rfl` consumers) |
+| 17 | CifarCNN re-derives the raw-point pool VJP with `rw [← hpt]` (:415) | STILL OPEN (22 sites). `maxPoolFlatHasVJPAt'` now lives in `Nets/Small/ChapterGraphTies.lean:87` (audit_v2 §2.6), which IMPORTS CifarCNN — still unreachable from it | `CifarCNN.lean:151-156, 603-608, 936-…`; `MnistCNN.lean:138-140` | small / low-med (⚠ changes the apexes' `.backward` spelling — check `rfl` consumers) |
 | 18 | 6 `*LossCot_den` copies (+5 `*_tied_totalloss`) (:437) | STILL OPEN | `MlpFold.lean:133`, `CnnFold.lean:150`, `CifarFold.lean:100`, `Cifar8StepTie.lean:34`, `Cifar8BnStepTie.lean:25`, `ConvNeXtStepTie.lean:293` (K = 10 hard-coded) | small / low-med |
-| 19 | `cbReluBackBatchedGraph_faithful` closes by definitional `simp only` (:461) | FIXED — §1(m) (`vjp_comp_at_backward` exists, `Tensor.lean:456`, and is in the set; decl moved to `Foundation/BatchedStageLayers.lean:337`) | — | — |
+| 19 | `cbReluBackBatchedGraph_faithful` closes by definitional `simp only` (:461) | FIXED — §1(m) (`vjpCompAt_backward` exists, `Tensor.lean:456`, and is in the set; decl moved to `Foundation/BatchedStageLayers.lean:337`) | — | — |
 | 20 | `_correct` corollaries copy 16 PProd / 35 bundle binders (:484) | FullBVJP half FIXED — §1(t) (`R34PosB`/`R34SmoothAtB`, `ResNet34FullBVJP.lean:499`). WholeBack half PARKED — certlayer_nets §4.3 ("binder resolutions for R34"); `r34InputGradB_eq_r34B_full_vjp` is in the comparator tier (`gen_comparator_tier.py:64`) | `ResNet34BackCertifiedTieB.lean:444-…` | — |
 
 Counts: FIXED 11 (1, 3, 5, 7, 8, 10, 14, 15, 16, 19, + ResNet half of 9) · PARKED 2 (2, 20) · STILL OPEN 8
@@ -901,9 +901,9 @@ sideways ConvNeXt → ResNet edge. ⚠ SgdNodes must be able to import `mnv2_ren
   rw [chanLNTensor3Back_eq_chanLN_vjp (β := β) ε hε γ]
   rfl
 ```
-Each copy re-spells `batchMap_has_vjp_at`'s backward field (`Foundation/BatchMapVJPAt.lean:87-90`).
-Add `batchMapAux_eq_batchMap_has_vjp_at_backward` (statement as in the audit, :342-347) plus a
-point-independent twin for `batchMap_has_vjp` (stem, dense); each leaf tie becomes a term. The
+Each copy re-spells `batchMapHasVJPAt`'s backward field (`Foundation/BatchMapVJPAt.lean:87-90`).
+Add `batchMapAux_eq_batchMapHasVJPAt_backward` (statement as in the audit, :342-347) plus a
+point-independent twin for `batchMapHasVJP` (stem, dense); each leaf tie becomes a term. The
 lemma goes in `BatchMapVJPAt.lean` (a leaf).
 
 ### C. #18 — one generic `softmaxCELossCot_den` (small, low-med)
@@ -953,14 +953,14 @@ statement, so removing them is a tier regen.
 ```lean
   have hpt1 : Tensor3.flatten (Tensor3.unflatten z1 : Tensor3 c1 …) = z1 := Tensor3.flatten_unflatten z1
   have mp1_v : HasVJPAt (maxPoolFlat c1 (2*(2*(2*h))) (2*(2*(2*w)))) z1 := by
-    rw [← hpt1]; exact maxPoolFlat_has_vjp_at _ hp1
+    rw [← hpt1]; exact maxPoolFlatHasVJPAt _ hp1
   have mp1_d : DifferentiableAt ℝ (maxPoolFlat c1 …) z1 := by
     rw [← hpt1]; exact maxPoolFlat_differentiableAt _ hp1 hc1 (by omega) (by omega)
 ```
-Move `maxPoolFlat_has_vjp_at'` (`ChapterGraphTies.lean:87`) down into `MnistCNN.lean` or
+Move `maxPoolFlatHasVJPAt'` (`ChapterGraphTies.lean:87`) down into `MnistCNN.lean` or
 `Architectures/CNN.lean`, add `maxPoolFlat_differentiableAt'`, and swap the 11 blocks. ⚠ The
 apexes are tactic-mode data (#9), so the `.backward` of the result changes spelling
-(`maxPoolBackFlat` instead of an `Eq.mpr`-transported one); grep `cifarCnn*_has_vjp_at` consumers
+(`maxPoolBackFlat` instead of an `Eq.mpr`-transported one); grep `cifarCnn*HasVJPAt` consumers
 that close by `rfl` before switching.
 
 ### G. #6 — `*TiedB` Props vs `_den` lemmas (medium, medium)
@@ -987,15 +987,15 @@ tier modules (proofs only, statements unchanged).
 theorem nn9 (nCls : Nat) (t : ℝ) : ∀ k, 0 ≤ r34Pre9 2 (sealW nCls) (sealX t) k := by
   intro k; rw [r34Pre9_apply]; exact r34IdB_nonneg 2 14 14 256 _ _ k
 theorem pc9 … := by rw [r34Pre9_apply]; exact sealIdB_eq 2 14 14 256 (by norm_num) _ (nn8 nCls t)
-theorem ed9 … := by rw [pc9]; exact EDiff_shift _ _ 1 (ed8 nCls t)
+theorem ed9 … := by rw [pc9]; exact eDiff_shift _ _ 1 (ed8 nCls t)
 ```
 125 lemmas across two files; fast today. A `sealIdSlot` step lemma would cut them ~4→1 per slot, but
 it names `r34PreK` (parked vocabulary, #2) — do it only alongside certlayer_nets work.
 
 ### I. #9 residue — tactic-mode apexes in CifarCNN ×3 and ConvNeXtFullT (medium, low)
 
-`ConvNeXtFullT.lean:294-…` (`convNextForwardTCh_has_vjp … := by have st_diff … have e1 := vjp_comp …`)
-still forces the term-mode twin `convNextForwardTCh_vjp_chain` (`ConvNeXtWholeBackCertifiedTie.lean:520`).
+`ConvNeXtFullT.lean:294-…` (`convNextForwardTChHasVJP … := by have st_diff … have e1 := vjpComp …`)
+still forces the term-mode twin `convNextForwardTChVjpChain` (`ConvNeXtWholeBackCertifiedTie.lean:520`).
 Rewriting the apex in term mode (as ResNet's now is) would let the twin go. Only duplication; no
 compile-time cost recorded.
 

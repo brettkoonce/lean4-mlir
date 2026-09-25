@@ -18,14 +18,14 @@ a batched fold); with this the `*InputGradB_eq_*_vjp` family covers all seven ne
 
 Nothing here is new mathematics, and it is ViT's batched tie (`ViTWholeBackCertifiedTieB.lean`)
 one architecture over: ConvNeXt is smooth everywhere, so every stage has a GLOBAL `HasVJP` and its
-batched witness is `batchMap_has_vjp_at` over `HasVJP.toHasVJPAt` at each row — no smooth-point
+batched witness is `batchMapHasVJPAt` over `HasVJP.toHasVJPAt` at each row — no smooth-point
 hypothesis anywhere, only the 23 LayerNorm positivities the per-example tie already carries.
 
 1. `cnxSavedB0 … cnxSavedB10` — the eleven batched stage inputs, saved STAGE BY STAGE
    (`batchMap B stage (cnxSavedB_{k-1} …)`), not as `batchMap B` of the composed per-example
-   prefix: the two agree only up to `batchMap_comp`, not `rfl`, and the apex's `vjp_comp_diff_at`
+   prefix: the two agree only up to `batchMap_comp`, not `rfl`, and the apex's `vjpCompDiffAt`
    produces the former.
-2. The twelve batched stage witnesses `cnx*B_at`, each `batchMap_has_vjp_at` over the per-example
+2. The twelve batched stage witnesses `cnx*B_at`, each `batchMapHasVJPAt` over the per-example
    `HasVJP` at each row — at the dimension spellings the per-example tie normalised (`cnxDn1`,
    `cnxLNh`, `cnxSavedA0`: `ConvNeXtWholeBackCertifiedTie.lean`'s "two spellings of one numeral"
    rule holds one batch index over).
@@ -36,15 +36,15 @@ hypothesis anywhere, only the 23 LayerNorm positivities the per-example tie alre
    and instantiated by term: at the literal `96 56 56` the same `rfl` recurses past
    `maxRecDepth 100000` on the numerals, the batched form of the per-example tie's "two spellings
    of one numeral" rule.
-4. `convNextForwardTChB_has_vjp_at` — the twelve-stage apex, eleven `vjp_comp_diff_at`s over the
+4. `convNextForwardTChBHasVJPAt` — the twelve-stage apex, eleven `vjpCompDiffAt`s over the
    batched stage witnesses at the batched saved activations — and
    `convnextInputGradB_eq_convNextForwardTChB_vjp`, the tie: twelve leaf rewrites, then the eleven
-   levels peeled by `vjp_comp_diff_at_fst_backward` (a twelve-level `rfl` times out at 10⁶
+   levels peeled by `vjpCompDiffAt_fst_backward` (a twelve-level `rfl` times out at 10⁶
    heartbeats: it looks for the unfolding through the concrete witnesses first).
 5. `convNextForwardTChB_eq_chain` — the shape check: `batchMap B` of the per-example twelve-factor
    chain IS the twelve batched stages, by `batchMap_comp` eleven times — and
    `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp`, the tie carried to the committed GLOBAL
-   witness `batchMap_has_vjp _ (convNextForwardTCh_has_vjp …)` through
+   witness `batchMapHasVJP _ (convNextForwardTChHasVJP …)` through
    `HasVJPAt.backward_unique_of_eq`, plus the `∑ pdiv` reading on `convNextForwardTCh` itself.
 6. `convnextImagenetInputGradB_eq_vjp` — the same statement at `nC = 1000`, the class count of
    every `convnextin_*` artifact, `B` a binder.
@@ -122,71 +122,71 @@ noncomputable def cnxSavedB10 (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
 -- ═════════════════════════════════════════════════
 
 /-- The batched stem-conv witness at `x`. -/
-noncomputable def cnxStemB_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
+noncomputable def cnxStemBAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (B * (3 * 224 * 224))) : HasVJPAt (StableHLO.batchMap B (cnxSavedA0 w)) x :=
-  batchMap_has_vjp_at _ x (fun _ => (cnxV0 w).toHasVJPAt _) (fun _ => (cnxD0 w).differentiableAt)
+  batchMapHasVJPAt _ x (fun _ => (cnxV0 w).toHasVJPAt _) (fun _ => (cnxSavedA0_differentiable w).differentiableAt)
 
 /-- The batched channel-LayerNorm witness at `v`, at any `c h w`. -/
-noncomputable def cnxChanLNB_at (B c h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+noncomputable def cnxChanLNBAt (B c h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (v : Vec (B * (c * h * w))) :
     HasVJPAt (StableHLO.batchMap B (chanLNTensor3 c h w ε γ β)) v :=
-  batchMap_has_vjp_at _ v
-    (fun _ => (chanLNTensor3_has_vjp c h w ε γ β hε).toHasVJPAt _)
-    (fun _ => (chanLNTensor3_diff c h w ε γ β hε).differentiableAt)
+  batchMapHasVJPAt _ v
+    (fun _ => (chanLNTensor3HasVJP c h w ε γ β hε).toHasVJPAt _)
+    (fun _ => (chanLNTensor3_differentiable c h w ε γ β hε).differentiableAt)
 
 /-- The batched stem-LayerNorm witness at `v`. -/
-noncomputable def cnxStemLNB_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε)
+noncomputable def cnxStemLNBAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε)
     (v : Vec (B * (96 * 56 * 56))) :
     HasVJPAt (StableHLO.batchMap B (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ)) v :=
-  cnxChanLNB_at B 96 56 56 w.sε hsε w.sγ w.sβ v
+  cnxChanLNBAt B 96 56 56 w.sε hsε w.sγ w.sβ v
 
 /-- The batched depth-`k` stage witness at `v` — one definition for all four stages. -/
-noncomputable def cnxStageB_at (B : Nat) {c cExp h w kH kW : Nat} (k : Nat)
+noncomputable def cnxStageBAt (B : Nat) {c cExp h w kH kW : Nat} (k : Nat)
     (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW) (hε : ∀ i, 0 < (ps i).εn)
     (v : Vec (B * (c * h * w))) :
     HasVJPAt (StableHLO.batchMap B (convNextStageChK k ps)) v :=
-  batchMap_has_vjp_at _ v
-    (fun _ => (convNextStageChK_has_vjp k ps hε).toHasVJPAt _)
-    (fun _ => (convNextStageChK_diff k ps hε).differentiableAt)
+  batchMapHasVJPAt _ v
+    (fun _ => (convNextStageChKHasVJP k ps hε).toHasVJPAt _)
+    (fun _ => (convNextStageChK_differentiable k ps hε).differentiableAt)
 
 /-- The batched downsample witness at `v`, at any resolution and channel pair. -/
-noncomputable def cnxDownB_at (B h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
+noncomputable def cnxDownBAt (B h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
     (hε : 0 < p.ε) (v : Vec (B * (cin * (2 * h) * (2 * w)))) :
     HasVJPAt (StableHLO.batchMap B (cnxDownChW h w p)) v :=
-  batchMap_has_vjp_at _ v (fun _ => (cnxDownChW_has_vjp h w p hε).toHasVJPAt _)
-    (fun _ => (cnxDownChW_diff h w p hε).differentiableAt)
+  batchMapHasVJPAt _ v (fun _ => (cnxDownChWHasVJP h w p hε).toHasVJPAt _)
+    (fun _ => (cnxDownChW_differentiable h w p hε).differentiableAt)
 
 /-- The batched downsample-1 witness at `v`, at the chain's dimension spelling (`cnxDn1`). -/
-noncomputable def cnxDn1B_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 < w.d1.ε)
+noncomputable def cnxDn1BAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 < w.d1.ε)
     (v : Vec (B * (96 * 56 * 56))) : HasVJPAt (StableHLO.batchMap B (cnxDn1 w)) v :=
-  cnxDownB_at B 28 28 w.d1 hd1 v
+  cnxDownBAt B 28 28 w.d1 hd1 v
 
 /-- The batched downsample-2 witness at `v`, at the chain's dimension spelling (`cnxDn2`). -/
-noncomputable def cnxDn2B_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε)
+noncomputable def cnxDn2BAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε)
     (v : Vec (B * (192 * 28 * 28))) : HasVJPAt (StableHLO.batchMap B (cnxDn2 w)) v :=
-  cnxDownB_at B 14 14 w.d2 hd2 v
+  cnxDownBAt B 14 14 w.d2 hd2 v
 
 /-- The batched downsample-3 witness at `v`, at the chain's dimension spelling (`cnxDn3`). -/
-noncomputable def cnxDn3B_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd3 : 0 < w.d3.ε)
+noncomputable def cnxDn3BAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd3 : 0 < w.d3.ε)
     (v : Vec (B * (384 * 14 * 14))) : HasVJPAt (StableHLO.batchMap B (cnxDn3 w)) v :=
-  cnxDownB_at B 7 7 w.d3 hd3 v
+  cnxDownBAt B 7 7 w.d3 hd3 v
 
 /-- The batched GAP witness at `v`. -/
-noncomputable def cnxGapB_at (B : Nat) (v : Vec (B * (768 * 7 * 7))) :
+noncomputable def cnxGapBAt (B : Nat) (v : Vec (B * (768 * 7 * 7))) :
     HasVJPAt (StableHLO.batchMap B (globalAvgPoolFlat 768 7 7)) v :=
-  batchMap_has_vjp_at _ v (fun _ => (globalAvgPoolFlat_has_vjp 768 7 7).toHasVJPAt _)
+  batchMapHasVJPAt _ v (fun _ => (globalAvgPoolFlatHasVJP 768 7 7).toHasVJPAt _)
     (fun _ => (globalAvgPoolFlat_differentiable 768 7 7).differentiableAt)
 
 /-- The batched head-LayerNorm witness at `v`. -/
-noncomputable def cnxLNhB_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε)
+noncomputable def cnxLNhBAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε)
     (v : Vec (B * 768)) : HasVJPAt (StableHLO.batchMap B (cnxLNh w)) v :=
-  batchMap_has_vjp_at _ v (fun _ => (cnxLNhVjp w hhε).toHasVJPAt _)
-    (fun _ => (cnxLNhDiff w hhε).differentiableAt)
+  batchMapHasVJPAt _ v (fun _ => (cnxLNhVjp w hhε).toHasVJPAt _)
+    (fun _ => (cnxLNh_differentiable w hhε).differentiableAt)
 
 /-- The batched classifier witness at `v`. -/
-noncomputable def cnxDenseB_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : Vec (B * 768)) :
+noncomputable def cnxDenseBAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : Vec (B * 768)) :
     HasVJPAt (StableHLO.batchMap B (dense w.Wd w.bd)) v :=
-  batchMap_has_vjp_at _ v (fun _ => (dense_has_vjp w.Wd w.bd).toHasVJPAt _)
+  batchMapHasVJPAt _ v (fun _ => (denseHasVJP w.Wd w.bd).toHasVJPAt _)
     (fun _ => (dense_differentiable w.Wd w.bd).differentiableAt)
 
 -- ═════════════════════════════════════════════════
@@ -199,7 +199,7 @@ noncomputable def cnxDenseB_at (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : 
 theorem cnxStemBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (B * (3 * 224 * 224))) :
     StableHLO.batchMap B (flatConvStride4Back (h := 56) (w := 56) (padOdd w.sW))
-      = (cnxStemB_at B w x).backward := by
+      = (cnxStemBAt B w x).backward := by
   funext dy idx
   show flatConvStride4Back (h := 56) (w := 56) (padOdd w.sW)
       (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
@@ -215,7 +215,7 @@ theorem cnxStemBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
 theorem cnxChanLNBackB_eq_vjp (B c h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (v : Vec (B * (c * h * w))) :
     StableHLO.batchMapAux B (chanLNTensor3Back c h w ε γ) v
-      = (cnxChanLNB_at B c h w ε hε γ β v).backward := by
+      = (cnxChanLNBAt B c h w ε hε γ β v).backward := by
   funext dy idx
   show chanLNTensor3Back c h w ε γ (Mat.unflatten v (finProdFinEquiv.symm idx).1)
       (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
@@ -227,7 +227,7 @@ theorem cnxChanLNBackB_eq_vjp (B c h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β :
 theorem cnxStemLNBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε)
     (v : Vec (B * (96 * 56 * 56))) :
     StableHLO.batchMapAux B (chanLNTensor3Back 96 56 56 w.sε w.sγ) v
-      = (cnxStemLNB_at B w hsε v).backward :=
+      = (cnxStemLNBAt B w hsε v).backward :=
   cnxChanLNBackB_eq_vjp B 96 56 56 w.sε hsε w.sγ w.sβ v
 
 /-- **The batched stage tie** — `cnxStageChKBack_eq_vjp` at one example's row, for every depth. -/
@@ -235,7 +235,7 @@ theorem cnxStageBackB_eq_vjp (B : Nat) {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
     (k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kHd kWd) (hε : ∀ i, 0 < (ps i).εn)
     (v : Vec (B * (c * h * w))) :
-    StableHLO.batchMapAux B (cnxStageChKBack k ps) v = (cnxStageB_at B k ps hε v).backward := by
+    StableHLO.batchMapAux B (cnxStageChKBack k ps) v = (cnxStageBAt B k ps hε v).backward := by
   funext dy idx
   show cnxStageChKBack k ps (Mat.unflatten v (finProdFinEquiv.symm idx).1)
       (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
@@ -252,7 +252,7 @@ theorem cnxDownBackB_eq_vjp (B h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh 
     (hε : 0 < p.ε) (v : Vec (B * (cin * (2 * h) * (2 * w)))) :
     StableHLO.batchMapAux B (fun u => cnxDownBack (h := h) (w := w) (padOdd p.W)
         (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ u)) v
-      = (cnxDownB_at B h w p hε v).backward := by
+      = (cnxDownBAt B h w p hε v).backward := by
   funext dy idx
   show cnxDownBack (h := h) (w := w) (padOdd p.W)
       (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ (Mat.unflatten v (finProdFinEquiv.symm idx).1))
@@ -266,7 +266,7 @@ theorem cnxDn1BackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 
     (v : Vec (B * (96 * 56 * 56))) :
     StableHLO.batchMapAux B (fun u => cnxDownBack (h := 28) (w := 28) (padOdd w.d1.W)
         (chanLNTensor3Back 96 56 56 w.d1.ε w.d1.γ u)) v
-      = (cnxDn1B_at B w hd1 v).backward :=
+      = (cnxDn1BAt B w hd1 v).backward :=
   cnxDownBackB_eq_vjp B 28 28 w.d1 hd1 v
 
 /-- **The batched downsample-2 tie** — `cnxDownBackB_eq_vjp` at `14 14`. -/
@@ -274,7 +274,7 @@ theorem cnxDn2BackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 
     (v : Vec (B * (192 * 28 * 28))) :
     StableHLO.batchMapAux B (fun u => cnxDownBack (h := 14) (w := 14) (padOdd w.d2.W)
         (chanLNTensor3Back 192 28 28 w.d2.ε w.d2.γ u)) v
-      = (cnxDn2B_at B w hd2 v).backward :=
+      = (cnxDn2BAt B w hd2 v).backward :=
   cnxDownBackB_eq_vjp B 14 14 w.d2 hd2 v
 
 /-- **The batched downsample-3 tie** — `cnxDownBackB_eq_vjp` at `7 7`. -/
@@ -282,18 +282,18 @@ theorem cnxDn3BackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hd3 : 0 
     (v : Vec (B * (384 * 14 * 14))) :
     StableHLO.batchMapAux B (fun u => cnxDownBack (h := 7) (w := 7) (padOdd w.d3.W)
         (chanLNTensor3Back 384 14 14 w.d3.ε w.d3.γ u)) v
-      = (cnxDn3B_at B w hd3 v).backward :=
+      = (cnxDn3BAt B w hd3 v).backward :=
   cnxDownBackB_eq_vjp B 7 7 w.d3 hd3 v
 
 /-- **The batched GAP tie is `rfl`**, as the per-example `gapBack_eq_vjp_backward` is. -/
 theorem cnxGapBackB_eq_vjp (B : Nat) (v : Vec (B * (768 * 7 * 7))) :
-    StableHLO.batchMap B (gapBack 768 7 7) = (cnxGapB_at B v).backward := rfl
+    StableHLO.batchMap B (gapBack 768 7 7) = (cnxGapBAt B v).backward := rfl
 
 /-- **The batched head-LayerNorm tie** — `cnxLNhBack_eq_vjp` at one example's row. -/
 theorem cnxLNhBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε)
     (v : Vec (B * 768)) :
     StableHLO.batchMapAux B (rowLNVecFlatBack 1 768 w.hε w.hγ) v
-      = (cnxLNhB_at B w hhε v).backward := by
+      = (cnxLNhBAt B w hhε v).backward := by
   funext dy idx
   show rowLNVecFlatBack 1 768 w.hε w.hγ (Mat.unflatten v (finProdFinEquiv.symm idx).1)
       (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
@@ -305,7 +305,7 @@ theorem cnxLNhBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0
     head is linear, so the saved `v` is free). -/
 theorem cnxDenseBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : Vec (B * 768)) :
     StableHLO.batchMap B (dense (Mat.transpose w.Wd) (0 : Vec 768))
-      = (cnxDenseB_at B w v).backward := by
+      = (cnxDenseBAt B w v).backward := by
   funext dy idx
   show dense (Mat.transpose w.Wd) (0 : Vec 768)
       (fun c => dy (finProdFinEquiv ((finProdFinEquiv.symm idx).1, c)))
@@ -325,21 +325,21 @@ noncomputable def truncApex (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
     (h3 : ∀ i, 0 < (w.s3 i).εn)
     (x : Vec (B * (3 * 224 * 224))) :=
-  vjp_comp_diff_at _ (StableHLO.batchMap B (convNextStageChK 3 w.s2)) x
-    (vjp_comp_diff_at _ (StableHLO.batchMap B (cnxDn1 w)) x
-    (vjp_comp_diff_at _ (StableHLO.batchMap B (convNextStageChK 3 w.s1)) x
-    (vjp_comp_diff_at (StableHLO.batchMap B (cnxSavedA0 w))
+  vjpCompDiffAt _ (StableHLO.batchMap B (convNextStageChK 3 w.s2)) x
+    (vjpCompDiffAt _ (StableHLO.batchMap B (cnxDn1 w)) x
+    (vjpCompDiffAt _ (StableHLO.batchMap B (convNextStageChK 3 w.s1)) x
+    (vjpCompDiffAt (StableHLO.batchMap B (cnxSavedA0 w))
     (StableHLO.batchMap B (chanLNTensor3 96 56 56 w.sε w.sγ w.sβ)) x
-    ⟨cnxStemB_at B w x,
-     batchMap_differentiableAt _ x (fun _ => (cnxD0 w).differentiableAt)⟩
-    ⟨cnxStemLNB_at B w hsε (cnxSavedB0 B w x),
+    ⟨cnxStemBAt B w x,
+     batchMap_differentiableAt _ x (fun _ => (cnxSavedA0_differentiable w).differentiableAt)⟩
+    ⟨cnxStemLNBAt B w hsε (cnxSavedB0 B w x),
      batchMap_differentiableAt _ _ (fun _ =>
-       (chanLNTensor3_diff 96 56 56 w.sε w.sγ w.sβ hsε).differentiableAt)⟩)
-    (⟨cnxStageB_at B 3 w.s1 h1 (cnxSavedB1 B w x),
-     batchMap_differentiableAt _ _ (fun _ => (convNextStageChK_diff 3 w.s1 h1).differentiableAt)⟩))
-    (⟨cnxDn1B_at B w hd1 (cnxSavedB2 B w x),
-     batchMap_differentiableAt _ _ (fun _ => (cnxDn1Diff w hd1).differentiableAt)⟩))
-    (⟨cnxStageB_at B 3 w.s2 h2 (cnxSavedB3 B w x),
-     batchMap_differentiableAt _ _ (fun _ => (convNextStageChK_diff 3 w.s2 h2).differentiableAt)⟩)
+       (chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε).differentiableAt)⟩)
+    (⟨cnxStageBAt B 3 w.s1 h1 (cnxSavedB1 B w x),
+     batchMap_differentiableAt _ _ (fun _ => (convNextStageChK_differentiable 3 w.s1 h1).differentiableAt)⟩))
+    (⟨cnxDn1BAt B w hd1 (cnxSavedB2 B w x),
+     batchMap_differentiableAt _ _ (fun _ => (cnxDn1_differentiable w hd1).differentiableAt)⟩))
+    (⟨cnxStageBAt B 3 w.s2 h2 (cnxSavedB3 B w x),
+     batchMap_differentiableAt _ _ (fun _ => (convNextStageChK_differentiable 3 w.s2 h2).differentiableAt)⟩)
 
 end Proofs

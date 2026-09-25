@@ -4,7 +4,7 @@
 §8e of `planning/archive/mnv4_verified.md` ran this sweep by hand and **took four passes, three of
 which were wrong**, because Lean naming does not support mechanical auditing:
 
-  pass 1 "151 holes"  — matched `<X>_has_vjp` against `<X>Back*Graph_faithful`; swept up
+  pass 1 "151 holes"  — matched `<X>HasVJP` against `<X>Back*Graph_faithful`; swept up
                         whole-net forwards, primitives, weight-grads and the float-bridge world
   pass 2 "6 holes"    — narrowed to batched `*B`, but missed the `<X>GraphB_faithful` family
                         entirely (no "Back" in the name)
@@ -18,12 +18,12 @@ pass 4, written down. The statement/proof split is by **paren depth**: a named-a
 is always inside parentheses, so the first depth-0 `:=` is the real boundary.
 
 ⚠ **A name-keyed audit cannot tell one object with two names from two objects.** §8f found
-`mbStridedFwdB_has_vjp` and `mbDownBodyB_has_vjp` are definitionally the same VJP (`rfl`), so a
+`mbStridedFwdBHasVJP` and `mbDownBodyBHasVJP` are definitionally the same VJP (`rfl`), so a
 reported hole can be a naming artifact — two of §8e's four were. Probe before building.
 
 Two cohorts, because the repo has two VJP worlds:
-  * **batched** `Vec`-level `<X>B_has_vjp` — the conv nets (§8e's scope)
-  * **per-token** `Mat`-level `<X>_has_vjp_mat` — ViT
+  * **batched** `Vec`-level `<X>BHasVJP` — the conv nets (§8e's scope)
+  * **per-token** `Mat`-level `<X>HasVJPMat` — ViT
 
 Usage:  python3 scripts/probes/vjp_graph_sweep.py [--all] [--cohort batched|mat|both]
         --all  also lists the TIED forwards, not just the holes
@@ -99,16 +99,16 @@ def main() -> int:
             decls.append((name, stmt, body, path))
 
     # ── The two forward cohorts ──────────────────────────────────────────────
-    # batched: `<X>B_has_vjp` / `<X>B_has_vjp_at` — the trailing B before `_has_vjp` is what
+    # batched: `<X>BHasVJP` / `<X>BHasVJPAt` — the trailing B before `HasVJP` is what
     # `*BackB0` uses for "batched over N", and it is what keeps whole-net and per-example
     # forwards (pass 1's 151) out of scope.
     batched = {}
     mat = {}
     for name, stmt, _body, path in decls:
-        m = re.fullmatch(r"(.*B)_has_vjp(?:_at)?", name)
+        m = re.fullmatch(r"(.*B)HasVJP(?:At)?", name)
         if m:
             batched.setdefault(m.group(1), (name, path))
-        m = re.fullmatch(r"(.*)_has_vjp_mat", name)
+        m = re.fullmatch(r"(.*)HasVJPMat", name)
         if m:
             mat.setdefault(m.group(1), (name, path))
 
@@ -135,7 +135,7 @@ def main() -> int:
     # ⚠⚠ The ONLY calibrated cohort is `batched`: its verdict was derived by hand in §8e/§8f and
     # this script reproduces it (1 hole, `efficientnetForwardB`). `mat` has NEVER been checked
     # against a hand-derived answer, and its classification is known to be unreliable —
-    # `mhsa_g`/`colSlabwise` are demonstrably consumed on the way to `mhsaBackGraphMH_faithful`
+    # `mhsaG`/`colSlabwise` are demonstrably consumed on the way to `mhsaBackGraphMH_faithful`
     # (via `mhsaClean`, a def, and `mhsaClean_backward_collapseMH`, whose name matches no filter)
     # yet land in the hole column. Do NOT read that column as debt; tuning the filter until it
     # looks clean is how a sweep manufactures a false green.
@@ -149,7 +149,7 @@ def main() -> int:
             print("⚠ UNCALIBRATED COHORT — the columns below have never been checked against a")
             print("  hand-derived answer. Ingredients-of-ingredients land in the hole column.\n")
         # ⭐ THREE categories, not two. A forward whose VJP is consumed INSIDE a capstone's proof
-        # (an `mhsa_g_has_vjp_mat` fed to `colSlabwise_has_vjp_mat` on the way to
+        # (an `mhsaGHasVJPMat` fed to `colSlabwiseHasVJPMat` on the way to
         # `mhsaBackGraphMH_faithful`) is an INGREDIENT of a certified graph, not a stage nobody
         # covered. Collapsing those into "hole" is how a sweep manufactures debt: the first run
         # of this script reported 9 per-token holes, of which several were ingredients.

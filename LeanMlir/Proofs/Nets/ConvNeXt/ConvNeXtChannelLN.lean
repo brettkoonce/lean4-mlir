@@ -15,12 +15,12 @@ namespace Proofs
 open scoped BigOperators
 
 /-- **Channel-LN γ output, certified.** The rendered per-channel reduce — ViT's
-    `vecLN_grad_gamma` on the two transposed views the tail emits — equals the certified Jacobian
+    `vecLNGradGamma` on the two transposed views the tail emits — equals the certified Jacobian
     of `chanLNTensor3` in its `Vec c` γ, contracted with the activation-layout cotangent. The
     `den` target of the render's `veclnGammaSgd` LN tail. -/
 theorem cnx_render_chlngamma_certified {c h w : Nat} (ε : ℝ) (β γ : Vec c)
     (x cot : Vec (c * h * w)) (lr : ℝ) (k : Fin c) :
-    γ k - lr * vecLN_grad_gamma (h * w) c ε (Mat.unflatten (chanLNRows c h w x))
+    γ k - lr * vecLNGradGamma (h * w) c ε (Mat.unflatten (chanLNRows c h w x))
                   (Mat.unflatten (chanLNRows c h w cot)) k
       = γ k - lr * ∑ j : Fin (c * h * w),
           pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j := by
@@ -33,7 +33,7 @@ theorem cnx_render_chlngamma_certified {c h w : Nat} (ε : ℝ) (β γ : Vec c)
     `rowDenseBiasSgd` op ViT's LN-β uses denotes it here too. -/
 theorem cnx_render_chlnbeta_certified {c h w : Nat} (ε : ℝ) (γ β : Vec c)
     (x cot : Vec (c * h * w)) (lr : ℝ) (k : Fin c) :
-    β k - lr * vecLN_grad_beta (h * w) c (Mat.unflatten (chanLNRows c h w cot)) k
+    β k - lr * vecLNGradBeta (h * w) c (Mat.unflatten (chanLNRows c h w cot)) k
       = β k - lr * ∑ j : Fin (c * h * w),
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j := by
   rw [chanLN_beta_contract ε γ β x cot k]

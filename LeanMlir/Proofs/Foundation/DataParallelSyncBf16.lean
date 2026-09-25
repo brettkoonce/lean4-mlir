@@ -178,7 +178,7 @@ theorem den_convWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R : Nat)
   rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro r _
   apply Finset.sum_congr rfl; intro n _
-  -- ⚠ `rw`, not `simp`: the `x` slice sits inside `conv2d_weight_grad_has_vjp b x`, whose TYPE
+  -- ⚠ `rw`, not `simp`: the `x` slice sits inside `conv2dWeightGradHasVJP b x`, whose TYPE
   -- depends on it (as in `den_allReduceMeanF_convWeightGradB_shard`).
   rw [batchSlice_batchShard, batchSlice_batchShard]
 

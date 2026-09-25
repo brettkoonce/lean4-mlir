@@ -15,7 +15,7 @@ Each declaration below IS the corresponding generic theorem at `(784, 512, 512, 
 `#check` shows the specialized statement; the 3-axiom audit covers them all. Nothing else
 in Lean consumes them: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)
 is this file's only importer, by design.
-The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerified_has_vjp*`
+The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerifiedHasVJP*`
 (stated over `mlpVerified.layers` itself; that file lives outside the Mathlib-only seam).
 
 The OTHER MNIST proof population — the trained-weight certificate instances
@@ -35,15 +35,15 @@ namespace MlpCanonical
 -- inferred rather than restated (`theorem` would force spelling each one out).
 set_option linter.defProp false
 
-/-- Canonical whole-net pointwise VJP: `mlp_has_vjp_at` at (784, 512, 512, 10) —
+/-- Canonical whole-net pointwise VJP: `mlpHasVJPAt` at (784, 512, 512, 10) —
     the honest conditional witness (both hidden layers off-kink at `x`). -/
-noncomputable def has_vjp_at :=
-  mlp_has_vjp_at (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
+noncomputable def hasVJPAt :=
+  mlpHasVJPAt (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
 
 /-- Canonical backward-correctness: the canonical witness's backward IS the
     Jacobian-transpose contraction. -/
-noncomputable def has_vjp_correct :=
-  mlp_has_vjp_correct (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
+noncomputable def hasVJP_correct :=
+  mlpHasVJP_correct (d₀ := 784) (d₁ := 512) (d₂ := 512) (d₃ := 10)
 
 /-- Canonical output-layer float-SGD descent (`mlp_output_float_sgd_descends`
     at the canonical dims): one binary32-model SGD step on W₂ decreases the

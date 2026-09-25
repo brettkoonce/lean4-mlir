@@ -10,7 +10,7 @@ module @m {
     // gradient reads the same global x-hat (bnSyncGammaGradB). Each replica therefore computes
     // its shard of the GLOBAL-batch function, and this step IS the single-device step at the
     // global batch N x b: proved as EnetSyncTieG.efficientnet_net_syncTiedG (every all-reduced
-    // gradient) and StableHLO.efficientnetFwdGraphSync_full_shard (the forward), both in
+    // gradient) and StableHLO.efficientnetFwdGraphSyncFull_shard (the forward), both in
     // LeanMlir/Proofs/Nets/EfficientNet/ (planning/global_bn_verified.md).
     // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round
     // their operands per element, are not in that statement.)

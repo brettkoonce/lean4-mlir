@@ -298,7 +298,7 @@ shrinks to ~20 lines. The heartbeat bump should then be removable.
 
 ## LeanMlir/Proofs/Architectures/CNN.lean + Depthwise.lean (+ Attention.lean patch embed)
 
-### CNN.lean:266–:412 — `conv2d_has_vjp3.correct` and Depthwise.lean:236–:370 — `depthwise_has_vjp3.correct`
+### CNN.lean:266–:412 — `conv2dHasVJP3.correct` and Depthwise.lean:236–:370 — `depthwiseHasVJP3.correct`
 
 **Smell:** repetition + long-proof + undocumented-defeq
 **Current:** the two proofs are a near line-for-line copy (`diff` shows only the channel index and
@@ -321,7 +321,7 @@ the `c = ci ∧` conjunct differ). Each contains:
 ```
 ~145 lines each, 290 total.
 **Why it breaks:** the 25-line `show (let …) = …` restates the formula's `let`-body verbatim, so
-any edit to `conv2d_input_grad_formula` (a renamed binder, a different padding expression) must
+any edit to `conv2dInputGradFormula` (a renamed binder, a different padding expression) must
 be mirrored in 2 files × 2 places. `Finset.sum_eq_single` + `absurd (Finset.mem_univ _)` is the
 pre-`Fintype` idiom.
 **Suggested:** the repo already has the short version in Attention.lean:2123–:2140
@@ -342,7 +342,7 @@ theorem padTap_indicator {h kH : Nat} (hi ho : Fin h) (kh : Fin kH) (P : Fin h �
        then P ⟨kh.val + ho.val - (kH-1)/2, hpad.2⟩ else 0)
       = if kh.val + ho.val = hi.val + (kH-1)/2 then P hi else 0   -- (with P := indicator at hi)
 ```
-Both `has_vjp3` proofs then become rows × cols applications of it.
+Both `hasVJP3` proofs then become rows × cols applications of it.
 
 ---
 
@@ -387,7 +387,7 @@ lemmas (`sub_apply`, `smul_apply`, `coe_sum'`) are the stable API.
 **Smell:** undocumented-defeq
 **Current:**
 ```lean
-    rw [fderiv_apply (softmax_diff (c' + 1) z) j]
+    rw [fderiv_apply (softmax_differentiable (c' + 1) z) j]
     rfl
   …
     show Real.exp (z' j) / (∑ k, Real.exp (z' k)) = _          -- unfolds `softmax`
@@ -411,14 +411,14 @@ theorem pdiv_eq_fderiv_coord {m n} (f : Vec m → Vec n) (x : Vec m) (hf : Diffe
     pdiv f x i j = fderiv ℝ (fun y => f y j) x (basisVec i)
 ```
 
-### Attention.lean:1042 — `pdivMat_mhsa_g_split`, :1087 `mhsa_g_has_vjp_mat`, :1134–:1210 `mhsa_qkv_W/b` + six `@[simp]` lemmas
+### Attention.lean:1042 — `pdivMat_mhsaG_split`, :1087 `mhsaGHasVJPMat`, :1134–:1210 `mhsaQkvW/b` + six `@[simp]` lemmas
 
 **Smell:** repetition
 **Current:** the three-way `if c = 0 then … else if c = 1 then … else …` over `Fin 3` is written
 four times (two defs, one backward, one theorem statement), and needs six `@[simp]` lemmas
-(`mhsa_qkv_W_eq0/1/2`, `mhsa_qkv_b_eq0/1/2`), each proved by
+(`mhsaQkvW_eq0/1/2`, `mhsaQkvB_eq0/1/2`), each proved by
 ```lean
-  unfold mhsa_qkv_W
+  unfold mhsaQkvW
   simp [Equiv.symm_apply_apply, show (2 : Fin 3) ≠ (0 : Fin 3) from by decide,
         show (2 : Fin 3) ≠ (1 : Fin 3) from by decide]
 ```
@@ -435,17 +435,17 @@ the six `@[simp]` lemmas become one (or none), and consumers `fin_cases c <;> si
 **Smell:** undocumented-defeq (compile time)
 **Current:**
 ```lean
-  rw [← (sdpa_Q_chain_has_vjp n d K V).correct Q dOut i j]
-  unfold sdpa_back_Q sdpa_dScores sdpa_dScaled sdpa_dWeights sdpa_weights sdpa_Q_chain_has_vjp
+  rw [← (sdpaQChainHasVJP n d K V).correct Q dOut i j]
+  unfold sdpaBackQ sdpaDScores sdpaDScaled sdpaDWeights sdpaWeights sdpaQChainHasVJP
   rfl
 ```
-**Why it breaks:** the closing `rfl` asks the kernel to unfold three nested `vjpMat_comp`
-structures plus `rowSoftmax_has_vjp_mat` down to the explicit formula — exactly the
+**Why it breaks:** the closing `rfl` asks the kernel to unfold three nested `vjpMatComp`
+structures plus `rowSoftmaxHasVJPMat` down to the explicit formula — exactly the
 "`rfl` forces whole-chain unfolding" hazard; a change to any `HasVJPMat` builder (even adding a
 field) changes what has to be unfolded. Likely a large share of this file's 15 s.
-**Suggested:** give `vjpMat_comp` a `@[simp] theorem vjpMat_comp_backward` (backward of the
-composite = inner backward ∘ outer backward) and close with `simp only [vjpMat_comp_backward, …]`
-or `rw` steps; or define `sdpa_back_Q := (sdpa_Q_chain_has_vjp n d K V).backward` and prove the
+**Suggested:** give `vjpMatComp` a `@[simp] theorem vjpMatComp_backward` (backward of the
+composite = inner backward ∘ outer backward) and close with `simp only [vjpMatComp_backward, …]`
+or `rw` steps; or define `sdpaBackQ := (sdpaQChainHasVJP n d K V).backward` and prove the
 closed form as an `_apply` lemma instead of the other way round.
 
 ---
@@ -518,7 +518,7 @@ monomials match as atoms) — or `by ring_nf; ring_nf at hnat; exact hnat`.
 ```
 **Suggested:** `rw [depthwiseStride2FlatXlaBack, Function.comp_apply]` (or the def's equation
 lemma) in place of the `show`, and a one-line comment for the closing `rfl` (it unfolds
-`depthwiseStride2FlatXla_has_vjp`'s backward).
+`depthwiseStride2FlatXlaHasVJP`'s backward).
 
 ---
 
@@ -544,7 +544,7 @@ lemma) in place of the `show`, and a one-line comment for the closing `rfl` (it 
    `sum_eq_single + absurd mem_univ + finProdFinEquiv.injective` conv indicator proof duplicated
    in CNN.lean and Depthwise.lean (~290 lines; Attention's patch-embed version already shows the
    short `simp only [Prod.mk.injEq, Fin.ext_iff, ite_and, Finset.sum_ite_eq']` idiom). Add
-   `_apply` lemmas for the defs, a `vjpMat_comp_backward` simp lemma, and one `padTap_indicator`
+   `_apply` lemmas for the defs, a `vjpMatComp_backward` simp lemma, and one `padTap_indicator`
    lemma.
 
 Also worth one pass: file-scope `open Classical` in 6 files (→ `open scoped Classical in` per

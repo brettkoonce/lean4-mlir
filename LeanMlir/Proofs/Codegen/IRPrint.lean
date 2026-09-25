@@ -18,7 +18,7 @@ the spec). The correspondence, per node:
     .input "%dy"       .cotangent          —
 
 So `mlpHlo` below mirrors `IR.emitMlpBack`, whose denotation is proven
-equal to `mlp_has_vjp_at.backward` (`IR.mlp_whole_bridge`). The printed text
+equal to `mlpHasVJPAt.backward` (`IR.mlp_whole_bridge`). The printed text
 is therefore the rendering of a proof-backed computation — up to the printer
 (this file, trusted), IREE, and float. (Phase 1: feed the output to IREE.)
 -/
@@ -209,7 +209,7 @@ def lossCotModule (B c : Nat) : String :=
 --                       the proven softmax-CE gradient ∂L/∂logits
 --                       (IR.lossCot_bridge). The cotangent is computed, not
 --                       supplied.
---   backward (PROOF-BACKED): the dx chain is ⟦emitMlpBack⟧ = mlp_has_vjp_at
+--   backward (PROOF-BACKED): the dx chain is ⟦emitMlpBack⟧ = mlpHasVJPAt
 --                       .backward; each dWℓ = aₗ₋₁ᵀ·dyℓ (batch-contracting
 --                       dot_general) and dbℓ = Σ_batch dyℓ (reduce-add) is
 --                       IR.emitWeightGrad / IR.emitBiasGrad, bridged to the
@@ -252,7 +252,7 @@ def mlpTrainStepModule (B d₀ d₁ d₂ d₃ : Nat) (lr : String) : String :=
   "    // ── loss (PROOF-BACKED: dy = softmax(logits) − onehot = ⟦emitLossCot⟧ = ∂L/∂logits) ──\n" ++
   renderLossCot B d₃ logits "%onehot" "%dy" ++
   -- ── backward (proof-backed) ──
-  "    // ── backward (PROOF-BACKED: dx chain = ⟦emitMlpBack⟧ = mlp_has_vjp_at.backward;\n" ++
+  "    // ── backward (PROOF-BACKED: dx chain = ⟦emitMlpBack⟧ = mlpHasVJPAt.backward;\n" ++
   "    //    dWℓ/dbℓ = emitWeightGrad/emitBiasGrad, bridged to the certified Jacobians) ──\n" ++
   "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
   s!"    %za = stablehlo.constant dense<0.0> : {tt [B,d₁]}\n" ++
@@ -394,7 +394,7 @@ def depthwiseFwdM (c H W kH kW : Nat) : String :=
      s!"    %bb = stablehlo.broadcast_in_dim %b, dims = [1] : ({tt [c]}) -> {tt [1,c,H,W]}\n" ++
      s!"    %o = stablehlo.add %cv, %bb : {tt [1,c,H,W]}\n    return %o : {tt [1,c,H,W]}\n")
 
-/-- Depthwise conv input-gradient `depthwiseConv2d_input_grad_formula` as
+/-- Depthwise conv input-gradient `depthwiseConv2dInputGradFormula` as
     `@dw_back`: per-channel reversed-kernel grouped conv (no channel
     transpose — depthwise channels don't mix). -/
 def depthwiseBackM (c H W kH kW : Nat) : String :=
@@ -538,9 +538,9 @@ def cnnModule (ic oc H W kH kW nClass : Nat) : String :=
 --            dWc = conv weight-grad via the **transpose trick** — the SAME
 --                  `stablehlo.convolution` with input/gradient reshaped (input
 --                  channels as batch, gradient as the kernel); proven formula
---                  `conv2d_weight_grad_has_vjp`, IREE-friendly (no exotic
+--                  `conv2dWeightGradHasVJP`, IREE-friendly (no exotic
 --                  dim_numbers — iree#21955),
---            dbc = Σ_{batch,spatial} dhconv (conv2d_bias_grad_formula).
+--            dbc = Σ_{batch,spatial} dhconv (conv2dBiasGradFormula).
 --   SGD      θ' = θ − lr·dθ (trusted).
 -- (The transpose-trick render is numerically validated here, as the repo's
 -- check_jacobians does; the graph-denotation bridge is the same expansion
@@ -660,7 +660,7 @@ def bnFwdModule (B n : Nat) (eps : String) : String :=
   s!"    %y = stablehlo.add %gx, %bb : {tt [B,n]}\n" ++
   s!"    return %y : {tt [B,n]}\n" ++ "  }\n}\n"
 
-/-- BatchNorm/LayerNorm backward `bn_has_vjp.backward` (the proven 3-term
+/-- BatchNorm/LayerNorm backward `bnHasVJP.backward` (the proven 3-term
     rank-1 form, `bn_back_bridge`) as `@bn_back`: recompute x̂,istd, then
     `dx = (istd/N)·(N·dx̂ − Σdx̂ − x̂·Σ(x̂·dx̂))`, `dx̂ = γ·dy`. -/
 def bnBackModule (B n : Nat) (eps : String) : String :=
@@ -716,7 +716,7 @@ def softmaxFwdModule (B c : Nat) : String :=
   renderSoftmax "%p" "%z" B c ++
   s!"    return %p : {tt [B,c]}\n" ++ "  }\n}\n"
 
-/-- Softmax backward `softmax_has_vjp.backward` (rank-1, `softmax_back_bridge`)
+/-- Softmax backward `softmaxHasVJP.backward` (rank-1, `softmax_back_bridge`)
     as `@softmax_back`: `dz = p ⊙ (dy − Σⱼ pⱼ·dyⱼ)`. -/
 def softmaxBackModule (B c : Nat) : String :=
   "module @m {\n" ++
@@ -732,7 +732,7 @@ def softmaxBackModule (B c : Nat) : String :=
 -- ════════════════════════════════════════════════════════════════
 -- § Scaled dot-product attention — the apex (Phase 3 sweep, ViT core)
 --
--- `sdpa Q K V = softmax(QKᵀ/√d)·V`. Proven backward (sdpa_back_Q/K/V_correct),
+-- `sdpa Q K V = softmax(QKᵀ/√d)·V`. Proven backward (sdpaBackQ/K/V_correct),
 -- step by step:  dV = wᵀ·dOut,  dWeights = dOut·Vᵀ,  dScaled =
 -- rowsoftmax-VJP(w, dWeights) = w⊙(dW − ⟨w,dW⟩),  dScores = dScaled/√d,
 -- dQ = dScores·K,  dK = dScoresᵀ·Q. All `dot_general` + the softmax above +
@@ -758,7 +758,7 @@ def sdpaFwdModule (n d : Nat) (scale : String) : String :=
   matdg "%out" "%weights" "%V" "1" "0" (tt [n,n]) (tt [n,d]) (tt [n,d]) ++
   s!"    return %out : {tt [n,d]}\n" ++ "  }\n}\n"
 
-/-- SDPA backward (the three proven input grads `sdpa_back_Q/K/V`) as
+/-- SDPA backward (the three proven input grads `sdpaBackQ/K/V`) as
     `@sdpa_back`: recompute the softmax weights, then the matmul/softmax-VJP
     chain. Returns `(dQ, dK, dV)`. -/
 def sdpaBackModule (n d : Nat) (scale : String) : String :=
@@ -788,7 +788,7 @@ def sdpaBackModule (n d : Nat) (scale : String) : String :=
 -- (gelu/swish/sigmoid_back_bridge — a single multiply). Forward renders the
 -- transcendental directly (`logistic`/`tanh`); the derivative is the
 -- closed form matching the repo's `*ScalarDeriv = deriv …`. relu6 is the
--- two-sided clamp with mask `1[0<x<6]` (relu6_has_vjp_at). Length `m`. -/
+-- two-sided clamp with mask `1[0<x<6]` (relu6HasVJPAt). Length `m`. -/
 -- ════════════════════════════════════════════════════════════════
 
 /-- sigmoid: σ = logistic; σ' = σ(1−σ). -/
@@ -926,7 +926,7 @@ def seBackM (m : Nat) : String :=
 -- projections, scaled dot-product attention (with the proven dQ/dK/dV and
 -- the three-way Q/K/V fan-in at the input), gelu, residual add. The backward
 -- (input gradient `dx`) chains them via the proven bridges — the codegen
--- analogue of `transformerBlock_has_vjp_mat`. Single head (heads=1,
+-- analogue of `transformerBlockHasVJPMat`. Single head (heads=1,
 -- d_head=D); `N` tokens, model dim `D`, MLP hidden `F`, scale `1/√D`.
 -- ════════════════════════════════════════════════════════════════
 
@@ -1103,7 +1103,7 @@ def vitBlockFwdModule (N D F : Nat) (eps scale : String) : String :=
 
 /-- Full ViT transformer block **input-gradient backward** `dx`: MLP-sublayer
     back (gelu) then attention-sublayer back (3-way QKV fan-in), each a residual
-    fan-in. The codegen analogue of `transformerBlock_has_vjp_mat`. -/
+    fan-in. The codegen analogue of `transformerBlockHasVJPMat`. -/
 def vitBlockBackModule (N D F : Nat) (eps scale : String) : String :=
   actMod "vit_back" (vitBlockSig N D F ++ s!", %dOut: {tt [N,D]}") (tt [N,D])
     (vitBlockFwdBody N D F eps scale ++
@@ -1135,11 +1135,11 @@ def vitBlockBackModule (N D F : Nat) (eps scale : String) : String :=
 -- ════════════════════════════════════════════════════════════════
 -- § ResNet — the whole-network test case (Phase 3, deep assembly)
 --
--- The repo's proven ResNet-style net (\texttt{cnn\_has\_vjp\_at}) is
+-- The repo's proven ResNet-style net (\texttt{cnnHasVJPAt}) is
 --   dense ∘ globalAvgPool ∘ rblkP ∘ rblk ∘ maxPool ∘ cbr(stem),
 -- where its "BN" is `bnForward` over the *flattened* feature vector --- i.e.
 -- the per-token LN renderer (renderLN), reused at n = C·H·W. The basic block
--- is  out = relu( BN₂(conv₂(relu(BN₁(conv₁(x))))) + skip(x) )  (residual_has_vjp).
+-- is  out = relu( BN₂(conv₂(relu(BN₁(conv₁(x))))) + skip(x) )  (residualHasVJP).
 -- Convs have no bias (BN absorbs it — standard ResNet). We keep tensors NCHW
 -- and reshape to [1,C·H·W] only across each BN. (Input gradient dx; the
 -- generator below stacks these blocks into a full ResNet tower.)
@@ -1614,7 +1614,7 @@ def mbconvBackModule (c cmid H W kHd kWd r : Nat) (eps : String) : String :=
 -- The MBConv skeleton minus the squeeze-excite branch, relu6 in place of swish
 -- (`invresBody = ivProject ∘ ivDepthwise ∘ ivExpand`). relu6 has a kink, so its
 -- bridge holds at a smooth point (no pre-activation exactly 0 or 6) — the
--- measure-zero conditionality of the proven `relu6_has_vjp_at`. Reuses the
+-- measure-zero conditionality of the proven `relu6HasVJPAt`. Reuses the
 -- nf/eps-parameterized flat BN and the conv/depthwise machinery from MBConv.
 -- ════════════════════════════════════════════════════════════════
 

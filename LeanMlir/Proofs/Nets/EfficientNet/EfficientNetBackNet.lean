@@ -27,8 +27,8 @@ namespace Proofs.StableHLO
 
 | forward | verdict |
 |---|---|
-| `mbStridedFwdB` | ⭐ **never a hole** — `mbDownBodyBackBatchedGraph_faithful` certifies `mbStridedFwdB_has_vjp` itself |
-| `mbExpFwdB` | `mbBodyBackBatchedGraph_faithful` certifies `mbExpFwdB_has_vjp` at `ic = oc` (the graph's type) |
+| `mbStridedFwdB` | ⭐ **never a hole** — `mbDownBodyBackBatchedGraph_faithful` certifies `mbStridedFwdBHasVJP` itself |
+| `mbExpFwdB` | `mbBodyBackBatchedGraph_faithful` certifies `mbExpFwdBHasVJP` at `ic = oc` (the graph's type) |
 | `mbNoExpFwdB` | genuine — nothing composed `projB ∘ seB ∘ dwbsB` |
 | `headFwdB` | genuine — nothing composed `dense ∘ GAP ∘ cbsB` |
 
@@ -56,11 +56,11 @@ theorem mbNoExpBackBatchedGraph_faithful {N ic oc h w kHd kWd r : Nat}
     (Wp : Kernel4 oc ic 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
     den (mbNoExpBackBatchedGraph Wd bd εd γd βd Wz₁ bz₁ Wz₂ bz₂ Wp bp εp γp βp x e)
-      = (mbNoExpFwdB_has_vjp N Wd bd εd hεd γd βd Wz₁ bz₁ Wz₂ bz₂
+      = (mbNoExpFwdBHasVJP N Wd bd εd hεd γd βd Wz₁ bz₁ Wz₂ bz₂
           Wp bp εp hεp γp βp).backward x (den e) := by
   rw [mbNoExpBackBatchedGraph, dwbsBackBatchedGraph_faithful (hε := hεd),
       seBackBatched_faithful, projBackBatchedGraph_faithful (hε := hεp)]
-  simp only [mbNoExpFwdB_has_vjp, Function.comp_apply]
+  simp only [mbNoExpFwdBHasVJP, Function.comp_apply]
   rfl
 
 /-- **`headFwdB`'s backward graph** — genuinely new: `cbsB⁻¹ ∘ GAP⁻¹ ∘ dense⁻¹`. The EfficientNet
@@ -78,9 +78,9 @@ theorem headBackBatchedGraph_faithful {N c oc h w nC : Nat}
     (Wfc : Mat oc nC) (bfc : Vec nC)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * nC)) :
     den (headBackBatchedGraph Wh bh εh γh βh Wfc bfc x e)
-      = (headFwdB_has_vjp N Wh bh εh hεh γh βh Wfc bfc).backward x (den e) := by
+      = (headFwdBHasVJP N Wh bh εh hεh γh βh Wfc bfc).backward x (den e) := by
   rw [headBackBatchedGraph, cbsBackBatchedGraph_faithful (hε := hεh)]
-  simp only [headFwdB_has_vjp]
+  simp only [headFwdBHasVJP]
   rfl
 
 end Proofs.StableHLO

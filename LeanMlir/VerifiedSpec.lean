@@ -13,8 +13,8 @@ This file provides that surface:
                          with `#guard spec.toSpecs == XLayout.specs` — see `VerifiedNetsCore.lean`'s
                          `#guard resnet34Verified.toSpecs == ResNet34Layout.specs`.)
 
-The architecture's *faithfulness* is the audited `<net>_has_vjp` theorem, which is itself a
-hand-unrolled `foldl` of the generic `vjp_comp` chain-rule combinator ([`Proofs/Tensor.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Tensor.lean))
+The architecture's *faithfulness* is the audited `<net>HasVJP` theorem, which is itself a
+hand-unrolled `foldl` of the generic `vjpComp` chain-rule combinator ([`Proofs/Tensor.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Tensor.lean))
 over these same layers — so the spec and the proof describe the same fold. Generating the
 verified StableHLO from `layers` (folding the proven op-emitters) and folding the proof via
 a `netVjp` term are the remaining Tier-2 / Tier-3 steps; for now the slug names the committed,

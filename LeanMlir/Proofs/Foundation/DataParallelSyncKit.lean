@@ -11,7 +11,7 @@ The per-op facts that argument is assembled from are stated here once:
 
 | what | names | namespace |
 |---|---|---|
-| the `c·h·w ↔ c·(h·w)` index cast and sharding through it; non-BN nodes commute with the batch cut; the BN sync site | `castIdx`, `laAssoc`, `batchShard_castIdx`, `den_batchOp_shard`, `den_relu_shard`, `den_addVB_shard`, `bnSyncSiteLA` | `StableHLO` |
+| the `c·h·w ↔ c·(h·w)` index cast and sharding through it; non-BN nodes commute with the batch cut; the BN sync site | `castIdx`, `la_assoc`, `batchShard_castIdx`, `den_batchOp_shard`, `den_relu_shard`, `den_addVB_shard`, `bnSyncSiteLA` | `StableHLO` |
 | homogeneity — each cotangent step and gradient node is linear in its cotangent | `*_smul` | `ResNet34SyncTieB`, `MBConvSyncTieB` |
 | sharding — each input-VJP is per example, so it commutes with the batch cut; sync-BN's backward is the shard of the global one | `*_shard`, `bnSyncInB_shard` | `ResNet34SyncTieB`, `MBConvSyncTieB` |
 | P4 — the replica mean of a weight-gradient node is `1/R` of the global node | `den_allReduceMeanF_*_shard` | both (and `DataParallelSync` for conv W / BN β) |
@@ -62,9 +62,9 @@ theorem den_addVB_shard {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B : Vec 
 def bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) (hR : 0 < R)
     {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (x : Fin R → SHlo (N * (oc * h * w))) (r : Fin R) :
     SHlo (N * (oc * h * w)) :=
-  castIdx (laAssoc N oc h w).symm
-    (.bnSyncF gN bN es ε γ β (castIdx (laAssoc N oc h w) (x r))
-      (syncStats R hR t t' ds ds' (fun r' => castIdx (laAssoc N oc h w) (x r'))))
+  castIdx (la_assoc N oc h w).symm
+    (.bnSyncF gN bN es ε γ β (castIdx (la_assoc N oc h w) (x r))
+      (syncStats R hR t t' ds ds' (fun r' => castIdx (la_assoc N oc h w) (x r'))))
 
 /-- ⭐⭐ **The sync-BN site on replica `r` is shard `r` of the global-batch BatchNorm.**
     `den_bnSyncF_allReduce` (P1 on the graph), carried across the `mul_assoc` seam: the right-hand
@@ -76,7 +76,7 @@ theorem den_bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) 
     den (bnSyncSiteLA gN bN es t t' ds ds' R hR ε γ β x r)
       = batchShard R N (oc * h * w) (bnBatchLA (R * N) oc h w ε γ β X) r := by
   have hM := mulR_nhw_ne_zero hR hm
-  have hx' : ∀ r, den (castIdx (laAssoc N oc h w) (x r))
+  have hx' : ∀ r, den (castIdx (la_assoc N oc h w) (x r))
       = batchShard R N (oc * (h * w))
           (fun i => X (Fin.cast (congrArg ((R * N) * ·) (Nat.mul_assoc oc h w)).symm i)) r := by
     intro r
@@ -105,7 +105,7 @@ theorem reluMaskB_smul (n : Nat) (pre : Vec n) : IsHomog (reluMaskB n pre) := by
   split_ifs <;> simp
 
 /-- The three-term BatchNorm input-gradient is linear in `dy` — both its reductions are. -/
-theorem bn_grad_input_smul (n : Nat) (ε γ : ℝ) (x : Vec n) : IsHomog (bn_grad_input n ε γ x) := by
+theorem bnGradInput_smul (n : Nat) (ε γ : ℝ) (x : Vec n) : IsHomog (bnGradInput n ε γ x) := by
   intro s dy
   funext i
   have h1 : ∑ j : Fin n, γ * (s * dy j) = s * ∑ j : Fin n, γ * dy j := by
@@ -113,27 +113,27 @@ theorem bn_grad_input_smul (n : Nat) (ε γ : ℝ) (x : Vec n) : IsHomog (bn_gra
   have h2 : ∑ j : Fin n, bnXhat n ε x j * (γ * (s * dy j))
       = s * ∑ j : Fin n, bnXhat n ε x j * (γ * dy j) := by
     rw [Finset.mul_sum]; exact Finset.sum_congr rfl (fun _ _ => by ring)
-  simp only [bn_grad_input, h1, h2]
+  simp only [bnGradInput, h1, h2]
   ring
 
-theorem bnPerChannel_grad_input_smul (oc m : Nat) (ε : ℝ) (γ : Vec oc) (x : Vec (oc * m)) :
-    IsHomog (bnPerChannel_grad_input oc m ε γ x) := by
+theorem bnPerChannelGradInput_smul (oc m : Nat) (ε : ℝ) (γ : Vec oc) (x : Vec (oc * m)) :
+    IsHomog (bnPerChannelGradInput oc m ε γ x) := by
   intro s dy
   funext idx
-  exact congrFun (bn_grad_input_smul m ε _ _ s (Mat.unflatten dy (finProdFinEquiv.symm idx).1)) _
+  exact congrFun (bnGradInput_smul m ε _ _ s (Mat.unflatten dy (finProdFinEquiv.symm idx).1)) _
 
-theorem bnBatchTensor4_grad_input_smul (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
-    (x : Vec (N * (oc * (h * w)))) : IsHomog (bnBatchTensor4_grad_input N oc h w ε γ x) := by
+theorem bnBatchTensor4GradInput_smul (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
+    (x : Vec (N * (oc * (h * w)))) : IsHomog (bnBatchTensor4GradInput N oc h w ε γ x) := by
   intro s dy
   funext i
-  exact congrFun (bnPerChannel_grad_input_smul oc (N * (h * w)) ε γ _ s (bnchwFwd N oc h w dy)) _
+  exact congrFun (bnPerChannelGradInput_smul oc (N * (h * w)) ε γ _ s (bnchwFwd N oc h w dy)) _
 
 theorem bnInB_smul (N oc h w : Nat) (ε : ℝ) (γ : Vec oc) (x : Vec (N * (oc * h * w))) :
     IsHomog (bnInB N oc h w ε γ x) := by
   intro s dy
   rw [bnInB_eq_den_bnBatchBack, bnInB_eq_den_bnBatchBack]
   funext i
-  exact congrFun (bnBatchTensor4_grad_input_smul N oc h w ε γ _ s (reassocB N oc h w dy)) _
+  exact congrFun (bnBatchTensor4GradInput_smul N oc h w ε γ _ s (reassocB N oc h w dy)) _
 
 theorem batchMap_smul {N a b : Nat} (f : Vec a → Vec b) (hf : IsHomog f) :
     IsHomog (batchMap N f) := fun s X => by
@@ -191,14 +191,14 @@ theorem bnGammaGradB_smul {N oc h w : Nat} (vN epsStr cotN : String) (ε : ℝ)
     (v cot : Vec (N * (oc * (h * w)))) (s : ℝ) (k : Fin oc) :
     den (SHlo.bnGammaGradB vN epsStr ε v (.operand cotN (fun i => s * cot i))) k
       = s * den (SHlo.bnGammaGradB vN epsStr ε v (.operand cotN cot)) k := by
-  simp only [denStepApp, bnPerChannel_grad_gamma, bnchwFwd, Finset.mul_sum]
+  simp only [denStepApp, bnPerChannelGradGamma, bnchwFwd, Finset.mul_sum]
   exact Finset.sum_congr rfl (fun _ _ => by ring)
 
 theorem bnBetaGradB_smul {N oc h w : Nat} (cotN : String) (cot : Vec (N * (oc * (h * w))))
     (s : ℝ) (k : Fin oc) :
     den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN (fun i => s * cot i))) k
       = s * den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w) (.operand cotN cot)) k := by
-  simp only [denStepApp, bnPerChannel_grad_beta, bnchwFwd, Finset.mul_sum]
+  simp only [denStepApp, bnPerChannelGradBeta, bnchwFwd, Finset.mul_sum]
 
 theorem denseWeightGradB_smul {N a c : Nat} (xN cotN : String) (x : Vec (N * a))
     (cot : Vec (N * c)) (s : ℝ) (idx : Fin (a * c)) :
@@ -242,7 +242,7 @@ noncomputable def bnSyncInB (R : Nat) (hR : 0 < R) (N oc h w : Nat) (ε : ℝ) (
       (.allReduceMeanF R hR "" [] (fun r' => .bnSyncDyStatsB "" "" "" ε γ (reassocB N oc h w (xs r'))
         (.operand "" (reassocB N oc h w (dys r')))
         (syncStats R hR "" "" [] [] (fun r'' => .operand "" (reassocB N oc h w (xs r'')))))))
-    (Fin.cast (laAssoc N oc h w) i)
+    (Fin.cast (la_assoc N oc h w) i)
 
 /-- `reassocB` of a shard is the shard of the `reassocB`. -/
 theorem reassocB_shard {R N oc h w : Nat} (X : Vec ((R * N) * (oc * h * w))) (r : Fin R) :
@@ -411,7 +411,7 @@ theorem bnSync_of_scaled (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * 
         [oc] [oc] [oc] ε _ (fun r => reassocB N oc h w (batchShard R N (oc * h * w) V r)) _
         (reassocB (R * N) oc h w V) (reassocB (R * N) oc h w (fun i => (R : ℝ) * COT i)) hV
         (fun r => reassocB_shard V r) hC k]
-    rw [show (bnPerChannel_grad_gamma oc ((R * N) * (h * w)) ε
+    rw [show (bnPerChannelGradGamma oc ((R * N) * (h * w)) ε
           (bnchwFwd (R * N) oc h w (reassocB (R * N) oc h w V))
           (bnchwFwd (R * N) oc h w (reassocB (R * N) oc h w (fun i => (R : ℝ) * COT i))) k)
         = den (SHlo.bnGammaGradB vN epsStr ε (reassocB (R * N) oc h w V)

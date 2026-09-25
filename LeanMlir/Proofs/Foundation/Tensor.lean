@@ -30,10 +30,10 @@ Contents, in file order:
 |---|---|
 | Types, Matrix Operations | `Vec`, `Mat`, `Mat.mulVec`/`mul`/`transpose`/`outer`, `basisVec` |
 | Differentiation | `pdiv` and its rules (`pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_reindex`, …); the linear-map kits `pdiv_of_affine` / `pdiv_of_linear`, `pdiv_elementwise`, `pdiv_finset_sum`, `pdiv_const_smul` |
-| VJP Framework, Pointwise VJP | `HasVJP` (global) and `HasVJPAt` (at a point), `canonical`, `backward_unique`, `vjp_comp` / `vjp_comp_at` / `vjp_comp_diff_at` and their `_backward` peels, `biPath` |
+| VJP Framework, Pointwise VJP | `HasVJP` (global) and `HasVJPAt` (at a point), `canonical`, `backward_unique`, `vjpComp` / `vjpCompAt` / `vjpCompDiffAt` and their `_backward` peels, `biPath` |
 | flattening | `Mat.flatten` / `unflatten` with `_apply` and `@[simp]` round-trips, `sum_finProdFinEquiv` |
-| Matrix-level | `pdivMat`, `HasVJPMat`, `vjpMat_comp`, row-independence (`pdivMat_rowIndep*`, `rowwise_has_vjp_mat`), and the matmul / scale / transpose Jacobians and VJPs. The multi-head column-slab kit and `HasVJPMat3` live in `Attention.lean` |
-| 3D tensors | `Tensor3`, `pdiv3`, `HasVJP3` / `HasVJPAt3` and `hasVJP3_to_hasVJP` — nets compose at `Vec` through it |
+| Matrix-level | `pdivMat`, `HasVJPMat`, `vjpMatComp`, row-independence (`pdivMat_rowIndep*`, `rowwiseHasVJPMat`), and the matmul / scale / transpose Jacobians and VJPs. The multi-head column-slab kit and `HasVJPMat3` live in `Attention.lean` |
+| 3D tensors | `Tensor3`, `pdiv3`, `HasVJP3` / `HasVJPAt3` and `HasVJP3.toHasVJP` — nets compose at `Vec` through it |
 
 Zero project axioms: everything closes under `propext`, `Classical.choice`, `Quot.sound`.
 -/
@@ -308,7 +308,7 @@ theorem HasVJP.backward_unique {m n : Nat} {f : Vec m → Vec n} (h₁ h₂ : Ha
     scatters each output cotangent back to the input cell it was read from — `pdiv_reindex`'s
     indicator, contracted. The one witness behind every reindex-shaped layer: the BN layout
     bridges (`reassocFwd/Back`, `bnchwFwd/Back`), the `StridedConv` decimations, and
-    `reindex_has_vjp`'s `correct`. (`broadcastFlat_has_vjp` keeps its own witness: its backward
+    `reindexHasVJP`'s `correct`. (`broadcastFlatHasVJP` keeps its own witness: its backward
     is spelled the way the IR's `broadcastBack` denotes, and the SE-gate graph ties match it by
     `rfl`.) -/
 noncomputable def reindexVJP {a b : Nat} (σ : Fin b → Fin a) :
@@ -340,7 +340,7 @@ theorem reindexVJP_backward {a b : Nat} (σ : Fin b → Fin a) (v : Vec a) (dy :
 @[reducible] noncomputable def biPath {m n : Nat} (f g : Vec m → Vec n) : Vec m → Vec n :=
   fun x i => f x i + g x i
 
-noncomputable def biPath_has_vjp {m n : Nat}
+noncomputable def biPathHasVJP {m n : Nat}
     (f g : Vec m → Vec n)
     (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
     (hf : HasVJP f) (hg : HasVJP g) :
@@ -357,7 +357,7 @@ noncomputable def biPath_has_vjp {m n : Nat}
     (f g : Vec n → Vec n) : Vec n → Vec n :=
   fun x i => f x i * g x i
 
-noncomputable def elemwiseProduct_has_vjp {n : Nat}
+noncomputable def elemwiseProductHasVJP {n : Nat}
     (f g : Vec n → Vec n)
     (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
     (hf : HasVJP f) (hg : HasVJP g) :
@@ -372,7 +372,7 @@ noncomputable def elemwiseProduct_has_vjp {n : Nat}
     rw [pdiv_mul _ _ _ (hf_diff x) (hg_diff x)]; ring
 
 /-- **Identity VJP** — proved, no sorry. -/
-def identity_has_vjp (n : Nat) : HasVJP (fun (x : Vec n) => x) where
+def identityHasVJP (n : Nat) : HasVJP (fun (x : Vec n) => x) where
   backward := fun _x dy => dy
   correct := by
     intro x dy i
@@ -422,15 +422,15 @@ def HasVJP.toHasVJPAt {m n : Nat} {f : Vec m → Vec n}
   correct := hf.correct x
 
 /-- **Identity pointwise VJP** — trivial. -/
-def identity_has_vjp_at (n : Nat) (x : Vec n) :
+def identityHasVJPAt (n : Nat) (x : Vec n) :
     HasVJPAt (fun (y : Vec n) => y) x :=
-  (identity_has_vjp n).toHasVJPAt x
+  (identityHasVJP n).toHasVJPAt x
 
-/-- **Chain rule for pointwise VJPs.** Same shape as `vjp_comp`, but
+/-- **Chain rule for pointwise VJPs.** Same shape as `vjpComp`, but
     only requires `DifferentiableAt` at the relevant points (not
     everywhere). The pointwise analogue is what lets us compose
     through `relu` at smooth inputs. -/
-noncomputable def vjp_comp_at {m n p : Nat}
+noncomputable def vjpCompAt {m n p : Nat}
     (f : Vec m → Vec n) (g : Vec n → Vec p) (x : Vec m)
     (hf_diff : DifferentiableAt ℝ f x)
     (hg_diff : DifferentiableAt ℝ g (f x))
@@ -448,29 +448,29 @@ noncomputable def vjp_comp_at {m n p : Nat}
     simp_rw [← mul_assoc]
     rw [← Finset.sum_mul]
 
-/-- **Chain rule for VJPs** — `vjp_comp_at` at every point. Requires `f` and `g`
+/-- **Chain rule for VJPs** — `vjpCompAt` at every point. Requires `f` and `g`
     to be differentiable everywhere. -/
-noncomputable def vjp_comp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+noncomputable def vjpComp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
     (hf : HasVJP f) (hg : HasVJP g) :
     HasVJP (g ∘ f) where
   backward := fun x dy => hf.backward x (hg.backward (f x) dy)
   correct x :=
-    (vjp_comp_at f g x (hf_diff x) (hg_diff (f x)) (hf.toHasVJPAt x) (hg.toHasVJPAt (f x))).correct
+    (vjpCompAt f g x (hf_diff x) (hg_diff (f x)) (hf.toHasVJPAt x) (hg.toHasVJPAt (f x))).correct
 
-/-- `vjp_comp_at`'s backward: `g`'s, then `f`'s. Definitional; stated so a chain peels by `rw`.
+/-- `vjpCompAt`'s backward: `g`'s, then `f`'s. Definitional; stated so a chain peels by `rw`.
     ⛔ Not by `simp only` in a whole-net tie: simp uses an `rfl` lemma as a `dsimp` step and the
     kernel re-derives the unfolding. -/
-theorem vjp_comp_at_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p) (x : Vec m)
+theorem vjpCompAt_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p) (x : Vec m)
     (hf_diff : DifferentiableAt ℝ f x) (hg_diff : DifferentiableAt ℝ g (f x))
     (hf : HasVJPAt f x) (hg : HasVJPAt g (f x)) (dy : Vec p) :
-    (vjp_comp_at f g x hf_diff hg_diff hf hg).backward dy = hf.backward (hg.backward dy) := rfl
+    (vjpCompAt f g x hf_diff hg_diff hf hg).backward dy = hf.backward (hg.backward dy) := rfl
 
-/-- `vjp_comp`'s backward: `g`'s at `f x`, then `f`'s. Definitional, for `rw`. -/
-theorem vjp_comp_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+/-- `vjpComp`'s backward: `g`'s at `f x`, then `f`'s. Definitional, for `rw`. -/
+theorem vjpComp_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (hf_diff : Differentiable ℝ f) (hg_diff : Differentiable ℝ g)
     (hf : HasVJP f) (hg : HasVJP g) (x : Vec m) (dy : Vec p) :
-    (vjp_comp f g hf_diff hg_diff hf hg).backward x dy = hf.backward x (hg.backward (f x) dy) :=
+    (vjpComp f g hf_diff hg_diff hf hg).backward x dy = hf.backward x (hg.backward (f x) dy) :=
   rfl
 
 /-- A VJP witness at `x` together with differentiability there — one stage of a whole-net
@@ -479,18 +479,18 @@ abbrev HasVJPDiffAt {m n : Nat} (f : Vec m → Vec n) (x : Vec m) :=
   PProd (HasVJPAt f x) (DifferentiableAt ℝ f x)
 
 /-- Compose two `HasVJPDiffAt` stages. The fold step of every whole-net apex. -/
-noncomputable def vjp_comp_diff_at {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+noncomputable def vjpCompDiffAt {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (x : Vec m) (hf : HasVJPDiffAt f x) (hg : HasVJPDiffAt g (f x)) :
     HasVJPDiffAt (g ∘ f) x :=
-  ⟨vjp_comp_at f g x hf.snd hg.snd hf.fst hg.fst, hg.snd.comp x hf.snd⟩
+  ⟨vjpCompAt f g x hf.snd hg.snd hf.fst hg.fst, hg.snd.comp x hf.snd⟩
 
-/-- One `vjp_comp_diff_at` level's backward, unfolded: the composite runs `g`'s backward, then
+/-- One `vjpCompDiffAt` level's backward, unfolded: the composite runs `g`'s backward, then
     `f`'s. Definitional, stated so that a chain of levels peels by `rw` rather than by a
     `rfl` that has to find the same unfolding through concrete witnesses. ⛔ Not by
     `simp only`: simp would use it as a `dsimp` step and record nothing for the kernel to replay. -/
-theorem vjp_comp_diff_at_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
+theorem vjpCompDiffAt_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (x : Vec m) (hf : HasVJPDiffAt f x) (hg : HasVJPDiffAt g (f x)) (dy : Vec p) :
-    (vjp_comp_diff_at f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
+    (vjpCompDiffAt f g x hf hg).fst.backward dy = hf.fst.backward (hg.fst.backward dy) := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix ↔ Vector flattening (row-major)
@@ -643,8 +643,8 @@ theorem HasVJPMat.backward_unique_of_eq {a b c d : Nat} {f g : Mat a b → Mat c
   subst hfg; funext i j; rw [v.correct, v'.correct]
 
 /-- **Chain rule for matrix VJPs** — proved, no sorry.
-    Direct transcription of `vjp_comp` to rank-2 indices. -/
-noncomputable def vjpMat_comp {a b c d e f : Nat}
+    Direct transcription of `vjpComp` to rank-2 indices. -/
+noncomputable def vjpMatComp {a b c d e f : Nat}
     (F : Mat a b → Mat c d) (G : Mat c d → Mat e f)
     (hF_diff : Differentiable ℝ
       (fun v : Vec (a * b) => Mat.flatten (F (Mat.unflatten v))))
@@ -690,7 +690,7 @@ noncomputable def vjpMat_comp {a b c d e f : Nat}
     (F G : Mat a b → Mat c d) : Mat a b → Mat c d :=
   fun M r s => F M r s + G M r s
 
-noncomputable def biPathMat_has_vjp {a b c d : Nat}
+noncomputable def biPathMatHasVJP {a b c d : Nat}
     (F G : Mat a b → Mat c d)
     (hF_diff : Differentiable ℝ
       (fun v : Vec (a * b) => Mat.flatten (F (Mat.unflatten v))))
@@ -708,7 +708,7 @@ noncomputable def biPathMat_has_vjp {a b c d : Nat}
     rw [pdivMat_add _ _ _ (hF_diff (Mat.flatten A)) (hG_diff (Mat.flatten A))]; ring
 
 /-- **Identity VJP for matrices** — proved, no sorry. -/
-noncomputable def identityMat_has_vjp (a b : Nat) :
+noncomputable def identityMatHasVJP (a b : Nat) :
     HasVJPMat (fun (M : Mat a b) => M) where
   backward := fun _A dY => dY
   correct := by
@@ -724,10 +724,10 @@ noncomputable def identityMat_has_vjp (a b : Nat) :
     reshapes the input/output flat vectors to matrices, applies the
     matrix backward, and flattens the result.
 
-    Lets us compose `HasVJPMat` pieces (vit_body, transformer blocks)
+    Lets us compose `HasVJPMat` pieces (vitBody, transformer blocks)
     with rank-crossing pieces (patch embed, classifier head) that live
     natively as `Vec → Vec` by first bridging everything to `HasVJP`. -/
-noncomputable def hasVJPMat_to_hasVJP {a b c d : Nat} {f : Mat a b → Mat c d}
+noncomputable def HasVJPMat.toHasVJP {a b c d : Nat} {f : Mat a b → Mat c d}
     (hf : HasVJPMat f) :
     HasVJP (fun v : Vec (a * b) =>
               Mat.flatten (f (Mat.unflatten v))) where
@@ -838,10 +838,10 @@ theorem pdivMat_rowIndep {m n p : Nat} (g : Vec n → Vec p)
     Given any `g : Vec n → Vec p` with a proved `HasVJP`, applying `g`
     independently to each row of a matrix `A : Mat m n` gives a
     `HasVJPMat` on `Mat m n → Mat m p`. The backward is just `g.backward`
-    applied per row. Generalizes `rowSoftmax_has_vjp_mat`: any per-token
+    applied per row. Generalizes `rowSoftmaxHasVJPMat`: any per-token
     operation (LayerNorm, GELU, dense, activation) lifts to a per-sequence
     matrix operation via this one helper. -/
-noncomputable def rowwise_has_vjp_mat {m n p : Nat} {g : Vec n → Vec p}
+noncomputable def rowwiseHasVJPMat {m n p : Nat} {g : Vec n → Vec p}
     (hg : HasVJP g) (hg_diff : Differentiable ℝ g) :
     HasVJPMat (fun A : Mat m n => fun r => g (A r)) where
   backward := fun A dY => fun r c => hg.backward (A r) (dY r) c
@@ -881,7 +881,7 @@ theorem pdivMat_transpose {m n : Nat} (A : Mat m n)
 
     `f : Mat p q → Mat m q`,  `f B' = C · B'`.
     Backward: `dB' = C^T · dY`. -/
-noncomputable def matmul_left_const_has_vjp {m p q : Nat} (C : Mat m p) :
+noncomputable def matmulLeftConstHasVJP {m p q : Nat} (C : Mat m p) :
     HasVJPMat (fun B' : Mat p q => Mat.mul C B') where
   backward := fun _B dY => fun i j => ∑ k : Fin m, C k i * dY k j
   correct := by
@@ -893,7 +893,7 @@ noncomputable def matmul_left_const_has_vjp {m p q : Nat} (C : Mat m p) :
 
     `f : Mat m p → Mat m q`,  `f A' = A' · D`.
     Backward: `dA' = dY · D^T`. -/
-noncomputable def matmul_right_const_has_vjp {m p q : Nat} (D : Mat p q) :
+noncomputable def matmulRightConstHasVJP {m p q : Nat} (D : Mat p q) :
     HasVJPMat (fun A' : Mat m p => Mat.mul A' D) where
   backward := fun _A dY => fun i j => ∑ l : Fin q, dY i l * D j l
   correct := by
@@ -902,7 +902,7 @@ noncomputable def matmul_right_const_has_vjp {m p q : Nat} (D : Mat p q) :
     simp [mul_comm]
 
 /-- **Scalar-scale VJP** — proved.  Backward: `dA = s · dY`. -/
-noncomputable def scalarScale_has_vjp {m n : Nat} (s : ℝ) :
+noncomputable def scalarScaleHasVJP {m n : Nat} (s : ℝ) :
     HasVJPMat (fun M : Mat m n => fun r c => s * M r c) where
   backward := fun _A dY => fun i j => s * dY i j
   correct := by
@@ -911,7 +911,7 @@ noncomputable def scalarScale_has_vjp {m n : Nat} (s : ℝ) :
     simp [ite_and]
 
 /-- **Transpose VJP** — proved.  Backward: `dA = (dY)^T`. -/
-noncomputable def transpose_has_vjp {m n : Nat} :
+noncomputable def transposeHasVJP {m n : Nat} :
     HasVJPMat (fun M : Mat m n => Mat.transpose M) where
   backward := fun _A dY => fun i j => dY j i
   correct := by
@@ -974,9 +974,9 @@ theorem unflatten_differentiable {c h w : Nat} :
 end Tensor3
 
 /-- **3D partial derivative** — `pdiv` of the flattened map, both indices read through the
-    triple-nested flatten bijection. Operator-specific VJPs at rank 3 (`conv2d_has_vjp3`,
-    `maxPool2_has_vjp3`, `depthwise_has_vjp3`) are bundled `HasVJP3` defs in their own files;
-    nets compose them at `Vec`, through `hasVJP3_to_hasVJP` / `hasVJPAt3_to_hasVJPAt`. -/
+    triple-nested flatten bijection. Operator-specific VJPs at rank 3 (`conv2dHasVJP3`,
+    `maxPool2HasVJP3`, `depthwiseHasVJP3`) are bundled `HasVJP3` defs in their own files;
+    nets compose them at `Vec`, through `HasVJP3.toHasVJP` / `HasVJPAt3.toHasVJPAt`. -/
 noncomputable def pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (x : Tensor3 c₁ h₁ w₁)
@@ -1004,7 +1004,7 @@ structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
 
 /-- Tensor3 analogue of `HasVJPAt`: the same `pdiv3`-sum contract, but
     only required at the chosen smooth point `x`. The natural home for
-    `maxPool2_has_vjp_at3` and any other kinked Tensor3 operator. -/
+    `maxPool2HasVJPAt3` and any other kinked Tensor3 operator. -/
 structure HasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (x : Tensor3 c₁ h₁ w₁) where
@@ -1017,14 +1017,14 @@ structure HasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
 
 /-- **Bridge: `HasVJP3` → `HasVJP` via the `Tensor3.flatten` bijection.**
 
-    Rank-3 analogue of `hasVJPMat_to_hasVJP`. Given a Tensor3-level VJP
+    Rank-3 analogue of `HasVJPMat.toHasVJP`. Given a Tensor3-level VJP
     for `f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂`, produce a vector-level
     VJP for the flattened `fun v => Tensor3.flatten (f (Tensor3.unflatten v))`.
     The backward decodes the flat index in two `finProdFinEquiv.symm`
     levels (matching `pdiv3`'s row-major encode), applies the Tensor3
     backward, and the closing collapse folds the triple `co/ho/wo` sum
     back to the single flat sum via `sum_finProdFinEquiv` twice. -/
-noncomputable def hasVJP3_to_hasVJP {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+noncomputable def HasVJP3.toHasVJP {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
     (hf : HasVJP3 f) :
     HasVJP (fun v : Vec (c₁ * h₁ * w₁) =>
@@ -1043,10 +1043,10 @@ noncomputable def hasVJP3_to_hasVJP {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
 
 /-- **Bridge: `HasVJPAt3` → `HasVJPAt` via the `Tensor3.flatten` bijection.**
 
-    Smooth-point analogue of `hasVJP3_to_hasVJP`, with `x` fixed. Needed
+    Smooth-point analogue of `HasVJP3.toHasVJP`, with `x` fixed. Needed
     for kinked operators (e.g. `maxPool2`) that only carry `HasVJPAt3`.
     Same two-level index decode and triple→flat reindex collapse. -/
-noncomputable def hasVJPAt3_to_hasVJPAt {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+noncomputable def HasVJPAt3.toHasVJPAt {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
     {x : Tensor3 c₁ h₁ w₁}
     (hf : HasVJPAt3 f x) :

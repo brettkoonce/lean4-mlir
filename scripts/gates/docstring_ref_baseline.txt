@@ -11,14 +11,14 @@
 
 # ── PROPOSED: named as work not yet done. The prose says so; nothing is broken.
 #    A reader is not misled, so these are not debt. They leave when the work lands.
-globalAvgPool_has_vjp        # SE.lean:140 "you'd need to add …" — sketch of the SE fold
-broadcast_has_vjp            # SE.lean:140, same sentence, the adjoint of GAP
-cnn_has_vjp_at3              # CNN.lean:2337 explicitly "(future)"
+globalAvgPoolHasVJP        # SE.lean:140 "you'd need to add …" — sketch of the SE fold
+broadcastHasVJP            # SE.lean:140, same sentence, the adjoint of GAP
+cnnHasVJPAt3              # CNN.lean:2337 explicitly "(future)"
 r34_float_close              # ResNet34FloatBridge.lean:22 "the remaining work for a whole-net …"
 
 # ── OUT OF SCOPE: exists, but in a lib this gate does not import.
 #    Widening the import set to reach it costs more than the check is worth here.
-chk_relu_has_vjp_correct     # real, tests/comparator/ChallengeArch.lean — comparator lib
+chk_reluHasVJP_correct     # real, tests/comparator/ChallengeArch.lean — comparator lib
 renderLNBack                 # real, IRPrint.lean — no lib builds it (its olean is from an older toolchain)
 renderSEGateBack             # real, IRPrint.lean, same
 sdpaBackModule               # real, IRPrint.lean, same
@@ -35,7 +35,7 @@ convStridedXlaBackBatched    # cited as ABSENT: four MNv4 files state no such to
 #    here rather than guessed at: picking a plausible replacement would put a NEW
 #    false citation in the docs, which is worse than a flagged one. Each needs an
 #    author who knows which theorem was meant.
-cnnVerified_has_vjp_at       # MainMnistCnnVerified.lean:16 — cnn_has_vjp_at? cnnConcrete_has_vjp_at?
-flatten_has_vjp              # MainVjpOracleConv.lean:3 — no flatten VJP exists under any name
-maxPool_has_vjp              # MainVjpOracleConvPool.lean — maxPool2_has_vjp3 is the likely referent
+cnnVerifiedHasVJPAt       # MainMnistCnnVerified.lean:16 — cnnHasVJPAt? cnnConcreteHasVJPAt?
+flattenHasVJP              # MainVjpOracleConv.lean:3 — no flatten VJP exists under any name
+maxPoolHasVJP              # MainVjpOracleConvPool.lean — maxPool2HasVJP3 is the likely referent
 convStrided_faithful         # TestStrided1x1.lean

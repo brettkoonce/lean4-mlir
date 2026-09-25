@@ -12,10 +12,10 @@ As in M2, the cotangent the backward chain delivers at each conv layer's output 
 through a backward graph — here the Tensor3-level `IR.Back3` (`convBackDenote`,
 `maxPoolBackDenote`, with `IR.denote_subst3` the chain rule), exactly as the MLP used
 `IR.Back` (`mlpCotOut0`/`mlpCotOut1`). Given that cotangent `c`, the conv kernel and
-bias gradients (the transpose-trick `conv2d_weight_grad`/`conv2d_bias_grad`) are the
+bias gradients (the transpose-trick `conv2dWeightGrad`/`conv2dBiasGrad`) are the
 certified Jacobian of `conv2d` — as a function of the flattened kernel / of the bias —
 contracted with `c`. Both bridges are the `.correct` field of the proven conv
-parameter VJPs (`conv2d_weight_grad_has_vjp`/`conv2d_bias_grad_has_vjp`).
+parameter VJPs (`conv2dWeightGradHasVJP`/`conv2dBiasGradHasVJP`).
 
 Together with M2's dense bridges and the `Back3` cotangent chain, this covers every
 parameter of the CNN train step. (The SGD wrapping `θ − lr·∇` is identical to the
@@ -28,28 +28,28 @@ namespace Proofs
     (and any kernel point `v = Kernel4.flatten W`), the emitted conv kernel gradient
     equals the certified Jacobian of `conv2d` viewed as a function of the flattened
     kernel, contracted with `c`. The convolution analogue of `IR.weight_grad_bridge`;
-    it is the `.correct` field of `conv2d_weight_grad_has_vjp`. -/
+    it is the `.correct` field of `conv2dWeightGradHasVJP`. -/
 theorem conv_weight_grad_bridge {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Tensor3 ic h w)
     (v : Vec (oc * ic * kH * kW)) (c : Vec (oc * h * w))
     (idx : Fin (oc * ic * kH * kW)) :
-    (conv2d_weight_grad_has_vjp b x).backward v c idx
+    (conv2dWeightGradHasVJP b x).backward v c idx
       = ∑ j : Fin (oc * h * w),
           pdiv (fun v' : Vec (oc * ic * kH * kW) =>
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
                v idx j * c j :=
-  (conv2d_weight_grad_has_vjp b x).correct v c idx
+  (conv2dWeightGradHasVJP b x).correct v c idx
 
 /-- **Conv bias-gradient bridge.** Likewise the conv bias gradient (`db[o] = Σ
     spatial c`) is the certified Jacobian of `conv2d` wrt the bias, contracted with
-    `c` — the `.correct` field of `conv2d_bias_grad_has_vjp`. -/
+    `c` — the `.correct` field of `conv2dBiasGradHasVJP`. -/
 theorem conv_bias_grad_bridge {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
     (b : Vec oc) (c : Vec (oc * h * w)) (o : Fin oc) :
-    (conv2d_bias_grad_has_vjp W x).backward b c o
+    (conv2dBiasGradHasVJP W x).backward b c o
       = ∑ j : Fin (oc * h * w),
           pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j :=
-  (conv2d_bias_grad_has_vjp W x).correct b c o
+  (conv2dBiasGradHasVJP W x).correct b c o
 
 -- ════════════════════════════════════════════════════════════════
 -- § Closing the CNN render — the conv param outputs denote the certified gradients
@@ -70,7 +70,7 @@ theorem cnn_render_convW_certified {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Tensor3 ic h w)
     (v : Vec (oc * ic * kH * kW)) (c : Vec (oc * h * w)) (lr : ℝ)
     (idx : Fin (oc * ic * kH * kW)) :
-    v idx - lr * (conv2d_weight_grad_has_vjp b x).backward v c idx
+    v idx - lr * (conv2dWeightGradHasVJP b x).backward v c idx
       = v idx - lr * ∑ j : Fin (oc * h * w),
           pdiv (fun v' : Vec (oc * ic * kH * kW) =>
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
@@ -82,7 +82,7 @@ theorem cnn_render_convW_certified {ic oc h w kH kW : Nat}
 theorem cnn_render_convb_certified {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
     (b : Vec oc) (c : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :
-    b o - lr * (conv2d_bias_grad_has_vjp W x).backward b c o
+    b o - lr * (conv2dBiasGradHasVJP W x).backward b c o
       = b o - lr * ∑ j : Fin (oc * h * w),
           pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j := by
   rw [conv_bias_grad_bridge W x b c o]

@@ -26,30 +26,30 @@ effort tag.
 **Current:**
 ```lean
 -- :73
-  show bnBatchTensor4_grad_input N oc h w ε γ x (den e) i = _
-  rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β x (den e) i,
-      ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β x (den e) i]
+  show bnBatchTensor4GradInput N oc h w ε γ x (den e) i = _
+  rw [bnBatchTensor4GradInput_correct N oc h w ε hε γ β x (den e) i,
+      ← bnBatchTensor4HasVJP_correct N oc h w ε hε γ β x (den e) i]
 -- :194-205  (an 8-line `hb` that restates the whole LHS twice, then)
     funext i
-    rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β,
-        ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β]
+    rw [bnBatchTensor4GradInput_correct N oc h w ε hε γ β,
+        ← bnBatchTensor4HasVJP_correct N oc h w ε hε γ β]
   rw [hb]
 ```
 **Why it breaks:** both sites prove "the renderable BN input-grad equals the certified VJP
 backward" the same way: they go out to the `pdiv` sum and back (`grad_input_correct`, then
-`← has_vjp_correct`). `PerChannelBN.lean:640` proves `grad_input_correct` by going through the
+`← hasVJP_correct`). `PerChannelBN.lean:640` proves `grad_input_correct` by going through the
 backward in the first place, so the fact is derived three times. The `show` at :73 relies on the
 `den` of `bnBatchBack` unfolding definitionally, and no comment says so.
 **Suggested:** park one lemma in this leaf. Per §0, not in PerChannelBN.
 ```lean
-theorem bnBatchTensor4_grad_input_eq_backward (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε)
+theorem bnBatchTensor4GradInput_eq_backward (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε)
     (γ β : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
-    bnBatchTensor4_grad_input N oc h w ε γ x dy
-      = (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x dy :=
-  funext fun i => by rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β,
-                         ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β]
+    bnBatchTensor4GradInput N oc h w ε γ x dy
+      = (bnBatchTensor4HasVJP N oc h w ε hε γ β).backward x dy :=
+  funext fun i => by rw [bnBatchTensor4GradInput_correct N oc h w ε hε γ β,
+                         ← bnBatchTensor4HasVJP_correct N oc h w ε hε γ β]
 ```
-With it, `hb` goes away (`rw [bnBatchTensor4_grad_input_eq_backward (hε := hε) (β := β)]`). At
+With it, `hb` goes away (`rw [bnBatchTensor4GradInput_eq_backward (hε := hε) (β := β)]`). At
 :73 the proof is the lemma, applied after the `den` unfold. Keep the `show`, add a one-line
 comment that it rests on `den (.bnBatchBack …)` being the grad-input definitionally, or open with
 `simp only [denStepApp]` as the file's siblings do.
@@ -84,7 +84,7 @@ Then `h_log_diff` is dead, and `h_softmax_pos` is needed only at `logits` (for `
 (`Softmax.lean:221`, `BatchNorm.lean:576`):
 ```lean
     show _ = fderiv ℝ (softmax (c' + 1)) logits (basisVec j) label
-    rw [fderiv_apply ((softmax_diff (c' + 1)) logits) label]; rfl]
+    rw [fderiv_apply ((softmax_differentiable (c' + 1)) logits) label]; rfl]
 ```
 **Why it breaks:** every copy relies on `pdiv f x i j` being `fderiv ℝ f x (basisVec i) j`
 definitionally, and on the closing `rfl` evaluating a `ContinuousLinearMap.proj`/`comp`
@@ -140,7 +140,7 @@ Then close with `rw [one_mul]; exact (abs_le_of_sq_le_sq' hsq (norm_nonneg _)).2
 **Smell:** undocumented-defeq, repetition · **Effort:** trivial
 **Current:**
 ```lean
-  show (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x (den (.operand "" dy)) = _
+  show (bnBatchLAHasVJP N oc h w ε hε γ β).backward x (den (.operand "" dy)) = _
   rw [← bnBatchLABack_faithful "" "" "" ε γ β hε x (.operand "" dy),
       den_bnBatchLABack_eq_bnBatchBack]
   rfl
@@ -201,7 +201,7 @@ with nothing pointing at the cause.
 and `chanLNRows_apply : chanLNRows c h w v o = v ((chanRowsPerm c h w).symm o) := rfl`. Rewrite
 both contracts with them. Also :230 has an unscoped terminal `simp [pdiv_reindex …]` (low).
 
-### 10. Nets/Small/ChapterGraphTies.lean:215-224: `maxPoolFlat_has_vjp_at'` belongs in CNN.lean
+### 10. Nets/Small/ChapterGraphTies.lean:215-224: `maxPoolFlatHasVJPAt'` belongs in CNN.lean
 
 **Smell:** repetition · **Effort:** medium
 **Current:** a raw-point max-pool VJP defined in a leaf. Its transport is re-derived inline in 7
@@ -210,29 +210,29 @@ places, `CNN.lean:1630-1635` and `CifarCNN.lean:153, 175, 605, 626, 647, 668`:
   have hpt1 : Tensor3.flatten (Tensor3.unflatten zmp1 : Tensor3 c1 …) = zmp1 :=
     Tensor3.flatten_unflatten zmp1
   have mp1_v : HasVJPAt (maxPoolFlat c1 (2*h) (2*w)) zmp1 := by
-    rw [← hpt1]; exact maxPoolFlat_has_vjp_at _ h_mp1
+    rw [← hpt1]; exact maxPoolFlatHasVJPAt _ h_mp1
   have mp1_d : … := by rw [← hpt1]; exact maxPoolFlat_differentiableAt _ h_mp1 hc1 (by omega) (by omega)
 ```
 **Why it breaks:** there are seven copies of a `rw [← hpt]` transport of a data-carrying witness.
-Precedent for the fix exists: the 3×3/s2 pool already has `maxPool3s2Flat_has_vjp_at_vec` /
+Precedent for the fix exists: the 3×3/s2 pool already has `maxPool3s2FlatHasVJPAtVec` /
 `…_differentiableAt_vec` (`HeadLayers.lean:73-74`).
-**Suggested:** add `maxPoolFlat_has_vjp_at_vec` (this def) and `maxPoolFlat_differentiableAt_vec`
+**Suggested:** add `maxPoolFlatHasVJPAtVec` (this def) and `maxPoolFlat_differentiableAt_vec`
 to CNN.lean and use them at the 7 sites. ⚠ `.backward` spelling changes at those sites, and graph
 ties rfl-match backward spelling (memory: IR-spelled backwards). Run every consumer of
-`mnistCnnNoBn_has_vjp_at` and the CIFAR `_has_vjp_at`s. After the move, `cnnBackGraph_faithful`'s
+`mnistCnnNoBnHasVJPAt` and the CIFAR `HasVJPAt`s. After the move, `cnnBackGraph_faithful`'s
 `backward_unique` detour may become a plain `rfl`.
 
-### 11. The `mul_assoc` cast spelled out rather than `laAssoc`
+### 11. The `mul_assoc` cast spelled out rather than `la_assoc`
 
 **Smell:** repetition · **Effort:** small (breadth), low risk
 **Current:** `congrArg (N * ·) (Nat.mul_assoc oc h w)` appears 19 times in
 `Foundation/BatchedBackLinks.lean` (e.g. :188-201, :335, :352, :355-364, :383, :480), twice in
 `Foundation/Batched.lean:63-65`, 5 times in `Training/BatchSealKit.lean` and twice in
-`BatchMapVJPAt.lean`. `Foundation/IndexCast.lean:28` names it `laAssoc`.
+`BatchMapVJPAt.lean`. `Foundation/IndexCast.lean:28` names it `la_assoc`.
 **Why it breaks:** a restatement drifts (`(N * ·)` vs `congrArg (HMul.hMul N)`) and stops matching
 a `rw` pattern. It is also 60 characters of noise per occurrence in statements that consumers
 read.
-**Suggested:** move `laAssoc` down into `Batched.lean`, which only imports PerChannelBN, and
+**Suggested:** move `la_assoc` down into `Batched.lean`, which only imports PerChannelBN, and
 replace the spelled-out casts. Proof arguments are defeq by proof irrelevance, so keyed `rw`
 patterns in consumers still unify. Batch this with the next Batched-root rebuild.
 
@@ -253,7 +253,7 @@ That is medium effort.
 
 **Smell:** fragile-simpa · **Effort:** trivial to test
 `convBackBatched_faithful` and `depthwiseBackBatched_faithful` add
-`flatConv_has_vjp, hasVJP3_to_hasVJP, conv2d_has_vjp3` (respectively the depthwise ones) to the
+`flatConvHasVJP, HasVJP3.toHasVJP, conv2dHasVJP3` (respectively the depthwise ones) to the
 simp set that their strided siblings (:117, :140, :155) close without, before the same closing
 `rfl`. Those entries are probably dead, because the kernel-side `rfl` does the unfolding. Strip
 them and compile, as §1(m) found 9 dead peels. The explanatory comment is also pasted 3×.

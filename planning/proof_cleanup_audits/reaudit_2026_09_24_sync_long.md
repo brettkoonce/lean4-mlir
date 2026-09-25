@@ -32,12 +32,12 @@ declarations the caller named. Files with no findings are listed at the end.
 ```lean
   rw [congrFun (r50InputGradB_eq_r34B_full_vjp N q hq0 Ws bs εs hεs γs βs Wd bd
     b1 b2 … b16 x h_stem h_pool hb1 … hb16) dy]
-  exact (r34B_full_has_vjp_at (r34StemB N (2 * (2 * (2 * q))) …) b1 … b16
+  exact (r34BFullHasVJPAt (r34StemB N (2 * (2 * (2 * q))) …) b1 … b16
           (r34HeadB N q q Wd bd) x
-          ⟨r34StemB_has_vjp_at N … (by norm_num) (by omega) (by omega) x h_stem h_pool,
+          ⟨r34StemBHasVJPAt N … (by norm_num) (by omega) (by omega) x h_stem h_pool,
             r34StemB_differentiableAt N … x h_stem h_pool⟩
           hb1 … hb16
-          ⟨(r34HeadB_has_vjp N q q Wd bd).toHasVJPAt _,
+          ⟨(r34HeadBHasVJP N q q Wd bd).toHasVJPAt _,
             (r34HeadB_differentiable N q q Wd bd) _⟩).correct dy i
 ```
 MNv4WholeBackCertifiedTieB.lean:515–531 does the same with a 16-line witness. So each witness is written twice per net: once in the `_eq` statement and again in the `_correct` proof.
@@ -135,19 +135,19 @@ Each apex body becomes `obtain ⟨tE1, sE0⟩ := r34_idblock_syncStepB … sE1` 
       r34HeadBBack_eq_vjp_backward Wd bd (opaqueA16 …)]
   rfl                                                            -- :150
 ```
-MNv2 (:313–317) and MNv4 (:378–389) have the same shape. Their closing `rfl` goes through a 20-/25-deep `vjp_comp_diff_at` chain at the literal widths (112, 7).
+MNv2 (:313–317) and MNv4 (:378–389) have the same shape. Their closing `rfl` goes through a 20-/25-deep `vjpCompDiffAt` chain at the literal widths (112, 7).
 
 R34's twin (ResNet34BackCertifiedTieB.lean:436–441) was fixed in §1(f) to peel through a lemma proved at variable stages:
 ```lean
   funext dy
-  rw [r34B_full_has_vjp_at_backward, r34StemB_has_vjp_at_backward]
+  rw [r34BFullHasVJPAt_backward, r34StemBHasVJPAt_backward]
   repeat rw [Function.comp_apply]
   rfl
 ```
-**Why it breaks:** this is the "closing `rfl` through the concrete chain" that §0 forbids. The ties compile today only because the blocks are opaque. R34's identical `rfl` cost 43 s / 8.2 GB and hit `maxRecDepth` at its stem. If a stem VJP becomes `vjp_comp_at`-built, as R34's is, or the apex gains a stage, the kernel has to re-derive the chain at the net's numerals.
-**Suggested:** R50 uses R34's apex, so `r34B_full_has_vjp_at_backward` and `r34StemB_has_vjp_at_backward` apply unchanged: copy R34's four closing lines into R50 (trivial). For MNv2/MNv4, add `mobilenetv2PaperPC_has_vjp_at_backward` / `mnv4B_full_has_vjp_at_backward`, each `rfl` at variable `{s0 … s26}` exactly like ResNet34BackCertifiedTieB.lean:259, and `rw` with them. Size the effort after #6, which makes those two statements short.
+**Why it breaks:** this is the "closing `rfl` through the concrete chain" that §0 forbids. The ties compile today only because the blocks are opaque. R34's identical `rfl` cost 43 s / 8.2 GB and hit `maxRecDepth` at its stem. If a stem VJP becomes `vjpCompAt`-built, as R34's is, or the apex gains a stage, the kernel has to re-derive the chain at the net's numerals.
+**Suggested:** R50 uses R34's apex, so `r34BFullHasVJPAt_backward` and `r34StemBHasVJPAt_backward` apply unchanged: copy R34's four closing lines into R50 (trivial). For MNv2/MNv4, add `mobilenetv2PaperPCHasVJPAt_backward` / `mnv4BFullHasVJPAt_backward`, each `rfl` at variable `{s0 … s26}` exactly like ResNet34BackCertifiedTieB.lean:259, and `rw` with them. Size the effort after #6, which makes those two statements short.
 
-**On the name.** `r50InputGradB_eq_r34B_full_vjp` is not a copy-paste name. Its right-hand side really is `r34B_full_has_vjp_at` (:138), which is the generic 18-stage apex; the module doc (:20–23) says so ("ResNet-34's only by where it was written"). The misnomer, if there is one, is the apex's own name. It does mark a real divergence, though: R50's tie was written from R34's pre-§1(f) proof and did not receive the peel. A second, harmless drift: `r34InputGradB` takes the block backwards `hb16 … hb1` (:401–416), while `r50InputGradB` takes them `hb1 … hb16` (:120–135).
+**On the name.** `r50InputGradB_eq_r34B_full_vjp` is not a copy-paste name. Its right-hand side really is `r34BFullHasVJPAt` (:138), which is the generic 18-stage apex; the module doc (:20–23) says so ("ResNet-34's only by where it was written"). The misnomer, if there is one, is the apex's own name. It does mark a real divergence, though: R50's tie was written from R34's pre-§1(f) proof and did not receive the peel. A second, harmless drift: `r34InputGradB` takes the block backwards `hb16 … hb1` (:401–416), while `r50InputGradB` takes them `hb1 … hb16` (:120–135).
 
 ### LeanMlir/Proofs/Nets/ResNet/ResNet34BackCertifiedTieB.lean:345 / :444, ResNet50WholeBackCertifiedTieB.lean:60 / :156, MobileNetV2WholeBackCertifiedTieB.lean:211 / :323, MobileNetV4WholeBackCertifiedTieB.lean:251 / :395
 
@@ -176,34 +176,34 @@ R50 (:796 `r50NetSyncTiedB`), MNv2 (:914) and MNv4 (:1175) instead state a named
 ### LeanMlir/Proofs/Nets/ViT/ViTBackB0.lean:276 — `mhsaClean_backward_collapseMH`
 
 **Smell:** long-proof / undocumented-defeq / repetition
-**Current:** two bare `show`s restate the goal through the `mhsaClean` witness's `vjp_comp`/`rowwise`/`colSlabwise` structure (:283–306):
+**Current:** two bare `show`s restate the goal through the `mhsaClean` witness's `vjpComp`/`rowwise`/`colSlabwise` structure (:283–306):
 ```lean
   funext r c
-  show (rowwise_has_vjp_mat (dense_has_vjp (mhsa_qkv_W heads d Wq Wk Wv) …)).backward X
-        ((colSlabwise_has_vjp_mat (mhsa_g_has_vjp_mat N d) …).backward … ) r c = _
-  show Mat.mulVec (mhsa_qkv_W heads d Wq Wk Wv) (fun kj => (colSlabwise_has_vjp_mat …).backward …) c = _
+  show (rowwiseHasVJPMat (denseHasVJP (mhsaQkvW heads d Wq Wk Wv) …)).backward X
+        ((colSlabwiseHasVJPMat (mhsaGHasVJPMat N d) …).backward … ) r c = _
+  show Mat.mulVec (mhsaQkvW heads d Wq Wk Wv) (fun kj => (colSlabwiseHasVJPMat …).backward …) c = _
 ```
-Then the three-way `if q.1 = 0 then sdpa_back_Q … else if … sdpa_back_K … else sdpa_back_V …` term is written out in full three times: in the statement of `hdz` (:322–342), inside `rw [show … from rfl]` (:361–382) and as the `trans` target (:386–406). A fourth near-copy is the argument list of `qkv_back_fanin_MH` (:410–425). `hproj0`/`hproj1`/`hproj2` (:347–358) are the same proof with the index changed.
-**Why it breaks:** both `show`s rely on how `mhsaClean`, `rowwise_has_vjp_mat` and `colSlabwise_has_vjp_mat` currently build their `.backward` definitionally, and no comment says so. A change to any of those builders (for example a `vjp_comp_backward` restatement like §1(m)) breaks this proof at a 20-line `show` with no pointer to the cause. The three copies of the if-form must stay character-identical.
+Then the three-way `if q.1 = 0 then sdpaBackQ … else if … sdpaBackK … else sdpaBackV …` term is written out in full three times: in the statement of `hdz` (:322–342), inside `rw [show … from rfl]` (:361–382) and as the `trans` target (:386–406). A fourth near-copy is the argument list of `qkv_back_fanin_MH` (:410–425). `hproj0`/`hproj1`/`hproj2` (:347–358) are the same proof with the index changed.
+**Why it breaks:** both `show`s rely on how `mhsaClean`, `rowwiseHasVJPMat` and `colSlabwiseHasVJPMat` currently build their `.backward` definitionally, and no comment says so. A change to any of those builders (for example a `vjpComp_backward` restatement like §1(m)) breaks this proof at a 20-line `show` with no pointer to the cause. The three copies of the if-form must stay character-identical.
 **Suggested:** extract three lemmas, each proved at variable arguments:
 ```lean
-/-- The per-slab selector `mhsa_g`'s backward reads. -/
+/-- The per-slab selector `mhsaG`'s backward reads. -/
 noncomputable def sdpaBackSel (N d : Nat) (q : Fin 3) (Q K V dA : Mat N d) : Mat N d :=
-  if q = 0 then sdpa_back_Q N d Q K V dA else if q = 1 then sdpa_back_K N d Q K V dA
-  else sdpa_back_V N d Q K V dA
+  if q = 0 then sdpaBackQ N d Q K V dA else if q = 1 then sdpaBackK N d Q K V dA
+  else sdpaBackV N d Q K V dA
 
-theorem mhsa_g_backward_eq_sel (N d : Nat) (M : Mat N (3 * d)) (dY : Mat N d) (r : Fin N)
+theorem mhsaG_backward_eq_sel (N d : Nat) (M : Mat N (3 * d)) (dY : Mat N d) (r : Fin N)
     (j : Fin (3 * d)) :
-    (mhsa_g_has_vjp_mat N d).backward M dY r j
-      = sdpaBackSel N d (finProdFinEquiv.symm j).1 (mhsa_proj_c 0 M) (mhsa_proj_c 1 M)
-          (mhsa_proj_c 2 M) dY r (finProdFinEquiv.symm j).2 := rfl
+    (mhsaGHasVJPMat N d).backward M dY r j
+      = sdpaBackSel N d (finProdFinEquiv.symm j).1 (mhsaProjC 0 M) (mhsaProjC 1 M)
+          (mhsaProjC 2 M) dY r (finProdFinEquiv.symm j).2 := rfl
 
-theorem mhsa_proj_c_slab (q : Fin 3) (h : Fin heads) (X : Mat N (heads * d)) :
-    mhsa_proj_c q (fun r' j_in => dense (mhsa_qkv_W heads d Wq Wk Wv) (mhsa_qkv_b heads d bq bk bv)
+theorem mhsaProjC_slab (q : Fin 3) (h : Fin heads) (X : Mat N (heads * d)) :
+    mhsaProjC q (fun r' j_in => dense (mhsaQkvW heads d Wq Wk Wv) (mhsaQkvB heads d bq bk bv)
         (X r') (finProdFinEquiv (h, j_in)))
       = fun r' j => dense (![Wq, Wk, Wv] q) (![bq, bk, bv] q) (X r') (finProdFinEquiv (h, j))
 ```
-The last one replaces `hproj0/1/2` with one `fin_cases q` proof. With these, `hdz` is `funext kj; rw [hslab, mhsa_g_backward_eq_sel]; simp only [mhsa_proj_c_slab]`, and the `trans` target is `sdpaBackSel …` written once. Replace the two leading `show`s with `rw` on a named `mhsaClean_backward_apply` lemma (`rfl` at variables), or at least comment which builder's defeq each `show` depends on.
+The last one replaces `hproj0/1/2` with one `fin_cases q` proof. With these, `hdz` is `funext kj; rw [hslab, mhsaG_backward_eq_sel]; simp only [mhsaProjC_slab]`, and the `trans` target is `sdpaBackSel …` written once. Replace the two leading `show`s with `rw` on a named `mhsaClean_backward_apply` lemma (`rfl` at variables), or at least comment which builder's defeq each `show` depends on.
 
 ### LeanMlir/Proofs/Nets/ViT/ViTBackB0.lean:570 — `mhsaBackGraphMH_faithful`
 
@@ -229,7 +229,7 @@ Each proof is 25 `exact cnx_block_ch_tiedAt … aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 
 **Why it breaks:** any per-block parameter change has to be made in 18 (or 12) binder lines, 18 `let`s, 18 conjuncts and 18 `exact`s, in each of two files.
 **Suggested:** re-state over `w : CnxTWeightsCh nC` / a `ViTWeights` record, the way §1(o)/(t) did for MNv2/R34/R50. ⚠ Two things to check first. (1) The ConvNeXt ties use ONE `ε` for every block and downsample (`cnxBlockFwdChO ε …`), while `CnxBlockParamsCh` carries a per-block `εn`. Either add a tie-local record without `εn`, or state `∀ i, (w.blk i).εn = ε`. (2) `cnx_net_tiedGB` and `vit_net_tied_certified` are in the comparator tier (`gen_comparator_tier.py:47–48`). Medium effort, and the largest line saving in this audit.
 
-### LeanMlir/Proofs/Foundation/DataParallelSync.lean:316 — `bnSyncTensor4_grad_input_apply`
+### LeanMlir/Proofs/Foundation/DataParallelSync.lean:316 — `bnSyncTensor4GradInput_apply`
 
 **Smell:** undocumented-defeq
 **Current:**
@@ -263,7 +263,7 @@ Each proof is 25 `exact cnx_block_ch_tiedAt … aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 
 **Smell:** undocumented-defeq
 **Current:**
 ```lean
-    rw [show (bnPerChannel_grad_gamma oc ((R * N) * (h * w)) ε
+    rw [show (bnPerChannelGradGamma oc ((R * N) * (h * w)) ε
           (bnchwFwd (R * N) oc h w (reassocB (R * N) oc h w V))
           (bnchwFwd (R * N) oc h w (reassocB (R * N) oc h w (fun i => (R : ℝ) * COT i))) k)
         = den (SHlo.bnGammaGradB vN epsStr ε (reassocB (R * N) oc h w V)
@@ -286,7 +286,7 @@ Each proof is 25 `exact cnx_block_ch_tiedAt … aW1 aB1 nG1 nB1 eW1 eB1 pW1 pB1 
 * **The five sync apexes' bodies.** Once #4 is set aside, each is ~35–60 lines of `have sK := …_scaled` and one `exact ⟨…⟩`, with a comment per phase. The rest of the "110–152 lines" is the statement's `let` chains, which are the spec.
 * **`DataParallelSync.lean:339` / `:384`.** Numbered, commented steps (P1b → P2b → P2a + anchor). Genuinely irreducible.
 * **`IsShardwise` stays parked, and this re-read agrees.** There are 98 `fun r => by rw [X_shard …, X_smul]` sites. A generic `scaled_of_shard (hF : IsHomog F) (hsh : …) hdys` would still take the same `_shard` arguments at each site, so it saves about 0 lines per site. #2 and #4 are where the repetition actually is.
-* **`r34B_full_has_vjp_at` / `_backward`, `mnv4Chain_apply`.** The unrolled, fixed-arity VJP chains are deliberate (opaque stages, `rfl` only between variables). A heterogeneous-list apex would need dependent types that the §0 kernel rules make risky.
+* **`r34BFullHasVJPAt` / `_backward`, `mnv4Chain_apply`.** The unrolled, fixed-arity VJP chains are deliberate (opaque stages, `rfl` only between variables). A heterogeneous-list apex would need dependent types that the §0 kernel rules make risky.
 * **`DataParallelSyncBf16.lean`.** Its `rw [show … by ring]` at :305 and the `show … from` sites at :350/:365 are proved in place, not defeq.
 * **`mnv2PreB*_apply`.** Stays, per §3.6.
 

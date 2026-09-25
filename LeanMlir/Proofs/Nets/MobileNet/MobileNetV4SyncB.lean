@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # MobileNetV4-Conv-M's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
-`MobileNetV4FullB.lean` (T2) says the typed batch-BN graph denotes `mobilenetv4ForwardB_full N w`
+`MobileNetV4FullB.lean` (T2) says the typed batch-BN graph denotes `mobilenetv4ForwardBFull N w`
 on one device. `MobileNetV4RenderB`'s data-parallel step normalises with the GLOBAL batch's
 statistics at `replicas > 1`: every one of the 77 BatchNorm sites is the sync-BN composition —
 this replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed, then
@@ -11,11 +11,11 @@ this replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-redu
 `R` replicas, denotes on replica `r` exactly `batchShard r` of the single-device forward at the
 global batch `R·N`.
 
-    den (mnv4FwdGraphSync_full R hR N epsStr w e r)
-      = batchShard R N nCls (mobilenetv4ForwardB_full (R * N) w X) r
+    den (mnv4FwdGraphSyncFull R hR N epsStr w e r)
+      = batchShard R N nCls (mobilenetv4ForwardBFull (R * N) w X) r
 
 given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
-move**: the right-hand side is the committed `mobilenetv4ForwardB_full`, at `N := R·N`.
+move**: the right-hand side is the committed `mobilenetv4ForwardBFull`, at `N := R·N`.
 
 ## How it is proved
 
@@ -36,7 +36,7 @@ T2 uses (`s.preDWk ≠ 0`, `s.postDWk = 0`, …), discharged by `decide` at the 
 skip is one generic combinator (`mnv4SkipGraphSync`, the peer of `mnv4SkipGraphB`), which keeps
 the whole-net term linear in the depth. The five resolution groups are proved against
 `mnv4Res*Layer (R * N) w` through T2's `_fwd_apply` peels, and the whole net is a `have`-chain of
-eight stage lemmas over `mobilenetv4ForwardB_full`'s own prefixes — no `CertLayer.comp` is ever
+eight stage lemmas over `mobilenetv4ForwardBFull`'s own prefixes — no `CertLayer.comp` is ever
 peeled at a literal width.
 
 ## The index seam
@@ -400,11 +400,11 @@ def mnv4HeadGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {c 
     (Wd : Mat oc nCls) (bd : Vec nCls) (e : Fin R → SHlo (N * (c * h * w))) :
     Fin R → SHlo (N * nCls) :=
   fun r => .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
-    (castIdx (mnv4Pool11 N oc).symm
+    (castIdx (mnv4_pool11 N oc).symm
       (.batchOp (N := N) (.relu (n := oc * 1 * 1))
         (bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc] R hR ε2 γ2 β2
           (fun r => .batchOp (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
-            (castIdx (mnv4Pool11 N mid)
+            (castIdx (mnv4_pool11 N mid)
               (.batchOp (N := N) (.gap (c := mid) (h := h) (w := w))
                 (.batchOp (N := N) (.relu (n := mid * h * w))
                   (bnSyncSiteLA "%h1g" "%h1bt" epsStr "h1gmu" "h1gvar" [mid] [mid] R hR ε1 γ1 β1
@@ -434,13 +434,13 @@ theorem mnv4HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
   have hr1 := den_relu_shard _ _ hn1
   have hg := den_batchOp_shard (N := N) (.gap (c := mid) (h := h) (w := w)) _ _ hr1
   have hp := den_castIdx_shard (by rw [Nat.mul_one, Nat.mul_one] : mid = mid * 1 * 1)
-    (mnv4Pool11 N mid) _ _ hg
+    (mnv4_pool11 N mid) _ _ hg
   have hc2 := den_batchOp_shard (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2) _ _ hp
   have hn2 := den_bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc]
     R hR hm1 ε2 γ2 β2 _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
   have hf := den_castIdx_shard (by rw [Nat.mul_one, Nat.mul_one] : oc * 1 * 1 = oc)
-    (mnv4Pool11 N oc).symm _ _ hr2
+    (mnv4_pool11 N oc).symm _ _ hr2
   exact den_batchOp_shard (N := N) (.dense "%Wd" "%bd" Wd bd) _ _ hf r
 
 -- ════════════════════════════════════════════════════════════════
@@ -646,9 +646,9 @@ theorem mnv4HeadStack_graphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 <
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The sync-BN data-parallel MobileNetV4-Conv-M forward graph, over the replica family.** T2's
-    `mnv4FwdGraphB_full` with every one of its 77 BatchNorms a `bnSyncSiteLA` over all `R` replicas;
+    `mnv4FwdGraphBFull` with every one of its 77 BatchNorms a `bnSyncSiteLA` over all `R` replicas;
     parameter names are read off the rows and collective tags are the render's. -/
-def mnv4FwdGraphSync_full (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
+def mnv4FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (3 * 224 * 224))) : Fin R → SHlo (N * nCls) :=
   mnv4HeadGraphSync epsStr R hR N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
     w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd
@@ -663,16 +663,16 @@ def mnv4FwdGraphSync_full (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nC
 
 /-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` images,
-    the sync-BN graph on replica `r` denotes `batchShard r` of `mobilenetv4ForwardB_full (R * N)
+    the sync-BN graph on replica `r` denotes `batchShard r` of `mobilenetv4ForwardBFull (R * N)
     w X` — the committed batch-BN forward, at the global batch. Eight stage lemmas — the stem, the
     fused stage, the five resolution groups, the head — the shard hypothesis threaded from each
     into the next, over the forward's own prefixes. -/
-theorem mnv4FwdGraphSync_full_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+theorem mnv4FwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : Fin R → SHlo (N * (3 * 224 * 224))) (X : Vec ((R * N) * (3 * 224 * 224)))
     (he : ∀ r, den (e r) = batchShard R N (3 * 224 * 224) X r) (r : Fin R) :
-    den (mnv4FwdGraphSync_full R hR N epsStr w e r)
-      = batchShard R N nCls (mobilenetv4ForwardB_full (R * N) w X) r := by
+    den (mnv4FwdGraphSyncFull R hR N epsStr w e r)
+      = batchShard R N nCls (mobilenetv4ForwardBFull (R * N) w X) r := by
   have h112 : 0 < 112 := by norm_num
   have s0 := mnv4StemGraphSync_shard epsStr R hR N 112 112 hN h112 h112
     w.sW w.sb w.sE w.sg w.sbt e X he
@@ -682,7 +682,7 @@ theorem mnv4FwdGraphSync_full_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N
   have s4 := mnv4Res14bGraphSync_shard R hR N hN epsStr w _ _ s3
   have s5 := mnv4Res7aGraphSync_shard R hR N hN epsStr w _ _ s4
   have s6 := mnv4Res7bGraphSync_shard R hR N hN epsStr w _ _ s5
-  unfold mobilenetv4ForwardB_full mnv4Pre6 mnv4Pre5 mnv4Pre4 mnv4Pre3 mnv4Pre2 mnv4Pre1 mnv4Pre0
+  unfold mobilenetv4ForwardBFull mnv4Pre6 mnv4Pre5 mnv4Pre4 mnv4Pre3 mnv4Pre2 mnv4Pre1 mnv4Pre0
   exact mnv4HeadStack_graphSync_shard R hR N hN epsStr w _ _ s6 r
 
 end StableHLO

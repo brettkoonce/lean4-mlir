@@ -4,12 +4,12 @@ import LeanMlir.Proofs.Nets.ViT.ViTChainClose
 
 The committed ViT render (`ViTRender.lean`, the GPU-trained ViT-Tiny) carries a vector `γ, β : [D]`
 per LN site, spelled `scalar-LN(1,0) ∘ per-channel scale γ ∘ + β`. The op itself — `layerNormVec`,
-its VJP, its per-token lift and its γ/β parameter gradients (`vecLN_grad_gamma` / `_beta` and the
+its VJP, its per-token lift and its γ/β parameter gradients (`vecLNGradGamma` / `_beta` and the
 `vit_render_vecln*_certified` step forms) — is in `Architectures/LayerNorm`, which ConvNeXt's
 channel-LN shares. This file is ViT's use of it:
 
 * §1 **`transformerBlockV`** — the vector-LN block, with its VJP composed through the sublayer
-  recipe (`biPathMat_has_vjp` + `vjpMat_comp` + `rowwise_has_vjp_mat`). UNCONDITIONAL except
+  recipe (`biPathMatHasVJP` + `vjpMatComp` + `rowwiseHasVJPMat`). UNCONDITIONAL except
   `0 < ε`. The depth-`k` net built from it is `ViTDepthK`'s.
 * §2 **the row-broadcast flat bridges** (`rowScaleFlat_flat`, `rowBiasFlat_flat`) for the tokens
   each vector-LN site is spelled with: `lnRowF`(1,0) → `rowScaleF γ` → `rowBiasF β`.
@@ -32,7 +32,7 @@ noncomputable def transformerAttnSublayerV (N heads d_head : Nat) (ε : ℝ)
     Mat N (heads * d_head) → Mat N (heads * d_head) :=
   biPathMat
     (fun X => X)
-    ((mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
+    ((mhsaLayer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
      (fun X : Mat N (heads * d_head) => fun n =>
         layerNormVec (heads * d_head) ε γ1 β1 (X n)))
 
@@ -62,45 +62,45 @@ noncomputable def transformerBlockV (N heads d_head mlpDim : Nat) (ε : ℝ)
   (transformerAttnSublayerV N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo)
 
 /-- Flat Diff of the attentionᵥ sublayer's non-trivial arm (`mhsa ∘ LNᵥ`). -/
-lemma transformerAttnSublayerV_inner_flat_diff
+lemma transformerAttnSublayerV_inner_flat_differentiable
     (N heads d_head : Nat) (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten
-        (((mhsa_layer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
+        (((mhsaLayer N heads d_head Wq Wk Wv Wo bq bk bv bo) ∘
           (fun X : Mat N (heads * d_head) => fun n =>
             layerNormVec (heads * d_head) ε γ1 β1 (X n)))
          (Mat.unflatten v))) := by
   simpa [Function.comp_def, Mat.unflatten_flatten] using
-    (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo).comp
-      (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
+    (mhsaLayer_flat_differentiable N heads d_head Wq Wk Wv Wo bq bk bv bo).comp
+      (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ1 β1 hε)
 
 /-- Flat Diff of the attentionᵥ sublayer. -/
-lemma transformerAttnSublayerV_flat_diff
+lemma transformerAttnSublayerV_flat_differentiable
     (N heads d_head : Nat) (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerAttnSublayerV N heads d_head ε γ1 β1
                      Wq Wk Wv Wo bq bk bv bo (Mat.unflatten v))) := by
-  exact (identity_mat_flat_diff N (heads * d_head)).add
-    (transformerAttnSublayerV_inner_flat_diff N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+  exact (identity_mat_flat_differentiable N (heads * d_head)).add
+    (transformerAttnSublayerV_inner_flat_differentiable N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
 
 /-- Attentionᵥ sublayer VJP. -/
-noncomputable def transformerAttnSublayerV_has_vjp_mat (N heads d_head : Nat)
+noncomputable def transformerAttnSublayerVHasVJPMat (N heads d_head : Nat)
     (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
     HasVJPMat (transformerAttnSublayerV N heads d_head ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo) :=
-  preLNRes_has_vjp_mat _ _ (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ1 β1 hε)
-    (mhsa_layer_flat_diff N heads d_head Wq Wk Wv Wo bq bk bv bo)
-    (layerNormVec_per_token_has_vjp_mat N (heads * d_head) ε γ1 β1 hε)
-    (mhsa_has_vjp_mat N heads d_head Wq Wk Wv Wo bq bk bv bo)
+  preLNResHasVJPMat _ _ (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ1 β1 hε)
+    (mhsaLayer_flat_differentiable N heads d_head Wq Wk Wv Wo bq bk bv bo)
+    (layerNormVecPerTokenHasVJPMat N (heads * d_head) ε γ1 β1 hε)
+    (mhsaHasVJPMat N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 /-- Flat Diff of the MLPᵥ sublayer's non-trivial arm. -/
-lemma transformerMlpSublayerV_inner_flat_diff
+lemma transformerMlpSublayerV_inner_flat_differentiable
     (N heads d_head mlpDim : Nat) (ε : ℝ) (γ2 β2 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
@@ -111,34 +111,34 @@ lemma transformerMlpSublayerV_inner_flat_diff
             layerNormVec (heads * d_head) ε γ2 β2 (X n)))
          (Mat.unflatten v))) := by
   simpa [Function.comp_def, Mat.unflatten_flatten] using
-    (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2).comp
-      (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_flat_differentiable N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2).comp
+      (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
 
 /-- Flat Diff of the MLPᵥ sublayer. -/
-lemma transformerMlpSublayerV_flat_diff
+lemma transformerMlpSublayerV_flat_differentiable
     (N heads d_head mlpDim : Nat) (ε : ℝ) (γ2 β2 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     Differentiable ℝ (fun v : Vec (N * (heads * d_head)) =>
       Mat.flatten (transformerMlpSublayerV N heads d_head mlpDim ε γ2 β2
                      Wfc1 bfc1 Wfc2 bfc2 (Mat.unflatten v))) := by
-  exact (identity_mat_flat_diff N (heads * d_head)).add
-    (transformerMlpSublayerV_inner_flat_diff N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
+  exact (identity_mat_flat_differentiable N (heads * d_head)).add
+    (transformerMlpSublayerV_inner_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
 
 /-- MLPᵥ sublayer VJP. -/
-noncomputable def transformerMlpSublayerV_has_vjp_mat (N heads d_head mlpDim : Nat)
+noncomputable def transformerMlpSublayerVHasVJPMat (N heads d_head mlpDim : Nat)
     (ε : ℝ) (γ2 β2 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
     HasVJPMat (transformerMlpSublayerV N heads d_head mlpDim ε γ2 β2
                  Wfc1 bfc1 Wfc2 bfc2) :=
-  preLNRes_has_vjp_mat _ _ (layerNormVec_per_token_flat_diff N (heads * d_head) ε γ2 β2 hε)
-    (transformerMlp_flat_diff N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
-    (layerNormVec_per_token_has_vjp_mat N (heads * d_head) ε γ2 β2 hε)
-    (transformerMlp_has_vjp_mat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
+  preLNResHasVJPMat _ _ (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlp_flat_differentiable N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
+    (layerNormVecPerTokenHasVJPMat N (heads * d_head) ε γ2 β2 hε)
+    (transformerMlpHasVJPMat N (heads * d_head) mlpDim Wfc1 bfc1 Wfc2 bfc2)
 
 /-- Flat Diff of the vector-LN block. -/
-lemma transformerBlockV_flat_diff (N heads d_head mlpDim : Nat)
+lemma transformerBlockV_flat_differentiable (N heads d_head mlpDim : Nat)
     (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -150,11 +150,11 @@ lemma transformerBlockV_flat_diff (N heads d_head mlpDim : Nat)
                      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2
                    (Mat.unflatten v))) := by
   simpa [transformerBlockV, Function.comp_def, Mat.unflatten_flatten] using
-    (transformerMlpSublayerV_flat_diff N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).comp
-      (transformerAttnSublayerV_flat_diff N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
+    (transformerMlpSublayerV_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2).comp
+      (transformerAttnSublayerV_flat_differentiable N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
 
-/-- **Vector-LN block VJP** — one `vjpMat_comp` of the two sublayer witnesses. -/
-noncomputable def transformerBlockV_has_vjp_mat (N heads d_head mlpDim : Nat)
+/-- **Vector-LN block VJP** — one `vjpMatComp` of the two sublayer witnesses. -/
+noncomputable def transformerBlockVHasVJPMat (N heads d_head mlpDim : Nat)
     (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -164,14 +164,14 @@ noncomputable def transformerBlockV_has_vjp_mat (N heads d_head mlpDim : Nat)
     HasVJPMat (transformerBlockV N heads d_head mlpDim ε γ1 β1
                  Wq Wk Wv Wo bq bk bv bo
                  γ2 β2 Wfc1 bfc1 Wfc2 bfc2) :=
-  vjpMat_comp _ (transformerMlpSublayerV N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
-    (transformerAttnSublayerV_flat_diff N heads d_head ε γ1 β1 hε
+  vjpMatComp _ (transformerMlpSublayerV N heads d_head mlpDim ε γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
+    (transformerAttnSublayerV_flat_differentiable N heads d_head ε γ1 β1 hε
        Wq Wk Wv Wo bq bk bv bo)
-    (transformerMlpSublayerV_flat_diff N heads d_head mlpDim ε γ2 β2 hε
+    (transformerMlpSublayerV_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε
        Wfc1 bfc1 Wfc2 bfc2)
-    (transformerAttnSublayerV_has_vjp_mat N heads d_head ε γ1 β1 hε
+    (transformerAttnSublayerVHasVJPMat N heads d_head ε γ1 β1 hε
        Wq Wk Wv Wo bq bk bv bo)
-    (transformerMlpSublayerV_has_vjp_mat N heads d_head mlpDim ε γ2 β2 hε
+    (transformerMlpSublayerVHasVJPMat N heads d_head mlpDim ε γ2 β2 hε
        Wfc1 bfc1 Wfc2 bfc2)
 
 end Proofs

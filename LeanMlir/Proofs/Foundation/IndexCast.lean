@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 `c·h·w` (and `N·(c·h·w)`) and the BatchNorm / channel-LayerNorm ops' `c·(h·w)` are different
 types for the same tensor. `castIdx h e` is the same graph typed at the other index; the emitted
 text does not change (`skel` erases indices), and `den_castIdx` says the denotation is read
-through `Fin.cast`. `laAssoc` is the batched seam `N·(c·h·w) = N·(c·(h·w))`.
+through `Fin.cast`. `la_assoc` is the batched seam `N·(c·h·w) = N·(c·(h·w))`.
 
 The same reshuffle on plain vectors is `EnetTiePoC.reassocB` (batched, `BatchedBackLinks`) and
 `reassocFwd` / `reassocBack` (per example, `PerChannelBN`); `den_reassocS` / `den_unassocS`
@@ -25,7 +25,7 @@ theorem den_castIdx {n m : Nat} (h : n = m) (e : SHlo n) :
 
 /-- The `mul_assoc` relabelling under `N * ·` — the seam between the network's left-assoc
     `N·(c·h·w)` and the BatchNorm ops' `N·(c·(h·w))`. -/
-theorem laAssoc (N oc h w : Nat) : N * (oc * h * w) = N * (oc * (h * w)) :=
+theorem la_assoc (N oc h w : Nat) : N * (oc * h * w) = N * (oc * (h * w)) :=
   congrArg (N * ·) (Nat.mul_assoc oc h w)
 
 end Proofs.StableHLO

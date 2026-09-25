@@ -27,13 +27,13 @@ open scoped BigOperators
 /-- Backward graph for a residual block `x ↦ x + f x`, given a subgraph
     `fBack` that renders the body `f`'s input-cotangent. The identity skip
     contributes the cotangent verbatim (`%dy`); `addV` sums the two paths.
-    This is the renderable image of `residual_has_vjp`'s `biPath` backward. -/
+    This is the renderable image of `residualHasVJP`'s `biPath` backward. -/
 def residualBackGraph {n : Nat} (fBack ecot : SHlo n) : SHlo n :=
   .addV fBack ecot
 
 /-- **Residual additive-fan-in backward faithfulness (general).**
     If `fBack` denotes the body's VJP backward (`den fBack = hf.backward x dy`),
-    then the residual backward graph denotes the proven `residual_has_vjp`
+    then the residual backward graph denotes the proven `residualHasVJP`
     backward, which is `f.backward x dy + dy`. The proof is structural — the
     only definitional facts are `den (addV a b) = den a + den b` and the
     identity skip's `backward = dy` — so it composes without a whole-net
@@ -43,11 +43,11 @@ theorem residualBackGraph_faithful {n : Nat}
     (x : Vec n) (ecot fBack : SHlo n)
     (hfb : den fBack = hf.backward x (den ecot)) :
     den (residualBackGraph fBack ecot)
-      = (residual_has_vjp f hf_diff hf).backward x (den ecot) := by
+      = (residualHasVJP f hf_diff hf).backward x (den ecot) := by
   funext i
   have hsum : den (residualBackGraph fBack ecot) i = den fBack i + den ecot i := rfl
   rw [hsum, hfb]
-  -- RHS = `biPath_has_vjp f id`'s backward = `f.backward x dy i + id.backward x dy i`
+  -- RHS = `biPathHasVJP f id`'s backward = `f.backward x dy i + id.backward x dy i`
   -- with `id.backward x dy = dy`; defeq but needs full-transparency unfolding.
   rfl
 
@@ -56,21 +56,21 @@ theorem residualBackGraph_faithful {n : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The renderable batch-norm input-grad IS the certified backward** — both equal the
-    `pdiv`-contracted Jacobian (`bnBatchTensor4_grad_input_correct`,
-    `bnBatchTensor4_has_vjp_correct`). -/
-theorem bnBatchTensor4_grad_input_eq_backward (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε)
+    `pdiv`-contracted Jacobian (`bnBatchTensor4GradInput_correct`,
+    `bnBatchTensor4HasVJP_correct`). -/
+theorem bnBatchTensor4GradInput_eq_backward (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε)
     (γ β : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
-    bnBatchTensor4_grad_input N oc h w ε γ x dy
-      = (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x dy :=
+    bnBatchTensor4GradInput N oc h w ε γ x dy
+      = (bnBatchTensor4HasVJP N oc h w ε hε γ β).backward x dy :=
   funext fun i => by
-    rw [bnBatchTensor4_grad_input_correct N oc h w ε hε γ β,
-      ← bnBatchTensor4_has_vjp_correct N oc h w ε hε γ β]
+    rw [bnBatchTensor4GradInput_correct N oc h w ε hε γ β,
+      ← bnBatchTensor4HasVJP_correct N oc h w ε hε γ β]
 
 /-- **`bnBatchBack` (true batch-norm backward) faithfulness.** The first
     batched-backward primitive: `bnBatchBack` denotes the proven
     `bnBatchTensor4` VJP backward (batch-COUPLED batch-norm on `[N,C,H,W]`,
     reduce over `[0,2,3]` per channel) via the renderable three-term
-    `bnBatchTensor4_grad_input`. This is the genuinely-new op the batched MBConv
+    `bnBatchTensor4GradInput`. This is the genuinely-new op the batched MBConv
     stages need (their bn is `bnBatchLA`, not a per-example `batchMap`); the
     other batched stages (conv/depthwise/SE) are `batchMap` of the per-example
     backwards already proven above. The `bnBatchLA` layout-reindex wrapper to the
@@ -79,75 +79,75 @@ theorem bnBatchBack_faithful {N oc h w : Nat} (gN xN es : String)
     (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (x : Vec (N * (oc * (h * w)))) (e : SHlo (N * (oc * (h * w)))) :
     den (SHlo.bnBatchBack gN xN es ε γ x e)
-      = (bnBatchTensor4_has_vjp N oc h w ε hε γ β).backward x (den e) := by
+      = (bnBatchTensor4HasVJP N oc h w ε hε γ β).backward x (den e) := by
   -- `den (.bnBatchBack …)` is the grad-input at `den e` by definition (its `den` arm).
-  show bnBatchTensor4_grad_input N oc h w ε γ x (den e) = _
-  exact bnBatchTensor4_grad_input_eq_backward N oc h w ε hε γ β x (den e)
+  show bnBatchTensor4GradInput N oc h w ε γ x (den e) = _
+  exact bnBatchTensor4GradInput_eq_backward N oc h w ε hε γ β x (den e)
 
 /-- **Batched conv input-VJP faithfulness.** `convBackBatched` denotes the proven
     VJP of the batched conv `batchMap N (flatConv W b)` — i.e. the per-example
     conv input-grad applied independently across the batch. Conv is linear, so
     its backward ignores the forward activation; the batched backward is a plain
-    `batchMap` of the per-example backward, matching `batchMap_has_vjp`. The
+    `batchMap` of the per-example backward, matching `batchMapHasVJP`. The
     second batch-separable stage brick (after `seB`); together with `bnBatchBack`
     these are the batched MBConv's per-stage backward pieces. -/
 theorem convBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (v : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
     den (SHlo.convBackBatched (N := N) wN W b e)
-      = (batchMap_has_vjp (flatConv W b) (flatConv_has_vjp W b)
+      = (batchMapHasVJP (flatConv W b) (flatConvHasVJP W b)
           (flatConv_differentiable W b)).backward v (den e) := by
   funext idx
-  -- The transport in `batchMap_has_vjp` unfolds to the per-example conv backward
+  -- The transport in `batchMapHasVJP` unfolds to the per-example conv backward
   -- on each row; both sides then differ only in the (discarded) forward
-  -- activation arg, since conv is linear (`conv2d_has_vjp3.backward` ignores it).
-  simp only [denStepApp, batchMap, batchMap_has_vjp, flatConv_has_vjp, hasVJPMat_to_hasVJP,
-    rowwise_has_vjp_mat, hasVJP3_to_hasVJP, conv2d_has_vjp3]
+  -- activation arg, since conv is linear (`conv2dHasVJP3.backward` ignores it).
+  simp only [denStepApp, batchMap, batchMapHasVJP, flatConvHasVJP, HasVJPMat.toHasVJP,
+    rowwiseHasVJPMat, HasVJP3.toHasVJP, conv2dHasVJP3]
   rfl
 
 /-- **Batched STRIDE-2 conv input-VJP faithfulness.** The stride-2 analogue of
     `convBackBatched_faithful`: `convStridedBackBatched` denotes the proven VJP of
     the batched strided conv `batchMap N (flatConvStride2 W b)` — i.e. the
-    per-example strided-conv input-grad (`flatConvStride2_has_vjp` = zero-upsample
+    per-example strided-conv input-grad (`flatConvStride2HasVJP` = zero-upsample
     the cotangent then the reversed-kernel conv) applied independently across the
     batch. Strided conv (`decimate ∘ conv`) is linear, so its backward ignores the
     forward activation; the batched backward is a plain `batchMap` of the
-    per-example backward, matching `batchMap_has_vjp`. The downsample basic-block's
+    per-example backward, matching `batchMapHasVJP`. The downsample basic-block's
     stride-2 conv1 backward brick. -/
 theorem convStridedBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :
     den (SHlo.convStridedBackBatched (N := N) wN W b e)
-      = (batchMap_has_vjp (flatConvStride2 W b) (flatConvStride2_has_vjp W b)
+      = (batchMapHasVJP (flatConvStride2 W b) (flatConvStride2HasVJP W b)
           (flatConvStride2_differentiable W b)).backward v (den e) := by
   funext idx
-  -- The transport in `batchMap_has_vjp` unfolds to the per-example strided-conv
+  -- The transport in `batchMapHasVJP` unfolds to the per-example strided-conv
   -- backward on each row; both sides then differ only in the (discarded) forward
   -- activation arg, since strided conv is linear (its backward ignores it).
-  simp only [denStepApp, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, batchMap, batchMapHasVJP, HasVJPMat.toHasVJP, rowwiseHasVJPMat]
   rfl
 
 /-- **Batched STRIDE-2 depthwise input-VJP faithfulness.** The stride-2 analogue
     of `depthwiseBackBatched_faithful` (and the depthwise analogue of
     `convStridedBackBatched_faithful`): `depthwiseStridedBackBatched` denotes the
     proven VJP of the batched strided depthwise `batchMap N (depthwiseStride2Flat W b)`
-    — i.e. the per-example strided-depthwise input-grad (`depthwiseStride2Flat_has_vjp`
+    — i.e. the per-example strided-depthwise input-grad (`depthwiseStride2FlatHasVJP`
     = zero-upsample the cotangent then the reversed-kernel per-channel depthwise)
     applied independently across the batch. Strided depthwise (`decimate ∘ depthwise`)
     is linear, so its backward ignores the forward activation; the batched backward
-    is a plain `batchMap` of the per-example backward, matching `batchMap_has_vjp`.
+    is a plain `batchMap` of the per-example backward, matching `batchMapHasVJP`.
     The EfficientNet downsample MBConv's stride-2 depthwise backward brick. -/
 theorem depthwiseStridedBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c)
     (v : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
     den (SHlo.depthwiseStridedBackBatched (N := N) wN W b e)
-      = (batchMap_has_vjp (depthwiseStride2Flat W b) (depthwiseStride2Flat_has_vjp W b)
+      = (batchMapHasVJP (depthwiseStride2Flat W b) (depthwiseStride2FlatHasVJP W b)
           (depthwiseStride2Flat_differentiable W b)).backward v (den e) := by
   funext idx
-  -- The transport in `batchMap_has_vjp` unfolds to the per-example strided-depthwise
+  -- The transport in `batchMapHasVJP` unfolds to the per-example strided-depthwise
   -- backward on each row; both sides then differ only in the (discarded) forward
   -- activation arg, since strided depthwise is linear (its backward ignores it).
-  simp only [denStepApp, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, batchMap, batchMapHasVJP, HasVJPMat.toHasVJP, rowwiseHasVJPMat]
   rfl
 
 /-- **Batched XLA-`SAME` STRIDE-2 depthwise input-VJP faithfulness.** The odd-phase peer of
@@ -159,10 +159,10 @@ theorem depthwiseStridedXlaBackBatched_faithful {N c h w kH kW : Nat} (wN : Stri
     (W : DepthwiseKernel c kH kW) (b : Vec c)
     (v : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
     den (SHlo.depthwiseStridedXlaBackBatched (N := N) wN W b e)
-      = (batchMap_has_vjp (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXla_has_vjp W b)
+      = (batchMapHasVJP (depthwiseStride2FlatXla W b) (depthwiseStride2FlatXlaHasVJP W b)
           (depthwiseStride2FlatXla_differentiable W b)).backward v (den e) := by
   funext idx
-  simp only [denStepApp, batchMap, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, batchMap, batchMapHasVJP, HasVJPMat.toHasVJP, rowwiseHasVJPMat]
   rfl
 
 /-- **Batched depthwise input-VJP faithfulness.** The depthwise analogue of
@@ -175,11 +175,11 @@ theorem depthwiseBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c)
     (v : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
     den (SHlo.depthwiseBackBatched (N := N) wN W b e)
-      = (batchMap_has_vjp (depthwiseFlat W b) (depthwiseFlat_has_vjp W b)
+      = (batchMapHasVJP (depthwiseFlat W b) (depthwiseFlatHasVJP W b)
           (depthwiseFlat_differentiable W b)).backward v (den e) := by
   funext idx
-  simp only [denStepApp, batchMap, batchMap_has_vjp, depthwiseFlat_has_vjp, hasVJPMat_to_hasVJP,
-    rowwise_has_vjp_mat, hasVJP3_to_hasVJP, depthwise_has_vjp3]
+  simp only [denStepApp, batchMap, batchMapHasVJP, depthwiseFlatHasVJP, HasVJPMat.toHasVJP,
+    rowwiseHasVJPMat, HasVJP3.toHasVJP, depthwiseHasVJP3]
   rfl
 
 -- ════════════════════════════════════════════════════════════════
@@ -191,23 +191,23 @@ theorem depthwiseBackBatched_faithful {N c h w kH kW : Nat} (wN : String)
     `bnBatchTensor4` lives at `N·(oc·(h·w))`; `bnBatchLA` bridges by conjugating
     with the associativity-cast reindexes (`bnBatchLA_eq_comp`). Its VJP backward
     is therefore: scatter the cotangent into `[N,C,(H·W)]`, run the renderable
-    three-term `bnBatchTensor4_grad_input` at the reindexed activation, scatter
+    three-term `bnBatchTensor4GradInput` at the reindexed activation, scatter
     back. This is what a network-layout `bnBatchLABack` op denotes. -/
 theorem bnBatchLA_back_conj {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (x dy : Vec (N * (oc * h * w))) :
-    (reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm)).backward x
-      (bnBatchTensor4_grad_input N oc h w ε γ
+    (reindexHasVJP (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm)).backward x
+      (bnBatchTensor4GradInput N oc h w ε γ
         (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x)
-        ((reindex_has_vjp (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
+        ((reindexHasVJP (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)))).backward
           (reindexCLM (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm) x) dy))
-      = (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x dy := by
-  rw [bnBatchTensor4_grad_input_eq_backward N oc h w ε hε γ β]
-  simp only [bnBatchLA_has_vjp, eq_mpr_eq_cast]
+      = (bnBatchLAHasVJP N oc h w ε hε γ β).backward x dy := by
+  rw [bnBatchTensor4GradInput_eq_backward N oc h w ε hε γ β]
+  simp only [bnBatchLAHasVJP, eq_mpr_eq_cast]
   rfl
 
 /-- **`bnBatchLABack` (network-layout true batch-norm backward) faithfulness.**
-    The `den` (inline scatter-conjugated `bnBatchTensor4_grad_input`) equals the
-    proven `bnBatchLA_has_vjp` backward — the bn backward at the network's
+    The `den` (inline scatter-conjugated `bnBatchTensor4GradInput`) equals the
+    proven `bnBatchLAHasVJP` backward — the bn backward at the network's
     `N·(oc·h·w)` index. This is the
     layout wrapper that lets `bnBatchBack` compose with `convBackBatched` /
     `depthwiseBackBatched` (all on the left-assoc index) into batched stages. -/
@@ -215,22 +215,22 @@ theorem bnBatchLABack_faithful {N oc h w : Nat} (gN xN es : String)
     (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (x : Vec (N * (oc * h * w))) (e : SHlo (N * (oc * h * w))) :
     den (SHlo.bnBatchLABack gN xN es ε γ x e)
-      = (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x (den e) :=
+      = (bnBatchLAHasVJP N oc h w ε hε γ β).backward x (den e) :=
   bnBatchLA_back_conj ε γ β hε x (den e)
 
 /-- **`seBackBatched` (batched squeeze-excite backward) faithfulness.** The `den`
     (rowwise application of the proven per-example `seBlockFull` VJP) equals the
-    proven batched `seB_has_vjp` backward. SE is non-linear, so — unlike the
+    proven batched `seBHasVJP` backward. SE is non-linear, so — unlike the
     linear `convBackBatched`/`depthwiseBackBatched` — the backward threads each
-    example's forward activation `v`; the rowwise `batchMap_has_vjp` structure
+    example's forward activation `v`; the rowwise `batchMapHasVJP` structure
     handles that. The fourth (and last) MBConv stage's batch-separable backward. -/
 theorem seBackBatched_faithful {N c h w r : Nat} (w1N b1N w2N b2N vN : String)
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
     (v : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
     den (SHlo.seBackBatched (N := N) w1N b1N w2N b2N vN W₁ b₁ W₂ b₂ v e)
-      = (seB_has_vjp N (h := h) (w := w) W₁ b₁ W₂ b₂).backward v (den e) := by
+      = (seBHasVJP N (h := h) (w := w) W₁ b₁ W₂ b₂).backward v (den e) := by
   funext idx
-  simp only [denStepApp, seB_has_vjp, batchMap_has_vjp, hasVJPMat_to_hasVJP, rowwise_has_vjp_mat]
+  simp only [denStepApp, seBHasVJP, batchMapHasVJP, HasVJPMat.toHasVJP, rowwiseHasVJPMat]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Batched MBConv stage backward graphs (the bn wrapper unblocks these)
@@ -250,10 +250,10 @@ theorem cbsBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
     den (cbsBackBatchedGraph W b ε γ β x e)
-      = (cbsB_has_vjp N W b ε hε γ β).backward x (den e) := by
+      = (cbsBHasVJP N W b ε hε γ β).backward x (den e) := by
   rw [cbsBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [cbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp_backward, Function.comp_apply]
+  simp only [cbsBHasVJP, bnSwishStageHasVJP, vjpComp_backward, Function.comp_apply]
 
 /-- Batched **depthwise → bn → swish** stage backward graph (MBConv depthwise). -/
 noncomputable def dwbsBackBatchedGraph {N c h w kH kW : Nat}
@@ -267,10 +267,10 @@ theorem dwbsBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
     den (dwbsBackBatchedGraph W b ε γ β x e)
-      = (dwbsB_has_vjp N W b ε hε γ β).backward x (den e) := by
+      = (dwbsBHasVJP N W b ε hε γ β).backward x (den e) := by
   rw [dwbsBackBatchedGraph, depthwiseBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [dwbsB_has_vjp, bnSwishStage_has_vjp, vjp_comp_backward, Function.comp_apply]
+  simp only [dwbsBHasVJP, bnSwishStageHasVJP, vjpComp_backward, Function.comp_apply]
 
 /-- Batched **STRIDE-2 depthwise → bn → swish** stage backward graph (the
     EfficientNet downsample MBConv's depthwise). The stride-2 analogue of
@@ -289,10 +289,10 @@ theorem dwbsSBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
     den (dwbsSBackBatchedGraph W b ε γ β x e)
-      = (dwbsSB_has_vjp N W b ε hε γ β).backward x (den e) := by
+      = (dwbsSBHasVJP N W b ε hε γ β).backward x (den e) := by
   rw [dwbsSBackBatchedGraph, depthwiseStridedBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε), swishBack_faithful]
-  simp only [dwbsSB_has_vjp, bnSwishStage_has_vjp, vjp_comp_backward, Function.comp_apply]
+  simp only [dwbsSBHasVJP, bnSwishStageHasVJP, vjpComp_backward, Function.comp_apply]
 
 /-- Batched **conv → bn** stage backward graph (MBConv project, no swish). -/
 noncomputable def projBackBatchedGraph {N ic oc h w kH kW : Nat}
@@ -305,10 +305,10 @@ theorem projBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
     den (projBackBatchedGraph W b ε γ β x e)
-      = (projB_has_vjp N W b ε hε γ β).backward x (den e) := by
+      = (projBHasVJP N W b ε hε γ β).backward x (den e) := by
   rw [projBackBatchedGraph, convBackBatched_faithful (v := x),
       bnBatchLABack_faithful (β := β) (hε := hε)]
-  simp only [projB_has_vjp, bnStage_has_vjp, vjp_comp_backward]
+  simp only [projBHasVJP, bnStageHasVJP, vjpComp_backward]
 
 end Proofs.StableHLO
 
@@ -318,7 +318,7 @@ open scoped BigOperators
 
 /-! ## Chain-cotangent helpers — the per-op batched backward steps (built fresh, HasVJP-style)
 
-`EfficientNetChainClose` proves the per-block VJPs by `vjp_comp` of the per-op VJPs but exposes no
+`EfficientNetChainClose` proves the per-block VJPs by `vjpComp` of the per-op VJPs but exposes no
 explicit cotangent-vector defs (unlike mnv2's `invresCot*`). So the tie BUILDS the chain cotangents
 from the proven per-op backwards: `bnBackB` (true-BN, the batch-coupled `bnBatchLA` VJP), `swBackB`
 (swish, smooth), `cInB`/`dInB` (the batched conv/depthwise input-VJP = `den convBackBatched`/
@@ -336,7 +336,7 @@ noncomputable def reassocB (N oc h w : Nat) (v : Vec (N * (oc * h * w))) : Vec (
 /-- Batched **true-BN** input-cotangent (`bnBatchLA` VJP — batch-coupled). -/
 noncomputable def bnBackB (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
-  (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x dy
+  (bnBatchLAHasVJP N oc h w ε hε γ β).backward x dy
 
 /-- ⭐ **The tie's BN node and the emitted BN node denote one map.** Every batched render emits
     `.bnBatchBack`, typed at `N·(oc·(h·w))`; the ties state the BN input cotangent at
@@ -380,40 +380,40 @@ theorem bnBackB_eq_den_bnBatchBack (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (�
       = fun i => den (SHlo.bnBatchBack "" "" "" ε γ (reassocB N oc h w x)
           (.operand "" (reassocB N oc h w dy)))
           (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) i) := by
-  show (bnBatchLA_has_vjp N oc h w ε hε γ β).backward x (den (.operand "" dy)) = _
+  show (bnBatchLAHasVJP N oc h w ε hε γ β).backward x (den (.operand "" dy)) = _
   rw [← bnBatchLABack_faithful "" "" "" ε γ β hε x (.operand "" dy),
       den_bnBatchLABack_eq_bnBatchBack]
   rfl
 
 /-- Batched **swish** mask-back (smooth, no kink). -/
-noncomputable def swBackB (n : Nat) (x dy : Vec n) : Vec n := (swish_has_vjp n).backward x dy
+noncomputable def swBackB (n : Nat) (x dy : Vec n) : Vec n := (swishHasVJP n).backward x dy
 
 /-- Batched **sigmoid** back (the SE gate excite-dense output cotangent). -/
-noncomputable def sigBackB (n : Nat) (x dy : Vec n) : Vec n := (sigmoid_has_vjp n).backward x dy
+noncomputable def sigBackB (n : Nat) (x dy : Vec n) : Vec n := (sigmoidHasVJP n).backward x dy
 
 /-- Batched **1×1/conv input-VJP** (= `den convBackBatched`; conv is linear, `x` unused). -/
 noncomputable def cInB (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (dy : Vec (N * (oc * h * w))) : Vec (N * (ic * h * w)) :=
-  batchMap N (fun d => (flatConv_has_vjp W b).backward (fun _ => 0) d) dy
+  batchMap N (fun d => (flatConvHasVJP W b).backward (fun _ => 0) d) dy
 
 /-- Batched **depthwise input-VJP** (= `den depthwiseBackBatched`). -/
 noncomputable def dInB (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (dy : Vec (N * (c * h * w))) : Vec (N * (c * h * w)) :=
-  batchMap N (fun d => (depthwiseFlat_has_vjp W b).backward (fun _ => 0) d) dy
+  batchMap N (fun d => (depthwiseFlatHasVJP W b).backward (fun _ => 0) d) dy
 
 /-- Batched **strided depthwise input-VJP** (= `den depthwiseStridedBackBatched`; upsamples `h→2h`). -/
 noncomputable def dStridedInB (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (dy : Vec (N * (c * h * w))) : Vec (N * (c * (2 * h) * (2 * w))) :=
-  batchMap N (fun d => (depthwiseStride2Flat_has_vjp W b).backward (fun _ => 0) d) dy
+  batchMap N (fun d => (depthwiseStride2FlatHasVJP W b).backward (fun _ => 0) d) dy
 
 /-- Batched **GAP input-VJP** (= `den gapBackBatched`; the head's GAP backward, broadcast÷(h·w)). -/
 noncomputable def gapInB (N c h w : Nat) (dy : Vec (N * c)) : Vec (N * (c * h * w)) :=
-  batchMap N (fun d => (globalAvgPoolFlat_has_vjp c h w).backward (fun _ => 0) d) dy
+  batchMap N (fun d => (globalAvgPoolFlatHasVJP c h w).backward (fun _ => 0) d) dy
 
 /-- Batched **fused SE input-cotangent** (= `den seBackBatched`, the `x⊙gate` VJP). -/
 noncomputable def seInB (N : Nat) {c h w r : Nat} (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
     (x dy : Vec (N * (c * h * w))) : Vec (N * (c * h * w)) :=
-  (seB_has_vjp N (h := h) (w := w) W₁ b₁ W₂ b₂).backward x dy
+  (seBHasVJP N (h := h) (w := w) W₁ b₁ W₂ b₂).backward x dy
 
 /-- Batched **SE gate cotangent** `dgate[n,c] = Σ_{h,w}(x⊙dy)` (= `den seReduceB`, the broadcast-adjoint
     of `x ⊙ dy` — the FIRST step of the SE gate backward, feeding the SE dense param grads). -/
@@ -447,7 +447,7 @@ noncomputable def reluMaskB (n : Nat) (pre dy : Vec n) : Vec n :=
     XLA-`SAME` twin. -/
 noncomputable def cStridedInB (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
     (b : Vec oc) (dy : Vec (N * (oc * h * w))) : Vec (N * (ic * (2 * h) * (2 * w))) :=
-  batchMap N (fun d => (flatConvStride2_has_vjp W b).backward (fun _ => 0) d) dy
+  batchMap N (fun d => (flatConvStride2HasVJP W b).backward (fun _ => 0) d) dy
 
 /-- **Batched true-BN input-cotangent, as the EMITTED backward computes it.** Written as the `den`
     of the backward op rather than as the certified VJP's `.backward`, because that is the form the

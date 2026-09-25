@@ -66,7 +66,7 @@ lemma patchEmbedF_x_den (ic H W patchSize N D : Nat) (Wc : Kernel4 D ic patchSiz
     (bc cls : Vec D) (pos : Mat (N + 1) D) (x : Vec (ic * H * W)) :
     den (SHlo.patchEmbedF (P := patchSize) "%Wp" "%bp" "%cls" "%pos"
         Wc bc cls pos (.operand "%x" x))
-      = Mat.flatten (Mat.unflatten (patchEmbed_flat ic H W patchSize N D Wc bc cls pos x)) := by
+      = Mat.flatten (Mat.unflatten (patchEmbedFlat ic H W patchSize N D Wc bc cls pos x)) := by
   rw [Mat.flatten_unflatten]
   rfl
 

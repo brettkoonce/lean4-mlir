@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # EfficientNet-B0's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
-`EfficientNetFullB0.lean` (T2) says the typed batch-BN graph denotes `efficientnetForwardB_full N w`
+`EfficientNetFullB0.lean` (T2) says the typed batch-BN graph denotes `efficientnetForwardBFull N w`
 on one device. At `replicas > 1` the data-parallel render normalises every one of B0's 49
 BatchNorms with the GLOBAL batch's statistics — the sync-BN composition `bnFwdSite` emits: this
 replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed, then `bnSyncF`.
@@ -11,11 +11,11 @@ This file is T2's data-parallel twin: that forward graph, stated as a family ove
 replicas, denotes on replica `r` exactly `batchShard r` of the single-device forward at the global
 batch `R·N`.
 
-    den (efficientnetFwdGraphSync_full R hR N epsStr w e r)
-      = batchShard R N 10 (efficientnetForwardB_full (R * N) w X) r
+    den (efficientnetFwdGraphSyncFull R hR N epsStr w e r)
+      = batchShard R N 10 (efficientnetForwardBFull (R * N) w X) r
 
 given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
-move**: the right-hand side is the committed `efficientnetForwardB_full`, at `N := R·N`.
+move**: the right-hand side is the committed `efficientnetForwardBFull`, at `N := R·N`.
 
 ## How it is proved
 
@@ -275,10 +275,10 @@ theorem headGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Na
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The sync-BN data-parallel EfficientNet-B0 forward graph, over the replica family.** T2's
-    `efficientnetFwdGraphB_full` with every one of the 49 BatchNorms a `bnSyncSiteLA` over all `R`
+    `efficientnetFwdGraphBFull` with every one of the 49 BatchNorms a `bnSyncSiteLA` over all `R`
     replicas, fed each replica's own input subgraph `e r`; block prefixes and collective tags are
     `EfficientNetRender`'s. -/
-def efficientnetFwdGraphSync_full (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String)
+def efficientnetFwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String)
     (w : B0Weights) (e : Fin R → SHlo (N * (3 * 224 * 224))) : Fin R → SHlo (N * 10) :=
   headGraphSync epsStr R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mbExpGraphSync "b16" epsStr R hR N 7 7 w.b16
@@ -302,15 +302,15 @@ def efficientnetFwdGraphSync_full (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : Str
 
 /-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` images, the
-    sync-BN graph on replica `r` denotes `batchShard r` of `efficientnetForwardB_full (R * N) w X`
+    sync-BN graph on replica `r` denotes `batchShard r` of `efficientnetForwardBFull (R * N) w X`
     — the committed batch-BN forward, at the global batch. One block lemma per stage, the shard
     hypothesis threaded from each into the next. -/
-theorem efficientnetFwdGraphSync_full_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+theorem efficientnetFwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) (w : B0Weights) (e : Fin R → SHlo (N * (3 * 224 * 224)))
     (X : Vec ((R * N) * (3 * 224 * 224)))
     (he : ∀ r, den (e r) = batchShard R N (3 * 224 * 224) X r) (r : Fin R) :
-    den (efficientnetFwdGraphSync_full R hR N epsStr w e r)
-      = batchShard R N 10 (efficientnetForwardB_full (R * N) w X) r := by
+    den (efficientnetFwdGraphSyncFull R hR N epsStr w e r)
+      = batchShard R N 10 (efficientnetForwardBFull (R * N) w X) r := by
   have h112 : 0 < 112 := by norm_num
   have h56 : 0 < 56 := by norm_num
   have h28 : 0 < 28 := by norm_num

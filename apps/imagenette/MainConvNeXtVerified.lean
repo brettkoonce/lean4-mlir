@@ -14,7 +14,7 @@ kernel-`#guard`ed against the audited `ConvNeXtLayout`. Trains on
 `verified_mlir/convnext_{train_step,fwd}.mlir` (rendered by tests/TestConvNeXt*) through the
 packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, global-scalar LN, He-init). Each op
 fragment is a proven-faithful emitter (GELU/LN/layerScale/depthwise-7×7/even-kernel patchify+
-downsample); the whole-net VJP `convnext_has_vjp` is a representative witness (full B/C deferred).
+downsample); the whole-net VJP `convnextHasVJP` is a representative witness (full B/C deferred).
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/convnext-verified data`
 -/

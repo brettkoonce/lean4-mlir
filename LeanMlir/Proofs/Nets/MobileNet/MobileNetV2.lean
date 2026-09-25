@@ -4,10 +4,10 @@ import LeanMlir.Proofs.Architectures.Depthwise
 # MobileNetV2 — end-to-end inverted-residual VJP (flattened Vec space)
 
 Builds a representative MobileNetV2 forward and proves its end-to-end
-vector–Jacobian product correct, analogous to `cnn_has_vjp_at` for the
+vector–Jacobian product correct, analogous to `cnnHasVJPAt` for the
 ResNet basic block. Everything lives in flattened `Vec` space and reuses
 the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
-`MLP.lean`, and `Residual.lean` through `vjp_comp_at` chaining.
+`MLP.lean`, and `Residual.lean` through `vjpCompAt` chaining.
 
 ## What's new here
 
@@ -48,19 +48,19 @@ open Finset BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- **1×1 conv → bn → relu6** (expand stage / stem). Mirror of
-    `convBnRelu_has_vjp_at` with relu6 in place of relu. -/
-noncomputable def convBnRelu6_has_vjp_at {ic oc h w kH kW : Nat}
+    `convBnReluHasVJPAt` with relu6 in place of relu. -/
+noncomputable def convBnRelu6HasVJPAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 0 ∧
                        bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 6)) :
     HasVJPAt (relu6 (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
-  stage_has_vjp_at (flatConv W b) (bnForward (oc * h * w) ε γ β) (relu6 (oc * h * w)) v
-    (flatConv_differentiable W b) (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b))
-    (bnForward_differentiable (oc * h * w) ε γ β hε) (bn_has_vjp (oc * h * w) ε γ β hε)
+  stageHasVJPAt (flatConv W b) (bnForward (oc * h * w) ε γ β) (relu6 (oc * h * w)) v
+    (flatConv_differentiable W b) (HasVJP3.toHasVJP (conv2dHasVJP3 W b))
+    (bnForward_differentiable (oc * h * w) ε γ β hε) (bnHasVJP (oc * h * w) ε γ β hε)
     (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    (relu6_has_vjp_at (oc * h * w) _ h_smooth)
+    (relu6HasVJPAt (oc * h * w) _ h_smooth)
 
 theorem convBnRelu6_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
@@ -72,18 +72,18 @@ theorem convBnRelu6_differentiableAt {ic oc h w kH kW : Nat}
 
 /-- **Depthwise → bn → relu6** (depthwise stage of an inverted residual).
     Channels & spatial dims preserved: `Vec (c*h*w) → Vec (c*h*w)`. -/
-noncomputable def dwBnRelu6_has_vjp_at {c h w kH kW : Nat}
+noncomputable def dwBnRelu6HasVJPAt {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c)
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (c * h * w))
     (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseFlat W b v) k ≠ 0 ∧
                        bnForward (c * h * w) ε γ β (depthwiseFlat W b v) k ≠ 6)) :
     HasVJPAt (relu6 (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseFlat W b) v :=
-  stage_has_vjp_at (depthwiseFlat W b) (bnForward (c * h * w) ε γ β) (relu6 (c * h * w)) v
-    (depthwiseFlat_differentiable W b) (depthwiseFlat_has_vjp W b)
-    (bnForward_differentiable (c * h * w) ε γ β hε) (bn_has_vjp (c * h * w) ε γ β hε)
+  stageHasVJPAt (depthwiseFlat W b) (bnForward (c * h * w) ε γ β) (relu6 (c * h * w)) v
+    (depthwiseFlat_differentiable W b) (depthwiseFlatHasVJP W b)
+    (bnForward_differentiable (c * h * w) ε γ β hε) (bnHasVJP (c * h * w) ε γ β hε)
     (relu6_differentiableAt_of_smooth (c * h * w) _ h_smooth)
-    (relu6_has_vjp_at (c * h * w) _ h_smooth)
+    (relu6HasVJPAt (c * h * w) _ h_smooth)
 
 theorem dwBnRelu6_differentiableAt {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε γ β : ℝ) (hε : 0 < ε)
@@ -129,10 +129,10 @@ theorem dwBnRelu6_differentiableAt {c h w kH kW : Nat}
     (ivDepthwise (h := h) (w := w) Wd bd εd γd βd ∘
       ivExpand (h := h) (w := w) We be εe γe βe)
 
-/-- **Inverted-residual body VJP at a smooth point.** Two `vjp_comp_at`
+/-- **Inverted-residual body VJP at a smooth point.** Two `vjpCompAt`
     chains: (1) `depthwise ∘ expand` over the two relu6 smoothness families,
     (2) `project` (everywhere) on top. -/
-noncomputable def invresBody_has_vjp_at {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+noncomputable def invresBodyHasVJPAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp γp βp : ℝ) (hεp : 0 < εp)
@@ -146,13 +146,13 @@ noncomputable def invresBody_has_vjp_at {ic mid oc h w kHe kWe kHd kWd kHp kWp :
     HasVJPAt (invresBody (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v := by
   -- expand
   have hexp_vjp : HasVJPAt (ivExpand (h := h) (w := w) We be εe γe βe) v :=
-    convBnRelu6_has_vjp_at We be εe γe βe hεe v h_se
+    convBnRelu6HasVJPAt We be εe γe βe hεe v h_se
   have hexp_diff : DifferentiableAt ℝ (ivExpand (h := h) (w := w) We be εe γe βe) v :=
     convBnRelu6_differentiableAt We be εe γe βe hεe v h_se
   -- depthwise (at the expand output)
   have hdw_vjp : HasVJPAt (ivDepthwise (h := h) (w := w) Wd bd εd γd βd)
       (ivExpand (h := h) (w := w) We be εe γe βe v) :=
-    dwBnRelu6_has_vjp_at Wd bd εd γd βd hεd _ h_sd
+    dwBnRelu6HasVJPAt Wd bd εd γd βd hεd _ h_sd
   have hdw_diff : DifferentiableAt ℝ (ivDepthwise (h := h) (w := w) Wd bd εd γd βd)
       (ivExpand (h := h) (w := w) We be εe γe βe v) :=
     dwBnRelu6_differentiableAt Wd bd εd γd βd hεd _ h_sd
@@ -160,17 +160,17 @@ noncomputable def invresBody_has_vjp_at {ic mid oc h w kHe kWe kHd kWd kHp kWp :
   have hde_vjp : HasVJPAt
       (ivDepthwise (h := h) (w := w) Wd bd εd γd βd ∘
         ivExpand (h := h) (w := w) We be εe γe βe) v :=
-    vjp_comp_at _ _ v hexp_diff hdw_diff hexp_vjp hdw_vjp
+    vjpCompAt _ _ v hexp_diff hdw_diff hexp_vjp hdw_vjp
   have hde_diff : DifferentiableAt ℝ
       (ivDepthwise (h := h) (w := w) Wd bd εd γd βd ∘
         ivExpand (h := h) (w := w) We be εe γe βe) v :=
     hdw_diff.comp v hexp_diff
   -- project (everywhere)
-  exact vjp_comp_at _ (ivProject (h := h) (w := w) Wp bp εp γp βp) v
+  exact vjpCompAt _ (ivProject (h := h) (w := w) Wp bp εp γp βp) v
     hde_diff
     ((convBn_differentiable Wp bp εp γp βp hεp) _)
     hde_vjp
-    ((convBn_has_vjp Wp bp εp γp βp hεp).toHasVJPAt _)
+    ((convBnHasVJP Wp bp εp γp βp hεp).toHasVJPAt _)
 
 theorem invresBody_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
@@ -195,7 +195,7 @@ theorem invresBody_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat
     `residual (invresBody)` — `body(x) + x`. No final activation
     (MobileNetV2 uses linear bottleneck; the project stage has no relu6,
     and the residual add is the block output). -/
-noncomputable def invresSkip_has_vjp_at {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
+noncomputable def invresSkipHasVJPAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid c kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Wp : Kernel4 c mid kHp kWp) (bp : Vec c) (εp γp βp : ℝ) (hεp : 0 < εp)
@@ -212,8 +212,8 @@ noncomputable def invresSkip_has_vjp_at {c mid h w kHe kWe kHd kWd kHp kWp : Nat
     invresBody_differentiableAt We be εe γe βe hεe Wd bd εd γd βd hεd Wp bp εp γp βp hεp v h_se h_sd
   have hF : HasVJPAt
       (invresBody (h := h) (w := w) We be εe γe βe Wd bd εd γd βd Wp bp εp γp βp) v :=
-    invresBody_has_vjp_at We be εe γe βe hεe Wd bd εd γd βd hεd Wp bp εp γp βp hεp v h_se h_sd
-  exact residual_has_vjp_at _ v hF_diff hF
+    invresBodyHasVJPAt We be εe γe βe hεe Wd bd εd γd βd hεd Wp bp εp γp βp hεp v h_se h_sd
+  exact residualHasVJPAt _ v hF_diff hF
 
 theorem invresSkip_differentiableAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid c kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
@@ -244,7 +244,7 @@ theorem invresSkip_differentiableAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
 --   Fixed block counts (one skip IR + one no-skip IR). Spatial dims h w
 --   kept constant (SAME depthwise/pointwise convs preserve them). All
 --   channel/kernel dims are implicit Nat params. mid₁/mid₂ are the
---   expansion widths (t·in). The chain mirrors `cnn_has_vjp_at` with
+--   expansion widths (t·in). The chain mirrors `cnnHasVJPAt` with
 --   inverted-residual blocks in place of basic resblocks.
 -- ════════════════════════════════════════════════════════════════
 
@@ -274,10 +274,10 @@ noncomputable def mobilenetv2Forward
 
 /-- **MobileNetV2 end-to-end VJP at a smooth point.** Chains the stem,
     a skip inverted-residual, a no-skip inverted-residual, global avg
-    pool, and dense head with `vjp_comp_at` under one bundled smoothness
+    pool, and dense head with `vjpCompAt` under one bundled smoothness
     family (one `≠0∧≠6` hypothesis per relu6 site, evaluated at the
     running activation). -/
-noncomputable def mobilenetv2_has_vjp_at
+noncomputable def mobilenetv2HasVJPAt
     {ic c mid₁ oc mid₂ h w kHs kWs
      kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
      kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ nClasses : Nat}
@@ -329,46 +329,46 @@ noncomputable def mobilenetv2_has_vjp_at
   unfold mobilenetv2Forward
   -- s0: stem
   set S0 := (relu6 (c*h*w) ∘ bnForward (c*h*w) εs γs βs ∘ flatConv Ws bs) with hS0
-  have s0_vjp : HasVJPAt S0 x := convBnRelu6_has_vjp_at Ws bs εs γs βs hεs x h_stem
+  have s0_vjp : HasVJPAt S0 x := convBnRelu6HasVJPAt Ws bs εs γs βs hεs x h_stem
   have s0_diff : DifferentiableAt ℝ S0 x := convBnRelu6_differentiableAt Ws bs εs γs βs hεs x h_stem
   -- s1: block1 (skip IR) ∘ S0
   set B1 := residual (invresBody (h := h) (w := w) We₁ be₁ e₁ ge₁ be1 Wd₁ bd₁ d₁ gd₁ bd1 Wp₁ bp₁ p₁ gp₁ bp1) with hB1
   have b1_vjp : HasVJPAt B1 (S0 x) :=
-    invresSkip_has_vjp_at We₁ be₁ e₁ ge₁ be1 he₁ Wd₁ bd₁ d₁ gd₁ bd1 hd₁ Wp₁ bp₁ p₁ gp₁ bp1 hp₁
+    invresSkipHasVJPAt We₁ be₁ e₁ ge₁ be1 he₁ Wd₁ bd₁ d₁ gd₁ bd1 hd₁ Wp₁ bp₁ p₁ gp₁ bp1 hp₁
       (S0 x) h_b1e h_b1d
   have b1_diff : DifferentiableAt ℝ B1 (S0 x) :=
     invresSkip_differentiableAt We₁ be₁ e₁ ge₁ be1 he₁ Wd₁ bd₁ d₁ gd₁ bd1 hd₁ Wp₁ bp₁ p₁ gp₁ bp1 hp₁
       (S0 x) h_b1e h_b1d
-  have s1_vjp : HasVJPAt (B1 ∘ S0) x := vjp_comp_at S0 B1 x s0_diff b1_diff s0_vjp b1_vjp
+  have s1_vjp : HasVJPAt (B1 ∘ S0) x := vjpCompAt S0 B1 x s0_diff b1_diff s0_vjp b1_vjp
   have s1_diff : DifferentiableAt ℝ (B1 ∘ S0) x := b1_diff.comp x s0_diff
   -- s2: block2 (no-skip IR) ∘ (above)
   set B2 := invresBody (h := h) (w := w) We₂ be₂ e₂ ge₂ be2 Wd₂ bd₂ d₂ gd₂ bd2 Wp₂ bp₂ p₂ gp₂ bp2 with hB2
   have b2_vjp : HasVJPAt B2 (B1 (S0 x)) :=
-    invresBody_has_vjp_at We₂ be₂ e₂ ge₂ be2 he₂ Wd₂ bd₂ d₂ gd₂ bd2 hd₂ Wp₂ bp₂ p₂ gp₂ bp2 hp₂
+    invresBodyHasVJPAt We₂ be₂ e₂ ge₂ be2 he₂ Wd₂ bd₂ d₂ gd₂ bd2 hd₂ Wp₂ bp₂ p₂ gp₂ bp2 hp₂
       (B1 (S0 x)) h_b2e h_b2d
   have b2_diff : DifferentiableAt ℝ B2 (B1 (S0 x)) :=
     invresBody_differentiableAt We₂ be₂ e₂ ge₂ be2 he₂ Wd₂ bd₂ d₂ gd₂ bd2 hd₂ Wp₂ bp₂ p₂ gp₂ bp2 hp₂
       (B1 (S0 x)) h_b2e h_b2d
-  have s2_vjp : HasVJPAt (B2 ∘ (B1 ∘ S0)) x := vjp_comp_at (B1 ∘ S0) B2 x s1_diff b2_diff s1_vjp b2_vjp
+  have s2_vjp : HasVJPAt (B2 ∘ (B1 ∘ S0)) x := vjpCompAt (B1 ∘ S0) B2 x s1_diff b2_diff s1_vjp b2_vjp
   have s2_diff : DifferentiableAt ℝ (B2 ∘ (B1 ∘ S0)) x := b2_diff.comp x s1_diff
   -- s3: gap ∘ (above)
   set P := B2 ∘ (B1 ∘ S0) with hP
   have gap_diff : DifferentiableAt ℝ (globalAvgPoolFlat oc h w) (P x) :=
     (globalAvgPoolFlat_differentiable oc h w) (P x)
   have s3_vjp : HasVJPAt (globalAvgPoolFlat oc h w ∘ P) x :=
-    vjp_comp_at P (globalAvgPoolFlat oc h w) x s2_diff gap_diff s2_vjp
-      ((globalAvgPoolFlat_has_vjp oc h w).toHasVJPAt (P x))
+    vjpCompAt P (globalAvgPoolFlat oc h w) x s2_diff gap_diff s2_vjp
+      ((globalAvgPoolFlatHasVJP oc h w).toHasVJPAt (P x))
   have s3_diff : DifferentiableAt ℝ (globalAvgPoolFlat oc h w ∘ P) x := gap_diff.comp x s2_diff
   -- s4: dense head
-  exact vjp_comp_at (globalAvgPoolFlat oc h w ∘ P) (dense Wh bh) x s3_diff
+  exact vjpCompAt (globalAvgPoolFlat oc h w ∘ P) (dense Wh bh) x s3_diff
     ((dense_differentiable Wh bh) _) s3_vjp
-    ((dense_has_vjp Wh bh).toHasVJPAt _)
+    ((denseHasVJP Wh bh).toHasVJPAt _)
 
-/-- **Public correctness theorem for `mobilenetv2_has_vjp_at`** — exposes
+/-- **Public correctness theorem for `mobilenetv2HasVJPAt`** — exposes
     the witness's `.correct` field: the full MobileNetV2 backward equals
     the `pdiv`-contracted Jacobian (Jacobian-transpose applied to the
-    cotangent). MobileNetV2 analogue of `cnn_has_vjp_at_correct`. -/
-theorem mobilenetv2_has_vjp_at_correct
+    cotangent). MobileNetV2 analogue of `cnnHasVJPAt_correct`. -/
+theorem mobilenetv2HasVJPAt_correct
     {ic c mid₁ oc mid₂ h w kHs kWs
      kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁
      kHe₂ kWe₂ kHd₂ kWd₂ kHp₂ kWp₂ nClasses : Nat}
@@ -412,7 +412,7 @@ theorem mobilenetv2_has_vjp_at_correct
           ((residual (invresBody (h := h) (w := w) We₁ be₁ e₁ ge₁ be1 Wd₁ bd₁ d₁ gd₁ bd1 Wp₁ bp₁ p₁ gp₁ bp1))
             ((relu6 (c*h*w) ∘ bnForward (c*h*w) εs γs βs ∘ flatConv Ws bs) x)))) k ≠ 6))
     (dy : Vec nClasses) (i : Fin (ic * h * w)) :
-    (mobilenetv2_has_vjp_at Ws bs εs γs βs hεs
+    (mobilenetv2HasVJPAt Ws bs εs γs βs hεs
         We₁ be₁ e₁ ge₁ be1 he₁ Wd₁ bd₁ d₁ gd₁ bd1 hd₁ Wp₁ bp₁ p₁ gp₁ bp1 hp₁
         We₂ be₂ e₂ ge₂ be2 he₂ Wd₂ bd₂ d₂ gd₂ bd2 hd₂ Wp₂ bp₂ p₂ gp₂ bp2 hp₂ Wh bh
         x h_stem h_b1e h_b1d h_b2e h_b2d).backward dy i =
@@ -421,7 +421,7 @@ theorem mobilenetv2_has_vjp_at_correct
                 We₁ be₁ e₁ ge₁ be1 Wd₁ bd₁ d₁ gd₁ bd1 Wp₁ bp₁ p₁ gp₁ bp1
                 We₂ be₂ e₂ ge₂ be2 Wd₂ bd₂ d₂ gd₂ bd2 Wp₂ bp₂ p₂ gp₂ bp2 Wh bh)
              x i j * dy j :=
-  (mobilenetv2_has_vjp_at Ws bs εs γs βs hεs
+  (mobilenetv2HasVJPAt Ws bs εs γs βs hεs
       We₁ be₁ e₁ ge₁ be1 he₁ Wd₁ bd₁ d₁ gd₁ bd1 hd₁ Wp₁ bp₁ p₁ gp₁ bp1 hp₁
       We₂ be₂ e₂ ge₂ be2 he₂ Wd₂ bd₂ d₂ gd₂ bd2 hd₂ Wp₂ bp₂ p₂ gp₂ bp2 hp₂ Wh bh
       x h_stem h_b1e h_b1d h_b2e h_b2d).correct dy i

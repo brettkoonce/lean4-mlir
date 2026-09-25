@@ -62,7 +62,7 @@ nothing else.
 
 The 73 theorems span foundation rules (incl. `chk_pdiv_is_fderiv`, which pins
 `pdiv` to Mathlib's `fderiv`), every chapter's headline Jacobian, the public
-`*_has_vjp_correct` wrappers, six whole-network VJPs, and the tie /
+`*HasVJP_correct` wrappers, six whole-network VJPs, and the tie /
 faithfulness / certificate tier. The first two buckets are `Challenge.lean`,
 the next nine `ChallengeArch.lean`, the last `ChallengeTier.lean`:
 
@@ -70,18 +70,18 @@ the next nine `ChallengeArch.lean`, the last `ChallengeTier.lean`:
 |---|---|
 | Foundation calculus rules | `pdiv_is_fderiv`, `pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_id`, `pdiv_const`, `pdiv_reindex`, `pdiv_finset_sum`, `pdivMat_rowIndep` |
 | Mat-level structural rules | `pdivMat_comp`, `pdivMat_matmul_left_const`, `pdivMat_scalarScale`, `pdivMat_transpose` |
-| Ch 3 MLP | `pdiv_dense`, `pdiv_dense_W`, `pdiv_dense_b`, `dense_weight_grad_correct`, `dense_bias_grad_correct`, `relu_has_vjp_correct`, `mlp_has_vjp_correct`, `relu_has_vjp_at_correct`, `mlp_has_vjp_at_correct` |
-| Ch 4 CNN | `maxPool2_has_vjp3_correct`, `maxPool2_has_vjp_at3_correct`, `conv2d_has_vjp3_correct`, `globalAvgPoolFlat_has_vjp_correct` |
+| Ch 3 MLP | `pdiv_dense`, `pdiv_dense_W`, `pdiv_dense_b`, `denseWeightGrad_correct`, `denseBiasGrad_correct`, `reluHasVJP_correct`, `mlpHasVJP_correct`, `reluHasVJPAt_correct`, `mlpHasVJPAt_correct` |
+| Ch 4 CNN | `maxPool2HasVJP3_correct`, `maxPool2HasVJPAt3_correct`, `conv2dHasVJP3_correct`, `globalAvgPoolFlatHasVJP_correct` |
 | Ch 5 BN | `pdiv_bnAffine`, `pdiv_bnCentered`, `pdiv_bnIstdBroadcast`, `pdiv_bnNormalize` (the famous 3-term cancellation) |
-| Ch 6 Residual | `residual_has_vjp_correct`, `residualProj_has_vjp_correct` |
-| Ch 7 Depthwise | `depthwise_has_vjp3_correct` |
-| Ch 8 SE | `seBlock_has_vjp_correct` |
-| Ch 9 LN+GELU | `pdiv_gelu`, `gelu_has_vjp_correct`, `layerNorm_has_vjp_correct` |
-| Ch 10 Attention | `pdiv_softmax`, `softmaxCE_grad`, `sdpa_back_Q/K/V_correct`, `mhsa_has_vjp_mat_correct`, `transformerBlock_has_vjp_mat_correct` |
-| Whole-network VJPs | `mnistLinear_has_vjp_correct`, `vit_full_has_vjp_correct`, `cnn_has_vjp_at_correct`, `mobilenetv2_has_vjp_at_correct`, `convnext_has_vjp{,_at}_correct`, `efficientnet_has_vjp{,_at}_correct` |
+| Ch 6 Residual | `residualHasVJP_correct`, `residualProjHasVJP_correct` |
+| Ch 7 Depthwise | `depthwiseHasVJP3_correct` |
+| Ch 8 SE | `seBlockHasVJP_correct` |
+| Ch 9 LN+GELU | `pdiv_gelu`, `geluHasVJP_correct`, `layerNormHasVJP_correct` |
+| Ch 10 Attention | `pdiv_softmax`, `softmaxCE_grad`, `sdpaBackQ/K/V_correct`, `mhsaHasVJPMat_correct`, `transformerBlockHasVJPMat_correct` |
+| Whole-network VJPs | `mnistLinearHasVJP_correct`, `vitFullHasVJP_correct`, `cnnHasVJPAt_correct`, `mobilenetv2HasVJPAt_correct`, `convnextHasVJP{,_at}_correct`, `efficientnetHasVJP{,_at}_correct` |
 | **Tier: step ties** | `r50_net_tiedB`, `vit_net_tied_certified`, `cnx_net_tiedGB` |
-| **Tier: codegen faithfulness** | `mnv4FwdGraphB_full_faithful`, `convStridedWGradB_den` |
-| **Tier: whole-net back-chains** | `resnet50ForwardB_full_has_vjp_at_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradB_full_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTiny_has_vjp_correct`, `bn_input_grad_correct`, `smoothedCE_grad`, `sealX_nonconstant` |
+| **Tier: codegen faithfulness** | `mnv4FwdGraphBFull_faithful`, `convStridedWGradB_den` |
+| **Tier: whole-net back-chains** | `resnet50ForwardBFullHasVJPAt_correct`, `r34InputGradB_eq_r34B_full_vjp`, `efficientnetInputGradBFull_correct`, `convnextImagenetInputGradB_eq_vjp`, `vitTinyHasVJP_correct`, `bn_input_grad_correct`, `smoothedCE_grad`, `sealX_nonconstant` |
 | **Tier: data parallel** | `dpMeanGrad_ne_globalBatchGrad`, `adamW_at_allReduceMeanF` |
 | **Tier: float / descent** | `linear_e4m3_argmax_preserved`, `trained_linear_sgd_strictly_descends` |
 | **Tier: certificates** | `lipschitz_margin_certified_radius`, `scorecard_sdp`, `smoothing_certified_radius_classifier`, `shampoo_eq_muon` |
@@ -98,8 +98,8 @@ For each, comparator confirms:
 3. The Solution typechecks against Lean's kernel, re-run from the
    compiled `.olean` independently of the elaborator.
 
-`relu_has_vjp_at_correct`, `mlp_has_vjp_at_correct` and
-`maxPool2_has_vjp_at3_correct` are pointwise (smooth-input) variants whose
+`reluHasVJPAt_correct`, `mlpHasVJPAt_correct` and
+`maxPool2HasVJPAt3_correct` are pointwise (smooth-input) variants whose
 underlying `.correct` field is a real proof rather than `rfl` — closing the
 kink-rfl-escape at smooth inputs for ReLU, the composed MLP, and MaxPool2. See
 `LeanMlir/Proofs/README.md`'s codegen trust boundary section for the math.
@@ -210,12 +210,12 @@ keeps the audit reproducible until they land.
   deliberate: what the comparator adds is a second, non-elaborator opinion, and
   a second opinion on the advertised set plus the calculus floor it rests on is
   the claim being made. It is not a claim that 73 is all that is proved.
-- **`noncomputable def` *witnesses*** themselves like `vit_full_has_vjp`,
-  `cnn_has_vjp_at`, `mhsa_layer_has_vjp_mat`, etc. comparator's
+- **`noncomputable def` *witnesses*** themselves like `vitFullHasVJP`,
+  `cnnHasVJPAt`, `mhsaLayerHasVJPMat`, etc. comparator's
   `theorem_names` matches `Lean.ConstantInfo.thm`, not `defn`, so the
   witness *defs* aren't run directly — but their public `_correct`
-  theorem wrappers (`vit_full_has_vjp_correct`, `cnn_has_vjp_at_correct`,
-  and the per-architecture `*_has_vjp_at_correct`) **are** in the suite
+  theorem wrappers (`vitFullHasVJP_correct`, `cnnHasVJPAt_correct`,
+  and the per-architecture `*HasVJPAt_correct`) **are** in the suite
   above. `#print axioms` on the underlying defs confirms the same
   allowlist closure for the composition shortcuts.
 - **nanoda second-kernel re-check.** Set `enable_nanoda: true` in

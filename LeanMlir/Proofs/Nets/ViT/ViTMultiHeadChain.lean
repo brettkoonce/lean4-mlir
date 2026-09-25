@@ -6,8 +6,8 @@ The single-head representative (`ViTChainClose`) pins the rendered attention bac
 audited `sdpa_back_{Q,K,V}` suite at `d = D` (one head). The committed `vitTrainStepRenderV`
 render is **multi-head** (`D = heads · d`, the committed ViT-Tiny: `heads = 3`, `d = 64`): the
 Q/K/V denses produce all heads' projections at once (`[N, heads·d]`), then `headSliceF h` slices
-head `h`'s `[N, d]` block, per-head SDPA runs at `sdpa_scale d` (d_head, NOT D), and `headPadF h`
-scatters the result back, summed over heads (`mhsa_layer_spelled`).
+head `h`'s `[N, d]` block, per-head SDPA runs at `sdpaScale d` (d_head, NOT D), and `headPadF h`
+scatters the result back, summed over heads (`mhsaLayer_spelled`).
 
 This file is the backward symmetry of `ViTMultiHead`'s forward: the cotangent the multi-head
 chain delivers at each of the Q/K/V dense **outputs** (`[N, heads·d]`). The out-proj `Wo` is a
@@ -42,7 +42,7 @@ open StableHLO
     Q/K — the `ss` argument the rendered per-head `vitCotDQ`/`vitCotDK` consume (`d` = d_head). -/
 noncomputable def headScoresF (Np1 heads d : Nat) (h : Fin heads)
     (q k : Vec (Np1 * (heads * d))) : Vec (Np1 * Np1) :=
-  Mat.flatten (fun i j => sdpa_scale d *
+  Mat.flatten (fun i j => sdpaScale d *
     Mat.mul (headSliceMat Np1 heads d h (Mat.unflatten q))
       (Mat.transpose (headSliceMat Np1 heads d h (Mat.unflatten k))) i j)
 
@@ -50,7 +50,7 @@ noncomputable def headScoresF (Np1 heads d : Nat) (h : Fin heads)
     Q/K — the `p` argument the rendered per-head `vitCotDV` consumes. -/
 noncomputable def headWeightsF (Np1 heads d : Nat) (h : Fin heads)
     (q k : Vec (Np1 * (heads * d))) : Vec (Np1 * Np1) :=
-  Mat.flatten (sdpa_weights Np1 d
+  Mat.flatten (sdpaWeights Np1 d
     (headSliceMat Np1 heads d h (Mat.unflatten q))
     (headSliceMat Np1 heads d h (Mat.unflatten k)))
 
@@ -102,8 +102,8 @@ noncomputable def vitCotLn1MH (Np1 heads d : Nat)
 -- ════════════════════════════════════════════════════════════════
 
 /-- One head's Q term: `headPadFlat h (vitCotDQ d …)` at the saved slices of the full Q/K/V/dOut
-    IS `Mat.flatten (headPadMat h (sdpa_back_Q d Q_h K_h V_h dOut_h))` — the single-head pin
-    `vitCotDQ_eq_sdpa_back_Q` at `d_head`, slid through the slice/pad commutation bridges. -/
+    IS `Mat.flatten (headPadMat h (sdpaBackQ d Q_h K_h V_h dOut_h))` — the single-head pin
+    `vitCotDQ_eq_sdpaBackQ` at `d_head`, slid through the slice/pad commutation bridges. -/
 lemma vitCotDQ_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
     headPadFlat Np1 heads d h
         (vitCotDQ d (headScoresF Np1 heads d h (Mat.flatten Q) (Mat.flatten K))
@@ -111,14 +111,14 @@ lemma vitCotDQ_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1
           (headSliceFlat Np1 heads d h (Mat.flatten V))
           (headSliceFlat Np1 heads d h (Mat.flatten dOut)))
       = Mat.flatten (headPadMat Np1 heads d h
-          (sdpa_back_Q Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
+          (sdpaBackQ Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
             (headSliceMat Np1 heads d h V) (headSliceMat Np1 heads d h dOut))) := by
   unfold headScoresF
   rw [Mat.unflatten_flatten, Mat.unflatten_flatten]
-  rw [headSliceFlat_flat, headSliceFlat_flat, headSliceFlat_flat, vitCotDQ_eq_sdpa_back_Q,
+  rw [headSliceFlat_flat, headSliceFlat_flat, headSliceFlat_flat, vitCotDQ_eq_sdpaBackQ,
       headPadFlat_flat]
 
-/-- One head's K term — `vitCotDK_eq_sdpa_back_K` at `d_head` through the bridges. -/
+/-- One head's K term — `vitCotDK_eq_sdpaBackK` at `d_head` through the bridges. -/
 lemma vitCotDK_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
     headPadFlat Np1 heads d h
         (vitCotDK d (headScoresF Np1 heads d h (Mat.flatten Q) (Mat.flatten K))
@@ -126,37 +126,37 @@ lemma vitCotDK_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1
           (headSliceFlat Np1 heads d h (Mat.flatten V))
           (headSliceFlat Np1 heads d h (Mat.flatten dOut)))
       = Mat.flatten (headPadMat Np1 heads d h
-          (sdpa_back_K Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
+          (sdpaBackK Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
             (headSliceMat Np1 heads d h V) (headSliceMat Np1 heads d h dOut))) := by
   unfold headScoresF
   rw [Mat.unflatten_flatten, Mat.unflatten_flatten]
-  rw [headSliceFlat_flat, headSliceFlat_flat, headSliceFlat_flat, vitCotDK_eq_sdpa_back_K,
+  rw [headSliceFlat_flat, headSliceFlat_flat, headSliceFlat_flat, vitCotDK_eq_sdpaBackK,
       headPadFlat_flat]
 
-/-- One head's V term — `vitCotDV_eq_sdpa_back_V` at `d_head` through the bridges. -/
+/-- One head's V term — `vitCotDV_eq_sdpaBackV` at `d_head` through the bridges. -/
 lemma vitCotDV_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
     headPadFlat Np1 heads d h
         (vitCotDV (headWeightsF Np1 heads d h (Mat.flatten Q) (Mat.flatten K))
           (headSliceFlat Np1 heads d h (Mat.flatten dOut)))
       = Mat.flatten (headPadMat Np1 heads d h
-          (sdpa_back_V Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
+          (sdpaBackV Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
             (headSliceMat Np1 heads d h V) (headSliceMat Np1 heads d h dOut))) := by
   unfold headWeightsF
   rw [Mat.unflatten_flatten, Mat.unflatten_flatten]
-  rw [headSliceFlat_flat, vitCotDV_eq_sdpa_back_V, headPadFlat_flat]
+  rw [headSliceFlat_flat, vitCotDV_eq_sdpaBackV, headPadFlat_flat]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The composition theorems — the multi-head dense backward, pinned to `sdpa_back_*`
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Multi-head Q-dense backward, pinned.** At the saved full activations, the rendered
-    `Σ_h headPadFlat h (vitCotDQ d …)` IS `Mat.flatten (Σ_h headPadMat h (sdpa_back_Q d …))`
+    `Σ_h headPadFlat h (vitCotDQ d …)` IS `Mat.flatten (Σ_h headPadMat h (sdpaBackQ d …))`
     — the concat of the audited per-head SDPA Q-backwards. So the cotangent the Q dense ops
     contract with is the genuine multi-head attention Q-gradient. -/
 theorem vitCotDQmh_eq (Np1 heads d : Nat) (Q K V dOut : Mat Np1 (heads * d)) :
     vitCotDQmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V) (Mat.flatten dOut)
       = Mat.flatten (∑ h : Fin heads, headPadMat Np1 heads d h
-          (sdpa_back_Q Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
+          (sdpaBackQ Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
             (headSliceMat Np1 heads d h V) (headSliceMat Np1 heads d h dOut))) := by
   unfold vitCotDQmh
   rw [Finset.sum_congr rfl (fun h _ => vitCotDQ_head_eq Np1 heads d h Q K V dOut),
@@ -164,11 +164,11 @@ theorem vitCotDQmh_eq (Np1 heads d : Nat) (Q K V dOut : Mat Np1 (heads * d)) :
   funext j
   rw [Finset.sum_apply]
 
-/-- **Multi-head K-dense backward, pinned** — concat of the per-head `sdpa_back_K`. -/
+/-- **Multi-head K-dense backward, pinned** — concat of the per-head `sdpaBackK`. -/
 theorem vitCotDKmh_eq (Np1 heads d : Nat) (Q K V dOut : Mat Np1 (heads * d)) :
     vitCotDKmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V) (Mat.flatten dOut)
       = Mat.flatten (∑ h : Fin heads, headPadMat Np1 heads d h
-          (sdpa_back_K Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
+          (sdpaBackK Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
             (headSliceMat Np1 heads d h V) (headSliceMat Np1 heads d h dOut))) := by
   unfold vitCotDKmh
   rw [Finset.sum_congr rfl (fun h _ => vitCotDK_head_eq Np1 heads d h Q K V dOut),
@@ -176,11 +176,11 @@ theorem vitCotDKmh_eq (Np1 heads d : Nat) (Q K V dOut : Mat Np1 (heads * d)) :
   funext j
   rw [Finset.sum_apply]
 
-/-- **Multi-head V-dense backward, pinned** — concat of the per-head `sdpa_back_V`. -/
+/-- **Multi-head V-dense backward, pinned** — concat of the per-head `sdpaBackV`. -/
 theorem vitCotDVmh_eq (Np1 heads d : Nat) (Q K V dOut : Mat Np1 (heads * d)) :
     vitCotDVmh Np1 heads d (Mat.flatten Q) (Mat.flatten K) (Mat.flatten V) (Mat.flatten dOut)
       = Mat.flatten (∑ h : Fin heads, headPadMat Np1 heads d h
-          (sdpa_back_V Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
+          (sdpaBackV Np1 d (headSliceMat Np1 heads d h Q) (headSliceMat Np1 heads d h K)
             (headSliceMat Np1 heads d h V) (headSliceMat Np1 heads d h dOut))) := by
   unfold vitCotDVmh
   rw [Finset.sum_congr rfl (fun h _ => vitCotDV_head_eq Np1 heads d h Q K V dOut),

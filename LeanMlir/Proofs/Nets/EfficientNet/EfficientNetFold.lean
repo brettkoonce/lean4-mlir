@@ -43,7 +43,7 @@ theorem convWB_den {N ic oc h w kH kW : Nat}
   rw [convWeightSgdB_eq_grad, ResNet34PoCB.convWGradB_den]
 
 /-- **Batched strided-stem 3×3 conv weight op denotes the certified Σ_n batched weight gradient.**
-    `Σ_n` of `flatConvStride2Xla_weight_grad_has_vjp.correct`. The op is the XLA-`SAME`
+    `Σ_n` of `flatConvStride2XlaWeightGradHasVJP.correct`. The op is the XLA-`SAME`
     `convStridedXlaWeightSgdB` the render emits at the stem (`EfficientNetRender.lean`), whose
     weight-grad correlation pad is shifted one position; its `den` is the odd-phase weight VJP,
     so the certified gradient here is the gradient of the net that ships. -/
@@ -63,7 +63,7 @@ theorem convStridedWB_den {N ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched dense weight op denotes the certified Σ_n batched weight gradient.** `Σ_n` of the
-    dense outer-product `.correct` (`dense_weight_grad_correct`). Covers the SE squeeze/excite denses
+    dense outer-product `.correct` (`denseWeightGrad_correct`). Covers the SE squeeze/excite denses
     (`W₁ : c→r`, `W₂ : r→c`) and the head classifier. Generic in `b` (the grad is `b`-independent). -/
 theorem denseWB_den {N a c : Nat}
     (xN wN lrStr cotN : String) (x : Vec (N * a)) (W : Mat a c) (b : Vec c) (cot : Vec (N * c))
@@ -76,7 +76,7 @@ theorem denseWB_den {N a c : Nat}
   simp only [Mat.flatten, Equiv.symm_apply_apply]
 
 /-- **Batched dense bias op denotes the certified Σ_n batched bias gradient** (`Σ_{n} cotₙ` per
-    output) — `Σ_n` of `dense_bias_grad_correct`. Covers the SE `b₁`/`b₂` and the head bias. -/
+    output) — `Σ_n` of `denseBiasGrad_correct`. Covers the SE `b₁`/`b₂` and the head bias. -/
 theorem denseBB_den {N c : Nat}
     (bN lrStr cotN : String) (W : Mat c c) (x : Vec c) (b : Vec c) (cot : Vec (N * c))
     (lr : ℝ) (j : Fin c) :
@@ -144,7 +144,7 @@ theorem bnSgdPairTiedB_holds {N oc h w : Nat} {gN vN epsStr bN lrStr cotN : Stri
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched stride-1 depthwise weight op denotes the certified Σ_n batched weight gradient.**
-    `Σ_n` of the flattened `depthwise_weight_grad_has_vjp3.correct` (the per-slice grad bridge from
+    `Σ_n` of the flattened `depthwiseWeightGradHasVJP3.correct` (the per-slice grad bridge from
     `mnv2_render_depthwiseW_flat_certified`). Generic in the kernel size (3×3 and 5×5). -/
 theorem depthwiseWB_den {N c h w kH kW : Nat}
     (xN wN lrStr cotN : String) (b : Vec c) (x : Vec (N * (c * h * w)))
@@ -158,7 +158,7 @@ theorem depthwiseWB_den {N c h w kH kW : Nat}
   rw [depthwiseWeightSgdB_eq_grad, EnetPoCG.depthwiseWGradB_den]
 
 /-- **Batched strided depthwise weight op denotes the certified Σ_n batched weight gradient.** The
-    strided VJP is already flat, so `Σ_n` of `depthwiseStride2_weight_grad_has_vjp.correct`. -/
+    strided VJP is already flat, so `Σ_n` of `depthwiseStride2WeightGradHasVJP.correct`. -/
 theorem depthwiseStridedWB_den {N c h w kH kW : Nat}
     (xN wN lrStr cotN : String) (b : Vec c) (x : Vec (N * (c * (2*h) * (2*w))))
     (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) (lr : ℝ) (idx : Fin (c * kH * kW)) :

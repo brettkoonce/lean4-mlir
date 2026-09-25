@@ -8,9 +8,9 @@ real environment and fails CI on a miss, so a rename that orphans a blueprint ci
 red. **Nothing does that for docstrings**, so a rename that orphans a docstring citation is
 invisible: the file still compiles, doc-gen4 still renders it, and the text still reads
 current. Found the hard way, repeatedly — `VerifiedNets.lean` cited
-`Proofs.convNextForwardTC_has_vjp_correct`, a symbol that has never existed under that
-spelling, and `ConvNeXtFullT.lean` still cites `convNextForwardT_has_vjp` from inside the
-file that defines `convNextForwardTCh_has_vjp`.
+`Proofs.convNextForwardTCHasVJP_correct`, a symbol that has never existed under that
+spelling, and `ConvNeXtFullT.lean` still cites `convNextForwardTHasVJP` from inside the
+file that defines `convNextForwardTChHasVJP`.
 
 This is that gate, and it is deliberately the SAME shape as the blueprint one: same
 workspace load, same root filtering, resolve-or-fail against `Environment`.
@@ -19,7 +19,7 @@ workspace load, same root filtering, resolve-or-fail against `Environment`.
 A first pass of this check written as a Python regex reported 26% of refs unresolved;
 tightening the filters by hand got it to 8.7%, and the residue was still mostly false
 positives (Mathlib names the regex could not see, structure projections like
-`foo_has_vjp.backward`, tactic names). `Environment.find?` answers all three exactly,
+`fooHasVJP.backward`, tactic names). `Environment.find?` answers all three exactly,
 because it knows about Mathlib, about projections, and about namespaces. A heuristic that
 needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
 
@@ -34,7 +34,7 @@ needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
 5. it names a module (`ViTRenderB`) or a namespace (`Mnv2FullBSeal`) by a suffix of its
    components, or a scanned file outside the environment by its basename
    (`TestMnv4FwdSmoke` for `tests/TestMnv4FwdSmoke.lean`);
-6. its PREFIX resolves — `foo_has_vjp.backward` is a field access on a real declaration,
+6. its PREFIX resolves — `fooHasVJP.backward` is a field access on a real declaration,
    not a declaration, and the prefix is the thing a rename would break;
 7. it is baselined in `scripts/gates/docstring_ref_baseline.txt`.
 
@@ -90,8 +90,8 @@ open Lake Lean
     exchange for resolving against the corpus the docstrings actually live in. -/
 def unbuiltTrees : List Name := [`apps, `demos]
 
-/-- Project namespaces a docstring may cite relatively (`\`vjp_comp\`` for
-    `Proofs.vjp_comp`). Kept short on purpose: every entry widens what counts as resolved,
+/-- Project namespaces a docstring may cite relatively (`\`vjpComp\`` for
+    `Proofs.vjpComp`). Kept short on purpose: every entry widens what counts as resolved,
     so a long list would quietly re-admit the false-negative class this gate exists to catch. -/
 def projectNamespaces : List Name := [`Proofs, `LeanMlir, `Layer]
 
@@ -159,7 +159,7 @@ def backtickRefs (body : String) : Array String := Id.run do
     ▶ Widening this list is the way to grow the gate, and each addition should come with a
     look at what it admits. -/
 def projectMarkers : List String :=
-  ["_has_vjp", "_correct", "_bridge", "_close", "_tied", "_faithful", "_denote_eq",
+  ["HasVJP", "_correct", "_bridge", "_close", "_tied", "_faithful", "_denote_eq",
    "_descends", "_adjointClose", "_argmaxSafe", "_fwd_faithful", "_eq_chain", "_rowIndep",
    -- the float tier's names (2026-09-08): nine `floatBridges_*` citations of theorems deleted
    -- in the float second pass sat under a green gate because none carried a marker above.
@@ -191,7 +191,7 @@ def lastComponent : Name → String
   | n => n.toString
 
 /-- Does `full` end with the dotted components of `ref`? A docstring under `open Proofs`
-    writes `` `vjp_comp` `` for `Proofs.vjp_comp`, and under `open Lean` writes
+    writes `` `vjpComp` `` for `Proofs.vjpComp`, and under `open Lean` writes
     `` `Environment.find?` `` for `Lean.Environment.find?`. Resolving absolutely would call
     both dangling, which is how the first run produced 2,447 false positives. -/
 def endsWithComponents (full0 : Name) (parts : List String) : Bool :=
@@ -206,8 +206,8 @@ def moduleEndsWith (m : Name) (parts : List String) : Bool :=
 /-- The ways a citation counts as live: exact, under a project namespace, as a dotted SUFFIX
     of a real declaration (a `private` one by its user name), as `File.decl` with `decl`
     declared in `File`, as a module or namespace name, by its PREFIX resolving (a field
-    access such as `foo_has_vjp.backward` is not itself a declaration, but a rename of
-    `foo_has_vjp` breaks it and that is what we are catching), or baselined. -/
+    access such as `fooHasVJP.backward` is not itself a declaration, but a rename of
+    `fooHasVJP` breaks it and that is what we are catching), or baselined. -/
 def resolves (env : Environment) (idx : Std.HashMap String (Array Name))
     (nsSet : Std.HashSet Name) (fileStems : Std.HashSet String) (baseline : Array String)
     (s : String) : Bool :=
@@ -325,7 +325,7 @@ unsafe def main (args : List String) : IO UInt32 := do
       let lines ← IO.FS.lines baselinePath
       -- A line is `name` or `name  # why it is here`. The trailing comment is the point:
       -- the first version of this file was a bare list, which made a PROPOSED name
-      -- ("you'd need to add `globalAvgPool_has_vjp`") indistinguishable from a stale
+      -- ("you'd need to add `globalAvgPoolHasVJP`") indistinguishable from a stale
       -- citation, and the header then had to describe all of them as one thing and was
       -- wrong about most.
       pure <| lines.filterMap fun l =>
@@ -365,8 +365,8 @@ unsafe def main (args : List String) : IO UInt32 := do
     if ← r.pathExists then files := files ++ (← leanFiles r)
   -- ⚠ This file is excluded from its own scan, and the reason is not vanity: its header
   -- documents the gate by QUOTING the dead citations that motivated it
-  -- (`convNextForwardT_has_vjp`, `Proofs.convNextForwardTC_has_vjp_correct`) plus a
-  -- `foo_has_vjp` placeholder. Those are deliberately dangling — a gate whose own
+  -- (`convNextForwardTHasVJP`, `Proofs.convNextForwardTCHasVJP_correct`) plus a
+  -- `fooHasVJP` placeholder. Those are deliberately dangling — a gate whose own
   -- documentation trips it teaches the reader to add exceptions.
   files := files.filter fun f => f.toString != "tests/DocstringCheckRefs.lean"
   -- tests, apps and `IRPrint` are outside the environment, so a citation of one of those files

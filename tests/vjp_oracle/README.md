@@ -42,15 +42,15 @@ auto-pins JAX to CPU. If you need to force CPU for any reason, pass
 
 | case | axiom probed | tolerance | observed step-2 Δ |
 |---|---|---|---|
-| `dense` | `dense_has_vjp` + `softmaxCE_grad` | 1e-5 | 2.73e-07 |
-| `dense-relu` | `relu_has_vjp` + `vjp_comp` | 1e-5 | 4.77e-07 |
-| `conv` | `conv2d_has_vjp` + `flatten_has_vjp` | 1e-5 | 2.24e-07 |
-| `convbn` | `convBn_has_vjp` (conv + BN + ReLU) | 1e-4 | 2.18e-06 |
-| `conv-pool` | `maxPool_has_vjp` | 1e-3 | 1.18e-04 |
-| `residual` | `biPath_has_vjp` (additive fan-in VJP) | 1e-5 | 3.06e-07 |
+| `dense` | `denseHasVJP` + `softmaxCE_grad` | 1e-5 | 2.73e-07 |
+| `dense-relu` | `reluHasVJP` + `vjpComp` | 1e-5 | 4.77e-07 |
+| `conv` | `conv2dHasVJP` + `flattenHasVJP` | 1e-5 | 2.24e-07 |
+| `convbn` | `convBnHasVJP` (conv + BN + ReLU) | 1e-4 | 2.18e-06 |
+| `conv-pool` | `maxPoolHasVJP` | 1e-3 | 1.18e-04 |
+| `residual` | `biPathHasVJP` (additive fan-in VJP) | 1e-5 | 3.06e-07 |
 | `depthwise` | depthwise-conv VJP via `.invertedResidual` | 1e-4 | 1.11e-05 |
-| `attention` | ViT block: `patchEmbed` + `transformerBlock_has_vjp_mat` + classifier | 1e-5 | 1.81e-07 |
-| `mbconv` | `elemwiseProduct_has_vjp` (SE gate) + MBConv composition | 1e-5 | 1.56e-06 |
+| `attention` | ViT block: `patchEmbed` + `transformerBlockHasVJPMat` + classifier | 1e-5 | 1.81e-07 |
+| `mbconv` | `elemwiseProductHasVJP` (SE gate) + MBConv composition | 1e-5 | 1.56e-06 |
 | `global-avg-pool` | `globalAvgPool` spatial-mean VJP | 1e-5 | 1.35e-06 |
 | `bottleneck` | `.bottleneckBlock` (ResNet-50 1×1-3×3-1×1 + skip) | 1e-4 | 8.78e-06 |
 | `mbconv-v3` | `.mbConvV3` with h-swish + h-sigmoid SE | 1e-4 | 5.81e-06 |

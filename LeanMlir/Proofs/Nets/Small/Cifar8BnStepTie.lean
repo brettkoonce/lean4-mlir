@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 
 cifar8's §1a tie + a BN-back at every conv. The backward
 chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the γ/β ops) and **conv-output
-cotangent** `cotCᵢ` (`bnPerChannelTensor3_grad_input` of `dyBnᵢ` — fed to the conv W/b ops), repeated
+cotangent** `cotCᵢ` (`bnPerChannelTensor3GradInput` of `dyBnᵢ` — fed to the conv W/b ops), repeated
 over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
 
 **Zero new ops/bridges/constructors.** Conv ties reuse `CifarPoC.convW_den`/`convB_den`; BN ties reuse
@@ -117,31 +117,31 @@ theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : N
     -- BN-output cotangents (relu-masked, γ/β) and conv-output cotangents (BN-back, W/b)
     let dyBn8 : Vec (c4*(2*h)*(2*w)) := fun i => if bn8o i > 0
       then (Back3.maxpool (c₁ := c4) (h₁ := h) (w₁ := w) r8t Back3.cot).flatDenote cpool4 i else 0
-    let cotC8 : Vec (c4*(2*h)*(2*w)) := bnPerChannelTensor3_grad_input c4 (2*h) (2*w) ε₈ γ₈ cc8 dyBn8
+    let cotC8 : Vec (c4*(2*h)*(2*w)) := bnPerChannelTensor3GradInput c4 (2*h) (2*w) ε₈ γ₈ cc8 dyBn8
     let dyBn7 : Vec (c4*(2*h)*(2*w)) := fun i => if bn7o i > 0
       then (Back3.conv (c₁ := c4) (h₁ := 2*h) (w₁ := 2*w) W₈ Back3.cot).flatDenote cotC8 i else 0
-    let cotC7 : Vec (c4*(2*h)*(2*w)) := bnPerChannelTensor3_grad_input c4 (2*h) (2*w) ε₇ γ₇ cc7 dyBn7
+    let cotC7 : Vec (c4*(2*h)*(2*w)) := bnPerChannelTensor3GradInput c4 (2*h) (2*w) ε₇ γ₇ cc7 dyBn7
     let dyBn6 : Vec (c3*(2*(2*h))*(2*(2*w))) := fun i => if bn6o i > 0
       then (Back3.maxpool (c₁ := c3) (h₁ := 2*h) (w₁ := 2*w) r6t Back3.cot).flatDenote
              ((Back3.conv (c₁ := c4) (h₁ := 2*h) (w₁ := 2*w) W₇ Back3.cot).flatDenote cotC7) i else 0
-    let cotC6 : Vec (c3*(2*(2*h))*(2*(2*w))) := bnPerChannelTensor3_grad_input c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ cc6 dyBn6
+    let cotC6 : Vec (c3*(2*(2*h))*(2*(2*w))) := bnPerChannelTensor3GradInput c3 (2*(2*h)) (2*(2*w)) ε₆ γ₆ cc6 dyBn6
     let dyBn5 : Vec (c3*(2*(2*h))*(2*(2*w))) := fun i => if bn5o i > 0
       then (Back3.conv (c₁ := c3) (h₁ := 2*(2*h)) (w₁ := 2*(2*w)) W₆ Back3.cot).flatDenote cotC6 i else 0
-    let cotC5 : Vec (c3*(2*(2*h))*(2*(2*w))) := bnPerChannelTensor3_grad_input c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ cc5 dyBn5
+    let cotC5 : Vec (c3*(2*(2*h))*(2*(2*w))) := bnPerChannelTensor3GradInput c3 (2*(2*h)) (2*(2*w)) ε₅ γ₅ cc5 dyBn5
     let dyBn4 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := fun i => if bn4o i > 0
       then (Back3.maxpool (c₁ := c2) (h₁ := 2*(2*h)) (w₁ := 2*(2*w)) r4t Back3.cot).flatDenote
              ((Back3.conv (c₁ := c3) (h₁ := 2*(2*h)) (w₁ := 2*(2*w)) W₅ Back3.cot).flatDenote cotC5) i else 0
-    let cotC4 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := bnPerChannelTensor3_grad_input c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ cc4 dyBn4
+    let cotC4 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := bnPerChannelTensor3GradInput c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₄ γ₄ cc4 dyBn4
     let dyBn3 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := fun i => if bn3o i > 0
       then (Back3.conv (c₁ := c2) (h₁ := 2*(2*(2*h))) (w₁ := 2*(2*(2*w))) W₄ Back3.cot).flatDenote cotC4 i else 0
-    let cotC3 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := bnPerChannelTensor3_grad_input c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ cc3 dyBn3
+    let cotC3 : Vec (c2*(2*(2*(2*h)))*(2*(2*(2*w)))) := bnPerChannelTensor3GradInput c2 (2*(2*(2*h))) (2*(2*(2*w))) ε₃ γ₃ cc3 dyBn3
     let dyBn2 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := fun i => if bn2o i > 0
       then (Back3.maxpool (c₁ := c1) (h₁ := 2*(2*(2*h))) (w₁ := 2*(2*(2*w))) r2t Back3.cot).flatDenote
              ((Back3.conv (c₁ := c2) (h₁ := 2*(2*(2*h))) (w₁ := 2*(2*(2*w))) W₃ Back3.cot).flatDenote cotC3) i else 0
-    let cotC2 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := bnPerChannelTensor3_grad_input c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ cc2 dyBn2
+    let cotC2 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := bnPerChannelTensor3GradInput c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₂ γ₂ cc2 dyBn2
     let dyBn1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := fun i => if bn1o i > 0
       then (Back3.conv (c₁ := c1) (h₁ := 2*(2*(2*(2*h)))) (w₁ := 2*(2*(2*(2*w)))) W₂ Back3.cot).flatDenote cotC2 i else 0
-    let cotC1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := bnPerChannelTensor3_grad_input c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ cc1 dyBn1
+    let cotC1 : Vec (c1*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))) := bnPerChannelTensor3GradInput c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ cc1 dyBn1
     -- conv₁ + bn₁
     ConvWSgdTied xN wN lrStr cotN b₁ x W₁ cotC1 lr
   ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotC1 lr

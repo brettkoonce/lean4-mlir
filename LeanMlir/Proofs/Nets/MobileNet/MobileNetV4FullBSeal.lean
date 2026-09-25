@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 # MobileNetV4-Conv-M's non-degeneracy seal, on the full-width batched net (levels 2 and 3)
 
 `planning/full_width_seals.md` §4.4. `MobileNetV4FullBVJP.lean` proves
-`mobilenetv4ForwardB_full_has_vjp_at`: the whole-net VJP at any `(w, x)` satisfying **eight clause
+`mobilenetv4ForwardBFullHasVJPAt`: the whole-net VJP at any `(w, x)` satisfying **eight clause
 bundles** — the stem's relu, the fused stage's, one per resolution group and the head's, **38**
 relu sites in all (the `#guard` below counts them off the block table). That statement is
 pointwise, so it could in principle be vacuous. This file exhibits a `(w, x)` that discharges
@@ -318,7 +318,7 @@ theorem sealX_zero_add (t : ℝ) : sealX 0 + t • sealV = sealX t := by
 
 /-- ⭐ the witness input is per-(example, channel) CONSTANT: `t` on example 0's channel 0, zero
     everywhere else. -/
-theorem BUnif_sealX (t : ℝ) :
+theorem bUnif_sealX (t : ℝ) :
     BUnif (h := 2 * 112) (w := 2 * 112)
       (fun n ci => if n.val = 0 ∧ ci.val = 0 then t else 0) (sealX t) := by
   intro n ci i j
@@ -329,18 +329,18 @@ theorem BUnif_sealX (t : ℝ) :
 /-- so it is a carrier from the start: `t` on channel 0. -/
 theorem ed_sealX (t : ℝ) :
     EDiff (h := 2 * 112) (w := 2 * 112) (fun ci : Fin 3 => if ci.val = 0 then t else 0) (sealX t) :=
-  EDiff_of_BUnif _ _ _ (BUnif_sealX t) (fun ci => by
+  eDiff_of_bUnif _ _ _ (bUnif_sealX t) (fun ci => by
     by_cases h : ci.val = 0 <;> simp [h])
 
 -- ════════════════════════════════════════════════════════════════
 -- § 7. The eight clause bundles, and the whole-net VJP at the witness
 -- ════════════════════════════════════════════════════════════════
-theorem scStem (nCls : Nat) (t : ℝ) :
+theorem sc_stem (nCls : Nat) (t : ℝ) :
     Mnv4StemSmoothAtB 2 112 112 (sealW nCls).sW (sealW nCls).sb (sealW nCls).sE
       (sealW nCls).sg (sealW nCls).sbt (sealX t) :=
   bne 2 32 112 112 (by norm_num) _
 
-theorem scFused (nCls : Nat) (t : ℝ) :
+theorem sc_fused (nCls : Nat) (t : ℝ) :
     (mnv4FusedStack 2 (sealW nCls)).ok (mnv4Pre0 2 (sealW nCls) (sealX t)) :=
   ⟨bne 2 128 56 56 (by norm_num) _, trivial⟩
 
@@ -382,27 +382,27 @@ theorem sc7b (nCls : Nat) (t : ℝ) :
 
 /-- the head's two relus — `cn_960`'s at 7×7 and `conv_head`'s on the pooled `1×1` (its BatchNorm
     over the two examples alone); GAP, the relabels and dense are `True`. -/
-theorem scHead (nCls : Nat) (t : ℝ) :
+theorem sc_head (nCls : Nat) (t : ℝ) :
     (mnv4HeadStack 2 (sealW nCls)).ok (mnv4Pre6 2 (sealW nCls) (sealX t)) :=
   ⟨bne 2 960 7 7 (by norm_num) _, trivial, trivial, bne 2 1280 1 1 (by norm_num) _, trivial,
     trivial⟩
 
 /-- The eight group conditions above, as the apex's one smoothness hypothesis. -/
-theorem sealSmooth (nCls : Nat) (t : ℝ) : Mnv4SmoothAt 2 (sealW nCls) (sealX t) :=
-  ⟨scStem nCls t, scFused nCls t, sc28 nCls t, sc14a nCls t, sc14b nCls t, sc7a nCls t,
-    sc7b nCls t, scHead nCls t⟩
+theorem seal_smooth (nCls : Nat) (t : ℝ) : Mnv4SmoothAt 2 (sealW nCls) (sealX t) :=
+  ⟨sc_stem nCls t, sc_fused nCls t, sc28 nCls t, sc14a nCls t, sc14b nCls t, sc7a nCls t,
+    sc7b nCls t, sc_head nCls t⟩
 
 /-- ⭐⭐ **The whole-net VJP at the witness** — all eight bundles discharged. -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
-    HasVJPAt (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX t) :=
-  mobilenetv4ForwardB_full_has_vjp_at 2 (sealW nCls) (sealX t) (sealSmooth nCls t)
+    HasVJPAt (mobilenetv4ForwardBFull 2 (sealW nCls)) (sealX t) :=
+  mobilenetv4ForwardBFullHasVJPAt 2 (sealW nCls) (sealX t) (seal_smooth nCls t)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 8. The pool and the relabels carry the carrier
 -- ════════════════════════════════════════════════════════════════
 /-- Reading a `[N, c]` vector relabelled to `[N, c, 1, 1]` at `(n, ci, 0, 0)` reads `(n, ci)`. -/
 theorem bcell_to11 {N c : Nat} (u : Vec (N * c)) (n : Fin N) (ci : Fin c) (i j : Fin 1) :
-    bcell (fun k => u (Fin.cast (mnv4Pool11 N c).symm k)) n ci i j = Mat.unflatten u n ci := by
+    bcell (fun k => u (Fin.cast (mnv4_pool11 N c).symm k)) n ci i j = Mat.unflatten u n ci := by
   simp only [bcell, Mat.unflatten, Tensor3.unflatten]
   congr 1
   apply Fin.ext
@@ -411,7 +411,7 @@ theorem bcell_to11 {N c : Nat} (u : Vec (N * c)) (n : Fin N) (ci : Fin c) (i j :
 
 /-- and back: the `[N, c]` relabel of a `[N, c, 1, 1]` vector reads its `(n, ci, 0, 0)` cell. -/
 theorem unflatten_from11 {N c : Nat} (v : Vec (N * (c * 1 * 1))) (n : Fin N) (ci : Fin c) :
-    Mat.unflatten (fun k => v (Fin.cast (mnv4Pool11 N c) k)) n ci = bcell v n ci 0 0 := by
+    Mat.unflatten (fun k => v (Fin.cast (mnv4_pool11 N c) k)) n ci = bcell v n ci 0 0 := by
   simp only [bcell, Mat.unflatten, Tensor3.unflatten]
   congr 1
   apply Fin.ext
@@ -425,11 +425,11 @@ theorem globalAvgPoolFlat_continuous (c h w : Nat) : Continuous (globalAvgPoolFl
 
 /-- ⭐ **GAP, then the relabel to `[N, c, 1, 1]`, keeps the carrier**: a per-channel shift of every
     cell shifts the average by the same amount. -/
-theorem EDiff_gapTo11 {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (δ : Fin c → ℝ)
+theorem eDiff_gapTo11 {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (δ : Fin c → ℝ)
     (v : Vec (2 * (c * h * w))) (hv : EDiff δ v) :
     EDiff (h := 1) (w := 1) δ
       (fun k => StableHLO.batchMap 2 (globalAvgPoolFlat c h w) v
-        (Fin.cast (mnv4Pool11 2 c).symm k)) := by
+        (Fin.cast (mnv4_pool11 2 c).symm k)) := by
   intro ci i j
   rw [bcell_to11, bcell_to11, row_batchMap, row_batchMap]
   exact globalAvgPool_shift hh hw _ _ (δ ci) ci (fun i j => hv ci i j)
@@ -439,19 +439,19 @@ theorem cls_diff {c nCls : Nat} (c₀ : Fin c) (hc₀ : c₀.val = 0) (j : Fin n
     (Wd : Mat c nCls) (bd : Vec nCls)
     (hWd : ∀ ci, Wd ci j = if ci.val = 0 then (1 : ℝ) else 0) (hbd : bd j = 0)
     (v : Vec (2 * (c * 1 * 1))) (δ : Fin c → ℝ) (hv : EDiff (h := 1) (w := 1) δ v) :
-    StableHLO.batchMap 2 (dense Wd bd) (fun k => v (Fin.cast (mnv4Pool11 2 c) k))
+    StableHLO.batchMap 2 (dense Wd bd) (fun k => v (Fin.cast (mnv4_pool11 2 c) k))
         (finProdFinEquiv ((0 : Fin 2), j))
-      - StableHLO.batchMap 2 (dense Wd bd) (fun k => v (Fin.cast (mnv4Pool11 2 c) k))
+      - StableHLO.batchMap 2 (dense Wd bd) (fun k => v (Fin.cast (mnv4_pool11 2 c) k))
         (finProdFinEquiv ((1 : Fin 2), j))
       = δ c₀ := by
   have e : ∀ n : Fin 2, StableHLO.batchMap 2 (dense Wd bd)
-      (fun k => v (Fin.cast (mnv4Pool11 2 c) k)) (finProdFinEquiv (n, j))
+      (fun k => v (Fin.cast (mnv4_pool11 2 c) k)) (finProdFinEquiv (n, j))
       = dense Wd bd (fun ci => bcell v n ci 0 0) j := by
     intro n
-    have hr := congrFun (row_batchMap (dense Wd bd) (fun k => v (Fin.cast (mnv4Pool11 2 c) k)) n) j
+    have hr := congrFun (row_batchMap (dense Wd bd) (fun k => v (Fin.cast (mnv4_pool11 2 c) k)) n) j
     rw [show Mat.unflatten (StableHLO.batchMap 2 (dense Wd bd)
-          (fun k => v (Fin.cast (mnv4Pool11 2 c) k))) n j
-        = StableHLO.batchMap 2 (dense Wd bd) (fun k => v (Fin.cast (mnv4Pool11 2 c) k))
+          (fun k => v (Fin.cast (mnv4_pool11 2 c) k))) n j
+        = StableHLO.batchMap 2 (dense Wd bd) (fun k => v (Fin.cast (mnv4_pool11 2 c) k))
           (finProdFinEquiv (n, j)) from rfl] at hr
     rw [hr]
     congr 1
@@ -579,7 +579,7 @@ noncomputable def Ah1 (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
 
 /-- the pooled head features at `[2, 960, 1, 1]`: GAP of the first head stage, relabelled. -/
 noncomputable def Pl (t : ℝ) : Vec (2 * (960 * 1 * 1)) :=
-  fun k => StableHLO.batchMap 2 (globalAvgPoolFlat 960 7 7) (Ah1 t) (Fin.cast (mnv4Pool11 2 960).symm k)
+  fun k => StableHLO.batchMap 2 (globalAvgPoolFlat 960 7 7) (Ah1 t) (Fin.cast (mnv4_pool11 2 960).symm k)
 
 noncomputable def Zh2 (t : ℝ) : Vec (2 * (1280 * 1 * 1)) :=
   StableHLO.batchMap 2 (flatConv (h := 1) (w := 1) (ctK 1280 960 1 1 1) (kv 1280 0)) (Pl t)
@@ -652,76 +652,76 @@ noncomputable def dh2 (t : ℝ) : Fin 1280 → ℝ :=
   fun o => dh1 t 0 * rf (2 * (1 * 1)) (bnRowLA 2 1280 1 1 (Zh2 t) o)
 
 theorem eds (t : ℝ) : EDiff (ds t) (As t) :=
-  EDiff_convS2Bn (h := 112) (w := 112) (0 : Fin 3) rfl (by norm_num) (by norm_num) 1 160 (Zs t)
+  eDiff_convS2Bn (h := 112) (w := 112) (0 : Fin 3) rfl (by norm_num) (by norm_num) 1 160 (Zs t)
     (ed_sealX t) rfl (fun ci => by simp only [ds, rf, dx, Fin.val_zero, ite_true]; ring)
 
 theorem edf (t : ℝ) : EDiff (df t) (Af t) :=
-  EDiff_convS2Bn (h := 56) (w := 56) (0 : Fin 32) rfl (by norm_num) (by norm_num) 1 160 (Zf t)
+  eDiff_convS2Bn (h := 56) (w := 56) (0 : Fin 32) rfl (by norm_num) (by norm_num) 1 160 (Zf t)
     (eds t) rfl (fun ci => by simp only [df, rf]; ring)
 
 theorem ed1p (t : ℝ) : EDiff (d1p t) (A1p t) :=
-  EDiff_convBn (h := 56) (w := 56) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1 0 (Z1p t)
+  eDiff_convBn (h := 56) (w := 56) (0 : Fin 128) rfl (by norm_num) (by norm_num) 1 0 (Z1p t)
     (edf t) rfl (fun ci => by simp only [d1p, rf]; ring)
 
 theorem edaq (t : ℝ) : EDiff (daq t) (Aaq t) :=
-  EDiff_dwBn (h := 56) (w := 56) (by norm_num) (by norm_num) 1 160 (Zaq t) (ed1p t) rfl
+  eDiff_dwBn (h := 56) (w := 56) (by norm_num) (by norm_num) 1 160 (Zaq t) (ed1p t) rfl
     (fun ci => by simp only [daq, rf]; ring)
 
 theorem edae (t : ℝ) : EDiff (dae t) (Aae t) :=
-  EDiff_convBn (h := 56) (w := 56) (0 : Fin 48) rfl (by norm_num) (by norm_num) 1 160 (Zae t)
+  eDiff_convBn (h := 56) (w := 56) (0 : Fin 48) rfl (by norm_num) (by norm_num) 1 160 (Zae t)
     (edaq t) rfl (fun ci => by simp only [dae, rf]; ring)
 
 theorem edad (t : ℝ) : EDiff (dad t) (Aad t) :=
-  EDiff_dwS2Bn (h := 28) (w := 28) (by norm_num) (by norm_num) 1 160 (Zad t) (edae t) rfl
+  eDiff_dwS2Bn (h := 28) (w := 28) (by norm_num) (by norm_num) 1 160 (Zad t) (edae t) rfl
     (fun ci => by simp only [dad, rf]; ring)
 
 theorem edaz (t : ℝ) : EDiff (daz t) (Aaz t) :=
-  EDiff_convBn (h := 28) (w := 28) (0 : Fin 192) rfl (by norm_num) (by norm_num) 1 0 (Zaz t)
+  eDiff_convBn (h := 28) (w := 28) (0 : Fin 192) rfl (by norm_num) (by norm_num) 1 0 (Zaz t)
     (edad t) rfl (fun ci => by simp only [daz, rf]; ring)
 
 theorem edbq (t : ℝ) : EDiff (dbq t) (Abq t) :=
-  EDiff_dwBn (h := 28) (w := 28) (by norm_num) (by norm_num) 1 160 (Zbq t) (edaz t) rfl
+  eDiff_dwBn (h := 28) (w := 28) (by norm_num) (by norm_num) 1 160 (Zbq t) (edaz t) rfl
     (fun ci => by simp only [dbq, rf]; ring)
 
 theorem edbe (t : ℝ) : EDiff (dbe t) (Abe t) :=
-  EDiff_convBn (h := 28) (w := 28) (0 : Fin 80) rfl (by norm_num) (by norm_num) 1 160 (Zbe t)
+  eDiff_convBn (h := 28) (w := 28) (0 : Fin 80) rfl (by norm_num) (by norm_num) 1 160 (Zbe t)
     (edbq t) rfl (fun ci => by simp only [dbe, rf]; ring)
 
 theorem edbd (t : ℝ) : EDiff (dbd t) (Abd t) :=
-  EDiff_dwS2Bn (h := 14) (w := 14) (by norm_num) (by norm_num) 1 160 (Zbd t) (edbe t) rfl
+  eDiff_dwS2Bn (h := 14) (w := 14) (by norm_num) (by norm_num) 1 160 (Zbd t) (edbe t) rfl
     (fun ci => by simp only [dbd, rf]; ring)
 
 theorem edbz (t : ℝ) : EDiff (dbz t) (Abz t) :=
-  EDiff_convBn (h := 14) (w := 14) (0 : Fin 480) rfl (by norm_num) (by norm_num) 1 0 (Zbz t)
+  eDiff_convBn (h := 14) (w := 14) (0 : Fin 480) rfl (by norm_num) (by norm_num) 1 0 (Zbz t)
     (edbd t) rfl (fun ci => by simp only [dbz, rf]; ring)
 
 theorem edcq (t : ℝ) : EDiff (dcq t) (Acq t) :=
-  EDiff_dwBn (h := 14) (w := 14) (by norm_num) (by norm_num) 1 160 (Zcq t) (edbz t) rfl
+  eDiff_dwBn (h := 14) (w := 14) (by norm_num) (by norm_num) 1 160 (Zcq t) (edbz t) rfl
     (fun ci => by simp only [dcq, rf]; ring)
 
 theorem edce (t : ℝ) : EDiff (dce t) (Ace t) :=
-  EDiff_convBn (h := 14) (w := 14) (0 : Fin 160) rfl (by norm_num) (by norm_num) 1 160 (Zce t)
+  eDiff_convBn (h := 14) (w := 14) (0 : Fin 160) rfl (by norm_num) (by norm_num) 1 160 (Zce t)
     (edcq t) rfl (fun ci => by simp only [dce, rf]; ring)
 
 theorem edcd (t : ℝ) : EDiff (dcd t) (Acd t) :=
-  EDiff_dwS2Bn (h := 7) (w := 7) (by norm_num) (by norm_num) 1 160 (Zcd t) (edce t) rfl
+  eDiff_dwS2Bn (h := 7) (w := 7) (by norm_num) (by norm_num) 1 160 (Zcd t) (edce t) rfl
     (fun ci => by simp only [dcd, rf]; ring)
 
 theorem edcz (t : ℝ) : EDiff (dcz t) (Acz t) :=
-  EDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1 0 (Zcz t)
+  eDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1 0 (Zcz t)
     (edcd t) rfl (fun ci => by simp only [dcz, rf]; ring)
 
 theorem edh1 (t : ℝ) : EDiff (dh1 t) (Ah1 t) :=
-  EDiff_convBn (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1 160 (Zh1 t)
+  eDiff_convBn (h := 7) (w := 7) (0 : Fin 256) rfl (by norm_num) (by norm_num) 1 160 (Zh1 t)
     (edcz t) rfl (fun ci => by simp only [dh1, rf]; ring)
 
 /-- the pool and its relabel keep the carrier. -/
-theorem edPl (t : ℝ) : EDiff (h := 1) (w := 1) (dh1 t) (Pl t) :=
-  EDiff_gapTo11 (by norm_num) (by norm_num) (dh1 t) (Ah1 t) (edh1 t)
+theorem eDiff_pl (t : ℝ) : EDiff (h := 1) (w := 1) (dh1 t) (Pl t) :=
+  eDiff_gapTo11 (by norm_num) (by norm_num) (dh1 t) (Ah1 t) (edh1 t)
 
 theorem edh2 (t : ℝ) : EDiff (dh2 t) (Ah2 t) :=
-  EDiff_convBn (h := 1) (w := 1) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1 160 (Zh2 t)
-    (edPl t) rfl (fun ci => by simp only [dh2, rf]; ring)
+  eDiff_convBn (h := 1) (w := 1) (0 : Fin 960) rfl (by norm_num) (by norm_num) 1 160 (Zh2 t)
+    (eDiff_pl t) rfl (fun ci => by simp only [dh2, rf]; ring)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. `Rr` — the seventeen carrier BatchNorm factors
@@ -882,15 +882,15 @@ theorem headStack_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
           (fun k => StableHLO.cbReluB N (h := 1) (w := 1) w.hW w.hb w.hE w.hg w.hbt
             (fun j => StableHLO.batchMap N (globalAvgPoolFlat 960 7 7)
               (StableHLO.cbReluB N (h := 7) (w := 7) w.h1W w.h1b w.h1E w.h1g w.h1bt v)
-              (Fin.cast (mnv4Pool11 N 960).symm j))
-            (Fin.cast (mnv4Pool11 N 1280) k)) := by
+              (Fin.cast (mnv4_pool11 N 960).symm j))
+            (Fin.cast (mnv4_pool11 N 1280) k)) := by
   simp only [mnv4HeadStack, mnv4Head, CertLayer.comp_fwd_apply, cbReluLayer_fwd_apply,
     gapLayer_fwd_apply, denseLayer_fwd_apply, castLayer_fwd_apply]
 
-theorem headA (nCls : Nat) (t : ℝ) :
-    mobilenetv4ForwardB_full 2 (sealW nCls) (sealX t)
+theorem head_eq_dense (nCls : Nat) (t : ℝ) :
+    mobilenetv4ForwardBFull 2 (sealW nCls) (sealX t)
       = StableHLO.batchMap 2 (dense (sealW nCls).Wd (sealW nCls).bd)
-          (fun k => Ah2 t (Fin.cast (mnv4Pool11 2 1280) k)) := by
+          (fun k => Ah2 t (Fin.cast (mnv4_pool11 2 1280) k)) := by
   show (mnv4HeadStack 2 (sealW nCls)).fwd (mnv4Pre6 2 (sealW nCls) (sealX t)) = _
   rw [headStack_apply, pc6]
   show StableHLO.batchMap 2 (dense (sealW nCls).Wd (sealW nCls).bd)
@@ -899,8 +899,8 @@ theorem headA (nCls : Nat) (t : ℝ) :
         (fun j => StableHLO.batchMap 2 (globalAvgPoolFlat 960 7 7)
           (StableHLO.cbReluB 2 (h := 7) (w := 7) (ctK 960 256 1 1 1) (kv 960 0) 1 (kv 960 1)
             (kv 960 160) (Acz t))
-          (Fin.cast (mnv4Pool11 2 960).symm j))
-        (Fin.cast (mnv4Pool11 2 1280) k)) = _
+          (Fin.cast (mnv4_pool11 2 960).symm j))
+        (Fin.cast (mnv4_pool11 2 1280) k)) = _
   rw [cbReluB_eq (ctK 960 256 1 1 1) (kv 960 0) (by norm_num) (Acz t),
     cbReluB_eq (ctK 1280 960 1 1 1) (kv 1280 0) (by norm_num) _]
   rfl
@@ -908,12 +908,12 @@ theorem headA (nCls : Nat) (t : ℝ) :
 /-- ⭐⭐ **The class-0 difference between the two examples, along the ray**: `t` times the
     seventeen BatchNorm factors on the carrier's path. -/
 theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
-    mobilenetv4ForwardB_full 2 (sealW nCls) (sealX t)
+    mobilenetv4ForwardBFull 2 (sealW nCls) (sealX t)
         (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
-      - mobilenetv4ForwardB_full 2 (sealW nCls) (sealX t)
+      - mobilenetv4ForwardBFull 2 (sealW nCls) (sealX t)
         (finProdFinEquiv ((1 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
       = t * Rr t := by
-  rw [headA, cls_diff (0 : Fin 1280) rfl ⟨0, hn⟩ _ _ (fun ci => by rw [sealW_Wd]; simp) rfl
+  rw [head_eq_dense, cls_diff (0 : Fin 1280) rfl ⟨0, hn⟩ _ _ (fun ci => by rw [sealW_Wd]; simp) rfl
     (Ah2 t) (dh2 t) (edh2 t)]
   simp only [dh2, dh1, dcz, dcd, dce, dcq, dbz, dbd, dbe, dbq, daz, dad, dae, daq, d1p, df, ds, dx, Rr]
   norm_num
@@ -925,25 +925,25 @@ theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
 theorem hasDerivAt_gd : HasDerivAt (fun t : ℝ => t * Rr t) (Rr 0) 0 :=
   hasDerivAt_mul_self_zero Rr_continuous.continuousAt
 
-theorem sealDiffAt (nCls : Nat) (t : ℝ) :
-    DifferentiableAt ℝ (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX t) :=
-  mobilenetv4ForwardB_full_differentiableAt 2 (sealW nCls) (sealX t) (sealSmooth nCls t)
+theorem seal_differentiableAt (nCls : Nat) (t : ℝ) :
+    DifferentiableAt ℝ (mobilenetv4ForwardBFull 2 (sealW nCls)) (sealX t) :=
+  mobilenetv4ForwardBFull_differentiableAt 2 (sealW nCls) (sealX t) (seal_smooth nCls t)
 
 /-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV4-Conv-M at
     the structural weights is NOT constant in its input. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
-    mobilenetv4ForwardB_full 2 (sealW nCls) (sealX 1)
-      ≠ mobilenetv4ForwardB_full 2 (sealW nCls) (sealX 0) :=
+    mobilenetv4ForwardBFull 2 (sealW nCls) (sealX 1)
+      ≠ mobilenetv4ForwardBFull 2 (sealW nCls) (sealX 0) :=
   ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos 1).ne')
 
 /-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
-    fderiv ℝ (mobilenetv4ForwardB_full 2 (sealW nCls)) (sealX 0) ≠ 0 :=
+    fderiv ℝ (mobilenetv4ForwardBFull 2 (sealW nCls)) (sealX 0) ≠ 0 :=
   fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
-    (sealDiffAt nCls 0) (Rr_pos 0).ne' hasDerivAt_gd
+    (seal_differentiableAt nCls 0) (Rr_pos 0).ne' hasDerivAt_gd
 
 /-- ⭐⭐ **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
-    21-block, 224×224 MobileNetV4-Conv-M — `mobilenetv4ForwardB_full`, the forward every
+    21-block, 224×224 MobileNetV4-Conv-M — `mobilenetv4ForwardBFull`, the forward every
     MobileNetV4 artifact runs — is **not the zero map** at the witness. -/
 theorem sealX_backward_nontrivial (nCls : Nat) (hn : 0 < nCls) :
     ∃ (j₀ : Fin (2 * nCls)) (i₀ : Fin (2 * (3 * (2 * 112) * (2 * 112)))),

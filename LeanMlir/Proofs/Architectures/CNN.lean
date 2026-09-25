@@ -161,7 +161,7 @@ lemma differentiableAt_pad_eval {n : Nat} (P : Prop) [Decidable P]
     Equivalent (under the `(ho, wo) ↔ (kh, kw)` partial bijection
     `ho = hi+pH-kh`) to the MLIR-aligned "reversed-kernel" formula
     `dx[c, h, w] = Σ_{o, kh, kw} W[o, c, kH−1−kh, kW−1−kw] · dy[o, h+kh−p, w+kw−p]`. -/
-noncomputable def conv2d_input_grad_formula {ic oc h w kH kW : Nat}
+noncomputable def conv2dInputGradFormula {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (dy : Tensor3 oc h w) : Tensor3 ic h w :=
   fun ci hi wi =>
     ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
@@ -208,11 +208,11 @@ theorem padTap_indicator {C h w kH kW : Nat} (c ci : Fin C) (hi ho : Fin h) (wi 
     `W o(idx_out) c kh kw` times the pad-guarded Kronecker. Reindex `Fin (oc*h*w) ↔ Fin oc × Fin h × Fin w`
     on the sum-over-`idx_out`; `padTap_indicator` turns each Kronecker into
     "`c = ci` and the tap lands on `(hi, wi)`", and `sum_fin_ite_add_eq` collapses
-    `(c, kh, kw)` to the closed-form input gradient `conv2d_input_grad_formula`.
+    `(c, kh, kw)` to the closed-form input gradient `conv2dInputGradFormula`.
 
-    The backward function (accessed as `(conv2d_has_vjp3 W b).backward`,
-    or via the `conv2d_input_grad` abbrev below) implements
-    `conv2d_input_grad_formula W dy ci hi wi` — a direct sum over
+    The backward function (accessed as `(conv2dHasVJP3 W b).backward`,
+    or via the `conv2dInputGrad` abbrev below) implements
+    `conv2dInputGradFormula W dy ci hi wi` — a direct sum over
     `(co, kh, kw)` of `W co ci kh kw * dy co ho_nat wo_nat` for valid
     `(ho_nat, wo_nat)`. Equivalent (under `kh ↔ kH−1−kh`) to the
     MLIR-aligned reversed-kernel formula
@@ -223,10 +223,10 @@ theorem padTap_indicator {C h w kH kW : Nat} (c ci : Fin C) (hi ho : Fin h) (wi 
       %W1_rev = stablehlo.reverse %W1_t, dims = [2, 3]         -- flip spatial
       %d_h0   = "stablehlo.convolution"(%d_h1pre, %W1_rev) ...
 -/
-noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
+noncomputable def conv2dHasVJP3 {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
     HasVJP3 (conv2d W b : Tensor3 ic h w → Tensor3 oc h w) where
-  backward := fun _x dy => conv2d_input_grad_formula W dy
+  backward := fun _x dy => conv2dInputGradFormula W dy
   correct := by
     intro x dy ci hi wi
     -- Set abbreviation for idx_in (the input position we're computing grad at).
@@ -277,10 +277,10 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
           Finset.sum_congr rfl fun kw _ => ?_
         split_ifs <;> ring
     -- Step 2: substitute h_pdiv, rewrite each indicator to `c = ci ∧ tap lands`, collapse.
-    show conv2d_input_grad_formula W dy ci hi wi =
+    show conv2dInputGradFormula W dy ci hi wi =
       ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
         pdiv3 (conv2d W b) x ci hi wi co ho wo * dy co ho wo
-    unfold conv2d_input_grad_formula pdiv3
+    unfold conv2dInputGradFormula pdiv3
     refine Finset.sum_congr rfl fun co _ => Finset.sum_congr rfl fun ho _ =>
       Finset.sum_congr rfl fun wo _ => ?_
     rw [h_pdiv (finProdFinEquiv (finProdFinEquiv (co, ho), wo))]
@@ -293,22 +293,22 @@ noncomputable def conv2d_has_vjp3 {ic oc h w kH kW : Nat}
 
 /-- Named accessor for the conv2d input backward — aligns with MLIR
     codegen (`stablehlo.convolution` in the backward pass). -/
-noncomputable abbrev conv2d_input_grad {ic oc h w kH kW : Nat}
+noncomputable abbrev conv2dInputGrad {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Tensor3 ic h w :=
-  (conv2d_has_vjp3 W b).backward x dy
+  (conv2dHasVJP3 W b).backward x dy
 
 /-- **Uniform VJP-correctness wrapper** for `conv2d` — a citable `_correct`
     matching the convention of every other layer (just unfolds the
-    `HasVJP3.correct` field of `conv2d_has_vjp3`). -/
-theorem conv2d_has_vjp3_correct {ic oc h w kH kW : Nat}
+    `HasVJP3.correct` field of `conv2dHasVJP3`). -/
+theorem conv2dHasVJP3_correct {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w)
     (ci : Fin ic) (hi : Fin h) (wi : Fin w) :
-    (conv2d_has_vjp3 W b).backward x dy ci hi wi =
+    (conv2dHasVJP3 W b).backward x dy ci hi wi =
       ∑ co : Fin oc, ∑ ho : Fin h, ∑ wo : Fin w,
         pdiv3 (conv2d W b) x ci hi wi co ho wo * dy co ho wo :=
-  (conv2d_has_vjp3 W b).correct x dy ci hi wi
+  (conv2dHasVJP3 W b).correct x dy ci hi wi
 
 -- ════════════════════════════════════════════════════════════════
 -- § Flattened conv and the conv → bn → relu block VJP
@@ -326,7 +326,7 @@ noncomputable def flatConv {ic oc h w kH kW : Nat}
 
 /-- **`flatConv` is differentiable everywhere.** Composition of the three
     differentiable maps `unflatten`, `conv2d`, `flatten`. This is the
-    differentiability witness `vjp_comp_at` needs to chain conv into the
+    differentiability witness `vjpCompAt` needs to chain conv into the
     block. -/
 @[fun_prop]
 theorem flatConv_differentiable {ic oc h w kH kW : Nat}
@@ -350,45 +350,45 @@ theorem flatConv_eq_zero {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : 
     normalisation, then an activation. `lin` and `norm` are differentiable everywhere, so their
     global VJPs lift through `.toHasVJPAt`; `act` needs a derivative and a VJP only at the stage's
     pre-activation `norm (lin v)`, which is what relu and relu6 have off their kinks. Two
-    `vjp_comp_at`s: `norm ∘ lin`, then `act`. Every conv-bn-act stage VJP in the repo is this at a
+    `vjpCompAt`s: `norm ∘ lin`, then `act`. Every conv-bn-act stage VJP in the repo is this at a
     particular `lin`, `norm` and `act`. -/
-noncomputable def stage_has_vjp_at {a b : Nat}
+noncomputable def stageHasVJPAt {a b : Nat}
     (lin : Vec a → Vec b) (norm : Vec b → Vec b) (act : Vec b → Vec b) (v : Vec a)
     (hlin : Differentiable ℝ lin) (hlinV : HasVJP lin)
     (hnorm : Differentiable ℝ norm) (hnormV : HasVJP norm)
     (hact : DifferentiableAt ℝ act (norm (lin v))) (hactV : HasVJPAt act (norm (lin v))) :
     HasVJPAt (act ∘ norm ∘ lin) v :=
-  vjp_comp_at (norm ∘ lin) act v ((hnorm (lin v)).comp v (hlin v)) hact
-    (vjp_comp_at lin norm v (hlin v) (hnorm _) (hlinV.toHasVJPAt v) (hnormV.toHasVJPAt _)) hactV
+  vjpCompAt (norm ∘ lin) act v ((hnorm (lin v)).comp v (hlin v)) hact
+    (vjpCompAt lin norm v (hlin v) (hnorm _) (hlinV.toHasVJPAt v) (hnormV.toHasVJPAt _)) hactV
 
 /-- **conv → bn → relu block VJP at a smooth point.**
 
     The workhorse for composing a ResNet VJP. In flattened `Vec` space,
     the block is `relu ∘ bnForward ∘ flatConv : Vec (ic*h*w) → Vec (oc*h*w)`
     (BatchNorm runs over the `oc*h*w` flattened activations with scalar
-    `ε, γ, β`). It is `stage_has_vjp_at` at a point `v`:
+    `ε, γ, β`). It is `stageHasVJPAt` at a point `v`:
 
     * inner = `bnForward ∘ flatConv` — both differentiable everywhere
       (`flatConv_differentiable`, `bnForward_differentiable`), so their
       bundled VJPs lift through `.toHasVJPAt`. The conv witness is the
-      `HasVJP3`-bridged `hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)`.
+      `HasVJP3`-bridged `HasVJP3.toHasVJP (conv2dHasVJP3 W b)`.
     * outer = `relu` — needs the smoothness hypothesis `h_smooth` (no
       post-BN activation hits the ReLU kink) for both
-      `relu_differentiableAt_of_smooth` and `relu_has_vjp_at`.
+      `relu_differentiableAt_of_smooth` and `reluHasVJPAt`.
 
-    Mirrors `mlp_has_vjp_at` (dense→relu→dense), with flatConv/bn in
+    Mirrors `mlpHasVJPAt` (dense→relu→dense), with flatConv/bn in
     place of the dense layers. -/
-noncomputable def convBnRelu_has_vjp_at {ic oc h w kH kW : Nat}
+noncomputable def convBnReluHasVJPAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 0) :
     HasVJPAt (relu (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b) v :=
-  stage_has_vjp_at (flatConv W b) (bnForward (oc * h * w) ε γ β) (relu (oc * h * w)) v
-    (flatConv_differentiable W b) (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b))
-    (bnForward_differentiable (oc * h * w) ε γ β hε) (bn_has_vjp (oc * h * w) ε γ β hε)
+  stageHasVJPAt (flatConv W b) (bnForward (oc * h * w) ε γ β) (relu (oc * h * w)) v
+    (flatConv_differentiable W b) (HasVJP3.toHasVJP (conv2dHasVJP3 W b))
+    (bnForward_differentiable (oc * h * w) ε γ β hε) (bnHasVJP (oc * h * w) ε γ β hε)
     (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
-    (relu_has_vjp_at (oc * h * w) _ h_smooth)
+    (reluHasVJPAt (oc * h * w) _ h_smooth)
 
 -- ════════════════════════════════════════════════════════════════
 -- § ResNet basic residual block VJP (flattened Vec space)
@@ -398,16 +398,16 @@ noncomputable def convBnRelu_has_vjp_at {ic oc h w kH kW : Nat}
     `bnForward`, both differentiable everywhere, so this is a global
     `HasVJP` (no smoothness needed). This is the building block for the
     second conv→bn of a residual body and for the 1×1 projection skip. -/
-noncomputable def convBn_has_vjp {ic oc h w kH kW : Nat}
+noncomputable def convBnHasVJP {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε γ β : ℝ) (hε : 0 < ε) :
     HasVJP (bnForward (oc * h * w) ε γ β ∘ flatConv W b
       : Vec (ic * h * w) → Vec (oc * h * w)) :=
-  vjp_comp (flatConv W b) (bnForward (oc * h * w) ε γ β)
+  vjpComp (flatConv W b) (bnForward (oc * h * w) ε γ β)
     (flatConv_differentiable W b)
     (bnForward_differentiable (oc * h * w) ε γ β hε)
-    (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b))
-    (bn_has_vjp (oc * h * w) ε γ β hε)
+    (HasVJP3.toHasVJP (conv2dHasVJP3 W b))
+    (bnHasVJP (oc * h * w) ε γ β hε)
 
 /-- **`convBn` is differentiable everywhere.** -/
 theorem convBn_differentiable {ic oc h w kH kW : Nat}
@@ -427,8 +427,8 @@ theorem convBn_differentiable {ic oc h w kH kW : Nat}
 
     Inner `convBnRelu₁` needs the smoothness hyp `h_smooth₁` (no post-bn₁
     activation hits the ReLU kink); outer `convBn₂` is everywhere
-    differentiable, lifted via `.toHasVJPAt`. Two `vjp_comp_at` chain. -/
-noncomputable def resblock_body_has_vjp_at {ic mid oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    differentiable, lifted via `.toHasVJPAt`. Two `vjpCompAt` chain. -/
+noncomputable def resblockBodyHasVJPAt {ic mid oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid)
     (W₂ : Kernel4 oc mid kH₂ kW₂) (b₂ : Vec oc)
     (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
@@ -440,7 +440,7 @@ noncomputable def resblock_body_has_vjp_at {ic mid oc h w kH₁ kW₁ kH₂ kW�
   -- inner = convBnRelu₁
   have step1 : HasVJPAt
       (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁) v :=
-    convBnRelu_has_vjp_at W₁ b₁ ε₁ γ₁ β₁ hε₁ v h_smooth₁
+    convBnReluHasVJPAt W₁ b₁ ε₁ γ₁ β₁ hε₁ v h_smooth₁
   have step1_diff : DifferentiableAt ℝ
       (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁) v := by
     apply DifferentiableAt.comp
@@ -448,13 +448,13 @@ noncomputable def resblock_body_has_vjp_at {ic mid oc h w kH₁ kW₁ kH₂ kW�
     · exact ((bnForward_differentiable (mid * h * w) ε₁ γ₁ β₁ hε₁).comp
         (flatConv_differentiable W₁ b₁)) v
   -- outer = convBn₂ (everywhere)
-  exact vjp_comp_at
+  exact vjpCompAt
     (relu (mid * h * w) ∘ bnForward (mid * h * w) ε₁ γ₁ β₁ ∘ flatConv W₁ b₁)
     (bnForward (oc * h * w) ε₂ γ₂ β₂ ∘ flatConv W₂ b₂) v
     step1_diff
     ((convBn_differentiable W₂ b₂ ε₂ γ₂ β₂ hε₂) _)
     step1
-    ((convBn_has_vjp W₂ b₂ ε₂ γ₂ β₂ hε₂).toHasVJPAt _)
+    ((convBnHasVJP W₂ b₂ ε₂ γ₂ β₂ hε₂).toHasVJPAt _)
 
 /-- **Basic-block body is `DifferentiableAt` at a smooth point.** Needed as
     the diff witness when feeding the body into the residual/projection
@@ -476,9 +476,9 @@ theorem resblock_body_differentiableAt {ic mid oc h w kH₁ kW₁ kH₂ kW₂ : 
     identity skip (so `ic = mid = oc = c`, spatial preserved). Two
     smoothness hyps: `h_smooth₁` for the inner block ReLU, and
     `h_smooth_out` for the post-add outer ReLU (`F v + v` avoids the
-    kink). Built as `relu ∘ residual F` via `residual_has_vjp_at` then a
-    final `vjp_comp_at` with `relu`. -/
-noncomputable def resblock_has_vjp_at {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+    kink). Built as `relu ∘ residual F` via `residualHasVJPAt` then a
+    final `vjpCompAt` with `relu`. -/
+noncomputable def resblockHasVJPAt {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c)
     (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
     (ε₁ γ₁ β₁ ε₂ γ₂ β₂ : ℝ) (hε₁ : 0 < ε₁) (hε₂ : 0 < ε₂)
@@ -499,16 +499,16 @@ noncomputable def resblock_has_vjp_at {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
   have hF_diff : DifferentiableAt ℝ F v :=
     resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
   have hF : HasVJPAt F v :=
-    resblock_body_has_vjp_at W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+    resblockBodyHasVJPAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
   have hres : HasVJPAt (residual F) v :=
-    residual_has_vjp_at F v hF_diff hF
+    residualHasVJPAt F v hF_diff hF
   have hres_diff : DifferentiableAt ℝ (residual F) v := residual_differentiableAt hF_diff
   have h_smooth_res : ∀ k, residual F v k ≠ 0 := h_smooth_out
-  exact vjp_comp_at (residual F) (relu (c * h * w)) v
+  exact vjpCompAt (residual F) (relu (c * h * w)) v
     hres_diff
     (relu_differentiableAt_of_smooth (c * h * w) _ h_smooth_res)
     hres
-    (relu_has_vjp_at (c * h * w) _ h_smooth_res)
+    (reluHasVJPAt (c * h * w) _ h_smooth_res)
 
 /-- **Downsample/projection basic residual block VJP.**
 
@@ -516,9 +516,9 @@ noncomputable def resblock_has_vjp_at {c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     the conv dims: body `F` maps `ic → oc` (first conv `ic → oc`, second
     `oc → oc`), and the skip is a 1×1 `convBn` projection `proj : ic → oc`
     (everywhere differentiable — no ReLU, so its diffAt is immediate).
-    Built with `residualProj_has_vjp_at`, then `vjp_comp_at` with the
+    Built with `residualProjHasVJPAt`, then `vjpCompAt` with the
     post-add `relu` under `h_smooth_out`. -/
-noncomputable def resblockProj_has_vjp_at
+noncomputable def resblockProjHasVJPAt
     {ic oc h w kH₁ kW₁ kH₂ kW₂ kHp kWp : Nat}
     (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc)
     (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc)
@@ -547,21 +547,21 @@ noncomputable def resblockProj_has_vjp_at
   have hproj_diff : DifferentiableAt ℝ proj v :=
     (convBn_differentiable Wp bp εp γp βp hεp) v
   have hproj_vjp : HasVJPAt proj v :=
-    (convBn_has_vjp Wp bp εp γp βp hεp).toHasVJPAt v
+    (convBnHasVJP Wp bp εp γp βp hεp).toHasVJPAt v
   have hF_diff : DifferentiableAt ℝ F v :=
     resblock_body_differentiableAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
   have hF : HasVJPAt F v :=
-    resblock_body_has_vjp_at W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
+    resblockBodyHasVJPAt W₁ b₁ W₂ b₂ ε₁ γ₁ β₁ ε₂ γ₂ β₂ hε₁ hε₂ v h_smooth₁
   have hres : HasVJPAt (residualProj proj F) v :=
-    residualProj_has_vjp_at proj F v hproj_diff hF_diff hproj_vjp hF
+    residualProjHasVJPAt proj F v hproj_diff hF_diff hproj_vjp hF
   have hres_diff : DifferentiableAt ℝ (residualProj proj F) v :=
     DifferentiableAt.add hproj_diff hF_diff
   have h_smooth_res : ∀ k, residualProj proj F v k ≠ 0 := h_smooth_out
-  exact vjp_comp_at (residualProj proj F) (relu (oc * h * w)) v
+  exact vjpCompAt (residualProj proj F) (relu (oc * h * w)) v
     hres_diff
     (relu_differentiableAt_of_smooth (oc * h * w) _ h_smooth_res)
     hres
-    (relu_has_vjp_at (oc * h * w) _ h_smooth_res)
+    (reluHasVJPAt (oc * h * w) _ h_smooth_res)
 
 /-! ### Weight gradient (now proved from foundation via `unfold + fun_prop`)
 
@@ -597,11 +597,11 @@ weight gradient we reuse the plain `HasVJP` on `Vec` by flattening
 both the kernel (`Kernel4.flatten : Kernel4 → Vec (oc*ic*kH*kW)`) and
 the output (`Tensor3.flatten : Tensor3 → Vec (oc*h*w)`). The bundled
 `HasVJP` def packages a correct backward for the flattened function
-together with its proof; the user-facing `conv2d_weight_grad` wrapper
+together with its proof; the user-facing `conv2dWeightGrad` wrapper
 does the flatten / unflatten housekeeping so callers see the natural
 `Kernel4` type.
 
-Numerical validation: `check_jacobians.py:test_conv2d_weight_grad`
+Numerical validation: `check_jacobians.py:test_conv2dWeightGrad`
 gradient-checks the transpose-trick formula against finite differences. -/
 
 /-- **Conv2d weight-VJP** — proved from foundation rules.
@@ -612,7 +612,7 @@ gradient-checks the transpose-trick formula against finite differences. -/
     conv of a basis vector — a Kronecker at `(o', c', kh', kw')` against the
     padded input — and the collapsed sum is the transpose-trick backward
     `dW[o', c', kh', kw'] = Σ_{hi, wi} x_pad_term(...) · dy(flat(o', hi, wi))`. -/
-noncomputable def conv2d_weight_grad_has_vjp {ic oc h w kH kW : Nat}
+noncomputable def conv2dWeightGradHasVJP {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Tensor3 ic h w) :
     HasVJP (fun v : Vec (oc * ic * kH * kW) =>
               Tensor3.flatten (conv2d (Kernel4.unflatten v) b x)) where
@@ -671,11 +671,11 @@ noncomputable def conv2d_weight_grad_has_vjp {ic oc h w kH kW : Nat}
 /-- Named accessor for the conv2d weight backward — aligns with MLIR
     codegen (the "transpose trick" `stablehlo.convolution` in the backward
     pass). Unwraps the flattening so callers see `Kernel4 → Kernel4`. -/
-noncomputable def conv2d_weight_grad {ic oc h w kH kW : Nat}
+noncomputable def conv2dWeightGrad {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Kernel4 oc ic kH kW :=
   Kernel4.unflatten
-    ((conv2d_weight_grad_has_vjp b x).backward
+    ((conv2dWeightGradHasVJP b x).backward
       (Kernel4.flatten W) (Tensor3.flatten dy))
 
 /-- **Conv2d bias-VJP** — proved from foundation rules. Now that `conv2d`
@@ -684,8 +684,8 @@ noncomputable def conv2d_weight_grad {ic oc h w kH kW : Nat}
     `pdiv_of_affine` gives the channel Kronecker, collapsed over the
     `(c, hi, wi)` decomposition of `Fin (oc*h*w)`.
     The backward is `db[o] = Σ_{hi, wi} dy[o, hi, wi]` (matches
-    `conv2d_bias_grad_formula` below). -/
-noncomputable def conv2d_bias_grad_has_vjp {ic oc h w kH kW : Nat}
+    `conv2dBiasGradFormula` below). -/
+noncomputable def conv2dBiasGradHasVJP {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) :
     HasVJP (fun b : Vec oc => Tensor3.flatten (conv2d W b x)) where
   backward := fun _b dy => fun o =>
@@ -707,20 +707,20 @@ noncomputable def conv2d_bias_grad_has_vjp {ic oc h w kH kW : Nat}
       Finset.sum_const_zero, Finset.sum_ite_eq', Finset.mem_univ, ite_true]
 
 /-- Named accessor for the conv2d bias backward via the VJP framework. -/
-noncomputable def conv2d_bias_grad {ic oc h w kH kW : Nat}
+noncomputable def conv2dBiasGrad {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Vec oc :=
-  (conv2d_bias_grad_has_vjp W x).backward b (Tensor3.flatten dy)
+  (conv2dBiasGradHasVJP W x).backward b (Tensor3.flatten dy)
 
 /-- **Conv2d bias gradient — closed-form formula** (documented, numerically
-    verified, expected to equal `conv2d_bias_grad` up to fp precision).
+    verified, expected to equal `conv2dBiasGrad` up to fp precision).
 
     `db[o] = Σ_{h, w} dy[o, h, w]`
 
     Each output cell adds the same `b[o]`, so its gradient accumulates
     the contributions from every spatial position. MLIR emits this as
     a `stablehlo.reduce` across the spatial (and batch) dims. -/
-noncomputable def conv2d_bias_grad_formula {oc h w : Nat}
+noncomputable def conv2dBiasGradFormula {oc h w : Nat}
     (dy : Tensor3 oc h w) : Vec oc :=
   fun o => ∑ y : Fin h, ∑ x : Fin w, dy o y x
 
@@ -778,7 +778,7 @@ noncomputable def maxPool2 {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) : Tensor3 c
     a single deterministic argmax. See `LeanMlir/Proofs/README.md` for
     the trust-boundary discussion. Smooth-point agreement is formal:
     see `maxPool2_codegen_matches_canonical` below. -/
-noncomputable def maxPool2_has_vjp3 {c h w : Nat} :
+noncomputable def maxPool2HasVJP3 {c h w : Nat} :
     HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) where
   backward x dy ci hi wi :=
     ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
@@ -788,9 +788,9 @@ noncomputable def maxPool2_has_vjp3 {c h w : Nat} :
 
 /-- Named accessor for the maxPool2 input backward — aligns with the
     codegen's tile-compare-select MLIR. -/
-noncomputable abbrev maxPool2_input_grad {c h w : Nat}
+noncomputable abbrev maxPool2InputGrad {c h w : Nat}
     (x : Tensor3 c (2*h) (2*w)) (dy : Tensor3 c h w) : Tensor3 c (2*h) (2*w) :=
-  maxPool2_has_vjp3.backward x dy
+  maxPool2HasVJP3.backward x dy
 
 -- ════════════════════════════════════════════════════════════════
 -- § MaxPool2 smooth-point bridge to codegen
@@ -800,7 +800,7 @@ noncomputable abbrev maxPool2_input_grad {c h w : Nat}
 
 Closes the smooth-point half of the codegen trust boundary at MaxPool2.
 At points where every 2×2 window has a unique strict argmax, the
-canonical pdiv-derived backward in `maxPool2_has_vjp3` collapses to
+canonical pdiv-derived backward in `maxPool2HasVJP3` collapses to
 "route `dy` to the argmax position, zero elsewhere" — the formula that
 `MlirCodegen.lean` emits via tile-compare-select (broadcast dy and the
 pooled output, `compare EQ` to find the argmax cells, `select` to
@@ -1131,7 +1131,7 @@ theorem pdiv3_maxPool2_smooth {c h w : Nat}
                           winColInv (winCol wi_in) (winColMod wi_in)) = _
     rw [winRowInv_winRow, winColInv_winCol]
 
-/-- **Bridge: `maxPool2_has_vjp3`'s canonical backward matches the
+/-- **Bridge: `maxPool2HasVJP3`'s canonical backward matches the
     codegen formula at smooth points.**
 
     At points where every 2×2 window has a unique strict argmax, the
@@ -1145,7 +1145,7 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w))
     (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w)
     (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w)) :
-    (maxPool2_has_vjp3 :
+    (maxPool2HasVJP3 :
         HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)).backward
         x dy ci hi_in wi_in
     = (if MaxPool2IsArgmax x ci hi_in wi_in
@@ -1161,11 +1161,11 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
     the codegen tile-compare-select formula directly (route `dy` to
     the argmax cell, zero elsewhere); the `correct` field is
     `maxPool2_codegen_matches_canonical` flipped, not `rfl`.
-    Companion of `relu_has_vjp_at` in MLP.lean — together they let
-    `mlp_has_vjp_at` and (future) `cnn_has_vjp_at3` discharge the chain
+    Companion of `reluHasVJPAt` in MLP.lean — together they let
+    `mlpHasVJPAt` and (future) `cnnHasVJPAt3` discharge the chain
     rule through every kinked operator without the global vacuous
     witness. -/
-noncomputable def maxPool2_has_vjp_at3 {c h w : Nat}
+noncomputable def maxPool2HasVJPAt3 {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x) :
     HasVJPAt3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) x where
   backward dy ci hi_in wi_in :=
@@ -1199,7 +1199,7 @@ for the mutual-inverse proofs. -/
 
 /-- **Walking through the CNN backward pass**.
 
-    Unlike the MLP, where the chain rule (`vjp_comp`) gave us the whole
+    Unlike the MLP, where the chain rule (`vjpComp`) gave us the whole
     backward pass in one go, here the layer types vary (Tensor3 ↔ Vec
     via flatten) so a uniform `HasVJP`-style composition would need a
     type family. For pedagogical clarity, we instead trace the backward
@@ -1213,26 +1213,26 @@ for the mutual-inverse proofs. -/
     Backward (each step labeled with which lemma justifies it):
 
         d_logits  = softmax_ce_grad logits label                  [softmaxCE_grad]
-        d_W4      = outer d₁ d_logits                             [dense_weight_grad]
-        d_b4      = d_logits                                      [dense_bias_grad]
-        d_d₁      = mulVec W₄ d_logits                            [dense_has_vjp]
-        d_d₁pre   = relu_back d₁pre d_d₁                          [relu_has_vjp]
-        d_W3      = outer d₀ d_d₁pre                              [dense_weight_grad]
-        d_b3      = d_d₁pre                                       [dense_bias_grad]
-        d_d₀      = mulVec W₃ d_d₁pre                             [dense_has_vjp]
-        d_d₀pre   = relu_back d₀pre d_d₀                          [relu_has_vjp]
-        d_W2      = outer d₀in d_d₀pre                            [dense_weight_grad]
-        d_b2      = d_d₀pre                                       [dense_bias_grad]
-        d_d₀in    = mulVec W₂ d_d₀pre                             [dense_has_vjp]
+        d_W4      = outer d₁ d_logits                             [denseWeightGrad]
+        d_b4      = d_logits                                      [denseBiasGrad]
+        d_d₁      = mulVec W₄ d_logits                            [denseHasVJP]
+        d_d₁pre   = relu_back d₁pre d_d₁                          [reluHasVJP]
+        d_W3      = outer d₀ d_d₁pre                              [denseWeightGrad]
+        d_b3      = d_d₁pre                                       [denseBiasGrad]
+        d_d₀      = mulVec W₃ d_d₁pre                             [denseHasVJP]
+        d_d₀pre   = relu_back d₀pre d_d₀                          [reluHasVJP]
+        d_W2      = outer d₀in d_d₀pre                            [denseWeightGrad]
+        d_b2      = d_d₀pre                                       [denseBiasGrad]
+        d_d₀in    = mulVec W₂ d_d₀pre                             [denseHasVJP]
         d_pool    = unflatten d_d₀in                              [flatten VJP = unflatten]
-        d_h₁      = maxPool2_input_grad h₁ d_pool                 [maxPool2_input_grad]
-        d_h₁pre   = relu_back h₁pre d_h₁                          [relu_has_vjp, lifted to T3]
-        d_W1      = conv2d_weight_grad W₁ b₁ h₀ d_h₁pre           [conv2d_weight_grad_has_vjp]  ← transpose trick
-        d_b1      = conv2d_bias_grad W₁ b₁ h₀ d_h₁pre             [conv2d_bias_grad_has_vjp]
-        d_h₀      = conv2d_input_grad W₁ b₁ h₀ d_h₁pre            [conv2d_has_vjp3]     ← reversed kernel
-        d_h₀pre   = relu_back h₀pre d_h₀                          [relu_has_vjp, lifted to T3]
-        d_W0      = conv2d_weight_grad W₀ b₀ x d_h₀pre            [conv2d_weight_grad_has_vjp]  ← transpose trick
-        d_b0      = conv2d_bias_grad W₀ b₀ x d_h₀pre              [conv2d_bias_grad_has_vjp]
+        d_h₁      = maxPool2InputGrad h₁ d_pool                 [maxPool2InputGrad]
+        d_h₁pre   = relu_back h₁pre d_h₁                          [reluHasVJP, lifted to T3]
+        d_W1      = conv2dWeightGrad W₁ b₁ h₀ d_h₁pre           [conv2dWeightGradHasVJP]  ← transpose trick
+        d_b1      = conv2dBiasGrad W₁ b₁ h₀ d_h₁pre             [conv2dBiasGradHasVJP]
+        d_h₀      = conv2dInputGrad W₁ b₁ h₀ d_h₁pre            [conv2dHasVJP3]     ← reversed kernel
+        d_h₀pre   = relu_back h₀pre d_h₀                          [reluHasVJP, lifted to T3]
+        d_W0      = conv2dWeightGrad W₀ b₀ x d_h₀pre            [conv2dWeightGradHasVJP]  ← transpose trick
+        d_b0      = conv2dBiasGrad W₀ b₀ x d_h₀pre              [conv2dBiasGradHasVJP]
 
     Each line of the backward pass corresponds to a single line in
     the historical hand-written hand_cnn_train_step.mlir (under historical/mlir_poc). The backward pass is just
@@ -1242,7 +1242,7 @@ for the mutual-inverse proofs. -/
 
     The novelty over the MLP is in the conv layers, where the VJP turns
     out to be — itself — a convolution, just with reversed/transposed
-    kernels (`conv2d_input_grad`) or swapped axes (`conv2d_weight_grad`'s
+    kernels (`conv2dInputGrad`) or swapped axes (`conv2dWeightGrad`'s
     transpose trick). Once you accept those two tricks, the entire CNN
     backprop fits in a page.
 -/
@@ -1251,61 +1251,61 @@ example : True := trivial  -- anchor for the docstring above
 /-! ## Summary of derivations in this file
 
 - `conv2d`, `maxPool2` — forward operations (black-box forward).
-- `maxPool2_has_vjp3` — input-path VJP for maxPool2 (argmax-routing
+- `maxPool2HasVJP3` — input-path VJP for maxPool2 (argmax-routing
   subgradient convention).
 
 Derived (not axioms):
-- `conv2d_has_vjp3` — input-path VJP, proved with `pdiv_of_affine` (the
+- `conv2dHasVJP3` — input-path VJP, proved with `pdiv_of_affine` (the
   conv is affine in its input; the Jacobian entry is the bias-free conv of a
-  basis vector, a pad-guarded Kronecker). Backward function is `conv2d_input_grad_formula` (sum over
+  basis vector, a pad-guarded Kronecker). Backward function is `conv2dInputGradFormula` (sum over
   `(co, ho, wo)` with reconstructed kernel offsets `kh = hi+pH-ho`,
   `kw = wi+pW-wo`).
-- `conv2d_weight_grad_has_vjp` — Phase 7: the weight-path VJP, bundled
+- `conv2dWeightGradHasVJP` — Phase 7: the weight-path VJP, bundled
   as a plain `HasVJP` on the Kernel4-flattened function. Numerically
   gradient-checked against the transpose-trick formula in
-  `check_jacobians.py:test_conv2d_weight_grad`.
-- `conv2d_bias_grad_has_vjp` — Phase 9: the bias-path VJP, same bundled
+  `check_jacobians.py:test_conv2dWeightGrad`.
+- `conv2dBiasGradHasVJP` — Phase 9: the bias-path VJP, same bundled
   `HasVJP` pattern. The closed-form "sum output cotangent over spatial
-  dims per channel" is expressed as `conv2d_bias_grad_formula`; the
-  named `conv2d_bias_grad` extracts the backward via the VJP.
-- `conv2d_input_grad`, `maxPool2_input_grad`, `conv2d_weight_grad`,
-  `conv2d_bias_grad` — named accessors, defined as `.backward` (plus
+  dims per channel" is expressed as `conv2dBiasGradFormula`; the
+  named `conv2dBiasGrad` extracts the backward via the VJP.
+- `conv2dInputGrad`, `maxPool2InputGrad`, `conv2dWeightGrad`,
+  `conv2dBiasGrad` — named accessors, defined as `.backward` (plus
   flatten / unflatten housekeeping for the weight / bias variants) of
   the corresponding VJP.
-- `conv2d_input_grad_formula`, `conv2d_bias_grad_formula` — the
+- `conv2dInputGradFormula`, `conv2dBiasGradFormula` — the
   concrete closed-form formulas (numerically verified to equal the
   VJP's backward).
 - 3D reshape (`Tensor3.flatten` / `Tensor3.unflatten`) imported from
   `Tensor.lean`; 4D reshape (`Kernel4.flatten` / `Kernel4.unflatten`)
   defined here, both proved bijections. -/
 
-/-- **Public correctness theorem for `maxPool2_has_vjp3`**: the
+/-- **Public correctness theorem for `maxPool2HasVJP3`**: the
 canonical-witness backward equals the `pdiv3`-contracted Jacobian
 by definition. The codegen substitutes the standard argmax-routing
 convention at non-smooth tiebreaks (see `LeanMlir/Proofs/README.md`'s
 Codegen Trust Boundary). -/
-theorem maxPool2_has_vjp3_correct {c h w : Nat}
+theorem maxPool2HasVJP3_correct {c h w : Nat}
     (x : Tensor3 c (2*h) (2*w)) (dy : Tensor3 c h w)
     (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
-    (maxPool2_has_vjp3 (c := c) (h := h) (w := w)).backward x dy ci hi wi =
+    (maxPool2HasVJP3 (c := c) (h := h) (w := w)).backward x dy ci hi wi =
     ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
       pdiv3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)
             x ci hi wi co ho wo * dy co ho wo :=
-  maxPool2_has_vjp3.correct x dy ci hi wi
+  maxPool2HasVJP3.correct x dy ci hi wi
 
-/-- **Public correctness theorem for `maxPool2_has_vjp_at3`** — the
+/-- **Public correctness theorem for `maxPool2HasVJPAt3`** — the
 pointwise variant under `MaxPool2Smooth`. The underlying `.correct`
 field is `maxPool2_codegen_matches_canonical` flipped (a real proof),
 not `rfl`; this wrapper exposes it for comparator re-verification. -/
-theorem maxPool2_has_vjp_at3_correct {c h w : Nat}
+theorem maxPool2HasVJPAt3_correct {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
     (dy : Tensor3 c h w)
     (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
-    (maxPool2_has_vjp_at3 x h_smooth).backward dy ci hi wi =
+    (maxPool2HasVJPAt3 x h_smooth).backward dy ci hi wi =
     ∑ co : Fin c, ∑ ho : Fin h, ∑ wo : Fin w,
       pdiv3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)
             x ci hi wi co ho wo * dy co ho wo :=
-  (maxPool2_has_vjp_at3 x h_smooth).correct dy ci hi wi
+  (maxPool2HasVJPAt3 x h_smooth).correct dy ci hi wi
 
 -- ════════════════════════════════════════════════════════════════
 -- § Global average pool + end-to-end ResNet-style CNN VJP (capstone)
@@ -1313,13 +1313,13 @@ theorem maxPool2_has_vjp_at3_correct {c h w : Nat}
 
 /-! ## The capstone: a whole-network ResNet-style CNN VJP
 
-`cnn_has_vjp_at` is the CNN analogue of `vit_full_has_vjp` — a single
+`cnnHasVJPAt` is the CNN analogue of `vitFullHasVJP` — a single
 `HasVJPAt` for an end-to-end forward pass, chained entirely in flattened
-`Vec` space via `vjp_comp_at`. It first needs **global average pooling**,
+`Vec` space via `vjpCompAt`. It first needs **global average pooling**,
 which was previously only referenced in codegen, so we define it here:
 `globalAvgPool x ci = (∑ hi ∑ wi x ci hi wi) / (h*w)` (mean over spatial
 per channel), bridge it to flat `Vec` space (`globalAvgPoolFlat`), and
-prove its linear VJP (`globalAvgPoolFlat_has_vjp`, backward broadcasts
+prove its linear VJP (`globalAvgPoolFlatHasVJP`, backward broadcasts
 `dy ci / (h*w)` to every spatial cell of channel `ci`) and
 differentiability.
 
@@ -1330,8 +1330,8 @@ axiom-clean end-to-end witness over maximal generality):
     input  : Vec (ic * (2h) * (2w))
     stem   : convBnRelu  ic → c   (spatial 2h×2w preserved)
     pool   : maxPool2    c, 2h×2w → c, h×w
-    block1 : resblock_has_vjp_at        (identity skip,  c → c,  h×w)
-    block2 : resblockProj_has_vjp_at    (projection skip, c → oc, h×w)
+    block1 : resblockHasVJPAt        (identity skip,  c → c,  h×w)
+    block2 : resblockProjHasVJPAt    (projection skip, c → oc, h×w)
     gap    : globalAvgPool   oc, h×w → Vec oc
     head   : dense           oc → nClasses
 
@@ -1341,10 +1341,10 @@ global-average pool, one dense classifier. Channel/spatial dims stay
 implicit `Nat` params; the block/stage counts are fixed. The bundled
 smoothness hypotheses (`h_stem`, `h_mp`, `h_rb1`/`h_rb1o`, `h_rb2`/
 `h_rb2o`) are the family of every ReLU + max-pool site's smooth-point
-condition, exactly like `mlp_has_vjp_at`'s multiple `h_smooth_*`.
+condition, exactly like `mlpHasVJPAt`'s multiple `h_smooth_*`.
 
 The differentiability obstacle (max-pool is non-smooth globally, so
-`vjp_comp_at` cannot get `DifferentiableAt` of a max-pool-containing
+`vjpCompAt` cannot get `DifferentiableAt` of a max-pool-containing
 prefix from a global lemma) is discharged at the smooth point by
 `maxPool2_flat_hasFDerivAt` (the local linearization already proved for
 the max-pool Jacobian) via `.differentiableAt`. -/
@@ -1389,7 +1389,7 @@ theorem pdiv_globalAvgPoolFlat (c h w : Nat) (v : Vec (c * h * w))
 
 /-- **Global average pool VJP (flattened).** Linear map; backward
     broadcasts `dy ci / (h*w)` to every spatial cell of channel `ci`. -/
-noncomputable def globalAvgPoolFlat_has_vjp (c h w : Nat) :
+noncomputable def globalAvgPoolFlatHasVJP (c h w : Nat) :
     HasVJP (globalAvgPoolFlat c h w) where
   backward := fun _v dy => fun idx => dy (flatChannel c h w idx) / (h * w)
   correct := by
@@ -1404,12 +1404,12 @@ noncomputable def globalAvgPoolFlat_has_vjp (c h w : Nat) :
 
 /-- **Uniform VJP-correctness wrapper** for `globalAvgPoolFlat` — a citable
     `_correct` matching the convention of every other layer (just unfolds the
-    `HasVJP.correct` field of `globalAvgPoolFlat_has_vjp`). -/
-theorem globalAvgPoolFlat_has_vjp_correct (c h w : Nat)
+    `HasVJP.correct` field of `globalAvgPoolFlatHasVJP`). -/
+theorem globalAvgPoolFlatHasVJP_correct (c h w : Nat)
     (x : Vec (c*h*w)) (dy : Vec c) (i : Fin (c*h*w)) :
-    (globalAvgPoolFlat_has_vjp c h w).backward x dy i =
+    (globalAvgPoolFlatHasVJP c h w).backward x dy i =
       ∑ j : Fin c, pdiv (globalAvgPoolFlat c h w) x i j * dy j :=
-  (globalAvgPoolFlat_has_vjp c h w).correct x dy i
+  (globalAvgPoolFlatHasVJP c h w).correct x dy i
 
 -- maxpool flat helper
 noncomputable def maxPoolFlat (c h w : Nat) :
@@ -1422,10 +1422,10 @@ theorem maxPoolFlat_differentiableAt {c h w : Nat}
     DifferentiableAt ℝ (maxPoolFlat c h w) (Tensor3.flatten x) :=
   (maxPool2_flat_hasFDerivAt x h_smooth hc hh hw).differentiableAt
 
-noncomputable def maxPoolFlat_has_vjp_at {c h w : Nat}
+noncomputable def maxPoolFlatHasVJPAt {c h w : Nat}
     (x : Tensor3 c (2*h) (2*w)) (h_smooth : MaxPool2Smooth x) :
     HasVJPAt (maxPoolFlat c h w) (Tensor3.flatten x) :=
-  hasVJPAt3_to_hasVJPAt (maxPool2_has_vjp_at3 x h_smooth)
+  HasVJPAt3.toHasVJPAt (maxPool2HasVJPAt3 x h_smooth)
 
 -- ════════════════════════════════════════════════════════════════
 -- § MaxPool is exact in floating point (the float-bridge pass-through)
@@ -1579,7 +1579,7 @@ noncomputable def cnnForward
   (maxPoolFlat c h w) ∘
   (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs)
 
-noncomputable def cnn_has_vjp_at
+noncomputable def cnnHasVJPAt
     {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
     (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
@@ -1623,40 +1623,40 @@ noncomputable def cnn_has_vjp_at
   -- s0: stem cbr at x
   set S0 := cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs with hS0def
   have s0_vjp : HasVJPAt S0 x :=
-    convBnRelu_has_vjp_at Ws bs εs γs βs hεs x h_stem
+    convBnReluHasVJPAt Ws bs εs γs βs hεs x h_stem
   have s0_diff : DifferentiableAt ℝ S0 x :=
     convBnRelu_differentiableAt Ws bs εs γs βs hεs x h_stem
   -- s1: maxPoolFlat ∘ S0 at x; align maxpool point
   have hpt : Tensor3.flatten (Tensor3.unflatten (S0 x) : Tensor3 c (2*h) (2*w)) = S0 x :=
     Tensor3.flatten_unflatten (S0 x)
   have mp_vjp : HasVJPAt (maxPoolFlat c h w) (S0 x) := by
-    rw [← hpt]; exact maxPoolFlat_has_vjp_at _ h_mp
+    rw [← hpt]; exact maxPoolFlatHasVJPAt _ h_mp
   have mp_diff : DifferentiableAt ℝ (maxPoolFlat c h w) (S0 x) := by
     rw [← hpt]; exact maxPoolFlat_differentiableAt _ h_mp hc hh hw
   have s1_vjp : HasVJPAt (maxPoolFlat c h w ∘ S0) x :=
-    vjp_comp_at S0 (maxPoolFlat c h w) x s0_diff mp_diff s0_vjp mp_vjp
+    vjpCompAt S0 (maxPoolFlat c h w) x s0_diff mp_diff s0_vjp mp_vjp
   have s1_diff : DifferentiableAt ℝ (maxPoolFlat c h w ∘ S0) x :=
     mp_diff.comp x s0_diff
   -- s2: rblk ∘ (maxPoolFlat ∘ S0) at x
   set R1 := rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂ with hR1def
   have rb1_vjp : HasVJPAt R1 (maxPoolFlat c h w (S0 x)) :=
-    resblock_has_vjp_at W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂ hf₁ hf₂ _ h_rb1 h_rb1o
+    resblockHasVJPAt W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂ hf₁ hf₂ _ h_rb1 h_rb1o
   have rb1_diff : DifferentiableAt ℝ R1 (maxPoolFlat c h w (S0 x)) :=
     resblock_differentiableAt W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂ hf₁ hf₂ _ h_rb1 h_rb1o
   have s2_vjp : HasVJPAt (R1 ∘ (maxPoolFlat c h w ∘ S0)) x :=
-    vjp_comp_at (maxPoolFlat c h w ∘ S0) R1 x s1_diff rb1_diff s1_vjp rb1_vjp
+    vjpCompAt (maxPoolFlat c h w ∘ S0) R1 x s1_diff rb1_diff s1_vjp rb1_vjp
   have s2_diff : DifferentiableAt ℝ (R1 ∘ (maxPoolFlat c h w ∘ S0)) x :=
     rb1_diff.comp x s1_diff
   -- s3: rblkP ∘ (above) at x
   set R2 := rblkP (h := h) (w := w) W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hhp ip with hR2def
   have rb2_vjp : HasVJPAt R2 (R1 (maxPoolFlat c h w (S0 x))) :=
-    resblockProj_has_vjp_at W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hhp ip
+    resblockProjHasVJPAt W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hhp ip
       he₁ he₂ hfp _ h_rb2 h_rb2o
   have rb2_diff : DifferentiableAt ℝ R2 (R1 (maxPoolFlat c h w (S0 x))) :=
     resblockProj_differentiableAt W₁' b₁' W₂' b₂' Wp bp e₁ g₁ bb₁ e₂ g₂ bb₂ fp hhp ip
       he₁ he₂ hfp _ h_rb2 h_rb2o
   have s3_vjp : HasVJPAt (R2 ∘ (R1 ∘ (maxPoolFlat c h w ∘ S0))) x :=
-    vjp_comp_at (R1 ∘ (maxPoolFlat c h w ∘ S0)) R2 x s2_diff rb2_diff s2_vjp rb2_vjp
+    vjpCompAt (R1 ∘ (maxPoolFlat c h w ∘ S0)) R2 x s2_diff rb2_diff s2_vjp rb2_vjp
   have s3_diff : DifferentiableAt ℝ (R2 ∘ (R1 ∘ (maxPoolFlat c h w ∘ S0))) x :=
     rb2_diff.comp x s2_diff
   -- s4: gap ∘ (above) at x (global lift)
@@ -1664,21 +1664,21 @@ noncomputable def cnn_has_vjp_at
   have gap_diff : DifferentiableAt ℝ (globalAvgPoolFlat oc h w) (P3 x) :=
     (globalAvgPoolFlat_differentiable oc h w) (P3 x)
   have s4_vjp : HasVJPAt (globalAvgPoolFlat oc h w ∘ P3) x :=
-    vjp_comp_at P3 (globalAvgPoolFlat oc h w) x s3_diff gap_diff s3_vjp
-      ((globalAvgPoolFlat_has_vjp oc h w).toHasVJPAt (P3 x))
+    vjpCompAt P3 (globalAvgPoolFlat oc h w) x s3_diff gap_diff s3_vjp
+      ((globalAvgPoolFlatHasVJP oc h w).toHasVJPAt (P3 x))
   have s4_diff : DifferentiableAt ℝ (globalAvgPoolFlat oc h w ∘ P3) x :=
     gap_diff.comp x s3_diff
   -- s5: dense ∘ (above) at x (global lift)
-  exact vjp_comp_at (globalAvgPoolFlat oc h w ∘ P3) (dense Wd bd) x s4_diff
+  exact vjpCompAt (globalAvgPoolFlat oc h w ∘ P3) (dense Wd bd) x s4_diff
     ((dense_differentiable Wd bd) _) s4_vjp
-    ((dense_has_vjp Wd bd).toHasVJPAt _)
+    ((denseHasVJP Wd bd).toHasVJPAt _)
 
-/-- **Public correctness theorem for `cnn_has_vjp_at`** — exposes the
+/-- **Public correctness theorem for `cnnHasVJPAt`** — exposes the
     witness's `.correct` field as a top-level proposition: the full
     ResNet-style CNN's backward equals the `pdiv`-contracted Jacobian
     (Jacobian-transpose applied to the cotangent). CNN analogue of
-    `vit_full_has_vjp_correct`. -/
-theorem cnn_has_vjp_at_correct
+    `vitFullHasVJP_correct`. -/
+theorem cnnHasVJPAt_correct
     {ic c oc h w kHs kWs kH₁ kW₁ kH₂ kW₂ kH₁' kW₁' kH₂' kW₂' kHp kWp nClasses : Nat}
     (Ws : Kernel4 c ic kHs kWs) (bs : Vec c) (εs γs βs : ℝ) (hεs : 0 < εs)
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c)
@@ -1713,14 +1713,14 @@ theorem cnn_has_vjp_at_correct
             (rblk (h := h) (w := w) W₁ b₁ W₂ b₂ f₁ hh₁ i₁ f₂ hh₂ i₂
               (maxPoolFlat c h w (cbr (h := 2*h) (w := 2*w) Ws bs εs γs βs x))) k ≠ 0)
     (dy : Vec nClasses) (i : Fin (ic * (2*h) * (2*w))) :
-    (cnn_has_vjp_at Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
+    (cnnHasVJPAt Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
         W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
         hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).backward dy i =
       ∑ j : Fin nClasses,
         pdiv (cnnForward Ws bs εs γs βs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂
                 W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip Wd bd)
              x i j * dy j :=
-  (cnn_has_vjp_at Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
+  (cnnHasVJPAt Ws bs εs γs βs hεs W₁ b₁ W₂ b₂ e₁ g₁ bb₁ e₂ g₂ bb₂ he₁ he₂
       W₁' b₁' W₂' b₂' Wp bp f₁ hh₁ i₁ f₂ hh₂ i₂ fp hhp ip hf₁ hf₂ hfp Wd bd
       hc hh hw x h_stem h_mp h_rb1 h_rb1o h_rb2 h_rb2o).correct dy i
 

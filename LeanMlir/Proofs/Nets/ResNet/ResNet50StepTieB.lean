@@ -13,7 +13,7 @@ and it makes this the third net whose train-step tie is about the artifact its q
 comes from.
 
 ⭐⭐ **The block cotangents are NOT derived here.** `ResNet50FullBVJP.lean`'s
-`r50{Id,Proj,Down}B_has_vjp_at` ARE the certified block backwards, and `ResNet50BackB0.lean`'s
+`r50{Id,Proj,Down}BHasVJPAt` ARE the certified block backwards, and `ResNet50BackB0.lean`'s
 `r50{Bottleneck,ProjBlock,DownBlock}BackBatchedGraph_faithful` family already proves the emitted
 backward subgraph denotes exactly them. The three `*CotIn_eq_vjp` lemmas below are that statement
 in this file's vocabulary, so the cross-block chain is a composition of certified VJPs rather than
@@ -136,17 +136,17 @@ noncomputable def r50IdCotIn (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
     + r50IdCotA N h w p xin dyOut i
 
 /-- ⭐⭐ **The emitted fan-in IS the certified bottleneck VJP's backward.** `rfl` after the graph
-    lemma: the render's ten-node backward subgraph denotes `(r50IdB_has_vjp_at …).backward dyOut`. -/
+    lemma: the render's ten-node backward subgraph denotes `(r50IdBHasVJPAt …).backward dyOut`. -/
 theorem r50IdCotIn_eq_vjp (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (hq : R50IdPos p)
     (xin dyOut : Vec (N * (oc * h * w))) (hs : R50IdSmoothAt N h w p xin) :
     r50IdCotIn N h w p xin dyOut
-      = (r50IdB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (r50IdBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := r50BottleneckBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃ xin (.operand "" dyOut)
     hs.hm1 hs.hm2 hs.hout
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  rw [r50IdB_has_vjp_at, ← h]
+  rw [r50IdBHasVJPAt, ← h]
   rfl
 
 
@@ -225,13 +225,13 @@ theorem r50ProjCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid
     (hq : R50ProjPos p) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
     (hs : R50ProjSmoothAt N h w p xin) :
     r50ProjCotIn N h w p xin dyOut
-      = (r50ProjB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (r50ProjBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := r50ProjBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
     p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand "" dyOut) hs.hm1 hs.hm2 hs.hout
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  rw [r50ProjB_has_vjp_at, ← h]
+  rw [r50ProjBHasVJPAt, ← h]
   funext i
   exact add_comm _ _
 
@@ -316,13 +316,13 @@ theorem r50DownCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid
     (hq : R50ProjPos p) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dyOut : Vec (N * (oc * h * w))) (hs : R50DownSmoothAt N h w p xin) :
     r50DownCotIn N h w p xin dyOut
-      = (r50DownB_has_vjp_at N h w p hq xin hs).backward dyOut := by
+      = (r50DownBHasVJPAt N h w p hq xin hs).backward dyOut := by
   have h := r50DownBlockBackBatchedGraph_faithful (N := N) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.W₃ p.b₃ p.ε₃ hq.h3 p.γ₃ p.β₃
     p.Wp p.bp p.εp hq.hp p.γp p.βp xin (.operand "" dyOut) hs.hm1 hs.hm2 hs.hout
   have hd : den (SHlo.operand "" dyOut) = dyOut := rfl
   rw [hd] at h
-  rw [r50DownB_has_vjp_at, ← h]
+  rw [r50DownBHasVJPAt, ← h]
   funext i
   exact add_comm _ _
 
@@ -481,7 +481,7 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
 --   delegation and is true at `bias = 0`, so the stem contributes 3 exercised slots of 4.
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The whole batch-BN ResNet-50 train step, tied.** Threading `resnet50ForwardB_full`'s own
+/-- ⭐⭐ **The whole batch-BN ResNet-50 train step, tied.** Threading `resnet50ForwardBFull`'s own
     prefixes as the block inputs and an arbitrary loss cotangent `g` down through the certified head
     backward and the sixteen certified bottleneck backwards, every parameter GRADIENT node of the
     net — stem 3, twelve identity bottlenecks × 9, four projection bottlenecks × 12, dense 2 —
@@ -576,13 +576,13 @@ theorem r50_lossCot_is_smoothedCE_grad (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
     (n : Fin N) (j : Fin nCls)
     (ht : ∑ k : Fin nCls, Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1) k = 1) :
     den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
-          (rowB N nCls (resnet50ForwardB_full N q w x)) t)
+          (rowB N nCls (resnet50ForwardBFull N q w x)) t)
         (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = (pdiv (fun z' : Vec nCls => fun _ : Fin 1 =>
             softCE nCls (smoothTarget nCls α
               (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1))) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
-            (rowB N nCls (resnet50ForwardB_full N q w x)) n) (0 : Fin 1)) j 0) / B :=
+            (rowB N nCls (resnet50ForwardBFull N q w x)) n) (0 : Fin 1)) j 0) / B :=
   smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
 
 /-- ⭐⭐ **The BCE-with-logits cotangent, for every `bce := true` artifact — including the one the
@@ -596,12 +596,12 @@ theorem r50_lossCot_is_bce_grad (N q : Nat) {nCls : Nat} (bStr logN ohN : String
     (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (t : Vec (N * (1 * nCls)))
     (n : Fin N) (j : Fin nCls) :
     den (bceLossCotGraph N nCls ((N : ℝ) * (nCls : ℝ)) bStr logN ohN
-          (rowB N nCls (resnet50ForwardB_full N q w x)) t)
+          (rowB N nCls (resnet50ForwardBFull N q w x)) t)
         (finProdFinEquiv (n, finProdFinEquiv ((0 : Fin 1), j)))
       = (pdiv (fun z' : Vec nCls => fun _ : Fin 1 =>
             bceLogits nCls (Mat.unflatten (batchSlice N (1 * nCls) t n) (0 : Fin 1)) z')
           (Mat.unflatten (batchSlice N (1 * nCls)
-            (rowB N nCls (resnet50ForwardB_full N q w x)) n) (0 : Fin 1)) j 0)
+            (rowB N nCls (resnet50ForwardBFull N q w x)) n) (0 : Fin 1)) j 0)
         / ((N : ℝ) * (nCls : ℝ)) :=
   bceLossCotGraph_row_committed N nCls bStr logN ohN _ t n j
 

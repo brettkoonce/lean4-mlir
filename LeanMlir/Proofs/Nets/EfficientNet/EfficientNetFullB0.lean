@@ -200,10 +200,10 @@ theorem mbNoExpW_differentiable (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoEx
   unfold mbNoExpW
   exact mbNoExpFwdB_differentiable N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
-noncomputable def mbNoExpW_has_vjp (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoExp ic oc r kh kw)
+noncomputable def mbNoExpWHasVJP (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoExp ic oc r kh kw)
     (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbNoExpW N h w p) := by
   unfold mbNoExpW
-  exact mbNoExpFwdB_has_vjp N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
+  exact mbNoExpFwdBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 theorem mbStridedW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
@@ -211,10 +211,10 @@ theorem mbStridedW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : M
   unfold mbStridedW
   exact mbStridedFwdB_differentiable N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
-noncomputable def mbStridedW_has_vjp (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
+noncomputable def mbStridedWHasVJP (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbStridedW N h w p) := by
   unfold mbStridedW
-  exact mbStridedFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
+  exact mbStridedFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 theorem mbResidW_differentiable (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
@@ -222,10 +222,10 @@ theorem mbResidW_differentiable (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c m
   unfold mbResidW
   exact mbResidFwdB_differentiable N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
-noncomputable def mbResidW_has_vjp (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
+noncomputable def mbResidWHasVJP (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbResidW N h w p) := by
   unfold mbResidW
-  exact mbResidFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
+  exact mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 theorem mbExpW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
@@ -233,10 +233,10 @@ theorem mbExpW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW i
   unfold mbExpW
   exact mbExpFwdB_differentiable N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
-noncomputable def mbExpW_has_vjp (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
+noncomputable def mbExpWHasVJP (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbExpW N h w p) := by
   unfold mbExpW
-  exact mbExpFwdB_has_vjp N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
+  exact mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 -- ════════════════════════════════════════════════════════════════
@@ -245,7 +245,7 @@ noncomputable def mbExpW_has_vjp (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MB
 --   → b12(14→7) → b13,b14,b15,b16@7 → head@7 → GAP → dense
 -- ════════════════════════════════════════════════════════════════
 
-noncomputable def efficientnetForwardB_full (N : Nat) (w : B0Weights)
+noncomputable def efficientnetForwardBFull (N : Nat) (w : B0Weights)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * 10) :=
   headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mbExpW N 7 7 w.b16
@@ -321,7 +321,7 @@ theorem mbExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh k
 /-- The full **batched EfficientNet-B0 forward graph** at the batched index `N·(c·h·w)`: stem → 16
     MBConv blocks (the real `[t,c,n,s,k]` spec, 3×3 and 5×5 depthwise, true batch-norm, squeeze-excite,
     4 stride-2 downsamples, identity residuals where `s=1 ∧ ic=oc`) → head → GAP → dense. -/
-def efficientnetFwdGraphB_full (N : Nat) (epsStr : String) (w : B0Weights)
+def efficientnetFwdGraphBFull (N : Nat) (epsStr : String) (w : B0Weights)
     (x : Vec (N * (3 * 224 * 224))) : SHlo (N * 10) :=
   headGraphB epsStr (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mbExpGraphW "b16" epsStr N 7 7 w.b16
@@ -344,13 +344,13 @@ def efficientnetFwdGraphB_full (N : Nat) (epsStr : String) (w : B0Weights)
                                       (.operand "%x" x))))))))))))))))))
 
 /-- **Full batched EfficientNet-B0 forward faithfulness.** The full 16-MBConv batched graph (true
-    batch-norm + SE) denotes `efficientnetForwardB_full`. Chained from the per-block `*GraphW_faithful`
+    batch-norm + SE) denotes `efficientnetForwardBFull`. Chained from the per-block `*GraphW_faithful`
     lemmas (one `rw` per block, outermost→innermost), then a structural `rfl` (the forward is
     nested-application form, blocks opaque) — the `ResNet34RenderPC.lean` recipe (since retired) at full depth. -/
-theorem efficientnetFwdGraphB_full_faithful (N : Nat) (epsStr : String) (w : B0Weights)
+theorem efficientnetFwdGraphBFull_faithful (N : Nat) (epsStr : String) (w : B0Weights)
     (x : Vec (N * (3 * 224 * 224))) :
-    den (efficientnetFwdGraphB_full N epsStr w x) = efficientnetForwardB_full N w x := by
-  rw [efficientnetFwdGraphB_full, headGraphB_faithful,
+    den (efficientnetFwdGraphBFull N epsStr w x) = efficientnetForwardBFull N w x := by
+  rw [efficientnetFwdGraphBFull, headGraphB_faithful,
       mbExpGraphW_faithful, mbResidGraphW_faithful, mbResidGraphW_faithful, mbResidGraphW_faithful,
       mbStridedGraphW_faithful, mbResidGraphW_faithful, mbResidGraphW_faithful, mbExpGraphW_faithful,
       mbResidGraphW_faithful, mbResidGraphW_faithful, mbStridedGraphW_faithful, mbResidGraphW_faithful,
@@ -361,14 +361,14 @@ theorem efficientnetFwdGraphB_full_faithful (N : Nat) (epsStr : String) (w : B0W
 end StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § The full B0 VJP — all 16 MBConv blocks (the full-depth analogue of `efficientnet_has_vjp`)
+-- § The full B0 VJP — all 16 MBConv blocks (the full-depth analogue of `efficientnetHasVJP`)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The full EfficientNet-B0 has a (correct) VJP.** Chained from the per-block gradients (stem → 16
-    MBConv blocks → head) via `vjp_comp`. Stated on the `∘`-composition of the blocks (= the full
+    MBConv blocks → head) via `vjpComp`. Stated on the `∘`-composition of the blocks (= the full
     forward by construction; keeps the blocks opaque so the chain closes structurally). The full-depth,
-    batched, true-batch-norm + SE analogue of `efficientnet_has_vjp`. -/
-noncomputable def efficientnetForwardB_full_has_vjp (N : Nat) (w : B0Weights)
+    batched, true-batch-norm + SE analogue of `efficientnetHasVJP`. -/
+noncomputable def efficientnetForwardBFullHasVJP (N : Nat) (w : B0Weights)
     (hεw : w.EpsPos) :
     HasVJP
       (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘
@@ -379,69 +379,69 @@ noncomputable def efficientnetForwardB_full_has_vjp (N : Nat) (w : B0Weights)
         mbResidW N 56 56 w.b3 ∘ mbStridedW N 56 56 w.b2 ∘ mbNoExpW N 112 112 w.b1 ∘
         stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) := by
   have dS := stemB_differentiable N (h := 112) (w := 112) w.sW w.sb w.sε hεw.s w.sγ w.sβ
-  have vS := stemB_has_vjp N (h := 112) (w := 112) w.sW w.sb w.sε hεw.s w.sγ w.sβ
+  have vS := stemBHasVJP N (h := 112) (w := 112) w.sW w.sb w.sε hεw.s w.sγ w.sβ
   have d1 := mbNoExpW_differentiable N 112 112 w.b1 hεw.b1.d hεw.b1.p
-  have v1 := mbNoExpW_has_vjp N 112 112 w.b1 hεw.b1.d hεw.b1.p
+  have v1 := mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p
   have d2 := mbStridedW_differentiable N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p
-  have v2 := mbStridedW_has_vjp N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p
+  have v2 := mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p
   have d3 := mbResidW_differentiable N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p
-  have v3 := mbResidW_has_vjp N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p
+  have v3 := mbResidWHasVJP N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p
   have d4 := mbStridedW_differentiable N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p
-  have v4 := mbStridedW_has_vjp N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p
+  have v4 := mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p
   have d5 := mbResidW_differentiable N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p
-  have v5 := mbResidW_has_vjp N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p
+  have v5 := mbResidWHasVJP N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p
   have d6 := mbStridedW_differentiable N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p
-  have v6 := mbStridedW_has_vjp N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p
+  have v6 := mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p
   have d7 := mbResidW_differentiable N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p
-  have v7 := mbResidW_has_vjp N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p
+  have v7 := mbResidWHasVJP N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p
   have d8 := mbResidW_differentiable N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p
-  have v8 := mbResidW_has_vjp N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p
+  have v8 := mbResidWHasVJP N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p
   have d9 := mbExpW_differentiable N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p
-  have v9 := mbExpW_has_vjp N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p
+  have v9 := mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p
   have d10 := mbResidW_differentiable N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p
-  have v10 := mbResidW_has_vjp N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p
+  have v10 := mbResidWHasVJP N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p
   have d11 := mbResidW_differentiable N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p
-  have v11 := mbResidW_has_vjp N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p
+  have v11 := mbResidWHasVJP N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p
   have d12 := mbStridedW_differentiable N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p
-  have v12 := mbStridedW_has_vjp N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p
+  have v12 := mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p
   have d13 := mbResidW_differentiable N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p
-  have v13 := mbResidW_has_vjp N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p
+  have v13 := mbResidWHasVJP N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p
   have d14 := mbResidW_differentiable N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p
-  have v14 := mbResidW_has_vjp N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p
+  have v14 := mbResidWHasVJP N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p
   have d15 := mbResidW_differentiable N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p
-  have v15 := mbResidW_has_vjp N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p
+  have v15 := mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p
   have d16 := mbExpW_differentiable N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p
-  have v16 := mbExpW_has_vjp N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p
+  have v16 := mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p
   have dH := headFwdB_differentiable N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb
-  have vH := headFwdB_has_vjp N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb
-  have e1 := vjp_comp _ _ dS d1 vS v1;            have f1 := d1.comp dS
-  have e2 := vjp_comp _ _ f1 d2 e1 v2;            have f2 := d2.comp f1
-  have e3 := vjp_comp _ _ f2 d3 e2 v3;            have f3 := d3.comp f2
-  have e4 := vjp_comp _ _ f3 d4 e3 v4;            have f4 := d4.comp f3
-  have e5 := vjp_comp _ _ f4 d5 e4 v5;            have f5 := d5.comp f4
-  have e6 := vjp_comp _ _ f5 d6 e5 v6;            have f6 := d6.comp f5
-  have e7 := vjp_comp _ _ f6 d7 e6 v7;            have f7 := d7.comp f6
-  have e8 := vjp_comp _ _ f7 d8 e7 v8;            have f8 := d8.comp f7
-  have e9 := vjp_comp _ _ f8 d9 e8 v9;            have f9 := d9.comp f8
-  have e10 := vjp_comp _ _ f9 d10 e9 v10;         have f10 := d10.comp f9
-  have e11 := vjp_comp _ _ f10 d11 e10 v11;       have f11 := d11.comp f10
-  have e12 := vjp_comp _ _ f11 d12 e11 v12;       have f12 := d12.comp f11
-  have e13 := vjp_comp _ _ f12 d13 e12 v13;       have f13 := d13.comp f12
-  have e14 := vjp_comp _ _ f13 d14 e13 v14;       have f14 := d14.comp f13
-  have e15 := vjp_comp _ _ f14 d15 e14 v15;       have f15 := d15.comp f14
-  have e16 := vjp_comp _ _ f15 d16 e15 v16;       have f16 := d16.comp f15
-  exact vjp_comp _ _ f16 dH e16 vH
+  have vH := headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb
+  have e1 := vjpComp _ _ dS d1 vS v1;            have f1 := d1.comp dS
+  have e2 := vjpComp _ _ f1 d2 e1 v2;            have f2 := d2.comp f1
+  have e3 := vjpComp _ _ f2 d3 e2 v3;            have f3 := d3.comp f2
+  have e4 := vjpComp _ _ f3 d4 e3 v4;            have f4 := d4.comp f3
+  have e5 := vjpComp _ _ f4 d5 e4 v5;            have f5 := d5.comp f4
+  have e6 := vjpComp _ _ f5 d6 e5 v6;            have f6 := d6.comp f5
+  have e7 := vjpComp _ _ f6 d7 e6 v7;            have f7 := d7.comp f6
+  have e8 := vjpComp _ _ f7 d8 e7 v8;            have f8 := d8.comp f7
+  have e9 := vjpComp _ _ f8 d9 e8 v9;            have f9 := d9.comp f8
+  have e10 := vjpComp _ _ f9 d10 e9 v10;         have f10 := d10.comp f9
+  have e11 := vjpComp _ _ f10 d11 e10 v11;       have f11 := d11.comp f10
+  have e12 := vjpComp _ _ f11 d12 e11 v12;       have f12 := d12.comp f11
+  have e13 := vjpComp _ _ f12 d13 e12 v13;       have f13 := d13.comp f12
+  have e14 := vjpComp _ _ f13 d14 e13 v14;       have f14 := d14.comp f13
+  have e15 := vjpComp _ _ f14 d15 e14 v15;       have f15 := d15.comp f14
+  have e16 := vjpComp _ _ f15 d16 e15 v16;       have f16 := d16.comp f15
+  exact vjpComp _ _ f16 dH e16 vH
 
-/-- **`efficientnetForwardB_full` = the `∘`-chain of the VJP's statement** — the
+/-- **`efficientnetForwardBFull` = the `∘`-chain of the VJP's statement** — the
     kernel-checked bridge between the nested-application and composition forms,
     closing the form-gap this file shipped with. PROOF-SHAPE MATTERS (the ConvNeXt-T
     `convNextForwardTCh_eq_chain` lesson): equation-lemma `rw` + 17 `comp_apply`
     rewrites close syntactically; a `simp`/`rfl` proof of the same statement makes
     the kernel reduce the block bodies (no reducibility, no defeq cache) and
     deterministically time out. -/
-theorem efficientnetForwardB_full_eq_chain (N : Nat) (w : B0Weights)
+theorem efficientnetForwardBFull_eq_chain (N : Nat) (w : B0Weights)
     (x : Vec (N * (3 * 224 * 224))) :
-    efficientnetForwardB_full N w x =
+    efficientnetForwardBFull N w x =
       (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘
         mbExpW N 7 7 w.b16 ∘ mbResidW N 7 7 w.b15 ∘ mbResidW N 7 7 w.b14 ∘ mbResidW N 7 7 w.b13 ∘
         mbStridedW N 7 7 w.b12 ∘ mbResidW N 14 14 w.b11 ∘ mbResidW N 14 14 w.b10 ∘
@@ -449,24 +449,24 @@ theorem efficientnetForwardB_full_eq_chain (N : Nat) (w : B0Weights)
         mbStridedW N 14 14 w.b6 ∘ mbResidW N 28 28 w.b5 ∘ mbStridedW N 28 28 w.b4 ∘
         mbResidW N 56 56 w.b3 ∘ mbStridedW N 56 56 w.b2 ∘ mbNoExpW N 112 112 w.b1 ∘
         stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) x := by
-  rw [efficientnetForwardB_full]
+  rw [efficientnetForwardBFull]
   rw [Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
       Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
       Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
       Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
       Function.comp_apply]
 
-/-- **Public correctness theorem for `efficientnetForwardB_full_has_vjp`** — the full
-    B0's backward equals the `pdiv`-contracted Jacobian of `efficientnetForwardB_full`
+/-- **Public correctness theorem for `efficientnetForwardBFullHasVJP`** — the full
+    B0's backward equals the `pdiv`-contracted Jacobian of `efficientnetForwardBFull`
     itself at every input, tying the chain-stated VJP back to the nested forward via
-    `efficientnetForwardB_full_eq_chain`. -/
-theorem efficientnetForwardB_full_has_vjp_correct (N : Nat) (w : B0Weights)
+    `efficientnetForwardBFull_eq_chain`. -/
+theorem efficientnetForwardBFullHasVJP_correct (N : Nat) (w : B0Weights)
     (hεw : w.EpsPos)
     (x : Vec (N * (3 * 224 * 224))) (dy : Vec (N * 10)) (i : Fin (N * (3 * 224 * 224))) :
-    (efficientnetForwardB_full_has_vjp N w hεw).backward x dy i =
-      ∑ j : Fin (N * 10), pdiv (efficientnetForwardB_full N w) x i j * dy j := by
-  have h := (efficientnetForwardB_full_has_vjp N w hεw).correct x dy i
-  rwa [show efficientnetForwardB_full N w =
+    (efficientnetForwardBFullHasVJP N w hεw).backward x dy i =
+      ∑ j : Fin (N * 10), pdiv (efficientnetForwardBFull N w) x i j * dy j := by
+  have h := (efficientnetForwardBFullHasVJP N w hεw).correct x dy i
+  rwa [show efficientnetForwardBFull N w =
         (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘
           mbExpW N 7 7 w.b16 ∘ mbResidW N 7 7 w.b15 ∘ mbResidW N 7 7 w.b14 ∘ mbResidW N 7 7 w.b13 ∘
           mbStridedW N 7 7 w.b12 ∘ mbResidW N 14 14 w.b11 ∘ mbResidW N 14 14 w.b10 ∘
@@ -474,6 +474,6 @@ theorem efficientnetForwardB_full_has_vjp_correct (N : Nat) (w : B0Weights)
           mbStridedW N 14 14 w.b6 ∘ mbResidW N 28 28 w.b5 ∘ mbStridedW N 28 28 w.b4 ∘
           mbResidW N 56 56 w.b3 ∘ mbStridedW N 56 56 w.b2 ∘ mbNoExpW N 112 112 w.b1 ∘
           stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ)
-      from funext (efficientnetForwardB_full_eq_chain N w)]
+      from funext (efficientnetForwardBFull_eq_chain N w)]
 
 end Proofs

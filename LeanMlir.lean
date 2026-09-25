@@ -93,7 +93,7 @@ Two things are proved for every net, and the linear classifier shows both in abo
 
 `Proofs.pdiv` is *defined* over Mathlib's `fderiv` — `pdiv f x i j := fderiv ℝ f x (basisVec i) j`,
 in `LeanMlir.Proofs.Foundation.Tensor` — and the calculus is theorems from Mathlib's API:
-`Proofs.pdiv_comp` (the chain rule), `Proofs.pdiv_add`, `Proofs.pdiv_mul`, `Proofs.biPath_has_vjp`
+`Proofs.pdiv_comp` (the chain rule), `Proofs.pdiv_add`, `Proofs.pdiv_mul`, `Proofs.biPathHasVJP`
 (the additive fan-in). A layer's backward is a `Proofs.HasVJP` witness whose `correct` field says
 it is the Jacobian-transpose of the forward, and every layer has one: convolution and max-pool in
 `LeanMlir.Proofs.Architectures.CNN`; BatchNorm's three-term backward in
@@ -109,9 +109,9 @@ re-runs Lean's kernel over 73 of the headline theorems independently of the elab
 
 ## The chapter nets
 
-Whole-network VJPs — [`resnet34ForwardB_full_has_vjp_at`](find/#doc/Proofs.resnet34ForwardB_full_has_vjp_at),
-`Proofs.mobilenetv2_has_vjp_at`, `Proofs.efficientnet_has_vjp`, `Proofs.convnext_has_vjp`,
-`Proofs.vit_full_has_vjp` — and, for every net the tiers train, the tie of the committed
+Whole-network VJPs — [`resnet34ForwardBFullHasVJPAt`](find/#doc/Proofs.resnet34ForwardBFullHasVJPAt),
+`Proofs.mobilenetv2HasVJPAt`, `Proofs.efficientnetHasVJP`, `Proofs.convnextHasVJP`,
+`Proofs.vitFullHasVJP` — and, for every net the tiers train, the tie of the committed
 train-step render (the verified_mlir/ files the trainers load) to the certified chain, at the
 batch BatchNorm and the ImageNet head its artifacts run: each emitted parameter-update node
 denotes the certified descent step.

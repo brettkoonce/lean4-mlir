@@ -3559,10 +3559,10 @@ private def emitConvBnBackward (r : FwdRec) (gradSSA : String) : String × Strin
   -- reader of the .mlir file can jump straight from any op to its proof.
   s := s ++ s!"    // ════════════════════════════════════════════════════════════════\n"
   s := s ++ s!"    // ConvBn backward — see LeanMlir/Proofs/:\n"
-  s := s ++ s!"    //   Activation VJP   MLP.lean: relu_has_vjp (ReLU); ReLU6/Swish/h-swish are analogous diagonal grads\n"
-  s := s ++ s!"    //   BN VJP           BatchNorm.lean: bn_has_vjp + pdiv_bnNormalize (3-term consolidated formula)\n"
-  s := s ++ s!"    //   Conv input grad  CNN.lean: conv2d_has_vjp3 (reversed kernel + transposed I/O channels)\n"
-  s := s ++ s!"    //   Conv weight grad CNN.lean: conv2d_weight_grad_has_vjp (transpose trick; Phase 7)\n"
+  s := s ++ s!"    //   Activation VJP   MLP.lean: reluHasVJP (ReLU); ReLU6/Swish/h-swish are analogous diagonal grads\n"
+  s := s ++ s!"    //   BN VJP           BatchNorm.lean: bnHasVJP + pdiv_bnNormalize (3-term consolidated formula)\n"
+  s := s ++ s!"    //   Conv input grad  CNN.lean: conv2dHasVJP3 (reversed kernel + transposed I/O channels)\n"
+  s := s ++ s!"    //   Conv weight grad CNN.lean: conv2dWeightGradHasVJP (transpose trick; Phase 7)\n"
   s := s ++ s!"    // ════════════════════════════════════════════════════════════════\n"
   s := s ++ s!"    // ─── activation backward ───\n"
   -- ReLU / ReLU6 / Swish / h-swish backward
@@ -3614,7 +3614,7 @@ private def emitConvBnBackward (r : FwdRec) (gradSSA : String) : String × Strin
     s := s ++ s!"    %cbg_hsw1{p} = stablehlo.select %cbg_hslt{p}, %cbg_hs0{p}, %cbg_hsmid{p} : {i1Ty}, {outTy}\n"
     s := s ++ s!"    %cbg_hsgrad{p} = stablehlo.select %cbg_hsgt{p}, %cbg_hs1{p}, %cbg_hsw1{p} : {i1Ty}, {outTy}\n"
     s := s ++ s!"    {effGrad} = stablehlo.multiply {gradSSA}, %cbg_hsgrad{p} : {outTy}\n"
-  s := s ++ s!"    // ─── BN backward (BatchNorm.lean: bn_has_vjp) ───\n"
+  s := s ++ s!"    // ─── BN backward (BatchNorm.lean: bnHasVJP) ───\n"
   -- d_gamma = reduce_sum(grad * norm, dims=[0,2,3])
   s := s ++ s!"    %cbg_gn{p} = stablehlo.multiply {effGrad}, {r.normSSA} : {outTy}\n"
   s := s ++ s!"    %d_g{p} = stablehlo.reduce(%cbg_gn{p} init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n"
@@ -3652,7 +3652,7 @@ private def emitConvBnBackward (r : FwdRec) (gradSSA : String) : String × Strin
   s := s ++ s!"    %cbg_t5{p} = stablehlo.multiply {r.istdBcSSA}, %cbg_t4{p} : {outTy}\n"
   s := s ++ s!"    %cbg_invN{p} = stablehlo.constant dense<{1.0 / bnN.toFloat}> : {outTy}\n"
   s := s ++ s!"    %cbg_dconv{p} = stablehlo.multiply %cbg_invN{p}, %cbg_t5{p} : {outTy}\n"
-  s := s ++ s!"    // ─── conv weight grad (CNN.lean: conv2d_weight_grad_has_vjp) + input grad (conv2d_has_vjp3) ───\n"
+  s := s ++ s!"    // ─── conv weight grad (CNN.lean: conv2dWeightGradHasVJP) + input grad (conv2dHasVJP3) ───\n"
   -- Conv backward: dW via transpose trick
   let ic := r.ic
   let kSize := r.kSize
@@ -3725,10 +3725,10 @@ private def emitDepthwiseConvBnBackward (r : FwdRec) (gradSSA : String) : String
   -- Block header for the generated MLIR: cite the backing theorems.
   s := s ++ s!"    // ════════════════════════════════════════════════════════════════\n"
   s := s ++ s!"    // Depthwise ConvBn backward — see LeanMlir/Proofs/:\n"
-  s := s ++ s!"    //   Activation VJP        MLP.lean: relu_has_vjp (or ReLU6/Swish/h-swish variants)\n"
-  s := s ++ s!"    //   BN VJP                BatchNorm.lean: bn_has_vjp + pdiv_bnNormalize\n"
-  s := s ++ s!"    //   Depthwise input grad  Depthwise.lean: depthwise_has_vjp3 (per-channel reversed kernel)\n"
-  s := s ++ s!"    //   Depthwise weight grad Depthwise.lean: depthwise_weight_grad_has_vjp3 (Phase 7; per-channel transpose trick)\n"
+  s := s ++ s!"    //   Activation VJP        MLP.lean: reluHasVJP (or ReLU6/Swish/h-swish variants)\n"
+  s := s ++ s!"    //   BN VJP                BatchNorm.lean: bnHasVJP + pdiv_bnNormalize\n"
+  s := s ++ s!"    //   Depthwise input grad  Depthwise.lean: depthwiseHasVJP3 (per-channel reversed kernel)\n"
+  s := s ++ s!"    //   Depthwise weight grad Depthwise.lean: depthwiseWeightGradHasVJP3 (Phase 7; per-channel transpose trick)\n"
   s := s ++ s!"    // ════════════════════════════════════════════════════════════════\n"
   s := s ++ s!"    // ─── activation backward ───\n"
   -- ReLU / ReLU6 / Swish / h-swish backward
@@ -3773,7 +3773,7 @@ private def emitDepthwiseConvBnBackward (r : FwdRec) (gradSSA : String) : String
     s := s ++ s!"    %cbg_hsw1{p} = stablehlo.select %cbg_hslt{p}, %cbg_hs0{p}, %cbg_hsmid{p} : {i1Ty}, {outTy}\n"
     s := s ++ s!"    %cbg_hsgrad{p} = stablehlo.select %cbg_hsgt{p}, %cbg_hs1{p}, %cbg_hsw1{p} : {i1Ty}, {outTy}\n"
     s := s ++ s!"    {effGrad} = stablehlo.multiply {gradSSA}, %cbg_hsgrad{p} : {outTy}\n"
-  s := s ++ s!"    // ─── BN backward (BatchNorm.lean: bn_has_vjp) ───\n"
+  s := s ++ s!"    // ─── BN backward (BatchNorm.lean: bnHasVJP) ───\n"
   -- d_gamma, d_beta (same as regular convBn)
   s := s ++ s!"    %cbg_gn{p} = stablehlo.multiply {effGrad}, {r.normSSA} : {outTy}\n"
   s := s ++ s!"    %d_g{p} = stablehlo.reduce(%cbg_gn{p} init: %zf) applies stablehlo.add across dimensions = [0, 2, 3]\n"
@@ -3803,7 +3803,7 @@ private def emitDepthwiseConvBnBackward (r : FwdRec) (gradSSA : String) : String
   s := s ++ s!"    %cbg_t5{p} = stablehlo.multiply {r.istdBcSSA}, %cbg_t4{p} : {outTy}\n"
   s := s ++ s!"    %cbg_invN{p} = stablehlo.constant dense<{1.0 / bnN.toFloat}> : {outTy}\n"
   s := s ++ s!"    %cbg_dconv{p} = stablehlo.multiply %cbg_invN{p}, %cbg_t5{p} : {outTy}\n"
-  s := s ++ s!"    // ─── depthwise weight grad (Depthwise.lean: depthwise_weight_grad_has_vjp3) + input grad (depthwise_has_vjp3) ───\n"
+  s := s ++ s!"    // ─── depthwise weight grad (Depthwise.lean: depthwiseWeightGradHasVJP3) + input grad (depthwiseHasVJP3) ───\n"
   -- Depthwise conv backward
   let kSize := r.kSize
   let stride := r.stride
@@ -6772,7 +6772,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
     else
     match r.layer with
     | .dense _fanIn fanOut act =>
-      code := code ++ s!"    // ─── dense backward (MLP.lean: dense_has_vjp, dense_weight_grad_correct, dense_bias_grad_correct) ───\n"
+      code := code ++ s!"    // ─── dense backward (MLP.lean: denseHasVJP, denseWeightGrad_correct, denseBiasGrad_correct) ───\n"
       code := code ++ s!"    //     d_W = outer(x, effGrad)  |  d_b = effGrad  |  d_x = W · effGrad\n"
       let effGrad := if act == .relu then s!"%gp{p}" else gradSSA
       if act == .relu then
@@ -6794,7 +6794,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
     | .conv2d ic oc kSize _pad act =>
       match r.outShape with
       | [b, _oc, h, w] =>
-        code := code ++ s!"    // ─── conv2d backward (CNN.lean: conv2d_has_vjp3 for dx, conv2d_weight_grad_has_vjp for dW) ───\n"
+        code := code ++ s!"    // ─── conv2d backward (CNN.lean: conv2dHasVJP3 for dx, conv2dWeightGradHasVJP for dW) ───\n"
         code := code ++ s!"    //     dW via transpose trick; dx via reversed+transposed kernel convolution\n"
         let oTy := tensorTy r.outShape
         let i1Ty := oTy.replace "xf32>" "xi1>"
@@ -6843,9 +6843,9 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
       if r.isSE then
         match r.inShape with
         | [b, _mid, h, w] =>
-          code := code ++ s!"    // ─── Squeeze-and-Excitation backward (SE.lean: seBlock_has_vjp) ───\n"
-          code := code ++ s!"    //     dx = elemwiseProduct_has_vjp(x, gate): dx_direct + dx_gap\n"
-          code := code ++ s!"    //     Gate path uses dense_has_vjp for two 1x1 convs + sigmoid/h-sigmoid gradient\n"
+          code := code ++ s!"    // ─── Squeeze-and-Excitation backward (SE.lean: seBlockHasVJP) ───\n"
+          code := code ++ s!"    //     dx = elemwiseProductHasVJP(x, gate): dx_direct + dx_gap\n"
+          code := code ++ s!"    //     Gate path uses denseHasVJP for two 1x1 convs + sigmoid/h-sigmoid gradient\n"
           let mid := r.seMidFull
           let seMid := r.seMid
           let pRed := r.sePidxRed
@@ -6939,7 +6939,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           gradShape := r.inShape
         | _ => pure ()
       else if r.addSkipGrad.startsWith "proj:" || r.addSkipGrad == "identity" then
-        code := code ++ s!"    // ─── residual skip-add backward (Residual.lean: residual_has_vjp via biPath_has_vjp) ───\n"
+        code := code ++ s!"    // ─── residual skip-add backward (Residual.lean: residualHasVJP via biPathHasVJP) ───\n"
         code := code ++ s!"    //     dy flows to both branches: main path + skip (identity or 1x1-conv projection)\n"
         -- Residual skip-add backward
         let oTy := tensorTy r.outShape
@@ -6995,7 +6995,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
       -- For overlapping pools (size>stride), use stride==size pooling instead.
       match r.inShape with
       | [b, c, h, w] =>
-        code := code ++ s!"    // ─── max-pool backward (CNN.lean: maxPool2_has_vjp3 — gradient routes to argmax) ───\n"
+        code := code ++ s!"    // ─── max-pool backward (CNN.lean: maxPool2HasVJP3 — gradient routes to argmax) ───\n"
         let oH := r.outShape[2]!
         let oW := r.outShape[3]!
         -- Tile gradient: (B,C,oH,oW) → (B,C,oH,1,oW,1) → (B,C,oH,S,oW,S) → (B,C,oH*S,oW*S)
@@ -7087,7 +7087,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
         let bTy    := tensorTy bShape
         match aShape, bShape, r.outShape with
         | [n, ca, h, w], [_, cb, _, _], [_, _, _, _] =>
-          code := code ++ s!"    // ─── UNet concat-split backward (channelSplit_has_vjp ↔ channelConcat) ───\n"
+          code := code ++ s!"    // ─── UNet concat-split backward (channelSplitHasVJP ↔ channelConcat) ───\n"
           code := code ++ s!"    //     dConcat[:, :ca]  → upsampled-half (decoder, flows to bilinearUpsample backward)\n"
           code := code ++ s!"    //     dConcat[:, ca:]  → skip-half (saved as %unet_skip_g{e}, accumulated at unetDown maxPool)\n"
           code := code ++ s!"    %uut_a{r.pos} = \"stablehlo.slice\"({gradSSA}) " ++ "{" ++
@@ -7106,7 +7106,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
         match r.inShape with
         | [b, ic, h, w] =>
           code := code ++ s!"    // ─── patch-embed backward (composite — no single theorem) ───\n"
-          code := code ++ s!"    //     conv projection: CNN.lean: conv2d_has_vjp3 / conv2d_weight_grad_has_vjp\n"
+          code := code ++ s!"    //     conv projection: CNN.lean: conv2dHasVJP3 / conv2dWeightGradHasVJP\n"
           code := code ++ s!"    //     CLS token + positional embedding: pdiv_add + pdiv_reindex (Tensor.lean)\n"
           let dim := r.pePDim
           let pSize := r.pePSize
@@ -7165,7 +7165,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
       else if r.isFinalLn then
         match r.inShape with
         | [b, n, d] =>
-          code := code ++ s!"    // ─── final LN backward (LayerNorm.lean: layerNorm_has_vjp — applied to every token) ───\n"
+          code := code ++ s!"    // ─── final LN backward (LayerNorm.lean: layerNormHasVJP — applied to every token) ───\n"
           let p := r.finalLnPidx
           let ty := tensorTy r.inShape
           let bnTy := tensorTy [b, n]
@@ -7202,13 +7202,13 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
         | [b, n, d] =>
           code := code ++ s!"    // ════════════════════════════════════════════════════════════════\n"
           code := code ++ s!"    // Transformer block backward — see LeanMlir/Proofs/:\n"
-          code := code ++ s!"    //   Residual skips (main + mlp)  Residual.lean: residual_has_vjp / biPath_has_vjp\n"
-          code := code ++ s!"    //   MLP (fc2, fc1)               MLP.lean: dense_has_vjp + dense_weight_grad_correct\n"
+          code := code ++ s!"    //   Residual skips (main + mlp)  Residual.lean: residualHasVJP / biPathHasVJP\n"
+          code := code ++ s!"    //   MLP (fc2, fc1)               MLP.lean: denseHasVJP + denseWeightGrad_correct\n"
           code := code ++ s!"    //   GELU                         LayerNorm.lean: pdiv_gelu (tanh-form diagonal Jacobian)\n"
-          code := code ++ s!"    //   LN2, LN1                     LayerNorm.lean: layerNorm_has_vjp\n"
-          code := code ++ s!"    //   Scaled dot-product attention Attention.lean: sdpa_back_Q_correct / _K_ / _V_\n"
-          code := code ++ s!"    //   Q/K/V/O projections          MLP.lean: dense_has_vjp (2D matmul generalization)\n"
-          code := code ++ s!"    //   Row-softmax inside attention Attention.lean: rowSoftmax_has_vjp_mat\n"
+          code := code ++ s!"    //   LN2, LN1                     LayerNorm.lean: layerNormHasVJP\n"
+          code := code ++ s!"    //   Scaled dot-product attention Attention.lean: sdpaBackQ_correct / _K_ / _V_\n"
+          code := code ++ s!"    //   Q/K/V/O projections          MLP.lean: denseHasVJP (2D matmul generalization)\n"
+          code := code ++ s!"    //   Row-softmax inside attention Attention.lean: rowSoftmaxHasVJPMat\n"
           code := code ++ s!"    // ════════════════════════════════════════════════════════════════\n"
           let basePidx := r.tbBasePidx
           let pLn1   := basePidx
@@ -7230,7 +7230,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           let dF := d.toFloat
           let tag := s!"tb{basePidx}"
           let dy := gradSSA
-          code := code ++ s!"    // ─── fc2 backward (dense_has_vjp + dense_weight_grad_correct) ───\n"
+          code := code ++ s!"    // ─── fc2 backward (denseHasVJP + denseWeightGrad_correct) ───\n"
           -- fc2 backward
           code := code ++ s!"    %{tag}_dwfc2 = stablehlo.dot_general {r.tbGeluOutSSA}, {dy},\n"
           code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
@@ -7262,7 +7262,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           code := code ++ s!"    %{tag}_term1 = stablehlo.multiply %{tag}_c05, %{tag}_1pt : {mlpTy}\n"
           code := code ++ s!"    %{tag}_dgdx = stablehlo.add %{tag}_term1, %{tag}_term2 : {mlpTy}\n"
           code := code ++ s!"    %{tag}_dfc1 = stablehlo.multiply %{tag}_dge, %{tag}_dgdx : {mlpTy}\n"
-          code := code ++ s!"    // ─── fc1 backward (dense_has_vjp + dense_weight_grad_correct) ───\n"
+          code := code ++ s!"    // ─── fc1 backward (denseHasVJP + denseWeightGrad_correct) ───\n"
           -- fc1 backward
           code := code ++ s!"    %{tag}_dwfc1 = stablehlo.dot_general {r.tbLn2OutSSA}, %{tag}_dfc1,\n"
           code := code ++ s!"              contracting_dims = [0, 1] x [0, 1],\n"
@@ -7275,7 +7275,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           code := code ++ s!"              contracting_dims = [2] x [1],\n"
           code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
           code := code ++ s!"            : ({mlpTy}, {tensorTy [d, mlpDim]}) -> {ty}\n"
-          code := code ++ s!"    // ─── LN2 backward (LayerNorm.lean: layerNorm_has_vjp — 3-term per-token formula) ───\n"
+          code := code ++ s!"    // ─── LN2 backward (LayerNorm.lean: layerNormHasVJP — 3-term per-token formula) ───\n"
           -- LN2 backward
           code := code ++ s!"    %{tag}_ln2_gn = stablehlo.multiply %{tag}_dln2, {r.tbLn2NormSSA} : {ty}\n"
           code := code ++ s!"    %d_b{pLn2} = stablehlo.reduce(%{tag}_dln2 init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
@@ -7300,10 +7300,10 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           code := code ++ s!"    %{tag}_ln2_invN = stablehlo.constant dense<{1.0 / dF}> : {ty}\n"
           code := code ++ s!"    %{tag}_ln2_scale = stablehlo.multiply %{tag}_ln2_istdbc, %{tag}_ln2_invN : {ty}\n"
           code := code ++ s!"    %{tag}_dln2_in = stablehlo.multiply %{tag}_ln2_scale, %{tag}_ln2_t4 : {ty}\n"
-          code := code ++ s!"    // ─── MLP-branch residual accumulate (Residual.lean: biPath_has_vjp) ───\n"
+          code := code ++ s!"    // ─── MLP-branch residual accumulate (Residual.lean: biPathHasVJP) ───\n"
           -- Residual 2 accumulate
           code := code ++ s!"    %{tag}_dr1 = stablehlo.add {dy}, %{tag}_dln2_in : {ty}\n"
-          code := code ++ s!"    // ─── MHSA backward (Attention.lean: sdpa_back_Q/K/V_correct + rowSoftmax_has_vjp_mat) ───\n"
+          code := code ++ s!"    // ─── MHSA backward (Attention.lean: sdpaBackQ/K/V_correct + rowSoftmaxHasVJPMat) ───\n"
           code := code ++ s!"    //     output projection (Wo, bo), then per-head softmax VJP, then Q/K/V projections\n"
           -- MHSA backward
           code := code ++ s!"    %{tag}_dwo = stablehlo.dot_general {r.tbMhPpSSA}, %{tag}_dr1,\n"
@@ -7413,10 +7413,10 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           code := code ++ s!"              contracting_dims = [2] x [1],\n"
           code := code ++ s!"              precision = [DEFAULT, DEFAULT]\n"
           code := code ++ s!"            : ({ty}, {tensorTy [d, d]}) -> {ty}\n"
-          code := code ++ s!"    // ─── Q/K/V backward fan-in into LN1 input (biPath_has_vjp: three paths sum) ───\n"
+          code := code ++ s!"    // ─── Q/K/V backward fan-in into LN1 input (biPathHasVJP: three paths sum) ───\n"
           code := code ++ s!"    %{tag}_dln1a = stablehlo.add %{tag}_dxq, %{tag}_dxk : {ty}\n"
           code := code ++ s!"    %{tag}_dln1 = stablehlo.add %{tag}_dln1a, %{tag}_dxv : {ty}\n"
-          code := code ++ s!"    // ─── LN1 backward (LayerNorm.lean: layerNorm_has_vjp) ───\n"
+          code := code ++ s!"    // ─── LN1 backward (LayerNorm.lean: layerNormHasVJP) ───\n"
           -- LN1 backward
           code := code ++ s!"    %{tag}_ln1_gn = stablehlo.multiply %{tag}_dln1, {r.tbLn1NormSSA} : {ty}\n"
           code := code ++ s!"    %d_b{pLn1} = stablehlo.reduce(%{tag}_dln1 init: %zf) applies stablehlo.add across dimensions = [0, 1]\n"
@@ -7441,7 +7441,7 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
           code := code ++ s!"    %{tag}_ln1_invN = stablehlo.constant dense<{1.0 / dF}> : {ty}\n"
           code := code ++ s!"    %{tag}_ln1_scale = stablehlo.multiply %{tag}_ln1_istdbc, %{tag}_ln1_invN : {ty}\n"
           code := code ++ s!"    %{tag}_dln1_in = stablehlo.multiply %{tag}_ln1_scale, %{tag}_ln1_t4 : {ty}\n"
-          code := code ++ s!"    // ─── MHSA-branch residual accumulate → block input gradient (biPath_has_vjp) ───\n"
+          code := code ++ s!"    // ─── MHSA-branch residual accumulate → block input gradient (biPathHasVJP) ───\n"
           code := code ++ s!"    %{tag}_dblockin = stablehlo.add %{tag}_dr1, %{tag}_dln1_in : {ty}\n"
           gradSSA := s!"%{tag}_dblockin"
           gradShape := r.inShape
@@ -7454,12 +7454,12 @@ private def emitTrainBackward (B : Nat) (records : Array FwdRec) (gradSSA₀ : S
         | [b, _, h, w] =>
           code := code ++ s!"    // ════════════════════════════════════════════════════════════════\n"
           code := code ++ s!"    // ConvNeXt block backward — see LeanMlir/Proofs/:\n"
-          code := code ++ s!"    //   Residual fan-in            Residual.lean: residual_has_vjp\n"
-          code := code ++ s!"    //   LayerScale (per-channel γ) Pointwise.lean: elemwiseProduct_has_vjp\n"
-          code := code ++ s!"    //   1×1 project / expand convs CNN.lean: conv2d_has_vjp3 / conv2d_weight_grad_has_vjp\n"
+          code := code ++ s!"    //   Residual fan-in            Residual.lean: residualHasVJP\n"
+          code := code ++ s!"    //   LayerScale (per-channel γ) Pointwise.lean: elemwiseProductHasVJP\n"
+          code := code ++ s!"    //   1×1 project / expand convs CNN.lean: conv2dHasVJP3 / conv2dWeightGradHasVJP\n"
           code := code ++ s!"    //   GELU                       LayerNorm.lean: pdiv_gelu (tanh-form diagonal)\n"
-          code := code ++ s!"    //   LN over channel axis       LayerNorm.lean: layerNorm_has_vjp (axis-relabeled)\n"
-          code := code ++ s!"    //   Depthwise 7×7 raw          Depthwise.lean: depthwise_has_vjp3 + depthwise_weight_grad_has_vjp3\n"
+          code := code ++ s!"    //   LN over channel axis       LayerNorm.lean: layerNormHasVJP (axis-relabeled)\n"
+          code := code ++ s!"    //   Depthwise 7×7 raw          Depthwise.lean: depthwiseHasVJP3 + depthwiseWeightGradHasVJP3\n"
           code := code ++ s!"    // ════════════════════════════════════════════════════════════════\n"
           let basePidx := r.cnbBasePidx
           let pDw := basePidx

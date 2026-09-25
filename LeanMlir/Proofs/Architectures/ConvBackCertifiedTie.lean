@@ -22,15 +22,15 @@ namespace Proofs
 
 
 /-- **Conv input-VJP leaf tie.** The backward map `convFlatBack W` (= reversed-kernel forward
-    conv) IS the certified conv input-VJP `(flatConv_has_vjp W b).backward x` (conv is linear,
+    conv) IS the certified conv input-VJP `(flatConvHasVJP W b).backward x` (conv is linear,
     so the saved activation `x` is ignored), for odd kernels. Routes through the general
     `IR.convBackDenote_eq_input_grad_formula`; the leaf every conv slot of the ResNet chains reduces to. -/
 theorem convFlatBack_eq_vjp_backward {ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * h * w)) :
-    convFlatBack (h := h) (w := w) W = (flatConv_has_vjp W b).backward x := by
+    convFlatBack (h := h) (w := w) W = (flatConvHasVJP W b).backward x := by
   funext dy
-  simp only [convFlatBack, flatConv, flatConv_has_vjp, hasVJP3_to_hasVJP, conv2d_has_vjp3]
+  simp only [convFlatBack, flatConv, flatConvHasVJP, HasVJP3.toHasVJP, conv2dHasVJP3]
   rw [IR.convBackDenote_eq_input_grad_formula hkH hkW W (Tensor3.unflatten dy)]
   rfl
 
@@ -39,20 +39,20 @@ theorem convFlatBack_eq_vjp_backward {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Strided conv input-VJP leaf tie.** `flatConvStride2Back W` (= `convFlatBack ∘ decimateBack`)
-    IS the certified strided conv input-VJP `(flatConvStride2_has_vjp W b).backward x`, for odd
+    IS the certified strided conv input-VJP `(flatConvStride2HasVJP W b).backward x`, for odd
     kernels. Decomposes into the conv leaf tie (`convFlatBack_eq_vjp_backward`) and the decimate
     leaf (`decimateBack_eq_vjp`, `rfl`), matching `flatConvStride2 = decimateFlat ∘ flatConv`. -/
 theorem flatConvStride2Back_eq_vjp_backward {ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
-    flatConvStride2Back (h := h) (w := w) W = (flatConvStride2_has_vjp W b).backward x := by
+    flatConvStride2Back (h := h) (w := w) W = (flatConvStride2HasVJP W b).backward x := by
   funext dy
   show convFlatBack (h := 2*h) (w := 2*w) W (decimateBack oc h w dy) = _
   rw [convFlatBack_eq_vjp_backward hkH hkW W b x]
   rfl
 
 /-- **XLA-`SAME` strided conv input-VJP leaf tie.** `flatConvStride2XlaBack W`
-    (= `convFlatBack ∘ decimateOddBack`) IS the certified `(flatConvStride2Xla_has_vjp W b).backward x`,
+    (= `convFlatBack ∘ decimateOddBack`) IS the certified `(flatConvStride2XlaHasVJP W b).backward x`,
     for odd kernels: the conv leaf tie and the odd-scatter leaf (`decimateOddBack_eq_vjp`, `rfl`),
     matching `flatConvStride2Xla = decimateOddFlat ∘ flatConv`. The TF-origin stems' (B0,
     MobileNetV2) leaf. ⚠ This is the theorem that fixes the odd-phase backward's DIRECTION: the
@@ -61,7 +61,7 @@ theorem flatConvStride2Back_eq_vjp_backward {ic oc h w kH kW : Nat}
 theorem flatConvStride2XlaBack_eq_vjp_backward {ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
-    flatConvStride2XlaBack (h := h) (w := w) W = (flatConvStride2Xla_has_vjp W b).backward x := by
+    flatConvStride2XlaBack (h := h) (w := w) W = (flatConvStride2XlaHasVJP W b).backward x := by
   funext dy
   show convFlatBack (h := 2*h) (w := 2*w) W (decimateOddBack oc h w dy) = _
   rw [convFlatBack_eq_vjp_backward hkH hkW W b x]
@@ -73,18 +73,18 @@ theorem flatConvStride2XlaBack_eq_vjp_backward {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Dense head input-VJP leaf tie.** The chain's dense backward `dense (Wᵀ) 0` (= `Wᵀ·dy`)
-    IS the certified dense input-VJP `(dense_has_vjp W b).backward x` (= `Mat.mulVec W dy`), conv is
+    IS the certified dense input-VJP `(denseHasVJP W b).backward x` (= `Mat.mulVec W dy`), conv is
     linear so the activation `x` is ignored. One `mul_comm` per term. -/
 theorem dense_transpose_eq_vjp_backward {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) :
-    dense (Mat.transpose W) (0 : Vec m) = (dense_has_vjp W b).backward x := by
+    dense (Mat.transpose W) (0 : Vec m) = (denseHasVJP W b).backward x := by
   funext dy i
-  simp only [dense, dense_has_vjp, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
+  simp only [dense, denseHasVJP, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
   exact Finset.sum_congr rfl fun j _ => mul_comm _ _
 
 /-- **GAP input-VJP leaf tie.** The backward map `gapBack c h w` (broadcast `dy(channel)/(h·w)`)
-    IS the certified GAP input-VJP `(globalAvgPoolFlat_has_vjp c h w).backward x` — definitionally
+    IS the certified GAP input-VJP `(globalAvgPoolFlatHasVJP c h w).backward x` — definitionally
     the same broadcast-÷ map (the VJP ignores its primal argument). -/
 theorem gapBack_eq_vjp_backward (c h w : Nat) (x : Vec (c * h * w)) :
-    gapBack c h w = (globalAvgPoolFlat_has_vjp c h w).backward x := rfl
+    gapBack c h w = (globalAvgPoolFlatHasVJP c h w).backward x := rfl
 
 end Proofs

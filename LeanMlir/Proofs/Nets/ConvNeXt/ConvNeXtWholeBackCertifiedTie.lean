@@ -33,7 +33,7 @@ written in the vocabulary `BackwardMaps.lean` already has, so the existing odd-k
 all the work and no new conv machinery is needed. On top of it:
 
 1. `cnxDownChBack_eq_vjp` — the stage-boundary downsample tie, `lnB ∘ flatConvStride2Back
-   (padOdd W)` against `(cnxDownChW_has_vjp …).backward`. ⛔ `padOdd` is load-bearing: `p.W` is
+   (padOdd W)` against `(cnxDownChWHasVJP …).backward`. ⛔ `padOdd` is load-bearing: `p.W` is
    `2×2`. Two existing ties composed.
 2. `cnxStageChKBack_eq_vjp` — ⭐ **the depth-`k` stage fold, §3.18's "one real proof".** `HasVJP`
    for `convNextStageChK` is built head-first (block `0` runs first), so its backward composes the
@@ -42,11 +42,11 @@ all the work and no new conv machinery is needed. On top of it:
    (`cnxBlockChBack_eq_vjp`) and one of the inductive hypothesis.
 3. `cnxSavedA0 … cnxSavedA10` — `convNextForwardTCh`'s eleven stage inputs, named as FUNCTIONS, so
    that the same twelve constants are both the activations the backward's slots are saved at and
-   the `f` argument of each `vjp_comp`.
+   the `f` argument of each `vjpComp`.
 4. ⭐⭐ **`convnextInputGrad_eq_convNextForwardTCh_vjp` — THE APEX.** `convnextInputGrad`, with
    every slot pinned to the certified per-op backward at its own saved activation, IS
-   `(convNextForwardTCh_has_vjp …).backward x`. The ConvNeXt peer of
-   `r34InputGradB_eq_r34B_full_vjp`, and **stronger**: `convNextForwardTCh_has_vjp` is `HasVJP` —
+   `(convNextForwardTChHasVJP …).backward x`. The ConvNeXt peer of
+   `r34InputGradB_eq_r34B_full_vjp`, and **stronger**: `convNextForwardTChHasVJP` is `HasVJP` —
    everywhere — not the smooth-point `HasVJPAt` that one is, because GELU, LayerNorm, convolution and the layer scale are all smooth and
    ConvNeXt has no kink anywhere. Its only hypotheses are the 23 LayerNorm positivities, so unlike
    every other whole-net backward tie in this repo it carries no smoothness side-condition.
@@ -61,7 +61,7 @@ free once the spelling is normalised at a definition:
 * `cnxDownChW h w p` is declared over `Vec (cin * (2 * h) * (2 * w))` where the chain spells
   `Vec (96 * 56 * 56)`. Both are closed terms and equal, and the unifier still descends into the
   semantics of both sides rather than reducing `2 * 28` — the diagnostics reach
-  `conv2d_input_grad_formula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`. Measured one link at a
+  `conv2dInputGradFormula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`. Measured one link at a
   time, the three downsamples cost 3 s, 15 s and then do not finish, while every stage, LayerNorm,
   GAP and dense link is free. `cnxDn1`/`cnxDn2`/`cnxDn3` below are the whole fix: a one-line `def`
   with the type ascribed in the chain's spelling, plus `Differentiable`/`HasVJP` peers ascribed the
@@ -82,17 +82,17 @@ free once the spelling is normalised at a definition:
 computed dimension meets a metavariable (`2 * ?h = 112`) and the unification is higher-order; there
 the fix is to pin the implicit. Here `h` is given explicitly and it still costs — two CLOSED
 spellings of one numeral are enough. ⛔ And it is invisible in an unapplied position:
-`convNextForwardTCh_vjp_chain`'s ascription compares the whole twelve-factor composition against
+`convNextForwardTChVjpChain`'s ascription compares the whole twelve-factor composition against
 the committed one and is free, because no `x` is in sight to evaluate.
 
 ⛔ **The other half of the shape is the term-mode chain, and it is not a preference.**
-`convNextForwardTCh_has_vjp` is a tactic proof, so its eleven `have`s are `letFun` and its
+`convNextForwardTChHasVJP` is a tactic proof, so its eleven `have`s are `letFun` and its
 `.backward` does not reduce; the whole-net `rfl` against it returned no result at
 `maxHeartbeats 8000000`, twice, ~8 min each. `HasVJP.backward_unique` transfers through `.correct`
 instead, which costs nothing, and the term-mode peer must be top-level `def`s rather than a `let`
 chain — a `let` used twice per level zeta-expands to `2^11` copies of the prefix.
 
-⚠ ResNet-34's shape check is `resnet34ForwardB_full_eq_slots` (`ResNet34BackCertifiedTieB.lean`),
+⚠ ResNet-34's shape check is `resnet34ForwardBFull_eq_slots` (`ResNet34BackCertifiedTieB.lean`),
 and it is the net the hole first bit.
 -/
 
@@ -105,7 +105,7 @@ namespace Proofs
 
 /-- **The downsample backward tie.** `cnxDownBack (padOdd p.W) lnB` — the strided-conv backward at
     the ZERO-EXTENDED kernel, then the channel-LN back at the input resolution — is
-    `(cnxDownChW_has_vjp h w p hε).backward v`.
+    `(cnxDownChWHasVJP h w p hε).backward v`.
 
     ⛔ `padOdd` is load-bearing and not cosmetic: `p.W` is `2×2`, so `cnxDownBack p.W` reverses a
     conv shifted one pixel (`EvenKernelConvBack.lean`). This is one of the four sites the
@@ -114,7 +114,7 @@ theorem cnxDownChBack_eq_vjp {cin cout h w : Nat} (p : CnxDownParamsCh cin cout)
     (hε : 0 < p.ε) (v : Vec (cin * (2 * h) * (2 * w))) :
     cnxDownBack (h := h) (w := w) (padOdd p.W)
         (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ v)
-      = (cnxDownChW_has_vjp h w p hε).backward v := by
+      = (cnxDownChWHasVJP h w p hε).backward v := by
   funext dy
   show (chanLNTensor3Back cin (2 * h) (2 * w) p.ε p.γ v)
       (flatConvStride2Back (h := h) (w := w) (padOdd p.W) dy) = _
@@ -134,11 +134,11 @@ noncomputable def cnxBlockChBackAt {c cExp h w kHd kWd : Nat}
     Vec (c * h * w) → Vec (c * h * w) :=
   Proofs.residual (cnxBlockBodyBack p.Wdw p.Wex p.Wpr
     (chanLNTensor3Back c h w p.εn p.γn (depthwiseFlat (h := h) (w := w) p.Wdw p.bdw v))
-    ((layerScale_has_vjp (cnxGlsCh p)).backward
+    ((layerScaleHasVJP (cnxGlsCh p)).backward
       ((flatConv (h := h) (w := w) p.Wpr p.bpr ∘ gelu (cExp * h * w) ∘
         flatConv (h := h) (w := w) p.Wex p.bex ∘ chanLNTensor3 c h w p.εn p.γn p.βn ∘
         depthwiseFlat (h := h) (w := w) p.Wdw p.bdw) v))
-    ((gelu_has_vjp (cExp * h * w)).backward
+    ((geluHasVJP (cExp * h * w)).backward
       ((flatConv (h := h) (w := w) p.Wex p.bex ∘ chanLNTensor3 c h w p.εn p.γn p.βn ∘
         depthwiseFlat (h := h) (w := w) p.Wdw p.bdw) v)))
 
@@ -160,15 +160,15 @@ noncomputable def cnxStageChKBack {c cExp h w kH kW : Nat} :
         cnxStageChKBack k (fun i => ps i.succ) (cnxBlockChW (ps 0) v)
 
 /-- ⭐⭐ **THE STAGE-FOLD TIE.** The hand-composed depth-`k` stage backward IS
-    `(convNextStageChK_has_vjp k ps hε).backward`. Induction on `k`: the base case is
-    `identity_has_vjp`'s `fun _ dy => dy`, and the step is one rewrite of the block tie
+    `(convNextStageChKHasVJP k ps hε).backward`. Induction on `k`: the base case is
+    `identityHasVJP`'s `fun _ dy => dy`, and the step is one rewrite of the block tie
     (`cnxBlockChBack_eq_vjp`) and one of the inductive hypothesis at the shifted saved
     activation. -/
 theorem cnxStageChKBack_eq_vjp {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd) :
     ∀ (k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kHd kWd)
       (hε : ∀ i, 0 < (ps i).εn) (v : Vec (c * h * w)),
-      cnxStageChKBack k ps v = (convNextStageChK_has_vjp k ps hε).backward v
+      cnxStageChKBack k ps v = (convNextStageChKHasVJP k ps hε).backward v
   | 0, _, _, _ => rfl
   | k + 1, ps, hε, v => by
       show cnxBlockChBackAt (ps 0) v ∘
@@ -179,14 +179,14 @@ theorem cnxStageChKBack_eq_vjp {c cExp h w kHd kWd : Nat}
       rw [cnxBlockChBack_eq_vjp hkHd hkWd (ps 0) (hε 0) v]
       rfl
 
-/-- `rowLNVecFlat_has_vjp_backward_eq` at the FUNCTION level — the direction and shape a whole-net
+/-- `rowLNVecFlatHasVJP_backward_eq` at the FUNCTION level — the direction and shape a whole-net
     `rw` needs. The committed lemma is pointwise in `dy` and oriented certified-to-hand; a chain
     rewrite wants hand-to-certified with `dy` abstracted. -/
-theorem rowLNVecFlat_has_vjp_backward_eq_fun {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+theorem rowLNVecFlatHasVJP_backward_eq_fun {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (X : Vec (s * c)) :
-    rowLNVecFlatBack s c ε γ X = (rowLNVecFlat_has_vjp s c ε γ β hε).backward X := by
+    rowLNVecFlatBack s c ε γ X = (rowLNVecFlatHasVJP s c ε γ β hε).backward X := by
   funext dy
-  rw [rowLNVecFlat_has_vjp_backward_eq (β := β) ε hε γ X dy]
+  rw [rowLNVecFlatHasVJP_backward_eq (β := β) ε hε γ X dy]
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -198,7 +198,7 @@ that is the whole reason this section closes in seconds.** `cnxDownChW h w p` is
 `Vec (cin * (2 * h) * (2 * w))`; the chain spells the same type `Vec (96 * 56 * 56)`. Both are
 closed terms and they are equal, but in an APPLIED position the unifier does not reduce `2 * 28`
 to `56` — it descends into the semantics of both sides instead, and the diagnostics name what it
-reaches: `conv2d_input_grad_formula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`. Measured, one
+reaches: `conv2dInputGradFormula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`. Measured, one
 tie at a time: the three downsample links cost 3 s, 15 s and then do not finish, while every
 stage, LayerNorm, GAP and dense link is free. With the wrappers below — a one-line `def` per
 offending stage, its type ascribed in the chain's spelling, and its `Differentiable`/`HasVJP`
@@ -209,52 +209,52 @@ peers ascribed the same way — the twelve chain defs and all eleven links toget
 computed dimension meets a metavariable (`2 * ?h = 112`) and the unification is higher-order.
 There the fix is to pin the implicit. Here `h` is already given explicitly and it still costs:
 two CLOSED spellings of one numeral are enough. ⛔ And it is invisible in an unapplied position —
-`convNextForwardTCh_vjp_chain`'s ascription below compares the whole twelve-factor composition
+`convNextForwardTChVjpChain`'s ascription below compares the whole twelve-factor composition
 against the committed one and is free, because no `x` is in sight to evaluate. -/
 
-/-! ⭐ The wrappers, their `Differentiable`/`HasVJP` peers, the stem's `cnxD0`/`cnxV0` and the four
+/-! ⭐ The wrappers, their `Differentiable`/`HasVJP` peers, the stem's `cnxSavedA0_differentiable`/`cnxV0` and the four
 normalised leaf ties below are PUBLIC: `ConvNeXtWholeBackCertifiedTieB.lean` lifts the same
 twelve stages over a batch and needs them at exactly these spellings. -/
 
 /-- Downsample 1 at the chain's dimension spelling. -/
 noncomputable def cnxDn1 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (96 * 56 * 56) → Vec (192 * 28 * 28) :=
   cnxDownChW 28 28 w.d1
-theorem cnxDn1Diff {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 < w.d1.ε) :
-    Differentiable ℝ (cnxDn1 w) := cnxDownChW_diff 28 28 w.d1 hd1
+theorem cnxDn1_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 < w.d1.ε) :
+    Differentiable ℝ (cnxDn1 w) := cnxDownChW_differentiable 28 28 w.d1 hd1
 noncomputable def cnxDn1Vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 < w.d1.ε) :
-    HasVJP (cnxDn1 w) := cnxDownChW_has_vjp 28 28 w.d1 hd1
+    HasVJP (cnxDn1 w) := cnxDownChWHasVJP 28 28 w.d1 hd1
 
 /-- Downsample 2 at the chain's dimension spelling. -/
 noncomputable def cnxDn2 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (192 * 28 * 28) → Vec (384 * 14 * 14) :=
   cnxDownChW 14 14 w.d2
-theorem cnxDn2Diff {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) :
-    Differentiable ℝ (cnxDn2 w) := cnxDownChW_diff 14 14 w.d2 hd2
+theorem cnxDn2_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) :
+    Differentiable ℝ (cnxDn2 w) := cnxDownChW_differentiable 14 14 w.d2 hd2
 noncomputable def cnxDn2Vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) :
-    HasVJP (cnxDn2 w) := cnxDownChW_has_vjp 14 14 w.d2 hd2
+    HasVJP (cnxDn2 w) := cnxDownChWHasVJP 14 14 w.d2 hd2
 
 /-- Downsample 3 at the chain's dimension spelling. -/
 noncomputable def cnxDn3 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (384 * 14 * 14) → Vec (768 * 7 * 7) :=
   cnxDownChW 7 7 w.d3
-theorem cnxDn3Diff {nC : Nat} (w : CnxTWeightsCh nC) (hd3 : 0 < w.d3.ε) :
-    Differentiable ℝ (cnxDn3 w) := cnxDownChW_diff 7 7 w.d3 hd3
+theorem cnxDn3_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hd3 : 0 < w.d3.ε) :
+    Differentiable ℝ (cnxDn3 w) := cnxDownChW_differentiable 7 7 w.d3 hd3
 noncomputable def cnxDn3Vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd3 : 0 < w.d3.ε) :
-    HasVJP (cnxDn3 w) := cnxDownChW_has_vjp 7 7 w.d3 hd3
+    HasVJP (cnxDn3 w) := cnxDownChWHasVJP 7 7 w.d3 hd3
 
 /-- The head LayerNorm at `Vec 768`, not `Vec (1 * 768)` — the same normalisation, at the one
     site where the computed dimension is a `1 *` rather than a `2 *`. -/
 noncomputable def cnxLNh {nC : Nat} (w : CnxTWeightsCh nC) : Vec 768 → Vec 768 :=
   rowLNVecFlat 1 768 w.hε w.hγ w.hβ
-theorem cnxLNhDiff {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε) :
-    Differentiable ℝ (cnxLNh w) := rowLNVecFlat_diff 1 768 w.hε w.hγ w.hβ hhε
+theorem cnxLNh_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε) :
+    Differentiable ℝ (cnxLNh w) := rowLNVecFlat_differentiable 1 768 w.hε w.hγ w.hβ hhε
 noncomputable def cnxLNhVjp {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε) :
-    HasVJP (cnxLNh w) := rowLNVecFlat_has_vjp 1 768 w.hε w.hγ w.hβ hhε
+    HasVJP (cnxLNh w) := rowLNVecFlatHasVJP 1 768 w.hε w.hγ w.hβ hhε
 
 
 -- ── the forward prefixes: `cnxSavedA k w x` is stage `k`'s saved input ──
 
 /-! ⭐ `convNextForwardTCh`'s eleven stage inputs, named — and named as FUNCTIONS, so that the
 same twelve constants are both the saved activations the backward's slots are indexed by and the
-`f` argument of each `vjp_comp`. That is what makes every link below a one-step iota with
+`f` argument of each `vjpComp`. That is what makes every link below a one-step iota with
 syntactically identical sides: the alternative — an applied `cnxSavedA k w x` on one side and the
 chain's own `f x` on the other — is defeq, and identifying the two costs 2 s at depth one and
 does not finish at depth two. -/
@@ -263,192 +263,192 @@ does not finish at depth two. -/
 noncomputable def cnxSavedA0 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (96 * 56 * 56) :=
     flatConvStride4 (h := 56) (w := 56) w.sW w.sb
 
-theorem cnxD0 {nC : Nat} (w : CnxTWeightsCh nC) : Differentiable ℝ (cnxSavedA0 w) :=
+theorem cnxSavedA0_differentiable {nC : Nat} (w : CnxTWeightsCh nC) : Differentiable ℝ (cnxSavedA0 w) :=
     flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb
 noncomputable def cnxV0 {nC : Nat} (w : CnxTWeightsCh nC) : HasVJP (cnxSavedA0 w) :=
-    flatConvStride4_has_vjp (h := 56) (w := 56) w.sW w.sb
+    flatConvStride4HasVJP (h := 56) (w := 56) w.sW w.sb
 
 /-- Stage 1's saved input. -/
 noncomputable def cnxSavedA1 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (96 * 56 * 56) :=
   chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘ cnxSavedA0 w
 
-private theorem cnxD1 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) : Differentiable ℝ (cnxSavedA1 w) :=
-  (chanLNTensor3_diff 96 56 56 w.sε w.sγ w.sβ hsε).comp (cnxD0 w)
+private theorem cnxSavedA1_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) : Differentiable ℝ (cnxSavedA1 w) :=
+  (chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε).comp (cnxSavedA0_differentiable w)
 private noncomputable def cnxV1 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) : HasVJP (cnxSavedA1 w) :=
-  vjp_comp (cnxSavedA0 w) _ (cnxD0 w) (chanLNTensor3_diff 96 56 56 w.sε w.sγ w.sβ hsε) (cnxV0 w)
-    (chanLNTensor3_has_vjp 96 56 56 w.sε w.sγ w.sβ hsε)
+  vjpComp (cnxSavedA0 w) _ (cnxSavedA0_differentiable w) (chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε) (cnxV0 w)
+    (chanLNTensor3HasVJP 96 56 56 w.sε w.sγ w.sβ hsε)
 
 /-- Downsample 1's saved input. -/
 noncomputable def cnxSavedA2 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (96 * 56 * 56) :=
   convNextStageChK 3 w.s1 ∘ cnxSavedA1 w
 
-private theorem cnxD2 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn) :
+private theorem cnxSavedA2_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn) :
     Differentiable ℝ (cnxSavedA2 w) :=
-  (convNextStageChK_diff 3 w.s1 h1).comp (cnxD1 w hsε)
+  (convNextStageChK_differentiable 3 w.s1 h1).comp (cnxSavedA1_differentiable w hsε)
 private noncomputable def cnxV2 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn) :
     HasVJP (cnxSavedA2 w) :=
-  vjp_comp (cnxSavedA1 w) _ (cnxD1 w hsε) (convNextStageChK_diff 3 w.s1 h1) (cnxV1 w hsε)
-    (convNextStageChK_has_vjp 3 w.s1 h1)
+  vjpComp (cnxSavedA1 w) _ (cnxSavedA1_differentiable w hsε) (convNextStageChK_differentiable 3 w.s1 h1) (cnxV1 w hsε)
+    (convNextStageChKHasVJP 3 w.s1 h1)
 
 /-- Stage 2's saved input. -/
 noncomputable def cnxSavedA3 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (192 * 28 * 28) :=
   cnxDn1 w ∘ cnxSavedA2 w
 
-private theorem cnxD3 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA3_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) : Differentiable ℝ (cnxSavedA3 w) :=
-  (cnxDn1Diff w hd1).comp (cnxD2 w hsε h1)
+  (cnxDn1_differentiable w hd1).comp (cnxSavedA2_differentiable w hsε h1)
 private noncomputable def cnxV3 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) : HasVJP (cnxSavedA3 w) :=
-  vjp_comp (cnxSavedA2 w) _ (cnxD2 w hsε h1) (cnxDn1Diff w hd1) (cnxV2 w hsε h1) (cnxDn1Vjp w hd1)
+  vjpComp (cnxSavedA2 w) _ (cnxSavedA2_differentiable w hsε h1) (cnxDn1_differentiable w hd1) (cnxV2 w hsε h1) (cnxDn1Vjp w hd1)
 
 /-- Downsample 2's saved input. -/
 noncomputable def cnxSavedA4 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (192 * 28 * 28) :=
   convNextStageChK 3 w.s2 ∘ cnxSavedA3 w
 
-private theorem cnxD4 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA4_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) : Differentiable ℝ (cnxSavedA4 w) :=
-  (convNextStageChK_diff 3 w.s2 h2).comp (cnxD3 w hsε h1 hd1)
+  (convNextStageChK_differentiable 3 w.s2 h2).comp (cnxSavedA3_differentiable w hsε h1 hd1)
 private noncomputable def cnxV4 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) : HasVJP (cnxSavedA4 w) :=
-  vjp_comp (cnxSavedA3 w) _ (cnxD3 w hsε h1 hd1) (convNextStageChK_diff 3 w.s2 h2)
-    (cnxV3 w hsε h1 hd1) (convNextStageChK_has_vjp 3 w.s2 h2)
+  vjpComp (cnxSavedA3 w) _ (cnxSavedA3_differentiable w hsε h1 hd1) (convNextStageChK_differentiable 3 w.s2 h2)
+    (cnxV3 w hsε h1 hd1) (convNextStageChKHasVJP 3 w.s2 h2)
 
 /-- Stage 3's saved input. -/
 noncomputable def cnxSavedA5 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (384 * 14 * 14) :=
   cnxDn2 w ∘ cnxSavedA4 w
 
-private theorem cnxD5 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA5_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) : Differentiable ℝ
     (cnxSavedA5 w) :=
-  (cnxDn2Diff w hd2).comp (cnxD4 w hsε h1 hd1 h2)
+  (cnxDn2_differentiable w hd2).comp (cnxSavedA4_differentiable w hsε h1 hd1 h2)
 private noncomputable def cnxV5 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) : HasVJP (cnxSavedA5 w) :=
-  vjp_comp (cnxSavedA4 w) _ (cnxD4 w hsε h1 hd1 h2) (cnxDn2Diff w hd2) (cnxV4 w hsε h1 hd1 h2)
+  vjpComp (cnxSavedA4 w) _ (cnxSavedA4_differentiable w hsε h1 hd1 h2) (cnxDn2_differentiable w hd2) (cnxV4 w hsε h1 hd1 h2)
     (cnxDn2Vjp w hd2)
 
 /-- Downsample 3's saved input. -/
 noncomputable def cnxSavedA6 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (384 * 14 * 14) :=
   convNextStageChK 9 w.s3 ∘ cnxSavedA5 w
 
-private theorem cnxD6 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA6_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn) :
     Differentiable ℝ (cnxSavedA6 w) :=
-  (convNextStageChK_diff 9 w.s3 h3).comp (cnxD5 w hsε h1 hd1 h2 hd2)
+  (convNextStageChK_differentiable 9 w.s3 h3).comp (cnxSavedA5_differentiable w hsε h1 hd1 h2 hd2)
 private noncomputable def cnxV6 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn) :
     HasVJP (cnxSavedA6 w) :=
-  vjp_comp (cnxSavedA5 w) _ (cnxD5 w hsε h1 hd1 h2 hd2) (convNextStageChK_diff 9 w.s3 h3)
-    (cnxV5 w hsε h1 hd1 h2 hd2) (convNextStageChK_has_vjp 9 w.s3 h3)
+  vjpComp (cnxSavedA5 w) _ (cnxSavedA5_differentiable w hsε h1 hd1 h2 hd2) (convNextStageChK_differentiable 9 w.s3 h3)
+    (cnxV5 w hsε h1 hd1 h2 hd2) (convNextStageChKHasVJP 9 w.s3 h3)
 
 /-- Stage 4's saved input. -/
 noncomputable def cnxSavedA7 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (768 * 7 * 7) :=
   cnxDn3 w ∘ cnxSavedA6 w
 
-private theorem cnxD7 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA7_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) : Differentiable ℝ (cnxSavedA7 w) :=
-  (cnxDn3Diff w hd3).comp (cnxD6 w hsε h1 hd1 h2 hd2 h3)
+  (cnxDn3_differentiable w hd3).comp (cnxSavedA6_differentiable w hsε h1 hd1 h2 hd2 h3)
 private noncomputable def cnxV7 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) : HasVJP (cnxSavedA7 w) :=
-  vjp_comp (cnxSavedA6 w) _ (cnxD6 w hsε h1 hd1 h2 hd2 h3) (cnxDn3Diff w hd3)
+  vjpComp (cnxSavedA6 w) _ (cnxSavedA6_differentiable w hsε h1 hd1 h2 hd2 h3) (cnxDn3_differentiable w hd3)
     (cnxV6 w hsε h1 hd1 h2 hd2 h3) (cnxDn3Vjp w hd3)
 
 /-- GAP's saved input. -/
 noncomputable def cnxSavedA8 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (768 * 7 * 7) :=
   convNextStageChK 3 w.s4 ∘ cnxSavedA7 w
 
-private theorem cnxD8 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA8_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) : Differentiable ℝ (cnxSavedA8 w) :=
-  (convNextStageChK_diff 3 w.s4 h4).comp (cnxD7 w hsε h1 hd1 h2 hd2 h3 hd3)
+  (convNextStageChK_differentiable 3 w.s4 h4).comp (cnxSavedA7_differentiable w hsε h1 hd1 h2 hd2 h3 hd3)
 private noncomputable def cnxV8 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) : HasVJP (cnxSavedA8 w) :=
-  vjp_comp (cnxSavedA7 w) _ (cnxD7 w hsε h1 hd1 h2 hd2 h3 hd3) (convNextStageChK_diff 3 w.s4 h4)
-    (cnxV7 w hsε h1 hd1 h2 hd2 h3 hd3) (convNextStageChK_has_vjp 3 w.s4 h4)
+  vjpComp (cnxSavedA7 w) _ (cnxSavedA7_differentiable w hsε h1 hd1 h2 hd2 h3 hd3) (convNextStageChK_differentiable 3 w.s4 h4)
+    (cnxV7 w hsε h1 hd1 h2 hd2 h3 hd3) (convNextStageChKHasVJP 3 w.s4 h4)
 
 /-- The head LayerNorm's saved input. -/
 noncomputable def cnxSavedA9 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (768) :=
   globalAvgPoolFlat 768 7 7 ∘ cnxSavedA8 w
 
-private theorem cnxD9 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA9_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) : Differentiable ℝ (cnxSavedA9 w) :=
-  (globalAvgPoolFlat_differentiable 768 7 7).comp (cnxD8 w hsε h1 hd1 h2 hd2 h3 hd3 h4)
+  (globalAvgPoolFlat_differentiable 768 7 7).comp (cnxSavedA8_differentiable w hsε h1 hd1 h2 hd2 h3 hd3 h4)
 private noncomputable def cnxV9 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) : HasVJP (cnxSavedA9 w) :=
-  vjp_comp (cnxSavedA8 w) _ (cnxD8 w hsε h1 hd1 h2 hd2 h3 hd3 h4)
+  vjpComp (cnxSavedA8 w) _ (cnxSavedA8_differentiable w hsε h1 hd1 h2 hd2 h3 hd3 h4)
     (globalAvgPoolFlat_differentiable 768 7 7) (cnxV8 w hsε h1 hd1 h2 hd2 h3 hd3 h4)
-    (globalAvgPoolFlat_has_vjp 768 7 7)
+    (globalAvgPoolFlatHasVJP 768 7 7)
 
 /-- The classifier's saved input. -/
 noncomputable def cnxSavedA10 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (768) :=
   cnxLNh w ∘ cnxSavedA9 w
 
-private theorem cnxD10 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxSavedA10_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) : Differentiable ℝ
     (cnxSavedA10 w) :=
-  (cnxLNhDiff w hhε).comp (cnxD9 w hsε h1 hd1 h2 hd2 h3 hd3 h4)
+  (cnxLNh_differentiable w hhε).comp (cnxSavedA9_differentiable w hsε h1 hd1 h2 hd2 h3 hd3 h4)
 private noncomputable def cnxV10 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) : HasVJP (cnxSavedA10 w) :=
-  vjp_comp (cnxSavedA9 w) _ (cnxD9 w hsε h1 hd1 h2 hd2 h3 hd3 h4) (cnxLNhDiff w hhε)
+  vjpComp (cnxSavedA9 w) _ (cnxSavedA9_differentiable w hsε h1 hd1 h2 hd2 h3 hd3 h4) (cnxLNh_differentiable w hhε)
     (cnxV9 w hsε h1 hd1 h2 hd2 h3 hd3 h4) (cnxLNhVjp w hhε)
 
 private noncomputable def cnxV11 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) :
     HasVJP (dense w.Wd w.bd ∘ cnxSavedA10 w) :=
-  vjp_comp (cnxSavedA10 w) _ (cnxD10 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
+  vjpComp (cnxSavedA10 w) _ (cnxSavedA10_differentiable w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
     (dense_differentiable w.Wd w.bd) (cnxV10 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
-    (dense_has_vjp w.Wd w.bd)
+    (denseHasVJP w.Wd w.bd)
 
 -- ── the eleven single-level reductions ──
 
-private theorem cnxT1 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (x : Vec (3 * 224 * 224))
+private theorem cnxV1_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (x : Vec (3 * 224 * 224))
     (dy : Vec (96 * 56 * 56)) :
     (cnxV1 w hsε).backward x dy
       = (cnxV0 w).backward x
-        ((chanLNTensor3_has_vjp 96 56 56 w.sε w.sγ w.sβ hsε).backward (cnxSavedA0 w x) dy) := rfl
+        ((chanLNTensor3HasVJP 96 56 56 w.sε w.sγ w.sβ hsε).backward (cnxSavedA0 w x) dy) := rfl
 
-private theorem cnxT2 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV2_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (x : Vec (3 * 224 * 224))
     (dy : Vec (96 * 56 * 56)) :
     (cnxV2 w hsε h1).backward x dy
       = (cnxV1 w hsε).backward x
-        ((convNextStageChK_has_vjp 3 w.s1 h1).backward (cnxSavedA1 w x) dy) := rfl
+        ((convNextStageChKHasVJP 3 w.s1 h1).backward (cnxSavedA1 w x) dy) := rfl
 
-private theorem cnxT3 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV3_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (x : Vec (3 * 224 * 224))
     (dy : Vec (192 * 28 * 28)) :
     (cnxV3 w hsε h1 hd1).backward x dy
       = (cnxV2 w hsε h1).backward x ((cnxDn1Vjp w hd1).backward (cnxSavedA2 w x) dy) := rfl
 
-private theorem cnxT4 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV4_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (x : Vec (3 * 224 * 224))
     (dy : Vec (192 * 28 * 28)) :
     (cnxV4 w hsε h1 hd1 h2).backward x dy
       = (cnxV3 w hsε h1 hd1).backward x
-        ((convNextStageChK_has_vjp 3 w.s2 h2).backward (cnxSavedA3 w x) dy) := rfl
+        ((convNextStageChKHasVJP 3 w.s2 h2).backward (cnxSavedA3 w x) dy) := rfl
 
-private theorem cnxT5 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV5_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (x : Vec (3 * 224 * 224))
     (dy : Vec (384 * 14 * 14)) :
     (cnxV5 w hsε h1 hd1 h2 hd2).backward x dy
       = (cnxV4 w hsε h1 hd1 h2).backward x ((cnxDn2Vjp w hd2).backward (cnxSavedA4 w x) dy) := rfl
 
-private theorem cnxT6 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV6_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (x : Vec (3 * 224 * 224))
     (dy : Vec (384 * 14 * 14)) :
     (cnxV6 w hsε h1 hd1 h2 hd2 h3).backward x dy
       = (cnxV5 w hsε h1 hd1 h2 hd2).backward x
-        ((convNextStageChK_has_vjp 9 w.s3 h3).backward (cnxSavedA5 w x) dy) := rfl
+        ((convNextStageChKHasVJP 9 w.s3 h3).backward (cnxSavedA5 w x) dy) := rfl
 
-private theorem cnxT7 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV7_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (x : Vec (3 * 224 * 224))
     (dy : Vec (768 * 7 * 7)) :
@@ -456,23 +456,23 @@ private theorem cnxT7 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 :
       = (cnxV6 w hsε h1 hd1 h2 hd2 h3).backward x ((cnxDn3Vjp w hd3).backward (cnxSavedA6 w x) dy)
         := rfl
 
-private theorem cnxT8 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV8_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (x : Vec (3 * 224 * 224))
     (dy : Vec (768 * 7 * 7)) :
     (cnxV8 w hsε h1 hd1 h2 hd2 h3 hd3 h4).backward x dy
       = (cnxV7 w hsε h1 hd1 h2 hd2 h3 hd3).backward x
-        ((convNextStageChK_has_vjp 3 w.s4 h4).backward (cnxSavedA7 w x) dy) := rfl
+        ((convNextStageChKHasVJP 3 w.s4 h4).backward (cnxSavedA7 w x) dy) := rfl
 
-private theorem cnxT9 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV9_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (x : Vec (3 * 224 * 224))
     (dy : Vec (768)) :
     (cnxV9 w hsε h1 hd1 h2 hd2 h3 hd3 h4).backward x dy
       = (cnxV8 w hsε h1 hd1 h2 hd2 h3 hd3 h4).backward x
-        ((globalAvgPoolFlat_has_vjp 768 7 7).backward (cnxSavedA8 w x) dy) := rfl
+        ((globalAvgPoolFlatHasVJP 768 7 7).backward (cnxSavedA8 w x) dy) := rfl
 
-private theorem cnxT10 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV10_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) (x : Vec (3 * 224 * 224))
     (dy : Vec (768)) :
@@ -480,13 +480,13 @@ private theorem cnxT10 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 
       = (cnxV9 w hsε h1 hd1 h2 hd2 h3 hd3 h4).backward x
         ((cnxLNhVjp w hhε).backward (cnxSavedA9 w x) dy) := rfl
 
-private theorem cnxT11 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
+private theorem cnxV11_backward {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
     (hd1 : 0 < w.d1.ε) (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε) (h3 : ∀ i, 0 < (w.s3 i).εn)
     (hd3 : 0 < w.d3.ε) (h4 : ∀ i, 0 < (w.s4 i).εn) (hhε : 0 < w.hε) (x : Vec (3 * 224 * 224))
     (dy : Vec nC) :
     (cnxV11 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x dy
       = (cnxV10 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x
-        ((dense_has_vjp w.Wd w.bd).backward (cnxSavedA10 w x) dy) := rfl
+        ((denseHasVJP w.Wd w.bd).backward (cnxSavedA10 w x) dy) := rfl
 
 -- ── the three normalised leaf ties the wrappers need ──
 
@@ -510,14 +510,14 @@ theorem cnxDn3Back_eq_vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd3 : 0 < w.d3.ε) 
 
 theorem cnxLNhBack_eq_vjp {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε) (v : Vec (1 * 768)) :
     rowLNVecFlatBack 1 768 w.hε w.hγ v = (cnxLNhVjp w hhε).backward v :=
-  rowLNVecFlat_has_vjp_backward_eq_fun (β := w.hβ) w.hε hhε w.hγ v
+  rowLNVecFlatHasVJP_backward_eq_fun (β := w.hβ) w.hε hhε w.hγ v
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE APEX
 -- ════════════════════════════════════════════════════════════════
 
-/-- **`convNextForwardTCh_has_vjp` as a TERM-mode `vjp_comp` chain.** -/
-noncomputable def convNextForwardTCh_vjp_chain {nC : Nat} (w : CnxTWeightsCh nC)
+/-- **`convNextForwardTChHasVJP` as a TERM-mode `vjpComp` chain.** -/
+noncomputable def convNextForwardTChVjpChain {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
     (h2 : ∀ i, 0 < (w.s2 i).εn) (hd2 : 0 < w.d2.ε)
@@ -559,7 +559,7 @@ theorem convnextInputGrad_eq_convNextForwardTCh_vjp {nC : Nat} (w : CnxTWeightsC
         (cnxDownBack (h := 7) (w := 7) (padOdd w.d3.W)
           (chanLNTensor3Back 384 14 14 w.d3.ε w.d3.γ (cnxSavedA6 w x)))
         (cnxStageChKBack 3 w.s4 (cnxSavedA7 w x))
-      = (convNextForwardTCh_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x := by
+      = (convNextForwardTChHasVJP w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε).backward x := by
   rw [cnxStageChKBack_eq_vjp (by norm_num) (by norm_num) 3 w.s1 h1 (cnxSavedA1 w x),
       cnxStageChKBack_eq_vjp (by norm_num) (by norm_num) 3 w.s2 h2 (cnxSavedA3 w x),
       cnxStageChKBack_eq_vjp (by norm_num) (by norm_num) 9 w.s3 h3 (cnxSavedA5 w x),
@@ -573,20 +573,20 @@ theorem convnextInputGrad_eq_convNextForwardTCh_vjp {nC : Nat} (w : CnxTWeightsC
       gapBack_eq_vjp_backward 768 7 7 (cnxSavedA8 w x),
       dense_transpose_eq_vjp_backward w.Wd w.bd (cnxSavedA10 w x)]
   funext dy
-  rw [HasVJP.backward_unique (convNextForwardTCh_has_vjp w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
-        (convNextForwardTCh_vjp_chain w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε) x dy,
-      convNextForwardTCh_vjp_chain,
-      cnxT11 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε x,
-      cnxT10 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε x,
-      cnxT9 w hsε h1 hd1 h2 hd2 h3 hd3 h4 x,
-      cnxT8 w hsε h1 hd1 h2 hd2 h3 hd3 h4 x,
-      cnxT7 w hsε h1 hd1 h2 hd2 h3 hd3 x,
-      cnxT6 w hsε h1 hd1 h2 hd2 h3 x,
-      cnxT5 w hsε h1 hd1 h2 hd2 x,
-      cnxT4 w hsε h1 hd1 h2 x,
-      cnxT3 w hsε h1 hd1 x,
-      cnxT2 w hsε h1 x,
-      cnxT1 w hsε x]
+  rw [HasVJP.backward_unique (convNextForwardTChHasVJP w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε)
+        (convNextForwardTChVjpChain w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε) x dy,
+      convNextForwardTChVjpChain,
+      cnxV11_backward w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε x,
+      cnxV10_backward w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε x,
+      cnxV9_backward w hsε h1 hd1 h2 hd2 h3 hd3 h4 x,
+      cnxV8_backward w hsε h1 hd1 h2 hd2 h3 hd3 h4 x,
+      cnxV7_backward w hsε h1 hd1 h2 hd2 h3 hd3 x,
+      cnxV6_backward w hsε h1 hd1 h2 hd2 h3 x,
+      cnxV5_backward w hsε h1 hd1 h2 hd2 x,
+      cnxV4_backward w hsε h1 hd1 h2 x,
+      cnxV3_backward w hsε h1 hd1 x,
+      cnxV2_backward w hsε h1 x,
+      cnxV1_backward w hsε x]
   rw [cnxV0]
   repeat rw [Function.comp_apply]
 

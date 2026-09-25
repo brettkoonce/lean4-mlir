@@ -75,7 +75,7 @@ noncomputable def Back.denote {inp out : Nat} (e : Back inp out) (dy : Vec inp) 
 /-- **Composition lemma** (the Phase-3 mechanism in miniature): a
     `dotGeneral` node denotes post-composition with `Mat.mulVec`.
     Whole-network bridges will chain lemmas of this shape, mirroring how
-    `vjp_comp` builds whole-net VJPs from per-layer ones. -/
+    `vjpComp` builds whole-net VJPs from per-layer ones. -/
 theorem denote_dotGeneral {inp m n : Nat} (A : Mat m n) (e : Back inp n) (dy : Vec inp) :
     (Back.dotGeneral A e).denote dy = Mat.mulVec A (e.denote dy) := rfl
 
@@ -85,7 +85,7 @@ theorem denote_dotGeneral {inp m n : Nat} (A : Mat m n) (e : Back inp n) (dy : V
 -- A backward graph is rooted at the cotangent leaf; composing two layers'
 -- backwards means plugging one graph into the other's cotangent. `subst`
 -- does that, and `denote_subst` proves it denotes the composition of the
--- denotations — the IR analogue of `vjp_comp`/`vjp_comp_at`. This is the
+-- denotations — the IR analogue of `vjpComp`/`vjpCompAt`. This is the
 -- mechanism that assembles per-op bridges into a whole-network bridge.
 -- ════════════════════════════════════════════════════════════════
 
@@ -105,7 +105,7 @@ def Back.subst {inp inp' out : Nat} (e : Back inp out) (g : Back inp' inp) : Bac
 
 /-- **IR-level chain rule.** `subst` denotes the composition of
     denotations: `⟦e[g/cotangent]⟧ dz = ⟦e⟧ (⟦g⟧ dz)`. The analogue of
-    `vjp_comp` — chains per-op bridges into a whole-network bridge. -/
+    `vjpComp` — chains per-op bridges into a whole-network bridge. -/
 theorem denote_subst {inp inp' out : Nat} (e : Back inp out) (g : Back inp' inp)
     (dz : Vec inp') : (e.subst g).denote dz = e.denote (g.denote dz) := by
   induction e with
@@ -130,7 +130,7 @@ def emitDenseBack {m n : Nat} (W : Mat m n) : Back n m := .dotGeneral W .cotange
     `Mat.mulVec W dy`. Base case — dense's backward is a single
     `dot_general` — so this is definitional; it pins the plumbing. -/
 theorem dense_back_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) (dy : Vec n) :
-    (emitDenseBack W).denote dy = (dense_has_vjp W b).backward x dy := rfl
+    (emitDenseBack W).denote dy = (denseHasVJP W b).backward x dy := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § Phase 0b — ReLU at a smooth point
@@ -148,8 +148,8 @@ def emitReluBack {n : Nat} (x : Vec n) : Back n n := .selectPos x .cotangent
     boundary — and exactly where this equality is allowed to fail. -/
 theorem relu_back_bridge {n : Nat} (x : Vec n) (h_smooth : ∀ k, x k ≠ 0)
     (dy : Vec n) (i : Fin n) :
-    (emitReluBack x).denote dy i = (relu_has_vjp n).backward x dy i := by
-  show (if x i > 0 then dy i else 0) = (relu_has_vjp n).backward x dy i
+    (emitReluBack x).denote dy i = (reluHasVJP n).backward x dy i := by
+  show (if x i > 0 then dy i else 0) = (reluHasVJP n).backward x dy i
   exact (relu_codegen_matches_canonical n x h_smooth dy i).symm
 
 -- ════════════════════════════════════════════════════════════════
@@ -162,7 +162,7 @@ theorem relu_back_bridge {n : Nat} (x : Vec n) (h_smooth : ∀ k, x k ≠ 0)
 -- "reversed-kernel identity" `dx = conv(dy, reverse(Wᵀ))` that `CNN.lean`
 -- only *asserts* in prose (in `CNN.lean`, "Equivalent under the partial
 -- bijection …") and never proves — the repo deliberately uses the
--- (co, ho, wo) form of `conv2d_input_grad_formula` to avoid this bijection.
+-- (co, ho, wo) form of `conv2dInputGradFormula` to avoid this bijection.
 -- Here it is discharged by expansion at the concrete shapes the Spatial
 -- instance uses (the partial-bijection-free route the repo wanted). The
 -- general-shape proof is the remaining Phase-2 item.
@@ -267,7 +267,7 @@ theorem reverseSlab_eq_gradSlab {h w kH kW : Nat}
 
 /-- **The general conv-adjoint identity (odd kernels), all dims.** The emitted
     reversed-kernel forward conv `conv2d (reverseSwap W) 0` equals the certified
-    conv input-gradient `conv2d_input_grad_formula W`, for ARBITRARY
+    conv input-gradient `conv2dInputGradFormula W`, for ARBITRARY
     `ic oc h w kH kW` with odd `kH`, `kW` (`2·⌊(kH-1)/2⌋+1 = kH`). This is the
     reversed-kernel ⇒ correlation-adjoint reindex that `conv_back_bridge_{1to2,2to2}`
     previously asserted only at two toy 4×4 shapes by exhaustive `fin_cases`.
@@ -280,20 +280,20 @@ theorem reverseSlab_eq_gradSlab {h w kH kW : Nat}
 theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : Kernel4 oc ic kH kW) (dy : Tensor3 oc h w) :
-    conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy := by
+    conv2d (reverseSwap W) (fun _ => 0) dy = conv2dInputGradFormula W dy := by
   funext ci hi wi
-  simp only [conv2d, reverseSwap, zero_add, conv2d_input_grad_formula]
+  simp only [conv2d, reverseSwap, zero_add, conv2dInputGradFormula]
   exact Finset.sum_congr rfl fun co _ => reverseSlab_eq_gradSlab hkH hkW (W co ci) (dy co) hi wi
 
 /-- **Conv backward bridge, 1→2 channels (the Spatial instance's first
     conv: `Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution
-    graph denotes the proven conv input-VJP `(conv2d_has_vjp3 W b).backward`.
+    graph denotes the proven conv input-VJP `(conv2dHasVJP3 W b).backward`.
     Now a one-line instance of the general `convBackDenote_eq_input_grad_formula`
     (3×3 is odd) — no longer the brute-force `fin_cases` expansion. -/
 theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
-    convBackDenote W dy = (conv2d_has_vjp3 W b).backward x dy := by
-  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy
+    convBackDenote W dy = (conv2dHasVJP3 W b).backward x dy := by
+  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2dInputGradFormula W dy
   exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
 
 /-- **Conv backward bridge, 2→2 channels (the Spatial instance's second
@@ -301,8 +301,8 @@ theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     one-line instance of the general lemma. -/
 theorem conv_back_bridge_2to2 (W : Kernel4 2 2 3 3) (b : Vec 2)
     (x : Tensor3 2 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
-    convBackDenote W dy = (conv2d_has_vjp3 W b).backward x dy := by
-  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2d_input_grad_formula W dy
+    convBackDenote W dy = (conv2dHasVJP3 W b).backward x dy := by
+  show conv2d (reverseSwap W) (fun _ => 0) dy = conv2dInputGradFormula W dy
   exact convBackDenote_eq_input_grad_formula (by decide) (by decide) W dy
 
 -- ════════════════════════════════════════════════════════════════
@@ -334,7 +334,7 @@ theorem maxpool_back_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w)
     (ci : Fin c) (hi_in : Fin (2*h)) (wi_in : Fin (2*w)) :
     maxPoolBackDenote x dy ci hi_in wi_in
-      = (maxPool2_has_vjp3 :
+      = (maxPool2HasVJP3 :
           HasVJP3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w)).backward
           x dy ci hi_in wi_in := by
   show (if MaxPool2IsArgmax x ci hi_in wi_in
@@ -366,17 +366,17 @@ def emitActBack {n : Nat} (s : Vec n) : Back n n := .scale s .cotangent
     `HasVJP.backward` exactly this elementwise scaling. -/
 theorem gelu_back_bridge (n : Nat) (x dy : Vec n) :
     (emitActBack (fun i => geluScalarDeriv (x i))).denote dy
-      = (gelu_has_vjp n).backward x dy := rfl
+      = (geluHasVJP n).backward x dy := rfl
 
 /-- **Swish / SiLU backward bridge.** Same diagonal pattern. -/
 theorem swish_back_bridge (n : Nat) (x dy : Vec n) :
     (emitActBack (fun i => swishScalarDeriv (x i))).denote dy
-      = (swish_has_vjp n).backward x dy := rfl
+      = (swishHasVJP n).backward x dy := rfl
 
 /-- **Sigmoid backward bridge.** Same diagonal pattern. -/
 theorem sigmoid_back_bridge (n : Nat) (x dy : Vec n) :
     (emitActBack (fun i => sigmoidScalarDeriv (x i))).denote dy
-      = (sigmoid_has_vjp n).backward x dy := rfl
+      = (sigmoidHasVJP n).backward x dy := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § Phase 1 — BatchNorm / LayerNorm (the rank-1 "wringer")
@@ -386,8 +386,8 @@ theorem sigmoid_back_bridge (n : Nat) (x dy : Vec n) :
 -- which the codegen emits as two `stablehlo.reduce` sums + broadcast +
 -- elementwise subtract/scale. The IR now carries `sumBroadcast`
 -- (reduce+broadcast), `sub`, and `scaleConst`; the bridge shows that graph
--- denotes the proven `bnNormalize_has_vjp.backward`. The affine half
--- (`γ·dy`) is one `scaleConst`. `bn_has_vjp = vjp_comp normalize affine`,
+-- denotes the proven `bnNormalizeHasVJP.backward`. The affine half
+-- (`γ·dy`) is one `scaleConst`. `bnHasVJP = vjpComp normalize affine`,
 -- so the full BN backward is the normalize graph fed `γ ⊙ dy`. LayerNorm
 -- is definitionally BN, so it inherits all of this.
 -- ════════════════════════════════════════════════════════════════
@@ -403,32 +403,32 @@ noncomputable def bnNormalizeBackOf {n : Nat} (xh : Vec n) (s invN : ℝ)
       (.sub (.scaleConst (n : ℝ) input) (.sumBroadcast input))
       (.scale xh (.sumBroadcast (.scale xh input))))
 
-/-- **Full BatchNorm backward bridge.** `bn_has_vjp = vjp_comp normalize
+/-- **Full BatchNorm backward bridge.** `bnHasVJP = vjpComp normalize
     affine`, so the emitted graph is the 3-term normalize graph fed
-    `γ ⊙ dy` (the affine backward). Denotes `(bn_has_vjp …).backward`.
+    `γ ⊙ dy` (the affine backward). Denotes `(bnHasVJP …).backward`.
     The `bnForward = bnAffine ∘ bnNormalize` cast collapses by `rfl`. -/
 theorem bn_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) :
     (bnNormalizeBackOf (bnXhat n ε x) (bnIstd n x ε) (1 / (n : ℝ))
         (Back.scaleConst γ Back.cotangent)).denote dy
-      = (bn_has_vjp n ε γ β hε).backward x dy := by
-  have h : (bn_has_vjp n ε γ β hε).backward x dy
-         = (bnNormalize_has_vjp n ε hε).backward x
-             ((bnAffine_has_vjp n γ β).backward (bnNormalize n ε x) dy) := by
-    simp only [bn_has_vjp, eq_mpr_eq_cast]; rfl
+      = (bnHasVJP n ε γ β hε).backward x dy := by
+  have h : (bnHasVJP n ε γ β hε).backward x dy
+         = (bnNormalizeHasVJP n ε hε).backward x
+             ((bnAffineHasVJP n γ β).backward (bnNormalize n ε x) dy) := by
+    simp only [bnHasVJP, eq_mpr_eq_cast]; rfl
   rw [h]
   funext i
-  simp only [bnNormalizeBackOf, Back.denote, bnNormalize_has_vjp, bnAffine_has_vjp]
+  simp only [bnNormalizeBackOf, Back.denote, bnNormalizeHasVJP, bnAffineHasVJP]
   rw [show (∑ j, γ * dy j * bnXhat n ε x j) = ∑ j, bnXhat n ε x j * (γ * dy j) from
         Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
   ring
 
-/-- **LayerNorm backward bridge — free.** `layerNorm_has_vjp` is
-    definitionally `bn_has_vjp` (LayerNorm is BN on a different axis), so
+/-- **LayerNorm backward bridge — free.** `layerNormHasVJP` is
+    definitionally `bnHasVJP` (LayerNorm is BN on a different axis), so
     the same emitted graph denotes its backward. -/
 theorem layernorm_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) :
     (bnNormalizeBackOf (bnXhat n ε x) (bnIstd n x ε) (1 / (n : ℝ))
         (Back.scaleConst γ Back.cotangent)).denote dy
-      = (layerNorm_has_vjp n ε γ β hε).backward x dy :=
+      = (layerNormHasVJP n ε γ β hε).backward x dy :=
   bn_back_bridge ε γ β hε x dy
 
 -- ════════════════════════════════════════════════════════════════
@@ -448,9 +448,9 @@ noncomputable def emitSoftmaxBack {c : Nat} (p : Vec c) : Back c c :=
 /-- **Softmax backward bridge.** The emitted reduce+broadcast+scale graph
     denotes the proven rank-1 softmax backward `pᵢ·(dyᵢ − ⟨p, dy⟩)`. -/
 theorem softmax_back_bridge (c : Nat) (z dy : Vec c) :
-    (emitSoftmaxBack (softmax c z)).denote dy = (softmax_has_vjp c).backward z dy := by
+    (emitSoftmaxBack (softmax c z)).denote dy = (softmaxHasVJP c).backward z dy := by
   funext i
-  simp only [emitSoftmaxBack, Back.denote, softmax_has_vjp]
+  simp only [emitSoftmaxBack, Back.denote, softmaxHasVJP]
   rw [show (∑ j, dy j * softmax c z j) = ∑ j, softmax c z j * dy j from
         Finset.sum_congr rfl (fun j _ => mul_comm _ _)]
   ring
@@ -470,7 +470,7 @@ theorem softmax_back_bridge (c : Nat) (z dy : Vec c) :
 /-- **Squeeze-and-Excitation backward bridge.** Given the gate's backward
     graph `bg` bridged to its proven backward at `x` (`hbg`), the emitted SE
     backward graph — `add (scale (gate x) dy) (bg[x ⊙ dy])` — denotes the
-    proven `seBlock_has_vjp.backward`. The fan-in + `denote_subst` (to plug
+    proven `seBlockHasVJP.backward`. The fan-in + `denote_subst` (to plug
     the gate graph in) assemble the per-op bridges through a non-composition
     combinator. -/
 theorem se_back_bridge {n : Nat} (gate : Vec n → Vec n)
@@ -478,9 +478,9 @@ theorem se_back_bridge {n : Nat} (gate : Vec n → Vec n)
     (bg : Back n n) (x dy : Vec n) (hbg : ∀ z, bg.denote z = hg.backward x z) :
     (Back.add (Back.scale (gate x) Back.cotangent)
         (bg.subst (Back.scale x Back.cotangent))).denote dy
-      = (seBlock_has_vjp gate hg_diff hg).backward x dy := by
+      = (seBlockHasVJP gate hg_diff hg).backward x dy := by
   funext i
-  simp only [Back.denote, seBlock_has_vjp, elemwiseProduct_has_vjp, identity_has_vjp]
+  simp only [Back.denote, seBlockHasVJP, elemwiseProductHasVJP, identityHasVJP]
   rw [denote_subst]
   simp only [Back.denote]
   rw [hbg, show (fun j => dy j * x j) = (fun j => x j * dy j) from
@@ -537,18 +537,18 @@ theorem denote_subst3 {c₁ h₁ w₁ c₀ h₀ w₀ c₂ h₂ w₂ : Nat}
   | maxpool x e' ih => simp only [Back3.subst, Back3.denote, ih]
 
 /-- The `Back3` maxpool node denotes the proven pointwise maxpool backward
-    `maxPool2_has_vjp_at3` — `maxPoolBackDenote` *is* that backward. -/
+    `maxPool2HasVJPAt3` — `maxPoolBackDenote` *is* that backward. -/
 theorem maxpool3_node_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool2Smooth x) (dy : Tensor3 c h w) :
-    (Back3.maxpool x Back3.cot).denote dy = (maxPool2_has_vjp_at3 x h_smooth).backward dy := by
+    (Back3.maxpool x Back3.cot).denote dy = (maxPool2HasVJPAt3 x h_smooth).backward dy := by
   funext ci hi wi
-  simp only [Back3.denote, maxPoolBackDenote, maxPool2_has_vjp_at3]
+  simp only [Back3.denote, maxPoolBackDenote, maxPool2HasVJPAt3]
 
 /-- The `Back3` conv node denotes the proven conv backward, at the Spatial
     instance's `1→2` conv shape (via `conv_back_bridge_1to2`). -/
 theorem conv3_node_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
-    (Back3.conv W Back3.cot).denote dy = (conv2d_has_vjp3 W b).backward x dy := by
+    (Back3.conv W Back3.cot).denote dy = (conv2dHasVJP3 W b).backward x dy := by
   simp only [Back3.denote]
   exact conv_back_bridge_1to2 W b x dy
 
@@ -568,7 +568,7 @@ theorem conv_compose3 {ic mc oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
 -- `mnistCnnNoBn` runs in flattened Vec space (`flatConv`, `maxPoolFlat`),
 -- so the connective step is to view a `Back3` graph through the
 -- `Tensor3.flatten` bijection and show it denotes the proven *flattened*
--- layer backward (`hasVJP3_to_hasVJP` / `maxPoolFlat_has_vjp_at`). With
+-- layer backward (`HasVJP3.toHasVJP` / `maxPoolFlatHasVJPAt`). With
 -- this, the Tensor3 conv/maxpool and the Vec dense/relu speak the same
 -- (Vec) language and can be chained.
 -- ════════════════════════════════════════════════════════════════
@@ -580,58 +580,58 @@ noncomputable def Back3.flatDenote {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
 
 /-- **Flatten bridge, max-pool.** The flattened `Back3` maxpool graph
     denotes the proven flattened maxpool layer backward
-    `maxPoolFlat_has_vjp_at` (the form `mnistCnnNoBn` composes). -/
+    `maxPoolFlatHasVJPAt` (the form `mnistCnnNoBn` composes). -/
 theorem maxpool_flatten_bridge {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (h_smooth : MaxPool2Smooth x) (dy : Vec (c * h * w)) :
     (Back3.maxpool x Back3.cot).flatDenote dy
-      = (maxPoolFlat_has_vjp_at x h_smooth).backward dy := by
+      = (maxPoolFlatHasVJPAt x h_smooth).backward dy := by
   funext idx
-  simp only [Back3.flatDenote, Back3.denote, maxPoolFlat_has_vjp_at,
-             hasVJPAt3_to_hasVJPAt, maxPoolBackDenote, maxPool2_has_vjp_at3,
+  simp only [Back3.flatDenote, Back3.denote, maxPoolFlatHasVJPAt,
+             HasVJPAt3.toHasVJPAt, maxPoolBackDenote, maxPool2HasVJPAt3,
              Tensor3.flatten]
 
 /-- **Flatten bridge, conv (Spatial `1→2` shape).** The flattened `Back3`
     conv graph denotes the proven flattened conv layer backward
-    `hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)` — chains `conv_back_bridge_1to2`
+    `HasVJP3.toHasVJP (conv2dHasVJP3 W b)` — chains `conv_back_bridge_1to2`
     (the reversed-kernel identity) with the `Tensor3.flatten` decode. -/
 theorem conv_flatten_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     (v : Vec (1 * (2*2) * (2*2))) (dy : Vec (2 * (2*2) * (2*2))) :
     (Back3.conv W Back3.cot).flatDenote dy
-      = (hasVJP3_to_hasVJP (conv2d_has_vjp3 W b)).backward v dy := by
+      = (HasVJP3.toHasVJP (conv2dHasVJP3 W b)).backward v dy := by
   funext idx
-  simp only [Back3.flatDenote, Back3.denote, hasVJP3_to_hasVJP, Tensor3.flatten]
+  simp only [Back3.flatDenote, Back3.denote, HasVJP3.toHasVJP, Tensor3.flatten]
   rw [conv_back_bridge_1to2 W b (Tensor3.unflatten v) (Tensor3.unflatten dy)]
 
 -- ════════════════════════════════════════════════════════════════
 -- § `HasVJPAt` (smooth-point) variants — the form whole-network VJPs use
 --
--- `mnistCnnNoBn_has_vjp_at` composes layers via `vjp_comp_at` over their
--- `HasVJPAt` instances. The leaves bridge trivially: `relu_has_vjp_at`'s
+-- `mnistCnnNoBnHasVJPAt` composes layers via `vjpCompAt` over their
+-- `HasVJPAt` instances. The leaves bridge trivially: `reluHasVJPAt`'s
 -- backward IS the `compare`/`select` formula (rfl), and
--- `(dense_has_vjp).toHasVJPAt` just wraps the global. The payoff is the
+-- `(denseHasVJP).toHasVJPAt` just wraps the global. The payoff is the
 -- block: the IR `subst` of the dense + relu backward graphs denotes the
--- `vjp_comp_at` block backward — the actual `mnistCnnNoBn` building block.
+-- `vjpCompAt` block backward — the actual `mnistCnnNoBn` building block.
 -- (conv/maxpool `_at` forms are the flatten bridges above.)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **ReLU `_at` bridge.** The `compare`/`select` graph denotes the pointwise
-    `relu_has_vjp_at` backward directly — definitional (no canonical sum). -/
+    `reluHasVJPAt` backward directly — definitional (no canonical sum). -/
 theorem relu_at_bridge (n : Nat) (x : Vec n) (h_smooth : ∀ k, x k ≠ 0) (dy : Vec n) :
-    (emitReluBack x).denote dy = (relu_has_vjp_at n x h_smooth).backward dy := rfl
+    (emitReluBack x).denote dy = (reluHasVJPAt n x h_smooth).backward dy := rfl
 
-/-- **Dense `_at` bridge.** `(dense_has_vjp).toHasVJPAt` wraps the global
+/-- **Dense `_at` bridge.** `(denseHasVJP).toHasVJPAt` wraps the global
     instance, so the dense graph still denotes it (rfl). -/
 theorem dense_at_bridge {m n : Nat} (W : Mat m n) (b : Vec n) (v : Vec m) (dy : Vec n) :
-    (emitDenseBack W).denote dy = ((dense_has_vjp W b).toHasVJPAt v).backward dy := rfl
+    (emitDenseBack W).denote dy = ((denseHasVJP W b).toHasVJPAt v).backward dy := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § Final assembly — a whole-network bridge
 --
 -- `mlpForward = dense W₂ ∘ relu ∘ dense W₁ ∘ relu ∘ dense W₀` is a genuine
--- whole network (all in Vec), and `mlp_has_vjp_at` is its proven VJP at a
--- smooth point (built by chaining `vjp_comp_at`). The emitted whole
+-- whole network (all in Vec), and `mlpHasVJPAt` is its proven VJP at a
+-- smooth point (built by chaining `vjpCompAt`). The emitted whole
 -- backward is a single Vec `subst` chain of the per-op graphs; the bridge
--- shows it denotes `mlp_has_vjp_at.backward` — every per-op `_at` bridge
+-- shows it denotes `mlpHasVJPAt.backward` — every per-op `_at` bridge
 -- assembled through `denote_subst` into one machine-checked statement that
 -- the emitted StableHLO backward graph computes the proven whole-network VJP.
 -- ════════════════════════════════════════════════════════════════
@@ -649,8 +649,8 @@ noncomputable def emitMlpBack {d₀ d₁ d₂ d₃ : Nat}
         ((emitReluBack p₁).subst (emitDenseBack W₂))))
 
 /-- **Whole-network bridge.** The emitted MLP backward graph denotes the
-    proven `mlp_has_vjp_at.backward` — the full assembly: per-op `_at`
-    bridges chained through `denote_subst`, matching the nested `vjp_comp_at`.
+    proven `mlpHasVJPAt.backward` — the full assembly: per-op `_at`
+    bridges chained through `denote_subst`, matching the nested `vjpCompAt`.
     A machine-checked statement that the emitted backward graph computes the
     proven whole-network VJP at a smooth point. -/
 theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
@@ -660,9 +660,9 @@ theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
     (h_smooth_1 : ∀ k, dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)) k ≠ 0) (dy : Vec d₃) :
     (emitMlpBack W₀ W₁ W₂ (dense W₀ b₀ x)
         (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote dy
-      = (mlp_has_vjp_at W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy := by
-  simp only [emitMlpBack, denote_subst, mlp_has_vjp_at, Back.denote,
-             emitDenseBack, emitReluBack, HasVJP.toHasVJPAt, dense_has_vjp, relu_has_vjp_at,
+      = (mlpHasVJPAt W₀ b₀ W₁ b₁ W₂ b₂ x h_smooth_0 h_smooth_1).backward dy := by
+  simp only [emitMlpBack, denote_subst, mlpHasVJPAt, Back.denote,
+             emitDenseBack, emitReluBack, HasVJP.toHasVJPAt, denseHasVJP, reluHasVJPAt,
              Function.comp_apply]
   rfl
 
@@ -675,8 +675,8 @@ theorem mlp_whole_bridge {d₀ d₁ d₂ d₃ : Nat}
 -- by a backward subgraph `e`) and the layer's saved forward input `x`,
 --   dW = outer(x, dyℓ)   — a `dot_general` contracting the batch axis,
 --   db = dyℓ             — a `reduce`-add over the batch axis.
--- These are the proven `dense_weight_grad`/`dense_bias_grad`, which
--- `dense_weight_grad_correct`/`dense_bias_grad_correct` certify *are* the
+-- These are the proven `denseWeightGrad`/`denseBiasGrad`, which
+-- `denseWeightGrad_correct`/`denseBiasGrad_correct` certify *are* the
 -- cotangent-contracted Jacobians of the dense layer wrt `W` and `b`.
 -- Emitting them off the (already-bridged) backward chain promotes the
 -- input-gradient bridge to a full **train-step** bridge: every gradient the
@@ -699,7 +699,7 @@ noncomputable def emitBiasGrad {inp n : Nat} (e : Back inp n) (dy : Vec inp) : V
 /-- **Weight-gradient bridge.** The emitted outer-product graph, fed the
     cotangent the backward subgraph `e` delivers, computes coordinate-wise
     the cotangent-contracted Jacobian of the dense layer wrt `W` — the
-    proven `dense_weight_grad`. Certified by `dense_weight_grad_correct` at
+    proven `denseWeightGrad`. Certified by `denseWeightGrad_correct` at
     the *actual* chain cotangent `e.denote dy`, so it composes with any of
     the input-gradient bridges above. -/
 theorem weight_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
@@ -708,17 +708,17 @@ theorem weight_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
       = ∑ k : Fin n,
           pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
                (Mat.flatten W) (finProdFinEquiv (i, j)) k * (e.denote dy) k :=
-  dense_weight_grad_correct W b x (e.denote dy) i j
+  denseWeightGrad_correct W b x (e.denote dy) i j
 
 /-- **Bias-gradient bridge.** The emitted graph (the cotangent itself,
     reduce-summed over the batch) computes the cotangent-contracted Jacobian
-    of the dense layer wrt `b` — the proven `dense_bias_grad`. Certified by
-    `dense_bias_grad_correct`. -/
+    of the dense layer wrt `b` — the proven `denseBiasGrad`. Certified by
+    `denseBiasGrad_correct`. -/
 theorem bias_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
     (e : Back inp n) (dy : Vec inp) (i : Fin n) :
     emitBiasGrad e dy i
       = ∑ j : Fin n, pdiv (fun b' : Vec n => dense W b' x) b i j * (e.denote dy) j :=
-  dense_bias_grad_correct W b x (e.denote dy) i
+  denseBiasGrad_correct W b x (e.denote dy) i
 
 /-- The backward subgraph delivering the cotangent at the MLP's **layer-1**
     dense output: `relu'(p₁) ⊙ (W₂ · dy)` — ReLU-back composed with the

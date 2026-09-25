@@ -8,13 +8,13 @@ param output for *any* cotangent `dy` at that layer's output. This file defines 
 layer (`planning/archive/convnext_close.md` Item D), and the step ties (`ConvNeXtStepTie`,
 `ConvNeXtStepTieGB`) feed those cotangents to Item C's bridges at the real forward. Pure-Lean,
 batch-1 — LayerNorm is per-example separable, so none of EfficientNet's batched-VJP machinery
-(`batchMap_has_vjp`) is needed.
+(`batchMapHasVJP`) is needed.
 
 The chain through a ConvNeXt block composes the *rendered* backward denotations — layer-scale back
 (`layerScale γls` applied to the cotangent: the input-VJP `γ ⊙ dy` is the forward map itself, the
 `layerScaleF`-on-the-cotangent trick the Item B render uses), the 1×1 conv input-VJP
-(`conv2d_has_vjp3` via the flatten bridge, = `convBack`'s denotation), the GELU mask
-(`dy ⊙ geluScalarDeriv`, = `gelu_has_vjp`'s backward; `geluScalarDeriv_eq` certifies the closed
+(`conv2dHasVJP3` via the flatten bridge, = `convBack`'s denotation), the GELU mask
+(`dy ⊙ geluScalarDeriv`, = `geluHasVJP`'s backward; `geluScalarDeriv_eq` certifies the closed
 form `geluBack` emits) — back through `layerScale → project → gelu → expand` to the LN output,
 where the scalar-LN `γ/β` grads read it:
 
@@ -41,7 +41,7 @@ open scoped BigOperators
 /-- Cotangent at the **project conv output** (= the layer-scale input): `layerScale γls dyOut`
     — the forward map applied to the block cotangent. The residual `addV` passes `dyOut` through
     to the layer-scale output unchanged (no post-add activation), and `layerScale`'s input-VJP
-    `γ ⊙ dy` is `layerScale γ` itself (diagonal/symmetric — `layerScale_has_vjp`), which is why
+    `γ ⊙ dy` is `layerScale γ` itself (diagonal/symmetric — `layerScaleHasVJP`), which is why
     the Item B render emits a second `layerScaleF` on the cotangent rather than a backward token. -/
 noncomputable def cnxCotP {n : Nat} (γls : Vec n) (dyOut : Vec n) : Vec n :=
   layerScale γls dyOut
@@ -51,7 +51,7 @@ noncomputable def cnxCotP {n : Nat} (γls : Vec n) (dyOut : Vec n) : Vec n :=
 noncomputable def cnxCotE {c cExp h w : Nat} (γls : Vec (c * h * w))
     (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (g e : Vec (cExp * h * w)) (dyOut : Vec (c * h * w)) : Vec (cExp * h * w) :=
-  let cotG := (hasVJP3_to_hasVJP (conv2d_has_vjp3 (h := h) (w := w) Wpr bpr)).backward g
+  let cotG := (HasVJP3.toHasVJP (conv2dHasVJP3 (h := h) (w := w) Wpr bpr)).backward g
     (cnxCotP γls dyOut)
   fun i => cotG i * geluScalarDeriv (e i)
 
@@ -61,7 +61,7 @@ noncomputable def cnxCotN {c cExp h w : Nat} (γls : Vec (c * h * w))
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (nl : Vec (c * h * w)) (g e : Vec (cExp * h * w)) (dyOut : Vec (c * h * w)) :
     Vec (c * h * w) :=
-  (hasVJP3_to_hasVJP (conv2d_has_vjp3 (h := h) (w := w) Wex bex)).backward nl
+  (HasVJP3.toHasVJP (conv2dHasVJP3 (h := h) (w := w) Wex bex)).backward nl
     (cnxCotE γls Wpr bpr g e dyOut)
 
 end Proofs

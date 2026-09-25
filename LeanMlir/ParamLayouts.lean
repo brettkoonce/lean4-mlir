@@ -253,7 +253,7 @@ namespace ViTLayout
     `[192]` (1D, matching the proof-tied render) + positional embed `[197,192]`, then 12 pre-norm transformer blocks
     (dim 192, 3 heads, MLP 768), final LayerNorm γ/β, CLS-slice dense head {W=`[192,10]`,b}.
     LayerNorm γ/β are **per-channel `[192]`** (the non-scalar form — beyond the scalar
-    proof witness `vit_full`, faithful per-op: normalize ∘ per-channel affine). Each block
+    proof witness `vitFull`, faithful per-op: normalize ∘ per-channel affine). Each block
     (16 params): LN1 γ/β, Wq/bq/Wk/bk/Wv/bv/Wo/bo `[192,192]`/`[192]`, LN2 γ/β, MLP
     Wfc1`[192,768]`/bfc1/Wfc2`[768,192]`/bfc2. 4+12·16+4 = 200 params. The `(dims,initKind)`
     order MUST match `@vit_train_step`/`@vit_fwd` (tests/TestViT{Train,Fwd}.lean, from the
@@ -263,9 +263,9 @@ namespace ViTLayout
 private def D : Nat := 192
 private def M : Nat := 768
 private def S : Nat := 16
-private def NTOK : Nat := 197    -- 14·14 + 1 (CLS)
-private def DEPTH : Nat := 12
-private def NC : Nat := 10
+private def nTok : Nat := 197    -- 14·14 + 1 (CLS)
+private def depth : Nat := 12
+private def nCls : Nat := 10
 private def blockSpec : Array (Array Nat × Nat) :=
   #[(#[D],1),(#[D],2),                                                       -- LN1 γ,β
     (#[D,D],0),(#[D],2),(#[D,D],0),(#[D],2),(#[D,D],0),(#[D],2),(#[D,D],0),(#[D],2),  -- Wq..bo
@@ -274,9 +274,9 @@ private def blockSpec : Array (Array Nat × Nat) :=
 /-- `(dims, initKind)` for every param, in `@vit_train_step` func-arg order. -/
 def specs : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) :=
-    #[(#[D,3,S,S],0),(#[D],2),(#[D],2),(#[NTOK,D],2)]   -- patch W,b ; CLS [192] (1D) ; pos
-  for _ in [0:DEPTH] do a := a ++ blockSpec
-  a := a ++ #[(#[D],1),(#[D],2),(#[D,NC],0),(#[NC],2)]   -- final LN γ,β ; head W,b
+    #[(#[D,3,S,S],0),(#[D],2),(#[D],2),(#[nTok,D],2)]   -- patch W,b ; CLS [192] (1D) ; pos
+  for _ in [0:depth] do a := a ++ blockSpec
+  a := a ++ #[(#[D],1),(#[D],2),(#[D,nCls],0),(#[nCls],2)]   -- final LN γ,β ; head W,b
   return a
 def paramShapes : Array (Array Nat) := specs.map (·.1)
 def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0

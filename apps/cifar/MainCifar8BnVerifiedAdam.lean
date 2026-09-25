@@ -4,7 +4,7 @@ import LeanMlir.VerifiedNets
 
 The Adam peer of `cifar8-bn-verified` (SGD), and the BN half of the BN/noBN × SGD/Adam
 ablation. Same proof-rendered forward + backward + param gradients as `cifar8BnVerified`
-(whole-net VJP `Proofs.cifarCnnBn8_has_vjp_at`, 8× per-channel BN), with the SGD update
+(whole-net VJP `Proofs.cifarCnnBn8HasVJPAt`, 8× per-channel BN), with the SGD update
 swapped for AdamW via `ViTRender.emitAdamV` and driven by `VerifiedNet.trainAdamSched`:
 `[θ|m|v]` (38 params: 22 conv/dense + 16 BN γ/β) packed + runtime `lr`/`bc₁`/`bc₂`. Trains
 on `verified_mlir/cifar8_bn_adam_train_step.mlir`, rendered as `pretty(provenGraph)` by

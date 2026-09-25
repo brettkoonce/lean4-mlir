@@ -3,11 +3,11 @@ import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 /-!
 # ViT scaling pass — multi-head rendering + faithfulness
 
-The MATH is general in `heads` (`mhsa_has_vjp_mat`, `transformerBlockV_has_vjp_mat`); this file
+The MATH is general in `heads` (`mhsaHasVJPMat`, `transformerBlockVHasVJPMat`); this file
 supplies the RENDERING + faithfulness at heads > 1:
 
-1. **`mhsa_layer_spelled`** — the load-bearing tie, the general-`heads`
-   tie: `mhsa_layer N heads d` IS, per head,
+1. **`mhsaLayer_spelled`** — the load-bearing tie, the general-`heads`
+   tie: `mhsaLayer N heads d` IS, per head,
    slice → matmul-spelled SDPA → pad-scatter, summed over heads. The concat
    is spelled as `Σ_h headPadMat h ∘ (per-head SDPA)` — every output column
    receives exactly one head's value, and the sum stays at the single index
@@ -17,7 +17,7 @@ supplies the RENDERING + faithfulness at heads > 1:
    `headSliceF`/`headPadF` (+ `headsSumG`, a left-assoc `addV` fold), with
    the block denotation `vitBlockGraphMHV_den_aux` that `ViTDepthK`'s
    `vitFwdGraphKMHV_faithful` chains per block at `heads := hm1 + 1` — faithfulness
-   against `mhsa_layer N heads d` DIRECTLY, not a 1-head specialization.
+   against `mhsaLayer N heads d` DIRECTLY, not a 1-head specialization.
 
 The graph layer is stated at `heads = hm1 + 1` (the head fold needs a first
 head); the Mat-level spelling is fully general in `heads`.
@@ -32,13 +32,13 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- Head `h`'s `[N,d]` column block of an `[N,heads·d]` matrix — the
-    `finProdFinEquiv (h, ·)` column gather `mhsa_layer` feeds each head's SDPA. -/
+    `finProdFinEquiv (h, ·)` column gather `mhsaLayer` feeds each head's SDPA. -/
 noncomputable def headSliceMat (N heads d : Nat) (h : Fin heads)
     (A : Mat N (heads * d)) : Mat N d :=
   fun r j => A r (finProdFinEquiv (h, j))
 
 /-- Scatter an `[N,d]` head block into head `h`'s columns of a zero
-    `[N,heads·d]`. Summed over heads this is `mhsa_layer`'s concat; it is also
+    `[N,heads·d]`. Summed over heads this is `mhsaLayer`'s concat; it is also
     the slice's VJP. -/
 noncomputable def headPadMat (N heads d : Nat) (h : Fin heads)
     (A : Mat N d) : Mat N (heads * d) :=
@@ -47,7 +47,7 @@ noncomputable def headPadMat (N heads d : Nat) (h : Fin heads)
 
 /-- **The pad-sum IS the head concat**: every column `hj` lands in exactly one
     head's block, so the sum over heads of pad-scatters reads off head
-    `(symm hj).1` at column `(symm hj).2` — `mhsa_layer`'s concat indexing. -/
+    `(symm hj).1` at column `(symm hj).2` — `mhsaLayer`'s concat indexing. -/
 lemma sum_headPadMat_apply {N heads d : Nat} (G : Fin heads → Mat N d)
     (n : Fin N) (hj : Fin (heads * d)) :
     (∑ h : Fin heads, headPadMat N heads d h (G h)) n hj =
@@ -62,21 +62,21 @@ lemma sum_headPadMat_apply {N heads d : Nat} (G : Fin heads → Mat N d)
     rests on: each head's SDPA is exactly the ch10 token spelling
     (`Q_h·K_hᵀ` → `·1/√d` → row-softmax → `P_h·V_h`) on the sliced Q/K/V, and
     the concat is the pad-sum (`sum_headPadMat_apply`). -/
-lemma mhsa_layer_spelled (Np1 heads d : Nat)
+lemma mhsaLayer_spelled (Np1 heads d : Nat)
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (X : Mat Np1 (heads * d)) :
-    mhsa_layer Np1 heads d Wq Wk Wv Wo bq bk bv bo X =
+    mhsaLayer Np1 heads d Wq Wk Wv Wo bq bk bv bo X =
       fun n => dense Wo bo
         ((∑ h : Fin heads, headPadMat Np1 heads d h
             (Mat.mul
-              (rowSoftmax (fun i j => sdpa_scale d *
+              (rowSoftmax (fun i j => sdpaScale d *
                 Mat.mul (headSliceMat Np1 heads d h (fun r c => dense Wq bq (X r) c))
                   (Mat.transpose (headSliceMat Np1 heads d h
                     (fun r c => dense Wk bk (X r) c))) i j))
               (headSliceMat Np1 heads d h
                 (fun r c => dense Wv bv (X r) c)))) n) := by
   funext n j
-  unfold mhsa_layer sdpa sdpa_scale dense headSliceMat
+  unfold mhsaLayer sdpa sdpaScale dense headSliceMat
   dsimp only
   congr 1
   apply Finset.sum_congr rfl
@@ -89,7 +89,7 @@ lemma mhsa_layer_spelled (Np1 heads d : Nat)
 
 /-- The spelled multi-head block at vector-[D] LN — each LN site decomposed as
     the graph (and `ViTRender`) emit it: pure normalize (scalar-LN at 1,0) →
-    per-channel scale → per-channel bias; attention spelled per head (`mhsa_layer_spelled`). -/
+    per-channel scale → per-channel bias; attention spelled per head (`mhsaLayer_spelled`). -/
 noncomputable def vitBlockSpelledMHV (Np1 heads d mlpDim : Nat) (ε : ℝ)
     (γ1 β1 : Vec (heads * d))
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
@@ -105,7 +105,7 @@ noncomputable def vitBlockSpelledMHV (Np1 heads d mlpDim : Nat) (ε : ℝ)
   let V : Mat Np1 (heads * d) := fun r => dense Wv bv (ln1 r)
   let att : Mat Np1 (heads * d) := ∑ h : Fin heads, headPadMat Np1 heads d h
     (Mat.mul
-      (rowSoftmax (fun i j => sdpa_scale d *
+      (rowSoftmax (fun i j => sdpaScale d *
         Mat.mul (headSliceMat Np1 heads d h Q)
           (Mat.transpose (headSliceMat Np1 heads d h K)) i j))
       (headSliceMat Np1 heads d h V))
@@ -121,7 +121,7 @@ noncomputable def vitBlockSpelledMHV (Np1 heads d mlpDim : Nat) (ε : ℝ)
 
 /-- **The spelled multi-head vector-LN block IS `transformerBlockV` at general
     `heads`** — the three-stage LN decomposition collapses to `layerNormVec`
-    definitionally; the per-head plumbing via `mhsa_layer_spelled`. -/
+    definitionally; the per-head plumbing via `mhsaLayer_spelled`. -/
 lemma vitBlockSpelledMHV_eq (Np1 heads d mlpDim : Nat) (ε : ℝ)
     (γ1 β1 : Vec (heads * d))
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
@@ -136,7 +136,7 @@ lemma vitBlockSpelledMHV_eq (Np1 heads d mlpDim : Nat) (ε : ℝ)
   unfold transformerBlockV transformerMlpSublayerV transformerAttnSublayerV
          transformerMlp biPathMat vitBlockSpelledMHV
   simp only [Function.comp_apply]
-  rw [mhsa_layer_spelled]
+  rw [mhsaLayer_spelled]
   rfl
 
 end Proofs
@@ -236,7 +236,7 @@ lemma vitBlockGraphMHV_den_aux {Np1 hm1 d mlpDim : Nat}
     (Wfc2 : Mat mlpDim ((hm1 + 1) * d)) (bfc2 : Vec ((hm1 + 1) * d))
     (e : SHlo (Np1 * ((hm1 + 1) * d))) (A : Mat Np1 ((hm1 + 1) * d))
     (hA : den e = Mat.flatten A) :
-    den (vitBlockGraphMHV pfx epsStr sStr oneStr zeroStr ε (sdpa_scale d) γ1 β1
+    den (vitBlockGraphMHV pfx epsStr sStr oneStr zeroStr ε (sdpaScale d) γ1 β1
           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 e) =
       Mat.flatten (vitBlockSpelledMHV Np1 (hm1 + 1) d mlpDim ε γ1 β1
           Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2 A) := by

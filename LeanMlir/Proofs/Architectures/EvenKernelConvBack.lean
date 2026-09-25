@@ -14,7 +14,7 @@ conv shifted one pixel.
 
 ⛔ **ConvNeXt-T is the only net in the repo with an even kernel**, and it has four: the 4×4/s4
 patchify stem and the three 2×2/s2 downsamples. (ViT's 16×16 patch embed is NOT affected —
-`patchEmbed_flat` is its own definition over non-overlapping patches, with no `conv2d` and no
+`patchEmbedFlat` is its own definition over non-overlapping patches, with no `conv2d` and no
 padding convention.) Every other net is all-odd: R34 7×7/3×3/1×1, MobileNetV2 and
 EfficientNet-B0 1×1/3×3/5×5.
 
@@ -22,7 +22,7 @@ EfficientNet-B0 1×1/3×3/5×5.
 ASYMMETRICALLY, `[[kH-1-pH, pH]]`, in both its per-example (`.convStridedBack`) and batched (`.convStridedBackBatched`) arms,
 and the batched one says so in as many words — *"The symmetric `[[p,p],[p,p]]` this emitted AGREES
 at every odd kernel and is WRONG at even ones (kH=2 ⇒ `[[0,0]]` where the VJP needs `[[1,0]]`) …
-Found by the whole-net backward tie"*. Its `den` is `(flatConvStride2_has_vjp W b).backward`, the
+Found by the whole-net backward tie"*. Its `den` is `(flatConvStride2HasVJP W b).backward`, the
 certified VJP, so the EMITTED ConvNeXt backward is correct and nothing trained is affected. What
 was never carried across is the third spelling of the same map — `BackwardMaps.lean`'s
 `flatConvStride2Back` / `flatConvStride4Back`, which are `convFlatBack ∘ scatter` at the SYMMETRIC
@@ -144,12 +144,12 @@ theorem flatConv_padOdd_eq {ic oc h w kH kW : Nat}
 theorem convFlatBack_padOdd_eq_vjp_backward {ic oc h w kH kW : Nat}
     (hH : 2 * (kH / 2) = kH) (hW : 2 * (kW / 2) = kW)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * h * w)) :
-    convFlatBack (h := h) (w := w) (padOdd W) = (flatConv_has_vjp W b).backward x := by
+    convFlatBack (h := h) (w := w) (padOdd W) = (flatConvHasVJP W b).backward x := by
   funext dy
   rw [convFlatBack_eq_vjp_backward (W := padOdd W) (b := b) (x := x)
         (by omega) (by omega)]
   exact HasVJP.backward_unique_of_eq (flatConv_padOdd_eq hH hW W b)
-    (flatConv_has_vjp (padOdd W) b) (flatConv_has_vjp W b) x dy
+    (flatConvHasVJP (padOdd W) b) (flatConvHasVJP W b) x dy
 
 /-- **The even-kernel STRIDE-2 conv input-VJP leaf tie** — ConvNeXt's three 2×2/s2 downsamples.
     The even-kernel peer of `flatConvStride2Back_eq_vjp_backward`; same proof shape, with the
@@ -158,7 +158,7 @@ theorem flatConvStride2Back_padOdd_eq_vjp_backward {ic oc h w kH kW : Nat}
     (hH : 2 * (kH / 2) = kH) (hW : 2 * (kW / 2) = kW)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w))) :
     flatConvStride2Back (h := h) (w := w) (padOdd W)
-      = (flatConvStride2_has_vjp W b).backward x := by
+      = (flatConvStride2HasVJP W b).backward x := by
   funext dy
   show convFlatBack (h := 2*h) (w := 2*w) (padOdd W) (decimateBack oc h w dy) = _
   rw [convFlatBack_padOdd_eq_vjp_backward hH hW W b x]
@@ -172,7 +172,7 @@ theorem flatConvStride4Back_padOdd_eq_vjp_backward {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (x : Vec (ic * (2 * (2 * h)) * (2 * (2 * w)))) :
     flatConvStride4Back (h := h) (w := w) (padOdd W)
-      = (flatConvStride4_has_vjp W b).backward x := by
+      = (flatConvStride4HasVJP W b).backward x := by
   funext dy
   show convFlatBack (h := 2*(2*h)) (w := 2*(2*w)) (padOdd W)
       (decimateOddBack oc (2*h) (2*w) (decimateBack oc h w dy)) = _

@@ -26,13 +26,13 @@ fewer. Group sizes differ from the survey tables because the cuts also re-pointe
 deleted what the fixed point orphaned.
 
 **Notes on what landed:**
-- **2c follow-up.** Kept `flatConvStride2Xla_weight_grad_has_vjp_correct`, generic API the fixed
+- **2c follow-up.** Kept `flatConvStride2XlaWeightGradHasVJP_correct`, generic API the fixed
   point would have taken. Still a candidate: `mnv2_render_depthwiseW_certified`. It has been
   audit-only since 2a and is the only user of the pinned `mnv2_depthwise_weight_grad_bridge`.
 - **2d.** `CnnConcrete` built fine without the shared `_proof_1`. `MnistCNN`'s header and
   Proofs/README.md now name `TrainedCnn` as the MNIST-CNN witness. `JacobianSeal` keeps only the
   `HasVJPAt` seal.
-- **2e.** X.1 also took the dead `*Rep_has_vjp` defs, `mobilenetv2FwdGraphFull(_faithful)`,
+- **2e.** X.1 also took the dead `*RepHasVJP` defs, `mobilenetv2FwdGraphFull(_faithful)`,
   `denoteMobilenet` and `mobilenetv2Forward_full`. `denoteMobilenet` shares its matcher with the
   other `denote*` functions, so the fixed point never reached it. B.4's wording was changed in
   `scripts/certs/lipschitz_cert_pair_sdp_full.py` and in both generated SDPFull files, together.
@@ -68,18 +68,18 @@ held at 58) before the word.
 | commit | what | files | lines | pins |
 |---|---|---:|---:|---:|
 | `b18e1acd` | the sweep: findings 7 (certs.yml, READMEs), 8's regen line, 9, 10, 11 | 17 | +170 −88 | −1 |
-| `ff1fe2f2` | formalization.yaml: :99 → `vitTiny_has_vjp_correct`, the seals as they are, the smoothing gap as closed, :227, :370 | 2 | +30 −21 | 0 |
+| `ff1fe2f2` | formalization.yaml: :99 → `vitTinyHasVJP_correct`, the seals as they are, the smoothing gap as closed, :227, :370 | 2 | +30 −21 | 0 |
 | `2b88d7bb` `caf3c02f` `276c06f7` `85f96828` `f6da580d` | finding 5 in the book, one chapter each: front matter, ch 3, ch 4, ch 6, appendix C | 5 | +54 −34 | 0 |
 | `cbf9807d` | finding 4: `maxPool3s2BackFlat_eq_flatBack`, `den_maxPool3s2BackB_eq_flatBackB` — the two stem-pool scatters are one map, no smoothness needed | 3 | +46 −4 | +2 |
 | `ce758853` | finding 3: `den_bnBatchLABack_eq_bnBatchBack`, `bnBackB_eq_den_bnBatchBack`, `bnInB_eq_den_bnBatchBack` — the emitted BN node and the ties' node denote one map up to `reassocB` | 4 | +66 −2 | +3 |
 | `dfabd7b6` | finding 2: `resnet34VerifiedB_*` and `mobilenetv2VerifiedB_*`, the spec rungs at batch BN (`rfl`; the two 224 spellings are defeq) | 3 | +92 −3 | +4 |
 | `607ea30d` `11782de7` | ch 6, the spec-rung sentence, before and after M.2 | 1 | +8 −9 | 0 |
 | `838d5496` | R.A: the per-example ResNet-34 tier; `ResNet34RenderPC.lean`, `ResNet50BlocksCertified.lean`, `tests/TestResnet34Train{,PC}.lean` deleted; `ResNet34BackCertifiedTie` keeps five leaf ties | 29 | +83 −1,815 | −15 |
-| `736db882` | M.2: the per-example MobileNetV2 paper tier; the generic apex `mobilenetv2PaperPC_has_vjp_at` moved into `MobileNetV2WholeBackCertifiedTieB`; `MobileNetV2PaperWholeBackCertifiedTie.lean`, `tests/TestMobilenetV2Train.lean` deleted; `IVW`/`IVWNoExp`/`IVPos`/`IVNoExpPos` kept | 19 | +177 −1,381 | −18 |
+| `736db882` | M.2: the per-example MobileNetV2 paper tier; the generic apex `mobilenetv2PaperPCHasVJPAt` moved into `MobileNetV2WholeBackCertifiedTieB`; `MobileNetV2PaperWholeBackCertifiedTie.lean`, `tests/TestMobilenetV2Train.lean` deleted; `IVW`/`IVWNoExp`/`IVPos`/`IVNoExpPos` kept | 19 | +177 −1,381 | −18 |
 
 AuditAxioms: 1,430 → 1,405 verdicts. The book check that preceded the chapter commits: every `.lean`
 path and every project theorem `content.tex` cites resolves (checked against a `Dump.lean` decls.tsv);
-two of the survey's finding-5 readings were wrong (`cifarCnn8_has_vjp_at` exists — the issue was the
+two of the survey's finding-5 readings were wrong (`cifarCnn8HasVJPAt` exists — the issue was the
 no-BN VJP cited in the BN section; an fp8 graph IS emitted, `cifar8b_fp8_adam_train_step.mlir`, it is
 `E4M3Fold`'s linear graph that is not), and two misses it lacked were fixed (`finSum` at l.259,
 `matmul_left_const` in `fig:spines`).
@@ -91,7 +91,7 @@ the basename form (`X.lean`) is the one the gate skips; `retire.py` leaves free-
 and `open … in` lines behind a cut range; a Python edit script that asserts mid-way leaves its earlier
 in-memory edits UNWRITTEN — verify each file, not the script's exit; `size.py` reports the other
 `denote*` functions as users of a cut `denote*` (shared `match_N`) — false; and one "per-example" apex
-(`mobilenetv2PaperPC_has_vjp_at`) was the batched tie's generic chain, so a whole-file delete needs a
+(`mobilenetv2PaperPCHasVJPAt`) was the batched tie's generic chain, so a whole-file delete needs a
 grep of the batched files first.
 
 ## Status (2026-09-20, end of session 4): every decision group ruled, findings closed, the dead code and the contracts table done
@@ -109,7 +109,7 @@ in the rebuilt PDF (overfull count held at 58) before the word. `main` is now 23
 | `7ba0e56f` | B.9: `scorecard_counts`, `cappedCerts_idx`, `unconCerts_idx`, `float_scorecard_count` and the three index lists; both generators edited the same way (`lipschitz_cert_float.py` regenerates byte-identical) | 5 | +2 −66 | −4 |
 | `e8d06510` | B.1: `floatClose_{reluConv,cifarStage,resBlock,bnRelu}`, `floatClose_{reluConvMixed,convMixed_twice,r50_stages_mixed}`, `convMixedBudget_nonneg`; the emptied bf16 composition section removed | 3 | +2 −179 | −7 |
 | `142e7bed` | B.3: four `binomTail_check_*`, `iIndepFun_eval_pi`, `stdNormalQuantile_ge_of_09`, `stdNormalQuantile_ge_of_9952` (followed), `smooth_cp_mlp_i1_radius_dec`; `smoothing_mc_certified` kept; the two emptied demo sections and three demo sentences removed | 4 | +4 −100 | −8 |
-| `fb00989c` | the dead MobileNet/EfficientNet declarations (30, no pins; list below); `sigmoid_has_vjp_correct` pinned | 11 | +21 −381 | +1 |
+| `fb00989c` | the dead MobileNet/EfficientNet declarations (30, no pins; list below); `sigmoidHasVJP_correct` pinned | 11 | +21 −381 | +1 |
 | `3d09c138` | the book's front matter: the contracts table re-derived, 44/16/60 → 45/6/51 | 1 | +9 −9 | 0 |
 | `a9baa271` | finding 6: certs.yml, formalization.yaml and the Proofs README cite `cnx_net_tiedGB` / `vit_net_tiedGB` | 3 | +10 −6 | 0 |
 | `1f56d5cf` | the book's appendix C.1.1: the trust-kernel sentence follows the table, no total quoted | 1 | +5 −5 | 0 |
@@ -139,37 +139,37 @@ for any net (its ImageNet sections quote runs, not theorems), so it is unchanged
 **The unpinned dead code (same session).** The no-users query (`dead.py` over the census graph:
 unpinned, no env users, no token users, auto-generated names excluded) finds 326 declarations
 repo-wide. The MobileNet/EfficientNet set the survey named was cut — 30 declarations, 319 lines,
-0 pins, 6 files: `sigmoidScalarDeriv_eq`, `mbconvResidual_has_vjp_at`, the four `enet*Layer`s,
+0 pins, 6 files: `sigmoidScalarDeriv_eq`, `mbconvResidualHasVJPAt`, the four `enet*Layer`s,
 MobileNetV2.lean's strided infrastructure (`invresBodyStrided` and its four lemmas,
 `convBnRelu6Strided_*`, `dwBnRelu6Strided_*`, `ivDepthwiseStrided`), `Mnv2Live.bn1_devSum_scale`,
-`Mnv2Live.invresBody₂_eq`, `Mnv2Live.fwdFull_differentiable`, `Mnv2RealSeal.fwdR_has_vjp_correct`,
+`Mnv2Live.invresBody₂_eq`, `Mnv2Live.fwdFull_differentiable`, `Mnv2RealSeal.fwdRHasVJP_correct`,
 and MobileNetV4BackB0's family table (`mnv4Family*`, `mnv4Stage14`, `mnv4*DWSlot_*`,
-`mnv4UibSkipBlock(OfKs)`, `mnv4BlockLadder`). `sigmoid_has_vjp_correct` was dead only because the
+`mnv4UibSkipBlock(OfKs)`, `mnv4BlockLadder`). `sigmoidHasVJP_correct` was dead only because the
 audit never pinned it while pinning every other operator's `_correct`: pinned instead (X.3's
 convention). The other ~296 are outside the survey's scope and untouched; by directory they are
 Nets 11 files, Codegen 11, Certificates 11, Foundation 9, top-level LeanMlir 8, Architectures 6,
 Float 5, Training 3 (`dead.txt` in the session scratchpad; re-run the query, it is 20 lines).
 
-**The contracts table (same session).** Re-derived from the 117 `has_vjp*` pins on the rule the
+**The contracts table (same session).** Re-derived from the 117 `hasVJP*` pins on the rule the
 lead-in states. Counted as contracts (45): the `_correct` theorem where a def/`_correct` pair is
 pinned, else the pinned `HasVJP`/`HasVJPAt` def — ch 1 `mnistLinear`; ch 2 `relu`, `mlp`; ch 3
 `conv2d`, `maxPool2`, `mnistCnnNoBn`; ch 4 `bnPerChannelFlat`, `bnPerChannelTensor3`, `bnBatchLA`,
 `cifarCnn`, `cifarCnn8`, `cifarCnnBn8`; ch 5 `residual`, `residualProj`, `globalAvgPoolFlat`,
 `flatConvStride2`, `flatConvStride2_weight_grad`, `maxPool3s2` (`_at3`; the `Flat` form is its
-restatement), `cnn`, `resnet34_has_vjp_at`, `resnet34ForwardB_full`, `resnet50ForwardB_full`; ch 6
-`depthwise`, `depthwiseStride2Flat`, `relu6`, `mobilenetv2` (representative), `mobilenetv2ForwardB_full`,
-`mobilenetv4ForwardB_full`; ch 7 `swish`, `sigmoid`, `seBlock`, `efficientnet`, `efficientnetForwardB_full`;
+restatement), `cnn`, `resnet34HasVJPAt`, `resnet34ForwardBFull`, `resnet50ForwardBFull`; ch 6
+`depthwise`, `depthwiseStride2Flat`, `relu6`, `mobilenetv2` (representative), `mobilenetv2ForwardBFull`,
+`mobilenetv4ForwardBFull`; ch 7 `swish`, `sigmoid`, `seBlock`, `efficientnet`, `efficientnetForwardBFull`;
 ch 8 `gelu`, `layerNorm`, `layerScale`, `flatConvStride4`, `convnext`, `convNextForwardTCh`; ch 9 `mhsa`,
-`transformerBlock`, `layerNormVec`, `transformerBlockV`, `vitForwardKV`, `vit_full`. Witnesses (6):
+`transformerBlock`, `layerNormVec`, `transformerBlockV`, `vitForwardKV`, `vitFull`. Witnesses (6):
 `MlpConcrete`, `TrainedMlp` (ch 2), `TrainedCnn` (ch 3), `Tiny.cifarTinyCnn` (ch 4), `CnnConcrete`
 and `liveFwdW_mixing` (ch 5). Not counted: the spec/canonical rungs (`linearVerified`, `mlpVerified`,
 `vitVerified`, `MlpCanonical`), `vitTiny` (k = 12 at fixed dims), `liveFwdW` (the ∀-kernel form the
-witness instantiates), the two superseded smooth-point forms (`convnext_has_vjp_at`,
-`efficientnet_has_vjp_at`), and the pieces the whole-net theorems compose — batched block VJPs
+witness instantiates), the two superseded smooth-point forms (`convnextHasVJPAt`,
+`efficientnetHasVJPAt`), and the pieces the whole-net theorems compose — batched block VJPs
 (`r34IdB`…, `r50IdB`…, `mnv2StemB`…, `mb*FwdB`, `headFwdB`), the opaque-stage chain apexes
 (`r34B_full`, `mobilenetv2PaperPC`, `mnv4B_full`, `efficientnetB_full`, `convNextForwardTChB`,
 `vitKVB`), plumbing (`batchMap`, `reindex`, `decimateOddFlat`), and the ViT composition pieces
-(`transformerTower`, `vit_body`, `vitBodyKVFlat`). Every `_correct` pin is accounted for: 38
+(`transformerTower`, `vitBody`, `vitBodyKVFlat`). Every `_correct` pin is accounted for: 38
 contracts + 6 witnesses + 5 restatements + 2 superseded = 51. Changes from the 2026-09-13 table
 (44/16/60): the census cuts took the strided block and stage (R.C), the per-example 17-block
 MobileNetV2 (M.2), three MNIST-CNN toys (S.1), three Live projections (R.D) and the MNv2 seals'
@@ -196,12 +196,12 @@ now cite the batched rungs (that file has 110 dependents — batch any further e
 
 | # | Finding | State at `281b6beb` | Fix |
 |---|---|---|---|
-| 2 | The r34 and MNv2 spec rungs (`resnet34Verified_fwd_faithful`, `mobilenetv2Verified_fwd_faithful`) are stated at per-example forwards no artifact renders | fixed: `denoteR34FullB` / `denoteMobilenetB` map the SAME committed layer lists to `resnet34ForwardB_full` / `mobilenetv2ForwardB_full` at every `N`; `resnet34VerifiedB_denote_eq` and `mobilenetv2VerifiedB_denote_eq` are `rfl`, `*VerifiedB_fwd_faithful` compose the batched T2 apexes; all in SpecVJP, pinned. The per-example rungs stay until R.A / M.2 are ruled on | R.A and M.2 are now ordinary cuts |
+| 2 | The r34 and MNv2 spec rungs (`resnet34Verified_fwd_faithful`, `mobilenetv2Verified_fwd_faithful`) are stated at per-example forwards no artifact renders | fixed: `denoteR34FullB` / `denoteMobilenetB` map the SAME committed layer lists to `resnet34ForwardBFull` / `mobilenetv2ForwardBFull` at every `N`; `resnet34VerifiedB_denote_eq` and `mobilenetv2VerifiedB_denote_eq` are `rfl`, `*VerifiedB_fwd_faithful` compose the batched T2 apexes; all in SpecVJP, pinned. The per-example rungs stay until R.A / M.2 are ruled on | R.A and M.2 are now ordinary cuts |
 | 3 | BN node seam: the RenderB files emit `.bnBatchBack` (44 sites) and never `.bnBatchLABack`, but the T3 ties state the BN cotangent at `.bnBatchLABack`'s `den` | fixed: `EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack` (the two `den`s are one map up to the associativity relabelling `reassocB`; the scatters collapse because `Fin.cast` is a bijection), `bnBackB_eq_den_bnBatchBack` (the certified cotangent every batched tie threads is the emitted node's `den`), `ResNet34TieB.bnInB_eq_den_bnBatchBack`; all pinned | — |
 | 4 | Stem-pool seam: `maxPool3s2BackFlat` (`ResNet34StepTieB`) vs `maxPool3s2FlatBack` (whole-back tie) | fixed: `maxPool3s2BackFlat_eq_flatBack` (the two scatters are one map, no smoothness needed — `sum_flat3` re-indexes one into the other) and `den_maxPool3s2BackB_eq_flatBackB` (the emitted batched node denotes `maxPool3s2FlatBackB`), both in `ResNetBackChains.lean`, pinned | — |
-| 5 | The book cites the wrong theorem in five places (4295; 6242–6249 and 6748; 391; 16279; 16306), and the IRPrint passages overclaim "by construction" | fixed, five commits `2b88d7bb`..`f6da580d` (front matter, ch 3, ch 4, ch 6, appendix C). Two of the survey's readings were wrong: `cifarCnn8_has_vjp_at` exists (a def, CifarCNN.lean:441) — the issue was the no-BN VJP cited in the BN section; and an fp8 graph IS emitted (`cifar8b_fp8_adam_train_step.mlir`, `.convF8`), it is `E4M3Fold`'s linear graph that is not. Also fixed: a `finSum` that never existed (l.259) and `matmul_left_const` in `fig:spines`. Ch 6's spec-rung sentence changes again with finding 2 | — |
+| 5 | The book cites the wrong theorem in five places (4295; 6242–6249 and 6748; 391; 16279; 16306), and the IRPrint passages overclaim "by construction" | fixed, five commits `2b88d7bb`..`f6da580d` (front matter, ch 3, ch 4, ch 6, appendix C). Two of the survey's readings were wrong: `cifarCnn8HasVJPAt` exists (a def, CifarCNN.lean:441) — the issue was the no-BN VJP cited in the BN section; and an fp8 graph IS emitted (`cifar8b_fp8_adam_train_step.mlir`, `.convF8`), it is `E4M3Fold`'s linear graph that is not. Also fixed: a `finSum` that never existed (l.259) and `matmul_left_const` in `fig:spines`. Ch 6's spec-rung sentence changes again with finding 2 | — |
 | 6 | `vit_net_tiedGB` / `cnx_net_tiedGB` certify every shipped AdamW artifact but are cited nowhere outside Lean | fixed `a9baa271`: certs.yml's convnext/vit rows, a yaml T3 row, the README's tie list; the book cites no whole-net tie for any net | — |
-| 7 | certs.yml / READMEs / yaml | certs.yml and the READMEs fixed in the sweep: the r34 row cites `ResNet34PoCB.convStrided{W,B}GradB_den`, the two even-kernel clauses are gone, Certificates/README names its eight hand-written files | yaml fixed in the follow-up commit (:99 → `vitTiny_has_vjp_correct`, the seals paragraph, 4b + the smoothing row, :227, :370). certs-heavy.yml:27 stays: it is a history comment describing the pre-2026-07 filter that matched nothing |
+| 7 | certs.yml / READMEs / yaml | certs.yml and the READMEs fixed in the sweep: the r34 row cites `ResNet34PoCB.convStrided{W,B}GradB_den`, the two even-kernel clauses are gone, Certificates/README names its eight hand-written files | yaml fixed in the follow-up commit (:99 → `vitTinyHasVJP_correct`, the seals paragraph, 4b + the smoothing row, :227, :370). certs-heavy.yml:27 stays: it is a history comment describing the pre-2026-07 filter that matched nothing |
 | 8 | Tests and roots on retired artifacts | `ConvLossFold` deleted in 2e; the regen-script line dropped in the sweep; `TestResnet34Train`, `TestResnet34TrainPC` and `ResNet50BlocksCertified` deleted with R.A | `TestMobilenetV2Train` deleted with M.2; `TestMobilenetV2TrainPC` kept (a live `iree-compile` smoke of the committed AdamW bytes) | — |
 | 9 | `mathlib_reuse_audit.md` calls `vit_net_tied_certified` the 2-block representative | fixed in the sweep | — |
 | 10 | Names and docstrings claiming more than they state | 2 of 7 resolved by cuts; the other 5 fixed in the sweep (`smooth_cp_mlpT_demo` through its generator; `linearTrainStepModuleV` → `linTrainStepFaithfulV` at six sites) | — |
@@ -231,14 +231,14 @@ Done; the current order is the numbered list at the top of this section.
 
 **Also found, not in any group: unpinned dead code.** `size.py` never counts a declaration with
 no users at all. There are about 25 in MobileNet/EfficientNet, dead before the census started:
-- `sigmoidScalarDeriv_eq`, `sigmoid_has_vjp_correct`, `mbconvResidual_has_vjp_at`;
+- `sigmoidScalarDeriv_eq`, `sigmoidHasVJP_correct`, `mbconvResidualHasVJPAt`;
 - the four `enet*Layer` defs;
 - `mnv4Family*`, `mnv4Stage14`, `mnv4BlockLadder`, `mnv4*DWSlot_*`, `mnv4UibSkipBlockOfKs`;
 - MobileNetV2.lean's strided infrastructure: `invresBodyStrided` and its lemmas,
   `convBnRelu6Strided_differentiableAt`, `dwBnRelu6Strided_*`. The last user of
   `invresBodyStrided` went with `mobilenetv2Forward_full` in 2e.
 - `Mnv2Live.bn1_devSum_scale`, `Mnv2Live.invresBody₂_eq`, `Mnv2Live.fwdFull_differentiable`,
-  `Mnv2RealSeal.fwdR_has_vjp_correct`.
+  `Mnv2RealSeal.fwdRHasVJP_correct`.
 
 A sweep needs a query for "unpinned, no env users, no token users", excluding auto-generated
 `recOn`/`casesOn`/`inst*`. The earlier item-1 query did this per directory.
@@ -330,7 +330,7 @@ recorded call, touches the book, or needs new work first.
 | id | group | lines | pins | superseded by / why | re-point first | keep / risk |
 |---|---|---:|---:|---|---|---|
 | VC.B | ViT T3 ladder (vit_net_tiedV/MHV) | 294 | 4 | the 2-block single-head rung and the generic-dims 12-block thread of the ViT fused-SGD tie ("the ladder, not the result" per its own header); `vit_net_tied_certified` (depth 12, 200 params, at `vit_train_step.mlir`) and `vit_net_tiedGB` carry it | ViTStepTie header bullets (l.14-22); the `vit_net_tiedMHV`/`MHV2` docstrings; AuditAxioms comments near 1596-1608 | keep `vit_block_tied(At)MHV`, `vitBlockFwdOMHV`, `vitBlockCotInAtMHV`, `vitCotB2outV` (capstone and GB use them) |
-| VC.A | ConvNeXt scalar-LN leftovers | 285 | 13 | scalar-LN / per-element layer-scale ConvNeXt leftovers; superseded by the channel-LN `cnxResidBlockChBackGraph_faithful`, `cnxBlockChBack_eq_vjp`, `CnxPoC.chanLn{Gamma,Beta}Sgd_den`, `CnxPoC.cnx_render_lsgammaCh_certified` | ConvNeXtFold header + channel-LN section; ConvNeXtClose header table; ConvNeXtBackB0 §1; `cnxBlockChLayer` docstring; three AuditAxioms comments; `tests/TestConvNeXtTrainPC.lean` (unbuilt smoke) | keep book-cited `convNextBlock_has_vjp`, `layerScale_has_vjp`, `convnext_has_vjp(_correct)`; afterwards `SHlo.lnGammaSgd`/`lnBetaSgd` are dead IR (follow-up) |
+| VC.A | ConvNeXt scalar-LN leftovers | 285 | 13 | scalar-LN / per-element layer-scale ConvNeXt leftovers; superseded by the channel-LN `cnxResidBlockChBackGraph_faithful`, `cnxBlockChBack_eq_vjp`, `CnxPoC.chanLn{Gamma,Beta}Sgd_den`, `CnxPoC.cnx_render_lsgammaCh_certified` | ConvNeXtFold header + channel-LN section; ConvNeXtClose header table; ConvNeXtBackB0 §1; `cnxBlockChLayer` docstring; three AuditAxioms comments; `tests/TestConvNeXtTrainPC.lean` (unbuilt smoke) | keep book-cited `convNextBlockHasVJP`, `layerScaleHasVJP`, `convnextHasVJP(_correct)`; afterwards `SHlo.lnGammaSgd`/`lnBetaSgd` are dead IR (follow-up) |
 | VC.C | per-example un-fused G tier | 183 | 19 | per-example un-fused ViT/ConvNeXt folds: no tie consumes them and the adam branch they fold writes no committed file since 4c legs 3-4; superseded by `ViTPoCGB`/`CnxPoCGB.*GradB_den` through the GB ties | the "per-example peer" columns of ViTFoldGB (l.21-36) and ConvNeXtFoldGB (l.27-33); ViTFoldG / ConvNeXtFoldG headers; AuditAxioms "4b.2 / 4b.3" comments | keep the five G lemmas the GB folds use: `ViTPoCG.{posEmbedGrad,clsGrad}_den`, `CnxPoCG.{layerScaleChGammaGrad,chanLnGammaGrad,chanLnBetaGrad}_den` |
 | VC.E | ViT scalar rowLN bridges | 100 | 4 | scalar rowwise-LN bridges left by `cf0e1e39`; superseded by `vit_vecln{Gamma,Beta}_grad_bridge` | none | - |
 | VC.G | ViT CertLayer restatements | 40 | 3 | CertLayer restatements; `vitTinyTrunk_is_shipped` is misnamed (ViTBackNet: "not tied to the committed artifact") | ViTBackNet header | - |
@@ -340,17 +340,17 @@ recorded call, touches the book, or needs new work first.
 | R.D | R34 Live-family trim | 114 | 5 | Live-family `.correct` projections and the 32x32 empty-chains seal (LiveFull beats it on depth, R34RealSeal on shape) | formalization.yaml:354 (drop "liveFwd2_jacobian_nonzero (empty chains)") | keep `liveFwd2_nonconstant` (LiveFull uses it) |
 | R.E | CertLayer trunk/row wiring (r34/r50) | 107 | 6 | CertLayer trunk / row wiring no artifact renders: `r34Trunk_3463 := r50Trunk_3463`, row wrappers superseded by `R34BWeights`/`R50BWeights` | MobileNetV4BackB0:796-800; ViTBackNet:50/207/388; ResNet34FullB:22; ResNet50FullB:7/21 | the `*Layer` defs stay (FullBVJP) |
 | R.F | R34 per-op float leftovers | 75 | 4 | per-example-BN R34 float bridges whose consumers the 2026-09-08 float chop deleted | FloatComposeBridge:20-22/238; both R34 float-bridge headers (they promise an `r34_float_close` that does not exist) | keep `add_close`, `bnStep_close`, `gapFlat_close` |
-| M.1 | MNv2 six-block per-example tier | 697 | 8 | the six-block reduced MobileNetV2 per-example tier: its render writes only /tmp; superseded by `mnv2InputGradB_correct`, `mobilenetv2ForwardB_full_eq_slots`, `mobilenetv2FwdGraphB_full_faithful`, `mobilenetv2FwdGraphPaperEval_faithful`, `mnv2*CotIn_eq_vjp` | formalization.yaml:227; comments in ConvNeXtWholeBackCertifiedTie (x2), EfficientNetWholeBackCertifiedTie, ResNet34BackCertifiedTie, EfficientNetChainClose, the MobileNetBackChains module doc | keep `depthwiseStride2FlatXlaBack_eq_vjp_backward` (generic) and the RenderPC/RenderPCEval stage abbreviations (FullPaperEval and a test import them) |
-| M.3 | EfficientNet 3-block representative | 418 | 9 | the 3-block EfficientNet representative (`efficientnetForwardB_has_vjp_committed` is misnamed: its "committed" forward is the 3-block one); superseded by the full-B0 T2, eval T2 and T6 | comments only; `scripts/probes/vjp_graph_sweep.py`'s `EXPECTED_BATCHED_HOLES = {"efficientnetForwardB"}` | keep `stemBBack_eq_vjp_backward`, `headFwdBBack_eq_vjp_backward` and the stage abbreviations |
+| M.1 | MNv2 six-block per-example tier | 697 | 8 | the six-block reduced MobileNetV2 per-example tier: its render writes only /tmp; superseded by `mnv2InputGradB_correct`, `mobilenetv2ForwardBFull_eq_slots`, `mobilenetv2FwdGraphBFull_faithful`, `mobilenetv2FwdGraphPaperEval_faithful`, `mnv2*CotIn_eq_vjp` | formalization.yaml:227; comments in ConvNeXtWholeBackCertifiedTie (x2), EfficientNetWholeBackCertifiedTie, ResNet34BackCertifiedTie, EfficientNetChainClose, the MobileNetBackChains module doc | keep `depthwiseStride2FlatXlaBack_eq_vjp_backward` (generic) and the RenderPC/RenderPCEval stage abbreviations (FullPaperEval and a test import them) |
+| M.3 | EfficientNet 3-block representative | 418 | 9 | the 3-block EfficientNet representative (`efficientnetForwardBHasVJP_committed` is misnamed: its "committed" forward is the 3-block one); superseded by the full-B0 T2, eval T2 and T6 | comments only; `scripts/probes/vjp_graph_sweep.py`'s `EXPECTED_BATCHED_HOLES = {"efficientnetForwardB"}` | keep `stemBBack_eq_vjp_backward`, `headFwdBBack_eq_vjp_backward` and the stage abbreviations |
 | M.4 | *GradsCertified bundles (MNv2/MNv4) | 357 | 13 | `*GradsCertified` bundles: conjunctions of pinned leaf folds; `mnv2_net_tiedB` / `mnv4_net_tiedB` call the leaves directly | MNv2 / MNv4 fold-file headers | `ResNet34PoCB.denseBGradB_den` loses its last user (keep: op fold) |
 | M.5 | EfficientNet per-example scalar-BN spike | 162 | 7 | the per-example scalar-BN EfficientNet backward spike; superseded by the batched `mb*BackBatchedGraph_faithful` and `seBackBatched` | comments in ConvNeXtBackB0, EfficientNetBackChains | keep `residualBackGraph_faithful`, `seBlockBackGraph_faithful`, `bnBatchBack_faithful`; `backGraph_faithful`, `seGate_backGraph_faithful`, `mbconvBodyBackGraph_faithful` lose their last user and stay pinned |
 | M.6 | CertLayer .faithful projections (MNv4/ENet) | 202 | 14 | CertLayer `.faithful` projections (MNv4 BackB0 x7, EfficientNet x5) and two `*Layer` wrappers nothing composes | the archived audit log narrates `mnv4UibSkipBlock_faithful` | keep `CertLayer.chain_faithful`, `mbResidBlockBackBatchedGraph_faithful` |
 | M.7 | aliases and stale statements (MNv2/ENet) | 76 | 6 | an alias (`EnetPoCG.bnGammaGradB_den`), two `rfl` renames, two `.correct` one-liners, and `efficientnetLossCot_den` (stated at tokens the render no longer emits) | teach `vjp_graph_sweep.py` the two renames | keep `mbDownBodyBackBatchedGraph_faithful` |
 | B.6 | MNv2 per-example XLA-SAME fused tokens (+M.9) | 87 | 10 | MNv2 per-example XLA-SAME fused-SGD tokens and their `Mnv2PoC` folds: the only emitter (`MobileNetV2Render.lean`) was retired in `32d657bb`; superseded by `EnetPoCG.convStridedXlaWGradB_den`, `Mnv2PaperPoCG.*Xla*GradB_den`, `depthwiseStridedXlaBackBatched_faithful` | ResNet34BackCertifiedTie:195; AuditAxioms:1429 comment | four are `@[simp]` rfl lemmas: build-check; keep `Mnv2PoC.depthwise{W,B}_den` (ConvNeXtStepTie uses them); follow-up: the five SHlo constructors and their parse arms |
 | M.10 | MNv2 toy witnesses | 24 | 2 | toy MobileNetV2 witnesses: the degenerate `MobileNetV2Concrete`; the 2x2 `mnv2Live` seal, carried at 224 (`fwdR`) and depth 17 (`fwdFull`) | Proofs/README.md:160-170 (point at Mnv2Live) | - |
-| S.1 | toy MNIST-CNN witnesses (Micro/Mini/Spatial) | 78 | 4 | toy MNIST-CNN witnesses; `TrainedCnn` is a trained discharge of the same `mnistCnnNoBn_has_vjp_at` | Proofs/README.md:161; MnistCNN header; CifarCNN.lean:232; tests/AUDIT_REPORT.md:343 | measured 78 lines; the real span is ~400 (a shared `_proof_1` and a short-name collision in tests/comparator hide it); keep `maxPool2Smooth_of_injective` |
+| S.1 | toy MNIST-CNN witnesses (Micro/Mini/Spatial) | 78 | 4 | toy MNIST-CNN witnesses; `TrainedCnn` is a trained discharge of the same `mnistCnnNoBnHasVJPAt` | Proofs/README.md:161; MnistCNN header; CifarCNN.lean:232; tests/AUDIT_REPORT.md:343 | measured 78 lines; the real span is ~400 (a shared `_proof_1` and a short-name collision in tests/comparator hide it); keep `maxPool2Smooth_of_injective` |
 | S.2 | SgdDescentCnn drift restatements | 239 | 10 | SgdDescentCnn drift lemmas, each a one-line `Conv{1,2}Slot.*` instance kept by `046ec333`/`a9c57a3b`'s "every pinned name unchanged" | none | - |
-| S.4 | toy ResNet forward graph | 72 | 1 | the toy ResNet forward graph; `resnetFwdGraph` has no renderer; superseded by `resnet34FwdGraphB_full_faithful` | ResNet34RenderPC:5/18/193; StableHLO:1424 and the "peer of `resnetFwdGraph`" docstrings at 3930/3980/4126 | - |
+| S.4 | toy ResNet forward graph | 72 | 1 | the toy ResNet forward graph; `resnetFwdGraph` has no renderer; superseded by `resnet34FwdGraphBFull_faithful` | ResNet34RenderPC:5/18/193; StableHLO:1424 and the "peer of `resnetFwdGraph`" docstrings at 3930/3980/4126 | - |
 | S.5 | orphaned SgdDescent helpers | 127 | 8 | helpers orphaned by the SgdDescent refactors (`b50ba380`, `a9c57a3b`, `850dac3b`, `0c2410d6`, `31f76507`) | SgdDescentCnn prose at :26, :906, :2347-2349, :2483-2485, :3396 | - |
 | S.7 | ViT float orphans | 35 | 3 | float lemmas extracted for the ViT attention bridge the float chop deleted | AuditAxioms:1129 header (it also names the deleted `vit_grad_floatBridges`) | - |
 | S.9 | small-net tail | 128 | 9 | `LinPoC.poc_train_step_certified` (superseded by `poc_train_step_tail_certified`), `poc_fwd_faithful`, `dot_close_linear`, `linear_float_close`, the global-HasVJP seal pair, `mlp_output_sgd_descends` | LinearFold header | - |
@@ -363,14 +363,14 @@ recorded call, touches the book, or needs new work first.
 | B.5 | AdamRender Phase-3b spec | 63 | 5 | AdamRender.lean, the Phase-3b spec (whole file); superseded by `adamWParamF_faithful` / `adamW_triple_faithful` | lakefile roots at 63 and 199; RmsPropStep:168 | - |
 | B.7 | bnMean_num_le | 36 | 1 | numeral form for the deleted budget files (`0de261e8`) | none | - |
 | B.8 | rfl restatements (den_batchOp_*_eq_*, patchEmbedBack) | 27 | 4 | `rfl` restatements (`den_batchOp` + `denOp` already give them) | none | `@[simp]` rfl: build-check |
-| X.1 | SpecVJP Rep rungs (all nets) | 322 | 8 | SpecVJP `Rep` rungs for all five nets (and their dead `denote*Rep` / `*Rep_has_vjp`); superseded by the `*Verified` rungs | SpecVJP header | keep book/yaml-cited `vit_full` |
+| X.1 | SpecVJP Rep rungs (all nets) | 322 | 8 | SpecVJP `Rep` rungs for all five nets (and their dead `denote*Rep` / `*RepHasVJP`); superseded by the `*Verified` rungs | SpecVJP header | keep book/yaml-cited `vitFull` |
 
 ### Decision groups
 
 | id | group | lines | pins | what | why it is a decision |
 |---|---|---:|---:|---|---|
-| R.A | per-example ResNet-34 tier | 393 | 6 | the per-example ResNet-34 tier (spec rung E, T6, block ties, the 2x2-pool leaf) outlived its renderer (`resnet34_train_step.mlir` retired 2026-09-06) | it holds the only spec->math tie for `resnet34Verified`: port a batched rung first (`denoteR34FullB` on `resnet34FwdGraphB_full_faithful`, template `efficientnetVerified_fwd_faithful`) or accept the gap; formalization.yaml:227; frees ResNet34RenderPC.lean's remainder (266 lines) and tests/TestResnet34TrainPC; ResNet34BackCertifiedTie also hosts leaf ties nine files import, so cut the r34-specific declarations only |
-| M.2 | MNv2 per-example paper tier | 276 | 4 | the MobileNetV2 per-example "paper" (training-BN) tier; its artifact was retired 2026-09-06 | same spec-rung question as R.A (`mobilenetv2Verified_fwd_faithful`); the fixed point would take the book-cited `mobilenetv2_full_has_vjp_at` (book 6243-6249, 6748 describe the batch-BN run with the per-example names) |
+| R.A | per-example ResNet-34 tier | 393 | 6 | the per-example ResNet-34 tier (spec rung E, T6, block ties, the 2x2-pool leaf) outlived its renderer (`resnet34_train_step.mlir` retired 2026-09-06) | it holds the only spec->math tie for `resnet34Verified`: port a batched rung first (`denoteR34FullB` on `resnet34FwdGraphBFull_faithful`, template `efficientnetVerified_fwd_faithful`) or accept the gap; formalization.yaml:227; frees ResNet34RenderPC.lean's remainder (266 lines) and tests/TestResnet34TrainPC; ResNet34BackCertifiedTie also hosts leaf ties nine files import, so cut the r34-specific declarations only |
+| M.2 | MNv2 per-example paper tier | 276 | 4 | the MobileNetV2 per-example "paper" (training-BN) tier; its artifact was retired 2026-09-06 | same spec-rung question as R.A (`mobilenetv2Verified_fwd_faithful`); the fixed point would take the book-cited `mobilenetv2_fullHasVJPAt` (book 6243-6249, 6748 describe the batch-BN run with the per-example names) |
 | S.3 | dense-head per-layer den restatements | 135 | 12 | per-layer dense-head folds, each a one-liner of `Cifar8PoC.denseW_den`/`denseB_den` | decide the MLP tie first (finding 1): if b1/b0 join it, `MlpPoC.b{0,1}_den_certified` stop being restatements (group drops to 10 pins); certs.yml:214-216 cite three of them |
 | S.6 | MLP layer-bridge restatements | 106 | 6 | MLP layer-bridge restatements (`weight_grad_bridge` / `bias_grad_bridge` at `mlpCotOut*`) | reverses `18c31142`'s call that the bridges "are the statements" |
 | S.8 | MlpCanonical aliases | 31 | 8 | `MlpCanonical`'s eight Prop-valued aliases | an audit surface by design; its fixed point is 1,510 lines / 35 pins because it is the only Lean consumer of 27 book- and certs-cited pins; 7 "Canonical surface" banners point at it (4 emitted by generators) |
@@ -379,7 +379,7 @@ recorded call, touches the book, or needs new work first.
 | B.2 | Lipschitz demo ladder (generated sections) | 75 | 9 | the Lipschitz demo ladder: two toys and two certificates strictly implied by `trained_demo_certified_gram2` (generated sections) | loses the in-kernel Frobenius -> Schatten-4 -> Schatten-8 comparison; generator change |
 | B.3 | smoothing demos + Hoeffding tier | 116 | 8 | smoothing demos and the Hoeffding tier (`smooth_cp_mlp_i1_radius_dec` is beaten by `smooth_dec_mlp_i1`; ~1,900 kernel panels of CI) | `smoothing_mc_certified` is a result in its own right, superseded only in use; keep `binomTail_check_5500of10112` if a deep-tail regime test is wanted |
 | B.9 | generated scorecard bookkeeping | 22 | 4 | generated scorecard bookkeeping (`scorecard_counts` calls itself legacy) | generator change |
-| X.3 | .correct projections (one-liners) | 28 | 4 | `X_has_vjp_correct := (X_has_vjp ...).correct` projections (R.C and R.D hold more) | a repo-wide convention: pin the def instead, everywhere or nowhere |
+| X.3 | .correct projections (one-liners) | 28 | 4 | `XHasVJP_correct := (XHasVJP ...).correct` projections (R.C and R.D hold more) | a repo-wide convention: pin the def instead, everywhere or nowhere |
 
 ### Checked and not candidates
 
@@ -406,7 +406,7 @@ recorded call, touches the book, or needs new work first.
   DataParallel pieces, `smoothing_cp_certified`, and the Smoothing CP / Dec scorecards. The two
   scorecards are two halves of one certificate over the same rows, not two methods.
 - **The T6 `∑pdiv` readings** (`*InputGradB_correct`, `vitInputGradK(B)_correct`, seven nets).
-  These are all-or-none: the yaml gives `efficientnetInputGradB_full_correct` as the T6 exemplar.
+  These are all-or-none: the yaml gives `efficientnetInputGradBFull_correct` as the T6 exemplar.
 
 ### Correctness findings (independent of any retirement)
 
@@ -432,8 +432,8 @@ recorded call, touches the book, or needs new work first.
    `maxPool3s2BackFlat`. The batched whole-back tie uses `maxPool3s2FlatBack`. No lemma equates
    them. `maxPool3s2Back_faithful`, stated at a per-example constructor, is the only bridge.
 5. **The book cites the wrong theorems in five places.**
-   - 4295-4298 cite the no-BN `cifarCnn8_has_vjp_at` as the gradient of the BN nets; the BN one,
-     `cifarCnnBn8_has_vjp_at_correct`, is uncited.
+   - 4295-4298 cite the no-BN `cifarCnn8HasVJPAt` as the gradient of the BN nets; the BN one,
+     `cifarCnnBn8HasVJPAt_correct`, is uncited.
    - 6242-6249 and 6748 name per-example-BN MobileNetV2 theorems while describing the batch-BN
      `mobilenetv2_adam_train_step` run.
    - 391 still lists a "depth-2 (×2 LN forms)" ViT.
@@ -453,8 +453,8 @@ recorded call, touches the book, or needs new work first.
    - Certificates/README says every file is generated. Seven are hand-written.
    - formalization.yaml:
      - :227 gives the per-example R34 and MNv2 T6 ties.
-     - :98-99 describes `vit_full` as vector-LN depth 12; it is the weight-shared scalar-LN
-       tower, and `vitTiny_has_vjp_correct` fits the description.
+     - :98-99 describes `vitFull` as vector-LN depth 12; it is the weight-shared scalar-LN
+       tower, and `vitTinyHasVJP_correct` fits the description.
      - :196-199 says the Live seals are "at 224x224"; both are at 32×32, and no R34 seal has
        both full depth and 224.
      - :204 and :377 say the smoothing estimation gap "is not formalized"; SmoothingMC / CP /
@@ -473,7 +473,7 @@ recorded call, touches the book, or needs new work first.
    200-parameter capstone at `vit_train_step.mlir`. The 2-block representative is `vit_net_tiedV`,
    which is why that one survived (group VC.B).
 10. **Names and docstrings that claim more than they state.**
-    - `efficientnetForwardB_has_vjp_committed` is about the 3-block representative.
+    - `efficientnetForwardBHasVJP_committed` is about the 3-block representative.
     - `vitTinyTrunk_is_shipped` is not tied to an artifact.
     - `smooth_cp_mlpT_demo` uses the 784-dim MLP's count for the 49-dim `mlpT`.
     - `mlpVerified_back_faithful` says its graph is in `mlp_train_step.mlir`; it isn't, and no
@@ -517,7 +517,7 @@ better: `Render`, `Back`, `Fwd`, `Tied`/`Tie`, `Live`, `Close`, `Cot`, `Grad`, `
 A history check agrees. Of the unresolved names that were declared once in git history, 30 are
 declared nowhere now (47 sites). Read in context, the real stale ones are the table's.
 
-The field-access rule (`foo_has_vjp.backward` resolves when `foo_has_vjp` does) accepts any
+The field-access rule (`fooHasVJP.backward` resolves when `fooHasVJP` does) accepts any
 resolving prefix. Narrowing it to "a value prefix, not a type" catches only 7 citations, mostly
 deliberate "no `String.toFloat?`" statements. `FloatClose.batchMapAux` slips past both versions,
 because `FloatClose` is a def.
@@ -570,19 +570,19 @@ fixed point also takes are in `size.py`'s output.
 - **VC.G** — `vitTinyTrunk_is_shipped`, `vitTrunkV_eq_chain`, `vitTrunkV_faithful`
 - **VC.F1** — `vitEmbedBackB_eq_vjp`, `vitPatchEmbedBack_eq_vjp`
 - **R.B1** — `r34BodyBackBatchedGraph_faithful`, `maxPool3s2FlatBackB_eq_vjp_backward`, `r34StemBBack_eq_vjp_backward`
-- **R.C** — `ResNet34Concrete.resnet34Concrete_has_vjp_correct`, `convBnReluStrided_has_vjp_at_correct`, `rblkPStrided_has_vjp_at_correct`, `resStage_has_vjp_at_correct`, `vjp_chain_at_correct`, `vjp_chain_correct`
-- **R.D** — `ResNet34LiveFull.liveFwd2Full_has_vjp_correct`, `ResNet34LivePC.liveFwd2_has_vjp_correct`, `ResNet34LiveRealistic.liveFwd224_has_vjp_correct`, `ResNet34LiveSeal.liveFwd2_backward_nontrivial`, `ResNet34LiveSeal.liveFwd2_jacobian_nonzero`
+- **R.C** — `ResNet34Concrete.resnet34ConcreteHasVJP_correct`, `convBnReluStridedHasVJPAt_correct`, `rblkPStridedHasVJPAt_correct`, `resStageHasVJPAt_correct`, `vjp_chain_at_correct`, `vjp_chain_correct`
+- **R.D** — `ResNet34LiveFull.liveFwd2FullHasVJP_correct`, `ResNet34LivePC.liveFwd2HasVJP_correct`, `ResNet34LiveRealistic.liveFwd224HasVJP_correct`, `ResNet34LiveSeal.liveFwd2_backward_nontrivial`, `ResNet34LiveSeal.liveFwd2_jacobian_nonzero`
 - **R.E** — `r34DownBlockOfRow`, `r34Trunk_3463`, `r50DownBlockOfRow`, `r50Stage_faithful`, `r50Trunk_3463`, `r50Trunk_faithful`
 - **R.F** — `FloatModel.bnPerChannelFlat_close_of`, `FloatModel.bnRelu_close`, `FloatModel.flatConvStride2F_close`, `FloatModel.reluAdd_close`
-- **M.1** — `mobilenetv2FwdGraphFullPCEval_faithful`, `mobilenetv2FwdGraphFullPC_faithful`, `invresBodyBackPC_eq_invresBodyPC_vjp`, `invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp`, `mnv2InputGrad_eq_mobilenetv2_vjp`, `mobilenetv2Forward_full_pc_eq_chain`, `mobilenetv2PC_has_vjp_at`, `residualBack_eq_vjp_backward`
-- **M.3** — `efficientnetFwdGraphBEval_faithful`, `efficientnetFwdGraphB_faithful`, `enetTrunk`, `efficientnetB_has_vjp`, `efficientnetForwardBEval`, `efficientnetForwardB_eq_chain`, `efficientnetForwardB_has_vjp`, `efficientnetForwardB_has_vjp_committed`, `efficientnetInputGradB_eq_efficientnetForwardB_vjp`
+- **M.1** — `mobilenetv2FwdGraphFullPCEval_faithful`, `mobilenetv2FwdGraphFullPC_faithful`, `invresBodyBackPC_eq_invresBodyPC_vjp`, `invresBodyStridedBackPC_eq_invresBodyStridedPC_vjp`, `mnv2InputGrad_eq_mobilenetv2_vjp`, `mobilenetv2Forward_full_pc_eq_chain`, `mobilenetv2PCHasVJPAt`, `residualBack_eq_vjp_backward`
+- **M.3** — `efficientnetFwdGraphBEval_faithful`, `efficientnetFwdGraphB_faithful`, `enetTrunk`, `efficientnetBHasVJP`, `efficientnetForwardBEval`, `efficientnetForwardB_eq_chain`, `efficientnetForwardBHasVJP`, `efficientnetForwardBHasVJP_committed`, `efficientnetInputGradB_eq_efficientnetForwardB_vjp`
 - **M.4** — `Mnv2PaperPoCG.mnv2HeadDenseGradsCertified`, `Mnv2PaperPoCG.mnv2NoExpGradsCertified`, `Mnv2PaperPoCG.mnv2StemGradsCertified`, `Mnv2PaperPoCG.mnv2Stride1GradsCertified`, `Mnv2PaperPoCG.mnv2Stride2GradsCertified`, `Mnv4PoCB.mnv4BnGradsCertified`, `Mnv4PoCB.mnv4ConvNeXtGradsCertified`, `Mnv4PoCB.mnv4ExtraDWGradsCertified`, `Mnv4PoCB.mnv4FfnGradsCertified`, `Mnv4PoCB.mnv4FusedGradsCertified`, `Mnv4PoCB.mnv4HeadGradsCertified`, `Mnv4PoCB.mnv4PreStridedGradsCertified`, `Mnv4PoCB.mnv4StemGradsCertified`
 - **M.5** — `broadcastBack_faithful`, `gapBack_faithful`, `mbconvResidual_backGraph_faithful`, `residual_dense_backGraph_faithful`, `seBlockFull_backGraph_faithful`, `se_dense_backGraph_faithful`, `mbconvBodyBack_eq_mbconvBody_vjp`
 - **M.6** — `enetChain_faithful`, `enetHead_faithful`, `enetMBConvLayer`, `enetMbExp_faithful`, `enetMbNoExp_faithful`, `enetMbStrided_faithful`, `mnv2ResidBlockLayer`, `mnv4BodyOfRow_faithful`, `mnv4FusedStage_faithful`, `mnv4Head_faithful`, `mnv4PreStridedBodyOfRow_faithful`, `mnv4UibPostStridedBody_faithful`, `mnv4UibPreStridedBody_faithful`, `mnv4UibSkipBlock_faithful`
-- **M.7** — `EnetPoCG.bnGammaGradB_den`, `EnetTiePoC.efficientnetLossCot_den`, `Mnv2Live.fwdFull_has_vjp_correct`, `Mnv2Live.mnv2Live_has_vjp_correct`, `mbExpFwdBackBatchedGraph_faithful`, `mbStridedFwdBackBatchedGraph_faithful`
+- **M.7** — `EnetPoCG.bnGammaGradB_den`, `EnetTiePoC.efficientnetLossCot_den`, `Mnv2Live.fwdFullHasVJP_correct`, `Mnv2Live.mnv2LiveHasVJP_correct`, `mbExpFwdBackBatchedGraph_faithful`, `mbStridedFwdBackBatchedGraph_faithful`
 - **B.6** — `Mnv2PoC.convStridedXlaB_den`, `Mnv2PoC.convStridedXlaW_den`, `Mnv2PoC.depthwiseStridedB_den`, `Mnv2PoC.depthwiseStridedW_den`, `convStridedXlaBiasSgd_faithful`, `convStridedXlaWeightSgd_faithful`, `depthwiseStridedXlaBack_faithful`, `depthwiseStridedXlaBiasSgd_faithful`, `depthwiseStridedXlaWeightSgd_faithful`, `mnv2_render_stem_convb_xla_certified`
-- **M.10** — `Mnv2Live.mnv2Live_backward_nontrivial`, `MobileNetV2Concrete.mnv2Concrete_has_vjp_correct`
-- **S.1** — `Micro.mnistMicroCnn_has_vjp_correct`, `Mini.miniCnn_has_vjp_correct`, `Spatial.spatialCnn_has_vjp_correct`, `conv2d_center3x3`
+- **M.10** — `Mnv2Live.mnv2Live_backward_nontrivial`, `MobileNetV2Concrete.mnv2ConcreteHasVJP_correct`
+- **S.1** — `Micro.mnistMicroCnnHasVJP_correct`, `Mini.miniCnnHasVJP_correct`, `Spatial.spatialCnnHasVJP_correct`, `conv2d_center3x3`
 - **S.2** — `cnn1_logit_drift`, `cnn1_pool_l1_drift`, `cnn1_z2_entry_drift`, `cnn_conv2_logit_drift`, `cnn_pool_l1_drift`, `cnnb1_logit_drift`, `cnnb1_pool_l1_drift`, `cnnb1_z2_entry_drift`, `cnnb2_logit_drift`, `cnnb2_pool_l1_drift`
 - **S.4** — `resnetFwdGraph_faithful`
 - **S.5** — `MaxPool2MarginQ.pdiv3_eq`, `cnnDenseHeadCot_denote`, `conv2d_weight_pdiv_row_l1`, `convTap_in_l1`, `k4Idx_inj`, `maxPoolFlat_entry_lipschitz`, `mlp_input_logit_drift`, `sum_pinned_le`
@@ -599,16 +599,16 @@ fixed point also takes are in `size.py`'s output.
 - **B.8** — `den_batchOp_denseRow_eq_denseRowF`, `den_batchOp_gelu_eq_geluF`, `den_batchOp_lnRow_eq_lnRowF`, `patchEmbedBack_faithful`
 - **X.1** — `convNextFwdGraph_faithful`, `convnextRep_denote_eq`, `convnextRep_fwd_faithful`, `efficientnetRep_denote_eq`, `mobilenetv2Rep_denote_eq`, `mobilenetv2Rep_fwd_faithful`, `r34Rep_denote_eq`, `vitRep_denote_eq`
 - **R.A** — `maxPoolFlatBack_eq_vjp_backward`, `r34DownBlockBack_eq_rblkPStridedPC_vjp`, `r34IdBlockBack_eq_rblkPC_vjp`, `r34InputGrad_eq_resnet34_vjp`, `resnet34Forward_full_pc_eq_chain`, `resnet34Verified_fwd_faithful`
-- **M.2** — `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp`, `mobilenetv2ForwardPaper_eq_slots`, `mobilenetv2_full_has_vjp_at_correct`, `mobilenetv2Verified_fwd_faithful`
+- **M.2** — `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp`, `mobilenetv2ForwardPaper_eq_slots`, `mobilenetv2_fullHasVJPAt_correct`, `mobilenetv2Verified_fwd_faithful`
 - **S.3** — `CifarPoC.dW5_den`, `CifarPoC.dW6_den`, `CifarPoC.db5_den`, `CifarPoC.db6_den`, `CifarPoC.db7_den`, `CnnPoC.dW3_den`, `CnnPoC.dW4_den`, `CnnPoC.db3_den`, `CnnPoC.db4_den`, `CnnPoC.db5_den`, `MlpPoC.b0_den_certified`, `MlpPoC.b1_den_certified`
 - **S.6** — `IR.mlp_layer0_bias_grad_bridge`, `IR.mlp_layer0_weight_grad_bridge`, `IR.mlp_layer1_bias_grad_bridge`, `IR.mlp_layer1_weight_grad_bridge`, `IR.mlp_layer2_weight_grad_bridge`, `IR.mlp_whole_net_weight_grads`
-- **S.8** — `MlpCanonical.has_vjp_at`, `MlpCanonical.has_vjp_correct`, `MlpCanonical.hidden_float_sgd_descends`, `MlpCanonical.input_float_sgd_descends`, `MlpCanonical.output_float_sgd_descends`, `MlpCanonical.train_step_tied_certified`, `MlpCanonical.w0_grad_close`, `MlpCanonical.w1_grad_close`
+- **S.8** — `MlpCanonical.hasVJPAt`, `MlpCanonical.hasVJP_correct`, `MlpCanonical.hidden_float_sgd_descends`, `MlpCanonical.input_float_sgd_descends`, `MlpCanonical.output_float_sgd_descends`, `MlpCanonical.train_step_tied_certified`, `MlpCanonical.w0_grad_close`, `MlpCanonical.w1_grad_close`
 - **B.1** — `floatClose_bnRelu`, `floatClose_cifarStage`, `floatClose_convMixed_twice`, `floatClose_r50_stages_mixed`, `floatClose_reluConv`, `floatClose_reluConvMixed`, `floatClose_resBlock`
 - **B.1b** — `floatClose_dense`, `floatClose_gap`, `floatClose_maxPool3s2`, `floatClose_residual`
 - **B.2** — `LipschitzCertDemo.linear_demo_certified`, `LipschitzCertDemo.linear_radius_pos`, `LipschitzCertDemo.mlp_demo_certified`, `LipschitzCertDemo.mlp_radius_pos`, `LipschitzCertDemo.trained_demo_certified`, `LipschitzCertDemo.trained_demo_certified_gram`, `LipschitzCertDemo.trained_radius_gram_pos`, `LipschitzCertDemo.trained_radius_pos`, `clm_lipschitzL2`
 - **B.3** — `binomTail_check_5500of10112`, `binomTail_check_9900of10112`, `binomTail_check_999of1000`, `binomTail_check_99of100`, `iIndepFun_eval_pi`, `smooth_cp_mlp_i1_radius_dec`, `smoothing_mc_certified`, `stdNormalQuantile_ge_of_09`
 - **B.9** — `LipschitzCertDemo.cappedCerts_idx`, `LipschitzCertDemo.float_scorecard_count`, `LipschitzCertDemo.scorecard_counts`, `LipschitzCertDemo.unconCerts_idx`
-- **X.3** — `depthwiseStride2Flat_has_vjp_correct`, `flatConvStride2_has_vjp_correct`, `layerScale_has_vjp_correct`, `swish_has_vjp_correct`
+- **X.3** — `depthwiseStride2FlatHasVJP_correct`, `flatConvStride2HasVJP_correct`, `layerScaleHasVJP_correct`, `swishHasVJP_correct`
 
 ## Re-running
 

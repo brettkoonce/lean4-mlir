@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.PerChannelBN
 /-! # Per-channel BN parameter-gradient bridges (dγ, dβ certified)
 
 The non-BN closes (`cnn_render_conv{W,b}_certified` + the M2 dense bridges) and the BN
-**input**-grad (`bnPerChannel_grad_input_correct`, under `0<ε`) already cover every
+**input**-grad (`bnPerChannelGradInput_correct`, under `0<ε`) already cover every
 parameter of a per-channel-BN train step except the BN scale/shift γ, β. This
 file supplies their bridges — the BN analogue of `IR.bias_grad_bridge` / `conv_bias_grad`.
 
@@ -23,7 +23,7 @@ namespace Proofs
 
 open scoped BigOperators
 
--- `bnPerChannel_grad_gamma` / `bnPerChannel_grad_beta` moved to `PerChannelBN.lean`
+-- `bnPerChannelGradGamma` / `bnPerChannelGradBeta` moved to `PerChannelBN.lean`
 -- (so the `bnGammaSgd`/`bnBetaSgd` `SHlo` ops' `den` can reference them upstream).
 
 /-- per-channel BN, as a function of γ (β, v fixed), written affinely:
@@ -68,7 +68,7 @@ private theorem pdiv_bnPerChannelFlat_beta (oc m : Nat) (ε : ℝ) (γ β : Vec 
   simp [@eq_comm _ idx]
 
 /-- Sum-over-the-channel-fibre: `Σ_j [idx = chan j]·g j = Σ_s g (idx, s)`. -/
-private theorem sum_channel_fibre (oc m : Nat) (idx : Fin oc) (g : Fin (oc * m) → ℝ) :
+private theorem sum_channel_fiber (oc m : Nat) (idx : Fin oc) (g : Fin (oc * m) → ℝ) :
     (∑ j : Fin (oc * m), (if idx = (finProdFinEquiv.symm j).1 then g j else 0))
       = ∑ s : Fin m, g (finProdFinEquiv (idx, s)) := by
   rw [← Equiv.sum_comp finProdFinEquiv
@@ -87,9 +87,9 @@ private theorem sum_channel_fibre (oc m : Nat) (idx : Fin oc) (g : Fin (oc * m) 
     certified Jacobian of per-channel BN (as a function of γ) contracted with the
     cotangent `dy`. The BN analogue of the conv/dense weight bridges; affine in γ, so no
     `0<ε`. -/
-theorem bnPerChannel_grad_gamma_correct (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
+theorem bnPerChannelGradGamma_correct (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
     (v dy : Vec (oc * m)) (idx : Fin oc) :
-    bnPerChannel_grad_gamma oc m ε v dy idx
+    bnPerChannelGradGamma oc m ε v dy idx
       = ∑ j : Fin (oc * m), pdiv (fun γ' : Vec oc => bnPerChannelFlat oc m ε γ' β v) γ idx j * dy j := by
   simp only [pdiv_bnPerChannelFlat_gamma]
   rw [show (∑ j : Fin (oc * m),
@@ -101,23 +101,23 @@ theorem bnPerChannel_grad_gamma_correct (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
              then bnXhat m ε (Mat.unflatten v (finProdFinEquiv.symm j).1) (finProdFinEquiv.symm j).2 * dy j
              else 0) by
       apply Finset.sum_congr rfl; intro j _; by_cases h : idx = (finProdFinEquiv.symm j).1 <;> simp [h]]
-  rw [sum_channel_fibre oc m idx
+  rw [sum_channel_fiber oc m idx
         (fun j => bnXhat m ε (Mat.unflatten v (finProdFinEquiv.symm j).1) (finProdFinEquiv.symm j).2 * dy j)]
-  simp only [bnPerChannel_grad_gamma, Equiv.symm_apply_apply]
+  simp only [bnPerChannelGradGamma, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl; intro s _; ring
 
 /-- **BN β-gradient bridge.** The rendered per-channel `dβ_idx = Σ_s dy` equals the
     certified Jacobian of per-channel BN (as a function of β) contracted with `dy`. The
     BN analogue of `bias_grad_bridge`; affine in β, so no `0<ε`. -/
-theorem bnPerChannel_grad_beta_correct (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
+theorem bnPerChannelGradBeta_correct (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
     (v dy : Vec (oc * m)) (idx : Fin oc) :
-    bnPerChannel_grad_beta oc m dy idx
+    bnPerChannelGradBeta oc m dy idx
       = ∑ j : Fin (oc * m), pdiv (fun β' : Vec oc => bnPerChannelFlat oc m ε γ β' v) β idx j * dy j := by
   simp only [pdiv_bnPerChannelFlat_beta]
   rw [show (∑ j : Fin (oc * m), (if idx = (finProdFinEquiv.symm j).1 then (1 : ℝ) else 0) * dy j)
         = ∑ j : Fin (oc * m), (if idx = (finProdFinEquiv.symm j).1 then dy j else 0) by
       apply Finset.sum_congr rfl; intro j _; by_cases h : idx = (finProdFinEquiv.symm j).1 <;> simp [h]]
-  rw [sum_channel_fibre oc m idx (fun j => dy j)]
+  rw [sum_channel_fiber oc m idx (fun j => dy j)]
   rfl
 
 /-- **BN γ output certified.** `γ_c − lr·(rendered dγ_c)` denotes
@@ -125,18 +125,18 @@ theorem bnPerChannel_grad_beta_correct (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
     `cnn_render_convb_certified`. -/
 theorem cifar_bn_render_gamma_certified (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
     (v dy : Vec (oc * m)) (lr : ℝ) (idx : Fin oc) :
-    γ idx - lr * bnPerChannel_grad_gamma oc m ε v dy idx
+    γ idx - lr * bnPerChannelGradGamma oc m ε v dy idx
       = γ idx - lr * ∑ j : Fin (oc * m),
           pdiv (fun γ' : Vec oc => bnPerChannelFlat oc m ε γ' β v) γ idx j * dy j := by
-  rw [bnPerChannel_grad_gamma_correct]
+  rw [bnPerChannelGradGamma_correct]
 
 /-- **BN β output certified.** `β_c − lr·(rendered dβ_c)` denotes the certified BN
     `∂/∂β` contraction. The β peer. -/
 theorem cifar_bn_render_beta_certified (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
     (v dy : Vec (oc * m)) (lr : ℝ) (idx : Fin oc) :
-    β idx - lr * bnPerChannel_grad_beta oc m dy idx
+    β idx - lr * bnPerChannelGradBeta oc m dy idx
       = β idx - lr * ∑ j : Fin (oc * m),
           pdiv (fun β' : Vec oc => bnPerChannelFlat oc m ε γ β' v) β idx j * dy j := by
-  rw [bnPerChannel_grad_beta_correct (γ := γ)]
+  rw [bnPerChannelGradBeta_correct (γ := γ)]
 
 end Proofs

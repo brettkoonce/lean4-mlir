@@ -96,7 +96,7 @@ theorem convStridedWGradB_den {N ic oc h w kH kW : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (flatConvStride2_weight_grad_has_vjp b (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
+  exact (flatConvStride2WeightGradHasVJP b (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
 /-- **Batched strided conv bias GRADIENT denotes the certified `Σ_n` bias gradient.** -/
@@ -111,7 +111,7 @@ theorem convStridedBGradB_den {N ic oc h w kH kW : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (flatConvStride2_bias_grad_has_vjp W (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
+  exact (flatConvStride2BiasGradHasVJP W (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
     b (batchSlice N (oc * h * w) cot n) o
 
 -- ════════════════════════════════════════════════════════════════
@@ -120,7 +120,7 @@ theorem convStridedBGradB_den {N ic oc h w kH kW : Nat}
 
 /-- **Batched BN γ GRADIENT denotes the certified per-channel γ gradient over the merged
     batch+spatial axis `m = N·(h·w)`.** γ enters affinely, so there is no batch coupling in the
-    PARAM gradient and this is `bnPerChannel_grad_gamma_correct` at that width, through the
+    PARAM gradient and this is `bnPerChannelGradGamma_correct` at that width, through the
     network→oc-major reindex `bnchwFwd`. Generic in the free `β`. -/
 theorem bnGammaGradB_den {N oc h w : Nat}
     (vN epsStr cotN : String) (ε : ℝ) (γ β : Vec oc)
@@ -131,7 +131,7 @@ theorem bnGammaGradB_den {N oc h w : Nat}
                   bnPerChannelFlat oc (N * (h * w)) ε γ' β (bnchwFwd N oc h w v))
                γ c j * bnchwFwd N oc h w cot j := by
   simp only [denStep, denStepApp]
-  exact bnPerChannel_grad_gamma_correct oc (N * (h * w)) ε γ β
+  exact bnPerChannelGradGamma_correct oc (N * (h * w)) ε γ β
     (bnchwFwd N oc h w v) (bnchwFwd N oc h w cot) c
 
 /-- **Batched BN β GRADIENT denotes the certified per-channel β gradient** `Σ_{batch,spatial} cot`
@@ -145,7 +145,7 @@ theorem bnBetaGradB_den {N oc h w : Nat}
           pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ β' v)
                β c j * bnchwFwd N oc h w cot j := by
   simp only [denStep, denStepApp]
-  exact bnPerChannel_grad_beta_correct oc (N * (h * w)) ε γ β v (bnchwFwd N oc h w cot) c
+  exact bnPerChannelGradBeta_correct oc (N * (h * w)) ε γ β v (bnchwFwd N oc h w cot) c
 
 /-- **One batched BN layer's γ and β gradient nodes, tied** — the pair every step tie states per
     BatchNorm: the emitted `bnGammaGradB` / `bnBetaGradB` denote the certified per-channel γ and β
@@ -184,7 +184,7 @@ theorem denseWGradB_den {N a c : Nat}
   simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
-  exact dense_weight_grad_correct W b (batchSlice N a x n) (batchSlice N c cot n) i j
+  exact denseWeightGrad_correct W b (batchSlice N a x n) (batchSlice N c cot n) i j
 
 /-- **Batched dense bias GRADIENT denotes the certified `Σ_n` cotangent sum.** -/
 theorem denseBGradB_den {N c : Nat}
@@ -195,7 +195,7 @@ theorem denseBGradB_den {N c : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact dense_bias_grad_correct W b x (batchSlice N c cot n) j
+  exact denseBiasGrad_correct W b x (batchSlice N c cot n) j
 
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one gradient node each
@@ -331,7 +331,7 @@ theorem denseBGradB_den {N a c : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact dense_bias_grad_correct W b x (batchSlice N c cot n) j
+  exact denseBiasGrad_correct W b x (batchSlice N c cot n) j
 
 -- ════════════════════════════════════════════════════════════════
 -- § New: the XLA-`SAME` strided stem
@@ -340,7 +340,7 @@ theorem denseBGradB_den {N a c : Nat}
 
 /-- **Batched XLA-`SAME` strided conv weight GRADIENT denotes the certified `Σ_n` weight
     gradient.** B0's 3×3/s2 stem, the net's one XLA-phase site. `Σ_n` of
-    `flatConvStride2Xla_weight_grad_has_vjp.correct` — the odd-phase weight VJP, so the certified
+    `flatConvStride2XlaWeightGradHasVJP.correct` — the odd-phase weight VJP, so the certified
     gradient is the gradient of the net that ships. -/
 theorem convStridedXlaWGradB_den {N ic oc h w kH kW : Nat}
     (xN cotN : String) (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
@@ -354,7 +354,7 @@ theorem convStridedXlaWGradB_den {N ic oc h w kH kW : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (flatConvStride2Xla_weight_grad_has_vjp b
+  exact (flatConvStride2XlaWeightGradHasVJP b
     (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
@@ -364,7 +364,7 @@ theorem convStridedXlaWGradB_den {N ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched stride-1 depthwise weight GRADIENT denotes the certified `Σ_n` weight gradient.**
-    `Σ_n` of the flattened `depthwise_weight_grad_has_vjp3.correct`. Generic in the kernel size, so
+    `Σ_n` of the flattened `depthwiseWeightGradHasVJP3.correct`. Generic in the kernel size, so
     the one lemma covers every 3×3 and every 5×5 depthwise. -/
 theorem depthwiseWGradB_den {N c h w kH kW : Nat}
     (xN cotN : String) (b : Vec c) (x : Vec (N * (c * h * w)))
@@ -378,14 +378,14 @@ theorem depthwiseWGradB_den {N c h w kH kW : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  rw [← (hasVJP3_to_hasVJP (depthwise_weight_grad_has_vjp3 b
+  rw [← (HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 b
       (Tensor3.unflatten (batchSlice N (c * h * w) x n)))).correct
       (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx]
-  simp only [hasVJP3_to_hasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
+  simp only [HasVJP3.toHasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
 
 /-- **Batched strided depthwise weight GRADIENT denotes the certified `Σ_n` weight gradient.** The
     strided VJP is already flat, so this is `Σ_n` of
-    `depthwiseStride2_weight_grad_has_vjp.correct`. -/
+    `depthwiseStride2WeightGradHasVJP.correct`. -/
 theorem depthwiseStridedWGradB_den {N c h w kH kW : Nat}
     (xN cotN : String) (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w))))
     (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)) :
@@ -398,7 +398,7 @@ theorem depthwiseStridedWGradB_den {N c h w kH kW : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (depthwiseStride2_weight_grad_has_vjp b
+  exact (depthwiseStride2WeightGradHasVJP b
     (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct
     (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx
 
@@ -427,7 +427,7 @@ theorem convStridedXlaBGradB_den {N ic oc h w kH kW : Nat} (cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (flatConvStride2Xla_bias_grad_has_vjp W
+  exact (flatConvStride2XlaBiasGradHasVJP W
     (batchSlice N (ic * (2 * h) * (2 * w)) x n)).correct b (batchSlice N (oc * h * w) cot n) o
 
 /-- **Batched stride-1 depthwise bias GRADIENT denotes the certified `Σ_n` bias gradient.** The
@@ -445,7 +445,7 @@ theorem depthwiseBGradB_den {N c h w kH kW : Nat} (cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (depthwise_bias_grad_has_vjp W
+  exact (depthwiseBiasGradHasVJP W
     (Tensor3.unflatten (batchSlice N (c * h * w) x n))).correct b
     (batchSlice N (c * h * w) cot n) o
 
@@ -466,7 +466,7 @@ theorem depthwiseStridedXlaWGradB_den {N c h w kH kW : Nat} (xN cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (depthwiseStride2Xla_weight_grad_has_vjp b
+  exact (depthwiseStride2XlaWeightGradHasVJP b
     (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct
     (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx
 
@@ -483,7 +483,7 @@ theorem depthwiseStridedXlaBGradB_den {N c h w kH kW : Nat} (cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (depthwiseStride2Xla_bias_grad_has_vjp W
+  exact (depthwiseStride2XlaBiasGradHasVJP W
     (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct b
     (batchSlice N (c * h * w) cot n) o
 
@@ -508,7 +508,7 @@ theorem psWGradB_den {N ic oc h w kH kW : Nat} (xN cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact (flatConvStride4_weight_grad_has_vjp b
+  exact (flatConvStride4WeightGradHasVJP b
     (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n)).correct
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
