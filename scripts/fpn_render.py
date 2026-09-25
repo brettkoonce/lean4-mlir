@@ -14,7 +14,7 @@ undo and no separate images.bin to keep in sync.
 
 Usage:
     python3 scripts/fpn_render.py runs/fpn_x/logits.bin data/visdrone_fpn/val.bin \\
-        --fpn data/visdrone --out demos/figures/visdrone_fpn.png --n 6
+        --fpn data/visdrone --out fpn.png --n 6
 
     # side-by-side with ground truth, which is what makes the density legible
     ... --gt data/visdrone448/val.full_gt.bin
@@ -191,7 +191,7 @@ def main():
     ap.add_argument("val_bin", help="data/visdrone_fpn/val.bin (images live here)")
     ap.add_argument("--fpn", default="data/visdrone", help="dir with anchors_fpn_*.txt")
     ap.add_argument("--gt", default=None, help="full-GT sidecar; adds a GT column")
-    ap.add_argument("--out", default="demos/figures/visdrone_fpn.png")
+    ap.add_argument("--out", default="fpn.png")
     ap.add_argument("--n", type=int, default=6, help="images in the figure")
     ap.add_argument("--conf-thresh", type=float, default=0.05)
     ap.add_argument("--nms-iou", type=float, default=0.5)
@@ -289,7 +289,12 @@ def main():
                 n_tp = sum(1 for k, _, _ in m if k == "tp")
                 n_fp = sum(1 for k, _, _ in m if k == "fp")
                 n_fn = sum(1 for k, _, _ in m if k == "fn")
-                tag = f"  {n_tp} hit / {n_fp} false / {n_fn} missed"
+                # ⚠ Under --topk-per-gt the model draws exactly K = GT boxes, so
+                # false positives and misses are both K − hits: one number, not two.
+                if args.topk_per_gt and len(dets) == len(gts[i]):
+                    tag = f"  {n_tp} of {len(gts[i])} found"
+                else:
+                    tag = f"  {n_tp} hit / {n_fp} false / {n_fn} missed"
             else:
                 boxes = [(d[0], d[1], d[2]) for d in dets]
                 tag = f"  ({len(boxes)})"

@@ -48,8 +48,19 @@ python3 scripts/yolo_map_visdrone.py runs/fpn_run1/logits.bin \
     --multilabel --topk 3000 --ml-k 3 --ml-floor 0.05
 
 python3 scripts/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
-    --gt data/visdrone448/val.full_gt.bin --diverse --scale 2 --topk-per-gt \
-    --layout cols --n 4 --out demos/figures/visdrone_fpn.png
+    --fpn data/visdrone --gt data/visdrone448/val.full_gt.bin --diverse --scale 2 \
+    --topk-per-gt --layout cols --n 4 \
+    --labels "ground truth,R34+FPN — 30 ep + scale aug (mAP 0.2363)" --out fpn.png
+# the figure below is that sheet at 1800 px wide, as a JPEG
+python3 -c "from PIL import Image; im = Image.open('fpn.png'); \
+    im.resize((1800, round(im.height * 1800 / im.width)), Image.LANCZOS).save('demos/figures/visdrone_fpn.jpg', quality=90)"
+
+# the correctness figure: after vs before (the 12-epoch cfoc2 arm), three frames
+python3 scripts/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
+    --fpn data/visdrone --gt data/visdrone448/val.full_gt.bin --compare <12-ep logits.bin> \
+    --diverse --n 3 --scale 2 --topk-per-gt --match --layout rows \
+    --labels "truth,after · 30 ep + scale aug (0.2363),before · 12 ep (0.1961)" \
+    --out demos/figures/visdrone_fpn_match.png
 ```
 
 ⚠ Three flags that fail *silently* rather than loudly:
@@ -66,16 +77,15 @@ of the box-aware scale/translate transform), `FPN_CLSW`, `FPN_CLSFOCAL`,
 
 ![The detector on four VisDrone validation frames](figures/visdrone_fpn.jpg)
 
-Ground truth above, the R34+FPN's boxes below, at the top row of the table (30 epochs, scale
-augmentation, mAP@0.5 0.2363). Box colour is the class, keyed along the bottom edge, and each
-frame's box count sits in its corner. The night market and the street market are where the misses
-live — the small and the rare, exactly what the per-class spread predicts.
+Ground truth above, the R34+FPN's boxes below, on four val frames (30 epochs, scale
+augmentation). Box colour is the class, keyed along the bottom edge, and each frame's box count
+follows its label. The night market and the street market are where the misses live — the small
+and the rare, exactly what the per-class spread predicts.
 
-Truth on top, prediction below, on four val frames. **mAP@0.5 = 0.2363**
-(recall 0.769, class-agnostic AP 0.487) at 30 epochs, and 65 fps on one RTX
-4060 Ti — or **35.7 fps on a 25 W Jetson Orin Nano** under TensorRT fp16, which
-is the deployment this dataset implies. That beats a hand-written PyTorch replica
-of this same architecture (0.1532) by **54%**.
+**mAP@0.5 = 0.2363** (recall 0.769, class-agnostic AP 0.487) at 30 epochs, and 65 fps on one RTX
+4060 Ti — or **35.7 fps on a 25 W Jetson Orin Nano** under TensorRT fp16, which is the deployment
+this dataset implies. That beats a hand-written PyTorch replica of this same architecture (0.1532)
+by **54%**.
 
 ⚠ Frames are picked with `--diverse`. Picking the *densest* frames selects
 consecutive frames of one VisDrone sequence — val records are video — so the
@@ -101,11 +111,12 @@ whatever is small *and* rare, and an averaged mAP hides exactly that.
 
 ![VisDrone predictions coloured by correctness](figures/visdrone_fpn_match.png)
 
-The same frames coloured by **correctness** rather than class — green hit, red
-false positive, yellow missed ground truth — with the 30-epoch arm on the left
-and the 12-epoch one on the right. Read the per-frame counts in the labels: the
-gain on any single dense frame is a few boxes, because most of the improvement is
-rare-class ranking spread across all 548 val images and no one frame displays it.
+Three of those frames coloured by **correctness** rather than class — green hit, red false
+positive, yellow missed ground truth — with the 30-epoch arm on the left and the 12-epoch one on
+the right. Each arm draws its K best boxes, K = the frame's ground-truth count, so red and yellow
+boxes always come in equal numbers and the label's "found" count is the whole score. The gain on any
+single dense frame is a few boxes (54 vs 50, 80 vs 78, 30 vs 25), because most of the improvement
+is rare-class ranking spread across all 548 val images and no one frame displays it.
 
 A YOLOv8s at the same budget scores 0.140; its published-style 0.391 comes from
 8× the epochs, higher resolution, full augmentation and COCO pretraining, so that
@@ -348,6 +359,8 @@ python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
         --size 224 --seed 0            # same patient split as data/brats
 ./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU
 lake exe brats-predict net=r34 arm=scratch,r34 out.ppm
+python3 scripts/brats_figure.py out.ppm demos/figures/brats_r34_skip_transfer.png \
+    --labels "T1gd,ground truth,from scratch,ImageNet R34"
 ```
 
 | arm | mIoU | WT | TC | ET |
@@ -355,18 +368,12 @@ lake exe brats-predict net=r34 arm=scratch,r34 out.ppm
 | `r34` (ImageNet bootstrap) | 0.742 | 0.911 | 0.870 | 0.858 |
 | `scratch` (He-init) | 0.740 | 0.910 | 0.869 | 0.856 |
 
-![The ResNet-34 UNet on four held-out BraTS patients](figures/brats_r34_unet.png)
+![The ResNet-34 UNet on four held-out BraTS patients, both arms](figures/brats_r34_skip_transfer.png)
 
-One patient per row: the T1gd slice, the ground truth, the prediction. Green is the edema that
-bounds the whole tumour, red the necrotic and non-enhancing core, yellow the enhancing tumour.
-Background is 97% of the voxels, which is why this picture carries more than the pixel accuracy
-does.
-
-![R34 UNet transfer on BraTS](figures/brats_r34_skip_transfer.png)
-
-`T1gd | ground truth | +scratch | +r34`. Edema green, non-enhancing/necrotic
-core red, enhancing tumour yellow — the yellow rim around a red core is a
-textbook ring-enhancing glioblastoma.
+One held-out patient per row: the T1gd slice, the ground truth, and each arm's prediction on the
+same slice. Background is 97% of the voxels, which is why this picture carries more than the pixel
+accuracy does. The yellow rim around a red core in the first and last rows is a textbook
+ring-enhancing glioblastoma.
 
 **Two things this demo measures, and they are not the same size.**
 
@@ -508,6 +515,21 @@ A `bigram-shakespeare` baseline (single dense V→V predicting next
 char given current char) also lives here as a smoke test that the
 data pipeline + sampler work end-to-end without the transformer.
 
+`tinystories` is the same transformer scaled to a word-piece corpus: vocab-4096 BPE, T = 256,
+D = 256, 8 layers, 8.5M params, and the embedding as a true gather/scatter instead of a one-hot.
+It trains and samples on XLA (a 600-step probe: 9.24 → 3.06 nats/token, val 3.08) but has no
+finished run yet; `planning/lm_demos_modernization.md` is its backlog. The corpus is 1.9 GB and
+the tokenizer wants its own venv (`tokenizers` must stay out of the pinned `.venv`).
+
+```bash
+bash historical/download_tinystories.sh
+python3 historical/preprocess_tinystories.py 4096 200000000
+lake exe tinystories train 12000                            # steps; ⚠ a rerun starts over
+python3 scripts/tinystories_decode.py encode "Once upon a time"
+lake exe tinystories sample 200 80 40 95 1 > gen.txt        # ids out; BPE decode is Python's
+python3 scripts/tinystories_decode.py decode "Once upon a time" < gen.txt
+```
+
 ---
 
 ## Diffusion — DDPM on MNIST
@@ -559,6 +581,33 @@ labels.
 ⚠ Most of the visible change happens in the last few columns. That is the cosine
 schedule, not a rendering artifact — ᾱ stays low across most of the trajectory
 and the image resolves late.
+
+**Scored, not squinted at.** Chapter 3's verified CNN (98.66% on the real test split) classifies
+1024 samples, and the samples are compared with real digits on three axes: how many classes appear
+(coverage), how sure the classifier is, and the energy distance to 1024 real images as a multiple
+of the real-vs-real floor.
+
+```bash
+LEAN_MLIR_DUMP_PARAMS=.lake/build/cnn_verified_params.bin \
+  lake exe mnist-cnn-verified data                   # the scorer's classifier, ~50 s
+lake exe mnist-ddpm-score 1024 50                    # 1024 samples, 50 DDIM steps, ~13 s
+python3 scripts/mnist_ddpm_score.py                  # exits non-zero below 10/10 coverage
+```
+
+| arm | coverage | confidence | energy (× floor) |
+|---|---|---|---|
+| real MNIST, scored as if generated | 10/10 | 99.40% | 1× |
+| **50 epochs, centred to [−1, 1]** (the recipe above) | **10/10** | 90.94% | **15×** |
+| 50 epochs, uncentred | 9/10 | **92.82%** | 33× |
+| 3 epochs, centred | 8/10 | 84.19% | 73× |
+| 3 epochs, uncentred | 9/10 | 63.89% | 119× |
+| unstructured pixels with MNIST's moments | 4/10 | 58.47% | 231× |
+
+⭐ **Confidence alone would pick the wrong model.** The uncentred 50-epoch arm is the more
+confident of the two while dropping a class ("1" gets 0.8% of the mass) and doubling the distance
+to the data; the classifier is 58% confident on noise, so its usable range starts there, not at 0.
+Epochs do most of the work (3 → 50 is 3.6–4.9× on energy), centring the rest (1.6–2.2×). Every arm
+and the per-class masses are in `runs/2026-08-28-mnist-ddpm-verified-score/`.
 
 ---
 
@@ -829,4 +878,5 @@ demos/
     └── MainCifarDdpmSincosTrain.lean / …  #   sincos t-embed variant (small negative)
 ```
 
-Per-demo planning docs live in `planning/archive/` at the repo root.
+Each section links its plan: the active ones sit at `planning/` top level, the finished ones in
+`planning/archive/`.
