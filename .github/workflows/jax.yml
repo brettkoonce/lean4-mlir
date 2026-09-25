@@ -621,7 +621,12 @@ jobs:
           set -eo pipefail
           export JAX_PLATFORMS=cpu
           scripts/regen_jax_generated.sh sync
-          python3 scripts/mnv4_forward_tie.py 2>&1 | tee -a /tmp/parity.log
+          # The COMMITTED render (drift-checked by proofs.yml), not the batch-2 copy the script
+          # defaults to — that one is written by `mnv4-fwd-smoke`, whose proof-side modules this
+          # job does not build. At batch 32 the tie sits at ~2.4e-4 of scale (float accumulation
+          # through 77 batch-BN layers); a structural error, a swapped pre/post-DW, lands near 1e-1.
+          python3 scripts/mnv4_forward_tie.py --mlir verified_mlir/mnv4_fwd.mlir --batch 32 --tol 1e-3 \
+              2>&1 | tee -a /tmp/parity.log
           python3 scripts/mnv2_forward_tie.py --imagenet 2>&1 | tee -a /tmp/parity.log
           # CONTROL: the ε-1e-5 eval graph against the ε-1e-3 reference must FAIL.
           if python3 scripts/mnv2_forward_tie.py --imagenet --mlir verified_mlir/mobilenetv2in_fwd_eval.mlir; then
