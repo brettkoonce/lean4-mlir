@@ -2894,7 +2894,11 @@ never written. Scoring the .bin alone would normalise by zeros."
     pure (F32.concat #[theta, stats])
   let evalShapes := if hasBn then packShapes (net.paramShapes ++ bnStatShapes) else net.shapesBA
   let evalResident := (net.paramShapes.size + (if hasBn then 2 * net.bnChannels.size else 0)).toUSize
-  let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else s!"m.{net.slug}_fwd"
+  -- A size-specific artifact declares its own entry (`@<slug>_fwd_eval_s256`: an artifact's entry is
+  -- its file name); the recipe-size ones keep the net's.
+  let sizedStem := (System.FilePath.mk fwdPath).fileStem.getD ""
+  let evalFn := if !sizeSuf.isEmpty && sizedStem.endsWith sizeSuf then s!"m.{sizedStem}"
+                else if hasBn then s!"m.{net.slug}_fwd_eval" else s!"m.{net.slug}_fwd"
   (← IO.getStdout).flush
   -- ▶ `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
   -- read exactly as the trainers read it. ⭐ This is the knob `scripts/sharded_eval_gate.sh` turns:

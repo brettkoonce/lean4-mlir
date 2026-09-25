@@ -1235,11 +1235,12 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval.mlir"
   (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in")
 -- ▶ timm's TEST protocol for Conv-M r224 (`mobilenetv4_conv_medium.e500_r224_in1k`: 256px, crop 1.0,
--- jax/timm_eval_protocols.json): the same eval graph at a 256 input, final side 8. Same entry name
--- and operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=256` with nothing else
--- changed. Training and every proof stay at 224.
+-- jax/timm_eval_protocols.json): the same eval graph at a 256 input, final side 8, entry
+-- `@mnv4in_fwd_eval_s256` (an artifact's entry is its file name — `regen_verified_mlir.sh check`).
+-- Same operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=256`. Training and
+-- every proof stay at 224.
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval_s256.mlir"
-  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" (s := 256))
+  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" "_s256" (s := 256))
 #guard (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" (s := 224)) ==
   Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in"
 

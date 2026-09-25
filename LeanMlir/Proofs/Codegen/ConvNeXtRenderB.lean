@@ -1111,10 +1111,11 @@ end Proofs.StableHLO
   (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS))
 -- ▶ timm's TEST protocol for ConvNeXt-T (`convnext_tiny.fb_in1k`: 288px, crop 1.0,
--- jax/timm_eval_protocols.json): the same forward at a 288 input, stages 72/36/18/9. Same entry
--- name and operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=288`.
+-- jax/timm_eval_protocols.json): the same forward at a 288 input, stages 72/36/18/9, entry
+-- `@convnextin_fwd_s288` (an artifact's entry is its file name — `regen_verified_mlir.sh check`).
+-- Same operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=288`.
 #eval IO.FS.writeFile "verified_mlir/convnextin_fwd_s288.mlir"
-  (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
+  (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd_s288" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS) (s := 288))
 #guard Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS) (s := 224) ==
