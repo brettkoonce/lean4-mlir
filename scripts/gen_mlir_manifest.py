@@ -126,12 +126,14 @@ def decode(variant: str) -> str:
         return "—"
     bits = []
     if ema_on(variant):
-        bits.append("EMA shadow (4-region blob)")
+        # 4 regions [θ|m|v|ema], or 5 behind a gradient accumulator [θ|m|v|G|ema]
+        bits.append(f"EMA shadow ({5 if acc_k(variant) else 4}-region blob)")
     if rms_on(variant):
         bits.append("RMSProp")
     elif "lamb" in variant:
         bits.append("LAMB")
-    elif "adam" in variant:
+    elif "adam" in variant or acc_k(variant):
+        # `acc…` without `lamb` is `R34Opt.adamwAccum`: AdamW over k micro-batches
         bits.append("AdamW")
     elif "mom" in variant:
         bits.append("momentum")
@@ -147,7 +149,8 @@ def decode(variant: str) -> str:
     if cd_on(variant):
         bits.append("classifier dropout")
     if "wx" in variant:
-        bits.append("wd-on-x")
+        # timm `no_weight_decay`: decay OFF BN γ/β and biases
+        bits.append("no decay on norm/bias")
     if "clip" in variant:
         bits.append("grad clip")
     if "bce" in variant:
