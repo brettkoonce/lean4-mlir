@@ -2089,9 +2089,10 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       -- any resolution: A3's trainRes (train) vs imageH (eval), and timm's test resolution
       -- (`test_input_size`, jax/timm_eval_protocols.json) for `jax/scripts/eval_full50k.py`.
       -- A fully convolutional net with a global pool is resolution-agnostic; at imageH the
-      -- reshape is the same one the literal spelled.
-      code := code ++ "    _s = int(round((x.shape[-1] // " ++ toString ic ++ ") ** 0.5)); x = x.reshape(-1, " ++
-        toString ic ++ ", _s, _s)\n"
+      -- reshape is the same one the literal spelled. An NCHW input passes through, as it did
+      -- through the literal: the convention audit and the grad/forward ties call with one.
+      code := code ++ "    if x.ndim != 4:\n        _s = int(round((x.shape[-1] // " ++ toString ic ++
+        ") ** 0.5)); x = x.reshape(-1, " ++ toString ic ++ ", _s, _s)\n"
     else
       code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
         toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
