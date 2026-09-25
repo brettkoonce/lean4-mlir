@@ -580,7 +580,8 @@ jobs:
 
       - name: Build the reference modules
         # The parity scripts re-emit each reference from the CURRENT source (`lake env lean` on a
-        # two-line file importing the Main module), so the modules' .olean files must exist. The
+        # two-line file importing the Main module), so the modules' .olean files must exist —
+        # built through their exes, since the target-name lint admits only `lean_exe`s here. The
         # MNv4 forward tie reads the Imagenette reference the exe writes (the `|| true` + existence
         # check is the convention job's emit pattern); the MNv2 tie reads the committed ImageNet
         # file, which `regen_jax_generated.sh sync` copies in and the build job's drift guard pins.
@@ -588,8 +589,8 @@ jobs:
         run: |
           set -e
           lake exe cache get || true
-          lake build MainMobilenetV2 MainMobilenetV2Imagenet MainMobilenetV4 MainMobilenetV4Imagenet \
-                     MainEfficientNet MainEfficientNetImagenet MainVit MainVitImagenet mobilenet-v4
+          lake build mobilenet-v2 mobilenet-v2-imagenet mobilenet-v4 mobilenet-v4-imagenet \
+                     efficientnet-b0 efficientnet-b0-imagenet vit-tiny vit-tiny-imagenet
           lake exe mobilenet-v4 /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true
           [ -s .lake/build/generated_mobilenet_v4.py ] || { echo "::error::generated_mobilenet_v4.py was not emitted"; exit 1; }
 
