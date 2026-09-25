@@ -175,7 +175,23 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
   fails at 1.4e-1. Neither script is in CI yet (G4's question for MNv4 too: CI has no `.venv-timm`).
   ⚠ Pre-existing, not touched: the Imagenette `--eval` tie reports FAIL at max |Δ| 1.3e-4 against its
   absolute 1e-4 tolerance on logits spanning ±49 (2.6e-6 of scale), identically before this change.
-  G3 for B0 and ViT still open.
+* ✅ G3 for B0: `scripts/enet_timm_parity.py` (+ `_enet_timm_dump.py`) against timm's `efficientnet_b0`
+  with a SAME stem — the paths' hybrid (SAME stem, symmetric strided depthwise): Imagenette 2.3e-6,
+  ImageNet train 2.0e-6 / eval 7.3e-7; controls red (symmetric everywhere 6.0e-3, ε 1e-5 6.0e-3).
+  ⚠ `--pad tf` against TF's all-SAME `tf_efficientnet_b0`: train 3.7e-1 / eval 4.8e-2 of scale. The
+  strided-depthwise padding is a LARGE deviation from the TF net the recipe now follows; fixing it
+  moves both paths (JAX `mbconv_block` + the verified render's four strided depthwise sites) and is
+  a decision for the user, not taken here.
+* ✅ G3 for ViT: `scripts/vit_timm_parity.py` (+ `_vit_timm_dump.py`) against `deit_tiny_patch16_224`
+  at the reference's tanh GELU / LN ε 1e-5: Imagenette 4.7e-7, ImageNet 6.9e-7 at tol 1e-5 (tanh vs
+  erf is only ~4e-5 of scale, so the CNN gates' 1e-3 would be blind to it); controls red (k/v swapped
+  1.3e-1, erf GELU 3.8e-5). `--deit` (erf, 1e-6): 4.6e-5 / 3.9e-5 at random init.
+* ✅ G4: `jax.yml` job `timm-parity` runs all four parity gates (with controls) and the two IREE
+  forward ties (`mnv4_forward_tie.py`, `mnv2_forward_tie.py --imagenet` + its ε control) on CPU:
+  jax at the lockfile's version, the pinned timm env torch-first from the CPU index, IREE 3.11.0 from
+  PyPI (both ties checked on it locally). Trigger paths extended to the gates, dumps, `_iree.py` and
+  the timm lockfile. Rehearsed locally step for step; first CI run is on the next push.
+  `aug_bicubic_pil_check.py` is not in CI (it needs TensorFlow, which no CI job installs).
 * ✅ C6 does not reach MNv2: its trainer and shim call no geometric aug or erasing, and both resizes
   are already bicubic + antialias. **The MNv2 pair (R4) is code-complete.**
 

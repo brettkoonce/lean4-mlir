@@ -16,6 +16,10 @@
 #            the same way its JAX reference does? Six divergences across four
 #            nets were each found by hand, a session apiece. Ratchet against
 #            scripts/convention_baseline.txt: fails only on a NEW one.
+#   optimizer — the rendered optimizer's one step against the reference's own.
+#   timm-parity — each ImageNet JAX reference against timm's own net on shared weights
+#            (MobileNetV2, MobileNetV4-Conv-M, EfficientNet-B0, ViT-Ti), each gate with a control
+#            that must go red, then the IREE forward ties carrying MNv4 and MNv2 to the renders.
 name: JAX subproject
 
 on:
@@ -53,6 +57,14 @@ on:
       # The two tools the `build`/`convention` jobs run that nothing above watched.
       - 'scripts/regen_jax_generated.sh'
       - 'scripts/parse_verified_mlir.py'
+      # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
+      # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
+      - 'scripts/*_timm_parity.py'
+      - 'scripts/_*_timm_dump.py'
+      - 'scripts/mnv2_forward_tie.py'
+      - 'scripts/mnv4_forward_tie.py'
+      - 'scripts/_iree.py'
+      - 'requirements-timm-lock.txt'
   pull_request:
     paths:
       - 'jax/**'
@@ -84,6 +96,14 @@ on:
       # The two tools the `build`/`convention` jobs run that nothing above watched.
       - 'scripts/regen_jax_generated.sh'
       - 'scripts/parse_verified_mlir.py'
+      # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
+      # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
+      - 'scripts/*_timm_parity.py'
+      - 'scripts/_*_timm_dump.py'
+      - 'scripts/mnv2_forward_tie.py'
+      - 'scripts/mnv4_forward_tie.py'
+      - 'scripts/_iree.py'
+      - 'requirements-timm-lock.txt'
   workflow_dispatch:
 
 concurrency:
@@ -499,5 +519,109 @@ jobs:
             echo ""
             echo '```'
             grep -E '✓|✗|worst|‖Gt‖' /tmp/opt_tie.log || true
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+  timm-parity:
+    name: timm parity + forward ties
+    # ⭐ planning/imagenet_parity.md G3/G4. Every other gate on these nets compares the verified render
+    # with its JAX reference — two things built from the same spec — so a defect in the SPEC passes
+    # all of them. That is how MNv4 shipped five deviations from timm's conv_medium and how the
+    # MobileNetV2 / EfficientNet ImageNet stems and heads ran ReLU for a month. These run each JAX
+    # reference against timm 1.0.28's own net (`requirements-timm-lock.txt`) on shared weights, CPU
+    # only, and then carry two of them to the verified renders through IREE.
+    #   MNv2  mobilenetv2_100 at TF SAME padding; controls: symmetric padding, BN ε 1e-5
+    #   MNv4  mobilenetv4_conv_medium
+    #   B0    efficientnet_b0 with a SAME stem (the paths' hybrid; `--pad tf` measures TF's net);
+    #         controls: symmetric padding, BN ε 1e-5
+    #   ViT   deit_tiny_patch16_224 at tanh GELU / LN ε 1e-5 (`--deit` measures DeiT's); controls:
+    #         k/v swapped, erf GELU
+    # ⚠ The timm env is its OWN venv with the CPU torch build, installed torch-first from the CPU
+    # index as the lockfile says: a plain `-r` resolves torch from PyPI, i.e. the CUDA build.
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Cache .lake
+        uses: actions/cache@v4
+        with:
+          path: |
+            .lake/build
+            jax/.lake/build
+          key: lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
+            lake-jax-
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-timm-parity-${{ hashFiles('requirements-timm-lock.txt', 'jax/requirements-cuda-lock.txt') }}
+
+      - name: Python (jax CPU at the lockfile's version, IREE, the pinned timm env)
+        # IREE 3.11.0 is PyPI's release; the 4060 Ti box runs a 3.12 nightly, and both ties pass on
+        # both (checked 2026-09-25: MNv4 4.1e-5, MNv2 ImageNet 2.1e-6 of scale).
+        run: |
+          set -e
+          python3 -m pip install --quiet "jax[cpu]==$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)" \
+              iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
+          python3 -m venv .venv-timm
+          .venv-timm/bin/pip install --quiet torch==2.13.0 torchvision==0.28.0 \
+              --index-url https://download.pytorch.org/whl/cpu
+          .venv-timm/bin/pip install --quiet -r requirements-timm-lock.txt
+
+      - name: Build the reference modules
+        # The parity scripts re-emit each reference from the CURRENT source (`lake env lean` on a
+        # two-line file importing the Main module), so the modules' .olean files must exist. The
+        # MNv4 forward tie reads the Imagenette reference the exe writes (the `|| true` + existence
+        # check is the convention job's emit pattern); the MNv2 tie reads the committed ImageNet
+        # file, which `regen_jax_generated.sh sync` copies in and the build job's drift guard pins.
+        working-directory: jax
+        run: |
+          set -e
+          lake exe cache get || true
+          lake build MainMobilenetV2 MainMobilenetV2Imagenet MainMobilenetV4 MainMobilenetV4Imagenet \
+                     MainEfficientNet MainEfficientNetImagenet MainVit MainVitImagenet mobilenet-v4
+          lake exe mobilenet-v4 /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true
+          [ -s .lake/build/generated_mobilenet_v4.py ] || { echo "::error::generated_mobilenet_v4.py was not emitted"; exit 1; }
+
+      - name: timm parity (each gate with its control)
+        run: |
+          set -eo pipefail
+          export JAX_PLATFORMS=cpu
+          for g in "mnv2_timm_parity.py --controls" "mnv4_timm_parity.py" \
+                   "enet_timm_parity.py --controls" "vit_timm_parity.py --controls"; do
+            python3 scripts/$g 2>&1 | tee -a /tmp/parity.log
+          done
+
+      - name: Forward ties through IREE (render ↔ reference)
+        run: |
+          set -eo pipefail
+          export JAX_PLATFORMS=cpu
+          scripts/regen_jax_generated.sh sync
+          python3 scripts/mnv4_forward_tie.py 2>&1 | tee -a /tmp/parity.log
+          python3 scripts/mnv2_forward_tie.py --imagenet 2>&1 | tee -a /tmp/parity.log
+          # CONTROL: the ε-1e-5 eval graph against the ε-1e-3 reference must FAIL.
+          if python3 scripts/mnv2_forward_tie.py --imagenet --mlir verified_mlir/mobilenetv2in_fwd_eval.mlir; then
+            echo "::error::mnv2 forward-tie control came out GREEN — the tie cannot see BN ε"; exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo ""
+            echo "## timm parity + forward ties"
+            echo ""
+            echo '```'
+            grep -E '^\[|max\|Δ\|/max|CONTROL|✅ the|FORWARD TIE|⛔' /tmp/parity.log || true
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
