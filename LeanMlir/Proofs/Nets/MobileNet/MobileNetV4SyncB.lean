@@ -22,17 +22,16 @@ move**: the right-hand side is the committed `mobilenetv4ForwardB_full`, at `N :
 As `ResNet34SyncB.lean` and `MobileNetV2SyncB.lean` prove theirs: one block at a time, with the
 shard hypothesis `∀ r, den (e r) = batchShard R N _ X r` carried from block to block.
 
-* every conv, depthwise (stride 1 and SYMMETRIC stride 2), XLA-`SAME` strided stem conv, GAP and
-  dense node is a per-example lift (`den_batchOp_shard`) — the padding lives inside the
-  per-example map;
-* relu and swish are pointwise (`den_relu_shard`, `den_swish_shard`); the identity skip is
-  `den_addVB_shard`;
+* every conv, depthwise (stride 1 and SYMMETRIC stride 2), strided conv, GAP and dense node is a
+  per-example lift (`den_batchOp_shard`) — the padding lives inside the per-example map;
+* relu is pointwise (`den_relu_shard`); the identity skip is `den_addVB_shard`; the head's two
+  `1×1` relabellings are `den_castIdx_shard` (sharding commutes with a per-example relabel);
 * every BatchNorm site is `bnSyncSiteLA`, whose shard lemma `den_bnSyncSiteLA` is P1 on the graph
   read at the network index.
 
 ⭐ **Same shape as T2, and for T2's reasons.** The block lemmas are GENERIC IN THE ROW (`s :
 UibSpec`), so every width is a projection of a variable and nothing evaluates; each one closes on
-the row-typed `mnv4BodyOfRow (R * N) s p` / `mnv4PreStridedBodyOfRow` by the dispatch hypotheses
+the row-typed `mnv4BodyOfRow (R * N) s p` / `mnv4StridedBodyOfRow` by the dispatch hypotheses
 T2 uses (`s.preDWk ≠ 0`, `s.postDWk = 0`, …), discharged by `decide` at the concrete rows. The
 skip is one generic combinator (`mnv4SkipGraphSync`, the peer of `mnv4SkipGraphB`), which keeps
 the whole-net term linear in the depth. The five resolution groups are proved against
@@ -73,30 +72,29 @@ open scoped BigOperators
 namespace StableHLO
 
 -- ════════════════════════════════════════════════════════════════
--- § swish — pointwise, so sharding commutes with it
+-- § The head's relabelling — per-example, so sharding commutes with it
 -- ════════════════════════════════════════════════════════════════
 
-/-- **swish on every replica is the shard of the global swish** — the fused stage's activation,
-    read cell by cell. The peer of `den_relu_shard`, stated at the whole-batch `swish` the
-    committed forward (`fusedConvB`) is written in. -/
-theorem den_swish_shard {R N n : Nat} (e : Fin R → SHlo (N * n)) (X : Vec ((R * N) * n))
-    (he : ∀ r, den (e r) = batchShard R N n X r) (r : Fin R) :
-    den (.batchOp (N := N) (.swish (n := n)) (e r))
-      = batchShard R N n (swish ((R * N) * n) X) r := by
-  rw [den_batchOp_swish_eq_swishF, swishF_faithful, he]
-  rfl
+/-- **A per-example relabel on every replica is the shard of the relabelled global batch** — the
+    head's `[N, c] ↔ [N, c, 1, 1]` casts, read at the network index. -/
+theorem den_castIdx_shard {R N a b : Nat} (hab : a = b) (h : N * a = N * b)
+    (e : Fin R → SHlo (N * a)) (X : Vec ((R * N) * a))
+    (he : ∀ r, den (e r) = batchShard R N a X r) (r : Fin R) :
+    den (castIdx h (e r))
+      = batchShard R N b (fun i => X (Fin.cast (congrArg ((R * N) * ·) hab).symm i)) r := by
+  rw [den_castIdx, he, batchShard_castIdx hab]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The stem and the fused stage — generic in their widths
 -- ════════════════════════════════════════════════════════════════
 
-/-- Stem at sync-BN, over the replica family: 3×3/s2 XLA-`SAME` conv → sync-BN → relu. -/
+/-- Stem at sync-BN, over the replica family: 3×3/s2 symmetric conv → sync-BN → relu. -/
 def mnv4StemGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : Fin R → SHlo (N * (ic * (2 * h) * (2 * w)))) : Fin R → SHlo (N * (oc * h * w)) :=
   fun r => .batchOp (N := N) (.relu (n := oc * h * w))
     (bnSyncSiteLA "%sg" "%sbt" epsStr "sgmu" "sgvar" [oc] [oc] R hR εs γs βs
-      (fun r => .batchOp (N := N) (.convStridedXla (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) (e r))
+      (fun r => .batchOp (N := N) (.convStrided (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) (e r))
       r)
 
 theorem mnv4StemGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
@@ -108,12 +106,12 @@ theorem mnv4StemGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
       = batchShard R N (oc * h * w) (mnv4StemB (R * N) h w Ws bs εs γs βs X) r := by
   have hm := nhw_ne_zero hN hh hw
   have hc := den_batchOp_shard (N := N)
-    (.convStridedXla (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e X he
+    (.convStrided (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e X he
   have hn := den_bnSyncSiteLA "%sg" "%sbt" epsStr "sgmu" "sgvar" [oc] [oc]
     R hR hm εs γs βs _ _ hc
   exact den_relu_shard _ _ hn r
 
-/-- Fused stage at sync-BN, over the replica family: 3×3/s2 SYMMETRIC conv → sync-BN → **swish** →
+/-- Fused stage at sync-BN, over the replica family: 3×3/s2 symmetric conv → sync-BN → relu →
     1×1 project → sync-BN. Two sync sites, no skip. -/
 def mnv4FusedGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
     {ic mid oc kH kW : Nat}
@@ -122,7 +120,7 @@ def mnv4FusedGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
     (e : Fin R → SHlo (N * (ic * (2 * h) * (2 * w)))) : Fin R → SHlo (N * (oc * h * w)) :=
   fun r => bnSyncSiteLA "%f0pg" "%f0pbt" epsStr "f0pgmu" "f0pgvar" [oc] [oc] R hR εp γp βp
     (fun r => .batchOp (N := N) (.conv (h := h) (w := w) "%f0pW" s!"%zb{oc}" Wp bp)
-      (.batchOp (N := N) (.swish (n := mid * h * w))
+      (.batchOp (N := N) (.relu (n := mid * h * w))
         (bnSyncSiteLA "%f0cg" "%f0cbt" epsStr "f0cgmu" "f0cgvar" [mid] [mid] R hR εc γc βc
           (fun r => .batchOp (N := N)
             (.convStrided (h := h) (w := w) "%f0cW" s!"%zb{mid}" Wc bc) (e r)) r)))
@@ -136,14 +134,14 @@ theorem mnv4FusedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w
     (he : ∀ r, den (e r) = batchShard R N (ic * (2 * h) * (2 * w)) X r) (r : Fin R) :
     den (mnv4FusedGraphSync epsStr R hR N h w Wc bc εc γc βc Wp bp εp γp βp e r)
       = batchShard R N (oc * h * w)
-          ((mnv4FusedStage (R * N) (mnv4FusedConvLayer (h := h) (w := w) (R * N) Wc bc εc hεc γc βc)
+          ((mnv4FusedStage (R * N) (cbReluStridedLayer (h := h) (w := w) (R * N) Wc bc εc hεc γc βc)
             (projLayer (h := h) (w := w) (R * N) Wp bp εp hεp γp βp)).fwd X) r := by
   have hm := nhw_ne_zero hN hh hw
   have hcc := den_batchOp_shard (N := N)
     (.convStrided (h := h) (w := w) "%f0cW" s!"%zb{mid}" Wc bc) e X he
   have hcn := den_bnSyncSiteLA "%f0cg" "%f0cbt" epsStr "f0cgmu" "f0cgvar" [mid] [mid]
     R hR hm εc γc βc _ _ hcc
-  have hcs := den_swish_shard _ _ hcn
+  have hcs := den_relu_shard _ _ hcn
   have hpc := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%f0pW" s!"%zb{oc}" Wp bp) _ _ hcs
   exact den_bnSyncSiteLA "%f0pg" "%f0pbt" epsStr "f0pgmu" "f0pgvar" [oc] [oc]
     R hR hm εp γp βp _ _ hpc r
@@ -153,8 +151,8 @@ theorem mnv4FusedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w
 -- ════════════════════════════════════════════════════════════════
 
 /-- **ExtraDW body at sync-BN**, over the replica family — both depthwises present: pre-DW →
-    sync-BN → relu → expand → sync-BN → relu → post-DW → sync-BN → relu → project → sync-BN. Four
-    sync sites. The body only; the identity skip is `mnv4SkipGraphSync`. -/
+    sync-BN → expand → sync-BN → relu → post-DW → sync-BN → relu → project → sync-BN. Four sync
+    sites. The body only; the identity skip is `mnv4SkipGraphSync`. -/
 def mnv4ExtraDWBodyGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec)
     (p : UibParams s) (e : Fin R → SHlo (N * (s.ic * s.h * s.h))) :
     Fin R → SHlo (N * (s.oc * s.h * s.h)) :=
@@ -173,12 +171,11 @@ def mnv4ExtraDWBodyGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) 
                 (fun r => .batchOp (N := N)
                   (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
                     s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be)
-                  (.batchOp (N := N) (.relu (n := s.ic * s.h * s.h))
-                    (bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu"
-                      s!"u{s.p}qgvar" [s.ic] [s.ic] R hR p.eq_ p.gq p.bq2
-                      (fun r => .batchOp (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
-                          s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) (e r))
-                      r)))
+                  (bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu"
+                    s!"u{s.p}qgvar" [s.ic] [s.ic] R hR p.eq_ p.gq p.bq2
+                    (fun r => .batchOp (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
+                        s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) (e r))
+                    r))
                 r)))
           r)))
     r
@@ -197,10 +194,9 @@ theorem mnv4ExtraDWBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) 
     s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) e X he
   have hqn := den_bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
     [s.ic] [s.ic] R hR hm p.eq_ p.gq p.bq2 _ _ hqc
-  have hqr := den_relu_shard _ _ hqn
   have hec := den_batchOp_shard (N := N)
     (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-      s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqr
+      s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqn
   have hen := den_bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
     [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ee p.ge p.be2 _ _ hec
   have her := den_relu_shard _ _ hen
@@ -216,8 +212,8 @@ theorem mnv4ExtraDWBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) 
     [s.oc] [s.oc] R hR hm p.ez p.gz p.bz2 _ _ hpc r).trans
     (congrArg (fun z => batchShard R N (s.oc * s.h * s.h) z r) ?_)
   simp only [mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot, ite_eq_right hq,
-    ite_eq_right hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.comp_fwd, projB, cbReluB,
-    dwbReluB, denOp, Function.comp_apply]
+    ite_eq_right hd, mnv4DWBnLayer, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.comp_fwd,
+    projB, cbReluB, dwbB, dwbReluB, denOp, Function.comp_apply]
 
 /-- **ConvNeXt-like body at sync-BN** — pre-DW only (`postDWk = 0`): the absent depthwise emits no
     tokens, exactly as in T2. Three sync sites. -/
@@ -233,12 +229,11 @@ def mnv4ConvNeXtBodyGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat)
           [s.ic * s.expand] [s.ic * s.expand] R hR p.ee p.ge p.be2
           (fun r => .batchOp (N := N) (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h)
               (w := s.h) s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be)
-            (.batchOp (N := N) (.relu (n := s.ic * s.h * s.h))
-              (bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
-                [s.ic] [s.ic] R hR p.eq_ p.gq p.bq2
-                (fun r => .batchOp (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
-                    s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) (e r))
-                r)))
+            (bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
+              [s.ic] [s.ic] R hR p.eq_ p.gq p.bq2
+              (fun r => .batchOp (N := N) (.depthwise (c := s.ic) (h := s.h) (w := s.h)
+                  s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) (e r))
+              r))
           r)))
     r
 
@@ -254,10 +249,9 @@ theorem mnv4ConvNeXtBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R)
     s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) e X he
   have hqn := den_bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
     [s.ic] [s.ic] R hR hm p.eq_ p.gq p.bq2 _ _ hqc
-  have hqr := den_relu_shard _ _ hqn
   have hec := den_batchOp_shard (N := N)
     (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-      s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqr
+      s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqn
   have hen := den_bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
     [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ee p.ge p.be2 _ _ hec
   have her := den_relu_shard _ _ hen
@@ -268,8 +262,8 @@ theorem mnv4ConvNeXtBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R)
     [s.oc] [s.oc] R hR hm p.ez p.gz p.bz2 _ _ hpc r).trans
     (congrArg (fun z => batchShard R N (s.oc * s.h * s.h) z r) ?_)
   simp only [mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot, ite_eq_right hq,
-    ite_eq_left hd, mnv4DWReluLayer, cbReluLayer, projLayer, CertLayer.id'_fwd,
-    CertLayer.comp_fwd, projB, cbReluB, dwbReluB, denOp, Function.comp_apply]
+    ite_eq_left hd, mnv4DWBnLayer, cbReluLayer, projLayer, CertLayer.id'_fwd,
+    CertLayer.comp_fwd, projB, cbReluB, dwbB, denOp, Function.comp_apply]
 
 /-- **FFN body at sync-BN** — neither depthwise: expand → sync-BN → relu → project → sync-BN. -/
 def mnv4FfnBodyGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec)
@@ -311,10 +305,10 @@ theorem mnv4FfnBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N :
     ite_eq_left hd, cbReluLayer, projLayer, CertLayer.id'_fwd, CertLayer.comp_fwd, projB, cbReluB,
     denOp, Function.comp_apply]
 
-/-- **Pre-strided block at sync-BN** — rows 1, 3 and 11: the leading depthwise carries the stride
-    (`.depthwiseStrided`, SYMMETRIC padding), everything after it at the reduced `h`. Four sync
+/-- **Strided block at sync-BN** — rows 1, 3 and 11: the BN-only pre-DW and the expand at `2h`, the
+    post-DW (`.depthwiseStrided`, symmetric) carrying the stride, the project at `h`. Four sync
     sites; no skip (`ic ≠ oc`). -/
-def mnv4PreStridedGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec)
+def mnv4StridedGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec)
     (p : UibParams s) (e : Fin R → SHlo (N * (s.ic * (2 * s.h) * (2 * s.h)))) :
     Fin R → SHlo (N * (s.oc * s.h * s.h)) :=
   fun r => bnSyncSiteLA s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr s!"u{s.p}pgmu" s!"u{s.p}pgvar"
@@ -324,46 +318,48 @@ def mnv4PreStridedGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) (
       (.batchOp (N := N) (.relu (n := s.ic * s.expand * s.h * s.h))
         (bnSyncSiteLA s!"%u{s.p}dg" s!"%u{s.p}dbt" epsStr s!"u{s.p}dgmu" s!"u{s.p}dgvar"
           [s.ic * s.expand] [s.ic * s.expand] R hR p.ed p.gd p.bd2
-          (fun r => .batchOp (N := N) (.depthwise (c := s.ic * s.expand) (h := s.h) (w := s.h)
+          (fun r => .batchOp (N := N)
+            (.depthwiseStrided (c := s.ic * s.expand) (h := s.h) (w := s.h)
               s!"%u{s.p}dW" s!"%zb{s.ic * s.expand}" p.Wd p.bd)
-            (.batchOp (N := N) (.relu (n := s.ic * s.expand * s.h * s.h))
+            (.batchOp (N := N) (.relu (n := s.ic * s.expand * (2 * s.h) * (2 * s.h)))
               (bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
                 [s.ic * s.expand] [s.ic * s.expand] R hR p.ee p.ge p.be2
                 (fun r => .batchOp (N := N)
-                  (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
+                  (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := 2 * s.h) (w := 2 * s.h)
                     s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be)
-                  (.batchOp (N := N) (.relu (n := s.ic * s.h * s.h))
-                    (bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu"
-                      s!"u{s.p}qgvar" [s.ic] [s.ic] R hR p.eq_ p.gq p.bq2
-                      (fun r => .batchOp (N := N)
-                        (.depthwiseStrided (c := s.ic) (h := s.h) (w := s.h)
-                          s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) (e r))
-                      r)))
+                  (bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu"
+                    s!"u{s.p}qgvar" [s.ic] [s.ic] R hR p.eq_ p.gq p.bq2
+                    (fun r => .batchOp (N := N)
+                      (.depthwise (c := s.ic) (h := 2 * s.h) (w := 2 * s.h)
+                        s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) (e r))
+                    r))
                 r)))
           r)))
     r
 
-theorem mnv4PreStridedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat)
-    (hN : 0 < N) (s : UibSpec) (hh : 0 < s.h) (p : UibParams s) (hd : s.postDWk ≠ 0)
+theorem mnv4StridedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat)
+    (hN : 0 < N) (s : UibSpec) (hh : 0 < s.h) (p : UibParams s) (hq : s.preDWk ≠ 0)
     (e : Fin R → SHlo (N * (s.ic * (2 * s.h) * (2 * s.h))))
     (X : Vec ((R * N) * (s.ic * (2 * s.h) * (2 * s.h))))
     (he : ∀ r, den (e r) = batchShard R N (s.ic * (2 * s.h) * (2 * s.h)) X r) (r : Fin R) :
-    den (mnv4PreStridedGraphSync epsStr R hR N s p e r)
-      = batchShard R N (s.oc * s.h * s.h) ((mnv4PreStridedBodyOfRow (R * N) s p).fwd X) r := by
+    den (mnv4StridedGraphSync epsStr R hR N s p e r)
+      = batchShard R N (s.oc * s.h * s.h) ((mnv4StridedBodyOfRow (R * N) s p).fwd X) r := by
   have hm := nhw_ne_zero hN hh hh
-  have hqc := den_batchOp_shard (N := N) (.depthwiseStrided (c := s.ic) (h := s.h) (w := s.h)
+  have h2 : 0 < 2 * s.h := by omega
+  have hm2 := nhw_ne_zero hN h2 h2
+  have hqc := den_batchOp_shard (N := N) (.depthwise (c := s.ic) (h := 2 * s.h) (w := 2 * s.h)
     s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq) e X he
   have hqn := den_bnSyncSiteLA s!"%u{s.p}qg" s!"%u{s.p}qbt" epsStr s!"u{s.p}qgmu" s!"u{s.p}qgvar"
-    [s.ic] [s.ic] R hR hm p.eq_ p.gq p.bq2 _ _ hqc
-  have hqr := den_relu_shard _ _ hqn
+    [s.ic] [s.ic] R hR hm2 p.eq_ p.gq p.bq2 _ _ hqc
   have hec := den_batchOp_shard (N := N)
-    (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := s.h) (w := s.h)
-      s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqr
+    (.conv (ic := s.ic) (oc := s.ic * s.expand) (h := 2 * s.h) (w := 2 * s.h)
+      s!"%u{s.p}eW" s!"%zb{s.ic * s.expand}" p.We p.be) _ _ hqn
   have hen := den_bnSyncSiteLA s!"%u{s.p}eg" s!"%u{s.p}ebt" epsStr s!"u{s.p}egmu" s!"u{s.p}egvar"
-    [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ee p.ge p.be2 _ _ hec
+    [s.ic * s.expand] [s.ic * s.expand] R hR hm2 p.ee p.ge p.be2 _ _ hec
   have her := den_relu_shard _ _ hen
-  have hdc := den_batchOp_shard (N := N) (.depthwise (c := s.ic * s.expand) (h := s.h) (w := s.h)
-    s!"%u{s.p}dW" s!"%zb{s.ic * s.expand}" p.Wd p.bd) _ _ her
+  have hdc := den_batchOp_shard (N := N)
+    (.depthwiseStrided (c := s.ic * s.expand) (h := s.h) (w := s.h)
+      s!"%u{s.p}dW" s!"%zb{s.ic * s.expand}" p.Wd p.bd) _ _ her
   have hdn := den_bnSyncSiteLA s!"%u{s.p}dg" s!"%u{s.p}dbt" epsStr s!"u{s.p}dgmu" s!"u{s.p}dgvar"
     [s.ic * s.expand] [s.ic * s.expand] R hR hm p.ed p.gd p.bd2 _ _ hdc
   have hdr := den_relu_shard _ _ hdn
@@ -373,9 +369,9 @@ theorem mnv4PreStridedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (
   refine (den_bnSyncSiteLA s!"%u{s.p}pg" s!"%u{s.p}pbt" epsStr s!"u{s.p}pgmu" s!"u{s.p}pgvar"
     [s.oc] [s.oc] R hR hm p.ez p.gz p.bz2 _ _ hpc r).trans
     (congrArg (fun z => batchShard R N (s.oc * s.h * s.h) z r) ?_)
-  simp only [mnv4PreStridedBodyOfRow, mnv4UibPreStridedBody, mnv4PostDWSlot, ite_eq_right hd,
-    mnv4DWReluLayer, mnv4DWReluStridedLayer, cbReluLayer, projLayer, CertLayer.comp_fwd, projB,
-    cbReluB, dwbReluB, dwbReluBstrided, denOp, Function.comp_apply]
+  simp only [mnv4StridedBodyOfRow, mnv4UibStridedBody, mnv4PreDWSlot, ite_eq_right hq,
+    mnv4DWBnLayer, mnv4DWReluStridedLayer, cbReluLayer, projLayer, CertLayer.comp_fwd, projB,
+    cbReluB, dwbB, dwbReluBstrided, denOp, Function.comp_apply]
 
 /-- ⭐ **One skip row at sync-BN: its body's family, plus the identity skip, replica by replica** —
     the peer of `mnv4SkipGraphB`, and a named combinator for the same reason: the add needs the
@@ -395,23 +391,26 @@ theorem mnv4SkipGraphSync_shard {R N n : Nat}
     den (mnv4SkipGraphSync body e r) = batchShard R N n (Proofs.residual f X) r :=
   den_addVB_shard (body e) e (f X) X (hb e X he) he r
 
-/-- Head at sync-BN, over the replica family: 1×1 conv → sync-BN → relu, a SECOND 1×1 conv →
-    sync-BN → relu, GAP, dense — Conv-M's two head convs. -/
+/-- Head at sync-BN, over the replica family, timm's order: 1×1 conv → sync-BN → relu, GAP,
+    `conv_head` 1×1 conv → sync-BN → relu on the pooled features (that BN's statistics over the
+    GLOBAL batch alone), dense — with the two `castIdx` relabellings T2's head carries. -/
 def mnv4HeadGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (e : Fin R → SHlo (N * (c * h * w))) :
     Fin R → SHlo (N * nCls) :=
   fun r => .batchOp (N := N) (.dense "%Wd" "%bd" Wd bd)
-    (.batchOp (N := N) (.gap (c := oc) (h := h) (w := w))
-      (.batchOp (N := N) (.relu (n := oc * h * w))
+    (castIdx (mnv4Pool11 N oc).symm
+      (.batchOp (N := N) (.relu (n := oc * 1 * 1))
         (bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc] R hR ε2 γ2 β2
-          (fun r => .batchOp (N := N) (.conv (h := h) (w := w) "%hW" s!"%zb{oc}" W2 b2)
-            (.batchOp (N := N) (.relu (n := mid * h * w))
-              (bnSyncSiteLA "%h1g" "%h1bt" epsStr "h1gmu" "h1gvar" [mid] [mid] R hR ε1 γ1 β1
-                (fun r => .batchOp (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
-                  (e r))
-                r)))
+          (fun r => .batchOp (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2)
+            (castIdx (mnv4Pool11 N mid)
+              (.batchOp (N := N) (.gap (c := mid) (h := h) (w := w))
+                (.batchOp (N := N) (.relu (n := mid * h * w))
+                  (bnSyncSiteLA "%h1g" "%h1bt" epsStr "h1gmu" "h1gvar" [mid] [mid] R hR ε1 γ1 β1
+                    (fun r => .batchOp (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
+                      (e r))
+                    r)))))
           r)))
 
 theorem mnv4HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
@@ -423,21 +422,26 @@ theorem mnv4HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
     (r : Fin R) :
     den (mnv4HeadGraphSync epsStr R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd e r)
       = batchShard R N nCls
-          (((cbReluLayer (h := h) (w := w) (R * N) W1 b1 ε1 hε1 γ1 β1).comp
-            (mnv4Head (R * N) (cbReluLayer (h := h) (w := w) (R * N) W2 b2 ε2 hε2 γ2 β2)
-              (gapLayer (R * N) (c := oc) (h := h) (w := w))
-              (denseLayer (R * N) Wd bd))).fwd X) r := by
+          ((mnv4Head (R * N) (cbReluLayer (h := h) (w := w) (R * N) W1 b1 ε1 hε1 γ1 β1)
+            (gapLayer (R * N) (c := mid) (h := h) (w := w))
+            (cbReluLayer (h := 1) (w := 1) (R * N) W2 b2 ε2 hε2 γ2 β2)
+            (denseLayer (R * N) Wd bd)).fwd X) r := by
   have hm := nhw_ne_zero hN hh hw
+  have hm1 := nhw_ne_zero hN Nat.one_pos Nat.one_pos
   have hc1 := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1) e X he
   have hn1 := den_bnSyncSiteLA "%h1g" "%h1bt" epsStr "h1gmu" "h1gvar" [mid] [mid]
     R hR hm ε1 γ1 β1 _ _ hc1
   have hr1 := den_relu_shard _ _ hn1
-  have hc2 := den_batchOp_shard (N := N) (.conv (h := h) (w := w) "%hW" s!"%zb{oc}" W2 b2) _ _ hr1
+  have hg := den_batchOp_shard (N := N) (.gap (c := mid) (h := h) (w := w)) _ _ hr1
+  have hp := den_castIdx_shard (by rw [Nat.mul_one, Nat.mul_one] : mid = mid * 1 * 1)
+    (mnv4Pool11 N mid) _ _ hg
+  have hc2 := den_batchOp_shard (N := N) (.conv (h := 1) (w := 1) "%hW" s!"%zb{oc}" W2 b2) _ _ hp
   have hn2 := den_bnSyncSiteLA "%hg" "%hbt" epsStr "hgmu" "hgvar" [oc] [oc]
-    R hR hm ε2 γ2 β2 _ _ hc2
+    R hR hm1 ε2 γ2 β2 _ _ hc2
   have hr2 := den_relu_shard _ _ hn2
-  have hg := den_batchOp_shard (N := N) (.gap (c := oc) (h := h) (w := w)) _ _ hr2
-  exact den_batchOp_shard (N := N) (.dense "%Wd" "%bd" Wd bd) _ _ hg r
+  have hf := den_castIdx_shard (by rw [Nat.mul_one, Nat.mul_one] : oc * 1 * 1 = oc)
+    (mnv4Pool11 N oc).symm _ _ hr2
+  exact den_batchOp_shard (N := N) (.dense "%Wd" "%bd" Wd bd) _ _ hf r
 
 -- ════════════════════════════════════════════════════════════════
 -- § The five resolution groups, at their table rows
@@ -450,7 +454,7 @@ def mnv4Res28GraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls 
     (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (48 * 56 * 56))) :
     Fin R → SHlo (N * (80 * 28 * 28)) :=
   mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row2 w.b2)
-    (mnv4PreStridedGraphSync epsStr R hR N mnv4Row1 w.b1 e)
+    (mnv4StridedGraphSync epsStr R hR N mnv4Row1 w.b1 e)
 
 theorem mnv4Res28GraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (epsStr : String)
     {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (48 * 56 * 56)))
@@ -459,7 +463,7 @@ theorem mnv4Res28GraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (
     den (mnv4Res28GraphSync R hR N epsStr w e r)
       = batchShard R N (80 * 28 * 28) ((mnv4Res28Layer (R * N) w).fwd X) r := by
   rw [mnv4Res28Layer_fwd_apply, CertLayer.residual_fwd]
-  have b1 := mnv4PreStridedGraphSync_shard epsStr R hR N hN mnv4Row1 (by decide) w.b1 (by decide)
+  have b1 := mnv4StridedGraphSync_shard epsStr R hR N hN mnv4Row1 (by decide) w.b1 (by decide)
     e X he
   exact mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row2 w.b2)
     (mnv4BodyOfRow (R * N) mnv4Row2 w.b2).fwd
@@ -474,7 +478,7 @@ def mnv4Res14aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls
   mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row6 w.b6)
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row5 w.b5)
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row4 w.b4)
-    (mnv4PreStridedGraphSync epsStr R hR N mnv4Row3 w.b3 e)))
+    (mnv4StridedGraphSync epsStr R hR N mnv4Row3 w.b3 e)))
 
 theorem mnv4Res14aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (80 * 28 * 28)))
@@ -484,7 +488,7 @@ theorem mnv4Res14aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
       = batchShard R N (160 * 14 * 14) ((mnv4Res14aLayer (R * N) w).fwd X) r := by
   rw [mnv4Res14aLayer_fwd_apply]
   simp only [CertLayer.residual_fwd]
-  have b3 := mnv4PreStridedGraphSync_shard epsStr R hR N hN mnv4Row3 (by decide) w.b3 (by decide)
+  have b3 := mnv4StridedGraphSync_shard epsStr R hR N hN mnv4Row3 (by decide) w.b3 (by decide)
     e X he
   have b4 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row4 w.b4)
     (mnv4BodyOfRow (R * N) mnv4Row4 w.b4).fwd
@@ -541,7 +545,7 @@ def mnv4Res7aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls 
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row14 w.b14)
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row13 w.b13)
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row12 w.b12)
-    (mnv4PreStridedGraphSync epsStr R hR N mnv4Row11 w.b11 e))))
+    (mnv4StridedGraphSync epsStr R hR N mnv4Row11 w.b11 e))))
 
 theorem mnv4Res7aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (160 * 14 * 14)))
@@ -551,7 +555,7 @@ theorem mnv4Res7aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
       = batchShard R N (256 * 7 * 7) ((mnv4Res7aLayer (R * N) w).fwd X) r := by
   rw [mnv4Res7aLayer_fwd_apply]
   simp only [CertLayer.residual_fwd]
-  have b11 := mnv4PreStridedGraphSync_shard epsStr R hR N hN mnv4Row11 (by decide) w.b11
+  have b11 := mnv4StridedGraphSync_shard epsStr R hR N hN mnv4Row11 (by decide) w.b11
     (by decide) e X he
   have b12 := mnv4SkipGraphSync_shard (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row12 w.b12)
     (mnv4BodyOfRow (R * N) mnv4Row12 w.b12).fwd

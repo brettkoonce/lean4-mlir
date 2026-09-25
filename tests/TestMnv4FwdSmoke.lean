@@ -10,7 +10,8 @@ depthwises, or a ConvNeXt-like block that emitted two — because those change t
 ⚠ It does **not** catch a pre/post-DW swap. Same `k`, same channels ⇒ same op counts as well
 as the same parameter shapes. Only a forward tie against the reference pins the order. Stated
 in every file that touches this, because a green structural gate is exactly when it gets
-forgotten.
+forgotten. It does pin WHICH convs are strided (`expectedStridedGroups`), which is how timm places
+the stride on `dw_mid` (`planning/mnv4_timm_parity.md`).
 -/
 
 open Proofs.StableHLO
@@ -33,6 +34,11 @@ def expectedDwGroups : List (Nat × Nat) :=
     (256, 7),   -- pre of b12,b13,b14,b16,b17,b18,b21
     (512, 1),   -- b17 post (256*2)
     (1024, 4) ] -- post of b12,b13,b14,b18 (256*4)
+
+/-- The `feature_group_count` of every stride-2 conv: the stem and stage 0 (regular, `1`), then
+    the three downsampling blocks' POST-DWs at the expanded width `mid` (b1 48·4, b3 80·6,
+    b11 160·6) — timm strides `dw_mid`. A pre-strided render reads `48, 80, 160` here. -/
+def expectedStridedGroups : List Nat := [1, 1, 192, 480, 960]
 
 def main : IO Unit := do
   let fwd := (mnv4FwdChainB 2 10 "1.0e-05").run' (0, [])
@@ -57,8 +63,18 @@ def main : IO Unit := do
     if got == want then IO.println s!"  ✓ {what}: {got}"; pure true
     else IO.println s!"  ✗ {what}: got {got}, want {want}"; pure false
   if !(← chk "regular convs (fgc = 1)" (grp 1) 47) then bad := bad + 1
-  if !(← chk "swish (fused stage only)" (n "stablehlo.logistic") 1) then bad := bad + 1
-  if !(← chk "relu" (n "stablehlo.maximum") 54) then bad := bad + 1
+  -- timm's Conv-M is ReLU throughout: no swish anywhere (stage 0 was swish until 2026-09-24).
+  if !(← chk "swish (none)" (n "stablehlo.logistic") 0) then bad := bad + 1
+  -- relu sites: stem 1 + stage 0 1 + per block (expand 1 + post-DW 1 if present) + head 2
+  --   = 1 + 1 + (21 + 13 post-DWs) + 2 = 38. The pre-DW (`dw_start`) is BN only.
+  if !(← chk "relu" (n "stablehlo.maximum") 38) then bad := bad + 1
+  let strided : List Nat := (lines.zip (lines.drop 1)).filterMap fun (l, nxt) =>
+    if l.contains "stride = [2, 2]" then fgcOf nxt else none
+  if strided.mergeSort (· ≤ ·) == expectedStridedGroups then
+    IO.println s!"  ✓ stride-2 convs at groups {expectedStridedGroups}"
+  else
+    IO.println s!"  ✗ stride-2 convs at groups {strided.mergeSort (· ≤ ·)}, want {expectedStridedGroups}"
+    bad := bad + 1
   -- (No skip-add count: `addVB` emits a bare `stablehlo.add`, indistinguishable from the many
   -- adds inside each expanded batch-BN. 273 of them, so the check would be noise, not a gate.)
   if !(← chk "total convs" fgcs.length 77) then bad := bad + 1

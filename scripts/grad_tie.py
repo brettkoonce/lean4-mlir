@@ -59,8 +59,25 @@ ALPHA = 0.1
 # ─────────────────────────────────────────────────────────────────────────────
 NETS = {
     "mnv4": dict(
-        mlir=".lake/build/mnv4_adam_train_step_b2.mlir",
-        fn="mnv4_adam2_train_step",
+        # ⚠ B = 8, not 2. timm's head (2026-09-24, `planning/mnv4_timm_parity.md`) pools BEFORE
+        # `conv_head`, so `norm_head` normalises `[B, 1280]` over the batch alone; at B = 2 every
+        # channel is ±1 whatever the input and nearly every upstream gradient is ~0 (the vacuity
+        # guard below fired). B = 8 carries a real gradient to every live parameter.
+        mlir=".lake/build/mnv4_adam_train_step_b8.mlir",
+        fn="mnv4_adam8_train_step",
+        batch=8,
+        # ⚠ --nokink only. Two head parameters are PRECISION-limited under the probe, not wired
+        # wrong: with every beta = +5 the pooled head features are nearly batch-constant on a large
+        # common offset, so the batch-only `norm_head` runs at istd ~ 300 and the fp32 residual of
+        # sum_n x_hat is amplified into a per-output constant in its backward (measured: the %hW
+        # error is exactly rank-1, constant across the 960 inputs; %h1bt = W^T of that constant,
+        # and is itself structurally dead under the probe). Both are checked by the DEFAULT mode,
+        # where the head is well conditioned (head block 1.3x-6x the control at B = 8 / 16).
+        nokink_exempt=("%h1bt", "%hW"),
+        # 17 pre-DW (timm `dw_start`) betas are EXACTLY dead in any mode (BN-only pre-DW -> 1x1
+        # conv -> BN absorbs a shift), and --nokink makes every BN -> relu -> conv -> BN beta dead
+        # too: 31 of 233 there. The vacuity floor is 80% of parameters live, not 90%.
+        min_live=0.8,
         ref_py="jax/.lake/build/generated_mobilenet_v4.py",
         # ⚠⚠ **CONV-M, not Conv-S.** These read 158 / 104 until 2026-09-07 -- Conv-S's counts,
         # left behind by `ed5a797`'s table swap, so this gate could not have run against the
@@ -210,7 +227,7 @@ def main():
                     help="which net's registry entry supplies the defaults below")
     ap.add_argument("--mlir", default=None)
     ap.add_argument("--fn", default=None)
-    ap.add_argument("--batch", type=int, default=2)
+    ap.add_argument("--batch", type=int, default=None, help="default: the net's registry entry, else 2")
     ap.add_argument("--nclasses", type=int, default=None)
     ap.add_argument("--nparams", type=int, default=None)
     ap.add_argument("--nstats", type=int, default=None)
@@ -254,6 +271,7 @@ def main():
     args.nparams = args.nparams if args.nparams is not None else cfg["nparams"]
     args.nstats = args.nstats if args.nstats is not None else cfg["nstats"]
     args.runner = args.runner or cfg["runner"]
+    args.batch = args.batch if args.batch is not None else cfg.get("batch", 2)
     ref_py = cfg["ref_py"]
     if not os.path.exists(ref_py):
         sys.exit(f"{ref_py} missing — the generated reference for {args.net} is not built")
@@ -493,6 +511,12 @@ def main():
     med = float(np.median([r[2] for r in rows]))
     dead = [r for r in rows if r[2] < 1e-3 * med]
     live = [r for r in rows if r[2] >= 1e-3 * med]
+    exempt = set(cfg.get("nokink_exempt", ())) if args.nokink else set()
+    if exempt:
+        print(f"\n  --nokink exempt (precision-limited under the probe; see the registry): "
+              f"{', '.join(sorted(exempt))}")
+        live = [r for r in live if names[r[3]] not in exempt]
+        dead = [r for r in dead if names[r[3]] not in exempt]
     if dead:
         worst_dead = max(np.abs(np.asarray(got_g[r[3]]).ravel()).max() for r in dead)
         print(f"\n  structurally-dead parameters (reference gradient == 0): {len(dead)}")
@@ -500,8 +524,9 @@ def main():
         print(f"    worst |render gradient| there: {worst_dead:.3e}  "
               f"(typical live scale {med:.3e}) -> {'✓ also ~0' if worst_dead < 1e-3 * med else '✗ NOT zero'}")
 
-    worst = rows[0][0]
-    worst_ref = max(r[1] for r in rows)
+    kept = [r for r in rows if names[r[3]] not in exempt]
+    worst = kept[0][0]
+    worst_ref = max(r[1] for r in kept)
     # ⭐ THE VERDICT IS RELATIVE TO THE CONTROL, not to an absolute tolerance: the render must be
     # no worse than `--ratio`x the reference's OWN fp32 error against f64 truth. An absolute
     # threshold here would either convict the render of the reference's conditioning or, set loose
@@ -515,7 +540,7 @@ def main():
     # If the reference gradient is ~0 everywhere the comparison says nothing. Require that a
     # healthy majority of parameters carry a gradient well clear of zero.
     print(f"  parameters with a non-trivial reference gradient: {len(live)}/{nP}")
-    if len(live) < nP * 0.9:
+    if len(live) < nP * cfg.get("min_live", 0.9):
         print("  ✗ VACUOUS: most reference gradients are ~0, so this tie measures nothing.")
         return 2
 

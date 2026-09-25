@@ -592,7 +592,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
           -- the uib_block _bn call order. SE-free; k=0 legs contribute no BN.
           let mid := ic * expand
           (if preDWk > 0 then [ic] else []) ++ [mid] ++ (if postDWk > 0 then [mid] else []) ++ [oc]
-        | .fusedMbConv ic oc expand _ _ n useSE =>
+        | .fusedMbConv ic oc expand _ _ n useSE _ =>
           -- fused kxk(mid) → [SE: no BN] → project(oc, only when expand≠1), per block.
           let _ := useSE
           let mid (bic : Nat) := if expand == 1 then oc else bic * expand
@@ -956,8 +956,8 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "        x = _drop_branch(x, drop_key, keep_prob)\n" ++
       "        x = x + residual\n" ++
       "    return x\n\n" ++
-      "def fused_mbconv_block(params, x, idx, stride, expand, ksize, use_se):\n" ++
-      "    \"\"\"Fused-MBConv: kxk conv (expand) → SE → 1x1 project, with Swish.\"\"\"\n" ++
+      "def fused_mbconv_block(params, x, idx, stride, expand, ksize, use_se, act=None):\n" ++
+      "    \"\"\"Fused-MBConv: kxk conv (expand) → SE → 1x1 project, with Swish (or `act`).\"\"\"\n" ++
       "    residual = x\n" ++
       "    i = idx\n" ++
       "    # Fused expand: kxk conv instead of 1x1 + depthwise\n" ++
@@ -968,7 +968,7 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "    x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "    x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
-      "    x = swish(x)\n" ++
+      "    x = (act or swish)(x)\n" ++
       "    i += 1\n" ++
       "    # Squeeze-and-Excitation\n" ++
       "    if use_se:\n" ++
@@ -1057,12 +1057,13 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         "    residual = x\n" ++
         "    i = idx; bi = bn_start; out = []\n" ++
         "    if pre_dw_k > 0:\n" ++
+        "        s0 = stride if post_dw_k == 0 else 1  # timm: the stride rides dw_mid when it exists\n" ++
         "        pad = ((pre_dw_k - 1) // 2, (pre_dw_k - 1) // 2)\n" ++
-        "        x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
+        "        x = jax.lax.conv_general_dilated(x, params[i][0], (s0,s0), (pad,pad),\n" ++
         "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'), feature_group_count=x.shape[1])\n" ++
         "        x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
-        "        x = jax.nn.relu(x); i += 1\n" ++
-        "        stride = 1  # stride consumed by pre-DW\n" ++
+        "        i += 1  # no activation: timm's dw_start is BN only\n" ++
+        "        if post_dw_k == 0: stride = 1\n" ++
         "    x, ns = conv_bn(x, params[i][0], params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
         "    x = jax.nn.relu(x); i += 1\n" ++
         "    if post_dw_k > 0:\n" ++
@@ -1084,17 +1085,17 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       "    i = idx\n" ++
       "    # Optional pre-depthwise\n" ++
       "    if pre_dw_k > 0:\n" ++
+      "        s0 = stride if post_dw_k == 0 else 1  # timm: the stride rides dw_mid when it exists\n" ++
       "        pad = ((pre_dw_k - 1) // 2, (pre_dw_k - 1) // 2)\n" ++
-      "        x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
+      "        x = jax.lax.conv_general_dilated(x, params[i][0], (s0,s0), (pad,pad),\n" ++
       "              dimension_numbers=('NCHW', 'OIHW', 'NCHW'),\n" ++
       "              feature_group_count=x.shape[1])\n" ++
       "        mean = jnp.mean(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        var = jnp.var(x, axis=(0, 2, 3), keepdims=True)\n" ++
       "        x = (x - mean) / jnp.sqrt(var + 1e-5)\n" ++
       "        x = x * params[i][1].reshape(1, -1, 1, 1) + params[i][2].reshape(1, -1, 1, 1)\n" ++
-      "        x = jax.nn.relu(x)\n" ++
-      "        i += 1\n" ++
-      "        stride = 1  # stride consumed by pre-DW\n" ++
+      "        i += 1  # no activation: timm's dw_start is BN only\n" ++
+      "        if post_dw_k == 0: stride = 1\n" ++
       "    # Expand 1x1\n" ++
       "    x = conv_bn(x, params[i][0], params[i][1], params[i][2])\n" ++
       "    x = jax.nn.relu(x)\n" ++
@@ -1124,14 +1125,14 @@ private def emitHelpers (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   -- fp32 (no convdt), matching the non-running form; SE has no BN.
   if (spec.layers.any fun | .fusedMbConv .. => true | _ => false) && cfg.runningBN then
     code := code ++
-      "def fused_mbconv_block(params, x, idx, stride, expand, ksize, use_se, bn, bn_start, training):\n" ++
+      "def fused_mbconv_block(params, x, idx, stride, expand, ksize, use_se, bn, bn_start, training, act=None):\n" ++
       "    residual = x\n" ++
       "    i = idx; bi = bn_start; out = []\n" ++
       "    pad = ((ksize - 1) // 2, (ksize - 1) // 2)\n" ++
       "    x = jax.lax.conv_general_dilated(x, params[i][0], (stride,stride), (pad,pad),\n" ++
       "          dimension_numbers=('NCHW', 'OIHW', 'NCHW'))\n" ++
       "    x, ns = _bn(x, params[i][1], params[i][2], bn[bi], training); out.append(ns); bi += 1\n" ++
-      "    x = swish(x); i += 1\n" ++
+      "    x = (act or swish)(x); i += 1\n" ++
       "    if use_se:\n" ++
       "        se = jnp.mean(x, axis=(2, 3), keepdims=True)\n" ++
       "        se = jax.lax.conv_general_dilated(se, params[i][0], (1,1), 'SAME',\n" ++
@@ -1641,7 +1642,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
           "                   jnp.ones(" ++ toString mid ++ "), jnp.zeros(" ++ toString mid ++ ")))\n"
       -- Project 1x1
       code := code ++ emitConvBnInit s!"UIB project {mid}→{oc}" mid oc 1
-    | .fusedMbConv ic oc expand kSize _ n useSE =>
+    | .fusedMbConv ic oc expand kSize _ n useSE _ =>
       let emitFusedBlock (blockIc blockOc : Nat) : String := Id.run do
         let mid := if expand == 1 then blockOc else blockIc * expand
         let mut code := ""
@@ -1842,7 +1843,7 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
           s!"    b = jnp.array(buf[idx:idx+{mid}]); idx += {mid}\n" ++
           "    params.append((W, b))\n"
       code := code ++ emitConvBnFromBuf s!"mbConvV3 project {mid}→{oc}" mid oc 1
-    | .fusedMbConv ic oc expand kSize _stride n useSE =>
+    | .fusedMbConv ic oc expand kSize _stride n useSE _ =>
       for bi in [:n] do
         let blockIc := if bi == 0 then ic else oc
         let mid := if expand == 1 then oc else blockIc * expand
@@ -2010,7 +2011,7 @@ private def emitParamsToFile (spec : NetSpec) : String := Id.run do
         code := code ++ emitSEToBuf "mbConvV3 SE squeeze"
         code := code ++ emitSEToBuf "mbConvV3 SE excite"
       code := code ++ emitConvBnToBuf s!"mbConvV3 project {mid}→{oc}"
-    | .fusedMbConv ic oc expand kSize _stride n useSE =>
+    | .fusedMbConv ic oc expand kSize _stride n useSE _ =>
       for bi in [:n] do
         let blockIc := if bi == 0 then ic else oc
         let mid := if expand == 1 then oc else blockIc * expand
@@ -2103,7 +2104,19 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       ") if drop_key is not None else [None] * " ++ toString totalDrop ++ ")\n"
   let mut dbi : Nat := 0
   let mut pidx : Nat := 0
+  -- A `.convBn` AFTER `.globalAvgPool` (MobileNetV4's timm head: GAP → conv_head → norm_head → act)
+  -- runs on the pooled `[B, C]` lifted to `[B, C, 1, 1]`; its BN then reduces over the batch only.
+  -- `afterGap` marks the pool, `lifted` that the tensor is 4-D again and must be flattened back
+  -- before the next dense / LN / flatten.
+  let mut afterGap := false
+  let mut lifted := false
   for l in spec.layers do
+    if lifted then
+      match l with
+      | .dense .. | .layerNorm _ | .flatten =>
+        code := code ++ "    x = x.reshape(x.shape[0], -1)\n"
+        lifted := false
+      | _ => pure ()
     match l with
     | .conv2d _ _ _ pad act =>
       -- ⚠ `.same` under `.symmetric` emits NO padding argument, so `conv2d`'s own
@@ -2128,6 +2141,9 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
         | .same,  .xlaSame   => ", padding='SAME'"
         | .valid, _          => ", padding='VALID'"
       let strideStr := if s == 1 then "" else ", stride=(" ++ toString s ++ "," ++ toString s ++ ")"
+      if afterGap && !lifted then
+        code := code ++ "    x = x.reshape(x.shape[0], -1, 1, 1)\n"
+        lifted := true
       if cfg.runningBN then
         code := code ++ "    x, _ns = conv_bn(x, params[" ++ toString pidx ++ "][0], params[" ++
           toString pidx ++ "][1], params[" ++ toString pidx ++ "][2], bn[bn_i], training" ++
@@ -2169,6 +2185,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       code := code ++ "    x = max_pool2d(x, " ++ toString size ++ ", " ++ toString stride ++ ")\n"
     | .globalAvgPool =>
       code := code ++ "    x = global_avg_pool(x)\n"
+      afterGap := true
     | .layerNorm _ =>
       code := code ++ "    x = head_layer_norm(x, params[" ++ toString pidx ++ "][0], params[" ++
         toString pidx ++ "][1])\n"
@@ -2298,26 +2315,28 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
           toString stride ++ ", " ++ toString preDWk ++ ", " ++ toString postDWk ++ dropArgs ++ ")\n"
       if cfg.dropPath > 0 then dbi := dbi + 1
       pidx := pidx + nP
-    | .fusedMbConv _ic _oc expand kSize stride n useSE =>
+    | .fusedMbConv _ic _oc expand kSize stride n useSE act =>
       let nPerBlock (blockExpand : Nat) (se : Bool) :=
         1 + (if se then 2 else 0) + (if blockExpand != 1 then 1 else 0)
       let seStr := if useSE then "True" else "False"
+      -- MobileNetV4's stage 0 (timm `EdgeResidual`) is ReLU; EfficientNetV2's fused blocks are swish.
+      let actArg := if act == .relu then ", act=jax.nn.relu" else ""
       if cfg.runningBN then
         code := code ++ "    x, _ne = fused_mbconv_block(params, x, " ++ toString pidx ++ ", " ++
           toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++
-          ", bn, bn_i, training)\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
+          ", bn, bn_i, training" ++ actArg ++ ")\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
       else
         code := code ++ "    x = fused_mbconv_block(params, x, " ++ toString pidx ++ ", " ++
-          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++ ")\n"
+          toString stride ++ ", " ++ toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++ actArg ++ ")\n"
       pidx := pidx + nPerBlock expand useSE
       for _ in List.range (n - 1) do
         if cfg.runningBN then
           code := code ++ "    x, _ne = fused_mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
             toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++
-            ", bn, bn_i, training)\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
+            ", bn, bn_i, training" ++ actArg ++ ")\n    bn_out.extend(_ne); bn_i += len(_ne)\n"
         else
           code := code ++ "    x = fused_mbconv_block(params, x, " ++ toString pidx ++ ", 1, " ++
-            toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++ ")\n"
+            toString expand ++ ", " ++ toString kSize ++ ", " ++ seStr ++ actArg ++ ")\n"
         pidx := pidx + nPerBlock expand useSE
     | .fireModule _ _ _ _ =>
       code := code ++ "    x = fire_module(params, x, " ++ toString pidx ++ ")\n"

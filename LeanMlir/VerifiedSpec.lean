@@ -143,12 +143,8 @@ inductive VLayer where
       "Fused" = the MBConv expand-1×1 and depthwise collapse into ONE regular `k×k` conv, which is
       why nothing here is depthwise. `mid = ic * expand`. Bias-free — both convs are BN-followed.
 
-      ⚠⚠ **THE ACTIVATION IS SWISH, NOT RELU, AND THAT IS A PAPER DEVIATION.** MobileNetV4-Conv is
-      a ReLU network, but both emitters that produced the 84.58% use swish here
-      (`fused_mbconv_block` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean) — the reference — and `MlirCodegen`'s
-      `emitConvBnTrainSwish`), inherited from the block being shared with EfficientNetV2. Matching
-      the REFERENCE is what lets the number be reproduced and tied; matching the PAPER would be a
-      different net from the one with the result. Recorded rather than quietly fixed.
+      ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium` (swish until 2026-09-24, inherited
+      from the JAX block being shared with EfficientNetV2; `planning/mnv4_timm_parity.md`).
 
       ⚠ Deliberately narrower than the baseline `Layer.fusedMbConv`, which also carries `nBlocks`
       and `useSE`. MNv4 uses `n = 1, useSE = false`, and a layout whose render does not exist is a
@@ -259,7 +255,7 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
     #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] ++
     (if postDWk > 0 then #[(#[mid,1,postDWk,postDWk],0),(#[mid],1),(#[mid],2)] else #[]) ++
     #[(#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)]
-  | fusedMbConvNB ic oc expand k _stride =>          -- fused k×k conv (ic→mid) +BN+swish | project 1×1 (mid→oc) +BN
+  | fusedMbConvNB ic oc expand k _stride =>          -- fused k×k conv (ic→mid) +BN+relu | project 1×1 (mid→oc) +BN
     let mid := if expand == 1 then oc else ic * expand
     #[(#[mid,ic,k,k],0),(#[mid],1),(#[mid],2)] ++
     (if expand == 1 then #[] else #[(#[oc,mid,1,1],0),(#[oc],1),(#[oc],2)])

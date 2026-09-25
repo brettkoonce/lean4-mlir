@@ -111,7 +111,7 @@ def Layer.paramSlots : Layer → Option (List ParamSlot)
       some <| (if expandCh != ic then slotsConvBn mid ic 1 else []) ++ slotsConvBn mid 1 kSize ++
         (if useSE then slotsConvB seMid mid 1 ++ slotsConvB mid seMid 1 else []) ++
         slotsConvBn oc mid 1
-  | .fusedMbConv ic oc expand kSize _stride n useSE =>
+  | .fusedMbConv ic oc expand kSize _stride n useSE _act =>
       some <| (List.range n).flatMap fun bi =>
         let blockIc := if bi == 0 then ic else oc
         let mid := if expand == 1 then oc else blockIc * expand
@@ -433,7 +433,7 @@ def NetSpec.archStr (s : NetSpec) : String :=
         | .swish => ",Swish" | .hSwish => ",HS" | .gelu => ",GELU"
       s!"V3({ic}→{oc},{exp},k{k},s{s}" ++
         (if useSE then ",SE" else "") ++ a ++ ")"
-    | .fusedMbConv ic oc e k s n useSE => s!"FMB{n}({ic}→{oc},e{e},k{k},s{s}" ++ (if useSE then ",SE" else "") ++ ")"
+    | .fusedMbConv ic oc e k s n useSE act => s!"FMB{n}({ic}→{oc},e{e},k{k},s{s}" ++ (if useSE then ",SE" else "") ++ (if act == .relu then ",relu" else "") ++ ")"
     | .uib ic oc e s pDW poDW => s!"UIB({ic}→{oc},e{e},s{s},dw{pDW}/{poDW})"
     | .fireModule ic sq e1 e3 => s!"Fire({ic}→{e1 + e3},sq{sq})"
     | .patchEmbed ic dim p _     => s!"Patch({ic}→{dim},{p}x{p})"
@@ -490,7 +490,7 @@ def Layer.outChannels : Layer → Nat
   | .invertedResidual _ oc _ _ _    => oc
   | .mbConv _ oc _ _ _ _ _ _        => oc
   | .mbConvV3 _ oc _ _ _ _ _        => oc
-  | .fusedMbConv _ oc _ _ _ _ _     => oc
+  | .fusedMbConv _ oc _ _ _ _ _ _   => oc
   | .uib _ oc _ _ _ _               => oc
   | .fireModule _ _ e1 e3           => e1 + e3
   | .patchEmbed _ dim _ _           => dim
@@ -540,7 +540,7 @@ def Layer.inChannels : Layer → Nat
   | .invertedResidual ic _ _ _ _    => ic
   | .mbConv ic _ _ _ _ _ _ _        => ic
   | .mbConvV3 ic _ _ _ _ _ _        => ic
-  | .fusedMbConv ic _ _ _ _ _ _     => ic
+  | .fusedMbConv ic _ _ _ _ _ _ _   => ic
   | .uib ic _ _ _ _ _               => ic
   | .fireModule ic _ _ _            => ic
   | .patchEmbed ic _ _ _            => ic

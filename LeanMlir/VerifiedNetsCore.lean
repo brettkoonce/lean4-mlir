@@ -1506,12 +1506,13 @@ def vitBImagenetVerified : VerifiedNetSpec where
     that pins the BACKWARD's dispatch is `scripts/grad_tie.py --net mnv4`. Same invisibility class
     as R50's stride-on-the-3×3.
 
-    ✅ **Both ran at the Conv-M table on 2026-09-07 and both pass.** Forward `max |Δ| = 3.770e-06`
-    over the logits at B = 2 (the Conv-S value was 1.423e-06 — same order); gradient tie 0 of 232
-    live parameters worse than 10× the reference's own relu-discontinuity floor, in BOTH the raw
-    and the `--nokink` mode, with the render's worst error (1.281e+00) INSIDE that floor
-    (1.468e+00). Family dispatch, the strided depthwise placement, the two-conv head and the AdamW
-    slot order are all covered. -/
+    ✅ **timm's net since 2026-09-24** (`planning/mnv4_timm_parity.md`): stride on the post-DW, a
+    BN-only pre-DW, a ReLU stage 0, GAP before `conv_head`, a symmetric stem. Three gates, run on
+    that date: `scripts/mnv4_timm_parity.py` (the JAX reference = timm 1.0.28's
+    `mobilenetv4_conv_medium`, logits to 1.5e-5 relative); `scripts/mnv4_forward_tie.py` (this
+    render = the JAX reference, `max |Δ| = 1.767e-05` at B = 2); `scripts/grad_tie.py --net mnv4
+    --nokink` at B = 8 (0 of 201 live parameters worse than 10× the control; the two
+    precision-limited head parameters are exempt there and checked by the default mode). -/
 def mobilenetv4Verified : VerifiedNetSpec where
   name     := "MobileNetV4-Conv-M"
   slug     := "mnv4"
@@ -1521,8 +1522,8 @@ def mobilenetv4Verified : VerifiedNetSpec where
   nClasses := 10
   data     := .imagenette
   layers   := [
-    .convBnNB 3 32 3 2,                 -- stem, 224→112 (⚠ the render's stem is XLA-`SAME`, §3e)
-    .fusedMbConvNB 32 48 4 3 2,         -- fused stage, 112→56 — ⚠ SWISH, not relu (§ Phase 1b)
+    .convBnNB 3 32 3 2,                 -- stem, 224→112 (symmetric pad, timm `conv_stem`)
+    .fusedMbConvNB 32 48 4 3 2,         -- fused stage, 112→56 (relu, timm `EdgeResidual`)
     .uib  48  80 4 2 3 5,               -- ExtraDW  56→28
     .uib  80  80 2 1 3 3,               -- ExtraDW  28
     .uib  80 160 6 2 3 5,               -- ExtraDW  28→14
@@ -1545,10 +1546,10 @@ def mobilenetv4Verified : VerifiedNetSpec where
     .uib 256 256 4 1 0 0,               -- FFN      7
     .uib 256 256 2 1 5 0,               -- ConvNeXt 7
     .convBnNB 256 960 1 1,              -- head conv 1 (Conv-M `cn_r1_k1_s1_c960`)
-    .convBnNB 960 1280 1 1,             -- head conv 2 (`conv_head`, num_features)
-    .globalAvgPool,
+    .globalAvgPool,                     -- timm pools BEFORE conv_head
+    .convBnNB 960 1280 1 1,             -- head conv 2 (`conv_head` on the pooled features)
     .dense 1280 10 ]
-  blurb := "MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → two head convs 256→960→1280 → GAP → LN → dense) via the VERIFIED renderer → %LOWERER% → GPU"
+  blurb := "MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv 256→960 → GAP → conv_head 960→1280 → dense, timm order) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 52 BN layers in forward order: stem; the fused stage's k×k-BN and project-BN; then per UIB
   -- block pre-DW-BN (if preDWk≠0) / expand-BN / post-DW-BN (if postDWk≠0) / project-BN; head.
   -- ⚠ The `if`s are the `k = 0` family dispatch, so this list's LENGTH varies per block (2, 3 or 4)
@@ -1597,8 +1598,8 @@ def mobilenetv4Verified : VerifiedNetSpec where
 
     ⚠ A batch-BN net, so it needs `@mnv4in_fwd_eval` with frozen running stats. Same
     pre/post-DW-swap invisibility as its Imagenette peer: `toSpecs` cannot see the order, so the
-    forward tie is what pins it. ✅ That tie was re-run at the Conv-M table on 2026-09-07 and
-    passes (`max |Δ| = 3.770e-06`), as did the gradient tie. ⚠ Both run against the **Imagenette**
+    forward tie is what pins it. ✅ That tie and the gradient tie were re-run on timm's net on
+    2026-09-24 (see `mobilenetv4Verified`). ⚠ Both run against the **Imagenette**
     render (`@mnv4_fwd`, 10 classes); this spec differs from it only in the classifier, which the
     `#guard`s below pin, so what they establish about block order carries — but no run has scored
     THIS net: it has no verified ImageNet training run yet. -/
@@ -1640,8 +1641,8 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
     .uib 256 256 4 1 0 0,
     .uib 256 256 2 1 5 0,
     .convBnNB 256 960 1 1,
+    .globalAvgPool,                     -- timm pools BEFORE conv_head
     .convBnNB 960 1280 1 1,
-    .globalAvgPool,
     .dense 1280 1000 ]
   blurb := "MobileNetV4-Conv-S on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the MNv4 reference augmentation"
   bnChannels := mobilenetv4Verified.bnChannels

@@ -51,14 +51,7 @@ and `bnBatchLA_bcell` is the bridge. Everything after it is the usual BN algebra
   pool, `batchMap` and `bnIstd` are continuous (`MLP`, `Residual`, `MaxPool3s2`, `Batched`,
   `BatchNorm`). §5 keeps `bnRowLA_continuous`, which is about this file's own reindex.
 * §11 the SYMMETRIC strided depthwise (`EDiff_dwS2`), MobileNetV4's; §3c's is the XLA one.
-* §12–§14 what MobileNetV4's **swish** needs, and nothing else does. ⭐⭐ `EDiff` carries only the
-  gap between the two examples, which is all a relu-in-the-window or a centre-tap conv reads. A
-  stage that is smooth but NOT affine changes that gap by an amount depending on the values
-  themselves, so the carrier has to know them: `BUnif` says each example's slab is constant over
-  the grid, one value per channel. Every op in these nets preserves that, and `bnBatchLA` then
-  puts the two values symmetrically about `β` (`bnBatchLA_pair`) — so the swish's two outputs, and
-  hence their gap `swishGap`, are functions of the gap alone. `EDiff_of_BUnif` hands the carrier
-  back to §8 on the far side.
+* §12 `BUnif`, a grid-constant slab, and `EDiff_of_BUnif`, the carrier it starts.
 -/
 
 namespace Proofs
@@ -889,12 +882,8 @@ theorem EDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (
   ring
 
 -- ════════════════════════════════════════════════════════════════
--- § 12. `BUnif` — the carrier that also carries the VALUES
---   ⭐⭐ `EDiff` tracks only the gap between the two examples, which is all a relu-in-the-window
---   or a centre-tap conv needs. A stage that is smooth but NOT affine — MobileNetV4's swish —
---   changes the gap by an amount that depends on the values themselves, so the carrier has to
---   know them. `BUnif` does: each example's slab is CONSTANT over the grid, one value per
---   channel, which every op in these nets preserves and `bnBatchLA` makes symmetric about `β`.
+-- § 12. `BUnif` — a slab constant over the grid, one value per (example, channel)
+--   The seals' inputs are built this way (`t • rayV`); `EDiff_of_BUnif` reads the carrier off one.
 -- ════════════════════════════════════════════════════════════════
 def BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (v : Vec (2 * (c * h * w))) : Prop :=
   ∀ (n : Fin 2) (ci : Fin c) (i : Fin h) (j : Fin w), bcell v n ci i j = a n ci
@@ -979,91 +968,6 @@ theorem EDiff_of_BUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (δ : Fin c �
   intro ci i j
   rw [hv 0 ci i j, hv 1 ci i j, hδ ci]
   ring
-
-theorem BUnif_convS2Xla {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
-    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (a : Fin 2 → Fin ic → ℝ)
-    (a' : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (ic * (2 * h) * (2 * w))))
-    (hv : BUnif (h := 2 * h) (w := 2 * w) a v) (ha : ∀ n o, a' n o = b o + s * a n c₀) :
-    BUnif (h := h) (w := w) a'
-      (StableHLO.batchMap 2 (flatConvStride2Xla (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
-  intro n o i j
-  rw [bcell_convS2Xla_ctK c₀ hc₀ hkH hkW s b v n o i j, hv n c₀ _ _, ha n o]
-
-theorem BUnif_convS2 {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
-    (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc) (a : Fin 2 → Fin ic → ℝ)
-    (a' : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (ic * (2 * h) * (2 * w))))
-    (hv : BUnif (h := 2 * h) (w := 2 * w) a v) (ha : ∀ n o, a' n o = b o + s * a n c₀) :
-    BUnif (h := h) (w := w) a'
-      (StableHLO.batchMap 2 (flatConvStride2 (h := h) (w := w) (ctK oc ic kH kW s) b) v) := by
-  intro n o i j
-  rw [bcell_convS2_ctK c₀ hc₀ hkH hkW s b v n o i j, hv n c₀ _ _, ha n o]
-
-/-- a pointwise activation preserves `BUnif`, value by value. -/
-theorem BUnif_map {c h w : Nat} (f : ℝ → ℝ) (a a' : Fin 2 → Fin c → ℝ)
-    (v : Vec (2 * (c * h * w))) (hv : BUnif (h := h) (w := w) a v)
-    (ha : ∀ n ci, a' n ci = f (a n ci)) :
-    BUnif (h := h) (w := w) a' (fun k => f (v k)) := by
-  intro n ci i j
-  rw [ha n ci, ← hv n ci i j]
-  rfl
-
--- ════════════════════════════════════════════════════════════════
--- § 13. Batch BN on a `BUnif` slab: ⭐⭐ the two values straddle `β`
---   With both slabs grid-constant the channel's mean is their midpoint, so the outputs are
---   `β ± γ·(gap/2)·istd`. THAT is what lets a non-affine activation be crossed: its two outputs
---   are a function of the gap alone.
--- ════════════════════════════════════════════════════════════════
-theorem bnBatchLA_pair {oc h w : Nat} (hhw : 0 < h * w) (ε : ℝ) (γ β : Vec oc)
-    (a : Fin 2 → Fin oc → ℝ) (v : Vec (2 * (oc * h * w)))
-    (hv : BUnif (h := h) (w := w) a v) (a' : Fin 2 → Fin oc → ℝ)
-    (ha : ∀ n ci, a' n ci = β ci + γ ci * ((a n ci - (a 0 ci + a 1 ci) / 2) *
-            bnIstd (2 * (h * w)) (bnRowLA 2 oc h w v ci) ε)) :
-    BUnif (h := h) (w := w) a' (StableHLO.bnBatchLA 2 oc h w ε γ β v) := by
-  intro n ci i j
-  have hz : ∀ (nn : Fin 2) (q : Fin (h * w)),
-      bnRowLA 2 oc h w v ci (finProdFinEquiv (nn, q)) = a nn ci := by
-    intro nn q
-    obtain ⟨⟨ii, jj⟩, rfl⟩ := finProdFinEquiv.surjective q
-    rw [bnRowLA_apply]
-    exact hv nn ci ii jj
-  rw [bnBatchLA_bcell, ha n ci]
-  simp only [bnForward, bnXhat, bnMean_pair (h * w) hhw (fun nn => a nn ci) _ hz, hz n]
-  ring
-
--- ════════════════════════════════════════════════════════════════
--- § 14. `swish` — the one activation no window makes the identity
---   Used only by MobileNetV4, whose fused stage is swish where every other stage in every other
---   net is relu or relu6. Its scalar facts (`hasDerivAt_swishScalar`, `swishScalarDeriv_pos`,
---   `swishScalar_lt`) are in `Architectures/LayerNorm`, beside `swishScalar`.
--- ════════════════════════════════════════════════════════════════
-/-- the two examples' swish outputs, as a function of half their gap. -/
-noncomputable def swishGap (β u : ℝ) : ℝ := swishScalar (β + u) - swishScalar (β - u)
-
-@[simp] theorem swishGap_zero (β : ℝ) : swishGap β 0 = 0 := by
-  simp only [swishGap, add_zero, sub_zero, sub_self]
-
-theorem hasDerivAt_swishGap (β : ℝ) : HasDerivAt (swishGap β) (2 * swishScalarDeriv β) 0 := by
-  have hp : HasDerivAt (fun u : ℝ => swishScalar (β + u)) (swishScalarDeriv β) 0 := by
-    have h1 : HasDerivAt (fun u : ℝ => β + u) 1 0 := (hasDerivAt_id (0:ℝ)).const_add β
-    have h2 := HasDerivAt.comp (0:ℝ) (hasDerivAt_swishScalar (β + 0)) h1
-    rw [add_zero, mul_one] at h2
-    exact h2
-  have hm : HasDerivAt (fun u : ℝ => swishScalar (β - u)) (-swishScalarDeriv β) 0 := by
-    have h1 : HasDerivAt (fun u : ℝ => β - u) (-1) 0 := (hasDerivAt_id (0:ℝ)).const_sub β
-    have h2 := HasDerivAt.comp (0:ℝ) (hasDerivAt_swishScalar (β - 0)) h1
-    rw [sub_zero, mul_neg, mul_one] at h2
-    exact h2
-  have h3 : HasDerivAt (fun u : ℝ => swishScalar (β + u) - swishScalar (β - u))
-      (swishScalarDeriv β - -swishScalarDeriv β) 0 := hp.sub hm
-  rw [sub_neg_eq_add, ← two_mul] at h3
-  exact h3
-
-theorem swishGap_pos {β u : ℝ} (hu : 0 < u) (hub : u ≤ β) : 0 < swishGap β u := by
-  have h1 : (0:ℝ) ≤ β - u := by linarith
-  have h2 : β - u < β + u := by linarith
-  have := swishScalar_lt h1 h2
-  simp only [swishGap]
-  linarith
 
 end BatchSeal
 namespace R34FullBSeal

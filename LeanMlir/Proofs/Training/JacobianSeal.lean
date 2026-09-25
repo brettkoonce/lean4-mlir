@@ -136,21 +136,4 @@ theorem hasDerivAt_mul_self_zero {Q : ℝ → ℝ} (hQ : ContinuousAt Q 0) :
   filter_upwards [self_mem_nhdsWithin] with y hy
   rw [slope_def_field, sub_zero, zero_mul, sub_zero, mul_div_cancel_left₀ _ hy]
 
-/-- ⭐ **`S · Q` at a zero of `S`** — `hasDerivAt_mul_self_zero` where the carrier reaches the
-    readout through a smooth but NON-AFFINE stage, so it is not `t` itself that factors out.
-
-    MobileNetV4's fused stage is swish: its two examples' outputs differ by `swishGap β u`, which
-    vanishes at `u = 0` and is differentiable there but is not a multiple of `u`. `S` is that gap
-    along the ray and `Q` the BatchNorm factors below it; as before no derivative of `Q` is
-    needed, only its continuity at `0`. -/
-theorem hasDerivAt_mul_of_zero {S Q : ℝ → ℝ} {c : ℝ} (hS : HasDerivAt S c 0) (hS0 : S 0 = 0)
-    (hQ : ContinuousAt Q 0) : HasDerivAt (fun t : ℝ => S t * Q t) (c * Q 0) 0 := by
-  rw [hasDerivAt_iff_tendsto_slope]
-  have h1 := hasDerivAt_iff_tendsto_slope.mp hS
-  have h2 := hQ.tendsto.mono_left (nhdsWithin_le_nhds (a := (0 : ℝ)) (s := {(0 : ℝ)}ᶜ))
-  refine Filter.Tendsto.congr' ?_ (h1.mul h2)
-  filter_upwards [self_mem_nhdsWithin] with y hy
-  simp only [slope_def_field, hS0, sub_zero, zero_mul]
-  ring
-
 end Proofs

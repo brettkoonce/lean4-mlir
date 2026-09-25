@@ -810,24 +810,4 @@ theorem bnIstd_continuous {n : Nat} (ε : ℝ) (hε : 0 < ε) :
   exact continuous_const.div (Real.continuous_sqrt.comp hv)
     (fun v => (Real.sqrt_pos.2 (add_pos_of_nonneg_of_pos (bnVar_nonneg n v) hε)).ne')
 
-/-- with `ε = 1` a batch `istd` is at most `1`, which keeps the ray's gap inside the window
-    `swishGap_pos` needs. -/
-theorem bnIstd_le_one {n : Nat} (z : Vec n) : bnIstd n z 1 ≤ 1 := by
-  have hv := bnVar_nonneg n z
-  have h1 : (1:ℝ) ≤ Real.sqrt (bnVar n z + 1) := by
-    have hs : Real.sqrt 1 ≤ Real.sqrt (bnVar n z + 1) := Real.sqrt_le_sqrt (by linarith)
-    simpa using hs
-  rw [bnIstd, div_le_one (by linarith)]
-  exact h1
-
-theorem bnMean_pair (m : Nat) (hm : 0 < m) (a : Fin 2 → ℝ) (z : Vec (2 * m))
-    (hz : ∀ (n : Fin 2) (q : Fin m), z (finProdFinEquiv (n, q)) = a n) :
-    bnMean (2 * m) z = (a 0 + a 1) / 2 := by
-  have : Nonempty (Fin m) := ⟨⟨0, hm⟩⟩
-  rw [bnMean_eq_expect, ← Fintype.expect_equiv finProdFinEquiv (fun p => z (finProdFinEquiv p)) z
-    (fun _ => rfl), ← Finset.univ_product_univ, Finset.expect_product]
-  simp only [hz, Fintype.expect_const]
-  simp only [Fintype.expect_eq_sum_div_card, Fin.sum_univ_two, Fintype.card_fin]
-  norm_num
-
 end Proofs

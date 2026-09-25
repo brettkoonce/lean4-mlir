@@ -7118,9 +7118,8 @@ See \leandocref{Proofs.Mnv2FullBSeal.sealX\_backward\_nontrivial}.
       ax:depthwise_has_vjp3, ax:pdiv, ax:pdiv_add, ax:pdiv_comp, ax:pdiv_reindex,
       ax:pdiv_relu, def:hasvjp, def:hasvjp3, def:hasvjpmat, thm:bn_has_vjp,
       thm:dense_has_vjp, thm:identity_has_vjp, thm:rowwise_has_vjp_mat, thm:vjp_comp}
-  \Prove{} the same for MobileNetV4-Conv-M, fifty-four clauses; the fused
-  swish makes the readout a swish gap over a grid-constant base rather than a
-  product.
+  \Prove{} the same for MobileNetV4-Conv-M, thirty-eight clauses, from a
+  grid-constant base.
 \end{theorem}
 
 \begin{proof}
@@ -7935,6 +7934,15 @@ full pack underfits short schedules. \textbf{500 epochs}
 100-epoch tier is the one run here, and the $79.9\%$ headline is a
 500-epoch number:
 
+\textbf{[TODO: rerun at 100 epochs.]} The numbers below were measured on an
+earlier transcription that differed from timm's in five places: the
+stride sat on the leading depthwise rather than the inner one, the
+leading depthwise carried a ReLU, the fused stage used swish instead of ReLU, the stem
+padded XLA-\texttt{SAME}, and \texttt{conv\_head} ran before the pool instead
+of after it. The shipped network now matches timm's on shared weights
+(\texttt{scripts/mnv4\_timm\_parity.py}); the table and curve stay until
+its own 100-epoch run replaces them.
+
 \begin{center}
 \begin{tabular}{l l r r r r r}
 \hline
@@ -8010,7 +8018,8 @@ $8{,}447{,}322$ to $\mathbf{9{,}715{,}512}$, which is the $\sim$9.7M
 Conv-M is quoted at.
 
 \textbf{The $75.48\%$ above is this network's target.} It is not
-this network's result. The row below reports a measured wall clock and a
+this network's result, and it was measured on the earlier
+transcription. The row below reports a measured wall clock and a
 \texttt{TBD} accuracy, because the network has been timed and has not
 been trained to convergence.
 

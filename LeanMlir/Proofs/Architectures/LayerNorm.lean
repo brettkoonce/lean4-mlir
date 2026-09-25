@@ -320,20 +320,6 @@ lemma swishScalar_diff : Differentiable ℝ swishScalar := by
 theorem hasDerivAt_swishScalar (x : ℝ) : HasDerivAt swishScalar (swishScalarDeriv x) x :=
   (swishScalar_diff x).hasDerivAt
 
-/-- Swish's slope is positive on `[0, ∞)`: `σ(x) > 0` and `1 + x·(1 − σ(x)) ≥ 1`. -/
-theorem swishScalarDeriv_pos {x : ℝ} (hx : 0 ≤ x) : 0 < swishScalarDeriv x := by
-  rw [swishScalarDeriv_eq]
-  have := mul_nonneg hx (sub_nonneg.mpr (Real.sigmoid_lt_one x).le)
-  exact mul_pos (Real.sigmoid_pos x) (by linarith)
-
-/-- Swish is strictly increasing on `[0, ∞)` (`x·σ(x)`, both factors nonnegative and increasing). -/
-theorem swishScalar_lt {a b : ℝ} (ha : 0 ≤ a) (hab : a < b) :
-    swishScalar a < swishScalar b := by
-  simp only [swishScalar_eq_mul_sigmoid]
-  calc a * Real.sigmoid a ≤ a * Real.sigmoid b :=
-        mul_le_mul_of_nonneg_left (Real.sigmoid_monotone hab.le) ha
-    _ < b * Real.sigmoid b := mul_lt_mul_of_pos_right hab (Real.sigmoid_pos b)
-
 /-- Differentiability of `swish D` as a function on `Vec D`. -/
 lemma swish_diff (D : Nat) : Differentiable ℝ (swish D) := by
   unfold swish; fun_prop

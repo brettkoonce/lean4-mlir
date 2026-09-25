@@ -71,7 +71,7 @@ inductive Layer where
   | invertedResidual (ic oc expand stride nBlocks : Nat)
   | mbConv (ic oc expand kSize stride nBlocks : Nat) (useSE : Bool) (act : Activation := .swish)
   | mbConvV3 (ic oc expandCh kSize stride : Nat) (useSE : Bool) (act : Activation := .relu)
-  | fusedMbConv (ic oc expand kSize stride nBlocks : Nat) (useSE : Bool)
+  | fusedMbConv (ic oc expand kSize stride nBlocks : Nat) (useSE : Bool) (act : Activation := .swish)
   | uib (ic oc expand stride : Nat) (preDWk postDWk : Nat)  -- Universal Inverted Bottleneck; k=0 means no DW
   | fireModule (ic squeeze expand1x1 expand3x3 : Nat)
   | patchEmbed (ic dim patchSize nPatches : Nat)

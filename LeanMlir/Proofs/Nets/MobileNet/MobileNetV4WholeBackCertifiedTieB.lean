@@ -10,19 +10,20 @@ with it MobileNetV4-Conv-M is certified from its ℝ forward (T1) through its ty
 233-parameter train-step tie (T3) and now its whole-net input gradient. T4 and T5 are float
 budgets and `planning/archive/float_budget_numbers.md` closed that thread by user decision on 2026-09-05.
 
-⚠⚠ **No accuracy is quoted for this net.** Conv-M has no Imagenette run and no verified ImageNet
-run; what pins the artifact to the reference's function is the 2026-09-07 tie pair (forward
-`max |Δ| = 3.770e-06`, gradient 0 of 232 live parameters outside the reference's own
-relu-discontinuity floor).
+⚠⚠ **No accuracy is quoted for this net.** The statements are about timm's
+`mobilenetv4_conv_medium` (`planning/mnv4_timm_parity.md`).
 
 ## The four pieces
 
-1. `mnv4StemBBack_eq_vjp_backward` and `cbReluBBack_eq_vjp_backward` — the concrete endpoint stage
-   ties, one `rw` of a conv leaf tie and then `rfl` each. ⚠ The stem's is the XLA-`SAME` leaf
-   (`flatConvStride2XlaBack`) and the head's the plain one; MobileNetV4 carries both phases.
+1. The concrete endpoint stage ties: the stem's (ResNet's symmetric strided conv-bn-relu tie),
+   the first head conv's (`cbReluBBack_eq_vjp_backward`), `conv_head`'s with the pool in front of
+   it (`mnv4Hc2BBack_eq_vjp_backward`), and the classifier's with its relabel
+   (`mnv4ClsBBack_eq_vjp_backward`).
 2. `mnv4B_full_has_vjp_at` — the generic **twenty-six-stage** apex
-   `head ∘ hc2 ∘ hc1 ∘ b21 ∘ … ∘ b1 ∘ fused ∘ stem`, twenty-five `vjp_comp_diff_at`s and nothing
-   else, with `opaqueA0 … A24` naming the running activations.
+   `cls ∘ hc2 ∘ hc1 ∘ b21 ∘ … ∘ b1 ∘ fused ∘ stem`, twenty-five `vjp_comp_diff_at`s and nothing
+   else, with `opaqueA0 … A24` naming the running activations. timm's head is three stages here:
+   `hc1` (conv-bn-relu at 7×7), `hc2` (GAP, relabel to `[N, 960, 1, 1]`, `conv_head`-bn-relu) and
+   `cls` (relabel to `[N, 1280]`, dense).
 3. `mnv4InputGradB_eq_mnv4B_full_vjp` and `mnv4InputGradB_correct` — the tie, and its reading as
    `∑ pdiv … * dy`: the chain IS the Jacobian-transpose of the twenty-six-stage composition, at
    every batch size and both shipped class counts.
@@ -30,18 +31,12 @@ relu-discontinuity floor).
    `mobilenetv4ForwardB_full`, the forward `mnv4FwdGraphB_full_faithful` (T2) says the typed graph
    denotes. Without it the tie would be a statement about variables.
 
-## ⭐⭐ What is MobileNetV4's own, and what is borrowed
+## What is MobileNetV4's own, and what is borrowed
 
-ResNet-50's T6 was four declarations because its stem and head ARE ResNet-34's. MobileNetV4's stem
-is EfficientNet-B0's (3×3/s2 at the XLA-`SAME` phase) with ResNet-34's activation, so the leaf
-ties compose rather than transfer: `flatConvStride2XlaBack_eq_vjp_backward` is B0's/MobileNetV2's
-and the relu mask is ResNet-34's, and the stage tie that joins them is new here. The head's two
-1×1 conv-BN-relu stages are `cbReluB` — ResNet-34's stage vocabulary at a 1×1 kernel — and its
-**GAP-and-dense tail is `r34HeadB` verbatim**, exactly as T3 reused `r34HeadCotBlk`/`r34HeadTiedB`.
-So what this file adds is the two stage ties, the wider apex, and the tie itself.
-
-⚠ **Twenty-six stages, not eighteen.** Conv-M's ladder is 21 UIB blocks plus a fused stage, and
-its head has TWO convs before the pool where MobileNetV2's has one and ResNet-34's has none.
+The stem is ResNet's symmetric strided conv-bn-relu, so its tie is ResNet's; the first head conv is
+`cbReluB`. What is MobileNetV4's own is the pool stage in front of `conv_head` (GAP then a
+`Fin.cast` relabel, whose certified backward along a bijection is the plain relabel,
+`reindex_cast_backward`) and the relabel in front of the classifier.
 
 ## ⛔⛔ The apex is composed at BLOCK granularity, not at `MobileNetV4FullB.lean`'s groups
 
@@ -66,7 +61,8 @@ has no kink. The shape check is what replaces it.
 
 ⚠ It stays a SMOOTH-POINT statement, and MobileNetV4's kink budget is **relu, not relu6**: one
 clause per site, where MobileNetV2's `.selectMid` carries two. The stem's and the two head convs'
-are bound here; the ~60 inside the blocks are `CertLayer.comp`'s and are never written down.
+are bound here (`conv_head`'s at the pooled `1×1`); the ones inside the fused stage and the blocks
+are `CertLayer.comp`'s and are never written down.
 
 ⛔ **What this does NOT reach.** Under `mnv4in_adamdp64*` every gradient is all-reduced by
 `allReduceMeanF` (`DataParallelNode.lean`, §4d), so this is at the per-replica gradient. And it is
@@ -86,33 +82,135 @@ open scoped BigOperators
 --   `%hW`), is `ResNet34BackCertifiedTieB.lean`'s — net-agnostic, beside its strided peer.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The STEM tie.** `batchMap (flatConvStride2XlaBack) ∘ bnBack ∘ reluMaskBack` IS `mnv4StemB`'s
-    certified backward at a smooth point. One `rw` of the odd-kernel XLA-`SAME` strided leaf tie,
-    then `rfl` — the stage's VJP is `vjp_comp_at`-built so its backward is already the
-    composition, and a convolution's backward ignores its primal argument, so the row-wise
-    `batchMap` lift matches at every saved input.
-
-    ⚠ **Plain relu, XLA-`SAME` padding** — the two axes MobileNetV4's stem does not share with a
-    neighbour. MobileNetV2's stem is this map with `relu6` (two mask clauses); ResNet-34's is this
-    map with SYMMETRIC padding (`cbReluStridedBBack_eq_vjp_backward`); EfficientNet-B0's is this
-    padding with `swish`. One token apart from each, and a different certificate from all three.
+/-- **The STEM tie.** `batchMap (flatConvStride2Back) ∘ bnBack ∘ reluMaskBack` IS `mnv4StemB`'s
+    certified backward at a smooth point — ResNet's symmetric strided conv-bn-relu tie, since
+    `mnv4StemB` is `cbReluStridedB` at the stem's widths.
 
     ⛔⛔ **And this is one step past the artifact.** No render emits a gradient into `%x`, so
     MobileNetV4's committed backward ends at the stem conv's WEIGHT gradient, whose operand is the
     stem-BN cotangent `mnv4StemCotN` ties (T3). This lemma names the map that carries that
-    cotangent the rest of the way to the image — B0's choice at the identical stem. -/
+    cotangent the rest of the way to the image. -/
 theorem mnv4StemBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : Mnv4StemSmoothAtB N h w Ws bs ε γ β x) :
-    (StableHLO.batchMap N (flatConvStride2XlaBack (h := h) (w := w) Ws)
+    (StableHLO.batchMap N (flatConvStride2Back (h := h) (w := w) Ws)
         ∘ (bnBatchLA_has_vjp N oc h w ε hε γ β).backward
-            (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x)
+            (StableHLO.batchMap N (flatConvStride2 Ws bs) x)
         ∘ reluMaskBack (fun i => StableHLO.bnBatchLA N oc h w ε γ β
-            (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x) i > 0))
-      = (mnv4StemB_has_vjp_at N h w Ws bs ε hε γ β x hs).backward := by
-  rw [flatConvStride2XlaBack_eq_vjp_backward hkH hkW Ws bs (fun _ => 0)]
+            (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0))
+      = (mnv4StemB_has_vjp_at N h w Ws bs ε hε γ β x hs).backward :=
+  cbReluStridedBBack_eq_vjp_backward hkH hkW Ws bs ε hε γ β x hs
+
+-- ════════════════════════════════════════════════════════════════
+-- § The head's pool and classifier stages, and their ties
+-- ════════════════════════════════════════════════════════════════
+
+/-- A `Fin.cast` reindex's certified backward is the reverse relabel: along a bijection exactly
+    one term of `reindex_has_vjp`'s masked sum survives. -/
+theorem reindex_cast_backward {n m : Nat} (h : n = m) (x : Vec n) (dy : Vec m) :
+    (reindex_has_vjp (Fin.cast h.symm)).backward x dy = fun i => dy (Fin.cast h i) := by
+  funext i
+  show ∑ k : Fin m, (if i = Fin.cast h.symm k then dy k else 0) = dy (Fin.cast h i)
+  have hk : ∀ k : Fin m, i = Fin.cast h.symm k ↔ Fin.cast h i = k := fun k => by
+    constructor
+    · rintro rfl; exact Fin.ext rfl
+    · rintro rfl; exact Fin.ext rfl
+  simp only [hk, Finset.sum_ite_eq, Finset.mem_univ, ite_true]
+
+/-- **The pool stage** in front of `conv_head`: GAP, then the relabel to `[N, c, 1, 1]`. -/
+@[reducible] noncomputable def mnv4PoolB (N h w : Nat) {c : Nat} :
+    Vec (N * (c * h * w)) → Vec (N * (c * 1 * 1)) :=
+  reindexCLM (Fin.cast (mnv4Pool11 N c).symm) ∘ StableHLO.batchMap N (globalAvgPoolFlat c h w)
+
+theorem mnv4PoolB_differentiable (N h w : Nat) {c : Nat} :
+    Differentiable ℝ (mnv4PoolB N h w (c := c)) :=
+  (reindexCLM _).differentiable.comp
+    (batchMap_differentiable _ (globalAvgPoolFlat_differentiable c h w))
+
+noncomputable def mnv4PoolB_has_vjp (N h w : Nat) {c : Nat} : HasVJP (mnv4PoolB N h w (c := c)) :=
+  vjp_comp _ _ (batchMap_differentiable _ (globalAvgPoolFlat_differentiable c h w))
+    (reindexCLM _).differentiable
+    (batchMap_has_vjp _ (globalAvgPoolFlat_has_vjp c h w) (globalAvgPoolFlat_differentiable c h w))
+    (reindex_has_vjp _)
+
+/-- The pool stage's certified backward: the reverse relabel, then GAP-back. -/
+theorem mnv4PoolB_backward (N h w : Nat) {c : Nat} (v : Vec (N * (c * h * w)))
+    (d : Vec (N * (c * 1 * 1))) :
+    (mnv4PoolB_has_vjp N h w (c := c)).backward v d
+      = StableHLO.batchMap N (gapBack c h w) (fun i => d (Fin.cast (mnv4Pool11 N c) i)) := by
+  unfold mnv4PoolB_has_vjp
+  rw [vjp_comp_backward, reindex_cast_backward]
+  rfl
+
+/-- **`conv_head`'s stage**: the pool, then conv-bn-relu at `1×1`, with its VJP at a point where
+    that relu is away from its kink. -/
+noncomputable def mnv4Hc2B_has_vjp_diff_at (N h w : Nat) {mid oc : Nat}
+    (W : Kernel4 oc mid 1 1) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (v : Vec (N * (mid * h * w)))
+    (hs : ∀ k, StableHLO.bnBatchLA N oc 1 1 ε γ β
+      (StableHLO.batchMap N (flatConv W b) (mnv4PoolB N h w v)) k ≠ 0) :
+    HasVJPDiffAt (cbReluB N (h := 1) (w := 1) W b ε γ β ∘ mnv4PoolB N h w) v :=
+  vjp_comp_diff_at (mnv4PoolB N h w) (cbReluB N (h := 1) (w := 1) W b ε γ β) v
+    ⟨(mnv4PoolB_has_vjp N h w).toHasVJPAt v, (mnv4PoolB_differentiable N h w) v⟩
+    ⟨cbReluB_has_vjp_at N W b ε hε γ β _ hs, cbReluB_differentiableAt N W b ε hε γ β _ hs⟩
+
+/-- **`conv_head`'s stage tie**: GAP-back after the relabel, after conv-back ∘ BN-back ∘ relu mask
+    at `1×1`, IS the stage's certified backward. -/
+theorem mnv4Hc2BBack_eq_vjp_backward {N h w mid oc : Nat}
+    (W : Kernel4 oc mid 1 1) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (v : Vec (N * (mid * h * w)))
+    (hs : ∀ k, StableHLO.bnBatchLA N oc 1 1 ε γ β
+      (StableHLO.batchMap N (flatConv W b) (mnv4PoolB N h w v)) k ≠ 0) :
+    ((StableHLO.batchMap N (gapBack mid h w)
+        ∘ fun u i => u (Fin.cast (by rw [Nat.mul_one, Nat.mul_one]) i))
+      ∘ (StableHLO.batchMap N (convFlatBack (h := 1) (w := 1) W)
+        ∘ (bnBatchLA_has_vjp N oc 1 1 ε hε γ β).backward
+            (StableHLO.batchMap N (flatConv W b) (mnv4PoolB N h w v))
+        ∘ reluMaskBack (fun i => StableHLO.bnBatchLA N oc 1 1 ε γ β
+            (StableHLO.batchMap N (flatConv W b) (mnv4PoolB N h w v)) i > 0)))
+      = (mnv4Hc2B_has_vjp_diff_at N h w W b ε hε γ β v hs).fst.backward := by
+  rw [cbReluBBack_eq_vjp_backward (h := 1) (w := 1) (by decide) (by decide) W b ε hε γ β _ hs]
+  funext dy
+  rw [mnv4Hc2B_has_vjp_diff_at, vjp_comp_diff_at_fst_backward]
+  show _ = (mnv4PoolB_has_vjp N h w).backward v _
+  rw [mnv4PoolB_backward]
+  rfl
+
+/-- **The classifier stage**: the relabel of `[N, oc, 1, 1]` to `[N, oc]`, then dense. -/
+@[reducible] noncomputable def mnv4ClsB (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls)
+    (bd : Vec nCls) : Vec (N * (oc * 1 * 1)) → Vec (N * nCls) :=
+  StableHLO.batchMap N (dense Wd bd) ∘ reindexCLM (Fin.cast (mnv4Pool11 N oc))
+
+theorem mnv4ClsB_differentiable (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (bd : Vec nCls) :
+    Differentiable ℝ (mnv4ClsB N Wd bd) :=
+  (batchMap_differentiable _ (dense_differentiable Wd bd)).comp (reindexCLM _).differentiable
+
+noncomputable def mnv4ClsB_has_vjp (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (bd : Vec nCls) :
+    HasVJP (mnv4ClsB N Wd bd) :=
+  vjp_comp _ _ (reindexCLM _).differentiable (batchMap_differentiable _ (dense_differentiable Wd bd))
+    (reindex_has_vjp _) (batchMap_has_vjp _ (dense_has_vjp Wd bd) (dense_differentiable Wd bd))
+
+/-- The classifier stage's certified backward: dense-back, then the reverse relabel. -/
+theorem mnv4ClsB_backward (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (bd : Vec nCls)
+    (x : Vec (N * (oc * 1 * 1))) (d : Vec (N * nCls)) :
+    (mnv4ClsB_has_vjp N Wd bd).backward x d
+      = fun i => StableHLO.batchMap N ((dense_has_vjp Wd bd).backward (fun _ => 0)) d
+          (Fin.cast (mnv4Pool11 N oc).symm i) := by
+  unfold mnv4ClsB_has_vjp
+  rw [vjp_comp_backward, reindex_cast_backward]
+  rfl
+
+/-- **The classifier stage tie**: dense-back (`Wᵀ`), then the relabel, IS its certified backward. -/
+theorem mnv4ClsBBack_eq_vjp_backward {N oc nCls : Nat} (Wd : Mat oc nCls) (bd : Vec nCls)
+    (x : Vec (N * (oc * 1 * 1))) :
+    ((fun u i => u (Fin.cast (by rw [Nat.mul_one, Nat.mul_one]) i))
+      ∘ StableHLO.batchMap N (Proofs.dense (Mat.transpose Wd) (0 : Vec oc)))
+      = (mnv4ClsB_has_vjp N Wd bd).backward x := by
+  rw [dense_transpose_eq_vjp_backward Wd bd (fun _ => 0)]
+  funext dy
+  rw [mnv4ClsB_backward]
   rfl
 
 -- The opaque running activations `opaqueA0 … opaqueA24` are `Foundation/OpaquePrefix.lean`'s.
@@ -363,15 +461,15 @@ theorem mnv4InputGradB_eq_mnv4B_full_vjp (N : Nat) {nCls : Nat}
     (hb21 : HasVJPDiffAt b21 (opaqueA21 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 x))
     (h_h1 : ∀ k, StableHLO.bnBatchLA N 960 7 7 εh1 γh1 βh1
       (StableHLO.batchMap N (flatConv Wh1 bh1) (opaqueA22 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x)) k ≠ 0)
-    (h_h2 : ∀ k, StableHLO.bnBatchLA N 1280 7 7 εh γh βh
-      (StableHLO.batchMap N (flatConv Wh bh) (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x)) k ≠ 0) :
+    (h_h2 : ∀ k, StableHLO.bnBatchLA N 1280 1 1 εh γh βh
+      (StableHLO.batchMap N (flatConv Wh bh) (mnv4PoolB N 7 7 (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x))) k ≠ 0) :
     mnv4InputGradB N Ws Wh1 Wh Wd
       ((bnBatchLA_has_vjp N 32 112 112 εs hεs γs βs).backward
-        (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x))
+        (StableHLO.batchMap N (flatConvStride2 Ws bs) x))
       ((bnBatchLA_has_vjp N 960 7 7 εh1 hεh1 γh1 βh1).backward
         (StableHLO.batchMap N (flatConv Wh1 bh1) (opaqueA22 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x)))
-      ((bnBatchLA_has_vjp N 1280 7 7 εh hεh γh βh).backward
-        (StableHLO.batchMap N (flatConv Wh bh) (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x)))
+      ((bnBatchLA_has_vjp N 1280 1 1 εh hεh γh βh).backward
+        (StableHLO.batchMap N (flatConv Wh bh) (mnv4PoolB N 7 7 (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x))))
       hfused.fst.backward
       hb1.fst.backward
       hb2.fst.backward
@@ -395,37 +493,35 @@ theorem mnv4InputGradB_eq_mnv4B_full_vjp (N : Nat) {nCls : Nat}
       hb20.fst.backward
       hb21.fst.backward
       (fun i => StableHLO.bnBatchLA N 32 112 112 εs γs βs
-        (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x) i > 0)
+        (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0)
       (fun i => StableHLO.bnBatchLA N 960 7 7 εh1 γh1 βh1
         (StableHLO.batchMap N (flatConv Wh1 bh1) (opaqueA22 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x)) i > 0)
-      (fun i => StableHLO.bnBatchLA N 1280 7 7 εh γh βh
-        (StableHLO.batchMap N (flatConv Wh bh) (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x)) i > 0)
+      (fun i => StableHLO.bnBatchLA N 1280 1 1 εh γh βh
+        (StableHLO.batchMap N (flatConv Wh bh) (mnv4PoolB N 7 7 (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x))) i > 0)
       = (mnv4B_full_has_vjp_at
           (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21
           (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1)
-          (cbReluB N (h := 7) (w := 7) Wh bh εh γh βh)
-          (r34HeadB N 7 7 Wd bd)
+          (cbReluB N (h := 1) (w := 1) Wh bh εh γh βh ∘ mnv4PoolB N 7 7)
+          (mnv4ClsB N Wd bd)
           x
           ⟨mnv4StemB_has_vjp_at N 112 112 Ws bs εs hεs γs βs x h_stem,
             mnv4StemB_differentiableAt N 112 112 Ws bs εs hεs γs βs x h_stem⟩
           hfused hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 hb18 hb19 hb20 hb21
           ⟨cbReluB_has_vjp_at N Wh1 bh1 εh1 hεh1 γh1 βh1 _ h_h1,
             cbReluB_differentiableAt N Wh1 bh1 εh1 hεh1 γh1 βh1 _ h_h1⟩
-          ⟨cbReluB_has_vjp_at N Wh bh εh hεh γh βh _ h_h2,
-            cbReluB_differentiableAt N Wh bh εh hεh γh βh _ h_h2⟩
-          ⟨(r34HeadB_has_vjp N 7 7 Wd bd).toHasVJPAt _,
-            (r34HeadB_differentiable N 7 7 Wd bd) _⟩).backward := by
+          (mnv4Hc2B_has_vjp_diff_at N 7 7 Wh bh εh hεh γh βh _ h_h2)
+          ⟨(mnv4ClsB_has_vjp N Wd bd).toHasVJPAt _,
+            (mnv4ClsB_differentiable N Wd bd) _⟩).backward := by
   unfold mnv4InputGradB
   rw [mnv4StemBBack_eq_vjp_backward (N := N) (h := 112) (w := 112)
         (by decide) (by decide) Ws bs εs hεs γs βs x h_stem,
       cbReluBBack_eq_vjp_backward (N := N) (h := 7) (w := 7)
         (by decide) (by decide) Wh1 bh1 εh1 hεh1 γh1 βh1
         (opaqueA22 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x) h_h1,
-      cbReluBBack_eq_vjp_backward (N := N) (h := 7) (w := 7)
-        (by decide) (by decide) Wh bh εh hεh γh βh
+      mnv4Hc2BBack_eq_vjp_backward (N := N) (h := 7) (w := 7) Wh bh εh hεh γh βh
         (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x) h_h2,
-      r34HeadBBack_eq_vjp_backward (N := N) (h := 7) (w := 7) Wd bd
-        (opaqueA24 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) (cbReluB N (h := 7) (w := 7) Wh bh εh γh βh) x)]
+      mnv4ClsBBack_eq_vjp_backward (N := N) Wd bd
+        (opaqueA24 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) (cbReluB N (h := 1) (w := 1) Wh bh εh γh βh ∘ mnv4PoolB N 7 7) x)]
   funext dy
   rw [mnv4B_full_has_vjp_at_backward]
   repeat rw [Function.comp_apply]
@@ -488,16 +584,16 @@ theorem mnv4InputGradB_correct (N : Nat) {nCls : Nat}
     (hb21 : HasVJPDiffAt b21 (opaqueA21 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 x))
     (h_h1 : ∀ k, StableHLO.bnBatchLA N 960 7 7 εh1 γh1 βh1
       (StableHLO.batchMap N (flatConv Wh1 bh1) (opaqueA22 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x)) k ≠ 0)
-    (h_h2 : ∀ k, StableHLO.bnBatchLA N 1280 7 7 εh γh βh
-      (StableHLO.batchMap N (flatConv Wh bh) (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x)) k ≠ 0)
+    (h_h2 : ∀ k, StableHLO.bnBatchLA N 1280 1 1 εh γh βh
+      (StableHLO.batchMap N (flatConv Wh bh) (mnv4PoolB N 7 7 (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x))) k ≠ 0)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * 224 * 224))) :
     mnv4InputGradB N Ws Wh1 Wh Wd
       ((bnBatchLA_has_vjp N 32 112 112 εs hεs γs βs).backward
-        (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x))
+        (StableHLO.batchMap N (flatConvStride2 Ws bs) x))
       ((bnBatchLA_has_vjp N 960 7 7 εh1 hεh1 γh1 βh1).backward
         (StableHLO.batchMap N (flatConv Wh1 bh1) (opaqueA22 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x)))
-      ((bnBatchLA_has_vjp N 1280 7 7 εh hεh γh βh).backward
-        (StableHLO.batchMap N (flatConv Wh bh) (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x)))
+      ((bnBatchLA_has_vjp N 1280 1 1 εh hεh γh βh).backward
+        (StableHLO.batchMap N (flatConv Wh bh) (mnv4PoolB N 7 7 (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x))))
       hfused.fst.backward
       hb1.fst.backward
       hb2.fst.backward
@@ -521,15 +617,15 @@ theorem mnv4InputGradB_correct (N : Nat) {nCls : Nat}
       hb20.fst.backward
       hb21.fst.backward
       (fun i => StableHLO.bnBatchLA N 32 112 112 εs γs βs
-        (StableHLO.batchMap N (flatConvStride2Xla Ws bs) x) i > 0)
+        (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0)
       (fun i => StableHLO.bnBatchLA N 960 7 7 εh1 γh1 βh1
         (StableHLO.batchMap N (flatConv Wh1 bh1) (opaqueA22 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 x)) i > 0)
-      (fun i => StableHLO.bnBatchLA N 1280 7 7 εh γh βh
-        (StableHLO.batchMap N (flatConv Wh bh) (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x)) i > 0)
+      (fun i => StableHLO.bnBatchLA N 1280 1 1 εh γh βh
+        (StableHLO.batchMap N (flatConv Wh bh) (mnv4PoolB N 7 7 (opaqueA23 (mnv4StemB N 112 112 Ws bs εs γs βs) fused b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 b18 b19 b20 b21 (cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1) x))) i > 0)
       dy i
       = ∑ j : Fin (N * nCls),
-          pdiv (r34HeadB N 7 7 Wd bd
-          ∘ cbReluB N (h := 7) (w := 7) Wh bh εh γh βh
+          pdiv (mnv4ClsB N Wd bd
+          ∘ (cbReluB N (h := 1) (w := 1) Wh bh εh γh βh ∘ mnv4PoolB N 7 7)
           ∘ cbReluB N (h := 7) (w := 7) Wh1 bh1 εh1 γh1 βh1
           ∘ b21 ∘ b20 ∘ b19 ∘ b18 ∘ b17 ∘ b16 ∘ b15 ∘ b14 ∘ b13 ∘ b12 ∘ b11 ∘ b10 ∘ b9 ∘ b8 ∘ b7 ∘ b6 ∘ b5 ∘ b4 ∘ b3 ∘ b2 ∘ b1
           ∘ fused ∘ mnv4StemB N 112 112 Ws bs εs γs βs) x i j * dy j := by
@@ -544,18 +640,20 @@ theorem mnv4InputGradB_correct (N : Nat) {nCls : Nat}
 -- `CertLayer.comp` to reach `.fwd` at MNv4's LITERAL resolutions is a kernel deterministic timeout
 -- in every spelling that does the peel here (`rfl`, `simp only [.., Function.comp_apply]`,
 -- Mathlib's `Function.comp_assoc`), and 2 s through a lemma proved between variables and APPLIED.
--- The head's stays here: it reads the tail through ResNet-34's `r34HeadB`, which is this file's
+-- The head's stays here: it reads the tail through the tie's own stages (`mnv4PoolB`, `mnv4ClsB`), which are this file's
 -- spelling (the apex is `r34B_full_has_vjp_at`'s), not `MobileNetV4FullB`'s.
 
-/-- The **head**, as its two 1×1 conv-BN-relu stages and ResNet-34's GAP-and-dense tail. -/
+/-- The **head**, as the tie's three stages: `cn_960` conv-BN-relu, the pool with `conv_head`, the
+    relabelled classifier. -/
 theorem mnv4HeadStack_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (v : Vec (N * (256 * 7 * 7))) :
     (mnv4HeadStack N w).fwd v
-      = r34HeadB N 7 7 w.Wd w.bd
-          (cbReluB N (h := 7) (w := 7) w.hW w.hb w.hE w.hg w.hbt
+      = mnv4ClsB N w.Wd w.bd
+          ((cbReluB N (h := 1) (w := 1) w.hW w.hb w.hE w.hg w.hbt ∘ mnv4PoolB N 7 7)
             (cbReluB N (h := 7) (w := 7) w.h1W w.h1b w.h1E w.h1g w.h1bt v)) := by
   simp only [mnv4HeadStack, mnv4Head, CertLayer.comp_fwd_apply, cbReluLayer_fwd_apply,
-    gapLayer_fwd_apply, denseLayer_fwd_apply, r34HeadB_apply]
+    gapLayer_fwd_apply, denseLayer_fwd_apply, castLayer_fwd_apply]
+  rfl
 
 /-- The forward at GROUP granularity — `rfl`, because `mobilenetv4ForwardB_full` IS the nest of
     `mnv4Pre0 … mnv4Pre6`. Nothing is peeled here; the seven `.fwd`s stay folded. -/
@@ -610,9 +708,9 @@ theorem mnv4Chain_apply {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s
 
 /-- ⭐⭐ **The twenty-six slots the tie is about ARE `mobilenetv4ForwardB_full`.** The committed
     forward, regrouped into exactly the twenty-six arguments `mnv4B_full_has_vjp_at` takes: the
-    XLA-`SAME` stem, the fused stage, the three pre-strided rows (1, 3, 11) as
-    `mnv4PreStridedBodyOfRow`, the eighteen skip rows as `CertLayer.residual` of `mnv4BodyOfRow`
-    at their own table rows, the head's two `cbReluB`s and ResNet-34's GAP-and-dense tail.
+    symmetric stem, the fused stage, the three strided rows (1, 3, 11) as `mnv4StridedBodyOfRow`,
+    the eighteen skip rows as `CertLayer.residual` of `mnv4BodyOfRow` at their own table rows, and
+    the head's three stages (`cn_960`, the pool with `conv_head`, the relabelled classifier).
 
     ⛔ **This is the theorem that would have caught ResNet-34's wrong pool** (§3.10) — the tie
     keeps its blocks opaque, so its subject is a chain of VARIABLES and nothing in it says which
@@ -626,8 +724,8 @@ theorem mnv4Chain_apply {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s
 theorem mobilenetv4ForwardB_full_eq_slots (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) :
     mobilenetv4ForwardB_full N w x
-      = (r34HeadB N 7 7 w.Wd w.bd
-          ∘ cbReluB N (h := 7) (w := 7) w.hW w.hb w.hE w.hg w.hbt
+      = (mnv4ClsB N w.Wd w.bd
+          ∘ (cbReluB N (h := 1) (w := 1) w.hW w.hb w.hE w.hg w.hbt ∘ mnv4PoolB N 7 7)
           ∘ cbReluB N (h := 7) (w := 7) w.h1W w.h1b w.h1E w.h1g w.h1bt
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row21 w.b21)).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row20 w.b20)).fwd
@@ -639,7 +737,7 @@ theorem mobilenetv4ForwardB_full_eq_slots (N : Nat) {nCls : Nat} (w : Mnv4BWeigh
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row14 w.b14)).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row13 w.b13)).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row12 w.b12)).fwd
-          ∘ (mnv4PreStridedBodyOfRow N mnv4Row11 w.b11).fwd
+          ∘ (mnv4StridedBodyOfRow N mnv4Row11 w.b11).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row10 w.b10)).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row9 w.b9)).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row8 w.b8)).fwd
@@ -647,9 +745,9 @@ theorem mobilenetv4ForwardB_full_eq_slots (N : Nat) {nCls : Nat} (w : Mnv4BWeigh
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row6 w.b6)).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row5 w.b5)).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row4 w.b4)).fwd
-          ∘ (mnv4PreStridedBodyOfRow N mnv4Row3 w.b3).fwd
+          ∘ (mnv4StridedBodyOfRow N mnv4Row3 w.b3).fwd
           ∘ (CertLayer.residual (mnv4BodyOfRow N mnv4Row2 w.b2)).fwd
-          ∘ (mnv4PreStridedBodyOfRow N mnv4Row1 w.b1).fwd
+          ∘ (mnv4StridedBodyOfRow N mnv4Row1 w.b1).fwd
           ∘ (mnv4FusedStack N w).fwd
           ∘ mnv4StemB N 112 112 w.sW w.sb w.sE w.sg w.sbt) x := by
   rw [mnv4Chain_apply, mnv4_fwd_eq_groups, mnv4HeadStack_fwd_apply, mnv4Res7bLayer_fwd_apply,

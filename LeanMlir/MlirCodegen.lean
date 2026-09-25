@@ -695,12 +695,15 @@ private def emitMbConvV3 (startPidx : Nat) (curSSA : String) (curShape : List Na
 
 /-- Emit a Universal Inverted Bottleneck (UIB) block for inference. Single block.
     MobileNet V4 building block. Structure:
-      1. Optional preDW (depthwise convBn + plain ReLU), consumes stride if present
+      1. Optional preDW (depthwise convBn, NO activation — timm's `dw_start`); carries the
+         stride only when there is no postDW
       2. Expand 1×1 convBn + plain ReLU
-      3. Optional postDW (depthwise convBn + plain ReLU), uses remaining stride
+      3. Optional postDW (depthwise convBn + plain ReLU — timm's `dw_mid`); carries the stride
       4. Project 1×1 convBn, NO activation
       5. Skip if stride == 1 && ic == oc
-    All activations are plain ReLU (NOT ReLU6, NOT Swish, NOT h-swish). -/
+    All activations are plain ReLU (NOT ReLU6, NOT Swish, NOT h-swish). Stride placement and
+    the activation-free preDW follow timm 1.0.28's `UniversalInvertedResidual`
+    (`scripts/mnv4_timm_parity.py`). -/
 private def emitUib (startPidx : Nat) (curSSA : String) (curShape : List Nat)
     (ic oc expand stride preDWk postDWk : Nat)
     (fixedBN : Bool := false) : String × String × List Nat × Nat := Id.run do
@@ -711,14 +714,15 @@ private def emitUib (startPidx : Nat) (curSSA : String) (curShape : List Nat)
   let blockIn := ssa
   let mid := ic * expand
   let useSkip := stride == 1 && ic == oc
-  -- 1. Optional preDW: consumes stride, then effective stride becomes 1
+  -- 1. Optional preDW, BN only; strided only when there is no postDW
   let mut effectiveStride := stride
   if preDWk > 0 then
-    let (s1, out1, sh1) := emitDepthwiseConvBn p ssa shape ic preDWk stride
-                             (fixedBN := fixedBN) (useRelu := true)
+    let preStride := if postDWk > 0 then 1 else stride
+    let (s1, out1, sh1) := emitDepthwiseConvBn p ssa shape ic preDWk preStride
+                             (fixedBN := fixedBN) (noAct := true)
     code := code ++ s1
     ssa := out1; shape := sh1; p := p + 1
-    effectiveStride := 1
+    effectiveStride := stride / preStride
   -- 2. Expand 1×1 convBn + plain ReLU
   let (s2, out2, sh2) := emitConvBn p ssa shape ic mid 1 1 true (fixedBN := fixedBN)
   code := code ++ s2
@@ -2333,7 +2337,7 @@ private def emitForwardBody (spec : NetSpec) (batchSize : Nat)
       curSSA := newSSA
       curShape := newShape
       pidx := newPidx
-    | .fusedMbConv ic oc expand kSize stride nBlocks useSE =>
+    | .fusedMbConv ic oc expand kSize stride nBlocks useSE _act =>
       let (snip, newSSA, newShape, newPidx) := emitFusedMbConv pidx curSSA curShape ic oc expand kSize stride nBlocks useSE (fixedBN := fixedBN)
       code := code ++ snip
       curSSA := newSSA
@@ -2631,7 +2635,7 @@ private def fwdSigParts (spec : NetSpec) (batchSize : Nat) : String × List Nat 
     | .dense _ fanOut _ => curShape := [batchSize, fanOut]
     | .conv2d _ oc _ _ _ => curShape := withCh oc curShape
     | .convBn _ oc _ stride _ | .invertedResidual _ oc _ stride _ | .mbConv _ oc _ _ stride _ _ _
-    | .fusedMbConv _ oc _ _ stride _ _ | .mbConvV3 _ oc _ _ stride _ _ | .uib _ oc _ stride _ _
+    | .fusedMbConv _ oc _ _ stride _ _ _ | .mbConvV3 _ oc _ _ stride _ _ | .uib _ oc _ stride _ _
     | .residualBlock _ oc _ stride | .bottleneckBlock _ oc _ stride =>
       curShape := down stride (withCh oc curShape)
     | .unetDown _ oc => curShape := down 2 (withCh oc curShape)
@@ -2773,7 +2777,7 @@ def collectBnLayers (spec : NetSpec) : Array (Nat × Nat) := Id.run do
           pidx := pidx + 2
         result := result.push (pidx, oc)
         pidx := pidx + 1
-    | .fusedMbConv ic oc expand _kSize _ nBlocks useSE =>
+    | .fusedMbConv ic oc expand _kSize _ nBlocks useSE _act =>
       for bi in [:nBlocks] do
         let blockIc := if bi == 0 then ic else oc
         let mid := if expand == 1 then oc else blockIc * expand
@@ -2946,7 +2950,7 @@ def preGAPShape (spec : NetSpec) : Option (Nat × Nat × Nat) := Id.run do
       | [b, _, h, w] =>
         curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
       | _ => pure ()
-    | .fusedMbConv _ oc _ _ stride _ _ =>
+    | .fusedMbConv _ oc _ _ stride _ _ _ =>
       match curShape with
       | [b, _, h, w] =>
         curShape := [b, oc, (h + stride - 1) / stride, (w + stride - 1) / stride]
@@ -3247,7 +3251,10 @@ private def emitConvBnTrain (pidx pos : Nat) (curSSA : String) (curShape : List 
     `useHSwish := true`. -/
 private def emitDepthwiseConvBnTrain (pidx pos : Nat) (curSSA : String) (curShape : List Nat)
     (channels kSize stride : Nat) (useSwish : Bool := false)
-    (useHSwish : Bool := false) (useRelu : Bool := false) : String × FwdRec := Id.run do
+    (useHSwish : Bool := false) (useRelu : Bool := false)
+    -- `noAct`: BN only, the output IS the pre-activation (MobileNetV4's `dw_start`). ⚠ Not the
+    -- same as `useRelu := false`, which is the ReLU6 default below.
+    (noAct : Bool := false) : String × FwdRec := Id.run do
   match curShape with
   | [b, _, h, w] =>
     let oH := (h + stride - 1) / stride
@@ -3292,7 +3299,9 @@ private def emitDepthwiseConvBnTrain (pidx pos : Nat) (curSSA : String) (curShap
     s := s ++ s!"    %cbn_bt_bc{pidx} = stablehlo.broadcast_in_dim %bt{pidx}, dims = [1] : ({tensorTy [channels]}) -> {tensorTy outShape}\n"
     let preSSA := s!"%cbn_pre{pidx}"
     s := s ++ s!"    {preSSA} = stablehlo.add %cbn_gn{pidx}, %cbn_bt_bc{pidx} : {tensorTy outShape}\n"
-    if useHSwish then
+    if noAct then
+      pure ()
+    else if useHSwish then
       -- h-swish: x * ReLU6(x + 3) / 6
       s := s ++ s!"    %cbn_hs3{pidx} = stablehlo.constant dense<3.0> : {tensorTy outShape}\n"
       s := s ++ s!"    %cbn_hs6{pidx} = stablehlo.constant dense<6.0> : {tensorTy outShape}\n"
@@ -3319,14 +3328,15 @@ private def emitDepthwiseConvBnTrain (pidx pos : Nat) (curSSA : String) (curShap
     let fwdRec : FwdRec := {
       layer := .convBn channels channels kSize stride .same
       pidx := some pidx, pos
-      inputSSA := curSSA, preActSSA := preSSA, outputSSA := s!"%cbn_out{pidx}"
+      inputSSA := curSSA, preActSSA := preSSA
+      outputSSA := if noAct then preSSA else s!"%cbn_out{pidx}"
       inShape := curShape, outShape
       normSSA := s!"%cbn_norm{pidx}"
       istdBcSSA := s!"%cbn_istd_bc{pidx}"
-      hasRelu := useRelu
-      hasRelu6 := !useSwish && !useHSwish && !useRelu
-      hasSwish := useSwish
-      hasHSwish := useHSwish
+      hasRelu := useRelu && !noAct
+      hasRelu6 := !noAct && !useSwish && !useHSwish && !useRelu
+      hasSwish := useSwish && !noAct
+      hasHSwish := useHSwish && !noAct
       isDepthwise := true
       ic := channels, kSize := kSize, stride := stride
     }
@@ -6204,7 +6214,7 @@ private def emitTrainForward (spec : NetSpec) (B : Nat)
             addSkipGrad := "identity"
           }
 
-    | .fusedMbConv ic oc expand kSize firstStride nBlocks useSE =>
+    | .fusedMbConv ic oc expand kSize firstStride nBlocks useSE _act =>
       for bi in [:nBlocks] do
         let blockIn := curSSA
         let blockInShape := curShape
@@ -6423,19 +6433,20 @@ private def emitTrainForward (spec : NetSpec) (B : Nat)
 
     | .uib ic oc expand stride preDWk postDWk =>
       -- UIB (MobileNet V4) block: optional preDW → expand 1×1 → optional postDW → project 1×1
-      -- Plain ReLU throughout. Skip if stride==1 && ic==oc.
+      -- Plain ReLU after expand and postDW; preDW and project are BN only. Skip if stride==1 && ic==oc.
       let blockIn := curSSA
       let blockInShape := curShape
       let mid := ic * expand
       let useSkip := stride == 1 && ic == oc
-      -- 1. Optional preDW: consumes stride, with plain ReLU
+      -- 1. Optional preDW, BN only (timm `dw_start`); strided only when there is no postDW
       let mut effectiveStride := stride
       if preDWk > 0 then
-        let (s1, rec1) := emitDepthwiseConvBnTrain pidx pos curSSA curShape ic preDWk stride
-                             (useRelu := true)
+        let preStride := if postDWk > 0 then 1 else stride
+        let (s1, rec1) := emitDepthwiseConvBnTrain pidx pos curSSA curShape ic preDWk preStride
+                             (noAct := true)
         code := code ++ s1; curSSA := rec1.outputSSA; curShape := rec1.outShape
         records := records.push rec1; pidx := pidx + 1
-        effectiveStride := 1
+        effectiveStride := stride / preStride
       -- 2. Expand 1×1 convBn + plain ReLU
       let (s2, rec2) := emitConvBnTrain pidx pos curSSA curShape ic mid 1 1 true
       code := code ++ s2; curSSA := rec2.outputSSA; curShape := rec2.outShape

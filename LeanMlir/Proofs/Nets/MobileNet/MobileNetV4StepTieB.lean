@@ -10,8 +10,9 @@ Every parameter gradient node MNv4's batched train step emits denotes the certif
 table below). This file removes that freedom: each node is stated at the cotangent the render's own
 backward chain delivers, driven by a loss cotangent `g` at the logits.
 
-⚠⚠ **No accuracy is quoted for this net.** Conv-M has no Imagenette run and no verified ImageNet
-run; the ties that pin these statements to the reference's function are the 2026-09-07 pair.
+⚠⚠ **No accuracy is quoted for this net.** The statements are about timm's
+`mobilenetv4_conv_medium` (`planning/mnv4_timm_parity.md`); the gates that pin the artifacts to it
+are `scripts/mnv4_timm_parity.py`, `scripts/mnv4_forward_tie.py` and `scripts/grad_tie.py`.
 
 ## ⭐ The UIB bottleneck is LINEAR, and that makes MNv4's chain shorter than ResNet's
 
@@ -32,17 +33,13 @@ composes certified VJPs; it does not re-prove them.
 |---|---|---|
 | `bnGammaGradB` / `bnBetaGradB` | 77 BN layers | `ResNet34PoCB.bnGammaGradB_den` / `bnBetaGradB_den` |
 | `convWeightGradB` | expands, projects, both head convs, the fused project | `ResNet34PoCB.convWGradB_den` |
-| `convStridedWeightGradB` (SYMMETRIC) | the fused stage's 3×3/s2 | `ResNet34PoCB.convStridedWGradB_den` |
-| `convStridedXlaWeightGradB` (XLA-`SAME`) | the stem, and only the stem | `EnetPoCG.convStridedXlaWGradB_den` |
+| `convStridedWeightGradB` (SYMMETRIC) | the stem's and the fused stage's 3×3/s2 | `ResNet34PoCB.convStridedWGradB_den` |
 | `depthwiseWeightGradB` | every stride-1 depthwise | `EnetPoCG.depthwiseWGradB_den` |
-| `depthwiseStridedWeightGradB` | rows 1, 3, 11's leading depthwise | `EnetPoCG.depthwiseStridedWGradB_den` |
+| `depthwiseStridedWeightGradB` | rows 1, 3, 11's post-DW (timm's `dw_mid`) | `EnetPoCG.depthwiseStridedWGradB_den` |
 | `denseWeightGradB` / `denseBiasGradB` | the classifier | `ResNet34PoCB.denseWGradB_den` / `denseBGradB_den` |
 
-⚠⚠ **TWO padding phases, and the two strided conv kinds are NOT interchangeable.** The stem is
-XLA-`SAME` (`flatConvStride2Xla`, EfficientNet-B0's op) and the fused stage is SYMMETRIC
-(`flatConvStride2`, ResNet's). Identical types, identical emitted shapes, different certificates —
-`scripts/convention_audit.py` is what reads them apart, and swapping one for the other is the
-6.16e-2-vs-1.79e-6 forward-tie defect `planning/archive/mnv4_verified.md` §3b measured.
+⭐ Every strided site pads symmetrically (timm), so the stem and the fused stage share one
+certificate. Until 2026-09-24 the stem was XLA-`SAME` and took `convStridedXlaWGradB_den`.
 
 ⛔ **MNv4 emits no conv BIAS gradient at all.** `MobileNetV4RenderB` has no `convBias` flag — every
 bias is folded into its BatchNorm and bound to `%zb{c}` — so `convBiasGradB` and its strided peers
@@ -68,7 +65,7 @@ stuck; the capstone then instantiates at the 21 concrete rows, which is applicat
 | `CotDc` | post-DW conv's output | `%u{p}dW` |
 | `CotEn` | expand BN's output (`depthwiseBackBatched`, then the expand relu's mask) | `%u{p}eg`, `%u{p}ebt` |
 | `CotEc` | expand conv's output | `%u{p}eW` |
-| `CotQn` | pre-DW BN's output | `%u{p}qg`, `%u{p}qbt` |
+| `CotQn` | pre-DW BN's output (`convBackBatched`; no mask — the pre-DW is BN only) | `%u{p}qg`, `%u{p}qbt` |
 | `CotQc` | pre-DW conv's output | `%u{p}qW` |
 | `CotIn` | the block input — `addVB (depthwiseBackBatched dQc) dyOut` | the previous block |
 
@@ -85,8 +82,8 @@ open Proofs Proofs.StableHLO Proofs.IR Proofs.ResNet34TieB Proofs.EnetTiePoC
 namespace Proofs.Mnv4TieB
 
 open scoped BigOperators
-open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedWTiedB_holds convStridedXlaWTiedB_holds
-  convWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
+open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_holds
+  denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The ExtraDW block's cotangent chain — 13 of Conv-M's 21 rows
@@ -158,15 +155,12 @@ noncomputable def mnv4CotEc (N : Nat) (s : UibSpec) (p : UibParams s)
         xin))
     (mnv4CotEn N s p xin dyOut)
 
-/-- Cotangent at the pre-DW BN's output — the expand conv's input-VJP, masked by the pre-DW relu.
-    Feeds `%u{p}qg` and `%u{p}qbt`. -/
+/-- Cotangent at the pre-DW BN's output — the expand conv's input-VJP, UNMASKED: the pre-DW is
+    BN only (timm's `dw_start`). Feeds `%u{p}qg` and `%u{p}qbt`. -/
 noncomputable def mnv4CotQn (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     Vec (N * (s.ic * s.h * s.h)) :=
-  reluMaskB (N * (s.ic * s.h * s.h))
-    (bnBatchLA N s.ic s.h s.h p.eq_ p.gq p.bq2
-      (batchMap N (depthwiseFlat p.Wq p.bq) xin))
-    (cInB N p.We p.be (mnv4CotEc N s p xin dyOut))
+  cInB N p.We p.be (mnv4CotEc N s p xin dyOut)
 
 /-- Cotangent at the pre-DW CONV's output — through the pre-DW BN's backward. Feeds `%u{p}qW`. -/
 noncomputable def mnv4CotQc (N : Nat) (s : UibSpec) (p : UibParams s)
@@ -178,105 +172,97 @@ noncomputable def mnv4CotQc (N : Nat) (s : UibSpec) (p : UibParams s)
 
 
 -- ════════════════════════════════════════════════════════════════
--- § The PRE-STRIDED block's chain — rows 1, 3 and 11, and no skip
+-- § The STRIDED block's chain — rows 1, 3 and 11, and no skip
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠⚠ **A near-copy of the stride-1 chain, and it has to be.** Only two things differ — the
-leading depthwise is `depthwiseStride2Flat` rather than `depthwiseFlat`, and the block input sits
-at `2h` — but those two changes run through every type in the chain, so the whole thing is
-re-stated rather than instantiated. ⭐ Everything from the expand down is the same composition at
-the reduced resolution; the stride is entirely consumed by the first op, which is what
-`mnv4UibPreStridedBody` means one tier up.
+/-! ⚠⚠ **A near-copy of the stride-1 chain, and it has to be.** The post-DW carries the stride
+(timm's `dw_mid`), so the block input, the BN-only pre-DW and the expand sit at `2h` and the post-DW
+and the project at `h` — a change that runs through every type in the chain.
 
 ⛔ **And there is no skip**: all three stride-2 rows change channels (`ic ≠ oc`), so the block IS
-the body, `dx` is the strided depthwise's input-VJP alone, and there is no `addVB` fan-in. -/
+the body and there is no `addVB` fan-in. -/
 
-/-- Cotangent at the project CONV's output — `dyOut` through the project BN's backward.
-    ⭐ `dyOut` itself is the cotangent at the project BN's output: the bottleneck is linear, so
-    nothing masks it. Feeds `%u{p}pW`. -/
+/-- Cotangent at the project CONV's output. ⭐ `dyOut` itself is the cotangent at the project BN's
+    output: the bottleneck is linear. Feeds `%u{p}pW`. -/
 noncomputable def mnv4SCotPc (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     Vec (N * (s.oc * s.h * s.h)) :=
   bnInB N s.oc s.h s.h p.ez p.gz
     (batchMap N (flatConv p.Wz p.bz)
-      ((mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd
-        ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
-          ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
+      ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd
+        ((cbReluLayer (h := 2 * s.h) (w := 2 * s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+          ((mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
             xin))))
     dyOut
 
-/-- Cotangent at the post-DW BN's output — the project conv's input-VJP, masked by the post-DW
-    relu. Feeds `%u{p}dg` and `%u{p}dbt`. -/
+/-- Cotangent at the STRIDED post-DW BN's output — the project conv's input-VJP, masked by the
+    post-DW relu. Feeds `%u{p}dg` and `%u{p}dbt`. -/
 noncomputable def mnv4SCotDn (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   reluMaskB (N * (s.ic * s.expand * s.h * s.h))
     (bnBatchLA N (s.ic * s.expand) s.h s.h p.ed p.gd p.bd2
-      (batchMap N (depthwiseFlat p.Wd p.bd)
-        ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
-          ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
+      (batchMap N (depthwiseStride2Flat p.Wd p.bd)
+        ((cbReluLayer (h := 2 * s.h) (w := 2 * s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+          ((mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
             xin))))
     (cInB N p.Wz p.bz (mnv4SCotPc N s p xin dyOut))
 
-/-- Cotangent at the post-DW CONV's output — through the post-DW BN's backward. Feeds `%u{p}dW`. -/
+/-- Cotangent at the STRIDED post-DW CONV's output — through its BN's backward. Feeds `%u{p}dW`. -/
 noncomputable def mnv4SCotDc (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   bnInB N (s.ic * s.expand) s.h s.h p.ed p.gd
-    (batchMap N (depthwiseFlat p.Wd p.bd)
-      ((cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
-        ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
+    (batchMap N (depthwiseStride2Flat p.Wd p.bd)
+      ((cbReluLayer (h := 2 * s.h) (w := 2 * s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd
+        ((mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
           xin)))
     (mnv4SCotDn N s p xin dyOut)
 
-/-- Cotangent at the expand BN's output — masked by the expand relu. Feeds `%u{p}eg`/`%u{p}ebt`.
-
-    ⚠ No dispatch here, unlike the stride-1 chain: all three of Conv-M's stride-2 rows have
-    `postDWk > 0`, so the post-depthwise is always present on this path. -/
+/-- Cotangent at the expand BN's output, at `2h` — the strided post-DW's input-VJP, masked by the
+    expand relu. Feeds `%u{p}eg`/`%u{p}ebt`. -/
 noncomputable def mnv4SCotEn (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    Vec (N * (s.ic * s.expand * s.h * s.h)) :=
-  reluMaskB (N * (s.ic * s.expand * s.h * s.h))
-    (bnBatchLA N (s.ic * s.expand) s.h s.h p.ee p.ge p.be2
+    Vec (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h))) :=
+  reluMaskB (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h)))
+    (bnBatchLA N (s.ic * s.expand) (2 * s.h) (2 * s.h) p.ee p.ge p.be2
       (batchMap N (flatConv p.We p.be)
-        ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
+        ((mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
           xin)))
-    (dInB N p.Wd p.bd (mnv4SCotDc N s p xin dyOut))
+    (dStridedInB N p.Wd p.bd (mnv4SCotDc N s p xin dyOut))
 
-/-- Cotangent at the expand CONV's output — through the expand BN's backward. Feeds `%u{p}eW`. -/
+/-- Cotangent at the expand CONV's output, at `2h`. Feeds `%u{p}eW`. -/
 noncomputable def mnv4SCotEc (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    Vec (N * (s.ic * s.expand * s.h * s.h)) :=
-  bnInB N (s.ic * s.expand) s.h s.h p.ee p.ge
+    Vec (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h))) :=
+  bnInB N (s.ic * s.expand) (2 * s.h) (2 * s.h) p.ee p.ge
     (batchMap N (flatConv p.We p.be)
-      ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
+      ((mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd
         xin))
     (mnv4SCotEn N s p xin dyOut)
 
-/-- Cotangent at the STRIDED pre-DW BN's output — the expand conv's input-VJP, masked by the pre-DW relu.
-    Feeds `%u{p}qg` and `%u{p}qbt`. -/
+/-- Cotangent at the pre-DW BN's output, at `2h` — the expand conv's input-VJP, unmasked (the
+    pre-DW is BN only). Feeds `%u{p}qg` and `%u{p}qbt`. -/
 noncomputable def mnv4SCotQn (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    Vec (N * (s.ic * s.h * s.h)) :=
-  reluMaskB (N * (s.ic * s.h * s.h))
-    (bnBatchLA N s.ic s.h s.h p.eq_ p.gq p.bq2
-      (batchMap N (depthwiseStride2Flat p.Wq p.bq) xin))
-    (cInB N p.We p.be (mnv4SCotEc N s p xin dyOut))
+    Vec (N * (s.ic * (2 * s.h) * (2 * s.h))) :=
+  cInB N p.We p.be (mnv4SCotEc N s p xin dyOut)
 
-/-- Cotangent at the STRIDED pre-DW conv's output — through the pre-DW BN's backward. Feeds `%u{p}qW`. -/
+/-- Cotangent at the pre-DW CONV's output, at `2h`. Feeds `%u{p}qW`. -/
 noncomputable def mnv4SCotQc (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    Vec (N * (s.ic * s.h * s.h)) :=
-  bnInB N s.ic s.h s.h p.eq_ p.gq
-    (batchMap N (depthwiseStride2Flat p.Wq p.bq) xin)
+    Vec (N * (s.ic * (2 * s.h) * (2 * s.h))) :=
+  bnInB N s.ic (2 * s.h) (2 * s.h) p.eq_ p.gq
+    (batchMap N (depthwiseFlat p.Wq p.bq) xin)
     (mnv4SCotQn N s p xin dyOut)
 
-/-- **The pre-strided block's input cotangent** — the STRIDED depthwise's input-VJP, landing at
-    `2h`. No fan-in: `ic ≠ oc`, so the block has no skip. -/
+/-- **The strided block's input cotangent**, at `2h`: the pre-DW's input-VJP when there is one, the
+    expand conv's otherwise. No fan-in: `ic ≠ oc`, so the block has no skip. -/
 noncomputable def mnv4SBodyCotIn (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     Vec (N * (s.ic * (2 * s.h) * (2 * s.h))) :=
-  dStridedInB N p.Wq p.bq (mnv4SCotQc N s p xin dyOut)
+  if s.preDWk = 0 then cInB N p.We p.be (mnv4SCotEc N s p xin dyOut)
+  else dInB N p.Wq p.bq (mnv4SCotQc N s p xin dyOut)
 
 /-- **The BODY's input cotangent** — what the render's `dx` carries before the skip fan-in.
 
@@ -425,31 +411,26 @@ theorem mnv4_ffn_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p :
 
 
 -- ════════════════════════════════════════════════════════════════
--- § The PRE-STRIDED block, tied — rows 1, 3 and 11
+-- § The STRIDED block, tied — rows 1, 3 and 11
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **Pre-strided block, tied** — rows 1, 3 and 11. All twelve parameter nodes — four conv/depthwise weights and four
-    BatchNorm γ/β pairs — denote the certified batched `Σ_n` gradient at the real forward
-    activations and the real backward-chain cotangent driven by `dyOut`.
+/-- ⭐ **Strided block, tied** — rows 1, 3 and 11. All twelve parameter nodes denote the certified
+    batched `Σ_n` gradient at the real forward activations and the backward-chain cotangent driven
+    by `dyOut`.
 
-    ⚠ Each BatchNorm's γ/β reads the cotangent at THAT BatchNorm's output (`CotQn`, `CotEn`,
-    `CotDn`, and `dyOut` itself for the project) while its conv reads the one at the conv's output
-    (`CotQc`, `CotEc`, `CotDc`, `CotPc`). Off by one and the gradient is silently wrong — the two
-    have the same type. ⭐ The project BN's pair reads `dyOut` UNMASKED: the bottleneck is linear.
-
-    ⚠⚠ The leading node is `depthwiseStridedWeightGradB` — `depthwiseStride2Flat`, SYMMETRIC
-    padding, reading its input at `2h`. Every other node is the stride-1 profile's at the reduced
-    resolution, because the stride is consumed entirely by that first depthwise.
+    ⚠⚠ The strided node is the POST-DW's `depthwiseStridedWeightGradB` (timm's `dw_mid`,
+    symmetric), reading its input at `2h`; the pre-DW and the expand nodes read theirs at `2h`, the
+    project's at `h`.
 
     ⛔ No skip and no `addVB`: `ic ≠ oc` at all three rows, so the block IS its body. -/
-def mnv4PreStridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
+def mnv4StridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
-  let qr := (mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
-  let er := (cbReluLayer (h := s.h) (w := s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
-  let dr := (mnv4PostDWSlot (h := s.h) (w := s.h) N s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
-  let qc := batchMap N (depthwiseStride2Flat p.Wq p.bq) xin
+  let qr := (mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
+  let er := (cbReluLayer (h := 2 * s.h) (w := 2 * s.h) N p.We p.be p.ee p.he p.ge p.be2).fwd qr
+  let dr := (mnv4DWReluStridedLayer (h := s.h) (w := s.h) N p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd er
+  let qc := batchMap N (depthwiseFlat p.Wq p.bq) xin
   let ec := batchMap N (flatConv p.We p.be) qr
-  let dc := batchMap N (depthwiseFlat p.Wd p.bd) er
+  let dc := batchMap N (depthwiseStride2Flat p.Wd p.bd) er
   let pc := batchMap N (flatConv p.Wz p.bz) dr
   let cotQn := mnv4SCotQn N s p xin dyOut
   let cotQc := mnv4SCotQc N s p xin dyOut
@@ -458,17 +439,18 @@ def mnv4PreStridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p 
   let cotDn := mnv4SCotDn N s p xin dyOut
   let cotDc := mnv4SCotDc N s p xin dyOut
   let cotPc := mnv4SCotPc N s p xin dyOut
-  ResNet34PoCB.DepthwiseStridedWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
+  ResNet34PoCB.DepthwiseWTiedB N (2 * s.h) (2 * s.h) xN cotN p.bq xin p.Wq cotQc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
-      (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
+  ResNet34PoCB.BnPairTiedB N s.ic (2 * s.h) (2 * s.h) vN epsStr cotN p.eq_ p.gq p.bq2
+      (reassocB N s.ic (2 * s.h) (2 * s.h) qc) (reassocB N s.ic (2 * s.h) (2 * s.h) cotQn)
   ∧
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
+  ResNet34PoCB.ConvWTiedB N (2 * s.h) (2 * s.h) xN cotN p.be qr p.We cotEc
   ∧
-  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
-      (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
+  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) (2 * s.h) (2 * s.h) vN epsStr cotN p.ee p.ge p.be2
+      (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) ec)
+      (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) cotEn)
   ∧
-  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
+  ResNet34PoCB.DepthwiseStridedWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
   ∧
   ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
       (reassocB N (s.ic * s.expand) s.h s.h dc) (reassocB N (s.ic * s.expand) s.h s.h cotDn)
@@ -478,15 +460,14 @@ def mnv4PreStridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p 
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
-/-- ⭐⭐ **And it holds** — twelve instantiations (the first at the STRIDED depthwise) of the shared `∀ cot` leaf folds with
-    the freedom removed. Nothing here is new mathematics; what is new is that the cotangents are
-    the chain's, not free. -/
-theorem mnv4_prestrided_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
+/-- ⭐⭐ **And it holds** — twelve instantiations (one at the STRIDED post-DW) of the shared
+    `∀ cot` leaf folds with the freedom removed. -/
+theorem mnv4_strided_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
-    mnv4PreStridedTiedB N s xN cotN vN epsStr p xin dyOut := by
-  unfold mnv4PreStridedTiedB
-  exact ⟨depthwiseStridedWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
-    depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
+    mnv4StridedTiedB N s xN cotN vN epsStr p xin dyOut := by
+  unfold mnv4StridedTiedB
+  exact ⟨depthwiseWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
+    depthwiseStridedWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 -- ════════════════════════════════════════════════════════════════
 -- § The stem, the fused stage and the head — the three non-UIB stages
@@ -502,28 +483,28 @@ noncomputable def mnv4StemCotN (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 o
     (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (dyStem : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
   reluMaskB (N * (oc * h * w))
-    (bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2Xla Ws bs) x)) dyStem
+    (bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2 Ws bs) x)) dyStem
 
 /-- Cotangent at the stem CONV's output — through the stem BN's backward. Feeds `%sW`. -/
 noncomputable def mnv4StemCotC (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW)
     (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (dyStem : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
-  bnInB N oc h w εs γs (batchMap N (flatConvStride2Xla Ws bs) x)
+  bnInB N oc h w εs γs (batchMap N (flatConvStride2 Ws bs) x)
     (mnv4StemCotN N h w Ws bs εs γs βs x dyStem)
 
 /-- **Stem, tied.** Its three nodes at the chain's cotangents.
 
-    ⛔⛔ **And the chain STOPS here.** There is no `convStridedXlaBackBatched` node: no render emits
-    a gradient into `%x`, so the artifact's backward ends at this weight gradient. That is why the
+    ⛔⛔ **And the chain STOPS here.** No render emits a gradient into `%x`, so the artifact's
+    backward ends at this weight gradient. That is why the
     stem sits outside `MobileNetV4FullB.lean`'s `CertLayer` trunk, and it is B0's situation
     exactly. -/
 def mnv4StemTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : String)
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) : Prop :=
-  let sc := batchMap N (flatConvStride2Xla Ws bs) x
+  let sc := batchMap N (flatConvStride2 Ws bs) x
   let cotN' := mnv4StemCotN N h w Ws bs εs γs βs x dyStem
   let cotC := mnv4StemCotC N h w Ws bs εs γs βs x dyStem
-  ResNet34PoCB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotC
+  ResNet34PoCB.ConvStridedWTiedB N h w xN cotN bs x Ws cotC
   ∧
   ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w sc)
       (reassocB N oc h w cotN')
@@ -533,7 +514,7 @@ theorem mnv4_stem_tiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : S
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (dyStem : Vec (N * (oc * h * w))) :
     mnv4StemTiedB N h w xN cotN vN epsStr Ws bs εs γs βs x dyStem := by
   unfold mnv4StemTiedB
-  exact ⟨convStridedXlaWTiedB_holds, bnPairTiedB_holds⟩
+  exact ⟨convStridedWTiedB_holds, bnPairTiedB_holds⟩
 
 /-- Cotangent at the fused stage's project CONV output. ⭐ `dyF` reaches the project BN's γ/β
     unmasked — the fused stage ends in a BatchNorm with no activation. Feeds `%f0pW`. -/
@@ -545,16 +526,15 @@ noncomputable def mnv4FusedCotPc (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Ker
     (γp _βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dyF : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
   bnInB N oc h w εp γp
-    (batchMap N (flatConv Wp bp) (fusedConvB N (h := h) (w := w) Wc bc εc γc βc xin)) dyF
+    (batchMap N (flatConv Wp bp) (cbReluStridedB N (h := h) (w := w) Wc bc εc γc βc xin)) dyF
 
-/-- Cotangent at the fused BN's output — the project conv's input-VJP through **swish**'s
-    backward. ⭐ No mask: swish is smooth, which is why this stage carries no kink hypothesis
-    anywhere. Feeds `%f0cg` and `%f0cbt`. -/
+/-- Cotangent at the fused BN's output — the project conv's input-VJP, masked by the fused relu.
+    Feeds `%f0cg` and `%f0cbt`. -/
 noncomputable def mnv4FusedCotN (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
     (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dyF : Vec (N * (oc * h * w))) : Vec (N * (mid * h * w)) :=
-  swBackB (N * (mid * h * w))
+  reluMaskB (N * (mid * h * w))
     (bnBatchLA N mid h w εc γc βc (batchMap N (flatConvStride2 Wc bc) xin))
     (cInB N Wp bp (mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF))
 
@@ -574,15 +554,13 @@ noncomputable def mnv4FusedCotIn (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Ker
   cStridedInB N Wc bc (mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF)
 
 
-/-- ⭐ **Fused stage, tied** — its six parameter nodes. ⚠ `%f0cW` is `convStridedWeightGradB`,
-    SYMMETRIC padding, where the stem's is the XLA-`SAME` twin: two phases in one net. ⭐ And the
-    fused BN's γ/β read the cotangent that came through SWISH's backward, not through a relu mask —
-    this is the one stage in MNv4 with no kink anywhere. -/
+/-- ⭐ **Fused stage, tied** — its six parameter nodes. `%f0cW` is `convStridedWeightGradB`,
+    symmetric padding, like the stem's. -/
 def mnv4FusedTiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
     (γp βp : Vec oc) (xN cotN vN epsStr : String)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyF : Vec (N * (oc * h * w))) : Prop :=
-  let sw := fusedConvB N (h := h) (w := w) Wc bc εc γc βc xin
+  let sw := cbReluStridedB N (h := h) (w := w) Wc bc εc γc βc xin
   let fc := batchMap N (flatConvStride2 Wc bc) xin
   let pc := batchMap N (flatConv Wp bp) sw
   let cotN' := mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
@@ -607,36 +585,56 @@ theorem mnv4_fused_tiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid
   exact ⟨convStridedWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 
-/-! ⭐ The head's GAP-and-dense tail is ResNet-34's, reused: `r34HeadCotBlk` is its certified
-input cotangent and `r34HeadTiedB` its two parameter nodes. What is MNv4's own is the pair of
-1×1 conv-BN-relu stages in front of it — Conv-M's head has TWO convs where `mnv4Head` models
-one. -/
+/-! The head, timm's order: `cn_960` conv-bn-relu at `h×w`, GAP, `conv_head` conv-bn-relu on the
+pooled `[N, mid, 1, 1]`, dense. The two `1×1` relabellings (`mnv4Pool11`) are no-ops in the render
+and `Fin.cast` reads here. -/
 
-/-- Cotangent at the SECOND head BN's output — the GAP/dense tail's input cotangent, masked by
-    that stage's relu. Feeds `%hg` and `%hbt`. -/
+/-- The pooled `[N, c]` read at `[N, c, 1, 1]` and back — `castLayer`'s forward and backward. -/
+noncomputable def mnv4To11 {N c : Nat} (v : Vec (N * c)) : Vec (N * (c * 1 * 1)) :=
+  fun i => v (Fin.cast (mnv4Pool11 N c).symm i)
+noncomputable def mnv4From11 {N c : Nat} (v : Vec (N * (c * 1 * 1))) : Vec (N * c) :=
+  fun i => v (Fin.cast (mnv4Pool11 N c) i)
+
+/-- The pooled head features at `[N, mid, 1, 1]`: GAP of the first head stage, relabelled. -/
+noncomputable def mnv4HeadPool (N h w : Nat) {c mid : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
+    (xin : Vec (N * (c * h * w))) : Vec (N * (mid * 1 * 1)) :=
+  mnv4To11 (batchMap N (globalAvgPoolFlat mid h w) (cbReluB N (h := h) (w := w) W1 b1 ε1 γ1 β1 xin))
+
+/-- The dense input: `conv_head`-bn-relu of the pooled features, relabelled to `[N, oc]`. -/
+noncomputable def mnv4HeadFeat (N h w : Nat) {c mid oc : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
+    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
+    (xin : Vec (N * (c * h * w))) : Vec (N * oc) :=
+  mnv4From11 (cbReluB N (h := 1) (w := 1) W2 b2 ε2 γ2 β2 (mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin))
+
+/-- Cotangent at `conv_head`'s BN output (`[N, oc, 1, 1]`) — the dense input-VJP (`rowDenseBackFlat`,
+    the `den` of the render's `denseRowBack`), relabelled,
+    masked by that stage's relu. Feeds `%hg` and `%hbt`. -/
 noncomputable def mnv4HeadCotHn (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
-    (Wd : Mat oc nCls) (bd : Vec nCls)
-    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * h * w)) :=
-  reluMaskB (N * (oc * h * w))
-    (bnBatchLA N oc h w ε2 γ2 β2
-      (batchMap N (flatConv W2 b2) (cbReluB N (h := h) (w := w) W1 b1 ε1 γ1 β1 xin)))
-    (r34HeadCotBlk N h w Wd bd
-      (cbReluB N (h := h) (w := w) W2 b2 ε2 γ2 β2
-        (cbReluB N (h := h) (w := w) W1 b1 ε1 γ1 β1 xin)) g)
+    -- ⭐ `bd` is taken and NOT read: the dense input-VJP does not see the bias. Kept so every
+    -- cotangent in the head chain has the tie bundle's argument list.
+    (Wd : Mat oc nCls) (_bd : Vec nCls)
+    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * 1 * 1)) :=
+  reluMaskB (N * (oc * 1 * 1))
+    (bnBatchLA N oc 1 1 ε2 γ2 β2
+      (batchMap N (flatConv W2 b2) (mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin)))
+    (mnv4To11 (rowDenseBackFlat N oc nCls Wd g))
 
-/-- Cotangent at the second head CONV's output. Feeds `%hW`. -/
+/-- Cotangent at `conv_head`'s CONV output. Feeds `%hW`. -/
 noncomputable def mnv4HeadCotHc (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls)
-    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * h * w)) :=
-  bnInB N oc h w ε2 γ2
-    (batchMap N (flatConv W2 b2) (cbReluB N (h := h) (w := w) W1 b1 ε1 γ1 β1 xin))
+    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (oc * 1 * 1)) :=
+  bnInB N oc 1 1 ε2 γ2
+    (batchMap N (flatConv W2 b2) (mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin))
     (mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g)
 
-/-- Cotangent at the FIRST head BN's output. Feeds `%h1g` and `%h1bt`. -/
+/-- Cotangent at the FIRST head BN's output — `conv_head`'s input-VJP, relabelled, spread by the
+    GAP backward, masked by the first relu. Feeds `%h1g` and `%h1bt`. -/
 noncomputable def mnv4HeadCotH1n (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
@@ -644,7 +642,8 @@ noncomputable def mnv4HeadCotH1n (N h w : Nat) {c mid oc nCls : Nat}
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (bnBatchLA N mid h w ε1 γ1 β1 (batchMap N (flatConv W1 b1) xin))
-    (cInB N W2 b2 (mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g))
+    (gapInB N mid h w
+      (mnv4From11 (cInB N W2 b2 (mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g))))
 
 /-- Cotangent at the first head CONV's output. Feeds `%h1W`. -/
 noncomputable def mnv4HeadCotH1c (N h w : Nat) {c mid oc nCls : Nat}
@@ -664,17 +663,17 @@ noncomputable def mnv4HeadCotIn (N h w : Nat) {c mid oc nCls : Nat}
   cInB N W1 b1 (mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g)
 
 /-- ⭐ **Head, tied** — all EIGHT nodes: two conv weights, two BatchNorm γ/β pairs, and the
-    classifier's weight and bias. ⭐ The last two are `r34HeadTiedB`, reused verbatim: MNv4's
-    GAP-and-dense tail IS ResNet-34's at a different width. -/
+    classifier's weight and bias. `conv_head`'s nodes (`%hW`, `%hg`, `%hbt`) read the POOLED
+    features at `h = w = 1`; the classifier reads `conv_head`'s relu output. -/
 def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (xN cotN vN epsStr : String)
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Prop :=
-  let r1 := cbReluB N (h := h) (w := w) W1 b1 ε1 γ1 β1 xin
-  let r2 := cbReluB N (h := h) (w := w) W2 b2 ε2 γ2 β2 r1
+  let pool := mnv4HeadPool N h w W1 b1 ε1 γ1 β1 xin
+  let feat := mnv4HeadFeat N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 xin
   let c1 := batchMap N (flatConv W1 b1) xin
-  let c2 := batchMap N (flatConv W2 b2) r1
+  let c2 := batchMap N (flatConv W2 b2) pool
   let cotH1n := mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotH1c := mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHn := mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
@@ -684,11 +683,12 @@ def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
   ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN ε1 γ1 β1 (reassocB N mid h w c1)
       (reassocB N mid h w cotH1n)
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN b2 r1 W2 cotHc
+  ResNet34PoCB.ConvWTiedB N 1 1 xN cotN b2 pool W2 cotHc
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN ε2 γ2 β2 (reassocB N oc h w c2)
-      (reassocB N oc h w cotHn)
-  ∧ ResNet34TieB.r34HeadTiedB N h w xN cotN Wd bd r2 g
+  ResNet34PoCB.BnPairTiedB N oc 1 1 vN epsStr cotN ε2 γ2 β2 (reassocB N oc 1 1 c2)
+      (reassocB N oc 1 1 cotHn)
+  ∧ ResNet34PoCB.DenseWTiedB N xN cotN feat Wd bd g
+  ∧ ResNet34PoCB.DenseBTiedB N cotN Wd (fun _ => 0) bd g
 
 theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
@@ -697,12 +697,8 @@ theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) :
     mnv4HeadTiedB N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xN cotN vN epsStr xin g := by
   unfold mnv4HeadTiedB
-  intro r1 r2 c1 c2 cotH1n cotH1c cotHn cotHc
-  exact ⟨convWTiedB_holds,
-    bnPairTiedB_holds,
-    convWTiedB_holds,
-    bnPairTiedB_holds,
-    ResNet34TieB.r34_head_tiedB N h w xN cotN Wd bd r2 g⟩
+  exact ⟨convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds,
+    denseWTiedB_holds, denseBTiedB_holds⟩
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -720,7 +716,7 @@ noncomputable def mnv4Blk0 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
 
 noncomputable def mnv4Blk1 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (80 * 28 * 28)) :=
-  (mnv4PreStridedBodyOfRow N mnv4Row1 w.b1).fwd (mnv4Blk0 N w x)
+  (mnv4StridedBodyOfRow N mnv4Row1 w.b1).fwd (mnv4Blk0 N w x)
 
 noncomputable def mnv4Blk2 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (80 * 28 * 28)) :=
@@ -728,7 +724,7 @@ noncomputable def mnv4Blk2 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
 
 noncomputable def mnv4Blk3 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (160 * 14 * 14)) :=
-  (mnv4PreStridedBodyOfRow N mnv4Row3 w.b3).fwd (mnv4Blk2 N w x)
+  (mnv4StridedBodyOfRow N mnv4Row3 w.b3).fwd (mnv4Blk2 N w x)
 
 noncomputable def mnv4Blk4 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (160 * 14 * 14)) :=
@@ -760,7 +756,7 @@ noncomputable def mnv4Blk10 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
 
 noncomputable def mnv4Blk11 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (256 * 7 * 7)) :=
-  (mnv4PreStridedBodyOfRow N mnv4Row11 w.b11).fwd (mnv4Blk10 N w x)
+  (mnv4StridedBodyOfRow N mnv4Row11 w.b11).fwd (mnv4Blk10 N w x)
 
 noncomputable def mnv4Blk12 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (256 * 7 * 7)) :=
@@ -805,7 +801,7 @@ noncomputable def mnv4Blk21 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
 /-- ⭐⭐ **The whole batch-BN MobileNetV4-Conv-M train step, tied.** Threading the net's own forward
     prefixes as the block inputs and an arbitrary loss cotangent `g` down through the certified
     head backward, the 21 certified UIB block backwards and the fused stage, every parameter
-    GRADIENT node of the net — stem 3, fused 6, thirteen ExtraDW-profile blocks × 12, four
+    GRADIENT node of the net — stem 3, fused 6, thirteen ExtraDW blocks × 12, four
     ConvNeXt-like × 9, four FFN × 6, head 8 — denotes the certified batched `Σ_n` gradient. That is
     **233**, the render's own census and `mnv4_fwd.mlir`'s signature minus `%x`. No free activation
     and no symbolic cotangent below the loss.
@@ -850,9 +846,9 @@ theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   mnv4StemTiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt x dyStem
   ∧ mnv4FusedTiedB N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg
       w.f0pbt xN cotN vN epsStr (mnv4Pre0 N w x) dy0
-  ∧ mnv4PreStridedTiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x) dy1
+  ∧ mnv4StridedTiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x) dy1
   ∧ mnv4ExtraDWTiedB N mnv4Row2 xN cotN vN epsStr w.b2 (mnv4Blk1 N w x) dy2
-  ∧ mnv4PreStridedTiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x) dy3
+  ∧ mnv4StridedTiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x) dy3
   ∧ mnv4ExtraDWTiedB N mnv4Row4 xN cotN vN epsStr w.b4 (mnv4Blk3 N w x) dy4
   ∧ mnv4ExtraDWTiedB N mnv4Row5 xN cotN vN epsStr w.b5 (mnv4Blk4 N w x) dy5
   ∧ mnv4ExtraDWTiedB N mnv4Row6 xN cotN vN epsStr w.b6 (mnv4Blk5 N w x) dy6
@@ -860,7 +856,7 @@ theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   ∧ mnv4ConvNeXtTiedB N mnv4Row8 xN cotN vN epsStr w.b8 (mnv4Blk7 N w x) dy8
   ∧ mnv4FfnTiedB N mnv4Row9 xN cotN vN epsStr w.b9 (mnv4Blk8 N w x) dy9
   ∧ mnv4ConvNeXtTiedB N mnv4Row10 xN cotN vN epsStr w.b10 (mnv4Blk9 N w x) dy10
-  ∧ mnv4PreStridedTiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x) dy11
+  ∧ mnv4StridedTiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x) dy11
   ∧ mnv4ExtraDWTiedB N mnv4Row12 xN cotN vN epsStr w.b12 (mnv4Blk11 N w x) dy12
   ∧ mnv4ExtraDWTiedB N mnv4Row13 xN cotN vN epsStr w.b13 (mnv4Blk12 N w x) dy13
   ∧ mnv4ExtraDWTiedB N mnv4Row14 xN cotN vN epsStr w.b14 (mnv4Blk13 N w x) dy14
@@ -878,9 +874,9 @@ theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
   exact ⟨mnv4_stem_tiedB N 112 112 xN cotN vN epsStr w.sW w.sb w.sE w.sg w.sbt x dyStem,
     mnv4_fused_tiedB N 56 56 w.f0cW w.f0cb w.f0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.f0pg
       w.f0pbt xN cotN vN epsStr (mnv4Pre0 N w x) dy0,
-    mnv4_prestrided_tiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x) dy1,
+    mnv4_strided_tiedB N mnv4Row1 xN cotN vN epsStr w.b1 (mnv4Blk0 N w x) dy1,
     mnv4_extradw_tiedB N mnv4Row2 xN cotN vN epsStr w.b2 (mnv4Blk1 N w x) dy2,
-    mnv4_prestrided_tiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x) dy3,
+    mnv4_strided_tiedB N mnv4Row3 xN cotN vN epsStr w.b3 (mnv4Blk2 N w x) dy3,
     mnv4_extradw_tiedB N mnv4Row4 xN cotN vN epsStr w.b4 (mnv4Blk3 N w x) dy4,
     mnv4_extradw_tiedB N mnv4Row5 xN cotN vN epsStr w.b5 (mnv4Blk4 N w x) dy5,
     mnv4_extradw_tiedB N mnv4Row6 xN cotN vN epsStr w.b6 (mnv4Blk5 N w x) dy6,
@@ -888,7 +884,7 @@ theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     mnv4_convnext_tiedB N mnv4Row8 xN cotN vN epsStr w.b8 (mnv4Blk7 N w x) dy8,
     mnv4_ffn_tiedB N mnv4Row9 xN cotN vN epsStr w.b9 (mnv4Blk8 N w x) dy9,
     mnv4_convnext_tiedB N mnv4Row10 xN cotN vN epsStr w.b10 (mnv4Blk9 N w x) dy10,
-    mnv4_prestrided_tiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x) dy11,
+    mnv4_strided_tiedB N mnv4Row11 xN cotN vN epsStr w.b11 (mnv4Blk10 N w x) dy11,
     mnv4_extradw_tiedB N mnv4Row12 xN cotN vN epsStr w.b12 (mnv4Blk11 N w x) dy12,
     mnv4_extradw_tiedB N mnv4Row13 xN cotN vN epsStr w.b13 (mnv4Blk12 N w x) dy13,
     mnv4_extradw_tiedB N mnv4Row14 xN cotN vN epsStr w.b14 (mnv4Blk13 N w x) dy14,

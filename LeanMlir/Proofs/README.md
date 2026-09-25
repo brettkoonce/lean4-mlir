@@ -216,11 +216,8 @@ net at paper depth, on the forward its artifacts run.
 ReLU6 input inside `(0,6)` with a BatchNorm window that holds at *every*
 input, so all 35 of that net's kink clauses are weight-only and its forward
 is non-constant (`Mnv2FullBSeal.sealX_nonconstant`).
-`MobileNetV4FullBSeal` is the same story one net over — but its fused stage
-is **swish**, which is the identity on no window at all, so its witness is
-grid-constant rather than a ramp: the two examples then straddle `β` at that
-BatchNorm and their swish outputs differ by a function of their gap alone
-(`BatchSeal.swishGap`), which is what lets the carrier through.
+`MobileNetV4FullBSeal` is the same story one net over, with a grid-constant
+witness (one value per example and channel) and 38 kink clauses, all weight-only.
 
 ## Axioms (0 project)
 

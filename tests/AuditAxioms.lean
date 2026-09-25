@@ -569,13 +569,10 @@ open Proofs
 #print axioms Mnv2FullBSeal.sealX_jacobian_nonzero
 #print axioms Mnv2FullBSeal.sealX_backward_nontrivial
 -- MobileNetV4-Conv-M's, on `mobilenetv4ForwardB_full` -- all 21 UIB blocks, the fused stage and
--- the two-conv head, batch BN, 224x224. The last kinked net in the book to get a witness, and it
--- had none at any depth before 2026-09-20. Its 54 kink clauses (counted off the block table by a `#guard`) are weight-only like
--- MobileNetV2's, but its fused stage is SWISH, which is the identity on no window: so this
--- witness's base is grid-constant rather than a ramp, the two examples straddle beta at the
--- fused BatchNorm, and the readout along the ray is `swishGap 160 (uF t 0) * Rr t` rather than
--- `t * Rr t`. The carrier threads 17 BatchNorms -- the stem, the fused stage's two, four in each
--- of the three channel-changing rows, and the head's two.
+-- the two-conv head, batch BN, 224x224. Its 38 kink clauses (counted off the block table by a
+-- `#guard`) are weight-only like MobileNetV2's. The witness is grid-constant (one value per example
+-- and channel), and the carrier threads 17 BatchNorms: the stem, the fused stage's two, four in
+-- each of the three channel-changing rows, and the head's two (the second at 1x1, after the pool).
 #print axioms Mnv4FullBSeal.sealX_nonconstant
 #print axioms Mnv4FullBSeal.sealX_jacobian_nonzero
 #print axioms Mnv4FullBSeal.sealX_backward_nontrivial
@@ -1348,7 +1345,7 @@ open Proofs
 -- MNv4 — the four UIB families COLLAPSED into one body
 #print axioms StableHLO.dwbReluBackBatchedGraph_faithful
 #print axioms StableHLO.dwbReluBstridedBackBatchedGraph_faithful
-#print axioms StableHLO.stemBackBatchedGraph_faithful
+#print axioms StableHLO.dwbBackBatchedGraph_faithful
 
 -- MNv4's NET level (T1, T2)
 #print axioms StableHLO.mobilenetv4ForwardB_full_has_vjp_at
@@ -1358,13 +1355,13 @@ open Proofs
 #print axioms StableHLO.mnv4ExtraDWBodyGraphB_faithful
 #print axioms StableHLO.mnv4ConvNeXtBodyGraphB_faithful
 #print axioms StableHLO.mnv4FfnBodyGraphB_faithful
-#print axioms StableHLO.mnv4PreStridedGraphB_faithful
+#print axioms StableHLO.mnv4StridedGraphB_faithful
 
 -- MNv4's T3 §1a tie
 #print axioms Mnv4TieB.mnv4_extradw_tiedB
 #print axioms Mnv4TieB.mnv4_convnext_tiedB
 #print axioms Mnv4TieB.mnv4_ffn_tiedB
-#print axioms Mnv4TieB.mnv4_prestrided_tiedB
+#print axioms Mnv4TieB.mnv4_strided_tiedB
 #print axioms Mnv4TieB.mnv4_stem_tiedB
 #print axioms Mnv4TieB.mnv4_fused_tiedB
 #print axioms Mnv4TieB.mnv4_head_tiedB
@@ -1374,6 +1371,8 @@ open Proofs
 -- MNv4's T6 -- the certified whole-net input gradient
 #print axioms Proofs.mnv4StemBBack_eq_vjp_backward
 #print axioms Proofs.cbReluBBack_eq_vjp_backward
+#print axioms Proofs.mnv4Hc2BBack_eq_vjp_backward
+#print axioms Proofs.mnv4ClsBBack_eq_vjp_backward
 #print axioms Proofs.mnv4B_full_has_vjp_at
 #print axioms Proofs.mnv4InputGradB_eq_mnv4B_full_vjp
 #print axioms Proofs.mnv4InputGradB_correct
@@ -2204,13 +2203,13 @@ open Proofs
 -- 4d PIECE 3 AT MOBILENETV4: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
 -- (MobileNetV4SyncB.lean + MobileNetV4SyncStepTieB.lean, planning/global_bn_verified.md §3.4, 2026-09-21)
 -- T2 twin: replica r's sync-BN forward graph denotes shard r of mobilenetv4ForwardB_full (R*N)
-#print axioms Proofs.StableHLO.den_swish_shard
+#print axioms Proofs.StableHLO.den_castIdx_shard
 #print axioms Proofs.StableHLO.mnv4StemGraphSync_shard
 #print axioms Proofs.StableHLO.mnv4FusedGraphSync_shard
 #print axioms Proofs.StableHLO.mnv4ExtraDWBodyGraphSync_shard
 #print axioms Proofs.StableHLO.mnv4ConvNeXtBodyGraphSync_shard
 #print axioms Proofs.StableHLO.mnv4FfnBodyGraphSync_shard
-#print axioms Proofs.StableHLO.mnv4PreStridedGraphSync_shard
+#print axioms Proofs.StableHLO.mnv4StridedGraphSync_shard
 #print axioms Proofs.StableHLO.mnv4SkipGraphSync_shard
 #print axioms Proofs.StableHLO.mnv4HeadGraphSync_shard
 #print axioms Proofs.StableHLO.mnv4FwdGraphSync_full_shard
@@ -2235,7 +2234,7 @@ open Proofs
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_extradw_syncTiedB
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_convnext_syncTiedB
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_ffn_syncTiedB
-#print axioms Proofs.MobileNetV4SyncTieB.mnv4_prestrided_syncTiedB
+#print axioms Proofs.MobileNetV4SyncTieB.mnv4_strided_syncTiedB
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_stem_syncTiedB
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_fused_syncTiedB
 #print axioms Proofs.MobileNetV4SyncTieB.mnv4_head_syncTiedB

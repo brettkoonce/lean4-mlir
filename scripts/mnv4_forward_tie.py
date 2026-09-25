@@ -26,11 +26,8 @@ tolerance (a tolerance that hides a convention bug is worse than no gate):
     exec only the prefix up to `def loss_fn`, which is every function `forward` needs and
     none of the loop.
 
-⚠ KNOWN MISMATCH THIS IS EXPECTED TO SURFACE (as of 2026-08-08): the stem. The reference
-calls `conv_bn(..., stride=(2,2), padding='SAME')`, and XLA 'SAME' on a 3x3/s2 at 224 pads
-(0,1) — asymmetric. The verified render emits symmetric (1,1). Both yield 112x112, so no
-shape check anywhere can see it. If this run reports a mismatch concentrated in the logits
-rather than a clean tie, that is the first place to look.
+The reference itself is pinned to timm's `mobilenetv4_conv_medium` by `scripts/mnv4_timm_parity.py`;
+this tie carries that to the render.
 
 Usage:
     scripts/mnv4_forward_tie.py                 # batch 2, seed 42
@@ -52,23 +49,13 @@ def parse_input_shapes(mlir_path, fn):
     return re.findall(r'tensor<([0-9x]*)f32>', m.group(1))
 
 
-def load_reference_forward(stem_symmetric=False):
-    """exec the reference's function prefix — the real generated code, minus its train loop.
-
-    `stem_symmetric` is a DIAGNOSTIC: it rewrites the stem's `padding='SAME'` to the symmetric
-    ((1,1),(1,1)) the verified render emits. If the tie passes only with this on, the stem
-    padding is the entire disagreement and nothing else is wrong — which is a different repair
-    from "the block order is wrong", so it is worth isolating rather than guessing."""
+def load_reference_forward():
+    """exec the reference's function prefix — the real generated code, minus its train loop."""
     src = open(REF_PY).read().split("\n")
     cut = next((i for i, l in enumerate(src) if l.startswith("def loss_fn")), None)
     if cut is None:
         sys.exit(f"{REF_PY}: no `def loss_fn` to cut at; the generator's shape changed")
     body = "\n".join(src[:cut])
-    if stem_symmetric:
-        old = "params[0][2], stride=(2,2), padding='SAME')"
-        if old not in body:
-            sys.exit("stem line not found — the reference generator's shape changed")
-        body = body.replace(old, "params[0][2], stride=(2,2), padding=((1,1),(1,1)))")
     mod = {}
     exec(body, mod)
     if "forward" not in mod:
@@ -85,8 +72,6 @@ def main():
     ap.add_argument("--scale", type=float, default=0.1)
     ap.add_argument("--tol", type=float, default=1e-4, help="max |Δ| over the logits")
     ap.add_argument("--backend", default="llvm-cpu", choices=_iree.BACKENDS)
-    ap.add_argument("--diag", action="store_true",
-                    help="also evaluate the reference with a SYMMETRIC stem, to isolate padding")
     args = ap.parse_args()
 
     if not os.path.exists(args.mlir):
@@ -114,19 +99,11 @@ def main():
     import jax.numpy as jnp
     x = arrays[0].reshape(args.batch, 3, 224, 224)          # %x is flat [B, 3*224*224]
     ws = arrays[1:]
-    params = [tuple(ws[i:i + 3]) for i in range(0, len(ws) - 2, 3)]  # 52 (W, γ, β) triples
+    params = [tuple(ws[i:i + 3]) for i in range(0, len(ws) - 2, 3)]  # 77 (W, γ, β) triples
     params.append((ws[-2].T, ws[-1]))                        # dense: [1280,K] -> reference's [K,1280]
     print(f"  reference params: {len(params)} entries "
           f"({sum(1 for p in params if len(p) == 3)} triples + dense)")
-    def evalref(sym):
-        return np.asarray(load_reference_forward(sym)(params, jnp.asarray(x))).astype(np.float64)
-    want = evalref(False)
-    if args.diag:
-        alt = evalref(True)
-        for lbl, w in (("reference as-is ('SAME' stem)", want),
-                       ("stem patched to SYMMETRIC (1,1)", alt)):
-            dd = np.abs(got - w)
-            print(f"  DIAG {lbl:34s} max|Δ| {dd.max():.3e}  mean {dd.mean():.3e}")
+    want = np.asarray(load_reference_forward()(params, jnp.asarray(x))).astype(np.float64)
 
     if got.shape != want.shape:
         sys.exit(f"SHAPE MISMATCH: render {got.shape} vs reference {want.shape}")
@@ -142,7 +119,6 @@ def main():
         return 0
     print(f"  ✗ FORWARD TIE FAILS (tol {args.tol:.1e})")
     print("    A clean tie is the ONLY evidence that the pre/post-DW order is right.")
-    print("    First suspect: the stem's padding (symmetric (1,1) here vs XLA 'SAME' (0,1)).")
     return 1
 
 

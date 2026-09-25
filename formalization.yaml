@@ -220,7 +220,7 @@ fidelity:
     3. SMOOTH-INPUT CONDITIONING. The strongest backprop-correctness results are pointwise
        (`HasVJPAt`, `vjp_comp_at`) under an explicit smooth-input hypothesis -- no ReLU kink, no
        pooling tie -- so every kinked net's whole-net VJP carries those clauses in its statement
-       (32 for ResNet-34, 48 for ResNet-50, 35 relu6 for MobileNetV2, 54 for MobileNetV4). The
+       (32 for ResNet-34, 48 for ResNet-50, 35 relu6 for MobileNetV2, 38 for MobileNetV4). The
        global instances (`relu_has_vjp`, `mlp_has_vjp`, `maxPool2_has_vjp3`) are codegen-shaped
        witnesses whose `correct` closes by `rfl`; the measure-zero non-smooth points are (2).
 
@@ -237,10 +237,9 @@ fidelity:
        35 relu6 clauses is weight-only, because each relu6 sits on a BatchNorm output whose margin
        holds at every input; the 2-channel per-example proxies it replaces are deleted.
        MobileNetV4-Conv-M's is on `mobilenetv4ForwardB_full` (`MobileNetV4FullBSeal`), all 21 UIB
-       blocks, the fused stage and the two-conv head -- its 54 relu clauses are weight-only for
-       the same reason, but its fused stage is SWISH, which is the identity on no window, so the
-       witness's base is grid-constant rather than a ramp: the two examples then straddle beta at
-       the fused BatchNorm and their swish outputs differ by a function of their gap alone. With it
+       blocks, the fused stage and the two-conv head, on timm's `mobilenetv4_conv_medium` (the
+       pinned spec, `scripts/mnv4_timm_parity.py`) -- its 38 relu clauses are weight-only for the
+       same reason, and its witness is grid-constant (one value per example and channel). With it
        every kinked net in the book is sealed on the forward its artifacts run. Plus trained-weight witnesses and a
        provable strict CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,
        `TrainedLinearDescent`).

@@ -32,6 +32,11 @@ def main : IO Unit := do
   let nClasses := 10
   let m := mobilenetv4AdamTrainStepFaithfulB B nClasses "1.0e-05"
   IO.FS.writeFile ".lake/build/mnv4_adam_train_step_b2.mlir" m
+  -- `scripts/grad_tie.py --net mnv4` reads a BATCH-8 copy: timm's `norm_head` normalises the pooled
+  -- `[B, 1280]` over the batch alone, which at B = 2 maps every channel to ±1 and leaves the
+  -- gradient tie nothing to measure.
+  IO.FS.writeFile ".lake/build/mnv4_adam_train_step_b8.mlir"
+    (mobilenetv4AdamTrainStepFaithfulB 8 nClasses "1.0e-05")
   let lines := m.splitOn "\n"
   IO.println s!"  rendered {lines.length} lines"
   let mut bad := 0
@@ -97,18 +102,19 @@ def main : IO Unit := do
   if !(← chk "eval forward binds every stat slot (0 missing)" missing 0) then bad := bad + 1
 
   -- ── ⭐ THE ACTIVATION-PAIRING GATE: every activation is masked by its OWN backward ──
-  -- The forward has 54 relu + 1 swish (`mnv4-fwd-smoke` pins those). So the whole train step must
-  -- show 54 `maximum` (the relus) paired with 54 `select` (their `selectPosB` masks), and
-  -- `logistic` exactly twice — once forward in the swish, once in `swishBackB`.
+  -- The forward has 38 relu and no swish (`mnv4-fwd-smoke` pins those; timm's Conv-M is ReLU
+  -- throughout, and its `dw_start` is BN only). So the whole train step must show 38 `maximum`
+  -- (the relus) paired with 38 `select` (their `selectPosB` masks), and no `logistic`.
   --
-  -- ⚠ This is what catches masking the swish site with `selectPos`: that renders 37 selects and
-  -- ONE logistic, keeps every shape and count elsewhere, type-checks, and descends. `mnv4-fwd-smoke`
-  -- cannot see it (it never looks at a backward) and neither can the arity checks above.
+  -- ⚠ This is what catches a backward that masks a site the forward never activated — a stray
+  -- `selectPosB` at a pre-DW renders 39+ selects against 38 relus, keeps every shape, type-checks,
+  -- and descends. `mnv4-fwd-smoke` cannot see it (it never looks at a backward) and neither can the
+  -- arity checks above.
   let n (pat : String) : Nat := (lines.filter (fun l => l.contains pat)).length
   let nRelu := n "stablehlo.maximum"
-  if !(← chk "relu forwards" nRelu 54) then bad := bad + 1
+  if !(← chk "relu forwards" nRelu 38) then bad := bad + 1
   if !(← chk "selectPos masks (= one per relu)" (n "stablehlo.select") nRelu) then bad := bad + 1
-  if !(← chk "logistic (swish fwd + swishBack)" (n "stablehlo.logistic") 2) then bad := bad + 1
+  if !(← chk "logistic (none)" (n "stablehlo.logistic") 0) then bad := bad + 1
 
   if bad == 0 then
     IO.println "  ✓ mnv4 train step: arity, entry point, forward-prefix and stat binding all hold"

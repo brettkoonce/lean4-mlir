@@ -33,18 +33,16 @@ ResNet-50's own shape at seven stages rather than eighteen.
 
 ## The stem is the only thing composed by hand, and it has to be
 
-⚠⚠ `CertLayer` demands a backward graph and **no render emits a gradient into `%x`** — there is no
-`convStridedXlaBackBatched` token, because the artifact's backward ends at the stem conv's WEIGHT
-gradient. That is EfficientNet-B0's situation exactly, so MNv4's stem stays a plain function and the apex is one `vjp_comp_at`.
+⚠⚠ `CertLayer` demands a backward graph and **no render emits a gradient into `%x`**: the
+artifact's backward ends at the stem conv's WEIGHT gradient. That is EfficientNet-B0's situation
+exactly, so MNv4's stem stays a plain function and the apex is one `vjp_comp_at`.
 
-⭐ **No new `Foundation` lemma was needed.** `bnReluStage_has_vjp_at` is generic in the inner op,
-so the XLA-padded stride-2 stem is one instantiation at `flatConvStride2Xla` — the same lemma
-`cbReluB_has_vjp_at` uses at `flatConv` and `dwbReluB_has_vjp_at` uses at `depthwiseFlat`. ⚠ Its
-relu6 twin is what `MobileNetV2FullBVJP.lean` instantiates one file over at the SAME padding; the
-two stems differ in exactly one token, which is why they are separate definitions.
+⭐ **No new `Foundation` lemma was needed.** The stem is ResNet's symmetric strided conv-bn-relu
+(`cbReluStridedB`), so its VJP is `cbReluStridedB_has_vjp_at` — itself `bnReluStage_has_vjp_at` at
+`flatConvStride2`.
 
-⚠ Pointwise (`HasVJPAt`), not global, and necessarily: relu is kinked. The fused stage is the one
-stage that contributes nothing — swish is smooth, so its `ok` is `True`.
+⚠ Pointwise (`HasVJPAt`), not global, and necessarily: relu is kinked, at every stage including
+stage 0 (timm's `EdgeResidual` is relu).
 
 ⭐ `N` is a binder, so this covers every batch size, and the artifacts' `N` is the PER-REPLICA
 batch (`DataParallel.lean`, §4d).
@@ -65,26 +63,23 @@ namespace StableHLO
 def Mnv4StemSmoothAtB (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) : Prop :=
-  ∀ k, bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2Xla Ws bs) x) k ≠ 0
+  ∀ k, bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2 Ws bs) x) k ≠ 0
 
-/-- ⭐ The stem's VJP: `bnReluStage_has_vjp_at` at the XLA-`SAME` strided conv. That lemma takes
-    the inner op as a parameter, so the stride-2 stem is the same construction as every stride-1
-    stage — zero new analytic content. -/
+/-- ⭐ The stem's VJP: `cbReluStridedB_has_vjp_at`, the symmetric strided conv-bn-relu — zero new
+    analytic content. -/
 noncomputable def mnv4StemB_has_vjp_at (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : Mnv4StemSmoothAtB N h w Ws bs εs γs βs x) :
     HasVJPAt (mnv4StemB N h w Ws bs εs γs βs) x :=
-  bnReluStage_has_vjp_at N (flatConvStride2Xla Ws bs)
-    (flatConvStride2Xla_differentiable Ws bs) (flatConvStride2Xla_has_vjp Ws bs) εs hεs γs βs x hs
+  cbReluStridedB_has_vjp_at N Ws bs εs hεs γs βs x hs
 
 theorem mnv4StemB_differentiableAt (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : Mnv4StemSmoothAtB N h w Ws bs εs γs βs x) :
     DifferentiableAt ℝ (mnv4StemB N h w Ws bs εs γs βs) x :=
-  bnReluStage_differentiableAt N (flatConvStride2Xla Ws bs)
-    (flatConvStride2Xla_differentiable Ws bs) εs hεs γs βs x hs
+  cbReluStridedB_differentiableAt N Ws bs εs hεs γs βs x hs
 
 -- ════════════════════════════════════════════════════════════════
 -- § The whole hypothesis budget, in one structure
@@ -94,15 +89,14 @@ theorem mnv4StemB_differentiableAt (N h w : Nat) {ic oc kH kW : Nat}
     each group's `.ok` at the activation that group actually sees.**
 
     Each group field is a conjunction `CertLayer.comp` assembled from its blocks' conditions —
-    each relu's condition stated at the activation THAT stage sees, in execution order. The fused
-    stage contributes nothing (swish is smooth, `ok = True`), the eighteen skips contribute their
-    bodies' conditions unchanged (an identity skip adds no kink), and GAP and dense contribute
-    nothing. Roughly sixty clauses in total, none of which had to be written down. -/
+    each relu's condition stated at the activation THAT stage sees, in execution order. The
+    eighteen skips contribute their bodies' conditions unchanged (an identity skip adds no kink),
+    and the BN-only pre-DWs, the projects, GAP, the head casts and dense contribute nothing. Roughly sixty clauses in total, none of which had to be written down. -/
 structure Mnv4SmoothAt (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Prop where
   /-- the stem's relu is away from its kink at the image. -/
   stem : Mnv4StemSmoothAtB N 112 112 w.sW w.sb w.sE w.sg w.sbt x
-  /-- the fused stage at the stem's output. ⭐ Vacuous: swish is smooth, so this is `True ∧ True`. -/
+  /-- the fused stage's relu at the stem's output (its project contributes `True`). -/
   fused : (mnv4FusedStack N w).ok (mnv4Pre0 N w x)
   /-- rows 1–2 at 56×56. -/
   g28 : (mnv4Res28Layer N w).ok (mnv4Pre1 N w x)

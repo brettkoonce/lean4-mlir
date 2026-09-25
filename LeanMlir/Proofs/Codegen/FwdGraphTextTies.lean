@@ -173,14 +173,15 @@ def mnv4UibW0 (s : UibSpec) : UibParams s :=
    fun _ _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩
 
 /-- `pretty` of the T2 graph for one table row, dispatched as `mnv4FwdGraphB_full` builds it: a
-    stride-2 row is `mnv4PreStridedGraphB` (all three of Conv-M's are pre-strided); a stride-1 row
-    is its family's body plus the identity skip (`mnv4SkipGraphB`, spelled out here because the
-    leaf is width-polymorphic and a skip row has `ic = oc` only numerically). A post-strided (IB)
-    row has no T2 graph — Conv-M has none — and prints `""`, so a table that grew one fails. -/
+    stride-2 row is `mnv4StridedGraphB` (the post-DW carries the stride; all three of Conv-M's have
+    a pre-DW); a stride-1 row is its family's body plus the identity skip (`mnv4SkipGraphB`, spelled
+    out here because the leaf is width-polymorphic and a skip row has `ic = oc` only numerically).
+    A row with no T2 graph — an IB block, or a strided row without a pre-DW — prints `""`, so a
+    table that grew one fails. -/
 def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
   if s.stride2 then
     if s.preDWk > 0 then
-      prettyText B (mnv4PreStridedGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _))
+      prettyText B (mnv4StridedGraphB "1.0e-03" B s (mnv4UibW0 s) (leaf "%in" _))
     else ""
   else
     let body : SHlo (B * (s.oc * s.h * s.h)) :=
@@ -193,12 +194,12 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
     if s.postDWk > 0 ∧ s.preDWk = 0 then "" else
     prettyText B (.addVB body (leaf "%in" _))
 
--- Stem: 3×3/s2 XLA-SAME, 224 → 112.
+-- Stem: 3×3/s2 symmetric, 224 → 112.
 #guard textOf (mnv4StemFwdB 2 "1.0e-03") (·.code) ==
   prettyText 2 (mnv4StemGraphB "1.0e-03" 2 112 112 (ic := 3) (oc := 32) (kH := 3) (kW := 3)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0) (leaf "%x" _))
 
--- Fused stage 0: 3×3/s2 conv (32 → 128) → BN → swish → 1×1 project (→ 48) → BN, 112² → 56².
+-- Fused stage 0: 3×3/s2 conv (32 → 128) → BN → relu → 1×1 project (→ 48) → BN, 112² → 56².
 #guard textOf (fusedMbConvFwdStridedB 2 32 48 4 3 56 .train "1.0e-03" "0" "%in") (·.code) ==
   prettyText 2 (mnv4FusedGraphB "1.0e-03" 2 56 56 (ic := 32) (mid := 128) (oc := 48) (kH := 3) (kW := 3)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)
@@ -208,7 +209,7 @@ def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
 #guard mnv4Blocks.length == 21 && mnv4Blocks.all fun s =>
   textOf (uibFwdDispatch 2 s .train "1.0e-03" "%in") (·.code) == mnv4RowGraphText 2 s
 
--- Head: 1×1 (256 → 960) → BN → relu → 1×1 (→ 1280) → BN → relu → GAP(7²) → dense(→ 10).
+-- Head: 1×1 (256 → 960) → BN → relu → GAP(7²) → 1×1 (→ 1280) → BN → relu → dense(→ 10).
 #guard textOf (mnv4HeadFwdB 2 10 "1.0e-03" "%in") (·.code) ==
   prettyText 2 (mnv4HeadGraphB "1.0e-03" 2 7 7 (c := 256) (mid := 960) (oc := 1280) (nCls := 10)
     (fun _ _ _ _ => 0) (fun _ => 0) 0 (fun _ => 0) (fun _ => 0)

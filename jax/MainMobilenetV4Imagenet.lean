@@ -22,12 +22,15 @@ import Jax
 
 def mobilenetV4ConvMImagenet : NetSpec where
   name := "MobileNetV4-Conv-M (ImageNet, bf16)"
+  -- timm `mobilenetv4_conv_medium` pads every strided conv symmetrically (`(k-1)//2`); XLA `SAME`
+  -- put the stem's extra row on the high side. See `PadStyle`.
+  convPadStyle := .symmetric
   imageH := 224
   imageW := 224
   layers := [
     .convBn 3 32 3 2 .same,                       -- 224→112  stem
     -- stage 0 (FusedIB): er_r1_k3_s2_e4_c48
-    .fusedMbConv 32 48 4 3 2 1 false,             -- 112→56
+    .fusedMbConv 32 48 4 3 2 1 false .relu,       -- 112→56
     -- stage 1: 2× UIB
     .uib  48  80 4 2 3 5,                          -- 56→28   ExtraDW
     .uib  80  80 2 1 3 3,                          --         ExtraDW
@@ -52,10 +55,10 @@ def mobilenetV4ConvMImagenet : NetSpec where
     .uib 256 256 4 1 0 0,                          --         FFN      (uir_r2 #1)
     .uib 256 256 4 1 0 0,                          --         FFN      (uir_r2 #2)
     .uib 256 256 2 1 5 0,                          --         ConvNeXt
-    -- head: cn_r1_k1_s1_c960 → conv_head 1280 → GAP → FC
+    -- head: cn_r1_k1_s1_c960 → GAP → conv_head 1280 → norm_head → FC (timm order)
     .convBn 256 960 1 1 .same,                     -- 7  cn to 960
-    .convBn 960 1280 1 1 .same,                    -- 7  conv_head (num_features)
-    .globalAvgPool,
+    .globalAvgPool,                               -- 7→1  (timm pools BEFORE conv_head)
+    .convBn 960 1280 1 1 .same,                    -- 1  conv_head (num_features), on the POOLED features
     .dense 1280 1000 .identity                     -- 1000-class head
   ]
 
