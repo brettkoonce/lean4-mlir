@@ -1,0 +1,14 @@
+  ▶ mnv4/f32/fed (variant adamdp64, bs 64, workers 8) ...
+    → 233 ms/step (min 200, wait 33 ms, 5004 steps/ep, 195s)
+  ▶ mnv4/bf16/fed (variant adamdp64bf16, bs 64, workers 8) ...
+    → 168 ms/step (min 120, wait 48 ms, 5004 steps/ep, 232s)
+  ▶ mnv4/f32/synth (variant adamdp64, bs 64, workers 8) ...
+    → 167 ms/step (min 164, wait 3 ms, 5004 steps/ep, 119s)
+  ▶ mnv4/bf16/synth (variant adamdp64bf16, bs 64, workers 8) ...
+    → 97 ms/step (min 95, wait 2 ms, 5004 steps/ep, 108s)
+ALL DONE -> runs/2026-09-25-mnv4-timm-probe/probe.tsv
+net   variant       prec  arm    bs  workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+mnv4  adamdp64      f32   fed    64  8        233     200     254     234      33       5004      195        
+mnv4  adamdp64bf16  bf16  fed    64  8        168     120     192     280      48       5004      232        
+mnv4  adamdp64      f32   synth  64  8        167     164     168     167      3        5004      119        
+mnv4  adamdp64bf16  bf16  synth  64  8        97      95      98      97       2        5004      108        

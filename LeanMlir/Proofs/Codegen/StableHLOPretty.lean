@@ -3115,7 +3115,12 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             pure (s!"    {o} = stablehlo.logistic {r} : {ty d}\n", o)
           pure (txt4, res4 :: st)
       | "dropoutP", [mN], [_N, n] => do
-          let (txt4, res4) ← liftPointwise B n r fun r d => do
+          -- ⚠⚠ NEVER LIFTED to the operand's recorded 4-D shape (`liftPointwise`), unlike the other
+          -- pointwise ops: the mask is a graph INPUT whose type is fixed at `tensor<B×n>`, so a 4-D
+          -- emission types `mN` two ways and the artifact does not parse. MobileNetV4's head relu
+          -- carries `[1280,1,1]` from its 1×1 BN and hit exactly that (2026-09-25); EfficientNet's
+          -- GAP output has no recorded shape, so its renders are unchanged.
+          let (txt4, res4) ← (fun r d => do
             -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C): the per-ELEMENT inverted mask, applied
             -- immediately before the classifier dense. `mN` is a graph INPUT of type
             -- `tensor<B×n×f32>` — one value per (example, feature), computed on the host.
@@ -3131,7 +3136,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
             -- into the supplied mask, so the ones-mask forward is the exact identity and this op can
             -- be emitted in the forward artifact without rescaling eval.
             let o ← fresh
-            pure (s!"    {o} = stablehlo.multiply {mN}, {r} : {ty d}\n", o)
+            pure (s!"    {o} = stablehlo.multiply {mN}, {r} : {ty d}\n", o)) r [B, n]
           pure (txt4, res4 :: st)
       | "swishBackP", [x], [_N, n] => do
           let (txt4, res4) ← liftPointwise2 B n r x fun r x d => do

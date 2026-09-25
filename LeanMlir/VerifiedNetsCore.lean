@@ -1644,8 +1644,11 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
     .globalAvgPool,                     -- timm pools BEFORE conv_head
     .convBnNB 960 1280 1 1,
     .dense 1280 1000 ]
-  blurb := "MobileNetV4-Conv-S on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the MNv4 reference augmentation"
+  blurb := "MobileNetV4-Conv-M on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the MNv4 reference augmentation"
   bnChannels := mobilenetv4Verified.bnChannels
+  -- ▶ classifier dropout at the reference's 0.1 (keep 0.9) on the 1280-wide head, read only by
+  -- `do` variants (`VerifiedVariant.cdOn`); `adamdp64*` carry no mask and are untouched.
+  dropoutKeep := some (0.9, 1280)
 
 -- Exactly one parameter shape may differ (the head), and the BN layout must be IDENTICAL — the
 -- running-stat region is positional, so a drift there misaligns every frozen statistic at eval.

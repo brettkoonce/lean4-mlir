@@ -1,0 +1,9 @@
+  ▶ mnv4w6/bf16/fed (variant adamdp128bf16, bs 128, workers 6) ...
+    → 282 ms/step (min 186, wait 96 ms, 2502 steps/ep, 351s)
+  ▶ mnv4w8/bf16/fed (variant adamdp128bf16, bs 128, workers 8) ...
+    → 320 ms/step (min 185, wait 135 ms, 2502 steps/ep, 520s)
+ALL DONE -> runs/2026-09-25-mnv4-timm-probe/probe_b128_workers.tsv
+net     variant        prec  arm  bs   workers  med_ms  min_ms  p90_ms  mean_ms  wait_ms  steps_ep  elapsed_s  note
+mnv4w6  adamdp128bf16  bf16  fed  128  6        282     186     324     523      96       2502      351        
+mnv4w8  adamdp128bf16  bf16  fed  128  8        320     185     501     678      135      2502      520        
+RUN4 DONE

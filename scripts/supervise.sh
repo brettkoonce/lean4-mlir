@@ -10,6 +10,10 @@
 #     DRY_RUN=1 scripts/supervise.sh <job>  # print the plan and exit, run nothing
 #     ONCE=1 scripts/supervise.sh <job>     # one foreground run with the job's env, no restarts
 #     RUNDIR=<dir> scripts/supervise.sh <job>   # logs there (default: runs/<date>-<job>, reused on resume)
+#     START_AT=00:00 STOP_AT=08:00 setsid nohup scripts/supervise.sh <job> >/dev/null 2>&1 &
+#                                           # one overnight CHUNK: wait until START_AT, train, and be
+#                                           # off the GPUs by STOP_AT; the next chunk resumes from the
+#                                           # checkpoint (see OVERNIGHT CHUNKS below)
 #
 # `lake run <job>` (and `lake run <job> plan|once`) is the same thing from the lakefile, and
 # `lake run imagenet` walks the whole tier — see the ImageNet section of lakefile.lean.
@@ -42,9 +46,24 @@
 #   STALL_SECS   — kill+restart if the log is silent this long (default 1800, 0 = off)
 #   MAX_ATTEMPTS — default 60
 #   PRECHECK     — a function; non-zero exit aborts before the first launch
+#   POLL_SECS    — watch-loop interval (default 10)
+#   EPOCH_SECS   — seconds one epoch takes, eval included; the STOP_AT planner's estimate until
+#                  it has timed an epoch of its own (default 0 = unknown)
 #   ETA          — free text: the wall-clock on file for this job and the box it was measured
 #                  on. Printed in the plan, never computed — v1 reports what the conf's own
 #                  header measured, so `lake run imagenet` can say what it is about to cost.
+#
+# OVERNIGHT CHUNKS (START_AT / STOP_AT, from the environment or the conf). Both take anything
+# `date -d` reads ("00:00", "23:30", "2026-09-26 00:00"); a bare time of day means its NEXT
+# occurrence. START_AT sleeps before the first launch. STOP_AT is when the GPUs must be free:
+#   * soft stop — at each completed epoch, if the next one (the longest epoch timed so far, or
+#     EPOCH_SECS before one has been, plus 5%) would end past STOP_AT, the run is stopped there, on
+#     the boundary, so the chunk loses nothing;
+#   * hard stop — at STOP_AT itself, whatever is running is killed (the partial epoch is lost);
+#   * neither a new attempt nor a cooldown wait is started past it.
+# A chunk that stops early exits 0 with "⏸ CHUNK DONE"; the next launch resumes from epoch_now,
+# and the trainer's schedule is fixed by its own epoch count, so N chunks train the same run
+# as one continuous launch.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
@@ -55,10 +74,27 @@ CONF="scripts/jobs/${JOB}.conf"
 
 # ── defaults, then the job overrides them ──────────────────────────────────────
 REST_EPOCHS=""; REST_SECS=1800; TEMP_MAX=0; TEMP_RESUME=""; STALL_SECS=1800
-MAX_ATTEMPTS=60; ENV_EXTRA=(); PRECHECK=""; RECIPE=""
+MAX_ATTEMPTS=60; ENV_EXTRA=(); PRECHECK=""; RECIPE=""; POLL_SECS=10
+# the environment wins over the conf for the chunk window, so one conf serves every night
+ENV_START_AT="${START_AT:-}"; ENV_STOP_AT="${STOP_AT:-}"; ENV_EPOCH_SECS="${EPOCH_SECS:-}"
+EPOCH_SECS=0
 # shellcheck disable=SC1090
 . "$CONF"
 : "${TEMP_RESUME:=$(( TEMP_MAX > 12 ? TEMP_MAX - 12 : TEMP_MAX ))}"
+START_AT="${ENV_START_AT:-${START_AT:-}}"; STOP_AT="${ENV_STOP_AT:-${STOP_AT:-}}"
+EPOCH_SECS="${ENV_EPOCH_SECS:-$EPOCH_SECS}"
+
+# `date -d` of a bare time of day is TODAY's; a time already past means tomorrow's.
+# $2 = the epoch second it must fall after (default now).
+next_epoch_s() {
+  local t after="${2:-$(date +%s)}"
+  t="$(date -d "$1" +%s 2>/dev/null)" || { echo "⛔ cannot read time '$1'" >&2; return 1; }
+  while [ "$t" -le "$after" ]; do t=$(( t + 86400 )); done
+  echo "$t"
+}
+START_S=""; STOP_S=""
+if [ -n "$START_AT" ]; then START_S="$(next_epoch_s "$START_AT")" || exit 2; fi
+if [ -n "$STOP_AT" ]; then STOP_S="$(next_epoch_s "$STOP_AT" "${START_S:-$(date +%s)}")" || exit 2; fi
 
 # ── THE NAME IS A CLAIM, SO CHECK IT ──────────────────────────────────────────
 # A job is `<net>-<recipe>[-<axis>...]-<n>gpu`, and `<recipe>` is not decorative.
@@ -165,7 +201,18 @@ say "START job=$JOB devs=$DEVS epochs=$EPOCHS rest_after=[${REST_EPOCHS:-none}] 
 temp_max=${TEMP_MAX:-off} stall=${STALL_SECS}s logs=$RUNDIR"
 say "cmd: ${CMD[*]}"
 say "eta: ${ETA:-not on file}"
+[ -n "$START_S" ] && say "chunk start: $(date -d "@$START_S" '+%F %T')"
+[ -n "$STOP_S" ] && say "chunk stop:  $(date -d "@$STOP_S" '+%F %T') (epoch estimate ${EPOCH_SECS}s until one is timed)"
 if [ "${DRY_RUN:-0}" != "0" ]; then say "DRY_RUN — nothing launched"; exit 0; fi
+
+if [ -n "$START_S" ] && [ "$(date +%s)" -lt "$START_S" ]; then
+  say "💤 waiting for chunk start $(date -d "@$START_S" '+%F %T')"
+  while [ "$(date +%s)" -lt "$START_S" ]; do
+    left=$(( START_S - $(date +%s) )); sleep $(( left < 30 ? (left > 0 ? left : 1) : 30 ))
+  done
+  # the box may have picked up work since the plan was made; the checks run again at launch
+  if [ -n "$PRECHECK" ] && ! $PRECHECK; then say "⛔ PRECHECK failed at chunk start — not launching"; exit 1; fi
+fi
 
 # ONCE: the job's env and command, once, in the foreground — the incantation the book used to
 # print, minus the typing. No attempts loop, no AER/thermal/stall policy, no log tee; Ctrl-C ends
@@ -190,6 +237,24 @@ trap cleanup EXIT
 # Disarm EXIT first, or `exit` here re-enters `cleanup` and logs the takedown twice.
 trap 'trap - EXIT; cleanup; exit 130' INT TERM
 
+# Seconds the next epoch is budgeted: the longest timed so far (eval epochs are the long ones), else
+# EPOCH_SECS; +5%. 0 = unknown, and then only the hard stop applies.
+EPOCH_MAX=0
+epoch_budget() {
+  local e="$EPOCH_MAX"; [ "$e" -gt 0 ] || e="$EPOCH_SECS"
+  echo $(( e + e / 20 ))
+}
+# true when there is no time left for another epoch before STOP_AT
+past_stop() {
+  [ -n "$STOP_S" ] || return 1
+  local now b; now="$(date +%s)"; b="$(epoch_budget)"
+  [ "$now" -ge "$STOP_S" ] || [ $(( now + b )) -gt "$STOP_S" ]
+}
+chunk_done() {
+  say "⏸ CHUNK DONE — epoch $(epoch_now)/$EPOCHS at $(date '+%F %T') (stop $(date -d "@$STOP_S" '+%T')); GPUs free"
+  exit 0
+}
+
 next_rest() {  # first rest epoch strictly ahead of $1; 999 = none left
   for e in $REST_EPOCHS; do [ "$1" -lt "$e" ] && { echo "$e"; return; }; done
   echo 999
@@ -203,6 +268,8 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   if [ "$EP" -ge "$EPOCHS" ]; then
     say "✅ COMPLETE — $EP/$EPOCHS epochs"; exit 0
   fi
+
+  if past_stop; then chunk_done; fi
 
   REST_AT="$(next_rest "$EP")"
   say "attempt $attempt: resuming at epoch $EP/$EPOCHS (next rest: $REST_AT)"
@@ -221,6 +288,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   say "  launched PID=$PID PGID=${PGID:-?}"
 
   result="unknown"
+  LAST_EP="$EP"; LAST_EP_S="$(date +%s)"; FIRST_EP=1
   while kill -0 "$PID" 2>/dev/null; do
     if aer_since "$START"; then
       say "  !!! PCIe AER — killing PID=$PID"; kill_run "$PID"; sleep 2
@@ -228,6 +296,27 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
     fi
     NOW="$(epoch_now)"; NOW="${NOW:-0}"
     if [ "$NOW" -ge "$EPOCHS" ]; then result="done"; kill_run "$PID"; break; fi
+    if [ -n "$STOP_S" ]; then
+      if [ "$NOW" -gt "$LAST_EP" ]; then
+        # an epoch just landed. The attempt's first one carries compile + warm-up, so it only
+        # counts when nothing better is known.
+        # a poll can span several short epochs; charge each its share
+        T_EP=$(( ( $(date +%s) - LAST_EP_S ) / ( NOW - LAST_EP ) ))
+        if [ "$FIRST_EP" = 0 ] || [ "$EPOCH_MAX" -eq 0 ]; then
+          [ "$T_EP" -gt "$EPOCH_MAX" ] && EPOCH_MAX="$T_EP"
+        fi
+        FIRST_EP=0; LAST_EP="$NOW"; LAST_EP_S="$(date +%s)"
+        say "  epoch $NOW done in ${T_EP}s (budget for the next: $(epoch_budget)s)"
+        if past_stop; then
+          say "  ⏸ epoch $((NOW+1)) would end past $(date -d "@$STOP_S" '+%T') — stopping on the boundary"
+          kill_run "$PID"; sleep 2; result="deadline"; break
+        fi
+      fi
+      if [ "$(date +%s)" -ge "$STOP_S" ]; then
+        say "  ⏸ HARD STOP at $(date -d "@$STOP_S" '+%T') — killing mid-epoch $((NOW+1)) (partial epoch lost)"
+        kill_run "$PID"; sleep 2; result="deadline"; break
+      fi
+    fi
     if [ "$REST_AT" -ne 999 ] && [ "$NOW" -ge "$REST_AT" ]; then
       say "  💤 epoch $NOW reached — planned cooldown ${REST_SECS}s"
       kill_run "$PID"; sleep 2; result="rest"; break
@@ -248,7 +337,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
         kill_run "$PID"; sleep 2; result="stall"; break
       fi
     fi
-    sleep 10
+    sleep "$POLL_SECS"
   done
   wait "$PID" 2>/dev/null
   [ "$result" = "unknown" ] && result="exited"
@@ -259,6 +348,8 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
   EP2="$(epoch_now)"; EP2="${EP2:-0}"
   if [ "$EP2" -ge "$EPOCHS" ]; then say "✅ COMPLETE — $EP2/$EPOCHS epochs"; exit 0; fi
 
+  if [ "$result" = "deadline" ]; then chunk_done; fi
+
   case "$result" in
     rest) sleep "$REST_SECS"; say "  cooldown over" ;;
     hot)
@@ -266,6 +357,7 @@ while [ "$attempt" -lt "$MAX_ATTEMPTS" ]; do
       for _ in $(seq 1 240); do
         T="$(hottest)"; [ -z "$T" ] && break
         [ "$T" -le "$TEMP_RESUME" ] && break
+        [ -n "$STOP_S" ] && [ "$(date +%s)" -ge "$STOP_S" ] && break
         sleep 15
       done
       say "  cooled to $(hottest)°C" ;;

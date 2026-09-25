@@ -2,6 +2,7 @@ import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Proofs.Codegen.SyncBnSites
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 import LeanMlir.Proofs.Codegen.RenderKit
+import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
 /-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/archive/mnv4_verified.md` phase 3)
 
@@ -380,7 +381,10 @@ structure Mnv4FwdRec where
   gap : String          -- GAP of head relu 1, `[B, 960]` (= head conv 2's input)
   hc : String           -- head conv 2 out (960→1280, at 1×1) (= head-BN input)
   hn : String           -- head BN out   (= head-relu pre-activation)
-  hr : String           -- head relu out (= dense input)
+  hr : String           -- head relu out
+  -- the dense's input: `hr`, or `hr` under the classifier-dropout mask `%do`. The classifier
+  -- WEIGHT gradient reads this, not `hr` (with dropout on the two differ; see the train step).
+  cin : String
   last : String         -- the last block's output (= head conv input)
   -- ⭐ SYNC-BN: the stem's and the two head BNs' all-reduced packed stats (`""` at one replica).
   sst : String := ""
@@ -426,6 +430,7 @@ structure Mnv4HeadFwdB where
   hst : String
   hr : String
   gap : String
+  cin : String
   log : String
 
 /-- Head forward, timm's order: 1×1 (256→960) → BN → relu at 7×7 (Conv-M's `cn_r1_k1_s1_c960`),
@@ -434,7 +439,11 @@ structure Mnv4HeadFwdB where
     channel). Until 2026-09-24 `conv_head` ran at 7×7 before the pool; batch BN and relu do not
     commute with pooling, so that was a different function with the same parameter count. -/
 def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .train)
-    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false)
+    -- ▶ CLASSIFIER DROPOUT (`%do`, the driver's inverted per-element mask) between the head relu
+    -- and the dense, where timm's `drop_rate` and the JAX reference put it. At `false` no `pretty`
+    -- call happens, so every existing render is byte-identical.
+    (cd : Bool := false) :
     StateM Proofs.StableHLO.EmitS Mnv4HeadFwdB := do
   let z7     : Vec (B*(256*7*7)) := fun _ => 0
   let zH1k   : Kernel4 960 256 1 1 := fun _ _ _ _ => 0
@@ -457,11 +466,14 @@ def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .t
     (.convAt bf16 (ic := 960) (oc := 1280) (h := 1) (w := 1) zrnd "%hW" "%zb1280" zHk z1280) (.operand nGap zG))
   let (cHn, nHn, hst) ← mnv4Bn B 1280 1 mode epsStr "%hg" "%hbt" "hn" nHc replicas sync
   let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu (n := 1280*1*1)) (.operand nHn zH1))
+  let (cDo, nCin) ← if cd then
+      pretty B (.dropoutB (N := B) (n := 1280) doName z1280b (.operand nHr z1280b))
+    else pure ("", nHr)
   let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
-    (.operand nHr z1280b))
-  pure { code := cH1c ++ cH1n ++ cH1r ++ cGap ++ cHc ++ cHn ++ cHr ++ cLog,
+    (.operand nCin z1280b))
+  pure { code := cH1c ++ cH1n ++ cH1r ++ cGap ++ cHc ++ cHn ++ cHr ++ cDo ++ cLog,
          h1c := nH1c, h1n := nH1n, h1st := h1st, h1r := nH1r,
-         hc := nHc, hn := nHn, hst := hst, hr := nHr, gap := nGap, log := nLog }
+         hc := nHc, hn := nHn, hst := hst, hr := nHr, gap := nGap, cin := nCin, log := nLog }
 
 /-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → 10 classes.
 
@@ -492,7 +504,9 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     -- ▶ TRAILING and defaulted, so `@mnv4_fwd` / `@mnv4_fwd_eval` re-render byte-identical.
     (bf16 : Bool := false)
     -- ▶ SYNC-BN (`planning/global_bn_verified.md` §3.4), trailing and defaulted off likewise.
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
+    (replicas : Nat := 1) (sync : Bool := false)
+    -- ▶ classifier dropout, train step only (`mnv4HeadFwdB`); defaulted off likewise.
+    (cd : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu (symmetric pad; see `mnv4StemFwdB`) ═══
   let st ← mnv4StemFwdB B epsStr mode bf16 replicas sync
   let (nStc, nStn, sst, nStr) := (st.c, st.n, st.st, st.o)
@@ -513,7 +527,7 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     cur := r.o
 
   -- ═══ head: 1×1 conv-BN-relu (256→960) → GAP(7×7) → 1×1 conv-BN-relu (960→1280) → dense ═══
-  let hd ← mnv4HeadFwdB B nClasses epsStr cur mode bf16 replicas sync
+  let hd ← mnv4HeadFwdB B nClasses epsStr cur mode bf16 replicas sync cd
   let (nH1c, nH1n, h1st, nH1r) := (hd.h1c, hd.h1n, hd.h1st, hd.h1r)
   let (nHc, nHn, hst, nHr, nGap, nLog) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap, hd.log)
 
@@ -521,7 +535,7 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
          logits := nLog, stc := nStc, stn := nStn, str := nStr,
          f0 := f0, blocks := blocks, inputs := inputs,
          h1c := nH1c, h1n := nH1n, h1r := nH1r,
-         hc := nHc, hn := nHn, hr := nHr, gap := nGap, last := cur,
+         hc := nHc, hn := nHn, hr := nHr, gap := nGap, cin := hd.cin, last := cur,
          sst := sst, h1st := h1st, hst := hst }
 
 /-- Every distinct channel width a bias-free conv in this net binds `%zb{c}` at: the stem, the fused
@@ -826,6 +840,23 @@ def mnv4AdamVariant (B replicas : Nat)
   (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B) ++
   (if bf16 then "bf16" else "")
 
+/-- **The variant slug of a recipe render** — the JAX reference's tier-2 recipe
+    (planning/mnv4_half_pair.md). `opt = none` is `mnv4AdamVariant`, so every committed spelling
+    is unchanged. Markers in the order the driver's predicates read them (`VerifiedVariant`):
+    `ema` first (`emaOn` is a PREFIX test), then the optimizer with its `k` (`accK` parses it back
+    out after `acc[dp]`), the per-replica batch, `wx`, `do`, the decay mark, `bf16`. -/
+def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (ema wdExclude : Bool)
+    (wdStr : String) (cd : Bool) : String :=
+  match opt with
+  | none => mnv4AdamVariant B replicas bf16
+  | some o =>
+    let dp := if replicas ≤ 1 then "" else "dp"
+    let core := match o with
+      | .adamwAccum k => s!"acc{dp}{k}x"
+      | _ => s!"adam{dp}"
+    (if ema then "ema" else "") ++ core ++ toString B ++ (if wdExclude then "wx" else "") ++
+      (if cd then "do" else "") ++ wdVariantMark o wdStr ++ (if bf16 then "bf16" else "")
+
 -- ════════════════════════════════════════════════════════════════
 -- § The whole-net batched AdamW train step
 -- ════════════════════════════════════════════════════════════════
@@ -855,8 +886,16 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (bf16 : Bool := false)
     -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate only (`imagenet-syncbn-check`'s FORMULATION column). Never a committed artifact.
-    (forceSync : Bool := false) : String :=
+    (forceSync : Bool := false)
+    -- ▶▶ **THE RECIPE AXES** (planning/mnv4_half_pair.md), all trailing and defaulted so every
+    -- committed artifact re-renders byte-identically. `opt = none` is the committed AdamW tail
+    -- (`adamOne` + `adamWConsts`); `some o` hands the 233 gradients to `optAllParams`, the optimizer
+    -- stage ResNet-34/50 share (accumulation, EMA shadow, timm `no_weight_decay`), imported rather
+    -- than copied. `cd` is classifier dropout at the driver's `%do` mask.
+    (opt : Option R34Opt := none) (ema : Bool := false) (wdExclude : Bool := false)
+    (wdStr : String := "") (cd : Bool := false) : String :=
   let sync : Bool := replicas > 1 || forceSync
+  let accOn : Bool := match opt with | some (.adamwAccum _) => true | some (.lambAccum _) => true | _ => false
   let alphaStr := fmt6 0.1
   let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
   let go : StateM Proofs.StableHLO.EmitS String := do
@@ -865,7 +904,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- inline a second transcription of the block table into their train step and rely on eyes to
     -- keep the two in step; here there is only one, so the train/score divergence §3d(b) measured
     -- in MobileNetV2 — and that `regen_verified_mlir.sh check` reported green — cannot arise.
-    let fwd ← mnv4FwdChainB B nClasses epsStr .train bf16 replicas sync
+    let fwd ← mnv4FwdChainB B nClasses epsStr .train bf16 replicas sync cd
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32   : Vec 32 := fun _ => 0
@@ -902,9 +941,16 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     timm's order: dense → conv_head (960→1280 at 1×1) → GAP back → cn_960 (256→960 at 7×7). ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
       (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
-    let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) fwd.hr z1280b (.operand nDy zNCp))
+    -- ⚠⚠ `fwd.cin`, NOT `fwd.hr`: the classifier weight gradient reads the DENSE'S INPUT, which
+    -- under classifier dropout is the dropped activation. The two names coincide when `cd` is off.
+    let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) fwd.cin z1280b (.operand nDy zNCp))
     let (cbdg, nbdg) ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
-    let (cDhm, nDhm) ← pretty B (.selectPosB nHn zH1 (.operand nDgi zH1))
+    -- dropout's backward is the same op at the same mask (`Proofs.dropout_vjp_is_self`), on the
+    -- cotangent's way down to the head relu. Nothing is emitted when `cd` is off.
+    let (cDdo, nDdo) ← if cd then
+        pretty B (.dropoutB (N := B) (n := 1280) doName z1280b (.operand nDgi z1280b))
+      else pure ("", nDgi)
+    let (cDhm, nDhm) ← pretty B (.selectPosB nHn zH1 (.operand nDdo zH1))
     let (cDhn, nDhn) ← bnBackSite B 1280 1 1 sync replicas epsStr "%hg" nHc "hgdst" nDhm fwd.hst
     let (cDhx, nDhx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := 960) (oc := 1280) (h := 1) (w := 1) zrnd
       "%hW" zHk z1280 (.operand nDhn zH1))
@@ -998,17 +1044,21 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
        ⟨"hW", nHW, [1280,960,1,1]⟩, ⟨"hg", nHg, [1280]⟩, ⟨"hbt", nHt, [1280]⟩,
        ⟨"Wd", nWdg, [1280, nClasses]⟩, ⟨"bd", nbdg, [nClasses]⟩]
     let allPs : List PGrad := stemPs ++ g0.ps ++ blockPs.flatten ++ headPs
-    -- ═══ AdamW: one proven triple per parameter ═══
-    let mut adamCode := ""
-    let mut thetaN : List String := []
-    let mut mNames : List String := []
-    let mut vNames : List String := []
-    for g in allPs do
-      let (c, nT, nM, nV) ← adamOne B replicas g
-      adamCode := adamCode ++ c
-      thetaN := thetaN ++ [nT]
-      mNames := mNames ++ [nM]
-      vNames := vNames ++ [nV]
+    -- ═══ the optimizer: the committed AdamW tail, or the shared recipe stage ═══
+    let (adamCode, thetaN, mNames, vNames, aNames, eNames) ← match opt with
+      | none => do
+        let mut adamCode := ""
+        let mut thetaN : List String := []
+        let mut mNames : List String := []
+        let mut vNames : List String := []
+        for g in allPs do
+          let (c, nT, nM, nV) ← adamOne B replicas g
+          adamCode := adamCode ++ c
+          thetaN := thetaN ++ [nT]
+          mNames := mNames ++ [nM]
+          vNames := vNames ++ [nV]
+        pure (adamCode, thetaN, mNames, vNames, ([] : List String), ([] : List String))
+      | some o => optAllParams o B replicas allPs wdExclude (ema := ema)
     -- ═══ assemble ═══
     let statCode := cQs ++ cQ0c ++ cQ0p ++ qcode ++ cQh1 ++ cQh
     let statNames : List String := qs ++ q0c ++ q0p ++ qnames ++ qh1 ++ qh
@@ -1035,14 +1085,23 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let body := fwd.code ++
       cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
-      cDgi ++ cWdg ++ cbdg ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHg ++ cHt ++ cDgp ++
+      cDgi ++ cWdg ++ cbdg ++ cDdo ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHg ++ cHt ++ cDgp ++
       cDh1m ++ cDh1n ++ cDh1x ++ cH1W ++ cH1g ++ cH1t ++
       gcode ++ g0.code ++ cDsm ++ cDsn ++ csW ++ csg ++ cst ++ statCode
     let pTypes : List String := allPs.map (fun g => ty g.ds)
     let statTypes : List String := mnv4StatSigList.map (·.2)
-    let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames
-    let retTys  := pTypes ++ pTypes ++ pTypes ++
-      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
+    -- `[θ|m|v|(G)|(E)]`, the three report scalars, the accumulation / EMA scalars handed back as
+    -- passthroughs (so `#out = #in − 2` at every combination, as in R50), the BN stats, and the
+    -- dropout mask LAST (EfficientNet's placement: after the stats, before `%onehot`).
+    let accScalars := if accOn then ["%aup", "%akeep"] else []
+    let emaScalars := if ema then ["%emad", "%oemad"] else []
+    let retVals := thetaN ++ mNames ++ vNames ++ aNames ++ eNames ++ ["%loss", "%bc1", "%bc2"] ++
+      accScalars ++ emaScalars ++ statNames ++ (if cd then [doName] else [])
+    let retTys  := pTypes ++ pTypes ++ pTypes ++ (if accOn then pTypes else []) ++
+      (if ema then pTypes else []) ++
+      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++
+      (accScalars ++ emaScalars).map (fun _ => "tensor<f32>") ++ statTypes ++
+      (if cd then [ty [B, 1280]] else [])
     pure <|
       (if replicas ≤ 1 then
         "    // ── MobileNetV4-Conv-M batch-BN AdamW train step: every line is pretty(AST node) ──\n"
@@ -1063,18 +1122,23 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
           "    // (Both are stated at the f32 nodes; this artifact's bf16 conv twins, which round\n" ++
           "    // their operands per element, are not in that statement.)\n"
          else "")) ++
-      zeroBiasPrelude false mnv4ZbWidths ++ body ++ adamWConsts ++ adamCode ++ lossCode ++
+      zeroBiasPrelude false mnv4ZbWidths ++ body ++
+      (match opt with
+       | none => adamWConsts
+       | some o => optConstsB o wdStr ++ wdzConst wdExclude) ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv4SigList nClasses
   let statSig := String.intercalate ", " (mnv4StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ packedTrainSig sigList ++ ", " ++ statSig ++
+  -- ⚠ EMA's region suffix is `ema`, `optOne`'s spelling (the ResNet family's; see its note).
+  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ packedTrainSig sigList accOn ema (emaSuf := "ema") ++
+    ", " ++ statSig ++ (if cd then s!", {doName}: {ty [B, 1280]}" else "") ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
   let outSig := String.intercalate ", "
-    (packedTrainRetTys pTy ++
-     (mnv4StatSigList.map (·.2)))
+    (packedTrainRetTys pTy accOn ema ++
+     (mnv4StatSigList.map (·.2)) ++ (if cd then [ty [B, 1280]] else []))
   let inner : String := go.run' (0, [])
-  let fname := s!"{slug}_{mnv4AdamVariant B replicas bf16}_train_step"
+  let fname := s!"{slug}_{mnv4RecipeVariant B replicas bf16 opt ema wdExclude wdStr cd}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1213,6 +1277,27 @@ end Proofs.StableHLO
 #guard !"adamdp64bf16".contains "do"
 #guard !"adamdp64bf16".contains "acc"
 #guard !"adamdp64bf16".startsWith "ema"
+
+-- ⭐⭐ **THE JAX REFERENCE'S RECIPE, on the verified path** (planning/mnv4_half_pair.md): AdamW with
+-- 8 accumulated micro-batches of 4 × 128 (effective 4096, the reference's `512 × accum 8`, and a
+-- sync-BN group of 512 = its micro-batch), wd 0.05 off BN γ/β and biases (timm `no_weight_decay`),
+-- an EMA shadow (warmup-corrected by the driver), classifier dropout at the driver's mask, bf16.
+-- The LR (0.004), the 5-epoch warmup, the cosine length and the eval cadence are the driver's.
+-- ▶ Eval stays on `mnv4in_fwd_eval.mlir` at 64: the driver reads the eval batch off that artifact.
+-- ⚠ The ties (`MobileNetV4SyncTieB`) are gradient-node ties with the loss cotangent a binder, so
+-- they are optimizer-agnostic; the accumulator, the EMA line and the `%wdz` operand are existing ops
+-- (`momVNextF`, `adamMNextF`). The classifier dropout is NOT in their statement (stated at the
+-- dropout-free net), as for EfficientNet's `do` renders.
+#eval IO.FS.writeFile "verified_mlir/mnv4in_emaaccdp8x128wxdowd005bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 4 "mnv4in" true
+    (opt := some (.adamwAccum 8)) (ema := true) (wdExclude := true) (wdStr := "0.05") (cd := true))
+-- ▶ its single-device peer, `mnv4-dp-check`'s reference (duplicated batch, 4 × 128 against 1 × 128)
+#eval IO.FS.writeFile "verified_mlir/mnv4in_emaacc8x128wxdowd005bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 128 1000 "1.0e-5" 1 "mnv4in" true
+    (opt := some (.adamwAccum 8)) (ema := true) (wdExclude := true) (wdStr := "0.05") (cd := true))
+#guard Proofs.StableHLO.mnv4RecipeVariant 128 4 true (some (.adamwAccum 8)) true true "0.05" true ==
+  "emaaccdp8x128wxdowd005bf16"
+#guard Proofs.StableHLO.mnv4RecipeVariant 64 4 true none false false "" false == "adamdp64bf16"
 
 -- ⭐ The bf16 marker, and the wiring that actually breaks: the entry name derives from
 -- `mnv4AdamVariant`, so `bf16` must reach THAT call and not merely the block renderers.

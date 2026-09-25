@@ -52,6 +52,18 @@ Two failure modes it separates, both of which have actually happened in this rep
     DP_VARIANT=adam64bf16 DP_VARIANT_DP=adamdp64bf16 \
       PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check                # the bf16 pair
 
+▶ **The recipe render** (planning/mnv4_half_pair.md) — five regions `[θ|m|v|G|E]`, seven scalars
+and a classifier-dropout mask — takes the same gate at its own batch:
+
+    DP_BATCH=128 DP_VARIANT=emaacc8x128wxdowd005bf16 DP_VARIANT_DP=emaaccdp8x128wxdowd005bf16 \
+      PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check
+
+The layout is read off the variant name (`VerifiedVariant.nRegions` / `nScalars` / `cdOn`), the
+driver's own reading. The step is an APPLY step onto a non-zero accumulator (`%aup = %akeep = 1`),
+so `G' = G + g` carries the raw gradient and is gated beside `m`; the EMA shadow moves too. The
+dropout mask is non-uniform and duplicated with the batch, so every replica drops the same
+features.
+
 ⭐ **Both precision arms need gating, not just fp32.** `mnv4in_adamdp64bf16` is on disk and is
 exactly as untied as its f32 peer was; the precision axis does not get to quietly inherit a tie it
 was not given. The `DP_VARIANT` knobs are what make that a re-run rather than a second file.
@@ -77,6 +89,16 @@ def main (args : List String) : IO Unit := do
   -- convenience: a gate nobody has seen go red is an assertion. The control to run is the `%arn`
   -- divisor 4.0 → 1.0, i.e. sum instead of mean.
   let dpPath := args.head?.getD s!"verified_mlir/{net.slug}_{vDp}_train_step.mlir"
+  -- the blob layout, read off the variant NAME exactly as the driver reads it
+  let nR := VerifiedVariant.nRegions vDp
+  let nS := VerifiedVariant.nScalars vDp
+  let accOn := VerifiedVariant.accOn vDp
+  let emaOn := VerifiedVariant.emaOn vDp
+  let cdOn := VerifiedVariant.cdOn vDp && net.dropoutKeep.isSome
+  let doW := if cdOn then (net.dropoutKeep.map (·.2)).getD 0 else 0
+  if nR != VerifiedVariant.nRegions vSg || nS != VerifiedVariant.nScalars vSg ||
+     cdOn != (VerifiedVariant.cdOn vSg && net.dropoutKeep.isSome) then
+    IO.eprintln s!"LAYOUT MISMATCH: {vSg} and {vDp} are not the same blob layout"; IO.Process.exit 1
   let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   IO.println "MobileNetV4-Conv-M data-parallel gate — duplicated batch"
@@ -94,12 +116,34 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
   let θ := F32.concat θparts
   let m ← F32.heInit 4242 net.nParams.toUSize 0.02
   let v ← F32.scaleShift (← F32.heInit 8484 net.nParams.toUSize 0.01) 1.0 0.05
-  let tail ← F32.const 3 0.0
+  -- the accumulator and the shadow, when the layout has them: non-zero, so `akeep·G` and the EMA
+  -- line are exercised rather than multiplied into zeros
+  let gAcc ← F32.heInit 6161 net.nParams.toUSize 0.01
+  let eSh ← F32.scaleShift θ 1.0 0.001
+  let extra : Array ByteArray := (if accOn then #[gAcc] else #[]) ++ (if emaOn then #[eSh] else #[])
+  let tail ← F32.const nS.toUSize 0.0
   let tail ← F32.write3 tail 0 0.001 0.19 0.002
+  -- APPLY onto the running total (`%aup = 1`, `%akeep = 1`), then the EMA pair
+  -- `%aup, %akeep` at slots 3–4; `%emad, %oemad` at `emaScalarOff` (3, or 5 behind the pair).
+  -- `write3` writes three slots, so each pair is written with the slot BEFORE it restated.
+  let tail ← if accOn then F32.write3 tail 2 0.002 1.0 1.0 else pure tail
+  let emaOff := VerifiedVariant.emaScalarOff vDp
+  let tail ← if emaOn then F32.write3 tail (emaOff - 1).toUSize (if accOn then 1.0 else 0.002) 0.9 0.1
+             else pure tail
   let bnIn ← F32.scaleShift (← F32.heInit 3131 nBnStats.toUSize 0.01) 1.0 0.3
-  let pbuf := F32.concat #[θ, m, v, tail, bnIn]
-  let shapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes
-                            ++ #[#[], #[], #[]] ++ bnStatShapes)
+  -- ⚠ the dropout mask is per EXAMPLE × feature and rides at the tail; `0` or `1/keep`, non-uniform
+  -- so the mask is not the identity. Duplicated with the batch below.
+  let keep := (net.dropoutKeep.map (·.1)).getD 1.0
+  let doMask1 ← if cdOn then F32.dropoutMask keep (bs * doW) 777 else pure ByteArray.empty
+  let pbuf1 := F32.concat (#[θ, m, v] ++ extra ++ #[tail, bnIn] ++ (if cdOn then #[doMask1] else #[]))
+  let pbuf2 := F32.concat (#[θ, m, v] ++ extra ++ #[tail, bnIn] ++
+                 (if cdOn then #[F32.concat (Array.replicate replicas doMask1)] else #[]))
+  let pShapes := (List.range nR).foldl (fun acc _ => acc ++ net.paramShapes) #[]
+  let scalarShapes : Array (Array Nat) := Array.replicate nS #[]
+  let shapes1 := packShapes (pShapes ++ scalarShapes ++ bnStatShapes ++
+                   (if cdOn then #[#[bs, doW]] else #[]))
+  let shapes2 := packShapes (pShapes ++ scalarShapes ++ bnStatShapes ++
+                   (if cdOn then #[#[bs * replicas, doW]] else #[]))
   let x1 ← F32.heInit 555 (bs * net.d0).toUSize 1.0
   -- The SAME batch on EVERY replica. `all_reduce(add)/N` over N identical gradients is `(N·g)/N =
   -- g`, the identity at any N, so nothing here depends on the replica count but this concat.
@@ -119,21 +163,36 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
               s!".lake/build/{tag}_{((← IO.getEnv "IREE_BACKEND").getD "cuda")}.vmfb"] do
       if ← System.FilePath.pathExists p then IO.FS.removeFile p
   let s1 ← mkSession sgPath
-  let o1 ← LowererSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step" x1 pbuf shapes y1
+  let o1 ← LowererSession.mlpTrainStepV s1 s!"m.{net.slug}_{vSg}_train_step" x1 pbuf1 shapes1 y1
              bs.toUSize net.d0.toUSize net.nClasses.toUSize
   IO.println "  running data-parallel…"; (← IO.getStdout).flush
   let s2 ← mkSession dpPath
-  let o2 ← LowererSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" x2 pbuf shapes y2
+  -- ⚠ `nShardTail = 1` under dropout: the mask is per-example, so the shim splits it by rows the way
+  -- it splits `x` (the driver's own call); every replica then gets the same `bs` rows.
+  let o2 ← LowererSession.mlpTrainStepVDP s2 s!"m.{net.slug}_{vDp}_train_step" x2 pbuf2 shapes2 y2
              (bs * replicas).toUSize net.d0.toUSize net.nClasses.toUSize replicas.toUSize
+             (nShardTail := if cdOn then 1 else 0)
 
-  if o1.size != o2.size then
-    IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size}"; IO.Process.exit 1
+  -- ⚠ The sharded tail comes back WHOLE from the DP call: under dropout its mask passthrough is all
+  -- `bs·replicas` rows against the single-device call's `bs`. Everything before it is laid out
+  -- identically, so the regions below read replica 0's rows of the mask and nothing past them.
+  let extraMask := if cdOn then (replicas - 1) * bs * doW * 4 else 0
+  if o1.size + extraMask != o2.size then
+    IO.eprintln s!"SIZE MISMATCH: {o1.size} vs {o2.size} (expected +{extraMask} for the mask)"; IO.Process.exit 1
   let n := o1.size / 4
   let nP := net.nParams
+  let regNames := ["theta", "m", "v"] ++ (if accOn then ["G"] else []) ++ (if emaOn then ["ema"] else [])
+  let pEnd := nR * nP
+  let sEnd := pEnd + nS
+  let bEnd := sEnd + nBnStats
   let regions : List (String × Nat × Nat) :=
-    [("theta", 0, nP), ("m", nP, 2*nP), ("v", 2*nP, 3*nP),
-     ("loss/bc", 3*nP, 3*nP+3), ("bnstat", 3*nP+3, n)]
+    ((List.range nR).map (fun i => (regNames.getD i "?", i * nP, (i + 1) * nP))) ++
+    [("scalars", pEnd, sEnd), ("bnstat", sEnd, bEnd)] ++
+    (if cdOn then [("do (passthrough)", bEnd, n)] else [])
+  if !cdOn && bEnd != n then
+    IO.eprintln s!"LAYOUT MISMATCH: {n} returned floats, expected {bEnd}"; IO.Process.exit 1
   let mut gradRel : Float := 0.0
+  let mut accRel : Float := 0.0
   let mut fwdExact := true
   let mut fwdRel : Float := 0.0
   let mut nonFinite : Nat := 0
@@ -154,6 +213,7 @@ global {bs * replicas} = the same {bs} examples {replicas} times)"
       if a.abs > rm then rm := a.abs
     let nr := if rm > 1e-30 then ra / rm else 0.0
     if nm == "m" then gradRel := nr
+    if nm == "G" then accRel := nr
     if nm == "bnstat" then
       fwdRel := nr
       if exact != hi - lo then fwdExact := false
@@ -187,6 +247,11 @@ by construction; a difference here is the data-parallel path corrupting the forw
   if gradRel > gradTol then
     IO.eprintln s!"DP CHECK FAILED: gradient (m) norm-rel {gradRel} > {gradTol}. On a duplicated batch \
 all_reduce(add)/N is the identity, so the data-parallel step must reproduce the single-device one."
+    IO.Process.exit 1
+  -- the accumulator `G' = G + g` carries the RAW all-reduced gradient (no 1/k, no moment), so it is
+  -- the most direct reading of the collective there is
+  if accOn && accRel > gradTol then
+    IO.eprintln s!"DP CHECK FAILED: accumulator (G) norm-rel {accRel} > {gradTol}."
     IO.Process.exit 1
   IO.println s!"✓ DP step reproduces the single-device step on a duplicated batch: forward \
 BIT-EXACT (bnstat, {net.bnChannels.size} BN layers), gradient norm-rel {gradRel} ≤ {gradTol}, \

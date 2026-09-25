@@ -99,6 +99,12 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
 def mobilenetV4ConvMImagenetConfigProbe : TrainConfig :=
   { mobilenetV4ConvMImagenetConfig with epochs := 30 }
 
+/-- Tier-2 at half length: `default` with the cosine over 50 epochs. The first run of the
+    timm-parity net, paired with the verified path's `mnv4-half-4gpu` on the same recipe
+    (planning/mnv4_half_pair.md). -/
+def mobilenetV4ConvMImagenetConfigHalf : TrainConfig :=
+  { mobilenetV4ConvMImagenetConfig with epochs := 50 }
+
 /-- Throughput bench: micro-batch 128 (== one GPU's shard of the real 4-GPU
     512 micro-batch), no grad-accum, single epoch. For measuring per-GPU img/s
     to extrapolate a run-time estimate; kill after a couple hundred steps. -/
@@ -119,6 +125,9 @@ def mobilenetV4ConvMImagenetRecipes : List Recipe := [
   { name := "default", cfg := mobilenetV4ConvMImagenetConfig,
     out := "generated_mobilenet_v4_imagenet.py",
     desc := "Tier-2 ~100ep reduced-reg confidence run" },
+  { name := "half",    cfg := mobilenetV4ConvMImagenetConfigHalf,
+    out := "generated_mobilenet_v4_imagenet_half.py",
+    desc := "Tier-2 at 50ep: the pair with the verified path's half run" },
   { name := "probe",   cfg := mobilenetV4ConvMImagenetConfigProbe,
     out := "generated_mobilenet_v4_imagenet_probe.py",
     desc := "Tier-1 ~30ep quick-signal run" },

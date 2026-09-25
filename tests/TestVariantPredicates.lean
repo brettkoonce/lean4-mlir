@@ -147,6 +147,11 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- of names written by hand drifts from the function that derives them.
   , ("adamdo", false, false, false), ("emarms64dropdo", true, true, true)
   , ("emarms64drop", true, true, true), ("rmsdo64", false, true, false)
+    -- ▶▶ MobileNetV4's JAX-reference recipe (planning/mnv4_half_pair.md): EMA × accumulation ×
+    -- `wx` × classifier dropout × a decay mark × bf16 — FIVE regions and a mask. ⚠ `wx` ++ `do`
+    -- ++ `wd005` spells `wxdowd005`: `do` is followed by `wd`, and `wd005` must not reach `accK`.
+  , ("emaaccdp8x128wxdowd005bf16", true, false, false)
+  , ("emaacc8x128wxdowd005bf16", true, false, false)
     -- ▶▶ **EMA × ACCUMULATION — the FIVE-region spellings** (`verified_side_quest_counterparts.md`
     -- §6a). These were UNSPELLABLE until 2026-08-27: `trainAdamSched` threw on the pairing because
     -- both features claimed the fourth region, which is what stopped RSB-A2/A1 from being rendered
@@ -256,7 +261,8 @@ private def table : List (String × Bool × Bool × Bool) :=
 -- count. (The first draft of this check was a patched-up `|| v == … || s` chain, and it failed on
 -- `rmsdo64` — a dropout spelling the chain had simply not been updated for. A partition cannot
 -- rot that way: adding a spelling to the table without adding it here fails immediately.)
-private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsdo64"]
+private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsdo64",
+  "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16"]
 #guard table.all (fun (v, _, _, _) => cdOn v == dropoutSpellings.contains v)
 #guard dropoutSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 #guard cdOn "emarms64drop" == false      -- ⚠ `drop` alone must NOT read as dropout
@@ -340,8 +346,15 @@ private def accumSpellings : List String :=
    "emalambaccdp4x128wxclipdropbcebf16", "emalambacc4x128wxclipdropbcebf16",
    "emalambaccdp4x128wxclipdropbcewd001bf16", "emalambacc4x128wxclipdropbcewd001bf16",
    "emalambaccdp4x128wxclipdropbce", "emalambacc4x128wxclipdropbce",
-   "emalambaccdp4x128wxclipdropbcewd001", "emalambacc4x128wxclipdropbcewd001"]
+   "emalambaccdp4x128wxclipdropbcewd001", "emalambacc4x128wxclipdropbcewd001",
+   -- ⭐ MobileNetV4's reference recipe, 8 × (4 × 128)
+   "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16"]
 #guard table.all (fun (v, _, _, _) => accOn v == accumSpellings.contains v)
+-- MobileNetV4's recipe: k = 8 read back past `dp`, and nothing else read into it
+#guard accK "emaaccdp8x128wxdowd005bf16" == 8
+#guard accK "emaacc8x128wxdowd005bf16" == 8
+#guard lambOn "emaaccdp8x128wxdowd005bf16" == false
+#guard bceOn "emaaccdp8x128wxdowd005bf16" == false
 #guard accumSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 -- ⚠ and accumulation must disturb NONE of the other three axes it does not compose with. `acc4x64`
 -- contains no "rms" and no "drop"; `accdp8x64` puts `dp` inside the prefix, which is a placement no
@@ -354,7 +367,10 @@ private def accumSpellings : List String :=
 -- ⚠⚠ **`sdOn` CAME OUT TOO, 2026-08-27, and for the same reason `emaOn` did**: RSB-A2/A1 render
 -- accumulation WITH stochastic depth (`emalambaccdp8x64wxclipdropbce`), so a guard saying they
 -- never co-occur was recording the absence of a render, not a fact about the naming.
-#guard table.all (fun (v, _, _, _) => !accOn v || (!rmsOn v && !cdOn v))
+-- ⚠⚠ **`cdOn` CAME OUT TOO, 2026-09-25, for the same reason again**: MobileNetV4's reference recipe
+-- renders accumulation WITH classifier dropout (`emaaccdp8x128wxdowd005bf16`). The driver draws the
+-- mask per micro-step and packs it after the accumulator's scalars, so the pairing is legal.
+#guard table.all (fun (v, _, _, _) => !accOn v || !rmsOn v)
 -- ⭐ and the replacement, which is stronger than what it replaces: whenever BOTH fire, the `ema`
 -- marker must LEAD. `emaOn` is a prefix test and `accOn` a substring one, so `lambaccema…` would
 -- read as accumulation-only and pack four regions into a five-region graph.
