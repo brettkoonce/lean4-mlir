@@ -12,8 +12,8 @@ floor against 233× independent). ⚠ Two departures from the text below: the
 density is `log|det(I + hJ)|` per Euler step, not the trace form, because the
 trace form biases the KL negative at NFE 50 (§6.3); and gate B is applied to
 the corrected row when a `.logp.bin` exists (§6.1's own caveat). The exe is
-`demos/MainDiffusion2d.lean`, the scorer `scripts/boltzmann_metrics.py`, the
-figure `scripts/boltzmann_figure.py`, the entry `Bestiary/BoltzmannGenerator.lean`.
+`demos/MainDiffusion2d.lean`, the scorer `scripts/demos/boltzmann_metrics.py`, the
+figure `scripts/demos/boltzmann_figure.py`, the entry `Bestiary/BoltzmannGenerator.lean`.
 ⭐ The section is its own category, "Physics — demo: Boltzmann generator on Müller-Brown", a
 `\subsection` beside the other demo categories (on the TOC), with PINN, FNO
 and FourCastNet as bestiary entries beside the generator (user decision
@@ -136,7 +136,7 @@ integration of §6 multiplies the evaluations by five and the field dump by a
 grid, so `generateEval spec nGen` and one forward per solver step is the
 change that keeps everything under a minute.
 
-## 5. The instrument — `scripts/boltzmann_metrics.py`
+## 5. The instrument — `scripts/demos/boltzmann_metrics.py`
 
 Reads a samples `.bin`, the manifest and `mb_grid.npz`. Prints one row:
 
@@ -199,7 +199,7 @@ NFE. Same net, loss, target and integrator; only the path differs.
 
 ## 7. Figure and section
 
-`scripts/boltzmann_figure.py` (system python3 has matplotlib 3.10; the pinned
+`scripts/demos/boltzmann_figure.py` (system python3 has matplotlib 3.10; the pinned
 venv does not, same as the mock): three panels as in the artifact — the
 surface with the Langevin training set, the flow's paths from noise into the
 wells with hollow markers at t = 1, and the kT = 8 panel with the chain

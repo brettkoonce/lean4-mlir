@@ -5,7 +5,7 @@ name: Target names
 # to pay — it is grep, it finishes in under a second, and any file in the tree can name
 # a binary. Filtering it would reintroduce exactly the hole it exists to close.
 #
-# WHAT IT CLOSES (measured 2026-09-20): `scripts/residency_gate_all.sh` carried four
+# WHAT IT CLOSES (measured 2026-09-20): `scripts/gates/residency_gate_all.sh` carried four
 # pre-2026-08-10 `-xla` binary names for six weeks. On a clean tree each of those rows
 # reported "SKIP — not built" and the script still exited 0; on the box where it was
 # written they passed, because the binaries built before the rename were still in
@@ -36,7 +36,7 @@ jobs:
           # caught with `|| rc=$?` or the summary below never gets written.
           set -o pipefail
           rc=0
-          scripts/check_target_names.sh 2>&1 | tee /tmp/targets.log || rc=$?
+          scripts/gates/check_target_names.sh 2>&1 | tee /tmp/targets.log || rc=$?
           {
             echo "## Target-name lint"
             echo ""

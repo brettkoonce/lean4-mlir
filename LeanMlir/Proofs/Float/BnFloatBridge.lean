@@ -72,7 +72,7 @@ theorem rsqrt_lipschitz {a b ε : ℝ} (hε : 0 < ε) (ha : ε ≤ a) (hb : ε �
     floor-agnostic, so the bound becomes `ers/√V + evar/(2V√V)` — and since the
     measured `σ²` is `O(1)` (never near 0), `V ≈ σ²+ε ≫ ε` makes this ~`(σ²/ε)^{3/2}`
     tighter than the `ε`-floor `bnIstd_close` (empirically ~10⁷× on the CIFAR-BN
-    probe, `scripts/cifar_bn_margin_probe.py`). The non-vacuous BN certificate. -/
+    probe, `scripts/certs/cifar_bn_margin_probe.py`). The non-vacuous BN certificate. -/
 theorem bnIstd_close_at {n : ℕ} {ε ers evar fvarε V : ℝ} (x : Vec n)
     (fistd : ℝ → ℝ) (hV0 : 0 < V) (hers : 0 ≤ ers)
     (hVfv : V ≤ fvarε) (hVbn : V ≤ bnVar n x + ε)

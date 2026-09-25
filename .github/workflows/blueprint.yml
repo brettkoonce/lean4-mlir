@@ -30,14 +30,14 @@ on:
       # `apps` latent from 2026-07-27, `demos` from `dc5a7db`, both surfaced only when an
       # unrelated push happened to touch a trigger path).
       - 'tests/BlueprintCheckDecls.lean'
-      - 'scripts/blueprint_uses.py'
+      - 'scripts/book/blueprint_uses.py'
       # Fifth instance of the same bug: the docstring gate's SOURCE and its ratchet decide the
       # verdict at the `docstring-checkrefs` step below, and until 2026-09-09 a change to either
       # triggered nothing. The last two emit PUBLISHED content (sitemap, analytics tag).
       - 'tests/DocstringCheckRefs.lean'
-      - 'scripts/docstring_ref_baseline.txt'
-      - 'scripts/gen_sitemap.py'
-      - 'scripts/inject_umami.sh'
+      - 'scripts/gates/docstring_ref_baseline.txt'
+      - 'scripts/book/gen_sitemap.py'
+      - 'scripts/book/inject_umami.sh'
   workflow_dispatch:
     inputs:
       full_site:
@@ -330,10 +330,10 @@ jobs:
         # The dependency graph is drawn from the `\uses{}` line of every block. Those
         # lines were hand-written for the original suite and drifted with every proof
         # refactor (audited 2026-09-21: 155 of 242 edges matched). The step above wrote
-        # the real edges; this holds the lines to them. `scripts/blueprint_uses.py --fix`
+        # the real edges; this holds the lines to them. `scripts/book/blueprint_uses.py --fix`
         # rewrites them locally.
         run: |
-          python3 scripts/blueprint_uses.py --check
+          python3 scripts/book/blueprint_uses.py --check
 
       - name: Check Lean declarations cited in DOCSTRINGS
         # The peer of the step above, and the reason it exists: the blueprint came
@@ -343,7 +343,7 @@ jobs:
         # compiles and doc-gen4 still renders prose about a symbol that is not there.
         # Runs here rather than in proofs.yml because this job has already built the
         # corpus these citations resolve against.
-        # ⚠ scripts/docstring_ref_baseline.txt is DEBT, not an exception list, and may
+        # ⚠ scripts/gates/docstring_ref_baseline.txt is DEBT, not an exception list, and may
         # shrink but never grow. A new entry means a citation just rotted with CI green.
         id: docrefs
         run: |
@@ -411,9 +411,9 @@ jobs:
           # blueprint (cf. blueprint/src/umami_analytics.js). doc-gen4's
           # template is vendored (.lake/packages/doc-gen4/...) so we
           # patch the rendered HTML post-hoc instead of forking the
-          # template. Idempotent — see scripts/inject_umami.sh.
-          if [ -x scripts/inject_umami.sh ] && [ -d public/docs ]; then
-            scripts/inject_umami.sh public/docs
+          # template. Idempotent — see scripts/book/inject_umami.sh.
+          if [ -x scripts/book/inject_umami.sh ] && [ -d public/docs ]; then
+            scripts/book/inject_umami.sh public/docs
           fi
           # ⭐ The docs landing is the proofs map (2026-09-23). doc-gen4's index.html is
           # hard-coded — "Welcome to the documentation page … This was built using Lean 4
@@ -491,7 +491,7 @@ jobs:
         # different page set. The script deliberately lists only OUR doc namespaces —
         # public/docs/ carries a locally rebuilt Mathlib, and pointing crawlers at a
         # duplicate of Mathlib's own docs would both blow the 50k-URL cap and invite a
-        # duplicate-content penalty. See scripts/gen_sitemap.py.
+        # duplicate-content penalty. See scripts/book/gen_sitemap.py.
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -508,7 +508,7 @@ jobs:
           fi
           echo "base URL: $BASE"
           echo "SITE_BASE=$BASE" >> "$GITHUB_ENV"   # the job summary names the site
-          python3 scripts/gen_sitemap.py public "$BASE"
+          python3 scripts/book/gen_sitemap.py public "$BASE"
           echo '--- sitemap.xml (first 20 lines) ---'
           head -20 public/sitemap.xml
           echo '--- robots.txt ---'
@@ -545,7 +545,7 @@ jobs:
             echo "| | | |"
             echo "|---|---|---|"
             echo "| Lean declarations the blueprint cites | $decls | $(ok "${{ steps.checkdecls.outcome }}" "all present (\`blueprint-checkdecls\`)" "some missing — see \`blueprint-checkdecls\`") |"
-            echo "| Dependency edges (\`\\uses\`) | $edges | $(ok "${{ steps.checkuses.outcome }}" "match the Lean dependencies (\`blueprint_uses.py\`)" "drifted — run \`scripts/blueprint_uses.py --fix\`") |"
+            echo "| Dependency edges (\`\\uses\`) | $edges | $(ok "${{ steps.checkuses.outcome }}" "match the Lean dependencies (\`blueprint_uses.py\`)" "drifted — run \`scripts/book/blueprint_uses.py --fix\`") |"
             echo "| Blueprint statements | $thms theorems · $defs definitions | |"
             echo "| Docstring citations | ${docrefs:-—} | $(ok "${{ steps.docrefs.outcome }}" "all resolve (\`docstring-checkrefs\`)" "some do not resolve — see \`docstring-checkrefs\`") |"
             echo "| Blueprint web pages | $(count_html public/blueprint) | |"

@@ -27,7 +27,7 @@ the opposite: affordable, unwarranted until Gate D.
 
 ## §1 Stage A — close the 2D ledger (½ day, ~2 GPU-h)
 
-Both arms at 10 epochs on XLA via `scripts/run_brats_r34_ab.sh 10 data/brats224` (drop the
+Both arms at 10 epochs on XLA via `scripts/sweeps/run_brats_r34_ab.sh 10 data/brats224` (drop the
 `IREE_BACKEND` default at :23); record ms/step for `unet-brats-r34`. **Gate:** 0.740 ± 0.01
 reproduces. Fix the `content.tex` label while there.
 

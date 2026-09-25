@@ -46,8 +46,8 @@ on:
       # around; until 2026-09-09 only the fortnightly cron would have noticed one.
       - 'lean-toolchain'
       - 'lake-manifest.json'
-      - 'scripts/check_audit_coverage.py'
-      - 'scripts/lean_graph.py'
+      - 'scripts/gates/check_audit_coverage.py'
+      - 'scripts/lib/lean_graph.py'
   schedule:
     # Bi-weekly drift guard: the 1st and 15th at 09:47 UTC. Cron has no native
     # fortnightly, so day-of-month is the usual spelling (~14-16 day spacing).
@@ -86,7 +86,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Audit coverage check (both audits ⊆ their lib roots)
-        run: python3 scripts/check_audit_coverage.py
+        run: python3 scripts/gates/check_audit_coverage.py
 
       - name: Install elan
         run: |

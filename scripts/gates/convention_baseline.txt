@@ -1,0 +1,5 @@
+# Render/reference convention divergences this repo currently carries.
+# Regenerate with:
+#   python3 scripts/gates/convention_audit.py --baseline FILE --update-baseline
+# This list may SHRINK, never grow. A new entry means the render and the
+# JAX reference for one net drifted apart and CI stayed green.

@@ -23,7 +23,7 @@ forward, a net-level forward graph, and the faithfulness tying them. This file i
 
 ⚠ **Padding is symmetric at every stride-2 site**, as ResNet-34's render emits and as the
 PyTorch-origin convention requires (`.convStrided`, NOT `.convStridedXla` — B0's stem is the
-XLA-`SAME` one and the two tokens have identical types). `scripts/convention_audit.py` checks this
+XLA-`SAME` one and the two tokens have identical types). `scripts/gates/convention_audit.py` checks this
 at the artifact tier and nothing checks it here, so it is stated: stem 7x7/s2, the three
 downsample `conv1`s and the three 1x1 projections are all `flatConvStride2`.
 

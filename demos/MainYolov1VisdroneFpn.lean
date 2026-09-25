@@ -46,7 +46,7 @@ def fpnNtot : Nat :=
 /-- T1b class weights (planning/archive/yolo_fpn.md): sqrt-inverse encoded-target class
     frequency, normalized so `Σ_c f_c·w_c = 1` — a pure redistribution that leaves
     the class term's total magnitude (and so its balance against box/objectness)
-    unchanged. Counts from `scripts/fpn_class_freq.py` over data/visdrone_fpn:
+    unchanged. Counts from `scripts/probes/fpn_class_freq.py` over data/visdrone_fpn:
     car 44.1% and pedestrian 21.2% of positives, and the unweighted e12 head
     predicted ONLY those two (5/10 classes never emitted). Full inverse frequency
     spans 45× and is needlessly violent; sqrt spans 6.7×. -/
@@ -327,7 +327,7 @@ def augFromEnv : IO Bool := do
     and AP is precision-sensitive. Focal down-weights EASY examples whatever
     their class, and its weight tracks p_t as p_t moves, so it cannot buy recall
     with a permanent precision tax. FD-verified in
-    `scripts/fpn_loss_probe_check.py` (two new arms, with and without the class
+    `scripts/probes/fpn_loss_probe_check.py` (two new arms, with and without the class
     weights, since both fold into the same per-cell scalar). -/
 def clsFocalFromEnv : IO Float := do
   match (← IO.getEnv "FPN_CLSFOCAL") with
@@ -357,7 +357,7 @@ def affinePctFromEnv (name : String) (dflt : Nat) : IO Float := do
   | none => return dflt.toFloat / 100.0
   | some v => return ((v.trimAscii.toNat?).getD dflt).toFloat / 100.0
 
-/-- Infer: dump [N, Ntot] val logits for scripts/yolo_map_visdrone.py --fpn. -/
+/-- Infer: dump [N, Ntot] val logits for scripts/demos/yolo_map_visdrone.py --fpn. -/
 def inferDump (spec : NetSpec) (dataDir outDir : String) : IO Unit := do
   IO.FS.createDirAll outDir
   let flat : Nat := fpnNtot

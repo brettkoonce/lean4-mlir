@@ -5,7 +5,7 @@ import LeanMlir.LEBytes
 
 The quantizer the **Lean fp8 trainer** (`MainMnistLinearE4M3Verified`) wraps around
 the verified linear train-step kernel. It implements the *same* E4M3 (1-4-3, bias 7)
-round-to-nearest grid as the numpy oracle (`scripts/mnist_e4m3_demo.py:to_e4m3`):
+round-to-nearest grid as the numpy oracle (`scripts/demos/mnist_e4m3_demo.py:to_e4m3`):
 subnormals on the `e = −6` grid (step `2⁻⁹`), saturating at ±448.
 
 This is the host-side "operand byte preparation" half of the §3b render-tie

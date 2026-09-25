@@ -40,7 +40,7 @@ per-example record was pinned at 10.
 depthwises (`b2`, `b4`, `b7`, `b14`). These are `flatConvStride2Xla` / `depthwiseStride2FlatXla`,
 NOT r34's symmetric `flatConvStride2` peers; the two families have identical types and identical
 emitted shapes, so only the certificate distinguishes them, and MobileNetV2 is the TF-origin net.
-`scripts/convention_audit.py` sees this at the artifact tier and nothing sees it here, so it is
+`scripts/gates/convention_audit.py` sees this at the artifact tier and nothing sees it here, so it is
 stated.
 
 ⚠ **There is no max-pool.** MobileNetV2's stem is conv-BN-relu6 and downsamples once; r34's stem is

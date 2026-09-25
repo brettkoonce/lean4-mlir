@@ -1,7 +1,7 @@
 import LeanMlir
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
-/-! # The OPTIMIZER STAGE alone, as a runnable module — `scripts/opt_step_tie.py`'s input
+/-! # The OPTIMIZER STAGE alone, as a runnable module — `scripts/parity/opt_step_tie.py`'s input
 
 `planning/archive/verified_optimizer_parity.md` §5: *the reference and the verified path share a data
 pipeline by construction and share an optimizer by nobody's construction.* `tests/vjp_oracle` diffs
@@ -42,7 +42,7 @@ per-tensor norm, and a per-parameter clip would pass every check this gate makes
 only one taking `%wdz`/`%lzero`, so a fixture of rank-≥2 parameters alone would gate D2 vacuously.
 
     lake build opt-step-fixtures && .lake/build/bin/opt-step-fixtures
-    scripts/opt_step_tie.py
+    scripts/parity/opt_step_tie.py
 -/
 
 open Proofs.StableHLO
@@ -65,7 +65,7 @@ private def optStepModule (fname : String) (opt : R34Opt)
     -- ▶▶ **`ema` — the shadow region, and this fixture is where the composition gets MEASURED**
     -- (2026-08-27). RSB-A2/A1 want EMA *and* accumulation, which were mutually exclusive until the
     -- fifth region landed; a five-region render is exactly the thing whose region ORDER a reading
-    -- cannot check. `scripts/opt_step_tie.py` executes the reference's own `ema_update` against the
+    -- cannot check. `scripts/parity/opt_step_tie.py` executes the reference's own `ema_update` against the
     -- `E` slot this emits, so a shadow wired to the incoming θ rather than the updated one — the
     -- one-step-lag defect — shows up as a number here and nowhere else.
     (ema : Bool := false) : String :=
@@ -101,7 +101,7 @@ private def optStepModule (fname : String) (opt : R34Opt)
   "  }\n}\n"
 
 /-- The variants the gate runs. ⚠⚠ **EVERY ROW IS CHOSEN TO MATCH A REFERENCE THAT ACTUALLY
-    SHIPS**, because `scripts/opt_step_tie.py` EXECUTES the generated reference's own optimizer
+    SHIPS**, because `scripts/parity/opt_step_tie.py` EXECUTES the generated reference's own optimizer
     lines rather than re-implementing them — so a variant with no corresponding generated file
     could only be gated against a transcription, which is not a gate (`grad_tie.py`'s standing rule:
     *the reference must be the GENERATED reference*).

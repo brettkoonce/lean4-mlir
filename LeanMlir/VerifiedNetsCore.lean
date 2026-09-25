@@ -1522,15 +1522,15 @@ def vitBImagenetVerified : VerifiedNetSpec where
     ⚠⚠ **A pre/post-DW swap is invisible to everything in this file.** Same `k`, same channels ⇒
     same `toSpecs`, so the `#guard`s below pass on a spec that swaps them, and at stride 1 both
     positions are shape-preserving so the types pass too. The only thing that pins the ORDER is
-    `scripts/mnv4_forward_tie.py` against the JAX reference on shared weights, and the only thing
-    that pins the BACKWARD's dispatch is `scripts/grad_tie.py --net mnv4`. Same invisibility class
+    `scripts/parity/mnv4_forward_tie.py` against the JAX reference on shared weights, and the only thing
+    that pins the BACKWARD's dispatch is `scripts/parity/grad_tie.py --net mnv4`. Same invisibility class
     as R50's stride-on-the-3×3.
 
     ✅ **timm's net since 2026-09-24** (`planning/mnv4_timm_parity.md`): stride on the post-DW, a
     BN-only pre-DW, a ReLU stage 0, GAP before `conv_head`, a symmetric stem. Three gates, run on
-    that date: `scripts/mnv4_timm_parity.py` (the JAX reference = timm 1.0.28's
-    `mobilenetv4_conv_medium`, logits to 1.5e-5 relative); `scripts/mnv4_forward_tie.py` (this
-    render = the JAX reference, `max |Δ| = 1.767e-05` at B = 2); `scripts/grad_tie.py --net mnv4
+    that date: `scripts/parity/mnv4_timm_parity.py` (the JAX reference = timm 1.0.28's
+    `mobilenetv4_conv_medium`, logits to 1.5e-5 relative); `scripts/parity/mnv4_forward_tie.py` (this
+    render = the JAX reference, `max |Δ| = 1.767e-05` at B = 2); `scripts/parity/grad_tie.py --net mnv4
     --nokink` at B = 8 (0 of 201 live parameters worse than 10× the control; the two
     precision-limited head parameters are exempt there and checked by the default mode). -/
 def mobilenetv4Verified : VerifiedNetSpec where

@@ -13,16 +13,16 @@ on:
       - 'Bestiary/**'
       - 'verified_mlir/**'
       - 'tests/**'
-      - 'scripts/check_audit_coverage.py'
-      - 'scripts/lean_graph.py'
-      - 'scripts/check_render_coverage.py'
-      - 'scripts/render_guard_baseline.txt'
+      - 'scripts/gates/check_audit_coverage.py'
+      - 'scripts/lib/lean_graph.py'
+      - 'scripts/gates/check_render_coverage.py'
+      - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
-      - 'scripts/gen_mlir_manifest.py'
-      - 'scripts/_gencheck.py'
-      - 'scripts/lipschitz_cert_float.py'
-      - 'scripts/smooth_scorecard_gen.py'
-      - 'scripts/smooth_dec_scorecard_gen.py'
+      - 'scripts/gates/gen_mlir_manifest.py'
+      - 'scripts/certs/_gencheck.py'
+      - 'scripts/certs/lipschitz_cert_float.py'
+      - 'scripts/certs/smooth_scorecard_gen.py'
+      - 'scripts/certs/smooth_dec_scorecard_gen.py'
       - 'runs/2026-07-12-smooth-scorecard/*.csv'
       - 'lakefile.lean'
       - 'lean-toolchain'
@@ -35,16 +35,16 @@ on:
       - 'Bestiary/**'
       - 'verified_mlir/**'
       - 'tests/**'
-      - 'scripts/check_audit_coverage.py'
-      - 'scripts/lean_graph.py'
-      - 'scripts/check_render_coverage.py'
-      - 'scripts/render_guard_baseline.txt'
+      - 'scripts/gates/check_audit_coverage.py'
+      - 'scripts/lib/lean_graph.py'
+      - 'scripts/gates/check_render_coverage.py'
+      - 'scripts/gates/render_guard_baseline.txt'
       - 'scripts/regen_verified_mlir.sh'
-      - 'scripts/gen_mlir_manifest.py'
-      - 'scripts/_gencheck.py'
-      - 'scripts/lipschitz_cert_float.py'
-      - 'scripts/smooth_scorecard_gen.py'
-      - 'scripts/smooth_dec_scorecard_gen.py'
+      - 'scripts/gates/gen_mlir_manifest.py'
+      - 'scripts/certs/_gencheck.py'
+      - 'scripts/certs/lipschitz_cert_float.py'
+      - 'scripts/certs/smooth_scorecard_gen.py'
+      - 'scripts/certs/smooth_dec_scorecard_gen.py'
       - 'runs/2026-07-12-smooth-scorecard/*.csv'
       - 'lakefile.lean'
       - 'lean-toolchain'
@@ -70,7 +70,7 @@ jobs:
         # in certs.yml, but catching a root gap here surfaces it on every push
         # instead of the next corpus run. Locally the gap hides behind stale
         # dev .oleans, so CI is the only place it surfaces (see 5f27766).
-        run: python3 scripts/check_audit_coverage.py
+        run: python3 scripts/gates/check_audit_coverage.py
 
       - name: Render coverage check (artifact renderers built + drift-guarded)
         # Fail fast (no Lean needed). Same class of bug as the step above, on
@@ -80,7 +80,7 @@ jobs:
         # `Certs`'s docstring claimed it subsumed the `Proofs` roots; it did
         # not, for ResNet34RenderB and MobileNetV2RenderB. Also pins the
         # drift-guard debt at its baseline so it can shrink but never grow.
-        run: python3 scripts/check_render_coverage.py
+        run: python3 scripts/gates/check_render_coverage.py
 
       - name: verified_mlir/ audit suite (writers, pairings, entry names)
         # `scripts/regen_verified_mlir.sh check` writes nothing and needs no Lean, no GPU and no
@@ -97,7 +97,7 @@ jobs:
         # Needs no Lean: `git grep` for the writers, tracked `runs/` logs for the counts. It went
         # stale unnoticed when the chapter 1–4 writers moved to ChapterArtifacts, because nothing
         # ran --check.
-        run: python3 scripts/gen_mlir_manifest.py --check
+        run: python3 scripts/gates/gen_mlir_manifest.py --check
 
       - name: Certificate generators reproduce their committed Lean
         # Three generators whose inputs are all committed (LipschitzCertScorecard.lean, the
@@ -107,9 +107,9 @@ jobs:
         # manual (they need data/). ~2 min of Python, no Lean.
         run: |
           set -e
-          python3 scripts/lipschitz_cert_float.py --check
-          python3 scripts/smooth_scorecard_gen.py --check
-          python3 scripts/smooth_dec_scorecard_gen.py --check
+          python3 scripts/certs/lipschitz_cert_float.py --check
+          python3 scripts/certs/smooth_scorecard_gen.py --check
+          python3 scripts/certs/smooth_dec_scorecard_gen.py --check
 
       - name: Install elan
         run: |
@@ -220,7 +220,7 @@ jobs:
           # is what surfaced it. Same argument the mnv2 and ConvNeXt steps already make: one
           # `lake env lean` runs every `#eval` in the file whether or not the result is diffed, so
           # diffing the full set costs nothing and takes ELEVEN lines out of
-          # scripts/render_guard_baseline.txt, which is the only direction that file may move.
+          # scripts/gates/render_guard_baseline.txt, which is the only direction that file may move.
           lake env lean LeanMlir/Proofs/Codegen/ResNet34RenderB.lean
           git diff --exit-code -- \
               verified_mlir/resnet34_fwd.mlir \
@@ -252,7 +252,7 @@ jobs:
           # MobileNetV2RenderB owns every mnv2 OPTIMIZER render — AdamW, its DP peer, RMSProp,
           # and the four ImageNet (`mobilenetv2in`) variants. These were unguarded and baselined until
           # the RMSProp render landed; guarding the module covers all seven at once, which is why
-          # four lines came OUT of scripts/render_guard_baseline.txt rather than three going in.
+          # four lines came OUT of scripts/gates/render_guard_baseline.txt rather than three going in.
           # (The step comment above saying the *_adam_train_step variants are "exe-generated" is
           # stale for this net: since the §2f swap this `#eval` is their sole writer.)
           # ⭐ Since 4c leg 2 (2026-09-06) this module also owns all FOUR mnv2 forwards: the train
@@ -404,7 +404,7 @@ jobs:
           # Elaborating this module writes ALL FOURTEEN EfficientNet artifacts, so diffing only
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
           # costs nothing extra (the `lake env lean` above already ran every writer) and is why ten
-          # lines came OUT of scripts/render_guard_baseline.txt when the RMSProp render landed.
+          # lines came OUT of scripts/gates/render_guard_baseline.txt when the RMSProp render landed.
           lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean
           git diff --exit-code -- \
               verified_mlir/efficientnet_train_step.mlir \
@@ -533,7 +533,7 @@ jobs:
       #    a byte-0 read must MISS every label above 255), so a green here is not vacuous.
       #
       #    ⚠ The GPU-bound gates cannot live here and are deliberately absent: `r34-dp-shard`
-      #    (4 replicas) and `scripts/residency_gate_all.sh`. Those stay manual — a limit, not an
+      #    (4 replicas) and `scripts/gates/residency_gate_all.sh`. Those stay manual — a limit, not an
       #    oversight, and worth knowing when reading a green run.
       - name: Scoring gates (argmax width, label width)
         run: |

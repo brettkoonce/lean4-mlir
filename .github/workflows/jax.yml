@@ -15,7 +15,7 @@
 #   convention — does the VERIFIED render still spell padding, activation and BN
 #            the same way its JAX reference does? Six divergences across four
 #            nets were each found by hand, a session apiece. Ratchet against
-#            scripts/convention_baseline.txt: fails only on a NEW one.
+#            scripts/gates/convention_baseline.txt: fails only on a NEW one.
 #   optimizer — the rendered optimizer's one step against the reference's own.
 #   timm-parity — each ImageNet JAX reference against timm's own net on shared weights
 #            (MobileNetV2, MobileNetV4-Conv-M, EfficientNet-B0, ViT-Ti), each gate with a control
@@ -43,9 +43,9 @@ on:
       # switches a padding token or an activation on the verified side — touches nothing this
       # workflow watches, which is how all six known divergences got in.
       - 'verified_mlir/**'
-      - 'scripts/convention_audit.py'
-      - 'scripts/convention_baseline.txt'
-      - 'scripts/check_pinned_env.py'
+      - 'scripts/gates/convention_audit.py'
+      - 'scripts/gates/convention_baseline.txt'
+      - 'scripts/gates/check_pinned_env.py'
       # The one-step optimizer tie reads BOTH sides: the renderer that emits the optimizer stage
       # and the harness that diffs it. ⚠ `ResNet34RenderB.lean` is where `optOne`/`optAllParams`
       # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
@@ -53,18 +53,18 @@ on:
       - 'LeanMlir/Proofs/Codegen/ResNet34RenderB.lean'
       - 'LeanMlir/Proofs/Training/Optim/GradClip.lean'
       - 'tests/TestOptStepFixtures.lean'
-      - 'scripts/opt_step_tie.py'
+      - 'scripts/parity/opt_step_tie.py'
       # The two tools the `build`/`convention` jobs run that nothing above watched.
       - 'scripts/regen_jax_generated.sh'
-      - 'scripts/parse_verified_mlir.py'
+      - 'scripts/gates/parse_verified_mlir.py'
       # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
       # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
       - 'scripts/*_timm_parity.py'
       - 'scripts/_*_timm_dump.py'
-      - 'scripts/mnv2_forward_tie.py'
-      - 'scripts/mnv4_forward_tie.py'
-      - 'scripts/_iree.py'
-      - 'scripts/aug_bicubic_pil_check.py'
+      - 'scripts/parity/mnv2_forward_tie.py'
+      - 'scripts/parity/mnv4_forward_tie.py'
+      - 'scripts/lib/_iree.py'
+      - 'scripts/gates/aug_bicubic_pil_check.py'
       - 'requirements-timm-lock.txt'
   pull_request:
     paths:
@@ -83,9 +83,9 @@ on:
       # switches a padding token or an activation on the verified side — touches nothing this
       # workflow watches, which is how all six known divergences got in.
       - 'verified_mlir/**'
-      - 'scripts/convention_audit.py'
-      - 'scripts/convention_baseline.txt'
-      - 'scripts/check_pinned_env.py'
+      - 'scripts/gates/convention_audit.py'
+      - 'scripts/gates/convention_baseline.txt'
+      - 'scripts/gates/check_pinned_env.py'
       # The one-step optimizer tie reads BOTH sides: the renderer that emits the optimizer stage
       # and the harness that diffs it. ⚠ `ResNet34RenderB.lean` is where `optOne`/`optAllParams`
       # live, so an optimizer change lands there and NOWHERE this workflow otherwise watches —
@@ -93,18 +93,18 @@ on:
       - 'LeanMlir/Proofs/Codegen/ResNet34RenderB.lean'
       - 'LeanMlir/Proofs/Training/Optim/GradClip.lean'
       - 'tests/TestOptStepFixtures.lean'
-      - 'scripts/opt_step_tie.py'
+      - 'scripts/parity/opt_step_tie.py'
       # The two tools the `build`/`convention` jobs run that nothing above watched.
       - 'scripts/regen_jax_generated.sh'
-      - 'scripts/parse_verified_mlir.py'
+      - 'scripts/gates/parse_verified_mlir.py'
       # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
       # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
       - 'scripts/*_timm_parity.py'
       - 'scripts/_*_timm_dump.py'
-      - 'scripts/mnv2_forward_tie.py'
-      - 'scripts/mnv4_forward_tie.py'
-      - 'scripts/_iree.py'
-      - 'scripts/aug_bicubic_pil_check.py'
+      - 'scripts/parity/mnv2_forward_tie.py'
+      - 'scripts/parity/mnv4_forward_tie.py'
+      - 'scripts/lib/_iree.py'
+      - 'scripts/gates/aug_bicubic_pil_check.py'
       - 'requirements-timm-lock.txt'
   workflow_dispatch:
 
@@ -335,7 +335,7 @@ jobs:
     # padding being stated independently on each side). This is the standing check that stops a
     # SEVENTH being discovered a year later.
     #
-    # RATCHET against scripts/convention_baseline.txt, which is EMPTY: every known divergence is
+    # RATCHET against scripts/gates/convention_baseline.txt, which is EMPTY: every known divergence is
     # closed. The job fails on a divergence not in that list, and on a row left in it after its
     # divergence is gone (a stale entry would hide the regression). The list may shrink, never grow.
     #
@@ -369,7 +369,7 @@ jobs:
         run: python3 -m pip install --quiet "jax[cpu]==$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)"
 
       - name: Pinned env (jax version only — the cuDNN half needs the GPU box)
-        run: python3 scripts/check_pinned_env.py --allow-cpu
+        run: python3 scripts/gates/check_pinned_env.py --allow-cpu
 
       - name: Emit the generated references
         # ⚠ `runJax` WRITES the .py and then spawns python to train it. There is no emit-only flag,
@@ -383,7 +383,7 @@ jobs:
           lake exe cache get || true
           # ⚠ resnet50-IMAGENET, not resnet50: there is no 10-class R50 reference to generate.
           # The audit uses the 1000-class one as a convention proxy for the Imagenette demo — see
-          # the NETS entry in scripts/convention_audit.py for why that is sound.
+          # the NETS entry in scripts/gates/convention_audit.py for why that is sound.
           NETS="resnet34 mobilenet-v2 mobilenet-v4 efficientnet-b0 resnet50-imagenet"
           lake build $NETS
           for n in $NETS; do lake exe $n /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true; done
@@ -412,13 +412,13 @@ jobs:
         # first and CI said `ModuleNotFoundError: No module named 'jaxlib'`. This job already pays
         # for `jax[cpu]` and already reads the committed `.mlir`, so it is the cheap home.
         # ⭐ 229 artifacts in ~7 s, no device, no execution.
-        run: python3 scripts/parse_verified_mlir.py
+        run: python3 scripts/gates/parse_verified_mlir.py
 
       - name: Convention audit (ratchet + selftest)
         run: |
           set -o pipefail
-          JAX_PLATFORMS=cpu python3 scripts/convention_audit.py \
-              --baseline scripts/convention_baseline.txt --selftest 2>&1 | tee /tmp/audit.log
+          JAX_PLATFORMS=cpu python3 scripts/gates/convention_audit.py \
+              --baseline scripts/gates/convention_baseline.txt --selftest 2>&1 | tee /tmp/audit.log
           {
             echo ""
             echo "## Convention audit"
@@ -510,7 +510,7 @@ jobs:
       - name: One-step optimizer tie
         run: |
           set -o pipefail
-          JAX_PLATFORMS=cpu python3 scripts/opt_step_tie.py 2>&1 | tee /tmp/opt_tie.log
+          JAX_PLATFORMS=cpu python3 scripts/parity/opt_step_tie.py 2>&1 | tee /tmp/opt_tie.log
           {
             echo ""
             echo "## One-step optimizer tie"
@@ -614,7 +614,7 @@ jobs:
       - name: C6 augmentation geometry against PIL (with its bilinear control)
         run: |
           set -o pipefail
-          python3 scripts/aug_bicubic_pil_check.py 2>&1 | tee -a /tmp/parity.log
+          python3 scripts/gates/aug_bicubic_pil_check.py 2>&1 | tee -a /tmp/parity.log
 
       - name: Forward ties through IREE (render ↔ reference)
         run: |
@@ -625,11 +625,11 @@ jobs:
           # defaults to — that one is written by `mnv4-fwd-smoke`, whose proof-side modules this
           # job does not build. At batch 32 the tie sits at ~2.4e-4 of scale (float accumulation
           # through 77 batch-BN layers); a structural error, a swapped pre/post-DW, lands near 1e-1.
-          python3 scripts/mnv4_forward_tie.py --mlir verified_mlir/mnv4_fwd.mlir --batch 32 --tol 1e-3 \
+          python3 scripts/parity/mnv4_forward_tie.py --mlir verified_mlir/mnv4_fwd.mlir --batch 32 --tol 1e-3 \
               2>&1 | tee -a /tmp/parity.log
-          python3 scripts/mnv2_forward_tie.py --imagenet 2>&1 | tee -a /tmp/parity.log
+          python3 scripts/parity/mnv2_forward_tie.py --imagenet 2>&1 | tee -a /tmp/parity.log
           # CONTROL: the ε-1e-5 eval graph against the ε-1e-3 reference must FAIL.
-          if python3 scripts/mnv2_forward_tie.py --imagenet --mlir verified_mlir/mobilenetv2in_fwd_eval.mlir; then
+          if python3 scripts/parity/mnv2_forward_tie.py --imagenet --mlir verified_mlir/mobilenetv2in_fwd_eval.mlir; then
             echo "::error::mnv2 forward-tie control came out GREEN — the tie cannot see BN ε"; exit 1
           fi
 

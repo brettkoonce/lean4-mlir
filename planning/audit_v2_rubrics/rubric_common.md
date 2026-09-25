@@ -56,7 +56,7 @@ the CertLayer re-spelling (`planning/certlayer_nets.md`). 106 commits, ~22k line
 ## Pinned names are expensive
 
 Many declarations are pinned in `tests/AuditAxioms.lean`, cited by `blueprint/src/content.tex` (the
-book), `formalization.yaml`, `.github/workflows/certs*.yml`, `scripts/gen_comparator_tier.py`, and
+book), `formalization.yaml`, `.github/workflows/certs*.yml`, `scripts/gates/gen_comparator_tier.py`, and
 docstrings. When you propose a rename, a move, or a deletion, **count** those citations
 (`grep -c`) and state the cost. Moving a lemma into a root file (`Foundation/Tensor.lean` has ~423
 downstream modules) costs rebuild time; say how many modules import the target.

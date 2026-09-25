@@ -26,7 +26,7 @@ def efficientNetB0Imagenet : NetSpec where
   -- ⚠ The VERIFIED render was always swish (194 `stablehlo.logistic`, zero `stablehlo.maximum`), so
   -- until this line the port was MORE paper-faithful than the reference it was scored against, and
   -- B0's phase-2 ↔ phase-4 accuracy comparison was not like-for-like.
-  -- ⛔ `scripts/enet_forward_tie.py` cannot catch this: it ties the render against
+  -- ⛔ `scripts/parity/enet_forward_tie.py` cannot catch this: it ties the render against
   -- `generated_efficientnet_b0.py`, the Imagenette file, which is the one that was already right.
   convBnAct := .swish
   layers := [

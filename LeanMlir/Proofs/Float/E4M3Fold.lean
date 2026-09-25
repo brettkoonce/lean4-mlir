@@ -21,7 +21,7 @@ ops: `operand` (the int activation code = the stored bytes), `dotIn` (the int we
 code; its `den` is the exact `∑`, i.e. the fp32 accumulate), `layerScaleF` (the
 per-output dequant block-scale, `layerScaleF_faithful`), `addBcast` (the fp32 bias).
 The quantizer `q : ℝ → ℝ` (E4M3 round-to-nearest on the 1-4-3 grid; see
-`scripts/mnist_e4m3_demo.py`) is left **abstract** — the scheme is faithful for *any*
+`scripts/demos/mnist_e4m3_demo.py`) is left **abstract** — the scheme is faithful for *any*
 grid, E4M3 being one instance. Quantization-to-code is the offline/runtime byte
 preparation that produces the operands (exactly as real fp8 inference does), so the
 render-tie is the genuine "the bytes implement block-scaled-E4M3 matmul with fp32

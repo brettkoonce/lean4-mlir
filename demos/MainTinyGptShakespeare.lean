@@ -92,7 +92,7 @@ def nanoGatherCfg : GptCfg :=
 /-- nano with FlashAttention on the transformer (Phase 3). Same math as
     nano, so its loss curve must track nano's — validates the integrated
     flash fwd+bwd end-to-end (the standalone emitters are already checked
-    in scripts/flash_probe_check.py). -/
+    in scripts/probes/flash_probe_check.py). -/
 def nanoFlashCfg : GptCfg :=
   { nanoCfg with key := "nano-flash", specName := "tinygpt-shakespeare-nanoflash", flashAttn := true }
 

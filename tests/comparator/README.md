@@ -37,7 +37,7 @@ mean a second copy of every architecture, which must then never drift from the
 first; that is a weaker guarantee than an import, not a stronger one.
 
 `ChallengeTier.lean` holds the remaining 21 and is **machine-generated**
-(`scripts/gen_comparator_tier.py`). It is the layer above the Jacobians: the step
+(`scripts/gates/gen_comparator_tier.py`). It is the layer above the Jacobians: the step
 ties, the codegen faithfulness results, the whole-net back-chains, the
 data-parallel results, the float bridge, the descent result and the three
 certificate theorems — and the three nets the other two files never mention
@@ -50,7 +50,7 @@ constant.
 Its contents are exactly the declarations `formalization.yaml` advertises as the
 audited set, minus the four `config-arch.json` already covered. That is the
 point of it: **every declaration this project puts forward is independently
-kernel-rechecked**, and `scripts/gen_comparator_tier.py --check` fails if a yaml
+kernel-rechecked**, and `scripts/gates/gen_comparator_tier.py --check` fails if a yaml
 row stops naming a config that contains it.
 
 The division is the point: once the `fderiv` pin and the structural rules are

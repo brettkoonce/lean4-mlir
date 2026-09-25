@@ -141,7 +141,7 @@ def maxPool3s2BackText (B c h w : Nat) (xN r xr dr z scn o : String) : String :=
     ⚠ It lives HERE, beside the emitter, rather than in one net's renderer, because the spelling is
     load-bearing in three places that must agree and only one of them is Lean: `dropPathP`'s emit
     reads it as an operand, every SD render's signature declares it, and
-    **`scripts/misplace_drop_sites.py` matches `%dp\d+` textually** to build the placement control.
+    **`scripts/probes/misplace_drop_sites.py` matches `%dp\d+` textually** to build the placement control.
     A second definition would be the double-writer disease with a committed shell script as the
     third writer. (It started in `EfficientNetRender.lean` and moved when ConvNeXt needed it too;
     both renderers are in this namespace, so no call site changed and no artifact byte moved.) -/
@@ -151,7 +151,7 @@ def dpName (i : Nat) : String := s!"%dp{i}"
     `tensor<B×n×f32>` the signature declares for it.
 
     ⚠⚠ **IT IS DELIBERATELY NOT `%dp{i}`-SHAPED, and that is not cosmetic.**
-    `scripts/misplace_drop_sites.py` builds the stochastic-depth placement control by matching
+    `scripts/probes/misplace_drop_sites.py` builds the stochastic-depth placement control by matching
     `%dp\d+` textually; a dropout input spelled `%dp9` would be swept into that rewrite, silently
     changing a control's meaning on a render it was never written for. Handoff §0.11 records the
     other half of this hazard on ViT — a control that quietly does nothing reads exactly like a
@@ -3808,7 +3808,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
       -- `[p-1, p+1]`. The kernel is REVERSED here (`stablehlo.reverse`, dims [2,3]), and that
       -- reversal flips the sign of the index shift. Deriving it "by symmetry" with the weight
       -- grads gives `[p-1, p+1]`, which type-checks, has the right shape, descends, and is WRONG
-      -- — `scripts/xla_pad_op_check.py` caught exactly that (2.6e0 against both references) and
+      -- — `scripts/gates/xla_pad_op_check.py` caught exactly that (2.6e0 against both references) and
       -- a numeric sweep over (upsample phase, pad_low) pinned the true answer at both k=3 and
       -- k=5. Do not "fix" this to match its siblings. Total pad is `2p`, so the extent stays `2h`.
       -- ⚠ bf16 operands, **bf16-typed convolution result**, convert back. An f32-typed

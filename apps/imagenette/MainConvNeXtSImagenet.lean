@@ -93,7 +93,7 @@ def runConvNeXtSImagenet (argv : List String) : IO Unit := do
   -- exactly 1.0 and each drop op is the identity in IEEE (`Proofs.dropPath_ones_id`) — the
   -- `*drop` render must then train what a drop-free render trains. ⚠ It is an ENDPOINT gate and
   -- endpoint gates are blind to PLACEMENT (`1 ⊙ (branch + x) = branch + x` exactly), which is what
-  -- `scripts/misplace_drop_sites.py` is the control for.
+  -- `scripts/probes/misplace_drop_sites.py` is the control for.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
     | some 0 => { convnextSImagenetVerified.toNet with
                     dropKeeps := convnextSImagenetVerified.dropKeeps.map (fun _ => 1.0) }

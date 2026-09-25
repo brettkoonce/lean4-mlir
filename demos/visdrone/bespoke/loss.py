@@ -1,8 +1,8 @@
 """PyTorch twin of `emitMultiScaleYoloLoss` / `emitAnchorYoloLoss` / `emitDiouForward`.
 
 Exact transcription of LeanMlir/MlirCodegen.lean:5130-5596. Verified against the
-golden numpy mirrors in scripts/anchor_loss_probe_check.py and
-scripts/fpn_loss_breakdown.py.
+golden numpy mirrors in scripts/probes/anchor_loss_probe_check.py and
+scripts/probes/fpn_loss_breakdown.py.
 
 Per-anchor slot layout (base = a*15):
     +0 tx  +1 ty  +2 tw  +3 th   +4 obj   +5..+15 class logits

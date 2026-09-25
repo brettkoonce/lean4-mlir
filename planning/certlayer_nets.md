@@ -16,7 +16,7 @@ no-statement-change part (§4.2). Everything else is parked.
   costs ~10 min and then `(kernel) deterministic timeout` (four spellings tried). Any prototype
   must measure this first, before building on it.
 * Statement changes to anything in the comparator tier → regenerate with
-  `scripts/gen_comparator_tier.py` and run `tests/comparator/run.sh` locally (~5 min).
+  `scripts/gates/gen_comparator_tier.py` and run `tests/comparator/run.sh` locally (~5 min).
 
 ## 1. The problem
 

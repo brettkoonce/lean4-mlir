@@ -197,7 +197,7 @@ private def headLnBetaTailB (bB : Nat) (cot : String) (d : Nat) :
     between `layerScaleCh` and the `addVB`. ⚠⚠ **That placement is the whole correctness question and
     the obvious gate is blind to it** — at an all-ones mask `1 ⊙ (branch + x) = branch + x` exactly,
     so a site on the block OUTPUT is the same function bit-for-bit and every endpoint gate passes on
-    it (`stochastic_depth.md` §7b, measured on EfficientNet). `scripts/misplace_drop_sites.py` builds
+    it (`stochastic_depth.md` §7b, measured on EfficientNet). `scripts/probes/misplace_drop_sites.py` builds
     exactly that render — same SSA names, order, types and line count — and it is the control that
     licenses believing any green run here.
 
@@ -501,7 +501,7 @@ private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci 
   let (cNb, nNb) ← lnBetaTailB bB cot_n ci (2*h2)
   -- ⚠ The wgrad pad is `[[p-1, p+1], …]`, the OPPOSITE shift from the dgrad's `[[p+1, p-1], …]`
   -- in `bwdDownB`. `convStridedWeightGradBBf16` keeps its f32 peer's geometry verbatim;
-  -- `scripts/xla_pad_op_check.py` caught this pair being "fixed by symmetry" once already.
+  -- `scripts/gates/xla_pad_op_check.py` caught this pair being "fixed by symmetry" once already.
   let (wcode, nW) ← pretty bB (.convStridedWeightGradBAt bf16 (N := bB) (ic := ci) (oc := co)
         (h := h2)
         (w := h2) (kH := 2) (kW := 2) zrnd downLn (zVB : Vec co)
@@ -899,7 +899,7 @@ end Proofs.StableHLO
 --
 -- ⚠⚠ **DO NOT ASSUME THIS IS FASTER.** A bf16 op can be SLOWER than its f32 peer with every gate
 -- green — ViT's stem wgrad runs 0.19× — so the render existing says nothing about the wall clock.
--- Measure with `scripts/bf16_device_step.py`, which times the GRAPH; a trainer's own ms/step is a
+-- Measure with `scripts/probes/bf16_device_step.py`, which times the GRAPH; a trainer's own ms/step is a
 -- system number that also moves with `PJRT_FFI_RESIDENT` (off by default) and the shim feed.
 #eval IO.FS.writeFile "verified_mlir/convnextsin_adamwxclipdropbf16_train_step.mlir"
   (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" "32.0" 1 1000 "convnextsin"
@@ -977,7 +977,7 @@ end Proofs.StableHLO
 -- the conv input-VJP's `transpose`/`reverse` pair in the other order (commuting ops on disjoint
 -- axes; `tests/TestConvNeXtFwdBTie.lean` allows that pair and nothing else). The numeric licence is
 -- `planning/archive/xla_pjrt_handoff.md` §0.10 — the keep = 1 gate, per-example against batched, 0 of
--- 83,478,846 floats differing after three AdamW steps with `scripts/perturb_conv_vjp.py` as the
+-- 83,478,846 floats differing after three AdamW steps with `scripts/probes/perturb_conv_vjp.py` as the
 -- negative control — re-run as `convnext-adam-tie` on the swapped bytes.
 --
 -- ⛔ The batched tier landed FIRST: `Nets/ConvNeXt/ConvNeXtFoldGB.lean` folds every `*GradB`
@@ -1146,7 +1146,7 @@ end Proofs.StableHLO
 -- run clips, so its accuracy is comparable to nothing. It exists so `clip-tie` can drive it at
 -- bs32/K=10, where the compile is seconds.
 --
--- ⚠⚠ THE BELOW-THRESHOLD RENDER IS NOT COMMITTED — `scripts/perturb_clip.py hi` generates it, and
+-- ⚠⚠ THE BELOW-THRESHOLD RENDER IS NOT COMMITTED — `scripts/probes/perturb_clip.py hi` generates it, and
 -- the reason is a defect this file produced and then had reverted: `cnxAdamVariant`'s `clip` is a
 -- **Bool**, so a second render at a different threshold spelled the SAME variant, and
 -- `convnext_adamcliphi_train_step.mlir` came out declaring `@convnext_adamclip_train_step` — an

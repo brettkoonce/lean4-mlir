@@ -15,7 +15,7 @@ import Jax
     wired. No remaining architectural deviation from the paper.
 
     The verified peer is tied to this file's generated output on shared weights by
-    `scripts/convnext_forward_tie.py` (`--net convnextsin` for the S pair), the ConvNeXt sibling
+    `scripts/parity/convnext_forward_tie.py` (`--net convnextsin` for the S pair), the ConvNeXt sibling
     of the mnv2/mnv4/enet forward ties: max |Δ| 1.464e-03 over the logits, under its 2e-3 bound
     (2026-09-24). A divergence here compares two different networks. -/
 

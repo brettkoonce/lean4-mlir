@@ -7,7 +7,7 @@
 # can turn those gates red — which is the point.
 #
 # Consumers:
-#   scripts/randaug_timm_diff.py    RandAugment magnitude mappings vs timm's own level_to_arg
+#   scripts/parity/randaug_timm_diff.py    RandAugment magnitude mappings vs timm's own level_to_arg
 #   tests/verify_bestiary_timm.py   bestiary parameter counts vs timm's models
 #   (ad hoc)                        timm.get_pretrained_cfg lookups — crop_pct, interpolation,
 #                                   test_input_size, i.e. the eval protocol of appendix A

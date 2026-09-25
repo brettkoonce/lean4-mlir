@@ -18,9 +18,9 @@ are hand-emitted: the GAP backward, conv/depthwise/dense weight+bias grads, laye
 
 Unlike the MNV2/r34 peers there is no committed same-signature renderer (the committed
 `TestConvNeXtTrain.lean` is the full ConvNeXt-T [3,3,9,3]; "come back to scaling later"), so
-validation is the `scripts/render_parity.py` ref-only smoke: compile + run on the GPU, all 26
+validation is the `scripts/gates/render_parity.py` ref-only smoke: compile + run on the GPU, all 26
 updated params finite and non-zero:
-  `scripts/render_parity.py --fn convnext_rep_train_step --ref .lake/build/cnxpc_train_step.mlir`
+  `scripts/gates/render_parity.py --fn convnext_rep_train_step --ref .lake/build/cnxpc_train_step.mlir`
 
 Run: `lake env lean tests/TestConvNeXtTrainPC.lean`
 -/

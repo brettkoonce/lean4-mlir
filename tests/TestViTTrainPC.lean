@@ -39,11 +39,11 @@ Only the no-SHlo-constructor pieces are hand-emitted, each certified in
 `dWp`/`dbp` over the patch rows (`vit_render_patch{W,b}_certified`), and the head
 `dWcls = clsᵀ·dy` / `dbcls = Σ dy` (M2).
 
-Validation is the `scripts/render_parity.py` TWO-SIDED parity against the committed
+Validation is the `scripts/gates/render_parity.py` TWO-SIDED parity against the committed
 GPU-trained renderer (same signature; expect equivalent-not-byte-identical — the
 recompute-vs-save layouts differ, e.g. per-head slice/pad-sum vs rank-4 batched
 attention, im2col vs dilate+conv patch W-grad, 3-token vs fused LN affine):
-  `scripts/render_parity.py --fn vit_train_step --ref verified_mlir/vit_train_step.mlir \
+  `scripts/gates/render_parity.py --fn vit_train_step --ref verified_mlir/vit_train_step.mlir \
      --cand .lake/build/vitpc_train_step.mlir`
 
 Run: `lake env lean tests/TestViTTrainPC.lean`

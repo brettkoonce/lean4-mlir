@@ -127,13 +127,13 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
 * The REORDER probe (swap batch halves) is exactly commutative and measures nothing; SENSITIVITY
   (perturb `x` by 1e-4) is the yardstick for gradient columns at a random-init operating point.
 * A `formalization.yaml` row naming `config-tier.json` must also go in
-  `scripts/gen_comparator_tier.py`'s `DECLS` (+ `MODULES`), then regenerate — CI's `--check`
+  `scripts/gates/gen_comparator_tier.py`'s `DECLS` (+ `MODULES`), then regenerate — CI's `--check`
   fails otherwise (it was red at `95fc72d0`; fixed in `d19009e5`). 30 theorems in the tier now.
 * The docstring gate rejects bare backticked `dir/File.lean` paths in `LeanMlir/` docstrings —
   write a markdown link to the GitHub path.
 * f32 R34 at batch 256 OOMs the default 11.68 GiB arena (`d2h: Out of memory … 8.54GiB`);
   `LEAN_MLIR_MEM_FRACTION=0.97` fits it. bf16 at 256 peaks 5.8–6.7 GiB on all three nets
-  (`scripts/bf16_peak_memory.py`), so bf16 stays at the default.
+  (`scripts/probes/bf16_peak_memory.py`), so bf16 stays at the default.
 * ⚠ `XLA_FLAGS=--xla_gpu_autotune_level=0` changed neither a number nor a compile time (51.6 s vs
   51.7 s) — the PJRT plugin appears not to read `XLA_FLAGS`. Don't cite a run under it as
   "autotuning off".
@@ -150,8 +150,8 @@ The ImageNet-shape gate (4 GPUs; ~1.5–2 min each, most of it the first two XLA
 * Full gate list for a commit here: `lake build Certs`, `lake build`, `lake build Apps`,
   `lake env lean tests/AuditAxioms.lean` (verdicts = directives, no `sorryAx`),
   `lake exe docstring-checkrefs`, `scripts/regen_verified_mlir.sh check`,
-  `scripts/check_audit_coverage.py`, `scripts/check_target_names.sh`,
-  `scripts/gen_comparator_tier.py --check`, `tests/comparator/run.sh` (~6 min), and the GPU gates
+  `scripts/gates/check_audit_coverage.py`, `scripts/gates/check_target_names.sh`,
+  `scripts/gates/gen_comparator_tier.py --check`, `tests/comparator/run.sh` (~6 min), and the GPU gates
   — for R50 also `python3 tests/r50_dp_render_tie.py` (after building `ResNet50RenderB`).
 
 ---
@@ -879,7 +879,7 @@ Logs: `runs/2026-09-21-syncbn-r50-mnv4/`.
 `LeanMlir/SyncBnCheck.lean`, `tests/TestImagenetSyncBnCheck.lean`, `tests/TestShardCheck.lean`,
 `tests/TestMnv4DpCheck.lean`, `tests/TestR50AccumShardTie.lean`, `tests/TestR50GradCheck.lean`,
 `tests/TestDropShardCheck.lean`, `tests/r50_dp_render_tie.py`, `scripts/regen_verified_mlir.sh`,
-`scripts/check_render_coverage.py`, `scripts/bf16_probe_4gpu.sh` (since deleted), `scripts/gen_comparator_tier.py`
+`scripts/gates/check_render_coverage.py`, `scripts/bf16_probe_4gpu.sh` (since deleted), `scripts/gates/gen_comparator_tier.py`
 + the three regenerated `tests/comparator/*Tier*`, `tests/AuditAxioms.lean`, `formalization.yaml`,
 `lakefile.lean`, the two T2 docstrings (`ResNet50FullB`, `MobileNetV4FullB`),
 `apps/imagenette/MainMobilenetV4Imagenet.lean`, and this doc.

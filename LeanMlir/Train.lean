@@ -1123,7 +1123,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
            IO.eprintln s!"  ✓ new best (score {segScore}) — saved {pfx}_best_*"
      else if useYolov1Run || useFpnRun then
        -- mAP@0.5 eval for detection is a separate offline pass (inferDump →
-       -- scripts/yolo_map_visdrone.py). The train step runs + loss drops on real
+       -- scripts/demos/yolo_map_visdrone.py). The train step runs + loss drops on real
        -- detection data; the classification eval block below would interpret the
        -- flat detection output as class logits, which is nonsensical.
        IO.eprintln s!"  ({if useFpnRun then "fpn" else "yolov1"} eval skipped — offline mAP pass; train loss above is the signal)"

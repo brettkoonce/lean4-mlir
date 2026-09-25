@@ -12,7 +12,7 @@ backward chain delivers, driven by a loss cotangent `g` at the logits.
 
 ⚠⚠ **No accuracy is quoted for this net.** The statements are about timm's
 `mobilenetv4_conv_medium` (`planning/mnv4_timm_parity.md`); the gates that pin the artifacts to it
-are `scripts/mnv4_timm_parity.py`, `scripts/mnv4_forward_tie.py` and `scripts/grad_tie.py`.
+are `scripts/parity/mnv4_timm_parity.py`, `scripts/parity/mnv4_forward_tie.py` and `scripts/parity/grad_tie.py`.
 
 ## ⭐ The UIB bottleneck is LINEAR, and that makes MNv4's chain shorter than ResNet's
 

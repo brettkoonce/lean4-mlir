@@ -13,7 +13,7 @@ import LeanMlir
     ImageNet prefix (`jax_r34_imagenet.bin`, the BraTS/VisDrone/NEU bootstrap) with a
     38-way head through the ordinary cross-entropy train step — `demos/MainAraslSigns.lean`
     with the Imagenette loader and the bootstrap — and writes `[N, 38]` logits for every
-    evaluation part, which `scripts/plant_score.py` turns into the two columns of the
+    evaluation part, which `scripts/demos/plant_score.py` turns into the two columns of the
     section's table. The u8 records stay resident and a C helper converts one batch at a
     time (`F32.imagenetteGather`), because the f32 form of a 43k-image part is 34 GB.
 
@@ -27,7 +27,7 @@ import LeanMlir
     stratified) from the checkpoint `init` names, a fixed schedule with no selection, and
     scores fold k's held-out images. Otherwise the epoch is chosen on the PlantVillage val
     tenth. `extra` names one more 224-side part to score (the Shapley probe
-    `scripts/plant_shapley.py grid` writes); `cam=1` also dumps the closed-form CAM of every
+    `scripts/demos/plant_shapley.py grid` writes); `cam=1` also dumps the closed-form CAM of every
     image of the test tenth and the field part (`camDump`). Writes `<prefix>_curve.csv`, `_params.bin`, `_bn_stats.bin` and
     `_logits_<part>.bin` for `pv{,g}_test`, `_test_seg`, `_test_bg`, `_test_leaf`, `_test_none`
     and `pd_all` (or `pd_fold<k>_test`) under `out` (default `.lake/build`). -/
@@ -164,7 +164,7 @@ def offsetBefore (spec : NetSpec) (targetIdx : Nat) : Nat := Id.run do
     through `forward_cam`, the class's dense row as the channel weights, ReLU, max-normalised —
     `F32.camCompute` — for the TRUE class and for the PREDICTED class of every image. Writes
     `<pfx>_cam_<part>.bin` as f32 `[n, 2, 7, 7]` and `<pfx>_campred_<part>.bin` as int32 `[n]`;
-    `scripts/plant_cam.py` reads them against the leaf masks. No autodiff, no new codegen:
+    `scripts/demos/plant_cam.py` reads them against the leaf masks. No autodiff, no new codegen:
     `MlirCodegen.generateForwardCam` is the eval graph cut before the pool. -/
 def camDump (spec : NetSpec) (pfx : String) (params bn : ByteArray) (parts : Array Part) (B : Nat) : IO Unit := do
   let gpfx := spec.buildPrefix
@@ -425,7 +425,7 @@ val acc {fmt accVa 2}%  {fieldPart} acc {fmt accField 2}%  \
     IO.FS.writeBinFile s!"{pfx}_logits_{q.name}.bin" logits
     IO.println s!"{spec.name} [{split}/{trainSel}/{initTag}{if field == "none" then "" else s!"/field{field}"}] \
 {q.name}: accuracy {fmt acc 2}%  -> {pfx}_logits_{q.name}.bin"
-  IO.eprintln s!"score: .venv/bin/python scripts/plant_score.py {pfx}_logits_{fieldPart}.bin --part {fieldPart} --restrict"
+  IO.eprintln s!"score: .venv/bin/python scripts/demos/plant_score.py {pfx}_logits_{fieldPart}.bin --part {fieldPart} --restrict"
   -- ── cam=1: the CAM of every image of the test tenth and the field part ──
   if parseArg args "cam" "0" == "1" then
     camDump spec pfx p bn #[evalParts[0]!, evalParts.back!] B

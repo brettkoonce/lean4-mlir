@@ -122,7 +122,7 @@ jobs with no checkpoints.
 Consume whichever in-flight read completes first instead of strict round-robin. A slow loader then
 costs a quarter of its shortfall instead of pacing all four. Batch order is already
 nondeterministic with determinism off. ⚠ Must stay strict round-robin under `SHIM_DETERMINISM=1`:
-`tests/prefetch_tie.sh`, `scripts/residency_gate.sh`, `scripts/mixup_gate.py` and
+`tests/prefetch_tie.sh`, `scripts/gates/residency_gate.sh`, `scripts/gates/mixup_gate.py` and
 `scripts/shim_wiring_gate.py` replay streams.
 
 ### 3b. Level 1 — staggered periodic respawn ✅ BUILT 2026-09-16 · ⚠ STILL UNTESTED AGAINST THE FAULT (2026-09-17)

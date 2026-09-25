@@ -1,7 +1,7 @@
 # transformer_wavefunction_demo.md — structure first, the transformer models the rest
 
 **Status 2026-09-12: phases 0–3 DONE** — `demos/MainNqsIsing.lean`,
-`scripts/nqs_metrics.py`, `scripts/nqs_figure.py`, results and every gate in
+`scripts/demos/nqs_metrics.py`, `scripts/demos/nqs_figure.py`, results and every gate in
 `runs/2026-09-11-nqs-ising/` (README there has the tables). What the plan got
 right: zero new codegen, the DDPM-MSE target trick carries the energy gradient
 exactly, R1 at f_θ = 0 prints the mean-field row, the TinyGPT sampler batched over
@@ -164,7 +164,7 @@ decision is a cost, not a hope.
 - Inputs: ±1 floats for the MLP; patch ids for the transformer, built on the
   host from the configuration.
 
-## 5. Instrument and bracket — `scripts/nqs_metrics.py`
+## 5. Instrument and bracket — `scripts/demos/nqs_metrics.py`
 
 Rows: mean field (floor), MLP residual, ViT residual, GPT, exact (ceiling).
 Columns: (E − E0)/|E0|, Var(E_loc), ⟨σˣ⟩, ⟨σᶻ₁σᶻ₁₊ᵣ⟩ at r = N/2. At N = 12

@@ -55,7 +55,7 @@ noncomputable def u32 : ℝ := ((2 : ℝ) ^ (24 : ℕ))⁻¹
 
 /-- The normal-range unit roundoff of fp8 **E4M3** (1-4-3, 3 mantissa bits):
     `2⁻⁴ = 1/16` (6.25%) — the leaf precision of the §3c E4M3 MNIST demo
-    (`scripts/mnist_e4m3_demo.py`). Outside the normal range (subnormals,
+    (`scripts/demos/mnist_e4m3_demo.py`). Outside the normal range (subnormals,
     near the 448 max) the relative model degrades; see §2/§5 of the plan. -/
 noncomputable def u_e4m3 : ℝ := ((2 : ℝ) ^ (4 : ℕ))⁻¹
 
@@ -702,7 +702,7 @@ private theorem mnist_E1_nonneg : (0:ℝ) ≤ layerBudget M.u 512 (3/5) 1 (2357/
     relative scale as at small weights. All three layer budgets discharge by
     `norm_num` through the γ-form; no big-power evaluation.
 
-    Measured on the live run (`scripts/margin_probe.py`): actual logit
+    Measured on the live run (`scripts/certs/margin_probe.py`): actual logit
     drift ≤ 1.6·10⁻⁵ — the ≈3·10⁸ gap between the worst-case bound and
     reality is the worst-case-composition blow-up (`307·e` Lipschitz
     amplification per layer at these magnitudes), the quantitative case for
@@ -1221,7 +1221,7 @@ theorem mlp_b0_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     *forward* budget riding through the gradient at learning-rate scale —
     while fresh backward rounding contributes only ~2·10⁻³. The gradient
     step is as accurate as the forward pass, no worse. Measured on the
-    live run (`scripts/margin_probe.py`): actual W₂ step deviation
+    live run (`scripts/certs/margin_probe.py`): actual W₂ step deviation
     ≤ 7.5·10⁻⁹ — the worst-case-vs-measured gap is the a-posteriori case
     in numbers. -/
 theorem mnist_w2_step_float_budget (hMu : M.u ≤ u32)
@@ -1651,7 +1651,7 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
     forward logit budget (≈5100 at trained magnitudes) makes `e^(2δ) − 1`
     vacuous, so a useful head budget needs the measured logit error —
     exactly the hand-off point from worst-case to a-posteriori analysis.
-    Empirically validated (`scripts/margin_probe.py`): measured drift on a
+    Empirically validated (`scripts/certs/margin_probe.py`): measured drift on a
     real 12-epoch run is ≤ 1.6·10⁻⁵, 600× inside the `1/100` hypothesis. -/
 theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
     (heexp0 : 0 ≤ eexp) (heexp : eexp ≤ 1/1000000)
@@ -1797,7 +1797,7 @@ theorem denseMixedBudget_le_of {uacc uleaf : ℝ} {m : ℕ} {w β a g P Q U : �
     trained `|W| ≤ 3/5`, `|b| ≤ 1`): every E4M3-mixed logit is within **61** of
     the exact-ℝ logit. The leaf term `(2·2⁻⁴ ≈ 12.5%)·∑|xW|` dominates (the fp32
     fan-in γ at 784 is ≈5·10⁻⁵, negligible) — this is the *worst-case*, all-errors-
-    aligned figure. The demo (`scripts/mnist_e4m3_demo.py`) measures the actual
+    aligned figure. The demo (`scripts/demos/mnist_e4m3_demo.py`) measures the actual
     drift at `max|Δlogit| = 0.38` (errors cancel), the a-posteriori `B`; both
     feed `argmax_preserved`. -/
 theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
@@ -1833,7 +1833,7 @@ theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
     fp8 case with an honest accuracy guarantee (no vacuous depth compounding).
     The 122 is the worst-case threshold; with the demo's measured `B = 0.38`
     the same `argmax_preserved` covers the `>0.76`-margin inputs — empirically
-    92.89% of the MNIST test set (`scripts/mnist_e4m3_demo.py`). fp32 ≈ exact-ℝ
+    92.89% of the MNIST test set (`scripts/demos/mnist_e4m3_demo.py`). fp32 ≈ exact-ℝ
     (within `u_acc`), so the demo's fp32 margins are the relevant quantity. -/
 theorem linear_e4m3_argmax_preserved (L : FloatModel) (hMu : M.u ≤ u32)
     (hLu : L.u ≤ u_e4m3) {n : ℕ} {W : Mat 784 n} {b : Vec n} {x : Vec 784}

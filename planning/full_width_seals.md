@@ -466,11 +466,11 @@ Every place the retired names lived, all edited:
 | what | where |
 |---|---|
 | `main_results` row + §4 prose | `formalization.yaml` |
-| `DECLS` + `MODULES`, then the regenerated pair | `scripts/gen_comparator_tier.py`, `tests/comparator/{Challenge,Solution}Tier.lean`, `config-tier.json` |
+| `DECLS` + `MODULES`, then the regenerated pair | `scripts/gates/gen_comparator_tier.py`, `tests/comparator/{Challenge,Solution}Tier.lean`, `config-tier.json` |
 | nine `#print axioms` + three imports | `tests/AuditAxioms.lean` |
 | three roots | `lakefile.lean` |
 | prose | `LeanMlir/Proofs/README.md`, `Training/JacobianSeal.lean`, `Training/TrainedMlpWitness.lean` |
-| the docstring generator, kept in sync with the file above | `scripts/lipschitz_cert_witness_s8.py` |
+| the docstring generator, kept in sync with the file above | `scripts/certs/lipschitz_cert_witness_s8.py` |
 | its own worked example of "a namespace named by a suffix" | `tests/DocstringCheckRefs.lean` |
 | the audit count | `tests/comparator/README.md`, `blueprint/src/content.tex` |
 
@@ -575,7 +575,7 @@ table. Total elaboration 3.1 s. The shipped file imports only `MobileNetV4FullBV
   `comparator_config: tests/comparator/config-tier.json`. House style: no emoji, one-line comments.
 * **Comparator tier.** Every yaml `main_results` row must be in a comparator config
   (`gen_comparator_tier.py --check` enforces it). So a yaml row change is a `DECLS` change:
-  edit `DECLS` and `MODULES`, run `python3 scripts/gen_comparator_tier.py` (regenerates and
+  edit `DECLS` and `MODULES`, run `python3 scripts/gates/gen_comparator_tier.py` (regenerates and
   elaborates the solution in the parent package, seconds), then `tests/comparator/run.sh`
   (the tools are installed locally since 2026-09-20; ~25 min cold, all three configs).
 * **`tests/AuditAxioms.lean`.** Drop the retired prints (`liveFwd2_*`, `liveFwd2Full_*`,
@@ -591,8 +591,8 @@ table. Total elaboration 3.1 s. The shipped file imports only `MobileNetV4FullBV
   die with it in 4.3), while `sqrt_lt_param`, `bnIstd_cont` and `bnForward_chan_diff_γ` — general
   BN facts — moved into `BatchSealKit.lean`, which that file now imports. Also re-pointed: two
   docstrings in `Nets/ResNet/ResNet34.lean` cited the deleted modules (caught by
-  `lake exe docstring-checkrefs`), and `scripts/lipschitz_cert_witness_s8.py`'s prose.
-  `scripts/check_target_names.sh` and `python3 scripts/check_audit_coverage.py` after.
+  `lake exe docstring-checkrefs`), and `scripts/certs/lipschitz_cert_witness_s8.py`'s prose.
+  `scripts/gates/check_target_names.sh` and `python3 scripts/gates/check_audit_coverage.py` after.
 * **The audit count** went 1,380 → 1,374 at 4.1 (nine proxy prints out, three seal prints in),
   1,374 → 1,377 at 4.2, 1,377 → 1,371 at 4.3 (nine proxy prints out) and 1,371 → **1,374** at 4.4,
   in `tests/comparator/README.md` and `blueprint/src/content.tex`.
@@ -605,10 +605,10 @@ table. Total elaboration 3.1 s. The shipped file imports only `MobileNetV4FullBV
 ## 6. Gates
 
 The standard set: `lake build Certs`, `lake env lean tests/AuditAxioms.lean` (3-axiom clean),
-`lake exe docstring-checkrefs`, `python3 scripts/check_audit_coverage.py`,
-`python3 scripts/check_render_coverage.py`, `git diff verified_mlir/` empty,
-`bash scripts/check_target_names.sh`. Plus, whenever `DECLS` or the yaml changes,
-`python3 scripts/gen_comparator_tier.py --check` and `tests/comparator/run.sh`. Land by
+`lake exe docstring-checkrefs`, `python3 scripts/gates/check_audit_coverage.py`,
+`python3 scripts/gates/check_render_coverage.py`, `git diff verified_mlir/` empty,
+`bash scripts/gates/check_target_names.sh`. Plus, whenever `DECLS` or the yaml changes,
+`python3 scripts/gates/gen_comparator_tier.py --check` and `tests/comparator/run.sh`. Land by
 fast-forward, never a merge commit; stage, then stop for review before every commit.
 
 ## 7. Out of scope

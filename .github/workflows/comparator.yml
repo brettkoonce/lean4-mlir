@@ -52,7 +52,7 @@ on:
       - '.github/workflows/comparator.yml'
       # Both are inputs to the `--check` step: the generator writes the tier pair, and the
       # yaml is the list that step requires every comparator config to cover.
-      - 'scripts/gen_comparator_tier.py'
+      - 'scripts/gates/gen_comparator_tier.py'
       - 'formalization.yaml'
       - 'lakefile.lean'
       - 'lean-toolchain'
@@ -65,7 +65,7 @@ on:
       - '.github/workflows/comparator.yml'
       # Both are inputs to the `--check` step: the generator writes the tier pair, and the
       # yaml is the list that step requires every comparator config to cover.
-      - 'scripts/gen_comparator_tier.py'
+      - 'scripts/gates/gen_comparator_tier.py'
       - 'formalization.yaml'
       - 'lakefile.lean'
       - 'lean-toolchain'
@@ -212,12 +212,12 @@ jobs:
       - name: Comparator tier files match their generator
         id: tier
         # tests/comparator/{Challenge,Solution}Tier.lean are PRINTED from the project
-        # declarations' own types (scripts/gen_comparator_tier.py). A hand-edit, or a
+        # declarations' own types (scripts/gates/gen_comparator_tier.py). A hand-edit, or a
         # statement change upstream, makes them stale — comparator would catch the
         # challenge/solution mismatch, but not a pair that drifted together away from the
         # project. This asks the sharper question: do these files still say what the
         # declarations say? It re-prints every tier type and diffs, ~2 min, no sandbox.
-        run: python3 scripts/gen_comparator_tier.py --check
+        run: python3 scripts/gates/gen_comparator_tier.py --check
 
       - name: Run comparator (Mathlib-only, architecture and tier configs — kernel + axiom-closure re-check)
         id: run
@@ -259,7 +259,7 @@ jobs:
           done
           case "${{ steps.tier.outcome }}" in
             success) tier="✅ the tier files match their generator — every tier declaration's type re-printed and diffed" ;;
-            failure) tier="❌ the tier files have drifted from their generator (\`scripts/gen_comparator_tier.py\`)" ;;
+            failure) tier="❌ the tier files have drifted from their generator (\`scripts/gates/gen_comparator_tier.py\`)" ;;
             *)       tier="— the tier drift check did not run" ;;
           esac
           {

@@ -629,7 +629,7 @@ inductive SHlo : Nat → Type where
   -- The XLA-`SAME` per-example input-VJP (MobileNetV2's SGD train step). ⚠ Its transposed-conv
   -- pad is `[p+1, p-1]` — the OPPOSITE shift from the two weight grads, because the kernel is
   -- reversed here; the batched `depthwiseStridedXlaBackBatched` carries the full note and
-  -- `scripts/xla_pad_op_check.py` checks both. `den` is `depthwiseStride2FlatXla_has_vjp`.
+  -- `scripts/gates/xla_pad_op_check.py` checks both. `den` is `depthwiseStride2FlatXla_has_vjp`.
   | depthwiseStridedXlaBack {c h w kH kW : Nat} (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) (v : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- Chapter 7 (EfficientNet): swish forward (`x · σ(x)`, σ = `stablehlo.logistic`)
@@ -1026,7 +1026,7 @@ inductive SHlo : Nat → Type where
       (W : DepthwiseKernel c kH kW) (b : Vec c) :
       SHlo (N * (c * h * w)) → SHlo (N * (c * (2 * h) * (2 * w)))
   -- ⭐ Its bf16 peer. ⚠⚠ Keeps the `[p+1, p-1]` pad — the OPPOSITE shift from the weight grads,
-  -- because the kernel is reversed here. `scripts/xla_pad_op_check.py` caught that once already;
+  -- because the kernel is reversed here. `scripts/gates/xla_pad_op_check.py` caught that once already;
   -- the bf16 twin inherits the answer rather than re-deriving it.
   | depthwiseStridedXlaBackBatchedBf16 {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (wName : String)
       (W : DepthwiseKernel c kH kW) (b : Vec c) :

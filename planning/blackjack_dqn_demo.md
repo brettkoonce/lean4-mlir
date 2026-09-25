@@ -6,7 +6,7 @@ optimum -0.0431, tabular Q -0.0440 (192/200, 10^6 hands), Double DQN -0.0476
 (188/200, 200k updates) — Gate 2 passes for all four ablation arms. The
 environment moved to `LeanMlir/Blackjack.lean` so both exes share it; the DQN is
 `lake exe blackjack-dqn`. The book's figure is the two charts alone,
-`blueprint/src/figures/demos/blackjack_chart.png` (`scripts/blackjack_figure.py … chart`);
+`blueprint/src/figures/demos/blackjack_chart.png` (`scripts/demos/blackjack_figure.py … chart`);
 the curve version stays in the run directory.
 
 Goal: the reinforcement-learning demo, in two rungs on one loop. Rung 1 ports
@@ -142,7 +142,7 @@ the second panel of the figure. Tabular Q gets the same curve from its table.
 against dealer A–10, three columns (exact, tabular Q, DQN), cells coloured
 hit/stick with disagreements outlined. Right: exact value of the greedy
 policy against training hands for tabular Q and DQN, with the optimum and
-the published table as lines. Produced by `scripts/blackjack_figure.py` from
+the published table as lines. Produced by `scripts/demos/blackjack_figure.py` from
 a `.bin` dump of the three policies and the two curves.
 
 **Table 1 (bracketed).** Rows: random, threshold, published table, tabular Q,

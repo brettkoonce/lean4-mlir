@@ -976,7 +976,7 @@ tail fault) — this pass's denominator is {c.total + c.rows}, not 50,000"
     ⚠ The gate-only fault knobs, in the `PJRT_FFI_FAULT` style — controls that must go red:
     `LEAN_MLIR_VAL_FAULT=order` starts the round-robin on producer 1 (every image scored against
     another image's label: same count, different bitmap), `=tail` drops the 80-row tail (the C4
-    bug class: 49,920). `scripts/streamed_val_gate.sh`. -/
+    bug class: 49,920). `scripts/gates/streamed_val_gate.sh`. -/
 def spawnValStream (net : VerifiedNet) (flat : Nat) (n : Nat := 2) (shimBatch : Nat := 256)
     (extraEnv : Array (String × Option String) := #[]) : IO EvalRows := do
   let hs ← spawnShimSharded net.shimScript "validation" shimBatch flat 0 n (extraEnv := extraEnv)
@@ -1005,7 +1005,7 @@ def reapValStream : EvalRows → IO Unit
     from: the held split, or ImageNet's per-pass stream (`EvalRows`).
 
     ⭐ ONE copy, shared by the per-epoch eval in `trainAdamSched` and by `scoreCheckpoint`. That is
-    not tidiness: `scripts/sharded_eval_gate.sh` compares 1 replica against N through
+    not tidiness: `scripts/gates/sharded_eval_gate.sh` compares 1 replica against N through
     `score-checkpoint`, and a gate on a COPY of the loop says nothing about the loop that runs.
 
     ⚠⚠ THE RAGGED TAIL is the first thing to get wrong. 50,000 is not a multiple of 4 × 64 = 256:
@@ -1277,7 +1277,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   -- LEAN_MLIR_PERTURB_R: displace the initial parameters along a random unit vector of exact L2
   -- norm r, in units of 1e-9 (no `String.toFloat?` in this toolchain), before any training. Same
   -- knob and same spelling as `trainAdamSched`; it was implemented ONLY there, which made
-  -- `scripts/residency_gate.sh`'s init CONTROL a silent no-op for every net on this loop —
+  -- `scripts/gates/residency_gate.sh`'s init CONTROL a silent no-op for every net on this loop —
   -- the gate caught that itself and refused as VACUOUS rather than reporting a green.
   let params0 := F32.concat parts
   let mut params ← match (← IO.getEnv "LEAN_MLIR_PERTURB_R").bind (·.toNat?) with
@@ -1623,7 +1623,7 @@ name, as in lambaccdp8x64bce), and <k> is what the graph's baked 1/k was rendere
   -- replica 0 alone. `grep -c all_reduce` is 0 on every `_fwd`/`_fwd_eval`, so the train steps
   -- were N-replica and the eval never was. Measured on the killed ConvNeXt run: ~100 s/epoch at
   -- 91% util on GPU 0 while GPUs 1-3 sat at 0%. Same artifacts, nothing re-rendered. The gate is
-  -- `scripts/sharded_eval_gate.sh`: an identical correct count and bitmap at 1 and N replicas, with
+  -- `scripts/gates/sharded_eval_gate.sh`: an identical correct count and bitmap at 1 and N replicas, with
   -- a control that must fail.
   let fwdSess ← mkSessionDp fwdPath replicas
   -- ⚠ `evalTag`: a variant rendered at a non-default BN ε scores through the eval graph at THAT ε.
@@ -1844,7 +1844,7 @@ new-batch weight {bnMomShown}{if accOn then s!" = 1 − {cfg.bnMomentum}^(1/{acc
   -- ⚠ This is a REQUEST, and nothing here selects a transport. The C boundary
   -- honours it only under `$PJRT_FFI_RESIDENT=1` on the XLA build, so IREE and
   -- XLA still run this identical body — the property every §2h cross-backend
-  -- gate rests on. The gate is `scripts/residency_gate.sh`: bit-identical
+  -- gate rests on. The gate is `scripts/gates/residency_gate.sh`: bit-identical
   -- parameters, or it did not land.
   let nResident := (nRegions * net.paramShapes.size).toUSize
   let fwdShapes := net.shapesBA
@@ -2039,7 +2039,7 @@ re-seeded from the running stats over the first 100 steps, not restored"
   -- synth, differs by exactly the shim read. That difference is the ceiling on what a prefetch can
   -- hide (planning/archive/next_session_pipeline_then_r50.md §2).
   --
-  -- ⚠ It changes what `scripts/residency_gate.sh` feeds an ImageNet net — from a seeded real
+  -- ⚠ It changes what `scripts/gates/residency_gate.sh` feeds an ImageNet net — from a seeded real
   -- stream to one constant batch. Both are deterministic, which is all that gate's bit-identity
   -- verdict needs, but a constant batch is less numerically varied, so re-confirm the FAULT
   -- control fires before trusting a green from it.
@@ -2685,7 +2685,7 @@ gate's control, not a configuration.")
       -- the bitmaps silently lost, with the surviving file labelled as if it were the run.
       -- The checkpoint path has carried `variant` all along (`<slug>_<variant>_ckpt_xla.bin`);
       -- this brings the bitmap into line. ▶ Single-arm trainers pass "adam", so their files
-      -- move `<pfx>_e80.bin` -> `<pfx>_adam_e80.bin`; `scripts/mcnemar.py` takes explicit
+      -- move `<pfx>_e80.bin` -> `<pfx>_adam_e80.bin`; `scripts/demos/mcnemar.py` takes explicit
       -- paths and does not care, but bitmaps written before 2026-08-31 use the old name.
       match dumpCorrect with
       | some pfx =>
@@ -2789,7 +2789,7 @@ gate's control, not a configuration.")
 
     ▶ **timm's test protocol**: `LEAN_MLIR_EVAL_SIZE` / `LEAN_MLIR_EVAL_CROP` score through the eval
     graph rendered at that size (`…_fwd_eval_s<S>.mlir`) with the val stream resized and cropped to
-    match (`SHIM_EVAL_SIZE` / `SHIM_EVAL_CROP`). `scripts/score_timm.sh` reads the per-net values
+    match (`SHIM_EVAL_SIZE` / `SHIM_EVAL_CROP`). `scripts/parity/score_timm.sh` reads the per-net values
     from `jax/timm_eval_protocols.json`.
 
     ⭐ `region` is what one checkpoint cannot otherwise yield: the driver picks live-or-shadow at
@@ -2809,7 +2809,7 @@ def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant 
   -- (`<slug>_fwd_eval_s<S>.mlir`, or `<slug>_fwd_s<S>.mlir` for the LayerNorm nets) and has the
   -- val stream resize/crop at S / `LEAN_MLIR_EVAL_CROP` (`SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in the
   -- net's own shim). Unset ⇒ the recipe's own protocol, exactly as the in-training eval scores.
-  -- The per-net values are timm's (`jax/timm_eval_protocols.json`; `scripts/score_timm.sh`).
+  -- The per-net values are timm's (`jax/timm_eval_protocols.json`; `scripts/parity/score_timm.sh`).
   let evalSize := (← IO.getEnv "LEAN_MLIR_EVAL_SIZE").bind (·.toNat?)
   let evalCrop := (← IO.getEnv "LEAN_MLIR_EVAL_CROP").getD ""
   if evalSize.isNone && !evalCrop.isEmpty then
@@ -2923,7 +2923,7 @@ never written. Scoring the .bin alone would normalise by zeros."
                 else s!"m.{net.slug}_fwd"
   (← IO.getStdout).flush
   -- ▶ `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
-  -- read exactly as the trainers read it. ⭐ This is the knob `scripts/sharded_eval_gate.sh` turns:
+  -- read exactly as the trainers read it. ⭐ This is the knob `scripts/gates/sharded_eval_gate.sh` turns:
   -- one checkpoint at 1 and at N replicas must give the same count AND the same bitmap, because
   -- the loop below is the per-epoch eval's own (`evalScore`), not a copy of it.
   let replicas := ((← IO.getEnv "LEAN_MLIR_REPLICAS").bind (·.toNat?)).getD 1
@@ -2959,7 +2959,7 @@ never written. Scoring the .bin alone would normalise by zeros."
   match dumpCorrect with
   | some pfx =>
       IO.FS.writeBinFile s!"{pfx}.bin" correctBits
-      IO.println s!"    per-example top-1 bitmap -> {pfx}.bin ({correctBits.size} bytes) — pair two of these with scripts/mcnemar.py"
+      IO.println s!"    per-example top-1 bitmap -> {pfx}.bin ({correctBits.size} bytes) — pair two of these with scripts/demos/mcnemar.py"
   | none => pure ()
   if nScored != 50000 && net.data == .imagenet then
     IO.println s!"  ⚠ val is {nScored} of ImageNet's 50,000 — this is NOT over timm's denominator"
@@ -2991,7 +2991,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
   let mut W0 ← F32.const (d0 * d1).toUSize 0.0
   let mut b0 ← F32.const d1.toUSize 0.0
   -- LEAN_MLIR_PERTURB_R, as in `train`/`trainAdamSched`. Without it this loop is
-  -- the third for which `scripts/residency_gate.sh`'s init CONTROL is a silent
+  -- the third for which `scripts/gates/residency_gate.sh`'s init CONTROL is a silent
   -- no-op. Weights are ZERO-initialised here rather than He, so the displacement
   -- is off zero — if anything a cleaner control.
   match (← IO.getEnv "LEAN_MLIR_PERTURB_R").bind (·.toNat?) with
@@ -3076,7 +3076,7 @@ def VerifiedNet.trainLinear (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir 
     FFI are **unchanged**: fp8 here is host-side operand byte-prep, exactly the
     §3b render-tie model ([`Proofs/E4M3Fold.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Float/E4M3Fold.lean)). Eval runs the fp32
     master through `@<slug>_fwd` (the "fp32-infer" accuracy of the fp8-trained
-    model, mirroring `scripts/mnist_e4m3_demo.py`).
+    model, mirroring `scripts/demos/mnist_e4m3_demo.py`).
 
     Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-linear-e4m3-verified data` -/
 def VerifiedNet.trainLinearE4M3 (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do

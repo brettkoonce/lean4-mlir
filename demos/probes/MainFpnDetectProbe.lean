@@ -3,7 +3,7 @@ import LeanMlir
 /-! Emit the standalone whole-FPN-detector module (neck + 1×1 heads + concat +
     multi-scale loss + full DAG backward) for numeric validation (planning/archive/
     yolo_fpn.md bite 7 de-risk). Writes `fpn_detect_gen.mlir`;
-    `scripts/fpn_detect_probe_check.py` compiles it with IREE (CPU) and f64-FD-
+    `scripts/probes/fpn_detect_probe_check.py` compiles it with IREE (CPU) and f64-FD-
     checks every input/param gradient. Emitted at focal γ=0 so the objectness
     weight is a genuine constant and the whole loss is exactly differentiable.
     At tower=0 the module is conv1x1-only ⇒ CPU-compiles (the real detector's conv

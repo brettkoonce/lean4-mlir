@@ -8,7 +8,7 @@ converged and the defect is a mis-specified loss, not a broken optimizer, and
 every "converged equilibrium" reading in planning/archive/yolo_assignment.md was
 measuring the floor rather than the model.
 
-Emits a logits.bin that `scripts/fpn_loss_breakdown.py` can consume unchanged --
+Emits a logits.bin that `scripts/probes/fpn_loss_breakdown.py` can consume unchanged --
 reusing the already-validated numpy replica of emitMultiScaleYoloLoss rather than
 re-deriving it here, so the floor cannot disagree with the loss for a reason of
 my own making.
@@ -98,7 +98,7 @@ def main():
 
     out.tofile(out_path)
     print(f"wrote {out_path}: {out.shape}, {npos} positives ({npos/n:.1f}/img)")
-    print(f"\nnow: python3 scripts/fpn_loss_breakdown.py {out_path} {val_path} data/visdrone")
+    print(f"\nnow: python3 scripts/probes/fpn_loss_breakdown.py {out_path} {val_path} data/visdrone")
 
 
 if __name__ == "__main__":

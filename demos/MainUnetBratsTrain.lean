@@ -58,7 +58,7 @@ open ReferenceNets (unetBrats)
 -/
 
 /-- Inverse-frequency class weights, measured over `data/brats/train.bin` by
-    `scripts/brats_class_weights.py` (14,415 slices; background 97.46% / edema
+    `scripts/demos/brats_class_weights.py` (14,415 slices; background 97.46% / edema
     1.60% / non-enhancing 0.44% / enhancing 0.50% of voxels).
 
     Inverse frequency makes every class contribute **exactly 25%** of the
@@ -106,7 +106,7 @@ def unetBratsClassWeightsSqrt : List Float :=
 
 /-- The measured class prior over `data/brats/train.bin` — background / edema /
     non-enhancing / enhancing, as fractions of all voxels
-    (`scripts/brats_class_weights.py`). `unetBratsClassWeights` is literally the
+    (`scripts/demos/brats_class_weights.py`). `unetBratsClassWeights` is literally the
     reciprocal of this; both come from the same histogram.
 
     Fed to `TrainConfig.headPriorBias` (the `pb` flag) to start the head at

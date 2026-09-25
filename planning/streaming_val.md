@@ -3,7 +3,7 @@
 **Written 2026-09-22**, during the ConvNeXt-T verified run's last epochs.
 
 **Status, later the same day (ares):** §3.1 and §3.2 are built and §4's gate passes —
-`scripts/streamed_val_gate.sh`, streamed R=1 and R=4 equal the drained golden bit for bit over
+`scripts/gates/streamed_val_gate.sh`, streamed R=1 and R=4 equal the drained golden bit for bit over
 50,000 images, both controls go red. §2 measured: 1 / 2 / 4 producers = 1,168 / 1,608 / 1,701 img/s.
 Numbers, and two findings the gate caught (tfds' file interleave defeats index slices; a Lean 4.34
 mutable accumulator that held only the last invoke), in `runs/2026-09-22-streamed-val/RESULTS.md`.
@@ -123,7 +123,7 @@ k).map(λ _,ex: ex)` on the `SkipDecoding` dataset.
 
 ## 4. The gate — before any run uses it
 
-Same shape as `scripts/sharded_eval_gate.sh`: an EQUALITY, with controls that must go red.
+Same shape as `scripts/gates/sharded_eval_gate.sh`: an EQUALITY, with controls that must go red.
 Deterministic shim (`GATE_DET=1`), and `SHIM_DETERMINISM=1` per the shim's own rule ("a NEW
 byte-identity gate MUST set it").
 

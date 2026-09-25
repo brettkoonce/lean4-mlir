@@ -8,7 +8,7 @@ items' references point.**
 
 Gates for every item, unchanged from `float_second_pass.md` §5: `lake build Certs`,
 `lake env lean tests/AuditAxioms.lean` (3-axiom clean), `lake exe docstring-checkrefs`,
-`python3 scripts/check_audit_coverage.py`, `python3 scripts/check_render_coverage.py`,
+`python3 scripts/gates/check_audit_coverage.py`, `python3 scripts/gates/check_render_coverage.py`,
 `git diff verified_mlir/` empty. Prose-only items still run the docstring gate (it resolves
 every backticked identifier against the environment) and `lake exe blueprint-checkdecls` if the
 book is touched. Land by fast-forward, never a merge commit.
@@ -252,7 +252,7 @@ lines in Lean (§1), the lakefile roots, the audit imports, the yaml's 23 `file:
 book's 15 `\texttt{*.lean}` mentions, `proofs.yml`'s 24 `lake env lean LeanMlir/Proofs/…` drift
 lines, `regen_verified_mlir.sh`'s writer list, `check_render_coverage.py`, the memory index. Do it
 after §1–§3 (they rewrite the same prose) and before §7. ⚠ The renderers' module names are
-baked into `verified_mlir/` provenance comments? — check `scripts/check_render_coverage.py` and the
+baked into `verified_mlir/` provenance comments? — check `scripts/gates/check_render_coverage.py` and the
 drift guard before moving anything under `Codegen/`; the safe version of this item leaves
 `Codegen/` alone.
 
@@ -399,7 +399,7 @@ artifact. Two now-orphaned specs went with the binaries (`cifar8Bf16Verified`, `
 zero consumers after the drop); `VerifiedNets.lean` carries a note at their old site saying which
 artifacts they pointed at and that those stay.
 
-⛔ **The rot this surfaced, which is the more useful half.** `scripts/residency_gate_all.sh` had
+⛔ **The rot this surfaced, which is the more useful half.** `scripts/gates/residency_gate_all.sh` had
 carried four pre-2026-08-10 binary names — `mnist-cnn-verified-xla`, `cifar8-bn-verified-xla`,
 `cifar8-bn-verified-adam-xla`, `resnet34-verified-adam-xla`, four of eleven rows — for six weeks.
 On a clean tree each reported `SKIP — not built` and the script still **exited 0**; on the box
@@ -412,7 +412,7 @@ Three things landed against that, at two different costs:
 
 | gate | what it asks | where | cost |
 |---|---|---|---|
-| `scripts/check_target_names.sh` | does every binary a driver NAMES still resolve? | `.github/workflows/targets.yml`, **unfiltered** | grep, <1 s, no toolchain |
+| `scripts/gates/check_target_names.sh` | does every binary a driver NAMES still resolve? | `.github/workflows/targets.yml`, **unfiltered** | grep, <1 s, no toolchain |
 | `lake build Apps` | does the code behind it still ELABORATE? | `certs.yml`, beside the bestiary guard | 3393 jobs vs `Proofs`' 2403 |
 | the script's own guard | a name that is not a `lean_exe` now FAILS, where it used to SKIP | `residency_gate_all.sh` | free |
 
@@ -461,7 +461,7 @@ to the tie / faithfulness tier since.
 set exactly. A third pair rather than an append: it keeps a green gate untouched, isolates the
 heavier import cone, and makes the coverage story legible.
 
-⭐⭐ **They are GENERATED (`scripts/gen_comparator_tier.py`), and that is not laziness.** These
+⭐⭐ **They are GENERATED (`scripts/gates/gen_comparator_tier.py`), and that is not laziness.** These
 statements run to hundreds of lines each (`cnx_net_tiedGB` 186, ViT tie 158, B0 back-chain 136),
 and comparator needs the challenge and solution byte-identical. Both files are printed from one
 string per theorem, taken from `#check @<decl>`, so the statement IS the declaration's type and
@@ -485,7 +485,7 @@ also why none of this could be run end-to-end on this box (6.8.0).
 | 5 | The README's bucket table listed 46 of the 52; "the last three `_at_correct`" was true when the list ended there and there are seven now; "the five whole-network VJPs" was six | table regenerated to exactly 73, checked name-for-name against all three configs |
 | 6 | The workflow header said "keep NON-REQUIRED until it has gone green a few times" | 100 runs 2026-08-13 → 2026-09-20: 94 success / 2 cancelled / 4 failure, last failure 2026-08-30 and it failed in `lake build Certs`, not in comparator; streak of 10 spans the 4.34 bump and the ~24.7k-line refactor. Header records the promotion; ⚠ flipping it is a GitHub branch-protection setting, not a file |
 
-Also: `comparator.yml` gained the `--check` step and `scripts/gen_comparator_tier.py` +
+Also: `comparator.yml` gained the `--check` step and `scripts/gates/gen_comparator_tier.py` +
 `formalization.yaml` in its path filter (both are inputs to that step), and its timeout went
 90 → 120 for the third pass. ⚠ Accepted trade, unchanged and still disclosed: `run.sh` widens
 the Landlock sandbox with `--rox /usr` because comparator permits only `/usr/bin/git` and `lake`

@@ -13,9 +13,9 @@ Conv-M table, and the typed StableHLO graph over it at `mnv4FwdChainB`'s own tok
 ⭐ **This is timm's `mobilenetv4_conv_medium`** (1.0.28, the pinned spec) since 2026-09-24
 (`planning/mnv4_timm_parity.md`): the post-DW carries each downsample's stride, the pre-DW is BN
 only, stage 0 is relu, the head pools before `conv_head`, the stem pads symmetrically. The
-artifacts under this tier are pinned to that function by three gates: `scripts/mnv4_timm_parity.py`
-(the JAX reference = timm on shared weights), `scripts/mnv4_forward_tie.py` (the render = the JAX
-reference) and `scripts/grad_tie.py --net mnv4` (the render's backward = `jax.grad` of it).
+artifacts under this tier are pinned to that function by three gates: `scripts/parity/mnv4_timm_parity.py`
+(the JAX reference = timm on shared weights), `scripts/parity/mnv4_forward_tie.py` (the render = the JAX
+reference) and `scripts/parity/grad_tie.py --net mnv4` (the render's backward = `jax.grad` of it).
 
 ⚠⚠ **NO ACCURACY IS QUOTED FOR THIS NET.** The 100-epoch JAX reference run (75.51%) trained the
 pre-2026-09-24 variant; the rerun on timm's net is queued.

@@ -326,7 +326,7 @@ lean_lib «Reference» where
     `tests/comparator/`, a nested Lake package with its own toolchain whose modules a
     `.submodules` glob would try to elaborate here. The test exes CI already names
     (`argmax-check`, `label-check`, `opt-step-fixtures`, `bestiary-*`) keep their own
-    explicit builds. The NAME-level companion is `scripts/check_target_names.sh`. -/
+    explicit builds. The NAME-level companion is `scripts/gates/check_target_names.sh`. -/
 lean_lib «Apps» where
   srcDir := "."
   -- ⚠ `roots := #[]` is not redundant. Lake defaults `roots` to `#[<lib name>]`, and there is
@@ -745,7 +745,7 @@ lean_exe «blackjack-dqn» where
 
 -- The gravitational-wave detection demo (planning/gw_detection_demo.md): a chapter
 -- CNN on H1+L1 spectrograms of real O3a strain with injected chirps, scored by
--- `scripts/gw_metrics.py` against the matched filter's closed form. Zero new codegen.
+-- `scripts/demos/gw_metrics.py` against the matched filter's closed form. Zero new codegen.
 lean_exe «gw-detect» where
   root := `demos.MainGwDetect
   moreLinkArgs := lowererLink
@@ -760,7 +760,7 @@ lean_exe «nqs-ising» where
 
 -- The people-watching demo (planning/arasl_people_watching_demo.md): chapter 4's CNN on
 -- Arabic sign-language letters under a random and a capture-order-blocked split of the
--- same burst frames, scored by `scripts/arasl_score.py` with a leak audit. Zero new codegen.
+-- same burst frames, scored by `scripts/demos/arasl_score.py` with a leak audit. Zero new codegen.
 lean_exe «arasl-signs» where
   root := `demos.MainAraslSigns
   moreLinkArgs := lowererLink
@@ -953,7 +953,7 @@ lean_exe «cifar-verified» where
 -- family now: the six no-BN / momentum / sgdsched singletons were dropped 2026-09-20 (the wide
 -- ablation pair `cifar8w-{,bn-}ablation` runs all three optimizers per binary and is what Chapter 4
 -- reports). The book names `cifar8-bn-verified` as the 64-wide-head net the head-width proof is
--- parametric over, and `scripts/residency_gate_all.sh` gates both. Their renders are
+-- parametric over, and `scripts/gates/residency_gate_all.sh` gates both. Their renders are
 -- verified_mlir/cifar8_bn{,_adam}_train_step.mlir.
 lean_exe «cifar8-bn-verified» where
   root := `apps.cifar.MainCifar8BnVerified
@@ -1034,31 +1034,31 @@ lean_exe «seg-loss-probe» where
   moreLinkArgs := lowererLink
 
 -- DIoU box-loss forward probe (detection infra brick #1); FD-checked by
--- scripts/diou_probe_check.py against scripts/diou_grad_check.py.
+-- scripts/probes/diou_probe_check.py against scripts/probes/diou_grad_check.py.
 lean_exe «diou-loss-probe» where
   root := `demos.probes.MainDiouLossProbe
   moreLinkArgs := lowererLink
 
 -- Anchor-YOLO-loss probe (brick #2, A anchors); FD-checked by
--- scripts/anchor_loss_probe_check.py.
+-- scripts/probes/anchor_loss_probe_check.py.
 lean_exe «anchor-loss-probe» where
   root := `demos.probes.MainAnchorLossProbe
   moreLinkArgs := lowererLink
 
 -- FPN-neck (top-down multi-scale merge) probe (brick #3); FD-checked by
--- scripts/fpn_neck_probe_check.py against scripts/fpn_neck_check.py's oracle.
+-- scripts/probes/fpn_neck_probe_check.py against scripts/probes/fpn_neck_check.py's oracle.
 lean_exe «fpn-neck-probe» where
   root := `demos.probes.MainFpnNeckProbe
   moreLinkArgs := lowererLink
 
 -- FPN multi-scale-loss probe (brick #3, bites 4+6); FD-checked by
--- scripts/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
+-- scripts/probes/fpn_loss_probe_check.py against a numpy Σ-of-per-scale-anchor-loss ref.
 lean_exe «fpn-loss-probe» where
   root := `demos.probes.MainFpnLossProbe
   moreLinkArgs := lowererLink
 
 -- Whole-FPN-detector probe (bite 7 de-risk): neck+heads+concat+loss+DAG backward,
--- γ=0 so every grad is FD-checkable; validated by scripts/fpn_detect_probe_check.py.
+-- γ=0 so every grad is FD-checkable; validated by scripts/probes/fpn_detect_probe_check.py.
 lean_exe «fpn-detect-probe» where
   root := `demos.probes.MainFpnDetectProbe
   moreLinkArgs := lowererLink
@@ -1091,11 +1091,11 @@ lean_exe «mnv4-fwd-smoke» where
 /-- MNv4 AdamW train-step smoke (`planning/archive/mnv4_verified.md` phase 2): arity, entry point, the
     eval forward's stat binding, and — the one no other net has — that the train step's forward
     region is `@mnv4_fwd`'s body VERBATIM. §3d(b)'s two-worlds split cannot hide behind this.
-    Also emits the batch-2 train step `scripts/grad_tie.py --net mnv4` runs. -/
+    Also emits the batch-2 train step `scripts/parity/grad_tie.py --net mnv4` runs. -/
 lean_exe «mnv4-train-smoke» where
   root := `tests.TestMnv4TrainSmoke
 
-/-- Emits the **batch-2** ResNet-34 AdamW train step that `scripts/grad_tie.py --net r34` runs, and
+/-- Emits the **batch-2** ResNet-34 AdamW train step that `scripts/parity/grad_tie.py --net r34` runs, and
     pins the §3d(b) two-worlds split it lives with: `resnet34_fwd` is per-example BN while the Adam
     train step is batch BN, so unlike MNv4 there is no forward-prefix property to assert. Sole
     writer of `.lake/build/resnet34_adam_train_step_b2.mlir`. -/
@@ -1103,7 +1103,7 @@ lean_exe «r34-train-b2» where
   root := `tests.TestR34TrainB2
 
 /-- Emits the **optimizer stage alone** — one step as a function of `(θ, g, m, v, G)` — for each of
-    seven variants, which is what `scripts/opt_step_tie.py` diffs against the reference optimizer.
+    seven variants, which is what `scripts/parity/opt_step_tie.py` diffs against the reference optimizer.
     `planning/archive/verified_optimizer_parity.md` §5's gate: `vjp_oracle` ties the two implementations at
     the GRADIENT, and nothing tied them at the UPDATE until this.
 
@@ -1273,7 +1273,7 @@ lean_exe «droppath-tie» where
         CUDA_VISIBLE_DEVICES=0 .lake/build/bin/dropout-tie
         .lake/build/bin/dropout-tie --op --break     # gate A is falsifiable
         .lake/build/bin/dropout-tie --net            # gate W only — NO GPU, milliseconds
-        scripts/fault_dropout_wgrad.py verified_mlir/efficientnet_adamdo_train_step.mlir /tmp/f.mlir
+        scripts/probes/fault_dropout_wgrad.py verified_mlir/efficientnet_adamdo_train_step.mlir /tmp/f.mlir
         .lake/build/bin/dropout-tie --net /tmp/f.mlir              # goes red, rc=1 -/
 lean_exe «dropout-tie» where
   root := `tests.TestDropoutTie
@@ -1307,13 +1307,13 @@ lean_exe «wdx-tie» where
     `m'_clip/m'_adam` is ONE number at all ~5.5M coordinates. **That constancy is the gate**, and
     it is the only property a per-parameter clip gets wrong: a per-parameter clip scales, never
     amplifies, and is the identity below the threshold, so it satisfies every other check here.
-    `scripts/perturb_clip.py perparam` builds it and it must fire.
+    `scripts/probes/perturb_clip.py perparam` builds it and it must fire.
 
     ⚠ Needs the below-threshold render, which is GENERATED rather than committed (an artifact
     baking a threshold no config sets is a silent hyperparameter — handoff §2a-quater):
 
         lake build clip-tie
-        python3 scripts/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir \
+        python3 scripts/probes/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir \
           .lake/build/clip_hi_vit.mlir hi
         CUDA_VISIBLE_DEVICES=0 .lake/build/bin/clip-tie vit -/
 lean_exe «clip-tie» where
@@ -2554,7 +2554,7 @@ structure BenchItem where
 
     ⚠ ch9 is also the **validation of the marginal-epoch method** the other rows lean on: before
     the run, this row held 3480 s extrapolated from a 43.5 s `(T₃−T₁)/2` measurement × 80. The real
-    wall came in at 3491 s — **0.3% out**. So `scripts/marginal_epoch.sh` × epochs is trustworthy at
+    wall came in at 3491 s — **0.3% out**. So `scripts/sweeps/marginal_epoch.sh` × epochs is trustworthy at
     this scale, which is worth knowing because it is far cheaper than an 80-epoch run.
     ch4 mirrors the IREE row's
     approximation — the BN arm's cost × 6 — so that the two columns stay comparable, even

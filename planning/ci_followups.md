@@ -66,4 +66,4 @@ First evidence it works: the 17:08 blueprint build was cancelled by the 17:33 pu
 
 Every workflow watches its own yml, so a CI commit fires everything once — that is the full test.
 Run `python3 -c "import yaml; yaml.safe_load(open(f))"` on each edited file before pushing;
-`scripts/check_render_coverage.py` reads `proofs.yml` and must still pass after editing it.
+`scripts/gates/check_render_coverage.py` reads `proofs.yml` and must still pass after editing it.

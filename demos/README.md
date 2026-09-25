@@ -43,11 +43,11 @@ CUDA_VISIBLE_DEVICES=0 FPN_BACKBONE=r34 FPN_TAG=run1 \
 CUDA_VISIBLE_DEVICES=0 FPN_BACKBONE=r34 FPN_TAG=run1 \
   lake exe yolov1-visdrone-fpn infer data/visdrone_fpn runs/fpn_run1
 
-python3 scripts/yolo_map_visdrone.py runs/fpn_run1/logits.bin \
+python3 scripts/demos/yolo_map_visdrone.py runs/fpn_run1/logits.bin \
     data/visdrone448/val.bin --fpn data/visdrone --grid 14 \
     --multilabel --topk 3000 --ml-k 3 --ml-floor 0.05
 
-python3 scripts/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
+python3 scripts/demos/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
     --fpn data/visdrone --gt data/visdrone448/val.full_gt.bin --diverse --scale 2 \
     --topk-per-gt --layout cols --n 4 \
     --labels "ground truth,R34+FPN — 30 ep + scale aug (mAP 0.2363)" --out fpn.png
@@ -56,7 +56,7 @@ python3 -c "from PIL import Image; im = Image.open('fpn.png'); \
     im.resize((1800, round(im.height * 1800 / im.width)), Image.LANCZOS).save('demos/figures/visdrone_fpn.jpg', quality=90)"
 
 # the correctness figure: after vs before (the 12-epoch cfoc2 arm), three frames
-python3 scripts/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
+python3 scripts/demos/fpn_render.py runs/fpn_run1/logits.bin data/visdrone_fpn/val.bin \
     --fpn data/visdrone --gt data/visdrone448/val.full_gt.bin --compare <12-ep logits.bin> \
     --diverse --n 3 --scale 2 --topk-per-gt --match --layout rows \
     --labels "truth,after · 30 ep + scale aug (0.2363),before · 12 ep (0.1961)" \
@@ -148,18 +148,18 @@ CUDA_VISIBLE_DEVICES=0 FPN_TAG=run1 lake exe yolov1-neudet-fpn data/neu_det_fpn
 CUDA_VISIBLE_DEVICES=1 YOLO_TAG=run1 YOLO_EPOCHS=30 lake exe yolov1-neudet448 data/neu_det448
 
 # every saved epoch, inferred and scored (VisDrone protocol + the plain argmax check)
-scripts/neudet_eval_sweep.sh fpn  run1 0 val
-scripts/neudet_eval_sweep.sh grid run1 1 val
-scripts/neudet_eval_sweep.sh fpn  run1 0 test "28"      # the table's row, at the val-peak epoch
+scripts/sweeps/neudet_eval_sweep.sh fpn  run1 0 val
+scripts/sweeps/neudet_eval_sweep.sh grid run1 1 val
+scripts/sweeps/neudet_eval_sweep.sh fpn  run1 0 test "28"      # the table's row, at the val-peak epoch
 
-python3 scripts/fpn_render.py runs/2026-09-17-neudet-fpn-run1-sweep/e30_val/logits.bin \
+python3 scripts/demos/fpn_render.py runs/2026-09-17-neudet-fpn-run1-sweep/e30_val/logits.bin \
     data/neu_det_fpn/val.bin --fpn data/neu_det --gt data/neu_det448/val.full_gt.bin \
     --classes neu --compare-grid runs/2026-09-17-neudet-grid-run1-sweep/e30_val/logits.bin \
     --indices 33,87,267,327 --topk-per-gt --layout cols --out demos/figures/neudet_fpn.png
 ```
 
 What changed against the VisDrone binary: the anchor priors (k-means on NEU
-boxes, `scripts/neu_anchors.py`), the class weights (off — 300 crops per class),
+boxes, `scripts/probes/neu_anchors.py`), the class weights (off — 300 crops per class),
 and six classes in ids 0–5 of the ten-slot one-hot (the 5+10 per-anchor width is
 baked into the `fpnDetect` codegen; the scorer averages over classes present).
 Defaults are the measured recipe, so `FPN_BACKBONE` is `r34` and `FPN_CLSW` is
@@ -228,8 +228,8 @@ CUDA_VISIBLE_DEVICES=1 lake exe arasl-signs net=cifar8w split=blocked seed=1 tag
 # the bracket: net=mlp | net=linear, and the chapter's own 32×32 input with size=32
 
 # Wilson interval, leaked-vs-not accuracy, 1-NN floor, per class, confused pairs
-python3 scripts/arasl_score.py runs/x/arasl_cifar8w_blocked_s{1,2,3}_logits_test.bin --split=blocked --top 8 --json runs/x/score.json
-python3 scripts/arasl_figure.py --score runs/x/score.json --logits runs/x/arasl_cifar8w_blocked_s1_logits_test.bin
+python3 scripts/demos/arasl_score.py runs/x/arasl_cifar8w_blocked_s{1,2,3}_logits_test.bin --split=blocked --top 8 --json runs/x/score.json
+python3 scripts/demos/arasl_figure.py --score runs/x/score.json --logits runs/x/arasl_cifar8w_blocked_s1_logits_test.bin
 ```
 
 ![ArASL: the alphabet, nearest training images under each split, confused pairs](figures/arasl_signs.png)
@@ -277,8 +277,8 @@ themselves — the same leaves on black, on their own background colour, the
 background alone, a flat colour. Then three fixes, each scored on the same 2,578
 field images.
 
-`MainPlantLeaf.lean` (`lake exe plant-leaf`), `scripts/plant_score.py`,
-`scripts/plant_shapley.py`, `scripts/plant_cam.py`, `scripts/plant_figure.py`. See
+`MainPlantLeaf.lean` (`lake exe plant-leaf`), `scripts/demos/plant_score.py`,
+`scripts/demos/plant_shapley.py`, `scripts/demos/plant_cam.py`, `scripts/demos/plant_figure.py`. See
 `planning/plant_lab_to_field_demo.md` and `runs/2026-09-17-plant/README.md`.
 
 ```bash
@@ -288,12 +288,12 @@ field images.
 # Act 1–2: the base arm under the maintainers' leaf-grouped split (~40 min on one 4060 Ti);
 # scores PlantVillage test, its four counterfactuals and all of PlantDoc in one run
 CUDA_VISIBLE_DEVICES=0 lake exe plant-leaf split=grouped train=base init=imagenet seed=1 tag=s1 out=runs/x
-python3 scripts/plant_score.py runs/x/plant_resnet34_grouped_base_imagenet_s1_logits_pd_all.bin --part pd_all --restrict
+python3 scripts/demos/plant_score.py runs/x/plant_resnet34_grouped_base_imagenet_s1_logits_pd_all.bin --part pd_all --restrict
 
 # Act 3: the CAM of every test image, and the exact two-player Shapley value
 CUDA_VISIBLE_DEVICES=0 lake exe plant-leaf split=grouped train=base init=imagenet seed=1 tag=s1 out=runs/x eval cam=1
-python3 scripts/plant_cam.py runs/x/plant_resnet34_grouped_base_imagenet_s1_cam_pvg_test.bin --split pvg
-python3 scripts/plant_shapley.py two-player --split pvg --logits runs/x/plant_resnet34_grouped_base_imagenet_s1
+python3 scripts/demos/plant_cam.py runs/x/plant_resnet34_grouped_base_imagenet_s1_cam_pvg_test.bin --split pvg
+python3 scripts/demos/plant_shapley.py two-player --split pvg --logits runs/x/plant_resnet34_grouped_base_imagenet_s1
 
 # Act 4: train=comp (leaves on Imagenette backgrounds) | train=aug | field=<fold> from a checkpoint
 CUDA_VISIBLE_DEVICES=1 lake exe plant-leaf split=grouped train=comp init=imagenet seed=1 tag=s1 out=runs/x
@@ -358,9 +358,9 @@ verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
 ./scripts/datasets/download_brats.sh
 python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
         --size 224 --seed 0            # same patient split as data/brats
-./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU, ~50 min
+./scripts/sweeps/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU, ~50 min
 lake exe brats-predict net=r34 arm=scratch,r34 best out.ppm   # best-by-val checkpoints
-python3 scripts/brats_figure.py out.ppm demos/figures/brats_r34_skip_transfer.png \
+python3 scripts/demos/brats_figure.py out.ppm demos/figures/brats_r34_skip_transfer.png \
     --labels "T1gd,ground truth,from scratch,ImageNet R34"
 ```
 
@@ -439,7 +439,7 @@ Bellman target into the taken action's slot of the net's own prediction and
 hands that to the DDPM MSE train step, so the untaken slot's gradient is zero;
 the greedy policy is read off the net every 50 updates for acting and scored
 exactly every 1000. Run logs, curves and the figure script's inputs are in
-`runs/2026-09-11-blackjack-dqn/`; `scripts/blackjack_figure.py` draws the
+`runs/2026-09-11-blackjack-dqn/`; `scripts/demos/blackjack_figure.py` draws the
 book's chart.
 
 ![The exact hit/stick policy for blackjack, and where the learners disagree](figures/blackjack_chart.png)
@@ -527,9 +527,9 @@ the tokenizer wants its own venv (`tokenizers` must stay out of the pinned `.ven
 bash historical/download_tinystories.sh
 python3 historical/preprocess_tinystories.py 4096 200000000
 lake exe tinystories train 12000                            # steps; ⚠ a rerun starts over
-python3 scripts/tinystories_decode.py encode "Once upon a time"
+python3 scripts/demos/tinystories_decode.py encode "Once upon a time"
 lake exe tinystories sample 200 80 40 95 1 > gen.txt        # ids out; BPE decode is Python's
-python3 scripts/tinystories_decode.py decode "Once upon a time" < gen.txt
+python3 scripts/demos/tinystories_decode.py decode "Once upon a time" < gen.txt
 ```
 
 ---
@@ -551,7 +551,7 @@ lake exe mnist-ddpm-sample runs/mnist_samples.ppm          # 4x4 grid of samples
 
 # the two-row trajectory figure below
 lake exe mnist-ddpm-sample trajectory data=data img=7
-python3 scripts/ddpm_trajectory_figure.py \
+python3 scripts/demos/ddpm_trajectory_figure.py \
     runs/2026-09-02-mnist-ddpm/trajectory.ppm \
     --out demos/figures/ddpm_mnist_trajectory.png
 ```
@@ -577,7 +577,7 @@ Indexing the bottom row by sampler step instead would have made the columns
 incomparable and the figure decorative. Both rows are emitted by the sampler
 itself (`mnist-ddpm-sample trajectory`), using the same ᾱ table and the same
 `ddimStep` primitive as an ordinary run, so the picture cannot drift from the
-process it illustrates; `scripts/ddpm_trajectory_figure.py` only upscales and
+process it illustrates; `scripts/demos/ddpm_trajectory_figure.py` only upscales and
 labels.
 
 ⚠ Most of the visible change happens in the last few columns. That is the cosine
@@ -593,7 +593,7 @@ of the real-vs-real floor.
 LEAN_MLIR_DUMP_PARAMS=.lake/build/cnn_verified_params.bin \
   lake exe mnist-cnn-verified data                   # the scorer's classifier, ~50 s
 lake exe mnist-ddpm-score 1024 50                    # 1024 samples, 50 DDIM steps, ~13 s
-python3 scripts/mnist_ddpm_score.py                  # exits non-zero below 10/10 coverage
+python3 scripts/demos/mnist_ddpm_score.py                  # exits non-zero below 10/10 coverage
 ```
 
 | arm | coverage | confidence | energy (× floor) |
@@ -635,9 +635,9 @@ lake exe diffusion-2d muller_brown flow reuse 20000 10 logp          # NFE sweep
 lake exe diffusion-2d muller_brown ot 20000 50 logp                  # minibatch-OT coupling
 lake exe diffusion-2d muller_brown reflow 20000 50 logp              # reflow on the flow's own pairs
 lake exe diffusion-2d muller_brown 20000 50 ddim                     # the DDPM path, same target
-python3 scripts/boltzmann_metrics.py score "flow NFE 50=<samples.bin>" --gate
-python3 scripts/boltzmann_metrics.py transfer <samples.bin> --out=<run>
-python3 scripts/boltzmann_figure.py <run> boltzmann_mb.png           # needs matplotlib
+python3 scripts/demos/boltzmann_metrics.py score "flow NFE 50=<samples.bin>" --gate
+python3 scripts/demos/boltzmann_metrics.py transfer <samples.bin> --out=<run>
+python3 scripts/demos/boltzmann_figure.py <run> boltzmann_mb.png           # needs matplotlib
 ```
 
 ![Boltzmann generator on Müller-Brown](figures/boltzmann_mb.png)
@@ -681,9 +681,9 @@ blackjack/2-D pattern of a host loop around it. See `planning/gw_detection_demo.
 python3 scripts/datasets/preprocess_gw.py --pairs=26 --val-pairs=6 --out=data/gw    # O3a H1+L1 from GWOSC, whitened; IMRPhenomD chirps injected at SNR 4–20
 lake exe gw-detect arm=real  net=cifar8w epochs=6 tag=real          # trained on the real strain
 lake exe gw-detect arm=gauss net=cifar8w epochs=6 tag=gauss         # trained on Gaussian noise coloured by the same PSD
-python3 scripts/gw_metrics.py table --gate                          # the matched filter against its closed form (Gate 1)
-python3 scripts/gw_metrics.py matrix gauss=<prefix> real=<prefix>   # the 2 × 2 of trained-on × tested-on
-python3 scripts/gw_figure.py <table_val.json> gw_detect.png --cnn-real=<table_val.json> --net=CNN
+python3 scripts/demos/gw_metrics.py table --gate                          # the matched filter against its closed form (Gate 1)
+python3 scripts/demos/gw_metrics.py matrix gauss=<prefix> real=<prefix>   # the 2 × 2 of trained-on × tested-on
+python3 scripts/demos/gw_figure.py <table_val.json> gw_detect.png --cnn-real=<table_val.json> --net=CNN
 ```
 
 ![A chapter-4 CNN against the matched filter on LIGO strain](figures/gw_detect.png)
@@ -741,22 +741,22 @@ wavefunction (|ψ|² = Π_k p(patch_k | <k)), sampled exactly by the TinyGPT loo
 Every rung is scored against a closed form: enumeration of all 4096 configurations
 at N = 12, the Jordan-Wigner free-fermion solution at N = 64.
 
-`MainNqsIsing.lean`, `scripts/nqs_metrics.py`, `scripts/nqs_figure.py`. Plan:
+`MainNqsIsing.lean`, `scripts/demos/nqs_metrics.py`, `scripts/demos/nqs_figure.py`. Plan:
 `planning/transformer_wavefunction_demo.md`. Zero new codegen: the energy
 gradient ∂E/∂θ = 2 Σ_s p_s (E_loc(s) − E) ∂_θ log ψ(s) is one host weight per
 configuration, handed to the rank-2 DDPM MSE block as the target y = out − M·w/2
 (the blackjack DQN's trick with a physical target).
 
 ```bash
-python3 scripts/nqs_metrics.py gate                              # enumeration vs Jordan-Wigner, 7e-15
+python3 scripts/demos/nqs_metrics.py gate                              # enumeration vs Jordan-Wigner, 7e-15
 export LEAN_MLIR_MEM_FRACTION=0.1
 lake exe nqs-ising mlp N=12 h=1.0 steps=4000 lr=0.003 cosine     # 50 s, exact gradient
 lake exe nqs-ising vit N=12 h=1.0 steps=4000 lr=0.001 cosine     # 82 s
 lake exe nqs-ising gpt N=12 h=1.0 steps=4000 lr=0.003 cosine check   # 330 s, + the sampler gate
 lake exe nqs-ising gpt N=64 h=1.0 p=4 steps=2000 lr=0.003 cosine  # ~20 min, 1024 chains
 lake exe nqs-ising mlp model=j1j2 N=16 J2=0.5 steps=4000 lr=0.003 cosine   # rung 4, 45 s
-python3 scripts/nqs_metrics.py score GPT=.lake/build/nqs_ising_gpt_n12_h100_metrics.json --gate
-python3 scripts/nqs_figure.py runs/2026-09-11-nqs-ising nqs_ising.png
+python3 scripts/demos/nqs_metrics.py score GPT=.lake/build/nqs_ising_gpt_n12_h100_metrics.json --gate
+python3 scripts/demos/nqs_figure.py runs/2026-09-11-nqs-ising nqs_ising.png
 ```
 
 ![Neural quantum states on the Ising chain](figures/nqs_ising.png)

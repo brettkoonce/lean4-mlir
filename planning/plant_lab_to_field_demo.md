@@ -232,7 +232,7 @@ is ~35 GB (114 GB free). The loader reads a part whole. PlantDoc is small.
    class weights the 512×7×7 pre-GAP map; no autodiff), and the probe already
    compiles a `forward_cam` graph for an R34 spec. What is new: a `plant`
    entry in `pickModel` reading this demo's checkpoint, a raw dump of the
-   7×7 CAM per image beside the PPM strip, and `scripts/plant_cam.py` that
+   7×7 CAM per image beside the PPM strip, and `scripts/demos/plant_cam.py` that
    reads the dump and the 7×7 leaf mask and reports the mass fraction inside
    the leaf (CAM normalised to sum 1, ReLU'd first, as Grad-CAM does).
 6. **Shapley values, exact where they can be.** With two players — the leaf
@@ -316,13 +316,13 @@ potato, where the lesions are large; corn and grape collapse).
 
 ## 5. The instrument
 
-`scripts/plant_score.py <logits.bin> --part pv_test|pv_test_seg|pv_test_bg|pd_all|pd_fold<k>
+`scripts/demos/plant_score.py <logits.bin> --part pv_test|pv_test_seg|pv_test_bg|pd_all|pd_fold<k>
 [--restrict] [--json]`: accuracy with Wilson, 38-way or restricted to the
 mapped classes for a PlantDoc part, per class, the confusion matrix and its
 top pairs, and for `pv_test_*` the leak audit read from `meta_pv.npz` as
-ArASL's scorer does. `scripts/plant_cam.py <cam_dump.bin> data/plant/pv_test_mask.npy`:
+ArASL's scorer does. `scripts/demos/plant_cam.py <cam_dump.bin> data/plant/pv_test_mask.npy`:
 the mass-inside-leaf statistic, per image and pooled, and the images at the
-two extremes for the figure. `scripts/plant_shapley.py two-player <logits of
+two extremes for the figure. `scripts/demos/plant_shapley.py two-player <logits of
 test, test_leaf, test_bg, test_none>`: φ_leaf, φ_bg per image for the true
 (and the predicted) class logit, the efficiency check, the leaf share pooled
 and per class; `plant_shapley.py grid --images … --perms 40` writes the probe
@@ -344,7 +344,7 @@ sampled) | +backgrounds CAM, with the mass-inside-leaf and the leaf-share
 number under each map; (b) the same four classes from PlantDoc, input | base
 CAM | +field-labels CAM, with the predicted label under each; (c) one
 composite from `pv_train_comp` beside its source, so the reader sees what the
-fix trained on. `scripts/plant_figure.py`, from the probe's PPM/dump output.
+fix trained on. `scripts/demos/plant_figure.py`, from the probe's PPM/dump output.
 
 Section: *Agriculture — demo: lab leaves to field leaves on PlantVillage and
 PlantDoc*, a `\subsection` after *People watching* (the same move one step

@@ -211,7 +211,7 @@ def _batched_nms(boxes, scores, cids, nms_iou):
 def decode(flat, conf_thresh=0.05, nms_iou=0.5, topk=300):
     """[NTOT] -> [(cid, score, (x0,y0,x1,y1))], normalized coords.
 
-    Mirrors scripts/yolo_map_visdrone.py's decode_anchor_raw + decode_fpn: per
+    Mirrors scripts/demos/yolo_map_visdrone.py's decode_anchor_raw + decode_fpn: per
     scale, sigmoid objectness times max class softmax, centre confined to its own
     cell, size = anchor * exp(t) with t capped at 8 to match the training-time cap.
 

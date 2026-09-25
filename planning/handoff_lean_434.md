@@ -26,7 +26,7 @@ definitional step across the chain. Item 4 is a separate memory regression.
    **16.11 GB** on 4.34.0, same olean and CPU-seconds: 4.34 elaborates a module's theorem proofs
    as concurrent tasks and holds twice the memory while they run. `Elab.async false` → 7.10 GB
    but serial, 29 min a chunk. Fix: the generator now emits four 2-image chunks
-   (`scripts/ibp_conv_scorecard.py`, `N_CHUNKS`), 9.1–9.7 GB each; `certs-heavy.yml` lists all four.
+   (`scripts/certs/ibp_conv_scorecard.py`, `N_CHUNKS`), 9.1–9.7 GB each; `certs-heavy.yml` lists all four.
 
 Measured against 4.32.2 and not regressed: the twelve slowest `Certs` modules (StableHLO, the
 Lipschitz/Smoothing scorecards, the R34 ties, TrainedCnn*), and the CertsHeavy FullImgs/FullNets/IBP

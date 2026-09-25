@@ -42,7 +42,7 @@ import LeanMlir
     [seed=1] [p=2] [d=32] [heads=2] [blocks=2] [hidden=64] [B=1024] [sweeps=2]
     [lr=0.001] [cosine] [evalb=8] [tag=x] [noref] [symref] [check]`. Writes `<prefix>_metrics.json`,
     `_curve.csv`, `_samples.bin`, `_params.bin` under `.lake/build/`;
-    `scripts/nqs_metrics.py score` brackets the JSON against enumeration
+    `scripts/demos/nqs_metrics.py score` brackets the JSON against enumeration
     (N ≤ 14) or Jordan-Wigner (any even N). -/
 
 namespace NQS

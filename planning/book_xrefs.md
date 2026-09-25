@@ -7,7 +7,7 @@ LaTeX checks that a label exists; nothing checks that the sentence around `\S\re
 true. The user's rule, same day: cross-chapter refs of that kind are "the code form of
 instantly out of date" — a ref may NAME where something lives, never ASSERT what it says.
 
-`scripts/book_xrefs.py` is the census: every `\S\ref` / `Chapter~\ref` / `Appendix` / `Figure`
+`scripts/book/book_xrefs.py` is the census: every `\S\ref` / `Chapter~\ref` / `Appendix` / `Figure`
 ref and every cross-chapter `Theorem~\ref`, grouped by target, each with the sentence it sits
 in, so the claim and the target can be read side by side. `--summary` gives one line per target.
 
@@ -52,7 +52,7 @@ All 21 fixed the same day, staged with the §5.7 update:
 
 ## 2. The pass: the 220 claim-bearing refs still standing, by kind
 
-Counts are from the audit; rerun `scripts/book_xrefs.py` for today's list. Targets with the
+Counts are from the audit; rerun `scripts/book/book_xrefs.py` for today's list. Targets with the
 most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:cnn` 17,
 `chap:bn` 15, `chap:depthwise` 11, `sec:r34_pjrt` 9, `chap:se` 9, `sec:r34_ablation` 8,
 `app:verification` 8.
@@ -95,7 +95,7 @@ most incoming refs: `chap:residual` 35, `chap:tensor` 32, `chap:mlp` 20, `chap:c
 
 ## 3. Order of work
 
-One target chapter per commit, reading its block of `scripts/book_xrefs.py` output: chapter 1
+One target chapter per commit, reading its block of `scripts/book/book_xrefs.py` output: chapter 1
 (32 refs, mostly (b)), chapter 5 (35, mostly (c)/(d)), then 2, 3, 4, 6–9, the appendices.
 Rebuild the PDF after each (`cd blueprint/src && latexmk -xelatex -interaction=nonstopmode
 -output-directory=../print print.tex`, ~1 min, 0 `^!` lines in `print.log`). The near-term

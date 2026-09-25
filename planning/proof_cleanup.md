@@ -29,8 +29,8 @@ Everything in §1 is on main. Work is done on local branch `proof-cleanup` and l
 commits; the user says "commit" and "push" separately). Gates run before each landing: `lake
 build`, `lake build Certs CertsHeavy Proofs` (+ `Apps` when Codegen changed; there is no `Codegen` target),
 `tests/AuditAxioms.lean`, `tests/AuditAxiomsHeavy.lean` (both: no `sorry`, core three axioms
-only), `lake exe docstring-checkrefs`, `scripts/blueprint_uses.py --check`,
-`scripts/gen_comparator_tier.py --check`, and `git status verified_mlir` unchanged.
+only), `lake exe docstring-checkrefs`, `scripts/book/blueprint_uses.py --check`,
+`scripts/gates/gen_comparator_tier.py --check`, and `git status verified_mlir` unchanged.
 
 **Method that found every win in §1(f)–(k): profile before guessing.**
 `lake env lean -Dtrace.profiler=true -Dtrace.profiler.threshold=2000 <file>` names the
@@ -161,7 +161,7 @@ cheap half. `deriving DecidableEq` on `Raw`/`Tok` has no users (grep) but was no
 
 ### 3.3 Generators
 
-* ~~`scripts/ibp_conv_scorecard.py`~~ — done as §1(h). The four chunks could now be one
+* ~~`scripts/certs/ibp_conv_scorecard.py`~~ — done as §1(h). The four chunks could now be one
   module (the split was a memory bound); left as four to keep certs-heavy.yml and the audit as-is.
 * `LipschitzCertInstance.lean` — its 145 s was the Gram identities, now 17 s (§1(i)); the
   `LipschitzDense.lean` split would save little now.

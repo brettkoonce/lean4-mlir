@@ -298,7 +298,7 @@ fidelity:
        holds at every input; the 2-channel per-example proxies it replaces are deleted.
        MobileNetV4-Conv-M's is on `mobilenetv4ForwardB_full` (`MobileNetV4FullBSeal`), all 21 UIB
        blocks, the fused stage and the two-conv head, on timm's `mobilenetv4_conv_medium` (the
-       pinned spec, `scripts/mnv4_timm_parity.py`) -- its 38 relu clauses are weight-only for the
+       pinned spec, `scripts/parity/mnv4_timm_parity.py`) -- its 38 relu clauses are weight-only for the
        same reason, and its witness is grid-constant (one value per example and channel). With it
        every kinked net in the book is sealed on the forward its artifacts run. Plus trained-weight witnesses and a
        provable strict CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,

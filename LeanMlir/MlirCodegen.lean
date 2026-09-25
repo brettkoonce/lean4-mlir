@@ -703,7 +703,7 @@ private def emitMbConvV3 (startPidx : Nat) (curSSA : String) (curShape : List Na
       5. Skip if stride == 1 && ic == oc
     All activations are plain ReLU (NOT ReLU6, NOT Swish, NOT h-swish). Stride placement and
     the activation-free preDW follow timm 1.0.28's `UniversalInvertedResidual`
-    (`scripts/mnv4_timm_parity.py`). -/
+    (`scripts/parity/mnv4_timm_parity.py`). -/
 private def emitUib (startPidx : Nat) (curSSA : String) (curShape : List Nat)
     (ic oc expand stride preDWk postDWk : Nat)
     (fixedBN : Bool := false) : String × String × List Nat × Nat := Id.run do
@@ -1785,8 +1785,8 @@ private def emitTokenGatherFwd (pos : Nat) (idsSSA : String) (idsShape : List Na
     Composes 1×1 lateral convs + the already-verified `bilinearUpsample` + adds
     into the RetinaNet top-down pyramid. No new primitives: the merge is a DAG of
     existing ops. Forward/backward FD-verified in numpy first
-    (`scripts/fpn_neck_check.py`), then these emitters are checked against that
-    oracle by `scripts/fpn_neck_probe_check.py` (the `fpn-neck-probe` exe). -/
+    (`scripts/probes/fpn_neck_check.py`), then these emitters are checked against that
+    oracle by `scripts/probes/fpn_neck_probe_check.py` (the `fpn-neck-probe` exe). -/
 
 /-- 1×1 conv (channel mix) forward: `einsum('oi,bihw->bohw', W, x)`.
     x `[b,ic,h,w]`, W `[oc,ic]` → `[b,oc,h,w]`. dot_general contracting the input
@@ -1883,7 +1883,7 @@ private def emitFpnNeckForward (c3SSA c4SSA c5SSA w3SSA w4SSA w5SSA : String)
     pyramid (accumulating: `dP4_tot = dP4 + up^T(dP3)`, then
     `dP5_tot = dP5 + up^T(dP4_tot)`). Returns the code, the backbone-tap
     cotangents `(dC3,dC4,dC5)`, and the lateral-weight gradients `(dW3,dW4,dW5)`.
-    Mirrors `fpn_grad` in `scripts/fpn_neck_check.py`. -/
+    Mirrors `fpn_grad` in `scripts/probes/fpn_neck_check.py`. -/
 private def emitFpnNeckBackward (dP3SSA dP4SSA dP5SSA : String)
     (c3SSA c4SSA c5SSA w3SSA w4SSA w5SSA : String) (b oc c3 c4 c5 g5 : Nat)
     : String × (String × String × String) × (String × String × String) := Id.run do
@@ -4308,8 +4308,8 @@ private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
     construction — `cx=(j+σ(tx))/gW`, `cy=(i+σ(ty))/gH`, `w=exp(tw)`, `h=exp(th)`
     — so boxes are always valid (fixes the negative-w/h gradient death). Emits
     `loss = Σ_cells mask·(1 - DIoU)` with `DIoU = IoU − ρ²(centers)/c²(enclosing)`.
-    Requires `%zf` in scope. Numeric spec: scripts/diou_grad_check.py; the emitted
-    forward is checked against numpy in scripts/diou_probe_check.py. -/
+    Requires `%zf` in scope. Numeric spec: scripts/probes/diou_grad_check.py; the emitted
+    forward is checked against numpy in scripts/probes/diou_probe_check.py. -/
 private def emitDiouForward (B gH gW : Nat) (predSSA tgtSSA maskSSA : String)
     (lossOut : String := "%dio_loss") (anchorW : Float := 1.0) (anchorH : Float := 1.0)
     (pfx : String := "dio") : String := Id.run do
@@ -4433,7 +4433,7 @@ private def emitDiouForward (B gH gW : Nat) (predSSA tgtSSA maskSSA : String)
     (channels d/dtx, d/dty, d/dtw, d/dth), the hand-derived VJP of
     `Σ mask·(1 - DIoU)`. Analytic spec: `diou_loss_grad` in scripts/
     diou_grad_check.py; FD-verified against the emitted forward in
-    scripts/diou_probe_check.py. Every piecewise min/max sub-gradient is an
+    scripts/probes/diou_probe_check.py. Every piecewise min/max sub-gradient is an
     indicator (compare→select). -/
 private def emitDiouBackward (B gH gW : Nat) (gradOut : String := "%dio_dpred") (pfx : String := "dio") : String := Id.run do
   let c1 := tensorTy [B, 1, gH, gW]
@@ -4553,7 +4553,7 @@ private def emitDiouBackward (B gH gW : Nat) (gradOut : String := "%dio_dpred") 
     Loss = (1/B)·Σ_a [λ_box·Σmask_a(1-DIoU_a) + Σ focalBCE_a + Σ mask_a·CE_a]; the
     gradient is assembled per anchor to `[B,15,gH,gW]` and concatenated to
     `[B, A·15, gH, gW]`. Requires `%zf`,`%neginf` in scope. FD-verified in
-    scripts/anchor_loss_probe_check.py. -/
+    scripts/probes/anchor_loss_probe_check.py. -/
 private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     (predSSA tgtSSA : String) (focalGamma : Float) (lambdaBox : Float)
     (lossOut gradOut : String) (tag : String := "")
@@ -4701,7 +4701,7 @@ private def emitAnchorYoloLoss (B gH gW : Nat) (anchors : List (Float × Float))
     -- ── (T1b) per-cell class weight w_{c(cell)} = Σ_c onehot_c·weights[c] ──
     -- VisDrone is ~44% car / ~21% pedestrian, and the unweighted head collapses
     -- its argmax onto exactly those two (measured: 5/10 classes never predicted,
-    -- scripts/fpn_obj_separation.py). Weights are inverse-frequency and depend
+    -- scripts/probes/fpn_obj_separation.py). Weights are inverse-frequency and depend
     -- only on the TARGET, so they are an exact constant w.r.t. the logits — the
     -- gradient below carries the same factor and stays FD-checkable.
     --
@@ -5124,7 +5124,7 @@ private def emitTrainLoss (spec : NetSpec) (B : Nat) (logitsSSA : String) (curSh
           -- replaces the √-MSE coord terms T1+T2 with an IoU-family loss on box0,
           -- using a positive box parameterization (cx=(j+σ(tx))/gW, w=exp(tw)).
           -- Emits %dio_loss (Σ mask·(1-DIoU)) and %dio_dpred [B,4,gH,gW]; both
-          -- FD-verified in scripts/diou_probe_check.py. Scaled by λ_coord to keep
+          -- FD-verified in scripts/probes/diou_probe_check.py. Scaled by λ_coord to keep
           -- the box-vs-objectness balance. NB: the decoder must apply the same σ/exp.
           let lambdaBox : Float := 5.0
           if useDiouBox then
@@ -8089,7 +8089,7 @@ def generateTrainStep (spec : NetSpec) (batchSize : Nat) (moduleName : String :=
     This is the FD harness for `.dice` / `.diceCE`, whose gradient (unlike CE's
     `p - y`) is a real softmax Jacobian-vector product and therefore worth
     checking numerically rather than by inspection. Driven by
-    `scripts/seg_loss_probe_check.py`; CPU is fine, no GPU needed. -/
+    `scripts/probes/seg_loss_probe_check.py`; CPU is fine, no GPU needed. -/
 def segLossProbeModule (B NC H W : Nat) (segLoss : SegLoss)
     (labelSmoothing : Float := 0.0) : String := Id.run do
   let logitsTy := tensorTy [B, NC, H, W]
@@ -8108,7 +8108,7 @@ def segLossProbeModule (B NC H W : Nat) (segLoss : SegLoss)
 
 
 /-- Standalone DIoU box-loss probe: `@main(pred,tgt : [B,4,gH,gW], mask : [B,gH,gW])
-    -> (loss, d_pred)`. Compiled + run on CPU by scripts/diou_probe_check.py — the
+    -> (loss, d_pred)`. Compiled + run on CPU by scripts/probes/diou_probe_check.py — the
     emitted forward is checked against numpy and the emitted backward against
     central finite differences, before wiring into the YOLOv1 train step. -/
 def diouProbeModule (B gH gW : Nat) (anchorW : Float := 1.0) (anchorH : Float := 1.0) : String := Id.run do
@@ -8127,7 +8127,7 @@ def diouProbeModule (B gH gW : Nat) (anchorW : Float := 1.0) (anchorH : Float :=
 /-- Standalone anchor-YOLO-loss probe: `@main(pred,tgt : [B,A·15,gH,gW],
     mask : [B,A,gH,gW]) -> (loss, d_pred)`. Deterministic test anchors
     (w=0.02+0.03·i, h=0.03+0.04·i), γ=2, λ_box=5 — mirrored in
-    scripts/anchor_loss_probe_check.py, which checks the emitted forward against
+    scripts/probes/anchor_loss_probe_check.py, which checks the emitted forward against
     numpy and the emitted backward against finite differences. -/
 def anchorLossProbeModule (B gH gW A : Nat) : String := Id.run do
   let P := 15
@@ -8146,7 +8146,7 @@ def anchorLossProbeModule (B gH gW A : Nat) : String := Id.run do
 
 /-- Standalone FPN-neck probe: `@main(C3,C4,C5, W3,W4,W5, dP3,dP4,dP5) ->
     (P3,P4,P5, dC3,dC4,dC5, dW3,dW4,dW5)`. Compiled + run on CPU by
-    `scripts/fpn_neck_probe_check.py`, which checks the emitted forward against
+    `scripts/probes/fpn_neck_probe_check.py`, which checks the emitted forward against
     the numpy `fpn_forward` and the emitted backward against the f64-FD-verified
     `fpn_grad` oracle (brick #3). Cotangents are explicit inputs — no scalar-loss
     reduce — so the probe mirrors the real train-step wiring (head backwards feed
@@ -8181,7 +8181,7 @@ def fpnNeckProbeModule (B oc c3 c4 c5 g5 : Nat) : String := Id.run do
     + per-scale anchor loss + grad re-concat (bites 4+6) in isolation — conv-free,
     so it CPU-compiles for FD checking (the conv heads feeding this are verified
     convBn, validated separately on ROCm). Deterministic per-scale anchors
-    (w=0.02+0.03·i, h=0.03+0.04·i), matching scripts/fpn_loss_probe_check.py. -/
+    (w=0.02+0.03·i, h=0.03+0.04·i), matching scripts/probes/fpn_loss_probe_check.py. -/
 def fpnLossProbeModule (B : Nat) (scaleGrids : List Nat) (A : Nat)
     (clsWeights : List Float := []) (clsFocalGamma : Float := 0.0) : String := Id.run do
   let P := 15

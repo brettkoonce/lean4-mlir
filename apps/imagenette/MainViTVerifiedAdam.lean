@@ -131,7 +131,7 @@ LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.
   -- exactly 1.0, and each drop op is the identity in IEEE (`Proofs.dropPath_ones_id`), so `adamdrop`
   -- must train bit-identically to plain `adam`. ⚠ But it is an ENDPOINT gate and endpoint gates are
   -- structurally BLIND TO PLACEMENT — `1 ⊙ (branch + x) = branch + x` exactly, so a site on the
-  -- block OUTPUT passes it bit-for-bit. `scripts/misplace_drop_sites.py` is the control that makes a
+  -- block OUTPUT passes it bit-for-bit. `scripts/probes/misplace_drop_sites.py` is the control that makes a
   -- green run mean anything, and on ViT it needed fixing first: the branch is the SECOND operand of
   -- this net's residual add, which the script could not match.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with

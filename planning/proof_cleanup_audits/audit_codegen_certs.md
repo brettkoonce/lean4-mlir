@@ -245,7 +245,7 @@ MobileNetV2 renders already do. One theorem per block, and one file.
 About 5,000 s of the roughly 7,700 s build is in these modules. Their proof *shapes* fall into four
 families.
 
-### C.1 `scripts/ibp_conv_scorecard.py` (L484–566), and the same template in `lipschitz_cert_pair_sdp.py:307–402`, `lipschitz_cert_pair_sdp_full.py:245–349`, `lipschitz_cert_scorecard_full.py:262–280`, and the data half of `LipschitzCertInstance.lean` (G1t_eq/G2t_eq/H1t_eq/H2t_eq, L486–730)
+### C.1 `scripts/certs/ibp_conv_scorecard.py` (L484–566), and the same template in `lipschitz_cert_pair_sdp.py:307–402`, `lipschitz_cert_pair_sdp_full.py:245–349`, `lipschitz_cert_scorecard_full.py:262–280`, and the data half of `LipschitzCertInstance.lean` (G1t_eq/G2t_eq/H1t_eq/H2t_eq, L486–730)
 **Smell:** compile-time (per-entry real-number `simp`), with `try` masking
 **Current (emitted):**
 ```
@@ -282,7 +282,7 @@ change, and the failure shows up somewhere else.
    records 81 s for a much larger kernel fold, which is a useful comparison.
 4. Drop `try`. Emit a deterministic closer, or no closer at all.
 
-### C.2 `scripts/lipschitz_cert_scorecard_full.py` → `LipschitzCertScorecardFullNets.lean` (862 theorems), `…FullImgsA/B`, `…IBP*`, `…Crown*`
+### C.2 `scripts/certs/lipschitz_cert_scorecard_full.py` → `LipschitzCertScorecardFullNets.lean` (862 theorems), `…FullImgsA/B`, `…IBP*`, `…Crown*`
 **Smell:** compile-time (reflection applied one entry at a time)
 **Current (emitted, ×512):**
 ```
@@ -301,7 +301,7 @@ with `G`/`W` defined as casts of the ℤ tables over `65536`. The emitted proof 
 `gram_of_dotZ_table (by decide +kernel)`: one kernel evaluation per matrix instead of 784 theorems.
 Apply the same idea to the per-image margin/argmax blocks in `…FullImgsA` (666 theorems).
 
-### C.3 `scripts/lipschitz_cert_pair_sdp.py` / `lipschitz_cert_pair_sdp_full.py` → `…SDP*`, `…SDPFull*` (1 MB files, `maxHeartbeats 64000000`)
+### C.3 `scripts/certs/lipschitz_cert_pair_sdp.py` / `lipschitz_cert_pair_sdp_full.py` → `…SDP*`, `…SDPFull*` (1 MB files, `maxHeartbeats 64000000`)
 **Smell:** heartbeats (320×) + compile-time
 **Current (emitted, `LipschitzCertScorecardSDPFull.lean:63–75`):**
 ```
@@ -323,7 +323,7 @@ by `decide +kernel` on ℚ lists;
 `decide +kernel` over ℚ, and it avoids the Cholesky denominator blow-up entirely.
 Either one drops the 64M heartbeats. Choosing between them needs a timing experiment.
 
-### C.4 `scripts/smooth_scorecard_gen.py` → `SmoothingCPScorecard.lean` (392 s): the cost is in the hand-written engine `SmoothingCP.lean:516`
+### C.4 `scripts/certs/smooth_scorecard_gen.py` → `SmoothingCPScorecard.lean` (392 s): the cost is in the hand-written engine `SmoothingCP.lean:516`
 See D.2 below. The emitted shape (`binomTail_le_of_kernel_check (by norm_num)×4 (by decide +kernel)`)
 is already reflection. What costs is the kernel function it reflects into.
 

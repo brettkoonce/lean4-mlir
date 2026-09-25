@@ -308,7 +308,7 @@ def enetDropSites : Nat := enetDropIdxs.length
 #guard (enetDropIdxs.zip (enetDropIdxs.drop 1)).all (fun (a, b) => a < b)
 
 -- ⚠ `dpName` used to live here. It moved to `StableHLO.lean` (beside `fresh`) when ConvNeXt's SD
--- render needed the same spelling: `scripts/misplace_drop_sites.py` matches `%dp\d+` textually, so
+-- render needed the same spelling: `scripts/probes/misplace_drop_sites.py` matches `%dp\d+` textually, so
 -- a second definition would put a committed shell script in the middle of a two-writer drift. Same
 -- namespace, so every use below is unchanged and no artifact byte moved.
 

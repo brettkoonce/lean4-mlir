@@ -18,7 +18,7 @@ and one `manifest.json` carrying the geometry the scorer needs, so the
 constants live in ONE file instead of being retyped in the metric script.
 
 ⭐ Every target has EQUAL-MASS cells, so the 1%-of-mass recall threshold in
-`scripts/toy2d_metrics.py` means the same thing on all four.
+`scripts/demos/toy2d_metrics.py` means the same thing on all four.
 
 Usage: python3 scripts/datasets/preprocess_toy2d.py [n=8192] [outdir=data/toy2d]
 """

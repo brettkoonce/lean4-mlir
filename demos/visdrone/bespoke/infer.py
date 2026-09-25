@@ -1,6 +1,6 @@
 """Dump twin logits in the Lean `inferDump` format so the EXISTING scorer works.
 
-`scripts/yolo_map_visdrone.py --fpn` already knows how to decode a [N, NTOT]
+`scripts/demos/yolo_map_visdrone.py --fpn` already knows how to decode a [N, NTOT]
 float32 dump into 3-scale boxes, merge them and run one NMS. Emitting the same
 bytes means the twin's mAP is computed by the same code that produced the Lean
 arm's 0.0001 -- so the two numbers are directly comparable and no second scorer
@@ -8,7 +8,7 @@ can drift from the first.
 
     .venv/bin/python3 -m bespoke.infer --ckpt runs_bespoke/r34_full_12ep/last.pt \\
         --out ../figures/twin_r34_12ep
-    python3 scripts/yolo_map_visdrone.py runs/twin_r34_12ep/logits.bin \\
+    python3 scripts/demos/yolo_map_visdrone.py runs/twin_r34_12ep/logits.bin \\
         data/visdrone448/val.bin --fpn data/visdrone --grid 14 --box-param diou
 
 BN runs in EVAL mode here (running statistics), matching what Lean's `infer` does.

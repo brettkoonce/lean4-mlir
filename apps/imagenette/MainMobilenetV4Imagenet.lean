@@ -9,7 +9,7 @@ The sixth scale-tier trainer, and the last of the Imagenette nets to get one. Bu
 
 ⭐ **Conv-M, on the timm `mobilenetv4_conv_medium` layout since 90e4af7e** (stride on the
 post-DW, BN-only pre-DW, ReLU stage 0, symmetric stem, head pooled before `conv_head`), the same
-network as jax/MainMobilenetV4Imagenet.lean; `scripts/mnv4_timm_parity.py` ties both to timm on
+network as jax/MainMobilenetV4Imagenet.lean; `scripts/parity/mnv4_timm_parity.py` ties both to timm on
 shared weights. 9,715,512 parameters. The reference's 75.48% / 92.37% was trained on the pre-timm
 layout, so it is not this driver's target; the 100-epoch pair on the timm net is
 (`mnv4-default-4gpu` here, `mnv4-default-jax-4gpu` on the JAX path).

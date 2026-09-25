@@ -54,7 +54,7 @@ puts forward is independently kernel-rechecked" is a claim a reader can now chec
 diffing this theorem list against that yaml.
 
 ⚠ **MACHINE-GENERATED — do not hand-edit.** Every statement is the project declaration's
-own type as Lean prints it (`scripts/gen_comparator_tier.py`), so this file and its
+own type as Lean prints it (`scripts/gates/gen_comparator_tier.py`), so this file and its
 `SolutionTier.lean` carry the same text by construction rather than by review. Regenerate after any
 statement change; the generator verifies that what it wrote still elaborates.
 -/

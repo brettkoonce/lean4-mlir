@@ -23,7 +23,7 @@ stays in squares — the final per-image check is `Lp·ε ≤ margin` with a
 rational `Lp`, `ρ ≤ Lp²` (`certified_at_eps_pair`); `√ρ` never appears.
 
 This is the one-hidden-layer instance of LipSDP-Neuron; the SDP is solved
-numerically OFF-line (`scripts/lipschitz_cert_pair_sdp.py`) and only the
+numerically OFF-line (`scripts/certs/lipschitz_cert_pair_sdp.py`) and only the
 rationalized certificate `(ρ, T, L, d)` enters Lean as DATA, verified
 exactly. -/
 

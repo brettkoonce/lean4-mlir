@@ -93,7 +93,7 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 | C5 | `VerifiedTrain.lean` ~2778 (`scoreCheckpoint`) | refuses every BN net, although the `.bn` companion has been written since 09-12; the comment "~30 GB drain" is stale | read `.bn`; score BN nets | S–M |
 | C6 | `Codegen.lean:50-65, 430-443` + the shim (✅ 2026-09-25, see §3 status) | bilinear geometry ops; zero-fill erasing with uniform aspect; the erase box is sized from `_IMG_SIZE`, so any `trainRes` recipe with erasing breaks | bicubic geometry, `pixel` erasing with log-uniform aspect, a size taken from the actual crop. Lands **with the next reruns**, since it moves every reference | M |
 | C7 | every `scripts/jobs/*.conf` | prechecks diverge: only `mnv4-half` builds its exe; mnv2, mnv4-default and vit-default have no freshness check; vit-emabf16 tests `-x` only; the ConvNeXt AutoAugment grep matches the `def _autoaugment` line (always passes, and AutoAugment isn't in that recipe) | `scripts/lib/precheck.sh`, sourced by every conf: build the exe, `regen_jax_generated.sh box`, GPU idle, render exists with the expected replica/all-reduce count, `CKPT_EPOCH_FILE` matches the variant, shim present and fresh, aug call-site grep on the call not the def | S |
-| C8 | `scripts/gen_mlir_manifest.py:56-171` | `wd<n>` not decoded; `x` means k×B after `acc` but B×replicas in `128x4`; batch suppressed whenever `acc` is present | decode `wd`; one `x` grammar (rename `dp128x4` if needed, predicates in `TestVariantPredicates` pin it) | S |
+| C8 | `scripts/gates/gen_mlir_manifest.py:56-171` | `wd<n>` not decoded; `x` means k×B after `acc` but B×replicas in `128x4`; batch suppressed whenever `acc` is present | decode `wd`; one `x` grammar (rename `dp128x4` if needed, predicates in `TestVariantPredicates` pin it) | S |
 | C9 | JAX resume (`shuffle(seed=42)`, unseeded aug) | the MNv4 JAX conf says "resumes bit for bit"; it doesn't | seed the shuffle by epoch and the aug by step, or fix the claim | S |
 
 ### §3 status (2026-09-25, non-render half)
@@ -139,7 +139,7 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
     transform kernel; its resize uses −0.5), border clamp, truncation to uint8, and shear/translate
     as 4-tap 1-D warps (bit-equal to 16 taps there), Rotate at 16 taps. Timm's PIL shear data is in
     pixel-centre coordinates, so the index-space shear gains `+f/2`.
-    `scripts/aug_bicubic_pil_check.py`: worst mean |Δ| 0.094 / 255, max 1, over the five ops at three
+    `scripts/gates/aug_bicubic_pil_check.py`: worst mean |Δ| 0.094 / 255, max 1, over the five ops at three
     magnitudes; control (the bilinear block) 8.0.
   - Erasing: timm `RandomErasing(mode='pixel')` — N(0,1) fill, aspect log-uniform [0.3, 1/0.3], first
     of 10 draws that fits, box sized from the image erased (fixes `trainRes`). Sampled: fires 0.253
@@ -156,7 +156,7 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 |---|---|---|---|---|
 | G1 | ViT | `vit-dp-check` feeds every replica the same rows, so it can't see a shard-offset bug (book ~12205 admits it) | add `vitin` to `shard-check` / the genuinely sharded check | S, short GPU |
 | G2 | MNv4 | `mnv4-dp-check` uses a duplicated batch; `imagenet-syncbn-check mnv4` is hard-wired to `adamdp64` (`tests/TestImagenetSyncBnCheck.lean:167-173`) | a `renderDp` like R50's (`:141-147`): 4×128 tied against 1×512 | S, short GPU |
-| G3 | MNv2, B0, ViT (**go**, 2026-09-25) | no parity gate like `scripts/mnv4_timm_parity.py`; `enet_forward_tie.py:32` ties the render to the **Imagenette** JAX file, which is how the ImageNet ReLU stem/head bug went unseen | timm/torchvision parity per net (MNv2 needs a pad-mode option for SAME vs symmetric; ViT pins LN eps and GELU); an ImageNet-spec forward tie for B0 | M, CPU |
+| G3 | MNv2, B0, ViT (**go**, 2026-09-25) | no parity gate like `scripts/parity/mnv4_timm_parity.py`; `enet_forward_tie.py:32` ties the render to the **Imagenette** JAX file, which is how the ImageNet ReLU stem/head bug went unseen | timm/torchvision parity per net (MNv2 needs a pad-mode option for SAME vs symmetric; ViT pins LN eps and GELU); an ImageNet-spec forward tie for B0 | M, CPU |
 | G4 | MNv4 | `mnv4_timm_parity.py` and `mnv4_forward_tie.py` not in CI | add to `jax.yml` | S |
 | G5 | ConvNeXt | `opt_step_tie.py` has only ResNet-50 fixtures; the EMA variant has no numeric optimizer-step tie | AdamW + wx + clip (+EMA) row against `generated_convnext_tiny_imagenet_full.py`; run `TestConvNeXtDpCheck` on the EMA variant | M, short GPU |
 | G6 | MNv2 | the precheck doesn't assert the sync-BN render, so a relaunch silently trains different BN semantics from the book's run | covered by C7's all-reduce count (314) | S |
@@ -165,24 +165,24 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 ### §4 status (2026-09-25)
 
 * ✅ G6: `mnv2-default-4gpu` asserts 314 all-reduces (C7); `enet-default-4gpu` asserts 360.
-* ✅ G3 for MNv2: `scripts/mnv2_timm_parity.py` (+ `_mnv2_timm_dump.py`, run from `.venv/bin/python`;
+* ✅ G3 for MNv2: `scripts/parity/mnv2_timm_parity.py` (+ `_mnv2_timm_dump.py`, run from `.venv/bin/python`;
   it drives `.venv-timm` itself) ties both JAX emitters to timm's `mobilenetv2_100` at
   `pad_type='same'` on shared weights — Imagenette train 4.4e-6, ImageNet train 4.7e-6 / eval 3.1e-6
   at ε 1e-3. `--controls` shows it red on symmetric padding (1.5e-1) and on ε 1e-5 (1.7e-2).
-  `scripts/mnv2_forward_tie.py --imagenet` carries it to the artifact the run scores through:
+  `scripts/parity/mnv2_forward_tie.py --imagenet` carries it to the artifact the run scores through:
   `@mobilenetv2in_fwd_eval_eps0001` against the ImageNet reference in its own eval mode, max |Δ|
   3.0e-5 (2.1e-6 of scale); control `--mlir verified_mlir/mobilenetv2in_fwd_eval.mlir` (ε 1e-5)
   fails at 1.4e-1. Neither script is in CI yet (G4's question for MNv4 too: CI has no `.venv-timm`).
   ⚠ Pre-existing, not touched: the Imagenette `--eval` tie reports FAIL at max |Δ| 1.3e-4 against its
   absolute 1e-4 tolerance on logits spanning ±49 (2.6e-6 of scale), identically before this change.
-* ✅ G3 for B0: `scripts/enet_timm_parity.py` (+ `_enet_timm_dump.py`) against timm's `efficientnet_b0`
+* ✅ G3 for B0: `scripts/parity/enet_timm_parity.py` (+ `_enet_timm_dump.py`) against timm's `efficientnet_b0`
   with a SAME stem — the paths' hybrid (SAME stem, symmetric strided depthwise): Imagenette 2.3e-6,
   ImageNet train 2.0e-6 / eval 7.3e-7; controls red (symmetric everywhere 6.0e-3, ε 1e-5 6.0e-3).
   ⚠ `--pad tf` against TF's all-SAME `tf_efficientnet_b0`: train 3.7e-1 / eval 4.8e-2 of scale. The
   strided-depthwise padding is a LARGE deviation from the TF net the recipe now follows; fixing it
   moves both paths (JAX `mbconv_block` + the verified render's four strided depthwise sites) and is
   a decision for the user, not taken here.
-* ✅ G3 for ViT: `scripts/vit_timm_parity.py` (+ `_vit_timm_dump.py`) against `deit_tiny_patch16_224`
+* ✅ G3 for ViT: `scripts/parity/vit_timm_parity.py` (+ `_vit_timm_dump.py`) against `deit_tiny_patch16_224`
   at the reference's tanh GELU / LN ε 1e-5: Imagenette 4.7e-7, ImageNet 6.9e-7 at tol 1e-5 (tanh vs
   erf is only ~4e-5 of scale, so the CNN gates' 1e-3 would be blind to it); controls red (k/v swapped
   1.3e-1, erf GELU 3.8e-5). `--deit` (erf, 1e-6): 4.6e-5 / 3.9e-5 at random init.
@@ -335,7 +335,7 @@ R50-2018 runs on the other box, so it waits. The book still says `deit-init` (K1
 
 The rule (the user, 2026-09-25): score the way timm validates. timm scores at the pretrained
 config's `test_input_size` / `test_crop_pct`, which is often not the training size.
-`scripts/timm_eval_protocols.py` (run from `.venv-timm`) reads them from the pinned timm and writes
+`scripts/parity/timm_eval_protocols.py` (run from `.venv-timm`) reads them from the pinned timm and writes
 `jax/timm_eval_protocols.json`, keyed by generated trainer:
 
 | net (our recipe) | timm tag | train | timm test |
@@ -351,10 +351,10 @@ config's `test_input_size` / `test_crop_pct`, which is often not the training si
 
 | # | item | status |
 |---|---|---|
-| S1 | protocol table from the pinned timm, with `--check` | ✅ `scripts/timm_eval_protocols.py`, `jax/timm_eval_protocols.json` |
+| S1 | protocol table from the pinned timm, with `--check` | ✅ `scripts/parity/timm_eval_protocols.py`, `jax/timm_eval_protocols.json` |
 | S2 | JAX forwards score at any size: every conv stem infers its square side (`_s = …`, the A3 idiom), ViT stays fixed (pos-embed tied to the grid; timm scores DeiT at 224) | ✅ `Codegen.lean`; 24 trainers moved one line each |
 | S3 | `jax/scripts/eval_full50k.py`: `PROTOCOL=train\|timm\|both`, `EVAL_SIZE`/`EVAL_CROP`; refuses a fixed forward at a foreign size | ✅ A/B on the RSB-A3 rerun: committed scorer 74.64 / 91.75, new 74.62 / 91.75 (XLA noise); B0 `both` gives two identical passes |
-| S4 | the verified path at timm's test size, scored by a VERIFIED graph (the user's call): eval renders at the test size (`mnv4in_fwd_eval_s256`, `convnextin_fwd_s288`; `f`/`s` parameters on the MNv4 and ConvNeXt forward chains, default byte-identical, proofs untouched), `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in every shim, `score-checkpoint` under `LEAN_MLIR_EVAL_SIZE`/`_CROP`, `scripts/score_timm.sh <net>` | ✅ MNv4 epoch-17 checkpoint: 67.10 at 224 / 0.875, **68.02** at 256 / 1.0; ConvNeXt 288 plumbing smoke green. Open: RSB-A1/A2 at 288 (R50 renders) |
+| S4 | the verified path at timm's test size, scored by a VERIFIED graph (the user's call): eval renders at the test size (`mnv4in_fwd_eval_s256`, `convnextin_fwd_s288`; `f`/`s` parameters on the MNv4 and ConvNeXt forward chains, default byte-identical, proofs untouched), `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in every shim, `score-checkpoint` under `LEAN_MLIR_EVAL_SIZE`/`_CROP`, `scripts/parity/score_timm.sh <net>` | ✅ MNv4 epoch-17 checkpoint: 67.10 at 224 / 0.875, **68.02** at 256 / 1.0; ConvNeXt 288 plumbing smoke green. Open: RSB-A1/A2 at 288 (R50 renders) |
 | S4b | the other box: the generated trainers and shims moved (forward reshape, eval-size override). Run `scripts/regen_jax_generated.sh sync` there after pulling, or its prechecks refuse | note |
 | S5 | DeiT's 0.9 crop in the in-training eval (shim constant, both paths, no render) | open |
 | S6 | retire the six per-net `jax/scripts/eval_<net>_full50k.py` copies for the generic one | open |

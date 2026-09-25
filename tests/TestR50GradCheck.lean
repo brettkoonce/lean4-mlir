@@ -356,7 +356,7 @@ BNs + the head)"
   -- ⭐⭐ **THE 10th-PERCENTILE VIOLATION, and it is what the verdict below now rests on.**
   --
   -- ⚠⚠ The check used to be `bC` — the MINIMUM over the 21 control sites — which is exactly the
-  -- order statistic the comment at the verdict says not to use. `scripts/r50_gradcheck_stability.py`
+  -- order statistic the comment at the verdict says not to use. `scripts/probes/r50_gradcheck_stability.py`
   -- measured the cost of that contradiction (`a3_paper_fidelity.md` §3.1b): over three runs on the
   -- SAME seeded base point, `bC` spreads **2.75× under CE and 10.5× under BCE**, so under BCE the
   -- gate's answer depended on which run you happened to do — 2 of 3 reps cleared the separation and

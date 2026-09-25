@@ -43,7 +43,7 @@ deriving Inhabited, DecidableEq
     than re-read off this table, or they would gate nothing. What the table cannot say — which
     depthwise carries a stride (the post-DW when both exist; every strided row has both, and a
     `#guard` in the renderer holds that), and that the pre-DW is BN only — is the renderer's, and
-    `scripts/mnv4_timm_parity.py` pins it against timm on shared weights. -/
+    `scripts/parity/mnv4_timm_parity.py` pins it against timm on shared weights. -/
 def mnv4Blocks : List UibSpec :=
   [ ⟨"1",   48,  80, 4, 3, 5, 28, true⟩,   -- ExtraDW  56→28
     ⟨"2",   80,  80, 2, 3, 3, 28, false⟩,  -- ExtraDW  28

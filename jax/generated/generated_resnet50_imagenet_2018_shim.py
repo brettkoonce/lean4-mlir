@@ -162,7 +162,7 @@ def _main():
     # policy are identical either way and only the ORDER of random draws moves. ⭐ The JAX
     # reference trainer this shim mirrors has never paid it, so ON was an ASYMMETRY in the pair.
     # ⛔ EVERY GATE THAT REPLAYS A STREAM MUST NOW ASK FOR IT. SHIM_DETERMINISM=1 is pinned in
-    # tests/prefetch_tie.sh, scripts/residency_gate.sh, scripts/mixup_gate.py and
+    # tests/prefetch_tie.sh, scripts/gates/residency_gate.sh, scripts/gates/mixup_gate.py and
     # scripts/shim_wiring_gate.py. A NEW byte-identity gate MUST set it or its control is noise.
     _det_env = os.environ.get('SHIM_DETERMINISM')
     _det = (_det_env == '1')

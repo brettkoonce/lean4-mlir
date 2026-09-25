@@ -143,7 +143,7 @@ def _aa_rot(m): return (m/_AA_MAX)*30.0
 #   Posterize @ m=7: timm keeps 4-int(2.8) = 2 MSBs; we kept int(1.2) = 1. A WHOLE BIT more
 #   posterisation, at RSB-A2's own magnitude — the only one of these that is visible.
 #   Solarize  @ m=7: timm 256-int(179) = 77; we had int(76.8) = 76. One threshold unit of 256.
-# Both are the same transcription error, and `scripts/randaug_timm_diff.py` is what found it.
+# Both are the same transcription error, and `scripts/parity/randaug_timm_diff.py` is what found it.
 def _aa_pos(m): return ((4 - int((m/_AA_MAX)*4)) if _RA_INC else int((m/_AA_MAX)*4))
 # ⚠⚠ NO `min(256, ...)` HERE, and it must not come back. d96c7fa added one as a guard and it
 # BROKE EVERY IMAGENET TRAINING RUN: under mstd > 0 (RSB sets 0.5) the magnitude reaching this is
@@ -3653,7 +3653,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    # policy are identical either way and only the ORDER of random draws moves. ⭐ The JAX\n" ++
   "    # reference trainer this shim mirrors has never paid it, so ON was an ASYMMETRY in the pair.\n" ++
   "    # ⛔ EVERY GATE THAT REPLAYS A STREAM MUST NOW ASK FOR IT. SHIM_DETERMINISM=1 is pinned in\n" ++
-  "    # tests/prefetch_tie.sh, scripts/residency_gate.sh, scripts/mixup_gate.py and\n" ++
+  "    # tests/prefetch_tie.sh, scripts/gates/residency_gate.sh, scripts/gates/mixup_gate.py and\n" ++
   "    # scripts/shim_wiring_gate.py. A NEW byte-identity gate MUST set it or its control is noise.\n" ++
   "    _det_env = os.environ.get('SHIM_DETERMINISM')\n" ++
   "    _det = (_det_env == '1')\n" ++
@@ -3692,7 +3692,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- and decodes only its 1/N, since the filter sits before `_pp`.
   --
   -- ⚠⚠ NOT absolute-index slices (`validation[0:256]+validation[512:768]+…`). That was the first
-  -- cut, and `scripts/streamed_val_gate.sh` refused it: same 50,000 images, same count, same top-5,
+  -- cut, and `scripts/gates/streamed_val_gate.sh` refused it: same 50,000 images, same count, same top-5,
   -- 2,018 bitmap positions moved. tfds reads a split as an INTERLEAVE of its shard files (cycle
   -- length 16), so the order it yields — the order every bitmap is in — is not index order, and
   -- an index slice reproduces the set but not the sequence. Only walking the same stream does.

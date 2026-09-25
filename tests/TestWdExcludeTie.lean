@@ -93,7 +93,7 @@ def main (argv : List String) : IO Unit := do
   -- ⚠ `--cand <path>` drives a CANDIDATE wx render instead of the committed one, and it is what
   -- makes a green run believable — the `vit-dp-check` lesson (§2j): that harness hardcoded both
   -- paths, so its bit-exact PASS was unfalsifiable until an argument was added.
-  -- `scripts/perturb_wd_mask.py` builds the two controls.
+  -- `scripts/probes/perturb_wd_mask.py` builds the two controls.
   let cand := match argv.dropWhile (· != "--cand") with
     | _ :: p :: _ => some p
     | _ => none

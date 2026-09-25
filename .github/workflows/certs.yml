@@ -32,10 +32,10 @@ on:
       # The gates this job runs and what they read: a change to any of these flips the verdict
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
-      - 'scripts/check_audit_coverage.py'
-      - 'scripts/lean_graph.py'
-      - 'scripts/check_render_coverage.py'
-      - 'scripts/render_guard_baseline.txt'
+      - 'scripts/gates/check_audit_coverage.py'
+      - 'scripts/lib/lean_graph.py'
+      - 'scripts/gates/check_render_coverage.py'
+      - 'scripts/gates/render_guard_baseline.txt'
       - '.github/workflows/proofs.yml'
       - 'tests/bestiary_params.yml'
       - 'tests/test_bestiary_params.py'
@@ -57,10 +57,10 @@ on:
       # The gates this job runs and what they read: a change to any of these flips the verdict
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
-      - 'scripts/check_audit_coverage.py'
-      - 'scripts/lean_graph.py'
-      - 'scripts/check_render_coverage.py'
-      - 'scripts/render_guard_baseline.txt'
+      - 'scripts/gates/check_audit_coverage.py'
+      - 'scripts/lib/lean_graph.py'
+      - 'scripts/gates/check_render_coverage.py'
+      - 'scripts/gates/render_guard_baseline.txt'
       - '.github/workflows/proofs.yml'
       - 'tests/bestiary_params.yml'
       - 'tests/test_bestiary_params.py'
@@ -82,15 +82,15 @@ jobs:
 
       - name: Audit coverage check (AuditAxioms imports ⊆ Proofs+Certs roots)
         # Fail fast (no Lean needed) if the audit imports a module that
-        # `lake build Certs` won't build — see scripts/check_audit_coverage.py.
-        run: python3 scripts/check_audit_coverage.py
+        # `lake build Certs` won't build — see scripts/gates/check_audit_coverage.py.
+        run: python3 scripts/gates/check_audit_coverage.py
 
       - name: Render coverage check (artifact renderers built + drift-guarded)
         # This job is the one that actually broke: `lake build Certs` does not
         # build a leaf renderer nothing imports, so ResNet34RenderB's .olean
         # was absent on a fresh runner. Pure text analysis, no Lean — runs
         # before elan so a root gap fails in seconds, not after the build.
-        run: python3 scripts/check_render_coverage.py
+        run: python3 scripts/gates/check_render_coverage.py
 
       - name: Install elan
         run: |

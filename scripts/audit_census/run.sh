@@ -13,7 +13,7 @@ mkdir -p "$CENSUS_DIR"
 python3 - <<'PY'
 import os, sys
 from pathlib import Path
-sys.path.insert(0, "scripts")
+sys.path.insert(0, "scripts/lib")
 from lean_graph import lakefile_text, lib_roots, libs, reachable
 out = Path(os.environ["CENSUS_DIR"])
 text = lakefile_text()

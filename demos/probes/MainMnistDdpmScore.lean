@@ -36,7 +36,7 @@ import LeanMlir.VerifiedNets
     third of the mass sits in provably empty squares. The per-class mass and the
     energy distance are here so that failure has somewhere to show up.
 
-    This driver only GENERATES and CLASSIFIES; `scripts/mnist_ddpm_score.py`
+    This driver only GENERATES and CLASSIFIES; `scripts/demos/mnist_ddpm_score.py`
     does the statistics, the same split the 2-D demo uses.
 
     Run:
@@ -45,7 +45,7 @@ import LeanMlir.VerifiedNets
     LEAN_MLIR_DUMP_PARAMS=.lake/build/cnn_verified_params.bin \
       lake exe mnist-cnn-verified data                               # 10 ep, ~50 s
     lake exe mnist-ddpm-score 1024 50
-    python3 scripts/mnist_ddpm_score.py
+    python3 scripts/demos/mnist_ddpm_score.py
     ```
 -/
 
@@ -267,4 +267,4 @@ lake exe mnist-cnn-verified data"
   IO.FS.writeBinFile s!"{out}/mnist_ddpm_noise.bin" noise
   IO.FS.writeBinFile s!"{out}/mnist_ddpm_labels_real.bin" (F32.sliceLabels testLbl 0 nTest)
   IO.eprintln s!"wrote {nSamp} samples + logits ({nSamp}x{nc} gen, {nTest}x{nc} real)"
-  IO.eprintln "▶ score it: python3 scripts/mnist_ddpm_score.py"
+  IO.eprintln "▶ score it: python3 scripts/demos/mnist_ddpm_score.py"

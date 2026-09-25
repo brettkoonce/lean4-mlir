@@ -3,10 +3,10 @@ import LeanMlir
 /-! Emit the standalone FPN-neck (top-down multi-scale merge) module for numeric
     validation (detection-infra brick #3, planning/archive/yolo_fpn.md bite 2). Writes
     `fpn_neck_gen.mlir` for a concrete (B, oc, c3, c4, c5, g5);
-    `scripts/fpn_neck_probe_check.py` compiles it with IREE (CPU) and checks the
+    `scripts/probes/fpn_neck_probe_check.py` compiles it with IREE (CPU) and checks the
     emitted forward against the numpy `fpn_forward` and the emitted backward
     (dC3/dC4/dC5 + dW3/dW4/dW5) against the f64-FD-verified `fpn_grad` oracle in
-    `scripts/fpn_neck_check.py`.
+    `scripts/probes/fpn_neck_check.py`.
 
     Usage: lake exe fpn-neck-probe [B oc c3 c4 c5 g5] [outPath]
     Defaults: 2 8 6 10 12 3 fpn_neck_gen.mlir -/

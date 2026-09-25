@@ -14,7 +14,7 @@ that pair of numbers is what the section is about (planning/neu_det_fpn_demo.md)
 lake build yolov1-neudet448
 # train (default): data dir with 448/14 train.bin + val.bin from scripts/datasets/preprocess_neu_det.py
 CUDA_VISIBLE_DEVICES=1 YOLO_EPOCHS=30 .lake/build/bin/yolov1-neudet448 data/neu_det448
-# infer: dump [N,5880] logits.bin for scripts/yolo_map_visdrone.py --grid 14 --classes neu
+# infer: dump [N,5880] logits.bin for scripts/demos/yolo_map_visdrone.py --grid 14 --classes neu
 .lake/build/bin/yolov1-neudet448 infer data/neu_det448 runs/neudet_grid
 ```
 
@@ -144,7 +144,7 @@ def inferDump (dataDir outDir : String) : IO Unit := do
     logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)
   IO.FS.writeBinFile s!"{outDir}/logits.bin" logitsAll
   IO.println s!"  wrote {outDir}/logits.bin ({logitsAll.size} bytes — {nVal}×{flat} f32)"
-  IO.println s!"next: python3 scripts/yolo_map_visdrone.py {outDir}/logits.bin {dataDir}/{split}.bin --grid {gH} --classes neu"
+  IO.println s!"next: python3 scripts/demos/yolo_map_visdrone.py {outDir}/logits.bin {dataDir}/{split}.bin --grid {gH} --classes neu"
 
 def main (args : List String) : IO Unit := do
   match args with

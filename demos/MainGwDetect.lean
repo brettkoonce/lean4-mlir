@@ -8,7 +8,7 @@ import LeanMlir
     arm), a two-class head and the ordinary cross-entropy train step with int32
     labels — the blackjack/2-D pattern of a host loop around the standard step, no
     `DatasetKind`, no new codegen. The score is not the accuracy printed here but the
-    logits this writes for both val sets, which `scripts/gw_metrics.py` thresholds at a
+    logits this writes for both val sets, which `scripts/demos/gw_metrics.py` thresholds at a
     false-alarm rate and bins by injected SNR beside the matched filter's closed form.
 
     XLA backend only.
@@ -376,5 +376,5 @@ val acc gauss {fmt (accs[0]!).2 2}%  real {fmt (accs[1]!).2 2}%  \
     IO.FS.writeBinFile s!"{pfx}_logits_{nm}_val.bin" logits
     IO.println s!"{spec.name} trained on {arm}, scored on {nm} val: accuracy {fmt acc 2}%  \
 -> {pfx}_logits_{nm}_val.bin"
-  IO.eprintln s!"score: .venv-gw/bin/python scripts/gw_metrics.py table \
+  IO.eprintln s!"score: .venv-gw/bin/python scripts/demos/gw_metrics.py table \
 --logits=gauss:{pfx}_logits_gauss_val.bin,real:{pfx}_logits_real_val.bin"

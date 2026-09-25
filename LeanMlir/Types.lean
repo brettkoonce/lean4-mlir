@@ -454,7 +454,7 @@ inductive LossKind where
       gradient carries a factor of `p_i` from the softmax Jacobian, so it
       vanishes exactly where a collapsed class needs rescuing — measured on
       BraTS at 0.02% of CE's gradient once p₃ ≈ 2e-5
-      (`scripts/seg_dice_vanishing_grad_probe.py`). CE's seed is `(p - y)/N`,
+      (`scripts/probes/seg_dice_vanishing_grad_probe.py`). CE's seed is `(p - y)/N`,
       which is `-1/N` at `p = 0`: **flat, and wholly indifferent to the
       collapse.** Scaling that by `w_c` therefore keeps a live signal all the
       way down, which is precisely what Dice cannot do. See
@@ -611,7 +611,7 @@ structure TrainConfig where
       DIoU box loss on box0 with a positive box parameterization (cx=(j+σ(tx))/gW,
       w=exp(tw)), the detection-infra brick #1 (planning/archive/yolo_drone.md WS-D). Only
       consulted on the `.yolov1Masked` path. NB: a DIoU-trained model must be
-      decoded with the same σ/exp (scripts/yolo_map_visdrone.py --box-param diou). -/
+      decoded with the same σ/exp (scripts/demos/yolo_map_visdrone.py --box-param diou). -/
   useDiouBox   : Bool  := false
   /-- YOLO anchor priors (w_rel, h_rel) for the anchor-based detector (brick #2).
       Empty = single-box YOLOv1. When non-empty, the yolo loss routes to the
@@ -655,8 +655,8 @@ structure TrainConfig where
       Motivated by measurement, not folklore: on the unweighted e12 checkpoint
       the class argmax collapsed onto the two most frequent classes (car 44% +
       pedestrian 21% of encoded positives), leaving 5/10 classes never predicted
-      and per-class mAP pinned at ~0.0001 — see `scripts/fpn_obj_separation.py`
-      and `scripts/fpn_class_freq.py`. Weights depend only on the target, so
+      and per-class mAP pinned at ~0.0001 — see `scripts/probes/fpn_obj_separation.py`
+      and `scripts/probes/fpn_class_freq.py`. Weights depend only on the target, so
       they are exactly constant w.r.t. the logits and the weighted gradient
       stays finite-difference checkable.
 

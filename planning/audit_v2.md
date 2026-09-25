@@ -95,12 +95,12 @@ parameter layout is one table, `Spec.Layer.paramSlots`; `emitTok` renders every 
 `lake build Certs LeanMlir Apps CertsHeavy Reference`; `tests/AuditAxioms.lean` elaborates with
 every `#print axioms` giving a 3-axiom verdict (1,573 today — the certs.yml recipe, which JOINS
 wrapped lines: a plain grep undercounts) and `AuditAxiomsHeavy.lean` 62/62; `lake exe
-docstring-checkrefs`; `python3 scripts/gen_comparator_tier.py --check`;
-`scripts/check_audit_coverage.py` + `scripts/check_render_coverage.py`;
+docstring-checkrefs`; `python3 scripts/gates/gen_comparator_tier.py --check`;
+`scripts/gates/check_audit_coverage.py` + `scripts/gates/check_render_coverage.py`;
 `scripts/regen_verified_mlir.sh check` when a renderer or writer moves; regenerate
 `blueprint/lean_decls` from content.tex's `\lean{}` names, then `lake exe blueprint-checkdecls
-blueprint/lean_decls blueprint/lean_deps` + `scripts/blueprint_uses.py --check` (`--fix`, then
-re-run `scripts/blueprint_depgraph_tikz.py`, when an edge moves); every `formalization.yaml`
+blueprint/lean_decls blueprint/lean_deps` + `scripts/book/blueprint_uses.py --check` (`--fix`, then
+re-run `scripts/book/blueprint_depgraph_tikz.py`, when an edge moves); every `formalization.yaml`
 `declaration`/`file` pair still matches; `git status verified_mlir/` clean; and
 `tests/comparator/run.sh` (~4 min, three tiers) whenever a comparator-cited name, a root file or a
 tie moves. A book change gets the current-vs-proposed preview on :8765 (tailscale 100.76.1.97)
@@ -132,7 +132,7 @@ before the commit.
   caption macro (`\depgraphCites*`) — build the PDF.
 - `fun_prop` at the nets' literal widths: tag the ATOMS, unfold down to them, never tag a block
   lemma; interleaved defs need `repeat (first | unfold …)`.
-- `scripts/blueprint_depgraph_tikz.py` treats `argv[1]` as the OUTDIR — `--help` wrote a stray
+- `scripts/book/blueprint_depgraph_tikz.py` treats `argv[1]` as the OUTDIR — `--help` wrote a stray
   `--help/` directory (untracked, in the repo root; delete it).
 - `rw` does not match `h ▸ e` against `castIdx h e` — use `refine (lemma …).trans ?_`.
 - A `HasVJP` whose backward is spelled the way the IR op denotes cannot be swapped for an

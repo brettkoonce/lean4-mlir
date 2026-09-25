@@ -619,7 +619,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
       -- backward. MLIR's textual name scope is flat across nested regions, so the artifact was
       -- rejected at parse with *"redefinition of SSA value '%sge'"*. It rendered, it passed
       -- byte-identity, it passed render coverage, and its arity checked — because NOTHING IN THIS
-      -- REPO PARSED A COMMITTED ARTIFACT until `scripts/parse_verified_mlir.py`.
+      -- REPO PARSED A COMMITTED ARTIFACT until `scripts/gates/parse_verified_mlir.py`.
       -- ⚠ ViTRender's per-example EMA keeps `%{nm}e` and is fine: ViT has no maxpool, so no
       -- `select_and_scatter` and no `%s*` block-locals. Same reason this family cannot.
       let (c, nE) ← pretty B (.adamMNextF s!"%{g.nm}ema" "%emad" "%oemad" g.ds 0 z (.operand nT z))

@@ -51,7 +51,7 @@ const char* lowerer_active_name(void) { load_once(); return g_active; }
 // not -- it is a path, so the loader takes it literally. With the relative entry
 // first, the repo copy ALWAYS won and LD_LIBRARY_PATH could never be honoured,
 // which silently disabled every gate that injects a purpose-built shim that way:
-// `tests/prefetch_tie.sh` and `scripts/residency_gate_all.sh` both point
+// `tests/prefetch_tie.sh` and `scripts/gates/residency_gate_all.sh` both point
 // LD_LIBRARY_PATH at a deterministic, autotuning-off build (`scripts/det_shim.sh`)
 // and neither was getting it. Measured 2026-08-11: prefetch_tie's A1-vs-A2
 // control failed at ~145 M differing bytes -- the documented signature of "the

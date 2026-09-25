@@ -97,7 +97,7 @@ private def zKk {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 --
 -- ⚠⚠ AND THE RESIDUAL ADD PUTS THE BRANCH SECOND ON THIS NET. `hres = addVB(xin, o)` emits
 -- `add %xin, %o`, where EfficientNet and ConvNeXt both emit `add %branch, %skip`. That is not a
--- cosmetic difference: `scripts/misplace_drop_sites.py` matched only the branch-first shape and
+-- cosmetic difference: `scripts/probes/misplace_drop_sites.py` matched only the branch-first shape and
 -- silently rewrote ZERO of ViT's sites — a control that quietly does nothing reads exactly like a
 -- control that ran. It handles both orders now and REFUSES at zero matches.
 

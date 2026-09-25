@@ -54,7 +54,7 @@ Post-v2 additions (flash attention, RoPE, no-pos, the 8K config) exist only as c
 The causal-mask figure landed (`3c8c5dce`). The train-vs-val bits/char curve — Gate A of
 `tinygpt_demo_v2.md:92`, and the demo's actual lesson — now HAS its nano data: today's
 `train.log` carries loss every 100 steps and val every 500. `tiny` still needs a 10K run (~4 min)
-to draw its val line turning up. `scripts/log_to_pgfplots.py` needs ~10 lines of new regex
+to draw its val line turning up. `scripts/book/log_to_pgfplots.py` needs ~10 lines of new regex
 (`step {n}/{N}: loss=` and `── val @ step {n}: … bits/char`). Companion: the sample-vs-checkpoint
 verbatim panel — data already in `blueprint/src/figures/tinygpt/` (five orphaned `.txt` files).
 

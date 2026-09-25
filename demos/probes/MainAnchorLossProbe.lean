@@ -2,7 +2,7 @@ import LeanMlir
 
 /-! Emit the standalone anchor-YOLO-loss module for numeric validation (brick #2,
     WS-C). Writes `anchor_loss_gen.mlir` for a concrete (B, gH, gW, A);
-    `scripts/anchor_loss_probe_check.py` compiles it (CPU) and checks the emitted
+    `scripts/probes/anchor_loss_probe_check.py` compiles it (CPU) and checks the emitted
     forward against numpy and the emitted backward against finite differences.
 
     Usage: lake exe anchor-loss-probe [B gH gW A] [outPath]

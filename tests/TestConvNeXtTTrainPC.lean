@@ -43,10 +43,10 @@ demonstrably separates, which a 180/180 bit-identical PASS otherwise cannot be d
 from (§4).
 
   lake env lean tests/TestConvNeXtTTrainPC.lean
-  CUDA_VISIBLE_DEVICES=0 scripts/render_parity.py --fn convnext_train_step \
+  CUDA_VISIBLE_DEVICES=0 scripts/gates/render_parity.py --fn convnext_train_step \
     --ref verified_mlir/convnext_train_step.mlir --cand /tmp/cnxtpc/train_step.mlir
 
-  (`render_parity.py` finds `iree-compile` / `iree-run-module` through `scripts/_iree.py`.)
+  (`render_parity.py` finds `iree-compile` / `iree-run-module` through `scripts/lib/_iree.py`.)
 -/
 
 open Proofs Proofs.StableHLO

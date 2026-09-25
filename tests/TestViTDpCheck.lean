@@ -112,13 +112,13 @@ def main (args : List String) : IO Unit := do
   -- `g → λg`, so a collective off by any scalar is EXACTLY normalised away.
   --
   -- The same control on the no-clip DP render fires at norm-rel **2.965**, and composing it with
-  -- `scripts/perturb_clip.py hi` (threshold above the norm ⇒ the clip is inert) fires at
+  -- `scripts/probes/perturb_clip.py hi` (threshold above the norm ⇒ the clip is inert) fires at
   -- **identically 2.965** on the clipped render — which is what pins the cause to the clip rather
   -- than to anything else that changed:
   --
-  --     python3 scripts/perturb_clip.py verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir /tmp/hi.mlir hi
+  --     python3 scripts/probes/perturb_clip.py verified_mlir/vitin_adamdp128x4wxclip_train_step.mlir /tmp/hi.mlir hi
   --     sed -E 's/^(    %arn[A-Za-z0-9_]+ = stablehlo\.constant dense<)4\.0(>)/\11.0\2/' /tmp/hi.mlir > /tmp/hi_sum.mlir
-  --     python3 scripts/perturb_clip.py verified_mlir/vitin_adam128wxclip_train_step.mlir /tmp/sg_hi.mlir hi
+  --     python3 scripts/probes/perturb_clip.py verified_mlir/vitin_adam128wxclip_train_step.mlir /tmp/sg_hi.mlir hi
   --     … vit-dp-check /tmp/hi_sum.mlir /tmp/sg_hi.mlir 128        # rc=1
   --
   -- ⚠ **THIS IS THE RIGHT CONTROL, NOT A WORKAROUND**, and the reason is worth keeping: where the

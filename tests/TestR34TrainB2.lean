@@ -1,7 +1,7 @@
 import LeanMlir
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
-/-! # ResNet-34 AdamW train step at **batch 2** — the artifact `scripts/grad_tie.py` runs
+/-! # ResNet-34 AdamW train step at **batch 2** — the artifact `scripts/parity/grad_tie.py` runs
 
 The committed `resnet34_adam_train_step.mlir` is B=32, which is more than a CPU gradient check
 wants to carry. This is the same renderer at `B := 2`, written to `.lake/build/` because it is a
@@ -65,12 +65,12 @@ def main : IO Unit := do
   if (← IO.FS.lines "verified_mlir/resnet34_fwd.mlir").any
       (fun l => l.contains "dimensions = [0, 2, 3]") then
     IO.println "  ⚠ resnet34_fwd is now BATCH BN too — the two-worlds split has been CLOSED."
-    IO.println "    Good news, but `scripts/grad_tie.py --net r34` and this file's docstring both"
+    IO.println "    Good news, but `scripts/parity/grad_tie.py --net r34` and this file's docstring both"
     IO.println "    assume the split; re-read them before trusting either."
   else
     IO.println "  · resnet34_fwd remains PER-EXAMPLE BN — the split is still open (§3d(b))"
 
   if bad == 0 then
-    IO.println "  ✓ r34 b2 train step ready for scripts/grad_tie.py --net r34"
+    IO.println "  ✓ r34 b2 train step ready for scripts/parity/grad_tie.py --net r34"
   else
     throw (IO.userError s!"r34 b2 emit FAILED ({bad})")

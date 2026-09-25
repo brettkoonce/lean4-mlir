@@ -62,7 +62,7 @@ echo "  1800 images, 1800 annotations."
 
 cd "$REPO_ROOT"
 echo "Fitting per-scale anchor priors on the train split ..."
-python3 scripts/neu_anchors.py data/neu_det --save data/neu_det
+python3 scripts/probes/neu_anchors.py data/neu_det --save data/neu_det
 
 echo "Preprocessing (FPN records → data/neu_det_fpn, single-grid → data/neu_det448) ..."
 python3 scripts/datasets/preprocess_neu_det.py data/neu_det data/neu_det_fpn --size 448 --grid 14 --fpn data/neu_det

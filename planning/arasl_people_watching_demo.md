@@ -182,7 +182,7 @@ and the book's convention is a mean with an interval where one is cheap.
 
 ## 5. The instrument
 
-`scripts/arasl_score.py <logits.bin> data/arasl/labels_<protocol>_test.bin
+`scripts/demos/arasl_score.py <logits.bin> data/arasl/labels_<protocol>_test.bin
 --meta data/arasl/meta_<protocol>.npz [--train-bin …]`: accuracy with Wilson
 interval, per-class accuracy, the confusion matrix and its top pairs, and
 the leak audit from §2 (test → nearest train image, fraction under 6 grey
@@ -199,7 +199,7 @@ mean misleading, and if it does, say so beside the table, do not swap it in.
 Figure: (a) the alphabet — one crop per class, 32 tiles with the letter
 label, the data article's own `Signs_32_New.png` in the demo's own crops;
 (b) the five most confused pairs on the blocked split, a true and a
-predicted crop each, side by side. `scripts/arasl_figure.py`, 2 rows. If
+predicted crop each, side by side. `scripts/demos/arasl_figure.py`, 2 rows. If
 the leak audit is the story, a third panel: a test image and its nearest
 train neighbour under each split — the same hand twice under `random`, a
 different hand under `blocked`. A preview of (a) plus the burst-vs-random
@@ -291,7 +291,7 @@ Optional:                   size=32 arm; the ImageNet-R34 bootstrap arm if block
 - `data/arasl/` already holds the zip, the labels CSV and the extracted
   tree from 2026-09-17; `scripts/datasets/download_arasl.sh` must be idempotent over it.
 - The book's accuracy convention is a Wilson interval on every number;
-  `scripts/arasl_score.py` prints it, and Table 1 carries it.
+  `scripts/demos/arasl_score.py` prints it, and Table 1 carries it.
 
 ## 11. Log — how the plan met its data (2026-09-17)
 
@@ -316,7 +316,7 @@ Optional:                   size=32 arm; the ImageNet-R34 bootstrap arm if block
   the leaked vs the non-leaked test images (random: 99.7% vs 84.1%), and the
   1-NN-on-16×16-thumbnails floor (random 95.7%, blocked 28.6%) — a
   zero-parameter lookup that gets within three points of the published CNNs
-  on the literature's protocol. Both are in `scripts/arasl_score.py`.
+  on the literature's protocol. Both are in `scripts/demos/arasl_score.py`.
 - **Gate 1 met at epoch 5** (96.78%); seed 1 finished at 98.52% random /
   78.78% blocked, best-val epochs 23 / 24. ~9 s per epoch with three cards
   busy (8 ms/step alone), 30 epochs ≈ 5–6 min.
@@ -334,7 +334,7 @@ Optional:                   size=32 arm; the ImageNet-R34 bootstrap arm if block
   constant lr with hflip, which would be wrong here (a mirrored hand is a
   different sign for some letters).
 - Files: `scripts/datasets/download_arasl.sh`, `scripts/datasets/preprocess_arasl.py`, `demos/MainAraslSigns.lean`
-  (`lake exe arasl-signs`), `scripts/arasl_score.py`, `scripts/arasl_figure.py`;
+  (`lake exe arasl-signs`), `scripts/demos/arasl_score.py`, `scripts/demos/arasl_figure.py`;
   runs under `runs/2026-09-17-arasl*/`.
 - **DONE 2026-09-17, Table 1 as landed** (test, 3 seeds for the chapter net,
   pooled Wilson ±0.2 / ±0.6): cifar8w **98.62 ± 0.10 / 77.94 ± 0.80**; on the

@@ -321,7 +321,7 @@ private def uibFwdStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : BnMod
     "Fused" means the MBConv expand-1×1 and its depthwise collapse into ONE regular `k×k` conv, so
     despite living in a mobile net there is nothing depthwise here. No skip: `ic ≠ oc` and stride 2.
 
-    ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium` (`scripts/mnv4_timm_parity.py`). Until
+    ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium` (`scripts/parity/mnv4_timm_parity.py`). Until
     2026-09-24 this site was swish, inherited from the JAX `fused_mbconv_block` being shared with
     EfficientNetV2; the JAX block now takes the activation as an argument. -/
 def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
@@ -404,7 +404,7 @@ structure Mnv4StemFwdB where
     Symmetric `(1,1)` padding (`.convStridedAt`), as timm's `conv_stem`. Until 2026-09-24 this was
     `.convStridedXlaAt` to match a reference that passed `padding='SAME'` (XLA pads a 3×3/s2 at 224
     by (0,1)); both give 112×112, so only a forward on shared weights sees the difference
-    (`scripts/mnv4_timm_parity.py`, `scripts/mnv4_forward_tie.py`). -/
+    (`scripts/parity/mnv4_timm_parity.py`, `scripts/parity/mnv4_forward_tie.py`). -/
 def mnv4StemFwdB (B : Nat) (epsStr : String) (mode : BnMode := .train) (bf16 : Bool := false)
     (replicas : Nat := 1) (sync : Bool := false)
     -- ▶ `f`, the FINAL feature side (`mnv4FwdChainB`'s): the input is `32·f`, the stem out `16·f`.

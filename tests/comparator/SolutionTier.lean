@@ -46,7 +46,7 @@ the statement IS that theorem's type, so the delegation is a bare constant and n
 be weakened between the two files without failing to elaborate.
 
 ⚠ **MACHINE-GENERATED — do not hand-edit.** Every statement is the project declaration's
-own type as Lean prints it (`scripts/gen_comparator_tier.py`), so this file and its
+own type as Lean prints it (`scripts/gates/gen_comparator_tier.py`), so this file and its
 `ChallengeTier.lean` carry the same text by construction rather than by review. Regenerate after any
 statement change; the generator verifies that what it wrote still elaborates.
 -/

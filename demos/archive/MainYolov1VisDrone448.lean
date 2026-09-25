@@ -16,7 +16,7 @@ import LeanMlir
       # train (default): data dir with 448/14 train.bin + val.bin
       IREE_BACKEND=rocm HIP_VISIBLE_DEVICES=0 \
         .lake/build/bin/yolov1-visdrone448 data/visdrone448
-      # infer: dump [N,5880] logits.bin for scripts/yolo_map_visdrone.py
+      # infer: dump [N,5880] logits.bin for scripts/demos/yolo_map_visdrone.py
       .lake/build/bin/yolov1-visdrone448 infer data/visdrone448 runs/yolo_visdrone448
 -/
 
@@ -106,7 +106,7 @@ def inferDump (dataDir outDir : String) : IO Unit := do
     logitsAll := logitsAll ++ logitsB.extract 0 (real * rowBytes)
   IO.FS.writeBinFile s!"{outDir}/logits.bin" logitsAll
   IO.println s!"  wrote {outDir}/logits.bin ({logitsAll.size} bytes — {nVal}×{flat} f32)"
-  IO.println s!"next: python3 scripts/yolo_map_visdrone.py {outDir}/logits.bin {dataDir}/val.bin --grid {gH}"
+  IO.println s!"next: python3 scripts/demos/yolo_map_visdrone.py {outDir}/logits.bin {dataDir}/val.bin --grid {gH}"
 
 def main (args : List String) : IO Unit := do
   match args with

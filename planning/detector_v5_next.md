@@ -36,8 +36,8 @@ scrambled-data era) or is the Pets demo; read them as history only.
 1. **Land T1 + T2 completely.** Rebase the branch (move its doc to `planning/archive/`), then
    add the graph half of T2 in `emitDiouForward`: `cx = (j + 2σ(tx) − 0.5)/g`, `w = a·(2σ(tw))²`
    (removes the hand-placed `min(tw, 8)` cap that stops NaNs today). Mirror in
-   `scripts/yolo_map_visdrone.py:223-228` and the two `deploy/` decoders. Gates: coverage script
-   (seconds, before GPU), `scripts/fpn_loss_probe_check.py` FD arm (needs the throwaway IREE
+   `scripts/demos/yolo_map_visdrone.py:223-228` and the two `deploy/` decoders. Gates: coverage script
+   (seconds, before GPU), `scripts/probes/fpn_loss_probe_check.py` FD arm (needs the throwaway IREE
    venv), then one 30-epoch run against `aff30` at matched schedule. Cost: a day + 2 GPU-h.
 2. **Per-level objectness balance `[4.0, 1.0, 0.4]`** (`emitMultiScaleYoloLoss` ~:5649–5695 sums
    the three scales unweighted; P3 outweighs P5 16× by cell count). Three constants; gradient
@@ -62,7 +62,7 @@ scrambled-data era) or is the Pets demo; read them as history only.
    the Pets mosaic preprocessor (deleted 2026-09-24); depends on T1), **resolution > 448** (24/64 px thresholds and
    the 56/28/14 grids are hardcoded in THREE places: `scripts/datasets/preprocess_visdrone.py:158-159`,
    `Train.lean:914`, `ffi/f32_helpers.c` — collapse them regardless).
-8. **Decode + NMS out of Python** is a project (`scripts/yolo_map_visdrone.py:203-268`, duplicated
+8. **Decode + NMS out of Python** is a project (`scripts/demos/yolo_map_visdrone.py:203-268`, duplicated
    in `deploy/orin_detect.py`). The cheaper on-device win is the u8 preprocess fold —
    see `planning/orin_rerun.md`.
 

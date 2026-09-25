@@ -29,7 +29,7 @@ import LeanMlir
 
     Each spec is deliberately small (seconds per step) so the whole ladder is
     minutes. Usage mirrors the BraTS probe — plain SGD, no decay/clip/warmup, so
-    one step is exactly `θ' = θ − η·g` and `scripts/grad_fd_bisect.py` can
+    one step is exactly `θ' = θ − η·g` and `scripts/probes/grad_fd_bisect.py` can
     recover `g` and difference the loss against it.
 
       lake exe grad-fd-probe <rung> <lr> [data]

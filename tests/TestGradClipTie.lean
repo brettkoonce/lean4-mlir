@@ -28,7 +28,7 @@ is the entire semantic content of the feature, and it is the only thing a per-pa
 wrong: a per-parameter clip scales, never amplifies, and is the identity below the threshold —
 `Proofs.clipFactor_le_one`, `clipFactor_eq_one_below` and every other property in `GradClip.lean`
 hold for it. It differs from the reference in exactly one place, `clipFactor_shared`, and a gate
-that asks *"did the gradients get smaller"* passes it. `scripts/perturb_clip.py perparam` builds it.
+that asks *"did the gradients get smaller"* passes it. `scripts/probes/perturb_clip.py perparam` builds it.
 
 | gate | claim |
 |---|---|
@@ -62,7 +62,7 @@ in a fourth place). Gate ④ refuses with the recipe rather than reporting a pha
 
     lake build clip-tie
     scripts/det_shim.sh /tmp/detshim
-    python3 scripts/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir \
+    python3 scripts/probes/perturb_clip.py verified_mlir/vit_adamclip_train_step.mlir \
       .lake/build/clip_hi_vit.mlir hi
     CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie vit       # 200
     CUDA_VISIBLE_DEVICES=0 LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie convnext  # 180
@@ -74,9 +74,9 @@ variant, ViT takes it explicitly), and this thread found a third instance of it.
 
 The controls, each of which must be verified to FIRE:
 
-    python3 scripts/perturb_clip.py <committed> /tmp/c.mlir perparam   # ① fires — the real one
-    python3 scripts/perturb_clip.py <committed> /tmp/c.mlir nosqrt     # ② fires
-    python3 scripts/perturb_clip.py <committed> /tmp/c.mlir epsout     # ② fires
+    python3 scripts/probes/perturb_clip.py <committed> /tmp/c.mlir perparam   # ① fires — the real one
+    python3 scripts/probes/perturb_clip.py <committed> /tmp/c.mlir nosqrt     # ② fires
+    python3 scripts/probes/perturb_clip.py <committed> /tmp/c.mlir epsout     # ② fires
     LD_LIBRARY_PATH=/tmp/detshim .lake/build/bin/clip-tie vit --cand /tmp/c.mlir
 
 Measured 2026-08-02, under the det shim, all six red and rc=1:
@@ -194,7 +194,7 @@ the signature list says {ds}")
   if !(← System.FilePath.pathExists hiPath) then
     throw (IO.userError s!"④ CANNOT RUN: {hiPath} does not exist. It is GENERATED, not committed — \
 an artifact baking a threshold no config sets is a silent-hyperparameter artifact. Build it with:\n\
-  python3 scripts/perturb_clip.py verified_mlir/{cn.slug}_adamclip_train_step.mlir {hiPath} hi\n\
+  python3 scripts/probes/perturb_clip.py verified_mlir/{cn.slug}_adamclip_train_step.mlir {hiPath} hi\n\
 Refusing to report a pass without it: it is both gate ④ and the floor ① is read against.")
   let oH ← run "adamclip" (some hiPath)
 

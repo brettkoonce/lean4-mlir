@@ -222,7 +222,7 @@ def main (args : List String) : IO Unit := do
     else if args.any (· == "equivtap") then r34EquivProbe true
     else r34UnetBratsOf skips
   -- `fdprobe` makes one training step an exactly-invertible function of the
-  -- gradient, so `scripts/brats_r34_fd_probe.py` can recover g = (θ−θ′)/η and
+  -- gradient, so `scripts/probes/brats_r34_fd_probe.py` can recover g = (θ−θ′)/η and
   -- check it against finite differences of the loss.
   --
   -- Every knob that would bend the update away from `θ − η·g` is switched off:

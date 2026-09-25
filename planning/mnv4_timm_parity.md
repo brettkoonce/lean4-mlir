@@ -27,7 +27,7 @@ Unchanged: channel table, expand ratios, kernels, skips, BN ε = 1e-5, no conv b
 **P0: pin timm properly.** `scripts/mnv4_timm_spec.py` (`.venv-timm`) dumps, for every layer, the
 kernel size, stride, padding, groups, and whether an activation is present, plus the
 stem/stage-0/head order. The Lean `#guard`s read that tuple, not a `stride2` Bool. A numeric gate,
-`scripts/mnv4_timm_parity.py`, copies a random-init timm `state_dict` into the JAX param layout and
+`scripts/parity/mnv4_timm_parity.py`, copies a random-init timm `state_dict` into the JAX param layout and
 compares logits in train-mode BN (and eval mode with running stats) to ≤1e-4. This is the check
 that makes "timm is the spec" mean something, since a structural dump cannot see the op order
 inside a block.
@@ -61,7 +61,7 @@ the 100-epoch rerun lands (~15 h, 4 cards). Mark them as such, and don't delete 
 replacement exists.
 
 ## Status
-- [x] P0: `scripts/mnv4_timm_parity.py` (+ `_mnv4_timm_dump.py`). Train 1.5e-5 / 1.8e-5, eval 6.5e-7;
+- [x] P0: `scripts/parity/mnv4_timm_parity.py` (+ `_mnv4_timm_dump.py`). Train 1.5e-5 / 1.8e-5, eval 6.5e-7;
   the pre-fix reference scores 0.69. The structural dump was not built, since the numeric gate
   subsumes it; the stride-carrier rule is a renderer `#guard`.
 - [x] P1: JAX refs regenerated; vjp_oracle `uib` passes.

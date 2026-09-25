@@ -520,8 +520,8 @@ PY
 check_batch_divisor() {
   echo "── batch / loss-divisor audit (the batch spelled twice) ──"
   local rc=0
-  python3 scripts/batch_divisor_gate.py | sed 's/^/  /' || rc=1
-  python3 scripts/batch_divisor_gate.py --control | sed 's/^/  /' || rc=1
+  python3 scripts/gates/batch_divisor_gate.py | sed 's/^/  /' || rc=1
+  python3 scripts/gates/batch_divisor_gate.py --control | sed 's/^/  /' || rc=1
   return $rc
 }
 

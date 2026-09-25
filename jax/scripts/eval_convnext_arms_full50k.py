@@ -79,7 +79,7 @@ def _score(pr, x, y):
 
 # ▶ `DUMP_CORRECT=<prefix>` writes `<prefix>_{ema,raw}.bin`: one byte per val image, 1 = top-1
 # correct, in tfds `validation` FILE order. That is `LEAN_MLIR_DUMP_CORRECT`'s format, so
-# `scripts/mcnemar.py` pairs a reference arm against a verified checkpoint directly. The order
+# `scripts/demos/mcnemar.py` pairs a reference arm against a verified checkpoint directly. The order
 # matches the verified side's single-producer val drain: neither shuffles, and tf.data's map keeps
 # order. It also writes `<prefix>_labels.bin` (int32 LE, same order), so an alignment claim can be
 # CHECKED, not assumed. Unset ⇒ nothing is written and the output is unchanged.

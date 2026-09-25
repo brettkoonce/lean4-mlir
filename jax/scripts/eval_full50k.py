@@ -13,7 +13,7 @@ This is the one writer.
 
     PROTOCOL=train   # (default) the module's own `_IMG_SIZE` / `_CROP_PCT` — the in-training eval
     PROTOCOL=timm    # timm's validation protocol for this net: test_input_size / test_crop_pct
-                     # from jax/timm_eval_protocols.json (scripts/timm_eval_protocols.py)
+                     # from jax/timm_eval_protocols.json (scripts/parity/timm_eval_protocols.py)
     PROTOCOL=both    # both, one pass each, printed side by side
     EVAL_SIZE=256 EVAL_CROP=1.0   # an explicit protocol; overrides PROTOCOL
 
@@ -153,7 +153,7 @@ else:
         protocols.append(_train)
     if PROTOCOL in ("timm", "both"):
         import json
-        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts"))
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts", "parity"))
         from timm_eval_protocols import lookup
         _tbl = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "timm_eval_protocols.json")))
         _t = lookup(_tbl, GEN)

@@ -50,8 +50,8 @@ import LeanMlir
       lake exe diffusion-2d muller_brown flow 20000 50 logp          # the Boltzmann generator
       lake exe diffusion-2d muller_brown flow reuse fm-euler 10      # NFE sweep on one checkpoint
       lake exe diffusion-2d muller_brown 20000 50 euler              # the DDPM path, same target
-      python3 scripts/toy2d_metrics.py --target=spiral
-      python3 scripts/boltzmann_metrics.py score "flow NFE 50=<samples.bin>" --gate
+      python3 scripts/demos/toy2d_metrics.py --target=spiral
+      python3 scripts/demos/boltzmann_metrics.py score "flow NFE 50=<samples.bin>" --gate
 -/
 
 /-- Frequencies in the sinusoidal time encoding; the input is the 2-vector
@@ -704,9 +704,9 @@ straightness ∫E|v(x_t,t) - (z - x)|²dt = {straight}"
     let mpath := s!".lake/build/diffusion2d_strip_{target}{armSfx}.txt"
     IO.FS.writeFile mpath manifest
     IO.eprintln s!"wrote {frames.size} strip frames + {mpath}"
-    IO.eprintln s!"▶ render it: python3 scripts/toy2d_strip.py {target}"
+    IO.eprintln s!"▶ render it: python3 scripts/demos/toy2d_strip.py {target}"
 
   if target == "muller_brown" then
-    IO.eprintln s!"▶ score it: python3 scripts/boltzmann_metrics.py score \"{arm} {sampler} NFE {nSteps}={outPath}\" --gate"
+    IO.eprintln s!"▶ score it: python3 scripts/demos/boltzmann_metrics.py score \"{arm} {sampler} NFE {nSteps}={outPath}\" --gate"
   else
-    IO.eprintln s!"▶ score it: python3 scripts/toy2d_metrics.py --target={target}"
+    IO.eprintln s!"▶ score it: python3 scripts/demos/toy2d_metrics.py --target={target}"

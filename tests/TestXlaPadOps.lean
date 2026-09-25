@@ -10,7 +10,7 @@ nothing structural can distinguish a correct render from one that picked the wro
 the same invisibility class as R50's stride-on-the-3×3).
 
 What this emits is therefore deliberately *small*: two one-op modules, at the two kernel sizes the
-affected nets actually use, so `scripts/xla_pad_op_check.py` can run them through IREE and compare
+affected nets actually use, so `scripts/gates/xla_pad_op_check.py` can run them through IREE and compare
 against `jax.lax.conv_general_dilated(…, padding='SAME')` directly. A whole-net tie can only say
 "something is off somewhere"; this says which op.
 
@@ -21,7 +21,7 @@ is the one thing a reader of these ops most needs to know, so it is asserted in 
 than left as a comment.
 
 Run: `lake env lean tests/TestXlaPadOps.lean` (writes the modules), then
-     `.venv/bin/python3 scripts/xla_pad_op_check.py`. -/
+     `.venv/bin/python3 scripts/gates/xla_pad_op_check.py`. -/
 
 open Proofs Proofs.StableHLO
 

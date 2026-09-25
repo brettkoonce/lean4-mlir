@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+# Validation gate for the mnist-linear verified trainer's committed render.
+# Companion to LeanMlir/Proofs/Nets/Small/LinearFold.lean and
+# planning/archive/verified_faithful_sweep.md. Runs on the GPU box (needs iree-compile).
+#
+#   (a) drift: the committed verified_mlir/linear_*.mlir == the proven renderer
+#       (the `#eval` writers in Codegen/ChapterArtifacts.lean) — proofs.yml's drift guard
+#       checks this too, so (a) here is the local shortcut, and
+#   (b) validity: those bytes iree-compile cleanly for the target backend — local only.
+#
+# Defaults are CUDA `sm_86` (this box's 4060 Tis take the sm_86 target; sm_89 fails in IREE).
+#
+# (a)+(b) + the LinearFold `den = certified` capstones = the chain
+# "trainer bytes == proven renderer == certified loss-descent step, and iree
+# accepts them". Usage: IREE_COMPILE=/path/to/iree-compile ./scripts/gates/validate_linear_faithful.sh
+set -euo pipefail
+cd "$(dirname "$0")/../.."
+
+IREEC="${IREE_COMPILE:-iree-compile}"
+BACKEND="${IREE_BACKEND:-cuda}"
+CHIP="${IREE_CHIP:-sm_86}"
+
+echo "== (a) drift: committed verified_mlir/linear_* == proven renderer =="
+lake env lean LeanMlir/Proofs/Codegen/ChapterArtifacts.lean >/dev/null
+git diff --exit-code -- verified_mlir/linear_train_step.mlir verified_mlir/linear_fwd.mlir \
+  && echo "   OK: committed == renderer" \
+  || { echo "   DRIFT: regenerate with 'lake env lean LeanMlir/Proofs/Codegen/ChapterArtifacts.lean'"; exit 1; }
+
+echo "== (b) validity: iree-compile the committed bytes ($BACKEND/$CHIP) =="
+for f in linear_fwd linear_train_step; do
+  "$IREEC" "verified_mlir/${f}.mlir" \
+    --iree-hal-target-backends="$BACKEND" --iree-"$BACKEND"-target="$CHIP" \
+    --iree-codegen-llvmgpu-use-reduction-vector-distribution=false \
+    -o "/tmp/${f}_validate.vmfb"
+  echo "   OK: ${f}.mlir -> $(stat -c%s "/tmp/${f}_validate.vmfb") byte vmfb"
+done
+echo "PASS: mnist-linear verified render is drift-free and iree-valid."

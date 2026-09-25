@@ -116,7 +116,7 @@ def runConvNeXtAdam (argv : List String) : IO Unit := do
   -- render must then train the same parameters as the plain `adam` render — the peer of EMA's
   -- `decay = 0`. ⚠ But it is an ENDPOINT gate and endpoint gates are structurally BLIND TO
   -- PLACEMENT: `1 ⊙ (branch + x) = branch + x` exactly, so a site on the block OUTPUT passes it
-  -- bit-for-bit (`stochastic_depth.md` §7b, measured). `scripts/misplace_drop_sites.py` is the
+  -- bit-for-bit (`stochastic_depth.md` §7b, measured). `scripts/probes/misplace_drop_sites.py` is the
   -- control that makes a green run mean anything.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
     | some 0 => { convnextVerified.toNet with

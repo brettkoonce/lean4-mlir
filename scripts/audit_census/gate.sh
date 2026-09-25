@@ -32,7 +32,7 @@ sys.exit(0 if (len(v)+nodeps==pins and not bad and not errs) else 1)
 PY
 echo "  (audit $((SECONDS-t0))s, exit $rc)"
 lake exe docstring-checkrefs > $L/refs.log 2>&1; rc=$?; echo "checkrefs: exit $rc $(tail -1 $L/refs.log)"; [ $rc = 0 ] || fail=1
-python3 scripts/check_audit_coverage.py > $L/cov.log 2>&1; rc=$?; echo "audit coverage: exit $rc"; [ $rc = 0 ] || fail=1
-python3 scripts/check_render_coverage.py > $L/rcov.log 2>&1; rc=$?; echo "render coverage: exit $rc $(tail -1 $L/rcov.log)"; [ $rc = 0 ] || fail=1
+python3 scripts/gates/check_audit_coverage.py > $L/cov.log 2>&1; rc=$?; echo "audit coverage: exit $rc"; [ $rc = 0 ] || fail=1
+python3 scripts/gates/check_render_coverage.py > $L/rcov.log 2>&1; rc=$?; echo "render coverage: exit $rc $(tail -1 $L/rcov.log)"; [ $rc = 0 ] || fail=1
 st=$(git status --porcelain verified_mlir/ | wc -l); echo "verified_mlir changes: $st"; [ $st = 0 ] || fail=1
 echo "GATE: $([ $fail = 0 ] && echo PASS || echo FAIL)"

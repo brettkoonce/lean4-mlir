@@ -150,7 +150,7 @@ def encode_targets_anchor(img_w, img_h, boxes, anchors):
 # best-shape anchor. Three target blocks (P3 56×56, P4 28×28, P5 14×14 at 448px,
 # strides 8/16/32), each A_s·(5+C) channels + a per-anchor mask. Coverage — the
 # fraction of GT landing a unique (scale,cell,anchor) slot — jumps 60.9% → 88.2%
-# vs the single 14×14 grid (scripts/visdrone_fpn_coverage.py). The mask equals the
+# vs the single 14×14 grid (scripts/probes/visdrone_fpn_coverage.py). The mask equals the
 # obj channel (target[base+4]) exactly, so the loader can derive it (no FFI mask).
 # Consumed by the FPN loader + multi-scale codegen (bites 6/7).
 FPN_GRIDS = (56, 28, 14)          # P3 / P4 / P5 at 448px input
@@ -166,7 +166,7 @@ def encode_targets_fpn(img_w, img_h, boxes, anchors_per_scale, input_px):
     """Return (targets[3], masks[3], n_slots). targets[s]=[A_s·15,g_s,g_s],
     masks[s]=[A_s,g_s,g_s]. Later GT overwrites earlier on a (scale,cell,anchor)
     collision — the residual loss vs the FPN coverage ceiling. Mirrors the
-    validated scripts/visdrone_fpn_coverage.py assignment exactly."""
+    validated scripts/probes/visdrone_fpn_coverage.py assignment exactly."""
     tgts, msks = [], []
     for s, g in enumerate(FPN_GRIDS):
         A = len(anchors_per_scale[s])

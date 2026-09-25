@@ -74,7 +74,7 @@ def runConvNeXtBImagenet (argv : List String) : IO Unit := do
   -- ▶ Stochastic-depth rate in MICRO-units (`500000` = 0.5, this spec's committed value). Unset ⇒
   -- the spec's ramp. ⚠⚠ `0` is THE GATE: every keep becomes 1.0, so each drop op is the identity
   -- in IEEE (`Proofs.dropPath_ones_id`) and the `*drop` render must train what a drop-free render
-  -- trains. It is an ENDPOINT gate and blind to PLACEMENT, which `scripts/misplace_drop_sites.py`
+  -- trains. It is an ENDPOINT gate and blind to PLACEMENT, which `scripts/probes/misplace_drop_sites.py`
   -- is the control for.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
     | some 0 => { convnextBImagenetVerified.toNet with

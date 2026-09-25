@@ -224,7 +224,7 @@ static int pinned_enabled(void) {
 // $PJRT_FFI_FAULT=1 flips the low mantissa bit of ONE returned float — the
 // smallest possible transport fault, 1 ULP in 68 million values.
 //
-// This exists because `scripts/residency_gate.sh`'s other control (a perturbed
+// This exists because `scripts/gates/residency_gate.sh`'s other control (a perturbed
 // initialisation) proves only that the harness can see *a* difference; it does
 // not prove the harness can see a *transport* difference, which is the entire
 // thing the gate is for. Handoff §4: a tie that is bit-exact everywhere is
@@ -265,7 +265,7 @@ static int pinned_enabled(void) {
 //           EVERY replica's slot — "four copies of shard 0", which is exactly the
 //           replica-0-only read-back the train step uses and `d2h_gather`
 //           replaces. Every size still agrees, so nothing in the shim can catch
-//           it; `scripts/sharded_eval_gate.sh` must, and runs it as its control.
+//           it; `scripts/gates/sharded_eval_gate.sh` must, and runs it as its control.
 static int fault_mode(void) {
   static int t = -1;
   if (t < 0) { const char* e = getenv("PJRT_FFI_FAULT"); t = e ? atoi(e) : 0; }
@@ -282,7 +282,7 @@ static int fault_enabled(void) { return fault_mode() == 1; }
 // — `iree_lean_ffi.c` reads it and picks an entry point — so the training loop
 // above has no backend branch to drift.
 //
-// The gate is `scripts/residency_gate.sh` with GATE_ALT=PJRT_FFI_RESIDENT=1:
+// The gate is `scripts/gates/residency_gate.sh` with GATE_ALT=PJRT_FFI_RESIDENT=1:
 // residency must be BIT-IDENTICAL to the copying path over N steps. That bar is
 // achievable because nothing about the arithmetic changes — the same graph
 // consumes the same bits; all that is removed is a d2h followed by an h2d of

@@ -73,7 +73,7 @@ Virgo, KAGRA and GEO"). Two products:
 
 Access: `.venv-gw` from `requirements-gw-lock.txt` (⛔ never the pinned
 `.venv`; 638 MB, pycbc 2.9.0 / lalsuite 7.26 / gwpy 3.0.14 / gwosc 0.8.3).
-`scripts/gw_common.py` holds the fetch, the HDF5 read, the PSD and the
+`scripts/demos/gw_common.py` holds the fetch, the HDF5 read, the PSD and the
 whitening, so every script shares one convention. Files are chosen from the
 GWOSC timeline: 4096 s slots wholly inside H1 ∩ L1 of `DATA`, `CBC_CAT3` and
 `NO_CBC_HW_INJ`, one slot per day across O3a (`pick_o3a_pairs`). Noise budget:
@@ -178,7 +178,7 @@ square kernels pads to nothing useful and `unetDown`/pool2×2 collapse H = 1,
 so it needs strided `convBn` with k × 1 kernels or a 1-D primitive. Phase 5
 if the spectrogram arm leaves room.
 
-## 5. The instrument — `scripts/gw_metrics.py`
+## 5. The instrument — `scripts/demos/gw_metrics.py`
 
 Reads the logits, the sidecar and the matched-filter statistics; prints one
 table per noise set:
@@ -223,10 +223,10 @@ nobody has measured retrain variance yet. P_fa is 10⁻² not 10⁻³ because
 the val split has ~8k noise-only windows and 10⁻³ is its 8th-largest value;
 the scorer takes `--pfa` and both are reported.
 
-Across arms, `scripts/gw_compare.py` reads each run directory's `table_val.json` and prints one
+Across arms, `scripts/demos/gw_compare.py` reads each run directory's `table_val.json` and prints one
 SNR-at-P_d = ½ table: every net trained on Gaussian and on real noise, each scored on both val
 sets, closed by the PyCBC coherent search —
-`.venv-gw/bin/python scripts/gw_compare.py "B0 3ep=runs/<gauss>:runs/<real>:7.1M" ...`.
+`.venv-gw/bin/python scripts/demos/gw_compare.py "B0 3ep=runs/<gauss>:runs/<real>:7.1M" ...`.
 
 ## 6. The physics claims, in order of cost
 
@@ -271,7 +271,7 @@ row each, and the reason the real search has a χ² veto.
 
 ## 7. Figure and section
 
-`scripts/gw_figure.py`, grown from the mock: (a) a whitened 2 s window with
+`scripts/demos/gw_figure.py`, grown from the mock: (a) a whitened 2 s window with
 its injected chirp overlaid, (b) the two spectrograms the CNN must tell
 apart, noise-only and with the chirp, (c) P_d against injected SNR with the
 theorem, the PyCBC matched filter, the CNN, and the catalogue events as
@@ -295,7 +295,7 @@ Phase 0 (½ session, CPU):   venv; fetch one O3a H1+L1 file pair and the GW15091
                              file; PSD, whiten; reproduce the published SNR
                              (H1 ≈ 20, L1 ≈ 13, network 24)
                              Gate 0: within 1 of the published values
-                             ✅ 2026-09-11 `scripts/gw_gate0.py`: H1 19.83, L1 13.87,
+                             ✅ 2026-09-11 `scripts/demos/gw_gate0.py`: H1 19.83, L1 13.87,
                              network 24.20, L1 leads H1 by 7.1 ms (IMRPhenomD at
                              the detector-frame 39.2 + 31.6, 128 s median-Welch
                              PSD); the O3a pair at slot 1238777856 reads with

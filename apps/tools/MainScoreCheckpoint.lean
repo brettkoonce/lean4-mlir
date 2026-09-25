@@ -33,7 +33,7 @@ checkpoint since 2026-09-12, and a checkpoint older than that is refused (see `s
       .lake/build/bin/score-checkpoint mnv4-in data
 
 scores through the eval graph rendered at that size (`<slug>_fwd_eval_s256.mlir`) with the val
-stream resized and cropped to match. `scripts/score_timm.sh` reads the size and crop per net from
+stream resized and cropped to match. `scripts/parity/score_timm.sh` reads the size and crop per net from
 `jax/timm_eval_protocols.json`, the same table the JAX scorer uses.
 
 ## ⚠ Why a hand-written registry
@@ -79,7 +79,7 @@ def usage : String :=
   env:  LEAN_MLIR_VARIANT (required — which render wrote the checkpoint)\n\
         LEAN_MLIR_CKPT    (default: the path the trainer writes, `ckptPathFor`)\n\
         LEAN_MLIR_REGION  auto | live | ema   (default auto = the shadow iff the variant has one)\n\
-        LEAN_MLIR_EVAL_SIZE, LEAN_MLIR_EVAL_CROP — timm's test protocol (scripts/score_timm.sh)\n\
+        LEAN_MLIR_EVAL_SIZE, LEAN_MLIR_EVAL_CROP — timm's test protocol (scripts/parity/score_timm.sh)\n\
         LEAN_MLIR_CKPT_TAG, LEAN_MLIR_LOWERER — as in the trainers"
 
 def main (argv : List String) : IO Unit := do

@@ -14,7 +14,7 @@ import LeanMlir
     and the file names swapped.
 
     The epoch is chosen on val and test is reported at it; the logits this writes for
-    the test part are what `scripts/arasl_score.py` turns into the Wilson interval, the
+    the test part are what `scripts/demos/arasl_score.py` turns into the Wilson interval, the
     per-class table, the confused pairs and the leak audit.
 
     XLA backend only.
@@ -298,4 +298,4 @@ val acc {fmt accVa 2}%  test acc {fmt accTe 2}%  \
     let (logits, acc) ← scoreSet evalSess spec evalParams evalShapes xSh img lbl n B nPix
     IO.FS.writeBinFile s!"{pfx}_logits_{nm}.bin" logits
     IO.println s!"{spec.name} on the {split} split, {nm}: accuracy {fmt acc 2}%  -> {pfx}_logits_{nm}.bin"
-  IO.eprintln s!"score: .venv/bin/python scripts/arasl_score.py {pfx}_logits_test.bin --split={split}"
+  IO.eprintln s!"score: .venv/bin/python scripts/demos/arasl_score.py {pfx}_logits_test.bin --split={split}"

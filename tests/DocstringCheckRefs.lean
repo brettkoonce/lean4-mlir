@@ -36,7 +36,7 @@ needs hand-tuned filters to stay quiet is a heuristic that will be turned off.
    (`TestMnv4FwdSmoke` for `tests/TestMnv4FwdSmoke.lean`);
 6. its PREFIX resolves — `foo_has_vjp.backward` is a field access on a real declaration,
    not a declaration, and the prefix is the thing a rename would break;
-7. it is baselined in `scripts/docstring_ref_baseline.txt`.
+7. it is baselined in `scripts/gates/docstring_ref_baseline.txt`.
 
 Rules 3–5 are exact lookups, not heuristics: each of the four forms is a correct citation that
 the first version of this gate could never resolve (a 2026-09-19 survey counted 131 `private`,
@@ -316,7 +316,7 @@ def scanRoots : List System.FilePath := ["LeanMlir", "tests", "apps", "demos"]
 unsafe def main (args : List String) : IO UInt32 := do
   let listOnly := args.contains "--list"
   let update   := args.contains "--update-baseline"
-  let baselinePath : System.FilePath := "scripts/docstring_ref_baseline.txt"
+  let baselinePath : System.FilePath := "scripts/gates/docstring_ref_baseline.txt"
   -- ⚠ `--update-baseline` must recompute against an EMPTY baseline. Reading the existing
   -- one first made every recorded entry resolve, so the regenerated file came back with
   -- zero lines and silently discarded the whole ratchet. Caught by running it twice.

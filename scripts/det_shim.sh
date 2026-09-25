@@ -6,7 +6,7 @@
 #   scripts/det_shim.sh [<outdir>]        # default /tmp/detshim
 #   LD_LIBRARY_PATH=<outdir> .lake/build/bin/<binary> data
 #
-# ▶ WHY. `scripts/residency_gate.sh` and every other cross-PROCESS bit-identity
+# ▶ WHY. `scripts/gates/residency_gate.sh` and every other cross-PROCESS bit-identity
 # check need a bit-exact A-vs-A floor to be readable at all. Handoff §3 records
 # that XLA is bit-identical WITHIN a process but "not quite bit-stable" across
 # them, and §2d.3's Finding 1 then measured the floor as bit-exact anyway — on
@@ -39,7 +39,7 @@ FLAGS=${DET_FLAGS:---xla_gpu_autotune_level=0 --xla_gpu_deterministic_ops=true}
 [ -f ffi/pjrt_ffi.c ] || { echo "run from the repo root"; exit 2; }
 mkdir -p "$OUT"
 
-XLA_FLAGS="$FLAGS" "$VENV" scripts/gen_pjrt_compile_options.py > "$OUT/pjrt_compile_options.h"
+XLA_FLAGS="$FLAGS" "$VENV" scripts/gates/gen_pjrt_compile_options.py > "$OUT/pjrt_compile_options.h"
 
 # The flags landing is not something to assume: a name XLA no longer recognises
 # would leave the header byte-identical to the committed one and this whole

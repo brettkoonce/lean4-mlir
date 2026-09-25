@@ -11,7 +11,7 @@ import Jax
     table and is tagged there as such; this spec has no Imagenette accuracy run of its own yet.
 
     The verified peer `mobilenetv4Verified` moved in the same commit, and it has to: the ties
-    (`scripts/mnv4_forward_tie.py`, `scripts/grad_tie.py --net mnv4`) read this file's generated
+    (`scripts/parity/mnv4_forward_tie.py`, `scripts/parity/grad_tie.py --net mnv4`) read this file's generated
     output, so a divergence here silently compares two different networks. -/
 
 def mobilenetV4Medium : NetSpec where

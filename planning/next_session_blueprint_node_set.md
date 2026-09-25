@@ -2,9 +2,9 @@
 
 **Where this stands.** As of `37104d98` (2026-09-22) the blueprint's dependency graph is honest and
 self-maintaining: the `\uses` lines are generated from a Lean dependency walk and CI holds them to it
-(`blueprint-checkdecls … blueprint/lean_deps` + `scripts/blueprint_uses.py --check`), the web graph
+(`blueprint-checkdecls … blueprint/lean_deps` + `scripts/book/blueprint_uses.py --check`), the web graph
 draws chapters in order with portal nodes, and every theorems section opens with its chapter's graph
-as TikZ (`scripts/blueprint_depgraph_tikz.py` → `blueprint/src/figures/depgraph/`). What the graph
+as TikZ (`scripts/book/blueprint_depgraph_tikz.py` → `blueprint/src/figures/depgraph/`). What the graph
 *covers* has not moved since the original suite: 87 proof nodes, all on the per-layer-VJP spine —
 the calculus of chapter 1, one `*_has_vjp` per layer, and a net-level `*_has_vjp_at` (ViT:
 `vitTiny_has_vjp_correct`) as each chapter's last node. Everything the suite grew since 2026-08 has
@@ -44,11 +44,11 @@ one-chapter-per-commit rule for this landing. The book's node count goes 87 → 
 | what | where | status |
 |---|---|---|
 | node set | `blueprint/src/content.tex` theorem/definition environments with `\lean{}` | 87 proof nodes + 22 Bestiary `Layer.*` (constructors; the walker skips them) |
-| edges | `\uses{…}` lines | GENERATED — never hand-edit; `scripts/blueprint_uses.py --fix` |
+| edges | `\uses{…}` lines | GENERATED — never hand-edit; `scripts/book/blueprint_uses.py --fix` |
 | real edges | `blueprint/lean_deps` (gitignored) | written by `lake exe blueprint-checkdecls blueprint/lean_decls blueprint/lean_deps` |
 | cited names | `blueprint/lean_decls` (gitignored) | written by `leanblueprint web` in CI; locally the imager fails, so write it yourself: the `\lean{}` names of content.tex, one per line |
 | web graph | `blueprint/src/templates/dep_graph.html` | chapters in order, portals, `pdiv`/`hasvjp` drawn once; nothing to change for new nodes |
-| print figures | `blueprint/src/figures/depgraph/*.tex`, committed | `python3 scripts/blueprint_depgraph_tikz.py` after any `\uses` change; CI has no graphviz |
+| print figures | `blueprint/src/figures/depgraph/*.tex`, committed | `python3 scripts/book/blueprint_depgraph_tikz.py` after any `\uses` change; CI has no graphviz |
 | gates | blueprint.yml | checkdecls (names exist) → `--check` (edges match) → web build rasterizes the TikZ |
 
 The walker (`tests/BlueprintCheckDecls.lean`, `writeDeps`) is only as good as the oleans it loads:
@@ -135,7 +135,7 @@ are their own families and belong to appendix C's story, possibly as one appendi
    "The theorems") or the ladder as its own figure. The attention section shows what a cut looks like.
 3. Regenerate: write `blueprint/lean_decls` from content.tex, then
    `lake exe blueprint-checkdecls blueprint/lean_decls blueprint/lean_deps`,
-   `python3 scripts/blueprint_uses.py --fix`, `python3 scripts/blueprint_depgraph_tikz.py`
+   `python3 scripts/book/blueprint_uses.py --fix`, `python3 scripts/book/blueprint_depgraph_tikz.py`
    (its table prints each figure's font size; anything under 5.5 pt wants a `CUTS` entry).
 4. `leanblueprint pdf` under `timeout 300`; look at the chapter's figure page. Stage. Stop.
 

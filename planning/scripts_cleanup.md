@@ -75,7 +75,7 @@ docstring (no false coverage today).
 | where | problem | fix |
 |---|---|---|
 | `residency_gate.sh:55` | default exe `resnet34-verified-adam-xla` renamed 2026-08-10 | `resnet34-verified-adam` |
-| `grad_tie.py:51-53`, `mnv4_forward_tie.py:51-55`, `enet_forward_tie.py:34-36`, `convnext_forward_tie.py:59,61`, `mnv2_forward_tie.py:52,54`, `xla_pad_op_check.py:28,30`, `render_parity.py:23,46`, `seg_grad_scorecard.py:36-37`, 5 `*_probe_check.py` (C1) | IREE binaries at missing `.venv/bin/iree-*` or sibling checkouts; `IREE_CHIP=gfx1100` (AMD); some not env-overridable | one `scripts/_iree.py` resolver (env override, working default, CUDA/CPU target) |
+| `grad_tie.py:51-53`, `mnv4_forward_tie.py:51-55`, `enet_forward_tie.py:34-36`, `convnext_forward_tie.py:59,61`, `mnv2_forward_tie.py:52,54`, `xla_pad_op_check.py:28,30`, `render_parity.py:23,46`, `seg_grad_scorecard.py:36-37`, 5 `*_probe_check.py` (C1) | IREE binaries at missing `.venv/bin/iree-*` or sibling checkouts; `IREE_CHIP=gfx1100` (AMD); some not env-overridable | one `scripts/lib/_iree.py` resolver (env override, working default, CUDA/CPU target) |
 | `grad_fd_bisect.py:24,29-30` (backs lake `grad-fd-probe`) | scratch dir from another checkout's session; ROCm/HIP env | tempfile + CUDA env |
 | `coco_anchors.py:33` | imports `preprocess_coco` (now `historical/`) | move to `historical/` beside its caller |
 | `arasl_score.py:110` | nested same-quote f-string: SyntaxError on system 3.10; `demos/README.md:220` says `python3` | double quotes inside, or README → `.venv/bin/python` |
@@ -112,7 +112,7 @@ docstring (no false coverage today).
   (control: dropping `StableHLOParse` from the roots exits 1).
 
 §3:
-* `scripts/_iree.py`: `$IREE_COMPILE`/`$IREE_RUN_MODULE`, else the interpreter's bin, repo
+* `scripts/lib/_iree.py`: `$IREE_COMPILE`/`$IREE_RUN_MODULE`, else the interpreter's bin, repo
   `.venv/bin`, PATH, sibling `lean4-jax/.venv/bin` (compiler and runtime from one install);
   backends `llvm-cpu` / `cuda` (`$IREE_CHIP`, default sm_86); local-task → local-sync fallback;
   signals named. On it: the 7 `*_probe_check.py` (output byte-identical to the pre-change run),
@@ -230,7 +230,7 @@ Also: `smooth_scorecard_gen.py:33`, `smooth_dec_scorecard_gen.py:47-48`,
 
 ### §5 status (2026-09-24)
 
-* `scripts/_gencheck.py`: `emit(path, text)` + `finish()` — writes, or under `--check` writes
+* `scripts/certs/_gencheck.py`: `emit(path, text)` + `finish()` — writes, or under `--check` writes
   nothing and exits 1 naming each drifted file.
 * On it, ROOT-anchored, byte-reproducible before and after: `lipschitz_cert_float.py` (1 file),
   `smooth_scorecard_gen.py` (1), `smooth_dec_scorecard_gen.py` (scorecard + 6 chunks). `--check`
@@ -248,25 +248,25 @@ Also: `smooth_scorecard_gen.py:33`, `smooth_dec_scorecard_gen.py:47-48`,
 
 | module | replaces |
 |---|---|
-| `scripts/_iree.py` | the IREE compile/run harness in 7 A-group checkers + `make_runner` ×5 (C1) + `run_iree` ×2 — and fixes §3's defaults in one place |
-| `scripts/_leanlit.py` | Lean-literal printers (`frac`/`row`/`zlist`) ×7 |
-| `scripts/_mnist_io.py` | MNIST idx readers ×12 (9 generators, 3 probes), the seed-0 49→8→10 training loop ×3, e4m3 quantizers ×2 |
-| `scripts/_stats.py` | `wilson` ×3, `acc_str` ×2, `energy_distance` ×3 (`mnist_ddpm_score.py` claims to reuse it) |
-| `scripts/lean_graph.py` | lakefile-roots parsing + import BFS in `check_audit_coverage` (×2), `audit_census/run.sh` heredoc |
+| `scripts/lib/_iree.py` | the IREE compile/run harness in 7 A-group checkers + `make_runner` ×5 (C1) + `run_iree` ×2 — and fixes §3's defaults in one place |
+| `scripts/certs/_leanlit.py` | Lean-literal printers (`frac`/`row`/`zlist`) ×7 |
+| `scripts/lib/_mnist_io.py` | MNIST idx readers ×12 (9 generators, 3 probes), the seed-0 49→8→10 training loop ×3, e4m3 quantizers ×2 |
+| `scripts/lib/_stats.py` | `wilson` ×3, `acc_str` ×2, `energy_distance` ×3 (`mnist_ddpm_score.py` claims to reuse it) |
+| `scripts/lib/lean_graph.py` | lakefile-roots parsing + import BFS in `check_audit_coverage` (×2), `audit_census/run.sh` heredoc |
 | `scripts/jobs/_box.sh` | the box-detect block in 18 of 19 confs + 2 gates' plugin search |
 | `scripts/lib/gpu.sh` | det-shim build-or-reuse ×4 (3 different dirs), idle-GPU check ×3, work-queue packing ×3 |
 | (import) | FPN neck oracle ×2 (`fpn_neck_probe_check` ← `fpn_neck_check`), anchor loaders ×6 (← `yolo_map_visdrone`/`visdrone_anchors`), CROWN/IBP helpers ×2, `SHIM_HASH` parse ×2, `read_part` ×2 |
 
 ### §6 status (2026-09-24)
 
-* `scripts/_mnist_io.py` — `images`/`labels`/`mnist(split)`, `pool_sums`, `train_mlp` (the seed-0
+* `scripts/lib/_mnist_io.py` — `images`/`labels`/`mnist(split)`, `pool_sums`, `train_mlp` (the seed-0
   ReLU MLP). Replaces 12 idx-reader copies (+4 inline ones), 5 pooling copies and 4 copies of the
   training loop (49→8→10 ×3 and the 784→16→10 full scorecard, whose weight-cache key now also
   hashes `train_mlp`'s source). Users: the Lipschitz/IBP/CROWN/SDP scorecards,
   `lipschitz_cert_witness_s8`, `trained_{linear_descent,cnn_witness}`, `smoothing_net_witness_gen`,
   `margin_probe`, both `mnist_e4m3_*`, `crown_ibp_probe`, `mnist_ddpm_score`.
-* `scripts/_leanlit.py` — `zlit`/`zlist`/`frac`/`rrow`/`rmat`/`qrow`/`qmat` (7 printer copies).
-* `scripts/_stats.py` — `wilson` ×3, `acc_str` ×2, `energy_distance` ×3 (99 old-vs-new calls equal).
+* `scripts/certs/_leanlit.py` — `zlit`/`zlist`/`frac`/`rrow`/`rmat`/`qrow`/`qmat` (7 printer copies).
+* `scripts/lib/_stats.py` — `wilson` ×3, `acc_str` ×2, `energy_distance` ×3 (99 old-vs-new calls equal).
 * `scripts/jobs/_box.sh` — the box-detect block of 18 confs + the two probe launchers; every conf
   sources to the identical variable set, both branches exercised, supervise dry run identical.
 * Proof of no drift: all eleven MNIST generators (both pair-SDP tiers, 11 min each) + the
@@ -276,7 +276,7 @@ Also: `smooth_scorecard_gen.py:33`, `smooth_dec_scorecard_gen.py:47-48`,
 * Found on the way: `crown_ibp_probe.py` had been dead since the W2 → `W2<tag>Q : ℚ` + `castM`
   change; parser fixed, reproduces its documented 92/88/69/24 and the "k = 8 rounding costs zero"
   claim `CrownBound.lean` cites.
-* `scripts/lean_graph.py` — `libs`/`lib_roots`/`imports_of`/`reachable`; `check_audit_coverage.py`
+* `scripts/lib/lean_graph.py` — `libs`/`lib_roots`/`imports_of`/`reachable`; `check_audit_coverage.py`
   (output identical, now cwd-independent, control still exits 1) and the `audit_census/run.sh`
   heredoc (roots.txt + modules.txt identical: 199 / 275) both on it.
 * `scripts/lib/gpu.sh` — `det_shim_ensure` (build when missing or older than `ffi/pjrt_ffi.c` /

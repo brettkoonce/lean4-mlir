@@ -718,7 +718,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --
     -- ⚠⚠ **THE SITE IS ON THE RESIDUAL BRANCH AND THE OBVIOUS GATE CANNOT SEE THAT** — at an
     -- all-ones mask a site on the block OUTPUT is bit-identical. `bnkIdFwdB`'s docstring carries
-    -- the argument and `scripts/misplace_drop_sites.py` is the control.
+    -- the argument and `scripts/probes/misplace_drop_sites.py` is the control.
     -- ⚠ The BACKWARD is where it actually bites: the dropped cotangent feeds the branch and the
     -- UNDROPPED one feeds the skip. See `bnkIdBackGradB`.
     -- ⚠ It reaches `r34AdamVariant` — the `wx`/`clip`/`bf16` rule, and here the marker also tells
@@ -1254,7 +1254,7 @@ end Proofs.StableHLO
 -- and an f32 result has its converts folded away by XLA under excess precision — cuDNN then gets
 -- f32 parameters and the graph runs entirely in fp32 while still *reading* as mixed precision.
 -- Measured, not feared; `BatchableOp.convBf16` carries the note. ▶ Check it with
--- `scripts/bf16_gate2.py` on the OPTIMIZED HLO's operand SSA names, never by grepping the op line,
+-- `scripts/probes/bf16_gate2.py` on the OPTIMIZED HLO's operand SSA names, never by grepping the op line,
 -- which shows only the result type.
 --
 -- ⚠ R50 exercises a shape R34 never did: the **stride-1 1×1** convolution, which is 34 of these 53
@@ -1684,7 +1684,7 @@ end Proofs.StableHLO
 -- operand, so A1's 0.01 against A2's 0.02 is a re-render. `wdVariantMark` appends `wd001`, which is
 -- what stops the two from colliding on one path — the collision being unspellable is the point.
 -- ▶ A1's other two deltas: epochs 600 (a driver knob, free) and Mixup α 0.2 (data-side, its shim).
--- ⭐ Its optimizer arm was gated BEFORE this render existed: `scripts/opt_step_tie.py` carries
+-- ⭐ Its optimizer arm was gated BEFORE this render existed: `scripts/parity/opt_step_tie.py` carries
 -- `("lambacc8wxclipwd001", "generated_resnet50_imagenet_a1.py", 8, True)`, checked against an
 -- emitted A1 trainer that bakes `WD = 0.010000`. So "the string reaches the constant block" is a
 -- measurement here, not a code-reading claim.
@@ -1708,7 +1708,7 @@ end Proofs.StableHLO
 -- accumulation-only — the driver would pack four regions into a five-region graph, misaligning
 -- every parameter with no error anywhere. `tests/TestVariantPredicates.lean` pins both directions.
 --
--- ⭐ **The composition is MEASURED, not merely rendered.** `scripts/opt_step_tie.py`'s
+-- ⭐ **The composition is MEASURED, not merely rendered.** `scripts/parity/opt_step_tie.py`'s
 -- `emalambacc8wxclip` row runs `generated_resnet50_imagenet_a2accum.py`'s OWN `ema_update` against
 -- the `E` slot this emits: **1.20e-07** against rtol 2e-6. Its controls, run the same session
 -- (`runs/2026-08-27-r50-a2-a1-ema-fifth-region/`): a shadow reading the INCOMING θ rather than θ′

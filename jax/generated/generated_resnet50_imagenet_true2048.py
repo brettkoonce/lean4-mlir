@@ -136,7 +136,7 @@ def _aa_rot(m): return (m/_AA_MAX)*30.0
 #   Posterize @ m=7: timm keeps 4-int(2.8) = 2 MSBs; we kept int(1.2) = 1. A WHOLE BIT more
 #   posterisation, at RSB-A2's own magnitude — the only one of these that is visible.
 #   Solarize  @ m=7: timm 256-int(179) = 77; we had int(76.8) = 76. One threshold unit of 256.
-# Both are the same transcription error, and `scripts/randaug_timm_diff.py` is what found it.
+# Both are the same transcription error, and `scripts/parity/randaug_timm_diff.py` is what found it.
 def _aa_pos(m): return ((4 - int((m/_AA_MAX)*4)) if _RA_INC else int((m/_AA_MAX)*4))
 # ⚠⚠ NO `min(256, ...)` HERE, and it must not come back. d96c7fa added one as a guard and it
 # BROKE EVERY IMAGENET TRAINING RUN: under mstd > 0 (RSB sets 0.5) the magnitude reaching this is

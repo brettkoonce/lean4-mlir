@@ -1035,7 +1035,7 @@ private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convB
   let (cEr, nEr) ← pretty B (.relu6F (.operand nEn zeb))
   -- ⚠ XLA-`SAME` (`depthwiseStridedXlaF`), the TF-origin convention. The symmetric token has the
   -- same type and output shape, so nothing structural would notice the wrong one here — only
-  -- `scripts/convention_audit.py` (pad profile) and `scripts/mnv2_forward_tie.py` (values) can.
+  -- `scripts/gates/convention_audit.py` (pad profile) and `scripts/parity/mnv2_forward_tie.py` (values) can.
   let (cDc, nDc) ← pretty B (.depthwiseStridedXlaF (h := hh) (w := ww) s!"%Wd{p}" (biasName convBias s!"%bd{p}" mid) zdk zmid (.operand nEr zeb))
   let (cDn, nDn) ← bnEvalSite B mid hh ww epsStr s!"%gd{p}" s!"%btd{p}" s!"b{p}dn" nDc
   let (cDr, nDr) ← pretty B (.relu6F (.operand nDn zdb))
@@ -1396,7 +1396,7 @@ end Proofs.StableHLO
 -- (c=144, 56², 3×3, fgc=144) was compiled three ways: f32 → f32 operands; bf16 operands with an
 -- **f32-typed result** → **FOLDED back to f32**; bf16 operands with a bf16-typed result and a
 -- convert → bf16 reaches the hardware. ▶ Identical to the ordinary-conv finding in §9.2, so
--- `feature_group_count` buys no exemption. Check with `scripts/bf16_gate2.py`, never by grepping
+-- `feature_group_count` buys no exemption. Check with `scripts/probes/bf16_gate2.py`, never by grepping
 -- the op line, which shows only the result type.
 --
 -- ⚠ The depthwise convs are ~13% of MNv2's step and bf16 is a mild LOSS on them in isolation

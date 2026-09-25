@@ -9,7 +9,7 @@ LARGE defects per crop instead of seventy 20-px cars per frame — which is the
 point of running the same detector on it (planning/neu_det_fpn_demo.md).
 
 Two on-disk formats, byte-identical to scripts/datasets/preprocess_visdrone.py's, so the Lean
-loaders, the FPN codegen and scripts/yolo_map_visdrone.py run UNCHANGED:
+loaders, the FPN codegen and scripts/demos/yolo_map_visdrone.py run UNCHANGED:
 
   (default)   single-grid YOLOv1   perCell = 2*5 + 20   [lean_f32_load_voc_dims]
               + the uncapped GT sidecar val.full_gt.bin the scorer reads
@@ -29,7 +29,7 @@ Split: NEU-DET ships no official split. This uses 1,080 / 360 / 360
 crops — from a fixed seed, so it is reproducible and every split is balanced.
 It is the split size the published Faster R-CNN / YOLO rows use, so the
 comparison is loose (different draws) but not meaningless. `split_stems()` is
-the one place the draw lives; scripts/neu_anchors.py imports it so the priors
+the one place the draw lives; scripts/probes/neu_anchors.py imports it so the priors
 are fitted on exactly the training images.
 
 Geometry: the 200-px crop is upsampled to 448 (2.24×) so the R34 stem is the

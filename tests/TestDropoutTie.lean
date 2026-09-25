@@ -22,7 +22,7 @@ ConvNeXt's LayerScale γ gradient read the cotangent at the drop site and was fe
 18 of 180 gradients wrong by a per-example factor, on the very parameter stochastic depth acts
 through, found by tracing operands **by hand** because nothing in that feature's gate set could see
 it (handoff §0.10). Dropout has the identical shape one net over — `dnW`'s `xName` argument — and
-`scripts/fault_dropout_wgrad.py` is that defect, mechanised, so the gate has a control it is
+`scripts/probes/fault_dropout_wgrad.py` is that defect, mechanised, so the gate has a control it is
 verified to fail against.
 
     lake build dropout-tie
@@ -30,7 +30,7 @@ verified to fail against.
     .lake/build/bin/dropout-tie --op                            # gate A only (tiny, no artifact)
     .lake/build/bin/dropout-tie --op --break                    # gate A is falsifiable
     .lake/build/bin/dropout-tie --net                           # gate W only (no GPU at all)
-    scripts/fault_dropout_wgrad.py verified_mlir/efficientnet_adamdo_train_step.mlir /tmp/f.mlir
+    scripts/probes/fault_dropout_wgrad.py verified_mlir/efficientnet_adamdo_train_step.mlir /tmp/f.mlir
     .lake/build/bin/dropout-tie --net /tmp/f.mlir               # gate W goes red; expect rc=1
 
 **Why gate W is STRUCTURAL and not numeric, deliberately.** The defect is an operand choice, and a

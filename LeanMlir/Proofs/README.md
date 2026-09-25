@@ -376,7 +376,7 @@ lexing, `iree-compile`, the runtime, and the FFI stay trusted; (b) the same
 ReLU/MaxPool/ReLU6 kink convention above; and (c) the CI drift guard (`proofs.yml`,
 "Verified-render drift guard") re-elaborates the `Proofs/Codegen` renderers and
 byte-checks their committed `verified_mlir/` files against them;
-`scripts/check_render_coverage.py` holds the unguarded remainder (14 of 240 files)
+`scripts/gates/check_render_coverage.py` holds the unguarded remainder (14 of 240 files)
 at its baseline.
 
 ## The three rules

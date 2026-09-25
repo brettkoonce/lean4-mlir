@@ -39,7 +39,7 @@ than re-importing the whole lib.
 
 **Second argument: the dependency edges.** `lake exe blueprint-checkdecls
 blueprint/lean_decls blueprint/lean_deps` also writes the real dependency edges among
-the cited declarations (`dep name` per line), which `scripts/blueprint_uses.py --check`
+the cited declarations (`dep name` per line), which `scripts/book/blueprint_uses.py --check`
 holds the blueprint's `\uses{}` lines to. Those lines were hand-written for the original
 suite and drifted with every proof refactor — audited 2026-09-21, 155 of 242 matched the
 Lean dependencies, so the dependency graph was drawing lemmas the proofs no longer used
@@ -97,7 +97,7 @@ unsafe def main (args : List String) : IO UInt32 := do
   unless args.length == 1 || args.length == 2 do
     println! "This command takes one or two arguments: the path to a file containing a \
       list of declarations to check, and optionally a path to write their dependency \
-      edges to (read by scripts/blueprint_uses.py)."
+      edges to (read by scripts/book/blueprint_uses.py)."
     return 1
   let filename : System.FilePath := args[0]!
   unless ← filename.pathExists do

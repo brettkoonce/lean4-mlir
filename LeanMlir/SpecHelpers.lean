@@ -121,7 +121,7 @@ def heInitParams (spec : NetSpec) : IO ByteArray := do
     `log π_c` bias hands it the prior at step 0 instead, so the first gradient
     step is spent on the actual task.
 
-    The quantitative version is in `scripts/seg_grad_scorecard.py`, whose sweep
+    The quantitative version is in `scripts/probes/seg_grad_scorecard.py`, whose sweep
     lands on this exact row. Prior-bias init starts the net at
     `z₀ - z₃ = log(π₀/π₃) = log(0.9746/0.0050) = 5.27` (verified against the
     emitted checkpoint: `softmax(head bias) == π` to 2e-09). Its measured

@@ -24,7 +24,7 @@ labeled as the lab: it is the evidence behind the tour's numbers and the book's 
 
 Gates for every item: `lake exe docstring-checkrefs` when Lean prose moves (it resolves every
 backticked identifier), `lake exe blueprint-checkdecls blueprint/lean_decls` when the book is
-touched, `lake build` + `python3 scripts/check_audit_coverage.py` when `lakefile.lean` is touched
+touched, `lake build` + `python3 scripts/gates/check_audit_coverage.py` when `lakefile.lean` is touched
 (the coverage script parses its root lists), a `grep` residue check after any path move (the
 `sed` machinery of `cleanup_backlog.md` §1 and §10), `git diff verified_mlir/` empty. Land by
 fast-forward, never a merge commit.
@@ -61,7 +61,7 @@ runs, this file only.
 
 * **R50 and MNv4 on Imagenette.** No chapter quotes them, so the cells are the final-epoch (80)
   top-1 of the tier's own exes, median of the five seeds in `runs/2026-08-31-imagenette-n3/`
-  (`scripts/seed_sweep.sh`, `SUITE=imagenette`: 80 epochs, bs 32, AdamW with cosine + 3-epoch
+  (`scripts/sweeps/seed_sweep.sh`, `SUITE=imagenette`: 80 epochs, bs 32, AdamW with cosine + 3-epoch
   warmup, one 4060 Ti per run). R50: 89.58 / 89.68 / **89.71** / 89.73 / 89.96. MNv4-Conv-M:
   85.15 / 86.09 / **86.24** / 86.39 / 86.90. The `logs/ablation_*` files this section first pointed
   at are the 2026-06 narrow-net ablations and hold neither. The same sweep has the other five nets,
@@ -270,7 +270,7 @@ else by pointer:
   `runs/2026-09-01-cifar8w-bn-xla-cuda/cifar8w-bn.log`. Decision: the constant-lr version is the
   one Chapter 4 wants (cosine enters with ResNet in Chapter 5); the cite, the PJRT version, one
   compile time and the elision range now match that log, every epoch line already did.
-  `scripts/seed_sweep.sh`'s header said the same stale things and was fixed with it;
+  `scripts/sweeps/seed_sweep.sh`'s header said the same stale things and was fixed with it;
 * (h) **Resolved 2026-09-08.** The book's Track-4 table cited `r50-2018-bf16-4gpu` for the
   ResNet-50 2018 row, but that conf was the 4× 3060 box's (cuda13 plugin, `SHIM_PYTHON`) and refused
   on ares. It is box-aware now — the repo `.venv`'s cuda12 plugin when it exists, else the 3060

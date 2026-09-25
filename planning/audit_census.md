@@ -35,7 +35,7 @@ deleted what the fixed point orphaned.
 - **2e.** X.1 also took the dead `*Rep_has_vjp` defs, `mobilenetv2FwdGraphFull(_faithful)`,
   `denoteMobilenet` and `mobilenetv2Forward_full`. `denoteMobilenet` shares its matcher with the
   other `denote*` functions, so the fixed point never reached it. B.4's wording was changed in
-  `scripts/lipschitz_cert_pair_sdp_full.py` and in both generated SDPFull files, together.
+  `scripts/certs/lipschitz_cert_pair_sdp_full.py` and in both generated SDPFull files, together.
 - **A.1b, held (15 pins).** `IRPrint.lean` and `check_ir_codegen.py`, the execution oracle the
   book describes, name these as the proofs behind what they print. No StableHLO twin can stand
   in for them. They are:
@@ -267,7 +267,7 @@ A sweep needs a query for "unpinned, no env users, no token users", excluding au
 - A bare `Dir/File.lean` in a moved docstring fails the file-link check; write the markdown link.
 - Quote shell heredocs (`<<'EOF'`) when the text contains backticks. Don't chain an edit script
   after `git grep -c … &&`: a zero count exits 1 and silently skips the edit.
-- `scripts/vjp_graph_sweep.py`'s ratchet was already failing at `HEAD` (18 batched holes against a
+- `scripts/probes/vjp_graph_sweep.py`'s ratchet was already failing at `HEAD` (18 batched holes against a
   ledger of `{efficientnetForwardB}`), and 2c removed `efficientnetForwardB` itself. The script is
   not in CI; the ledger needs re-deriving, not tuning.
 - `retire.py` strips a `set_option … in` above a cut, but not an `open … in`. A dangling one at
@@ -341,7 +341,7 @@ recorded call, touches the book, or needs new work first.
 | R.E | CertLayer trunk/row wiring (r34/r50) | 107 | 6 | CertLayer trunk / row wiring no artifact renders: `r34Trunk_3463 := r50Trunk_3463`, row wrappers superseded by `R34BWeights`/`R50BWeights` | MobileNetV4BackB0:796-800; ViTBackNet:50/207/388; ResNet34FullB:22; ResNet50FullB:7/21 | the `*Layer` defs stay (FullBVJP) |
 | R.F | R34 per-op float leftovers | 75 | 4 | per-example-BN R34 float bridges whose consumers the 2026-09-08 float chop deleted | FloatComposeBridge:20-22/238; both R34 float-bridge headers (they promise an `r34_float_close` that does not exist) | keep `add_close`, `bnStep_close`, `gapFlat_close` |
 | M.1 | MNv2 six-block per-example tier | 697 | 8 | the six-block reduced MobileNetV2 per-example tier: its render writes only /tmp; superseded by `mnv2InputGradB_correct`, `mobilenetv2ForwardB_full_eq_slots`, `mobilenetv2FwdGraphB_full_faithful`, `mobilenetv2FwdGraphPaperEval_faithful`, `mnv2*CotIn_eq_vjp` | formalization.yaml:227; comments in ConvNeXtWholeBackCertifiedTie (x2), EfficientNetWholeBackCertifiedTie, ResNet34BackCertifiedTie, EfficientNetChainClose, the MobileNetBackChains module doc | keep `depthwiseStride2FlatXlaBack_eq_vjp_backward` (generic) and the RenderPC/RenderPCEval stage abbreviations (FullPaperEval and a test import them) |
-| M.3 | EfficientNet 3-block representative | 418 | 9 | the 3-block EfficientNet representative (`efficientnetForwardB_has_vjp_committed` is misnamed: its "committed" forward is the 3-block one); superseded by the full-B0 T2, eval T2 and T6 | comments only; `scripts/vjp_graph_sweep.py`'s `EXPECTED_BATCHED_HOLES = {"efficientnetForwardB"}` | keep `stemBBack_eq_vjp_backward`, `headFwdBBack_eq_vjp_backward` and the stage abbreviations |
+| M.3 | EfficientNet 3-block representative | 418 | 9 | the 3-block EfficientNet representative (`efficientnetForwardB_has_vjp_committed` is misnamed: its "committed" forward is the 3-block one); superseded by the full-B0 T2, eval T2 and T6 | comments only; `scripts/probes/vjp_graph_sweep.py`'s `EXPECTED_BATCHED_HOLES = {"efficientnetForwardB"}` | keep `stemBBack_eq_vjp_backward`, `headFwdBBack_eq_vjp_backward` and the stage abbreviations |
 | M.4 | *GradsCertified bundles (MNv2/MNv4) | 357 | 13 | `*GradsCertified` bundles: conjunctions of pinned leaf folds; `mnv2_net_tiedB` / `mnv4_net_tiedB` call the leaves directly | MNv2 / MNv4 fold-file headers | `ResNet34PoCB.denseBGradB_den` loses its last user (keep: op fold) |
 | M.5 | EfficientNet per-example scalar-BN spike | 162 | 7 | the per-example scalar-BN EfficientNet backward spike; superseded by the batched `mb*BackBatchedGraph_faithful` and `seBackBatched` | comments in ConvNeXtBackB0, EfficientNetBackChains | keep `residualBackGraph_faithful`, `seBlockBackGraph_faithful`, `bnBatchBack_faithful`; `backGraph_faithful`, `seGate_backGraph_faithful`, `mbconvBodyBackGraph_faithful` lose their last user and stay pinned |
 | M.6 | CertLayer .faithful projections (MNv4/ENet) | 202 | 14 | CertLayer `.faithful` projections (MNv4 BackB0 x7, EfficientNet x5) and two `*Layer` wrappers nothing composes | the archived audit log narrates `mnv4UibSkipBlock_faithful` | keep `CertLayer.chain_faithful`, `mbResidBlockBackBatchedGraph_faithful` |
@@ -359,7 +359,7 @@ recorded call, touches the book, or needs new work first.
 | A.4 | ConvLossFold (whole file) | 70 | 4 | ConvLossFold, the whole file: one-line `pdiv_comp` instances whose last consumer moved to `gradAt_comp_t3` (`046ec333`) | SgdDescentCnn:2 (import) and :1411; lakefile:108 (Certs root); LeanMlir.lean:27; AuditAxioms 680-684 | SgdDescentCnn may reach something through ConvLossFold's import of MobileNetV2Close; `lake build Certs` decides |
 | A.6 | even-phase strided depthwise map tie | 22 | 1 | even-phase strided depthwise map tie built "for mnv2", which uses the XLA twin | DepthwiseBackCertifiedTie 20-22; BackwardMaps 200-214; AuditAxioms:977 (all three also misstate B0's padding) | - |
 | A.7 | float-chop orphans | 21 | 2 | float-chop orphans | EvenKernelConvBack header | - |
-| B.4 | lipsdp_slack_of_cert (unused LDL route) | 72 | 2 | the entrywise LDL route no SDP scorecard uses | PairSDP:137; SDPFull headers; `scripts/lipschitz_cert_pair_sdp_full.py` (14, 210, 257) | - |
+| B.4 | lipsdp_slack_of_cert (unused LDL route) | 72 | 2 | the entrywise LDL route no SDP scorecard uses | PairSDP:137; SDPFull headers; `scripts/certs/lipschitz_cert_pair_sdp_full.py` (14, 210, 257) | - |
 | B.5 | AdamRender Phase-3b spec | 63 | 5 | AdamRender.lean, the Phase-3b spec (whole file); superseded by `adamWParamF_faithful` / `adamW_triple_faithful` | lakefile roots at 63 and 199; RmsPropStep:168 | - |
 | B.7 | bnMean_num_le | 36 | 1 | numeral form for the deleted budget files (`0de261e8`) | none | - |
 | B.8 | rfl restatements (den_batchOp_*_eq_*, patchEmbedBack) | 27 | 4 | `rfl` restatements (`den_batchOp` + `denOp` already give them) | none | `@[simp]` rfl: build-check |
