@@ -1046,7 +1046,7 @@ def params_to_file(params, path):
 def forward(params, x, bn, training, drop_key=None):
     bn_out = []
     bn_i = 0
-    x = x.reshape(-1, 3, 224, 224)
+    _s = int(round((x.shape[-1] // 3) ** 0.5)); x = x.reshape(-1, 3, _s, _s)
     x, _ns = conv_bn(x, params[0][0], params[0][1], params[0][2], bn[bn_i], training, stride=(2,2), padding='SAME')
     bn_out.append(_ns); bn_i += 1
     x = jnp.minimum(jax.nn.relu(x), 6.0)
@@ -1122,11 +1122,20 @@ MOMENTUM = 0.900000
 RHO = 0.900000
 EPS = 1.000000
 WD = 0.000040
+_WD_POS_SHAPE = None
+def _wd_mask(params):
+    # timm no_weight_decay: no decay on 1-D params (biases, LayerNorm γ/β,
+    # CLS token) or the positional embedding (2-D but must not be decayed).
+    def _leaf(p):
+        if p.ndim <= 1: return jnp.zeros_like(p)
+        if p.shape == _WD_POS_SHAPE: return jnp.zeros_like(p)
+        return jnp.ones_like(p)
+    return jax.tree.map(_leaf, params)
 
 @jit
 def train_step(params, opt_state, bn, x, y, lr, drop_key=None):
     (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)
-    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)
+    grads = jax.tree.map(lambda g, p, msk: g + WD * msk * p, grads, params, WD_MASK)
     sq, buf = opt_state
     sq = jax.tree.map(lambda s, g: RHO * s + (1.0 - RHO) * g * g, sq, grads)
     buf = jax.tree.map(lambda b, g, s: MOMENTUM * b + g / jnp.sqrt(s + EPS), buf, grads, sq)
@@ -1260,6 +1269,7 @@ if __name__ == "__main__":
     else:
         params = init_params(random.PRNGKey(314159))
     params = jax.device_put(params, replicated_sharding)
+    WD_MASK = _wd_mask(params)  # timm no_weight_decay mask (built once; shape-only, resume-safe)
     opt_sq = jax.tree.map(jnp.ones_like, params)  # TF-RMSProp: mean-square inits to 1.0, not 0 (gentle first steps)
     opt_buf = jax.tree.map(jnp.zeros_like, params)
     opt_state = (opt_sq, opt_buf)

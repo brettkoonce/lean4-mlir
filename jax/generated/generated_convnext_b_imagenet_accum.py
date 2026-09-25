@@ -2493,7 +2493,7 @@ def params_to_file(params, path):
     print(f'saved {idx} param-groups to {path} ({os.path.getsize(path)} bytes)')
 
 def forward(params, x, drop_key=None):
-    x = x.reshape(-1, 3, 224, 224)
+    _s = int(round((x.shape[-1] // 3) ** 0.5)); x = x.reshape(-1, 3, _s, _s)
     dpkeys = (jax.random.split(drop_key, 36) if drop_key is not None else [None] * 36)
     x = convnext_stem(params, x, 0, 4)
     x = convnext_block(params, x, 2, dpkeys[0], 1.000000)

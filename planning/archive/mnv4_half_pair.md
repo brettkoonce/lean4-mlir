@@ -1,5 +1,11 @@
 # MNv4-Conv-M 50-epoch pair: JAX reference × verified PJRT, same recipe, bf16
 
+> **Superseded 2026-09-25.** The 50-epoch `half` recipe is gone. The pair runs the 100-epoch
+> `default` recipe instead: `mnv4-default-4gpu` (verified, the same `emaaccdp8x128wxdowd005bf16`
+> render, checkpoint tagged `e100`) and `mnv4-default-jax-4gpu`. The PJRT half run stopped at
+> epoch 16 (runs/2026-09-25-mnv4-half-4gpu/); its untagged checkpoint is not resumed. The render,
+> the gates and the chunking below carry over unchanged.
+
 2026-09-25. First runs of the timm-parity net (90e4af7e). The owner's call: bf16, a 50-epoch
 half-length recipe on both paths, PJRT first. Both run as overnight chunks (`supervise.sh`
 START_AT/STOP_AT). Code first, then launch.

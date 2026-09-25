@@ -104,6 +104,17 @@ def selftest() -> int:
         # 4. lamb++acc puts the marker in the middle, so `startsWith` would miss it.
         ("lambaccdp8x64bce", acc_on, True, "`lamb`++`acc` — substring, not prefix"),
     ]
+    # 5. the `x` grammar and the decimal markers (planning/imagenet_parity.md C8): `x` is k×B after
+    #    `acc` and B×replicas after a bare `dp`, and a digit run inside `wd`/`ls` is not a batch.
+    checks += [
+        ("emaaccdp8x128wxdowd005bf16", acc_k, 8, "`accdp8x128`: k = 8, not a batch of 8"),
+        ("emaaccdp8x128wxdowd005bf16", batch_shape, "micro-batch 128 per replica", "B after acc"),
+        ("adamdp128x4wxclipdrop", batch_shape, "batch 128 per replica × 4 replicas", "B×R after dp"),
+        ("emaaccdp8x128wxdowd005bf16", lambda v: decimal_marker(v, "wd"), "0.05", "`%wd` = 0.05"),
+        ("emalambacc4x128wxclipdropbcewd001", lambda v: decimal_marker(v, "wd"), "0.01", "`%wd` = 0.01"),
+        ("adamwd00", batch_shape, None, "`wd00` is weight decay 0.0, not a batch of 00"),
+        ("adamls0bf16", lambda v: decimal_marker(v, "ls"), "0", "`%lomac` = 1.0"),
+    ]
     bad = 0
     for v, pred, want, why in checks:
         got = pred(v)
@@ -162,11 +173,48 @@ def decode(variant: str) -> str:
         bits.append("bf16")
     if "fp8" in variant:
         bits.append("fp8")
-    # the precision markers carry digits of their own — strip them before reading a batch size
-    m = re.search(r"(\d{2,4})(?:x(\d+))?", variant.replace("bf16", "").replace("fp8", ""))
-    if m and not k:
-        bits.append(f"batch {m.group(1)}")
+    wd = decimal_marker(variant, "wd")
+    if wd is not None:
+        bits.append(f"weight decay {wd}")
+    ls = decimal_marker(variant, "ls")
+    if ls is not None:
+        bits.append(f"label smoothing {ls}")
+    shape = batch_shape(variant)
+    if shape:
+        bits.append(shape)
     return ", ".join(bits) if bits else variant
+
+
+def decimal_marker(v: str, marker: str) -> str | None:
+    """`wd005` = 0.05, `wd001` = 0.01, `wd00` = 0.0, `ls0` = 0: the first digit is the integer part
+    and the rest are decimals (checked against the `%wd` / `%lomac` constants the renders bake)."""
+    m = re.search(marker + r"(\d+)", v)
+    if not m:
+        return None
+    d = m.group(1)
+    return d if len(d) == 1 else f"{d[0]}.{d[1:]}"
+
+
+def batch_shape(v: str) -> str | None:
+    """The batch geometry. ONE `x` grammar, read by what precedes it:
+         acc[dp]<k>x<B>   k accumulated micro-batches of B (per replica when `dp`)
+         dp<B>x<R>        B per replica on R replicas
+         dp<B>            B per replica (the replica count is the render's, 4 for every ImageNet net)
+         <B>              single-device batch
+    The precision markers and `wd`/`ls` carry digits of their own, so they are stripped first."""
+    s = v.replace("bf16", "").replace("fp8", "")
+    s = re.sub(r"(?:wd|ls)\d+", "", s)
+    m = re.search(r"acc(dp)?(\d+)x(\d+)", s)
+    if m:
+        return f"micro-batch {m.group(3)}{' per replica' if m.group(1) else ''}"
+    m = re.search(r"dp(\d+)x(\d+)", s)
+    if m:
+        return f"batch {m.group(1)} per replica × {m.group(2)} replicas"
+    m = re.search(r"dp(\d+)", s)
+    if m:
+        return f"batch {m.group(1)} per replica"
+    m = re.search(r"(\d{2,4})", s)
+    return f"batch {m.group(1)}" if m else None
 
 
 # Slugs with committed artifacts but no `VerifiedNetsCore` entry: renders kept after their trainer
@@ -226,10 +274,17 @@ def build() -> str:
         stem = p.stem
         slug = next((s for s in slugs if stem == s or stem.startswith(s + "_")), None)
         rest = stem[len(slug) + 1:] if slug else stem
+        # `<…>fwd[_eval]_s<N>`: the same eval graph rendered at an N-px input (timm's test size,
+        # scripts/score_timm.sh) — a resolution, not a variant or a batch.
+        res = re.fullmatch(r"(.*fwd(?:_eval)?)_s(\d+)", rest)
+        if res:
+            rest = res.group(1)
         kind = ("fwd_eval" if rest.endswith("fwd_eval")
                 else "fwd" if rest.endswith("fwd")
                 else "train_step" if rest.endswith("train_step") else "?")
         variant = rest.removesuffix("_" + kind) if rest != kind else ""
+        if res:
+            kind += f" @{res.group(2)}px"
         rows.append({
             "file": p.name, "slug": slug or "(unknown)", "kind": kind, "variant": variant,
             "mb": p.stat().st_size / 1048576, "writer": w.get(stem, "⛔ no writer"),
@@ -272,6 +327,9 @@ def build() -> str:
         "| stochastic depth | `drop` | not `sd` — `rms`++`dp` spells `rmsdp`, which contains `sd` |",
         "| classifier dropout | `do` | not `dropout` — that contains `drop` |",
         "| grad accumulation | `acc<k>x<B>` **substring** | `lamb`++`acc` puts it mid-string |",
+        "| replicas | `dp<B>x<R>` | `x` is k×B after `acc`, B×replicas after a bare `dp` |",
+        "| weight decay | `wd<d…>` | first digit the integer part: `wd005` = 0.05, `wd00` = 0.0 |",
+        "| label smoothing | `ls<d…>` | same rule: `ls0` = 0 |",
         "",
     ]
 

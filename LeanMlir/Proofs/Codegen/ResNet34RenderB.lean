@@ -775,33 +775,6 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     -- passes both. The packed `[θ|m|v]` arity is unchanged, so the driver needs no predicate.
     pure (arS ++ cD ++ cT ++ cE, nT, s!"%{g.nm}m", s!"%{g.nm}v", none, nE)
 
-/-- **Does this parameter get weight decay?** timm's `no_weight_decay` rule, and it is the PLAIN
-    RANK TEST with no name carve-out — every 1-D parameter is excluded: BN γ, BN β and every bias.
-
-    ⚠ Identical to `cnxWdDecays` by construction rather than by coincidence: the rule is timm's,
-    not the net's, and ConvNeXt's own docstring records that its ViT-style `nm != "pos"` carve-out
-    does not apply to a net with no positional parameter. ResNet has none either.
-
-    ⚠⚠ **This is `a3_paper_fidelity.md` §2.1, open since the A3 run.** The live A3 artifact has
-    ZERO `%wdz` occurrences against ConvNeXt's 123 — so the 77.43% run decayed BN γ/β and every
-    bias at wd = 0.02 where its reference (`resnet50ImagenetConfigRSBFaithful`, which sets
-    `wdExcludeNormBias := true`) did not. Decay on pre-BN conv weights is renormalised away by BN
-    and acts only as an effective-LR control; decay on γ/β is not, because γ directly scales the
-    layer's output. The effect concentrates at low LR — i.e. in the cosine endgame. -/
-def r34WdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
-
-/-- The decay operand for one parameter: the real `%wd`, or the zero constant when excluded. -/
-def r34WdName (wdExclude : Bool) (nm : String) (ds : List Nat) : String :=
-  if wdExclude && !r34WdDecays nm ds then "%wdz" else "%wd"
-
-/-- The `%wdz` declaration an excluding render needs. ⚠ Emitted only when the flag is on, so at
-    `wdExclude := false` not one byte moves and every committed artifact is untouched. -/
-def wdzConst (wdExclude : Bool) : String :=
-  if wdExclude then
-    "    // ── timm no_weight_decay (wdExcludeNormBias): 1-D params take %wdz, not %wd ──\n" ++
-    "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
-  else ""
-
 /-- **How many micro-batches the optimizer accumulates over** — `k` for the two accumulating
     constructors and `1` for every other, so a caller can ask the question without a second `match`
     that could disagree with `accOn`'s.

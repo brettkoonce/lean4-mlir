@@ -1,14 +1,13 @@
 import Jax
 
 /-! Vision Transformer (ViT-Tiny) on full 1000-class ImageNet — bf16
-    mixed precision, 2-GPU data-parallel (tfds streaming). Same ViT-Tiny
+    mixed precision, data-parallel over every visible GPU (tfds streaming; the
+    published run used 4, at 128 per device = global 512). Same ViT-Tiny
     spec as `MainVit.lean` but with a 1000-class head and the `.imagenet`
     dataset.
 
     bf16 routes every matmul (patch embed, attention QKV/scores/out, MLP,
-    head) through bfloat16 while keeping LayerNorm/softmax/GELU in fp32 —
-    measured ~2.7× on the isolated ViT-Ti matmuls on gfx1100, where
-    convnets see no bf16 benefit. See reference_bf16_gfx1100_conv_vs_gemm.
+    head) through bfloat16 while keeping LayerNorm/softmax/GELU in fp32.
     Note: at ViT-Tiny scale the run may be input-bound on tfds aug. -/
 
 def vitTinyImagenet : NetSpec where
@@ -31,6 +30,7 @@ def vitTinyImagenet : NetSpec where
     the additions here (geometric RA, stochastic depth, EMA, 300ep) target the
     ~72% DeiT-Ti headline (no distillation). -/
 def vitTinyImagenetConfig : TrainConfig where
+  vitInit        := true            -- timm/DeiT trunc_normal(0.02) init, not the emitter's Xavier-uniform
   learningRate   := 0.0005          -- proper DeiT batch-512 LR (was crippled at 1e-4)
   batchSize      := 512
   epochs         := 300             -- full DeiT-Ti schedule (was 80; closes ~65→72%)
@@ -65,16 +65,14 @@ def vitTinyImagenetConfig : TrainConfig where
 
 #eval vitTinyImagenet.validate!
 
-/-- **ViT-Ti with timm/DeiT weight init** — the `default` recipe plus
-    `vitInit := true`. The generic emitter path gives every transformer Linear
+/-- **ViT-Ti with the emitter's Xavier-uniform init** — the A/B arm against `default`, which since
+    2026-09-25 carries timm/DeiT init (`vitInit := true`; it was the separate `deit-init` recipe,
+    whose run is the book's 72.31). The generic emitter path gives every transformer Linear
     Xavier-uniform, which at ViT-Ti is **3.6x wider** than timm's
     `trunc_normal(std=0.02)`, while the patch-embed conv comes out ~6x too narrow
     (it divides by the output fan `dim*p*p` instead of the input fan `ic*p*p`).
     The CLS token and positional embedding were already correct at 0.02, so this
     closes an inconsistency inside one file rather than changing a design.
-
-    Kept as a SEPARATE recipe rather than folded into `default`: the A/B is the
-    point, and `default` stays comparable with the runs already in `runs/`.
 
     Measured at init (ViT-B, batch 32, pre-clip global grad norm): Xavier 44.09
     at loss 7.4637, timm 14.28 at loss 7.1597 — 3.1x better conditioned, and a
@@ -83,8 +81,8 @@ def vitTinyImagenetConfig : TrainConfig where
     `gradClipNorm := 1.0` becomes unnecessary: both norms still exceed the
     threshold by 10x+. Settling that needs a clip-off training arm.
     See planning/archive/vit_imagenet.md item 0. -/
-def vitTinyImagenetConfigDeitInit : TrainConfig :=
-  { vitTinyImagenetConfig with vitInit := true }
+def vitTinyImagenetConfigXavier : TrainConfig :=
+  { vitTinyImagenetConfig with vitInit := false }
 
 /-- Named training recipes, selected by a positional CLI arg
     (`vit-tiny-imagenet <recipe> [data_dir]`, listed by `--help`). -/
@@ -92,9 +90,9 @@ def vitTinyImagenetRecipes : List Recipe := [
   { name := "default", cfg := vitTinyImagenetConfig,
     out := "generated_vit_tiny_imagenet.py",
     desc := "full DeiT-Ti 300-epoch schedule, bs512, AdamW + full DeiT aug + EMA" },
-  { name := "deit-init", cfg := vitTinyImagenetConfigDeitInit,
-    out := "generated_vit_tiny_imagenet_deitinit.py",
-    desc := "300ep + timm trunc_normal(0.02) init — the A/B against Xavier-uniform" }
+  { name := "xavier", cfg := vitTinyImagenetConfigXavier,
+    out := "generated_vit_tiny_imagenet_xavier.py",
+    desc := "300ep with the emitter's Xavier-uniform init — the A/B arm against `default`" }
 ]
 
 def main (args : List String) : IO Unit :=

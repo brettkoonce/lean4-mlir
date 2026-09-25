@@ -791,8 +791,9 @@ def mobilenetv2Verified : VerifiedNetSpec where
     leg 2 (2026-09-06) that is literally true for every MobileNetV2 forward: they all come from
     `mnv2FwdChainB`, and both forwards are batch-BN because both train steps are.
 
-    ⚠ **Claim ceiling** (§5): proofs stop at Imagenette. And the recipe does not match — the
-    reference uses **RMSProp at LR 0.045**, where this path is AdamW + cosine. -/
+    ⚠ **Claim ceiling** (§5): proofs stop at Imagenette. The optimizer follows the variant: the
+    `rms*` renders (the shipping `rmsdp64bf16`) are the reference's RMSProp at LR 0.045 with its
+    warmup and ×0.98 exponential decay; the `adam*` renders are AdamW. -/
 def mobilenetv2ImagenetVerified : VerifiedNetSpec where
   name     := "MobileNetV2 (ImageNet-1k)"
   slug     := "mobilenetv2in"
@@ -806,6 +807,10 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
   -- exactly one line, the banner naming the reference. mnv2 is therefore the one net whose data
   -- stream this whole thread does not change, which is what makes it the inert control.
   shimScript := "generated_mobilenet_v2_imagenet_shim.py"
+  -- Classifier dropout 0.2 (`mobilenetV2ImagenetConfig.dropout`), per ELEMENT on the 1280-wide GAP
+  -- output. Read only by a variant carrying `do` (`rmsdp64wxdols0bf16`); the older renders have no
+  -- mask slot and train exactly as before.
+  dropoutKeep := some (0.8, 1280)
   layers   := [
     .convBnNB 3 32 3 2,
     .invertedResidualNB 32  32  16 1,
@@ -918,10 +923,10 @@ def efficientnetVerified : VerifiedNetSpec where
     from the plain duplicated-batch harness without the running-stat region, which is 2×49 extra
     tensors on both sides (§5 — omitting it is refused by the shim's G4 guard, not answered wrongly).
 
-    ⚠ **Claim ceiling** (§5): proofs stop at Imagenette; provenance carries. And the recipe does
-    not match — `efficientNetB0ImagenetConfig` trains with **RMSProp and exponential LR decay**
-    (×0.97 every 2.4 epochs), where the verified path has AdamW + cosine. That is a bigger optimizer
-    gap than ConvNeXt's or ViT's, and it is on top of the usual missing mixup/cutmix/EMA. -/
+    ⚠ **Claim ceiling** (§5): proofs stop at Imagenette; provenance carries. The recipe follows
+    the variant: the `emarmsdp64dropdo*` renders (the shipping one is `emarmsdp64dropdobf16`) carry
+    the reference's RMSProp with ×0.97-every-2.4-epoch decay, EMA, drop-connect and classifier
+    dropout, as `efficientNetB0ImagenetConfig` trains; the `adam*` renders are AdamW + cosine. -/
 def efficientnetImagenetVerified : VerifiedNetSpec where
   name     := "EfficientNet-B0 (ImageNet-1k)"
   slug     := "efficientnetin"
@@ -1315,13 +1320,14 @@ def vitVerified : VerifiedNetSpec where
     plus whatever a matched-pair comparison against [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean) shows. Say "one
     architecture, two independent lowerings, agreeing", never "proven" (§5).
 
-    ⚠ It is **not** the DeiT recipe. `vitTinyImagenetConfig` carries mixup, cutmix, stochastic
-    depth, EMA and grad clipping; none of those exist on the verified path (mixup/cutmix would need
-    soft labels on the shim wire AND a `softLabelCE` cotangent — this render's is smoothed-CE over
-    a one-hot). ⚠ The pipeline-level augs come across **as of 2026-08-02** — RandAugment, random
-    erasing and repeated aug ×3 were all absent in practice until `shimScript` existed, because the
-    driver spawned R34's shim here. Do not compare a number from this to
-    DeiT-Ti's 72.0%. -/
+    The recipe follows the variant. The shipping `emadp128x4wxclipdropbf16` carries the rest of
+    `vitTinyImagenetConfig`: EMA, grad clip 1.0, drop-path (24 host-drawn masks), weight decay off
+    norm/bias, and mixup/cutmix, which ride the producer's `SHIM_MIX` (this shim bakes `both`) as
+    soft targets on the wire; the render's cotangent smooths that mixed target (α = 0.1). The
+    pipeline-level augs (RandAugment, random erasing, repeated aug ×3) come from this net's own
+    shim (`shimScript`, since 2026-08-02). ⚠ Remaining differences from DeiT-Ti are listed in
+    planning/imagenet_parity.md §2.1 (clip, EMA-scored eval, LN eps, tanh GELU); from the JAX
+    reference in §2.2. -/
 def vitImagenetVerified : VerifiedNetSpec where
   name     := "ViT-Tiny (ImageNet-1k)"
   slug     := "vitin"

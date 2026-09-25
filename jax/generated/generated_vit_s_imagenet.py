@@ -430,9 +430,9 @@ replicated_sharding = NamedSharding(mesh, P())
 def init_params(key):
     """Xavier/Kaiming uniform init."""
     params = []
-    # Patch embedding conv 3→384, 16x16
+    # Patch embedding conv 3→384, 16x16  (PyTorch Conv2d default: U(±1/sqrt(fan_in)))
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 98304)
+    scale = 1.0 / jnp.sqrt(768.0)
     params.append((random.uniform(k_, (384, 3, 16, 16), minval=-scale, maxval=scale),
                    jnp.zeros(384)))
     # CLS token
@@ -443,346 +443,273 @@ def init_params(key):
     params.append((random.normal(k_, (197, 384)) * 0.02,))
     # Transformer block 0 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 0 Q 384→384
+    # Transformer block 0 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 0 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 0 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 0 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 0 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 0 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 0 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 0 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 0 MLP fc1 384→1536
+    # Transformer block 0 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 0 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 0 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 1 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 1 Q 384→384
+    # Transformer block 1 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 1 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 1 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 1 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 1 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 1 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 1 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 1 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 1 MLP fc1 384→1536
+    # Transformer block 1 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 1 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 1 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 2 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 2 Q 384→384
+    # Transformer block 2 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 2 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 2 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 2 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 2 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 2 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 2 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 2 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 2 MLP fc1 384→1536
+    # Transformer block 2 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 2 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 2 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 3 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 3 Q 384→384
+    # Transformer block 3 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 3 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 3 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 3 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 3 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 3 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 3 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 3 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 3 MLP fc1 384→1536
+    # Transformer block 3 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 3 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 3 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 4 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 4 Q 384→384
+    # Transformer block 4 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 4 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 4 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 4 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 4 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 4 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 4 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 4 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 4 MLP fc1 384→1536
+    # Transformer block 4 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 4 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 4 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 5 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 5 Q 384→384
+    # Transformer block 5 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 5 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 5 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 5 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 5 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 5 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 5 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 5 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 5 MLP fc1 384→1536
+    # Transformer block 5 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 5 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 5 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 6 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 6 Q 384→384
+    # Transformer block 6 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 6 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 6 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 6 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 6 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 6 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 6 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 6 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 6 MLP fc1 384→1536
+    # Transformer block 6 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 6 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 6 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 7 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 7 Q 384→384
+    # Transformer block 7 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 7 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 7 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 7 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 7 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 7 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 7 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 7 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 7 MLP fc1 384→1536
+    # Transformer block 7 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 7 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 7 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 8 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 8 Q 384→384
+    # Transformer block 8 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 8 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 8 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 8 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 8 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 8 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 8 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 8 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 8 MLP fc1 384→1536
+    # Transformer block 8 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 8 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 8 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 9 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 9 Q 384→384
+    # Transformer block 9 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 9 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 9 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 9 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 9 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 9 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 9 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 9 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 9 MLP fc1 384→1536
+    # Transformer block 9 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 9 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 9 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 10 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 10 Q 384→384
+    # Transformer block 10 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 10 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 10 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 10 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 10 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 10 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 10 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 10 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 10 MLP fc1 384→1536
+    # Transformer block 10 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 10 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 10 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Transformer block 11 LN1
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 11 Q 384→384
+    # Transformer block 11 Q 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 11 K 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 11 K 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 11 V 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 11 V 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
-    # Transformer block 11 Out 384→384
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
+    # Transformer block 11 Out 384→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 768)
-    params.append((random.uniform(k_, (384, 384), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 384)) * 0.02, jnp.zeros(384)))
     # Transformer block 11 LN2
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Transformer block 11 MLP fc1 384→1536
+    # Transformer block 11 MLP fc1 384→1536  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (1536, 384), minval=-scale, maxval=scale), jnp.zeros(1536)))
-    # Transformer block 11 MLP fc2 1536→384
+    params.append((random.normal(k_, (1536, 384)) * 0.02, jnp.zeros(1536)))
+    # Transformer block 11 MLP fc2 1536→384  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1920)
-    params.append((random.uniform(k_, (384, 1536), minval=-scale, maxval=scale), jnp.zeros(384)))
+    params.append((random.normal(k_, (384, 1536)) * 0.02, jnp.zeros(384)))
     # Final LN
     params.append((jnp.ones(384), jnp.zeros(384)))
-    # Dense 384→1000
+    # Dense 384→1000 (head)  (timm trunc_normal std=0.02)
     key, k_ = random.split(key)
-    scale = jnp.sqrt(6.0 / 1384)
-    params.append((random.uniform(k_, (1000, 384), minval=-scale, maxval=scale), jnp.zeros(1000)))
+    params.append((random.normal(k_, (1000, 384)) * 0.02, jnp.zeros(1000)))
     return params
 
 def init_params_from_file(path):

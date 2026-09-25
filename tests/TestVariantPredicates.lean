@@ -150,11 +150,14 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- of names written by hand drifts from the function that derives them.
   , ("adamdo", false, false, false), ("emarms64dropdo", true, true, true)
   , ("emarms64drop", true, true, true), ("rmsdo64", false, true, false)
-    -- ▶▶ MobileNetV4's JAX-reference recipe (planning/mnv4_half_pair.md): EMA × accumulation ×
+    -- ▶▶ MobileNetV4's JAX-reference recipe (planning/archive/mnv4_half_pair.md): EMA × accumulation ×
     -- `wx` × classifier dropout × a decay mark × bf16 — FIVE regions and a mask. ⚠ `wx` ++ `do`
     -- ++ `wd005` spells `wxdowd005`: `do` is followed by `wd`, and `wd005` must not reach `accK`.
   , ("emaaccdp8x128wxdowd005bf16", true, false, false)
   , ("emaacc8x128wxdowd005bf16", true, false, false)
+    -- ▶ MobileNetV2's reference recipe (2026-09-25): RMSProp × `wx` × dropout × α = 0 × bf16.
+    -- ⚠ `do` is followed by `ls0`, and `rms` ++ `dp` must still not read as stochastic depth.
+  , ("rmsdp64wxdols0bf16", false, true, false)
     -- ▶▶ **EMA × ACCUMULATION — the FIVE-region spellings** (`verified_side_quest_counterparts.md`
     -- §6a). These were UNSPELLABLE until 2026-08-27: `trainAdamSched` threw on the pairing because
     -- both features claimed the fourth region, which is what stopped RSB-A2/A1 from being rendered
@@ -265,7 +268,8 @@ private def table : List (String × Bool × Bool × Bool) :=
 -- `rmsdo64` — a dropout spelling the chain had simply not been updated for. A partition cannot
 -- rot that way: adding a spelling to the table without adding it here fails immediately.)
 private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsdo64",
-  "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16"]
+  "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16",
+  "rmsdp64wxdols0bf16"]
 #guard table.all (fun (v, _, _, _) => cdOn v == dropoutSpellings.contains v)
 #guard dropoutSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 #guard cdOn "emarms64drop" == false      -- ⚠ `drop` alone must NOT read as dropout

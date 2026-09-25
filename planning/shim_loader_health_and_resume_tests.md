@@ -170,7 +170,7 @@ respawn OFF for all 90 epochs, `REST_EPOCHS=""`, so the loaders ran **21.9 h con
 ⭐ **And there is a mechanism, not just a null.** The `SHIM_WORKERS` sweep taken immediately before
 (`runs/2026-09-16-r34-bf16-sweep/`) measured R34's feed at **19 ms of a 163 ms step (12 %)** against
 B0's **37 of 134 (28 %)** — fed-minus-synth, 800 steps per arm. R34's shim is flip-only; B0's does
-AutoAugment + RandAugment per image. A shim doing a quarter of the per-image work allocates to
+AutoAugment (the full ImageNet policy, no RandAugment) per image. A shim doing a quarter of the per-image work allocates to
 steady state early and stays there. **There is very little feed here to degrade.**
 
 ⚠⚠ **What this settles and what it does not.** It **bounds** the fault to heavy-augmentation shims;

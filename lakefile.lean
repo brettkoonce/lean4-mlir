@@ -2368,7 +2368,7 @@ script imagenette do
     `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
     rows are the ones with chapter numbers; the five side quests have job configs and no number
     yet. Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
-    `vit-default-4gpu`, `cnx-default-emabf16-4gpu` (ConvNeXt-T with the EMA shadow), the MNv4 50-epoch pair `mnv4-half-4gpu` / `mnv4-half-jax-4gpu` (run as
+    `vit-default-4gpu`, `cnx-default-emabf16-4gpu` (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch JAX side `mnv4-default-jax-4gpu` (run, like its verified side, as
     overnight chunks, `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only.
     ⚠ `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip-bf16-4gpu` are the 4× 3060 box's confs, named by the
     book's Track-4 table as the jobs behind their rows; on this box their PRECHECK refuses, which is

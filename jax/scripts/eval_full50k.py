@@ -11,6 +11,21 @@ This is the one writer.
     GEN=.lake/build/generated_<net>.py CKPT=<path>.state.npz ../.venv/bin/python \
         scripts/eval_full50k.py
 
+    PROTOCOL=train   # (default) the module's own `_IMG_SIZE` / `_CROP_PCT` — the in-training eval
+    PROTOCOL=timm    # timm's validation protocol for this net: test_input_size / test_crop_pct
+                     # from jax/timm_eval_protocols.json (scripts/timm_eval_protocols.py)
+    PROTOCOL=both    # both, one pass each, printed side by side
+    EVAL_SIZE=256 EVAL_CROP=1.0   # an explicit protocol; overrides PROTOCOL
+
+## The timm protocol
+
+timm scores at the pretrained config's TEST resolution, which is often not the training one:
+ConvNeXt-T and RSB-A1/A2 test at 288, MNv4-Conv-M r224 at 256 (all crop 1.0), DeiT crops 0.9 at
+224. A conv net whose forward infers its input side (`_s = …` in `forward`) runs at any size; a
+forward with a fixed reshape (ViT: the positional embedding is tied to the patch grid) is refused
+at any size but its own. The resampler stays the module's bicubic; timm's torchvision-recipe tags
+(`resnet*.tv_in1k`) resize bilinear, which is printed as a deviation rather than silently matched.
+
 ## Why this scores 50,000 and the training log does not
 
 In-training eval batched the val split with `drop_remainder=True` and drained a hardcoded
@@ -48,6 +63,7 @@ STATE  = os.environ.get("STATE") or (CKPT[:-4] + ".state.npz" if CKPT.endswith("
 BATCH  = int(os.environ.get("BATCH", "250"))
 REGION = os.environ.get("REGION", "auto")     # auto | live | ema
 LABEL  = os.environ.get("LABEL", os.path.basename(CKPT))
+PROTOCOL = os.environ.get("PROTOCOL", "train")   # train | timm | both
 
 spec = importlib.util.spec_from_file_location("gen", GEN)
 m = importlib.util.module_from_spec(spec)
@@ -127,47 +143,91 @@ print(f"scoring the {'EMA shadow' if use_ema else 'live weights'} + "
 params = jax.device_put(params, m.replicated_sharding)
 bn     = jax.device_put(bn, m.replicated_sharding)
 
-# ── the val split, through the module's OWN preprocessing ─────────────────────────────────
-ds = tfds.load('imagenet2012', split='validation',
-               decoders={'image': tfds.decode.SkipDecoding()},
-               data_dir=os.environ.get('TFDS_DATA_DIR'))
-def _pp(ex):
-    img = m._imagenet_decode_center_crop(ex['image'])
-    img = tf.cast(img, tf.float32)
-    img = (img - m._MEAN_RGB) / m._STD_RGB
-    img = tf.transpose(img, [2, 0, 1])
-    img = tf.reshape(img, [3 * m._IMG_SIZE * m._IMG_SIZE])
-    return img, ex['label']
-ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)
-ds = ds.batch(BATCH, drop_remainder=False).prefetch(tf.data.AUTOTUNE)
+# ── which protocols to score ──────────────────────────────────────────────────────────────
+_train = (m._IMG_SIZE, getattr(m, "_CROP_PCT", None), "train (the module's own)")
+if os.environ.get("EVAL_SIZE"):
+    protocols = [(int(os.environ["EVAL_SIZE"]), float(os.environ.get("EVAL_CROP", "1.0")), "explicit")]
+else:
+    protocols = []
+    if PROTOCOL in ("train", "both"):
+        protocols.append(_train)
+    if PROTOCOL in ("timm", "both"):
+        import json
+        sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "scripts"))
+        from timm_eval_protocols import lookup
+        _tbl = json.load(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "timm_eval_protocols.json")))
+        _t = lookup(_tbl, GEN)
+        if _t is None:
+            sys.exit(f"no timm protocol for {os.path.basename(GEN)} in jax/timm_eval_protocols.json")
+        if _t["interpolation"] != "bicubic":
+            print(f"⚠ timm resizes {_t['timm']} {_t['interpolation']}; this scorer resizes bicubic")
+        protocols.append((_t["test_size"], _t["test_crop_pct"], f"timm {_t['timm']} (timm {_tbl['timm_version']})"))
+    if not protocols:
+        sys.exit(f"PROTOCOL={PROTOCOL}: expected train | timm | both")
+_fixed = "_s = int(round((x.shape[-1]" not in src
+for size, crop, _ in protocols:
+    if _fixed and size != m._IMG_SIZE:
+        sys.exit(f"{GEN}'s forward reshapes to a fixed {m._IMG_SIZE}px input; it cannot be scored at {size}")
+    if crop is None:
+        sys.exit(f"{GEN} predates `_CROP_PCT` and can only be scored at its own protocol (PROTOCOL=train)")
 
-# The graph is compiled for one batch width, so the short final batch is PADDED up to it and
-# `take` masks the padding out of the counts — the same thing the fixed trainer drain does.
-# The batch is sharded exactly as the trainer's own drain shards it, so `eval_batch` runs on
-# every device rather than compiling for one and replicating the work.
-#
-# ⚠ `take` post-dates these checkpoints, and scoring one through a STALE module is the whole
-# point of the equality gate below — so tolerate a 4-argument `eval_batch` rather than
-# TypeError on it. Without `take` there is no way to mask padding, so a batch width that
-# leaves a tail would silently score zeros: refuse instead.
-import inspect
-_HAS_TAKE = "take" in inspect.signature(m.eval_batch).parameters
-if not _HAS_TAKE and 50000 % BATCH:
-    sys.exit(f"{GEN} predates `take`, so the tail cannot be masked, and BATCH={BATCH} leaves "
-             f"{50000 % BATCH} images over. Pick a BATCH dividing 50000 (e.g. 250 on 5 devices).")
+# ── the val split, through the module's OWN preprocessing, at the protocol's size/crop ──────
+def _score(size, crop):
+  # The module's crop function and this reshape read `_IMG_SIZE` / `_CROP_PCT` as globals at trace
+  # time, so setting them re-targets the SAME preprocessing code rather than a copy of it.
+  if crop is not None:
+    m._IMG_SIZE, m._CROP_PCT = size, crop
+  ds = tfds.load('imagenet2012', split='validation',
+                 decoders={'image': tfds.decode.SkipDecoding()},
+                 data_dir=os.environ.get('TFDS_DATA_DIR'))
+  def _pp(ex):
+      img = m._imagenet_decode_center_crop(ex['image'])
+      img = tf.cast(img, tf.float32)
+      img = (img - m._MEAN_RGB) / m._STD_RGB
+      img = tf.transpose(img, [2, 0, 1])
+      img = tf.reshape(img, [3 * m._IMG_SIZE * m._IMG_SIZE])
+      return img, ex['label']
+  ds = ds.map(_pp, num_parallel_calls=tf.data.AUTOTUNE)
+  ds = ds.batch(BATCH, drop_remainder=False).prefetch(tf.data.AUTOTUNE)
 
-c1 = c5 = total = 0
-for x, y in tfds.as_numpy(ds):
-    n = int(y.shape[0])
-    if n < BATCH:
-        x = np.concatenate([x, np.zeros((BATCH - n,) + x.shape[1:], x.dtype)])
-        y = np.concatenate([y, np.zeros((BATCH - n,), y.dtype)])
-    xs = jax.device_put(jnp.asarray(x), m.data_sharding)
-    ys = jax.device_put(jnp.asarray(y), m.data_sharding)
-    b1, b5, _loss = m.eval_batch(params, bn, xs, ys, n) if _HAS_TAKE \
-               else m.eval_batch(params, bn, xs, ys)
-    c1 += int(b1); c5 += int(b5); total += n
+  # The graph is compiled for one batch width, so the short final batch is PADDED up to it and
+  # `take` masks the padding out of the counts — the same thing the fixed trainer drain does.
+  # The batch is sharded exactly as the trainer's own drain shards it, so `eval_batch` runs on
+  # every device rather than compiling for one and replicating the work.
+  #
+  # ⚠ `take` post-dates these checkpoints, and scoring one through a STALE module is the whole
+  # point of the equality gate below — so tolerate a 4-argument `eval_batch` rather than
+  # TypeError on it. Without `take` there is no way to mask padding, so a batch width that
+  # leaves a tail would silently score zeros: refuse instead.
+  import inspect
+  _HAS_TAKE = "take" in inspect.signature(m.eval_batch).parameters
+  if not _HAS_TAKE and 50000 % BATCH:
+      sys.exit(f"{GEN} predates `take`, so the tail cannot be masked, and BATCH={BATCH} leaves "
+               f"{50000 % BATCH} images over. Pick a BATCH dividing 50000 (e.g. 250 on 5 devices).")
 
-print(f"\n=== FULL VAL ({total} images) ===")
-print(f"top-1: {c1}/{total} = {100.0 * c1 / total:.2f}%")
-print(f"top-5: {c5}/{total} = {100.0 * c5 / total:.2f}%")
+  c1 = c5 = total = 0
+  for x, y in tfds.as_numpy(ds):
+      n = int(y.shape[0])
+      if n < BATCH:
+          x = np.concatenate([x, np.zeros((BATCH - n,) + x.shape[1:], x.dtype)])
+          y = np.concatenate([y, np.zeros((BATCH - n,), y.dtype)])
+      xs = jax.device_put(jnp.asarray(x), m.data_sharding)
+      ys = jax.device_put(jnp.asarray(y), m.data_sharding)
+      b1, b5, _loss = m.eval_batch(params, bn, xs, ys, n) if _HAS_TAKE \
+                 else m.eval_batch(params, bn, xs, ys)
+      c1 += int(b1); c5 += int(b5); total += n
+
+  return c1, c5, total
+
+
+results = []
+for size, crop, name in protocols:
+    print(f"\n── scoring at {size}px, crop_pct {crop} — {name}")
+    c1, c5, total = _score(size, crop)
+    results.append((name, size, crop, c1, c5, total))
+    print(f"   top-1: {c1}/{total} = {100.0 * c1 / total:.2f}%   top-5: {c5}/{total} = {100.0 * c5 / total:.2f}%")
+
+print(f"\n=== FULL VAL ===")
+for name, size, crop, c1, c5, total in results:
+    print(f"{size}px crop {crop:<6} top-1 {100.0 * c1 / total:6.2f}%  top-5 {100.0 * c5 / total:6.2f}%  "
+          f"({total} images)  {name}")

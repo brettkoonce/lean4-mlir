@@ -43,29 +43,19 @@ def efficientNetB0Imagenet : NetSpec where
     .dense 1280 1000 .identity                        -- 1000-class head
   ]
 
-/-- EfficientNet-B0 80-epoch recipe — the validation tier of the 80→300
-    ladder (EPOCHS is baked from this spec; bump to 300 + re-emit for the
-    real run). RMSProp + momentum 0.9, base lr 0.045 at batch 256, 5-epoch
-    warmup + paper exp-LR-decay (×0.97 every 2.4 epochs), weight decay 1e-5 (EfficientNet's small value — protects
-    the depthwise/SE params), label smoothing 0.1, random-crop + flip,
-    bf16 + bf16Conv.
+/-- EfficientNet-B0 80-epoch tier (`default`); the published reference is the 350-epoch
+    `full` recipe below, which is this config with only `epochs` changed.
+    RMSProp + momentum 0.9 at peak lr 0.016 for batch 256 (= 0.256 @ 4096, TF's value), 5-epoch
+    warmup + exp-LR-decay (×0.97 every 2.4 epochs, continuous and counted from the end of warmup,
+    where TF's is a staircase from step 0), weight decay 1e-5 coupled into the gradient on every
+    parameter (BN γ/β and biases included; TF and timm exclude BN), label smoothing 0.1,
+    classifier dropout 0.2, bf16 + bf16Conv.
 
-    EfficientNet's original recipe is RMSProp + AutoAugment + stochastic depth
-    + EMA — and as of this config we have ALL FOUR: RMSProp (below) + the full
-    AutoAugment ImageNet policy (useAutoAugment, geometric ops included via
-    ImageProjectiveTransformV3) + stochastic depth + EMA. This is the faithful
-    B0 recipe; the remaining gap to 77% is schedule/length, not missing pieces.
-    RMSProp knobs: ρ=0.9, μ=0.9, ε=1e-3 (EfficientNet's value). LR schedule
-    is the paper's exponential decay (×0.97 every 2.4 epochs after warmup; cosineDecay off).
-
-    TODO(recipe): this is a CHANGE on two axes (optimizer SGD→RMSProp, aug
-    color-RandAugment→full AutoAugment) — prior results no longer apply. Re-run
-    80ep + re-eval (eval_enet_full50k.py, supervise script unchanged) for fresh
-    numbers. lr 0.045 is the MobileNet-style peak; the paper-faithful
-    linear-scaled value is ~0.016 at batch 256 (0.256@4096), so if SE/swish
-    make 0.045 unstable early, drop toward ~0.016. AutoAugment is a CPU-side
-    tf.data op — watch input throughput isn't the bottleneck on the first run.
-    Mixup/cutmix still off (flip those flags for the very full recipe). -/
+    EfficientNet's original recipe is RMSProp + AutoAugment + stochastic depth + EMA, and all four
+    are here: the full AutoAugment ImageNet policy (useAutoAugment, geometric ops included via
+    ImageProjectiveTransformV3; no RandAugment), drop-connect 0.2, EMA 0.9999 with the BN buffers
+    shadowed too. RMSProp knobs: ρ=0.9, μ=0.9, ε=1e-3 (EfficientNet's value, inside the sqrt as
+    TF has it, mean-square initialised to 1.0). Mixup/cutmix off. -/
 def efficientNetB0ImagenetConfig : TrainConfig where
   learningRate   := 0.016   -- EfficientNet reference base LR 0.016@bs256 (= 0.256@bs4096); paper-faithful now that RMSProp matches TF (ε-inside-sqrt + mean-square init 1.0)
   batchSize      := 256
@@ -104,7 +94,7 @@ def efficientNetB0ImagenetRecipes : List Recipe := [
     desc := "80-epoch validation tier (RMSProp + AutoAugment, default LR 0.016)" },
   { name := "full",    cfg := efficientNetB0ImagenetConfigFull,
     out := "generated_efficientnet_b0_imagenet_full.py",
-    desc := "paper-faithful 350-epoch run (stable peak LR 0.01)" }
+    desc := "paper-faithful 350-epoch run (peak LR 0.016)" }
 ]
 
 def main (args : List String) : IO Unit :=

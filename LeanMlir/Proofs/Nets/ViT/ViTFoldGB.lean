@@ -42,8 +42,9 @@ constructors were written that way (`StableHLO.lean`'s own comment on `veclnGamm
 the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example"*).
 
 ⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, the `wx`/`clip`
-variants, the EMA shadow and the 4× accumulation all consume the same `*GradB` node, and the
-`vitin_adamdp128x4wxclipdrop` artifact whose accuracy the book quotes is one of them.
+variants, the EMA shadow and the 4× accumulation all consume the same `*GradB` node. The artifact
+whose accuracy the book quotes, `vitin_emadp128x4wxclipdropbf16`, is a bf16 one, so its weight
+gradients also go through the bf16 kinds in the residual below (planning/imagenet_parity.md VT-5).
 
 ⭐ **The LayerNorm form is the VECTOR one** (`γ β : Vec D`), which is what the shipped
 `vitForwardKV` runs; the scalar-affine spelling this cone was caught on three times is nowhere here.
@@ -59,7 +60,7 @@ variants, the EMA shadow and the 4× accumulation all consume the same `*GradB` 
   the SGD-inline `vit_train_step.mlir`.
 * The `*bf16` artifacts emit `rowDenseWeightGradBBf16` / `patchEmbedWeightGradBBf16`, their own
   kinds; [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) folds them (the row-dense one keeps its f32 result).
-* `vitin_adamdp128x4*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
+* `vitin_*dp128x4*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
   gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
   it averages (4d).
 -/

@@ -37,10 +37,10 @@ deriving Inhabited
 /-- `(θ', m', v')` for one parameter under **AdamW**: the replica mean of its gradient
     (`prettyAllReduceMean`, `pretty` of the `allReduceMeanF` node) and then the proven
     `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`prettyAdamW`). -/
-def adamOne (B : Nat) (replicas : Nat) (g : PGrad) :
+def adamOne (B : Nat) (replicas : Nat) (g : PGrad) (wdName : String := "%wd") :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
-  let (c, nT, nM, nV) ← prettyAdamW B g.nm g.ds gAvg
+  let (c, nT, nM, nV) ← prettyAdamW B g.nm g.ds gAvg wdName
   pure (arS ++ c, nT, nM, nV)
 
 /-- `(θ', b', s')` for one parameter under **RMSProp with momentum** — the `adamOne` peer. Only ONE
@@ -65,13 +65,17 @@ def adamOne (B : Nat) (replicas : Nat) (g : PGrad) :
 
     Slot mapping: the packed `[θ|m|v]` signature is reused verbatim with **`m` carrying the
     momentum buffer and `v` the running mean-square**, the same slot reinterpretation the Nesterov
-    render does for its velocity. That is why the driver and the interface do not move. -/
-def rmsOne (B : Nat) (replicas : Nat) (g : PGrad) :
+    render does for its velocity. That is why the driver and the interface do not move.
+
+    `wdName` is `"%wd"`, or `"%wdz"` for a parameter `r34WdName` excludes (`wx`). The coupled L2
+    reads its coefficient as an operand name, so excluding a parameter binds it to the zero
+    constant: `g + 0·θ = g` exactly. -/
+def rmsOne (B : Nat) (replicas : Nat) (g : PGrad) (wdName : String := "%wd") :
     StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let n := g.ds.foldl (· * ·) 1
   let z : Vec n := fun _ => 0
   let (arS, gAvg) ← Proofs.StableHLO.prettyAllReduceMean g.grad g.ds g.nm replicas
-  let (cW, nW) ← pretty B (.momVNextF s!"%{g.nm}" "%wd" g.ds 0 z (.operand gAvg z))
+  let (cW, nW) ← pretty B (.momVNextF s!"%{g.nm}" wdName g.ds 0 z (.operand gAvg z))
   let gr : SHlo n := .operand nW z
   let (cS, nS) ← pretty B (.adamVNextF s!"%{g.nm}v" "%rho" "%orho" g.ds 0 z gr)
   let (cB, nB) ← pretty B (.rmsBufNextF s!"%{g.nm}v" s!"%{g.nm}m" "%rho" "%orho" "%mu" "%eps"
@@ -116,6 +120,37 @@ def adamOneEma (B : Nat) (replicas : Nat) (g : PGrad)
       pretty B (.adamMNextF s!"%{g.nm}e" "%emad" "%oemad" g.ds 0 z (.operand nT z))
     else pure ("", "")
   pure (arS ++ cA ++ cE, nT, nM, nV, nE)
+
+-- ════════════════════════════════════════════════════════════════
+-- § Weight-decay exclusion (`wx`): shared by every optimizer tail above and `ResNet34RenderB.optOne`
+-- ════════════════════════════════════════════════════════════════
+
+/-- **Does this parameter get weight decay?** timm's `no_weight_decay` rule, and it is the PLAIN
+    RANK TEST with no name carve-out — every 1-D parameter is excluded: BN γ, BN β and every bias.
+
+    ⚠ Identical to `cnxWdDecays` by construction rather than by coincidence: the rule is timm's,
+    not the net's, and ConvNeXt's own docstring records that its ViT-style `nm != "pos"` carve-out
+    does not apply to a net with no positional parameter. ResNet has none either.
+
+    ⚠⚠ **This is `a3_paper_fidelity.md` §2.1, open since the A3 run.** The live A3 artifact has
+    ZERO `%wdz` occurrences against ConvNeXt's 123 — so the 77.43% run decayed BN γ/β and every
+    bias at wd = 0.02 where its reference (`resnet50ImagenetConfigRSBFaithful`, which sets
+    `wdExcludeNormBias := true`) did not. Decay on pre-BN conv weights is renormalised away by BN
+    and acts only as an effective-LR control; decay on γ/β is not, because γ directly scales the
+    layer's output. The effect concentrates at low LR — i.e. in the cosine endgame. -/
+def r34WdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
+
+/-- The decay operand for one parameter: the real `%wd`, or the zero constant when excluded. -/
+def r34WdName (wdExclude : Bool) (nm : String) (ds : List Nat) : String :=
+  if wdExclude && !r34WdDecays nm ds then "%wdz" else "%wd"
+
+/-- The `%wdz` declaration an excluding render needs. ⚠ Emitted only when the flag is on, so at
+    `wdExclude := false` not one byte moves and every committed artifact is untouched. -/
+def wdzConst (wdExclude : Bool) : String :=
+  if wdExclude then
+    "    // ── timm no_weight_decay (wdExcludeNormBias): 1-D params take %wdz, not %wd ──\n" ++
+    "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
+  else ""
 
 -- ════════════════════════════════════════════════════════════════
 -- § The packed train-step interface `[θ|m|v|G|E] + scalars`

@@ -7,26 +7,30 @@ The sixth scale-tier trainer, and the last of the Imagenette nets to get one. Bu
 (`mnv4ImagenetVerified`, slug `mnv4in`), rendered by the SAME chain as the 10-class artifacts
 (`Proofs/Codegen/MobileNetV4RenderB.lean`), driven by the generic `VerifiedNet.trainAdamSched`.
 
-⭐ **Conv-M as of 2026-08-14**, so this driver and `jax/MainMobilenetV4Imagenet.lean` are the
-same network at last, and the reference's 75.48% / 92.37% is this driver's target. 9,715,512
-parameters. ⚠ Target, not result: nothing has been run to convergence on this path.
+⭐ **Conv-M, on the timm `mobilenetv4_conv_medium` layout since 90e4af7e** (stride on the
+post-DW, BN-only pre-DW, ReLU stage 0, symmetric stem, head pooled before `conv_head`), the same
+network as jax/MainMobilenetV4Imagenet.lean; `scripts/mnv4_timm_parity.py` ties both to timm on
+shared weights. 9,715,512 parameters. The reference's 75.48% / 92.37% was trained on the pre-timm
+layout, so it is not this driver's target; the 100-epoch pair on the timm net is
+(`mnv4-default-4gpu` here, `mnv4-default-jax-4gpu` on the JAX path).
 
-✅ **THE 4× RENDER EXISTS AND IS TIED, as of 2026-08-27.** This paragraph used to say there was
-none, and that it was what blocked a printable phase-4 row. `mnv4in_adamdp64` and its bf16 peer are
-4-replica renders, and both halves of the collective tie are green — `mnv4-dp-check` (duplicated
-batch) and `imagenet-syncbn-check mnv4` (split batch: 4×64 IS 1×256). ⭐ Since 2026-09-21 their
-BatchNorm is synchronised, so a 4×64 step IS the single-device step at batch 256
-(`planning/global_bn_verified.md` §3.4); until then the split-batch half was `shard-check mnv4in`,
-retired with the swap. Both go red on a sum-not-mean render. ▶ `scripts/jobs/mnv4-default-4gpu.conf` is the job;
-`runs/2026-08-27-mnv4-dp-shard-gates/` is the evidence.
+✅ **The 4× renders are tied.** `mnv4-dp-check` (duplicated batch) covers the 4-replica renders,
+and `imagenet-syncbn-check mnv4` (split batch: 4×64 IS 1×256) covers `adamdp64`. Since
+2026-09-21 their BatchNorm is synchronised, so a 4×B step IS the single-device step at batch 4B
+(planning/global_bn_verified.md §3.4); the old split-batch half, `shard-check mnv4in`, was
+retired with the swap. ⚠ The split-batch gate does not yet cover the shipping
+`emaaccdp8x128wxdowd005bf16` (planning/imagenet_parity.md G2).
 
-⚠ A single-card figure off this driver is still not comparable to the book's other ImageNet rows,
-which were all measured at 4× on this box. Run the job, not the bare binary, for anything printable.
+▶ The job is `scripts/jobs/mnv4-default-4gpu.conf`: `emaaccdp8x128wxdowd005bf16`, i.e. AdamW 0.004
+(`LEAN_MLIR_BASE_LR_U=4000`) at 8 accumulated micro-batches of 4 × 128 = effective 4096, sync-BN
+over 512, wd 0.05 off norm/bias, classifier dropout 0.1, EMA 0.9999, bf16, 100 epochs, RandAugment
+N2 m9 from the shim: the JAX reference's `default` recipe. The optimizer, schedule and
+regularisers are selected by the variant string; this file only supplies the defaults below.
+Still absent on this path: drop-path in the UIB blocks (planning/imagenet_parity.md M4-4) and the
+paper's RandAugment m15, both of which only the 500-epoch paper tier uses.
 
-⚠ Optimizer does NOT match the MNv4 reference: AdamW at 1e-3 here, where the paper is
-AdamW at 0.004 on effective batch 4096 with drop-path, EMA and RandAugment m15. Those live in the
-reference `TrainConfig`, and the ones that are not yet expressible on this path are listed in
-`planning/archive/chapter_makeover.md` under the MNv4 phase-4 gaps.
+⚠ A single-card figure off this driver is not comparable to the book's other ImageNet rows, which
+were all measured at 4×. Run the job, not the bare binary, for anything printable.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever trusted lowerer
 `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with `=iree` -- resolved by dlopen at
@@ -38,9 +42,9 @@ PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8 \
   .lake/build/bin/mobilenetv4-imagenet-verified data
 ```
 
-Run (4 GPUs — the measured 25.6 h configuration, and the one the book quotes):
+Run (4 GPUs, the 100-epoch pair's verified side, as overnight chunks):
 ```
-scripts/supervise.sh mnv4-default-4gpu
+START_AT=00:00 STOP_AT=08:00 setsid nohup scripts/supervise.sh mnv4-default-4gpu >/dev/null 2>&1 &
 ```
 -/
 
@@ -61,10 +65,9 @@ def mnv4ImagenetConfig : VerifiedConfig where
     drivers — a DP default dies at the first step on a replica-count refusal, which reads as a
     broken build rather than a missing flag.
 
-    ⭐ **`adamdp64` IS rendered and tied** (2026-08-27), so asking for it works — but it is a
-    4-REPLICA artifact and needs `PJRT_REPLICAS=4` AND `LEAN_MLIR_REPLICAS=4`. There is no
-    2-replica peer, so a 2-GPU attempt hits the shim's replica-count guard rather than degrading.
-    `scripts/jobs/mnv4-default-4gpu.conf` sets both. -/
+    ⭐ The `…dp…` variants are 4-REPLICA artifacts and need `PJRT_REPLICAS=4` AND
+    `LEAN_MLIR_REPLICAS=4`. There is no 2-replica peer, so a 2-GPU attempt hits the shim's
+    replica-count guard rather than degrading. `scripts/jobs/mnv4-default-4gpu.conf` sets both. -/
 def runMnv4Imagenet (argv : List String) : IO Unit := do
   let variant := (← IO.getEnv "LEAN_MLIR_VARIANT").getD "adam64"
   let bs := ((← IO.getEnv "LEAN_MLIR_BATCH").bind (·.toNat?)).getD mnv4ImagenetConfig.batchSize

@@ -6,8 +6,11 @@ The last of the five scale-tier trainers (§2p). Needed only a `slug` plus deriv
 constants — and mnv2 was the worst of the five on that axis, carrying the K=10 value in the
 COTANGENT (the gradient path, §2k's original bug) as well as in the report-only loss.
 
-⚠ Does NOT move the verification tier; optimizer does not match the reference (RMSProp there,
-AdamW here). See `MobileNetV2ImagenetCommon`.
+⚠ Does NOT move the verification tier. The optimizer follows the variant: `rms*` (the shipping
+`rmsdp64bf16`) is the reference's RMSProp with its warmup + ×0.98 exponential decay, `adam*` is
+AdamW at 1e-3. The `rmsdp64bf16` render still differs from the JAX reference in label smoothing
+(0.1 baked against the reference's 0.0) and in having no classifier dropout
+(planning/imagenet_parity.md §2.2).
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with

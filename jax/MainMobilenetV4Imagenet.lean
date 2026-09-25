@@ -10,10 +10,8 @@ import Jax
     of timm's `uir_rN_aA_kK_sS_eE_cC` encoding into `.uib ic oc expand stride
     preDWk postDWk` (a=pre/start-DW kernel, k=post/mid-DW kernel).
 
-    SPIKE STATUS (2026-07-19): `runningBN := false` — the UIB block is not yet
-    wired into the codegen's running-BN threading (template = `mbconv_block`,
-    Codegen.lean:684). This trains correctly; eval uses batch stats (slightly
-    noisy, not paper-faithful). Flip to `true` after the wiring lands.
+    Eval uses running BN statistics (`runningBN := true`): the UIB and fused-MBConv
+    blocks were wired into the codegen's running-BN threading on 2026-07-19.
 
     Resolution 224: the tfds pipeline hardcodes `_IMG_SIZE=224`, and timm ships
     an official `mobilenetv4_conv_medium.e500_r224_in1k` variant, so 224 is a
@@ -62,7 +60,9 @@ def mobilenetV4ConvMImagenet : NetSpec where
     .dense 1280 1000 .identity                     -- 1000-class head
   ]
 
-/-- Tier 2 — reduced-regularization ~100-epoch *confidence* tier (repo default).
+/-- Tier 2 — reduced-regularization 100-epoch tier (repo default), run on both paths: this recipe
+    is the JAX reference's `mnv4-default-jax-4gpu` and the verified path's `mnv4-default-4gpu`
+    (`emaaccdp8x128wxdowd005bf16`).
 
     The paper recipe (500ep, dropPath 0.075, RandAug m15 p0.7, wd 0.1,
     dropout 0.2) is tuned for the long schedule and UNDERFITS short. This tier
@@ -99,12 +99,6 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
 def mobilenetV4ConvMImagenetConfigProbe : TrainConfig :=
   { mobilenetV4ConvMImagenetConfig with epochs := 30 }
 
-/-- Tier-2 at half length: `default` with the cosine over 50 epochs. The first run of the
-    timm-parity net, paired with the verified path's `mnv4-half-4gpu` on the same recipe
-    (planning/mnv4_half_pair.md). -/
-def mobilenetV4ConvMImagenetConfigHalf : TrainConfig :=
-  { mobilenetV4ConvMImagenetConfig with epochs := 50 }
-
 /-- Throughput bench: micro-batch 128 (== one GPU's shard of the real 4-GPU
     512 micro-batch), no grad-accum, single epoch. For measuring per-GPU img/s
     to extrapolate a run-time estimate; kill after a couple hundred steps. -/
@@ -118,16 +112,13 @@ def mobilenetV4ConvMImagenetConfigFull : TrainConfig :=
       epochs         := 500
       weightDecay    := 0.1        -- paper
       dropout        := 0.2        -- paper
-      randAugmentM   := 15.0       -- paper (NB: codegen clamps M to 0–10 — verify scale)
-      dropPath       := 0.075 }    -- paper (NB: not yet wired into UIB — verify before trusting)
+      randAugmentM   := 15.0       -- paper; NOT clamped at mstd 0: the shim scales ops by m/_AA_MAX (10), so 15 extrapolates past timm's range
+      dropPath       := 0.075 }    -- paper; drop-path reaches every residual UIB (`uib_block`'s `_drop_branch`)
 
 def mobilenetV4ConvMImagenetRecipes : List Recipe := [
   { name := "default", cfg := mobilenetV4ConvMImagenetConfig,
     out := "generated_mobilenet_v4_imagenet.py",
     desc := "Tier-2 ~100ep reduced-reg confidence run" },
-  { name := "half",    cfg := mobilenetV4ConvMImagenetConfigHalf,
-    out := "generated_mobilenet_v4_imagenet_half.py",
-    desc := "Tier-2 at 50ep: the pair with the verified path's half run" },
   { name := "probe",   cfg := mobilenetV4ConvMImagenetConfigProbe,
     out := "generated_mobilenet_v4_imagenet_probe.py",
     desc := "Tier-1 ~30ep quick-signal run" },

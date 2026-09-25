@@ -23,10 +23,18 @@ Anything else means the eval half and its factoring disagree, and the factoring 
     LEAN_MLIR_VARIANT=<v> .lake/build/bin/score-checkpoint convnext data
     # → compare against that run's last `epoch N: test_acc = …` line
 
-▶ It is available TODAY on ConvNeXt and ViT and on no other net, and that is a property of the
-checkpoint format rather than of this tool: they have `nBnStats = 0`, so their whole eval state is
-in the blob. The BN nets refuse — see `scoreCheckpoint`'s own docstring for why zeros in the
-running-stat slots produce a plausible-looking percentage off garbage, and for the two exits.
+▶ Every net scores. The LayerNorm nets (ConvNeXt, ViT) carry their whole eval state in the blob;
+the BN nets read their running statistics from the `<ckpt>.bn` companion written beside every
+checkpoint since 2026-09-12, and a checkpoint older than that is refused (see `scoreCheckpoint`).
+
+## timm's test protocol
+
+    LEAN_MLIR_EVAL_SIZE=256 LEAN_MLIR_EVAL_CROP=1.0 LEAN_MLIR_VARIANT=<v> \
+      .lake/build/bin/score-checkpoint mnv4-in data
+
+scores through the eval graph rendered at that size (`<slug>_fwd_eval_s256.mlir`) with the val
+stream resized and cropped to match. `scripts/score_timm.sh` reads the size and crop per net from
+`jax/timm_eval_protocols.json`, the same table the JAX scorer uses.
 
 ## ⚠ Why a hand-written registry
 
@@ -42,7 +50,7 @@ the true statement.
     here too: they are the cheap way to exercise the tool at all (no 30 GB val drain, no shim), and
     `convnext`/`vit` among them have no BN either. -/
 def scorableNets : List (String × VerifiedNetSpec) :=
-  [ -- LayerNorm nets — no running statistics, so these SCORE today
+  [ -- LayerNorm nets — no running statistics
     ("convnext",     convnextVerified)
   , ("convnext-in",  convnextImagenetVerified)
   , ("convnexts-in", convnextSImagenetVerified)
@@ -51,8 +59,7 @@ def scorableNets : List (String × VerifiedNetSpec) :=
   , ("vit-in",       vitImagenetVerified)
   , ("vits-in",      vitSImagenetVerified)
   , ("vitb-in",      vitBImagenetVerified)
-    -- BatchNorm nets — present so the refusal is a message about the FORMAT rather than about
-    -- this tool's coverage. Each throws with the `nBnStats` count and the two exits (§2b).
+    -- BatchNorm nets — running statistics from the `<ckpt>.bn` companion
   , ("resnet34",     resnet34Verified)
   , ("resnet34-in",  resnet34ImagenetVerified)
   , ("resnet50",     resnet50Verified)
@@ -72,6 +79,7 @@ def usage : String :=
   env:  LEAN_MLIR_VARIANT (required — which render wrote the checkpoint)\n\
         LEAN_MLIR_CKPT    (default: the path the trainer writes, `ckptPathFor`)\n\
         LEAN_MLIR_REGION  auto | live | ema   (default auto = the shadow iff the variant has one)\n\
+        LEAN_MLIR_EVAL_SIZE, LEAN_MLIR_EVAL_CROP — timm's test protocol (scripts/score_timm.sh)\n\
         LEAN_MLIR_CKPT_TAG, LEAN_MLIR_LOWERER — as in the trainers"
 
 def main (argv : List String) : IO Unit := do

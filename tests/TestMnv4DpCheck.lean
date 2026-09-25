@@ -52,7 +52,7 @@ Two failure modes it separates, both of which have actually happened in this rep
     DP_VARIANT=adam64bf16 DP_VARIANT_DP=adamdp64bf16 \
       PJRT_REPLICAS=4 .lake/build/bin/mnv4-dp-check                # the bf16 pair
 
-▶ **The recipe render** (planning/mnv4_half_pair.md) — five regions `[θ|m|v|G|E]`, seven scalars
+▶ **The recipe render** (planning/archive/mnv4_half_pair.md) — five regions `[θ|m|v|G|E]`, seven scalars
 and a classifier-dropout mask — takes the same gate at its own batch:
 
     DP_BATCH=128 DP_VARIANT=emaacc8x128wxdowd005bf16 DP_VARIANT_DP=emaaccdp8x128wxdowd005bf16 \

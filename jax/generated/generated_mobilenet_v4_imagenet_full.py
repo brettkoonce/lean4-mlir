@@ -1697,7 +1697,7 @@ def params_to_file(params, path):
 def forward(params, x, bn, training, drop_key=None):
     bn_out = []
     bn_i = 0
-    x = x.reshape(-1, 3, 224, 224)
+    _s = int(round((x.shape[-1] // 3) ** 0.5)); x = x.reshape(-1, 3, _s, _s)
     dpkeys = (jax.random.split(drop_key, 21) if drop_key is not None else [None] * 21)
     x, _ns = conv_bn(x, params[0][0], params[0][1], params[0][2], bn[bn_i], training, stride=(2,2))
     bn_out.append(_ns); bn_i += 1

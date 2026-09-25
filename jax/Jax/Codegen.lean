@@ -1426,10 +1426,10 @@ private def emitInitParams (spec : NetSpec) (cfg : TrainConfig) : String := Id.r
     "#  Model (from Lean spec)\n" ++
     "# ═══════════════════════════════════════════════════════════════════════\n\n" ++
     "def init_params(key):\n" ++
-    -- ⚠ The `vitInit` branch deliberately keeps the generic docstring: changing
-    -- it would alter the emitted bytes of `generated_vit_tiny_imagenet_deitinit.py`,
-    -- and a 300-epoch run is executing that exact file (md5 357c0e69…). Byte-identity
-    -- on regeneration is the only cheap check that the live trainer is reproducible.
+    -- ⚠ The `vitInit` branch deliberately keeps the generic docstring: changing it would
+    -- alter the emitted bytes of `generated_vit_tiny_imagenet.py`, the trainer behind the
+    -- book's ViT-Ti reference, and byte-identity on regeneration is the cheap check that it
+    -- is reproducible.
     (if cfg.cnxInit then "    \"\"\"ConvNeXt paper init: trunc_normal(std=0.02) on every conv/dense.\"\"\"\n"
      else "    \"\"\"Xavier/Kaiming uniform init.\"\"\"\n") ++
     "    params = []\n"
@@ -2083,19 +2083,20 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   | some (.conv2d ic _ _ _ _) =>
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
-  | some (.convBn ic _ _ _ _) =>
-    if cfg.trainRes > 0 then
-      -- A3 train/test resolution split: infer the square side from the flat length
-      -- (static under jit) so one forward runs at trainRes (train) and imageH (eval).
+  | some (.convBn ic _ _ _ _) | some (.convNextStem ic _ _) =>
+    if cfg.trainRes > 0 || spec.imageH == spec.imageW then
+      -- Infer the square side from the flat length (static under jit), so one forward runs at
+      -- any resolution: A3's trainRes (train) vs imageH (eval), and timm's test resolution
+      -- (`test_input_size`, jax/timm_eval_protocols.json) for `jax/scripts/eval_full50k.py`.
+      -- A fully convolutional net with a global pool is resolution-agnostic; at imageH the
+      -- reshape is the same one the literal spelled.
       code := code ++ "    _s = int(round((x.shape[-1] // " ++ toString ic ++ ") ** 0.5)); x = x.reshape(-1, " ++
         toString ic ++ ", _s, _s)\n"
     else
       code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
         toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | some (.patchEmbed ic _ _ _) =>
-    code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
-      toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
-  | some (.convNextStem ic _ _) =>
+    -- Fixed: the positional embedding is tied to the patch grid, and timm scores DeiT at 224.
     code := code ++ "    x = x.reshape(-1, " ++ toString ic ++ ", " ++
       toString spec.imageH ++ ", " ++ toString spec.imageW ++ ")\n"
   | _ => pure ()
@@ -2653,7 +2654,10 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
     gradPrelude ++
-    (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
+    -- `wdExclude` (timm no_weight_decay) masks the COUPLED L2 off BN γ/β + biases with the same
+    -- `WD_MASK` the Adam and LAMB branches use; the verified renders spell it `%wdz` (`wx`).
+    (if wdExclude then "    grads = jax.tree.map(lambda g, p, msk: g + WD * msk * p, grads, params, WD_MASK)\n"
+     else if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    sq, buf = opt_state\n" ++
     "    sq = jax.tree.map(lambda s, g: RHO * s + (1.0 - RHO) * g * g, sq, grads)\n" ++
     "    buf = jax.tree.map(lambda b, g, s: MOMENTUM * b + g / jnp.sqrt(s + EPS), buf, grads, sq)\n" ++
@@ -2664,7 +2668,10 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, velocity, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, velocity, x, y, lr, drop_key=None):\n") ++
     gradPrelude ++
-    (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
+    -- `wdExclude` (timm no_weight_decay) masks the COUPLED L2 off BN γ/β + biases with the same
+    -- `WD_MASK` the Adam and LAMB branches use; the verified renders spell it `%wdz` (`wx`).
+    (if wdExclude then "    grads = jax.tree.map(lambda g, p, msk: g + WD * msk * p, grads, params, WD_MASK)\n"
+     else if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    velocity = jax.tree.map(lambda v, g: MOMENTUM * v + g, velocity, grads)\n" ++
     "    params = jax.tree.map(lambda p, v: p - lr * v, params, velocity)\n" ++
     (if cfg.runningBN then "    return params, velocity, _new_bn, loss\n\n" else "    return params, velocity, loss\n\n")
@@ -2672,7 +2679,10 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, x, y, lr, drop_key=None):\n") ++
     gradPrelude ++
-    (if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
+    -- `wdExclude` (timm no_weight_decay) masks the COUPLED L2 off BN γ/β + biases with the same
+    -- `WD_MASK` the Adam and LAMB branches use; the verified renders spell it `%wdz` (`wx`).
+    (if wdExclude then "    grads = jax.tree.map(lambda g, p, msk: g + WD * msk * p, grads, params, WD_MASK)\n"
+     else if hasWD then "    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)\n" else "") ++
     "    params = jax.tree.map(lambda p, g: p - lr * g, params, grads)\n" ++
     (if cfg.runningBN then "    return params, _new_bn, loss\n\n" else "    return params, loss\n\n")) ++
   -- EMA (exponential moving average of weights): a shadow param tree updated
@@ -2888,7 +2898,8 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   let opt := effOpt cfg
   -- Suspend/resume state tuple: the python variables that fully describe the
   -- training trajectory (weights + optimizer moments + EMA shadow). Saved/
-  -- restored together so a segmented run continues bit-for-bit.
+  -- restored together, so a segmented run continues the same optimizer trajectory. The DATA
+  -- stream does not resume: the shuffle restarts and augmentation is unseeded (scripts/lib/jax_job.sh).
   let optStateVar : Option String := match opt with
     | .adam | .rmsprop | .lamb | .muon | .shampoo => some "opt_state"
     | .sgd => if hasMomentum then some "velocity" else none
@@ -3582,6 +3593,14 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "                      .map(lambda _, ex: ex))\n" ++
   "        tfds.load = _load_val_blocks\n" ++
   "        shard = None\n" ++
+  -- ▶ timm's TEST protocol (`VerifiedNet.scoreCheckpoint` under `LEAN_MLIR_EVAL_SIZE`): the val split at a
+  --   size / crop other than the recipe's — MNv4-Conv-M r224 is scored at 256 / 1.0, ConvNeXt-T at
+  --   288 / 1.0 (jax/timm_eval_protocols.json). The centre crop and `flat` below read `_IMG_SIZE` /
+  --   `_CROP_PCT` as module globals, so rebinding them re-targets the SAME preprocessing. Inert
+  --   unless `SHIM_EVAL_SIZE` is set, and never on the train split.
+  "    if not training and os.environ.get('SHIM_EVAL_SIZE'):\n" ++
+  "        globals()['_IMG_SIZE'] = int(os.environ['SHIM_EVAL_SIZE'])\n" ++
+  "        globals()['_CROP_PCT'] = float(os.environ.get('SHIM_EVAL_CROP', globals().get('_CROP_PCT', 0.875)))\n" ++
   "    it = iter(build_imagenet_iter(split, batch, training, training, shard))\n" ++
   -- ⚠⚠ `flat` IS THE WIRE'S PER-IMAGE SIZE, and under `trainRes` it is NOT the same on both
   -- splits. The dataset above already resizes train to `_TRAIN_SIZE` and eval to `_IMG_SIZE`

@@ -481,11 +481,18 @@ def mnv2AdamVariant (B replicas : Nat) (opt : OptKind := .adamw)
     -- derived from the variant, so a flag that reaches the emission but not the name writes
     -- `…bf16_train_step.mlir` declaring `@…_train_step` inside, and the driver refuses at load
     -- with an entry mismatch. ConvNeXt shipped that twice and R34's bf16 a third time.
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- ▶ `wx` (no decay on the 1-D params), `do` (classifier dropout) and the label-smoothing
+    -- mass, TRAILING and defaulted for `bf16`'s reason: every committed spelling is untouched.
+    -- α is spelled `ls<100α>` only when it is not the default 0.1, so `ls0` is α = 0.
+    (wx : Bool := false) (cd : Bool := false) (alpha : Float := 0.1) : String :=
   (match opt with
    | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
    | .rmsprop => if replicas ≤ 1 then "rms"  else "rmsdp") ++
   (if B == 32 then "" else toString B) ++
+  (if wx then "wx" else "") ++
+  (if cd then "do" else "") ++
+  (if alpha == 0.1 then "" else s!"ls{(alpha * 100.0).round.toUInt64}") ++
   (if bf16 then "bf16" else "")
 
 -- ════════════════════════════════════════════════════════════════
@@ -507,6 +514,7 @@ structure MNV2FwdRecB where
   b   : Array MBFwdB      -- the 17 inverted-residual blocks, in forward order
   sst : String := ""      -- stem BN's packed global statistics (sync-BN only)
   hst : String := ""      -- head BN's packed global statistics (sync-BN only)
+  cin : String := ""      -- the dense's input (= gap, or the dropout output when cd is on)
 deriving Inhabited
 
 /-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), relu6 output. -/
@@ -540,11 +548,12 @@ structure MNV2HeadFwdB where
   hr : String
   gap : String
   log : String
+  cin : String := ""      -- the dense's input: `gap`, or `gap` under the dropout mask `%do`
 
-/-- Head forward: 1×1 conv (320→1280) → batch BN → relu6 → GAP(7×7) → dense, on block 17's
-    output `xName`. -/
+/-- Head forward: 1×1 conv (320→1280) → batch BN → relu6 → GAP(7×7) → [dropout] → dense, on
+    block 17's output `xName`. -/
 def mnv2HeadFwdB (B nClasses : Nat) (epsStr xName : String) (convBias : Bool)
-    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) (cd : Bool := false) :
     StateM Proofs.StableHLO.EmitS MNV2HeadFwdB := do
   let z7     : Vec (B*(320*7*7)) := fun _ => 0
   let zHk    : Kernel4 1280 320 1 1 := fun _ _ _ _ => 0
@@ -559,10 +568,16 @@ def mnv2HeadFwdB (B nClasses : Nat) (epsStr xName : String) (convBias : Bool)
   let (cHr, nHr) ← pretty B (.batchOp (N := B) (.relu6 (n := 1280*7*7)) (.operand nHn zH7))
   let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 1280) (h := 7) (w := 7))
     (.operand nHr zH7))
+  -- ▶ CLASSIFIER DROPOUT between GAP and the dense, where the reference puts it (`emitForward`'s
+  -- `.dense` case) and where EfficientNet's render does. At `cd = false` no `pretty` call happens,
+  -- so the fresh-name counter does not move and every committed artifact re-renders byte-identical.
+  let (cDo, nCin) ← if cd then
+      pretty B (.dropoutB (N := B) (n := 1280) doName z1280b (.operand nGap z1280b))
+    else pure ("", nGap)
   let (cLog, nLog) ← pretty B (.batchOp (N := B) (.dense "%Wd" "%bd" zWd zNC)
-    (.operand nGap z1280b))
-  pure { code := cHc ++ cHn ++ cHr ++ cGap ++ cLog, hc := nHc, hn := nHn, hst := hst, hr := nHr,
-         gap := nGap, log := nLog }
+    (.operand nCin z1280b))
+  pure { code := cHc ++ cHn ++ cHr ++ cGap ++ cDo ++ cLog, hc := nHc, hn := nHn, hst := hst,
+         hr := nHr, gap := nGap, log := nLog, cin := nCin }
 
 /-- **The MobileNetV2 forward chain at the BATCHED index** — one traversal, consumed by both
     `@mobilenetv2_fwd` and every train step that differentiates it.
@@ -585,7 +600,7 @@ def mnv2HeadFwdB (B nClasses : Nat) (epsStr xName : String) (convBias : Bool)
     ⭐ Extracting the traversal is byte-neutral for the train step: `pretty`'s SSA counter follows
     the call SEQUENCE, and the sequence is unchanged. -/
 def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
-    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
+    (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) (cd : Bool := false) :
     StateM Proofs.StableHLO.EmitS MNV2FwdRecB := do
   -- ═══ stem: 3×3/s2 conv (3→32, 224→112) → batch BN → relu6 (NO maxpool) ═══
   let st ← mnv2StemFwdB B epsStr convBias bf16 replicas sync
@@ -609,7 +624,7 @@ def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false
   let f16 ← irFwdSkipB    B 160 960 160  7 epsStr "16" f15.o convBias bf16 replicas sync
   let f17 ← irFwdNoSkipB  B 160 960 320  7 epsStr "17" f16.o convBias bf16 replicas sync
   -- ═══ head: 1×1 conv (320→1280) → batch BN → relu6 → GAP(7×7) → dense ═══
-  let hd ← mnv2HeadFwdB B nClasses epsStr f17.o convBias bf16 replicas sync
+  let hd ← mnv2HeadFwdB B nClasses epsStr f17.o convBias bf16 replicas sync cd
   let (nHc, nHn, hst, nHr, nGap, nLog) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap, hd.log)
   pure { code := st.code ++
            f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
@@ -618,7 +633,7 @@ def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false
          stc := nStc, stn := nStn, str := nStr,
          hc := nHc, hn := nHn, hr := nHr, gap := nGap, log := nLog,
          b := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17],
-         sst := sst, hst := hst }
+         sst := sst, hst := hst, cin := hd.cin }
 
 /-- **`@mobilenetv2_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN
     train step in this file differentiates, so the net that scores and the net that trains are one
@@ -672,7 +687,12 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (bf16 : Bool := false)
     -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate `mobilenetv2-syncbn-check`. Never a committed artifact.
-    (forceSync : Bool := false) : String :=
+    (forceSync : Bool := false)
+    -- ▶ The recipe knobs, TRAILING and defaulted so every committed render is byte-identical:
+    --   `wdExclude` — `wx`, no decay on the 1-D parameters (BN γ/β, biases): `r34WdName`'s rule;
+    --   `cd` — classifier dropout at the driver's `%do` mask (EfficientNet's and MNv4's slot);
+    --   `alpha` — the label-smoothing mass. At α = 0 the smoothing ops are not emitted at all.
+    (wdExclude : Bool := false) (cd : Bool := false) (alpha : Float := 0.1) : String :=
   let sync : Bool := replicas > 1 || forceSync
   -- ⚠ α and K are spelled ONCE here. Until 2026-08-02 this render carried `0.100000` and
   -- `-0.010000` as inline literals in the cotangent AND a third copy, `0.010000`, in the
@@ -680,13 +700,13 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
   -- because one of them is on the GRADIENT path, which is §2k's original bug rather than the
   -- report-only variant found in ConvNeXt and EfficientNet. At K=10 all three render byte-identical
   -- to the literals they replace, so the fix is inert on every committed artifact.
-  let alphaStr    := fmt6 0.1                 -- α itself ("0.100000")
-  let negAlphaKStr := "-" ++ alphaOverK nClasses 0.1
+  let alphaStr    := fmt6 alpha               -- α itself ("0.100000" at the default)
+  let negAlphaKStr := "-" ++ alphaOverK nClasses alpha
   let go : StateM Proofs.StableHLO.EmitS String := do
     -- ═══ forward — the SAME traversal `@mobilenetv2_fwd` renders, so the forward this
     --     differentiates and the forward the driver scores with are one graph by construction
     --     (leg 2 of `planning/archive/renderer_convergence.md`) ═══
-    let F : MNV2FwdRecB ← mnv2FwdChainB B nClasses epsStr convBias bf16 replicas sync
+    let F : MNV2FwdRecB ← mnv2FwdChainB B nClasses epsStr convBias bf16 replicas sync cd
     let zx    : Vec (B*(3*224*224)) := fun _ => 0
     let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
     let z32   : Vec 32 := fun _ => 0
@@ -718,17 +738,27 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let (cSm,  nSm)  ← pretty B (.batchOp (N := B) (.softmaxRow (m := 1) (n := nClasses))
       (.operand nLog zNCb))
     let (cD0,  nD0)  ← pretty B (.subB (.operand nSm zNCb) (.operand "%onehot" zNCb))
-    let (cLsa, nLsa) ← pretty B (.scaleB alphaStr 0 (.operand "%onehot" zNCb))
-    let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
-    let (cD2,  nD2)  ← pretty B (.shiftB negAlphaKStr 0 (.operand nD1 zNCb))
+    -- At α = 0 the smoothing chain is not emitted: `dy = (softmax − onehot)/B`.
+    let (cLsa, cD1, cD2, nD2) ← if alpha == 0.0 then pure ("", "", "", nD0) else do
+      let (cLsa, nLsa) ← pretty B (.scaleB alphaStr 0 (.operand "%onehot" zNCb))
+      let (cD1,  nD1)  ← pretty B (.addVB (.operand nD0 zNCb) (.operand nLsa zNCb))
+      let (cD2,  nD2)  ← pretty B (.shiftB negAlphaKStr 0 (.operand nD1 zNCb))
+      pure (cLsa, cD1, cD2, nD2)
     let (cDy,  nDy)  ← pretty B (.divConstB s!"{B}.0" 0 (.operand nD2 zNCb))
     -- ═══ head backward + the 6 head/dense gradients ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
       (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
-    let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) nGap z1280b (.operand nDy zNCp))
+    -- ⚠⚠ `F.cin`, NOT `nGap`: the classifier weight gradient reads the DENSE'S INPUT, which with
+    -- classifier dropout on is the dropped activation (EfficientNet's `ENetFwd.cin` note).
+    let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) F.cin z1280b (.operand nDy zNCp))
     let (cbdg, nbdg) ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
+    -- ▶ Dropout's backward is the same op at the same mask (`Proofs.dropout_vjp_is_self`), between
+    -- the dense's input-VJP and the GAP backward. At `cd = false` nothing is emitted.
+    let (cDdo, nDdo) ← if cd then
+        pretty B (.dropoutB (N := B) (n := 1280) doName z1280b (.operand nDgi z1280b))
+      else pure ("", nDgi)
     let (cDgp, nDgp) ← pretty B (.gapBackBatched (N := B) (c := 1280) (h := 7) (w := 7)
-      (.operand nDgi z1280b))
+      (.operand nDdo z1280b))
     let (cDhm, nDhm) ← pretty B (.selectMidB nHn zH7 (.operand nDgp zH7))
     let (cDhn, nDhn) ← bnBackSite B 1280 (7) (7) sync replicas epsStr "%hg" nHc "hgdst" nDhm F.hst
     let (cDhx, nDhx) ← pretty B (.convBackBatchedAt bf16 (N := B) (ic := 320) (oc := 1280) (h := 7) (w := 7) zrnd
@@ -840,9 +870,10 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     let mut mNames : List String := []
     let mut vNames : List String := []
     for g in allPs do
+      let wdN := r34WdName wdExclude g.nm g.ds
       let (c, nT, nM, nV) ← match opt with
-        | .adamw   => adamOne B replicas g
-        | .rmsprop => rmsOne  B replicas g
+        | .adamw   => adamOne B replicas g wdN
+        | .rmsprop => rmsOne  B replicas g wdN
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]
       mNames := mNames ++ [nM]
@@ -867,8 +898,8 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %lohll = stablehlo.multiply %onehot, %llog : {ty [B, nClasses]}\n" ++
       s!"    %lt1s = stablehlo.reduce(%lohll init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
       s!"    %llsr = stablehlo.reduce(%llog init: %lz) applies stablehlo.add across dimensions = [1] : ({ty [B, nClasses]}, tensor<f32>) -> {ty [B]}\n" ++
-      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha 0.1}> : {ty [B]}\n" ++
-      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses 0.1}> : {ty [B]}\n" ++
+      s!"    %lomac = stablehlo.constant dense<{oneMinusAlpha alpha}> : {ty [B]}\n" ++
+      s!"    %laKc = stablehlo.constant dense<{alphaOverK nClasses alpha}> : {ty [B]}\n" ++
       s!"    %llt1 = stablehlo.multiply %lomac, %lt1s : {ty [B]}\n" ++
       s!"    %llt2 = stablehlo.multiply %laKc, %llsr : {ty [B]}\n" ++
       s!"    %llpe = stablehlo.add %llt1, %llt2 : {ty [B]}\n" ++
@@ -877,16 +908,19 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       s!"    %lossm = stablehlo.divide %lsum2, %lbfc : tensor<f32>\n" ++
       s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
     let body := F.code ++ cSm ++ cD0 ++ cLsa ++ cD1 ++ cD2 ++ cDy ++
-      cDgi ++ cWdg ++ cbdg ++ cDgp ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHb ++ cHg ++ cHt ++
+      cDgi ++ cWdg ++ cbdg ++ cDdo ++ cDgp ++ cDhm ++ cDhn ++ cDhx ++ cHW ++ cHb ++ cHg ++ cHt ++
       b17.code ++ b16.code ++ b15.code ++ b14.code ++ b13.code ++ b12.code ++ b11.code ++
       b10.code ++ b9.code ++ b8.code ++ b7.code ++ b6.code ++ b5.code ++ b4.code ++ b3.code ++
       b2.code ++ b1.code ++
       cDsm ++ cDsn ++ csW ++ csb ++ csg ++ cst ++ statCode
     let pTypes : List String := allPs.map (fun g => ty g.ds)
     let statTypes : List String := mnv2StatSigList.map (·.2)
-    let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames
+    -- The dropout mask goes LAST, handed back as a passthrough (EfficientNet's and MNv4's slot).
+    let retVals := thetaN ++ mNames ++ vNames ++ ["%loss", "%bc1", "%bc2"] ++ statNames ++
+      (if cd then [doName] else [])
     let retTys  := pTypes ++ pTypes ++ pTypes ++
-      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes
+      ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ statTypes ++
+      (if cd then [ty [B, 1280]] else [])
     pure <|
       (match opt with
        | .adamw => ""
@@ -923,18 +957,19 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
          else "")) ++
       zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ body ++
       (match opt with | .adamw => adamWConsts | .rmsprop => rmsConstsBlock mnv2RmsHyper) ++
-      adamCode ++ lossCode ++
+      wdzConst wdExclude ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
   let sigList : List (String × String) := mnv2SigList nClasses convBias
   let statSig := String.intercalate ", " (mnv2StatSigList.map (fun (n, t) => s!"{n}i: {t}"))
   let inSig := s!"%x: {ty [B, 3*224*224]}, " ++ packedTrainSig sigList ++ ", " ++ statSig ++
+    (if cd then s!", {doName}: {ty [B, 1280]}" else "") ++
     s!", %onehot: {ty [B, nClasses]}"
   let pTy := sigList.map (·.2)
   let outSig := String.intercalate ", "
     (packedTrainRetTys pTy ++
-     (mnv2StatSigList.map (·.2)))
+     (mnv2StatSigList.map (·.2)) ++ (if cd then [ty [B, 1280]] else []))
   let inner : String := go.run' (0, [])
-  let fname := s!"{slug}_{mnv2AdamVariant B replicas opt bf16}_train_step"
+  let fname := s!"{slug}_{mnv2AdamVariant B replicas opt bf16 wdExclude cd alpha}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1414,6 +1449,22 @@ end Proofs.StableHLO
 -- `@mobilenetv2in_rmsdp64_train_step` inside a file named `…rmsdp64bf16…` — the load-time entry
 -- mismatch three other nets have each shipped once.
 #guard Proofs.StableHLO.mnv2AdamVariant 64 4 Proofs.StableHLO.OptKind.rmsprop true == "rmsdp64bf16"
+-- ⭐⭐ **The JAX reference's `full` recipe, row for row**, and the arm `mnv2-default-4gpu` runs.
+-- `rmsdp64bf16` above differs from `mobilenetV2ImagenetConfigFull` in three ways: it decays BN γ/β
+-- and biases, has no classifier dropout, and smooths labels at α = 0.1 where the reference (and
+-- Sandler et al.) use none. This render closes all three: `wx`, `do` (keep 0.8 from
+-- `mobilenetv2ImagenetVerified.dropoutKeep`) and `ls0`.
+#eval IO.FS.writeFile "verified_mlir/mobilenetv2in_rmsdp64wxdols0bf16_train_step.mlir"
+  (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-5" 4 false "mobilenetv2in"
+    Proofs.StableHLO.OptKind.rmsprop true (wdExclude := true) (cd := true) (alpha := 0.0))
+#guard Proofs.StableHLO.mnv2AdamVariant 64 4 .rmsprop true (wx := true) (cd := true) (alpha := 0.0)
+  == "rmsdp64wxdols0bf16"
+-- The driver reads the SAME string for its region layout: `do` must switch the mask slot on, and
+-- nothing else may fire.
+#guard "rmsdp64wxdols0bf16".contains "do" && "rmsdp64wxdols0bf16".contains "rms"
+#guard !"rmsdp64wxdols0bf16".contains "drop" && !"rmsdp64wxdols0bf16".contains "acc"
+#guard !"rmsdp64wxdols0bf16".startsWith "ema" && !"rmsdp64wxdols0bf16".contains "lamb"
+#guard !"rmsdp64wxdols0bf16".contains "bce"
 -- The **2-GPU** peer of the line above: `B := 128` per replica, so the global batch is still
 -- 128×2 = 256 and the recipe, the steps/epoch and the LR all stay exactly what the 4×64 config
 -- runs. That is what makes a 2-card wall-clock comparable to the 4-card one rather than a new

@@ -406,6 +406,9 @@ def _main():
                       .map(lambda _, ex: ex))
         tfds.load = _load_val_blocks
         shard = None
+    if not training and os.environ.get('SHIM_EVAL_SIZE'):
+        globals()['_IMG_SIZE'] = int(os.environ['SHIM_EVAL_SIZE'])
+        globals()['_CROP_PCT'] = float(os.environ.get('SHIM_EVAL_CROP', globals().get('_CROP_PCT', 0.875)))
     it = iter(build_imagenet_iter(split, batch, training, training, shard))
     flat = 3 * _IMG_SIZE * _IMG_SIZE
     nclasses = int(os.environ.get('SHIM_NCLASSES', '0'))

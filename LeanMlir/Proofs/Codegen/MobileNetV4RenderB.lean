@@ -406,16 +406,18 @@ structure Mnv4StemFwdB where
     by (0,1)); both give 112×112, so only a forward on shared weights sees the difference
     (`scripts/mnv4_timm_parity.py`, `scripts/mnv4_forward_tie.py`). -/
 def mnv4StemFwdB (B : Nat) (epsStr : String) (mode : BnMode := .train) (bf16 : Bool := false)
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4StemFwdB := do
-  let zx    : Vec (B*(3*224*224)) := fun _ => 0
+    (replicas : Nat := 1) (sync : Bool := false)
+    -- ▶ `f`, the FINAL feature side (`mnv4FwdChainB`'s): the input is `32·f`, the stem out `16·f`.
+    (f : Nat := 7) : StateM Proofs.StableHLO.EmitS Mnv4StemFwdB := do
+  let zx    : Vec (B*(3*(2*(16*f))*(2*(16*f)))) := fun _ => 0
   let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
   let z32   : Vec 32 := fun _ => 0
-  let z112  : Vec (B*(32*112*112)) := fun _ => 0
+  let z112  : Vec (B*(32*(16*f)*(16*f))) := fun _ => 0
   let (cStc, nStc) ← pretty B (.batchOp (N := B)
-    (.convStridedAt bf16 (ic := 3) (oc := 32) (h := 112) (w := 112) (kH := 3) (kW := 3) zrnd "%sW" "%zb32" zSk z32)
+    (.convStridedAt bf16 (ic := 3) (oc := 32) (h := 16*f) (w := 16*f) (kH := 3) (kW := 3) zrnd "%sW" "%zb32" zSk z32)
     (.operand "%x" zx))
-  let (cStn, nStn, sst) ← mnv4Bn B 32 112 mode epsStr "%sg" "%sbt" "stn" nStc replicas sync
-  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 32*112*112)) (.operand nStn z112))
+  let (cStn, nStn, sst) ← mnv4Bn B 32 (16*f) mode epsStr "%sg" "%sbt" "stn" nStc replicas sync
+  let (cStr, nStr) ← pretty B (.batchOp (N := B) (.relu (n := 32*(16*f)*(16*f))) (.operand nStn z112))
   pure { code := cStc ++ cStn ++ cStr, c := nStc, n := nStn, st := sst, o := nStr }
 
 /-- The head's saved SSA names: both convs, their BNs and stats, relus, GAP, logits. -/
@@ -443,12 +445,14 @@ def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .t
     -- ▶ CLASSIFIER DROPOUT (`%do`, the driver's inverted per-element mask) between the head relu
     -- and the dense, where timm's `drop_rate` and the JAX reference put it. At `false` no `pretty`
     -- call happens, so every existing render is byte-identical.
-    (cd : Bool := false) :
+    (cd : Bool := false)
+    -- ▶ `f`, the final feature side the head runs at before the pool (7 at a 224 input).
+    (f : Nat := 7) :
     StateM Proofs.StableHLO.EmitS Mnv4HeadFwdB := do
-  let z7     : Vec (B*(256*7*7)) := fun _ => 0
+  let z7     : Vec (B*(256*f*f)) := fun _ => 0
   let zH1k   : Kernel4 960 256 1 1 := fun _ _ _ _ => 0
   let z960   : Vec 960 := fun _ => 0
-  let zH17   : Vec (B*(960*7*7)) := fun _ => 0
+  let zH17   : Vec (B*(960*f*f)) := fun _ => 0
   let zG     : Vec (B*(960*1*1)) := fun _ => 0
   let zHk    : Kernel4 1280 960 1 1 := fun _ _ _ _ => 0
   let z1280  : Vec 1280 := fun _ => 0
@@ -457,10 +461,10 @@ def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .t
   let zWd    : Mat 1280 nClasses := fun _ _ => 0
   let zNC    : Vec nClasses := fun _ => 0
   let (cH1c, nH1c) ← pretty B (.batchOp (N := B)
-    (.convAt bf16 (ic := 256) (oc := 960) (h := 7) (w := 7) zrnd "%h1W" "%zb960" zH1k z960) (.operand xName z7))
-  let (cH1n, nH1n, h1st) ← mnv4Bn B 960 7 mode epsStr "%h1g" "%h1bt" "h1n" nH1c replicas sync
-  let (cH1r, nH1r) ← pretty B (.batchOp (N := B) (.relu (n := 960*7*7)) (.operand nH1n zH17))
-  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 960) (h := 7) (w := 7))
+    (.convAt bf16 (ic := 256) (oc := 960) (h := f) (w := f) zrnd "%h1W" "%zb960" zH1k z960) (.operand xName z7))
+  let (cH1n, nH1n, h1st) ← mnv4Bn B 960 f mode epsStr "%h1g" "%h1bt" "h1n" nH1c replicas sync
+  let (cH1r, nH1r) ← pretty B (.batchOp (N := B) (.relu (n := 960*f*f)) (.operand nH1n zH17))
+  let (cGap, nGap) ← pretty B (.batchOp (N := B) (.gap (c := 960) (h := f) (w := f))
     (.operand nH1r zH17))
   let (cHc, nHc) ← pretty B (.batchOp (N := B)
     (.convAt bf16 (ic := 960) (oc := 1280) (h := 1) (w := 1) zrnd "%hW" "%zb1280" zHk z1280) (.operand nGap zG))
@@ -506,13 +510,18 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
     -- ▶ SYNC-BN (`planning/global_bn_verified.md` §3.4), trailing and defaulted off likewise.
     (replicas : Nat := 1) (sync : Bool := false)
     -- ▶ classifier dropout, train step only (`mnv4HeadFwdB`); defaulted off likewise.
-    (cd : Bool := false) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
+    (cd : Bool := false)
+    -- ▶ `f`, the FINAL feature side: 7 at the 224 input every committed artifact is rendered at,
+    -- 8 at 256 (timm's test size for Conv-M r224). Every other side is a multiple of it — input
+    -- 32f, stem 16f, fused 8f, the block rows' `h` scaled by f/7 — so the default is byte-identical.
+    -- Eval renders only: the proofs and every train step stay at 224.
+    (f : Nat := 7) : StateM Proofs.StableHLO.EmitS Mnv4FwdRec := do
   -- ═══ stem: 3×3/s2 conv (3→32), 224→112 → batch BN → relu (symmetric pad; see `mnv4StemFwdB`) ═══
-  let st ← mnv4StemFwdB B epsStr mode bf16 replicas sync
+  let st ← mnv4StemFwdB B epsStr mode bf16 replicas sync f
   let (nStc, nStn, sst, nStr) := (st.c, st.n, st.st, st.o)
 
   -- ═══ stage 0: the fused inverted bottleneck, 112→56 (relu) ═══
-  let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 56 mode epsStr "0" nStr bf16 replicas sync
+  let f0 ← fusedMbConvFwdStridedB B 32 48 4 3 (8*f) mode epsStr "0" nStr bf16 replicas sync
 
   -- ═══ the 21 UIB blocks — ONE fold over `mnv4Blocks`, dispatch by the row ═══
   let mut cur := f0.o
@@ -520,14 +529,14 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
   let mut blocks : List UibFwdB := []
   let mut inputs : List String := []
   for b in mnv4Blocks do
-    let r ← uibFwdDispatch B b mode epsStr cur bf16 replicas sync
+    let r ← uibFwdDispatch B (if f == 7 then b else { b with h := b.h * f / 7 }) mode epsStr cur bf16 replicas sync
     bcode := bcode ++ r.code
     blocks := blocks ++ [r]
     inputs := inputs ++ [cur]
     cur := r.o
 
   -- ═══ head: 1×1 conv-BN-relu (256→960) → GAP(7×7) → 1×1 conv-BN-relu (960→1280) → dense ═══
-  let hd ← mnv4HeadFwdB B nClasses epsStr cur mode bf16 replicas sync cd
+  let hd ← mnv4HeadFwdB B nClasses epsStr cur mode bf16 replicas sync cd f
   let (nH1c, nH1n, h1st, nH1r) := (hd.h1c, hd.h1n, hd.h1st, hd.h1r)
   let (nHc, nHn, hst, nHr, nGap, nLog) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap, hd.log)
 
@@ -574,11 +583,13 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
     ⭐ It is `mnv4FwdChainB` at `.eval` — the SAME traversal `@mnv4_fwd` and the train step use, so
     its BN order matches `mnv4StatSigList` by construction rather than by a second reading. -/
 def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
-    (slug : String := "mnv4") (vSuffix : String := "") : String :=
+    (slug : String := "mnv4") (vSuffix : String := "")
+    -- ▶ the input side (224, or timm's test size); must be a multiple of 32 (the final side is s/32)
+    (s : Nat := 224) : String :=
   let sigList := mnv4SigList nClasses ++ mnv4StatSigList
-  let inSig := s!"%x: {ty [B, 3*224*224]}, " ++
+  let inSig := s!"%x: {ty [B, 3*s*s]}, " ++
     String.intercalate ", " (sigList.map (fun (n, t) => s!"{n}: {t}"))
-  let r := (mnv4FwdChainB B nClasses epsStr .eval).run' (0, [])
+  let r := (mnv4FwdChainB B nClasses epsStr .eval (f := s / 32)).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── MobileNetV4-Conv-M eval forward (running-stats BN): every line is pretty(AST node) ──\n" ++
@@ -841,7 +852,7 @@ def mnv4AdamVariant (B replicas : Nat)
   (if bf16 then "bf16" else "")
 
 /-- **The variant slug of a recipe render** — the JAX reference's tier-2 recipe
-    (planning/mnv4_half_pair.md). `opt = none` is `mnv4AdamVariant`, so every committed spelling
+    (planning/archive/mnv4_half_pair.md). `opt = none` is `mnv4AdamVariant`, so every committed spelling
     is unchanged. Markers in the order the driver's predicates read them (`VerifiedVariant`):
     `ema` first (`emaOn` is a PREFIX test), then the optimizer with its `k` (`accK` parses it back
     out after `acc[dp]`), the per-replica batch, `wx`, `do`, the decay mark, `bf16`. -/
@@ -870,9 +881,10 @@ def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (em
     order comes from `mnv4ShapeList` — through `zipPs`, which builds each block's gradient list from
     the very same `uibSig` slice the signature does — and stat order from `mnv4StatShapeList`.
 
-    Forward: stem 3×3/s2 XLA-`SAME` (3→32, 224→112) → fused MBConv (32→48, 112→56, **swish**) →
-    the 21 UIB blocks (three stride-2 downsamples, eighteen identity skips; ExtraDW, ConvNeXt and
-    FFN — no IB) → TWO 1×1 conv-BN-relu head stages (256→960, then 960→1280) → GAP → dense.
+    Forward, timm `mobilenetv4_conv_medium` since 90e4af7e: symmetric stem 3×3/s2 (3→32,
+    224→112) → fused MBConv (32→48, 112→56, ReLU) → the 21 UIB blocks (stride on the post-DW,
+    BN-only pre-DW; ExtraDW, ConvNeXt and FFN — no IB) → 1×1 conv-BN-relu (256→960) → GAP → 1×1
+    `conv_head` (960→1280, BN over the batch at 1×1) → dense.
 
     The cotangent is composed from kit ops (`softmaxRow → subB → scaleB → addVB → shiftB →
     divConstB`, α = 0.1, K = nClasses), and `%loss` is report-only and stays outside the AST — the
@@ -887,7 +899,7 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate only (`imagenet-syncbn-check`'s FORMULATION column). Never a committed artifact.
     (forceSync : Bool := false)
-    -- ▶▶ **THE RECIPE AXES** (planning/mnv4_half_pair.md), all trailing and defaulted so every
+    -- ▶▶ **THE RECIPE AXES** (planning/archive/mnv4_half_pair.md), all trailing and defaulted so every
     -- committed artifact re-renders byte-identically. `opt = none` is the committed AdamW tail
     -- (`adamOne` + `adamWConsts`); `some o` hands the 233 gradients to `optAllParams`, the optimizer
     -- stage ResNet-34/50 share (accumulation, EMA shadow, timm `no_weight_decay`), imported rather
@@ -1222,6 +1234,14 @@ end Proofs.StableHLO
 
 #eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval.mlir"
   (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in")
+-- ▶ timm's TEST protocol for Conv-M r224 (`mobilenetv4_conv_medium.e500_r224_in1k`: 256px, crop 1.0,
+-- jax/timm_eval_protocols.json): the same eval graph at a 256 input, final side 8. Same entry name
+-- and operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=256` with nothing else
+-- changed. Training and every proof stay at 224.
+#eval IO.FS.writeFile "verified_mlir/mnv4in_fwd_eval_s256.mlir"
+  (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" (s := 256))
+#guard (Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in" (s := 224)) ==
+  Proofs.StableHLO.mnv4FwdEvalFaithfulV 64 1000 "1.0e-5" "mnv4in"
 
 #eval IO.FS.writeFile "verified_mlir/mnv4in_adam64_train_step.mlir"
   (Proofs.StableHLO.mobilenetv4AdamTrainStepFaithfulB 64 1000 "1.0e-5" 1 "mnv4in")
@@ -1278,7 +1298,7 @@ end Proofs.StableHLO
 #guard !"adamdp64bf16".contains "acc"
 #guard !"adamdp64bf16".startsWith "ema"
 
--- ⭐⭐ **THE JAX REFERENCE'S RECIPE, on the verified path** (planning/mnv4_half_pair.md): AdamW with
+-- ⭐⭐ **THE JAX REFERENCE'S RECIPE, on the verified path** (planning/archive/mnv4_half_pair.md): AdamW with
 -- 8 accumulated micro-batches of 4 × 128 (effective 4096, the reference's `512 × accum 8`, and a
 -- sync-BN group of 512 = its micro-batch), wd 0.05 off BN γ/β and biases (timm `no_weight_decay`),
 -- an EMA shadow (warmup-corrected by the driver), classifier dropout at the driver's mask, bf16.

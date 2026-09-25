@@ -263,22 +263,26 @@ private def fwdDownB (bB : Nat) (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool
 def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
     (V : CnxDims := bTiny) (bf16 : Bool := false)
     -- ⚠ THE PER-REPLICA BATCH — trailing + defaulted, see the note at the top of this file.
-    (bB : Nat := 32) : StateM Proofs.StableHLO.EmitS CFwd := do
+    (bB : Nat := 32)
+    -- ▶ `f`, the FINAL feature side: 7 at the 224 input every committed artifact uses, 9 at 288
+    -- (timm's test size for `convnext_tiny.fb_in1k`). The stages run at 8f/4f/2f/f (`bSpats` · f/7),
+    -- so the default is byte-identical. Eval forwards only; the train steps stay at 224.
+    (f : Nat := 7) : StateM Proofs.StableHLO.EmitS CFwd := do
   -- ⭐ **The 4×4/s4 patchify stem — one of ConvNeXt's two genuinely new bf16 ops.** Its emit keeps
   -- `convStride4`'s pad-one-less rule (`[[0,0]]` at k=4), which is NOT the symmetric pad every
   -- other forward conv uses; `BatchableOp.convStride4Bf16` carries the note.
   let (cS, stemC) ← pretty bB (.batchOp (N := bB)
-      (.convStride4At bf16 (h := 56) (w := 56) zrnd "%psW" "%psb"
+      (.convStride4At bf16 (h := 8*f) (w := 8*f) zrnd "%psW" "%psb"
           (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
-      (.operand "%x" (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56)))))))
-  let (cSln, stem) ← lnFwdSiteB bB "%psng" "%psnbt" stemC V.dims[0]! 56
+      (.operand "%x" (zVB : Vec (bB*(3*(2*(2*(8*f)))*(2*(2*(8*f))))))))
+  let (cSln, stem) ← lnFwdSiteB bB "%psng" "%psnbt" stemC V.dims[0]! (8*f)
   let mut fwd := cS ++ cSln
   let mut cur := stem
   let mut blksAll : Array (Array FNames) := #[]
   let mut downLn : Array String := #[]
   let mut downIn : Array String := #[]
   for si in [0:4] do
-    let c := V.dims[si]!; let e := 4 * c; let h := bSpats[si]!
+    let c := V.dims[si]!; let e := 4 * c; let h := bSpats[si]! * f / 7
     let mut blks : Array FNames := #[]
     for j in [0:V.depths[si]!] do
       -- ⚠ `cnxBlockIdx si j V`, NOT `j`: the ramp counts blocks over the whole net (denominator 17
@@ -293,9 +297,9 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
     blksAll := blksAll.push blks
     if si < 3 then
       downIn := downIn.push cur
-      let (code, n, o) ← fwdDownB bB s!"d{si}" cur c V.dims[si+1]! bSpats[si+1]! bf16
+      let (code, n, o) ← fwdDownB bB s!"d{si}" cur c V.dims[si+1]! (bSpats[si+1]! * f / 7) bf16
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
-  let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := 7) (w := 7))
+  let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := f) (w := f))
       (.operand cur zVB))
   -- ⭐ head LN (2026-08-30, §7.1) — the per-example peer of `ConvNeXtRender`'s.
   let (cHn, hn) ← headLnFwdSiteB bB "%hng" "%hnbt" gap V.dims[3]!
@@ -323,11 +327,13 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
     (bf16 : Bool := false)
     -- ⚠ THE PER-REPLICA BATCH — trailing + defaulted, see the note at the top of this file.
     (bB : Nat := 32)
+    -- ▶ the input side (224, or timm's test size); a multiple of 32 (the final side is s/32)
+    (s : Nat := 224)
     : String := Id.run do
-  let F : CFwd := (convNextFwdChainB nClasses sd V bf16 (bB := bB)).run' (0, [])
+  let F : CFwd := (convNextFwdChainB nClasses sd V bf16 (bB := bB) (f := s / 32)).run' (0, [])
   let body := F.code; let logits := F.logits
   let argSig := String.intercalate ", "
-    (("%x: " ++ ty [bB, 3*224*224]) ::
+    (("%x: " ++ ty [bB, 3*s*s]) ::
       (cnxAllParams nClasses V).map (fun (nm, d) => s!"%{nm}: {ty d}"))
     -- ⚠ The mask inputs go LAST, after every parameter, matching the train step's placement and the
     -- driver's blob layout. Anywhere else and they capture an existing positional slot — the mnv2
@@ -1104,6 +1110,15 @@ end Proofs.StableHLO
 #eval IO.FS.writeFile "verified_mlir/convnextin_fwd.mlir"
   (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
     (bB := cnxInBS))
+-- ▶ timm's TEST protocol for ConvNeXt-T (`convnext_tiny.fb_in1k`: 288px, crop 1.0,
+-- jax/timm_eval_protocols.json): the same forward at a 288 input, stages 72/36/18/9. Same entry
+-- name and operands, so `score-checkpoint` scores it under `LEAN_MLIR_EVAL_SIZE=288`.
+#eval IO.FS.writeFile "verified_mlir/convnextin_fwd_s288.mlir"
+  (Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
+    (bB := cnxInBS) (s := 288))
+#guard Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner
+    (bB := cnxInBS) (s := 224) ==
+  Proofs.StableHLO.convNextFwdRenderB "convnextin_fwd" 1000 Proofs.StableHLO.cnxFwdBanner (bB := cnxInBS)
 
 -- ── ▶ v1.4: `wdExcludeNormBias` — timm/DeiT `no_weight_decay` (`recipe_gaps.md` v1.4) ──────────
 -- `convnextTinyImagenetConfig.wdExcludeNormBias := true`. 121 of the 180 params take `%wdz`: every

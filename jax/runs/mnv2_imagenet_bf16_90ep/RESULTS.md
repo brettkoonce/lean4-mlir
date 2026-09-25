@@ -1,5 +1,9 @@
 # MobileNetV2 / ImageNet-1k — 90-epoch bf16 run (2026-06-04)
 
+> **SUPERSEDED.** This is the retired SGD run (lr 0.1, the borrowed R34 pipeline). The MobileNetV2
+> ImageNet reference is now the RMSProp `full` recipe of `jax/MainMobilenetV2Imagenet.lean`
+> (350 epochs, 71.90% / 90.41%). Kept as a record; do not quote it as this net's reference.
+
 **Final (canonical, full 50,000-image validation on `mnv2_imagenet_bf16.bin`):**
 
 | Metric | Value |

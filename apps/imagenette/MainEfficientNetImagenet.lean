@@ -6,8 +6,9 @@ The fourth and last of the ImageNet scale-tier trainers (§2p). `B` and `nClasse
 renderer parameters, so this needed only a `slug` — plus the derived −α/K that turned up the third
 copy of §2k's hardcoded-K bug, this time in EfficientNet's report-only loss.
 
-⚠ Does NOT move the verification tier, and the OPTIMIZER does not match the reference (RMSProp +
-exponential decay there, AdamW + cosine here). See `the net's Main file`.
+⚠ Does NOT move the verification tier. The optimizer follows the variant: the `rms*`/`emarms*`
+renders (the shipping `emarmsdp64dropdobf16`) are the reference's RMSProp with its ×0.97-every-2.4
+exponential decay, EMA, drop-connect and classifier dropout; the `adam*` renders are AdamW + cosine.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
@@ -19,18 +20,15 @@ gone from the target name because it no longer distinguishes anything.
     replicas its global batch of 256. `batchSize` is PER DEVICE and must match the batch the
     variant was rendered at.
 
-    ⚠ **This was 80, and 80 was the wrong number to carry.** The chapter reports two phase-2 tiers:
-    an 80-epoch SGD validation tier (72.31%) and the faithful 350-epoch RMSProp run (76.80% /
-    93.26%, against B0's paper 77.1 / 93.3). A phase-4 config must carry the epoch count of the
-    tier whose number its chapter prints, because `totalSteps := cfg.epochs * nb / accK` is what the
-    schedule anneals over — 80 vs 350 is a different LR curve end to end, not a prefix of one, so
-    the two results would not be comparable.
+    ⚠ **This was 80, and 80 was the wrong number to carry.** The JAX reference the chapter prints
+    is the 350-epoch RMSProp `full` run (77.15% / 93.30%, against B0's paper 77.1 / 93.3). A
+    phase-4 config must carry the epoch count of the tier whose number its chapter prints, because
+    `totalSteps := cfg.epochs * nb / accK` is what the schedule anneals over — 80 vs 350 is a
+    different LR curve end to end, not a prefix of one, so the two results would not be comparable.
 
-    ▶ And here the choice is forced, not merely preferred: **there is no momentum/SGD render for
-    `efficientnetin`**. The committed variants are the AdamW family (`adam64`, `adamdp64`) and the
-    RMSProp family (`rms64`, `rmsdp64`, `emarms64*`, `emarmsdp64*`). The 80-epoch SGD tier is
-    therefore not reproducible on the verified path at all, and the 350-epoch RMSProp tier is the
-    only phase-2 result these artifacts can be pointed at. -/
+    The committed variants are the AdamW family (`adam64`, `adamdp64`) and the RMSProp family
+    (`rms64`, `rmsdp64`, `emarms64*`, `emarmsdp64*`); only the RMSProp family matches the
+    reference. -/
 def efficientnetImagenetConfig : VerifiedConfig where
   epochs    := 350
   batchSize := 64
@@ -47,8 +45,9 @@ def runEfficientNetImagenet (argv : List String) : IO Unit := do
   -- decay period is not 1 epoch here and mnv2's is; that difference is the whole reason
   -- `RmsSchedule` carries `decayEpochs` rather than the two nets sharing one constant.
   --
-  -- ⚠ RMSProp is one of TWO gaps to the reference's 72.31% on this net (`recipe_gaps.md` §2) —
-  -- stochastic depth and EMA are still missing — so this is not yet a matched pair the way mnv2 is.
+  -- ▶ With EMA (`ema…`), drop-connect (`drop`) and classifier dropout (`do`) the `emarmsdp64dropdo*`
+  -- renders carry the whole reference recipe; the remaining differences are listed in
+  -- planning/imagenet_parity.md §2.2 (BN group before the sync-BN render, host-drawn masks).
   let sched := enetRmsSchedule
   -- ⚠ SUBSTRING, not prefix, and the prefix version was a live bug here. Optimizer and EMA are
   -- INDEPENDENT axes in this net's variant names, so RMSProp+EMA is spelled `emarms`, which does

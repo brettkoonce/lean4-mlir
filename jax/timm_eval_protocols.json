@@ -1,0 +1,347 @@
+{
+ "nets": {
+  "convnext_b_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 1.0,
+   "test_size": 288,
+   "timm": "convnext_base.fb_in1k",
+   "train_crop_pct": 0.875,
+   "train_size": 224,
+   "why": "the paper's weights"
+  },
+  "convnext_s_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 1.0,
+   "test_size": 288,
+   "timm": "convnext_small.fb_in1k",
+   "train_crop_pct": 0.875,
+   "train_size": 224,
+   "why": "the paper's weights"
+  },
+  "convnext_tiny_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 1.0,
+   "test_size": 288,
+   "timm": "convnext_tiny.fb_in1k",
+   "train_crop_pct": 0.875,
+   "train_size": 224,
+   "why": "the paper's weights"
+  },
+  "efficientnet_b0_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.875,
+   "test_size": 224,
+   "timm": "tf_efficientnet_b0.in1k",
+   "train_crop_pct": 0.875,
+   "train_size": 224,
+   "why": "the paper's TF recipe, ported"
+  },
+  "mobilenet_v2_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.875,
+   "test_size": 224,
+   "timm": "mobilenetv2_100.ra_in1k",
+   "train_crop_pct": 0.875,
+   "train_size": 224,
+   "why": "MobileNetV2 1.0"
+  },
+  "mobilenet_v4_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 1.0,
+   "test_size": 256,
+   "timm": "mobilenetv4_conv_medium.e500_r224_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 224,
+   "why": "Conv-M trained at 224"
+  },
+  "resnet34_imagenet": {
+   "interpolation": "bilinear",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.875,
+   "test_size": 224,
+   "timm": "resnet34.tv_in1k",
+   "train_crop_pct": 0.875,
+   "train_size": 224,
+   "why": "the 2018 torchvision recipe"
+  },
+  "resnet50_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 1.0,
+   "test_size": 288,
+   "timm": "resnet50.a2_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 224,
+   "why": "`default` is RSB-A2"
+  },
+  "resnet50_imagenet_2018": {
+   "interpolation": "bilinear",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.875,
+   "test_size": 224,
+   "timm": "resnet50.tv_in1k",
+   "train_crop_pct": 0.875,
+   "train_size": 224,
+   "why": "the 2018 torchvision recipe"
+  },
+  "resnet50_imagenet_a1": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 1.0,
+   "test_size": 288,
+   "timm": "resnet50.a1_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 224,
+   "why": "RSB-A1"
+  },
+  "resnet50_imagenet_a2": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 1.0,
+   "test_size": 288,
+   "timm": "resnet50.a2_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 224,
+   "why": "RSB-A2"
+  },
+  "resnet50_imagenet_adamprobe": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.95,
+   "test_size": 224,
+   "timm": "resnet50.a3_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 160,
+   "why": "RSB-A3 (train 160)"
+  },
+  "resnet50_imagenet_rsbfaithful": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.95,
+   "test_size": 224,
+   "timm": "resnet50.a3_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 160,
+   "why": "RSB-A3 (train 160)"
+  },
+  "resnet50_imagenet_short": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.95,
+   "test_size": 224,
+   "timm": "resnet50.a3_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 160,
+   "why": "RSB-A3 (train 160)"
+  },
+  "resnet50_imagenet_true2048": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.95,
+   "test_size": 224,
+   "timm": "resnet50.a3_in1k",
+   "train_crop_pct": 0.95,
+   "train_size": 160,
+   "why": "RSB-A3 (train 160)"
+  },
+  "vit_b_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.9,
+   "test_size": 224,
+   "timm": "deit_base_patch16_224.fb_in1k",
+   "train_crop_pct": 0.9,
+   "train_size": 224,
+   "why": "DeiT-B"
+  },
+  "vit_s_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.9,
+   "test_size": 224,
+   "timm": "deit_small_patch16_224.fb_in1k",
+   "train_crop_pct": 0.9,
+   "train_size": 224,
+   "why": "DeiT-S"
+  },
+  "vit_tiny_imagenet": {
+   "interpolation": "bicubic",
+   "mean": [
+    0.485,
+    0.456,
+    0.406
+   ],
+   "std": [
+    0.229,
+    0.224,
+    0.225
+   ],
+   "test_crop_pct": 0.9,
+   "test_size": 224,
+   "timm": "deit_tiny_patch16_224.fb_in1k",
+   "train_crop_pct": 0.9,
+   "train_size": 224,
+   "why": "DeiT-Ti"
+  }
+ },
+ "timm_version": "1.0.28"
+}

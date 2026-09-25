@@ -24,9 +24,8 @@ def mobilenetV2Imagenet : NetSpec where
   -- ⚠ The VERIFIED render was always ReLU6 (35 `stablehlo.maximum` paired with 35
   -- `stablehlo.minimum`, including at the 32×112×112 stem), so this was a phase-2-only defect and
   -- the port was the faithful side.
-  -- ▶ This net is −3.23 from paper (68.77 @ 90 ep vs 72.0), the largest gap in the fleet, and the
-  -- schedule was the only suspect on the list. Two clamped activations are not 3 points on their
-  -- own, but the gap was never decomposed against a reference that had them.
+  -- ▶ The published JAX reference (the 350-epoch `full` recipe, 71.90) predates this fix, so it
+  -- trained ReLU stem/head; a rerun is owed before it pairs one-variable with the verified run.
   convBnAct := .relu6
   layers := [
     .convBn 3 32 3 2 .same,                    -- 224→112
@@ -42,27 +41,21 @@ def mobilenetV2Imagenet : NetSpec where
     .dense 1280 1000 .identity                  -- 1000-class head
   ]
 
-/-- MobileNetV2 30-epoch *validation* recipe (bump `epochs` to 90 for the
-    real run — EPOCHS/LR/BATCH are baked from this spec, so it's a one-line
-    edit + re-emit, no env override).
+/-- MobileNetV2 90-epoch tier (`default`); the published reference is the 350-epoch `full`
+    recipe below, which is this config with only `epochs` changed.
 
     RMSProp + momentum 0.9, base lr 0.045 at batch 256 with a 5-epoch warmup +
-    paper exp-LR-decay (×0.98 per epoch) — MobileNetV2's *original* optimizer (was SGD+momentum lr 0.1,
-    the borrowed R34 pipeline). Two MobileNet-specific departures kept:
+    paper exp-LR-decay (×0.98 per epoch) — MobileNetV2's original optimizer. Two
+    MobileNet-specific choices:
       * weight decay 4e-5 (not 1e-4): large wd hurts the tiny depthwise
-        weights; 4e-5 is the standard MobileNet value.
-      * no mixup/cutmix: not standard for MobileNetV2 and a net loss at
-        short schedules.
+        weights; 4e-5 is the standard MobileNet value. Coupled, on every tensor
+        (BN and depthwise included, where TF-slim skips both).
+      * no mixup/cutmix: not standard for MobileNetV2.
     RMSProp knobs: ρ=0.9 (rmspropDecay), μ=0.9 (momentum), ε=1.0 (rmspropEps —
     MobileNetV2's value, NOT 1e-8). LR schedule is the paper's exponential decay
-    (×0.98 per epoch after warmup; cosineDecay off).
-
-    TODO(recipe): this is a CHANGE on one axis — optimizer SGD→RMSProp (the
-    paper's optimizer). Aug stays paper-faithful: crop/flip only, NOT
-    AutoAugment (MobileNetV2 used no AA; useAutoAugment=false). Prior SGD
-    results no longer apply — re-run 90ep + re-eval (supervise script +
-    eval_mnv2_full50k.py unchanged). lr 0.045 is the paper value at the paper's
-    batch; if unstable at batch 256, drop the peak to ~0.02. -/
+    (×0.98 per epoch after warmup; cosineDecay off), continuous rather than the
+    paper's staircase. Aug is crop/flip only (MobileNetV2 used no AutoAugment).
+    Label smoothing 0.0 and classifier dropout 0.2, as the paper. -/
 def mobilenetV2ImagenetConfig : TrainConfig where
   learningRate   := 0.045   -- MobileNetV2-native RMSProp peak (was 0.1 for SGD)
   batchSize      := 256
@@ -72,6 +65,7 @@ def mobilenetV2ImagenetConfig : TrainConfig where
   rmspropDecay   := 0.9       -- ρ, the running mean-square decay
   rmspropEps     := 1.0       -- MobileNetV2 uses ε=1.0
   weightDecay    := 4e-5
+  wdExcludeNormBias := true   -- no decay on BN γ/β or biases (slim's rule for BN; the verified `wx`)
   cosineDecay      := false   -- replaced by the paper exp-decay schedule (gap B)
   expLRDecayRate   := 0.98    -- MobileNetV2: ×0.98 per epoch (after warmup)
   expLRDecayEpochs := 1.0

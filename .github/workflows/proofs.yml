@@ -276,8 +276,9 @@ jobs:
               verified_mlir/mobilenetv2in_adam64bf16_train_step.mlir \
               verified_mlir/mobilenetv2in_adamdp64bf16_train_step.mlir \
               verified_mlir/mobilenetv2in_rmsdp64bf16_train_step.mlir \
+              verified_mlir/mobilenetv2in_rmsdp64wxdols0bf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/{mobilenetv2,mobilenetv2in}_{fwd,*_train_step}.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/MobileNetV2RenderB.lean)"; exit 1; }
-          # MobileNetV4-Conv-S (planning/archive/mnv4_verified.md §3i). Elaborating this module writes
+          # MobileNetV4-Conv-M (Conv-S until 2026-08-14; planning/archive/mnv4_verified.md §3i). Elaborating this module writes
           # ALL THREE artifacts, so all three are diffed — the fwd/fwd_eval/train_step set comes
           # from ONE traversal (`mnv4FwdChainB` switched by `BnMode`), and guarding only the train
           # step would leave the two forwards free to drift away from the graph that trains them.
@@ -293,6 +294,7 @@ jobs:
               verified_mlir/mnv4_adam_train_step.mlir \
               verified_mlir/mnv4in_fwd.mlir \
               verified_mlir/mnv4in_fwd_eval.mlir \
+              verified_mlir/mnv4in_fwd_eval_s256.mlir \
               verified_mlir/mnv4in_adam64_train_step.mlir \
               verified_mlir/mnv4in_adam64bf16_train_step.mlir \
               verified_mlir/mnv4in_adamdp64_train_step.mlir \
@@ -323,6 +325,7 @@ jobs:
               verified_mlir/convnextin_ema_train_step.mlir \
               verified_mlir/convnextin_emadp_train_step.mlir \
               verified_mlir/convnextin_fwd.mlir \
+              verified_mlir/convnextin_fwd_s288.mlir \
               verified_mlir/convnext_adamwx_train_step.mlir \
               verified_mlir/convnextin_adamwx_train_step.mlir \
               verified_mlir/convnext_adamclip_train_step.mlir \

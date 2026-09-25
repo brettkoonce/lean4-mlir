@@ -9,20 +9,19 @@ ImageNet artifacts are three `#eval`s, exactly as §2k found for ResNet-34.
 XLA-only by construction: collectives live on the PJRT path, and IREE has no measured
 ImageNet-scale number here to compare against.
 
-⚠ **This does not move the verification tier** — the proof-carrying claims stop at Imagenette. See
-`the net's Main file`'s claim-ceiling note, and note in particular that this is not the DeiT recipe.
+⚠ **This does not move the verification tier** — the proof-carrying claims stop at Imagenette.
+See `vitImagenetVerified`'s claim-ceiling note for what the variant carries of the DeiT recipe.
 
-⚠ **Set `SHIM_WORKERS=2`.** ViT is the first net here whose step rate outruns a single shim
-producer (~1,940 img/s wanted against ~1,530 delivered); without it the GPUs wait on data.
+▶ The job is `scripts/jobs/vit-default-emabf16-4gpu.conf` (`emadp128x4wxclipdropbf16`: EMA, clip,
+drop-path, weight decay off norm/bias, bf16, 4 × 128 = global 512). It sets `SHIM_WORKERS`,
+`PJRT_FFI_RESIDENT`, `LEAN_MLIR_EPOCHS` and both replica knobs; run the job, not the bare binary,
+for anything printable. The worker count is an open probe (planning/imagenet_parity.md VT-2).
 
 ```bash
 scripts/gen_shims.sh                       # this net's OWN data shim (⚠ NOT R34's — see VerifiedNet.shimScript)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 lake build vit-imagenet-verified
-PJRT_FFI_RESIDENT=1 CUDA_VISIBLE_DEVICES=0,1,2,3 SHIM_WORKERS=2 \
-  LEAN_MLIR_VARIANT=adamdp128x4 LEAN_MLIR_BATCH=128 \
-  LEAN_MLIR_REPLICAS=4 PJRT_REPLICAS=4 \
-  .lake/build/bin/vit-imagenet-verified data
+scripts/supervise.sh vit-default-emabf16-4gpu
 ```
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever

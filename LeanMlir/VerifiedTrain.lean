@@ -638,7 +638,10 @@ structure ShimProc where
     resolution mismatch between the render and the shim would otherwise read as garbage pixels and
     look like a broken net. Same reasoning as the FFI's G4 arity guard. -/
 def spawnShim (shimScript : String) (split : String) (batch flat seed : Nat)
-    (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0) : IO ShimProc := do
+    (shard : Option (Nat × Nat) := none) (nclasses : Nat := 0)
+    -- ▶ extra child variables, appended last: `scoreCheckpoint`'s `SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP`
+    -- (timm's test protocol). Empty by default, so every existing spawn is unchanged.
+    (extraEnv : Array (String × Option String) := #[]) : IO ShimProc := do
   -- `shimScript` is the NET'S OWN generated shim (`VerifiedNet.shimScript`), not a shared default.
   -- An empty one refuses here rather than falling back: R34's shim was the fallback for years and
   -- it silently gave every other net R34's augmentation. See that field's docstring.
@@ -724,7 +727,7 @@ mixed target, so it is OFF for this run. SHIM_SOFT=1 turns on soft targets AND i
     cmd := py.toString, args := #[script.toString],
     stdout := .piped, stdin := .null, stderr := .inherit,
     env := #[("SHIM_BATCH", some (toString batch)), ("SHIM_SPLIT", some split),
-             ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv ++ mixEnv }
+             ("SHIM_SEED", some (toString seed))] ++ shardEnv ++ softEnv ++ mixEnv ++ extraEnv }
   let h := child.stdout
   let pre ← readExact h 16
   let magic := String.ofList ((List.range 4).map (fun i => Char.ofNat (pre.get! i).toNat))
@@ -880,13 +883,14 @@ reading a misframed batch"
     same augmentation sequence, and since the shards hold different images that is not a
     correctness bug — but it needlessly correlates the crops across workers. -/
 def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n : Nat)
-    (nclasses : Nat := 0) : IO (Array ShimProc) := do
+    (nclasses : Nat := 0) (extraEnv : Array (String × Option String) := #[]) :
+    IO (Array ShimProc) := do
   if n <= 1 then
-    pure #[← spawnShim shimScript split batch flat seed none nclasses]
+    pure #[← spawnShim shimScript split batch flat seed none nclasses extraEnv]
   else
     let mut hs : Array ShimProc := #[]
     for i in [0:n] do
-      hs := hs.push (← spawnShim shimScript split batch flat (seed + i) (some (i, n)) nclasses)
+      hs := hs.push (← spawnShim shimScript split batch flat (seed + i) (some (i, n)) nclasses extraEnv)
     IO.println s!"  imagenet shim: {n} sharded producers (round-robin over batches)"
     pure hs
 
@@ -963,9 +967,9 @@ tail fault) — this pass's denominator is {c.total + c.rows}, not 50,000"
     `LEAN_MLIR_VAL_FAULT=order` starts the round-robin on producer 1 (every image scored against
     another image's label: same count, different bitmap), `=tail` drops the 80-row tail (the C4
     bug class: 49,920). `scripts/streamed_val_gate.sh`. -/
-def spawnValStream (net : VerifiedNet) (flat : Nat) (n : Nat := 2) (shimBatch : Nat := 256) :
-    IO EvalRows := do
-  let hs ← spawnShimSharded net.shimScript "validation" shimBatch flat 0 n
+def spawnValStream (net : VerifiedNet) (flat : Nat) (n : Nat := 2) (shimBatch : Nat := 256)
+    (extraEnv : Array (String × Option String) := #[]) : IO EvalRows := do
+  let hs ← spawnShimSharded net.shimScript "validation" shimBatch flat 0 n (extraEnv := extraEnv)
   let fault ← IO.getEnv "LEAN_MLIR_VAL_FAULT"
   let offset := if fault == some "order" then 1 else 0
   let dropTail := (← IO.getEnv "LEAN_MLIR_EVAL_BATCHSTATS").isSome || fault == some "tail"
@@ -1741,9 +1745,13 @@ micro-batches."
     -- warn about, it asserted the exact opposite of the graph that was loaded. A warning that is
     -- always printed carries no information; one that is always printed AND sometimes false is
     -- worse, because the run log then reads as evidence for the wrong recipe.
+    -- ⚠ And only on the ResNet-50 family, whose accumulation recipes are RSB's. MNv4's reference IS
+    -- AdamW over accumulated micro-batches, so there the line named two "absences" its recipe never had.
     let missing := (if VerifiedVariant.lambOn variant then [] else ["LAMB"])
                 ++ (if VerifiedVariant.bceOn  variant then [] else ["BCE-with-logits"])
-    if missing.isEmpty then
+    if !net.slug.startsWith "resnet50" then
+      pure ()
+    else if missing.isEmpty then
       IO.println s!"     ▸ LAMB (per-tensor trust ratio) + BCE-with-logits: RSB-faithful optimizer \
 and loss at this batch."
     else
@@ -2752,14 +2760,16 @@ gate's control, not a configuration.")
     denominator, same batching, same graph. It is available today on ConvNeXt and ViT, which have
     `nBnStats = 0` and therefore carry their whole eval state in the checkpoint.
 
-    ⚠⚠ **BN NETS ARE REFUSED, LOUDLY, AND THAT IS THE POINT.** The checkpoint is exactly
-    `[θ|m|v(|ema)]`; the BN running mean/var are NOT in it — they are "reset per process and
-    rebuilt within an epoch" (see `runningBnStats`). In-training eval works because the statistics
-    have been accumulating all epoch. A fresh process reading a `.bin` has ZEROS, and
-    `@<slug>_fwd_eval` then normalises by them: not a slightly-off number, garbage that still
-    prints as a plausible-looking percentage. So R50/R34/MNv2/EfficientNet/MNv4 throw here rather
-    than score, until §2b lands the stats in the checkpoint (format) plus `--recalibrate` (the
-    fallback, and the only one of the two that can reach A3's finished checkpoint).
+    ⭐ **BN nets score through `@<slug>_fwd_eval`** with the running statistics read from the
+    `<ckpt>.bn` companion (`[running | ema_bn]`, written at every epoch end since 2026-09-12): the
+    EMA shadow with `ema_bn`, the live weights with the running stats — the training eval's
+    pairing. A checkpoint older than the companion is refused, since scoring the `.bin` alone would
+    normalise by zeros and still print a plausible percentage.
+
+    ▶ **timm's test protocol**: `LEAN_MLIR_EVAL_SIZE` / `LEAN_MLIR_EVAL_CROP` score through the eval
+    graph rendered at that size (`…_fwd_eval_s<S>.mlir`) with the val stream resized and cropped to
+    match (`SHIM_EVAL_SIZE` / `SHIM_EVAL_CROP`). `scripts/score_timm.sh` reads the per-net values
+    from `jax/timm_eval_protocols.json`.
 
     ⭐ `region` is what one checkpoint cannot otherwise yield: the driver picks live-or-shadow at
     TRAIN time (`LEAN_MLIR_EMA_BN`), so an EMA run reports one of the two numbers and discards the other.
@@ -2774,20 +2784,20 @@ def VerifiedNet.scoreCheckpoint (net : VerifiedNet) (dataDir : String) (variant 
   let nBnStats := net.bnChannels.foldl (fun acc c => acc + 2 * c) 0
   net.printBlurb
   IO.println s!"  SCORING A CHECKPOINT — no training. {net.name} {variant}, {ckptPath}"
-  -- ⛔⛔ THE BN BLOCKER, asserted before anything expensive happens (§2b). Refuse ahead of the
-  -- ~30 GB val drain and the compile, not after: the whole failure being prevented is a number
-  -- that looks like a number.
-  if hasBn then
-    throw <| IO.userError s!"{net.name} has {net.bnChannels.size} batch-norm layers \
-({nBnStats} running-stat floats) and the checkpoint does not contain them — it is exactly \
-[θ|m|v{if emaOn then "|ema" else ""}]. A fresh process would normalise @{net.slug}_fwd_eval by \
-ZEROS and print a plausible-looking percentage off garbage.\n\
-  Two exits, neither of them retroactive on its own (planning/archive/next_session_verified_trainer_code.md \
-§2b): (a) append the {nBnStats} stat floats to the checkpoint format — clean going forward, but A3's \
-finished checkpoint does not contain them; (b) --recalibrate, ~100-200 training batches forward to \
-re-accumulate the statistics, which DOES reach an existing checkpoint and is a different estimate \
-from the run's own.\n\
-  Scoring works today on the LayerNorm nets (ConvNeXt, ViT), which carry no running state."
+  -- ▶ timm's TEST protocol: `LEAN_MLIR_EVAL_SIZE=S` scores through an eval graph rendered at S
+  -- (`<slug>_fwd_eval_s<S>.mlir`, or `<slug>_fwd_s<S>.mlir` for the LayerNorm nets) and has the
+  -- val stream resize/crop at S / `LEAN_MLIR_EVAL_CROP` (`SHIM_EVAL_SIZE`/`SHIM_EVAL_CROP` in the
+  -- net's own shim). Unset ⇒ the recipe's own protocol, exactly as the in-training eval scores.
+  -- The per-net values are timm's (`jax/timm_eval_protocols.json`; `scripts/score_timm.sh`).
+  let evalSize := (← IO.getEnv "LEAN_MLIR_EVAL_SIZE").bind (·.toNat?)
+  let evalCrop := (← IO.getEnv "LEAN_MLIR_EVAL_CROP").getD ""
+  if evalSize.isNone && !evalCrop.isEmpty then
+    throw <| IO.userError "LEAN_MLIR_EVAL_CROP without LEAN_MLIR_EVAL_SIZE — give both (timm's \
+test_input_size and test_crop_pct), so the protocol printed is the protocol scored."
+  let shimEnv : Array (String × Option String) := match evalSize with
+    | some s => #[("SHIM_EVAL_SIZE", some (toString s))] ++
+                (if evalCrop.isEmpty then #[] else #[("SHIM_EVAL_CROP", some evalCrop)])
+    | none   => #[]
   -- The region to score. ⚠ `"ema"` on a variant with no fourth region is a REFUSAL and not a
   -- fallback to live: the request and the artifact disagree, and quietly answering the other
   -- question is how a live-weight number gets quoted as a shadow one.
@@ -2809,11 +2819,27 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
   -- Forward resolution, IDENTICAL to `trainAdamSched`'s: the per-variant `_fwd` wins when it
   -- exists, `<slug>_fwd.mlir` is the fallback. ⚠ The FUNCTION is `@<slug>_fwd` either way — the
   -- variant artifact re-renders the same entry name.
-  let fwdVariant := s!"{net.mlirDir}/{net.slug}_{variant}_fwd.mlir"
-  let fwdPath := if (← System.FilePath.pathExists fwdVariant) then fwdVariant
-                 else s!"{net.mlirDir}/{net.slug}_fwd.mlir"
+  -- ⭐ A BN net scores through `@<slug>_fwd_eval` with its running statistics appended — the
+  -- in-training eval's graph and operands (`trainAdamSched`), read back from the `.bn` companion.
+  let sizeSuf := match evalSize with | some s => s!"_s{s}" | none => ""
+  let pick (suf : String) : IO String := do
+    let v := s!"{net.mlirDir}/{net.slug}_{variant}_fwd{suf}.mlir"
+    if hasBn then pure s!"{net.mlirDir}/{net.slug}_fwd_eval{suf}.mlir"
+    else if (← System.FilePath.pathExists v) then pure v
+    else pure s!"{net.mlirDir}/{net.slug}_fwd{suf}.mlir"
+  -- A protocol that changes only the CROP (DeiT: 224 at 0.9) needs no second render: the base
+  -- artifact serves when it is already rendered at that size.
+  let fwdPath ← do
+    let sized ← pick sizeSuf
+    if sizeSuf.isEmpty || (← System.FilePath.pathExists sized) then pure sized
+    else
+      let base ← pick ""
+      let w ← if (← System.FilePath.pathExists base) then
+          pure ((← fwdRenderedShape base).map (·.2)) else pure none
+      pure (if w == evalSize.map (fun s => 3 * s * s) then base else sized)
   if !(← System.FilePath.pathExists fwdPath) then
-    throw <| IO.userError s!"no forward artifact for {net.slug}: tried {fwdVariant} and {fwdPath}"
+    throw <| IO.userError s!"no eval forward for {net.slug}{if evalSize.isSome then s!" at {sizeSuf.drop 2}px" else ""}: \
+{fwdPath} does not exist{if evalSize.isSome then " — render it at that resolution first" else ""}"
   -- ⚠ REFUSE rather than fall back to `(bs, net.d0)`. The training driver can default there
   -- because it has a `cfg.batchSize` the user chose; this tool has no such input, so a guess
   -- would be a silent mis-slice of the val buffer (RSB-A3: 224² rows read as 160²).
@@ -2821,9 +2847,15 @@ shadow — its blob is {nRegions} regions and there is no shadow slot to score. 
     | some s => pure s
     | none => throw <| IO.userError s!"could not read `%x: tensor<BxWxf32>` off {fwdPath} — the \
 eval batch and the eval WIDTH both come from that one declaration, and neither is guessable here."
+  if let some s := evalSize then
+    if evalD0 != 3 * s * s then
+      throw <| IO.userError s!"{fwdPath} declares %x width {evalD0}, not 3·{s}² = {3 * s * s} — \
+the artifact is not a {s}px render, and the val stream would be framed at the wrong width."
+    IO.println s!"  ▸ EVAL PROTOCOL: {s}px, crop_pct {if evalCrop.isEmpty then "the shim's own" else evalCrop} \
+(timm's test protocol) through {fwdPath}"
   if evalD0 != net.d0 then
     IO.println s!"  ▸ EVAL RES SPLIT: net d0 {net.d0}, eval d0 {evalD0} (batch {evalBs}) — read \
-off @{net.slug}_fwd"
+off {fwdPath}"
   -- The checkpoint, and its size guard — the same one `trainAdamSched` applies on resume, for the
   -- same reason: the blob has no header, no fingerprint and no region count, so a layout mismatch
   -- does not fail, it misaligns every parameter and scores silent garbage.
@@ -2841,6 +2873,28 @@ adds a 4th region and the EMA shadow a 5th."
   IO.println s!"  region {regIdx} of {nRegions} \
 ({if VerifiedVariant.emaRegion variant == some regIdx then "the EMA SHADOW" else "the live weights"}), \
 {net.nParams} params"
+  -- The BN operands: `<ckpt>.bn` = [running stats | their EMA shadow], written at every epoch end
+  -- since 2026-09-12. The EMA shadow pairs with the EMA-lagged stats, exactly as the training eval
+  -- pairs them; the live weights with the running ones.
+  let bnStatShapes := net.bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]]) #[]
+  let evalParams ← if !hasBn then pure theta else do
+    let bnPath := ckptPath ++ ".bn"
+    if !(← System.FilePath.pathExists bnPath) then
+      throw <| IO.userError s!"{net.name} has {net.bnChannels.size} batch-norm layers and there is \
+no {bnPath}: the checkpoint predates the BN companion (2026-09-12), so its running statistics were \
+never written. Scoring the .bin alone would normalise by zeros."
+    let bn ← IO.FS.readBinFile bnPath
+    if bn.size != 2 * nBnStats * 4 then
+      throw <| IO.userError s!"{bnPath} is {bn.size} bytes, not 2 x {nBnStats} x 4 — a different net's companion"
+    let scoringEma := VerifiedVariant.emaRegion variant == some regIdx
+    let stats := if scoringEma then bn.extract (nBnStats * 4) (2 * nBnStats * 4)
+                 else bn.extract 0 (nBnStats * 4)
+    IO.println s!"  BN: {net.bnChannels.size} layers from {bnPath} — \
+{if scoringEma then "the EMA-lagged stats (ema_bn), paired with the shadow" else "the running stats"}"
+    pure (F32.concat #[theta, stats])
+  let evalShapes := if hasBn then packShapes (net.paramShapes ++ bnStatShapes) else net.shapesBA
+  let evalResident := (net.paramShapes.size + (if hasBn then 2 * net.bnChannels.size else 0)).toUSize
+  let evalFn := if hasBn then s!"m.{net.slug}_fwd_eval" else s!"m.{net.slug}_fwd"
   (← IO.getStdout).flush
   -- ▶ `LEAN_MLIR_REPLICAS=N` scores through the SHARDED eval — N devices, `N × evalBs` per invoke —
   -- read exactly as the trainers read it. ⭐ This is the knob `scripts/sharded_eval_gate.sh` turns:
@@ -2852,7 +2906,6 @@ adds a 4th region and the EMA shadow a 5th."
   -- anyway is 7.4 GB held for nothing. Inert on `.imagenet`, which streams.
   let (_, _, _, evalImg, evalLbl, nEval, _, _) ← loadData net dataDir evalD0 (evalOnly := true)
   let nc := net.nClasses
-  let fwdShapes := net.shapesBA
   if replicas > 1 then
     let egB := replicas * evalBs
     IO.println s!"  EVAL SHARDED: {replicas} replicas x {evalBs} = {egB} images per invoke, \
@@ -2866,9 +2919,10 @@ adds a 4th region and the EMA shadow a 5th."
   -- Hold the parameters on device across every batch — one push per replica, not one per invoke.
   -- `gen` is a constant because θ never changes here, which is the whole difference from the
   -- training loop.
-  let rows ← if net.data == .imagenet then spawnValStream net evalD0 else pure (.held evalImg evalLbl)
-  let (correct, correct5, nScored, correctBits) ← evalScore sess s!"m.{net.slug}_fwd" theta fwdShapes
-    rows nEval evalBs evalD0 nc replicas net.paramShapes.size.toUSize 1
+  let rows ← if net.data == .imagenet then spawnValStream net evalD0 (extraEnv := shimEnv)
+             else pure (.held evalImg evalLbl)
+  let (correct, correct5, nScored, correctBits) ← evalScore sess evalFn evalParams evalShapes
+    rows nEval evalBs evalD0 nc replicas evalResident 1
     dumpCorrect.isSome
   reapValStream rows
   let acc := correct.toFloat / nScored.toFloat * 100.0
