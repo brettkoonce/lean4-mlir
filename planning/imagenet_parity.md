@@ -296,7 +296,7 @@ the ETA is now the measured 73 h, marked pre-sync-BN. ⚠ The `RECIPE=default` v
 | # | fix | size |
 |---|---|---|
 | CX-1 | `cnx-default-emabf16-4gpu.conf` header lines 38–42 were pasted from the other conf ("flipped IN PLACE", "Ch. 8 has never run"); the ETA is the non-EMA 3060 number; both ConvNeXt confs say "AutoAugment + RandAugment" | S |
-| CX-2 | `run_cnx_verified.sh` hard-codes `RUNDIR=runs/2026-09-18-cnx-verified-300ep` and the non-EMA job, so it would resume into a finished run | S |
+| CX-2 | `scripts/jobs/run_cnx_verified.sh` hard-codes `RUNDIR=runs/2026-09-18-cnx-verified-300ep` and the non-EMA job, so it would resume into a finished run | S |
 | CX-3 | `summarize.sh` says the curve is "unaffected" (`RESULTS.md` §3 notes it is wrong) | S |
 | CX-4 | S/B: JAX mains lack `cnxInit` (Xavier-uniform, `generated_convnext_s_imagenet.py:424`); `cnxs/cnxb` confs run f32 at 4×32 (global 128, 10,009 steps/epoch) at 2.5e-4, with no `LEAN_MLIR_EPOCHS`/`BASE_LR_U` and the old `.venv` precheck; they need T's 64-per-replica rescope, bf16 variants and C7 | M |
 
@@ -305,7 +305,7 @@ Decisions: (a) exact-erf GELU on both paths (touches the proof-side GELU node: c
 
 **Status (2026-09-25):** ✅ CX-1: `cnx-default-emabf16-4gpu` is a short conf that sources
 `cnx-default-4gpu` and swaps the variant; its ETA says it carries the non-EMA number. Both confs'
-"AutoAugment + RandAugment" became RandAugment + random erasing. ✅ CX-2: `run_cnx_verified.sh [JOB]`
+"AutoAugment + RandAugment" became RandAugment + random erasing. ✅ CX-2: `scripts/jobs/run_cnx_verified.sh [JOB]`
 defaults to the EMA job and no longer pins a RUNDIR. S/B confs use the shared checks; CX-3/CX-4 open.
 
 ### 5.5 ViT-Ti (and S/B)

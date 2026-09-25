@@ -29,7 +29,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "datasets"))
 from preprocess_visdrone import parse_visdrone_txt, load_anchors
 # a sibling import, not `scripts.visdrone_anchors`: a site-packages `scripts` package would win
 from visdrone_anchors import wh_iou, kmeans_anchors

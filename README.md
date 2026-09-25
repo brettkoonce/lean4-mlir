@@ -43,7 +43,7 @@ one track per tier; the short form is
 curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh   # Lean 4
 python3 -m venv .venv && . .venv/bin/activate && pip install jax-cuda12-pjrt          # the XLA plugin only (jax-rocm7-pjrt on AMD)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so                        # the shim; needs nothing but libc
-lake exe cache get && ./download_mnist.sh && lake run mnist                            # Mathlib oleans, MNIST, tier 1
+lake exe cache get && ./scripts/datasets/download_mnist.sh && lake run mnist           # Mathlib oleans, MNIST, tier 1
 ```
 
 | tier | command | trains | the number | chapter |

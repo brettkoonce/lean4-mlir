@@ -44,7 +44,7 @@ EOF
 fi
 
 echo "━━━ [4/5] imagenette (local disk; ~1.5 GB first time)"
-./download_imagenette.sh
+./scripts/datasets/download_imagenette.sh
 
 echo "━━━ [5/5] ready."
 echo "  ⚠ THIS shell first (bootstrap's venv dies with its subshell; new shells auto-set):"

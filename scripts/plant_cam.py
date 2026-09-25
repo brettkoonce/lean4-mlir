@@ -3,7 +3,7 @@
 
 `plant-leaf … cam=1` dumps the closed-form class-activation map (7×7, ReLU'd, max-normalised)
 of every image of a part, for the true class and for the predicted class. This reads the dump
-against the leaf mask `preprocess_plant.py` stored at the same 7×7 (the fraction of each cell
+against the leaf mask `scripts/datasets/preprocess_plant.py` stored at the same 7×7 (the fraction of each cell
 that is leaf) and reports the share of CAM mass that lands inside the leaf — the statistic the
 section tests with the background fix — per image, pooled, per class, and for the leaked /
 non-leaked split of the audit. `--examples` prints the images at the extremes for the figure.

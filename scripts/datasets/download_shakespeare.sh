@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."   # the repo root: data/ lives there
 mkdir -p data/shakespeare
 cd data/shakespeare
 

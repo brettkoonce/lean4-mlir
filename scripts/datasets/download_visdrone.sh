@@ -13,12 +13,12 @@
 # Citation: Zhu et al., "Detection and Tracking Meet Drones Challenge",
 #           IEEE TPAMI (2021); the VisDrone2019 dataset paper.
 #
-# Usage: ./download_visdrone.sh
+# Usage: ./scripts/datasets/download_visdrone.sh
 # Requires: curl, unzip, python3 + Pillow + numpy.
 set -e
 
 BASE="https://github.com/ultralytics/yolov5/releases/download/v1.0"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$REPO_ROOT/data/visdrone"
 
 mkdir -p "$OUT"
@@ -58,7 +58,7 @@ python3 "$REPO_ROOT/preprocess_visdrone.py" "$OUT" "$OUT"
 
 echo
 echo "Done. The detector demo (R34+FPN) needs the 448/FPN records next — see"
-echo "  demos/README.md: preprocess_visdrone.py ... data/visdrone_fpn --fpn data/visdrone"
+echo "  demos/README.md: scripts/datasets/preprocess_visdrone.py ... data/visdrone_fpn --fpn data/visdrone"
 echo
 echo "The zips and extracted image trees are no longer needed once the .bin"
 echo "files exist; reclaim ~2 GB with:"

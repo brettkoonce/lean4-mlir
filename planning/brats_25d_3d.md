@@ -13,7 +13,7 @@ the opposite: affordable, unwarranted until Gate D.
   0/1/2/3 (1↔2 permuted vs raw BraTS; `Train.lean:457` has the WT/TC/ET map). Axial slices,
   tumour-bearing only (`--min-tumor-px 1`), **`--stride 2`**, z-scored over brain voxels then u8
   at ±5σ. 411/73 patients → 14,415 / 2,569 slices. Records: `4·S·S` image bytes + `S·S` mask,
-  **no volume id, no z index** (`preprocess_brats.py:8-14, 184-227`).
+  **no volume id, no z index** (`scripts/datasets/preprocess_brats.py:8-14, 184-227`).
 * **Nets:** `unetBrats` from scratch (7.85M, 240²) and `r34UnetBratsOf true` (24.5M, 224²,
   ImageNet-bootstrapped encoder). The 4-channel stem is FRESH `[64,4,7,7]`; the bootstrap skips
   it by byte range (`stemFloats ic`, `MainUnetBratsR34.lean:71,241-247`) — **channel-count
@@ -36,7 +36,7 @@ reproduces. Fix the `content.tex` label while there.
 Neighbours are NOT recoverable from the records (no z, stride 2, non-uniform filter, and the
 loader shuffles) — a regen is required.
 
-1. `preprocess_brats.py:184-227` — `--context k`; neighbours from the UNFILTERED volume, kept
+1. `scripts/datasets/preprocess_brats.py:184-227` — `--context k`; neighbours from the UNFILTERED volume, kept
    centres still filtered/strided, replicate at volume ends. Regen to `data/brats224c3/`.
 2. `ffi/f32_helpers.c:342,354` — `BRATS_CHANNELS` #define → parameter; `F32Array.lean:313` follows.
 3. `Types.lean` ~:1084 `DatasetKind.brats224c3`; `Train.lean` ~:483 `brats224c3IO := { bratsIO

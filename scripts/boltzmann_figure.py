@@ -7,7 +7,7 @@
   (c) kT = 8: the Langevin chain started in well B beside the model's samples
       reweighted to that temperature, with the three population rows in a box
 
-Inputs: data/boltzmann (preprocess_boltzmann.py) and one run directory holding
+Inputs: data/boltzmann (scripts/datasets/preprocess_boltzmann.py) and one run directory holding
   samples/<flow NFE-50 samples>.bin, .paths.bin      lake exe diffusion-2d muller_brown flow … logp
   corrected_kT8.bin, transfer.json                   scripts/boltzmann_metrics.py transfer … --out=<run>
 

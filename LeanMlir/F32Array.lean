@@ -311,7 +311,7 @@ opaque imagenetteLabels (raw : @& ByteArray) (imgSize : USize) : IO ByteArray
     size. Returns (images f32 ByteArray, masks uint8 ByteArray, count).
     Images are `imgSize`×`imgSize`×4 (FLAIR / T1w / T1gd / T2w), channel-first.
     Unlike the RGB datasets these carry no ImageNet normalization: the loader
-    inverts the uint8 quantization `preprocess_brats.py` applied, yielding the
+    inverts the uint8 quantization `scripts/datasets/preprocess_brats.py` applied, yielding the
     per-volume, per-modality z-scored intensities the preprocessor computed over
     brain voxels. Masks are `imgSize`×`imgSize` uint8 per-pixel class labels
     (0=background, 1=edema, 2=non-enhancing tumour, 3=enhancing tumour). -/
@@ -326,7 +326,7 @@ opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArr
     the pre-Phase-3b target+mask size, long after the record grew the bbox
     tail; a stale stride in the docs is what this whole bug class feeds on.)
     The Lean dispatcher (`runTraining`) splits this into target + mask before
-    calling `trainStepAdamF32Yolov1`. See `preprocess_visdrone.py` for the
+    calling `trainStepAdamF32Yolov1`. See `scripts/datasets/preprocess_visdrone.py` for the
     on-disk format. -/
 @[extern "lean_f32_load_voc"]
 opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)

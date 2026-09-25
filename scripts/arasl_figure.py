@@ -11,7 +11,7 @@
 `--layout one-row` folds (b) and (c) into a single row of two pairs each. (b)/(c) need
 the scorer's JSON; without it only the grid is drawn.
 
-Reads data/arasl/images_u8.npy + meta_<split>.npz from preprocess_arasl.py; (c) reads
+Reads data/arasl/images_u8.npy + meta_<split>.npz from scripts/datasets/preprocess_arasl.py; (c) reads
 the confused pairs and the confusion matrix from `scripts/arasl_score.py --json`.
 
   .venv/bin/python scripts/arasl_figure.py [--score=runs/.../score_blocked.json]

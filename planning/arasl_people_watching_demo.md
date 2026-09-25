@@ -61,7 +61,7 @@ Mendeley Data, dataset `y7pckrw6z2` version 1 (published 2018-11-05):
 Direct URLs are `https://data.mendeley.com/public-files/datasets/y7pckrw6z2/
 files/<uuid>/file_downloaded`; the uuids come from the public API
 (`…/public-api/datasets/y7pckrw6z2/files?folder_id=root&version=1`), so
-`download_arasl.sh` resolves them at run time rather than hardcoding.
+`scripts/datasets/download_arasl.sh` resolves them at run time rather than hardcoding.
 Institutions: Prince Mohammad Bin Fahd University (Al Khobar) and Universiti
 Malaysia Sarawak. The 32 folder names, which are the class labels:
 
@@ -85,7 +85,7 @@ Census, measured 2026-09-17 on the download (`Gate 0` reproduces it):
   recorded anywhere in the release. ⚠ Verify the chain statistic holds in
   every class before trusting the blocked split (it did: 64–78% per class).
 
-`preprocess_arasl.py data/arasl data/arasl` writes, per split protocol
+`scripts/datasets/preprocess_arasl.py data/arasl data/arasl` writes, per split protocol
 `{random,blocked}` and per part `{train,val,test}`, the GW demo's format:
 `<protocol>_<part>.bin` as flat f32 `[N, 1, 64, 64]` in [0,1] (⚠ or the
 chapter's normalisation — match whatever `apps/cifar/MainCifar8WideAblation`
@@ -225,7 +225,7 @@ census, the burst structure and the two splits.
 ## 7. Phases
 
 ```
-Phase 0 (½ session, CPU):   download_arasl.sh (API-resolved URLs), preprocess_arasl.py
+Phase 0 (½ session, CPU):   scripts/datasets/download_arasl.sh (API-resolved URLs), scripts/datasets/preprocess_arasl.py
                             with --stats: census, chain statistic, both splits, leak audit
                             Gate 0: 54,049 files / 32 names exactly / 648 non-64 listed;
                                     chain fraction ≥ 0.6 in every class; leak audit
@@ -289,7 +289,7 @@ Optional:                   size=32 arm; the ImageNet-R34 bootstrap arm if block
   converts and resizes, and `--stats` prints the census so a mirror that
   differs is caught before it trains.
 - `data/arasl/` already holds the zip, the labels CSV and the extracted
-  tree from 2026-09-17; `download_arasl.sh` must be idempotent over it.
+  tree from 2026-09-17; `scripts/datasets/download_arasl.sh` must be idempotent over it.
 - The book's accuracy convention is a Wilson interval on every number;
   `scripts/arasl_score.py` prints it, and Table 1 carries it.
 
@@ -333,7 +333,7 @@ Optional:                   size=32 arm; the ImageNet-R34 bootstrap arm if block
   cosine, wd 1e-4, batch 64, ls 0); the chapter's own CIFAR ablation runs a
   constant lr with hflip, which would be wrong here (a mirrored hand is a
   different sign for some letters).
-- Files: `download_arasl.sh`, `preprocess_arasl.py`, `demos/MainAraslSigns.lean`
+- Files: `scripts/datasets/download_arasl.sh`, `scripts/datasets/preprocess_arasl.py`, `demos/MainAraslSigns.lean`
   (`lake exe arasl-signs`), `scripts/arasl_score.py`, `scripts/arasl_figure.py`;
   runs under `runs/2026-09-17-arasl*/`.
 - **DONE 2026-09-17, Table 1 as landed** (test, 3 seeds for the chapter net,

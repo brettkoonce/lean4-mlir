@@ -46,7 +46,7 @@ only where objects are small.
 
 ## 2. The data
 
-`download_neu.sh` → `data/neu_det/` with `IMAGES/*.jpg` (200×200, 8-bit
+`scripts/datasets/download_neu.sh` → `data/neu_det/` with `IMAGES/*.jpg` (200×200, 8-bit
 grayscale) and `ANNOTATIONS/*.xml` (VOC: one `<object>` per box, class name in
 `<name>`). Mirrors: the NEU page (faculty.neu.edu.cn/me/songkc), IEEE DataPort,
 Kaggle. ⚠ Verify the count is 1,800 and the six class names match exactly
@@ -57,8 +57,8 @@ No official split. Use 1,080/360/360 by image with a fixed seed, which is the
 split the Faster R-CNN and YOLO rows above used, so the comparison is loose but
 not meaningless; report which split every row is on.
 
-`preprocess_neu_det.py data/neu_det data/neu_det_fpn --size 448 --fpn data/neu_det`
-writes the FPN record format `preprocess_visdrone.py` writes (image + flat
+`scripts/datasets/preprocess_neu_det.py data/neu_det data/neu_det_fpn --size 448 --fpn data/neu_det`
+writes the FPN record format `scripts/datasets/preprocess_visdrone.py` writes (image + flat
 `[P3|P4|P5]` target of `Σ_s A_s·15·g_s²` floats), and `--grid 14` the
 single-grid format, so `F32.loadDetBinFpn` and the archived single-grid loader
 read them unchanged. The 200-px grayscale crop is replicated to three channels
@@ -69,7 +69,7 @@ preprocessor does, since the scorer reads it for uncapped GT.
 
 Box statistics to print first, because they decide §3 and §4: the (w, h)
 distribution in source pixels and in 448-px input, and the fraction that
-`fpn_scale_of` (`preprocess_visdrone.py:159`, thresholds 24 / 64 px on
+`fpn_scale_of` (`scripts/datasets/preprocess_visdrone.py:159`, thresholds 24 / 64 px on
 max(w, h) at input) assigns to P3 / P4 / P5. Expectation: almost everything on
 P5, inclusions and thin scratches on P4, nothing on P3 — which is the regime
 claim in one line.
@@ -88,7 +88,7 @@ codegen:
    filter, so give it a `--parser` hook or a sibling `scripts/neu_anchors.py`
    that reads the VOC XML; it already prints recall@0.5 of the priors, which
    is the coverage ceiling to record. Three per scale as on VisDrone.
-2. **Class count** — `NUM_CLASSES_A = 10` in `preprocess_visdrone.py:101`
+2. **Class count** — `NUM_CLASSES_A = 10` in `scripts/datasets/preprocess_visdrone.py:101`
    sets the per-anchor width 5 + 10 = 15, and ⛔ that 15 is baked into the
    `fpnDetect` codegen (`Types.lean:263`, head `oc → A·15`,
    `Ntot = A·15·Σg²`; `emitFpnDetectForward/Backward`), not a spec field.
@@ -166,7 +166,7 @@ second row, the same crops under the single-grid arm.
 Section: *Industrial inspection — demo: steel-surface defects on NEU-DET*,
 under the bestiary beside the VisDrone detection demo, two tables and the
 figure, ~1 page. The data-chapter row: NEU-DET, Song & Yan 2013 / He et al.
-2020, "free for research" (no stated CC), `download_neu.sh` → `data/neu_det/`.
+2020, "free for research" (no stated CC), `scripts/datasets/download_neu.sh` → `data/neu_det/`.
 
 ## 7. Phases
 
@@ -228,7 +228,7 @@ Cleanup (optional):         anchors read from the data dir; `5 + nClasses` in
 ### Phase 0 — 2026-09-17, DONE
 
 - Data: the maintainer's own Drive copy (`NEU-DET.zip`, 26 MB) via
-  `download_neu.sh`; 1,800 / 1,800, six names exactly as §2 expected, all
+  `scripts/datasets/download_neu.sh`; 1,800 / 1,800, six names exactly as §2 expected, all
   200×200, 4,189 boxes. The JPEGs are 3-channel files with grey content.
 - Split: 1,080 / 360 / 360 **stratified** (180 / 60 / 60 per class), seed 0,
   `preprocess_neu_det.split_stems`; `scripts/neu_anchors.py` imports it so the

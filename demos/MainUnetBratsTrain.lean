@@ -31,14 +31,14 @@ open ReferenceNets (unetBrats)
       the depth-4 UNet's four halvings still divide evenly and nothing needs
       resizing.
 
-    Data: ./download_brats.sh (MSD Task01, openly downloadable; BraTS 2021
+    Data: ./scripts/datasets/download_brats.sh (MSD Task01, openly downloadable; BraTS 2021
     itself is gated behind a Synapse agreement). Volumes are split by patient
-    before slicing — see preprocess_brats.py.
+    before slicing — see scripts/datasets/preprocess_brats.py.
 
     Usage — turn-key. Once the data is prepared, no arguments are needed:
 
-      ./download_brats.sh
-      python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats
+      ./scripts/datasets/download_brats.sh
+      python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats
       lake exe unet-brats-train
 
     That trains 3 epochs of `dicece` on data/brats and prints mIoU + per-class

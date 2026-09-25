@@ -19,7 +19,7 @@ runs. Models are imported from the committed Lean-generated probe modules, so th
 graphs are the demos', not rewrites; only the head differs (10-class Imagenette
 probe vs 1000-class ImageNet, negligible for both nets).
 
-Usage (from repo root; data/imagenette from ./download_imagenette.sh):
+Usage (from repo root; data/imagenette from ./scripts/datasets/download_imagenette.sh):
 
   python jax/probe/benchmark.py                      # R50-A3, all visible GPUs
   python jax/probe/benchmark.py --net vit-tiny
@@ -196,7 +196,7 @@ def main():
     # ── real pixels from the imagenette download, one resident micro-batch set ──
     train_bin = os.path.join(args.data, "train.bin")
     if not os.path.exists(train_bin):
-        sys.exit(f"missing {train_bin} — run ./download_imagenette.sh first")
+        sys.exit(f"missing {train_bin} — run ./scripts/datasets/download_imagenette.sh first")
     images, labels = m.load_imagenette(train_bin)   # [N, 3*224*224] normalized, [N]
     need = micro * accum
     idx = np.arange(need) % len(images)

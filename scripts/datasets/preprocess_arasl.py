@@ -31,7 +31,7 @@ Files, per protocol P in {random, blocked} and part S in {train, val, test}:
 Every non-64×64 file (638 at 256², 10 at 768×1024) and the 10 RGB files are resized
 and converted with ONE resampler; --stats lists them so a mirror that differs is caught.
 
-  .venv/bin/python preprocess_arasl.py data/arasl data/arasl [--stats] [--seed=0]
+  .venv/bin/python scripts/datasets/preprocess_arasl.py data/arasl data/arasl [--stats] [--seed=0]
                    [--chain-thr=6] [--size=64]
 
 `--size 32` writes `<protocol>_<part>_32.bin` (+ labels, meta, manifest with the same

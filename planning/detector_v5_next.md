@@ -23,7 +23,7 @@ scrambled-data era) or is the Pets demo; read them as history only.
   9.47× over IREE (`planning/archive/detector_pjrt_port.md` §9).
 * **Recipe status: 0 of 5 items on `main`.** The unmerged branch `yolo-v5-assignment` (one
   commit, `514c5f21`) carries T1 (ratio-match + neighbour cells) and T2 (`2σ−0.5` / `(2σ)²` box
-  param) on the ENCODER and SCRIPT side only — `preprocess_visdrone.py`, `ffi/f32_helpers.c`,
+  param) on the ENCODER and SCRIPT side only — `scripts/datasets/preprocess_visdrone.py`, `ffi/f32_helpers.c`,
   `deploy/orin_detect.py`, `scripts/*` (coverage 88.2% → 93.0%) — and touches **no `LeanMlir/`
   file**. The loss emitter (`MlirCodegen.emitDiouForward`, ~:5171–5227) still decodes the old
   parameterization, so the branch's encoder and main's graph disagree. Its planning doc sits at
@@ -60,7 +60,7 @@ scrambled-data era) or is the Pets demo; read them as history only.
    objectness** (target is the constant mask channel at ~:5461; needs stop-gradient + an FD arm;
    `yolo_assignment.md` priced it on void data — re-measure), **T3 mosaic** (port
    the Pets mosaic preprocessor (deleted 2026-09-24); depends on T1), **resolution > 448** (24/64 px thresholds and
-   the 56/28/14 grids are hardcoded in THREE places: `preprocess_visdrone.py:158-159`,
+   the 56/28/14 grids are hardcoded in THREE places: `scripts/datasets/preprocess_visdrone.py:158-159`,
    `Train.lean:914`, `ffi/f32_helpers.c` — collapse them regardless).
 8. **Decode + NMS out of Python** is a project (`scripts/yolo_map_visdrone.py:203-268`, duplicated
    in `deploy/orin_detect.py`). The cheaper on-device win is the u8 preprocess fold —

@@ -3,7 +3,7 @@
 
 The NEU-DET twin of historical/coco_anchors.py: the IoU metric and k-means come
 from scripts/visdrone_anchors.py (imported, not copied), the box source and
-the train split come from preprocess_neu_det.py, so the priors are fitted on
+the train split come from scripts/datasets/preprocess_neu_det.py, so the priors are fitted on
 exactly the images the detector trains on and by exactly the code that fitted
 VisDrone's and COCO's.
 
@@ -31,9 +31,9 @@ from pathlib import Path
 
 import numpy as np
 
-# Both the repo root (the preprocessors) and scripts/ itself: `scripts.` as a
+# Both scripts/datasets/ (the preprocessors) and scripts/ itself: `scripts.` as a
 # package name collides with an unrelated `scripts` module in some venvs.
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "datasets"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from visdrone_anchors import wh_iou, kmeans_anchors   # noqa: E402
 import preprocess_visdrone as pv                     # noqa: E402

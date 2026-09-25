@@ -710,7 +710,7 @@ seconds of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_mnist.sh                           # ~11 MB
+./scripts/datasets/download_mnist.sh          # ~11 MB
 lake build mnist-linear-verified
 ./.lake/build/bin/mnist-linear-verified data
 \end{verbatim}
@@ -2195,7 +2195,7 @@ seconds of GPU time:
 
 \begin{verbatim}
 lake exe cache get                         # Mathlib oleans, ~30 s
-./download_mnist.sh                        # ~11 MB
+./scripts/datasets/download_mnist.sh       # ~11 MB
 lake build mnist-mlp-verified
 ./.lake/build/bin/mnist-mlp-verified data
 \end{verbatim}
@@ -2802,7 +2802,7 @@ minute of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_mnist.sh                           # ~11 MB
+./scripts/datasets/download_mnist.sh          # ~11 MB
 lake build mnist-cnn-verified
 ./.lake/build/bin/mnist-cnn-verified data
 \end{verbatim}
@@ -3783,7 +3783,7 @@ thirteen minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_cifar.sh                           # ~170 MB
+./scripts/datasets/download_cifar.sh          # ~170 MB
 lake build cifar8w-bn-ablation
 ./.lake/build/bin/cifar8w-bn-ablation data
 \end{verbatim}
@@ -5026,7 +5026,7 @@ minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
+./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build resnet34-verified-adam
 PJRT_FFI_RESIDENT=1 ./.lake/build/bin/resnet34-verified-adam data
 \end{verbatim}
@@ -6622,7 +6622,7 @@ and about thirty-five minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
+./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build mobilenetv2-verified-adam
 PJRT_FFI_RESIDENT=1 ./.lake/build/bin/mobilenetv2-verified-adam data
 \end{verbatim}
@@ -8113,7 +8113,7 @@ commands, and about forty minutes of GPU time:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
+./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build efficientnet-verified-adam
 PJRT_FFI_RESIDENT=1 ./.lake/build/bin/efficientnet-verified-adam data
 \end{verbatim}
@@ -9281,7 +9281,7 @@ inside an hour and a quarter:
 
 \begin{verbatim}
 lake exe cache get                            # Mathlib oleans, ~30 s
-./download_imagenette.sh                      # 330 MB dl, 2.4 GB unpacked
+./scripts/datasets/download_imagenette.sh     # 330 MB dl, 2.4 GB unpacked
 lake build convnext-verified-adam
 PJRT_FFI_RESIDENT=1 ./.lake/build/bin/convnext-verified-adam data
 \end{verbatim}
@@ -10412,8 +10412,8 @@ it. Four commands, and the last network in Part 1 is also the quickest
 one in it:
 
 \begin{verbatim}
-lake exe cache get                        # Mathlib oleans, ~30 s
-./download_imagenette.sh                  # 330 MB dl, 2.4 GB unpacked
+lake exe cache get                         # Mathlib oleans, ~30 s
+./scripts/datasets/download_imagenette.sh  # 330 MB dl, 2.4 GB unpacked
 lake build vit-verified-adam
 PJRT_FFI_RESIDENT=1 ./.lake/build/bin/vit-verified-adam data
 \end{verbatim}
@@ -16015,7 +16015,7 @@ datasets span the book's whole range:
 \footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}l l l p{4.3cm} p{4.0cm}@{}}
 \hline
-Dataset & Abbrev. & Reference & Homepage & Path in repo \\
+Dataset & Abbrev. & Reference & Homepage & Script (in \texttt{scripts/datasets/}) $\to$ path \\
 \hline
 MNIST & MN & LeCun et al., 1998 &
   \href{http://yann.lecun.com/exdb/mnist/}{\nolinkurl{yann.lecun.com/exdb/mnist}} &
@@ -16204,7 +16204,7 @@ at all.
 \footnotesize\setlength{\tabcolsep}{4pt}
 \begin{tabular}{@{}l l p{3.2cm} p{4.0cm} p{3.7cm}@{}}
 \hline
-Dataset & Abbrev. & Reference & Homepage & Path in repo \\
+Dataset & Abbrev. & Reference & Homepage & Script (in \texttt{scripts/datasets/}) $\to$ path \\
 \hline
 VisDrone-DET2019 & VisD & Zhu et al., 2021 &
   \href{https://github.com/VisDrone/VisDrone-Dataset}{\nolinkurl{github.com/VisDrone/VisDrone-Dataset}} &
@@ -16573,9 +16573,9 @@ gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so
 
   \item \textbf{Fetch data} for the tier(s) you want:
 \begin{verbatim}
-./download_mnist.sh        # MNIST       (mnist tier)
-./download_cifar.sh        # CIFAR-10    (cifar tier)
-./download_imagenette.sh   # Imagenette 320px, 330 MB (imagenette tier)
+./scripts/datasets/download_mnist.sh       # MNIST       (mnist tier)
+./scripts/datasets/download_cifar.sh       # CIFAR-10    (cifar tier)
+./scripts/datasets/download_imagenette.sh  # Imagenette 320px, 330 MB (imagenette tier)
 \end{verbatim}
 
   \item \textbf{Build and run a trainer.} No backend selection: XLA finds

@@ -33,7 +33,7 @@ channel-planar RGB) that `F32.loadImagenetteSized` reads — S = 256 for trainin
                                    the class map; classes_pv.txt / classes_pd.txt beside it
   manifest_plant.json              census, leaf-map coverage, chain statistic, audit summary
 
-  .venv/bin/python preprocess_plant.py data/plant data/plant [--stats] [--composites] [--aug]
+  .venv/bin/python scripts/datasets/preprocess_plant.py data/plant data/plant [--stats] [--composites] [--aug]
                    [--seed=0] [--imagenette=data/imagenette/imagenette2-320/train]
 """
 import argparse
@@ -453,7 +453,7 @@ def main():
         if args.composites:
             bgs = sorted(glob.glob(os.path.join(args.imagenette, "*", "*.JPEG")))
             if not bgs:
-                sys.exit(f"no Imagenette JPEGs under {args.imagenette} — run download_imagenette.sh")
+                sys.exit(f"no Imagenette JPEGs under {args.imagenette} — run scripts/datasets/download_imagenette.sh")
 
             def comp(j):
                 rs = random.Random(args.seed * 1000003 + int(j))   # per-image, thread-order independent

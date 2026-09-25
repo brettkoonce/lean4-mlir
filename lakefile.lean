@@ -2386,9 +2386,9 @@ script imagenet (args) do
     downloaded)`. MNIST + CIFAR feed the benchmark's dense/conv probes; Imagenette
     feeds the ViT/attn probe and the `lake run imagenette-iree` tier. -/
 def coreDatasets : List (String × String × String) :=
-  [ ("MNIST",      "download_mnist.sh",      "data/train-images-idx3-ubyte"),
-    ("CIFAR-10",   "download_cifar.sh",      "data/cifar-10/data_batch_1.bin"),
-    ("Imagenette", "download_imagenette.sh", "data/imagenette/train.bin") ]
+  [ ("MNIST",      "scripts/datasets/download_mnist.sh",      "data/train-images-idx3-ubyte"),
+    ("CIFAR-10",   "scripts/datasets/download_cifar.sh",      "data/cifar-10/data_batch_1.bin"),
+    ("Imagenette", "scripts/datasets/download_imagenette.sh", "data/imagenette/train.bin") ]
 
 /-- Run a dataset's download script (via `bash`, so the exec bit doesn't matter)
     if its sentinel file is missing. Returns `false` on a download failure. -/
@@ -2413,7 +2413,7 @@ def ensureCoreData : IO Bool := do
 /-- `lake run download` — fetch the core datasets (MNIST, CIFAR-10, Imagenette)
     that the verified trainers and `lake run benchmark` need, downloading only the
     ones not already on disk. Imagenette additionally needs `python3` + Pillow for
-    the binary preprocessing step (see ./download_imagenette.sh). -/
+    the binary preprocessing step (see ./scripts/datasets/download_imagenette.sh). -/
 script download do
   IO.println "━━━ lake run download ━━━ core datasets: MNIST, CIFAR-10, Imagenette"
   if ← ensureCoreData then

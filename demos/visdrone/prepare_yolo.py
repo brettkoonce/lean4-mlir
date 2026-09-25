@@ -54,7 +54,7 @@ def main():
         img_src = SRC / srcdir / "images"
         ann_src = SRC / srcdir / "annotations"
         if not img_src.is_dir():
-            sys.exit(f"missing {img_src} -- run download_visdrone.sh first")
+            sys.exit(f"missing {img_src} -- run scripts/datasets/download_visdrone.sh first")
 
         lbl_dst = SRC / srcdir / "labels"
         lbl_dst.mkdir(parents=True, exist_ok=True)

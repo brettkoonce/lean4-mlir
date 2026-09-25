@@ -5,7 +5,7 @@ import LeanMlir
 
     PlantVillage is 54,305 lab photographs of single picked leaves on a grey background,
     38 classes; PlantDoc is 2,578 field photographs of the same crops whose 28 classes all
-    map into PlantVillage's 38. `preprocess_plant.py` writes both in the Imagenette record
+    map into PlantVillage's 38. `scripts/datasets/preprocess_plant.py` writes both in the Imagenette record
     format under two PlantVillage splits (`random`, the literature's; `grouped`, the
     maintainers' own leaf-grouped split) with the test tenth's `segmented` twin, its
     background complement and its leaf mask beside it, plus a composite and an augmented
@@ -96,7 +96,7 @@ structure Part where
 def loadPart (dataDir name : String) (side : Nat) : IO Part := do
   let path := s!"{dataDir}/{name}.bin"
   unless ← System.FilePath.pathExists path do
-    throw <| IO.userError s!"{path} missing — run: ./download_plant.sh"
+    throw <| IO.userError s!"{path} missing — run: ./scripts/datasets/download_plant.sh"
   let raw ← IO.FS.readBinFile path
   let lbl ← F32.imagenetteLabels raw side.toUSize
   let n := lbl.size / 4

@@ -18,7 +18,7 @@ import sys
 src = "data/shakespeare/tinyshakespeare.txt"
 out_dir = "data/shakespeare"
 if not os.path.exists(src):
-    sys.exit(f"missing {src} — run download_shakespeare.sh first")
+    sys.exit(f"missing {src} — run scripts/datasets/download_shakespeare.sh first")
 
 with open(src, "rb") as f:
     raw = f.read()

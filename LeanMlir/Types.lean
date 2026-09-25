@@ -1048,7 +1048,7 @@ inductive DatasetKind where
       labels carry the detector target, whose layout the run's config picks: the YOLOv1
       target + per-cell mask + box tail at 224/7×7, the same at another grid
       (`loadDetBinDims`), per-anchor targets (`cfg.anchors`), or the flat FPN block
-      (`cfg.fpnScales`). See `preprocess_visdrone.py` for the on-disk format. -/
+      (`cfg.fpnScales`). See `scripts/datasets/preprocess_visdrone.py` for the on-disk format. -/
   | detection
   /-- Brain-tumour segmentation on the Medical Segmentation Decathlon
       Task01_BrainTumour volumes (BraTS-derived). 2D axial slices: images are
@@ -1056,11 +1056,11 @@ inductive DatasetKind where
       volume over brain voxels — no ImageNet normalization), labels are 240×240
       uint8 per-pixel classes (0=background, 1=edema, 2=non-enhancing tumour,
       3=enhancing tumour). Segmentation kind: `labelBytesPerRecord = 240*240`
-      selects `.perPixelCE` automatically. See `preprocess_brats.py` for the
+      selects `.perPixelCE` automatically. See `scripts/datasets/preprocess_brats.py` for the
       on-disk format and `planning/archive/brats_demo.md` for the demo plan. -/
   | brats
   /-- The same BraTS data at 224×224, produced by
-      `preprocess_brats.py --size 224` (a **center crop**, not a resize — see
+      `scripts/datasets/preprocess_brats.py --size 224` (a **center crop**, not a resize — see
       `fit_plane`). Identical in every other respect: same 4 modalities, same
       patient split at seed 0, same slice selection, same 14,415/2,569 counts.
 

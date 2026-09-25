@@ -2,9 +2,9 @@
 # Launch the phase-4 verified/PJRT EfficientNet-B0 350-epoch ImageNet run
 # (bf16, RMSProp + EMA + stochastic depth + classifier dropout: `emarmsdp64dropdobf16`).
 #
-#   systemd-run --user --unit=enet-verified --working-directory="$PWD" ./run_enet_verified.sh
+#   systemd-run --user --unit=enet-verified --working-directory="$PWD" ./scripts/jobs/run_enet_verified.sh
 #
-# ⛔ NOT a bare `&` — see run_mnv2_verified.sh: the agent harness SIGKILLs background processes
+# ⛔ NOT a bare `&` — see scripts/jobs/run_mnv2_verified.sh: the agent harness SIGKILLs background processes
 # under memory pressure; a systemd user unit (`Linger=yes`) survives that and logout.
 #
 # ⛔ RUNDIR in-repo, from before the first step. This net's phase-2 master log was lost to a power

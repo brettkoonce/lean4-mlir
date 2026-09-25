@@ -13,7 +13,7 @@ reusing the already-validated numpy replica of emitMultiScaleYoloLoss rather tha
 re-deriving it here, so the floor cannot disagree with the loss for a reason of
 my own making.
 
-Inverting the encoder (see encode_targets_fpn in preprocess_visdrone.py, and the
+Inverting the encoder (see encode_targets_fpn in scripts/datasets/preprocess_visdrone.py, and the
 decode in fpn_loss_breakdown.diou_terms):
 
     target ch0,ch1 = cx*g - cj, cy*g - ci   in [0,1)   <- pred needs logit(.)

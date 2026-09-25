@@ -31,7 +31,7 @@ open ReferenceNets (unetBrats)
       usual BraTS renderings: edema green, non-enhancing/necrotic red,
       enhancing yellow.
 
-    * **Slices are chosen, not taken in order.** `preprocess_brats.py` keeps
+    * **Slices are chosen, not taken in order.** `scripts/datasets/preprocess_brats.py` keeps
       any slice with ≥1 tumour pixel, so the head of the val set is mostly
       near-empty tumour edges. Rendering those would show nothing either way.
 
@@ -94,7 +94,7 @@ def r34UnetBrats : NetSpec := r34UnetBratsOf true
 
 /-- Channel index of the modality used as the grayscale backdrop.
     0 = FLAIR, 1 = T1w, 2 = T1gd, 3 = T2w (order fixed by
-    `preprocess_brats.py`, which reads it from MSD's dataset.json). -/
+    `scripts/datasets/preprocess_brats.py`, which reads it from MSD's dataset.json). -/
 private def backdropModality : Nat := 2   -- T1gd
 
 private def numModalities : Nat := 4

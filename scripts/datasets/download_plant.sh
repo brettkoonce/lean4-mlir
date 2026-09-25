@@ -18,12 +18,12 @@
 #            detection", Front. Plant Sci. 7:1419 (2016); Singh et al., "PlantDoc: a dataset for
 #            visual plant disease detection", CODS-COMAD (2020).
 #
-# Usage: ./download_plant.sh            (idempotent over data/plant/)
+# Usage: ./scripts/datasets/download_plant.sh            (idempotent over data/plant/)
 # Requires: git, curl, python3 + Pillow + numpy + scipy (the repo .venv has them), and
-#           data/imagenette/imagenette2-320/ (download_imagenette.sh) for the composites.
+#           data/imagenette/imagenette2-320/ (scripts/datasets/download_imagenette.sh) for the composites.
 set -e
 
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$REPO_ROOT/data/plant"
 PY="$REPO_ROOT/.venv/bin/python"
 [ -x "$PY" ] || PY=python3
@@ -62,13 +62,13 @@ fi
 echo "  PlantVillage 54,305 colour images, PlantDoc 2,578, official test list 10,709."
 
 if [ ! -d "$REPO_ROOT/data/imagenette/imagenette2-320/train" ]; then
-  echo "ERROR: data/imagenette/imagenette2-320/ missing — run ./download_imagenette.sh first (the composites need it)"
+  echo "ERROR: data/imagenette/imagenette2-320/ missing — run ./scripts/datasets/download_imagenette.sh first (the composites need it)"
   exit 1
 fi
 
 cd "$REPO_ROOT"
 echo "Preprocessing (both splits + census + leaf map + leak audit + masks + composites + augmentations → data/plant) ..."
-"$PY" preprocess_plant.py data/plant data/plant --stats --composites --aug
+"$PY" scripts/datasets/preprocess_plant.py data/plant data/plant --stats --composites --aug
 
 echo
 echo "Done. The base arm under each split:"

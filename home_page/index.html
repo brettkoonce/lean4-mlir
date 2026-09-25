@@ -78,7 +78,7 @@ book's <a href="blueprint/app-getting_started.html">Getting started</a>, one tra
 <pre><code>curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh   # Lean 4
 python3 -m venv .venv &amp;&amp; . .venv/bin/activate &amp;&amp; pip install jax-cuda12-pjrt          # the XLA plugin only (jax-rocm7-pjrt on AMD)
 gcc -fPIC -O2 -shared ffi/pjrt_ffi.c -ldl -o ffi/libpjrt_ffi.so                        # the shim; needs nothing but libc
-lake exe cache get &amp;&amp; ./download_mnist.sh &amp;&amp; lake run mnist                            # Mathlib oleans, MNIST, tier 1</code></pre>
+lake exe cache get &amp;&amp; ./scripts/datasets/download_mnist.sh &amp;&amp; lake run mnist           # Mathlib oleans, MNIST, tier 1</code></pre>
 
 <div class="tablewrap">
 <table>

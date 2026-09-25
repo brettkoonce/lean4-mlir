@@ -15,9 +15,9 @@ We honor the two evaluation subtleties (or the numbers are silently wrong):
   * category 0 (ignored regions) and category 11 (others) -> excluded, skip.
 The 10 kept classes are remapped from file ids 1..10 to 0..9.
 
-Usage: python3 preprocess_visdrone.py <visdrone_dir> <out_dir>
+Usage: python3 scripts/datasets/preprocess_visdrone.py <visdrone_dir> <out_dir>
   <visdrone_dir> must contain VisDrone2019-DET-{train,val}/ each with
-  images/ and annotations/ (as extracted by download_visdrone.sh).
+  images/ and annotations/ (as extracted by scripts/datasets/download_visdrone.sh).
 """
 import os, sys, struct, glob
 from pathlib import Path

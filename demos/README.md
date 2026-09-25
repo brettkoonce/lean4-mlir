@@ -28,12 +28,12 @@ cannot work and multi-scale detection stops being decoration.
 `MainYolov1VisdroneFpn.lean`. See `planning/archive/visdrone_detector.md`.
 
 ```bash
-./download_visdrone.sh
+./scripts/datasets/download_visdrone.sh
 # ⚠ write the anchor priors from the values hardcoded in the demo — do NOT
 # re-run k-means, or encoder and model silently disagree
-python3 preprocess_visdrone.py data/visdrone data/visdrone_fpn \
+python3 scripts/datasets/preprocess_visdrone.py data/visdrone data/visdrone_fpn \
     --size 448 --grid 14 --fpn data/visdrone
-python3 preprocess_visdrone.py data/visdrone data/visdrone448 --size 448 --grid 14
+python3 scripts/datasets/preprocess_visdrone.py data/visdrone data/visdrone448 --size 448 --grid 14
 
 # the current best recipe — ~2 h on one RTX 4060 Ti
 CUDA_VISIBLE_DEVICES=0 FPN_BACKBONE=r34 FPN_TAG=run1 \
@@ -140,7 +140,7 @@ two heads on both datasets is what shows when multi-scale detection pays.
 See `planning/neu_det_fpn_demo.md` and `runs/2026-09-17-neudet-fpn-run1/README.md`.
 
 ```bash
-./download_neu.sh            # maintainer's Drive copy, 26 MB; fits anchors; writes both record formats
+./scripts/datasets/download_neu.sh            # maintainer's Drive copy, 26 MB; fits anchors; writes both record formats
 
 # the FPN arm — the 0.2363 recipe's flags are this binary's DEFAULTS; ~25 min on one 4060 Ti
 CUDA_VISIBLE_DEVICES=0 FPN_TAG=run1 lake exe yolov1-neudet-fpn data/neu_det_fpn
@@ -219,7 +219,7 @@ what each split did.
 loop. See `planning/arasl_people_watching_demo.md` and `runs/2026-09-17-arasl/README.md`.
 
 ```bash
-./download_arasl.sh          # Mendeley, URLs resolved from the public API, sha256-checked;
+./scripts/datasets/download_arasl.sh          # Mendeley, URLs resolved from the public API, sha256-checked;
                              # writes both splits + census + chain statistic + leak audit
 
 # the demo: the chapter net under each split, ~5 min per run on one 4060 Ti
@@ -282,7 +282,7 @@ field images.
 `planning/plant_lab_to_field_demo.md` and `runs/2026-09-17-plant/README.md`.
 
 ```bash
-./download_plant.sh          # two git clones (4.8 + 1.9 GB), the maintainers' split lists, census,
+./scripts/datasets/download_plant.sh          # two git clones (4.8 + 1.9 GB), the maintainers' split lists, census,
                              # leaf grouping, the ArASL leak audit, masks, composites, augmentations
 
 # Act 1–2: the base arm under the maintainers' leaf-grouped split (~40 min on one 4060 Ti);
@@ -355,8 +355,8 @@ verbatim as the contracting path) + a UNet decoder, on MSD Task01_BrainTumour:
 `runs/2026-09-25-brats-r34-xla/`.
 
 ```bash
-./download_brats.sh
-python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
+./scripts/datasets/download_brats.sh
+python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
         --size 224 --seed 0            # same patient split as data/brats
 ./scripts/run_brats_r34_ab.sh 10 data/brats224 # both arms, one per GPU, ~50 min
 lake exe brats-predict net=r34 arm=scratch,r34 best out.ppm   # best-by-val checkpoints
@@ -476,8 +476,8 @@ the held-out split (bigram baseline 3.56, uniform 6.02). Workings in
 `runs/2026-09-09-tinygpt-nano-xla/`; plan in `planning/archive/tinygpt_demo_v2.md`.
 
 ```bash
-./download_shakespeare.sh             # downloads tinyshakespeare.txt
-python3 preprocess_shakespeare.py     # builds train.bin / val.bin / vocab.txt
+./scripts/datasets/download_shakespeare.sh             # downloads tinyshakespeare.txt
+python3 scripts/datasets/preprocess_shakespeare.py     # builds train.bin / val.bin / vocab.txt
 lake exe tinygpt-shakespeare train nano 10000                    # 10K Adam steps, saves params
 lake exe tinygpt-shakespeare sample nano 600 80 0 100 1 "ROMEO:"  # 600 chars, temp 0.8, seed 1
 ```
@@ -629,7 +629,7 @@ temperature. Plan: `planning/boltzmann_generator_demo.md`.
 `planning/archive/diffusion_2d_demo.md` are still in it).
 
 ```bash
-python3 preprocess_boltzmann.py                                      # data + grid, ~1 min CPU
+python3 scripts/datasets/preprocess_boltzmann.py                                      # data + grid, ~1 min CPU
 lake exe diffusion-2d muller_brown flow 20000 50 logp nll            # train 30 s, sample, densities
 lake exe diffusion-2d muller_brown flow reuse 20000 10 logp          # NFE sweep on the checkpoint
 lake exe diffusion-2d muller_brown ot 20000 50 logp                  # minibatch-OT coupling
@@ -678,7 +678,7 @@ minutes on one card. Zero new codegen: the ordinary train step with integer labe
 blackjack/2-D pattern of a host loop around it. See `planning/gw_detection_demo.md`.
 
 ```bash
-python3 preprocess_gw.py --pairs=26 --val-pairs=6 --out=data/gw    # O3a H1+L1 from GWOSC, whitened; IMRPhenomD chirps injected at SNR 4–20
+python3 scripts/datasets/preprocess_gw.py --pairs=26 --val-pairs=6 --out=data/gw    # O3a H1+L1 from GWOSC, whitened; IMRPhenomD chirps injected at SNR 4–20
 lake exe gw-detect arm=real  net=cifar8w epochs=6 tag=real          # trained on the real strain
 lake exe gw-detect arm=gauss net=cifar8w epochs=6 tag=gauss         # trained on Gaussian noise coloured by the same PSD
 python3 scripts/gw_metrics.py table --gate                          # the matched filter against its closed form (Gate 1)

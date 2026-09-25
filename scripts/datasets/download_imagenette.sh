@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."   # the repo root: data/ lives there
 mkdir -p data/imagenette
 cd data/imagenette
 if [ ! -f "train.bin" ]; then
@@ -10,7 +11,7 @@ if [ ! -f "train.bin" ]; then
   # which network-volume mounts refuse ("Cannot change ownership to uid 501")
   tar xzf imagenette2-320.tgz --no-same-owner
   echo "Preprocessing to binary format (requires: pip install Pillow)..."
-  python3 ../../preprocess_imagenette.py imagenette2-320 .
+  python3 ../../scripts/datasets/preprocess_imagenette.py imagenette2-320 .
   rm -rf imagenette2-320 imagenette2-320.tgz
 fi
 echo "Done. Files in ./data/imagenette/"

@@ -3,7 +3,7 @@
 
 One scorer for both protocols, so the two columns of Table 1 are one code path with
 one constant changed. Reads the f32 [N, 32] test logits `arasl-signs` writes, the
-labels of the split's test part, and the leak audit `preprocess_arasl.py` stored in
+labels of the split's test part, and the leak audit `scripts/datasets/preprocess_arasl.py` stored in
 `meta_<split>.npz` (for every test image, its nearest train image at 16×16 and the
 distance there and at 64×64). Prints:
 

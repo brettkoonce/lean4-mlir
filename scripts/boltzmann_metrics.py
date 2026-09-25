@@ -2,7 +2,7 @@
 """Score the Boltzmann-generator demo — planning/boltzmann_generator_demo.md §5, §6.1, §6.2.
 
 The target is a density with a closed form, so every column is a number by
-quadrature on the grid preprocess_boltzmann.py wrote, and the first row of
+quadrature on the grid scripts/datasets/preprocess_boltzmann.py wrote, and the first row of
 every table is exact. A sample set is scored as a free-energy estimate:
 
   p_A / p_B / p_C   well populations, basin by gradient DESCENT on the samples

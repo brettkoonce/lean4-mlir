@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Pre-process Imagenette to raw binary format for Lean loader.
 
-Usage: python3 preprocess_imagenette.py <imagenette_dir> <output_dir>
+Usage: python3 scripts/datasets/preprocess_imagenette.py <imagenette_dir> <output_dir>
 
 Reads JPEG images from imagenette directory structure, resizes to 224×224,
 saves as binary files (train.bin, val.bin) in CIFAR-like format:

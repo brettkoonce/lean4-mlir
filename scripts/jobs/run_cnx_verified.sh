@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Launch a phase-4 verified/PJRT ConvNeXt-T 300-epoch ImageNet run under supervise.sh.
 #
-#   systemd-run --user --unit=cnx-verified --working-directory="$PWD" ./run_cnx_verified.sh [JOB]
+#   systemd-run --user --unit=cnx-verified --working-directory="$PWD" ./scripts/jobs/run_cnx_verified.sh [JOB]
 #
 # JOB defaults to `cnx-default-emabf16-4gpu`, the EMA peer (`emadpwxclipdropbf16`: AdamW + wd off
 # norm/bias + clip + drop-path + the EMA shadow the reference scores, bf16, 4x64). The non-EMA job,
@@ -35,7 +35,7 @@
 JOB="${1:-cnx-default-emabf16-4gpu}"
 case "$JOB" in
   cnx-default-4gpu|cnx-default-emabf16-4gpu) ;;
-  *) echo "run_cnx_verified.sh: $JOB is not a ConvNeXt-T job (cnx-default-4gpu | cnx-default-emabf16-4gpu)"; exit 2 ;;
+  *) echo "scripts/jobs/run_cnx_verified.sh: $JOB is not a ConvNeXt-T job (cnx-default-4gpu | cnx-default-emabf16-4gpu)"; exit 2 ;;
 esac
 [ -n "${RUNDIR:-}" ] && export RUNDIR
 exec scripts/supervise.sh "$JOB"

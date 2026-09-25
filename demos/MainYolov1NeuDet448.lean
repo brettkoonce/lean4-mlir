@@ -12,7 +12,7 @@ that pair of numbers is what the section is about (planning/neu_det_fpn_demo.md)
 
 ```
 lake build yolov1-neudet448
-# train (default): data dir with 448/14 train.bin + val.bin from preprocess_neu_det.py
+# train (default): data dir with 448/14 train.bin + val.bin from scripts/datasets/preprocess_neu_det.py
 CUDA_VISIBLE_DEVICES=1 YOLO_EPOCHS=30 .lake/build/bin/yolov1-neudet448 data/neu_det448
 # infer: dump [N,5880] logits.bin for scripts/yolo_map_visdrone.py --grid 14 --classes neu
 .lake/build/bin/yolov1-neudet448 infer data/neu_det448 runs/neudet_grid

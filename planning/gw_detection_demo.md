@@ -99,8 +99,8 @@ input gives the CNN and a single-detector search does not have.
 
 ## 3. Data — the data is the physics
 
-`preprocess_gw.py [--pairs=26] [--val-pairs=6] [--workers=13] [--out=data/gw]`
-(repo root, beside `preprocess_boltzmann.py`; ~15 min on 13 cores once the
+`scripts/datasets/preprocess_gw.py [--pairs=26] [--val-pairs=6] [--workers=13] [--out=data/gw]`
+(repo root, beside `scripts/datasets/preprocess_boltzmann.py`; ~15 min on 13 cores once the
 files are cached under `data/gw/raw/`):
 
 - Fetch the O3a files, read the DQ mask, keep science-mode, injection-free

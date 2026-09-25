@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Launch the phase-4 verified/PJRT MobileNetV2 350-epoch ImageNet run.
 #
-#   systemd-run --user --unit=mnv2-verified --working-directory="$PWD" ./run_mnv2_verified.sh
+#   systemd-run --user --unit=mnv2-verified --working-directory="$PWD" ./scripts/jobs/run_mnv2_verified.sh
 #
 # ⛔ NOT a bare `&`. The agent harness SIGKILLs background processes under memory pressure and
 # killed a supervisor mid-run on 2026-09-10. `Linger=yes` is set on this account, so a systemd

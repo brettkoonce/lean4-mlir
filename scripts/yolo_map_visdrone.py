@@ -3,13 +3,13 @@
 
 Reads a whole-val-set logits dump (from a detector's `infer` mode, e.g.
 `yolov1-visdrone-fpn infer`) plus the matching VisDrone detection-record `val.bin`
-(produced by preprocess_visdrone.py) and reports:
+(produced by scripts/datasets/preprocess_visdrone.py) and reports:
 
   * a CLASS-AGNOSTIC localization AP@0.5 — "did the detector box *anything* in
     the right place, regardless of label", the honest floor for the collapse story;
   * per-class AP@0.5 + mAP over the 10 VisDrone classes.
 
-The 10-class VisDrone name map (ids 0..9, matching preprocess_visdrone.py), an
+The 10-class VisDrone name map (ids 0..9, matching scripts/datasets/preprocess_visdrone.py), an
 extra class-agnostic row, the FPN decode and the NEU-DET class table. The decode:
 rank by sigmoid(conf logit), class from argmax of the class slots, per-class
 greedy NMS.
@@ -54,11 +54,11 @@ def set_geometry(size, grid):
 
 set_geometry(224, 7)
 
-# VisDrone kept classes, ids 0..9 (preprocess_visdrone.py remaps file 1..10 -> 0..9).
+# VisDrone kept classes, ids 0..9 (scripts/datasets/preprocess_visdrone.py remaps file 1..10 -> 0..9).
 CLASS_NAMES = {0: "pedestrian", 1: "people", 2: "bicycle", 3: "car", 4: "van",
                5: "truck", 6: "tricycle", 7: "awning-tri", 8: "bus", 9: "motor"}
 
-# `--classes neu`: NEU-DET's six defect classes in ids 0..5 (preprocess_neu_det.py).
+# `--classes neu`: NEU-DET's six defect classes in ids 0..5 (scripts/datasets/preprocess_neu_det.py).
 # The FPN head still emits ten class logits — the 5+10 per-anchor width is baked
 # into the codegen — so the decode below argmaxes over all ten and a stray
 # prediction of a dead slot (6..9) is dropped at `if cid not in confs`. The
@@ -308,7 +308,7 @@ def read_gt(val_path):
 
 
 def full_gt_sidecar(val_path):
-    """data/x/val.bin -> data/x/val.full_gt.bin (written by preprocess_visdrone.py)."""
+    """data/x/val.bin -> data/x/val.full_gt.bin (written by scripts/datasets/preprocess_visdrone.py)."""
     return str(Path(val_path).with_suffix(".full_gt.bin"))
 
 
@@ -454,7 +454,7 @@ def main():
         n_gt_rec, gts = read_gt(args.val_bin)
         print(f"⚠️  GT source: 56-box-CAPPED raw_boxes tail — no sidecar at {sidecar}. "
               f"This drops ~34.9% of val GT and is NOT VisDrone protocol. Regenerate GT "
-              f"with: preprocess_visdrone.py --size {args.size or args.grid*32} "
+              f"with: scripts/datasets/preprocess_visdrone.py --size {args.size or args.grid*32} "
               f"--grid {args.grid} --val-only data/visdrone data/visdrone448", file=sys.stderr)
     n = min(n_pred, n_gt_rec)
     if n_pred != n_gt_rec:

@@ -8,14 +8,14 @@ He et al. 2020, IEEE TIM 69). It is VisDrone's opposite regime — one or two
 LARGE defects per crop instead of seventy 20-px cars per frame — which is the
 point of running the same detector on it (planning/neu_det_fpn_demo.md).
 
-Two on-disk formats, byte-identical to preprocess_visdrone.py's, so the Lean
+Two on-disk formats, byte-identical to scripts/datasets/preprocess_visdrone.py's, so the Lean
 loaders, the FPN codegen and scripts/yolo_map_visdrone.py run UNCHANGED:
 
   (default)   single-grid YOLOv1   perCell = 2*5 + 20   [lean_f32_load_voc_dims]
               + the uncapped GT sidecar val.full_gt.bin the scorer reads
   --fpn DIR   FPN multi-scale      Ntot = Σ_s A_s·15·g_s²  [lean_f32_load_voc_fpn]
 
-The encoders are IMPORTED from preprocess_visdrone.py, not copied: the FPN
+The encoders are IMPORTED from scripts/datasets/preprocess_visdrone.py, not copied: the FPN
 per-anchor width (5 + 10 classes = 15) is baked into the `fpnDetect` codegen
 (LeanMlir/Types.lean), so NEU's six classes go into ids 0–5 of the ten-slot
 one-hot and four slots never see a positive. The scorer averages AP over the
@@ -38,9 +38,9 @@ bootstrap self-check passes as-is. The JPEGs are 3-channel files with grey
 content, so `convert("RGB")` is the identity.
 
 Usage:
-  python3 preprocess_neu_det.py data/neu_det data/neu_det_fpn --size 448 --grid 14 --fpn data/neu_det
-  python3 preprocess_neu_det.py data/neu_det data/neu_det448 --size 448 --grid 14
-  python3 preprocess_neu_det.py data/neu_det --stats        # box statistics only
+  python3 scripts/datasets/preprocess_neu_det.py data/neu_det data/neu_det_fpn --size 448 --grid 14 --fpn data/neu_det
+  python3 scripts/datasets/preprocess_neu_det.py data/neu_det data/neu_det448 --size 448 --grid 14
+  python3 scripts/datasets/preprocess_neu_det.py data/neu_det --stats        # box statistics only
 
 Flags: --size N --grid N --fpn DIR --seed N --stats --splits train,val,test
 """
@@ -100,7 +100,7 @@ def all_stems(neu_dir):
     imgs = Path(neu_dir) / "IMAGES"
     anns = Path(neu_dir) / "ANNOTATIONS"
     if not imgs.is_dir() or not anns.is_dir():
-        print(f"ERROR: expected {imgs} and {anns} (run download_neu.sh)", file=sys.stderr)
+        print(f"ERROR: expected {imgs} and {anns} (run scripts/datasets/download_neu.sh)", file=sys.stderr)
         sys.exit(1)
     by_class = {n: [] for n in CLASS_NAMES}
     for p in sorted(imgs.glob("*.jpg")):
@@ -201,7 +201,7 @@ def report_stats(per_image, label, input_px=INPUT_PX):
               f"{100.0 * np.mean(sc == 2):>4.0f}%")
 
 
-# ── writers (record layouts from preprocess_visdrone.py) ─────────────────────
+# ── writers (record layouts from scripts/datasets/preprocess_visdrone.py) ─────────────────────
 
 def load_rgb(neu_dir, stem):
     return Image.open(Path(neu_dir) / "IMAGES" / f"{stem}.jpg").convert("RGB")

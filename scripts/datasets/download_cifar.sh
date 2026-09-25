@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+cd "$(dirname "${BASH_SOURCE[0]}")/../.."   # the repo root: data/ lives there
 mkdir -p data/cifar-10
 cd data/cifar-10
 URL="https://www.cs.toronto.edu/~kriz/cifar-10-binary.tar.gz"

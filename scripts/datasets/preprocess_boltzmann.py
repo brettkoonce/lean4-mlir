@@ -19,7 +19,7 @@ Writes, into `outdir` (default data/boltzmann):
                          the scorer reads it rather than retyping
 
 Coordinates in every .bin are STANDARDISED, z = (x - c) / s with c = (-0.2, 0.75)
-and s = 0.8, so N(0, I) covers the box; the same reason preprocess_toy2d.py
+and s = 0.8, so N(0, I) covers the box; the same reason scripts/datasets/preprocess_toy2d.py
 scales its targets to unit radius. U is always evaluated in the original
 coordinates.
 
@@ -30,7 +30,7 @@ minimum: the wells are elongated and Voronoi cells put part of A's basin in C.
 steps still over-weight A by a few points; the model trained on it inherits
 that, the table shows it, and it is the reason the quadrature row exists.
 
-Usage: python3 preprocess_boltzmann.py [nref=4096] [outdir=data/boltzmann]
+Usage: python3 scripts/datasets/preprocess_boltzmann.py [nref=4096] [outdir=data/boltzmann]
 """
 import json, os, sys
 import numpy as np

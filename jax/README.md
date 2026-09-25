@@ -65,9 +65,9 @@ on jax 0.10.0 — see **Pinned environments** below.
 ### 3. Get data
 
 ```bash
-./download_mnist.sh        # MNIST (MLP, CNN)
-./download_cifar.sh        # CIFAR-10
-./download_imagenette.sh   # Imagenette (ResNet, MobileNet, ViT, etc.)
+./scripts/datasets/download_mnist.sh        # MNIST (MLP, CNN)
+./scripts/datasets/download_cifar.sh        # CIFAR-10
+./scripts/datasets/download_imagenette.sh   # Imagenette (ResNet, MobileNet, ViT, etc.)
 ```
 
 ### 4. Build and run

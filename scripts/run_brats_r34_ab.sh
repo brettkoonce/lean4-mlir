@@ -23,7 +23,7 @@ if [ "$VARIANT" = "noskip" ]; then EXTRA="noskip"; fi
 
 if [ ! -f "$DATA/train.bin" ] || [ ! -f "$DATA/val.bin" ]; then
   echo "missing $DATA/{train,val}.bin — build it with:"
-  echo "  python3 preprocess_brats.py data/brats/Task01_BrainTumour $DATA --size 224 --seed 0"
+  echo "  python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour $DATA --size 224 --seed 0"
   exit 1
 fi
 if [ ! -f .lake/build/jax_r34_imagenet.bin ]; then

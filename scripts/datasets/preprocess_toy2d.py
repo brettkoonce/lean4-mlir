@@ -20,7 +20,7 @@ constants live in ONE file instead of being retyped in the metric script.
 ⭐ Every target has EQUAL-MASS cells, so the 1%-of-mass recall threshold in
 `scripts/toy2d_metrics.py` means the same thing on all four.
 
-Usage: python3 preprocess_toy2d.py [n=8192] [outdir=data/toy2d]
+Usage: python3 scripts/datasets/preprocess_toy2d.py [n=8192] [outdir=data/toy2d]
 """
 import json, os, sys
 import numpy as np

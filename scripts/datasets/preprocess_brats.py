@@ -2,7 +2,7 @@
 """Pre-process the Medical Segmentation Decathlon brain-tumour task
 (Task01_BrainTumour, BraTS-derived) to raw binary for the Lean loader.
 
-Usage: python3 preprocess_brats.py <task_dir> <output_dir> [options]
+Usage: python3 scripts/datasets/preprocess_brats.py <task_dir> <output_dir> [options]
 
   <task_dir> must contain (as shipped inside Task01_BrainTumour.tar):
     dataset.json

@@ -436,7 +436,7 @@ private def bratsIO : DatasetIO where
     buffer carries the 30×7×7 float32 target tensor concatenated with the
     7×7 float32 per-cell objectness mask (6076 bytes per record). The
     `runTraining` dispatch splits this into target + mask before calling
-    `trainStepAdamF32Yolov1`. See `preprocess_visdrone.py` for the on-disk
+    `trainStepAdamF32Yolov1`. See `scripts/datasets/preprocess_visdrone.py` for the on-disk
     format and `planning/archive/yolo_final.md` for the recipe. -/
 private def detectionIO : DatasetIO where
   trainPixels := 3 * 224 * 224
@@ -875,7 +875,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
                           fpnAnchorsFlat
                           cfg.fpnAffineScale cfg.fpnAffineTranslate
                           -- 24 / 64 px are FPN_T_LO / FPN_T_HI from
-                          -- preprocess_visdrone.py: the max(w,h) thresholds that
+                          -- scripts/datasets/preprocess_visdrone.py: the max(w,h) thresholds that
                           -- decide P3 / P4 / P5. They MUST match the file on disk,
                           -- or a rescaled box lands on a different level than the
                           -- same box would have if it had been encoded there.

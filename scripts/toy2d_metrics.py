@@ -6,7 +6,7 @@ here is a NUMBER, not a judgement. Three of them, on all four targets:
 
   1. Cell recall    — assign each sample to its nearest support cell, count
                       cells holding >= 1% of mass. Every target's cells are
-                      EQUAL-MASS by construction (preprocess_toy2d.py), so the
+                      EQUAL-MASS by construction (scripts/datasets/preprocess_toy2d.py), so the
                       threshold means the same thing on each. 8-gaussians has
                       8 modes, checkerboard 8 squares, two-moons 2 moons,
                       spiral 8 equal-mass arcs. K/K or it collapsed.

@@ -36,9 +36,9 @@ twins are the SINGLE sample at the detector-frame time, no maximisation at all: 
 closed form's exact regime, and what Gate 1 checks (the +-2 ms max hands a signal
 ~0.2 of SNR that the noise-set threshold does not see).
 
-  .venv-gw/bin/python preprocess_gw.py [--pairs=26] [--val-pairs=6] [--workers=8]
+  .venv-gw/bin/python scripts/datasets/preprocess_gw.py [--pairs=26] [--val-pairs=6] [--workers=8]
                                        [--out=data/gw] [--smoke]
-  .venv-gw/bin/python preprocess_gw.py --examples=14,18     # only rewrite examples.npz, from
+  .venv-gw/bin/python scripts/datasets/preprocess_gw.py --examples=14,18     # only rewrite examples.npz, from
                                                            # the first val pair, at that SNR
 """
 import gc
@@ -57,7 +57,7 @@ for _v in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
 import numpy as np
 from scipy.ndimage import maximum_filter1d
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "scripts"))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import gw_common as gw  # noqa: E402
 
 FS = gw.FS

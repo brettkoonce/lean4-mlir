@@ -39,7 +39,7 @@ import LeanMlir
       7 → 14 → 28 → 56 → 112 → 224 on five upsamples. 224 is also R34's own
       ImageNet resolution, so the backbone sees the scale it was trained at.
 
-      `preprocess_brats.py --size 224` **center-crops** (`fit_plane`); it does
+      `scripts/datasets/preprocess_brats.py --size 224` **center-crops** (`fit_plane`); it does
       not interpolate. That matters more than it sounds: a bilinear resize of a
       label mask invents classes that never existed, silently. A crop leaves
       intensities exact and the mask exactly {0,1,2,3}. It is also lossless
@@ -68,7 +68,7 @@ import LeanMlir
       with no changes beyond the spec swap.
 
     Usage:
-      python3 preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
+      python3 scripts/datasets/preprocess_brats.py data/brats/Task01_BrainTumour data/brats224 \
               --size 224 --seed 0                 # same split as data/brats
       lake exe unet-brats-r34 data/brats224 10 r34       # bootstrapped arm
       lake exe unet-brats-r34 data/brats224 10 scratch   # control arm

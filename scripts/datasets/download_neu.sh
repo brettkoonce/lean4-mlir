@@ -18,13 +18,13 @@
 #           Surface Defect Detection Approach via Fusing Multiple Hierarchical
 #           Features", IEEE TIM 69(4) (2020).
 #
-# Usage: ./download_neu.sh
+# Usage: ./scripts/datasets/download_neu.sh
 # Requires: curl, unzip, python3 + Pillow + numpy.
 set -e
 
 DRIVE_ID="1qrdZlaDi272eA79b0uCwwqPrm2Q_WI3k"
 URL="https://drive.usercontent.google.com/download?id=${DRIVE_ID}&export=download&confirm=t"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$REPO_ROOT/data/neu_det"
 
 mkdir -p "$OUT"
@@ -65,8 +65,8 @@ echo "Fitting per-scale anchor priors on the train split ..."
 python3 scripts/neu_anchors.py data/neu_det --save data/neu_det
 
 echo "Preprocessing (FPN records → data/neu_det_fpn, single-grid → data/neu_det448) ..."
-python3 preprocess_neu_det.py data/neu_det data/neu_det_fpn --size 448 --grid 14 --fpn data/neu_det
-python3 preprocess_neu_det.py data/neu_det data/neu_det448 --size 448 --grid 14
+python3 scripts/datasets/preprocess_neu_det.py data/neu_det data/neu_det_fpn --size 448 --grid 14 --fpn data/neu_det
+python3 scripts/datasets/preprocess_neu_det.py data/neu_det data/neu_det448 --size 448 --grid 14
 
 echo
 echo "Done. Train the FPN detector on steel with:"

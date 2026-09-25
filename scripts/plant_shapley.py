@@ -7,7 +7,7 @@ leaf — and this is the model-agnostic one. Both modes need only the eval graph
   two-player   The leaf region and the background are the two players; the "removed" region is
                filled with the image's median background colour, the same fill for all four
                counterfactuals (`_test`, `_test_leaf`, `_test_bg`, `_test_none`, written by
-               `preprocess_plant.py --only-shapley-parts`). With two players the Shapley value is
+               `scripts/datasets/preprocess_plant.py --only-shapley-parts`). With two players the Shapley value is
                exact in those four evaluations:
                    φ_leaf = ½[(f(leaf) − f(none)) + (f(full) − f(bg))],  φ_bg likewise,
                and φ_leaf + φ_bg = f(full) − f(none) to the float (the efficiency axiom, checked).

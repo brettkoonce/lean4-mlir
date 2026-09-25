@@ -41,8 +41,8 @@ import LeanMlir
     step for the whole cloud. The archived version ran one point at a time.
 
     Usage:
-      python3 preprocess_toy2d.py 8192 data/toy2d
-      python3 preprocess_boltzmann.py
+      python3 scripts/datasets/preprocess_toy2d.py 8192 data/toy2d
+      python3 scripts/datasets/preprocess_boltzmann.py
       lake exe diffusion-2d                          # 8-gaussians: train + sample + dump
       lake exe diffusion-2d 20000 200 25             # steps, NFE budget, eta%
       lake exe diffusion-2d spiral                   # any of the targets
@@ -368,8 +368,8 @@ pairs; run `lake exe diffusion-2d {target} flow` first"
     IO.eprintln s!"  {F32.size raw / 2} pairs in {t1 - t0} ms"
   else
     unless ← System.FilePath.pathExists dataPath do
-      let hint := if target == "muller_brown" then "python3 preprocess_boltzmann.py"
-                  else "python3 preprocess_toy2d.py 8192 data/toy2d"
+      let hint := if target == "muller_brown" then "python3 scripts/datasets/preprocess_boltzmann.py"
+                  else "python3 scripts/datasets/preprocess_toy2d.py 8192 data/toy2d"
       throw <| IO.userError s!"{dataPath} missing — run: {hint}"
     raw ← IO.FS.readBinFile dataPath
   let nPts := F32.size raw / 2

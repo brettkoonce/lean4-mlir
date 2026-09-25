@@ -13,12 +13,12 @@
 #           Nature Communications 13, 4128 (2022). The underlying cases are
 #           BraTS — cite Menze et al. 2015 / Bakas et al. 2017 as well.
 #
-# Usage: ./download_brats.sh
+# Usage: ./scripts/datasets/download_brats.sh
 # Requires: curl, tar, python3 + numpy (NIfTI reading is dependency-free).
 set -e
 
 URL="https://msd-for-monai.s3-us-west-2.amazonaws.com/Task01_BrainTumour.tar"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 
 mkdir -p "$REPO_ROOT/data/brats"
 cd "$REPO_ROOT/data/brats"

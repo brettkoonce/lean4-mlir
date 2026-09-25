@@ -306,7 +306,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj,
 }
 
 // ---- BraTS (MSD Task01_BrainTumour) loader ----
-// Binary format per record (written by preprocess_brats.py):
+// Binary format per record (written by scripts/datasets/preprocess_brats.py):
 //   image: 4 * S * S bytes (channel-first [modality][y][x], uint8)
 //   mask:  S * S     bytes (per-pixel class 0..3)
 // At the default S=240: 288,000 bytes/record.
@@ -315,11 +315,11 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj,
 // segmentation train path expects.
 //
 // Unlike the RGB loaders, this does NOT apply ImageNet mean/std. MRI is not
-// RGB and has no such statistics. preprocess_brats.py z-scores each modality
+// RGB and has no such statistics. scripts/datasets/preprocess_brats.py z-scores each modality
 // over that volume's brain (nonzero) voxels and quantizes the result to uint8
 // over a +/-BRATS_CLIP_SIGMA window; here we invert exactly that, so the model
 // sees per-volume z-scored intensities. The inverse must stay in lockstep with
-// quantize_u8() in preprocess_brats.py.
+// quantize_u8() in scripts/datasets/preprocess_brats.py.
 #define BRATS_CLIP_SIGMA 5.0f
 #define BRATS_CHANNELS 4
 
@@ -501,7 +501,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc_dims(
 
 // Anchor-format detection loader (brick #2). On-disk record:
 //   image 3*imgSize^2 uint8, target A*15*gH*gW f32, mask A*gH*gW f32,
-//   numBoxes i32, raw_boxes 56*20 (as preprocess_visdrone.py --anchors writes).
+//   numBoxes i32, raw_boxes 56*20 (as scripts/datasets/preprocess_visdrone.py --anchors writes).
 // Returns (image_f32_normalized, target_only_concat, count): only the target is
 // returned (A*15*gH*gW f32/record) — the anchor loss derives its per-anchor mask
 // from the target's objectness channels, so mask/numBoxes/raw_boxes are skipped.
@@ -557,7 +557,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc_anchor(
 
 // FPN multi-scale detection loader (brick #3). On-disk record:
 //   image 3*imgSize^2 uint8, target ntot f32 (flat [P3|P4|P5] block,
-//   ntot = sum_s numAnchors_s*15*g_s^2, as preprocess_visdrone.py --fpn writes).
+//   ntot = sum_s numAnchors_s*15*g_s^2, as scripts/datasets/preprocess_visdrone.py --fpn writes).
 // Returns (image_f32_normalized, target_only_concat, count) — image + flat target
 // only (no mask/boxes on disk; the loss derives masks from the target's obj
 // channels, and eval GT comes from the single-box val.bin geometry).
@@ -2713,7 +2713,7 @@ LEAN_EXPORT lean_obj_res lean_f32_hsv_jitter(
 // record stores none): mirror the image columns, mirror each scale's grid
 // columns for every channel, and replace the in-cell x-offset tx with 1-tx on
 // assigned cells (obj==1). ty/tw/th/obj/cls and the anchor index are untouched.
-// This matches encode_targets_fpn's assignment exactly (see preprocess_visdrone.py):
+// This matches encode_targets_fpn's assignment exactly (see scripts/datasets/preprocess_visdrone.py):
 // after a column mirror cell cj -> g-1-cj and tx = cx*g-cj -> 1-tx.
 // `scales_flat` is int32-LE pairs [g_s, A_s] per scale; perAnchor = 15 fixed.
 // One p=`prob` coin per image. Returns (image', target') as fresh ByteArrays.

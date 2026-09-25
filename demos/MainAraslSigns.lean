@@ -4,7 +4,7 @@ import LeanMlir
     images — planning/arasl_people_watching_demo.md.
 
     ArASL is 54,049 grey 64 × 64 crops of hands spelling the 32 letters of the Arabic
-    alphabet, captured as video bursts. `preprocess_arasl.py` writes the same images
+    alphabet, captured as video bursts. `scripts/datasets/preprocess_arasl.py` writes the same images
     twice: `random` is the stratified permutation every published number uses, `blocked`
     keeps each class's capture order together and cuts at the 80 % and 90 % marks. The
     net is chapter 4's CIFAR-CNN8-wide-BN with a one-channel stem and a 32-way head —
@@ -137,7 +137,7 @@ def loadPart (dataDir split part sfx : String) (nPix : Nat) : IO (ByteArray × B
   let lp := s!"{dataDir}/labels_{split}_{part}{sfx}.bin"
   for f in [ip, lp] do
     unless ← System.FilePath.pathExists f do
-      throw <| IO.userError s!"{f} missing — run: .venv/bin/python preprocess_arasl.py data/arasl data/arasl --stats"
+      throw <| IO.userError s!"{f} missing — run: .venv/bin/python scripts/datasets/preprocess_arasl.py data/arasl data/arasl --stats"
   let lbl ← IO.FS.readBinFile lp
   let n := lbl.size / 4
   let img ← IO.FS.readBinFile ip

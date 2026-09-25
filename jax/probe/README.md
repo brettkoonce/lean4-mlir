@@ -23,7 +23,7 @@ python -m pip install -r /tmp/req-jax.txt Pillow
 # (only for `lake run benchmark` pods: python -m pip install "iree-base-compiler==<pin>" \
 #    "iree-base-runtime==<pin>" -f https://iree.dev/pip-release-links.html)
 python -c "import jax; print(jax.devices(), jax.devices()[0].device_kind)"
-./download_imagenette.sh                        # ~1.5 GB; run on LOCAL disk, not /workspace
+./scripts/datasets/download_imagenette.sh                        # ~1.5 GB; run on LOCAL disk, not /workspace
 nvidia-smi                                      # note the card + free VRAM
 
 python jax/probe/probe_resnet50_imagenette.py   # data_dir baked as data/imagenette

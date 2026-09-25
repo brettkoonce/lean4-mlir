@@ -140,7 +140,7 @@ disease on at least one; the label is per image and the task stays
 classification.
 
 **The class map**, PlantDoc → PlantVillage, all 28 folders, spelled once in
-`preprocess_plant.py` and printed by Gate 0:
+`scripts/datasets/preprocess_plant.py` and printed by Gate 0:
 
 | PlantDoc | PlantVillage | | PlantDoc | PlantVillage |
 |---|---|---|---|---|
@@ -168,7 +168,7 @@ stay in the 38-way head; the scorer reports PlantDoc accuracy both ways —
 restricted to the 28 mapped classes — and the section quotes the restricted
 one, since the published PlantDoc numbers are 27-way.
 
-`preprocess_plant.py <pv_dir> <plantdoc_dir> data/plant` writes the Imagenette
+`scripts/datasets/preprocess_plant.py <pv_dir> <plantdoc_dir> data/plant` writes the Imagenette
 record format (`count` header, then `label` byte + 3×S×S u8, channel-planar) at
 S = 256 for training parts and 224 for evaluation parts, so
 `F32.loadImagenetteSized` and the C batch helpers read them unchanged:
@@ -370,8 +370,8 @@ later session (`planning/orin_rerun.md` §1 lists the blockers when it comes).
 ## 7. Phases
 
 ```
-Phase 0 (½ session, CPU):   download_plant.sh (two clones, sizes + licences printed),
-                            preprocess_plant.py --stats: census, the class map, the ArASL
+Phase 0 (½ session, CPU):   scripts/datasets/download_plant.sh (two clones, sizes + licences printed),
+                            scripts/datasets/preprocess_plant.py --stats: census, the class map, the ArASL
                             audit on PlantVillage, the seg/bg/mask parts, composites, folds
                             Gate 0: 38 / 54,305 (color) with segmented twins for every file;
                                     27 PlantDoc folders each mapped or listed as unmapped;
@@ -447,11 +447,11 @@ Later (own session):        deploy — Orin PJRT + TensorRT, a Pi if one appears
   run from this prefix, so there is no number to quote), suspect the prefix
   offset before anything else — `MainUnetBratsR34.lean` documents the two
   offsets and the NEU detector's bootstrap self-check is the pattern.
-- The audit code is imported from `preprocess_arasl.py`, not copied; if the
+- The audit code is imported from `scripts/datasets/preprocess_arasl.py`, not copied; if the
   function signatures need to move into `scripts/dup_audit.py`, do it in this
   session and point both preprocessors at it.
 - `data/imagenette/train.bin` must exist for the composites
-  (`download_imagenette.sh`); it does on this box.
+  (`scripts/datasets/download_imagenette.sh`); it does on this box.
 - The `gradcam` probe writes to `blueprint/src/figures/gradcam/`; the demo's
   figure goes to `demos/figures/plant_lab_to_field.png` and a copy to
   `blueprint/src/figures/demos/`, as every demo's does.

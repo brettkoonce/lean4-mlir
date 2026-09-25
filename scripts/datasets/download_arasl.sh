@@ -12,13 +12,13 @@
 #           Alphabets Sign Language Dataset", Data in Brief 23, 103777 (2019).
 #           doi 10.17632/y7pckrw6z2.1
 #
-# Usage: ./download_arasl.sh            (idempotent over data/arasl/)
+# Usage: ./scripts/datasets/download_arasl.sh            (idempotent over data/arasl/)
 # Requires: curl, unzip, python3 + Pillow + numpy (the repo .venv has both).
 set -e
 
 DATASET="y7pckrw6z2"
 API="https://data.mendeley.com/public-api/datasets/${DATASET}/files?folder_id=root&version=1"
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 OUT="$REPO_ROOT/data/arasl"
 PY="$REPO_ROOT/.venv/bin/python"
 [ -x "$PY" ] || PY=python3
@@ -68,7 +68,7 @@ echo "  54,049 images in 32 class folders."
 
 cd "$REPO_ROOT"
 echo "Preprocessing (both splits + census + chain statistic + leak audit → data/arasl) ..."
-"$PY" preprocess_arasl.py data/arasl data/arasl --stats
+"$PY" scripts/datasets/preprocess_arasl.py data/arasl data/arasl --stats
 
 echo
 echo "Done. Train the chapter-4 CNN under each split with:"

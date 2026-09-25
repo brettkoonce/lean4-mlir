@@ -32,7 +32,7 @@ Three properties, in increasing strength:
 import ctypes, sys, numpy as np
 import os
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO)
+sys.path.insert(0, os.path.join(REPO, "scripts", "datasets"))
 from preprocess_visdrone import encode_targets_fpn, FPN_GRIDS, FPN_T_LO, FPN_T_HI
 
 ANCHORS = [

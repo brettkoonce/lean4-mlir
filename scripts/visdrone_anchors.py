@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+sys.path.insert(0, str(Path(__file__).resolve().parent / "datasets"))
 from preprocess_visdrone import parse_visdrone_txt  # reuse the exact box filter
 
 

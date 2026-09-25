@@ -3,7 +3,7 @@ import LeanMlir
 /-! A CNN against the matched filter on LIGO strain — planning/gw_detection_demo.md §4.
 
     Two-channel (H1, L1) 64 × 128 constant-Q spectrograms of 2-s windows, half of
-    them carrying an injected binary-black-hole chirp, from `preprocess_gw.py`. The
+    them carrying an injected binary-black-hole chirp, from `scripts/datasets/preprocess_gw.py`. The
     net is EfficientNet-B0 with a 2-channel stem (or the CIFAR-style CNN as the small
     arm), a two-class head and the ordinary cross-entropy train step with int32
     labels — the blackjack/2-D pattern of a host loop around the standard step, no
@@ -288,7 +288,7 @@ train on {arm}, {epochs} epochs, batch {B}, lr {lr}, label smoothing {ls}, seed 
                s!"{dataDir}/gauss_val.bin", s!"{dataDir}/real_val.bin", s!"{dataDir}/labels_val.bin"]
   for f in need do
     unless ← System.FilePath.pathExists f do
-      throw <| IO.userError s!"{f} missing — run: .venv-gw/bin/python preprocess_gw.py"
+      throw <| IO.userError s!"{f} missing — run: .venv-gw/bin/python scripts/datasets/preprocess_gw.py"
   let lblTr ← IO.FS.readBinFile s!"{dataDir}/labels_train.bin"
   let lblVa ← IO.FS.readBinFile s!"{dataDir}/labels_val.bin"
   let nTr := lblTr.size / 4
