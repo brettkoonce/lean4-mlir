@@ -207,6 +207,83 @@ def _autoaugment(img):
     idx = tf.random.uniform([], 0, len(_AA_POLICY), dtype=tf.int32)
     out = tf.switch_case(idx, branches)
     return tf.cast(out, tf.float32)
+# ── C6 (planning/imagenet_parity.md): timm's geometric ops run PIL BICUBIC, and TF has no bicubic
+#    projective warp (ImageProjectiveTransformV3 takes NEAREST/BILINEAR only and LOGS, not raises,
+#    on anything else). So the warp is written out: PIL's own affine sampler, a = -1 cubic (PIL's
+#    transform filter; its resize uses -0.5) over a 4x4 neighbourhood, neighbours clamped at the
+#    border, truncated to uint8 as PIL does, the fill where the source centre falls outside the
+#    image. Overrides the bilinear _aa_transform above; see _aa_warp1d for why only Rotate uses it. ──
+def _aa_transform(img, vec):
+    x = tf.cast(img, tf.float32)
+    H = tf.shape(x)[0]; W = tf.shape(x)[1]
+    Hf = tf.cast(H, tf.float32); Wf = tf.cast(W, tf.float32)
+    v = [tf.cast(t, tf.float32) for t in vec]
+    ys, xs = tf.meshgrid(tf.range(Hf), tf.range(Wf), indexing='ij')
+    den = v[6] * xs + v[7] * ys + 1.0
+    u = (v[0] * xs + v[1] * ys + v[2]) / den          # source column, pixel-index coords
+    w = (v[3] * xs + v[4] * ys + v[5]) / den          # source row
+    inside = (u >= -0.5) & (u < Wf - 0.5) & (w >= -0.5) & (w < Hf - 0.5)
+    x0 = tf.floor(u); y0 = tf.floor(w)
+    def _cub(t):   # PIL's transform bicubic (a = -1) weights for the taps at -1, 0, +1, +2
+        a = -1.0
+        def near(d): return ((a + 2.0) * d - (a + 3.0)) * d * d + 1.0
+        def far(d):  return ((a * d - 5.0 * a) * d + 8.0 * a) * d - 4.0 * a
+        return tf.stack([far(1.0 + t), near(t), near(1.0 - t), far(2.0 - t)], -1)
+    wx = _cub(u - x0); wy = _cub(w - y0)
+    offs = tf.constant([-1.0, 0.0, 1.0, 2.0])
+    xi = tf.clip_by_value(tf.cast(x0[..., None] + offs, tf.int32), 0, W - 1)
+    yi = tf.clip_by_value(tf.cast(y0[..., None] + offs, tf.int32), 0, H - 1)
+    flat = tf.reshape(x, [-1, 3])
+    out = tf.zeros([H, W, 3], tf.float32)
+    for i in range(4):
+        row = tf.zeros([H, W, 3], tf.float32)
+        for j in range(4):
+            row += wx[:, :, j:j+1] * tf.gather(flat, yi[:, :, i] * W + xi[:, :, j])
+        out += wy[:, :, i:i+1] * row
+    out = tf.where(inside[..., None], out, 128.0)
+    return tf.cast(tf.clip_by_value(tf.floor(out), 0.0, 255.0), tf.uint8)
+
+# Shear and translate move pixels along ONE axis, where the other axis lands on integer rows
+# (columns), whose cubic weights are exactly [0, 1, 0, 0]: four gathers give the 16-tap result bit
+# for bit at a quarter of the cost. Only Rotate needs the full warp.
+# `axis` 1 samples along x (u = x + a*y + c), 0 along y (v = y + a*x + c).
+def _aa_warp1d(img, a, c, axis):
+    x = tf.cast(img, tf.float32)
+    H = tf.shape(x)[0]; W = tf.shape(x)[1]
+    Hf = tf.cast(H, tf.float32); Wf = tf.cast(W, tf.float32)
+    a = tf.cast(a, tf.float32); c = tf.cast(c, tf.float32)
+    ys, xs = tf.meshgrid(tf.range(Hf), tf.range(Wf), indexing='ij')
+    if axis == 1:
+        u = xs + a * ys + c; n = W; nf = Wf
+    else:
+        u = ys + a * xs + c; n = H; nf = Hf
+    inside = (u >= -0.5) & (u < nf - 0.5)
+    u0 = tf.floor(u); t = u - u0
+    a_ = -1.0
+    def near(d): return ((a_ + 2.0) * d - (a_ + 3.0)) * d * d + 1.0
+    def far(d):  return ((a_ * d - 5.0 * a_) * d + 8.0 * a_) * d - 4.0 * a_
+    wts = [far(1.0 + t), near(t), near(1.0 - t), far(2.0 - t)]
+    flat = tf.reshape(x, [-1, 3])
+    iy = tf.cast(ys, tf.int32); ix = tf.cast(xs, tf.int32)
+    out = tf.zeros([H, W, 3], tf.float32)
+    for k in range(4):
+        tap = tf.clip_by_value(tf.cast(u0, tf.int32) + (k - 1), 0, n - 1)
+        idx = iy * W + tap if axis == 1 else tap * W + ix
+        out += wts[k][:, :, None] * tf.gather(flat, idx)
+    out = tf.where(inside[..., None], out, 128.0)
+    return tf.cast(tf.clip_by_value(tf.floor(out), 0.0, 255.0), tf.uint8)
+
+# PIL's affine data is in pixel-CENTRE coordinates: timm's shear (1, f, 0, 0, 1, 0) is
+# u = x + f*y + f/2 in index coordinates. Translate already agrees.
+def _aa_shear_x(img, lvl):     return _aa_warp1d(img, lvl, 0.5 * lvl, 1)
+def _aa_shear_y(img, lvl):     return _aa_warp1d(img, lvl, 0.5 * lvl, 0)
+def _aa_translate_x(img, pct): return _aa_warp1d(img, 0.0, -pct * tf.cast(tf.shape(img)[1], tf.float32), 1)  # timm -Rel
+def _aa_translate_y(img, pct): return _aa_warp1d(img, 0.0, -pct * tf.cast(tf.shape(img)[0], tf.float32), 0)
+_AA_OPS['ShearX'] = (_aa_shear_x, _aa_she, True)
+_AA_OPS['ShearY'] = (_aa_shear_y, _aa_she, True)
+_AA_OPS['TranslateX'] = (_aa_translate_x, _aa_trn, True)
+_AA_OPS['TranslateY'] = (_aa_translate_y, _aa_trn, True)
+
 _RA_INC = True   # timm inc1 (gap D)
 
 # ──────────────────────────────────────────────────────────────────
@@ -264,19 +341,25 @@ def _imagenet_decode_center_crop(image_bytes):
     return tf.image.crop_to_bounding_box(img, oy, ox, _IMG_SIZE, _IMG_SIZE)
 
 def _random_erase(img):
-    # Zero a random box (≈mean post-normalize) with prob p. tf-graph-friendly.
+    # timm RandomErasing(mode='pixel'): an N(0,1) box, area U(0.02, 1/3) of the image, aspect
+    # log-uniform in [0.3, 1/0.3], the first of 10 draws that fits; with prob p.
     def erase():
-        area = float(_IMG_SIZE * _IMG_SIZE)
-        er = tf.random.uniform([], 0.02, 0.33) * area
-        ar = tf.random.uniform([], 0.3, 3.3)
-        eh = tf.minimum(tf.cast(tf.sqrt(er * ar), tf.int32), _IMG_SIZE)
-        ew = tf.minimum(tf.cast(tf.sqrt(er / ar), tf.int32), _IMG_SIZE)
-        top = tf.random.uniform([], 0, _IMG_SIZE - eh + 1, dtype=tf.int32)
-        left = tf.random.uniform([], 0, _IMG_SIZE - ew + 1, dtype=tf.int32)
-        my = (tf.range(_IMG_SIZE) >= top) & (tf.range(_IMG_SIZE) < top + eh)
-        mx = (tf.range(_IMG_SIZE) >= left) & (tf.range(_IMG_SIZE) < left + ew)
-        mask = tf.cast(my[:, None] & mx[None, :], img.dtype)[:, :, None]
-        return img * (1.0 - mask)
+        H = tf.shape(img)[0]; W = tf.shape(img)[1]
+        area = tf.cast(H * W, tf.float32)
+        ta = tf.random.uniform([10], 0.02, 1.0 / 3.0) * area
+        ar = tf.exp(tf.random.uniform([10], np.log(0.3), np.log(1.0 / 0.3)))
+        eh = tf.cast(tf.round(tf.sqrt(ta * ar)), tf.int32)
+        ew = tf.cast(tf.round(tf.sqrt(ta / ar)), tf.int32)
+        ok = (eh < H) & (ew < W)
+        k = tf.argmax(tf.cast(ok, tf.int32))   # the first draw that fits
+        def box():
+            h = eh[k]; w = ew[k]
+            top = tf.random.uniform([], 0, H - h + 1, dtype=tf.int32)
+            left = tf.random.uniform([], 0, W - w + 1, dtype=tf.int32)
+            my = (tf.range(H) >= top) & (tf.range(H) < top + h)
+            mx = (tf.range(W) >= left) & (tf.range(W) < left + w)
+            return tf.where((my[:, None] & mx[None, :])[:, :, None], tf.random.normal(tf.shape(img)), img)
+        return tf.cond(tf.reduce_any(ok), box, lambda: img)
     return tf.cond(tf.random.uniform([]) < 0.250000, erase, lambda: img)
 
 def build_imagenet_iter(split, batch_size, training, augment, shard=None):

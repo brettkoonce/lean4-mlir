@@ -52,6 +52,7 @@ def convNeXtSImagenetConfig : TrainConfig where
   warmupEpochs   := 20
   augment        := true
   useRandAugment       := true
+  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
   randAugmentGeometric := true
   randAugmentMstd := 0.5
   randAugmentInc  := true
@@ -61,6 +62,7 @@ def convNeXtSImagenetConfig : TrainConfig where
   cutmixAlpha    := 1.0
   randomErasing  := true
   randomErasingProb := 0.25
+  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
   bf16           := true

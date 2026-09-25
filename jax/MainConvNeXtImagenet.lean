@@ -79,6 +79,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   warmupEpochs   := 20      -- ConvNeXt paper warmup (was 5)
   augment        := true
   useRandAugment       := true   -- ConvNeXt recipe RandAugment...
+  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
   randAugmentGeometric := true   -- ...the full color+geometric sampler (N=2, M=9)
   randAugmentMstd := 0.5         -- ConvNeXt rand-m9-mstd0.5 (gap D)
   randAugmentInc  := true        -- ...-inc1 increasing-severity mappings
@@ -88,6 +89,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   cutmixAlpha    := 1.0
   randomErasing  := true     -- ...+ Random Erasing p0.25 — completes the DeiT-style pack
   randomErasingProb := 0.25
+  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
   labelSmoothing := 0.1
   gradClipNorm   := 1.0
   bf16           := true

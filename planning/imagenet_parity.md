@@ -91,7 +91,7 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 | C3 | `supervise.sh:131`, `VerifiedTrain` | recipe → shim selection works for R50 only, so MNv4's `full` shim (RandAugment m15) cannot be reached on the verified path | `LEAN_MLIR_RECIPE` → shim for every net, in `VerifiedTrain` | S–M |
 | C4 | `VerifiedTrain.lean:200` | BN running-stat decay is 0.99 for every net except R50; timm-ported MNv4 wants 0.9 | per-net setting on both paths; decide per net in §5 | S |
 | C5 | `VerifiedTrain.lean` ~2778 (`scoreCheckpoint`) | refuses every BN net, although the `.bn` companion has been written since 09-12; the comment "~30 GB drain" is stale | read `.bn`; score BN nets | S–M |
-| C6 | `Codegen.lean:50-65, 430-443` + the shim (**go**, 2026-09-25) | bilinear geometry ops; zero-fill erasing with uniform aspect; the erase box is sized from `_IMG_SIZE`, so any `trainRes` recipe with erasing breaks | bicubic geometry, `pixel` erasing with log-uniform aspect, a size taken from the actual crop. Lands **with the next reruns**, since it moves every reference | M |
+| C6 | `Codegen.lean:50-65, 430-443` + the shim (✅ 2026-09-25, see §3 status) | bilinear geometry ops; zero-fill erasing with uniform aspect; the erase box is sized from `_IMG_SIZE`, so any `trainRes` recipe with erasing breaks | bicubic geometry, `pixel` erasing with log-uniform aspect, a size taken from the actual crop. Lands **with the next reruns**, since it moves every reference | M |
 | C7 | every `scripts/jobs/*.conf` | prechecks diverge: only `mnv4-half` builds its exe; mnv2, mnv4-default and vit-default have no freshness check; vit-emabf16 tests `-x` only; the ConvNeXt AutoAugment grep matches the `def _autoaugment` line (always passes, and AutoAugment isn't in that recipe) | `scripts/lib/precheck.sh`, sourced by every conf: build the exe, `regen_jax_generated.sh box`, GPU idle, render exists with the expected replica/all-reduce count, `CKPT_EPOCH_FILE` matches the variant, shim present and fresh, aug call-site grep on the call not the def | S |
 | C8 | `scripts/gen_mlir_manifest.py:56-171` | `wd<n>` not decoded; `x` means k×B after `acc` but B×replicas in `128x4`; batch suppressed whenever `acc` is present | decode `wd`; one `x` grammar (rename `dp128x4` if needed, predicates in `TestVariantPredicates` pin it) | S |
 | C9 | JAX resume (`shuffle(seed=42)`, unseeded aug) | the MNv4 JAX conf says "resumes bit for bit"; it doesn't | seed the shuffle by epoch and the aug by step, or fix the claim | S |
@@ -129,7 +129,26 @@ interpolation where timm uses bicubic (`Codegen.lean:50-65`); random erasing fil
 * ✅ C5: `scoreCheckpoint` scores BN nets through `@<slug>_fwd_eval` with the `.bn` companion
   (EMA shadow ↔ `ema_bn`); equality gate on a trained MNv4 checkpoint: in-training eval and
   `score-checkpoint` both 33,552 / 43,783 of 50,000.
-* Open: C3 (needed only for MNv4's 500-epoch tier), C6 (lands with the reruns).
+* Open: C3 (needed only for MNv4's 500-epoch tier).
+* ✅ C6 (2026-09-25), opt-in per recipe — `TrainConfig.augBicubic` / `erasingPixel`, both default off
+  so R50 (running on the other box) and MNv2 (no geometric aug, no erasing) are byte-identical. On
+  for B0, MNv4-Conv-M, ConvNeXt-T/S/B, ViT-Ti/S/B (erasing only where the recipe erases: CNX, ViT);
+  48 generated files move, trainers and shims alike.
+  - Bicubic: TF has no bicubic projective warp (`ImageProjectiveTransformV3` takes NEAREST/BILINEAR
+    and only LOGS on BICUBIC), so the emitter writes PIL's affine sampler out: a = −1 (PIL's
+    transform kernel; its resize uses −0.5), border clamp, truncation to uint8, and shear/translate
+    as 4-tap 1-D warps (bit-equal to 16 taps there), Rotate at 16 taps. Timm's PIL shear data is in
+    pixel-centre coordinates, so the index-space shear gains `+f/2`.
+    `scripts/aug_bicubic_pil_check.py`: worst mean |Δ| 0.094 / 255, max 1, over the five ops at three
+    magnitudes; control (the bilinear block) 8.0.
+  - Erasing: timm `RandomErasing(mode='pixel')` — N(0,1) fill, aspect log-uniform [0.3, 1/0.3], first
+    of 10 draws that fits, box sized from the image erased (fixes `trainRes`). Sampled: fires 0.253
+    at p 0.25, erased area mean 0.175 (U(0.02, 1/3) → 0.177), fill mean ≈ 0, std ≈ 1, at 224² and 160².
+  - ⚠ FEED COST, measured with 4 concurrent producers in `SHIM_HASH` mode on ares: B0 1,551 → 1,558
+    img/s (decode-bound); ViT-Ti ~1,960 → ~1,450 (−26%, repeated-aug 3× makes aug the bottleneck) on
+    the clean repeats, but the bicubic shims are BIMODAL under contention — some ViT/ConvNeXt/MNv4
+    runs came out 2–3.5× slower. The user chose to ship it everywhere anyway (2026-09-25); the next
+    ms/step probe of each C6 net is the real measure. Every conf ETA predates C6.
 
 ## 4. Code: gates
 

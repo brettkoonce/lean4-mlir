@@ -49,12 +49,14 @@ def vitBImagenetConfig : TrainConfig where
   useCutmix      := true
   cutmixAlpha    := 1.0
   useRandAugment := true
+  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
   randAugmentGeometric := true
   randAugmentM   := 9.0
   randAugmentMstd := 0.5
   randAugmentInc  := true
   randomErasing  := true
   randomErasingProb := 0.25
+  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
   dropPath       := 0.1             -- DeiT stochastic depth (same for Ti/S/B)
   useEMA         := true
   emaDecay       := 0.99996

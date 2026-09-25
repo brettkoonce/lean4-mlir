@@ -755,6 +755,17 @@ structure TrainConfig where
   knnMixupAlpha  : Float := 1.0
   randomErasing  : Bool  := false
   randomErasingProb : Float := 0.25
+  /-- timm's `RandomErasing(mode='pixel')` in place of the zero-filled box (C6,
+      planning/imagenet_parity.md): the box filled with N(0, 1) per pixel and channel on the
+      normalised image, aspect log-uniform in [0.3, 1/0.3], up to 10 draws for a box that fits, and
+      the box sized from the image actually erased (so a `trainRes` recipe erases its own crop).
+      Off keeps the zero-fill emit byte-identical. -/
+  erasingPixel : Bool := false
+  /-- PIL-bicubic geometric augmentation (C6): timm's ShearX/Y, TranslateX/Y and Rotate run PIL
+      BICUBIC (the model's data config), and TF has no bicubic projective warp, so the emitter
+      writes PIL's affine sampler out in the TF graph (a = −1, border clamp, truncation) in place of
+      `ImageProjectiveTransformV3(BILINEAR)`. Off keeps every generated file byte-identical. -/
+  augBicubic : Bool := false
   /-- RandAugment-Color (Cubuk et al. 2019, color subset). Applied
       per-image before mixup/cutmix, after crop/hflip. `randAugmentN`
       ops drawn uniformly from {identity, brightness, contrast, color,

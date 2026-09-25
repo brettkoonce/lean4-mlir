@@ -48,12 +48,14 @@ def vitTinyImagenetConfig : TrainConfig where
   useCutmix      := true
   cutmixAlpha    := 1.0
   useRandAugment := true            -- full DeiT RandAugment (color + geometric, below)
+  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
   randAugmentGeometric := true      -- shear/rotate/translate via ImageProjectiveTransformV3
   randAugmentM   := 9.0
   randAugmentMstd := 0.5            -- DeiT rand-m9-mstd0.5 (gap D)
   randAugmentInc  := true           -- ...-inc1 increasing-severity mappings
   randomErasing  := true
   randomErasingProb := 0.25
+  erasingPixel   := true    -- C6: timm RandomErasing(mode='pixel'), N(0,1) fill
   dropPath       := 0.1             -- DeiT-Ti stochastic depth (linear ramp 0→0.1 over blocks)
   useEMA         := true            -- DeiT model EMA; eval + checkpoints use the shadow weights
   emaDecay       := 0.99996         -- DeiT default

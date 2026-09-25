@@ -76,6 +76,7 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   warmupEpochs   := 5
   augment        := true
   useAutoAugment := true     -- full AutoAugment ImageNet policy (incl. geometric)
+  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
   labelSmoothing := 0.1
   bf16           := true
   bf16Conv       := true    -- now reaches the MBConv expand/depthwise/project

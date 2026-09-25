@@ -83,6 +83,7 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
   dropout              := 0.1      -- reduced from paper 0.2
   augment              := true
   useRandAugment       := true
+  augBicubic     := true    -- C6: PIL-bicubic geometry, as timm (planning/imagenet_parity.md)
   randAugmentGeometric := true     -- full color+geometric sampler
   randAugmentN         := 2
   randAugmentM         := 9.0      -- reduced from paper 15 for the short schedule
