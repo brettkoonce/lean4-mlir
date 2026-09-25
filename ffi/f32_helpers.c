@@ -1253,6 +1253,72 @@ LEAN_EXPORT lean_obj_res lean_f32_scale_shift(
     return lean_io_result_mk_ok(out);
 }
 
+// ---- u8 bytes to f32, times a scale ----
+// The Pong DQN keeps frames as u8 in its replay and concatenates a batch of stacks
+// on the Lean side (ByteArray append is a memcpy); this is the one widening pass.
+LEAN_EXPORT lean_obj_res lean_f32_u8_scaled(b_lean_obj_arg ba, double scale) {
+    size_t n = lean_sarray_size(ba);
+    size_t nbytes = n * 4;
+    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
+    const uint8_t* in = lean_sarray_cptr(ba);
+    float* o = (float*)lean_sarray_cptr(out);
+    float s = (float)scale;
+    for (size_t i = 0; i < n; i++) o[i] = s * (float)in[i];
+    return lean_io_result_mk_ok(out);
+}
+
+// ---- Gather records out of an Array ByteArray by index ----
+// The DQN replay keeps one ByteArray per agent step; a batch of stacks is the
+// concatenation of `recs[idx[i]]` for i in order (`idx` = u32 LE). The Lean-side
+// `foldl (· ++ ·)` over ~256 records cost ~2.6 ms a batch at 7 KB records.
+// `_u8_scaled` widens u8 → f32 × scale in the same pass (the pixel replay);
+// the plain one copies bytes (the f32 state replay). Every record must be `rec_bytes`.
+//
+// `dst` is OWNED: when it is exclusive and already the right size it is written in
+// place and returned, so a caller that threads last batch's buffer back in stops
+// paying a fresh multi-MB allocation — and its first-touch page faults, which were
+// most of the cost (~1,800 faults per pixel batch pair) — every update.
+static lean_obj_res gather_core(b_lean_obj_arg recs, b_lean_obj_arg idx_ba, lean_obj_arg dst,
+                                size_t rec_bytes, int widen, float scale) {
+  size_t n = lean_sarray_size(idx_ba) / 4;
+  const uint32_t* idx = (const uint32_t*)lean_sarray_cptr(idx_ba);
+  size_t nrec = lean_array_size(recs);
+  size_t out_bytes = n * rec_bytes * (widen ? 4 : 1);
+  lean_object* out;
+  if (lean_is_exclusive(dst) && lean_sarray_size(dst) == out_bytes) {
+    out = dst;
+  } else {
+    lean_dec_ref(dst);
+    out = lean_alloc_sarray(1, out_bytes, out_bytes);
+  }
+  uint8_t* o = lean_sarray_cptr(out);
+  for (size_t i = 0; i < n; i++) {
+    if (idx[i] >= nrec) { lean_dec_ref(out); return lean_io_result_mk_error(
+      lean_mk_io_user_error(lean_mk_string("gather: index past the record array"))); }
+    lean_object* r = lean_array_get_core(recs, idx[i]);
+    if (lean_sarray_size(r) != rec_bytes) { lean_dec_ref(out); return lean_io_result_mk_error(
+      lean_mk_io_user_error(lean_mk_string("gather: record of the wrong size"))); }
+    const uint8_t* src = lean_sarray_cptr(r);
+    if (widen) {
+      float* f = (float*)o + i * rec_bytes;
+      for (size_t k = 0; k < rec_bytes; k++) f[k] = scale * (float)src[k];
+    } else {
+      memcpy(o + i * rec_bytes, src, rec_bytes);
+    }
+  }
+  return lean_io_result_mk_ok(out);
+}
+
+LEAN_EXPORT lean_obj_res lean_gather_concat(b_lean_obj_arg recs, b_lean_obj_arg idx_ba,
+                                            lean_obj_arg dst, size_t rec_bytes) {
+  return gather_core(recs, idx_ba, dst, rec_bytes, 0, 1.0f);
+}
+
+LEAN_EXPORT lean_obj_res lean_gather_u8_scaled(b_lean_obj_arg recs, b_lean_obj_arg idx_ba,
+                                               lean_obj_arg dst, size_t rec_bytes, double scale) {
+  return gather_core(recs, idx_ba, dst, rec_bytes, 1, (float)scale);
+}
+
 // ---- Prepend a constant t-channel to each image ----
 // Input:  xt   [B, C*H*W] f32 (the noised image, C channels)
 //         t_ba [B]        int32 (per-image timestep ∈ [0, T_max))

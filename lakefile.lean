@@ -743,6 +743,12 @@ lean_exe «blackjack-dqn» where
   root := `demos.MainBlackjackDqn
   moreLinkArgs := lowererLink
 
+-- Rung 3, the Pong plan: the same loop on the Lean Pong, the six-number state
+-- (the ceiling row) and 84 × 84 frames through Chapter 3's CNN. Zero new codegen.
+lean_exe «pong-dqn» where
+  root := `demos.MainPongDqn
+  moreLinkArgs := lowererLink
+
 -- The gravitational-wave detection demo (planning/gw_detection_demo.md): a chapter
 -- CNN on H1+L1 spectrograms of real O3a strain with injected chirps, scored by
 -- `scripts/demos/gw_metrics.py` against the matched filter's closed form. Zero new codegen.

@@ -1,0 +1,26 @@
+pong dqn state: 4803 params, 500000 agent steps, batch 32, lr 0.000100, plain DQN, opponent speed 1.500000 delay 4, seed 1
+  sessions loaded
+  step 0  eval -18.35 ± 0.29
+  step 25000  updates 3750  games 71  eps 0.775  loss 0.02275  eval -20.30 ± 0.16  (8618 ms)
+  step 50000  updates 10000  games 141  eps 0.550  loss 0.00993  eval -16.70 ± 0.37  (23939 ms)
+  step 75000  updates 16250  games 189  eps 0.325  loss 0.01930  eval -3.40 ± 1.13  (39664 ms)
+  step 100000  updates 22500  games 218  eps 0.100  loss 0.01658  eval -0.90 ± 1.24  (56296 ms)
+  step 125000  updates 28750  games 240  eps 0.100  loss 0.01178  eval 5.75 ± 1.34  (75651 ms)
+  step 150000  updates 35000  games 260  eps 0.100  loss 0.01018  eval 8.40 ± 0.99  (95365 ms)
+  step 175000  updates 41250  games 279  eps 0.100  loss 0.01019  eval 8.85 ± 0.79  (115888 ms)
+  step 200000  updates 47500  games 300  eps 0.100  loss 0.00859  eval 11.35 ± 0.73  (133799 ms)
+  step 225000  updates 53750  games 320  eps 0.100  loss 0.00767  eval 6.90 ± 1.01  (155272 ms)
+  step 250000  updates 60000  games 342  eps 0.100  loss 0.00755  eval 12.70 ± 0.76  (177628 ms)
+  step 275000  updates 66250  games 364  eps 0.100  loss 0.00731  eval 10.25 ± 0.88  (197631 ms)
+  step 300000  updates 72500  games 386  eps 0.100  loss 0.00730  eval 9.85 ± 1.04  (217302 ms)
+  step 325000  updates 78750  games 409  eps 0.100  loss 0.00727  eval 12.95 ± 0.81  (236069 ms)
+  step 350000  updates 85000  games 431  eps 0.100  loss 0.00728  eval 11.50 ± 0.92  (254202 ms)
+  step 375000  updates 91250  games 454  eps 0.100  loss 0.00776  eval 12.20 ± 0.89  (273423 ms)
+  step 400000  updates 97500  games 477  eps 0.100  loss 0.00799  eval 10.65 ± 0.94  (294912 ms)
+  step 425000  updates 103750  games 500  eps 0.100  loss 0.00754  eval 9.60 ± 1.05  (313774 ms)
+  step 450000  updates 110000  games 523  eps 0.100  loss 0.00800  eval 14.40 ± 0.63  (333450 ms)
+  step 475000  updates 116250  games 546  eps 0.100  loss 0.00731  eval 9.10 ± 0.93  (351157 ms)
+  step 500000  updates 122500  games 568  eps 0.100  loss 0.00734  eval 13.15 ± 0.70  (368521 ms)
+trained: 500000 agent steps, 122500 updates, 568 games, 368522 ms
+wrote .lake/build/pong_dqn_state_state_s1_curve.csv, .lake/build/pong_dqn_state_state_s1_params.bin
+final (20 games, eps 0.050000): 14.15 ± 0.59 points per game; first positive eval at 125000 agent steps
