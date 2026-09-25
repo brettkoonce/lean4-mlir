@@ -16,8 +16,7 @@ LEAN_EXPORT double lean_f32_read(b_lean_obj_arg ba, size_t idx) {
 }
 
 // ---- Fill n float32 values with constant v ----
-LEAN_EXPORT lean_obj_res lean_f32_const(size_t n, double v, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_const(size_t n, double v) {
     size_t nbytes = n * 4;
     lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
     float* p = (float*)lean_sarray_cptr(ba);
@@ -27,8 +26,7 @@ LEAN_EXPORT lean_obj_res lean_f32_const(size_t n, double v, lean_obj_arg w) {
 }
 
 // ---- He init: n float32 values ~ N(0, scale²) ----
-LEAN_EXPORT lean_obj_res lean_f32_he_init(size_t seed, size_t n, double scale, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_he_init(size_t seed, size_t n, double scale) {
     size_t nbytes = n * 4;
     lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
     float* p = (float*)lean_sarray_cptr(ba);
@@ -61,8 +59,7 @@ LEAN_EXPORT lean_obj_res lean_f32_he_init(size_t seed, size_t n, double scale, l
 // **150.07 ms/step** against 0.073 ms for the extern-C fill of the same buffer, and it was 62%
 // of that net's 281 ms step. Its docstring had priced it at "~2 ULP of a ~310 ms step" from a
 // 40,960-draw shape that no production job runs.
-LEAN_EXPORT lean_obj_res lean_f32_dropout_fill(double keep, size_t n, size_t seed, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_dropout_fill(double keep, size_t n, size_t seed) {
     size_t nbytes = n * 4;
     lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
     float* p = (float*)lean_sarray_cptr(ba);
@@ -118,8 +115,7 @@ LEAN_EXPORT size_t lean_f32_argmax_n(b_lean_obj_arg ba, size_t off, size_t n) {
 // ---- Convert a batch of CIFAR-10 raw records to f32 ByteArray ----
 // Each record is 3073 bytes (1 label + 3072 pixels). Normalizes to [0,1].
 LEAN_EXPORT lean_obj_res lean_f32_cifar_batch(
-    b_lean_obj_arg raw_ba, size_t start, size_t count, lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg raw_ba, size_t start, size_t count) {
     const uint8_t* raw = lean_sarray_cptr(raw_ba);
     size_t npixels = count * 3072;
     size_t nbytes = npixels * 4;
@@ -140,8 +136,7 @@ static uint32_t read_be32(const uint8_t* p) {
            ((uint32_t)p[2] << 8) | (uint32_t)p[3];
 }
 
-LEAN_EXPORT lean_obj_res lean_f32_load_idx_images(b_lean_obj_arg path_obj, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_load_idx_images(b_lean_obj_arg path_obj) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(
@@ -178,8 +173,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_idx_images(b_lean_obj_arg path_obj, lean_
 }
 
 // ---- Load MNIST IDX labels → int32 LE ByteArray ----
-LEAN_EXPORT lean_obj_res lean_f32_load_idx_labels(b_lean_obj_arg path_obj, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_load_idx_labels(b_lean_obj_arg path_obj) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(
@@ -264,8 +258,7 @@ static lean_obj_res load_imagenette_sized(const char* path, size_t img_size) {
 // resident (196 KB per image) and convert one batch at a time, ImageNet-normalised exactly as
 // load_imagenette_sized does. `idx` is `count` little-endian u32 record indices.
 LEAN_EXPORT lean_obj_res lean_f32_imagenette_gather(
-    b_lean_obj_arg raw_ba, b_lean_obj_arg idx_ba, size_t count, size_t img_size, lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg raw_ba, b_lean_obj_arg idx_ba, size_t count, size_t img_size) {
     const uint8_t* raw = lean_sarray_cptr(raw_ba);
     const uint8_t* idx = lean_sarray_cptr(idx_ba);
     const size_t n = (size_t)(raw[0] | (raw[1] << 8) | (raw[2] << 16) | ((uint32_t)raw[3] << 24));
@@ -292,8 +285,7 @@ LEAN_EXPORT lean_obj_res lean_f32_imagenette_gather(
 }
 
 // Labels of every record as int32 LE (the layout `F32.sliceLabels` and the train step expect).
-LEAN_EXPORT lean_obj_res lean_f32_imagenette_labels(b_lean_obj_arg raw_ba, size_t img_size, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_imagenette_labels(b_lean_obj_arg raw_ba, size_t img_size) {
     const uint8_t* raw = lean_sarray_cptr(raw_ba);
     const size_t n = (size_t)(raw[0] | (raw[1] << 8) | (raw[2] << 16) | ((uint32_t)raw[3] << 24));
     const size_t rec = 1 + 3 * img_size * img_size;
@@ -305,13 +297,11 @@ LEAN_EXPORT lean_obj_res lean_f32_imagenette_labels(b_lean_obj_arg raw_ba, size_
     return lean_io_result_mk_ok(ba);
 }
 
-LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_load_imagenette(b_lean_obj_arg path_obj) {
     return load_imagenette_sized(lean_string_cstr(path_obj), 224);
 }
 
-LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj, size_t img_size, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj, size_t img_size) {
     return load_imagenette_sized(lean_string_cstr(path_obj), img_size);
 }
 
@@ -333,8 +323,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_imagenette_sized(b_lean_obj_arg path_obj,
 #define BRATS_CLIP_SIGMA 5.0f
 #define BRATS_CHANNELS 4
 
-LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img_size, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img_size) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open brats file")));
@@ -396,8 +385,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_brats(b_lean_obj_arg path_obj, size_t img
 // record (7,200 bytes/record). The Lean dispatcher splits this at
 // training time. Image is ImageNet-normalized as in load_imagenette. See planning/archive/yolo_demo_v2.md Phase 1 + yolo_demo_v3.md (folded into planning/archive/yolo_final.md at a0a33a3)
 // Phase 2-3.
-LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open voc file")));
@@ -460,9 +448,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc(b_lean_obj_arg path_obj, lean_obj_arg
 // mask gridH*gridW f32, numBoxes i32, raw_boxes 56*20. Returns
 // (image_f32_normalized, target++mask++numBoxes++raw_boxes concat, count).
 LEAN_EXPORT lean_obj_res lean_f32_load_voc_dims(
-        b_lean_obj_arg path_obj, size_t imgSize, size_t gridH, size_t gridW,
-        lean_obj_arg w) {
-    (void)w;
+        b_lean_obj_arg path_obj, size_t imgSize, size_t gridH, size_t gridW) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open voc file")));
@@ -521,8 +507,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc_dims(
 // from the target's objectness channels, so mask/numBoxes/raw_boxes are skipped.
 LEAN_EXPORT lean_obj_res lean_f32_load_voc_anchor(
         b_lean_obj_arg path_obj, size_t imgSize, size_t gridH, size_t gridW,
-        size_t numAnchors, lean_obj_arg w) {
-    (void)w;
+        size_t numAnchors) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open anchor file")));
@@ -577,8 +562,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_voc_anchor(
 // only (no mask/boxes on disk; the loss derives masks from the target's obj
 // channels, and eval GT comes from the single-box val.bin geometry).
 LEAN_EXPORT lean_obj_res lean_f32_load_voc_fpn(
-        b_lean_obj_arg path_obj, size_t imgSize, size_t ntot, lean_obj_arg w) {
-    (void)w;
+        b_lean_obj_arg path_obj, size_t imgSize, size_t ntot) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string("cannot open fpn file")));
@@ -778,8 +762,7 @@ LEAN_EXPORT lean_obj_res lean_f32_yolo_augment(
     size_t batch, size_t channels, size_t imgH, size_t imgW,
     size_t gridH, size_t gridW, size_t perCell, size_t numClasses,
     double hflip_prob, double crop_prob, double crop_min_scale,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     const size_t img_floats_per   = channels * imgH * imgW;
     const size_t tgt_floats_per   = perCell * gridH * gridW;
     const size_t msk_floats_per   = gridH * gridW;
@@ -902,9 +885,7 @@ LEAN_EXPORT lean_obj_res lean_f32_yolo_augment(
 LEAN_EXPORT lean_obj_res lean_f32_yolo_hflip(
     b_lean_obj_arg img_ba, b_lean_obj_arg tgt_ba, b_lean_obj_arg msk_ba,
     size_t batch, size_t channels, size_t imgH, size_t imgW,
-    size_t gridH, size_t gridW, size_t perCell, size_t seed,
-    lean_obj_arg w) {
-    (void)w;
+    size_t gridH, size_t gridW, size_t perCell, size_t seed) {
     const size_t img_floats_per   = channels * imgH * imgW;
     const size_t tgt_floats_per   = perCell * gridH * gridW;
     const size_t msk_floats_per   = gridH * gridW;
@@ -1013,8 +994,7 @@ LEAN_EXPORT lean_obj_res lean_f32_yolo_hflip(
 // Output: target_concat (batch*target_bytes), mask_concat (batch*mask_bytes).
 LEAN_EXPORT lean_obj_res lean_voc_split_batch(
     b_lean_obj_arg interleaved_ba, size_t batch,
-    size_t grid_h, size_t grid_w, size_t per_cell, lean_obj_arg w) {
-    (void)w;
+    size_t grid_h, size_t grid_w, size_t per_cell) {
     const size_t target_bytes = per_cell * grid_h * grid_w * 4;
     const size_t mask_bytes   = grid_h * grid_w * 4;
     const size_t rec_bytes    = target_bytes + mask_bytes + 4 + 56 * 20;
@@ -1055,8 +1035,7 @@ LEAN_EXPORT lean_obj_res lean_voc_split_batch(
 // normalized so ᾱ_0 = 1. Clamped to [1e-4, 0.9999] so the sampler's
 // `√ᾱ_t / √ᾱ_{t-1}` ratio stays bounded near t = T (where the
 // unclamped ᾱ would underflow to ~0).
-LEAN_EXPORT lean_obj_res lean_ddpm_cosine_schedule(size_t T, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_ddpm_cosine_schedule(size_t T) {
     size_t nbytes = T * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     float* o = (float*)lean_sarray_cptr(out);
@@ -1087,8 +1066,7 @@ static inline uint64_t f32_xs64(uint64_t* s) {
 // Returns Prod ByteArray (Prod ByteArray ByteArray) — i.e. (x_t, ε, t).
 LEAN_EXPORT lean_obj_res lean_ddpm_step_inputs(
     b_lean_obj_arg x0_ba, b_lean_obj_arg alphaBar_ba,
-    size_t B, size_t npixels, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t B, size_t npixels, size_t seed) {
     size_t T = lean_sarray_size(alphaBar_ba) / 4;
     size_t total = B * npixels;
     size_t nb_total = total * 4;
@@ -1192,8 +1170,7 @@ static void f32_hungarian(const double* cost, size_t n, size_t* assign) {
 // every row's first draw on one radius.
 LEAN_EXPORT lean_obj_res lean_ddpm_flow_step_inputs(
     b_lean_obj_arg x0_ba, b_lean_obj_arg eps_in_ba,
-    size_t B, size_t n, size_t seed, size_t Tmax, size_t mode, lean_obj_arg w) {
-    (void)w;
+    size_t B, size_t n, size_t seed, size_t Tmax, size_t mode) {
     size_t total = B * n;
     size_t nb_total = total * 4;
     lean_object* xt = lean_alloc_sarray(1, nb_total, nb_total);
@@ -1265,8 +1242,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_flow_step_inputs(
 // [-1,1] (scale=2, shift=-1) and the inverse for rendering (scale=0.5,
 // shift=0.5).
 LEAN_EXPORT lean_obj_res lean_f32_scale_shift(
-    b_lean_obj_arg ba, double scale, double shift, lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg ba, double scale, double shift) {
     size_t n = lean_sarray_size(ba) / 4;
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -1286,8 +1262,7 @@ LEAN_EXPORT lean_obj_res lean_f32_scale_shift(
 // without a new codegen primitive.
 LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel(
     b_lean_obj_arg xt_ba, b_lean_obj_arg t_ba,
-    size_t B, size_t C, size_t H, size_t W, size_t T_max, lean_obj_arg w) {
-    (void)w;
+    size_t B, size_t C, size_t H, size_t W, size_t T_max) {
     size_t hw = H * W;
     size_t img_floats = C * hw;
     size_t per_out = (C + 1) * hw;
@@ -1328,8 +1303,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel(
 LEAN_EXPORT lean_obj_res lean_ddpm_prepend_sincos_t(
     b_lean_obj_arg xt_ba, b_lean_obj_arg t_ba,
     size_t B, size_t C, size_t H, size_t W,
-    size_t n_freq, size_t T_max, lean_obj_arg w) {
-    (void)w;
+    size_t n_freq, size_t T_max) {
     size_t hw = H * W;
     size_t img_floats = C * hw;
     size_t out_C = C + 2 * n_freq;
@@ -1363,8 +1337,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_prepend_sincos_t(
 LEAN_EXPORT lean_obj_res lean_ddpm_prepend_sincos_t_scalar(
     b_lean_obj_arg xt_ba,
     size_t B, size_t C, size_t H, size_t W,
-    size_t t, size_t n_freq, size_t T_max, lean_obj_arg w) {
-    (void)w;
+    size_t t, size_t n_freq, size_t T_max) {
     size_t hw = H * W;
     size_t img_floats = C * hw;
     size_t out_C = C + 2 * n_freq;
@@ -1403,8 +1376,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_prepend_sincos_t_scalar(
 // vector.
 LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel_scalar(
     b_lean_obj_arg xt_ba,
-    size_t B, size_t C, size_t H, size_t W, size_t t, size_t T_max, lean_obj_arg w) {
-    (void)w;
+    size_t B, size_t C, size_t H, size_t W, size_t t, size_t T_max) {
     size_t hw = H * W;
     size_t img_floats = C * hw;
     size_t per_out = (C + 1) * hw;
@@ -1430,8 +1402,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_prepend_t_channel_scalar(
 // One pure-elementwise pass; caller passes a, b precomputed.
 LEAN_EXPORT lean_obj_res lean_ddim_step(
     b_lean_obj_arg xt_ba, b_lean_obj_arg eps_ba,
-    double a, double b, size_t n, lean_obj_arg w) {
-    (void)w;
+    double a, double b, size_t n) {
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     const float* xt = (const float*)lean_sarray_cptr(xt_ba);
@@ -1446,8 +1417,7 @@ LEAN_EXPORT lean_obj_res lean_ddim_step(
 // Used by the sampler at inference time (training noise goes through
 // `step_inputs` above). Two normals per Box–Muller iteration; for
 // odd `n` we keep one of the two.
-LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed) {
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     float* o = (float*)lean_sarray_cptr(out);
@@ -1488,8 +1458,7 @@ LEAN_EXPORT lean_obj_res lean_ddpm_sample_noise(size_t n, size_t seed, lean_obj_
 // conf[c][c] / (row_c + col_c - conf[c][c]). planning/archive/unet_demo_v2.md A.
 LEAN_EXPORT lean_obj_res lean_f32_seg_confusion(
     b_lean_obj_arg logits, b_lean_obj_arg masks,
-    size_t B, size_t NC, size_t H, size_t W, lean_obj_arg w_) {
-    (void)w_;
+    size_t B, size_t NC, size_t H, size_t W) {
     const float* lg = (const float*)lean_sarray_cptr(logits);
     const uint8_t* mk = (const uint8_t*)lean_sarray_cptr(masks);
     size_t plane = H * W;
@@ -1522,8 +1491,7 @@ LEAN_EXPORT lean_obj_res lean_f32_seg_confusion(
 // planning/archive/ddpm_demo_v2.md Workstream B3.
 LEAN_EXPORT lean_obj_res lean_f32_hflip_nchw(
     b_lean_obj_arg images, size_t batch, size_t channels,
-    size_t H, size_t W, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t H, size_t W, size_t seed) {
     size_t nbytes = lean_sarray_size(images);
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     const float* in = (const float*)lean_sarray_cptr(images);
@@ -1555,8 +1523,7 @@ LEAN_EXPORT lean_obj_res lean_f32_hflip_nchw(
 // one-hot is built inside the MLIR, so the host never materializes a
 // [B, V*T] buffer. f32 is exact for ids < 2^24 — far past any vocab here.
 LEAN_EXPORT lean_obj_res lean_f32_ids_to_floats(
-    b_lean_obj_arg ids_i32, lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg ids_i32) {
     size_t nbytes = lean_sarray_size(ids_i32);
     size_t n = nbytes / 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -1574,8 +1541,7 @@ LEAN_EXPORT lean_obj_res lean_f32_ids_to_floats(
 // signed int per pixel, matching the classification label convention used
 // elsewhere in the project). Output buffer is exactly 4× the input size.
 LEAN_EXPORT lean_obj_res lean_f32_mask_u8_to_i32(
-    b_lean_obj_arg mask_u8, lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg mask_u8) {
     size_t n = lean_sarray_size(mask_u8);
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -1602,9 +1568,7 @@ LEAN_EXPORT lean_obj_res lean_f32_mask_u8_to_i32(
 // against the same mispaired batch, so it passes too.
 LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl_obj,
                                           size_t n, size_t pixels_per,
-                                          size_t label_stride, size_t seed,
-                                          lean_obj_arg w) {
-    (void)w;
+                                          size_t label_stride, size_t seed) {
     // Ensure exclusive ownership (rc == 1) for in-place mutation
     if (!lean_is_exclusive(img_obj)) img_obj = lean_copy_byte_array(img_obj);
     if (!lean_is_exclusive(lbl_obj)) lbl_obj = lean_copy_byte_array(lbl_obj);
@@ -1658,8 +1622,7 @@ LEAN_EXPORT lean_obj_res lean_f32_shuffle(lean_obj_arg img_obj, lean_obj_arg lbl
 // ---- EMA update: running = (1-momentum)*running + momentum*batch ----
 LEAN_EXPORT lean_obj_res lean_f32_ema(
     b_lean_obj_arg running_ba, b_lean_obj_arg batch_ba,
-    double momentum, lean_obj_arg w) {
-    (void)w;
+    double momentum) {
     size_t n = lean_sarray_size(running_ba) / 4;
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -1678,8 +1641,7 @@ LEAN_EXPORT lean_obj_res lean_f32_ema(
 LEAN_EXPORT lean_obj_res lean_f32_random_crop(
     b_lean_obj_arg ba, size_t batch, size_t channels,
     size_t src_h, size_t src_w, size_t crop_h, size_t crop_w,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     size_t out_pixels = channels * crop_h * crop_w;
     size_t out_nbytes = batch * out_pixels * 4;
     size_t src_pixels = channels * src_h * src_w;
@@ -1717,9 +1679,7 @@ LEAN_EXPORT lean_obj_res lean_f32_random_crop(
 // expected tensor shape even when cfg.augment=false.
 LEAN_EXPORT lean_obj_res lean_f32_center_crop(
     b_lean_obj_arg ba, size_t batch, size_t channels,
-    size_t src_h, size_t src_w, size_t crop_h, size_t crop_w,
-    lean_obj_arg w) {
-    (void)w;
+    size_t src_h, size_t src_w, size_t crop_h, size_t crop_w) {
     size_t out_pixels = channels * crop_h * crop_w;
     size_t out_nbytes = batch * out_pixels * 4;
     size_t src_pixels = channels * src_h * src_w;
@@ -1747,8 +1707,7 @@ LEAN_EXPORT lean_obj_res lean_f32_center_crop(
 // pixels_per_image = C * H * W, width = W, 50% chance per image.
 LEAN_EXPORT lean_obj_res lean_f32_random_hflip(
     b_lean_obj_arg ba, size_t batch, size_t channels,
-    size_t height, size_t width, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t height, size_t width, size_t seed) {
     size_t pixels_per_image = channels * height * width;
     size_t nbytes = batch * pixels_per_image * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -1787,8 +1746,7 @@ LEAN_EXPORT lean_obj_res lean_f32_random_hflip(
 LEAN_EXPORT lean_obj_res lean_f32_seg_hflip_pair(
     b_lean_obj_arg img_ba, b_lean_obj_arg mask_ba,
     size_t batch, size_t channels, size_t height, size_t width,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     size_t img_ppi = channels * height * width;   // floats per image
     size_t mask_ppi = height * width;             // bytes per mask
     size_t img_bytes = batch * img_ppi * 4;
@@ -1888,8 +1846,7 @@ static inline double f32_randn(uint64_t* s) {
 //  the m certify samples for one test image.)
 LEAN_EXPORT lean_obj_res lean_f32_add_gaussian_tiled(
         b_lean_obj_arg base, size_t off, size_t d0, size_t m,
-        double sigma, size_t seed, lean_obj_arg w) {
-    (void)w;
+        double sigma, size_t seed) {
     size_t n = m * d0;
     size_t nbytes = n * 4;
     lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
@@ -1910,8 +1867,7 @@ LEAN_EXPORT lean_obj_res lean_f32_add_gaussian_tiled(
 // (Box-Muller draw of u ~ N(0,I), then normalized). Used by the Lipschitz-hypothesis probe to
 // measure how Φ⁻¹(P[f(x+η)=c]) moves under an input shift of known L2 size.
 LEAN_EXPORT lean_obj_res lean_f32_perturb_unit(
-        b_lean_obj_arg base, size_t off, size_t d0, double r, size_t seed, lean_obj_arg w) {
-    (void)w;
+        b_lean_obj_arg base, size_t off, size_t d0, double r, size_t seed) {
     size_t nbytes = d0 * 4;
     lean_object* ba = lean_alloc_sarray(1, nbytes, nbytes);
     float* p = (float*)lean_sarray_cptr(ba);
@@ -1985,8 +1941,7 @@ static inline float f32_smooth_onehot(int y, size_t c, double smooth, size_t n_c
 // ----------------------------------------------------------------
 LEAN_EXPORT lean_obj_res lean_f32_mixup_images(
     b_lean_obj_arg images, size_t batch, size_t channels,
-    size_t height, size_t width, double alpha, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t height, size_t width, double alpha, size_t seed) {
     size_t pixels = channels * height * width;
     size_t nbytes = batch * pixels * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2015,8 +1970,7 @@ LEAN_EXPORT lean_obj_res lean_f32_mixup_images(
 // ----------------------------------------------------------------
 LEAN_EXPORT lean_obj_res lean_f32_mixup_soft_labels(
     b_lean_obj_arg int_labels, size_t batch, size_t n_classes,
-    double alpha, double smooth, size_t seed, lean_obj_arg w) {
-    (void)w;
+    double alpha, double smooth, size_t seed) {
     size_t out_n = batch * n_classes;
     size_t nbytes = out_n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2048,8 +2002,7 @@ LEAN_EXPORT lean_obj_res lean_f32_mixup_soft_labels(
 // ----------------------------------------------------------------
 LEAN_EXPORT lean_obj_res lean_f32_cutmix_images(
     b_lean_obj_arg images, size_t batch, size_t channels,
-    size_t height, size_t width, double alpha, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t height, size_t width, double alpha, size_t seed) {
     size_t pixels = channels * height * width;
     size_t nbytes = batch * pixels * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2093,8 +2046,7 @@ LEAN_EXPORT lean_obj_res lean_f32_cutmix_images(
 LEAN_EXPORT lean_obj_res lean_f32_cutmix_soft_labels(
     b_lean_obj_arg int_labels, size_t batch, size_t n_classes,
     size_t height, size_t width, double alpha, double smooth,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     size_t out_n = batch * n_classes;
     size_t nbytes = out_n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2163,8 +2115,7 @@ static void f32_knn_pairing(size_t* pair, const float* in,
 
 LEAN_EXPORT lean_obj_res lean_f32_knn_mixup_images(
     b_lean_obj_arg images, size_t batch, size_t channels,
-    size_t height, size_t width, double alpha, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t height, size_t width, double alpha, size_t seed) {
     size_t pixels = channels * height * width;
     size_t nbytes = batch * pixels * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2193,8 +2144,7 @@ LEAN_EXPORT lean_obj_res lean_f32_knn_mixup_soft_labels(
     b_lean_obj_arg int_labels, b_lean_obj_arg images,
     size_t batch, size_t n_classes, size_t channels,
     size_t height, size_t width, double alpha, double smooth,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     size_t pixels = channels * height * width;
     size_t out_n = batch * n_classes;
     size_t nbytes = out_n * 4;
@@ -2229,8 +2179,7 @@ LEAN_EXPORT lean_obj_res lean_f32_knn_mixup_soft_labels(
 // ----------------------------------------------------------------
 LEAN_EXPORT lean_obj_res lean_f32_ema_sq(
     b_lean_obj_arg running_ba, b_lean_obj_arg batch_ba,
-    double momentum, lean_obj_arg w) {
-    (void)w;
+    double momentum) {
     size_t n = lean_sarray_size(running_ba) / 4;
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2251,8 +2200,7 @@ LEAN_EXPORT lean_obj_res lean_f32_ema_sq(
 // per-epoch deviations `p − swaMean`.
 // ----------------------------------------------------------------
 LEAN_EXPORT lean_obj_res lean_f32_subtract(
-    b_lean_obj_arg a_ba, b_lean_obj_arg b_ba, lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg a_ba, b_lean_obj_arg b_ba) {
     size_t n = lean_sarray_size(a_ba) / 4;
     size_t nbytes = n * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2276,8 +2224,7 @@ LEAN_EXPORT lean_obj_res lean_f32_subtract(
 LEAN_EXPORT lean_obj_res lean_f32_swag_sample(
     b_lean_obj_arg swa_mean, b_lean_obj_arg swa_sq,
     b_lean_obj_arg deviations,
-    size_t n_params, size_t k, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t n_params, size_t k, size_t seed) {
     size_t nbytes = n_params * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
     const float* mu = (const float*)lean_sarray_cptr(swa_mean);
@@ -2313,8 +2260,7 @@ LEAN_EXPORT lean_obj_res lean_f32_swag_sample(
 // ----------------------------------------------------------------
 LEAN_EXPORT lean_obj_res lean_f32_random_erasing(
     b_lean_obj_arg images, size_t batch, size_t channels,
-    size_t height, size_t width, double prob, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t height, size_t width, double prob, size_t seed) {
     size_t pixels = channels * height * width;
     size_t nbytes = batch * pixels * 4;
     lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2455,8 +2401,7 @@ static inline double rand_factor(double m, uint64_t* s) {
 // Read a flat int32 LE token-ID file into a ByteArray. Returns
 // (token_count : Nat) for the Lean side to slice from.
 LEAN_EXPORT lean_obj_res lean_f32_load_token_stream(
-    b_lean_obj_arg path_obj, lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg path_obj) {
     const char* path = lean_string_cstr(path_obj);
     FILE* f = fopen(path, "rb");
     if (!f) {
@@ -2495,8 +2440,7 @@ LEAN_EXPORT lean_obj_res lean_f32_load_token_stream(
 // half target. The Lean caller slices.
 LEAN_EXPORT lean_obj_res lean_f32_sample_chunks(
     b_lean_obj_arg tokens_ba, size_t n_tokens, size_t batch, size_t seq_len,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     if (n_tokens < seq_len + 1) {
         return lean_io_result_mk_error(
             lean_mk_io_user_error(lean_mk_string("n_tokens < seq_len + 1")));
@@ -2524,9 +2468,7 @@ LEAN_EXPORT lean_obj_res lean_f32_sample_chunks(
 // V = vocab_size. The flat layout matches inputFlatDim for a tinyGPT spec
 // whose first layer is the token+position embedding.
 LEAN_EXPORT lean_obj_res lean_f32_token_one_hot(
-    b_lean_obj_arg ids_ba, size_t batch, size_t seq_len, size_t vocab,
-    lean_obj_arg w) {
-    (void)w;
+    b_lean_obj_arg ids_ba, size_t batch, size_t seq_len, size_t vocab) {
     const int32_t* ids = (const int32_t*)lean_sarray_cptr(ids_ba);
     size_t per_token = vocab * 4;
     size_t out_bytes = batch * seq_len * per_token;
@@ -2558,8 +2500,7 @@ LEAN_EXPORT lean_obj_res lean_f32_token_one_hot(
 LEAN_EXPORT lean_obj_res lean_f32_cam_compute(
     b_lean_obj_arg dense_w_ba, b_lean_obj_arg last_conv_ba,
     size_t batch_idx, size_t C, size_t H, size_t W, size_t NC,
-    size_t tgt, lean_obj_arg w_io) {
-    (void)w_io;
+    size_t tgt) {
     const float* W_dense = (const float*)lean_sarray_cptr(dense_w_ba);
     const float* A = (const float*)lean_sarray_cptr(last_conv_ba);
     size_t plane = H * W;
@@ -2601,9 +2542,7 @@ LEAN_EXPORT lean_obj_res lean_f32_cam_compute(
 LEAN_EXPORT lean_obj_res lean_f32_cam_logits(
     b_lean_obj_arg dense_w_ba, b_lean_obj_arg dense_b_ba,
     b_lean_obj_arg last_conv_ba,
-    size_t batch_idx, size_t C, size_t H, size_t W, size_t NC,
-    lean_obj_arg w_io) {
-    (void)w_io;
+    size_t batch_idx, size_t C, size_t H, size_t W, size_t NC) {
     const float* W_dense = (const float*)lean_sarray_cptr(dense_w_ba);
     const float* B_dense = (const float*)lean_sarray_cptr(dense_b_ba);
     const float* A = (const float*)lean_sarray_cptr(last_conv_ba);
@@ -2636,9 +2575,7 @@ LEAN_EXPORT lean_obj_res lean_f32_cam_logits(
 // the standard Pillow / OpenCV behavior for visualization. Out-of-range
 // indices are clamped to the edge.
 LEAN_EXPORT lean_obj_res lean_f32_bilinear_upsample_2d(
-    b_lean_obj_arg in_ba, size_t Hin, size_t Win, size_t Hout, size_t Wout,
-    lean_obj_arg w_io) {
-    (void)w_io;
+    b_lean_obj_arg in_ba, size_t Hin, size_t Win, size_t Hout, size_t Wout) {
     const float* in = (const float*)lean_sarray_cptr(in_ba);
     size_t nbytes = Hout * Wout * 4;
     lean_object* out_obj = lean_alloc_sarray(1, nbytes, nbytes);
@@ -2674,8 +2611,7 @@ LEAN_EXPORT lean_obj_res lean_f32_bilinear_upsample_2d(
 LEAN_EXPORT lean_obj_res lean_f32_rand_augment(
     b_lean_obj_arg images, size_t batch, size_t channels,
     size_t height, size_t width, size_t n_ops, double m,
-    size_t imagenet_norm, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t imagenet_norm, size_t seed) {
     size_t plane = height * width;
     size_t pixels = channels * plane;
     size_t nbytes = batch * pixels * 4;
@@ -2750,8 +2686,7 @@ static inline void apply_hsv(float* img, size_t channels, size_t plane,
 LEAN_EXPORT lean_obj_res lean_f32_hsv_jitter(
     b_lean_obj_arg images, size_t batch, size_t channels,
     size_t height, size_t width, double hgain, double sgain, double vgain,
-    size_t imagenet_norm, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t imagenet_norm, size_t seed) {
     size_t plane = height * width;
     size_t pixels = channels * plane;
     size_t nbytes = batch * pixels * 4;
@@ -2786,8 +2721,7 @@ LEAN_EXPORT lean_obj_res lean_f32_fpn_hflip(
     b_lean_obj_arg images, b_lean_obj_arg target,
     size_t batch, size_t channels, size_t height, size_t width,
     b_lean_obj_arg scales_flat, size_t n_scales, double prob,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     size_t plane = height * width;
     size_t img_px = channels * plane;
     size_t img_bytes = batch * img_px * 4;
@@ -3051,8 +2985,7 @@ LEAN_EXPORT lean_obj_res lean_f32_fpn_affine(
     b_lean_obj_arg scales_flat, size_t n_scales, b_lean_obj_arg anchors_flat,
     double sgain, double tgain, double prob,
     double t_lo, double t_hi, double wh_thr_px, double area_thr,
-    size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t seed) {
     size_t plane = height * width;
     size_t img_px = channels * plane;
     size_t img_bytes = batch * img_px * 4;
@@ -3126,8 +3059,7 @@ static lean_object* f32_sarray_exclusive(lean_obj_arg ba) {
 
 // Write three consecutive f32 values starting at float index `idx`.
 LEAN_EXPORT lean_obj_res lean_f32_write3(
-        lean_obj_arg ba, size_t idx, double a, double b, double c, lean_obj_arg w) {
-    (void)w;
+        lean_obj_arg ba, size_t idx, double a, double b, double c) {
     lean_object* arr = f32_sarray_exclusive(ba);
     size_t n = lean_sarray_size(arr) / 4;
     if (idx + 3 > n) {
@@ -3142,8 +3074,7 @@ LEAN_EXPORT lean_obj_res lean_f32_write3(
 // Copy `count` f32 values from src[srcOff..] into dst[dstOff..], in place.
 LEAN_EXPORT lean_obj_res lean_f32_blit(
         lean_obj_arg dst, size_t dst_off,
-        b_lean_obj_arg src, size_t src_off, size_t count, lean_obj_arg w) {
-    (void)w;
+        b_lean_obj_arg src, size_t src_off, size_t count) {
     lean_object* arr = f32_sarray_exclusive(dst);
     size_t nd = lean_sarray_size(arr) / 4;
     size_t ns = lean_sarray_size(src) / 4;
@@ -3165,8 +3096,7 @@ LEAN_EXPORT lean_obj_res lean_f32_blit(
 // widening the sum would misrepresent what the device will actually see.
 LEAN_EXPORT lean_obj_res lean_f32_axpy_slice(
         lean_obj_arg dst, size_t dst_off,
-        b_lean_obj_arg src, size_t src_off, size_t count, double a, lean_obj_arg w) {
-    (void)w;
+        b_lean_obj_arg src, size_t src_off, size_t count, double a) {
     lean_object* arr = f32_sarray_exclusive(dst);
     size_t nd = lean_sarray_size(arr) / 4;
     size_t ns = lean_sarray_size(src) / 4;
@@ -3209,9 +3139,7 @@ LEAN_EXPORT double lean_f32_dot_slice(
 // huge block freed that way is only madvise(MADV_FREE)d and stays in RSS until the box is under
 // pressure (runs/2026-09-11-vit-leak-ab/README.md). With this the main thread allocates AND
 // frees every batch buffer and the pool thread only fills it.
-LEAN_EXPORT lean_obj_res lean_mlir_read_into(b_lean_obj_arg h, lean_obj_arg buf, size_t len,
-                                             lean_obj_arg w) {
-    (void)w;
+LEAN_EXPORT lean_obj_res lean_mlir_read_into(b_lean_obj_arg h, lean_obj_arg buf, size_t len) {
     int rc = buf->m_rc;
     if (!(rc == 1 || rc == -1)) {
         char msg[192];
@@ -3254,8 +3182,7 @@ LEAN_EXPORT lean_obj_res lean_mlir_read_into(b_lean_obj_arg h, lean_obj_arg buf,
 // whole step.
 LEAN_EXPORT lean_obj_res lean_nqs_gpt_logpsi(
     b_lean_obj_arg out_ba, b_lean_obj_arg ids_ba, b_lean_obj_arg bias_ba,
-    size_t rows, size_t T, size_t V, lean_obj_arg w) {
-    (void)w;
+    size_t rows, size_t T, size_t V) {
     const float* out = (const float*)lean_sarray_cptr(out_ba);
     const uint8_t* ids = (const uint8_t*)lean_sarray_cptr(ids_ba);
     const float* bias = (const float*)lean_sarray_cptr(bias_ba);
@@ -3302,8 +3229,7 @@ static inline uint64_t nqs_row_cfg(const uint8_t* cf, const uint8_t* sites, size
 // (gpt) BOS = 2^p followed by the first T−1 patch ids. Returns f32 [outRows, inDim].
 LEAN_EXPORT lean_obj_res lean_nqs_inputs(
     b_lean_obj_arg cfgs_ba, b_lean_obj_arg sites_ba, size_t rows, size_t N,
-    size_t p, size_t T, size_t mode, size_t flipMode, lean_obj_arg w) {
-    (void)w;
+    size_t p, size_t T, size_t mode, size_t flipMode) {
     const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
     const uint8_t* sites = (const uint8_t*)lean_sarray_cptr(sites_ba);
     size_t outRows = flipMode == 2 ? rows * N : rows;
@@ -3330,8 +3256,7 @@ LEAN_EXPORT lean_obj_res lean_nqs_inputs(
 // Number of up spins per row (the reference log-amplitude is linear in it). u8 [outRows].
 LEAN_EXPORT lean_obj_res lean_nqs_popcount(
     b_lean_obj_arg cfgs_ba, b_lean_obj_arg sites_ba, size_t rows, size_t N,
-    size_t flipMode, lean_obj_arg w) {
-    (void)w;
+    size_t flipMode) {
     const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
     const uint8_t* sites = (const uint8_t*)lean_sarray_cptr(sites_ba);
     size_t outRows = flipMode == 2 ? rows * N : rows;
@@ -3346,8 +3271,7 @@ LEAN_EXPORT lean_obj_res lean_nqs_popcount(
 // Patch ids per row, u8 [outRows, T] — what `lean_nqs_gpt_logpsi` gathers on.
 LEAN_EXPORT lean_obj_res lean_nqs_patch_ids(
     b_lean_obj_arg cfgs_ba, b_lean_obj_arg sites_ba, size_t rows, size_t N,
-    size_t p, size_t T, size_t flipMode, lean_obj_arg w) {
-    (void)w;
+    size_t p, size_t T, size_t flipMode) {
     const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
     const uint8_t* sites = (const uint8_t*)lean_sarray_cptr(sites_ba);
     size_t outRows = flipMode == 2 ? rows * N : rows;
@@ -3366,8 +3290,7 @@ LEAN_EXPORT lean_obj_res lean_nqs_patch_ids(
 // SplitMix64-seeded xorshift, the convention of the DDPM helpers above.
 LEAN_EXPORT lean_obj_res lean_nqs_gpt_draw(
     b_lean_obj_arg out_ba, b_lean_obj_arg bias_ba, size_t B, size_t T, size_t V,
-    size_t k, size_t seed, lean_obj_arg w) {
-    (void)w;
+    size_t k, size_t seed) {
     const float* out = (const float*)lean_sarray_cptr(out_ba);
     const float* bias = (const float*)lean_sarray_cptr(bias_ba);
     lean_object* res = lean_alloc_sarray(1, B, B);
@@ -3403,8 +3326,7 @@ LEAN_EXPORT lean_obj_res lean_nqs_gpt_draw(
 // sector, so it is found by binary search; nothing leaves the enumerated set.
 LEAN_EXPORT lean_obj_res lean_nqs_j1j2_eloc(
     b_lean_obj_arg cfgs_ba, b_lean_obj_arg a_ba, b_lean_obj_arg phi_ba,
-    size_t M, size_t N, double J1, double J2, lean_obj_arg w) {
-    (void)w;
+    size_t M, size_t N, double J1, double J2) {
     const uint8_t* cf = (const uint8_t*)lean_sarray_cptr(cfgs_ba);
     const double* a = (const double*)lean_sarray_cptr(a_ba);
     const double* phi = (const double*)lean_sarray_cptr(phi_ba);

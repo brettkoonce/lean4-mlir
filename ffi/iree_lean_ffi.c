@@ -21,8 +21,7 @@
 // ACTUALLY loaded, so it still cannot disagree with the running program the way
 // a bare env var could. See planning/archive/xla_pjrt_ladder.md.
 
-LEAN_EXPORT lean_obj_res lean_iree_backend_name(lean_obj_arg world) {
-  (void)world;
+LEAN_EXPORT lean_obj_res lean_iree_backend_name(void) {
   // `lowerer_active_name()` rather than a bare `pjrt_ffi_marker` test: this is
   // the FIRST thing the driver asks, before any session exists, so it has to be
   // what triggers the dlopen. It still answers with what actually loaded --
@@ -76,8 +75,7 @@ static void ensure_iree_session_class(void) {
 
 // ---- Session create ----
 LEAN_EXPORT lean_obj_res lean_iree_session_create(
-    b_lean_obj_arg path_obj, lean_obj_arg world) {
-  (void)world;
+    b_lean_obj_arg path_obj) {
   ensure_iree_session_class();
   const char* path = lean_string_cstr(path_obj);
   iree_ffi_session_t* sess = iree_ffi_session_create(path);
@@ -95,8 +93,7 @@ LEAN_EXPORT lean_obj_res lean_iree_session_create(
 // all of them — see `pjrt_ffi_session_create_dp`. Drive it with
 // `lean_iree_forward_f32_dp` at the same replica count.
 LEAN_EXPORT lean_obj_res lean_iree_session_create_dp(
-    b_lean_obj_arg path_obj, size_t replicas, lean_obj_arg world) {
-  (void)world;
+    b_lean_obj_arg path_obj, size_t replicas) {
   ensure_iree_session_class();
   const char* path = lean_string_cstr(path_obj);
   iree_ffi_session_t* sess = lowerer_session_create_dp(path, (int)replicas);
@@ -126,8 +123,7 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_forward(
     b_lean_obj_arg W0, b_lean_obj_arg b0,
     b_lean_obj_arg W1, b_lean_obj_arg b1,
     b_lean_obj_arg W2, b_lean_obj_arg b2,
-    size_t batch, lean_obj_arg world) {
-  (void)world;
+    size_t batch) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
 
@@ -195,8 +191,7 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step(
     b_lean_obj_arg x_fa,
     b_lean_obj_arg y_ba,
     double lr,
-    size_t batch, lean_obj_arg world) {
-  (void)world;
+    size_t batch) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
 
@@ -276,8 +271,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_packed(
     b_lean_obj_arg x_shape_ba,
     b_lean_obj_arg y_ba,
     double lr,
-    size_t batch, lean_obj_arg world) {
-  (void)world;
+    size_t batch) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -357,8 +351,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_f32(
     b_lean_obj_arg x_shape_ba,
     b_lean_obj_arg y_ba,
     double lr,
-    size_t batch, lean_obj_arg world) {
-  (void)world;
+    size_t batch) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -429,8 +422,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32(
     b_lean_obj_arg y_ba,
     double lr, double t,
     b_lean_obj_arg bn_shapes_ba,
-    size_t batch, lean_obj_arg world) {
-  (void)world;
+    size_t batch) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -516,8 +508,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_softlabel(
     b_lean_obj_arg y_soft_ba,
     double lr, double t,
     b_lean_obj_arg bn_shapes_ba,
-    size_t batch, size_t n_classes, lean_obj_arg world) {
-  (void)world;
+    size_t batch, size_t n_classes) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -602,8 +593,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_ddpm(
     b_lean_obj_arg y_ddpm_ba,
     double lr, double t,
     b_lean_obj_arg bn_shapes_ba,
-    size_t batch, size_t outC, size_t outH, size_t outW, lean_obj_arg world) {
-  (void)world;
+    size_t batch, size_t outC, size_t outH, size_t outW) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -690,9 +680,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_yolov1(
     b_lean_obj_arg m_yolo_ba,
     double lr, double t,
     b_lean_obj_arg bn_shapes_ba,
-    size_t batch, size_t gridH, size_t gridW, size_t perCell,
-    lean_obj_arg world) {
-  (void)world;
+    size_t batch, size_t gridH, size_t gridW, size_t perCell) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -775,8 +763,7 @@ LEAN_EXPORT lean_obj_res lean_iree_train_step_adam_f32_seg(
     b_lean_obj_arg y_seg_ba,
     double lr, double t,
     b_lean_obj_arg bn_shapes_ba,
-    size_t batch, size_t H, size_t W, lean_obj_arg world) {
-  (void)world;
+    size_t batch, size_t H, size_t W) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -976,9 +963,7 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32(
     b_lean_obj_arg shapes_ba,
     b_lean_obj_arg x_ba,
     b_lean_obj_arg x_shape_ba,
-    size_t batch, size_t n_classes, size_t n_resident, size_t res_gen,
-    lean_obj_arg world) {
-  (void)world;
+    size_t batch, size_t n_classes, size_t n_resident, size_t res_gen) {
   return forward_core(sess_obj, fn_name_obj, params_ba, shapes_ba, x_ba, x_shape_ba,
                       batch, n_classes, n_resident, res_gen, 1);
 }
@@ -994,9 +979,7 @@ LEAN_EXPORT lean_obj_res lean_iree_forward_f32_dp(
     b_lean_obj_arg x_ba,
     b_lean_obj_arg x_shape_ba,
     size_t batch, size_t n_classes, size_t replicas,
-    size_t n_resident, size_t res_gen,
-    lean_obj_arg world) {
-  (void)world;
+    size_t n_resident, size_t res_gen) {
   return forward_core(sess_obj, fn_name_obj, params_ba, shapes_ba, x_ba, x_shape_ba,
                       batch, n_classes, n_resident, res_gen, replicas);
 }
@@ -1062,8 +1045,7 @@ LEAN_EXPORT lean_obj_res lean_iree_linear_train_step(
     b_lean_obj_arg w0_ba,
     b_lean_obj_arg b0_ba,
     b_lean_obj_arg y_ba,
-    size_t batch, size_t d0, size_t d1, size_t n_resident, lean_obj_arg world) {
-  (void)world;
+    size_t batch, size_t d0, size_t d1, size_t n_resident) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -1145,9 +1127,7 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v_dp2(
     b_lean_obj_arg sess_obj, b_lean_obj_arg fn_name_obj,
     b_lean_obj_arg x_ba, b_lean_obj_arg params_ba, b_lean_obj_arg shapes_ba,
     b_lean_obj_arg y_ba, size_t batch, size_t d0, size_t d3, size_t replicas,
-    size_t n_resident, size_t n_shard_tail,
-    lean_obj_arg world) {
-  (void)world;
+    size_t n_resident, size_t n_shard_tail) {
   if (!pjrt_ffi_invoke_f32_dp) {
     return lean_io_result_mk_error(lean_mk_io_user_error(lean_mk_string(
         "data-parallel train step needs the XLA shim (libpjrt_ffi.so)")));
@@ -1261,8 +1241,7 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v(
     b_lean_obj_arg params_ba,
     b_lean_obj_arg shapes_ba,
     b_lean_obj_arg y_ba,
-    size_t batch, size_t d0, size_t d3, size_t n_resident, lean_obj_arg world) {
-  (void)world;
+    size_t batch, size_t d0, size_t d3, size_t n_resident) {
   iree_ffi_session_t* sess =
       (iree_ffi_session_t*)lean_get_external_data(sess_obj);
   const char* fn_name = lean_string_cstr(fn_name_obj);
@@ -1373,9 +1352,7 @@ LEAN_EXPORT lean_obj_res lean_iree_mlp_train_step_v(
 // fault, and it is a loud one — returning a partial parameter state would poison
 // a checkpoint silently.
 LEAN_EXPORT lean_obj_res lean_iree_read_params(
-    b_lean_obj_arg sess_obj, b_lean_obj_arg packed_ba, size_t n_bytes,
-    lean_obj_arg world) {
-  (void)world;
+    b_lean_obj_arg sess_obj, b_lean_obj_arg packed_ba, size_t n_bytes) {
   size_t have = lean_sarray_size(packed_ba);
   if (n_bytes > have) n_bytes = have;
   lean_object* result = lean_alloc_sarray(1, n_bytes, n_bytes);
