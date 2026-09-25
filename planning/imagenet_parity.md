@@ -326,6 +326,13 @@ is not a like-for-like check. (The canonical B0 77.15 and ConvNeXt 81.53 checkpo
 | R5 | B0 verified sync-BN rerun (and JAX if `wx`/staircase land) | B0-1, B0-2, §5.3 decisions, C6 | ~75 h (+ ~47 h JAX) | |
 | R6 | short probes: ETA re-probes on the sync-BN renders (every BN net; only `r50-a3-4x128` has been done), VT-2 worker probe, G1/G2/G5/G7 | — | ~30 min each | |
 
+**Pre-launch checks, 2026-09-25 (all green):** sync-BN split-batch `imagenet-syncbn-check`
+mobilenetv2 / efficientnet (4×64 = 1×256); every shipping verified variant (cnx EMA, B0 sync-BN,
+MNv2 wx/do/ls0, ViT EMA) probed at 600 steps, scored at epoch 1 and resumed into epoch 2; the new
+ViT JAX `default` trainer smoked 15 min. Probed on 4× 4060 Ti: cnx 237 ms (~107 h), B0 148 (~80 h),
+MNv2 123 (~66 h). ViT is FEED-BOUND here (verified 288 median / 691 mean; JAX ~380 ms, ~79 h vs
+34 h on the 3060 box): both ViT runs go on the 3060 box.
+
 Order: R1 is already queued; R2 needs no code change beyond CX-1. R3–R5 wait on their §5
 decisions and on C6, so one rerun per net takes every change.
 
