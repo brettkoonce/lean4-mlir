@@ -26,9 +26,9 @@ blueprint/src/*.fdb_latexmk
 blueprint/src/*.xdv
 blueprint/src/*.synctex.gz
 
-# Training logs — ignore at root, curated ones live under logs/ or runs/
+# Training logs — ignore at root, curated ones live under historical/logs/ or runs/
 *.log
-!logs/*.log
+!historical/logs/*.log
 !runs/**/*.log
 
 # Documents

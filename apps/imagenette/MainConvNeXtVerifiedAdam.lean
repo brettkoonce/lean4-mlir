@@ -31,10 +31,9 @@ conditioning (layer-scale γ is a cancelling reduce, §2f) and not a difference 
 
 ConvNeXt is all-smooth (LayerNorm, not BN), so there's no running-stats / train-vs-eval BN gap —
 this is **exact-parity** territory like ViT (eval matches train), and it is why there is no
-`convnext_fwd_eval` artifact and `fwd-tie convnext --eval` refuses outright. Recipe matches the
-reference (`MainConvNeXtTrain.lean`'s `convNextTinyConfig`): AdamW lr 1e-3 / wd 1e-4, cosine +
-3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32. Weight decay uniform (incl.
-LN/bias), matching the other verified paths.
+`convnext_fwd_eval` artifact and `fwd-tie convnext --eval` refuses outright. Recipe: AdamW lr
+1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32. Weight
+decay uniform (incl. LN/bias), matching the other verified paths.
 
 Run (GPU): `CUDA_VISIBLE_DEVICES=0 PJRT_FFI_RESIDENT=1 SHIM_WORKERS=8
 .lake/build/bin/convnext-verified-adam data` (loader reads `data/imagenette`). That is the default
@@ -49,7 +48,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 peer and no shared-body file: the config and entry point below ARE the program.
 -/
 
--- Matches MainConvNeXtTrain.lean's `convNextTinyConfig`: 80 epochs, bs 32, AdamW lr 1e-3 / wd 1e-4,
+-- 80 epochs, bs 32, AdamW lr 1e-3 / wd 1e-4,
 -- cosine + 3-epoch warmup, label smoothing 0.1, augment.
 def convnextAdamConfig : VerifiedConfig where
   epochs    := 80

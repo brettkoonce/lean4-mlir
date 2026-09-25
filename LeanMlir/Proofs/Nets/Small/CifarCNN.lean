@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Architectures.PerChannelBN
 
 /-! # Chapter 4: CIFAR-10 2D CNN (no BatchNorm) — whole-network VJP
 
-The Chapter-4 demo model `cifarCnn` (the no-BN spec of `MainCifarCnnTrain`):
+The Chapter-4 demo model `cifarCnn` (the no-BN CIFAR-10 spec):
 
   conv 3→32 (relu) → conv 32→32 (relu) → maxPool 2×2 →
   conv 32→64 (relu) → conv 64→64 (relu) → maxPool 2×2 → flatten →

@@ -148,7 +148,7 @@ The bestiary is for showing architecture at the conceptual level. Training
 introduces dataset / loss / optimizer / GPU concerns that distract from
 "here's the layer layout." A reader can always take any spec and pair it
 with a `TrainConfig` to run a real training job — that's one line of code
-away, same machinery as the `MainResnetTrain.lean` pattern.
+away, the same machinery the `apps/` trainers use.
 
 ## Limitations acknowledged
 

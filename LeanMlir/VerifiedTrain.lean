@@ -21,7 +21,7 @@ The architecture itself lives in the renderer + the audited VJP theorems; it is
 deliberately NOT re-expressed here. This file factors the ~100 lines of identical
 boilerplate (compile → sessions → load → init → train/eval loop) that every trainer
 used to copy. A trainer is now a `VerifiedNet` value + a `VerifiedConfig` + a one-line
-`main`, mirroring the shape of `MainResnetTrain.lean`.
+`main`, the same shape as a `NetSpec` trainer.
 
 This is the training driver alone (plus its fp8 E4M3 variants). The PGD attacks and spectral-norm
 studies are `VerifiedAttack` (on `VerifiedPgdGen`'s kernels), the smoothing certificate is

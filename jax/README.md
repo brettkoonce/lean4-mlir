@@ -189,7 +189,7 @@ on GPU; the earlier `JAX_DISABLE_JIT=1` / `ROCR_VISIBLE_DEVICES=0` /
 - Conv-backward JIT segfault (ROCm/jax#745) — closed.
 - Multi-GPU `Mesh` sharding hang (ROCm/jax#746) — closed.
 
-See [`../upstream-issues/`](../upstream-issues/) for the historical
+See [`../historical/upstream-issues/`](../historical/upstream-issues/) for the historical
 reproducers and confirmation comments.
 
 Run conv models on ROCm with:

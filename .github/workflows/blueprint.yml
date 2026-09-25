@@ -6,7 +6,7 @@ on:
       - main
     # Only rebuild when something that actually affects published content
     # changes: the blueprint LaTeX, the Lean source feeding doc-gen4, or
-    # project config. Skips README/traces/data/tests/historical edits.
+    # project config. Skips README/data/tests/historical edits.
     paths:
       - 'blueprint/**'
       - 'LeanMlir/**'

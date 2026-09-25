@@ -1,10 +1,10 @@
 import Jax
 
-/-! MNIST CNN — phase-2 mirror of `MainMnistCnnTrain.lean` (phase 3).
+/-! MNIST CNN — phase-2 (Lean → JAX) trainer.
 
-    Same NetSpec, same training config, same seed — so `tests/diff_traces.py`
-    can compare a phase-2 JAX run against a phase-3 Lean→IREE run step by
-    step (see traces/CROSS_BACKEND_RESULTS.md for the MLP precedent).
+    Same NetSpec, training config and seed as the phase-3 Lean→IREE traces in
+    `historical/traces/`, so `tests/diff_traces.py` can compare the two step by
+    step (see historical/traces/CROSS_BACKEND_RESULTS.md).
 
     Architecture: 4 conv-BN layers (1→32→32→64→64) with two maxPool/2
     downsamples, flatten, then two dense (3136→512→10). ~1.7M params. -/

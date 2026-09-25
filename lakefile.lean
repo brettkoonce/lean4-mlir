@@ -800,70 +800,6 @@ lean_exe «docstring-checkrefs» where
 -- these names, so nothing is renamed; groups are by home directory.
 -- ═══════════════════════════════════════════════════════════════════════
 
--- ─── apps/baselines/ — the unverified full-recipe `*-train` trainers, the pre-verified path ───
-
-lean_exe «resnet34-train» where
-  root := `apps.baselines.MainResnetTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «resnet50-train» where
-  root := `apps.baselines.MainResnet50Train
-  moreLinkArgs := lowererLink
-
-lean_exe «mobilenet-v2-train» where
-  root := `apps.baselines.MainMobilenetV2Train
-  moreLinkArgs := lowererLink
-
-lean_exe «mobilenet-v3-train» where
-  root := `apps.baselines.MainMobilenetV3Train
-  moreLinkArgs := lowererLink
-
-lean_exe «efficientnet-train» where
-  root := `apps.baselines.MainEfficientNetTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «efficientnet-v2-train» where
-  root := `apps.baselines.MainEfficientNetV2Train
-  moreLinkArgs := lowererLink
-
-lean_exe «convnext-tiny-train» where
-  root := `apps.baselines.MainConvNeXtTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «vit-tiny-train» where
-  root := `apps.baselines.MainVitTrain
-  moreLinkArgs := lowererLink
-
--- Muon (Newton–Schulz polar projection) on the 2D weights, AdamW on the rest.
--- Same ViT-Tiny + recipe as vit-tiny-train → a compute-matched A/B. See planning/archive/muon.md.
-lean_exe «vit-tiny-muon-train» where
-  root := `apps.baselines.MainVitMuonTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «vit-tiny-shampoo-train» where
-  root := `apps.baselines.MainVitShampooTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «vgg-train» where
-  root := `apps.baselines.MainVggTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-cnn-train» where
-  root := `apps.baselines.MainMnistCnnTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-bn-train» where
-  root := `apps.baselines.MainCifarCnnBnTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «mnist-mlp-train» where
-  root := `apps.baselines.MainMnistMlpTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-cnn-train» where
-  root := `apps.baselines.MainCifarCnnTrain
-  moreLinkArgs := lowererLink
-
 -- ─── apps/ablation/ — Chapter 4 and 5 ablation binaries: constant-lr optimizer arms, precision, the R34 recipe ───
 
 lean_exe «ablation» where
@@ -1071,46 +1007,12 @@ lean_exe «vit-verified» where
   root := `apps.imagenette.MainViTVerified
   moreLinkArgs := lowererLink
 
--- ─── demos/archive/ — earlier demo generations (CIFAR DDPM, VisDrone v1) ───
-
-lean_exe «cifar-ddpm-train» where
-  root := `demos.archive.MainCifarDdpmTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-sample» where
-  root := `demos.archive.MainCifarDdpmSample
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-attn-train» where
-  root := `demos.archive.MainCifarDdpmAttnTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-attn-sample» where
-  root := `demos.archive.MainCifarDdpmAttnSample
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-sincos-train» where
-  root := `demos.archive.MainCifarDdpmSincosTrain
-  moreLinkArgs := lowererLink
-
-lean_exe «cifar-ddpm-sincos-sample» where
-  root := `demos.archive.MainCifarDdpmSincosSample
-  moreLinkArgs := lowererLink
+-- ─── demos/archive/ — an earlier demo generation: the single-grid VisDrone detector ───
 
 -- VisDrone single-scale detector at 448 input / 14×14 grid (train + infer).
 -- The resolution rung above the 224/7×7 WS-A baseline; planning/archive/yolo_drone.md.
 lean_exe «yolov1-visdrone448» where
   root := `demos.archive.MainYolov1VisDrone448
-  moreLinkArgs := lowererLink
-
--- Stride-16 "finer grid" variant: 448 input / 28×28 grid (the different-head hedge).
-lean_exe «yolov1-visdrone448s16» where
-  root := `demos.archive.MainYolov1VisDrone448S16
-  moreLinkArgs := lowererLink
-
--- Anchor-based detector: 448 / 14×14 grid, A=6 anchors (brick #2, emitAnchorYoloLoss).
-lean_exe «yolov1-visdrone-anchor» where
-  root := `demos.archive.MainYolov1VisDroneAnchor
   moreLinkArgs := lowererLink
 
 -- ─── demos/probes/ — the loss / neck / emit probes behind the detector ───
@@ -1173,10 +1075,6 @@ lean_exe «fpn-train-emit» where
 -- and planning/archive/diffusion_2d_demo.md §7.
 lean_exe «mnist-ddpm-score» where
   root := `demos.probes.MainMnistDdpmScore
-  moreLinkArgs := lowererLink
-
-lean_exe «inspect-convnext» where
-  root := `demos.probes.MainInspectConvNeXt
   moreLinkArgs := lowererLink
 
 -- ─── tests/ — ties, checks, smokes and benches: the gates behind the verified renders ───
@@ -2308,7 +2206,7 @@ script cifar do
     ViT was excluded here from 2026-07-28 to 2026-07-30 by measurement, not omission: the graph
     compiled but died at *execution* in the patch-embed weight-gradient convolution with
     `miopenStatusUnknownError` (diagnosed in
-    `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`: a fused interior-dilated pad+conv
+    `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`: a fused interior-dilated pad+conv
     selects MIOpen's no-workspace `GemmFwdRest` solver, whose `MIOpenIm2d2Col.cpp` fails to build
     under HIPRTC — it uses the OpenCL builtin `get_global_id`).
 
@@ -2734,7 +2632,7 @@ def probeAttnRefMs : Nat := 1173
     graph used to die at *execution* in the patch-embed weight-gradient convolution
     (a fused interior-dilated pad+conv selects MIOpen's no-workspace `GemmFwdRest` solver,
     whose `MIOpenIm2d2Col.cpp` fails to build under HIPRTC — it uses the OpenCL builtin
-    `get_global_id`; see `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`).
+    `get_global_id`; see `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`).
 
     ⚠ **It is BATCH-DEPENDENT, and this anchor is the bs32 number.** Measured 2026-07-30:
     * **bs32** — the fault fired on the session's FIRST ViT/XLA execution and then never again
@@ -2745,7 +2643,7 @@ def probeAttnRefMs : Nat := 1173
     * **bs64** — the fault fires **reliably** and the variable is **REQUIRED** (see
       `vit_adamdp64_train_step` in `ViTRender.lean`).
 
-    The mechanism, from these logs plus `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`:
+    The mechanism, from these logs plus `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`:
     XLA fuses the interior-dilated `pad` into the patch-embed weight-gradient convolution as
     `rhs_dilation = 16` rather than materialising a 209×209 filter, and requests that conv with a
     **zero-byte workspace** (`provided ptr: 0 size: 0`). That confines MIOpen to no-workspace

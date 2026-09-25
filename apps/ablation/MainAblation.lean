@@ -447,7 +447,7 @@ def enetB0ReluSpec : NetSpec where
     .dense 1280 10 .identity
   ]
 
--- Standard EfficientNet-B0 recipe (matches MainEfficientNetTrain.lean).
+-- Standard EfficientNet-B0 recipe (the Imagenette recipe of the verified runners).
 def enetB0Config : TrainConfig where
   learningRate := 0.001
   batchSize    := 32

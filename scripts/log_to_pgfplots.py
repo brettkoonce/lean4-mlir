@@ -5,11 +5,11 @@ The blueprint's training curves are inline native pgfplots (see the R34
 validation curve in the ResNet-34 chapter) rather than raster PNGs: vector,
 font-matched, and diffable in git. This regenerates the coordinate block for a
 chosen metric so the inline \\addplot in content.tex can be refreshed from the
-committed logs/ with one command (parse → paste).
+committed historical/logs/ with one command (parse → paste).
 
 Usage:
-  python3 scripts/log_to_pgfplots.py logs/ablation_cifar-bn-sgd.log loss
-  python3 scripts/log_to_pgfplots.py logs/ablation_r34-full.log val
+  python3 scripts/log_to_pgfplots.py historical/logs/ablation_cifar-bn-sgd.log loss
+  python3 scripts/log_to_pgfplots.py historical/logs/ablation_r34-full.log val
 
 Metrics:
   loss  -> per-epoch training loss   (from "Epoch N/M: loss=X")

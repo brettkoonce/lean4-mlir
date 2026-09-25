@@ -1062,7 +1062,7 @@ def vitDropFwdBanner : String :=
 -- exist. That im2col workspace is LINEAR IN BATCH — MIOpen asks for 6,422,528 bytes at bs32 and
 -- exactly 2× that, 12,845,056, at bs64 — so the larger batch pushes solver selection onto the
 -- broken kernel deterministically. The variable drops that solver family, at ~7% throughput.
--- Diagnosis + a 20-line JAX reproducer: `upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`.
+-- Diagnosis + a 20-line JAX reproducer: `historical/upstream-issues/2026-06-jax-rocm-miopen-im2col-hiprtc/`.
 -- The eval forwards stay at bs 32 and that is fine: `trainAdamSched` reads the width off the
 -- forward artifact (`evalBs`), so eval runs at 32 while training runs at 64.
 #eval IO.FS.writeFile "verified_mlir/vit_adam64_train_step.mlir"

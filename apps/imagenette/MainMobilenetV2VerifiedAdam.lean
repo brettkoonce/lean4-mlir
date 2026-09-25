@@ -16,8 +16,8 @@ hand-written string emitter in `tests/TestMobilenetV2TrainPC.lean`; the swap was
 (the 52 BN batch statistics), `%loss`, and the gradient — with three negative controls each firing
 its own gate. The driver itself needed no change: it resolves the path from the net slug.
 
-Recipe matches `mobilenet-v2-train` (`MainMobilenetV2Train.lean`'s `mobilenetV2Config`): AdamW
-lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32
+Recipe: AdamW lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment,
+80 epochs, bs 32
 (no EMA, no grad-clip). **Exact BN parity**: TRUE batch-norm (reduce `[0,2,3]`) in the train step
 + running-stats eval — `mobilenetv2Verified.bnChannels` (52 layers, full-paper 17-block net) is
 non-empty, so the generic `trainAdamSched` threads per-layer EMA batch stats and evals through
@@ -34,7 +34,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 peer and no shared-body file: the config and entry point below ARE the program.
 -/
 
--- Matches MainMobilenetV2Train.lean's `mobilenetV2Config`: 80 epochs, bs 32, AdamW lr 1e-3 /
+-- 80 epochs, bs 32, AdamW lr 1e-3 /
 -- wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment.
 def mobilenetv2AdamConfig : VerifiedConfig where
   epochs    := 80

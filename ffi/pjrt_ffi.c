@@ -79,7 +79,7 @@ static int g_platform_rocm = 0;
 // `RocmCommandBuffer::LaunchGraph`, or a glibc `free(): invalid next size`
 // abort, at the FIRST execution of the compiled step. Reproduced in 60 lines of
 // pure JAX at batch 8 with one transformer block, no convolution and no
-// attention — `upstream-issues/2026-08-vit-imagenet-rocm-first-step-abort/`.
+// attention — `historical/upstream-issues/2026-08-vit-imagenet-rocm-first-step-abort/`.
 // It is not ours, not ViT-specific, and not the same bug as the stale-userspace
 // one 7.2.4 fixed (that one needed thousands of dispatches; this is the first).
 //

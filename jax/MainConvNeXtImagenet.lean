@@ -1,8 +1,7 @@
 import Jax
 
 /-! ConvNeXt-Tiny on full 1000-class ImageNet — phase-2 (Lean → JAX) trainer.
-    First JAX-path port of ConvNeXt (previously IREE-only). Same body as the
-    IREE `MainConvNeXtTrain.lean`: patchify stem, compute ratio (3,3,9,3),
+    First JAX-path port of ConvNeXt (previously IREE-only). Patchify stem, compute ratio (3,3,9,3),
     channels (96,192,384,768), depthwise-7×7 + channel-LN + inverted-
     bottleneck + GELU + LayerScale blocks, dedicated 2×2 stride-2 downsamples.
     ~28.6M params at 224×224, 1000 classes.

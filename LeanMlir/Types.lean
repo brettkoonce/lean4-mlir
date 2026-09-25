@@ -576,29 +576,6 @@ inductive OptimizerKind where
       is 1.0 wherever `‖θ‖` or `‖r‖` is 0 (timm convention). β1=0.9, β2=0.999,
       ε=1e-6. opt_state shape matches `.adam`: `(m, v, t)`. -/
   | lamb
-  /-- Muon (Jordan 2024) — MomentUm Orthogonalized by Newton–Schulz. The
-      heavy-ball momentum buffer is polar-projected onto the (semi-)orthogonal
-      matrices (`G = UΣVᵀ ↦ UVᵀ`) by a fixed 5-step Newton–Schulz iteration
-      (pure matmul, no SVD), so every singular direction gets an equal-size
-      step. Applies ONLY to 2D weight matrices; non-2D params (biases, norms,
-      embeddings, small heads) fall back to AdamW. IREE/MLIR perf path reads
-      `TrainConfig.useMuon`. UNVERIFIED. See `planning/archive/muon.md`. -/
-  | muon
-  /-- Shampoo (Gupta–Koren–Singer 2018) — Kronecker-factored full-matrix
-      preconditioner. For a 2D weight `W∈ℝ^{m×n}` it accumulates `L=Σ GGᵀ`
-      (m×m) and `R=Σ GᵀG` (n×n) and steps `W -= η·L^{-1/4}·G·R^{-1/4}`. The
-      inverse 4th roots are computed matmul-only by trace-scaled coupled-Newton
-      inverse-sqrt (reuses Muon's NS machinery). Single-step (un-accumulated)
-      Shampoo IS Muon = the polar factor `UVᵀ` — the demo's jewel. Demo scope:
-      applies ONLY to **square** 2D weight matrices (`m==n`), where `L[m,m]` and
-      `R[n,n]` fit exactly into the existing m/v optimizer slots — so like Muon
-      the train-step signature is Adam-identical (no extra state buffers) and it
-      drives through the existing Adam FFI. Non-square 2D weights and non-2D
-      params fall back to AdamW. `L`/`R` use EMA accumulation and are εI-
-      regularized at inversion time (state slots init to 0, so no host change).
-      IREE/MLIR perf path reads `TrainConfig.useShampoo`. UNVERIFIED.
-      See `planning/archive/shampoo.md`. -/
-  | shampoo
 deriving Repr, BEq, DecidableEq
 
 structure TrainConfig where
@@ -613,18 +590,6 @@ structure TrainConfig where
       Adam) for back-compat; set explicitly to `.rmsprop` (or `.adam`) to
       override. The IREE/MLIR backend still reads `useAdam`. -/
   optimizer    : OptimizerKind := .sgd
-  /-- Muon selector for the IREE/MLIR perf path (additive over `useAdam`, like
-      `optimizer` is for JAX). When true, every 2D weight matrix is updated by
-      Muon (Newton–Schulz polar projection); all non-2D params use AdamW. Left
-      false by default so no existing config changes behavior. See `planning/archive/muon.md`. -/
-  useMuon      : Bool := false
-  /-- Shampoo selector for the IREE/MLIR perf path (additive over `useAdam`,
-      like `useMuon`). When true, every **square** 2D weight matrix (`m==n`,
-      both dims ≥ 16) is updated by Shampoo (Kronecker `L^{-1/4}·G·R^{-1/4}`);
-      non-square 2D weights and all non-2D params use AdamW. The L/R state reuses
-      the m/v slots (square ⇒ same shape), so the module stays Adam-signature-
-      identical. Left false by default. See `planning/archive/shampoo.md`. -/
-  useShampoo   : Bool := false
   /-- RMSprop running-mean-square decay ρ (only used when `optimizer = .rmsprop`). -/
   rmspropDecay : Float := 0.9
   /-- RMSprop denominator ε — NOT 1e-8: MobileNetV2 uses 1.0, EfficientNet 1e-3;

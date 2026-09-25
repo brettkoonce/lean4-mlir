@@ -9,8 +9,8 @@ The capstone of the Muon-geometry ladder (`planning/archive/muon_ns_convergence.
 `planning/archive/muon_geometry.md`, [`LeanMlir/Proofs/Foundation/MuonGeometry.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/MuonGeometry.lean)). L1–L6 proved that the polar factor
 `UVᵀ` is the *right object* — operator-norm steepest descent (L3, von Neumann), the nuclear norm's
 argmax, Shampoo's single step (L5), the nearest orthogonal matrix to `G` (L6). **What remains is that
-the implementation actually computes it:** Muon's matmul iteration
-`X ↦ aX + b(XXᵀ)X + c(XXᵀ)²X` (`OptimizerKind.muon`, `emitMuonUpdate`) converges to `UVᵀ`.
+Muon's matmul iteration computes it:**
+`X ↦ aX + b(XXᵀ)X + c(XXᵀ)²X` converges to `UVᵀ`.
 
 **This file is P1 — the spectral-step lemma, the bridge that turns the whole problem scalar.** The one
 idea: a Newton–Schulz step never touches the singular *directions*, only the singular *values*. With

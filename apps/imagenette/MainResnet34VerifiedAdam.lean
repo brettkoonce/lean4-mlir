@@ -10,7 +10,7 @@ strided downsamples) → GAP → dense — with the SGD update swapped for AdamW
 packed as one blob + runtime `lr`/`bc₁`/`bc₂` scalars (cosine + warmup + per-step bias correction)
 through the unchanged FFI (`n_params = 3k`).
 
-Recipe matches the reference (`MainResnetTrain.lean`'s `resnet34Config`): AdamW lr 1e-3 / wd 1e-4,
+Recipe: AdamW lr 1e-3 / wd 1e-4,
 cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32. **Exact BN parity**:
 true batch-norm (reduce `[0,2,3]`) in train + running-stats eval — `resnet34Verified.bnChannels`
 (36 layers) drives the generic `trainAdamSched` to thread per-layer EMA batch stats and eval
@@ -26,7 +26,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 peer and no shared-body file: the config and entry point below ARE the program.
 -/
 
--- Matches MainResnetTrain.lean's `resnet34Config`: 80 epochs, bs 32, AdamW lr 1e-3 / wd 1e-4,
+-- 80 epochs, bs 32, AdamW lr 1e-3 / wd 1e-4,
 -- cosine + 3-epoch warmup, label smoothing 0.1, augment.
 def resnet34AdamConfig : VerifiedConfig where
   epochs    := 80

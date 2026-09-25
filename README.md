@@ -60,7 +60,7 @@ each.
 | signal processing | `lake exe gw-detect` | LIGO O3a strain: the chapter-4 CNN reaches half detection at network SNR 6.91 (false-alarm rate 10⁻²), where the matched filter needs 10.32 | [10.3.6](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_signal) |
 | beyond vision | `lake exe nqs-ising gpt` | the transverse-field Ising ground state at N = 12: a GPT wavefunction within 3.3 × 10⁻⁶ of the exact energy | [10.3.7](https://lean.brettkoonce.com/blueprint/chap-bestiary.html#sec:bestiary_beyond) |
 
-Everything else in the repository is the lab — `apps/baselines/`, the ablation and robustness
+Everything else in the repository is the lab — the ablation and robustness
 exes, the tests, the Bestiary — the evidence behind these numbers, one level down. `lakefile.lean`
 is grouped the same way: the tour first, then the lab by home directory.
 

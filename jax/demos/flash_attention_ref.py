@@ -3,8 +3,7 @@
 
 De-risks the algorithm BEFORE any MLIR: the exact block recurrence the
 StableHLO `while`-loop codegen will emit, validated against dense
-attention (forward) and against dense autodiff (backward). Same role the
-shampoo_jewel.py reference played for the NS inverse-root kernel.
+attention (forward) and against dense autodiff (backward).
 
 Two things must hold to a tight tolerance:
   (a) tiled online-softmax forward  == dense softmax(QKᵀ/√d + mask) @ V

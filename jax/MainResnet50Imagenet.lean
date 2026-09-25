@@ -186,13 +186,12 @@ def resnet50ImagenetConfig2018 : TrainConfig :=
 
 /-- Optimizer-regime probe (diagnosing the ~41% RSB-A3 result). Same A3 recipe
     but swaps LAMB→AdamW (LAMB is a large-batch optimizer; we run bs512) and adds
-    the timm no_weight_decay skip-list (BN γ/β + biases excluded from wd). NB on
-    the JAX path `.muon` also degrades to AdamW; we use `.adam` here for clarity.
+    the timm no_weight_decay skip-list (BN γ/β + biases excluded from wd).
     Keeps epochs=100 so the cosine LR schedule matches the baseline — the probe
     only RUNS the first ~10 epochs, so val@ep10 is comparable to the LAMB run. -/
 def resnet50ImagenetConfigAdamProbe : TrainConfig :=
   { resnet50ImagenetConfigShort with
-      optimizer         := .adam   -- AdamW (== Muon's JAX fallback); bs512-appropriate
+      optimizer         := .adam   -- AdamW; bs512-appropriate
       wdExcludeNormBias := true }  -- skip BN γ/β + biases from weight decay
 
 /-- **RSB-faithful A3** — reproduces timm's LAMB @ **bs2048** on this 4×16 GB box via

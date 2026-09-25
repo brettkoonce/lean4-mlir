@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 The companion to `E4M3Fold.lean`. Where the fp8 render-tie is **proven but
 un-lowered** (IREE's CUDA backend can't emit f8 — see
-`upstream-issues/2026-06-iree-cuda-fp8-nvptx-lowering/`), bf16 is the inverse: its
+`historical/upstream-issues/2026-06-iree-cuda-fp8-nvptx-lowering/`), bf16 is the inverse: its
 mixed-precision *accuracy* bound exists (`dense_close_mixed`,
 `u_leaf = 2⁻⁸`) and it **does lower on CUDA** (a `bf16`-in / `f32`-accumulate
 `dot_general` compiles for `sm_86`/`sm_89`), but its proof was **untied** — nothing

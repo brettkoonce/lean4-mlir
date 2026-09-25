@@ -240,8 +240,8 @@ theorem vitForwardKV_has_vjp_correct
 
 /-- **ViT-Tiny whole-network VJP — the production capstone.**
 
-    `vitForwardKV_has_vjp_correct` instantiated at the exact `MainVitTrain.lean`
-    `vitTiny` spec: a `3×224×224` image, `16×16` patches (`N = 196` patch tokens
+    `vitForwardKV_has_vjp_correct` instantiated at the exact ViT-Tiny
+    spec: a `3×224×224` image, `16×16` patches (`N = 196` patch tokens
     + the CLS token), embedding dim `D = 192 = 3 heads × 64`, MLP dim `768`,
     **12 transformer blocks with DISTINCT per-block parameters**
     (`ps : Fin 12 → BlockParamsV 192 768`), and Imagenette's `10` classes.

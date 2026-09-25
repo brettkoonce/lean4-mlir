@@ -282,5 +282,5 @@ each verified to 1–2 ULP of JAX autodiff.
 
 ULP-floor cross-backend agreement (Lean→IREE→GPU vs Lean→JAX→XLA on both
 NVIDIA and AMD); see
-[`traces/CROSS_BACKEND_RESULTS.md`](traces/CROSS_BACKEND_RESULTS.md) for the
+[`historical/traces/CROSS_BACKEND_RESULTS.md`](historical/traces/CROSS_BACKEND_RESULTS.md) for the
 four-corner verification tables.

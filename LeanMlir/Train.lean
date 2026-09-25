@@ -198,7 +198,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     if lossKind == .perPixelDice && cfg.labelSmoothing != 0.0 then
       throw <| IO.userError "perPixelDice + label smoothing is meaningless (Dice is a set-overlap ratio, not a log-likelihood target) — use .perPixelDiceCE if you want smoothing on the CE half"
   | .floatTargetMse =>
-    -- DDPM bypasses compileVmfbs entirely (see demos/MainCifarDdpm*Train.lean);
+    -- DDPM bypasses compileVmfbs entirely (see demos/MainMnistDdpmTrain.lean);
     -- reaching this branch via compileVmfbs is currently unused but reserved.
     pure ()
   | .yolov1Masked =>
@@ -220,8 +220,6 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     (labelSmoothing := cfg.labelSmoothing)
     (weightDecay := cfg.weightDecay)
     (useAdam := cfg.useAdam)
-    (useMuon := cfg.useMuon)
-    (useShampoo := cfg.useShampoo)
     (useSoftLabels := useSoftLabels)
     (useFocal := cfg.useFocal)
     (focalGamma := cfg.focalGamma)
@@ -649,7 +647,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
           pure params
   -- If LEAN_MLIR_INIT_DUMP is set, save the raw init-params buffer to disk.
   -- Used by phase 2 (jax/) to load bit-identical initial parameters for
-  -- step-level cross-compiler diffing. See traces/TRACE_FORMAT.md.
+  -- step-level cross-compiler diffing. See historical/traces/TRACE_FORMAT.md.
   match (← IO.getEnv "LEAN_MLIR_INIT_DUMP") with
   | some path => do
       IO.FS.writeBinFile path params
@@ -681,7 +679,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
 
   -- Trace emission (opt-in via LEAN_MLIR_TRACE_OUT env var).
   -- Writes a JSON Lines file with a header + one record per training
-  -- step. See traces/TRACE_FORMAT.md for the contract.
+  -- step. See historical/traces/TRACE_FORMAT.md for the contract.
   let traceHandle : Option IO.FS.Handle ←
     match (← IO.getEnv "LEAN_MLIR_TRACE_OUT") with
     | some path => do

@@ -16,8 +16,8 @@ hand-written string emitter in `tests/TestEfficientNetTrain.lean`; the swap was 
 (the 98 BN batch statistics), `%loss`, and the gradient. The driver itself needed no change: it
 resolves the path from the net slug.
 
-Recipe matches `efficientnet-train` (`MainEfficientNetTrain.lean`'s `efficientNetB0Config`): AdamW
-lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment, 80 epochs, bs 32.
+Recipe: AdamW lr 1e-3 / wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment,
+80 epochs, bs 32.
 **Exact BN parity**: true batch-norm (reduce `[0,2,3]`) in train + running-stats eval —
 `efficientnetVerified.bnChannels` (49 layers) drives the generic `trainAdamSched` to thread
 per-layer EMA batch stats and eval through `@efficientnet_fwd_eval` (class-batch-independent on
@@ -34,7 +34,7 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 peer and no shared-body file: the config and entry point below ARE the program.
 -/
 
--- Matches MainEfficientNetTrain.lean's `efficientNetB0Config`: 80 epochs, bs 32, AdamW lr 1e-3 /
+-- 80 epochs, bs 32, AdamW lr 1e-3 /
 -- wd 1e-4, cosine + 3-epoch warmup, label smoothing 0.1, augment.
 def efficientnetAdamConfig : VerifiedConfig where
   epochs    := 80

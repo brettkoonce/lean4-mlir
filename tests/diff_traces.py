@@ -14,7 +14,7 @@ Modes (controls numeric tolerance):
 
 Exits 0 on agreement, 1 on any mismatch. Prints a compact summary.
 
-See traces/TRACE_FORMAT.md for the trace contract.
+See historical/traces/TRACE_FORMAT.md for the trace contract.
 """
 import json
 import math

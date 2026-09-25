@@ -200,7 +200,7 @@ theorem vitInputGradK_correct
 -- ════════════════════════════════════════════════════════════════
 
 /-- ⭐⭐ **ViT-Tiny's whole-net backward tie — tier T6 at the paper net.**
-    `vitInputGradK_eq_vitForwardKV_vjp` instantiated at the exact `MainVitTrain.lean` `vitTiny`
+    `vitInputGradK_eq_vitForwardKV_vjp` instantiated at the exact ViT-Tiny
     spec: a `3×224×224` image, `16×16` patches (196 patch tokens + CLS), `D = 192 = 3 heads × 64`,
     MLP dim 768, **12 transformer blocks with DISTINCT per-block parameters**, vector-`[D]`
     LayerNorm at all 25 sites, and Imagenette's 10 classes.

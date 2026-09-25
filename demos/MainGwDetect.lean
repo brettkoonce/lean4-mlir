@@ -68,7 +68,7 @@ def cnn : NetSpec where
   ]
 
 /-- Chapter 4's CIFAR-10-BN on this input: two conv-conv-pool stacks, flatten, 512, 512,
-    out — the diffs against `apps/baselines/MainCifarCnnBnTrain.lean` are the 2-channel
+    out — the diffs from the CIFAR-10 net are the 2-channel
     stem, the flatten width and the 2-way output. The flatten fan-in is C·H·W after the
     two pools (64 × 16 × 32 = 32768), which `NetSpec.validate` does not check, so it is
     spelled out here. -/

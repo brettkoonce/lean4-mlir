@@ -868,16 +868,10 @@ demos/
 │   ├── MainGradFdProbe.lean               #   generic finite-difference gradient check
 │   ├── MainFlashProbe.lean                #   flash-attention
 │   ├── MainMnistDdpmScore.lean            #   DDPM sample scoring
-│   ├── MainGradCAM.lean                   #   closed-form CAM for GAP+dense nets
-│   └── MainInspectConvNeXt.lean           #   checkpoint diagnostics
+│   └── MainGradCAM.lean                   #   closed-form CAM for GAP+dense nets
 │
 └── archive/                               # superseded; kept building, not maintained
-    ├── MainYolov1VisDrone448.lean         #   single-scale VisDrone arms, superseded
-    ├── MainYolov1VisDrone448S16.lean      #     by the FPN detector
-    ├── MainYolov1VisDroneAnchor.lean      #
-    ├── MainCifarDdpmTrain.lean / Sample   #   DDPM on CIFAR-10
-    ├── MainCifarDdpmAttnTrain.lean / …    #   bottleneck-attention variant (codegen ✓, recipe ✗)
-    └── MainCifarDdpmSincosTrain.lean / …  #   sincos t-embed variant (small negative)
+    └── MainYolov1VisDrone448.lean         #   the single-grid VisDrone detector the FPN replaced
 ```
 
 Each section links its plan: the active ones sit at `planning/` top level, the finished ones in

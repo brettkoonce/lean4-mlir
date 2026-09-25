@@ -1,6 +1,6 @@
 /-! # NetSpec-style layer DSL for the verified trainers (Tier-2)
 
-A verified trainer should read like the reference `MainResnetTrain.lean` — a layer
+A verified trainer should read like a `NetSpec` trainer — a layer
 list + config + `train` — with the *only* difference being the formalization underneath.
 This file provides that surface:
 

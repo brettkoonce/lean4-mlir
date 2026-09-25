@@ -2509,10 +2509,6 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
 private def effOpt (cfg : TrainConfig) : OptimizerKind :=
   match cfg.optimizer with
   | .sgd => if cfg.useAdam then .adam else .sgd
-  | .muon => .adam  -- JAX backend has no Newton–Schulz kernel; Muon degrades to its
-                    -- AdamW fallback here. Muon proper is the IREE/MLIR path (planning/archive/muon.md).
-  | .shampoo => .adam  -- Same story: no preconditioner kernels in the JAX backend;
-                       -- Shampoo proper is the IREE/MLIR path (planning/archive/shampoo.md).
   | k    => k
 
 private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
@@ -2583,7 +2579,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   else "") ++
   let opt := effOpt cfg
   let optName := match opt with
-    | .adam | .muon | .shampoo => "Adam"
+    | .adam => "Adam"
     | .rmsprop => "RMSprop"
     | .lamb => "LAMB"
     | .sgd => "SGD" ++ (if hasMomentum then " + momentum" else "")
@@ -2671,7 +2667,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
      "EPS = " ++ toString cfg.rmspropEps ++ "\n"
    | .sgd => if hasMomentum then "MOMENTUM = " ++ toString cfg.momentum ++ "\n" else ""
    | .lamb => "BETA1 = 0.9\nBETA2 = 0.999\nEPS = 1e-6\n"
-   | .adam | .muon | .shampoo => "") ++
+   | .adam => "") ++
   (if hasWD then "WD = " ++ wd ++ "\n" else "") ++
   (if wdExclude then
     (match posShape with
@@ -2688,7 +2684,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
    else "") ++
   "\n" ++
   (match opt with
-   | .adam | .muon | .shampoo =>
+   | .adam =>
     "@jit\n" ++
     (if cfg.runningBN then "def train_step(params, opt_state, bn, x, y, lr, drop_key=None):\n" else "def train_step(params, opt_state, x, y, lr, drop_key=None):\n") ++
     gradPrelude ++
@@ -3015,7 +3011,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   -- restored together, so a segmented run continues the same optimizer trajectory. The DATA
   -- stream does not resume: the shuffle restarts and augmentation is unseeded (scripts/lib/jax_job.sh).
   let optStateVar : Option String := match opt with
-    | .adam | .rmsprop | .lamb | .muon | .shampoo => some "opt_state"
+    | .adam | .rmsprop | .lamb => some "opt_state"
     | .sgd => if hasMomentum then some "velocity" else none
   let stateVars : List String := ["params"] ++ optStateVar.toList ++
     (if cfg.useEMA then ["ema_params"] else []) ++
@@ -3116,7 +3112,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
     "    WD_MASK = _wd_mask(params)  # timm no_weight_decay mask (built once; shape-only, resume-safe)\n"
    else "") ++
   (match opt with
-   | .adam | .lamb | .muon | .shampoo =>
+   | .adam | .lamb =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -3236,7 +3232,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    let bnIn := if cfg.runningBN then ", bn_state" else ""
    let bnOut := if cfg.runningBN then ", bn_state" else ""
    match opt with
-   | .adam | .rmsprop | .lamb | .muon | .shampoo =>
+   | .adam | .rmsprop | .lamb =>
     "            params, opt_state" ++ bnOut ++ ", loss = train_step(params, opt_state" ++ bnIn ++ ", x, y, lr" ++ dk ++ ")\n"
    | .sgd =>
     if hasMomentum then
@@ -3385,7 +3381,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "    rng = np.random.RandomState(42)\n" ++
   let opt := effOpt cfg
   (match opt with
-   | .adam | .lamb | .muon | .shampoo =>
+   | .adam | .lamb =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_v = jax.tree.map(jnp.zeros_like, params)\n" ++
     "    opt_state = (opt_m, opt_v, jnp.float32(0))\n"
@@ -3481,7 +3477,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "            x = jax.device_put(shuf_images[i:i+BATCH_SIZE], data_sharding)\n") ++
   "            y = jax.device_put(shuf_labels[i:i+BATCH_SIZE], data_sharding)\n" ++
   (match opt with
-   | .adam | .rmsprop | .lamb | .muon | .shampoo =>
+   | .adam | .rmsprop | .lamb =>
      "            params, opt_state, loss = train_step(params, opt_state, x, y, lr)\n"
    | .sgd =>
      if hasMomentum then

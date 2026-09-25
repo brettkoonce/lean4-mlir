@@ -16,7 +16,7 @@ gradient norm-rel 1e-6, `%loss` **bit-exact**, 0/200 params disagreeing, on all 
 floats. `%loss` is the load-bearing check on this net rather than a footnote: ViT has no BN, so
 nothing else in the output depends on the forward alone.
 
-Recipe matches `MainVitTrain.lean`'s `vitTinyConfig`: AdamW lr 3e-4 / wd 1e-4, cosine + 5-epoch
+Recipe: AdamW lr 3e-4 / wd 1e-4, cosine + 5-epoch
 warmup, label smoothing 0.1, augment, 80 epochs, bs 32 — the schedule differs from the other four
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/vit-verified-adam data`. ⛔ The XLA peer
@@ -28,9 +28,9 @@ trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
 peer and no shared-body file: the config and entry point below ARE the program.
 -/
 
--- Matches MainVitTrain.lean's `vitTinyConfig` (the reference): 80 epochs, bs 32,
+-- 80 epochs, bs 32,
 -- AdamW lr 3e-4 / wd 1e-4, cosine + 5-epoch warmup, label smoothing 0.1, augment.
--- (vitTinyConfig sets NO EMA and gradClipNorm 0.0, so the DEFAULT verified path omits them too.)
+-- No EMA and no grad clipping on the default verified path.
 --
 -- ⚠ That parenthesis still holds and is why `LEAN_MLIR_VARIANT=ema` is opt-in here rather than the
 -- default. EMA belongs to the **ImageNet** ViT recipe (`jax/MainVitImagenet.lean`'s
