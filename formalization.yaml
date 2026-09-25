@@ -1,57 +1,106 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/mathlib-initiative/formalization.yaml/main/schema/formalization.schema.json
 # formalization.yaml -- see https://github.com/mathlib-initiative/formalization.yaml
 # Self-reported. The factual spine (axioms, comparator count, license, source)
 # is verifiable from the repo; the fidelity/review sections are written to state
 # the project's known gaps plainly rather than to pitch.
-version: "v0.3"
+version: "v0.4"
 
 project:
   name: "Verified Deep Learning with Lean 4"
-  authors: ["Brett Koonce"]
+  description: >-
+    Backward-pass (vector-Jacobian product) correctness for the layer primitives of ten
+    neural-network architectures, from an MLP to ResNet-50, EfficientNet-B0, ConvNeXt-T and
+    ViT-Tiny, proved against Mathlib's Frechet derivative and composed into whole-network
+    VJPs. On top of that: the batched training step of each ImageNet-scale net tied to the
+    backward it runs, a binary32 rounding model with per-operator float closeness, three
+    robustness certificates (Lipschitz margin, LipSDP, randomized smoothing) and the
+    optimizer-as-steepest-descent ladder.
+  authors: [{name: "Brett Koonce", github: "brettkoonce", orcid: "0009-0001-1381-1705"}]
+  responsible_maintainers: [{name: "Brett Koonce", github: "brettkoonce", orcid: "0009-0001-1381-1705"}]
   license: "BSD-3-Clause"
 
 sources:
+  - title: "Layer VJPs, whole-net compositions, train-step ties and the float tier"
+    authors: [{name: "Brett Koonce", github: "brettkoonce", orcid: "0009-0001-1381-1705"}]
+    id: ""
+    type: "original-proof"
+    location: "LeanMlir/Proofs/"
+    relationship: "other"
+    note: "first presented by this formalization; the backprop formulas are textbook, the Lean statements and proofs are original"
+    license: "BSD-3-Clause"
+    author_endorsement: "n/a"
   - title: "Convolutional Neural Networks with Swift for TensorFlow"
-    authors: ["Brett Koonce"]
+    authors: [{name: "Brett Koonce", github: "brettkoonce", orcid: "0009-0001-1381-1705"}]
     id: "doi:10.1007/978-1-4842-6168-2"   # Apress, 2021
-    type: "textbook"
+    type: "book"
+    location: "the architecture chapters"
+    relationship: "background"
+    note: "architectural coverage follows the book, extended through ConvNeXt and ViT"
     license: ""                            # commercial (Apress)
-    author_contacted: "n/a"               # the formalization author wrote this book
-    prior_work: ""                         # extends the book; coverage pushed through ConvNeXt + ViT
+    author_endorsement: "participated"     # the formalization author wrote this book
   - title: "Mathlib"
     authors: ["The mathlib community"]
     id: "https://github.com/leanprover-community/mathlib4"
-    type: "library"
+    type: "other"                        # software library
+    location: ""
+    relationship: "background"
+    note: "foundation: fderiv / Differentiable API; see literature_dependencies"
     license: "Apache-2.0"
-    author_contacted: "n/a"
-    prior_work: ""                         # foundation: fderiv / Differentiable API; see literature_dependencies
+    author_endorsement: "n/a"
   - title: "Lipschitz-Margin Training: Scalable Certification of Perturbation Invariance for Deep Neural Networks"
     authors: ["Yusuke Tsuzuku", "Issei Sato", "Masashi Sugiyama"]
     id: "arXiv:1802.04034"                 # NeurIPS 2018
     type: "paper"
+    location: "Proposition 1"
+    relationship: "other"
+    note: "formalized: certified radius m / (sqrt 2 * L) (LipschitzCert.lean)"
     license: ""
-    author_contacted: "no"
-    prior_work: ""                         # certified-radius theorem formalized (LipschitzCert.lean)
+    author_endorsement: "not-contacted"
   - title: "Certified Adversarial Robustness via Randomized Smoothing"
     authors: ["Jeremy Cohen", "Elan Rosenfeld", "J. Zico Kolter"]
     id: "arXiv:1902.02918"                 # ICML 2019
     type: "paper"
+    location: "Theorem 1; appendix Lemmas 3-4 (Neyman-Pearson)"
+    relationship: "other"
+    note: "formalized: radius and the Gaussian Neyman-Pearson core end to end (SmoothingGaussian.lean); the tightness result, Theorem 2, is not formalized"
     license: ""
-    author_contacted: "no"
-    prior_work: ""                         # radius + the Gaussian Neyman-Pearson core formalized end-to-end (SmoothingGaussian.lean)
+    author_endorsement: "not-contacted"
+  - title: "Provably Robust Deep Learning via Adversarially Trained Smoothed Classifiers"
+    authors: ["Hadi Salman", "Greg Yang", "Jerry Li", "Pengchuan Zhang", "Huan Zhang", "Ilya Razenshteyn", "Sebastien Bubeck"]
+    id: "arXiv:1906.04584"                 # NeurIPS 2019
+    type: "paper"
+    location: "appendix Lemma 2"
+    relationship: "other"
+    note: "formalized: the probit of a Gaussian-smoothed map is Lipschitz; proved in SmoothingGaussian.lean, used by the Cohen radius"
+    license: ""
+    author_endorsement: "not-contacted"
   - title: "Efficient and Accurate Estimation of Lipschitz Constants for Deep Neural Networks (LipSDP)"
     authors: ["Mahyar Fazlyab", "Alexander Robey", "Hamed Hassani", "Manfred Morari", "George J. Pappas"]
     id: "arXiv:1906.04893"                 # NeurIPS 2019
     type: "paper"
+    location: "Theorem 1 (single-layer certificate)"
+    relationship: "other"
+    note: "adapted: the one-hidden-layer instance of LipSDP-Neuron, per class pair, with exact-rational LDL^T PSD witnesses solved off-line (LipschitzCertPairSDP.lean)"
     license: ""
-    author_contacted: "no"
-    prior_work: ""                         # one-hidden-layer per-class-pair instance, exact-rational LDL^T PSD witnesses (LipschitzCertPairSDP.lean)
+    author_endorsement: "not-contacted"
   - title: "Old Optimizer, New Norm: An Anthology"
     authors: ["Jeremy Bernstein", "Laker Newhouse"]
-    id: "arXiv:2409.20325"
+    id: "arXiv:2409.20325"                 # OPT 2024 workshop
     type: "paper"
+    location: "Propositions 1, 2, 4, 5"
+    relationship: "other"
+    note: "formalized: steepest descent, sign descent, nearest semi-orthogonal matrix, Shampoo = spectral-norm steepest descent; square matrices (MuonGeometry.lean)"
     license: ""
-    author_contacted: "no"
-    prior_work: ""                         # optimizer-as-steepest-descent-under-a-norm ladder formalized (MuonGeometry.lean)
+    author_endorsement: "not-contacted"
+
+related_formalizations:
+  - id: "arXiv:1706.08605"                 # Certigrad: Selsam, Liang, Dill, ICML 2017; Lean 3
+    relationship: "independent"
+    note: "Certigrad: machine-checked backpropagation for stochastic computation graphs, in Lean 3"
+
+classification:
+  arxiv: ["cs.LG", "cs.LO"]
+  msc2020: ["68T07", "68V15", "65G50", "26B12", "90C22"]
 
 status:
   scope: >-
@@ -176,9 +225,20 @@ status:
 
 automation:
   methods:
+    - method: "manual"
+      models: []
+      framework: ""
+      tool_setup: "Lean 4 + Lake + Mathlib"
+      cost:
+        wall_time: ""
+        spend_usd: ""
+        hardware: ""
+      prompting_notes: >-
+        The author chose what to prove and how each claim is stated, set the fidelity
+        tiers, and reviewed the agent output; the proof text itself is mostly agent-written.
     - method: "agent"
-      models: ["Qwen3+", "Opus 4.6+"]
-      framework: "OpenCode + Claude Code"
+      models: ["Qwen", "Opus 4.6+"]
+      framework: "custom harness (Qwen) + Claude Code (Opus)"
       tool_setup: >-
         Lean 4 + Lake + Mathlib for the proofs; an independent kernel re-check via
         leanprover/comparator (Lean's own kernel; the optional nanoda second kernel is
@@ -188,12 +248,12 @@ automation:
         (planning/archive/audit_reports/) and mutation tests were themselves agent-assisted.
       cost:
         wall_time: ""        # not precisely tracked; project developed over months
-        spend_usd: ""        # not tracked
+        spend_usd: "Claude Max 20x subscription, $200/month"
         hardware: "three GPU workstations for training + codegen validation across both vendor stacks -- 4x RTX 4060 Ti and 4x RTX 3060 (NVIDIA/CUDA), 2x Radeon RX 7900 XTX (AMD/ROCm, gfx1100); API for proof work"
       prompting_notes: >-
         Mixed interactive + agentic. Proof development, codegen, the audit, and
         the empirical training runs were all done with AI assistance.
-  spend_usd: ""              # not tracked
+  spend_usd: "Claude Max 20x subscription, $200/month"
   notes: >-
     Heavily AI-assisted throughout -- proof authoring, MLIR/JAX codegen, the
     self-audit, and training. Not an unattended autonomous run; the author
