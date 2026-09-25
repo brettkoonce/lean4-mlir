@@ -59,8 +59,8 @@ on:
       - 'scripts/gates/parse_verified_mlir.py'
       # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
       # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
-      - 'scripts/*_timm_parity.py'
-      - 'scripts/_*_timm_dump.py'
+      - 'scripts/parity/*_timm_parity.py'
+      - 'scripts/parity/_*_timm_dump.py'
       - 'scripts/parity/mnv2_forward_tie.py'
       - 'scripts/parity/mnv4_forward_tie.py'
       - 'scripts/lib/_iree.py'
@@ -99,8 +99,8 @@ on:
       - 'scripts/gates/parse_verified_mlir.py'
       # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
       # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
-      - 'scripts/*_timm_parity.py'
-      - 'scripts/_*_timm_dump.py'
+      - 'scripts/parity/*_timm_parity.py'
+      - 'scripts/parity/_*_timm_dump.py'
       - 'scripts/parity/mnv2_forward_tie.py'
       - 'scripts/parity/mnv4_forward_tie.py'
       - 'scripts/lib/_iree.py'
@@ -608,7 +608,7 @@ jobs:
           export JAX_PLATFORMS=cpu
           for g in "mnv2_timm_parity.py --controls" "mnv4_timm_parity.py" \
                    "enet_timm_parity.py --controls" "vit_timm_parity.py --controls"; do
-            python3 scripts/$g 2>&1 | tee -a /tmp/parity.log
+            python3 scripts/parity/$g 2>&1 | tee -a /tmp/parity.log
           done
 
       - name: C6 augmentation geometry against PIL (with its bilinear control)
