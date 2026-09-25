@@ -64,6 +64,7 @@ on:
       - 'scripts/mnv2_forward_tie.py'
       - 'scripts/mnv4_forward_tie.py'
       - 'scripts/_iree.py'
+      - 'scripts/aug_bicubic_pil_check.py'
       - 'requirements-timm-lock.txt'
   pull_request:
     paths:
@@ -103,6 +104,7 @@ on:
       - 'scripts/mnv2_forward_tie.py'
       - 'scripts/mnv4_forward_tie.py'
       - 'scripts/_iree.py'
+      - 'scripts/aug_bicubic_pil_check.py'
       - 'requirements-timm-lock.txt'
   workflow_dispatch:
 
@@ -566,12 +568,18 @@ jobs:
           path: ~/.cache/pip
           key: pip-timm-parity-${{ hashFiles('requirements-timm-lock.txt', 'jax/requirements-cuda-lock.txt') }}
 
-      - name: Python (jax CPU at the lockfile's version, IREE, the pinned timm env)
+      - name: Python (jax CPU + TensorFlow at the lockfile's versions, IREE, the pinned timm env)
         # IREE 3.11.0 is PyPI's release; the 4060 Ti box runs a 3.12 nightly, and both ties pass on
         # both (checked 2026-09-25: MNv4 4.1e-5, MNv2 ImageNet 2.1e-6 of scale).
+        # ⚠ TensorFlow is NOT optional here: an ImageNet reference carries its tf.data pipeline at
+        # module level (`import tensorflow`, `tf.constant(...)`), so exec'ing the prefix up to
+        # `loss_fn` imports it — the first run of this job died on that. The lockfile's versions,
+        # so the pipeline code that runs is the trainers'.
         run: |
           set -e
-          python3 -m pip install --quiet "jax[cpu]==$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)" \
+          lock() { sed -n "s/^$1==//p" jax/requirements-cuda-lock.txt; }
+          python3 -m pip install --quiet "jax[cpu]==$(lock jax)" "tensorflow==$(lock tensorflow)" \
+              "tensorflow-datasets==$(lock tensorflow-datasets)" pillow \
               iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
           python3 -m venv .venv-timm
           .venv-timm/bin/pip install --quiet torch==2.13.0 torchvision==0.28.0 \
@@ -603,6 +611,11 @@ jobs:
             python3 scripts/$g 2>&1 | tee -a /tmp/parity.log
           done
 
+      - name: C6 augmentation geometry against PIL (with its bilinear control)
+        run: |
+          set -o pipefail
+          python3 scripts/aug_bicubic_pil_check.py 2>&1 | tee -a /tmp/parity.log
+
       - name: Forward ties through IREE (render ↔ reference)
         run: |
           set -eo pipefail
@@ -623,6 +636,6 @@ jobs:
             echo "## timm parity + forward ties"
             echo ""
             echo '```'
-            grep -E '^\[|max\|Δ\|/max|CONTROL|✅ the|FORWARD TIE|⛔' /tmp/parity.log || true
+            grep -E '^\[|max\|Δ\|/max|CONTROL|✅ the|FORWARD TIE|bicubic :|⛔' /tmp/parity.log || true
             echo '```'
           } >> $GITHUB_STEP_SUMMARY
