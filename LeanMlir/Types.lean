@@ -978,6 +978,10 @@ structure TrainConfig where
       ⚠ The verified peer is the render's `epsStr`, a different artifact per ε (the `eps<d…>`
       variant marker and its own `_fwd_eval_eps<d…>` eval graph), not a host-side knob. -/
   bnEps : Float := 1e-5
+  /-- Stochastic-depth ramp over `i/N` (TF EfficientNet's `drop_rate · idx / len(blocks)`) instead
+      of `i/(N−1)` (timm's `linspace(0, rate, depth)`), on the MBConv path only. Off keeps every
+      generated file byte-identical. -/
+  dropPathOverN : Bool := false
   /-- timm/DeiT ViT weight init, replacing the generic Xavier-uniform for
       transformer-shaped nets. Off by default so every existing run is
       byte-identical; turn it on per-recipe.
@@ -1033,10 +1037,11 @@ structure TrainConfig where
       decayEpochs 1.0. Selected over cosine when `> 0`. -/
   expLRDecayRate   : Float := 0.0
   expLRDecayEpochs : Float := 1.0
-  /-- The exponential schedule as a STAIRCASE — `rate^⌊(epoch − warmup) / decayEpochs⌋`, the
-      TF `exponential_decay(staircase=True)` form both papers train with — instead of the
-      continuous exponent. Only read when `expLRDecayRate > 0`. Off keeps every net's generated
-      file byte-identical. -/
+  /-- The exponential schedule as TF builds it — `exponential_decay(staircase=True)` on the GLOBAL
+      step, `rate^⌊epoch / decayEpochs⌋`, with any warmup overriding it only while it runs (TF
+      EfficientNet's `build_learning_rate`) — instead of the continuous exponent counted from the end
+      of warmup. Only read when `expLRDecayRate > 0`. Off keeps every net's generated file
+      byte-identical. -/
   expLRStaircase : Bool := false
   /-- Classifier dropout (gap C): dropout rate applied before the final dense
       head during training (inverted, scaled by 1/keep so eval is drop-free).

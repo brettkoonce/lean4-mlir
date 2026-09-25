@@ -144,6 +144,20 @@ def r34WdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
 def r34WdName (wdExclude : Bool) (nm : String) (ds : List Nat) : String :=
   if wdExclude && !r34WdDecays nm ds then "%wdz" else "%wd"
 
+/-- The variant marker for a BatchNorm ε other than the committed `1.0e-5`, in the `wd`/`ls` decimal
+    grammar (first digit the integer part): `eps0001` is 1e-3, the TF papers' value (MobileNetV2 in
+    slim, EfficientNet). ε is baked into every BN site of the train step AND of the eval forward, so
+    a different ε is a different pair of artifacts: the train step's entry carries the marker, and
+    the eval forward it scores through is `<slug>_fwd_eval_<marker>` (`VerifiedVariant.evalTag`
+    reads it back). -/
+def bnEpsMarker (epsStr : String) : String :=
+  if epsStr == "1.0e-5" then "" else if epsStr == "1.0e-3" then "eps0001" else s!"eps({epsStr})"
+
+/-- `@<slug>_fwd_eval`, or `@<slug>_fwd_eval_<marker>` at a non-default ε (an artifact's entry is its
+    file name). -/
+def fwdEvalEntry (slug epsStr : String) : String :=
+  match bnEpsMarker epsStr with | "" => s!"{slug}_fwd_eval" | m => s!"{slug}_fwd_eval_{m}"
+
 /-- The `%wdz` declaration an excluding render needs. ⚠ Emitted only when the flag is on, so at
     `wdExclude := false` not one byte moves and every committed artifact is untouched. -/
 def wdzConst (wdExclude : Bool) : String :=

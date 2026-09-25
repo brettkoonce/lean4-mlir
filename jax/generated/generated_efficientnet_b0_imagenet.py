@@ -317,7 +317,7 @@ def conv2d(x, w, b, padding=None, stride=(1,1)):
           dimension_numbers=('NCHW', 'OIHW', 'NCHW')).astype(jnp.float32)
     return x + b.reshape(1, -1, 1, 1)
 
-def _bn(x, gamma, beta, prev, training, eps=1e-5, momentum=0.99):
+def _bn(x, gamma, beta, prev, training, eps=0.001, momentum=0.99):
     rm, rv = prev
     if training:
         bm = jnp.mean(x, axis=(0, 2, 3)); bv = jnp.var(x, axis=(0, 2, 3))
@@ -1596,35 +1596,35 @@ def forward(params, x, bn, training, drop_key=None):
     x = swish(x)
     x, _ne = mbconv_block(params, x, 1, 1, 1, 3, True, bn, bn_i, training, dpkeys[0], 1.000000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 5, 2, 6, 3, True, bn, bn_i, training, dpkeys[1], 0.986667)
+    x, _ne = mbconv_block(params, x, 5, 2, 6, 3, True, bn, bn_i, training, dpkeys[1], 0.987500)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 10, 1, 6, 3, True, bn, bn_i, training, dpkeys[2], 0.973333)
+    x, _ne = mbconv_block(params, x, 10, 1, 6, 3, True, bn, bn_i, training, dpkeys[2], 0.975000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 15, 2, 6, 5, True, bn, bn_i, training, dpkeys[3], 0.960000)
+    x, _ne = mbconv_block(params, x, 15, 2, 6, 5, True, bn, bn_i, training, dpkeys[3], 0.962500)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 20, 1, 6, 5, True, bn, bn_i, training, dpkeys[4], 0.946667)
+    x, _ne = mbconv_block(params, x, 20, 1, 6, 5, True, bn, bn_i, training, dpkeys[4], 0.950000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 25, 2, 6, 3, True, bn, bn_i, training, dpkeys[5], 0.933333)
+    x, _ne = mbconv_block(params, x, 25, 2, 6, 3, True, bn, bn_i, training, dpkeys[5], 0.937500)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 30, 1, 6, 3, True, bn, bn_i, training, dpkeys[6], 0.920000)
+    x, _ne = mbconv_block(params, x, 30, 1, 6, 3, True, bn, bn_i, training, dpkeys[6], 0.925000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 35, 1, 6, 3, True, bn, bn_i, training, dpkeys[7], 0.906667)
+    x, _ne = mbconv_block(params, x, 35, 1, 6, 3, True, bn, bn_i, training, dpkeys[7], 0.912500)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 40, 1, 6, 5, True, bn, bn_i, training, dpkeys[8], 0.893333)
+    x, _ne = mbconv_block(params, x, 40, 1, 6, 5, True, bn, bn_i, training, dpkeys[8], 0.900000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 45, 1, 6, 5, True, bn, bn_i, training, dpkeys[9], 0.880000)
+    x, _ne = mbconv_block(params, x, 45, 1, 6, 5, True, bn, bn_i, training, dpkeys[9], 0.887500)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 50, 1, 6, 5, True, bn, bn_i, training, dpkeys[10], 0.866667)
+    x, _ne = mbconv_block(params, x, 50, 1, 6, 5, True, bn, bn_i, training, dpkeys[10], 0.875000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 55, 2, 6, 5, True, bn, bn_i, training, dpkeys[11], 0.853333)
+    x, _ne = mbconv_block(params, x, 55, 2, 6, 5, True, bn, bn_i, training, dpkeys[11], 0.862500)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 60, 1, 6, 5, True, bn, bn_i, training, dpkeys[12], 0.840000)
+    x, _ne = mbconv_block(params, x, 60, 1, 6, 5, True, bn, bn_i, training, dpkeys[12], 0.850000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 65, 1, 6, 5, True, bn, bn_i, training, dpkeys[13], 0.826667)
+    x, _ne = mbconv_block(params, x, 65, 1, 6, 5, True, bn, bn_i, training, dpkeys[13], 0.837500)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 70, 1, 6, 5, True, bn, bn_i, training, dpkeys[14], 0.813333)
+    x, _ne = mbconv_block(params, x, 70, 1, 6, 5, True, bn, bn_i, training, dpkeys[14], 0.825000)
     bn_out.extend(_ne); bn_i += len(_ne)
-    x, _ne = mbconv_block(params, x, 75, 1, 6, 3, True, bn, bn_i, training, dpkeys[15], 0.800000)
+    x, _ne = mbconv_block(params, x, 75, 1, 6, 3, True, bn, bn_i, training, dpkeys[15], 0.812500)
     bn_out.extend(_ne); bn_i += len(_ne)
     x, _ns = conv_bn(x, params[80][0], params[80][1], params[80][2], bn[bn_i], training, padding='SAME')
     bn_out.append(_ns); bn_i += 1
@@ -1665,11 +1665,20 @@ MOMENTUM = 0.900000
 RHO = 0.900000
 EPS = 0.001000
 WD = 0.000010
+_WD_POS_SHAPE = None
+def _wd_mask(params):
+    # timm no_weight_decay: no decay on 1-D params (biases, LayerNorm γ/β,
+    # CLS token) or the positional embedding (2-D but must not be decayed).
+    def _leaf(p):
+        if p.ndim <= 1: return jnp.zeros_like(p)
+        if p.shape == _WD_POS_SHAPE: return jnp.zeros_like(p)
+        return jnp.ones_like(p)
+    return jax.tree.map(_leaf, params)
 
 @jit
 def train_step(params, opt_state, bn, x, y, lr, drop_key=None):
     (loss, _new_bn), grads = value_and_grad(loss_fn, has_aux=True)(params, bn, x, y, drop_key)
-    grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)
+    grads = jax.tree.map(lambda g, p, msk: g + WD * msk * p, grads, params, WD_MASK)
     sq, buf = opt_state
     sq = jax.tree.map(lambda s, g: RHO * s + (1.0 - RHO) * g * g, sq, grads)
     buf = jax.tree.map(lambda b, g, s: MOMENTUM * b + g / jnp.sqrt(s + EPS), buf, grads, sq)
@@ -1826,6 +1835,7 @@ if __name__ == "__main__":
     else:
         params = init_params(random.PRNGKey(314159))
     params = jax.device_put(params, replicated_sharding)
+    WD_MASK = _wd_mask(params)  # timm no_weight_decay mask (built once; shape-only, resume-safe)
     opt_sq = jax.tree.map(jnp.ones_like, params)  # TF-RMSProp: mean-square inits to 1.0, not 0 (gentle first steps)
     opt_buf = jax.tree.map(jnp.zeros_like, params)
     opt_state = (opt_sq, opt_buf)
@@ -1893,7 +1903,7 @@ if __name__ == "__main__":
                 lr = jnp.float32(LR * (_global_step + 1) / warmup_steps)
             else:
                 _ep = _global_step / steps_per_epoch
-                lr = jnp.float32(LR * (0.970000 ** ((_ep - 5) / 2.400000)))
+                lr = jnp.float32(LR * (0.970000 ** np.floor(_ep / 2.400000)))
             params, opt_state, bn_state, loss = train_step(params, opt_state, bn_state, x, y, lr, jax.random.fold_in(_drop_base, _global_step))
             epoch_loss += loss  # jax scalar: defer the device sync to epoch end
             n_batches += 1

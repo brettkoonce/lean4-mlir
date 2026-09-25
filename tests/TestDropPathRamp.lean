@@ -51,6 +51,16 @@ private def refKeep (dropRate : Float) (i totalDrop : Nat) : Float :=
 #guard (efficientnetVerified.dropKeeps[8]! - refKeep 0.2 14 16).abs < 1e-9
 #guard (efficientnetVerified.dropKeeps[8]! - 0.8).abs > 1e-3
 
+-- ▶ The ImageNet peer rides TF's ramp since 2026-09-25 — `0.2 · i/16`, the reference's
+-- `dropPathOverN` (`efficientNetB0ImagenetConfig`), where the Imagenette spec keeps timm's `i/15`.
+-- Same sites, different denominator; the second guard is the control that the two ramps differ.
+private def refKeepOverN (dropRate : Float) (i totalDrop : Nat) : Float :=
+  1.0 - dropRate * i.toFloat / (Nat.max 1 totalDrop).toFloat
+#guard efficientnetImagenetVerified.dropKeeps.size == enetDropSites
+#guard (enetDropIdxs.toArray.zip efficientnetImagenetVerified.dropKeeps).all
+         (fun (i, k) => ((k - refKeepOverN 0.2 i enetDropTotal).abs) < 1e-9)
+#guard (efficientnetImagenetVerified.dropKeeps[8]! - efficientnetVerified.dropKeeps[8]!).abs > 1e-3
+
 -- ══════════════════════════════════════════════════════════════════════════════════════════════
 --  ▶ ConvNeXt-T — the same seam, and the trap is a DIFFERENT one
 --

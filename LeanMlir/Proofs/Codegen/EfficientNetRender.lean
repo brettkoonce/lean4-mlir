@@ -888,7 +888,7 @@ def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias 
     (slug : String := "efficientnet") (sd : Bool := false) (cd : Bool := false) : String :=
   let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd cd).run' (0, [])
   "module @m {\n" ++
-  s!"  func.func @{slug}_fwd_eval({enetFwdSig B nClasses .eval epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
+  s!"  func.func @{fwdEvalEntry slug epsStr}({enetFwdSig B nClasses .eval epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
   "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
@@ -1105,7 +1105,10 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
     -- ⚠ This net has the most crowded marker space in the repo — `ema`/`drop`/`do`/`dp` — and
     -- `tests/TestVariantPredicates.lean` exists because the collisions are between PAIRS of
     -- markers. `bf16` collides with none of them (no "ema" prefix, no "do", no "sd", no "acc").
-    (bf16 : Bool := false) : String :=
+    (bf16 : Bool := false)
+    -- ▶ `wx` (no decay on BN γ/β and biases) and the BN-ε marker (`bnEpsMarker`), TRAILING and
+    -- defaulted for `bf16`'s reason. They print after `do` and before `bf16`: `…dropdowxeps0001bf16`.
+    (wx : Bool := false) (epsMarker : String := "") : String :=
   -- ⚠⚠ THE STOCHASTIC-DEPTH MARKER IS `"drop"`, NOT `"sd"`, AND THAT IS A BUG FIX.
   -- `"sd"` collides: `rms` ++ `dp` spells **`rmsdp`**, which CONTAINS "sd", so a `"sd"` substring
   -- test fires on `rmsdp64` and `emarmsdp64` — every RMSProp DATA-PARALLEL variant, including the
@@ -1150,6 +1153,7 @@ def enetAdamVariant (B replicas : Nat) (opt : OptKind := .adamw) (ema : Bool := 
   -- ConvNeXt shipped twice and R34's bf16 hit once, arriving by a NEW route: not "the flag did
   -- not reach the name function" but "the name function ignored it". ▶ The `#guard`s below are
   -- what caught it, before anything ran.
+  (if wx then "wx" else "") ++ epsMarker ++
   (if bf16 then "bf16" else "")
 
 /-- **EfficientNet-B0 AdamW train step rendered from the verified AST.** The certified peer of the
@@ -1190,7 +1194,10 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     (bf16 : Bool := false)
     -- ▶ `forceSync`: the sync-BN graph at ONE replica (every collective empty), for the numeric
     -- gate `efficientnet-syncbn-check`. Never a committed artifact.
-    (forceSync : Bool := false) : String :=
+    (forceSync : Bool := false)
+    -- ▶ `wdExclude` — `wx`, no decay on the 1-D parameters (BN γ/β, biases): `r34WdName`'s rule,
+    -- the JAX `wdExcludeNormBias` mask. TRAILING and defaulted: every committed render is untouched.
+    (wdExclude : Bool := false) : String :=
   let sync : Bool := replicas > 1 || forceSync
   -- ⚠ `negAlphaKStr` is DERIVED from `nClasses` when empty. Passing −α/K as a string independent
   -- of K is the two-writers-for-one-fact shape that shipped a K=10 constant into R34's first
@@ -1234,9 +1241,10 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
     let mut eN : List String := []
     for i in [0:sigList.length] do
       let (nm, ds) := sigList[i]!
+      let wdN := r34WdName wdExclude nm ds
       let (c, nT, nM, nV) ← match opt with
-        | .adamw   => adamOne B replicas ⟨nm, gradNames[i]!, ds⟩
-        | .rmsprop => rmsOne  B replicas ⟨nm, gradNames[i]!, ds⟩
+        | .adamw   => adamOne B replicas ⟨nm, gradNames[i]!, ds⟩ wdN
+        | .rmsprop => rmsOne  B replicas ⟨nm, gradNames[i]!, ds⟩ wdN
       adamCode := adamCode ++ c
       thetaN := thetaN ++ [nT]; mN := mN ++ [nM]; vN := vN ++ [nV]
       -- ▶ THE EMA SHADOW (`planning/archive/ema.md`), emitted HERE rather than inside the two `*One`
@@ -1340,7 +1348,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
          "    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe.\n") ++
       zeroBiasPrelude convBias enetBiasWidths ++ code ++ statCode ++
       (match opt with | .adamw => adamWConsts | .rmsprop => rmsConstsBlock enetRmsHyper) ++
-      adamCode ++ lossCode ++
+      wdzConst wdExclude ++ adamCode ++ lossCode ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n",
       bnList.map (fun t => t.2.2.1))
   let (inner, bnOc) := go.run' (0, [])
@@ -1367,7 +1375,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
   -- The entry name must track the driver's `{slug}_{variant}_train_step` convention, or the shim
   -- refuses the call ("entry mismatch"). `enetAdamVariant` is the single source for the name, the
   -- artifact path and `LEAN_MLIR_VARIANT`.
-  let fname := s!"{slug}_{enetAdamVariant B replicas opt ema sd cd bf16}_train_step"
+  let fname := s!"{slug}_{enetAdamVariant B replicas opt ema sd cd bf16 wdExclude (bnEpsMarker epsStr)}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1805,6 +1813,20 @@ end Proofs.StableHLO
     "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true)
     (bf16 := true))
 #guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true true true true == "emarmsdp64dropdobf16"
+
+-- ⭐⭐ **The TF recipe, and the arm `enet-default-4gpu` runs** (2026-09-25, planning/imagenet_parity.md
+-- §5.3): the line above plus `wx` (no decay on BN γ/β or biases, as TF and timm do) at TF's BN
+-- ε = 1e-3. The staircase schedule and the i/16 drop-connect ramp are driver-side
+-- (`enetImagenetRmsSchedule`, `efficientnetImagenetVerified.dropKeeps`). ε is baked, so the eval
+-- partner is its own artifact, `efficientnetin_fwd_eval_eps0001.mlir`.
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_emarmsdp64dropdowxeps0001bf16_train_step.mlir"
+  (Proofs.StableHLO.efficientnetAdamTrainStepFaithful 64 1000 "1.0e-3"
+    "0.100000" "" "64.0" 4 false "efficientnetin" .rmsprop (ema := true) (sd := true) (cd := true)
+    (bf16 := true) (wdExclude := true))
+#eval IO.FS.writeFile "verified_mlir/efficientnetin_fwd_eval_eps0001.mlir"
+  (Proofs.StableHLO.efficientnetFwdEvalFaithfulV 64 1000 "1.0e-3" false "efficientnetin")
+#guard Proofs.StableHLO.enetAdamVariant 64 4 .rmsprop true true true true (wx := true)
+    (epsMarker := Proofs.StableHLO.bnEpsMarker "1.0e-3") == "emarmsdp64dropdowxeps0001bf16"
 
 -- The **2-GPU** peer: 2 replicas × batch 128 = the same global 256 =
 -- `efficientNetB0ImagenetConfig.batchSize`, so it keeps the geometry the 4×64 render above has and

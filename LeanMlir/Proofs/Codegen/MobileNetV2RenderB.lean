@@ -486,7 +486,7 @@ def mnv2AdamVariant (B replicas : Nat) (opt : OptKind := .adamw)
     -- mass, TRAILING and defaulted for `bf16`'s reason: every committed spelling is untouched.
     -- α is spelled `ls<100α>` only when it is not the default 0.1, so `ls0` is α = 0.
     (wx : Bool := false) (cd : Bool := false) (alpha : Float := 0.1)
-    -- ▶ BatchNorm ε, as `mnv2BnEpsMarker` spells it: empty at the committed 1e-5.
+    -- ▶ BatchNorm ε, as `bnEpsMarker` spells it: empty at the committed 1e-5.
     (epsMarker : String := "") : String :=
   (match opt with
    | .adamw   => if replicas ≤ 1 then "adam" else "adamdp"
@@ -497,14 +497,6 @@ def mnv2AdamVariant (B replicas : Nat) (opt : OptKind := .adamw)
   (if alpha == 0.1 then "" else s!"ls{(alpha * 100.0).round.toUInt64}") ++
   epsMarker ++
   (if bf16 then "bf16" else "")
-
-/-- The variant marker for a BatchNorm ε other than the committed `1.0e-5`, in the `wd`/`ls`
-    decimal grammar (first digit the integer part): `eps0001` is 1e-3, TF-slim's value. ε is baked
-    into every BN site of the train step AND of the eval forward, so a different ε is a different
-    pair of artifacts: the train step's entry carries the marker, and the eval forward it scores
-    through is `<slug>_fwd_eval_<marker>` (`VerifiedVariant.evalTag` reads it back). -/
-def mnv2BnEpsMarker (epsStr : String) : String :=
-  if epsStr == "1.0e-5" then "" else if epsStr == "1.0e-3" then "eps0001" else s!"eps({epsStr})"
 
 -- ════════════════════════════════════════════════════════════════
 -- § The forward traversal — ONE chain, consumed by `@mobilenetv2_fwd` and every train step
@@ -980,7 +972,7 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (packedTrainRetTys pTy ++
      (mnv2StatSigList.map (·.2)) ++ (if cd then [ty [B, 1280]] else []))
   let inner : String := go.run' (0, [])
-  let fname := s!"{slug}_{mnv2AdamVariant B replicas opt bf16 wdExclude cd alpha (mnv2BnEpsMarker epsStr)}_train_step"
+  let fname := s!"{slug}_{mnv2AdamVariant B replicas opt bf16 wdExclude cd alpha (bnEpsMarker epsStr)}_train_step"
   "module @m {\n" ++
   s!"  func.func @{fname}({inSig}) -> ({outSig}) " ++ "{\n" ++
   inner ++
@@ -1276,9 +1268,7 @@ private def mnv2FwdSig (B nClasses : Nat) (epsStr : String) (convBias : Bool) : 
     chain: `bnPerChannelEvalF` performs no reduction, so there is no batch to be honest about. -/
 def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (slug : String := "mobilenetv2") : String :=
-  -- A non-default ε is its own artifact, `@<slug>_fwd_eval_<marker>` (an artifact's entry is its
-  -- file name); at 1e-5 the entry is the net's, byte-identical.
-  let entry := match mnv2BnEpsMarker epsStr with | "" => s!"{slug}_fwd_eval" | m => s!"{slug}_fwd_eval_{m}"
+  let entry := fwdEvalEntry slug epsStr
   -- ⭐ The eval forward must be the SAME NET as the train step that produces the running
   -- statistics it consumes, and that partner is `mobilenetv2_adam_train_step` in
   -- `MobileNetV2RenderB`, XLA-`SAME` since 2026-08-08 (`planning/archive/mnv4_verified.md` §3h). Since
@@ -1495,8 +1485,8 @@ end Proofs.StableHLO
   (Proofs.StableHLO.mobilenetv2AdamTrainStepFaithfulB 64 1000 "1.0e-3" 4 false "mobilenetv2in"
     Proofs.StableHLO.OptKind.rmsprop true (wdExclude := true) (cd := true) (alpha := 0.0))
 #guard Proofs.StableHLO.mnv2AdamVariant 64 4 .rmsprop true (wx := true) (cd := true) (alpha := 0.0)
-    (epsMarker := Proofs.StableHLO.mnv2BnEpsMarker "1.0e-3") == "rmsdp64wxdols0eps0001bf16"
-#guard Proofs.StableHLO.mnv2BnEpsMarker "1.0e-5" == ""
+    (epsMarker := Proofs.StableHLO.bnEpsMarker "1.0e-3") == "rmsdp64wxdols0eps0001bf16"
+#guard Proofs.StableHLO.bnEpsMarker "1.0e-5" == ""
 #guard "rmsdp64wxdols0eps0001bf16".contains "do" && "rmsdp64wxdols0eps0001bf16".contains "rms"
 #guard !"rmsdp64wxdols0eps0001bf16".contains "drop" && !"rmsdp64wxdols0eps0001bf16".contains "acc"
 #guard !"rmsdp64wxdols0eps0001bf16".startsWith "ema" && !"rmsdp64wxdols0eps0001bf16".contains "lamb"

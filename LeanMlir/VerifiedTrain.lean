@@ -1480,8 +1480,9 @@ def VerifiedNet.trainAdamSched (net : VerifiedNet) (cfg : VerifiedConfig) (dataD
     (baseLR β1 β2 : Float) (warmupEpochs : Nat) (variant : String := "adam")
     (expDecayRate : Float := 0.0) (expDecayEpochs : Float := 1.0)
     (emaDecay : Float := 0.9999)
-    -- ▶ `expStaircase`: the exponent floored, TF's `exponential_decay(staircase=True)` — the
-    -- reference's `TrainConfig.expLRStaircase`. Off keeps the continuous form every run used.
+    -- ▶ `expStaircase`: TF's `exponential_decay(staircase=True)` — the exponent floored and counted
+    -- on the global step — the reference's `TrainConfig.expLRStaircase`. Off keeps the continuous
+    -- form, counted from the end of warmup, that every run before 2026-09-25 used.
     (expStaircase : Bool := false) : IO Unit := do
   -- `variant` selects the rendered train step `@<slug>_<variant>_train_step` (and its artifact /
   -- vmfb / checkpoint names). Default "adam" = the AdamW render; "mom" = the Nesterov-momentum SGD
@@ -2262,8 +2263,11 @@ gate's control, not a configuration.")
       -- Spelled `exp ∘ log` rather than with `^` because that is what the next two lines already do.
       let lrt := if gstep ≤ warmSteps then baseLR * gstep / warmSteps
                  else if expDecayRate > 0.0 then
-                   let k := ((gstep - 1.0) / nb.toFloat - warmupEpochs.toFloat) / expDecayEpochs
-                   baseLR * Float.exp ((if expStaircase then k.floor else k) * Float.log expDecayRate)
+                   -- The staircase is TF's `exponential_decay(staircase=True)` on the GLOBAL step
+                   -- (warmup only overrides it), the continuous form counts from warmup's end.
+                   let k := if expStaircase then ((gstep - 1.0) / nb.toFloat / expDecayEpochs).floor
+                     else ((gstep - 1.0) / nb.toFloat - warmupEpochs.toFloat) / expDecayEpochs
+                   baseLR * Float.exp (k * Float.log expDecayRate)
                  else baseLR * 0.5 * (1.0 + Float.cos (3.14159265358979 * (gstep - warmSteps) / (totalSteps - warmSteps)))
       let bc1 := 1.0 - Float.exp (gstep * Float.log β1)
       let bc2 := 1.0 - Float.exp (gstep * Float.log β2)

@@ -7,8 +7,10 @@ renderer parameters, so this needed only a `slug` — plus the derived −α/K t
 copy of §2k's hardcoded-K bug, this time in EfficientNet's report-only loss.
 
 ⚠ Does NOT move the verification tier. The optimizer follows the variant: the `rms*`/`emarms*`
-renders (the shipping `emarmsdp64dropdobf16`) are the reference's RMSProp with its ×0.97-every-2.4
-exponential decay, EMA, drop-connect and classifier dropout; the `adam*` renders are AdamW + cosine.
+renders are the reference's RMSProp with its ×0.97-every-2.4 decay, EMA, drop-connect and
+classifier dropout; the `adam*` renders are AdamW + cosine. The shipping
+`emarmsdp64dropdowxeps0001bf16` is the TF recipe the JAX `full` config now carries: `wx`, BN ε 1e-3,
+the staircase on the global step (`enetImagenetRmsSchedule`) and the i/16 drop-connect ramp.
 
 **One file, one binary, either lowerer.** The proven graph goes to whichever
 trusted lowerer `$LEAN_MLIR_LOWERER` selects -- XLA/PJRT by default, IREE with
@@ -48,7 +50,7 @@ def runEfficientNetImagenet (argv : List String) : IO Unit := do
   -- ▶ With EMA (`ema…`), drop-connect (`drop`) and classifier dropout (`do`) the `emarmsdp64dropdo*`
   -- renders carry the whole reference recipe; the remaining differences are listed in
   -- planning/imagenet_parity.md §2.2 (BN group before the sync-BN render, host-drawn masks).
-  let sched := enetRmsSchedule
+  let sched := enetImagenetRmsSchedule
   -- ⚠ SUBSTRING, not prefix, and the prefix version was a live bug here. Optimizer and EMA are
   -- INDEPENDENT axes in this net's variant names, so RMSProp+EMA is spelled `emarms`, which does
   -- NOT start with "rms" — and six committed artifacts are spelled that way, including the paper
@@ -75,5 +77,6 @@ def runEfficientNetImagenet (argv : List String) : IO Unit := do
     { efficientnetImagenetConfig with batchSize := bs, epochs := epochs }
     (argv.head?.getD "data") baseLR 0.9 0.999 (if rms then sched.warmup else 5) variant
     (if rms then sched.decayRate else 0.0) sched.decayEpochs
+    (expStaircase := rms && sched.staircase)
 
 def main (argv : List String) : IO Unit := runEfficientNetImagenet argv

@@ -45,11 +45,12 @@ def efficientNetB0Imagenet : NetSpec where
 
 /-- EfficientNet-B0 80-epoch tier (`default`); the published reference is the 350-epoch
     `full` recipe below, which is this config with only `epochs` changed.
-    RMSProp + momentum 0.9 at peak lr 0.016 for batch 256 (= 0.256 @ 4096, TF's value), 5-epoch
-    warmup + exp-LR-decay (×0.97 every 2.4 epochs, continuous and counted from the end of warmup,
-    where TF's is a staircase from step 0), weight decay 1e-5 coupled into the gradient on every
-    parameter (BN γ/β and biases included; TF and timm exclude BN), label smoothing 0.1,
-    classifier dropout 0.2, bf16 + bf16Conv.
+    RMSProp + momentum 0.9 at peak lr 0.016 for batch 256 (= 0.256 @ 4096, TF's value), and TF's
+    schedule: ×0.97 every 2.4 epochs as a staircase on the global step, a 5-epoch linear warmup
+    overriding it while it runs. Weight decay 1e-5 coupled into the gradient, off BN γ/β and biases
+    (TF and timm exclude BN), TF's BN ε 1e-3 (decay 0.99, already TF's), drop-connect ramped over
+    i/16 as TF's `drop_rate · idx / len(blocks)`, label smoothing 0.1, classifier dropout 0.2,
+    bf16 + bf16Conv (planning/imagenet_parity.md §5.3, 2026-09-25).
 
     EfficientNet's original recipe is RMSProp + AutoAugment + stochastic depth + EMA, and all four
     are here: the full AutoAugment ImageNet policy (useAutoAugment, geometric ops included via
@@ -66,9 +67,11 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   rmspropEps     := 1e-3      -- EfficientNet uses ε=1e-3
   gradClipNorm   := 0.0       -- OFF (paper uses none): the TF-RMSProp fix (ε-inside-sqrt + ms-init-1.0) removes the blow-up this was compensating for
   weightDecay    := 1e-5
+  wdExcludeNormBias := true   -- no decay on BN γ/β or biases (TF, timm; the verified `wx`)
   cosineDecay      := false   -- replaced by the paper exp-decay schedule (gap B)
-  expLRDecayRate   := 0.97    -- EfficientNet: ×0.97 every 2.4 epochs (after warmup)
+  expLRDecayRate   := 0.97    -- EfficientNet: ×0.97 every 2.4 epochs
   expLRDecayEpochs := 2.4
+  expLRStaircase   := true    -- TF: floored, on the global step (warmup overrides while it runs)
   dropout          := 0.2     -- EfficientNet-B0 classifier dropout (gap C)
   warmupEpochs   := 5
   augment        := true
@@ -78,7 +81,9 @@ def efficientNetB0ImagenetConfig : TrainConfig where
   bf16Conv       := true    -- now reaches the MBConv expand/depthwise/project
   useEMA         := true     -- weight averaging (decay 0.9999) — paper-faithful; the emitter now EMA-shadows the BN buffers too (eval uses ema_bn), fixing the earlier EMA-weights×live-BN-stats eval blow-up
   dropPath       := 0.2      -- stochastic depth, EfficientNet-B0 drop-connect rate
+  dropPathOverN  := true     -- TF's ramp: 0.2 · i/16, not timm's i/15
   runningBN      := true     -- paper-faithful eval (gap A): running BN stats, not eval-batch stats
+  bnEps          := 1e-3     -- TF's BN ε
 
 #eval efficientNetB0Imagenet.validate!
 

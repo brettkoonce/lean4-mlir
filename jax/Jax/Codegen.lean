@@ -2257,7 +2257,7 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
       let nPerBlock (blockExpand : Nat) (se : Bool) :=
         (if blockExpand != 1 then 1 else 0) + 1 + (if se then 2 else 0) + 1
       let seArg := if useSE then "True" else "False"
-      let denom := Float.ofNat (Nat.max 1 (totalDrop - 1))
+      let denom := Float.ofNat (if cfg.dropPathOverN then Nat.max 1 totalDrop else Nat.max 1 (totalDrop - 1))
       let bnArgs := if cfg.runningBN then ", bn, bn_i, training" else ""
       let bnAcc := if cfg.runningBN then "    bn_out.extend(_ne); bn_i += len(_ne)\n" else ""
       let lhs := if cfg.runningBN then "    x, _ne = " else "    x = "
@@ -3084,11 +3084,14 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
    let dEp := toString cfg.expLRDecayEpochs
    -- post-warmup decay formula (exp-decay = EfficientNet/MobileNet schedule, else cosine)
    -- `expLRStaircase`: TF's `exponential_decay(staircase=True)` — the exponent is floored, so the
-   -- rate steps once per `decayEpochs` instead of sliding.
+   -- rate steps once per `decayEpochs` instead of sliding, and it counts the GLOBAL step: a warmup
+   -- only overrides it while it runs (TF EfficientNet's `build_learning_rate`).
    let expo (e : String) := if cfg.expLRStaircase then "np.floor(" ++ e ++ ")" else "(" ++ e ++ ")"
    let decayWarmup := if hasExpLR then
        "                _ep = _global_step / steps_per_epoch\n" ++
-       "                lr = jnp.float32(LR * (" ++ rate ++ " ** " ++ expo ("(_ep - " ++ warmup ++ ") / " ++ dEp) ++ "))\n"
+       "                lr = jnp.float32(LR * (" ++ rate ++ " ** " ++
+         (if cfg.expLRStaircase then expo ("_ep / " ++ dEp)   -- TF: the global step, warmup or not
+          else expo ("(_ep - " ++ warmup ++ ") / " ++ dEp)) ++ "))\n"
      else
        "                prog = (_global_step - warmup_steps) / max(total_steps - warmup_steps, 1)\n" ++
        "                lr = jnp.float32(LR * 0.5 * (1 + np.cos(np.pi * min(prog, 1.0))))\n"

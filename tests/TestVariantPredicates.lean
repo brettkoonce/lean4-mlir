@@ -160,6 +160,9 @@ private def table : List (String × Bool × Bool × Bool) :=
   , ("rmsdp64wxdols0bf16", false, true, false)
     -- …and at TF-slim's BN ε: `ls0` ++ `eps0001` must not read as a batch or a smoothing mass.
   , ("rmsdp64wxdols0eps0001bf16", false, true, false)
+    -- ▶ EfficientNet-B0's TF recipe (2026-09-25): `do` ++ `wx` ++ `eps0001` — `dowx` must still
+    -- read as dropout exactly once, and `drop` stays the one stochastic-depth marker.
+  , ("emarmsdp64dropdowxeps0001bf16", true, true, true)
     -- ▶▶ **EMA × ACCUMULATION — the FIVE-region spellings** (`verified_side_quest_counterparts.md`
     -- §6a). These were UNSPELLABLE until 2026-08-27: `trainAdamSched` threw on the pairing because
     -- both features claimed the fourth region, which is what stopped RSB-A2/A1 from being rendered
@@ -271,7 +274,7 @@ private def table : List (String × Bool × Bool × Bool) :=
 -- rot that way: adding a spelling to the table without adding it here fails immediately.)
 private def dropoutSpellings : List String := ["adamdo", "emarms64dropdo", "rmsdo64",
   "emaaccdp8x128wxdowd005bf16", "emaacc8x128wxdowd005bf16",
-  "rmsdp64wxdols0bf16", "rmsdp64wxdols0eps0001bf16"]
+  "rmsdp64wxdols0bf16", "rmsdp64wxdols0eps0001bf16", "emarmsdp64dropdowxeps0001bf16"]
 #guard table.all (fun (v, _, _, _) => cdOn v == dropoutSpellings.contains v)
 #guard dropoutSpellings.all (fun v => table.any (fun (t, _, _, _) => t == v))
 #guard cdOn "emarms64drop" == false      -- ⚠ `drop` alone must NOT read as dropout
@@ -585,5 +588,7 @@ private def accumSpellings : List String :=
 -- ▶ `evalTag`: an `eps<d…>` variant scores through the eval graph at its own ε, every other
 -- spelling through `<slug>_fwd_eval` — run over the whole table as a partition.
 #guard VerifiedVariant.evalTag "rmsdp64wxdols0eps0001bf16" == "_eps0001"
+#guard VerifiedVariant.evalTag "emarmsdp64dropdowxeps0001bf16" == "_eps0001"
 #guard table.all (fun (v, _, _, _) =>
-  VerifiedVariant.evalTag v == (if v == "rmsdp64wxdols0eps0001bf16" then "_eps0001" else ""))
+  VerifiedVariant.evalTag v == (if v.contains "eps0001" then "_eps0001" else ""))
+#guard (table.filter (fun (v, _, _, _) => v.contains "eps")).length == 2

@@ -227,8 +227,17 @@ rerun.
 **Decisions taken, 2026-09-25 (the user): follow TF.** (a) staircase ×0.97 / 2.4 epochs counted
 from step 0 (the 5-epoch warmup stays, layered on top as in the TF code); (b) BN ε 1e-3 (TF; timm's
 own `efficientnet_b0` is 1e-5, `tf_efficientnet_b0` 1e-3); (c) drop-connect i/16; and B0-1 `wx` ON
-(the C2 note's "B0 does not" had no decision behind it). A JAX rerun rides along (R5). Not coded
-yet; ε reuses MNv2's `eps` marker and `evalTag`.
+(the C2 note's "B0 does not" had no decision behind it). A JAX rerun rides along (R5).
+✅ Landed (branch `mnv2-tf-recipe`): JAX `wdExcludeNormBias`, `bnEps := 1e-3`, `expLRStaircase`
+(now TF's form: floored on the GLOBAL step, the warmup overriding it only while it runs) and
+`dropPathOverN` (i/16 on the MBConv path; ramp ends at keep 0.8125); verified
+`efficientnetin_emarmsdp64dropdowxeps0001bf16` (131 1-D params on `%wdz`, 196 ε sites; otherwise
+byte-equal to `emarmsdp64dropdobf16`) + `efficientnetin_fwd_eval_eps0001`, `bnEpsMarker` /
+`fwdEvalEntry` moved to `RenderKit` (shared with MNv2), `enetImagenetRmsSchedule`, the ImageNet
+`dropKeeps` at i/16 (pinned in `TestDropPathRamp`); `enet-default-4gpu` flipped; new JAX-path conf
+`enet-full-jax-4gpu` (fresh `~/enet_tf350`, precheck greps ε, floor, i/16, wd mask).
+⚠ G7 still open: `imagenet-syncbn-check` cannot feed EMA or the host drop/dropout masks, so it
+covers `rmsdp64bf16`'s scope, not the shipping variant's.
 
 **Status (2026-09-25):** ✅ B0-4 docstrings (peak lr 0.016, AutoAugment only, continuous decay,
 decay on every parameter). ✅ B0-5 header trimmed to the 2026-09-12 table plus a short history;

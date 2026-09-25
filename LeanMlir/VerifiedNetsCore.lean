@@ -52,6 +52,10 @@ def mnv2ImagenetRmsSchedule : RmsSchedule := { mnv2RmsSchedule with warmup := 0,
     linear scaling of 0.256@4096 down to batch 256 ([`jax/MainEfficientNetImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainEfficientNetImagenet.lean)). -/
 def enetRmsSchedule : RmsSchedule := { lr := 0.016, decayRate := 0.97, decayEpochs := 2.4 }
 
+/-- **EfficientNet-B0 on ImageNet**: TF's schedule, the ×0.97 / 2.4-epoch staircase on the global
+    step with the 5-epoch warmup overriding it while it runs (2026-09-25). -/
+def enetImagenetRmsSchedule : RmsSchedule := { enetRmsSchedule with staircase := true }
+
 /-- The Chapter-1 linear classifier: a single dense 784→10. Trained by
     `MainMnistLinearVerified`; its math VJP is proven in [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
     (`linearVerified_has_vjp`) — both over *this* object. -/
@@ -970,12 +974,15 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
   bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
     480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
     1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
-  -- ▶ v1.2c: the ImageNet peer of `efficientnetVerified.dropKeeps`. IDENTICAL, and that is the
-  -- content: `enetDropIdxs` is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips), not
-  -- of the class count or the batch, so the ramp does not move between scales.
+  -- ▶ v1.2c: the ImageNet peer of `efficientnetVerified.dropKeeps`. The SITES are identical —
+  -- `enetDropIdxs` is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips) — but since
+  -- 2026-09-25 the ramp is TF's `0.2 · i/16` (`efficientNetB0ImagenetConfig.dropPathOverN`), where
+  -- the Imagenette peer keeps timm's `i/15`. Checked against the regenerated reference's call
+  -- sites: `dpkeys[2], 0.975000` and `dpkeys[14], 0.825000`.
+  -- ⚠ Host-fed, so it reaches every `…drop…` variant this driver runs, the older renders included.
   dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
-    (fun i => 1.0 - 0.2 * i.toFloat / 15.0)
-  -- The ImageNet peer, and IDENTICAL for the same reason the ramp is: the mask width is the head's
+    (fun i => 1.0 - 0.2 * i.toFloat / 16.0)
+  -- The ImageNet peer, and IDENTICAL for the reason the drop SITES are: the mask width is the head's
   -- input (1280), which is a property of the ARCHITECTURE. Only the classifier's OUTPUT moves
   -- between scales (10 → 1000), and the dropout site sits before it.
   dropoutKeep := some (0.8, 1280)
