@@ -824,6 +824,25 @@ end Proofs.StableHLO
     (ema := false) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
     (sd := true) (bf16 := true) (bB := cnxInBS))
 
+-- ▶▶ **THE EMA PEERS OF THE SHIPPING RECIPE** (2026-09-25). `convNeXtTinyImagenetConfig` sets
+-- `useEMA := true` (0.9999) and its reference number is the SHADOW's, so the verified pair needs the
+-- shadow on the recipe it actually trains — `convnextin_ema{,dp}` above carry it on the bare AdamW
+-- graph, three features behind. One `adamMNextF` per parameter on the UPDATED weight (the same
+-- reading `convnext_ema` uses), a fourth `[θ|m|v|ema]` region and the `%emad, %oemad` pair; the
+-- clip, the drop masks and the bf16 twins are untouched. ⚠ The shadow reads θ' AFTER the clipped
+-- update, as the reference's `ema_update` follows `train_step`.
+-- `vit-ema-drop-render convnextin` pins the artifact's arity against the driver's packing.
+#eval IO.FS.writeFile "verified_mlir/convnextin_emawxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 1 1000 "convnextin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true) (bB := cnxInBS))
+#eval IO.FS.writeFile "verified_mlir/convnextin_emadpwxclipdropbf16_train_step.mlir"
+  (Proofs.StableHLO.convNextAdamTrainStepFaithfulB "0.100000" "" s!"{cnxInBS}.0" 4 1000 "convnextin"
+    (ema := true) (wdExclude := true) (wdStr := "0.05") (clip := true) (clipStr := "1.0")
+    (sd := true) (bf16 := true) (bB := cnxInBS))
+#guard Proofs.StableHLO.cnxAdamVariant 4 true true true true true == "emadpwxclipdropbf16"
+#guard Proofs.StableHLO.cnxAdamVariant 1 true true true true true == "emawxclipdropbf16"
+
 -- ── ▶ ConvNeXt-**S** on ImageNet, slug `convnextsin` ────────────────────────────────────────────
 -- `planning/archive/vit_convnext_sb_scaleup.md`. The second net here added by RESHAPING an existing
 -- renderer rather than writing a chain, and the cheapest of the three so far: ViT-S needed six

@@ -345,6 +345,8 @@ jobs:
               verified_mlir/convnextbin_adamdpwxclipdrop_train_step.mlir \
               verified_mlir/convnextin_adamwxclipdropbf16_train_step.mlir \
               verified_mlir/convnextin_adamdpwxclipdropbf16_train_step.mlir \
+              verified_mlir/convnextin_emawxclipdropbf16_train_step.mlir \
+              verified_mlir/convnextin_emadpwxclipdropbf16_train_step.mlir \
               verified_mlir/convnextbin_adamwxclipdropbf16_train_step.mlir \
               verified_mlir/convnextbin_adamdpwxclipdropbf16_train_step.mlir \
             || { echo "::error::committed verified_mlir/{convnext,convnextin,convnextsin,convnextbin}_*drop* drifted (regen: lake env lean LeanMlir/Proofs/Codegen/ConvNeXtRenderB.lean)"; exit 1; }

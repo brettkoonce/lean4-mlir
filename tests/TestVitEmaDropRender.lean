@@ -49,6 +49,10 @@ open Proofs.StableHLO
 /-- The variant the ImageNet ViT pair runs, spelled once. -/
 def variantUnderTest : String := "emadp128x4wxclipdropbf16"
 
+/-- ConvNeXt-T's EMA peer of its shipping recipe (2026-09-25) — the same two axes in one render, so
+    the same gate: `vit-ema-drop-render convnextin`. -/
+def cnxVariantUnderTest : String := "emadpwxclipdropbf16"
+
 /-- Count `func.func` operands whose name matches a prefix, by parsing the committed signature.
     Deliberately a parse of the ARTIFACT rather than a re-render: a re-render that shares the
     emitter's bug reproduces it, and the file on disk is what the FFI will actually load. -/
@@ -66,13 +70,18 @@ def operandNames (src : String) : List String :=
 
 /-- Fail via `throw`, never `IO.Process.exit` — under `#eval` the elaborator buffers output and
     `exit` discards every diagnostic. -/
-def main : IO Unit := do
-  let path := s!"verified_mlir/vitin_{variantUnderTest}_train_step.mlir"
+def main (args : List String) : IO Unit := do
+  -- `vitin` (the default, and what this gate was written for) or `convnextin`
+  let which := args.headD "vitin"
+  let (slug, variantUnderTest, net, label) ← match which with
+    | "vitin"      => pure ("vitin", variantUnderTest, vitImagenetVerified.toNet, "ViT")
+    | "convnextin" => pure ("convnextin", cnxVariantUnderTest, convnextImagenetVerified.toNet, "ConvNeXt-T")
+    | other        => throw <| IO.userError s!"unknown net '{other}': vitin | convnextin"
+  let path := s!"verified_mlir/{slug}_{variantUnderTest}_train_step.mlir"
   let src ← IO.FS.readFile path
   let names := operandNames src
-  let net := vitImagenetVerified.toNet
 
-  IO.println "── ViT: EMA + stochastic depth in one render ──"
+  IO.println s!"── {label}: EMA + stochastic depth in one render ──"
   IO.println s!"  artifact : {path}"
   IO.println s!"  operands : {names.length}"
 

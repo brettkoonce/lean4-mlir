@@ -127,6 +127,9 @@ private def table : List (String × Bool × Bool × Bool) :=
     -- decay 0.05 + `wdExcludeNormBias` + `gradClipNorm` + `dropPath`, so it is all four at once.
   , ("adamwxclipdrop", false, false, true), ("adamdpwxclipdrop", false, false, true)
   , ("adamdpdrop", false, false, true), ("emawxclipdrop", true, false, true)
+    -- ▶ ConvNeXt-T's EMA peers of its shipping recipe (2026-09-25): `ema` LEADS the whole optimizer
+    -- name, and `bf16` trails `drop` — both spellings the driver now loads.
+  , ("emadpwxclipdropbf16", true, false, true), ("emawxclipdropbf16", true, false, true)
     -- ▶ ViT's SD spellings. ViT's variant carries a BATCH suffix the other two do not
     -- (`adam64`, `adam128`), so `drop` concatenates against a DIGIT here — a third ordering of the
     -- same three markers, and the reason this table is run rather than reasoned about.

@@ -139,6 +139,9 @@ def decode(variant: str) -> str:
         bits.append("momentum")
     elif "sgd" in variant:
         bits.append("SGD")
+    elif ema_on(variant):
+        # ConvNeXt/ViT/EfficientNet spell `ema` IN PLACE OF `adam` (`cnxAdamVariant`): AdamW + shadow
+        bits.append("AdamW")
     if "dp" in variant:
         bits.append("data-parallel")
     k = acc_k(variant)
