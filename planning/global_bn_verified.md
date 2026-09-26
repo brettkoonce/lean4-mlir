@@ -975,8 +975,8 @@ it through `scripts/supervise.sh`). ⚠ ares carries the box-wide stall
 | ✅ 1 | ResNet-34 | `scripts/jobs/r34-default-bf16-4gpu.conf` | `momdp64bf16` | 23.7 h, landed 2026-09-23 (`runs/2026-09-22-r34-syncbn-bf16-90ep/`, 74.168 / 91.894) | §5.7 rewritten: BN row moved below the rule, `\globalbntodo` gone, §6.5/§7 cross-refs follow |
 | 2 | MobileNetV2 | `scripts/jobs/mnv2-default-4gpu.conf` | `rmsdp64bf16` | ~51 h | `:7059` row + §6's `[TODO: global BN.]` |
 | 3 | EfficientNet-B0 | `scripts/jobs/enet-default-4gpu.conf` | `emarmsdp64dropdobf16` | ~73 h | `:8266` row |
-| 1 | ResNet-50 2018 | `r50-2018-bf16-4gpu.conf` | `momdp64bf16` | ~31 h (30.7 h on the 3060 box + 3 %) | `:5935` 2018 column's `BN group` |
-| 1 | ResNet-50 A3 | `r50-a3-wxclip4x128-bf16-4gpu.conf` | `lambaccdp4x128wxclipbcebf16` | ~22 h at ares' median, 30–40 h with its stall | `:5935` A3 column, `:6089`'s Ghost-BN row |
+| ✅ 1 | ResNet-50 2018 | `r50-2018-bf16-4gpu.conf` | `momdp64bf16` | 31.6 h, landed 2026-09-25 (`runs/2026-09-24-r50-2018-syncbn-bf16-90ep/`, 77.160 / 93.430, +0.21 on the reference) | §5.8 rewritten 2026-09-26 with the A3 leg: both BN-group rows below the rule, `\globalbntodo` gone, §5.9's ghost-BN paragraph retired, §6.5's pair count follows |
+| ✅ 1 | ResNet-50 A3 | `r50-a3-wxclip4x128-bf16-4gpu.conf` | `lambaccdp4x128wxclipbcebf16` | 21.8 h, landed 2026-09-24 (`runs/2026-09-23-r50-a3-syncbn-bf16-100ep/`, 78.330 / 94.034, +0.07 on the reference) | see the 2018 row; the job is now `lake run r50-a3-wxclip4x128-bf16-4gpu` and the Track-4 row |
 | — | MobileNetV4 | `scripts/jobs/mnv4-default-4gpu.conf` | `adamdp64` | not costed here | none — its FIRST pair; no caveat row needed |
 
 ⚠⚠ **R50 A3 trains the 4×128 render, not its old conf.** Sync-BN normalises over `R × micro`

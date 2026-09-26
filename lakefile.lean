@@ -2272,15 +2272,16 @@ script imagenette do
     `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
     rows are the ones with chapter numbers; the five side quests have job configs and no number
     yet. Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
+    `r50-a3-wxclip-bf16-4gpu` (RSB-A3 at 8 × 64: the same effective 2048 at a BatchNorm group of 256),
     `vit-default-4gpu`, `cnx-default-emabf16-4gpu` (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch JAX side `mnv4-default-jax-4gpu` (run, like its verified side, as
     overnight chunks, `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only.
-    ⚠ `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip-bf16-4gpu` are the 4× 3060 box's confs, named by the
+    ⚠ `r34-default-bf16-4gpu`, `r50-2018-bf16-4gpu` and `r50-a3-wxclip4x128-bf16-4gpu` are the 4× 3060 box's confs, named by the
     book's Track-4 table as the jobs behind their rows; on this box their PRECHECK refuses, which is
     the honest answer. -/
 private def imagenetRows : List (String × String × String) :=
   [ ("r34-default-bf16-4gpu",  "resnet34-imagenet-verified",     "Ch. 5  ResNet-34, the 2018 recipe, bf16"),
     ("r50-2018-bf16-4gpu",     "resnet50-imagenet-verified",     "Ch. 5  ResNet-50, 2018"),
-    ("r50-a3-wxclip-bf16-4gpu", "resnet50-imagenet-verified",    "Ch. 5  ResNet-50, RSB-A3 (train@160), bf16"),
+    ("r50-a3-wxclip4x128-bf16-4gpu", "resnet50-imagenet-verified", "Ch. 5  ResNet-50, RSB-A3 (train@160, 4 × 128), bf16"),
     ("mnv2-default-4gpu",      "mobilenetv2-imagenet-verified",  "Ch. 6  MobileNetV2"),
     ("mnv4-default-4gpu",      "mobilenetv4-imagenet-verified",  "Ch. 6  MobileNetV4-Conv-M (side quest)"),
     ("enet-default-4gpu",      "efficientnet-imagenet-verified", "Ch. 7  EfficientNet-B0"),
@@ -2329,7 +2330,7 @@ private def runJobScript (job : String) (args : List String) : IO UInt32 := do
 
 script «r34-default-bf16-4gpu»  (args) do runJobScript "r34-default-bf16-4gpu" args
 script «r50-2018-bf16-4gpu»     (args) do runJobScript "r50-2018-bf16-4gpu" args
-script «r50-a3-wxclip-bf16-4gpu» (args) do runJobScript "r50-a3-wxclip-bf16-4gpu" args
+script «r50-a3-wxclip4x128-bf16-4gpu» (args) do runJobScript "r50-a3-wxclip4x128-bf16-4gpu" args
 script «mnv2-default-4gpu»      (args) do runJobScript "mnv2-default-4gpu" args
 script «mnv4-default-4gpu»      (args) do runJobScript "mnv4-default-4gpu" args
 script «enet-default-4gpu»      (args) do runJobScript "enet-default-4gpu" args

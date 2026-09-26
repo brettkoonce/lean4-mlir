@@ -6077,9 +6077,8 @@ lake run r34-default-bf16-4gpu
 \end{verbatim}
 
 \noindent The job config behind that name,
-\texttt{scripts/jobs/r34-default-bf16-4gpu.conf}, carries what used to be a
-seven-variable command line --- the device list, both replica knobs, the
-variant, the per-replica batch and the feed setting --- and
+\texttt{scripts/jobs/r34-default-bf16-4gpu.conf}, carries the device list,
+both replica knobs, the variant, the per-replica batch and the feed setting;
 \S\ref{sec:getting_started_track4} says what the supervisor behind it does.
 
 \begin{center}
@@ -6094,11 +6093,10 @@ GPU & Precision & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 
 \noindent Global batch 256 as $4 \times 64$ replicas, bf16 matmul and
 convolution as on the reference, BatchNorm statistics all-reduced across
-the four replicas, scored over the same $50{,}000$ images. One attempt, no
-restarts.
+the four replicas, scored over the same $50{,}000$ images.
 
 \medskip\noindent\textbf{The lowerer underneath is interchangeable.} Run
-from the same initialization on the same box, the IREE and XLA lowerings of
+from the same initialization, the IREE and XLA lowerings of
 this artifact scored $17{,}312$ and $17{,}313$ correct at epoch~5 --- one
 image apart. The proof-carrying tier stops at Imagenette, so the claim is
 ``one architecture, two independent lowerings, agreeing'', not ``proven
@@ -6113,9 +6111,6 @@ at ImageNet scale''.
 \hline
 lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
 Python in the step  & yes                      & none \\
-box                 & 4$\times$ 4060\,Ti       & 4$\times$ 3060 \\
-per epoch           & $\sim$8.8 min            & $\sim$15.8 min \\
-total               & $\sim$14.8 hr            & $\sim$23.7 hr \\
 \hline
 precision           & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
 global batch        & 256 ($4\times64$)        & 256 ($4\times64$) \\
@@ -6131,10 +6126,9 @@ schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
 \end{center}
 
 \noindent Both columns are ResNet-34 on the 2018 recipe, 90 epochs, scored
-over the same $50{,}000$ validation images under the same protocol; the
-reference ran on four 4060\,Ti and the verified path on four 3060, the
-arrangement \S\ref{sec:r50_pjrt}'s grid keeps. Rows above the first rule
-differ; rows between the rules are held equal by construction.
+over the same $50{,}000$ validation images under the same protocol. Rows
+above the first rule differ; rows between the rules are held equal by
+construction.
 
 \medskip\noindent\textbf{The two paths agree to $0.01$ points on top-1 and
 $0.03$ on top-5}, and that is well inside what one run can resolve. At $n = 50{,}000$ the 95\% Wilson
@@ -6145,14 +6139,11 @@ at this scale a gap under about $0.4$ points is not yet a result in either
 direction. That is the floor every side-by-side table in this book is read
 against.
 
-\medskip\noindent The pair is not one-variable, and the table says where:
-the verified run is on four 3060 where the reference is on four 4060\,Ti.
-The BatchNorm group is held equal, and that took work the table does not
-show: the reference's \texttt{@jit} mesh reduces the batch statistics over
-the global $256$ for free, and the verified render only matches it because
-every one of its 36 BatchNorms all-reduces its mean and variance across the
-four replicas --- the render Theorem~\ref{thm:resnet34_sync_tie} ties to one
-device's step at $256$.
+\medskip\noindent Both paths normalize over the global $256$: the
+reference's \texttt{@jit} mesh reduces the batch statistics across its
+shards, and each of the verified render's 36 BatchNorms all-reduces its
+mean and variance across the four replicas --- the render
+Theorem~\ref{thm:resnet34_sync_tie} ties to one device's step at $256$.
 
 \medskip\noindent\textbf{The curves converge; they do not merely end
 together.} The middle of the schedule is noisy on both paths --- at peak
@@ -6277,8 +6268,8 @@ $4 \times 512$ to reach $2048$; the 2018 row is a true global batch of
 $256$. That is \emph{ghost} batch norm (Hoffer, Hubara \& Soudry 2017,
 \href{https://arxiv.org/abs/1705.08741}{arXiv:1705.08741}): the
 statistics come from a fixed sub-batch rather than the whole batch, here
-as a side effect of accumulation rather than a choice, and the group size
-is a knob of its own that \S\ref{sec:r50_a2_a1_cost} returns to. The
+as a side effect of accumulation rather than a choice, and the A3 render
+below reproduces it by accumulating the same way. The
 architecture lever: against ResNet-34's $74.16\%$ on the same
 recipe, the bottleneck is worth $+2.79$ points. The recipe lever: A3 adds
 $+1.31$ on the same network, in less wall clock, because it trains at
@@ -6330,13 +6321,13 @@ points in their decay; the endpoints are what the $+1.31$ is measured from.
 The verified trainer is the ResNet-34 one of \S\ref{sec:r34_pjrt} with the
 bottleneck backbone substituted, and each recipe is its own render:
 \texttt{resnet50in\_momdp64bf16} for 2018, and for A3
-\texttt{resnet50in160\_lambaccdp8x64wxclipbcebf16} --- LAMB $\times$
-BCE-with-logits $\times$ accumulation $k=8$ at four replicas of $64$, the
-same effective $2048$, train@160 / eval@224. They run with:
+\texttt{resnet50in160\_lambaccdp4x128wxclipbcebf16} --- LAMB $\times$
+BCE-with-logits $\times$ accumulation $k=4$ at four replicas of $128$ to
+the recipe's $2048$, train@160 / eval@224. They run with:
 
 \begin{verbatim}
 lake run r50-2018-bf16-4gpu
-lake run r50-a3-wxclip-bf16-4gpu
+lake run r50-a3-wxclip4x128-bf16-4gpu
 \end{verbatim}
 
 \begin{center}
@@ -6344,16 +6335,17 @@ lake run r50-a3-wxclip-bf16-4gpu
 \hline
 GPU & Recipe & BN group & Per epoch & Epochs & Total & Val top-1 & Val top-5 \\
 \hline
-4$\times$ 3060 (bf16) & 2018   & 64 (per replica) & $\sim$20.5 min & 90  & $\sim$30.7 hr & $\mathbf{77.07\%}$ & $\mathbf{93.48\%}$ \\
-4$\times$ 3060 (bf16) & RSB-A3 & 64 (per replica) & $\sim$13.7 min & 100 & $\sim$22.8 hr & $\mathbf{77.98\%}$ & $\mathbf{93.76\%}$ \\
+4$\times$ 3060 (bf16) & 2018   & 256 (global)   & $\sim$21.1 min & 90  & $\sim$31.6 hr & $\mathbf{77.16\%}$ & $\mathbf{93.43\%}$ \\
+4$\times$ 3060 (bf16) & RSB-A3 & 512 (Ghost-BN) & $\sim$13.1 min & 100 & $\sim$21.8 hr & $\mathbf{78.33\%}$ & $\mathbf{94.03\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Scored over the same $50{,}000$ images. \texttt{shimScript}
-(\S\ref{sec:r34_pjrt}) is a field on the network rather than on the recipe,
-so at $224^2$ the two recipes need two shims and the wrong one trains the
-right optimizer on the wrong data; the job configs refuse to start with it.
+\noindent Scored over the same $50{,}000$ images. Both renders all-reduce
+every BatchNorm's mean and variance across the four replicas
+(Theorem~\ref{thm:resnet50_sync_tie}), so the 2018 render normalizes over
+the global $256$ and the A3 render over $4 \times 128 = 512$, the ghost
+batch the reference's accumulation gives it.
 
 \medskip\noindent The A3 render carries the recipe as
 \S\ref{sec:r50_a3_vs_2018} tabulates it, including the three places a bare
@@ -6362,68 +6354,91 @@ decay, LAMB's gradient clip at \texttt{timm}'s default (after the all-reduce
 and the accumulation, at threshold $kC$,
 \texttt{Proofs.clipFactor\_accum}), and the \texttt{no\_weight\_decay} group
 left out of layer adaptation. The optimizer is tied to the reference at the
-update as well as the gradient, six variants to $\sim\!10^{-7}$. What it
-does not carry is the reference's BatchNorm group: no collective touches the
-batch statistics, so each replica normalizes over its own $64$ against the
-reference's $512$ --- an eightfold gap, and much the largest asymmetry
-between the two A3 columns. The rest of the list is small: $0.08\%$ of each
-epoch is dropped because $8 \nmid 5004$, and Mixup's $\lambda$ is drawn
-host-side, so agreement there is distributional rather than per-step.
+update as well as the gradient, six variants to $\sim\!10^{-7}$. Two things
+differ from the reference: $0.08\%$ of each epoch is dropped because
+$4 \nmid 2{,}502$, and Mixup's $\lambda$ is drawn host-side, so agreement
+there is distributional rather than per-step.
 
 \prosesection{The two paths, side by side}
 
 \begin{center}
-\begin{tabular}{@{}l r r r @{\qquad} r r r@{}}
+\begin{tabular}{@{}l l l@{}}
 \hline
- & \multicolumn{3}{c}{\textbf{2018} (90 ep)} & \multicolumn{3}{c}{\textbf{RSB-A3} (100 ep)} \\
- & reference & verified & $\Delta$ & reference & verified & $\Delta$ \\
+ & reference (JAX) & verified path (PJRT) \\
 \hline
-top-1        & $76.95$ & $\mathbf{77.07}$ & $+0.12$ & $78.26$ & $\mathbf{77.98}$ & $-0.28$ \\
-top-5        & $93.44$ & $\mathbf{93.48}$ & $+0.04$ & $93.79$ & $\mathbf{93.76}$ & $-0.03$ \\
-precision    & bf16 & bf16 & & bf16 & bf16 & \\
-BN group     & 256 & 64 & & 512 & 64 & \\
-box          & 4060\,Ti & 3060 & & 4060\,Ti & 3060 & \\
-wall clock   & $24.0$\,h & $30.7$\,h & & $15.1$\,h & $22.8$\,h & \\
+lowering            & JAX $\to$ XLA            & \texttt{pretty(provenGraph)} $\to$ XLA \\
+Python in the step  & yes                      & none \\
+\hline
+precision           & bf16 (matmul + conv)     & bf16 (matmul + conv) \\
+schedule            & cosine, 5-epoch warmup   & cosine, 5-epoch warmup \\
+\hline
+\multicolumn{3}{@{}l}{\textbf{2018} (90 ep)} \\
+effective batch     & 256                      & 256 \\
+accumulation        & none                     & none \\
+BN statistic group  & 256 (global)             & 256 (global) \\
+steps/epoch         & 5{,}004                  & 5{,}004 \\
+optimizer           & SGD, momentum $0.9$      & SGD, momentum $0.9$ \\
+train / eval res    & 224 / 224                & 224 / 224 \\
+\textbf{val top-1}  & $\mathbf{76.95\%}$       & $\mathbf{77.16\%}$ \\
+\textbf{val top-5}  & $\mathbf{93.44\%}$       & $\mathbf{93.43\%}$ \\
+\hline
+\multicolumn{3}{@{}l}{\textbf{RSB-A3} (100 ep)} \\
+effective batch     & 2048                     & 2048 \\
+accumulation        & $4 \times 512$           & $4 \times 512$ \\
+BN statistic group  & 512 (Ghost-BN)           & 512 (Ghost-BN) \\
+steps/epoch         & 625                      & 625 \\
+optimizer           & LAMB                     & LAMB \\
+train / eval res    & 160 / 224                & 160 / 224 \\
+\textbf{val top-1}  & $\mathbf{78.26\%}$       & $\mathbf{78.33\%}$ \\
+\textbf{val top-5}  & $\mathbf{93.79\%}$       & $\mathbf{94.03\%}$ \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Four runs, one per cell, every cell bf16 and every cell scored over
-the same $50{,}000$ images. The reference column is four 4060\,Ti and the
-verified column four 3060 throughout, which is what lets $\Delta$ be read as
-a path difference rather than a path-and-box one.
+\noindent Both columns are ResNet-50, each block on its recipe, scored over
+the same $50{,}000$ validation images under the same protocol. Rows above
+the first rule differ; every other row but the results is held equal by
+construction. The BatchNorm statistic group is the setting that changes
+between the blocks, on both paths at once: the 2018 recipe normalizes over
+the global $256$, and A3 over the $512$-image micro-batch its accumulation
+hands each step --- ghost batch norm, on the reference and the verified
+path alike.
 
-\medskip\noindent\textbf{The two paths agree within $0.28$ points on both
-recipes}, and within $0.04$ on top-5 --- inside the floor \S\ref{sec:r34_pjrt}
-set, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one seed per cell. \textbf{And the recipe delta
-replicates}: A3 beats 2018 by $+1.31$ on the reference and $+0.91$ on the
-verified path. Agreement at a single configuration can be a coincidence of
-that configuration; a difference that reproduces across two
-independent implementations is harder to arrange by accident, and it is
-what a one-row comparison cannot show. Two things the grid does not settle.
-The A3 column trains at $160$ and evaluates at $224$ while 2018 does both at
-$224$, so the recipe delta confounds resolution with recipe, by A3's own
-design. And the A3 pair's $-0.28$ sits on an eightfold BatchNorm-group
-difference that nothing here isolates.
+\medskip\noindent\textbf{The two paths agree within $0.21$ points on top-1
+on both recipes}, and within $0.24$ on top-5 --- inside the floor
+\S\ref{sec:r34_pjrt} set, $\pm0.37$ at $77\%$ on $50{,}000$ images, at one
+seed per cell. \textbf{And the recipe delta replicates}: A3 beats 2018 by
+$+1.31$ on the reference and $+1.17$ on the verified path. Agreement at a
+single configuration can be a coincidence of that configuration; a
+difference that reproduces across two independent implementations is harder
+to arrange by accident, and it is what a one-row comparison cannot show. One
+thing the table does not settle: the A3 column trains at $160$ and evaluates
+at $224$ while 2018 does both at $224$, so the recipe delta confounds
+resolution with recipe, by A3's own design.
 
-\globalbntodo
-
-\medskip\noindent\textbf{The A3 curves meet; they do not travel together.}
-The verified path runs ahead through most of the schedule, by as much as
-seventeen points, and the two converge only in the anneal --- within a
-point from epoch~80 and $0.01$ apart at epoch~90. Where that route
-difference lives is not established; the BatchNorm group is the one large
-known asymmetry, and it is why this pair is read at its endpoints and
-nowhere else:
+\medskip\noindent\textbf{The curves meet; they do not travel together, on
+either recipe.} The verified path runs ahead of the reference through the
+first half of both schedules --- by about seven points on average over the
+first forty-five epochs of 2018 and the first sixty of A3, twelve and
+twenty-one at the widest --- and the two converge only in the anneal. Over
+the last ten epochs they average within $0.33$ of each other on 2018 and
+$0.07$ on A3. Where the route difference lives is not established, and it
+is why these pairs are read at their endpoints and nowhere else:
 
 \begin{center}
-\begin{tabular}{@{}l r r r r r r@{}}
+\begin{tabular}{@{}l r r r r r r r r@{}}
 \hline
-epoch & 5 & 25 & 50 & 75 & 90 & 100 \\
+epoch & 5 & 15 & 30 & 45 & 60 & 75 & 90 & 100 \\
 \hline
-reference (JAX)       & 11.62 & 46.88 & 52.80 & 72.69 & 77.72 & 78.26 \\
-verified path (PJRT)  & 24.53 & 53.98 & 65.17 & 74.83 & 77.73 & 77.98 \\
-$\Delta$              & $+12.91$ & $+7.10$ & $+12.37$ & $+2.14$ & $+0.01$ & $-0.28$ \\
+\multicolumn{9}{@{}l}{\textbf{2018} (90 ep)} \\
+reference (JAX)       & 31.94 & 48.27 & 50.11 & 54.14 & 63.29 & 71.96 & 76.95 & --- \\
+verified path (PJRT)  & 40.72 & 51.99 & 56.24 & 61.40 & 66.29 & 73.00 & 77.16 & --- \\
+$\Delta$              & $+8.78$ & $+3.72$ & $+6.13$ & $+7.26$ & $+3.00$ & $+1.04$ & $+0.21$ & \\
+\hline
+\multicolumn{9}{@{}l}{\textbf{RSB-A3} (100 ep)} \\
+reference (JAX)       & 11.62 & 41.37 & 48.04 & 59.70 & 63.07 & 72.69 & 77.72 & 78.26 \\
+verified path (PJRT)  & 21.80 & 49.78 & 57.09 & 60.38 & 68.72 & 74.67 & 77.89 & 78.33 \\
+$\Delta$              & $+10.18$ & $+8.41$ & $+9.05$ & $+0.68$ & $+5.65$ & $+1.98$ & $+0.17$ & $+0.07$ \\
 \hline
 \end{tabular}
 \end{center}
@@ -6431,16 +6446,46 @@ $\Delta$              & $+12.91$ & $+7.10$ & $+12.37$ & $+2.14$ & $+0.01$ & $-0.
 \begin{center}
 \begin{tikzpicture}
 \begin{axis}[
-    width=0.92\linewidth, height=6.5cm,
+    width=0.49\linewidth, height=6cm,
     xlabel={Epoch}, ylabel={Validation top-1 (\%)},
+    xmin=0, xmax=91, ymin=0, ymax=80,
+    xtick={0,15,30,45,60,75,90},
+    ytick={20,40,60,80},
+    legend pos=south east,
+    legend cell align={left},
+    legend style={font=\scriptsize},
+    grid=major, grid style={gray!18},
+    tick label style={font=\small},
+    label style={font=\small},
+    title style={font=\small},
+    title={2018 (90 ep)},
+    every axis plot/.append style={line width=1pt, mark=none},
+]
+\addplot[blue] coordinates {
+(1,5.62) (2,12.26) (3,20.56) (4,26.88) (5,31.94) (6,39.00) (7,40.99) (8,39.22) (9,40.09) (10,44.78) (11,44.68) (12,40.05) (13,46.52) (14,44.43) (15,48.27) (16,46.74) (17,45.16) (18,45.97) (19,46.45) (20,48.40) (21,48.15) (22,49.31) (23,47.39) (24,49.90) (25,44.23) (26,49.32) (27,46.24) (28,47.15) (29,48.84) (30,50.11) (31,49.00) (32,49.19) (33,50.51) (34,45.38) (35,51.90) (36,50.42) (37,51.17) (38,52.60) (39,54.86) (40,54.25) (41,52.25) (42,55.65) (43,52.48) (44,57.34) (45,54.14) (46,56.66) (47,56.50) (48,54.69) (49,54.96) (50,57.40) (51,58.25) (52,56.86) (53,57.86) (54,58.89) (55,56.85) (56,61.05) (57,60.80) (58,61.29) (59,63.09) (60,63.29) (61,62.66) (62,62.64) (63,63.49) (64,64.41) (65,65.56) (66,66.45) (67,67.59) (68,67.14) (69,68.81) (70,68.19) (71,66.92) (72,69.45) (73,69.37) (74,71.08) (75,71.96) (76,71.41) (77,72.78) (78,73.17) (79,73.58) (80,74.35) (81,75.08) (82,75.18) (83,75.71) (84,76.16) (85,76.35) (86,76.60) (87,76.77) (88,76.91) (89,76.94) (90,76.95)
+};
+\addlegendentry{reference (JAX)}
+\addplot[red, dashed] coordinates {
+(1,10.66) (2,23.77) (3,32.27) (4,37.28) (5,40.72) (6,42.65) (7,45.39) (8,43.92) (9,48.52) (10,50.63) (11,50.93) (12,52.01) (13,51.18) (14,51.81) (15,51.99) (16,52.82) (17,53.52) (18,53.13) (19,52.64) (20,53.50) (21,54.16) (22,54.23) (23,55.07) (24,56.06) (25,54.24) (26,51.81) (27,56.46) (28,55.96) (29,57.58) (30,56.24) (31,56.62) (32,58.03) (33,56.96) (34,57.83) (35,58.74) (36,58.03) (37,59.42) (38,59.82) (39,58.54) (40,58.45) (41,59.58) (42,59.07) (43,60.83) (44,61.06) (45,61.40) (46,61.96) (47,61.94) (48,62.17) (49,61.80) (50,62.82) (51,63.42) (52,62.75) (53,64.15) (54,63.56) (55,64.64) (56,65.66) (57,65.48) (58,66.35) (59,66.03) (60,66.29) (61,67.34) (62,66.88) (63,68.10) (64,68.71) (65,69.07) (66,69.43) (67,69.28) (68,69.95) (69,70.33) (70,71.32) (71,71.12) (72,71.75) (73,72.24) (74,72.82) (75,73.00) (76,73.67) (77,74.21) (78,74.18) (79,74.78) (80,75.22) (81,75.65) (82,75.86) (83,76.02) (84,76.55) (85,76.72) (86,76.85) (87,77.00) (88,77.08) (89,77.09) (90,77.16)
+};
+\addlegendentry{verified path (PJRT)}
+\end{axis}
+\end{tikzpicture}%
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.49\linewidth, height=6cm,
+    xlabel={Epoch},
     xmin=0, xmax=101, ymin=0, ymax=80,
     xtick={0,20,40,60,80,100},
     ytick={20,40,60,80},
     legend pos=south east,
     legend cell align={left},
+    legend style={font=\scriptsize},
     grid=major, grid style={gray!18},
     tick label style={font=\small},
     label style={font=\small},
+    title style={font=\small},
+    title={RSB-A3 (100 ep)},
     every axis plot/.append style={line width=1pt, mark=none},
 ]
 \addplot[blue] coordinates {
@@ -6448,15 +6493,15 @@ $\Delta$              & $+12.91$ & $+7.10$ & $+12.37$ & $+2.14$ & $+0.01$ & $-0.
 };
 \addlegendentry{reference (JAX)}
 \addplot[red, dashed] coordinates {
-(1,2.81) (2,7.78) (3,15.89) (4,23.13) (5,24.53) (6,29.49) (7,33.10) (8,35.75) (9,40.62) (10,42.59) (11,43.50) (12,45.92) (13,47.79) (14,45.68) (15,49.27) (16,49.15) (17,50.42) (18,51.79) (19,50.85) (20,53.34) (21,47.99) (22,52.52) (23,54.02) (24,51.77) (25,53.98) (26,54.38) (27,53.02) (28,54.08) (29,52.88) (30,55.30) (31,53.70) (32,57.21) (33,55.45) (34,57.14) (35,56.24) (36,56.14) (37,60.42) (38,52.69) (39,60.44) (40,61.01) (41,58.73) (42,59.63) (43,60.16) (44,63.77) (45,61.29) (46,63.13) (47,62.03) (48,63.23) (49,60.37) (50,65.17) (51,61.85) (52,65.30) (53,66.21) (54,65.86) (55,66.96) (56,67.20) (57,67.09) (58,66.80) (59,67.37) (60,68.23) (61,70.11) (62,69.99) (63,70.08) (64,70.80) (65,71.48) (66,70.92) (67,70.83) (68,72.56) (69,72.21) (70,73.25) (71,72.99) (72,73.60) (73,74.17) (74,74.24) (75,74.83) (76,75.08) (77,75.09) (78,75.16) (79,75.40) (80,75.89) (81,76.16) (82,76.44) (83,76.32) (84,76.93) (85,76.94) (86,77.01) (87,77.20) (88,77.24) (89,77.49) (90,77.73) (91,77.60) (92,77.80) (93,77.81) (94,77.86) (95,77.95) (96,77.94) (97,77.96) (98,77.99) (99,78.02) (100,77.98)
+(1,2.92) (2,10.03) (3,12.66) (4,22.77) (5,21.80) (6,33.55) (7,35.73) (8,36.27) (9,40.65) (10,37.37) (11,43.29) (12,44.20) (13,43.87) (14,44.04) (15,49.78) (16,48.40) (17,50.52) (18,50.41) (19,51.39) (20,50.97) (21,48.93) (22,50.22) (23,50.09) (24,53.66) (25,56.29) (26,52.64) (27,53.34) (28,52.46) (29,55.07) (30,57.09) (31,57.34) (32,56.05) (33,59.11) (34,56.88) (35,58.08) (36,57.57) (37,58.43) (38,58.13) (39,57.92) (40,59.88) (41,60.93) (42,62.09) (43,61.14) (44,61.78) (45,60.38) (46,58.01) (47,62.23) (48,63.52) (49,63.54) (50,62.18) (51,61.09) (52,64.68) (53,62.70) (54,63.48) (55,65.14) (56,65.76) (57,68.85) (58,69.22) (59,69.31) (60,68.72) (61,70.46) (62,69.94) (63,70.27) (64,70.52) (65,71.64) (66,71.79) (67,72.26) (68,71.90) (69,72.88) (70,73.45) (71,73.51) (72,74.32) (73,73.79) (74,75.18) (75,74.67) (76,74.95) (77,75.71) (78,75.46) (79,75.92) (80,75.92) (81,76.58) (82,76.67) (83,76.62) (84,76.97) (85,77.34) (86,77.57) (87,77.67) (88,77.82) (89,77.87) (90,77.89) (91,77.95) (92,78.06) (93,78.11) (94,78.21) (95,78.19) (96,78.33) (97,78.35) (98,78.36) (99,78.39) (100,78.33)
 };
 \addlegendentry{verified path (PJRT)}
 \end{axis}
 \end{tikzpicture}
 \end{center}
 
-\noindent RSB-A3 on both paths, scored over all $50{,}000$ validation images
-at every epoch.
+\noindent Both recipes on both paths, scored over all $50{,}000$ validation
+images at every epoch.
 
 \subsection*{What A3 changes from the 2018 recipe}
 \label{sec:r50_a3_vs_2018}
@@ -6507,77 +6552,50 @@ extra epochs would cost. Every one of these is a one-line
 \section{Side quest: the A2 and A1 recipes}
 \label{sec:r50_a2_a1_cost}
 
-A3 is the cheap tier. The other two are recipes --- \texttt{a2-accum} and
-\texttt{a1} --- and both now render on the verified path:
+A3 is the cheap tier of ``ResNet Strikes Back''. The other two --- A2 at
+300 epochs and A1 at 600, both at $224^2$ --- render on the verified path
+as \texttt{a2-accum} and \texttt{a1}, and neither has been run:
 
 \begin{center}
 \begin{tabular}{@{}l c c l l@{}}
 \hline
 tier & epochs & train res & verified render & top-1 \\
 \hline
-A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run (\S\ref{sec:r50_pjrt}) & $\mathbf{77.98\%}$ \\
+A3 (\texttt{rsb-faithful}) & 100 & $160$ & shipped, and run (\S\ref{sec:r50_pjrt}) & $\mathbf{78.33\%}$ \\
 A2 (\texttt{a2-accum})     & 300 & $224$ & rendered, EMA + sd & $79.8\%$ (paper) \\
 A1 (\texttt{a1})           & 600 & $224$ & rendered, EMA + sd & $80.4\%$ (paper) \\
 \hline
 \end{tabular}
 \end{center}
 
-\noindent Eight artifacts: each tier at one and four replicas, in both precisions,
-all at $4\times128$ for the reason the batch-norm paragraph gives. \textbf{A1 is
-not ``the same render as A2''}: the decay is baked, so its $0.01$ against A2's
-$0.02$ is a re-render, kept apart so one line among $18{,}000$ cannot be lost.
+\noindent Eight artifacts: each tier at one and four replicas, in both
+precisions, at $4\times128$ --- under synchronised BatchNorm the recipe's
+ghost batch of $512$ per micro-step, as for A3. A1 is its own render rather
+than A2's with a flag: the weight decay is baked into the artifact, $0.01$
+against A2's $0.02$.
 
-\medskip\noindent \textbf{The two regularisers these renders used to be missing
-are now in them.} What is in these renders and what is still out, before anything
-is run:
+\medskip\noindent What the two renders carry, and where they stop short of
+the paper:
 
 \begin{center}
 \begin{tabular}{@{}p{0.45\linewidth} p{0.47\linewidth}@{}}
 \hline
-In & Still out, worst first \\
+In & Still out \\
 \hline
-\texttt{wdExcludeNormBias}; LAMB's clip at $kC$, after both the all-reduce and the accumulation
-  & \textbf{Ghost-BN group} $64$ against the reference's $\mathbf{512}$ --- an $8\times$ gap, and only half of it is reachable here \\[2pt]
-BCE-with-logits over Mixup/CutMix soft labels
-  & Repeated augmentation is stream-level, not per-batch \\[2pt]
-Accumulation to LAMB's design batch of $2048$, at $k=8$ or at the reference's own $k=4$
-  & Neither tier has been run yet \\[2pt]
 \textbf{Model EMA} at decay $0.9999$ --- a fifth blob region, $[\theta|m|v|G|E]$
-  & \\[2pt]
+  & Repeated augmentation is stream-level, not per-batch \\[2pt]
 \textbf{Stochastic depth} $0.05$ --- sixteen sites, one per bottleneck, on the residual branch
-  & \\[2pt]
+  & Neither tier has been run \\[2pt]
 Repeated augmentation $3\times$; both tiers, one and four replicas
   & \\[2pt]
-A1's own decay and own shim, which the driver refuses to start without
+A1's own weight decay and own shim
+  & \\[2pt]
+As A3: \texttt{wdExcludeNormBias}, LAMB's clip at $kC$ after the all-reduce and the accumulation, BCE-with-logits over Mixup/CutMix soft labels, accumulation to $2048$ at $k=4$
   & \\[2pt]
 Optimizer tied at the update, seven variants to ${\sim}10^{-7}$ & \\
 \hline
 \end{tabular}
 \end{center}
-
-\noindent \textbf{Both were structural, and A3 met neither} --- its recipe
-switches both off. The shadow and the accumulator used to be the
-same fourth region of $[\theta|m|v|\cdot]$, and accumulation is not optional
-at $224^2$: EMA was unreachable, not unrendered.
-
-\medskip\noindent Stochastic depth's site sits on the residual branch, and
-\textbf{no structural check can tell that from a site on the block output}: at an
-all-ones mask $1 \odot (b+x)$ and $1 \odot b + x$ agree bit-for-bit, so a
-misplaced render matches on names, operation count and arity and passes every
-endpoint gate. Moving all sixteen separates them by eight orders of magnitude at
-a real mask, and by exactly zero at an all-ones one. The reference had it wrong
-the other way round --- a scalar \texttt{bernoulli} for the whole batch where
-timm's is per sample, same expectation, which is why it survived.
-
-\medskip\noindent \textbf{Which leaves the batch-norm group, larger than it
-looks.} Nothing here all-reduces activation statistics, so each replica
-normalises over its own $64$; the reference's \texttt{jnp.mean} reduces over a
-mesh-sharded axis, so XLA inserts one and its group is the full $512$ ---
-its per-device tensor is $128$, and only the group is the statistic. \textbf{These renders
-take the first half of that gap}: $k=4$ at $128$ per device is the reference's own
-factorisation, and it is the faster arrangement besides. The last $4\times$ needs synchronised batch-norm --- a new operator,
-a changed backward, a variance that does not average, and $53$ collectives a
-step.
 
 \chapter{MobileNetV2}
 \label{chap:depthwise}
@@ -7749,8 +7767,8 @@ shown neutral. Separating those takes a verified render that all-reduces
 the batch statistics, and when this pair trained none did: the only node
 in the graph language that saw across replicas was the gradient
 collective, and every BatchNorm node consumed a single expression. Every
-BatchNorm pair in this book but ResNet-34's was trained under that
-asymmetry.
+BatchNorm pair in this book but the three ResNet pairs of
+Chapter~\ref{chap:residual} was trained under that asymmetry.
 
 \globalbntodo
 
@@ -16644,7 +16662,7 @@ middle field of the job's own name.
 \hline \\[-6pt]
 \texttt{resnet34-imagenet-verified}     & \texttt{default} (the 2018 recipe) & \texttt{r34-default-bf16-4gpu} \\
 \texttt{resnet50-imagenet-verified}     & \texttt{2018}                      & \texttt{r50-2018-bf16-4gpu} \\
-\texttt{resnet50-imagenet-verified}     & \texttt{a3} (RSB-A3, train@$160$)  & \texttt{r50-a3-wxclip-bf16-4gpu} \\
+\texttt{resnet50-imagenet-verified}     & \texttt{a3} (RSB-A3, train@$160$)  & \texttt{r50-a3-wxclip4x128-bf16-4gpu} \\
 \texttt{mobilenetv2-imagenet-verified}  & \texttt{default}                   & \texttt{mnv2-default-4gpu} \\
 \texttt{efficientnet-imagenet-verified} & \texttt{default}                   & \texttt{enet-default-4gpu} \\
 \texttt{convnext-imagenet-verified}     & \texttt{default}                   & \texttt{cnx-default-4gpu} \\
@@ -16653,12 +16671,12 @@ middle field of the job's own name.
 \end{center}
 
 \noindent Every row has run and is the one behind its chapter's numbers.
-\texttt{scripts/jobs/} also carries axis siblings that
-this table does not list --- an fp32 peer of each of the ResNet-34,
-ResNet-50 2018, RSB-A3 and ViT rows, and an earlier A3 artifact --- which differ from their
-row in precision or in one optimizer knob, never in the recipe, plus
-\texttt{selftest}, which exercises the supervisor without a GPU. Each config's
-header says which it is.
+\texttt{scripts/jobs/} also carries axis siblings that this table does not
+list --- an fp32 peer of each of the ResNet-34, ResNet-50 2018, RSB-A3 and
+ViT rows, and RSB-A3 at $8\times64$ --- which differ from their row in
+precision or in accumulation shape, never in the recipe, plus
+\texttt{selftest}, which exercises the supervisor without a GPU. Each
+config's header says which it is.
 
 \prosesection{This tier needs Python}
 
