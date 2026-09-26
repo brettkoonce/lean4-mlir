@@ -10,8 +10,9 @@ name: IREE
 # Today it runs the four adjoint/finite-difference gradchecks of the ViT chapter's hand-written
 # fragments (single-head SDPA, MHSA, one pre-norm ViT block, a tiny whole ViT), each gated on its
 # `✅ PASS` line, plus a control that must go red; then the `iree-compile` smokes of
-# scripts/regen_verified_mlir.sh (26 committed verified_mlir/ artifacts, ~2 min on CPU). Grow it here
-# rather than by hand: see planning/iree_ci.md.
+# scripts/regen_verified_mlir.sh (26 committed verified_mlir/ artifacts, ~2 min on CPU). A second job
+# runs the forward ties: the MNv4 and MNv2 renders against their JAX references on shared weights.
+# Grow it here rather than by hand: see planning/iree_ci.md.
 
 on:
   push:
@@ -33,6 +34,12 @@ on:
       - 'tests/TestCifar8AdamTrain.lean'
       - 'verified_mlir/**'
       - 'scripts/regen_verified_mlir.sh'
+      # the forward ties: the scripts, their IREE resolver, and the JAX references they run
+      - 'scripts/parity/mnv2_forward_tie.py'
+      - 'scripts/parity/mnv4_forward_tie.py'
+      - 'scripts/lib/_iree.py'
+      - 'scripts/regen_jax_generated.sh'
+      - 'jax/**'
       - 'LeanMlir/GradcheckHelpers.lean'
       - 'LeanMlir/Types.lean'          # ireeCompileArgs / compileCheckB
       - 'LeanMlir/Proofs/Codegen/StableHLO/Pretty.lean'
@@ -85,7 +92,7 @@ jobs:
           lake build LeanMlir.Verified.Train LeanMlir.Proofs.Codegen.ChapterGraphs \
             LeanMlir.Proofs.Codegen.ViTRender LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 
-      - name: IREE (PyPI, the version jax.yml's forward ties use)
+      - name: IREE (PyPI)
         run: python3 -m pip install --quiet iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
 
       - name: Gradchecks
@@ -155,3 +162,86 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
           # A re-rendered artifact that differs from the committed bytes means two writers disagree.
           git diff --exit-code --stat verified_mlir/
+
+  forward-ties:
+    name: IREE forward ties (render ↔ JAX reference)
+    # The verified render and its JAX reference on one set of weights, the render through IREE. The
+    # references are pinned to timm by jax.yml's timm-parity job; these carry that to the renders.
+    #   MNv4  verified_mlir/mnv4_fwd.mlir at batch 32 against the Imagenette reference the jax/ exe
+    #         emits. ~2.4e-4 of scale (float accumulation through 77 batch-BN layers); a structural
+    #         error, a swapped pre/post-DW, lands near 1e-1.
+    #   MNv2  the ImageNet eval render against the committed ImageNet reference, in its eval mode;
+    #         control: the ε-1e-5 eval graph against the ε-1e-3 reference must fail.
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Restore .lake (jax build, read-only)
+        # Restore-only, like the certs restore above: jax.yml owns this entry. ⚠ The path block
+        # must stay BYTE-IDENTICAL to jax.yml's or the restore never matches.
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .lake/build
+            jax/.lake/build
+          key: lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-jax-${{ hashFiles('lean-toolchain', 'jax/lean-toolchain', 'jax/lakefile.lean', 'jax/lake-manifest.json') }}-
+            lake-jax-
+
+      - name: Python (jax CPU + TensorFlow at the lockfile's versions, IREE)
+        # IREE 3.11.0 is PyPI's release; the 4060 Ti box runs a 3.12 nightly, and both ties pass on
+        # both (checked 2026-09-25: MNv4 4.1e-5, MNv2 ImageNet 2.1e-6 of scale).
+        # ⚠ TensorFlow is NOT optional: an ImageNet reference carries its tf.data pipeline at module
+        # level, so exec'ing the prefix up to `loss_fn` imports it.
+        run: |
+          set -e
+          lock() { sed -n "s/^$1==//p" jax/requirements-cuda-lock.txt; }
+          python3 -m pip install --quiet "jax[cpu]==$(lock jax)" "tensorflow==$(lock tensorflow)" \
+              "tensorflow-datasets==$(lock tensorflow-datasets)" pillow \
+              iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
+
+      - name: Emit the MNv4 reference
+        # The MNv4 tie reads the Imagenette reference the exe writes before it would train (the
+        # `|| true` + existence check is jax.yml's emit pattern); the MNv2 tie reads the committed
+        # ImageNet file, which `regen_jax_generated.sh sync` copies in.
+        working-directory: jax
+        run: |
+          set -e
+          lake exe cache get || true
+          lake build mobilenet-v4
+          lake exe mobilenet-v4 /nonexistent-so-training-cannot-start >/dev/null 2>&1 || true
+          [ -s .lake/build/generated_mobilenet_v4.py ] || { echo "::error::generated_mobilenet_v4.py was not emitted"; exit 1; }
+
+      - name: Forward ties
+        run: |
+          set -eo pipefail
+          export JAX_PLATFORMS=cpu
+          scripts/regen_jax_generated.sh sync
+          # The COMMITTED render (drift-checked by proofs.yml), not the batch-2 copy the script
+          # defaults to, which `mnv4-fwd-smoke` writes.
+          python3 scripts/parity/mnv4_forward_tie.py --mlir verified_mlir/mnv4_fwd.mlir --batch 32 --tol 1e-3 \
+              2>&1 | tee -a /tmp/ties.log
+          python3 scripts/parity/mnv2_forward_tie.py --imagenet 2>&1 | tee -a /tmp/ties.log
+          # CONTROL: the ε-1e-5 eval graph against the ε-1e-3 reference must FAIL.
+          if python3 scripts/parity/mnv2_forward_tie.py --imagenet --mlir verified_mlir/mobilenetv2in_fwd_eval.mlir \
+              2>&1 | tee -a /tmp/ties.log; then
+            echo "::error::mnv2 forward-tie control came out GREEN — the tie cannot see BN ε"; exit 1
+          fi
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "## IREE forward ties"
+            echo ""
+            echo '```'
+            grep -E '^\[|max\|Δ\|/max|CONTROL|FORWARD TIE|⛔' /tmp/ties.log || true
+            echo '```'
+          } >> $GITHUB_STEP_SUMMARY

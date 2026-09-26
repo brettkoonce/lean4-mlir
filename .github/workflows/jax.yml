@@ -19,7 +19,8 @@
 #   optimizer — the rendered optimizer's one step against the reference's own.
 #   timm-parity — each ImageNet JAX reference against timm's own net on shared weights
 #            (MobileNetV2, MobileNetV4-Conv-M, EfficientNet-B0, ViT-Ti), each gate with a control
-#            that must go red, then the IREE forward ties carrying MNv4 and MNv2 to the renders.
+#            that must go red. (The IREE forward ties that carry MNv4 and MNv2 on to the renders
+#            live in iree.yml.)
 name: JAX subproject
 
 on:
@@ -57,12 +58,9 @@ on:
       - 'scripts/regen_jax_generated.sh'
       - 'scripts/gates/parse_verified_mlir.py'
       # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
-      # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
+      # pinned timm env they compare against.
       - 'scripts/parity/*_timm_parity.py'
       - 'scripts/parity/_*_timm_dump.py'
-      - 'scripts/parity/mnv2_forward_tie.py'
-      - 'scripts/parity/mnv4_forward_tie.py'
-      - 'scripts/lib/_iree.py'
       - 'scripts/gates/aug_bicubic_pil_check.py'
       - 'requirements-timm-lock.txt'
   pull_request:
@@ -96,12 +94,9 @@ on:
       - 'scripts/regen_jax_generated.sh'
       - 'scripts/gates/parse_verified_mlir.py'
       # The timm-parity job (planning/imagenet_parity.md G3/G4): its gates, their timm halves, the
-      # pinned timm env they compare against, and the IREE forward ties that carry two to the renders.
+      # pinned timm env they compare against.
       - 'scripts/parity/*_timm_parity.py'
       - 'scripts/parity/_*_timm_dump.py'
-      - 'scripts/parity/mnv2_forward_tie.py'
-      - 'scripts/parity/mnv4_forward_tie.py'
-      - 'scripts/lib/_iree.py'
       - 'scripts/gates/aug_bicubic_pil_check.py'
       - 'requirements-timm-lock.txt'
   workflow_dispatch:
@@ -523,13 +518,13 @@ jobs:
           } >> $GITHUB_STEP_SUMMARY
 
   timm-parity:
-    name: timm parity + forward ties
+    name: timm parity
     # ⭐ planning/imagenet_parity.md G3/G4. Every other gate on these nets compares the verified render
     # with its JAX reference — two things built from the same spec — so a defect in the SPEC passes
     # all of them. That is how MNv4 shipped five deviations from timm's conv_medium and how the
     # MobileNetV2 / EfficientNet ImageNet stems and heads ran ReLU for a month. These run each JAX
     # reference against timm 1.0.28's own net (`requirements-timm-lock.txt`) on shared weights, CPU
-    # only, and then carry two of them to the verified renders through IREE.
+    # only. iree.yml's forward-ties job carries two of them on to the verified renders.
     #   MNv2  mobilenetv2_100 at TF SAME padding; controls: symmetric padding, BN ε 1e-5
     #   MNv4  mobilenetv4_conv_medium
     #   B0    efficientnet_b0 with a SAME stem (the paths' hybrid; `--pad tf` measures TF's net);
@@ -566,9 +561,7 @@ jobs:
           path: ~/.cache/pip
           key: pip-timm-parity-${{ hashFiles('requirements-timm-lock.txt', 'jax/requirements-cuda-lock.txt') }}
 
-      - name: Python (jax CPU + TensorFlow at the lockfile's versions, IREE, the pinned timm env)
-        # IREE 3.11.0 is PyPI's release; the 4060 Ti box runs a 3.12 nightly, and both ties pass on
-        # both (checked 2026-09-25: MNv4 4.1e-5, MNv2 ImageNet 2.1e-6 of scale).
+      - name: Python (jax CPU + TensorFlow at the lockfile's versions, the pinned timm env)
         # ⚠ TensorFlow is NOT optional here: an ImageNet reference carries its tf.data pipeline at
         # module level (`import tensorflow`, `tf.constant(...)`), so exec'ing the prefix up to
         # `loss_fn` imports it — the first run of this job died on that. The lockfile's versions,
@@ -577,8 +570,7 @@ jobs:
           set -e
           lock() { sed -n "s/^$1==//p" jax/requirements-cuda-lock.txt; }
           python3 -m pip install --quiet "jax[cpu]==$(lock jax)" "tensorflow==$(lock tensorflow)" \
-              "tensorflow-datasets==$(lock tensorflow-datasets)" pillow \
-              iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
+              "tensorflow-datasets==$(lock tensorflow-datasets)" pillow
           python3 -m venv .venv-timm
           .venv-timm/bin/pip install --quiet torch==2.13.0 torchvision==0.28.0 \
               --index-url https://download.pytorch.org/whl/cpu
@@ -614,29 +606,12 @@ jobs:
           set -o pipefail
           python3 scripts/gates/aug_bicubic_pil_check.py 2>&1 | tee -a /tmp/parity.log
 
-      - name: Forward ties through IREE (render ↔ reference)
-        run: |
-          set -eo pipefail
-          export JAX_PLATFORMS=cpu
-          scripts/regen_jax_generated.sh sync
-          # The COMMITTED render (drift-checked by proofs.yml), not the batch-2 copy the script
-          # defaults to — that one is written by `mnv4-fwd-smoke`, whose proof-side modules this
-          # job does not build. At batch 32 the tie sits at ~2.4e-4 of scale (float accumulation
-          # through 77 batch-BN layers); a structural error, a swapped pre/post-DW, lands near 1e-1.
-          python3 scripts/parity/mnv4_forward_tie.py --mlir verified_mlir/mnv4_fwd.mlir --batch 32 --tol 1e-3 \
-              2>&1 | tee -a /tmp/parity.log
-          python3 scripts/parity/mnv2_forward_tie.py --imagenet 2>&1 | tee -a /tmp/parity.log
-          # CONTROL: the ε-1e-5 eval graph against the ε-1e-3 reference must FAIL.
-          if python3 scripts/parity/mnv2_forward_tie.py --imagenet --mlir verified_mlir/mobilenetv2in_fwd_eval.mlir; then
-            echo "::error::mnv2 forward-tie control came out GREEN — the tie cannot see BN ε"; exit 1
-          fi
-
       - name: Summary
         if: always()
         run: |
           {
             echo ""
-            echo "## timm parity + forward ties"
+            echo "## timm parity"
             echo ""
             echo '```'
             grep -E '^\[|max\|Δ\|/max|CONTROL|✅ the|FORWARD TIE|bicubic :|⛔' /tmp/parity.log || true

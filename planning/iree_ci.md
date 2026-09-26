@@ -41,6 +41,8 @@ is the loop: IREE 3.11.0 from PyPI, `IREE_BACKEND=llvm-cpu` on `local-task`, no 
 2. ~~`regen_verified_mlir.sh` tests loop~~ — landed, see above.
 3. ~~`iree-compile` smoke over a subset of `verified_mlir/`~~ — the step-2 loop is that subset
    (26 artifacts incl. the 224² train steps, ~2 min). A wider sweep only if something slips past it.
-4. Move jax.yml's "Forward ties through IREE" step here.
+4. ~~Move jax.yml's "Forward ties through IREE" step here~~ — `iree.yml` job `forward-ties`
+   (MNv4 at batch 32, MNv2 ImageNet + its BN-ε control); jax.yml's `timm-parity` no longer
+   installs IREE.
 5. VJP oracle phase 3 (needs a CPU-mode `libiree_ffi.so` source build, cached): last, only if
    the build fits a runner.
