@@ -3,11 +3,13 @@ import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # PoC: the MNIST-linear train step, proof-tied to the certified SGD step
 
-Companion to `planning/archive/verified_faithful_sweep.md`. `MainMnistLinearVerified`
+`MainMnistLinearVerified`
 trains on `verified_mlir/linear_train_step.mlir`, which is written by
 `Proofs.StableHLO.linTrainStepFaithfulV` (the `#eval` writer at the end of
-`StableHLO.lean`). This file certifies *that* renderer: every value the emitted module produces is the
-certified (Mathlib-`fderiv`-derived) softmax-CE loss-descent SGD step.
+`StableHLO.lean`). This file certifies *that* renderer for a single example `x`: the emitted
+weight output denotes `W − lr·∂(crossEntropy ∘ dense)/∂W` (Mathlib-`fderiv`-derived) and the bias
+output denotes `b − lr·(certified ∂dense/∂b · (softmax − onehot))`. The committed module
+batch-contracts over `B` examples, which this file does not state.
 
 (Namespace/name lengths are kept short on purpose: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)'s
 three-axiom closure check greps `#print axioms` output per line, which Lean wraps
@@ -20,26 +22,24 @@ and false-fail the check. Keep future per-chapter capstone names short.)
   `renderModule` of a graph whose `den` is `mnistLinear` (text = `render(graph)`
   ∧ `den(graph) = math`). **Forward: end-to-end tied.**
 * `poc_train_step_tail_certified` — **fully tied.** The two emitted SGD ops consume
-  the proven `lossCotGraph` node *directly* (no SSA-name pin), so each output's `den`
-  is proven = the certified `fderiv`-derived step end-to-end, with the forward = the
-  proven `fwdGraph` (nested in `lossCotGraph`). `_fwd` and `_train_step` now share the
-  same forward graph — the connection §1a of the planning doc calls for.
+  the proven `lossCotGraph` node *directly* (no SSA-name pin), so the weight output's `den`
+  is proven = `W − lr·∂CE/∂W` and the bias output's = the certified bias Jacobian contracted
+  with `softmax − onehot`, with the forward = the proven `fwdGraph` (nested in
+  `lossCotGraph`). `_fwd` and `_train_step` share the same forward graph.
 
 The committed-bytes tie (`verified_mlir/linear_train_step.mlir ==
 linTrainStepFaithfulV(…)`) is enforced in CI (regenerate + `git diff`, the
 "Verified-render drift guard" step in `proofs.yml`), not here.
 
-## Honest residual (the boundary shared with the forward `SHlo` `den`)
+## Scope (the boundary shared with the forward `SHlo` `den`)
 
-* **Per-op `den` ⇄ MLIR text** for the four tail ops: `tailDenW`/`tailDenB`
-  *model* what `dot_general`/`reduce`/`multiply`/`subtract` compute; that they do
-  is the same trusted op-level modelling the forward `den` already relies on (the
-  weight-grad piece is `wGrad`, tied to `IR.emitWeightGrad` by `wGrad_faithful`).
-  Adding these as `SHlo` nodes with a `den` (whole module one `pretty(provenGraph)`)
-  is the last mechanical step.
+* **Per-op `den` ⇄ MLIR text** for `weightSgd`/`biasSgd`: that the printed
+  `dot_general`/`reduce`/`multiply`/`subtract` compute their `den` is the same trusted
+  op-level modelling the forward `den` relies on (the weight-grad piece is `wGrad`, tied to
+  `IR.emitWeightGrad` by `wGrad_faithful`).
 * **Single example (B = 1):** `wGrad x dy = x ⊗ dy`; the emitted module
   batch-contracts. The mean-loss cotangent makes the batch sum the mean gradient.
-* **ℝ → Float32:** deferred (a future pass); `FloatBridge.lean` covers the
+* **ℝ → Float32:** not stated here; `FloatBridge.lean` covers the
   linear/MLP rounding budget separately.
 -/
 
@@ -84,10 +84,9 @@ theorem poc_biasSgd_den_eq (lrStr : String) (lr : ℝ) (label : Fin n) :
     den (SHlo.biasSgd "%b0" lrStr b lr (lossCotGraph W b x (oneHot n label)))
       = linBiasDen W b x lr label := rfl
 
-/-- **Tail fold (in-kernel, closed).** The two emitted tail ops `weightSgd`/`biasSgd`
-    — the actual `SHlo` nodes `linTrainStepFaithfulV` prints — denote the certified
-    `fderiv`-derived loss-descent SGD step. The tail's meaning is now a property of
-    the emitted node (via `den`), proven — not a separately-supplied model. -/
+/-- **Tail fold.** For one example `x`, the two emitted tail ops `weightSgd`/`biasSgd` — the
+    actual `SHlo` nodes `linTrainStepFaithfulV` prints — denote, respectively,
+    `W − lr·∂(crossEntropy ∘ dense)/∂W` and `b − lr·(certified ∂dense/∂b · (softmax − onehot))`. -/
 theorem poc_train_step_tail_certified (lrStr : String) (lr : ℝ) (label : Fin n) :
     (∀ (i : Fin m) (j : Fin n),
         den (SHlo.weightSgd "%x" "%W0" lrStr x W lr

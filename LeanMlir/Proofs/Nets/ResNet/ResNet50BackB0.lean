@@ -31,8 +31,8 @@ so the projection is not strided. `r50DownBlock` cannot stand in for it — its 
 
 `r50DownBody` puts `cbReluStridedB` on the **second** conv: ResNet **v1.5** / torchvision, what
 [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. The v1 placement (stride on the leading 1×1)
-compiles, trains and descends, and is a different net (`VerifiedSpec` records it costing ~0.5 pt
-of top-1). The leading 1×1 therefore runs at the input resolution `(2*h)×(2*w)`.
+compiles, trains and descends, and is a different net (`VerifiedSpec.Layer.bottleneckStage`'s
+note). The leading 1×1 therefore runs at the input resolution `(2*h)×(2*w)`.
 
 ## Relu, and why every statement is `_at`
 
@@ -76,7 +76,7 @@ noncomputable def r50BodyBackBatchedGraph {N ic mid oc h w kH₁ kW₁ kH₂ kW�
 -- ════════════════════════════════════════════════════════════════
 
 /-- The identity bottleneck as a `CertLayer`: `residual (cbReluLayer ; cbReluLayer ; projLayer)`,
-    then `reluOut`. ⭐ **An endomorphism** (`ic = oc`, resolution unchanged), which is what lets
+    then `reluOut`. **An endomorphism** (`ic = oc`, resolution unchanged), which is what lets
     `CertLayer.chain` iterate it — a stage tail is n of these. -/
 noncomputable def r50BottleneckLayer (N : Nat) {c mid h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ : Nat}
     (W₁ : Kernel4 mid c kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (hε₁ : 0 < ε₁) (γ₁ β₁ : Vec mid)
@@ -89,7 +89,7 @@ noncomputable def r50BottleneckLayer (N : Nat) {c mid h w kH₁ kW₁ kH₂ kW�
 
 /-- The batched R50 identity bottleneck's VJP at a smooth point — `relu ∘ residual(F)` with body
     `F = projB ∘ cbReluB ∘ cbReluB`: the residual fan-in VJP, then the OUTER relu's pointwise VJP
-    at the pre-relu activation `residual(F)(x)` (`r50BottleneckLayer`'s VJP). ⚠ `h_s2` is stated
+    at the pre-relu activation `residual(F)(x)` (`r50BottleneckLayer`'s VJP). `h_s2` is stated
     at the SECOND stage's pre-relu activation, which lives at `cbReluB … x` — writing it at `x`
     typechecks nowhere.
 
@@ -164,7 +164,7 @@ theorem r50BottleneckBackBatchedGraph_faithful
 -- § CAPSTONE 2 — the STRIDE-1 projection bottleneck (R50 stage 1 block 0)
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ The **stride-1 projection** bottleneck as a `CertLayer` — R50 stage 1 block 0, the form with
+/-- The **stride-1 projection** bottleneck as a `CertLayer` — R50 stage 1 block 0, the form with
     no R34 analogue: `residualProj (projLayer) (cbReluLayer ; cbReluLayer ; projLayer)`, then
     `reluOut`. Changes channels, keeps resolution, so it is NOT an endomorphism and composes via
     `comp` rather than `chain`. -/
@@ -180,11 +180,11 @@ noncomputable def r50ProjBlockLayer (N : Nat)
       (cbReluLayer N W₂ b₂ ε₂ hε₂ γ₂ β₂)).comp (projLayer N W₃ b₃ ε₃ hε₃ γ₃ β₃))).comp
     (CertLayer.reluOut _)
 
-/-- ⭐ The batched R50 **stride-1 projection** bottleneck's VJP at a smooth point —
+/-- The batched R50 **stride-1 projection** bottleneck's VJP at a smooth point —
     `relu ∘ residualProj(projB, F)` with body `F = projB ∘ cbReluB ∘ cbReluB` and a **stride-1**
     `bn∘conv` projection skip.
 
-    ⚠ **This is the form with no R34 analogue**, and it exists in exactly one place in R50: stage 1
+    **This is the form with no R34 analogue**, and it exists in exactly one place in R50: stage 1
     block 0, where channels go `64 → 256` but the resolution does not change. R34's stage 1 is
     `ic = oc = 64`, so its block 0 is an identity block and this shape never arises.
 
@@ -284,7 +284,7 @@ noncomputable def r50DownBodyBackBatchedGraph
 
 /-- The **strided projection** bottleneck as a `CertLayer` — stages 2/3/4, block 0:
     `residualProj (projStridedLayer) (cbReluLayer ; cbReluStridedLayer ; projLayer)`, then
-    `reluOut`. Halves the resolution, which is why its input type carries `2*h`/`2*w`. ⚠ The stride
+    `reluOut`. Halves the resolution, which is why its input type carries `2*h`/`2*w`. The stride
     is on the 3×3 (`cbReluStridedLayer` at `W₂`), so `h_s1` is stated at the input resolution and
     `h_s2` at the output one. -/
 noncomputable def r50DownBlockLayer (N : Nat)

@@ -1,34 +1,31 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0
 import LeanMlir.Proofs.Architectures.MaxPool3s2
 
-/-! # ResNet-34 at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
+/-! # ResNet-34 at TRUE BATCH-NORM — the whole net's forward and graph
 
-`ResNet34RenderPC.lean` (retired 2026-09-19) stated ResNet-34's whole-net ℝ forward and typed graph at **per-example**
-BatchNorm (`bnPerChannelTensor3`, reduce `[2,3]`). That is the world of `resnet34_fwd.mlir` and the
-Imagenette SGD trainer, and every tier built on it is true and correctly paired with those bytes.
-It is NOT the world of `resnet34_sgd_train_step.mlir`, `resnet34in_mom256_train_step.mlir` or any
-of the Adam/momentum steps, which reduce `[0,2,3]` — one mu/var per channel across the batch, the
-one op that couples examples. Those are the artifacts the quoted ImageNet accuracies come from.
-
-This file re-states the ladder at `bnBatchLA` (= the proven `bnBatchTensor4` at the network's
-left-assoc index). `formalization.yaml` 4e records the decision and
-`planning/archive/proofs_tier_to_paper_nets.md` section 4 the work packages.
+ResNet-34's whole-net ℝ forward, its typed forward graph, and the faithfulness tying them, at
+batch BatchNorm: `bnBatchLA` (= the proven `bnBatchTensor4` at the network's left-assoc index),
+reduce `[0,2,3]` — one mu/var per channel across the batch, the one op that couples examples.
+Every committed ResNet-34 forward and train-step artifact (`resnet34_fwd.mlir`,
+`resnet34_sgd_train_step.mlir`, `resnet34in_mom256_train_step.mlir`, the Adam/momentum steps)
+reduces `[0,2,3]`; the `*_fwd_eval` artifacts normalise with running statistics.
 
 ## What is new here, and what is not
 
-⭐⭐ **Nothing about the blocks is new.** `ResNet34BackB0.lean` already carries the batched stages
-(`cbReluB`, `cbReluStridedB`, `projStridedB`, and `projB` from `EfficientNetRenderPC.lean`), their
-`_at` VJPs and their backward-graph faithfulness, all at `bnBatchLA`. What was missing is the level above: a net-level ℝ
-forward, a net-level forward graph, and the faithfulness tying them. This file is that enumeration.
+**Nothing about the blocks is new.** The batched stages (`cbReluB`, `cbReluStridedB`,
+`projStridedB` in Foundation/BatchedStageLayers.lean, and `projB` in
+Foundation/BatchedStages.lean), their `_at` VJPs and their backward-graph faithfulness are all at
+`bnBatchLA`, and `ResNet34BackB0` assembles them into the two block kinds. This file adds the
+level above: a net-level ℝ forward, a net-level forward graph, and the faithfulness tying them.
 
-⚠ **Padding is symmetric at every stride-2 site**, as ResNet-34's render emits and as the
+**Padding is symmetric at every stride-2 site**, as ResNet-34's render emits and as the
 PyTorch-origin convention requires (`.convStrided`, NOT `.convStridedXla` — B0's stem is the
 XLA-`SAME` one and the two tokens have identical types). `scripts/gates/convention_audit.py` checks this
 at the artifact tier and nothing checks it here, so it is stated: stem 7x7/s2, the three
 downsample `conv1`s and the three 1x1 projections are all `flatConvStride2`.
 
-⚠ **The stem pool is 3x3/s2 (`maxPool3s2Flat`), not 2x2.** Same type, different function; the
-render carried `.maxPool` until 2026-08-04 and nothing failed.
+**The stem pool is 3x3/s2 (`maxPool3s2Flat`), not 2x2.** Same type, different function, so a
+swap type-checks.
 
 ## Conventions this net runs at
 
@@ -42,14 +39,13 @@ render carried `.maxPool` until 2026-08-04 and nothing failed.
 | head | GAP then dense, generic in the class count |
 | artifacts | `resnet34_sgd_train_step`, `resnet34_adam*`, `resnet34in_mom*` |
 
-⭐ The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
-1000-class `resnet34in` ones — the lesson `MobileNetV2FullPaperEval.lean` and B0's eval twin both
-paid for.
+The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
+1000-class `resnet34in` ones.
 
-⚠ `N` stays a variable throughout. T1 and T2 carry no numerals, so the batch size does not need
-pinning here; it is pinned only where a `Maps` envelope turns a width into a rational (T4/T5).
-On the data-parallel artifacts the render's `N` is the PER-REPLICA batch (64); since 2026-09-21
-their BatchNorm is synchronised, and `ResNet34SyncB.lean` is this file's twin for them: replica
+`N` stays a variable throughout: the batch size is never pinned here (the 224-px resolution and
+the 64…512 widths are literals); it is pinned only where a `Maps` envelope turns a width into a
+rational. On the data-parallel artifacts the render's `N` is the PER-REPLICA batch; their
+BatchNorm is synchronised, and `ResNet34SyncB` is this file's twin for them: replica
 `r`'s forward graph denotes shard `r` of `resnet34ForwardBFull (R * N)`, this file's forward at
 the global batch.
 -/
@@ -168,9 +164,9 @@ theorem r34HeadB_apply (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec 
 --   -> d3(28->14) -> c0..c4@14 -> d4(14->7) -> e0,e1@7 -> GAP -> dense
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The full batch-BN ResNet-34 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of the
-    retired per-example forward; nested-application form, as `efficientnetForwardBFull` and
-    `mobilenetv2ForwardBFull` both are, so the T6 tie can peel it one block at a time. -/
+/-- **The full batch-BN ResNet-34 forward**, `N*(3*224*224) -> N*nCls`. Nested-application form,
+    as `efficientnetForwardBFull` and `mobilenetv2ForwardBFull` both are, so a whole-net proof can
+    peel it one block at a time. -/
 noncomputable def resnet34ForwardBFull (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Vec (N * nCls) :=
   r34HeadB N 7 7 w.Wd w.bd
@@ -305,11 +301,12 @@ def resnet34FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : R34BWeig
                                     (r34StemGraphB epsStr N 56 56 w.sW w.sb w.sε w.sγ w.sβ
                                       e)))))))))))))))))
 
-/-- ⭐ **T2 for ResNet-34 at batch BN**: the typed graph denotes the whole-net forward. One `rw`
-    per block over the eighteen per-kind faithfulness lemmas. -/
+/-- **Forward-graph faithfulness for ResNet-34 at batch BN**: the typed graph denotes the
+    whole-net forward. -/
 theorem resnet34FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : R34BWeights nCls) (e : SHlo (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
     den (resnet34FwdGraphBFull N epsStr w e) = resnet34ForwardBFull N w (den e) := by
+  -- one `rw` per block over the eighteen per-kind faithfulness lemmas
   unfold resnet34FwdGraphBFull resnet34ForwardBFull
   rw [r34HeadGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful, r34DownGraphB_faithful,
       r34IdGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful, r34IdGraphB_faithful,

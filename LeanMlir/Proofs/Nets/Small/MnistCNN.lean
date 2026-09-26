@@ -13,8 +13,11 @@ composed backward equals the `pdiv`-Jacobian VJP of the full forward
 pass, *conditional* on smoothness hypotheses (no ReLU kink / MaxPool
 tie at the running activations). The Chapter-3 sibling of
 `cnnHasVJPAt`, minus BN and residual blocks.
-`TrainedCnn.trainedCnnHasVJPAt` discharges every hypothesis at trained
-weights and a real MNIST test input. -/
+`TrainedCnn.trainedCnnHasVJPAt` discharges every hypothesis on a reduced
+instance of this forward — input a 24×24 MNIST crop 4×4-average-pooled to
+6×6, conv 1→2→2 (3×3), dense 18→8→8→10, /128-rational trained weights (the
+max-pool no-tie hypothesis needed a pool-tie regulariser during training) —
+at one pooled MNIST test digit. -/
 
 namespace Proofs
 

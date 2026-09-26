@@ -2,60 +2,38 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Foundation.SgdNodes
 
-/-! # PoC: the ResNet-34 (Chapter 5) train step, proof-tied to the certified SGD step
+/-! # The strided-convolution SGD ops denote the certified step
 
-The Chapter-5 capstone — the full `[3,4,6,3]` ResNet-34 (a 7×7/s2 stem, 16 residual blocks,
-GAP + final dense). This file makes every parameter update of the per-example, SGD-inline train step
-`den`-faithful — each emitted SGD op denotes the certified loss-descent step.
-
-⛔ **RETIRED ARTIFACT (2026-09-06, 4c leg 1).** This fold was about
-`verified_mlir/resnet34_train_step.mlir`, and both that file and its renderer
-(`ResNet34Render.lean`) are gone: it was the last train step in the suite at per-example
-BatchNorm, so `resnet34_fwd` could not be a prefix of both it and the batch-BN Adam step.
-`planning/archive/renderer_convergence.md` carries the decision. **Every theorem below is unchanged and
-still true** — each is a statement about an OP KIND and an arbitrary cotangent, not about bytes —
-and its live peer is `ResNet34PoCB` in `GradNodesB`, the same fold at the batched,
-un-fused gradient nodes every ResNet-34 artifact now emits. Read this file as the per-example
-ladder it always was; read that one for what ships.
-
-**Two new core ops, ZERO new theorems for 142 of the 146 params.** Like cifar8-bn, the
-overwhelming majority of ResNet-34's parameter outputs fold by *reusing the existing generic
-`den = certified` lemmas*:
-
-* **3×3 stride-1 block convs** (identity blocks `W1`/`W2`, downsample body `W2`):
-  `CifarPoC.convW_den`/`convB_den` (the `conv2d` weight/bias VJP is dim- and cotangent-generic).
-* **per-channel BN γ/β** (every block): `CifarBnPoC.bnGamma_den`/`bnBeta_den` (the `oc·h·w ↔ oc·m`
-  reassoc bridge).
-* **final dense `Wd`/`bd`**: `Cifar8PoC.denseW_den`/`denseB_den`.
-
-The genuinely-new shapes are the **strided convolutions** — the 7×7/s2 stem and the 3×3/s2
-downsample bodies + projection skips — which no prior fold exercised through an SGD op. They get
-the two new core ops `convStridedWeightSgd`/`convStridedBiasSgd` (StableHLO.lean) and the two
-`den = certified` lemmas below. Both are *one-line delegations* to the generic strided bridge
-`mnv2_render_stem_conv{W,b}_certified`, exactly mirroring `CifarPoC.convW_den`'s delegation to
-`cnn_render_convW_certified`.
+Two lemmas, `convStridedW_den` and `convStridedB_den`: any emitted strided-conv weight / bias SGD
+op (`convStridedWeightSgd` / `convStridedBiasSgd`, StableHLO.lean) denotes
+`θ − lr·(certified ∂flatConvStride2/∂θ · c)`, generic in the conv dims, the kernel size and the
+cotangent `c`. They are the strided peers of `CifarPoC.convW_den` / `CifarPoC.convB_den`, and the
+per-example fused-SGD ties use them (`ConvNeXtStepTie`). The batched, un-fused peer is
+`ResNet34PoCB` in `GradNodesB`.
 
 * **`convStridedWeightSgd`** emits the strided weight-grad text (zero-upsample the cotangent —
   the decimate-backward — then the SAME transpose-trick stride-1 weight-grad conv on the 2h×2w
   grid). Its `den` reduces (`rfl`) to `flatten W − lr·(flatConvStride2_weight_grad · c)`, the LHS
-  of `mnv2_render_stem_convW_certified` — generic in `kH/kW`, so the *single* lemma below certifies
-  the 7×7 stem AND every 3×3 strided conv (downsample `W1` + projection `Wp`).
+  of `mnv2_render_stem_convW_certified` — generic in `kH/kW`, so the *single* lemma below covers
+  a 7×7 stem and every 3×3 strided conv.
 * **`convStridedBiasSgd`** — the bias grad is stride-INDEPENDENT (`Σ_{batch,spatial} dy`), so it
   emits the same `reduce` op text as `convBiasSgd` (its `skel` aliases that op); only its `den`
   differs (the strided VJP), closing via `mnv2_render_stem_convb_certified`.
 
-## Honest residual (same boundary as every prior fold)
-* The conv cotangents here are free variables `c` (each lemma is ∀ c) — they hold at the actual
-  backward-chain cotangent the renderer feeds, without naming it. Pinning each `c` to the exact
-  emitted residual-backward subgraph (the cotangent-sum at each skip merge) is the remaining polish.
-* Per-op `pretty` lexing + BN `0 < ε` smoothness + ℝ → Float32.
+Both are one-line delegations to the generic strided bridge `mnv2_render_stem_conv{W,b}_certified`,
+mirroring `CifarPoC.convW_den`'s delegation to `cnn_render_convW_certified`.
 -/
+
+-- History: this file was the fold of the per-example ResNet-34 SGD train step
+-- (`verified_mlir/resnet34_train_step.mlir`, renderer `ResNet34Render.lean`); both were retired
+-- when every ResNet-34 artifact moved to batch BatchNorm. The two lemmas are about op kinds and an
+-- arbitrary cotangent, so they stay true and in use.
 
 open Proofs Proofs.StableHLO
 
 namespace Proofs.ResNet34PoC
 
-/-! ## Strided convolutions — the two new `den = certified` lemmas (the only new content) -/
+/-! ## Strided convolutions — the two `den = certified` lemmas -/
 
 /-- **Any emitted STRIDED conv weight op = certified.** Generic in the conv dims, the kernel size
     (covers the 7×7 stem AND every 3×3 downsample/projection) and the cotangent `c`: the

@@ -433,11 +433,11 @@ noncomputable def cifarCnn8Forward
   ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w))))) ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)
 
 /-- **Deeper (8-conv) CIFAR CNN (no BN) whole-network VJP at a smooth point.**
-    Conditional on the twelve ReLU smoothness kinks and the four MaxPools; built by
-    `vjpCompAt` through `convRelu`×8 / `maxPool`×4 / `denseRelu`×2 / dense. The
-    4-stage sibling of `cifarCnnHasVJPAt`. The smoothness side conditions are
-    supplied opaquely (`hf1 … hf12`, `hp1 … hp4`) — they discharge for a concrete
-    instance the same way `Tiny.cifarTinyCnnHasVJPAt` discharges the 2-stage ones. -/
+    Conditional on the ten ReLU kinks (eight conv, `hf1 … hf8`; two dense, `hf9`, `hfa`) and
+    the four MaxPools (`hp1 … hp4`); built by `vjpCompAt` through `convRelu`×8 / `maxPool`×4 /
+    `denseRelu`×2 / dense. The 4-stage sibling of `cifarCnnHasVJPAt`. No concrete instance of
+    this 4-stage net is proved; `Tiny.cifarTinyCnnHasVJPAt` is a concrete instance of the
+    2-stage `cifarCnnHasVJPAt` with every side condition discharged. -/
 noncomputable def cifarCnn8HasVJPAt
     {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1)
@@ -758,10 +758,13 @@ theorem convBnReluPC_differentiableAt {ic oc h w kH kW : Nat}
 -- The BN peer of `cifarCnn8HasVJPAt`: a per-channel `bnPerChannelTensor3`
 -- (`m=h·w`) inserted after each of the eight convs (before its ReLU). Chains
 -- `convBnReluPC → convBnReluPC → maxPool` ×4 → `denseRelu` ×2 → dense through
--- `vjpCompAt`. Conditional on `0 < εᵢ` (×8), the twelve post-BN ReLU kinks, and
--- the four MaxPools.
+-- `vjpCompAt`. Conditional on `0 < εᵢ` (×8), the eight post-BN ReLU kinks, the two
+-- dense ReLU kinks, and the four MaxPools.
 -- ════════════════════════════════════════════════════════════════
 
+/-- The 8-conv CIFAR forward with per-channel BatchNorm (`bnPerChannelTensor3`) between each
+    conv and its ReLU, flattened: four conv→BN→relu→conv→BN→relu→pool stages, then the dense
+    3-layer head. The BN peer of `cifarCnn8Forward`. -/
 noncomputable def cifarCnnBn8Forward
     {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
@@ -800,6 +803,10 @@ noncomputable def cifarCnnBn8Forward
   ∘ (relu (c1 * (2*(2*(2*(2*h)))) * (2*(2*(2*(2*w)))))
       ∘ bnPerChannelTensor3 c1 (2*(2*(2*(2*h)))) (2*(2*(2*(2*w)))) ε₁ γ₁ β₁ ∘ flatConv (h := 2*(2*(2*(2*h)))) (w := 2*(2*(2*(2*w)))) W₁ b₁)
 
+/-- **Deeper (8-conv) CIFAR CNN with per-channel BatchNorm, whole-network VJP at a smooth
+    point.** Conditional on `0 < εᵢ` (`hε₁ … hε₈`), the eight post-BN ReLU kinks (`h1 … h8`),
+    the two dense ReLU kinks (`h9`, `ha`), and the four MaxPool conditions
+    (`h_mp1 … h_mp4`, each a `MaxPool2Smooth`). -/
 noncomputable def cifarCnnBn8HasVJPAt
     {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1) (hε₁ : 0 < ε₁)
@@ -1024,6 +1031,8 @@ noncomputable def cifarCnnBn8HasVJPAt
   exact vjpCompAt _ _ x s14d ((dense_differentiable Wb bb) _) s14
     ((denseHasVJP Wb bb).toHasVJPAt _)
 
+/-- **Public correctness theorem for `cifarCnnBn8HasVJPAt`** — its backward equals the
+    `pdiv`-contracted Jacobian of `cifarCnnBn8Forward` at `x`. -/
 theorem cifarCnnBn8HasVJPAt_correct
     {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1) (hε₁ : 0 < ε₁)

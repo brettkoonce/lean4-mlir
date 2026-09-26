@@ -3,35 +3,33 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
 import LeanMlir.Proofs.Foundation.BceLossCot
 
-/-! # ResNet-50's T3 §1a TIE — the un-fused, batched whole-net thread
+/-! # ResNet-50's step TIE — the un-fused, batched whole-net thread
 
 `GradNodesB`'s op-kind folds (`ResNet34PoCB.*GradB_den`) make every parameter GRADIENT
 node of ResNet-50's batched train step `den`-faithful for an ARBITRARY cotangent. This removes the "arbitrary": each is pinned to the one
 the emitted backward chain delivers, so the whole train step is `den`-composed forward → loss →
-backward with no free activation and no symbolic cotangent. With T1 and T2 that is ResNet-50's T3,
-and it makes this the third net whose train-step tie is about the artifact its quoted accuracy
-comes from.
+backward with no free activation and no symbolic cotangent.
 
-⭐⭐ **The block cotangents are NOT derived here.** `ResNet50FullBVJP.lean`'s
+**The block cotangents are NOT derived here.** `ResNet50FullBVJP.lean`'s
 `r50{Id,Proj,Down}BHasVJPAt` ARE the certified block backwards, and `ResNet50BackB0.lean`'s
 `r50{Bottleneck,ProjBlock,DownBlock}BackBatchedGraph_faithful` family already proves the emitted
 backward subgraph denotes exactly them. The three `*CotIn_eq_vjp` lemmas below are that statement
 in this file's vocabulary, so the cross-block chain is a composition of certified VJPs rather than
-a re-derivation — the economy ResNet-34's 4.2a and MobileNetV2's 4.2c both took.
+a re-derivation — as in `ResNet34StepTieB` and MobileNetV2's step tie.
 
-⭐⭐ **THE LOSS COTANGENT IS A BINDER, and for this net it had to be.** ResNet-34's and
+**THE LOSS COTANGENT IS A BINDER, and for this net it had to be.** ResNet-34's and
 MobileNetV2's capstones compute `g` internally from `smoothedLossCotGraph`. ResNet-50 ships BOTH
 losses: `bce := false` artifacts carry the six-op label-smoothed softmax chain and `bce := true`
-ones — including `resnet50in160_lambaccdp8x64bce`, where the 76.66% comes from — carry
-BCE-with-logits' three-op chain. So `r50_net_tiedB` takes `g` as a hypothesis and the two loss
-corollaries instantiate it: `r50_lossCot_is_smoothedCE_grad` and `r50_lossCot_is_bce_grad`. That is
-4b's "the head takes `g` as a BINDER" made necessary rather than merely tidier.
+ones — including `resnet50in160_lambaccdp8x64bce` — carry
+BCE-with-logits' three-op chain. So `r50_net_tiedB` takes `g` as a binder and the two loss
+corollaries instantiate it: `r50_lossCot_is_smoothedCE_grad` and `r50_lossCot_is_bce_grad`.
 
-⭐ **The stem tie is three nodes, not four, and the head tie is ResNet-34's.** `ResNet50RenderB` has
-no `convBias` flag at all — its `zb` bakes `false` — so no conv-bias gradient op is ever emitted and
-there is nothing to keep "to cover the flag", unlike r34's and MobileNetV2's ties.
-`ResNet34TieB.r34HeadTiedB` is generic in `{c nCls}` and `r34HeadCotBlk` in the same, so the head
-is reused verbatim at 2048 channels — as `r34HeadB` itself was in T1.
+**The block ties carry no conv-bias conjunct, and the stem and head ties are ResNet-34's.**
+`ResNet50RenderB` has no `convBias` flag at all — its `zb` bakes `false` — so no conv-bias
+gradient op is emitted, and the bottleneck ties have no bias conjunct. The stem tie is ResNet-34's
+`ResNet34TieB.r34StemTiedB`, whose conv-bias conjunct is true at `bias = 0` but not exercised, so
+the stem contributes 3 exercised slots of 4. `ResNet34TieB.r34HeadTiedB` is generic in `{c nCls}` and `r34HeadCotBlk` in the same, so the head
+is reused verbatim at 2048 channels — as `r34HeadB` itself is in `resnet50ForwardBFull`.
 
 ## The emitted chain, node for node
 
@@ -45,26 +43,26 @@ is reused verbatim at 2048 channels — as `r34HeadB` itself was in T1.
 ```
 
 and the nine parameter nodes read `W1 ← %dn1`, `g1/bt1 ← %dr1`, `W2 ← %dn2`, `g2/bt2 ← %dr2`,
-`W3 ← %dn3`, `g3/bt3 ← %da`. ⚠ Off by one on any of those and the gradient is silently wrong; the
+`W3 ← %dn3`, `g3/bt3 ← %da`. Off by one on any of those and the gradient is silently wrong; the
 render's own comment records the same trap on the stochastic-depth cotangent.
 
 The projection blocks add `%dnp = bnBatchBack(gp, cp, %da)` and `%dcp = convBack(Wp)`, and their
 fan-in is `addVB(%dc1, %dcp)` — both branches nontrivial.
 
-## Honest residual
+## Scope
 
-⚠ **One `add_comm` per projection form.** The render emits `addVB(body, projection)` where
+**One `add_comm` per projection form.** The render emits `addVB(body, projection)` where
 `residualProj proj body` adds `proj + body`, so `r50{Proj,Down}CotIn_eq_vjp` carry a commutation.
-The identity block needs none. Same seam T2's graph faithfulness has, for the same reason.
+The identity block needs none. Same seam `resnet50FwdGraphBFull_faithful` has, for the same reason.
 
-⛔ **ONE REPLICA.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
-`allReduceMeanF` — the collective as an AST node since 4d piece 2 (2026-09-07), until then emitted
-text outside the AST — so every statement here is at the per-replica gradient node and
-[`Foundation/DataParallelNode.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallelNode.lean) composes it with the replica mean (§4d). The 8× accumulation sits between the gradient
+**ONE REPLICA.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
+`allReduceMeanF` — the collective as an AST node — so every statement here is at the per-replica
+gradient node and
+[`Foundation/DataParallelNode.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallelNode.lean) composes it with the replica mean. The 8× accumulation sits between the gradient
 and the optimizer as `momVNextF` at `(μ := akeep)`, and the LAMB tail is `lamb_triple_faithful` —
 both certified, neither part of this file.
 
-⚠ **No smoothness hypothesis in the capstone**, exactly as r34's and mnv2's: the folds are `∀ cot`
+**No smoothness hypothesis in the capstone**, exactly as r34's and mnv2's: the folds are `∀ cot`
 statements instantiated at explicitly constructed cotangents. The relu-kink and positivity
 conditions enter ONLY in the three `*CotIn_eq_vjp` lemmas, which say those cotangents ARE the
 certified whole-net backward. `N` and `q` are both binders.
@@ -135,7 +133,7 @@ noncomputable def r50IdCotIn (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
   fun i => cInB N p.W₁ p.b₁ (r50IdCotC1 N h w p xin dyOut) i
     + r50IdCotA N h w p xin dyOut i
 
-/-- ⭐⭐ **The emitted fan-in IS the certified bottleneck VJP's backward.** `rfl` after the graph
+/-- **The emitted fan-in IS the certified bottleneck VJP's backward.** `rfl` after the graph
     lemma: the render's ten-node backward subgraph denotes `(r50IdBHasVJPAt …).backward dyOut`. -/
 theorem r50IdCotIn_eq_vjp (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (hq : R50IdPos p)
     (xin dyOut : Vec (N * (oc * h * w))) (hs : R50IdSmoothAt N h w p xin) :
@@ -204,7 +202,7 @@ noncomputable def r50ProjCotC1 (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic 
     (r50ProjCotN1 N h w p xin dyOut)
 
 /-- Cotangent at the PROJECTION conv's output — `r50ProjCotA` through the skip BN's backward.
-    Feeds `Wp`. ⚠ It reads the UNMASKED-by-drop `%da`, which is the render's rule: the projection
+    Feeds `Wp`. It reads the UNMASKED-by-drop `%da`, which is the render's rule: the projection
     branch is never dropped. -/
 noncomputable def r50ProjCotCp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
@@ -218,7 +216,7 @@ noncomputable def r50ProjCotIn (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic 
   fun i => cInB N p.W₁ p.b₁ (r50ProjCotC1 N h w p xin dyOut) i
     + cInB N p.Wp p.bp (r50ProjCotCp N h w p xin dyOut) i
 
-/-- ⭐ **The projected fan-in IS the certified stride-1 projection block's backward.** ⚠ One
+/-- **The projected fan-in IS the certified stride-1 projection block's backward.** One
     `add_comm`: the render emits `addVB(body, projection)` and the graph builds
     `addV(projection, body)`. -/
 theorem r50ProjCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
@@ -280,7 +278,7 @@ noncomputable def r50DownCotC2 (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic 
     (r50DownCotN2 N h w p xin dyOut)
 
 /-- Cotangent at bn₁'s output — at the INPUT grid `2h × 2w`, because conv₂ upsamples. Feeds
-    `γ₁`/`β₁`. ⚠⚠ Writing this at `h × w` typechecks nowhere, and it is the one place a reader can
+    `γ₁`/`β₁`. Writing this at `h × w` typechecks nowhere, and it is the one place a reader can
     get v1.5's shape wrong. -/
 noncomputable def r50DownCotN1 (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
@@ -310,7 +308,7 @@ noncomputable def r50DownCotIn (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic 
   fun i => cInB N p.W₁ p.b₁ (r50DownCotC1 N h w p xin dyOut) i
     + cStridedInB N p.Wp p.bp (r50DownCotCp N h w p xin dyOut) i
 
-/-- ⭐ **The projected fan-in IS the certified strided block's backward.** One `add_comm`, as the
+/-- **The projected fan-in IS the certified strided block's backward.** One `add_comm`, as the
     stride-1 projection's is. -/
 theorem r50DownCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
     (hq : R50ProjPos p) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
@@ -332,13 +330,13 @@ theorem r50DownCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid
 -- ════════════════════════════════════════════════════════════════
 
 /-! Each conjunct is a `ResNet34PoCB` op-kind fold instantiated at the cotangent the
-render's chain delivers, so nothing here is a new proof: the bundles are the §1 fold with the
+render's chain delivers, so nothing here is a new proof: the bundles are `GradNodesB`'s folds with the
 freedom removed. `reassocB` bridges the conv/relu index `N·(c·h·w)` to the BatchNorm parameter
-ops' `N·(c·(h·w))`. ⛔ There are NO conv-bias conjuncts: `ResNet50RenderB` has no `convBias` flag,
+ops' `N·(c·(h·w))`. There are NO conv-bias conjuncts: `ResNet50RenderB` has no `convBias` flag,
 so those ops are never emitted and every slot here is exercised by the artifact. -/
 /-- **Identity bottleneck, tied.** All NINE parameter nodes — three conv weights and three
     BatchNorm γ/β pairs — denote the certified batched `Σ_n` gradient at the real forward
-    activations and the real backward-chain cotangent driven by `dyOut`. ⚠ Each BatchNorm's γ/β
+    activations and the real backward-chain cotangent driven by `dyOut`. Each BatchNorm's γ/β
     reads the cotangent at THAT BatchNorm's output (`cotN1`, `cotN2`, `cotA`) while its conv reads
     the one at the conv's output (`cotC1`, `cotC2`, `cotC3`); off by one and the gradient is
     silently wrong. -/
@@ -377,10 +375,10 @@ theorem r50_idblock_tiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : Stri
   exact ⟨convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds, convWTiedB_holds,
     bnPairTiedB_holds⟩
 
-/-- ⭐ **Stride-1 projection bottleneck, tied.** Twelve nodes: the identity block's nine plus the
-    1×1 skip's weight and its BatchNorm γ/β. ⚠ The skip's conv is an ORDINARY `convWeightGradB` —
+/-- **Stride-1 projection bottleneck, tied.** Twelve nodes: the identity block's nine plus the
+    1×1 skip's weight and its BatchNorm γ/β. The skip's conv is an ORDINARY `convWeightGradB` —
     stage 1 block 0 changes channels but not resolution, which is the whole reason this block form
-    exists. ⚠ The skip's three nodes read `cotA`, the UNMASKED post-relu cotangent: the projection
+    exists. The skip's three nodes read `cotA`, the UNMASKED post-relu cotangent: the projection
     branch is never stochastic-depth dropped, which is the render's own rule. -/
 def r50ProjTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p : R50ProjW ic mid oc)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
@@ -425,7 +423,7 @@ theorem r50_projblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
     bnPairTiedB_holds, convWTiedB_holds, bnPairTiedB_holds⟩
 
 /-- **Strided projection bottleneck, tied.** Twelve nodes, and TWO of the four conv weights are
-    the strided op. ⚠⚠ v1.5: `W₁` is an ordinary `convWeightGradB` at the INPUT grid `2h × 2w` and
+    the strided op. v1.5: `W₁` is an ordinary `convWeightGradB` at the INPUT grid `2h × 2w` and
     its BatchNorm reduces there too; only `W₂` (the 3×3) and `Wp` (the skip) are strided. Both
     strided nodes are SYMMETRIC padding — `flatConvStride2`, not the XLA-`SAME` twin B0 and
     MobileNetV2 use. -/
@@ -481,7 +479,7 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
 --   delegation and is true at `bias = 0`, so the stem contributes 3 exercised slots of 4.
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The whole batch-BN ResNet-50 train step, tied.** Threading `resnet50ForwardBFull`'s own
+/-- **The whole batch-BN ResNet-50 train step, tied.** Threading `resnet50ForwardBFull`'s own
     prefixes as the block inputs and an arbitrary loss cotangent `g` down through the certified head
     backward and the sixteen certified bottleneck backwards, every parameter GRADIENT node of the
     net — stem 3, twelve identity bottlenecks × 9, four projection bottlenecks × 12, dense 2 —
@@ -489,20 +487,20 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
     signature of `resnet50_fwd.mlir` minus `%x`. No free activation and no symbolic cotangent
     below the loss.
 
-    ⭐⭐ **`g` IS A BINDER, and for this net it had to be.** ResNet-50 ships both losses — the
+    **`g` IS A BINDER, and for this net it had to be.** ResNet-50 ships both losses — the
     label-smoothed softmax chain on the `bce := false` artifacts and BCE-with-logits' three-op
-    chain on the `bce := true` ones, including `resnet50in160_lambaccdp8x64bce` where the quoted
-    76.66% comes from. `r50_lossCot_is_smoothedCE_grad` and `r50_lossCot_is_bce_grad` instantiate
+    chain on the `bce := true` ones, including `resnet50in160_lambaccdp8x64bce`.
+    `r50_lossCot_is_smoothedCE_grad` and `r50_lossCot_is_bce_grad` instantiate
     it; neither is privileged.
 
-    ⭐ **No smoothness hypothesis, no `0 < ε`, and `N` and `q` are both binders.** The folds are
+    **No smoothness hypothesis, no `0 < ε`, and `N` and `q` are both binders.** The folds are
     `∀ cot` statements at explicitly constructed cotangents. The kink and positivity conditions
     enter only in `r50{Id,Proj,Down}CotIn_eq_vjp`, which say those cotangents ARE the certified
     whole-net backward — the two halves of the tie, kept apart because they have different
     hypotheses.
 
-    ⛔ **One replica.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
-    `allReduceMeanF`, an AST node since 4d piece 2 (`DataParallelNode.lean`, §4d), and the 8×
+    **One replica.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
+    `allReduceMeanF`, an AST node (`DataParallelNode.lean`), and the 8×
     accumulation and the LAMB tail sit downstream of every node named here. -/
 theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (g : Vec (N * nCls)) :
@@ -566,7 +564,7 @@ theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
 -- § The two losses the binder `g` is instantiated at
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **The label-smoothed cotangent, for every `bce := false` artifact.** Row by row, the six-op
+/-- **The label-smoothed cotangent, for every `bce := false` artifact.** Row by row, the six-op
     chain `ResNet50RenderB` emits is `(1/B)·∂/∂logits` of soft-target cross-entropy against the
     SMOOTHED target, at that example's real logits. The only hypothesis is that the example's
     target sums to 1 — a one-hot, or mixup's convex combination. -/
@@ -585,11 +583,11 @@ theorem r50_lossCot_is_smoothedCE_grad (N q : Nat) {nCls : Nat} (hK : 0 < nCls)
             (rowB N nCls (resnet50ForwardBFull N q w x)) n) (0 : Fin 1)) j 0) / B :=
   smoothedLossCotGraph_row N nCls hK α B aStr negAK bStr logN ohN _ t n j ht
 
-/-- ⭐⭐ **The BCE-with-logits cotangent, for every `bce := true` artifact — including the one the
-    76.66% comes from.** Row by row, the three-op chain `sigmoidB → subB → divConstB` is
+/-- **The BCE-with-logits cotangent, for every `bce := true` artifact — including
+    `resnet50in160_lambaccdp8x64bce`.** Row by row, the three-op chain `sigmoidB → subB → divConstB` is
     `∂/∂logits` of `Σ_k (softplus(z_k) − t_k·z_k)` at that example's real logits, over the baked
-    `N·K`. ⚠⚠ The divisor is `N·K`, not `N`: timm's `BinaryCrossEntropy` is `reduction='mean'` over
-    `B×C`, and at `K = 1000` the two differ by 1000× on the effective step. ⭐ NO hypothesis on the
+    `N·K`. The divisor is `N·K`, not `N`: timm's `BinaryCrossEntropy` is `reduction='mean'` over
+    `B×C`, and at `K = 1000` the two differ by 1000× on the effective step. NO hypothesis on the
     target at all, where the smoothed-CE row needs its mass to be 1 — BCE is per-class and
     separable, which is the point under mixup. -/
 theorem r50_lossCot_is_bce_grad (N q : Nat) {nCls : Nat} (bStr logN ohN : String)

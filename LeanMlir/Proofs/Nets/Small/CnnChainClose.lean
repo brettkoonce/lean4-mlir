@@ -19,9 +19,9 @@ The relu masks sit *between* the maxpool and conv `Back3` nodes, so the cotangen
 composition of the rendered backward denotations (not a single `Back3` graph) — but the
 maxpool/conv steps are exactly the `Back3` subgraphs `flatDenote` denotes. Instantiating the
 generic conv bridges at these cotangents gives: each conv `θ` output denotes `θ − lr·(certified
-∂conv/∂θ · the-actual-chain-cotangent)`. (This pins the cotangent — the further "= ∂loss/∂θ" fold
-is the separate `pdiv G = Back.denote` step, as in the MLP `mlp_*_total_loss_grad`.)
-See `planning/archive/render_close_handoff.md` §1 "Optional polish".
+∂conv/∂θ · the-actual-chain-cotangent)`. This pins the cotangent to the rendered chain; that it
+equals the loss gradient at the conv output (a `pdiv G = Back.denote` step, the conv analogue of
+the MLP's `mlp_hidden_total_loss_grad`) is not stated.
 -/
 
 namespace Proofs

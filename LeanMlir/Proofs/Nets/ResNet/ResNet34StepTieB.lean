@@ -3,51 +3,44 @@ import LeanMlir.Proofs.Foundation.BatchedBackLinks
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
-/-! # ResNet-34's T3 §1a TIE at TRUE BATCH-NORM — the un-fused, batched whole-net thread
+/-! # ResNet-34's step TIE at TRUE BATCH-NORM — the un-fused, batched whole-net thread
 
-`GradNodesB` (4.1e) makes every parameter GRADIENT node of the batched ResNet-34
+`GradNodesB` makes every parameter GRADIENT node of the batched ResNet-34
 train step `den`-faithful for an arbitrary cotangent. This file removes the "arbitrary": each
 cotangent is pinned to the one the emitted backward chain delivers, so the whole train step is
 `den`-composed forward → loss → backward with no free activation and no symbolic cotangent.
 
-It replaced the per-example `ResNet34TiePoC.lean` (deleted 2026-09-08: no committed artifact
-exercised it once `resnet34_train_step.mlir` was retired), and four things about it are different in kind.
-
-⭐⭐ **The block cotangents are NOT derived here.** The per-example close (`ResNet34ChainClose.lean`,
-deleted 2026-09-08) spelled per-block cotangent vectors out by hand, because no whole-block VJP
-existed when it was written. 4.1d's
-`r34IdBHasVJPAt` / `r34DownBHasVJPAt` ARE the certified block backwards, so a block's input
+**The block cotangents are NOT derived here.** `r34IdBHasVJPAt` / `r34DownBHasVJPAt` ARE the
+certified block backwards, so a block's input
 cotangent is a `.backward` application — and `r34{BasicBlock,DownBlock}BackBatchedGraph_faithful`
 already proves the emitted backward subgraph denotes exactly it. `r34IdCotIn_eq_vjp` and
 `r34DownCotIn_eq_vjp` below are that statement in the vocabulary this file threads, and they are
 what make the cross-block chain a composition of certified VJPs rather than a re-derivation.
 
-⭐ **The loss cotangent is the LABEL-SMOOTHED one, at a general target.** `ResNet34RenderB` composes
+**The loss cotangent is the LABEL-SMOOTHED one, at a general target.** `ResNet34RenderB` composes
 the head cotangent from six kit ops — `softmaxRow → subB → scaleB → addVB → shiftB → divConstB`, α
 baked at 0.1 and the `ls0` variants at 0 — and the target arrives as the graph input `%onehot`,
 which under mixup or cutmix is a soft vector drawn on the host. [`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean)
 is that cotangent's lemma; the head fold below is stated at it, not at `softmax − oneHot`.
 
-⭐ **`N` is a binder.** The capstone takes `(N : Nat)`, exactly as `efficientnet_net_tied` does;
+**`N` is a binder.** The capstone takes `(N : Nat)`, exactly as `efficientnet_net_tied` does;
 the artifacts at 32 (`resnet34_sgd/adam_train_step`) or 64 (`resnet34in_momdp64`) are instances.
-T3 carries no numerals, so nothing here pins the batch.
+The batch size is never pinned (the 224-px resolution and the 64…512 widths are literals).
 
-⛔ **The all-reduce, since 4d piece 2 (2026-09-07).** In `resnet34in_momdp64` each `*GradB` node
+**The all-reduce.** In `resnet34in_momdp64` each `*GradB` node
 feeds `allReduceMeanF` — the collective as an AST node whose `den` is the replica MEAN of the
-per-replica gradient nodes; until then `emitGradAllReduce`, emitted text and a declared carve-out
-outside the `SHlo` AST. Every statement below is at the PER-REPLICA gradient node;
+per-replica gradient nodes. Every statement below is at the PER-REPLICA gradient node;
 `DataParallelNode.lean` composes it with the mean and the tail. For the sync-BN data-parallel
-render (2026-09-21) `ResNet34SyncStepTieB.lean` is the whole step: its `r34_net_syncTiedB` says
+render `ResNet34SyncStepTieB.lean` is the whole step: its `r34_net_syncTiedB` says
 each all-reduced gradient IS this file's node at `N := R·N`.
 
-## ⛔ The parameter census is 110, not the 146 the per-example tie named
+## The parameter census is 110, not 146
 
-`resnet34TrainStepFaithfulV` and `ResNet34RenderB` both default to `convBias := false`: the conv
+`ResNet34RenderB`'s writers default to `convBias := false`: the conv
 biases are gone from the signature (BatchNorm subsumes them, and He et al.'s `.convBn` has none),
 bound instead to the zero constants `zeroBiasPrelude` emits. So `resnet34_sgd_train_step.mlir`
 carries **110** SGD-updated tensors — stem 3 + 13 identity blocks × 6 + 3 downsample blocks × 9 +
-dense 2 — and 146 is the census at `convBias := true`. (The per-example `resnet34_train_step.mlir`
-carried the same 110 and was retired the same day by 4c leg 1.) The bias
+dense 2 — and 146 is the census at `convBias := true`. The bias
 conjuncts below are kept (they are one delegation each and they cover the flag), and they are about
 ops the committed artifacts do not emit. Nothing about this weakens a theorem: every fold is
 `∀`-quantified over op instances, and `bias = 0` is one of them.
@@ -123,7 +116,7 @@ noncomputable def r34IdCotIn (N h w : Nat) {c : Nat} (p : R34IdW c)
   fun i => cInB N p.W₁ p.b₁ (r34IdCotC1 N h w p xin dyOut) i
     + r34IdCotA N h w p xin dyOut i
 
-/-- ⭐⭐ **The emitted fan-in IS the certified block VJP's backward.** Not a re-derivation: the
+/-- **The emitted fan-in IS the certified block VJP's backward.** Not a re-derivation: the
     render's seven-node backward subgraph denotes `(r34IdBHasVJPAt …).backward dyOut`, which is
     `r34BasicBlockBackBatchedGraph_faithful` read in this file's vocabulary. This is what makes the
     cross-block thread a composition of certified VJPs. -/
@@ -199,7 +192,7 @@ noncomputable def r34DownCotCp (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
   bnInB N oc h w p.εp p.γp (batchMap N (flatConvStride2 p.Wp p.bp) xin)
     (r34DownCotA N h w p xin dyOut)
 
-/-- **The block-INPUT cotangent**: the projected-residual fan-in `addVB(%dc1, %dcp)`. ⚠ Both
+/-- **The block-INPUT cotangent**: the projected-residual fan-in `addVB(%dc1, %dcp)`. Both
     operands are real backward subgraphs here — unlike the identity block, where the skip passes
     `%da` through verbatim. -/
 noncomputable def r34DownCotIn (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
@@ -208,8 +201,8 @@ noncomputable def r34DownCotIn (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
   fun i => cStridedInB N p.W₁ p.b₁ (r34DownCotC1 N h w p xin dyOut) i
     + cStridedInB N p.Wp p.bp (r34DownCotCp N h w p xin dyOut) i
 
-/-- ⭐⭐ **The projected fan-in IS the certified downsample-block VJP's backward.** The identity
-    block's `r34IdCotIn_eq_vjp` at the strided shape. ⚠ One `add_comm`: the render emits
+/-- **The projected fan-in IS the certified downsample-block VJP's backward.** The identity
+    block's `r34IdCotIn_eq_vjp` at the strided shape. One `add_comm`: the render emits
     `addVB(body, projection)` and `r34DownBlockBackBatchedGraph` builds `addV(projection, body)`.
     Same vector, and the emitted order is the one this file threads. -/
 theorem r34DownCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc) (hq : R34DownPos p)
@@ -266,11 +259,11 @@ noncomputable def r34StemCotC (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 
 -- ════════════════════════════════════════════════════════════════
 
 /-! Each conjunct is `GradNodesB`'s `∀ cot` fold instantiated at the cotangent the
-render's chain delivers, so nothing here is a new proof: the bundles are the §1 fold with the
-freedom removed. `reassocB` bridges the conv/relu index `N·(c·h·w)` to the BatchNorm parameter
+render's chain delivers, so nothing here is a new proof: the bundles are `GradNodesB`'s folds
+with the freedom removed. `reassocB` bridges the conv/relu index `N·(c·h·w)` to the BatchNorm parameter
 ops' `N·(c·(h·w))`.
 
-⚠ The two conv-BIAS conjuncts in each block are about `conv{,Strided}BiasGradB`, which the
+The two conv-BIAS conjuncts in each block are about `conv{,Strided}BiasGradB`, which the
 committed artifacts do NOT emit — both renders run `convBias := false` and bind the bias operand to
 `zeroBiasPrelude`'s zero constant. They are kept because they cost one delegation each and they
 cover the flag. -/
@@ -309,7 +302,7 @@ theorem r34_idblock_tiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (
 
 
 /-- **Downsample basic block, tied.** All twelve parameter nodes — the STRIDED conv₁, the stride-1
-    conv₂ and the 1×1/s2 option-B projection, each with bias and BatchNorm γ/β. ⚠ Both stride-2
+    conv₂ and the 1×1/s2 option-B projection, each with bias and BatchNorm γ/β. Both stride-2
     sites are SYMMETRIC padding (`convStrided*GradB`, whose `den` is `flatConvStride2_*`), which is
     ResNet's convention and NOT B0's or MobileNetV2's XLA-`SAME`. -/
 def r34DownTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String) (p : R34DownW ic oc)
@@ -385,7 +378,7 @@ noncomputable def r34HeadCotBlk (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (
   (r34HeadBHasVJP N h w Wd bd).backward xin dy
 
 /-- **Head, tied.** The classifier's weight and bias nodes denote the certified batched `Σ_n`
-    gradient at the real GAP output and the loss cotangent. ⚠ The bias conjunct's Jacobian witness
+    gradient at the real GAP output and the loss cotangent. The bias conjunct's Jacobian witness
     carries a zero activation rather than the real one: `dense`'s derivative in `b` is the identity
     whatever `x` is, so the statement is `x`-free and there is no per-example choice to make (the
     same shape `EfficientNetStepTie`'s bias conjuncts take). -/
@@ -407,24 +400,24 @@ theorem r34_head_tiedB (N h w : Nat) {c nCls : Nat} (xN cotN : String) (Wd : Mat
 -- § The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The whole batch-BN ResNet-34 train step, tied.** Threading `resnet34ForwardBFull`'s own
+/-- **The whole batch-BN ResNet-34 train step, tied.** Threading `resnet34ForwardBFull`'s own
     prefixes as the block inputs and the label-smoothed loss cotangent down through the certified
     head backward and the sixteen certified block backwards, every parameter GRADIENT node of the
     net — stem 4, thirteen identity blocks × 8, three downsample blocks × 12, dense 2 — denotes the
     certified batched `Σ_n` gradient. No free activation and no symbolic cotangent.
 
-    ⭐ **`N` is a binder and there is no smoothness hypothesis.** The folds are `∀ cot` statements
+    **`N` is a binder and there is no smoothness hypothesis.** The folds are `∀ cot` statements
     instantiated at explicitly-constructed cotangents, so the capstone needs neither `0 < ε` nor a
     relu-kink condition. Those enter only in `r34IdCotIn_eq_vjp` / `r34DownCotIn_eq_vjp`, which say
     the constructed chain IS the certified whole-net backward — the two halves of the tie, kept
     apart because they have different hypotheses.
 
-    ⚠ Of the 146 conjunct slots, the committed artifacts exercise **110**: both r34 renders run
+    Of the 146 conjunct slots, the committed artifacts exercise **110**: both r34 renders run
     `convBias := false`, so the 36 conv-bias nodes are not emitted (the biases are
     `zeroBiasPrelude`'s zero constants).
 
-    ⛔ One replica. In `resnet34in_momdp64` every gradient node feeds `allReduceMeanF`, an AST
-    node since 4d piece 2; `ResNet34SyncTieB.r34_net_syncTiedB` is the data-parallel step, and
+    One replica. In `resnet34in_momdp64` every gradient node feeds `allReduceMeanF`, an AST
+    node; `ResNet34SyncTieB.r34_net_syncTiedB` is the data-parallel step, and
     its right-hand sides are this theorem's nodes at `N := R·N`. -/
 theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
@@ -490,12 +483,15 @@ theorem r34_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     r34_head_tiedB N 7 7 xN cotN w.Wd w.bd (r34Pre16 N w x) g⟩
 
 
-/-- ⭐ **And the cotangent the capstone threads is the smoothed loss's gradient.** Row by row: the
+/-- **And the cotangent the capstone threads is the smoothed loss's gradient.** Row by row: the
     `g` above is, at example `n` and class `j`, `(1/B)·∂/∂logits` of soft-target cross-entropy
     against the SMOOTHED target `(1−α)·t + α/K`, at that example's real logits. The only hypothesis
     is that the example's target sums to 1 — a one-hot, or mixup's convex combination of two.
-    Together with the capstone this closes the top of the chain: every parameter node denotes the
-    certified gradient at the cotangent of the loss the trainer actually minimises. -/
+    Together with the capstone: every parameter gradient node is the certified per-op gradient at
+    the cotangent the rendered chain delivers from the loss the trainer minimises; at a smooth
+    point with positive epsilons (`R34IdSmoothAt` / `R34DownSmoothAt`, `R34IdPos` / `R34DownPos`,
+    via `r34IdCotIn_eq_vjp` / `r34DownCotIn_eq_vjp`) the block-input cotangents are the certified
+    block backwards. -/
 theorem r34_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (t : Vec (N * (1 * nCls)))

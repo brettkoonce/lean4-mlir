@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Foundation.SgdNodes
 
-/-! # PoC: the cifar8 (Chapter 4 deeper, 8-conv no-BN) §1a TIE — tied through the real forward
+/-! # PoC: the cifar8 (Chapter 4 deeper, 8-conv no-BN) TIE — tied through the real forward
 
-The 4-stage peer of `CifarFold`'s §1a tie (`cifar_conv_tied_certified`). cifar8 is cifar (ch5)
+The 4-stage peer of `CifarFold`'s tie (`cifar_conv_tied_certified`). cifar8 is cifar (ch4)
 with **four** conv→conv→pool stages instead of two, so its conv backward chain is the cifar chain
 repeated: within each stage the second conv is the maxpool-back layer (`cnnChainCotW2` for the very
 last, then `cifarChainCotW2`'s cross-pool move) and the first conv is the conv-back layer
@@ -15,13 +15,15 @@ bridges. The conv ties are `CifarPoC.convW_den`/`convB_den` (generic in the cota
 **No per-net fold file.** cifar8 needs zero new core ops and zero new fold lemmas: every conv
 layer is the generic `CifarPoC.convW_den`/`convB_den` (dim- and cotangent-generic, so they certify
 W₁…W₈ by instantiation), and the three dense layers are the generic `Cifar8PoC.denseW_den`/
-`denseB_den` (`MlpTrainStep.lean`, free in activation, weight, bias and cotangent).
+`denseB_den` (Foundation/SgdNodes.lean, free in activation, weight, bias and cotangent).
 
 Spatial bookkeeping (the 2-stage `(h,w)` convention nested two levels deeper): final pooled `(h,w)`;
 stage 4 (conv₇/conv₈) at `(2h,2w)`; stage 3 (conv₅/conv₆) at `(2(2h),2(2w))`; stage 2 (conv₃/conv₄) at
 `(2(2(2h)),…)`; stage 1 (conv₁/conv₂) at `(2(2(2(2h))),…)`.
 
-## Honest residual (same as cifar)
+## Scope (same as cifar)
+* The conv cotangents are the rendered chain (`cnnChainCotW2`, `cnnChainCotW1`,
+  `CifarPoC.cifarChainCotW2`); that they equal the loss gradient at each conv output is not stated.
 * Conv backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
   lexing; ℝ → Float32.
 -/
@@ -75,9 +77,10 @@ theorem cifar8_Wb_tied_totalloss {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
             W₉ b₉ Wa ba Wb bb x) k - oneHot nClasses label k) lr i j,
       mlp_output_total_loss_grad Wb bb a_head label i j, hlog]
 
-/-- **Whole cifar8 conv tail, tied.** All 16 conv params (8 conv `W`+`b`), at the real cifar8 forward
-    and the composed softmax-CE cotangent, denote the certified loss-descent step. Each conv op is fed
-    the cotangent the 4-stage backward chain delivers: `cnnChainCotW2` (conv₈, the last before pool₄),
+/-- **Whole cifar8 conv tail, tied.** All 16 conv params (8 conv `W`+`b`), at the real cifar8 forward,
+    denote `θ − lr·(certified ∂convₖ/∂θ · c)` with `c` the rendered backward-chain cotangent driven by
+    the composed softmax-CE cotangent `g`; that `c` equals the loss gradient at the conv output is not
+    stated. Each conv op is fed the cotangent the 4-stage backward chain delivers: `cnnChainCotW2` (conv₈, the last before pool₄),
     `cnnChainCotW1` (conv₇/₅/₃/₁, the within-stage conv-back), `cifarChainCotW2` (conv₆/₄/₂, the
     cross-pool move). Together with the dense head (`cifar8_Wb_tied_totalloss` + the generic
     `denseW_den`/`denseB_den` at `g`) the WHOLE cifar8 train step is den-composed forward→loss→backward. -/

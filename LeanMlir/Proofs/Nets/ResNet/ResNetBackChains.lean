@@ -10,22 +10,20 @@ chain keeps its block backwards and its BatchNorm backwards as *supplied* maps a
 the endpoints — the stem's strided conv-back, the 3×3/s2 pool-back, the GAP-back and the
 dense-back — so that the certified tie (`ResNet34BackCertifiedTieB`,
 `ResNet50WholeBackCertifiedTieB`, on the leaf ties of `ConvBackCertifiedTie`) is a statement
-about a NAMED chain of the forward's shape. (The per-example r34 chain and its two block
-backwards were retired with their renderer on 2026-09-19.)
+about a NAMED chain of the forward's shape.
 
-⛔ `maxPool3s2FlatBackB`, the batched pool backward, is `StableHLO.batchMapAux` and not
+Note: `maxPool3s2FlatBackB`, the batched pool backward, is `StableHLO.batchMapAux` and not
 `batchMap`: the pool's backward is indexed by the saved forward activation and every example
 has its own, so a `batchMap` would hand example 0's argmax pattern to all of them. It is the one
 endpoint the batch axis changed, and the reason this leaf imports `StableHLO.lean`.
 
-⚠ Padding is SYMMETRIC at every stride-2 site of both nets (`flatConvStride2Back`), the
+Padding is SYMMETRIC at every stride-2 site of both nets (`flatConvStride2Back`), the
 PyTorch-origin convention — not the XLA-`SAME` `flatConvStride2XlaBack` the TF-origin stems take.
-⚠ At a variable `q` every dimension is written as an explicit `2 * (…)` nest, never `8 * q`: those
+At a variable `q` every dimension is written as an explicit `2 * (…)` nest, never `8 * q`: those
 are equal Nats and NOT definitionally equal terms, and each stage demands its operand at exactly
 the spelling it names.
 
-Moved here from the float bridges that defined them beside their float twins on 2026-09-08
-(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
+No number is stated about any of these chains. -/
 
 namespace Proofs
 
@@ -37,8 +35,8 @@ namespace Proofs
     `resnet34ForwardBFull = head ∘ [3,4,6,3] ∘ stem`: dense-back → GAP-back → the sixteen basic
     blocks' backwards → the 3×3/s2 pool back → the stem's relu mask, BatchNorm back and 7×7/s2
     conv back. The block backwards and the stem's BatchNorm back are supplied; the conv, pool, GAP
-    and dense leaves are concrete and lifted over the `N` examples. ⭐ `N` is a variable: this chain
-    carries no numerals. -/
+    and dense leaves are concrete and lifted over the `N` examples. `N` is a variable: the batch
+    size is never pinned (the 224-px resolution and the 64…512 widths are literals). -/
 noncomputable def r34InputGradB (N : Nat) {nCls : Nat}
     (Ws : Kernel4 64 3 7 7) (Wd : Mat 512 nCls)
     (bnBs : Vec (N * (64 * (2 * 56) * (2 * 56))) → Vec (N * (64 * (2 * 56) * (2 * 56))))
@@ -69,9 +67,9 @@ noncomputable def r34InputGradB (N : Nat) {nCls : Nat}
     `resnet50ForwardBFull = head ∘ [3,4,6,3] bottlenecks ∘ stem`: dense-back → GAP-back → the
     sixteen bottleneck backwards → the 3×3/s2 pool back → the stem's relu mask, BatchNorm back
     and 7×7/s2 conv back. The bottleneck backwards and the stem's BatchNorm back are supplied;
-    the conv, pool, GAP and dense leaves are concrete and lifted over the `N` examples. ⭐ `q` is a
+    the conv, pool, GAP and dense leaves are concrete and lifted over the `N` examples. `q` is a
     binder, so one chain covers `resnet50in_fwd` (`q = 7`, 224 px) and `resnet50in160_fwd`
-    (`q = 5`, 160 px — the net the quoted 76.66% trains). Stem and head ARE ResNet-34's
+    (`q = 5`, 160 px). Stem and head ARE ResNet-34's
     (`r34StemB` / `r34HeadB`) at R50's widths. -/
 noncomputable def r50InputGradB (N q : Nat) {nCls : Nat}
     (Ws : Kernel4 64 3 7 7) (Wd : Mat 2048 nCls)

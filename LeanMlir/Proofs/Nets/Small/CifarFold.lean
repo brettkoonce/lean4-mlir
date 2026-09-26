@@ -8,8 +8,10 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 The Chapter-4 peer of `CnnFold` — a deeper, two-spatial-scale conv net
 (`(conv→relu)×2 → pool → (conv→relu)×2 → pool → (dense→relu)×2 → dense`; 14 params:
 4 conv kernels/biases + 3 dense layers). `MainCifarVerified` trains on
-`verified_mlir/cifar_train_step.mlir`; this file makes its parameter updates
-`den`-faithful — each emitted SGD op denotes the certified loss-descent step.
+`verified_mlir/cifar_train_step.mlir`; this file states what its parameter updates denote: each
+emitted SGD op denotes `θ − lr·(certified per-layer Jacobian · the cotangent the rendered chain
+feeds it)`; only the output weight `W₇` is tied to the whole-loss gradient
+(`cifar_W7_tied_totalloss`).
 
 **Zero new core ops.** The conv layers reuse the `convWeightSgd`/`convBiasSgd` ops
 added for cnn (CnnFold); the dense head reuses `weightSgd`/`biasSgd`. The
@@ -22,23 +24,19 @@ only new content is the per-net `den = certified` capstones below.
   cotangent the renderer feeds there, they certify W₁/b₁ … W₄/b₄ (one lemma each, all
   four layers — conv2d's weight/bias VJP is dim-generic).
 * **Dense head (W₅/W₆/W₇):** the classifier head is a 3-layer MLP over the flattened
-  pool output, so its cotangents are the IR `mlpCotOut0/1` and its `den`s close via the
-  M2 `weight_grad_bridge`/`bias_grad_bridge` — verbatim `CnnFold` (`dW7_den`, the op the
+  pool output, so its cotangents are the IR `mlpCotOut0/1` and its `den`s close via
+  `weight_grad_bridge`/`bias_grad_bridge` — verbatim `CnnFold` (`dW7_den`, the op the
   tie reads).
 
-## Honest residual (same boundary as cnn/mlp/linear)
-* The conv cotangents here are free variables `c` (the `convW_den`/`convB_den` statement
-  is ∀ c) — so the lemmas hold at the actual backward-chain cotangent the renderer
-  feeds, without naming it. Pinning each `c` to the exact emitted backward subgraph
-  (the `CnnChainClose` recipe, scaled to two stages) is the remaining polish.
+## Scope (same boundary as cnn/mlp/linear)
+* The conv cotangents are the rendered chain (`cnnChainCotW1`, `cnnChainCotW2`,
+  `cifarChainCotW2`); that they equal the loss gradient at each conv output is not stated.
 * Per-op `pretty` lexing + ℝ → Float32.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
 
 namespace Proofs.CifarPoC
-
-/-! ## Conv layers — generic `den = certified` (covers all four conv layers) -/
 
 /-! ## Dense classifier head (W₅/W₆/W₇) — `weightSgd`/`biasSgd`, mirrors `CnnPoC`
 
@@ -60,7 +58,7 @@ theorem dW7_den {c2 h w d1 nClasses : Nat}
                (Mat.flatten W₇) (finProdFinEquiv (i, j)) k * dy k :=
   Cifar8PoC.denseW_den aN "%W7" lrStr dyN _ W₇ b₇ _ lr i j
 
-/-! ## The §1a tie — the conv layers/dense head, tied through the REAL cifar forward
+/-! ## The tie — the conv layers/dense head, tied through the REAL cifar forward
 
 The conv/dense `*_den` theorems above hold for a FREE cotangent (`convW_den`/`convB_den` are `∀ c`;
 the dense head's `mlpCotOut0/1` are `∀ dy`). The capstones below pin those cotangents to the ones the
@@ -166,9 +164,11 @@ theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
   simp only [cifarCnnForward, mnistLinear, Function.comp_apply]
 
 /-- **Whole cifar conv tail, tied.** All four conv kernel/bias ops, at the real cifar forward and the
-    composed softmax-CE cotangent `g = softmax(cifarCnnForward … xv) − onehot` (`cifarLossCot_den`),
-    denote the certified loss-descent step. Each `den = certified` is the generic `convW_den`/`convB_den`
-    instantiated at the cotangent the backward chain delivers: `cnnChainCotW2` for conv₄ (relu mask on
+    rendered backward-chain cotangents driven by the composed softmax-CE cotangent
+    `g = softmax(cifarCnnForward … xv) − onehot` (`cifarLossCot_den`), denote
+    `θ − lr·(certified ∂convₖ/∂θ · c)`. That each `c` equals the loss gradient at its conv output is
+    not stated. Each clause is the generic `convW_den`/`convB_den` instantiated at the cotangent the
+    backward chain delivers: `cnnChainCotW2` for conv₄ (relu mask on
     pool₂-back of the dense head), `cnnChainCotW1` for conv₃/conv₁ (relu mask on the next conv's
     input-VJP), and `cifarChainCotW2` for conv₂ (relu mask on pool₁-back of conv₃'s input-VJP). Together
     with the dense head (`cifar_W7_tied_totalloss` + `Cifar8PoC.denseW_den`/`denseB_den` at `g`) the WHOLE

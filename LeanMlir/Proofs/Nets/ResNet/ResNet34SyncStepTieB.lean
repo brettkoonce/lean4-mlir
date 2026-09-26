@@ -4,17 +4,17 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 
 /-! # ResNet-34's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
 
-`ResNet34StepTieB.lean` (T3) threads the label-smoothed loss cotangent down the batch-BN
-backward chain on ONE device and ties every parameter gradient node to the certified gradient.
-This is its data-parallel twin, for the render `ResNet34RenderB` emits at `replicas > 1` since
-2026-09-21: `R` replicas at batch `N`, every BatchNorm synchronised (`bnFwdSite` / `bnBackSite` /
+`ResNet34StepTieB.lean` threads the label-smoothed loss cotangent down the batch-BN
+backward chain on ONE device and ties every parameter gradient node to the certified per-op
+gradient at the cotangent that chain delivers. This is its data-parallel twin, for the render
+`ResNet34RenderB` emits at `replicas > 1`: `R` replicas at batch `N`, every BatchNorm synchronised (`bnFwdSite` / `bnBackSite` /
 `bnGammaSite`), every parameter gradient all-reduced by its mean. The capstone
 `r34_net_syncTiedB` says that, for every parameter,
 
     mean over the R replicas of replica r's gradient node, loss divided by B
       = the single-device gradient node at the global batch R·N, loss divided by R·B
 
-— the gradient node `r34_net_tiedB` at `N := R·N` ties to the certified gradient. So the sentence
+— the gradient node `r34_net_tiedB` at `N := R·N` ties to the certified per-op gradient. So the sentence
 the DP render header carries ("this step IS the single-device step at the global batch") is a
 theorem, and the spec it is stated against has not moved: the right-hand side is the existing
 single-device chain at `N := R·N`.
@@ -41,12 +41,12 @@ chains and ties over them.
 
 ## What is NOT claimed
 
-⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
+The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (r34Pre_k (R*N) w X)`); that the sync forward graph computes exactly those is
-`ResNet34SyncB.resnet34FwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are
-the shards of one batch is the driver's. ⚠ The emitted artifacts run `convBias := false`, so the
+`ResNet34SyncB.resnet34FwdGraphSyncFull_shard`, the forward half. That the replicas' inputs are
+the shards of one batch is the driver's. The emitted artifacts run `convBias := false`, so the
 conv-bias nodes are not emitted and are not tied here (`r34_net_tiedB` keeps them for the flag).
-⚠ The lowerer's `all_reduce` is trusted as every other op's lowering is.
+The lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -541,7 +541,7 @@ theorem r34HeadCotBlk_scaled (R : Nat) (N h w : Nat) {c nCls : Nat} (Wd : Mat c 
     corollary (cotangents instantiated) state exactly one thing. The first 16 `let`s are
     `r34_net_tiedB`'s chain at `N := R·N`, driven by the global cotangent `G`; the rest are the
     replicas' sync-BN chain, driven by the family `gs`; the 18 conjuncts are one per stage, every
-    emitted parameter collective against T3's node at the global batch. -/
+    emitted parameter collective against `r34_net_tiedB`'s node at the global batch. -/
 def r34NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R34BWeights nCls) (X : Vec ((R * N) * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
@@ -601,23 +601,24 @@ def r34NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN ep
   ∧ r34IdSyncTiedB R hR N 7 7 "s4b1" xN cotN vN epsStr w.e1 (r34Pre15 (R * N) w X) eE1 dyE1
   ∧ r34HeadSyncTiedB R hR N 7 7 xN cotN (r34Pre16 (R * N) w X) gs G
 
-/-- ⭐⭐⭐ **The synchronised-BN data-parallel ResNet-34 step IS the single-device step at the global
+/-- **The synchronised-BN data-parallel ResNet-34 step IS the single-device step at the global
     batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from its own
     cotangent `gs r`, with `gs r` the `R`-scaled shard of a global cotangent `G`; every parameter's
     all-reduced mean gradient — stem 3, thirteen identity blocks × 6, three downsample blocks × 9,
     dense 2: the 110 the render emits — equals the single-device batch-BN gradient node at batch
-    `R·N`, at the cotangent T3's chain delivers there from `G`.
+    `R·N`, at the cotangent `r34_net_tiedB`'s chain delivers there from `G`.
 
-    ⭐ The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per BN
+    The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per BN
     layer), per-example conv / relu / pool / head links. The right-hand chain is `r34_net_tiedB`'s
-    at `N := R·N`, whose nodes that capstone ties to the certified gradient — so this and it
-    together say the DP step's update is the certified gradient of the global-batch step.
+    at `N := R·N`, whose nodes that capstone ties to the certified per-op gradient at the chain
+    cotangent — so this and it together say each all-reduced gradient equals the single-device
+    node at the global batch.
     `r34_net_syncTiedB_smoothedCE` discharges the hypothesis for the label-smoothed chain the
     artifacts emit.
 
-    ⛔ Before 2026-09-21 the DP render normalised per replica and this statement was false:
-    `DataParallel.dpMeanGrad_ne_globalBatchGrad` is the witness, and stays as the statement of what
-    those runs did. -/
+    Note: with per-replica BatchNorm the mean of the replica gradients is not the global-batch
+    gradient in general; `DataParallel.dpMeanGrad_ne_globalBatchGrad` is a two-replica,
+    one-parameter counterexample. -/
 theorem r34_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (w : R34BWeights nCls)
     (X : Vec ((R * N) * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (G : Vec ((R * N) * nCls))
@@ -670,7 +671,7 @@ theorem r34_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : 
     r34_idblock_syncTiedB R hR N 7 7 hN h7 h7 "s4b1" xN cotN vN epsStr w.e1 (r34Pre15 (R * N) w X) eE1 dyE1 sE1,
     r34_head_syncTiedB R hR N 7 7 xN cotN (r34Pre16 (R * N) w X) gs G hgs⟩
 
-/-- ⭐⭐ **…and at the loss the artifacts emit.** `r34_net_syncTiedB` with its cotangent hypothesis
+/-- **…and at the loss the artifacts emit.** `r34_net_syncTiedB` with its cotangent hypothesis
     discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
     (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
     single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced

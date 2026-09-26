@@ -6,44 +6,52 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 /-! # PoC: the MNIST-CNN train step, proof-tied to the certified SGD step
 
 The CNN analogue of `LinearFold` / `MlpFold`. `MainMnistCnnVerified`
-trains on `verified_mlir/cnn_train_step.mlir`; this file makes the *parameter
-updates* of that module `den`-faithful — each emitted SGD op denotes the certified
-(`fderiv`/VJP-derived) softmax-CE loss-descent step.
+trains on `verified_mlir/cnn_train_step.mlir`; this file states what the *parameter
+updates* of that module denote: each emitted SGD op denotes
+`θ − lr·(certified per-layer Jacobian · the cotangent the rendered backward chain feeds it)`,
+and the output weight `W₅` is folded to the whole-loss gradient (`cnn_W5_tied_totalloss`).
 
 The CNN has two kinds of parameter: the **dense classifier head** (`W₃,W₄,W₅` +
 biases — structurally a 3-layer MLP over the flattened pool output) and the
 **convolution kernels/biases** (`W₁,W₂` + biases). The dense head reuses the
 `weightSgd`/`biasSgd` `SHlo` ops added in `LinearFold` (its `den`s certified
-via the M2 `weight_grad_bridge`/`bias_grad_bridge` at the `mlpCotOut`-style chain
+via `weight_grad_bridge`/`bias_grad_bridge` at the `mlpCotOut`-style chain
 cotangents — the head is a 3-layer MLP, so the IR `mlpCotOut0/1` apply verbatim).
-The conv layers use the **new core ops** `convWeightSgd`/`convBiasSgd`
+The conv layers use the core ops `convWeightSgd`/`convBiasSgd`
 (StableHLO.lean): their `den` is `flatten(W − lr·conv2dWeightGrad…)` /
 `b − lr·conv2dBiasGrad…`, proven = certified by the chain-pinned conv bridges
 `cnn_render_conv{W,b}{1,2}_chain_certified` (CnnChainClose.lean) at the cotangents
-the CNN backward chain actually delivers (`cnnChainCotW1`/`cnnChainCotW2`).
+the CNN backward chain delivers (`cnnChainCotW1`/`cnnChainCotW2`).
 
 (Namespace/name lengths are kept short on purpose: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)'s
 three-axiom closure check greps `#print axioms` output per line, which Lean wraps
 past ~120 cols — long qualified names would split the benign triple across lines
 and false-fail the check.)
 
-## What is closed here (kernel, `[propext, Classical.choice, Quot.sound]`)
+## What is proved here (kernel, `[propext, Classical.choice, Quot.sound]`)
 
 * `cW1_den`/`cb1_den`/`cW2_den`/`cb2_den` — the four emitted **conv** param ops
-  (`convWeightSgd`/`convBiasSgd`), fed the chain cotangent, denote the certified
-  conv kernel/bias loss-descent step. The conv tail is now "under `den`" exactly
-  like the forward.
-* `dW5_den` — the output-layer **dense-head** op (`weightSgd`) denotes the certified
-  dense loss-descent step; the other five head ops are `Cifar8PoC.denseW_den` /
+  (`convWeightSgd`/`convBiasSgd`), fed the chain cotangent `c`, denote
+  `θ − lr·(certified ∂conv/∂θ · c)`.
+* `dW5_den` — the output-layer **dense-head** op (`weightSgd`) denotes
+  `W₅ − lr·(certified ∂dense/∂W₅ · dy)`; the other five head ops are `Cifar8PoC.denseW_den` /
   `Cifar8PoC.denseB_den` at their layer.
+* `cnn_W5_tied_totalloss` — at the emitted loss cotangent, the `W₅` op denotes
+  `W₅ − lr·∂(crossEntropy ∘ forward)/∂W₅`.
+* `cnn_conv_tied_certified` — the four conv ops at the real forward activations and the chain
+  cotangents driven by the emitted loss cotangent.
 
-## Honest residual (the boundary shared with the forward `SHlo` `den`)
+## Scope
 
-* **Cotangent subgraph ⇄ rendered SHlo.** The cotangents here are the *chain*
-  cotangents (`cnnChainCotW1/2`, `mlpCotOut0/1`), proven = the rendered backward
-  form in `CnnChainClose` (`cnnChainCotW{1,2}_eq`) and `IR` (`mlpCotOut*_denote`);
-  pinning each to the exact emitted `selectPos`/`dotOut`/`convBack`/`maxPoolBack`
-  SHlo subgraph (as `MlpPoC.cot{0,1}_den` does for the MLP) is the remaining polish.
+* **Chain cotangent vs loss gradient.** The conv cotangents are the rendered chain
+  (`cnnChainCotW1`, `cnnChainCotW2`: relu masks, select-and-scatter pool-back, conv-back). No theorem here
+  states that they equal the loss gradient at the conv outputs.
+* **Cotangent subgraph ⇄ rendered SHlo.** The chain cotangents (`cnnChainCotW1/2`,
+  `mlpCotOut0/1`) are proven = the rendered backward form in `CnnChainClose`
+  (`cnnChainCotW1_eq`, `cnnChainCotW2_eq`) and `MlpTrainStep` (`mlpCotOut0_denote`,
+  `mlpCotOut1_denote`); they are not pinned
+  to the emitted `selectPos`/`dotOut`/`convBack`/`maxPoolBack` SHlo subgraph (as
+  `MlpPoC.cot0_den`/`MlpPoC.cot1_den` do for the MLP).
 * **Per-op `pretty` lexing** (shared with the whole suite) + **ℝ → Float32**.
 -/
 
@@ -141,9 +149,8 @@ renderer feeds the cotangent the emitted loss graph `sub(softmaxDiv(expe(logits)
 with `logits` the REAL conv-forward output `mnistCnnNoBnForward … x`. The lemma below pins that graph
 to the composed softmax-CE gradient *of the conv forward* (the cnn analogue of `mlpLossCot_den`), and
 the headline folds the dense output weight `W₅` to the whole-loss gradient `∂CE/∂W₅` — so the output
-layer is tied forward(conv+dense)→softmax-CE→gradient. (The CONV layers `W₁`/`W₂` need the conv
-backward chain composed — the hand-written `selMask4`/`scatter`/`convBack` rendered as `SHlo` + the
-conv cotangent-subgraph pins — which is the bigger conv-side work; see §1a of the planning doc.) -/
+layer is tied forward(conv+dense)→softmax-CE→gradient. The conv layers `W₁`/`W₂` are stated at their
+chain cotangents in the next section. -/
 
 /-- **The emitted loss-cotangent graph denotes the composed softmax-CE gradient of the CONV forward**
     (`= softmax(mnistCnnNoBnForward … x) − onehot = ∂CE/∂logits` at the real conv-forward logits). -/
@@ -195,22 +202,26 @@ theorem cnn_W5_tied_totalloss {ic c h w d1 nClasses kH kW : Nat}
   -- are `dense W₅ b₅ (relu … pool)` — unfold both to match.
   simp only [mnistCnnNoBnForward, mnistLinear, Function.comp_apply]
 
-/-! ## The CONV fold — the conv kernels/biases tied through the real conv forward
+/-! ## The CONV fold — the conv kernels/biases at the real conv forward
 
 The four conv `*_den` theorems above hold for FREE conv activations (`ac1`/`ac2`/`hc2`) and a free
 cotangent. The capstone below instantiates them at the **real conv forward** (`ac1`/`hc1`/`hc2`/`ac2`
 = the actual `conv₁`/`relu`/`conv₂`/`relu` outputs, `h3`/`h4` the dense pre-acts the head-backward
-reads) and the **composed** top cotangent `g = softmax(mnistCnnNoBnForward x) − onehot` (`cnnLossCot_den`).
-So all four conv param ops denote `θ − lr·(certified ∂convₖ/∂θ · the conv backward-chain cotangent the
-real loss drives)` — `cnnChainCotW2` for conv₂, `cnnChainCotW1 W₂ hc1 cotW2` for conv₁ (it crosses one
-more conv-back). Together with the dense head (`cnn_W5_tied_totalloss` + the `*_den` at the composed
-cotangent) the WHOLE cnn train step is now den-composed forward→loss→backward — no free activations,
-no symbolic cotangent. (Residual: the conv backward is rendered hand-written, so the cotangent SSA
-↔ `cnnChainCot` correspondence is the per-op trust, same kind the whole suite carries; making it a
-printed `SHlo` subgraph with a `den` pin — the cnn analogue of `MlpPoC.cot{0,1}_den` — is the polish.) -/
+reads) and the chain cotangents driven by the composed top cotangent
+`g = softmax(mnistCnnNoBnForward x) − onehot` (`cnnLossCot_den`). So all four conv param ops denote
+`θ − lr·(certified ∂convₖ/∂θ · c)` with `c` the rendered backward-chain cotangent — `cnnChainCotW2`
+for conv₂, `cnnChainCotW1 W₂ hc1 cotW2` for conv₁ (it crosses one more conv-back). No theorem here
+states that `c` equals the loss gradient at the conv output. Together with the dense head
+(`cnn_W5_tied_totalloss` + the `*_den` at the composed cotangent) the WHOLE cnn train step is
+den-composed forward→loss→backward — no free activations, no symbolic cotangent. The
+correspondence between the hand-written conv-backward SSA values and `cnnChainCotW1`/`cnnChainCotW2`
+is the per-op trust the whole suite carries. -/
 
-/-- **Whole cnn conv tail, tied.** All four conv kernel/bias ops, at the real conv forward and the
-    composed softmax-CE cotangent, denote the certified loss-descent step. -/
+/-- **Whole cnn conv tail, tied.** All four conv kernel/bias ops, at the real conv forward, denote
+    `θ − lr·(certified ∂convₖ/∂θ · c)` with `c` the rendered backward-chain cotangent
+    (`cnnChainCotW2`, `cnnChainCotW1`: relu masks, select-and-scatter pool-back, conv-back) driven
+    by the emitted softmax-CE cotangent `g`. That `c` equals the loss gradient at the conv output is
+    not stated. -/
 theorem cnn_conv_tied_certified {ic c h w d1 nClasses kH kW : Nat}
     (xN wN bN lrStr cotN : String)
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)

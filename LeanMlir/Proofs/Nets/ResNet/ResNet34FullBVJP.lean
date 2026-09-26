@@ -4,27 +4,27 @@ import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Foundation.HeadLayers
 import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 
-/-! # ResNet-34's whole-net input-VJP at TRUE BATCH-NORM (T1, the VJP half)
+/-! # ResNet-34's whole-net input-VJP at TRUE BATCH-NORM
 
 `ResNet34FullB.lean` states the batch-BN forward and its typed graph. This file gives that forward
 a certified `HasVJPAt` at the paper depth — the peer of what `MobileNetV2FullBVJP.lean` does
-for MobileNetV2's seventeen bottlenecks, and the last piece of T1 in `formalization.yaml` 4e's port.
+for MobileNetV2's seventeen bottlenecks.
 
-## No new mathematics, and one new lemma one tier down
+## No new mathematics, and one lemma one tier down
 
 Every block VJP is already proven at `bnBatchLA`: `r34BasicBlockBHasVJPAt` and
 `r34DownBlockBHasVJPAt` (`ResNet34BackB0.lean`) are exactly the two block shapes
 `ResNet34FullB.lean`'s `r34IdB` / `r34DownB` unfold to. The bundle lemmas below are delegations
 in the `EfficientNetFullB0` style, and the whole net is those blocks' `CertLayer`s composed.
 
-⭐ The one thing that did not exist is `batchMapHasVJPAt` ([`Foundation/BatchMapVJPAt.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/BatchMapVJPAt.lean),
-written for this): r34's stem ends in `batchMap N (maxPool3s2Flat 64 56 56)` and a max-pool has no
-derivative at a tie, so the GLOBAL `batchMapHasVJP` cannot lift it. The per-example pool VJP at a
-`Vec` point was already there (`maxPool3s2FlatHasVJPAtVec`), so the batched pool is two lines.
+The one lemma this needs below the net is `batchMapHasVJPAt` ([`Foundation/BatchMapVJPAt.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/BatchMapVJPAt.lean)):
+r34's stem ends in `batchMap N (maxPool3s2Flat 64 56 56)` and a max-pool has no
+derivative at a tie, so the GLOBAL `batchMapHasVJP` cannot lift it. With the per-example pool VJP
+at a `Vec` point (`maxPool3s2FlatHasVJPAtVec`), the batched pool is two lines.
 
 ## The hypothesis budget
 
-⚠ **Pointwise (`HasVJPAt`), not global, and necessarily.** relu is kinked. ⛔ And r34 carries
+**Pointwise (`HasVJPAt`), not global, and necessarily.** relu is kinked. And r34 carries
 **two** kink clauses per block, not one: the body's mid-relu AND the post-residual outer relu.
 That outer relu is ResNet's structural difference from MobileNetV2/EfficientNet, whose residual
 add IS the block output. Sixteen blocks therefore carry 32 clauses, plus the stem's relu and the
@@ -32,16 +32,17 @@ stem pool's no-tie condition — bundled per block into `R34IdSmoothAt` / `R34Do
 those 18 bundles into one `R34SmoothAtB` (the positivity bundles into `R34PosB`), so the apex
 binds two hypotheses, exactly as `MobileNetV2FullBVJP.lean`'s `MNV2SmoothAtB` / `MNV2PosB`.
 
-⚠ The pool's condition is **per example** (`∀ r : Fin N, MaxPool3s2Smooth …` on that example's
+The pool's condition is **per example** (`∀ r : Fin N, MaxPool3s2Smooth …` on that example's
 row), because a tie is a property of one image's window, not of the batch. That is the shape
 `batchMapHasVJPAt` consumes.
 
-The running activations are named `r34Pre1 … r34Pre16` so each bundle can be STATED at the
+The running activations are named `r34Pre0 … r34Pre16` so each bundle can be STATED at the
 activation entering its block without a sixteen-deep nested application inline; `r34Pre16` doubles
 as the trunk, and `resnet34ForwardBFull_eq_chain` bridges it back to the committed
 nested-application forward.
 
-⭐ `N` is a variable throughout: this tier carries no numerals.
+`N` is a variable throughout: the batch size is never pinned (the 224-px resolution and the
+64…512 widths are literals).
 -/
 
 namespace Proofs
@@ -110,8 +111,8 @@ noncomputable def r34DownBHasVJPAt (N h w : Nat) {ic oc : Nat} (p : R34DownW ic 
   StableHLO.r34DownBlockBHasVJPAt N p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp v hs.hmid hs.hout
 
-/-- ⭐ Stem VJP: the 7×7/s2 conv-bn-relu, then the batched 3×3/s2 pool. The pool half is where
-    `batchMapHasVJPAt` earns its existence. -/
+/-- Stem VJP: the 7×7/s2 conv-bn-relu, then the batched 3×3/s2 pool. The pool half is lifted
+    over the batch by `batchMapHasVJPAt`. -/
 noncomputable def r34StemBHasVJPAt (N h w : Nat) {ic oc : Nat}
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
     (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
@@ -141,7 +142,7 @@ theorem r34StemB_differentiableAt (N h w : Nat) {ic oc : Nat}
       (fun r => maxPool3s2Flat_differentiableAt_vec _ (hpool r) hc hh hw)).comp x
     (StableHLO.cbReluStridedB_differentiableAt N Ws bs εs hεs γs βs x hrelu)
 
-/-- ⭐ The head is GLOBAL — GAP and dense are both smooth everywhere, and each is `batchMap` of a
+/-- The head is GLOBAL — GAP and dense are both smooth everywhere, and each is `batchMap` of a
     per-example op, so `batchMapHasVJP` suffices and no smoothness hypothesis appears. -/
 noncomputable def r34HeadBHasVJP (N h w : Nat) {c nCls : Nat}
     (Wd : Mat c nCls) (bd : Vec nCls) : HasVJP (r34HeadB N h w Wd bd) :=
@@ -283,7 +284,7 @@ structure R34PosB {nCls : Nat} (w : R34BWeights nCls) : Prop where
   e0 : R34IdPos w.e0
   e1 : R34IdPos w.e1
 
-/-- ⭐ **Every relu is away from its kink and the stem pool has no tie, each at the activation
+/-- **Every relu is away from its kink and the stem pool has no tie, each at the activation
     its block actually sees**: the stem's clauses at the image, block `k`'s at `r34Pre(k-1)`. The
     head has none (GAP and dense are smooth). -/
 structure R34SmoothAtB (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Prop where
@@ -383,7 +384,7 @@ theorem r34Pre16_apply (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     r34Pre16 N w x = r34IdB N 7 7 w.e1 (r34Pre15 N w x) := by
   rw [r34Pre16, Function.comp_apply]
 
-/-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** —
+/-- **The committed nested-application forward IS the layered chain the VJP is stated on** —
     the r34 peer of `mobilenetv2ForwardBFull_eq_chain`, and what lets the VJP be about
     `resnet34ForwardBFull` rather than about a re-spelling of it. -/
 theorem resnet34ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
@@ -400,7 +401,7 @@ theorem resnet34ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : R34BWeights nC
 --   by `Nat` literal arithmetic, and the peel below never has to (`planning/certlayer_nets.md` §6).
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **ResNet-34 as one certified layer**, at every batch size. Its `.faithful` is a whole-net
+/-- **ResNet-34 as one certified layer**, at every batch size. Its `.faithful` is a whole-net
     backward graph, stem pool included, proven to denote the VJP. -/
 noncomputable def r34NetLayer (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq : R34PosB w) :
     StableHLO.CertLayer (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))) (N * nCls) :=
@@ -434,11 +435,12 @@ theorem r34NetLayer_fwd_apply (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq 
   rw [r34StemLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34DownLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34DownLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd, r34DownLayer_fwd, r34IdLayer_fwd, r34IdLayer_fwd,
     r34HeadLayer_fwd, resnet34ForwardBFull]
 
-/-- `R34SmoothAtB` is the layer's `.ok`: one `comp_ok_of` per block, each naming its block's
-    input `r34PreK`. ⚠ At the literal widths the activation step must be a `rw`: the same step
-    by `rfl` (fine at ResNet-50's binder `q`) is a kernel deep recursion already at block 1. -/
+/-- `R34SmoothAtB` is the layer's `.ok`. -/
 theorem r34SmoothAtB_ok (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq : R34PosB w)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) : (r34NetLayer N w hq).ok x := by
+  -- One `comp_ok_of` per block, each naming its block's input `r34PreK`. At the literal widths
+  -- the activation step must be a `rw`: the same step by `rfl` (fine at ResNet-50's binder `q`)
+  -- is a kernel deep recursion already at block 1.
   refine StableHLO.CertLayer.comp_ok_of ⟨hx.stem, hx.pool⟩ (r34Pre0 N w x)
     (by rw [r34StemLayer_fwd, r34Pre0_apply]) ?_
   refine StableHLO.CertLayer.comp_ok_of ⟨⟨hx.a0.hmid, trivial⟩, hx.a0.hout⟩ (r34Pre1 N w x)
@@ -475,23 +477,24 @@ theorem r34SmoothAtB_ok (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq : R34P
     (by rw [r34IdLayer_fwd, r34Pre16_apply]) ?_
   exact ⟨trivial, trivial⟩
 
-/-- ⭐⭐ **ResNet-34 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
+/-- **ResNet-34 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
     basic blocks.** `r34NetLayer`'s `.vjp`, read at the layered chain, under two hypotheses: `R34PosB` (every `ε > 0`) and `R34SmoothAtB` (every relu clause and the pool's
-    no-tie, each at its block's own input). T1's VJP half for `formalization.yaml` 4e's port.
+    no-tie, each at its block's own input).
 
-    ⚠ Pointwise, and necessarily: relu is kinked. ⛔ Each block contributes TWO clauses — the
+    Pointwise, and necessarily: relu is kinked. Each block contributes TWO clauses — the
     body's mid-relu and the post-residual OUTER relu — where MobileNetV2's bottleneck contributes
     two relu6 clauses and EfficientNet's MBConv contributes none.
 
-    ⭐ The head takes no hypothesis at all (GAP and dense are smooth, and each is `batchMap` of a
-    per-example op), and `N` is a variable: this tier carries no numerals. -/
+    The head takes no hypothesis at all (GAP and dense are smooth, and each is `batchMap` of a
+    per-example op), and `N` is a variable: the batch size is never pinned (the 224-px resolution
+    and the 64…512 widths are literals). -/
 noncomputable def resnet34ForwardBFullHasVJPAt (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :
     HasVJPAt (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x :=
   (funext fun v => (r34NetLayer_fwd_apply N w hq v).trans (resnet34ForwardBFull_eq_chain N w v)
     : (r34NetLayer N w hq).fwd = _) ▸ (r34NetLayer N w hq).vjp x (r34SmoothAtB_ok N w hq x hx)
 
-/-- ⭐⭐ **Public correctness theorem**: the sixteen-block batch-BN backward equals the
+/-- **Public correctness theorem**: the sixteen-block batch-BN backward equals the
     `pdiv`-contracted Jacobian of `resnet34ForwardBFull` ITSELF — the committed
     nested-application forward `ResNet34FullB.lean` defines and
     `resnet34FwdGraphBFull_faithful` proves the typed graph denotes — not of the layered chain
@@ -505,7 +508,7 @@ theorem resnet34ForwardBFullHasVJPAt_correct (N : Nat) {nCls : Nat} (w : R34BWei
   rwa [show resnet34ForwardBFull N w = r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w
       from funext (resnet34ForwardBFull_eq_chain N w)]
 
-/-- ⭐ The committed forward is differentiable at every smooth point — the layer's `.diff`. What
+/-- The committed forward is differentiable at every smooth point — the layer's `.diff`. What
     the seal's `seal_differentiableAt` needs. -/
 theorem resnet34ForwardBFull_differentiableAt (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :

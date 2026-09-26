@@ -5,18 +5,17 @@ import LeanMlir.Proofs.Training.JacobianSeal
 /-!
 # ResNet-34's non-degeneracy seal, on the full-width batched net (levels 2 and 3)
 
-`planning/full_width_seals.md` §4.1. `ResNet34FullBVJP.lean` proves
+`ResNet34FullBVJP.lean` proves
 `resnet34ForwardBFullHasVJPAt`: the whole-net VJP at any `(w, x)` that satisfies 32 relu
 clauses, a stem clause and the stem pool's no-tie. A *conditional* theorem of that shape says
-nothing unless its hypotheses are jointly satisfiable at a point with a nonzero Jacobian — and
-until now that was exhibited only on a 2-channel per-example proxy (`ResNet34Live*`, retired with
-this file). This file exhibits it on `resnet34ForwardBFull` itself: 64→512 channels, `[3,4,6,3]`
+nothing unless its hypotheses are jointly satisfiable at a point with a nonzero Jacobian. This
+file exhibits such a point on `resnet34ForwardBFull` itself: 64→512 channels, `[3,4,6,3]`
 blocks, the 7×7/s2 stem, the 3×3/s2 pool, **batch** BatchNorm, at `224×224`.
 
 ## The witness
 
-Weights are *structural*, not trained (a trained-weight witness is a numeric fact about millions of
-floats, which is what the training runs evidence — `planning/full_width_seals.md` §7):
+Weights are *structural*, not trained (a trained-weight witness would be a numeric fact about
+millions of floats):
 
 * every residual body is zeroed, so it is the constant `β₂ = 1` whatever `γ₂` is
   (`BatchSeal.bnBatchLA_const`: a constant channel has variance 0, so batch BN returns `β`). On a
@@ -24,9 +23,9 @@ floats, which is what the training runs evidence — `planning/full_width_seals.
   (`sealIdB_eq`) — and the shift is batch-uniform, hence invisible to the carrier;
 * every channel-changing conv (the stem, the three 1×1/s2 projections) is a **centre-tap
   broadcast** (`BatchSeal.ctK`): every output channel is a copy of input channel 0 read through the
-  kernel's centre tap. ⚠ Centre tap, not a general kernel, because `conv2d` zero-pads: a conv of a
-  constant is not constant at the border, but the centre tap is in range at every cell. ⚠⚠ And a
-  *broadcast*, not the plan's diagonal-on-channel-0: a kernel feeding only output channel 0 leaves
+  kernel's centre tap. Centre tap, not a general kernel, because `conv2d` zero-pads: a conv of a
+  constant is not constant at the border, but the centre tap is in range at every cell. And a
+  *broadcast*, not a diagonal on channel 0: a kernel feeding only output channel 0 leaves
   the stem's other 63 channels constant, and a constant channel ties every 3×3 window of the pool
   — `R34PoolSmoothAt` quantifies over channels, so the tap has to reach all of them;
 * `γ = 1`, `β = 160` at the stem and the projections, `ε = 1` everywhere. `√(N·h·w) ≤ √25088 < 160`
@@ -39,9 +38,9 @@ floats, which is what the training runs evidence — `planning/full_width_seals.
 `N = 2` and the input is `sealX t = sealBase + t • sealV`: both examples carry the same strictly
 decreasing ramp in channel 0, and `sealV` adds `t` to **all of example 0's channel 0**.
 
-## Why the carrier is a batch difference (§3.2 of the plan)
+## Why the carrier is a batch difference
 
-⭐⭐ `bnBatchLA` normalizes each channel over all `N·h·w` cells, so the proxies' channel-difference
+`bnBatchLA` normalizes each channel over all `N·h·w` cells, so a within-example channel-difference
 carrier is exactly what a channel's own mean subtracts, and at `N = 1` this net is constant in its
 input. The carrier here is `EDiff`: example 0's slab is example 1's plus a per-channel constant.
 Batch BN keeps it and scales it by `γ_c · istd_c` (`BatchSeal.bnBatchLA_exdiff`) because the two
@@ -150,7 +149,7 @@ theorem seal_dn_body (N h w ic oc : Nat) (hn : 0 < N * (h * w))
         (sealDnW ic oc).ε₁ (sealDnW ic oc).γ₁ (sealDnW ic oc).β₁) v = fun _ => (1 : ℝ) :=
   projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1 (fun _ => rfl) _
 
-/-- ⭐ **The structural identity block is the shift `a ↦ a + 1`** on a nonnegative activation: the
+/-- **The structural identity block is the shift `a ↦ a + 1`** on a nonnegative activation: the
     body is the constant `1` and the post-residual relu is off (`1 + a ≥ 1 > 0`). -/
 theorem sealIdB_eq (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w)))
     (hv : ∀ k, 0 ≤ v k) :
@@ -168,7 +167,7 @@ theorem sealIdB_eq (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h *
   show relu (N * (c * h * w)) (residual _ v) k = v k + 1
   rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [hv i]), hres k]
 
-/-- ⭐ **The structural downsample is its projection plus one**: the body is the constant `1` and
+/-- **The structural downsample is its projection plus one**: the body is the constant `1` and
     the post-residual relu is off (`proj > 0`). -/
 theorem sealDnB_eq (N h w ic oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
@@ -191,7 +190,7 @@ theorem sealDnB_eq (N h w ic oc : Nat) (hn : 0 < N * (h * w))
   rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [sealProj_pos N h w ic oc hm v i]),
     hres k]
 
-/-- ⭐ **The stem with its relu removed**: pool ∘ bn ∘ strided conv. The pool stays — it is the
+/-- **The stem with its relu removed**: pool ∘ bn ∘ strided conv. The pool stays — it is the
     net's only remaining kink, and the carrier crosses it by `maxPool3s2_shift`. -/
 theorem r34StemB_eq {N h w ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
     (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
@@ -241,7 +240,7 @@ theorem seal_id_pos (c : Nat) : R34IdPos (sealIdW c) := ⟨one_pos, one_pos⟩
 /-- All three `ε`s of a structural downsample are positive. -/
 theorem seal_dn_pos (ic oc : Nat) : R34DownPos (sealDnW ic oc) := ⟨one_pos, one_pos, one_pos⟩
 
-/-- ⭐ **The identity block's two relu clauses**: the mid-relu sees the constant `β₁ = 1`
+/-- **The identity block's two relu clauses**: the mid-relu sees the constant `β₁ = 1`
     (weight-only), the outer one sees `1 + activation > 0`. -/
 theorem seal_id_smooth (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w)))
     (hv : ∀ k, 0 ≤ v k) : R34IdSmoothAt N h w (sealIdW c) v where
@@ -259,7 +258,7 @@ theorem seal_id_smooth (N h w c : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c *
     intro hc
     linarith [hv k]
 
-/-- ⭐ **The downsample's two relu clauses** — both weight-only: the mid-relu sees `β₁ = 1`, the
+/-- **The downsample's two relu clauses** — both weight-only: the mid-relu sees `β₁ = 1`, the
     outer one `proj + 1 > 0` with `proj > 0` by the margin. No hypothesis on the activation. -/
 theorem seal_dn_smooth (N h w ic oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
@@ -331,7 +330,7 @@ theorem Zs_bn_pos (t : ℝ) (k : Fin (2 * (64 * (2 * 56) * (2 * 56)))) :
   rw [Zs]
   exact ctConv_bn_pos 64 7 7 56 56 margin_stem t k
 
-/-- ⭐ The stem pool has no tie at the witness — the ramp is positionally injective and BN is
+/-- The stem pool has no tie at the witness — the ramp is positionally injective and BN is
     injective within a channel. -/
 theorem seal_pool_smooth (t : ℝ) :
     R34PoolSmoothAt 2 56 56
@@ -605,7 +604,7 @@ theorem seal_smooth (nCls : Nat) (t : ℝ) : R34SmoothAtB 2 (sealW nCls) (sealX 
     sc_c0 nCls t, sc_c1 nCls t, sc_c2 nCls t, sc_c3 nCls t, sc_c4 nCls t,
     sc_d4 nCls t, sc_e0 nCls t, sc_e1 nCls t⟩
 
-/-- ⭐⭐ **The whole-net VJP at the witness** — every one of the 32 relu clauses, the stem clause
+/-- **The whole-net VJP at the witness** — every one of the 32 relu clauses, the stem clause
     and the pool's no-tie discharged at `(sealW nCls, sealX t)`, on `resnet34ForwardBFull`
     itself (transported through `resnet34ForwardBFull_eq_chain`). -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
@@ -658,7 +657,7 @@ noncomputable def dP3 (nCls : Nat) (t : ℝ) : Fin 256 → ℝ :=
 noncomputable def dP4 (nCls : Nat) (t : ℝ) : Fin 512 → ℝ :=
   fun ci => dP3 nCls t 0 * bnIstd (2 * (7 * 7)) (bnRowLA 2 512 7 7 (Zp4 nCls t) ci) 1
 
-/-- ⭐ The carrier at the stem's output: the centre-tap conv copies channel 0's `t` to every
+/-- The carrier at the stem's output: the centre-tap conv copies channel 0's `t` to every
     channel, the BN scales it by `istd`, and the pool carries it through unchanged. -/
 theorem ed0 (nCls : Nat) (t : ℝ) : EDiff (dS t) (r34Pre0 2 (sealW nCls) (sealX t)) := by
   rw [pc0]
@@ -767,8 +766,8 @@ theorem head_diff (nCls : Nat) (hn : 0 < nCls) (v : Vec (2 * (512 * 7 * 7))) (δ
 -- § 10. The output difference along the ray is `t · R t`
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The positive, continuous nonlinear factor**: one `istd` per BN on the carrier's path —
-    the stem's and the three projections'. ⚠ No `γ` appears because every carrier-path `γ` is `1`,
+/-- **The positive, continuous nonlinear factor**: one `istd` per BN on the carrier's path —
+    the stem's and the three projections'. No `γ` appears because every carrier-path `γ` is `1`,
     and no BN-*variance* derivative is ever taken: `R` enters only through the factor `t · R t`,
     whose derivative at `0` is `R 0` for any `R` continuous there. -/
 noncomputable def Rr (nCls : Nat) (t : ℝ) : ℝ :=
@@ -782,7 +781,7 @@ theorem Rr_pos (nCls : Nat) (t : ℝ) : 0 < Rr nCls t :=
     (mul_pos (bnIstd_pos _ 1 one_pos)
       (mul_pos (bnIstd_pos _ 1 one_pos) (bnIstd_pos _ 1 one_pos)))
 
-/-- ⭐⭐ **The class-0 difference between the two examples, along the ray, is `t · R t`.** The
+/-- **The class-0 difference between the two examples, along the ray, is `t · R t`.** The
     carrier vanishes at the base (both examples carry the same ramp), so the product rule's cross
     terms all carry a factor `t`. -/
 theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
@@ -822,7 +821,7 @@ theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
 -- § 12. The seal
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN ResNet-34 at the
+/-- **Level 2 — the witness is non-degenerate**: the full-width batch-BN ResNet-34 at the
     structural weights is NOT constant in its input. Straight from the ray: the class-0 difference
     between the two examples is `R 1 > 0` at `t = 1` and `0` at the base. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
@@ -830,7 +829,7 @@ theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
       ≠ resnet34ForwardBFull 2 (sealW nCls) (sealX 0) :=
   ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos nCls 1).ne')
 
-/-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** `fderiv_ne_zero_of_ray` at
+/-- **Level 3 — the whole-net Jacobian is nonzero at the witness.** `fderiv_ne_zero_of_ray` at
     the readout "example 0's class 0 minus example 1's class 0": along the ray it is `t · R t` with
     `R` continuous and `R 0 > 0`, so its derivative at `0` is `R 0 ≠ 0`. -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
@@ -839,7 +838,7 @@ theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
     (seal_differentiableAt nCls 0) (Rr_pos nCls 0).ne'
     (hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt)
 
-/-- ⭐⭐ **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
+/-- **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
     `[3,4,6,3]`, 224×224** ResNet-34 — `resnet34ForwardBFull`, the forward the ImageNet artifacts
     run — is **not the zero map** at the witness. The conditional apex
     `resnet34ForwardBFullHasVJPAt` is therefore not vacuous, and it is not vacuous on the net

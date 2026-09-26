@@ -2,57 +2,58 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 
-/-! # ⭐⭐ `r50InputGradB` IS the certified whole-net ResNet-50 gradient
+/-! # `r50InputGradB` IS the certified whole-net ResNet-50 gradient
 
-Tier **T6** of `planning/archive/proofs_tier_to_paper_nets.md` §3.5(e) — the last of the four statements
-ResNet-50 was missing that says anything ((d)'s two float budgets are the vacuous half). T1, T2 and
-T3 landed 2026-09-06; with this the net is certified from its ℝ forward through its typed graph,
-its 161-parameter train-step tie and now its whole-net input gradient.
+The whole-net input-gradient tie for `resnet50ForwardBFull`, the [3,4,6,3] bottleneck ladder at
+batch BatchNorm, at a variable batch `N` and resolution `q`. The parameter-gradient tie is
+`ResNet50StepTieB`'s.
 
-## ⭐⭐ Almost all of it is ResNet-34's, reused rather than rewritten
+## Almost all of it is ResNet-34's, reused rather than rewritten
 
 `resnet50ForwardBFull` is `r34HeadB ∘ [3,4,6,3] bottlenecks ∘ r34StemB` — the stem and head are
-literally ResNet-34's functions at R50's widths (§3.5b) — so §4.2d's file supplies:
+literally ResNet-34's functions at R50's widths — so `ResNet34BackCertifiedTieB` supplies:
 
 * `cbReluStridedBBack_eq_vjp_backward` and `r34HeadBBack_eq_vjp_backward`, the two endpoint ties;
 * `maxPool3s2FlatBackB` and its `rfl` tie, plus the `StableHLO.batchMapAux` lift the batched
   3×3/s2 pool needed;
 * `opaqueA0 … A16` and **`r34BFullHasVJPAt` itself** — the generic eighteen-stage apex.
   [3,4,6,3] is sixteen blocks for both nets, so the chain is the same construction and a second
-  copy would be two writers for one fact. ⚠ It is ResNet-34's only by where it was written; every
+  copy would be two writers for one fact. It is ResNet-34's only by where it was written; every
   dimension in it is a variable. The prefixes themselves are [`Foundation/OpaquePrefix.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/OpaquePrefix.lean)'s.
 
 What this file adds is the sixteen bottleneck slots, the tie, its `pdiv` reading, and the shape
 check `resnet50ForwardBFull_eq_slots`.
 
-## ⚠ The two things ResNet-34's file did not face
+## The two things ResNet-34's file did not face
 
 **`q` is a BINDER.** One statement covers `resnet50in_fwd` (`q = 7`, 224 px) and
-`resnet50in160_fwd` (`q = 5`, 160 px — the net the quoted 76.66% trains). ⛔ So every dimension is
+`resnet50in160_fwd` (`q = 5`, 160 px). So every dimension is
 an explicit `2 * (…)` nest rather than `8 * q`: those are equal Nats and NOT definitionally equal
 terms at a variable `q`. And **`0 < q` is a real hypothesis** where ResNet-34 needed none — the
 stem pool's VJP needs its output grid nonempty, and at literal 56 that closed by `norm_num`.
 
-⚠ It stays a SMOOTH-POINT statement, and ResNet-50 carries the heaviest kink budget in the suite:
-**three relu clauses per bottleneck** — the two interior ones and the post-residual outer one —
-where ResNet-34's basic block has two and EfficientNet's MBConv none. Those are §3.5b's bundles,
-reused verbatim; this file adds no hypothesis of its own.
+## Scope
 
-⛔ **The blocks stay opaque and there is no `backward_unique` step**, for §4.2d's measured reason:
-instantiating a tie of this shape at the concrete blocks is a KERNEL deterministic timeout when the
-witnesses are `HasVJPAt` carrying a saved activation. B0 takes that step only because swish has no
-kink. The shape check is what replaces it.
-
-⛔ **What this does NOT reach.** `resnet50in160_lambaccdp8x64bce` all-reduces every gradient
-(`allReduceMeanF`), and this is at the per-replica gradient before it (§4d). And it is about the INPUT gradient;
-the 161 parameter gradients are `ResNet50StepTieB.lean`'s tie (§3.5c).
+A smooth-point statement: the tie assumes `0 < q`, `0 < εs`, the stem relu clause (`h_stem`) and
+the stem pool's per-example no-tie (`h_pool`), and takes each of the sixteen bottlenecks as an
+opaque `HasVJPDiffAt` witness at its running activation (a bottleneck's three relu clauses — the
+two interior ones and the post-residual outer one — are the caller's, inside that witness).
+`resnet50in160_lambaccdp8x64bce` all-reduces every gradient (`allReduceMeanF`), and this is at the
+per-replica gradient before it. It is about the INPUT gradient; the 161 parameter gradients are
+`ResNet50StepTieB.lean`'s tie.
 -/
+
+-- Build note: the blocks stay opaque and there is no `backward_unique` step, for the reason
+-- `ResNet34BackCertifiedTieB`'s build notes record: instantiating a tie of this shape at the
+-- concrete blocks is a KERNEL deterministic timeout when the witnesses are `HasVJPAt` carrying a
+-- saved activation. B0 takes that step only because swish has no kink. The shape check
+-- `resnet50ForwardBFull_eq_slots` is what replaces it.
 
 namespace Proofs
 
 open scoped BigOperators
 
-/-- ⭐⭐ **`r50InputGradB` IS the certified whole-net ResNet-50 gradient.** The committed backward
+/-- **`r50InputGradB` IS the certified whole-net ResNet-50 gradient.** The committed backward
     chain, with its stem BatchNorm and relu-mask slots filled by the certified per-op backwards,
     its saved pool activation the stem's own, and its sixteen bottlenecks left OPAQUE, equals the
     backward of `r34BFullHasVJPAt` at those eighteen stages. `unfold`, two `rw`s, `rfl` — the
@@ -136,10 +137,13 @@ theorem r50InputGradB_eq_r34B_full_vjp (N q : Nat) {nCls : Nat}
   repeat rw [Function.comp_apply]
   rfl
 
-/-- ⭐⭐ **The chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at every batch
-    size, every resolution, every input, every loss cotangent and every input pixel. The tie above
-    read through the apex's own `.correct`; `resnet50ForwardBFull_eq_slots` below is what says
-    those eighteen stages are the committed forward. -/
+/-- **The chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at every batch
+    size, resolution `q > 0` (`hq0`), loss cotangent and input pixel, at any input `x` where the
+    stem relu is off its kink (`h_stem`) and no stem-pool window ties (`h_pool`), for any block maps
+    `b1 … b16` carrying `HasVJPDiffAt` witnesses at their running activations (`hb1 … hb16`), with
+    `0 < εs`. The tie above read through the apex's own `.correct`;
+    `resnet50ForwardBFull_eq_slots` below identifies those eighteen stages with the committed
+    forward. -/
 theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
     (hq0 : 0 < q)
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 64)
@@ -211,16 +215,14 @@ theorem r50InputGradB_correct (N q : Nat) {nCls : Nat}
   exact HasVJPAt.correct_of_backward_eq _ (r50InputGradB_eq_r34B_full_vjp N q hq0 Ws bs εs hεs γs βs Wd bd
     b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x h_stem h_pool hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16) dy i
 
-/-- ⭐⭐ **THE SHAPE CHECK — the eighteen slots the tie is about ARE the committed forward.**
+/-- **THE SHAPE CHECK — the eighteen slots the tie is about ARE the committed forward.**
     `resnet50ForwardBFull`, regrouped into exactly the eighteen arguments `r34BFullHasVJPAt`
     takes: ResNet-34's stem, the [3,4,6,3] bottleneck ladder as one stride-1 projection block
     (`s1b0`, the form with no ResNet-34 analogue), three strided projections and twelve identity
     bottlenecks, and ResNet-34's head.
 
-    ⛔ **This is the theorem that would have caught ResNet-34's wrong pool** (§3.10) — the tie keeps
-    its blocks opaque, so its subject is a chain of VARIABLES and nothing in it says which net they
-    are. It goes through `resnet50ForwardBFull_eq_chain` (§3.5b) for the depth-16 half and then
-    unfolds the named prefixes. ⭐ `q` is a binder here too, so it checks both shipped
+    The tie keeps its blocks opaque, so its subject is a chain of VARIABLES and nothing in it says
+    which net they are; this theorem says it. `q` is a binder here too, so it checks both shipped
     resolutions. -/
 theorem resnet50ForwardBFull_eq_slots (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
@@ -243,6 +245,7 @@ theorem resnet50ForwardBFull_eq_slots (N q : Nat) {nCls : Nat} (w : R50BWeights 
           ∘ r50IdB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1
           ∘ r50ProjB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0
           ∘ r34StemB N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ) x := by
+  -- `resnet50ForwardBFull_eq_chain` for the depth-16 half, then unfold the named prefixes
   rw [resnet50ForwardBFull_eq_chain N q w x]
   simp only [r50Pre16, r50Pre15, r50Pre14, r50Pre13, r50Pre12, r50Pre11, r50Pre10, r50Pre9, r50Pre8, r50Pre7, r50Pre6, r50Pre5, r50Pre4, r50Pre3, r50Pre2, r50Pre1, r50Pre0]
 

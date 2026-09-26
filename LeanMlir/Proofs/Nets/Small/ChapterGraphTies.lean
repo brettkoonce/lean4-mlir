@@ -99,13 +99,11 @@ noncomputable def maxPoolFlatHasVJPAt' {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
     (hs : MaxPool2Smooth (Tensor3.unflatten v : Tensor3 c (2*h) (2*w))) :
     (maxPoolFlatHasVJPAt' v hs).backward = maxPoolBackFlat c h w v := rfl
 
--- **CNN backward faithfulness (smooth point) — A2c.** The whole-chain backward
--- graph denotes the proven conditional whole-network VJP
--- `mnistCnnNoBnHasVJPAt.backward` (the Chapter-3 peer of
--- `mlpBackGraph_faithful`). The per-op `convBack`/`selectPos`/`dotOut` ops
--- assemble through `vjpCompAt`; the one `maxPoolBack` matches via VJP
--- uniqueness (`HasVJPAt.backward_unique`) — sidestepping the `flatten∘unflatten`
--- transport in `mnistCnnNoBnHasVJPAt`'s maxpool step.
+/-- **CNN backward faithfulness (smooth point).** The emitted whole-chain backward graph
+    `cnnBackGraph` denotes the backward of the conditional whole-network VJP `mnistCnnNoBnHasVJPAt`,
+    at a point where the four ReLU pre-activations are nonzero (`h1`, `h2` conv; `h3`, `h4`
+    dense) and the max-pool input satisfies `h_mp` (a `MaxPool2Smooth` condition). The Chapter-3 peer of
+    `mlpBackGraph_faithful`. -/
 theorem cnnBackGraph_faithful
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
@@ -135,6 +133,9 @@ theorem cnnBackGraph_faithful
   simp only [cnnBackGraph, denStep, denStepApp, mnistCnnNoBnHasVJPAt, convReluHasVJPAt,
     denseReluHasVJPAt, vjpCompAt_backward, denseHasVJP, reluHasVJPAt,
     HasVJP3.toHasVJP, HasVJP.toHasVJPAt, Mat.mulVec, id, Function.comp_apply]
+  -- The per-op `convBack`/`selectPos`/`dotOut` ops assemble through `vjpCompAt`; the one
+  -- `maxPoolBack` matches via VJP uniqueness (`HasVJPAt.backward_unique`), sidestepping the
+  -- `flatten∘unflatten` transport in `mnistCnnNoBnHasVJPAt`'s maxpool step.
   rw [HasVJPAt.backward_unique _ (maxPoolFlatHasVJPAt'
         ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₂ b₂)
           ((relu (c * (2*h) * (2*w)) ∘ flatConv (h := 2*h) (w := 2*w) W₁ b₁) x)) h_mp)]

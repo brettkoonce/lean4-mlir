@@ -3,24 +3,24 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 
 /-! # ResNet-50's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
-`ResNet50FullB` (T2) says the typed batch-BN graph denotes `resnet50ForwardBFull N q w` on one
-device. At `replicas > 1` the data-parallel render makes every BatchNorm site `bnFwdSite`'s sync-BN
+`ResNet50FullB` says the typed batch-BN graph denotes `resnet50ForwardBFull N q w` on one
+device (`resnet50FwdGraphBFull_faithful`). At `replicas > 1` the data-parallel render makes every BatchNorm site `bnFwdSite`'s sync-BN
 composition — this replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed,
 then `bnSyncF` — so the statistics each replica normalises by are the GLOBAL batch's. This file is
-T2's data-parallel twin: that forward graph, stated as a family over the `R` replicas, denotes on
+that theorem's data-parallel twin: that forward graph, stated as a family over the `R` replicas, denotes on
 replica `r` exactly `batchShard r` of the single-device forward at the global batch `R·N`.
 
     den (resnet50FwdGraphSyncFull R hR N q epsStr w e r)
       = batchShard R N nCls (resnet50ForwardBFull (R * N) q w X) r
 
-given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
-move**: the right-hand side is the committed `resnet50ForwardBFull`, at `N := R·N`. ⭐ The
+given that each replica's input is its shard of one global batch `X`. **The spec does not
+move**: the right-hand side is the committed `resnet50ForwardBFull`, at `N := R·N`. The
 resolution stays a binder: one statement covers `q = 7` (224 px) and `q = 5` (160 px), the ladder
-written as T2 writes it, `2 * (…)` nests throughout.
+written as the single-device graph writes it, `2 * (…)` nests throughout.
 
 ## How it is proved
 
-By induction on the chain, one block at a time, exactly as T2 is — with the shard hypothesis
+By induction on the chain, one block at a time, exactly as `resnet50FwdGraphBFull_faithful` is — with the shard hypothesis
 `∀ r, den (e r) = batchShard R N _ X r` as the invariant carried from block to block. Every piece
 that is not about the bottleneck is `ResNet34SyncB`'s, imported:
 
@@ -33,9 +33,9 @@ that is not about the bottleneck is `ResNet34SyncB`'s, imported:
   same names (`%sW`, `%sg`, `%sbt`, `%Wd`, `%bd`).
 
 What is new is the three bottleneck forms at variable shapes (`N ic mid oc h w` all variables),
-each with three sync sites (four with the projection). ⚠ The two projection forms add in the
+each with three sync sites (four with the projection). The two projection forms add in the
 RENDER's order, `addVB(body, projection)`, where `residualProj proj body` adds `proj + body`; that
-costs one commutation, `den_addVB_shard_comm`, exactly the `add_comm` T2 carries.
+costs one commutation, `den_addVB_shard_comm`, exactly the `add_comm` the single-device graph carries.
 
 ## The index seam
 
@@ -45,12 +45,12 @@ The conv/relu chain runs at the left-assoc index `N·(c·h·w)`; `bnSyncF` and i
 
 ## What is NOT claimed here
 
-⚠ No stochastic depth: the graph is the drop-path-free forward, as T2's is. ⚠ The f32 nodes — the
-bf16 conv twins are not this statement. ⚠ The DP artifacts run with no conv biases; the bias operand
-is `biasName false "" c`, the render's own function, and the bias fields stay `∀`-quantified as in
-T2. ⚠ The backward and the parameter collectives are the T3 half
-(`ResNet50SyncTieB.r50_net_syncTiedB`). ⚠ That the `R` replicas' inputs ARE the shards of one batch
-is the driver's, as in `DataParallelSync`. ⚠ The lowerer's `all_reduce` is trusted as every other
+No stochastic depth: the graph is the drop-path-free forward, as the single-device graph is. The
+f32 nodes — the bf16 conv twins are not this statement. The DP artifacts run with no conv biases;
+the bias operand is `biasName false "" c`, the render's own function, and the bias fields stay
+`∀`-quantified as in `ResNet50FullB`. The backward and the parameter collectives are
+`ResNet50SyncTieB.r50_net_syncTiedB`'s. That the `R` replicas' inputs ARE the shards of one batch
+is the driver's, as in `DataParallelSync`. The lowerer's `all_reduce` is trusted as every other
 op's lowering is.
 -/
 
@@ -82,7 +82,7 @@ theorem den_addVB_shard_comm {R N n : Nat} (a b : Fin R → SHlo (N * n)) (A B :
 
 /-- Identity bottleneck at sync-BN, over the replica family:
     `relu(addVB(bn₃(conv₃(relu(bn₂(conv₂(relu(bn₁(conv₁ e))))))), e))`, every BatchNorm a
-    `bnSyncSiteLA`. T2's `r50IdGraphB` with the three sites swapped. -/
+    `bnSyncSiteLA`. The single-device `r50IdGraphB` with the three sites swapped. -/
 def r50IdGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat}
     (pw : R50IdW mid oc) (e : Fin R → SHlo (N * (oc * h * w))) : Fin R → SHlo (N * (oc * h * w)) :=
   fun r => .batchOp (N := N) (.relu (n := oc * h * w))
@@ -131,7 +131,7 @@ theorem r50IdGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w :
   have ha := den_addVB_shard _ e _ X hn3 he
   exact den_relu_shard _ _ ha r
 
-/-- ⭐ Stride-1 projection bottleneck at sync-BN — stage 1 block 0: the identity bottleneck's body
+/-- Stride-1 projection bottleneck at sync-BN — stage 1 block 0: the identity bottleneck's body
     plus a 1×1 conv → sync-BN skip at unchanged resolution, added in the render's order
     `addVB(body, projection)`. Four sync sites. -/
 def r50ProjGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
@@ -191,7 +191,7 @@ theorem r50ProjGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w
   have ha := den_addVB_shard_comm _ _ _ _ hn3 hnp
   exact den_relu_shard _ _ ha r
 
-/-- Strided projection bottleneck at sync-BN — stages 2/3/4 block 0. ⚠⚠ v1.5: the stride is on the
+/-- Strided projection bottleneck at sync-BN — stages 2/3/4 block 0. v1.5: the stride is on the
     **3×3** and the 1×1 skip, so conv₁ and its sync-BN (bn₁) run at the INPUT resolution
     `2h × 2w` — that site's statistics reduce over `N·(2h)·(2w)` per replica. Four sync sites,
     added in the render's order `addVB(body, projection)`. -/
@@ -261,7 +261,7 @@ theorem r50DownGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w
 -- § The whole net
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The sync-BN data-parallel ResNet-50 forward graph, over the replica family.** T2's
+/-- **The sync-BN data-parallel ResNet-50 forward graph, over the replica family.**
     `resnet50FwdGraphBFull` with every BatchNorm a `bnSyncSiteLA` over all `R` replicas; block
     prefixes (`s1b0` … `s4b2`) and collective tags are the render's. The stem and head are
     ResNet-34's sync graphs, whose names R50 shares. -/
@@ -293,7 +293,7 @@ def resnet50FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N q : Nat) (epsStr : String
                                         (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ
                                       e)))))))))))))))))
 
-/-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
+/-- **Forward-graph faithfulness at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` examples,
     the sync-BN graph on replica `r` denotes `batchShard r` of `resnet50ForwardBFull (R * N) q w X`
     — the committed batch-BN forward, at the global batch, at the same resolution binder `q`

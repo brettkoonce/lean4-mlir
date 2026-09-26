@@ -3,66 +3,59 @@ import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 
-/-! # ⭐⭐ `r34InputGradB` IS the certified whole-net ResNet-34 gradient AT BATCH BATCH-NORM
+/-! # `r34InputGradB` IS the certified whole-net ResNet-34 gradient AT BATCH BATCH-NORM
 
-The per-example net's tie (retired 2026-09-19 with `ResNet34RenderPC.lean`; `ConvBackCertifiedTie`
-keeps its leaf ties) closed this for the forward the retired `ResNet34Render.lean` emitted. This file closes it
-for the net the shipped trainers run: `resnet34ForwardBFull`, the [3,4,6,3] ladder at
-**`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
-`planning/archive/proofs_tier_to_paper_nets.md` §4.2, the last real statement in that section's port
-(T4/T5 there are float budgets, and `planning/archive/float_budget_numbers.md` closed that thread).
+The input-gradient tie for the net the shipped trainers run: `resnet34ForwardBFull`, the
+[3,4,6,3] ladder at **`bnBatchLA`**, at a variable batch `N`. The leaf ties it rests on are
+`ConvBackCertifiedTie`'s.
 
 Nothing here is new mathematics. Two endpoint stage ties (stem and head) and one pool tie, then
-the sixteen basic blocks stay **opaque** — they enter as the `_at` VJP witnesses 4.1d's apex
-already takes, and the reverse chain's block slots are pinned to their `.backward` — so the
-composition is checked between variables. The chain is peeled by `rw` with a lemma proved over
-variable stages (piece 2), so the whole module checks in a few seconds with no budget raised.
+the sixteen basic blocks stay **opaque** — they enter as `HasVJPDiffAt` witnesses, and the reverse
+chain's block slots are pinned to their `.backward` — so the composition is checked between
+variables. The chain is peeled by `rw` with a lemma proved over variable stages, so the module
+checks with no budget raised.
 
 ## The four pieces
 
 1. `cbReluStridedBBack_eq_vjp_backward` / `r34HeadBBack_eq_vjp_backward` — the concrete
    endpoints; the stem is the first and the pool needs no lemma.
-   ⭐ The pool endpoint is **`rfl`**, and that is the payoff of two earlier decisions: 4.1c built
-   `batchMapHasVJPAt` field by field rather than transporting it with `▸`, and
-   `maxPool3s2FlatHasVJPAtVec` did the same one tier down, so `batchMapAux` of the leaf and
-   the lift's `.backward` are the same term. It also closes the one seam §4.2a left open — that
-   file could thread the pool backward only as the emitted `den`.
+   The pool endpoint is **`rfl`**: `batchMapHasVJPAt` and `maxPool3s2FlatHasVJPAtVec` are built
+   field by field rather than transported with `▸`, so `batchMapAux` of the leaf and the lift's
+   `.backward` are the same term.
 2. `r34BFullHasVJPAt` — the generic eighteen-stage apex `head ∘ b16 ∘ … ∘ b1 ∘ stem`,
    seventeen nested `vjpCompDiffAt`s and nothing else, over `opaqueA0 … A16`, one prefix `def`
    per running activation — and `r34BFullHasVJPAt_backward`, its backward peeled into the
-   eighteen stage backwards, `rfl` at variable stages. ⛔ Not a closing `rfl` in the tie itself:
-   written as seventeen `let`s and closed that way, the tie cost ~45 s and 8 GB under
-   `maxRecDepth 800000`.
+   eighteen stage backwards, `rfl` at variable stages.
 3. `r34InputGradB_eq_r34B_full_vjp` and `r34InputGradB_correct` — the tie, and its reading as
    `∑ pdiv … * dy`: the chain IS the Jacobian-transpose of the eighteen-stage composition.
 4. `resnet34ForwardBFull_eq_slots` — the shape check: those eighteen stages ARE
-   `resnet34ForwardBFull`, the forward `resnet34FwdGraphBFull_faithful` (4.1b) says the typed
+   `resnet34ForwardBFull`, the forward `resnet34FwdGraphBFull_faithful` says the typed
    graph denotes. Without it the tie would be a statement about variables.
 
-## ⛔ Two walls, both measured, both worth not re-paying
+## Scope
 
-**A `rfl` straight at 4.1d's `resnet34ForwardBFullHasVJPAt` does not terminate** — five
-minutes to `(deterministic) timeout at isDefEq` at four million heartbeats. That is §5's
-elaboration trap and the reason the generic apex exists.
-
-⛔ **And so does instantiating the generic tie at the sixteen concrete blocks** — a *kernel*
-deterministic timeout at six minutes, with `HasVJPAt.backward_unique` or without it. So this
-file stops where MobileNetV2's per-example T6 stops (opaque blocks plus a shape check) rather
-than where B0's goes (concrete blocks, then `backward_unique`). ⭐ **The difference is not depth
-and not the net: it is the KINK.** B0's generic tie takes GLOBAL `HasVJP` witnesses, which carry
-no point, so instantiating them is free. r34's are `HasVJPAt` at `opaqueA{k-1} … x`, and the
-witnesses a caller has are at `r34Pre{k-1} N w x` — sixteen defeq checks between two
-sixteen-deep nested applications spelled through different definition chains.
-
-⚠ It stays a SMOOTH-POINT statement, and r34 carries the heaviest hypothesis budget of the five
-nets: two relu clauses per block (the body's mid-relu and the post-residual OUTER relu), the
-stem's relu, and the stem pool's per-example no-tie condition. That is 4.1d's bundle list,
-reused verbatim — this file adds no hypothesis of its own.
-
-⛔ **What this does NOT reach.** One device: the data-parallel step, collectives included, is
-`ResNet34SyncStepTieB.lean`'s. And it is about the INPUT gradient; the parameter gradients are
-`ResNet34StepTieB.lean`'s tie (§4.2a).
+A smooth-point statement: the tie assumes the stem relu clause (`h_stem : R34StemSmoothAt …`),
+the stem pool's per-example no-tie (`h_pool : R34PoolSmoothAt …`) and `0 < εs`, and takes each of
+the sixteen blocks as an opaque `HasVJPDiffAt` witness at its running activation (a basic block's
+two relu clauses are the caller's, inside that witness). One device: the data-parallel step,
+collectives included, is `ResNet34SyncStepTieB`'s. It is about the INPUT gradient; the parameter
+gradients are `ResNet34StepTieB`'s tie.
 -/
+
+-- Build notes (two walls, both measured):
+-- * A `rfl` straight at `resnet34ForwardBFullHasVJPAt` does not terminate — five minutes to
+--   `(deterministic) timeout at isDefEq` at four million heartbeats. That is why the generic apex
+--   `r34BFullHasVJPAt` exists.
+-- * Instantiating the generic tie at the sixteen concrete blocks is a *kernel* deterministic
+--   timeout at six minutes, with `HasVJPAt.backward_unique` or without it. So this file stops at
+--   opaque blocks plus a shape check (as MobileNetV2's per-example tie does), not concrete blocks
+--   then `backward_unique` (as B0's does). The difference is the kink: B0's generic tie takes
+--   GLOBAL `HasVJP` witnesses, which carry no point, so instantiating them is free; r34's are
+--   `HasVJPAt` at `opaqueA{k-1} … x`, and the witnesses a caller has are at `r34Pre{k-1} N w x` —
+--   sixteen defeq checks between two sixteen-deep nested applications spelled through different
+--   definition chains.
+-- * Not a closing `rfl` in the tie itself: written as seventeen `let`s and closed that way, the tie
+--   cost ~45 s and 8 GB under `maxRecDepth 800000`.
 
 namespace Proofs
 
@@ -79,7 +72,7 @@ open scoped BigOperators
     leaf's backward is input-independent (a convolution is linear), so the row-wise `batchMap`
     lift matches at every saved input.
 
-    ⚠ SYMMETRIC padding (`flatConvStride2Back`), not the XLA-`SAME` phase B0's and MobileNetV2's
+    SYMMETRIC padding (`flatConvStride2Back`), not the XLA-`SAME` phase B0's and MobileNetV2's
     stems take. Identical types, different certificates. -/
 theorem cbReluStridedBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
@@ -99,7 +92,7 @@ theorem cbReluStridedBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
 /-- **The HEAD CONV tie.** `batchMap (convFlatBack) ∘ bnBack ∘ reluMaskBack` IS `cbReluB`'s
     certified backward at a smooth point — the stride-1, plain-convolution peer of the stem's.
 
-    ⭐ The kernel extent is a binder, so a 1×1 conv-BN-relu is one instance of this stage and not
+    The kernel extent is a binder, so a 1×1 conv-BN-relu is one instance of this stage and not
     a new one: MobileNetV4's two head convs (`%h1W` 256 → 960, `%hW` 960 → 1280) tie by applying
     this twice, and its head is therefore not hypothesis-free the way ResNet-34's is. -/
 theorem cbReluBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
@@ -118,7 +111,7 @@ theorem cbReluBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
   rfl
 
 /-- **The HEAD tie.** `batchMap (gapBack) ∘ batchMap (dense Wᵀ 0)` IS `r34HeadB`'s certified
-    backward. ⭐ The head takes no hypothesis at all: GAP and dense are smooth and each is
+    backward. The head takes no hypothesis at all: GAP and dense are smooth and each is
     `batchMap` of a per-example op, so `r34HeadBHasVJP` is GLOBAL — the one place in this net
     where the certified backward comes with nothing attached. `gapBack` needs no rewrite; it is
     definitionally the global-average-pool VJP's backward. -/
@@ -153,12 +146,12 @@ theorem r34StemBHasVJPAt_backward (N h w : Nat) {ic oc : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Whole-network batched ResNet-34 VJP, every stage opaque.** `head ∘ b16 ∘ … ∘ b1 ∘ stem`,
-    seventeen `vjpCompDiffAt`s and nothing else. ⭐ ResNet-34's [3,4,6,3] ladder needs no
+    seventeen `vjpCompDiffAt`s and nothing else. ResNet-34's [3,4,6,3] ladder needs no
     list of blocks and no separate downsample slot: a downsample block is just a block of a
     different type, and the stem's pool lives INSIDE `stem`. Dimension-generic and parametric in
     every component, so the tie below is checked between variables.
 
-    ⚠ Pointwise (`HasVJPAt`), as every ResNet-34 statement is: relu is kinked, and this net has
+    Pointwise (`HasVJPAt`), as every ResNet-34 statement is: relu is kinked, and this net has
     two relu sites per block. -/
 noncomputable def r34BFullHasVJPAt {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 : Nat}
     (stem : Vec s0 → Vec s1)
@@ -299,10 +292,10 @@ theorem r34BFullHasVJPAt_backward {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13
                                           (hhead.fst.backward dy))))))))))))))))) := rfl
 
 -- ════════════════════════════════════════════════════════════════
--- § ⭐⭐ THE TIE — stem, pool and head concrete, the sixteen blocks opaque
+-- § THE TIE — stem, pool and head concrete, the sixteen blocks opaque
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **`r34InputGradB` IS the certified whole-net batch-BN ResNet-34 gradient.** The committed
+/-- **`r34InputGradB` IS the certified whole-net batch-BN ResNet-34 gradient.** The committed
     backward chain, with its stem BatchNorm and relu-mask slots filled by the certified per-op
     backwards, its saved pool activation the stem's own, and its sixteen basic blocks left OPAQUE,
     equals the backward of `r34BFullHasVJPAt` at those eighteen stages. `unfold`, the two
@@ -387,10 +380,12 @@ theorem r34InputGradB_eq_r34B_full_vjp (N : Nat) {nCls : Nat}
   rfl
 
 
-/-- ⭐⭐ **The batched chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at
-    every batch size, every input, every loss cotangent and every input pixel. The tie above read
-    through the apex's own `.correct`. `resnet34ForwardBFull_eq_slots` below is what says those
-    eighteen stages are the committed forward, so the two together are the T6 statement. -/
+/-- **The batched chain IS the `pdiv`-contracted Jacobian of the eighteen-stage net** — at every
+    batch size, loss cotangent and input pixel, at any input `x` where the stem relu is off its
+    kink (`h_stem`) and no stem-pool window ties (`h_pool`), for any block maps `b1 … b16` carrying
+    `HasVJPDiffAt` witnesses at their running activations (`hb1 … hb16`), with `0 < εs`. The tie
+    above read through the apex's own `.correct`. `resnet34ForwardBFull_eq_slots` below identifies
+    those eighteen stages with the committed forward. -/
 theorem r34InputGradB_correct (N : Nat) {nCls : Nat}
     (Ws : Kernel4 64 3 7 7) (bs : Vec 64) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 64)
     (Wd : Mat 512 nCls) (bd : Vec nCls)
@@ -460,20 +455,14 @@ theorem r34InputGradB_correct (N : Nat) {nCls : Nat}
     b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 x h_stem h_pool hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16) dy i
 
 
-/-- ⭐⭐ **THE SHAPE CHECK — the eighteen slots the tie is about ARE the committed forward.**
+/-- **THE SHAPE CHECK — the eighteen slots the tie is about ARE the committed forward.**
     `resnet34ForwardBFull`, regrouped into exactly the eighteen arguments `r34BFullHasVJPAt`
     takes: the stem (7×7/s2 conv-BN-relu and He et al.'s 3×3/s2 pool), the [3,4,6,3] ladder as
     sixteen basic blocks, and the GAP+dense head.
 
-    ⛔ **This is the theorem that would have caught ResNet-34's wrong pool.** The tie keeps its
-    blocks OPAQUE — they enter as the VJP witnesses, so its subject is a chain of VARIABLES and
-    nothing in it says which net they are. §3.10's drift (the 2×2 pool's backward against a
-    forward that pools 3×3/s2) lived a month for exactly that reason:
-    *"the same net as the tie"* was prose in a docstring. Here the pool appears on both sides of
-    one statement the kernel checks.
-
-    It goes through `resnet34ForwardBFull_eq_chain` (4.1d) for the depth-16 half and then unfolds
-    the named prefixes. -/
+    The tie keeps its blocks OPAQUE — they enter as the VJP witnesses, so its subject is a chain of
+    VARIABLES and nothing in it says which net they are. This theorem puts the stem pool on both
+    sides of one statement the kernel checks. -/
 theorem resnet34ForwardBFull_eq_slots (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) :
     resnet34ForwardBFull N w x
@@ -495,6 +484,9 @@ theorem resnet34ForwardBFull_eq_slots (N : Nat) {nCls : Nat} (w : R34BWeights nC
           ∘ r34IdB N 56 56 w.a1
           ∘ r34IdB N 56 56 w.a0
           ∘ r34StemB N 56 56 w.sW w.sb w.sε w.sγ w.sβ) x := by
+  -- `resnet34ForwardBFull_eq_chain` for the depth-16 half, then unfold the named prefixes. (A 2×2
+  -- pool's backward against this 3×3/s2 forward once went unnoticed for a month because the tie's
+  -- subject is variables; this shape check is what catches that.)
   rw [resnet34ForwardBFull_eq_chain N w x]
   simp only [r34Pre16, r34Pre15, r34Pre14, r34Pre13, r34Pre12, r34Pre11, r34Pre10, r34Pre9, r34Pre8, r34Pre7, r34Pre6, r34Pre5, r34Pre4, r34Pre3, r34Pre2, r34Pre1, r34Pre0]
 

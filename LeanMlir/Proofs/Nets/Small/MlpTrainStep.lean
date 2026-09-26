@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 
-/-! # M2 — the MLP train step: per-layer parameter-gradient assembly
+/-! # The MLP train step: per-layer parameter-gradient assembly
 
 The MLP (`dense → relu → dense → relu → dense`) train step updates six parameters
 `W₀,b₀,W₁,b₁,W₂,b₂`. Each layer's gradient is the **assembly** of backprop:
@@ -16,14 +16,14 @@ assembly is choosing the right cotangent subgraph per layer:
 * **layer 2** (logits): the loss cotangent `g` itself — `Back.cotangent`
   (`weight_grad_bridge … Back.cotangent`, with `Back.cotangent.denote g = g`).
 * **layer 1** (`p₁`): `relu'(p₁) ⊙ (W₂ · g)` — `mlpCotOut1`
-  (already built; `mlp_layer1_weight_grad_bridge`).
+  (IR.lean; `mlp_layer1_weight_grad_bridge`).
 * **layer 0** (`p₀`): `relu'(p₀) ⊙ (W₁ · mlpCotOut1)` — `mlpCotOut0`, below.
 
-This file supplies the only missing piece, `mlpCotOut0`, and its weight/bias
-bridges — completing the three-layer assembly. This is Crux A of
-`planning/archive/verified_train_step.md`: the multi-layer param-grad assembly, the step
-`linear` couldn't show (one layer, no chain). The SGD wrapping `θ − lr·∇` on top is
-identical to the linear case (`StableHLO.sgdW`).
+This file supplies `mlpCotOut0` and its weight/bias bridges — completing the three-layer
+assembly, the multi-layer step the one-layer `linear` net has no analogue of — and the
+total-loss folds (`mlp_output_total_loss_grad`, and at smooth points
+`mlp_hidden_total_loss_grad`, `mlp_input_total_loss_grad`, `mlp_whole_net_weight_grads`). The SGD
+wrapping `θ − lr·∇` on top is identical to the linear case (`StableHLO.sgdW`).
 -/
 
 namespace Proofs.IR
@@ -119,7 +119,7 @@ theorem mlpCotOut0_denote {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂) (W₂ : 
 -- the softmax-CE loss — no ReLU between it and the loss — so its total-loss gradient
 -- folds UNCONDITIONALLY: it is a direct instance of the linear fold at input `a₁`. The
 -- hidden layers (`W₁`,`W₀`) fold only at smooth points (the chain runs back through the
--- ReLU kinks); that conditional fold is the remaining new proof.
+-- ReLU kinks): `mlp_hidden_total_loss_grad` / `mlp_input_total_loss_grad` below.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Output-layer total-loss gradient.** For the top dense layer on activation `a₁`
@@ -142,9 +142,9 @@ theorem mlp_output_total_loss_grad {d₂ d₃ : Nat}
     pre-activation `p₁ = dense W₁ b₁ a₀` off the ReLU kinks — the single gradient of the
     whole softmax-CE loss wrt the hidden weights `W₁` folds, by the chain rule
     (`pdiv_comp`), into the certified `∂p₁/∂W₁` contracted with the loss gradient at the
-    hidden pre-activation, `∂L/∂p₁`. That inner factor is exactly the cotangent the
-    backward chain delivers at layer 1 (`relu'(p₁) ⊙ (W₂ · (softmax−onehot))`, cf.
-    `mlpCotOut1_denote`). Conditionality is intrinsic: the chain runs back through the
+    hidden pre-activation, `∂L/∂p₁`, left as a `pdiv`. (Off the kinks that factor is the
+    cotangent the backward chain delivers at layer 1, `relu'(p₁) ⊙ (W₂ · (softmax−onehot))`,
+    cf. `mlpCotOut1_denote`; that identification is not stated here.) Conditionality is intrinsic: the chain runs back through the
     ReLU kink, so — unlike the linear / output-layer fold — this needs the smoothness
     hypothesis. The hidden-layer analogue of `lossWeightGrad_eq_sum`. -/
 theorem mlp_hidden_total_loss_grad {d₁ d₂ d₃ : Nat}
@@ -181,8 +181,9 @@ theorem mlp_hidden_total_loss_grad {d₁ d₂ d₃ : Nat}
 /-- **Input-layer total-loss fold (conditional, deepest).** The same fold for the
     first layer `W₀`, whose chain runs back through *both* ReLUs — so it carries both
     smoothness hypotheses (the same pair as `mlpHasVJPAt`). The total loss gradient
-    wrt `W₀` = certified `∂p₀/∂W₀` contracted with the loss gradient at `p₀` (the
-    deepest cotangent the backward chain delivers, cf. `mlpCotOut0_denote`). -/
+    wrt `W₀` = certified `∂p₀/∂W₀` contracted with the loss gradient at `p₀`, left as a
+    `pdiv` (its identification with the chain cotangent `mlpCotOut0_denote` computes is not
+    stated here). -/
 theorem mlp_input_total_loss_grad {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃)

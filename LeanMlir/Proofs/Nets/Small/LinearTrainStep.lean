@@ -1,20 +1,20 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 
-/-! # M1 — the linear train step descends the certified softmax-CE gradient
+/-! # The linear train step descends the certified softmax-CE gradient
 
 `StableHLO.lean` proves the Chapter-1 linear train step piecewise: the forward
 graph (`fwdGraph_faithful`), the loss cotangent (`lossCotGraph_isCEgrad`), the
 per-parameter Jacobians (`wGrad/bGrad_isWeightJacobian`), and the plain-SGD update
 (`sgdW/sgdB_isCertifiedGradStep`). Each of those, however, still mentions the
 emitted cotangent as `den (lossCotGraph …)` — a denotation of an emitted graph,
-not yet a named closed form.
+not a named closed form.
 
 This file bundles them into a single statement per parameter: the emitted SGD
 update subtracts `lr` times **[the certified ∂logits/∂θ Jacobian]** contracted with
 **[the certified closed-form softmax-CE gradient `softmax − onehot`]**. Every factor
-is now a named, axiom-audited certified quantity — no residual `den`-of-graph, no
-trusted optimizer step. This is the *denotation* half of milestone M1 for `linear`
-(what the emitted train step computes).
+is a named, axiom-audited certified quantity — no residual `den`-of-graph, no
+trusted optimizer step. This is the *denotation* half for `linear`
+(what the emitted train step computes), for one example `x`.
 
 The chain-rule fold is here too: by `pdiv_comp`, the two-factor sum is the single
 gradient `∂/∂θ (crossEntropy ∘ mnistLinear)`, so the weight update is literally one step
@@ -45,7 +45,7 @@ theorem softmaxCELossCot_den {K : Nat} (nlogN ohN : String) (logits : Vec K) (la
       = fun j => softmax K logits j - oneHot K label j := by
   funext j; simp only [denStepApp, softmax]
 
-/-- **M1 (weight).** The emitted linear SGD weight update subtracts `lr` times the
+/-- **Weight update.** The emitted linear SGD weight update subtracts `lr` times the
     certified ∂logits/∂W Jacobian contracted with the certified closed-form
     softmax-CE gradient `softmax − onehot`. -/
 theorem sgdW_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (i : Fin m) (j : Fin n) :
@@ -57,7 +57,7 @@ theorem sgdW_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (i : Fin m) (j :
   rw [sgdW_isCertifiedGradStep W b x lr label i j]
   simp_rw [lossCot_eq_softmax_sub_onehot W b x label]
 
-/-- **M1 (bias).** The emitted linear SGD bias update subtracts `lr` times the
+/-- **Bias update.** The emitted linear SGD bias update subtracts `lr` times the
     certified ∂logits/∂b Jacobian contracted with the same certified softmax-CE
     gradient. -/
 theorem sgdB_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (j : Fin n) :
@@ -111,7 +111,7 @@ theorem lossWeightGrad_eq_sum (label : Fin n) (i : Fin m) (j : Fin n) :
   rw [Mat.unflatten_flatten]
   exact softmaxCE_grad n (mnistLinear W b x) label k
 
-/-- **M1 (weight, folded).** The emitted linear SGD weight update is *literally*
+/-- **Weight update, folded.** The emitted linear SGD weight update is *literally*
     one step of gradient descent on the certified softmax-CE loss:
     `W − lr·∂(crossEntropy ∘ mnistLinear)/∂W`. -/
 theorem sgdW_descends_loss_gradient (lr : ℝ) (label : Fin n) (i : Fin m) (j : Fin n) :
@@ -125,7 +125,7 @@ theorem sgdW_descends_loss_gradient (lr : ℝ) (label : Fin n) (i : Fin m) (j : 
 -- ════════════════════════════════════════════════════════════════
 -- § The two outputs' denotations. The emitted linear train step
 --   (`linTrainStepFaithfulV`, tied in `LinearFold`) has two updated-parameter outputs;
---   these are their ℝ values, each the certified SGD step (M1).
+--   these are their ℝ values, each the certified SGD step.
 -- ════════════════════════════════════════════════════════════════
 
 section LinearModule
@@ -137,7 +137,7 @@ noncomputable def linWeightDen : Vec (m * n) := Mat.flatten (sgdW W b x lr label
 noncomputable def linBiasDen   : Vec n       := sgdB W b x lr label
 
 /-- **Faithfulness, output 0 (weights).** The rendered weight output denotes
-    *literally* `W − lr·∂(softmax-CE loss)/∂W` (M1 `sgdW_descends_loss_gradient`). -/
+    *literally* `W − lr·∂(softmax-CE loss)/∂W` (`sgdW_descends_loss_gradient`). -/
 theorem linWeightDen_is_loss_descent (i : Fin m) (j : Fin n) :
     linWeightDen W b x lr label (finProdFinEquiv (i, j))
       = W i j - lr *
@@ -149,7 +149,7 @@ theorem linWeightDen_is_loss_descent (i : Fin m) (j : Fin n) :
   exact sgdW_descends_loss_gradient W b x lr label i j
 
 /-- **Faithfulness, output 1 (bias).** The rendered bias output denotes the
-    certified `b − lr·(∂logits/∂b · (softmax − onehot))` (M1). -/
+    certified `b − lr·(∂logits/∂b · (softmax − onehot))`. -/
 theorem linBiasDen_is_certified (j : Fin n) :
     linBiasDen W b x lr label j
       = b j - lr * ∑ i : Fin n,

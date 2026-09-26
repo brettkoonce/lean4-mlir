@@ -30,12 +30,15 @@ one at the outer relu's pre-activation `residual(F)(x)`.
 
 ## Structure
 
-* `cbReluB` — batched conv → bn → **relu** stage (`cbrB` from MobileNetV2BackB0
-  with relu for relu6), `_at` VJP + backward-graph faithfulness
-  (`cbReluBackBatchedGraph` + `…_faithful`), chaining `selectPos_faithful`
-  + `bnBatchLABack_faithful` + `convBackBatched_faithful`.
-* `cbB` (= `projB`, conv → bn, no activation) backward is reused VERBATIM from
-  EfficientNetBackB0 (`projBackBatchedGraph` / `projBackBatchedGraph_faithful`).
+The stages are defined in Foundation, not here: `cbReluB` (batched conv → bn → **relu**, the
+relu sibling of `cbrB`), `cbReluStridedB` and `projStridedB`, with their `_at` VJPs, the backward
+graph `cbReluBackBatchedGraph` + `cbReluBackBatchedGraph_faithful` (chaining
+`selectPos_faithful` + `bnBatchLABack_faithful` + `convBackBatched_faithful`), and the four
+`CertLayer`s `cbReluLayer` / `projLayer` / `cbReluStridedLayer` / `projStridedLayer`, are in
+Foundation/BatchedStageLayers.lean; `projB` (conv → bn, no activation, the body's `cbB`) is in
+Foundation/BatchedStages.lean; `projBackBatchedGraph` / `projBackBatchedGraph_faithful` are in
+Foundation/BatchedBackLinks.lean. This file holds the ResNet-34 assemblies:
+
 * the body `cbB ∘ cbReluB` — its backward graph `r34BodyBackBatchedGraph`, the two stage
   graphs chained at their cumulative activations, certified through the block layer.
 * `r34BasicBlockBackBatchedGraph_faithful` — the **CAPSTONE**: the whole batched
@@ -43,17 +46,16 @@ one at the outer relu's pre-activation `residual(F)(x)`.
   residual-fan-in(body-back) + identity skip) denotes the proven
   `relu ∘ residual(F)` VJP (`vjpCompAt(residualHasVJPAt(body), relu)`),
   threaded through both relu smoothness hypotheses.
-* `cbReluLayer` / `projLayer` (from `MobileNetV2BackB0`) / `cbReluStridedLayer` /
-  `projStridedLayer` — the four stages as `CertLayer`s. `r34BasicBlockLayer` / `r34DownBlockLayer` compose them with
-  `CertLayer.comp`, `residual` / `residualProj` and `reluOut`, and each body/block VJP
-  and capstone here is that composite's `.vjp` / `.faithful`.
+* `r34BasicBlockLayer` / `r34DownBlockLayer` compose the stage layers with `CertLayer.comp`,
+  `residual` / `residualProj` and `reluOut`, and each body/block VJP and capstone here is that
+  composite's `.vjp` / `.faithful`.
 
 ## The strided/downsample block (`relu ∘ residualProj(proj, F_s)`)
 
 The downsample-block capstone (`r34DownBlockBackBatchedGraph_faithful`) reuses the
-new **strided** batched-conv backward primitive `convStridedBackBatched`
-(`StableHLO.lean`, the stride-2 analog of `convBackBatched`; its `_faithful` lives
-in `EfficientNetBackB0`). The body `F_s = projB ∘ cbReluStridedB` has a stride-2
+**strided** batched-conv backward primitive `convStridedBackBatched`
+(`StableHLO.lean`, the stride-2 analog of `convBackBatched`; `convStridedBackBatched_faithful`
+is in Foundation/BatchedBackLinks.lean). The body `F_s = projB ∘ cbReluStridedB` has a stride-2
 conv1 (`cbReluStridedB`, the strided sibling of `cbReluB`) and a stride-1 conv2
 (`projB`); the projection skip `projStridedB` is a stride-2 conv-bn. The whole
 block composes `vjpCompAt(residualProjHasVJPAt(proj, F_s), relu)` exactly like

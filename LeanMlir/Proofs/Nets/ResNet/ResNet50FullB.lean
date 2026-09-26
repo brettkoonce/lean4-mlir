@@ -1,32 +1,27 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 
-/-! # ResNet-50 at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
+/-! # ResNet-50 at TRUE BATCH-NORM — the whole net's forward and graph
 
-ResNet-50 was the largest hole in the Proofs tier (`planning/archive/proofs_tier_to_paper_nets.md`
-§2: every tier ✗). §3.5(a) is this file
-— a net-level ℝ forward at the [3,4,6,3] bottleneck ladder, in the world the artifacts run —
-and §3.5(b) is the typed graph over it, in the second half of this file.
+A net-level ℝ forward at the [3,4,6,3] bottleneck ladder, in the world the artifacts run, and
+the typed graph over it (the second half of this file).
 
-⭐ **This is the one net where T1 matches the trained world from the start.** ResNet-34's and
-MobileNetV2's Proofs tiers were written at per-example BatchNorm and had to be ported (§4);
-ResNet-50 has only ever had a batched renderer (`ResNet50RenderB.lean`), so `bnBatchLA` is the
-world of `resnet50_fwd`, `resnet50in160_lambaccdp8x64bce` and everything between. There is no
-BatchNorm-world split to port later, and none of 4b's or 4c's axes apply to this net.
+ResNet-50 has only a batched renderer (`ResNet50RenderB.lean`), so `bnBatchLA` is the
+world of `resnet50_fwd`, `resnet50in160_lambaccdp8x64bce` and everything between.
 
 ## What is new here, and what is not
 
-⭐⭐ **Nothing about the blocks is new.** `ResNet50BackB0.lean` already carries all three batched
-bottleneck forms at `bnBatchLA` with their `_at` VJPs and backward-graph faithfulness. What was
-missing is the level above. This file is that enumeration, exactly as `ResNet34FullB.lean` was for r34.
+**Nothing about the blocks is new.** `ResNet50BackB0.lean` carries all three batched
+bottleneck forms at `bnBatchLA` with their `_at` VJPs and backward-graph faithfulness. This file
+adds the level above, exactly as `ResNet34FullB.lean` does for r34.
 
-⭐ **The stem and the head are ResNet-34's, imported rather than re-declared.** `r34StemB` is
+**The stem and the head are ResNet-34's, imported rather than re-declared.** `r34StemB` is
 generic in `{ic oc}` and `r34HeadB` in `{c nCls}`, and R50's stem (7×7/s2 conv-bn-relu, then He et
 al.'s 3×3/s2 max-pool, 3 → 64) and head (GAP then dense) are the same functions at different
 widths. So their VJP lemmas are reused verbatim one tier up, the way `ResNet50BackB0.lean` reuses
 all four of `ResNet34BackB0.lean`'s stages. A second `r50StemB` would be two writers for one fact.
 
-⭐ **ONE weight record serves both projection forms.** The stride-1 projection block (stage 1
+**ONE weight record serves both projection forms.** The stride-1 projection block (stage 1
 block 0) and the strided one (stages 2/3/4 block 0) have identical parameter shapes — 1×1, 3×3,
 1×1 and a 1×1 skip — and differ only in which convolutions are strided. `R50ProjW` is that record;
 `r50ProjB` and `r50DownB` are the two forwards over it. ResNet-34 needed two records for its two
@@ -39,50 +34,50 @@ block kinds.
 | depth | [3,4,6,3] BOTTLENECKS, 64/256 → 128/512 → 256/1024 → 512/2048 |
 | BatchNorm | **batch** (`bnBatchLA`, reduce `[0,2,3]`, width `N*h*w`) |
 | activation | relu, **THREE kinks per block** — two interior and the post-residual one |
-| stride-2 padding | symmetric at all five sites (stem + three downsample 3×3 + three 1×1 skips) |
+| stride-2 padding | symmetric at all seven sites (stem + three downsample 3×3 + three 1×1 skips) |
 | stride placement | **v1.5**: the stride is on the 3×3, not the leading 1×1 |
 | stem | 7×7/s2 conv-bn-relu, then 3×3/s2 max-pool |
 | head | GAP then dense, generic in the class count |
 | artifacts | `resnet50_fwd`, `resnet50in_fwd`, `resnet50in160_fwd`, every `resnet50in*_train_step` |
 
-⚠⚠ **THE STRIDE IS ON THE 3×3.** `r50DownB` puts `cbReluStridedB` on the SECOND convolution, so
+**THE STRIDE IS ON THE 3×3.** `r50DownB` puts `cbReluStridedB` on the SECOND convolution, so
 the leading 1×1 runs at the INPUT resolution and carries `mid` channels there until `W₂` decimates.
 That is ResNet **v1.5** / torchvision, which is what [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. The v1
-placement compiles, trains and descends, and is a different net worth ~0.5 pt of top-1
+placement compiles, trains and descends, and is a different net
 (`VerifiedSpec.Layer.bottleneckStage`'s note). Nothing in the types sees the difference.
 
-⚠ **Stage 1 block 0 is a STRIDE-1 projection, and it is the block with no ResNet-34 analogue.**
+**Stage 1 block 0 is a STRIDE-1 projection, and it is the block with no ResNet-34 analogue.**
 Channels go 64 → 256 at unchanged resolution, so it needs a projection but not a strided one.
-⛔ `r50DownB` cannot be substituted — the halving is in its signature, so that is a shape error and
+`r50DownB` cannot be substituted — the halving is in its signature, so that is a shape error and
 would be caught. Reaching for the identity form `r50IdB` is the dangerous one: it is well-typed
 only when `ic = oc`, which is exactly why this block exists.
 
-⭐⭐ **The spatial size is a BINDER, `q`, and that is not a stylistic choice.** ResNet-50 ships at
-TWO resolutions — `resnet50in_fwd` at 224 and `resnet50in160_fwd` at 160, the second being where
-`resnet50in160_lambaccdp8x64bce`'s 76.66% comes from. The ladder is `q`, `2q`, `4q`, `8q` with the
+**The spatial size is a BINDER, `q`, and that is not a stylistic choice.** ResNet-50 ships at
+TWO resolutions — `resnet50in_fwd` at 224 and `resnet50in160_fwd` at 160. The ladder is `q`, `2q`, `4q`, `8q` with the
 input at `32q`, so `q = 7` is the 224 net and `q = 5` the 160 one and ONE statement covers both.
-ResNet-34 could pin 56 because it has a single shipped resolution. ⚠ Every resolution is written as
+ResNet-34 could pin 56 because it has a single shipped resolution. Every resolution is written as
 an explicit nest of `2 * (…)` rather than a product like `8 * q`: `2 * (4 * q)` and `8 * q` are
 equal Nats and NOT definitionally equal terms at a variable `q`, and the block signatures demand
 the operand at exactly the spelling they name. The render's own `q1 … q5` comment records the same
 trap on the emitter side.
 
-⚠ `N` stays a variable throughout, as at r34: T1 carries no numerals. On the data-parallel
-artifacts the render's `N` is the PER-REPLICA batch; since 2026-09-21 their BatchNorm is
+`N` stays a variable throughout, as at r34: the batch size is never pinned (the widths are
+literals and the resolution is the binder `q`). On the data-parallel
+artifacts the render's `N` is the PER-REPLICA batch; their BatchNorm is
 synchronised, and `ResNet50SyncB.lean` is this file's twin for them: replica `r`'s forward graph
 denotes shard `r` of `resnet50ForwardBFull (R * N) q`, this file's forward at the global batch.
 
-⭐ **The census is 161 updated parameters**, which is `ResNet50RenderB`'s own docstring ("161 θ /
+**The census is 161 updated parameters**, which is `ResNet50RenderB`'s own docstring ("161 θ /
 161 m / 161 v"): stem 3 (`sW`, `sγ`, `sβ`) + 12 identity bottlenecks × 9 + 4 projection
-bottlenecks × 12 + head 2. ⚠ The records ALSO carry a bias slot per convolution, as ResNet-34's and
+bottlenecks × 12 + head 2. The records ALSO carry a bias slot per convolution, as ResNet-34's and
 MobileNetV2's do: both R50 renders run `convBias := false`, each conv bias is folded into the
 BatchNorm after it and bound to a `zeroBiasPrelude` zero, so those fields are the `convBias := true`
 census and are `∀`-quantified over — `bias = 0` is one instance. The 106 running-statistic slots the
 render's signature also carries belong to inference and do not appear here, since training-mode
 BatchNorm computes its statistics from the batch.
 
-✅ **The typed forward graph (T2) is the second half of this file** — `resnet50FwdGraphBFull` and
-its `_faithful`, over four per-block-kind graphs at `r50FwdChainB`'s own tokens. ✅ Checked against
+**The typed forward graph is the second half of this file** — `resnet50FwdGraphBFull` and
+its `_faithful`, over four per-block-kind graphs at `r50FwdChainB`'s own tokens. Against
 the committed bytes: `verified_mlir/resnet50_fwd.mlir`'s signature is **162 arguments = `%x` + 161
 parameters**, with 12 projection slots, and every name this file writes (`%sW`, `%sg`, `%sbt`,
 `%zb64` … `%zb2048`, `%s1b0W1` … `%s4b2bt3`, `%s1b0Wp`/`%gp`/`%btp`, `%Wd`, `%bd`) appears there.
@@ -118,7 +113,7 @@ structure R50IdW (mid oc : Nat) where
 
 /-- Weights of a PROJECTION bottleneck — `ic → mid → mid → oc` plus the 1×1 option-B skip.
 
-    ⭐ ONE record for BOTH projection forms. Stage 1 block 0 (stride 1, `64 → 256`) and stages
+    ONE record for BOTH projection forms. Stage 1 block 0 (stride 1, `64 → 256`) and stages
     2/3/4 block 0 (strided) have identical parameter shapes and differ only in which convolutions
     are strided, which is a property of the forward and not of the weights. `r50ProjB` and
     `r50DownB` are those two forwards. -/
@@ -148,7 +143,7 @@ structure R50ProjW (ic mid oc : Nat) where
     head. Generic in the class count, so one statement covers the 10-class Imagenette artifacts and
     the 1000-class `resnet50in` ones.
 
-    ⭐ The field names are `ResNet50RenderB`'s own SSA prefixes (`s1b0` … `s4b2`), so a reader can
+    The field names are `ResNet50RenderB`'s own SSA prefixes (`s1b0` … `s4b2`), so a reader can
     match a parameter to its emitted name without a table. -/
 structure R50BWeights (nCls : Nat) where
   sW : Kernel4 64 3 7 7
@@ -189,7 +184,7 @@ structure R50BWeights (nCls : Nat) where
       StableHLO.cbReluB N (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
       StableHLO.cbReluB N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁)
 
-/-- ⭐ Batched **stride-1 projection** bottleneck `relu(F(x) + proj(x))` — stage 1 block 0 and
+/-- Batched **stride-1 projection** bottleneck `relu(F(x) + proj(x))` — stage 1 block 0 and
     nowhere else in the net. The channels change (`64 → 256`) so a projection is needed; the
     resolution does not, so that projection is a plain 1×1 conv-BN. The form with no ResNet-34
     analogue: R34's stage 1 runs at `ic = oc = 64`, where block 0 is an identity block. -/
@@ -203,7 +198,7 @@ structure R50BWeights (nCls : Nat) where
 
 /-- Batched **strided projection** bottleneck — stages 2/3/4 block 0, halving the grid.
 
-    ⚠⚠ v1.5: the stride is on the 3×3 (`cbReluStridedB` is the SECOND stage), so the leading 1×1
+    v1.5: the stride is on the 3×3 (`cbReluStridedB` is the SECOND stage), so the leading 1×1
     and its BN and relu run at the INPUT resolution `2h × 2w`. Both stride-2 sites — the 3×3 and
     the 1×1 skip — are SYMMETRIC padding, as the PyTorch-origin convention requires. -/
 @[reducible] noncomputable def r50DownB (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc) :
@@ -225,8 +220,7 @@ structure R50BWeights (nCls : Nat) where
     ladder. Nested-application form, as `resnet34ForwardBFull` and `efficientnetForwardBFull`
     both are, so a later tie can peel it one block at a time.
 
-    ⭐ `q` is a binder: `q = 7` is `resnet50in_fwd` and `q = 5` is `resnet50in160_fwd`, the net the
-    quoted 76.66% trains. ⭐ The stem and head are ResNet-34's functions at R50's widths. -/
+    `q` is a binder: `q = 7` is `resnet50in_fwd` and `q = 5` is `resnet50in160_fwd`. The stem and head are ResNet-34's functions at R50's widths. -/
 noncomputable def resnet50ForwardBFull (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
     (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
     Vec (N * nCls) :=
@@ -323,11 +317,11 @@ theorem r50IdGraphB_faithful (p epsStr : String) (N h w : Nat) {mid oc : Nat} (p
   simp only [↓den_batchOp_relu_eq_reluF, reluF_faithful, den_batchOp, denOp, den_bnBatchF,
     den_addVB, Function.comp_apply]
 
-/-- ⭐ Stride-1 projection bottleneck graph — stage 1 block 0. The skip is a plain `1×1` conv → BN
+/-- Stride-1 projection bottleneck graph — stage 1 block 0. The skip is a plain `1×1` conv → BN
     (`.conv`, NOT `.convStrided`), which is the whole point of this form. Both `addVB` operands are
     nontrivial subtrees and both read the block-input subtree `e`.
 
-    ⚠ The render emits `addVB(body, projection)` where `residualProj proj body` adds
+    The render emits `addVB(body, projection)` where `residualProj proj body` adds
     `proj + body` — so this graph is in the RENDER's order and the faithfulness proof carries one
     `add_comm`. The alternative, writing the graph in `residualProj`'s order, would make `den`
     close by `rfl` and the emitted operand order wrong. -/
@@ -361,7 +355,7 @@ theorem r50ProjGraphB_faithful (p epsStr : String) (N h w : Nat) {ic mid oc : Na
   funext i
   ring
 
-/-- Strided projection bottleneck graph — stages 2/3/4 block 0. ⚠⚠ v1.5: `.convStrided` appears at
+/-- Strided projection bottleneck graph — stages 2/3/4 block 0. v1.5: `.convStrided` appears at
     the **3×3** and at the 1×1 skip, and `conv1`/`bn1`/`relu1` run at the input resolution
     `2h × 2w`. Both stride-2 sites are SYMMETRIC padding (`.convStrided`, not `.convStridedXla`). -/
 def r50DownGraphB (p epsStr : String) (N h w : Nat) {ic mid oc : Nat} (pw : R50ProjW ic mid oc)
@@ -415,7 +409,7 @@ theorem r50StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc : Nat}
 
 /-- **The full batch-BN ResNet-50 forward graph.** Block prefixes are `ResNet50RenderB`'s own
     (`s1b0` … `s4b2`) and the head's are `%Wd`/`%bd`, so the typed graph diffs against
-    `resnet50_fwd` and its ImageNet twins name for name. ⭐ The head graph is ResNet-34's,
+    `resnet50_fwd` and its ImageNet twins name for name. The head graph is ResNet-34's,
     unchanged: `r34HeadGraphB` is generic in `{c nCls}` and emits the same two tokens. -/
 def resnet50FwdGraphBFull (N q : Nat) (epsStr : String) {nCls : Nat} (w : R50BWeights nCls)
     (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : SHlo (N * nCls) :=
@@ -439,12 +433,12 @@ def resnet50FwdGraphBFull (N q : Nat) (epsStr : String) {nCls : Nat} (w : R50BWe
                                     (r50StemGraphB epsStr N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ
                                       e)))))))))))))))))
 
-/-- ⭐ **T2 for ResNet-50 at batch BN**: the typed graph denotes the whole-net forward. One `rw`
-    per block over the four per-kind faithfulness lemmas — the first graph-level tier this net has
-    ever had. -/
+/-- **Forward-graph faithfulness for ResNet-50 at batch BN**: the typed graph denotes the
+    whole-net forward. -/
 theorem resnet50FwdGraphBFull_faithful (N q : Nat) (epsStr : String) {nCls : Nat}
     (w : R50BWeights nCls) (e : SHlo (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) :
     den (resnet50FwdGraphBFull N q epsStr w e) = resnet50ForwardBFull N q w (den e) := by
+  -- one `rw` per block over the per-kind faithfulness lemmas
   unfold resnet50FwdGraphBFull resnet50ForwardBFull
   rw [r34HeadGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50DownGraphB_faithful, r50IdGraphB_faithful, r50IdGraphB_faithful, r50ProjGraphB_faithful,
       r50StemGraphB_faithful]

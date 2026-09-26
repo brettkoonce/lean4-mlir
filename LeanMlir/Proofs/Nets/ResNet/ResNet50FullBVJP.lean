@@ -1,11 +1,10 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
 
-/-! # ResNet-50's whole-net input-VJP at TRUE BATCH-NORM (T1, the VJP half)
+/-! # ResNet-50's whole-net input-VJP at TRUE BATCH-NORM
 
 `ResNet50FullB.lean` states the batch-BN forward at the [3,4,6,3] bottleneck ladder. This file
-gives that forward a certified `HasVJPAt` — the last piece of T1 for the largest hole in the
-Proofs tier (`planning/archive/proofs_tier_to_paper_nets.md` §3.5(a)).
+gives that forward a certified `HasVJPAt`.
 
 ## No new mathematics, and nothing new one tier down
 
@@ -14,36 +13,34 @@ Every block VJP is already proven at `bnBatchLA`: `r50BottleneckBHasVJPAt`,
 three shapes `r50IdB` / `r50ProjB` / `r50DownB` unfold to. The bundle lemmas below are delegations
 in `ResNet34FullBVJP.lean`'s style, and the whole net is those blocks' `CertLayer`s composed.
 
-⭐ **And unlike ResNet-34's, this file needed no new `Foundation` lemma.** r34's T1 was blocked on
-`batchMapHasVJPAt` (4.1c) for its stem pool. ResNet-50 has the same stem — and reuses
-`r34StemBHasVJPAt` verbatim, so that lemma is spent rather than re-derived. The head is
+**No `Foundation` lemma of its own.** ResNet-50 has ResNet-34's stem and reuses
+`r34StemBHasVJPAt` (which lifts the stem pool with `batchMapHasVJPAt`) verbatim. The head is
 ResNet-34's too (`r34HeadBHasVJP`, GLOBAL: GAP and dense are smooth and each is `batchMap` of a
 per-example op, so no hypothesis appears).
 
 ## The hypothesis budget
 
-⚠ **Pointwise (`HasVJPAt`), not global, and necessarily.** relu is kinked. ⛔ And a BOTTLENECK
+**Pointwise (`HasVJPAt`), not global, and necessarily.** relu is kinked. And a BOTTLENECK
 carries **THREE** kink clauses, where ResNet-34's basic block carries two: the two interior relus
 and the post-residual OUTER relu. Sixteen blocks give 48 clauses, plus the stem's relu and the stem
 pool's no-tie condition — bundled per block into `R50IdSmoothAt` / `R50ProjSmoothAt` /
 `R50DownSmoothAt`, and those 18 bundles into one `R50SmoothAtB` (the positivity bundles into
 `R50PosB`), so the apex binds two hypotheses beside `0 < q`, as MobileNetV2's does.
 
-⚠ The pool's condition is **per example** (`R34PoolSmoothAt`, reused): a tie is a property of one
+The pool's condition is **per example** (`R34PoolSmoothAt`, reused): a tie is a property of one
 image's 3×3 window, not of the batch.
 
-⛔ **`0 < q` is a real hypothesis here, where ResNet-34 needed none.** r34's ladder is at literals,
+**`0 < q` is a real hypothesis here, where ResNet-34 needed none.** r34's ladder is at literals,
 so `0 < 56` closes by `norm_num`; R50's is at the binder `q`, and the stem pool's VJP needs its
 output grid nonempty. At `q = 0` the net is degenerate and the statement says so.
 
-The running activations are named `r50Pre1 … r50Pre16` so each bundle can be STATED at the
+The running activations are named `r50Pre0 … r50Pre16` so each bundle can be STATED at the
 activation entering its block without a sixteen-deep nested application inline; `r50Pre16` doubles
 as the trunk, and `resnet50ForwardBFull_eq_chain` bridges it back to the committed
 nested-application forward.
 
-⭐ `N` and `q` are both variables: this tier carries no numerals, so ONE statement covers
-`resnet50in_fwd` (`q = 7`, 224 px) and `resnet50in160_fwd` (`q = 5`, 160 px) — the net the quoted
-76.66% trains — at every batch size.
+`N` and `q` are both variables (the widths are literals), so ONE statement covers
+`resnet50in_fwd` (`q = 7`, 224 px) and `resnet50in160_fwd` (`q = 5`, 160 px) at every batch size.
 -/
 
 namespace Proofs
@@ -61,7 +58,7 @@ structure R50IdPos {mid oc : Nat} (p : R50IdW mid oc) : Prop where
   h3 : 0 < p.ε₃
 
 /-- All four BatchNorm epsilons of a projection bottleneck are positive (body three, skip one).
-    ⭐ One bundle for BOTH projection forms, as `R50ProjW` is one record for both. -/
+    One bundle for BOTH projection forms, as `R50ProjW` is one record for both. -/
 structure R50ProjPos {ic mid oc : Nat} (p : R50ProjW ic mid oc) : Prop where
   h1 : 0 < p.ε₁
   h2 : 0 < p.ε₂
@@ -97,7 +94,7 @@ structure R50ProjSmoothAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid o
 
 /-- The three relu sites of the STRIDED projection bottleneck at `v`.
 
-    ⚠⚠ v1.5: the FIRST relu is at the input resolution `2h × 2w` and only the second is at
+    v1.5: the FIRST relu is at the input resolution `2h × 2w` and only the second is at
     `h × w`, because the stride is on the 3×3. Writing `hm1` at `h w` typechecks nowhere, which is
     the one place a reader can get this shape wrong. -/
 structure R50DownSmoothAt (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
@@ -249,7 +246,7 @@ structure R50PosB {nCls : Nat} (w : R50BWeights nCls) : Prop where
   s4b1 : R50IdPos w.s4b1
   s4b2 : R50IdPos w.s4b2
 
-/-- ⭐ **Every relu is away from its kink and the stem pool has no tie, each at the activation
+/-- **Every relu is away from its kink and the stem pool has no tie, each at the activation
     its block actually sees**: the stem's clauses at the image, block `k`'s at `r50Pre(k-1)`. The
     head has none (GAP and dense are smooth). -/
 structure R50SmoothAtB (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : Prop where
@@ -331,7 +328,7 @@ theorem r50Pre16_apply (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec 
     r50Pre16 N q w x = r50IdB N q q w.s4b2 (r50Pre15 N q w x) := by
   rw [r50Pre16, Function.comp_apply]
 
-/-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** — the
+/-- **The committed nested-application forward IS the layered chain the VJP is stated on** — the
     ResNet-50 peer of `resnet34ForwardBFull_eq_chain`, and what lets the VJP be about
     `resnet50ForwardBFull` rather than about a re-spelling of it. -/
 theorem resnet50ForwardBFull_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights nCls)
@@ -348,7 +345,7 @@ theorem resnet50ForwardBFull_eq_chain (N q : Nat) {nCls : Nat} (w : R50BWeights 
 --   what keeps the peel below cheap (`planning/certlayer_nets.md` §6).
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **ResNet-50 as one certified layer**, at every batch size and resolution. Its `.faithful`
+/-- **ResNet-50 as one certified layer**, at every batch size and resolution. Its `.faithful`
     is a whole-net backward graph, stem pool included, proven to denote the VJP. -/
 noncomputable def r50NetLayer (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) :
@@ -409,17 +406,16 @@ theorem r50SmoothAtB_ok (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights 
   refine StableHLO.CertLayer.comp_ok_of ⟨⟨⟨hx.s4b2.hm1, hx.s4b2.hm2⟩, trivial⟩, hx.s4b2.hout⟩ (r50Pre16 N q w x) rfl ?_
   exact ⟨trivial, trivial⟩
 
-/-- ⭐⭐ **ResNet-50 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
+/-- **ResNet-50 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all sixteen
     bottlenecks.** `r50NetLayer`'s `.vjp`, read at the layered chain, under two hypotheses: `R50PosB` (every `ε > 0`) and `R50SmoothAtB` (every relu clause and the pool's
-    no-tie, each at its block's own input). T1's VJP half, and the first tier ResNet-50 has ever
-    had at the net level.
+    no-tie, each at its block's own input), beside `0 < q`.
 
-    ⚠ Pointwise, and necessarily: relu is kinked. ⛔ Each block contributes THREE clauses — the
+    Pointwise, and necessarily: relu is kinked. Each block contributes THREE clauses — the
     two interior relus and the post-residual OUTER relu — where ResNet-34's basic block
     contributes two and EfficientNet's MBConv none.
 
-    ⭐ The head takes no hypothesis at all, and `N` and `q` are both variables, so this covers the
-    224-px and 160-px artifacts at every batch size. ⛔ `0 < q` is needed for the stem pool. -/
+    The head takes no hypothesis at all, and `N` and `q` are both variables, so this covers the
+    224-px and 160-px artifacts at every batch size. `0 < q` is needed for the stem pool. -/
 noncomputable def resnet50ForwardBFullHasVJPAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) :
@@ -427,7 +423,7 @@ noncomputable def resnet50ForwardBFullHasVJPAt (N q : Nat) (hq0 : 0 < q) {nCls :
   (funext fun v => (r50NetLayer_fwd_apply N q hq0 w hp v).trans (resnet50ForwardBFull_eq_chain N q w v)
     : (r50NetLayer N q hq0 w hp).fwd = _) ▸ (r50NetLayer N q hq0 w hp).vjp x (r50SmoothAtB_ok N q hq0 w hp x hx)
 
-/-- ⭐⭐ **Public correctness theorem**: the sixteen-bottleneck batch-BN backward equals the
+/-- **Public correctness theorem**: the sixteen-bottleneck batch-BN backward equals the
     `pdiv`-contracted Jacobian of `resnet50ForwardBFull` ITSELF — the committed
     nested-application forward `ResNet50FullB.lean` defines — not of the layered chain the VJP is
     assembled on. Tied back through `resnet50ForwardBFull_eq_chain`. -/
@@ -441,7 +437,7 @@ theorem resnet50ForwardBFullHasVJPAt_correct (N q : Nat) (hq0 : 0 < q) {nCls : N
   rwa [show resnet50ForwardBFull N q w = r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w
       from funext (resnet50ForwardBFull_eq_chain N q w)]
 
-/-- ⭐ The committed forward is differentiable at every smooth point — the layer's `.diff`. What
+/-- The committed forward is differentiable at every smooth point — the layer's `.diff`. What
     the seal's `seal_differentiableAt` needs. -/
 theorem resnet50ForwardBFull_differentiableAt (N q : Nat) (hq0 : 0 < q) {nCls : Nat} (w : R50BWeights nCls)
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))

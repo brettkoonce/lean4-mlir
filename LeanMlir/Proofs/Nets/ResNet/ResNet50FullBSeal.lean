@@ -4,15 +4,14 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 /-!
 # ResNet-50's non-degeneracy seal, on the full-width batched net (levels 2 and 3)
 
-`planning/full_width_seals.md` §4.2. `ResNet50FullBVJP.lean` proves
+`ResNet50FullBVJP.lean` proves
 `resnet50ForwardBFullHasVJPAt` under 48 relu clauses — three per bottleneck — plus the stem's
-and the stem pool's. ResNet-50 had **no** witness at all: unlike ResNet-34 and MobileNetV2 it never
-had a 2-channel proxy, so the clause bundle's joint satisfiability was never exhibited. This file
-exhibits it, and a nonzero Jacobian with it, on `resnet50ForwardBFull` itself.
+and the stem pool's. This file exhibits the clause bundle's joint satisfiability, and a nonzero
+Jacobian with it, on `resnet50ForwardBFull` itself.
 
 ## What is inherited and what is new
 
-⭐ Almost everything is [`Training/BatchSealKit.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/BatchSealKit.lean)'s or ResNet-34's. The carrier (`EDiff` and its
+Almost everything is [`Training/BatchSealKit.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/BatchSealKit.lean)'s or ResNet-34's. The carrier (`EDiff` and its
 per-op steps), the ray, the centre-tap kernel and the 7×7/s2 stem's no-tie are the kit's; the
 strided projection (`R34FullBSeal.sealProj`), the zeroed-body collapse (`projB_zero_const`), the
 relu-removal (`cbReluStridedB_eq`) and the stem's own collapse (`r34StemB_eq`) are ResNet-34's,
@@ -26,11 +25,11 @@ Three things are genuinely new:
   needs nothing of the activation. Only `hout` does, through `0 ≤ activation`;
 * **a stride-1 projection.** Stage 1 block 0 changes channels (64 → 256) at unchanged resolution,
   so its skip is `projB`, not `projStridedB`, and the carrier crosses it through the kit's
-  stride-1 `eDiff_conv`. ⛔ That also makes the carrier's BN count **five**, not the four of
+  stride-1 `eDiff_conv`. That also makes the carrier's BN count **five**, not the four of
   ResNet-34: stem, `s1b0`, `s2b0`, `s3b0`, `s4b0`;
-* **`q` stays a binder.** ResNet-50 ships at two resolutions and the tier is stated at both, so the
+* **`q` stays a binder.** ResNet-50 ships at two resolutions and the VJP is stated at both, so the
   seal is too: `0 < q` and `q ≤ 7` are all the witness needs, and `q = 7` (224 px) and `q = 5`
-  (160 px, where the 76.66% run lives) are instances of one theorem. The bound is the `β = 160`
+  (160 px) are instances of one theorem. The bound is the `β = 160`
   margin against the widest BN, the stem's `2·(16q)² = 512q²`; a larger `q` wants a larger `β`,
   not a different argument.
 -/
@@ -169,7 +168,7 @@ theorem seal_pr_body (N h w ic mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N 
   R34FullBSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
     (fun _ => rfl) _
 
-/-- The strided projection block's body is the constant `1`. ⚠ v1.5: its middle stage is the
+/-- The strided projection block's body is the constant `1`. v1.5: its middle stage is the
     STRIDED conv-bn-relu, so this is not `seal_pr_body` at other shapes. -/
 theorem seal_dn_body (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
@@ -183,7 +182,7 @@ theorem seal_dn_body (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
   R34FullBSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
     (fun _ => rfl) _
 
-/-- ⭐ **The structural bottleneck is the shift `a ↦ a + 1`** on a nonnegative activation. -/
+/-- **The structural bottleneck is the shift `a ↦ a + 1`** on a nonnegative activation. -/
 theorem sealIdB_eq (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (oc * h * w)))
     (hv : ∀ k, 0 ≤ v k) :
     r50IdB N h w (sealIdW mid oc) v = fun k => v k + 1 := by
@@ -218,7 +217,7 @@ theorem sealProj1_pos (N h w ic oc : Nat)
     0 < sealProj1 N h w ic oc v k :=
   bnBatchLA_pos 1 one_pos (kv oc 1) (kv oc 160) 1 160 (fun _ => rfl) (fun _ => rfl) hm _ k
 
-/-- ⭐ **The structural stride-1 projection block is its projection plus one.** -/
+/-- **The structural stride-1 projection block is its projection plus one.** -/
 theorem sealPrB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160) (v : Vec (N * (ic * h * w))) :
     r50ProjB N h w (sealPrW ic mid oc) v = fun k => sealProj1 N h w ic oc v k + 1 := by
@@ -241,7 +240,7 @@ theorem sealPrB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
   rw [relu_id_of_pos (fun i => by rw [hres i]; linarith [sealProj1_pos N h w ic oc hm v i]),
     hres k]
 
-/-- ⭐ **The structural strided projection block is ResNet-34's strided projection plus one.** -/
+/-- **The structural strided projection block is ResNet-34's strided projection plus one.** -/
 theorem sealDnB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
@@ -289,7 +288,7 @@ theorem seal_id_pos (mid oc : Nat) : R50IdPos (sealIdW mid oc) := ⟨one_pos, on
 theorem seal_pr_pos (ic mid oc : Nat) : R50ProjPos (sealPrW ic mid oc) :=
   ⟨one_pos, one_pos, one_pos, one_pos⟩
 
-/-- ⭐ **The bottleneck's three relu clauses.** Both interior ones see a constant channel (their
+/-- **The bottleneck's three relu clauses.** Both interior ones see a constant channel (their
     convs are zeroed), so they are `β = 1 ≠ 0` and weight-only; only the post-residual one needs
     the activation, and only through `0 ≤ ·`. -/
 theorem seal_id_smooth (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (oc * h * w)))
@@ -340,7 +339,7 @@ theorem seal_pr_smooth (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     intro hc
     linarith [sealProj1_pos N h w ic oc hm v k]
 
-/-- The strided projection block's three relu clauses — all weight-only. ⚠ v1.5: `hm1` is at the
+/-- The strided projection block's three relu clauses — all weight-only. v1.5: `hm1` is at the
     INPUT resolution and only `hm2` is at the halved one. -/
 theorem seal_dn_smooth (N h w ic mid oc : Nat) (hn2 : 0 < N * ((2 * h) * (2 * w)))
     (hn : 0 < N * (h * w)) (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
@@ -699,7 +698,7 @@ theorem seal_smooth (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ
     sc_s3b1 q hq0 nCls t, sc_s3b2 q hq0 nCls t, sc_s3b3 q hq0 nCls t, sc_s3b4 q hq0 nCls t,
     sc_s3b5 q hq0 nCls t, sc_s4b0 q hq0 hq nCls t, sc_s4b1 q hq0 nCls t, sc_s4b2 q hq0 nCls t⟩
 
-/-- ⭐⭐ **The whole-net VJP at the witness** — all 48 relu clauses, the stem clause and the
+/-- **The whole-net VJP at the witness** — all 48 relu clauses, the stem clause and the
     pool's no-tie discharged at `(sealW nCls, sealX q t)`, on `resnet50ForwardBFull` itself
     (transported through `resnet50ForwardBFull_eq_chain`), at BOTH shipped resolutions. -/
 noncomputable def sealVJP (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
@@ -887,7 +886,7 @@ theorem head_diff (q : Nat) (hq0 : 0 < q) (nCls : Nat) (hn : 0 < nCls)
   head_diff_ct hq0 hq0 (0 : Fin 2048) rfl ⟨0, hn⟩ _ _
     (fun ci => by rw [sealW_Wd]; simp) rfl v δ hv
 
-/-- ⭐⭐ **The positive, continuous nonlinear factor**: one `istd` per BN on the carrier's path —
+/-- **The positive, continuous nonlinear factor**: one `istd` per BN on the carrier's path —
     the stem's and the FOUR projections'. -/
 noncomputable def Rr (q : Nat) (nCls : Nat) (t : ℝ) : ℝ :=
   bnIstd (2 * ((2 * (2 * (2 * (2 * q)))) * (2 * (2 * (2 * (2 * q))))))
@@ -904,7 +903,7 @@ theorem Rr_pos (q : Nat) (nCls : Nat) (t : ℝ) : 0 < Rr q nCls t :=
       (mul_pos (bnIstd_pos _ 1 one_pos)
         (mul_pos (bnIstd_pos _ 1 one_pos) (bnIstd_pos _ 1 one_pos))))
 
-/-- ⭐⭐ **The class-0 difference between the two examples, along the ray, is `t · R t`.** -/
+/-- **The class-0 difference between the two examples, along the ray, is `t · R t`.** -/
 theorem gd_ray (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
     resnet50ForwardBFull 2 q (sealW nCls) (sealX q t)
         (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
@@ -935,14 +934,14 @@ theorem Rr_continuous (q : Nat) (_hq0 : 0 < q) (nCls : Nat) : Continuous (Rr q n
 -- § 12. The seal
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN ResNet-50 at the
+/-- **Level 2 — the witness is non-degenerate**: the full-width batch-BN ResNet-50 at the
     structural weights is NOT constant in its input, at either shipped resolution. -/
 theorem sealX_nonconstant (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (hn : 0 < nCls) :
     resnet50ForwardBFull 2 q (sealW nCls) (sealX q 1)
       ≠ resnet50ForwardBFull 2 q (sealW nCls) (sealX q 0) :=
   ne_of_ray_readout _ (sealX q) _ _ (gd_ray q hq0 hq nCls hn) (by simpa using (Rr_pos q nCls 1).ne')
 
-/-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
+/-- **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat)
     (hn : 0 < nCls) :
     fderiv ℝ (resnet50ForwardBFull 2 q (sealW nCls)) (sealX q 0) ≠ 0 :=
@@ -950,7 +949,7 @@ theorem sealX_jacobian_nonzero (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Na
     (gd_ray q hq0 hq nCls hn) (seal_differentiableAt q hq0 hq nCls 0) (Rr_pos q nCls 0).ne'
     (hasDerivAt_mul_self_zero (Rr_continuous q hq0 nCls).continuousAt)
 
-/-- ⭐⭐ **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
+/-- **The seal**: the proven whole-network backward of the **full-width, batch-BatchNorm,
     [3,4,6,3]-bottleneck** ResNet-50 — `resnet50ForwardBFull`, at BOTH shipped resolutions —
     is **not the zero map** at the witness. ResNet-50's clause bundle (48 relu clauses, the stem
     and the pool) had no exhibited point at all before this. -/

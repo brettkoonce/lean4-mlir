@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Foundation.SgdNodes
 
-/-! # PoC: the cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) §1a TIE
+/-! # PoC: the cifar8-bn (Chapter 4 deeper, 8-conv per-channel BN) TIE
 
-cifar8's §1a tie + a BN-back at every conv. The backward
+cifar8's tie (`Cifar8PoC.cifar8_convs_tied_certified`) + a BN-back at every conv. The backward
 chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the γ/β ops) and **conv-output
 cotangent** `cotCᵢ` (`bnPerChannelTensor3GradInput` of `dyBnᵢ` — fed to the conv W/b ops), repeated
 over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
@@ -12,9 +12,12 @@ over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-b
 `CifarBnPoC.bnGamma_den`/`bnBeta_den`; dense head + loss-cot reuse `Cifar8PoC`/cifar. All 38 params
 (8 conv W/b + 8 BN γ/β + 3 dense) fold with the generics — the cifar8-bn lesson applied to the tie.
 
-## Honest residual (same as the rest of the suite)
+## Scope (same as the rest of the suite)
+* The conv and BN cotangents are the rendered chain (`cotCᵢ`, `dyBnᵢ` in
+  `cifar8Bn_convbn_tied_certified`); that they equal the loss gradient at each layer output is not
+  stated.
 * Conv/BN backward rendered hand-written (cotangent SSA ↔ chain-cot per-op trust); per-op `pretty`
-  lexing; BN `0 < ε` smoothness; ℝ → Float32.
+  lexing; ℝ → Float32.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -45,11 +48,13 @@ theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
                     W₉ b₉ Wa ba Wb bb x) j - oneHot nClasses label j :=
   StableHLO.softmaxCELossCot_den nlogN ohN _ label
 
-/-- **Whole cifar8-bn conv+BN tail, tied.** All 32 conv/BN params (8 conv `W`+`b`, 8 BN `γ`+`β`), at the
-    real cifar8-bn forward and the composed softmax-CE cotangent, denote the certified loss-descent
-    step. The conv ops are fed the BN-back cotangents `cotC1–8`; the BN ops the relu-masked
-    cotangents `dyBn1–8`; both are the genuine cifar8-bn backward chain (cifar8's chain + a BN-back at
-    every conv). Dense head + loss-cot reuse `Cifar8PoC`/cifar. -/
+/-- **Whole cifar8-bn conv+BN tail, tied.** All 32 conv/BN params (8 conv `W`+`b`, 8 BN `γ`+`β`; 24
+    conjuncts, one `BnSgdPairTied` per γ/β pair), at the real cifar8-bn forward, denote
+    `θ − lr·(certified per-layer Jacobian · c)` with `c` the rendered backward-chain cotangent driven by
+    the composed softmax-CE cotangent `g`. The conv ops are fed the BN-back cotangents `cotC1–8`; the
+    BN ops the relu-masked cotangents `dyBn1–8`; both are the rendered cifar8-bn backward chain
+    (cifar8's chain + a BN-back at every conv). That they equal the loss gradient at each layer output
+    is not stated. Dense head + loss-cot reuse `Cifar8PoC`/cifar. -/
 theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)

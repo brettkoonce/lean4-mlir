@@ -6,20 +6,25 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 /-! # PoC: the MNIST-MLP train step, proof-tied to the certified SGD step
 
 The MLP analogue of `LinearFold`. `MainMnistMlpVerified` trains on
-`verified_mlir/mlp_train_step.mlir`; this file makes the *whole* module
-`pretty(provenGraph)` — forward (`denseF`/`reluF`), the loss cotangent, the
-backward chain (`dotOut`/`selectPos`), and the six parameter SGD updates as the
-`weightSgd`/`biasSgd` `SHlo` ops added in `LinearFold`'s core extension —
-and proves each output's `den` equals the certified `fderiv`-derived loss-descent
-step, reusing `mlp_render_{W,b}*_certified` (the per-layer bridges) and
-`mlpCotOut{0,1}_denote` (the explicit chain cotangents).
+`verified_mlir/mlp_train_step.mlir`; in that module every line that feeds a returned
+parameter is `pretty` of a node of the proven graph — forward (`denseF`/`reluF`), the loss
+cotangent, the backward chain (`dotOut`/`selectPos`), and the six parameter SGD updates as the
+`weightSgd`/`biasSgd` `SHlo` ops added in `LinearFold`'s core extension. The module also carries
+a hand-written, report-only `%loss` block that reads the logits and `%onehot` and feeds no
+parameter. This file proves that the output weight's `den` is `W₂ − lr·∂(crossEntropy ∘ forward)/∂W₂` at the
+emitted loss cotangent (`mlp_W2_tied_totalloss`), and that each of the other five is
+`θ − lr·(certified per-layer Jacobian · the rendered chain cotangent)` — `Cifar8PoC.denseW_den` /
+`Cifar8PoC.denseB_den` at the chain cotangents `mlpCotOut1`/`mlpCotOut0`, whose emitted
+`selectPos`/`dotOut` subgraphs `cot1_den`/`cot0_den` pin.
 
 No new core `SHlo` ops are needed: the backward chain uses the existing
 `dotOut`/`selectPos`, and the param updates reuse `weightSgd`/`biasSgd`.
 
-Residual (as for linear): per-op `pretty` lexing; B=1 (the emitted module
-batch-contracts; `den` is per-example); the ReLU smooth-point hypotheses are
-inherited from the bridges; ℝ→Float32.
+Scope: one example (the emitted module batch-contracts; `den` is per-example); that the chain
+cotangent `mlpCotOut1.denote g` / `mlpCotOut0.denote g` equals the loss gradient at the hidden
+pre-activation is not stated here (`IR.mlp_hidden_total_loss_grad` and
+`IR.mlp_input_total_loss_grad` state the hidden folds at smooth points with that factor left as a
+`pdiv`); per-op `pretty` lexing; ℝ→Float32.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -59,7 +64,7 @@ theorem cot0_den (p₀name c1name : String) :
 Each `weightSgd`/`biasSgd` op, fed the right activation (`x` field) and the
 cotangent the chain delivers (the `.operand` value), denotes `θ − lr·(certified
 per-layer Jacobian · cotangent)` — via the op `den` = `emitWeightGrad`/`emitBiasGrad`
-(outer / reduce) and the `mlp_render_*_certified` bridges. -/
+(outer / reduce) and `Cifar8PoC.denseW_den` / `Cifar8PoC.denseB_den`. -/
 
 /-- Output-layer weight op `weightSgd a1 W₂ (cot = dy)` = certified `W₂` step. -/
 theorem W2_den_certified (aN lrStr dyN : String) (i : Fin d₂) (j : Fin d₃) :
@@ -157,10 +162,11 @@ theorem mlp_W2_tied_totalloss (aN lrStr dyN : String) (label : Fin d₃) (i : Fi
       mlp_output_total_loss_grad W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label i j]
 
 /-- **Whole mlp train step, tied.** With the top loss cotangent `g` pinned to the composed
-    softmax-CE gradient of the forward (`mlpLossCot_den`), all six emitted parameter ops denote
-    the certified loss-descent step — the output weight `W₂` folded to the WHOLE-loss gradient
-    `∂CE/∂W₂` (`mlp_W2_tied_totalloss`), the other five to `θ − lr·(certified ∂layer/∂θ · the
-    backward-chain cotangent the real loss drives)` (the `*_den_certified` at the composed `g`).
+    softmax-CE gradient of the forward (`mlpLossCot_den`), the output-weight op denotes
+    `W₂ − lr·∂CE/∂W₂`, the WHOLE-loss gradient (`mlp_W2_tied_totalloss`), and the other five
+    denote `θ − lr·(certified ∂layer/∂θ · the backward-chain cotangent the real loss drives)` (the
+    `*_den_certified` at the composed `g`); that this chain cotangent is the loss gradient at a
+    hidden pre-activation is not stated.
     No symbolic cotangent remains; the forward is shared (single render, correctly-threaded SSAs). -/
 theorem mlp_train_step_tied_certified (lrStr aN dyN cN : String) (label : Fin d₃) :
     -- `g` = the softmax-CE gradient of the REAL forward logits (= `den` of the emitted loss graph)

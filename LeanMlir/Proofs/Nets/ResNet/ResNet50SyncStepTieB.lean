@@ -4,8 +4,9 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncB
 
 /-! # ResNet-50's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
 
-`ResNet50StepTieB` (T3) threads a loss cotangent `g` down the batch-BN bottleneck backward chain on
-ONE device and ties every parameter gradient node to the certified gradient. This is its
+`ResNet50StepTieB` threads a loss cotangent `g` down the batch-BN bottleneck backward chain on
+ONE device and ties every parameter gradient node to the certified per-op gradient at the cotangent
+that chain delivers. This is its
 data-parallel twin, for the render `ResNet50RenderB` emits at `replicas > 1`: `R` replicas at batch
 `N`, every BatchNorm synchronised (`bnFwdSite` / `bnBackSite` / `bnGammaSite`), every parameter
 gradient all-reduced by its mean. The capstone `r50_net_syncTiedB` says that, for every one of the
@@ -16,10 +17,10 @@ gradient all-reduced by its mean. The capstone `r50_net_syncTiedB` says that, fo
 
 whenever each replica's loss cotangent is `R ×` its shard of the global one
 (`∀ r, gs r = batchShard r (R • G)`) — the gradient node `r50_net_tiedB` at `N := R·N` ties to the
-certified gradient. The right-hand side is the existing single-device chain at `N := R·N`, so the
+certified per-op gradient. The right-hand side is the existing single-device chain at `N := R·N`, so the
 spec has not moved.
 
-⭐⭐ **The loss cotangent is a binder, as it is in T3.** ResNet-50 ships both losses, so the
+**The loss cotangent is a binder, as it is in `r50_net_tiedB`.** ResNet-50 ships both losses, so the
 capstone takes the scaled-shard relation between the replicas' cotangents and the global one as
 its hypothesis, and two corollaries discharge it, one per loss:
 
@@ -33,7 +34,7 @@ its hypothesis, and two corollaries discharge it, one per loss:
 1. **Sharding** — each replica's backward chain, handed its shard of a global cotangent, computes
    the shard of the global chain. Every non-BN link (relu mask, the 1×1 and 3×3 conv input-VJPs,
    the strided 3×3 and strided 1×1 input-VJPs, the stem pool's scatter, the head) is a per-example
-   map; the BN link is `bnSyncInB`, whose shard lemma `bnSyncInB_shard` is P2 on the graph. ⚠ In
+   map; the BN link is `bnSyncInB`, whose shard lemma `bnSyncInB_shard` is P2 on the graph. In
    the strided block bn₁ runs at the INPUT grid `2h × 2w` (v1.5: the stride is on the 3×3), so that
    site's statistics reduce over `N·(2h)·(2w)` per replica.
 2. **The collectives** — the mean over replicas of each replica's gradient node is `1/R` of the
@@ -52,13 +53,13 @@ The chain runs at `N·(c·h·w)`, the BN nodes at `N·(c·(h·w))`; the replica 
 
 ## What is NOT claimed
 
-⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
+The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (r50Pre_k (R*N) q w X)`); that the sync forward graph computes exactly those is
-`StableHLO.resnet50FwdGraphSyncFull_shard`, the forward half. ⚠ No stochastic depth (drop-path):
-the chain is the drop-free one, as T3's is. ⚠ The f32 nodes — the bf16 conv twins are not this
-statement. ⚠ The render has no conv-bias gradient ops, so there are none here. ⚠ That the replicas'
-inputs are the shards of one batch is the driver's. ⚠ The gradient accumulator and the optimizers
-run after the collective, so this is per micro-step. ⚠ The lowerer's `all_reduce` is trusted as
+`StableHLO.resnet50FwdGraphSyncFull_shard`, the forward half. No stochastic depth (drop-path):
+the chain is the drop-free one, as `r50_net_tiedB`'s is. The f32 nodes — the bf16 conv twins are not this
+statement. The render has no conv-bias gradient ops, so there are none here. That the replicas'
+inputs are the shards of one batch is the driver's. The gradient accumulator and the optimizers
+run after the collective, so this is per micro-step. The lowerer's `all_reduce` is trusted as
 every other op's lowering is.
 -/
 
@@ -171,7 +172,7 @@ theorem r50DownCotC2_smul : IsHomog (r50DownCotC2 N h w p xin) := by
   intro s dy
   unfold r50DownCotC2; rw [r50DownCotN2_smul, bnInB_smul]
 
-/-- ⚠ The strided 3×3's input-VJP carries the cotangent from `h × w` up to bn₁'s `2h × 2w`. -/
+/-- The strided 3×3's input-VJP carries the cotangent from `h × w` up to bn₁'s `2h × 2w`. -/
 theorem r50DownCotN1_smul : IsHomog (r50DownCotN1 N h w p xin) := by
   intro s dy
   unfold r50DownCotN1; rw [r50DownCotC2_smul, cStridedInB_smul, reluMaskB_smul]
@@ -549,7 +550,7 @@ theorem r50DownSyncCotN1_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-/-- ⚠ bn₁'s sync site reduces over `N·(2h)·(2w)` per replica — the one site in the net where the
+/-- bn₁'s sync site reduces over `N·(2h)·(2w)` per replica — the one site in the net where the
     reduction width is not the block's output grid. -/
 theorem r50DownSyncCotC1_shard (r : Fin R) :
     r50DownSyncCotC1 R hR N h w p XIN dys r
@@ -587,8 +588,8 @@ end DownBlockShard
 /-- **Identity bottleneck, DP-tied.** Its nine emitted parameter collectives — the three conv
     weights and the three BatchNorms' γ and β — each equal the single-device node at the global
     batch, at the single-device chain cotangents driven by `DY`, when the replicas' block-output
-    cotangents are `R ×` its shards. ⚠ Each BN's γ/β reads the cotangent at THAT BN's output
-    (`N1`, `N2`, `A`), each conv the one at the conv's output (`C1`, `C2`, `C3`) — T3's wiring. -/
+    cotangents are `R ×` its shards. Each BN's γ/β reads the cotangent at THAT BN's output
+    (`N1`, `N2`, `A`), each conv the one at the conv's output (`C1`, `C2`, `C3`) — `r50IdTiedB`'s wiring. -/
 def r50IdSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat}
     (pfx xN cotN vN epsStr : String) (p : R50IdW mid oc) (XIN : Vec ((R * N) * (oc * h * w)))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
@@ -641,7 +642,7 @@ theorem r50_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50IdSyncCotA_shard R N h w p XIN dys _ hdys, r50IdCotA_smul])
 
-/-- ⭐ **Stride-1 projection bottleneck, DP-tied** — stage 1 block 0, twelve collectives: the
+/-- **Stride-1 projection bottleneck, DP-tied** — stage 1 block 0, twelve collectives: the
     identity bottleneck's nine plus the stride-1 1×1 skip's weight (an ORDINARY `ConvWSync`) and
     its BatchNorm's γ and β, which read `A`, the post-relu cotangent. -/
 def r50ProjSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
@@ -704,7 +705,7 @@ theorem r50_projblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [r50ProjSyncCotA_shard R N h w p XIN dys _ hdys, r50ProjCotA_smul])
 
-/-- **Strided projection bottleneck, DP-tied** — stages 2/3/4 block 0, twelve collectives. ⚠⚠ v1.5:
+/-- **Strided projection bottleneck, DP-tied** — stages 2/3/4 block 0, twelve collectives. v1.5:
     `W₁` is an ordinary `ConvWSync` at the INPUT grid `2h × 2w` and bn₁'s γ/β reduce there; only
     `W₂` (the 3×3) and `Wp` (the 1×1 skip) are `ConvStridedWSync`. -/
 def r50DownSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
@@ -782,7 +783,7 @@ theorem r50_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc 
     the statement `r50_net_syncTiedB` proves, named so the per-loss corollaries can state it at
     their cotangents.
 
-    The single-device chain is T3's (`r50_net_tiedB`'s `dy_k`) at the global batch `R·N`, driven by
+    The single-device chain is `r50_net_tiedB`'s (its `dy_k`) at the global batch `R·N`, driven by
     the global loss cotangent `G`. The replica chain is each replica's own: the head backward on its
     shard of the trunk's output at its own cotangent `gs r`, then sixteen bottleneck backwards,
     every BatchNorm the sync backward. The conjuncts are the 161 collectives the render emits —
@@ -868,20 +869,20 @@ def r50NetSyncTiedB (R : Nat) (hR : 0 < R) (N q : Nat) {nCls : Nat} (xN cotN vN 
   ∧ r50IdSyncTiedB R hR N q q "s4b2" xN cotN vN epsStr w.s4b2 (r50Pre15 (R * N) q w X) e16 dy16
   ∧ r34HeadSyncTiedB R hR N q q xN cotN (r50Pre16 (R * N) q w X) gs G
 
-/-- ⭐⭐⭐ **The synchronised-BN data-parallel ResNet-50 step IS the single-device step at the global
+/-- **The synchronised-BN data-parallel ResNet-50 step IS the single-device step at the global
     batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from its
     own loss cotangent `gs r`; every parameter's all-reduced mean gradient — the 161 the render
-    emits — equals the single-device batch-BN gradient node at batch `R·N`, at the cotangent T3's
-    chain delivers there from `G`, whenever each replica's cotangent is `R ×` its shard of `G`.
+    emits — equals the single-device batch-BN gradient node at batch `R·N`, at the cotangent
+    `r50_net_tiedB`'s chain delivers there from `G`, whenever each replica's cotangent is `R ×` its shard of `G`.
 
-    ⭐ The hypothesis `hgs` is the divisor step, left open because T3 leaves the loss open: a
+    The hypothesis `hgs` is the divisor step, left open because `r50_net_tiedB` leaves the loss open: a
     replica divides its loss by its own batch and the global step by `R ×` that, so a replica's
     cotangent is `R ×` its shard of the global one — for the label-smoothed CE
     (`r50_net_syncTiedB_smoothedCE`) and for BCE-with-logits (`r50_net_syncTiedB_bce`) alike.
 
-    ⭐ The right-hand chain is `r50_net_tiedB`'s at `N := R·N`, `g := G`, whose nodes that capstone
-    ties to the certified gradient — so this and it together say the DP step's update is the
-    certified gradient of the mean loss over all `R·N` examples. `N`, `q` are binders, so one
+    The right-hand chain is `r50_net_tiedB`'s at `N := R·N`, `g := G`, whose nodes that capstone
+    ties to the certified per-op gradient at the chain cotangent — so this and it together say each
+    all-reduced gradient equals the single-device node at the global batch. `N`, `q` are binders, so one
     statement covers the 224-px (`q = 7`) and 160-px (`q = 5`) artifacts; `0 < q` makes every
     BatchNorm's reduction width nonzero. -/
 theorem r50_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat) (hq : 0 < q)
@@ -970,7 +971,7 @@ theorem r50_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat
 -- § 5. The two losses — the divisor step, discharged once per loss
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **The BCE divisor step** — `ResNet34SyncTieB.replicaLossCot_eq`'s peer for BCE-with-logits.
+/-- **The BCE divisor step** — `ResNet34SyncTieB.replicaLossCot_eq`'s peer for BCE-with-logits.
     Replica `r`'s three-op chain divides by `bk`, the single-device one at the global batch by
     `R·bk`; at the replica's shard of the logits and targets, the replica's cotangent is `R ×` its
     shard of the global one. `σ(z) − t` is per example, so only the divisor differs. -/
@@ -995,7 +996,7 @@ theorem replicaBceLossCot_eq (R N nCls : Nat) (hR : 0 < R) (bk : ℝ) (bStr logN
   rw [rowB_shard, hden, unrowB_shard]
   rfl
 
-/-- ⭐ **The sync-BN DP step at the label-smoothed loss** — every `bce := false` DP artifact.
+/-- **The sync-BN DP step at the label-smoothed loss** — every `bce := false` DP artifact.
     Replicas divide by `B`, the global step by `R·B`; `replicaLossCot_eq` discharges `hgs`. -/
 theorem r50_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat)
     (hq : 0 < q) {nCls : Nat} (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String)
@@ -1011,7 +1012,7 @@ theorem r50_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < 
   r50_net_syncTiedB R hR N hN q hq xN cotN vN epsStr w X _ _
     (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ T r)
 
-/-- ⭐⭐ **The sync-BN DP step at BCE-with-logits, at the COMMITTED divisors** — every `bce := true`
+/-- **The sync-BN DP step at BCE-with-logits, at the COMMITTED divisors** — every `bce := true`
     DP artifact, including `resnet50in160_lambaccdp8x64bce` (per micro-step). A replica's chain
     divides by `N·K` (its own batch × the class count, what the render bakes at `B := N`); the
     single-device step at the global batch by `(R·N)·K` — `r50_lossCot_is_bce_grad`'s divisor at
