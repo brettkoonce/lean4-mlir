@@ -7,15 +7,17 @@ name: IREE
 # This job is the loop that keeps them honest: IREE from PyPI, CPU only (`IREE_BACKEND=llvm-cpu`,
 # run on `local-task`), no GPU, no FFI build.
 #
-# Today it runs the three adjoint/finite-difference gradchecks of tests/ViTRender.lean's fragments
-# (MHSA, one pre-norm ViT block, a tiny whole ViT), each gated on its `✅ PASS` line, plus a control
-# that must go red. Grow it here rather than by hand: see planning/iree_ci.md.
+# Today it runs the four adjoint/finite-difference gradchecks of the ViT chapter's hand-written
+# fragments (single-head SDPA, MHSA, one pre-norm ViT block, a tiny whole ViT), each gated on its
+# `✅ PASS` line, plus a control that must go red. Grow it here rather than by hand: see
+# planning/iree_ci.md.
 
 on:
   push:
     branches: [main]
     paths:
       - 'tests/ViTRender.lean'
+      - 'tests/TestSDPA.lean'
       - 'tests/TestMHSA.lean'
       - 'tests/TestViTBlock.lean'
       - 'tests/TestViTTiny.lean'
@@ -78,7 +80,7 @@ jobs:
           {
             echo "## IREE gradchecks"
             echo ""
-            echo "Hand-written StableHLO fragments (tests/ViTRender.lean), compiled by IREE and run on the CPU."
+            echo "Hand-written StableHLO fragments (tests/TestSDPA.lean, tests/ViTRender.lean), compiled by IREE and run on the CPU."
             echo "Each backward is checked against finite differences of its own forward:"
             echo "⟨back(dOut), v⟩ ≈ (Φ(+ε) − Φ(−ε)) / 2ε, over every input it checks at once. Passes at rel err < 1e-2."
             echo ""
@@ -86,7 +88,8 @@ jobs:
             echo "|---|---|---|---|"
           } >> $GITHUB_STEP_SUMMARY
           rc=0
-          for row in "TestMHSA|multi-head self-attention (Q/K/V/O projections, softmax, head split/merge)" \
+          for row in "TestSDPA|single-head scaled dot-product attention: dQ, dK, dV through the row-softmax VJP" \
+                     "TestMHSA|multi-head self-attention (Q/K/V/O projections, softmax, head split/merge)" \
                      "TestViTBlock|one pre-norm transformer block (LayerNorm, MHSA, GELU MLP, two residuals)" \
                      "TestViTTiny|a whole tiny ViT, every parameter: patch embed, CLS + position, two blocks, final LN, head"; do
             t=${row%%|*}; what=${row#*|}

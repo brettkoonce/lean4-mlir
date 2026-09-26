@@ -96,11 +96,15 @@ private def backModule : String :=
 -- ════════════════════════════════════════════════════════════════
 
 /-- The adjoint/finite-difference gradcheck of the compiled SDPA fwd/back: all three backward
-    paths (dQ, dK, dV) against one directional derivative. -/
+    paths (dQ, dK, dV) against one directional derivative. Seed 1, not the default 0: seed 0's
+    draw is nearly orthogonal to the gradient (directional derivative 1.7e-3, against a median of
+    ~0.5 over seeds 0–19), so f32's own ~1.5e-5 finite-difference floor is 1% of it and the check
+    lands on the tolerance. Seeds 1–19 pass at 1.4e-5 to 1.9e-3. -/
 private def gradcheck : IO Unit := do
   let sh := s!"{Nn}x{Dd}xf32"
   let _ ← adjointGradcheck "sdpa gradcheck" ".lake/build/sdpa_fwd.vmfb" "sdpa_fwd"
     ".lake/build/sdpa_back.vmfb" "sdpa_back" [sh, sh, sh] [Nn*Dd, Nn*Dd, Nn*Dd] sh (Nn*Dd)
+    (seedBase := 1)
 
 def main : IO Unit := do
   IO.println "── @sdpa_fwd ──"

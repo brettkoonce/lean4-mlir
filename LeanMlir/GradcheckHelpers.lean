@@ -38,16 +38,34 @@ def parseFloat? (tok : String) : Option Float :=
 /-- `parseFloat?` with `0.0` for a token it cannot read. -/
 def parseFloat (tok : String) : Float := (parseFloat? tok).getD 0.0
 
-/-- Extract the parsed result buffers (in `result[i]` order) from an
-    iree-run-module stdout: each value line is `…xf32=[a b][c d]…`. -/
-private def parseResults (out : String) : Array (Array Float) := Id.run do
-  let mut res : Array (Array Float) := #[]
-  for line in out.splitOn "\n" do
-    if let some idx := (line.splitOn "f32=")[1]? then
-      let cleaned := idx.map (fun c => if c == '[' || c == ']' then ' ' else c)
-      let toks := (cleaned.splitOn " ").filter (fun t => !t.isEmpty)
-      res := res.push ((toks.map parseFloat).toArray)
-  return res
+/-- Write a flat array as raw little-endian `f32`, for `iree-run-module --input=<shape>=@file`.
+    Inputs and outputs go through files, not text: `Float.toString` keeps six decimals and IREE
+    prints six significant digits, and either rounding alone puts a ~3e-4 floor under a
+    finite-difference quotient at ε = 1e-3. Through files the floor is f32's own. -/
+private def writeBinF32 (path : String) (xs : Array Float) : IO Unit := do
+  let mut b := ByteArray.emptyWithCapacity (4 * xs.size)
+  for x in xs do
+    let u := x.toFloat32.toBits
+    b := b.push u.toUInt8 |>.push (u >>> 8).toUInt8 |>.push (u >>> 16).toUInt8
+      |>.push (u >>> 24).toUInt8
+  IO.FS.writeBinFile path b
+
+/-- Read an `f32` `.npy` file (as `iree-run-module --output=@file.npy` writes it) into a flat
+    array. -/
+private def readNpyF32 (path : String) : IO (Array Float) := do
+  let b ← IO.FS.readBinFile path
+  unless b.size ≥ 10 && b[0]! == 0x93 && b[6]! == 1 do
+    throw <| IO.userError s!"{path}: not a v1 .npy file"
+  let hlen := b[8]!.toNat + 256 * b[9]!.toNat
+  let header := String.fromUTF8! (b.extract 10 (10 + hlen))
+  unless (header.splitOn "'<f4'").length > 1 do
+    throw <| IO.userError s!"{path}: expected dtype '<f4', header {header}"
+  let n := (b.size - 10 - hlen) / 4
+  return (Array.range n).map fun i =>
+    let o := 10 + hlen + 4 * i
+    let bits := b[o]!.toUInt32 ||| (b[o+1]!.toUInt32 <<< 8) |||
+      (b[o+2]!.toUInt32 <<< 16) ||| (b[o+3]!.toUInt32 <<< 24)
+    (Float32.ofBits bits).toFloat
 
 /-- The `iree-run-module` device for the `IREE_BACKEND` the `.vmfb` was compiled for (default
     `cuda`, as in `ireeCompileArgs`): `rocm` runs on `hip`, `llvm-cpu` on `local-task`. -/
@@ -57,15 +75,20 @@ def runDevice : IO String := do
   | "llvm-cpu" => return "local-task"
   | b => return b
 
-/-- Run a compiled `.vmfb` function; `inputs` are `(shapeStr, flatValues)`. -/
-private def runFn (vmfb fn : String) (inputs : List (String × Array Float)) : IO (Array (Array Float)) := do
-  let inArgs := inputs.map (fun (sh, xs) =>
-    s!"--input={sh}=" ++ String.intercalate " " (xs.toList.map toString))
-  let args := #[s!"--module={vmfb}", s!"--device={← runDevice}", s!"--function={fn}"] ++ inArgs.toArray
+/-- Run a compiled `.vmfb` function with `nOut` results; `inputs` are `(shapeStr, flatValues)`. -/
+private def runFn (vmfb fn : String) (inputs : List (String × Array Float)) (nOut : Nat) :
+    IO (Array (Array Float)) := do
+  let inArgs ← inputs.zipIdx.mapM fun ((sh, xs), i) => do
+    let f := s!".lake/build/{fn}_in{i}.bin"
+    writeBinF32 f xs
+    return s!"--input={sh}=@{f}"
+  let outs := (List.range nOut).map (fun i => s!".lake/build/{fn}_out{i}.npy")
+  let args := #[s!"--module={vmfb}", s!"--device={← runDevice}", s!"--function={fn}"] ++
+    inArgs.toArray ++ (outs.map (s!"--output=@" ++ ·)).toArray
   let r ← IO.Process.output { cmd := "iree-run-module", args := args }
   if r.exitCode != 0 then
     IO.eprintln s!"[run {fn}] FAILED:\n{r.stderr.take 1500}"; return #[]
-  return parseResults r.stdout
+  outs.toArray.mapM readNpyF32
 
 /-- Deterministic LCG pseudo-random `Array Float` in `[-1,1]`, length `n`. -/
 def randVec (seed n : Nat) : Array Float := Id.run do
@@ -99,13 +122,13 @@ def adjointGradcheckFixed (label fwdVmfb fwdFn backVmfb backFn : String)
   let dirs   := (inLens.zipIdx).map (fun (l, i) => randVec (seedBase + 200 + i) l)
   let dO := randVec (seedBase + 42) outLen
   let ins := inShapes.zip params
-  let back ← runFn backVmfb backFn (fixed ++ ins ++ [(outShape, dO)])
+  let back ← runFn backVmfb backFn (fixed ++ ins ++ [(outShape, dO)]) inShapes.length
   if back.size != inShapes.length then
     IO.eprintln s!"[{label}] expected {inShapes.length} back results, got {back.size}"; return false
   let lhs := ((back.toList.zip dirs).map (fun (g, v) => dot g v)).foldl (· + ·) 0.0
   let phi (s : Float) : IO Float := do
     let pert := (params.zip dirs).map (fun (pv, vv) => axpy s vv pv)
-    let f ← runFn fwdVmfb fwdFn (fixed ++ inShapes.zip pert)
+    let f ← runFn fwdVmfb fwdFn (fixed ++ inShapes.zip pert) 1
     if f.size != 1 then IO.eprintln s!"[{label}] fwd result missing"; return 0.0
     return dot f[0]! dO
   let phiP ← phi eps
