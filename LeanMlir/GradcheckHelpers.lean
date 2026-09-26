@@ -49,11 +49,19 @@ def parseResults (out : String) : Array (Array Float) := Id.run do
       res := res.push ((toks.map parseFloat).toArray)
   return res
 
+/-- The `iree-run-module` device for the `IREE_BACKEND` the `.vmfb` was compiled for (default
+    `cuda`, as in `ireeCompileArgs`): `rocm` runs on `hip`, `llvm-cpu` on `local-task`. -/
+def runDevice : IO String := do
+  match (← IO.getEnv "IREE_BACKEND").getD "cuda" with
+  | "rocm" => return "hip"
+  | "llvm-cpu" => return "local-task"
+  | b => return b
+
 /-- Run a compiled `.vmfb` function; `inputs` are `(shapeStr, flatValues)`. -/
 def runFn (vmfb fn : String) (inputs : List (String × Array Float)) : IO (Array (Array Float)) := do
   let inArgs := inputs.map (fun (sh, xs) =>
     s!"--input={sh}=" ++ String.intercalate " " (xs.toList.map toString))
-  let args := #[s!"--module={vmfb}", "--device=hip", s!"--function={fn}"] ++ inArgs.toArray
+  let args := #[s!"--module={vmfb}", s!"--device={← runDevice}", s!"--function={fn}"] ++ inArgs.toArray
   let r ← IO.Process.output { cmd := "iree-run-module", args := args }
   if r.exitCode != 0 then
     IO.eprintln s!"[run {fn}] FAILED:\n{r.stderr.take 1500}"; return #[]

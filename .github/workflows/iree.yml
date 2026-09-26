@@ -1,0 +1,98 @@
+name: IREE
+
+# IREE is no longer the training engine (PJRT/XLA is), but it is still the second compiler: the
+# checks that lower a hand-written or rendered graph through IREE are how a render is tested against
+# something other than the compiler that trains it. Run only by hand, those checks rotted — a
+# hardcoded `--device=hip` after the ROCm box left, and smokes that printed FAILED and exited 0.
+# This job is the loop that keeps them honest: IREE from PyPI, CPU only (`IREE_BACKEND=llvm-cpu`,
+# run on `local-task`), no GPU, no FFI build.
+#
+# Today it runs the three adjoint/finite-difference gradchecks of tests/ViTRender.lean's fragments
+# (MHSA, one pre-norm ViT block, a tiny whole ViT), each gated on its `✅ PASS` line, plus a control
+# that must go red. Grow it here rather than by hand: see planning/iree_ci.md.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tests/ViTRender.lean'
+      - 'tests/TestMHSA.lean'
+      - 'tests/TestViTBlock.lean'
+      - 'tests/TestViTTiny.lean'
+      - 'LeanMlir/GradcheckHelpers.lean'
+      - 'LeanMlir/Types.lean'          # ireeCompileArgs / compileCheckB
+      - 'LeanMlir/Proofs/Codegen/StableHLO/Pretty.lean'
+      - 'lakefile.lean'
+      - 'lean-toolchain'
+      - 'lake-manifest.json'
+      - '.github/workflows/iree.yml'
+  schedule:
+    - cron: '30 7 * * *'   # nightly: catches IREE / toolchain drift the path filter cannot see
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gradcheck:
+    name: IREE gradchecks (llvm-cpu)
+    runs-on: ubuntu-latest
+    # Warm (certs cache restored) this is minutes; cold, the Pretty import chain builds from scratch.
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Restore .lake (certs build, read-only)
+        # Restore-only: this job builds a small slice of what certs.yml caches and must not save a
+        # narrower entry under its prefix. ⚠ The path block must stay BYTE-IDENTICAL to certs.yml's
+        # or the restore never matches (see the note there).
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .lake/build
+            !.lake/build/doc
+            !.lake/build/doc-data
+          key: lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-certs-
+
+      - name: Build the test modules
+        run: |
+          lake exe cache get || true
+          lake build TestSupport LeanMlir.GradcheckHelpers LeanMlir.Types
+
+      - name: IREE (PyPI, the version jax.yml's forward ties use)
+        run: python3 -m pip install --quiet iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
+
+      - name: Gradchecks
+        run: |
+          set -o pipefail
+          export IREE_BACKEND=llvm-cpu
+          rc=0
+          for t in TestMHSA TestViTBlock TestViTTiny; do
+            lake env lean tests/$t.lean 2>&1 | tee /tmp/$t.log
+            # The tests print their verdict and exit 0 either way, so the verdict line is the gate.
+            if grep -q "✅ PASS" /tmp/$t.log; then
+              echo "- ✅ $t: $(grep -m1 'rel err' /tmp/$t.log)" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "::error::$t did not PASS"; echo "- ❌ $t" >> $GITHUB_STEP_SUMMARY; rc=1
+            fi
+          done
+          exit $rc
+
+      - name: Control (a device the runner lacks must go red)
+        run: |
+          # IREE_BACKEND=rocm compiles for gfx1100 and runs on `hip`; a CPU runner has neither, so
+          # no PASS line can appear. If it does, the gate above is not reading the tests' verdict.
+          IREE_BACKEND=rocm lake env lean tests/TestMHSA.lean > /tmp/control.log 2>&1 || true
+          if grep -q "✅ PASS" /tmp/control.log; then
+            echo "::error::control came out GREEN — the PASS gate cannot fail"; exit 1
+          fi
+          echo "- control (IREE_BACKEND=rocm on a CPU runner): red, as it must be" >> $GITHUB_STEP_SUMMARY
