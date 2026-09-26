@@ -353,6 +353,26 @@ The scorecard generators under `scripts/certs/` emit the same theorem into sever
 `LipschitzCertScorecardIBPData`'s three imports are interchangeable. Emit shared lemmas once into a
 file both scorecards import; do it together with §6 rows 1–3, since those change the output paths anyway.
 
+**Measured 2026-09-26 (after §6):** by statement text (bound-variable names aside) there are 50
+cross-file pairs, and none is a safe generator dedup.
+
+| pair | where | ruling |
+|---|---|---|
+| `certSF*` = `certifiedSSF*` (16), `certTF*` = `certifiedSTF*` (7), `certifiedC*` = `certifiedSC*` (3) | `ScorecardFull` / `ScorecardSDPFull{,Uncon}`; `Scorecard` / `ScorecardSDP` | keep: the same statements with different proofs (global `√2·L` vs per-pair LipSDP). Each is its method's result; the SDP files exist to show their method certifies them |
+| `hpsumSF*` = `hpreSF*_sum` (8) | `ScorecardCrown` / `ScorecardIBP` | keep: the two tiers "import `ScorecardIBPData` and not each other, so they build in parallel", and CROWN certifies a different image set (the generator says so). Sharing them means emitting `_sum` beside `_eval` in `ScorecardFullImgsA/B`, the base that the unbuilt `ScorecardSDPFull*` imports; the saving is eight two-line lemmas |
+| `pzTF_*` = `pzITF_*` (16) | `ScorecardSDPFullUncon` / `ScorecardIBPUncon` | keep: per-file fallback images in two files with no shared import but the base; one of them is built by no lib (OOM), so a change there cannot be compiled by any gate |
+
+Reproducibility, checked in a scratch mirror with `data/` MNIST: `lipschitz_cert_scorecard_full.py`,
+`lipschitz_cert_scorecard_ibp.py` and `crown_ibp_scorecard.py` reproduce their nine committed files
+byte for byte (`lipschitz_cert_pair_sdp.py` was not run). `lipschitz_cert_pair_sdp_full.py` does NOT:
+`ScorecardSDPFullUncon` regenerates at 2,480 lines against 3,083 committed, and `ScorecardSDPFull`
+differs too. Both files are built by no lib, so nothing catches the drift. That is its own
+finding, open.
+
+Found in the check: Batch E's short-name pass wrote `` `Group/Rest` `` into four `scripts/certs/`
+generators while the Lean files they emit got `` `Group.Rest` ``; `lipschitz_cert_scorecard_ibp.py`
+therefore no longer reproduced `ScorecardIBPData`. Fixed: the generators emit the dotted form.
+
 ## 8. Handed to the naming pass
 
 Generic lemmas in the right file under a net's name or namespace: `ResNet34PoCB.*`,

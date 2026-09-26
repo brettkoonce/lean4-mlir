@@ -414,7 +414,7 @@ hdr = f'''import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 /-! # Trained-weight whole-network VJP witness — CNN rung
 
-The `Trained/MlpWitness` program extended to a CONVOLUTIONAL net: the
+The `Trained.MlpWitness` program extended to a CONVOLUTIONAL net: the
 Chapter-3 `mnistCnnNoBn` conditional whole-net VJP
 (`mnistCnnNoBnHasVJPAt`) instantiated at TRAINED, /128-rationalized
 weights and a REAL test input, with every smoothness hypothesis discharged

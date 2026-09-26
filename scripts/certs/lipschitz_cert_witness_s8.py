@@ -153,7 +153,7 @@ A("* level 3 — `trainedMlp_backward_nontrivial`: the backward is not the zero 
 A("  (via the explicit Jacobian entry `pdiv = " + f"{pv}" + " ≈ " + f"{float(pv):.2f}" + "`);")
 A("* `trainedMlp_jacobian_nonzero` / `trainedMlp_not_constant`: the `fderiv` forms.")
 A("")
-A("Weights/input are imported from `LipschitzCert/Instance` (generator:")
+A("Weights/input are imported from `LipschitzCert.Instance` (generator:")
 A("`historical/lipschitz_cert_rationalize.py`); the dense convention is transposed")
 A("(`Mat` is input×output) and biases are zero. -/")
 A("")

@@ -218,7 +218,7 @@ def emit_net(tag, W1q, W2q, out_path):
     A("")
     sname = "scorecard_sdp_full" + ("" if tag == "SF" else "_uncon")
     A("**Theorem vs. measurement — read this before quoting a number.** The")
-    A("soundness of a LipSDP certificate lives in the ENGINE (`LipschitzCert/PairSDP`:")
+    A("soundness of a LipSDP certificate lives in the ENGINE (`LipschitzCert.PairSDP`:")
     A("`pair_sq_bound`, `certified_at_eps_pair`), proved once — kernel-checking the")
     A("57th image buys nothing the 56th didn\'t. So the counts above are exact-")
     A(f"rational MEASUREMENTS over the first {N_IMG} images, while the first {N_EMIT}")
