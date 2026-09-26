@@ -35,7 +35,8 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 
 | commit | change |
 |---|---|
-| (staged) | §2 root batch: 2.1–2.4, 2.6, 2.7 as tabled, 2.5 in part. Deviations below |
+| 433b433a | §2 root batch: 2.1–2.4, 2.6, 2.7 as tabled, 2.5 in part. Deviations below |
+| (staged) | §3: 3.2 as a guard (3.1 not needed), 3.3 minimal form. Deviations below |
 
 §2 deviations:
 
@@ -68,6 +69,22 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 * `lipschitz_cert_witness_s8.py` had drifted from its output (one docstring line); the hand edit
   is ported, and both generators touched (`trained_linear_descent.py`,
   `lipschitz_cert_witness_s8.py`) reproduce their files byte for byte.
+
+§3 deviations:
+
+* 3.1's count was wrong in the other direction: 167 of 215 `SHlo` constructors have no named
+  `den_<ctor>` equation, not 42. They reach `simp` through the `denStep` proc (and most have a
+  `*_faithful` theorem in VJP terms). Adding 167 `rfl` equations is not the fix — the file header
+  already records that fixed-index arms are expensive by `rfl`.
+* 3.2 therefore keeps `denStep`/`denStepApp` in the default simp set (one step on a constructor
+  is a normal form, the proc form of per-constructor equations) and fixes the actual defect:
+  `denUnfold?` now fires only when the argument is an `SHlo` constructor up to `whnfR`, so a graph
+  built by a `def` (`denseF`, `fwdGraph`, …) stays folded. No proof in the corpus relied on the
+  see-through (full rebuild, zero failures).
+* 3.3 minimal form: `@[simp]` dropped from `relu6F_faithful` (dead: `den_relu6F` always won) and
+  from `den_dropPathB_ones` / `den_dropoutB_ones` (never fired). Making `reluF_faithful` /
+  `relu6F_faithful` the simp normal form was not done: the proc fires on `.reluF` too, so the
+  named form would compete with it. `max_zero_eq` → `max_def_lt'`; `patchEmbedBackFlat` deleted.
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

@@ -907,8 +907,8 @@ inductive SHlo : Nat → Type where
   -- ViT patch-embedding input-VJP: the strided-P patchify conv's input gradient
   -- (reversed-kernel `conv_transpose` on the patch-token rows of the `[N+1,D]`
   -- cotangent; the CLS row and position-add contribute nothing — input-VJP = id
-  -- on a +constant). `den` via `patchEmbedBackFlat` (= the proven
-  -- `patchEmbedInputGradFormula` = `patchEmbedFlatHasVJP.backward`). Linear
+  -- on a +constant). `den` via the proven `patchEmbedInputGradFormula`
+  -- (= `patchEmbedFlatHasVJP.backward`). Linear
   -- in the cotangent — activation-independent, so
   -- it routes through the generic `batched` Raw/Tok tag (like the strided-conv
   -- backward batched ops) rather than a bespoke top-level Raw/Tok constructor.
@@ -1530,18 +1530,12 @@ noncomputable def rowDenseBackFlat (N a c : Nat) (W : Mat a c) (dy : Vec (N*c)) 
     Vec (N*a) :=
   Mat.flatten (fun i => Mat.mulVec W ((Mat.unflatten dy) i))
 
-/-- **ViT patch-embedding input-VJP (flattened)** — the proven `patchEmbedInputGradFormula`
-    (Attention.lean), i.e. `patchEmbedFlatHasVJP.backward`: the strided patchify conv's input-VJP
-    on the patch-token rows of the cotangent. The CLS row and the position-add (a +constant)
-    contribute nothing. -/
-noncomputable abbrev patchEmbedBackFlat := @patchEmbedInputGradFormula
-
 /-- **ViT patch-embedding weight-grad (flattened)** — `TokenParamGrad`'s `patchEmbedWeightGrad`,
     flattened (that file is downstream of this one; the tie is
     `patchEmbed_weight_sgd_certified`). The non-overlapping 16×16/s16 patchify conv's weight-VJP:
     `dW_(d,c,kh,kw) = Σ_patches (patch pixel read)·dy_(patch.succ, d)` — token 0 is the CLS row
     (excluded); the pixel read mirrors `patchEmbedFlat`'s, and `dy (finProdFinEquiv (p.succ, d))`
-    mirrors `patchEmbedBackFlat`. -/
+    mirrors `patchEmbedInputGradFormula`. -/
 noncomputable def patchEmbedWeightGradFlat
     (ic H W patchSize N D : Nat)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) :
@@ -2247,7 +2241,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .patchEmbedF (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ _ _ _ Wc bc cls pos e =>
       patchEmbedFlat ic H W P N D Wc bc cls pos (den e)
   | _, .patchEmbedBack (ic := ic) (H := H) (W := W) (P := P) (N := N) (D := D) _ Wc e =>
-      patchEmbedBackFlat ic H W P N D Wc (den e)
+      patchEmbedInputGradFormula ic H W P N D Wc (den e)
   | _, .clsSliceF (N := N) (D := D) e => clsSliceFlat N D (den e)
   | _, .clsPadF (N := N) (D := D) e => clsPadFlat N D (den e)
   | _, .headSliceF (N := N) (heads := heads) (d := d) h e => headSliceFlat N heads d h (den e)
@@ -2320,11 +2314,16 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
 
 open Lean Meta in
 /-- `den e` (and `den e i`) one constructor deep, by smart unfolding at default transparency: the
-    match reduces the way the `den_*` lemmas' `rfl` does, and nothing asks for `den.eq_def`. -/
+    match reduces the way the `den_*` lemmas' `rfl` does, and nothing asks for `den.eq_def`.
+    Fires only when `e` is an `SHlo` constructor up to reducible unfolding, so a graph built by a
+    `def` (`denseF`, `fwdGraph`, …) stays folded for its own `_faithful` lemma. -/
 def denUnfold? (e : Expr) : MetaM (Option Expr) := do
   let args := e.getAppArgs
   if args.size < 2 then return none
-  let some h ← withDefault <| unfoldDefinition? (mkAppN e.getAppFn args[:2]) | return none
+  let g ← whnfR args[1]!
+  let .const c _ := g.getAppFn | return none
+  let some (.ctorInfo _) := (← getEnv).find? c | return none
+  let some h ← withDefault <| unfoldDefinition? (mkAppN e.getAppFn #[args[0]!, g]) | return none
   return some (mkAppN h args[2:]).headBeta
 
 /-- What `simp only` should name instead of `den`. Naming `den` itself makes Lean build
@@ -2863,15 +2862,9 @@ theorem sgdB_isCertifiedGradStep (lr : ℝ) (label : Fin n) (j : Fin n) :
 -- and SGD update reuse the layer-agnostic `wGrad`/`bGrad`/`sgd*` theorems above.
 -- ════════════════════════════════════════════════════════════════
 
-/-- `maximum(a,0)` equals ReLU's pointwise `if a>0 then a else 0`. -/
-private theorem max_zero_eq (a : ℝ) : max a 0 = if a > 0 then a else 0 := by
-  by_cases h : (0 : ℝ) < a
-  · rw [ite_eq_left h, max_eq_left h.le]
-  · rw [ite_eq_right h, max_eq_right (not_lt.1 h)]
-
 /-- **ReLU forward faithfulness.** `maximum(·,0)` denotes the proven `relu`. -/
 theorem reluF_faithful {k : Nat} (e : SHlo k) : den (.reluF e) = relu k (den e) := by
-  funext i; simp only [denStepApp, relu]; exact max_zero_eq _
+  funext i; simp only [denStepApp, relu]; exact max_def_lt' _ 0
 
 /-- **ReLU backward faithfulness (smooth point).** `select(x>0,·,0)` denotes the
     proven `reluHasVJPAt` backward — the codegen's `relu'(0)=0` convention. -/
@@ -2897,7 +2890,7 @@ theorem selectPosB_faithful {N n : Nat} (s : String) (x : Vec (N*n)) (hx : ∀ i
 
 /-- **ReLU6 forward faithfulness.** `min(max(·,0),6)` denotes the proven `relu6`
     (MLP.lean). (`rfl` — `relu6` is defined as exactly this clamp.) -/
-@[simp] theorem relu6F_faithful {k : Nat} (e : SHlo k) :
+theorem relu6F_faithful {k : Nat} (e : SHlo k) :
     den (.relu6F e) = relu6 k (den e) := rfl
 
 /-- **ReLU6 backward faithfulness (smooth point).** `select(0<x<6,·,0)` denotes the
@@ -2939,7 +2932,7 @@ theorem dropPathB_back_faithful {N n : Nat} (mN : String) (s : Vec N)
     (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.dropPathB mN s e) = (Proofs.dropPathHasVJP N n s).backward x (den e) := rfl
 
-@[simp] theorem den_dropPathB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
+theorem den_dropPathB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     den (.dropPathB mN (fun _ => 1) e) = den e := by
   simp only [den_dropPathB, dropPath_ones_id]
 
@@ -2960,7 +2953,7 @@ theorem dropoutB_back_faithful {N n : Nat} (mN : String) (mask : Vec (N*n))
 /-- **The ones-mask identity on the AST**, which is what licenses emitting the dropout site in
     the FORWARD artifact: `@efficientnet_do_fwd` and `@efficientnet_adamdo_train_step` are then one
     graph differing only in the mask the driver supplies, and the prefix audit survives. -/
-@[simp] theorem den_dropoutB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
+theorem den_dropoutB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     den (.dropoutB mN (fun _ => 1) e) = den e := by
   simp only [den_dropoutB, dropout_ones_id]
 
