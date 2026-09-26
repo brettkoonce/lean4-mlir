@@ -27,4 +27,4 @@ def caps : List Float := [1.0e9, 6.0, 4.0, 3.0, 2.0]
 def main (argv : List String) : IO Unit := do
   -- SPECTRAL_EPOCHS overrides the epoch count (cheap smoke test); absent → full 12.
   let ep := ((← IO.getEnv "SPECTRAL_EPOCHS").bind (·.toNat?)).getD cifarSpectralConfig.epochs
-  cifarVerified.attackPgdSpectralCifar { cifarSpectralConfig with epochs := ep } (argv.head?.getD "data") caps
+  cifarVerified.toNet.attackPgdSpectralCifar { cifarSpectralConfig with epochs := ep } (argv.head?.getD "data") caps

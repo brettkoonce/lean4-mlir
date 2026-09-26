@@ -1,14 +1,15 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
+import LeanMlir.FloatFmt
 
 /-! # ViT — hand-written StableHLO fragments
 
 Hand-rendered batched StableHLO string fragments for the Vision Transformer (chapter 9). This is
 a String emitter written by hand, not `pretty` of a proven graph, and no theorem ties its text;
 the ViT train steps in verified_mlir/ are rendered by the proof-side
-LeanMlir/Proofs/Codegen/ViTRender.lean instead. Outside the API-docs root, only tests import this
-file (tests/TestAdamOpTie.lean, TestMHSA, TestViTBlock, TestViTFwd, TestViTTrain, TestViTTiny,
-TestCifar8AdamTrain, TestMobilenetV2TrainPC, RenderAdamSmoke), which use it as a numeric
-reference. Each fragment spells an op the proof side also has: the matmuls are `dot_general`,
+LeanMlir/Proofs/Codegen/ViTRender.lean instead. It is test support, built by the `TestSupport`
+lean_lib: the tests that import it (TestAdamOpTie, TestMHSA, TestViTBlock, TestViTFwd,
+TestViTTrain, TestViTTiny, TestCifar8AdamTrain, TestMobilenetV2TrainPC, RenderAdamSmoke) use it
+as a numeric reference. Each fragment spells an op the proof side also has: the matmuls are `dot_general`,
 the row-softmax is the op pattern of `Proofs.StableHLO.SHlo.softmaxRowF` /
 `Proofs.StableHLO.SHlo.softmaxRowBack` (plain exp/sum), GELU is the tanh approximation of
 `Proofs.StableHLO.SHlo.geluF`, and LayerNorm is `Proofs.layerNormForward` (per-token over D,
@@ -379,10 +380,15 @@ structure ViTConfig where
   s : Nat        -- patch size (= stride)
   m : Nat        -- MLP hidden
   h : Nat        -- heads
-  dh : Nat       -- head dim (= d/h)
   nc : Nat       -- classes
   eps : String
-  scale : String
+
+/-- Head dim `d / h`. -/
+def ViTConfig.dh (cfg : ViTConfig) : Nat := cfg.d / cfg.h
+
+/-- The attention scale `1/√dh` as a StableHLO literal (9 decimals, below f32 resolution). -/
+def ViTConfig.scale (cfg : ViTConfig) : String :=
+  FloatFmt.fmt (1.0 / cfg.dh.toFloat.sqrt) 9
 
 /-- **Whole-ViT forward**, prefix `p`: `x` `[b,ic,s·ph,s·pw]` → logits `[b,nc]`.
     Result `%{p}hdlogits`. Keeps every sub-fragment save for the backward. -/
@@ -448,56 +454,13 @@ def vitParamDims (blocks : List BlockParams) (cfg : ViTConfig) : List (List Nat)
   [[cfg.d], [cfg.d], [cfg.d, cfg.nc], [cfg.nc]]
 
 -- ════════════════════════════════════════════════════════════════
--- § Whole-net module builders (the production train-step + fwd renderers)
+-- § Whole-net module builders
 -- ════════════════════════════════════════════════════════════════
 
 /-- The param func signature `%nm: tensor<…>` (canonical order). -/
 def vitParamSig (blocks : List BlockParams) (cfg : ViTConfig) : String :=
   String.intercalate ", "
     (((vitParamNames blocks).zip (vitParamDims blocks cfg)).map (fun (nm, ds) => s!"{nm}: {ty ds}"))
-
-/-- `@vit_fwd(%x flat, params…) → logits [b,nc]` — image→logits (for eval). The flat
-    `%x` `[b, ic·H·W]` is reshaped to `[b,ic,H,W]` then run through `vitFwd`. -/
-def vitFwdModule (cfg : ViTConfig) (blocks : List BlockParams) : String :=
-  let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w
-  "module @m {\n" ++
-  s!"  func.func @vit_fwd(%x: {ty [cfg.b, d0]}, {vitParamSig blocks cfg}) -> {ty [cfg.b, cfg.nc]} " ++ "{\n" ++
-  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-  s!"    %xr = stablehlo.reshape %x : ({ty [cfg.b, d0]}) -> {ty [cfg.b, cfg.ic, h, w]}\n" ++
-  vitFwd "vit" "%xr" "%wConv" "%bConv" "%cls" "%pos" "%gF" "%bF" "%Wc" "%bc" blocks cfg ++
-  s!"    return %vithdlogits : {ty [cfg.b, cfg.nc]}\n" ++ "  }\n}\n"
-
-/-- `@vit_train_step(%x flat, params…, %onehot) → updated params` — one mean-loss-SGD
-    step. Forward → softmax-CE cotangent `dy=(softmax(logits)−onehot)/b` → `vitBack` →
-    per-param SGD `θ ← θ − lr·dθ` (baked in), returns the updated param list. -/
-def vitTrainStepModule (cfg : ViTConfig) (blocks : List BlockParams) (lr : String) : String :=
-  let h := cfg.s * cfg.ph; let w := cfg.s * cfg.pw; let d0 := cfg.ic * h * w
-  let pnames := vitParamNames blocks
-  let pdims := vitParamDims blocks cfg
-  let grads := vitGradNames "vit" blocks
-  let cot :=
-    s!"    %le = stablehlo.exponential %vithdlogits : {ty [cfg.b, cfg.nc]}\n" ++
-    s!"    %lsum = stablehlo.reduce(%le init: %sc) applies stablehlo.add across dimensions = [1] : ({ty [cfg.b, cfg.nc]}, tensor<f32>) -> {ty [cfg.b]}\n" ++
-    s!"    %lsb = stablehlo.broadcast_in_dim %lsum, dims = [0] : ({ty [cfg.b]}) -> {ty [cfg.b, cfg.nc]}\n" ++
-    s!"    %lsm = stablehlo.divide %le, %lsb : {ty [cfg.b, cfg.nc]}\n" ++
-    s!"    %dyr = stablehlo.subtract %lsm, %onehot : {ty [cfg.b, cfg.nc]}\n" ++
-    s!"    %bnc = stablehlo.constant dense<{cfg.b}.0> : {ty [cfg.b, cfg.nc]}\n" ++
-    s!"    %dy = stablehlo.divide %dyr, %bnc : {ty [cfg.b, cfg.nc]}\n"
-  let upd := String.join (((pnames.zip grads).zip pdims).map (fun ((nm, gr), ds) =>
-    s!"    {nm}_lr = stablehlo.constant dense<{lr}> : {ty ds}\n" ++
-    s!"    {nm}_st = stablehlo.multiply {gr}, {nm}_lr : {ty ds}\n" ++
-    s!"    {nm}n = stablehlo.subtract {nm}, {nm}_st : {ty ds}\n"))
-  let retTy := String.intercalate ", " (pdims.map (fun ds => ty ds))
-  let retVals := String.intercalate ", " (pnames.map (fun nm => s!"{nm}n"))
-  "module @m {\n" ++
-  s!"  func.func @vit_train_step(%x: {ty [cfg.b, d0]}, {vitParamSig blocks cfg}, %onehot: {ty [cfg.b, cfg.nc]}) -> ({retTy}) " ++ "{\n" ++
-  "    %sc = stablehlo.constant dense<0.0> : tensor<f32>\n" ++
-  s!"    %xr = stablehlo.reshape %x : ({ty [cfg.b, d0]}) -> {ty [cfg.b, cfg.ic, h, w]}\n" ++
-  vitFwd "vit" "%xr" "%wConv" "%bConv" "%cls" "%pos" "%gF" "%bF" "%Wc" "%bc" blocks cfg ++
-  cot ++
-  vitBack "vit" "%dy" "%xr" "%wConv" "%Wc" "%gF" blocks cfg ++
-  upd ++
-  s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
 /-- Production ViT-Tiny config @ Imagenette 224² (matches `ViTLayout`): depth-`k`
     blocks with distinct per-block param names `%<field>_<i>`. -/
@@ -509,9 +472,9 @@ def vitTinyBlocks (depth : Nat) : List BlockParams :=
       g2 := s!"%g2_{i}", b2 := s!"%b2_{i}",
       Wfc1 := s!"%Wfc1_{i}", bfc1 := s!"%bfc1_{i}", Wfc2 := s!"%Wfc2_{i}", bfc2 := s!"%bfc2_{i}" })
 
-def vitTinyConfig (b _depth : Nat) : ViTConfig :=
-  { b := b, ic := 3, d := 192, ph := 14, pw := 14, s := 16, m := 768, h := 3, dh := 64,
-    nc := 10, eps := "1.0e-5", scale := "0.125" }   -- 1/√64 = 0.125
+def vitTinyConfig (b : Nat) : ViTConfig :=
+  { b := b, ic := 3, d := 192, ph := 14, pw := 14, s := 16, m := 768, h := 3,
+    nc := 10, eps := "1.0e-5" }
 
 -- ════════════════════════════════════════════════════════════════
 -- § AdamW optimizer render (Phase 3b of vit_train_to_vit_verified.md)
@@ -644,7 +607,7 @@ def vitTrainStepModuleAdam (cfg : ViTConfig) (blocks : List BlockParams) : Strin
 /-- **Packed AdamW train step** for the FFI driver. Hyperparameters are baked as
     constants (so the func takes NO scalar args), and the parameters + both moment
     buffers thread as a single `[θ|m|v]` blob: arg order `(x, θ×k, m×k, v×k, onehot)`
-    and return `(θ'×k, m'×k, v'×k)`. This matches `iree_ffi_train_step_generic`'s
+    and return `(θ'×k, m'×k, v'×k)`. This matches the generic packed train step's
     `(x, params, y) → params'` contract with `n_params = 3k` (the moments ride in
     the params blob — no `.so` change). Bias correction is omitted (`bc₁=bc₂=1`); a
     later rung host-passes the per-step `1−βᵗ`. Optimizer = `Proofs.adamWParam`. -/

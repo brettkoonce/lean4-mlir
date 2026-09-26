@@ -1967,26 +1967,6 @@ static int not_ported(const char* who) {
   return 99;
 }
 
-int iree_ffi_train_step_mlp(
-    iree_ffi_session_t* s, const char* f, int b,
-    const float* a1, const float* a2, const float* a3, const float* a4,
-    const float* a5, const float* a6, const float* a7, const int32_t* a8, float a9,
-    float* o1, float* o2, float* o3, float* o4, float* o5, float* o6, float* o7) {
-  (void)s;(void)f;(void)b;(void)a1;(void)a2;(void)a3;(void)a4;(void)a5;(void)a6;
-  (void)a7;(void)a8;(void)a9;(void)o1;(void)o2;(void)o3;(void)o4;(void)o5;(void)o6;(void)o7;
-  return not_ported("train_step_mlp");
-}
-
-int iree_ffi_train_step_generic(
-    iree_ffi_session_t* s, const char* f, int b, int np,
-    const int32_t* pr, const int64_t* pd, const int64_t* ps, const float* pp,
-    int xr, const int64_t* xd, const float* x, const int32_t* y, float lr,
-    float* po, float* lo) {
-  (void)s;(void)f;(void)b;(void)np;(void)pr;(void)pd;(void)ps;(void)pp;
-  (void)xr;(void)xd;(void)x;(void)y;(void)lr;(void)po;(void)lo;
-  return not_ported("train_step_generic");
-}
-
 // Adam train step for scalar-label classification. Ported 2026-08-26 against
 // the `train_step_adam_seg` template below; the two are the same ride and
 // differ in exactly one input, the label tensor's rank:

@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
-import LeanMlir.ViTRender
+import tests.ViTRender
 import LeanMlir.GradcheckHelpers
 import LeanMlir.Types
 

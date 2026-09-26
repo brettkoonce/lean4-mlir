@@ -29,4 +29,4 @@ def main (argv : List String) : IO Unit := do
   let sigmas := match (← IO.getEnv "SMOOTH_SIGMA_MILLI").bind (·.toNat?) with
     | some m => [m.toFloat / 1000.0]
     | none   => [0.25, 0.5]
-  convnextVerified.smoothCertify { convnextSmoothConfig with epochs := ep } (argv.head?.getD "data") sigmas
+  convnextVerified.toNet.smoothCertify { convnextSmoothConfig with epochs := ep } (argv.head?.getD "data") sigmas

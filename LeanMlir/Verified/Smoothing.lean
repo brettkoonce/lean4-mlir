@@ -323,12 +323,3 @@ def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDi
   IO.println "done (randomized smoothing: forward-only Monte-Carlo cert via the proof-rendered fwd —"
   IO.println "      architecture-agnostic + depth-independent, non-vacuous where ∏‖Wᵢ‖₂ is hopeless)."
 
-namespace VerifiedNetSpec
-
-/-- Randomized-smoothing certificate (Cohen 2019, depth-independent); see
-    `VerifiedNet.smoothCertify`. Forward-only — works on any spec via its rendered fwd. -/
-def smoothCertify (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (sigmas : List Float) : IO Unit :=
-  s.toNet.smoothCertify cfg dataDir sigmas
-
-end VerifiedNetSpec

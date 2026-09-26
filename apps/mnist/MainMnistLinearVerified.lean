@@ -52,4 +52,4 @@ def linearConfig : VerifiedConfig where
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=
-  linearVerified.trainLinear linearConfig (argv.head?.getD "data")
+  linearVerified.toNet.trainLinear linearConfig (argv.head?.getD "data")

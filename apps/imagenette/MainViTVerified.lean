@@ -24,4 +24,4 @@ def vitConfig : VerifiedConfig where
   batchSize := 32
 
 def main (argv : List String) : IO Unit :=
-  vitVerified.train vitConfig (argv.head?.getD "data")
+  vitVerified.toNet.train vitConfig (argv.head?.getD "data")

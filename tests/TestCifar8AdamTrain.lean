@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Codegen.ChapterGraphs
-import LeanMlir.ViTRender
+import tests.ViTRender
 import LeanMlir.Types
 
 /-! # `cifar8{,w}{,_bn}_{adam,mom,sgd}_train_step` — the cifar8 train steps, three optimizers

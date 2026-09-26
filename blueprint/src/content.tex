@@ -4690,7 +4690,7 @@ final per-parameter update op changes:
 \end{itemize}
 
 \noindent Each tail is emitted onto the same certified gradient
-(\texttt{emitSgd}, \texttt{emitMomentum}, \texttt{ViTRender.emitAdamV}),
+(\texttt{sgdParamF}, \texttt{momParamF} with \texttt{momVNextF}, \texttt{adamWParamF}),
 so the ablation is honest in the strong sense: identical, machine-checked
 gradients with different arithmetic stacked on top. And for plain
 SGD, that the binary32 step actually decreases the loss is itself a

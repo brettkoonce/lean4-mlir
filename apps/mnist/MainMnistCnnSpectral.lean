@@ -29,4 +29,4 @@ def caps : List Float := [1.0e9, 2.0, 1.5, 1.2, 1.0]
 def main (argv : List String) : IO Unit := do
   -- SPECTRAL_EPOCHS overrides the epoch count (cheap smoke test); absent → full 10.
   let ep := ((← IO.getEnv "SPECTRAL_EPOCHS").bind (·.toNat?)).getD cnnSpectralConfig.epochs
-  cnnVerified.attackPgdSpectralCnn { cnnSpectralConfig with epochs := ep } (argv.head?.getD "data") caps
+  cnnVerified.toNet.attackPgdSpectralCnn { cnnSpectralConfig with epochs := ep } (argv.head?.getD "data") caps

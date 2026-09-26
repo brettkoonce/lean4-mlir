@@ -23,4 +23,4 @@ def cifarPgdConfig : VerifiedConfig where
 def main (argv : List String) : IO Unit := do
   -- CIFAR_PGD_EPOCHS overrides the epoch count (cheap smoke test); absent → full 12.
   let ep := ((← IO.getEnv "CIFAR_PGD_EPOCHS").bind (·.toNat?)).getD cifarPgdConfig.epochs
-  cifarVerified.attackPgdCifar { cifarPgdConfig with epochs := ep } (argv.head?.getD "data")
+  cifarVerified.toNet.attackPgdCifar { cifarPgdConfig with epochs := ep } (argv.head?.getD "data")

@@ -23,11 +23,6 @@ def paramShapes (spec : NetSpec) : Array (Array Nat) :=
 def shapesBA (spec : NetSpec) : ByteArray :=
   packShapes (spec.paramShapes ++ spec.paramShapes ++ spec.paramShapes)
 
-/-- BN-layer (pidx, oc) pairs as discovered by the codegen. ViT-style
-    transformer specs return an empty array. -/
-def bnLayers (spec : NetSpec) : Array (Nat × Nat) :=
-  MlirCodegen.collectBnLayers spec
-
 /-- Total float count needed to store running BN stats (mean + var per
     BN layer). 0 for ViT and any non-BN architecture. -/
 def nBnStats (spec : NetSpec) : Nat :=
@@ -61,11 +56,6 @@ def evalShapesBA (spec : NetSpec) : ByteArray :=
     conv-style layer; defaults to 1 for pure-MLP specs. -/
 def xShape (spec : NetSpec) (batch : Nat) : ByteArray :=
   packXShape #[batch, MlirCodegen.inputFlatDim spec]
-
-/-- Sanitized base name for the spec — same transformation the codegen
-    applies when generating MLIR module names. -/
-def sanitizedName (spec : NetSpec) : String :=
-  MlirCodegen.sanitize spec.name
 
 /-- The eval forward function name to pass to `forwardF32`. The codegen
     emits modules of the form `@<sanitized_name>_eval` containing

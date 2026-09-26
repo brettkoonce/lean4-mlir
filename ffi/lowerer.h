@@ -58,22 +58,6 @@ extern int (*lowerer_invoke_f32)(
     const float* const* input_data,
     int n_outputs, const int64_t* output_totals, float* const* output_data);
 
-extern int (*lowerer_train_step_mlp)(
-    iree_ffi_session_t*, const char* fn_name, int batch,
-    const float* W0, const float* b0, const float* W1, const float* b1,
-    const float* W2, const float* b2,
-    const float* x, const int32_t* y, float lr,
-    float* W0_new, float* b0_new, float* W1_new, float* b1_new,
-    float* W2_new, float* b2_new, float* loss_out);
-
-extern int (*lowerer_train_step_generic)(
-    iree_ffi_session_t*, const char* fn_name, int batch, int n_params,
-    const int32_t* param_ranks, const int64_t* param_dims_flat,
-    const int64_t* param_sizes, const float* packed_params,
-    int x_rank, const int64_t* x_dims, const float* x,
-    const int32_t* y, float lr,
-    float* packed_params_out, float* loss_out);
-
 extern int (*lowerer_train_step_adam)(
     iree_ffi_session_t*, const char* fn_name, int batch, int n_params,
     const int32_t* param_ranks, const int64_t* param_dims_flat,
@@ -146,8 +130,6 @@ extern int (*lowerer_pjrt_invoke_f32_dp)(
 #define iree_ffi_session_create            lowerer_session_create
 #define iree_ffi_session_release           lowerer_session_release
 #define iree_ffi_invoke_f32                lowerer_invoke_f32
-#define iree_ffi_train_step_mlp            lowerer_train_step_mlp
-#define iree_ffi_train_step_generic        lowerer_train_step_generic
 #define iree_ffi_train_step_adam           lowerer_train_step_adam
 #define iree_ffi_train_step_adam_seg       lowerer_train_step_adam_seg
 #define iree_ffi_train_step_adam_softlabel lowerer_train_step_adam_softlabel

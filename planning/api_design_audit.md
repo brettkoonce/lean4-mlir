@@ -11,6 +11,33 @@ oleans; every "no consumer" claim was grepped over `LeanMlir/`, `apps/`, `demos/
 Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits for `@[ext` are
 `@[extern]`), 184 `@[simp]`, no `@[grind]`, 265 `private`.
 
+## ▶ Start here (next session)
+
+Branch `api-design`, §2–§6 and §8 committed (433b433a … 120cb099, then §8), not pushed.
+Remaining, in this order:
+
+1. **§7** relocations and dedup — forward stage graphs (7.1), stranded lemmas (7.2), ConvNeXt
+   record bridge + `EnTail` `extends` (7.3; `B0Weights` nCls is the 09-24 correctness finding),
+   RenderKit shared records / `bnStatSlots` / `wdzConst` comment arg / zero placeholders /
+   `reassoc` to IndexCast (7.4). §6.5 made `div_one_sub_mono` and `sum_channel_fiber` public in
+   place; they move here.
+2. **§9** bulk `private` sweep — last, after §7 (rerun the same-file-use scan then).
+
+Also open, lower priority: §4.3 flag+parameter pairs; 6.2 restating the L2 capstones (needs the
+scorecard generators rerun); 6.4 Gaussian shift / Cameron–Martin into UpstreamDraft PR2 (keep
+`planning/mathlib_upstream_drafts/` in sync); the `rms`-variant warmup (§5 notes).
+
+Per-commit gate (all ran green on every section so far): `lake build Certs LeanMlir Apps
+CertsHeavy Reference TestSupport` plus every `lean_exe`; `lake env lean tests/AuditAxioms.lean` (count =
+`#print axioms` lines; heavy file too when certificates move); `check_audit_coverage.py`;
+`gen_comparator_tier.py --check`; `name_lint.py`; `import_audit.py implied`;
+`lake exe docstring-checkrefs`; `lake exe blueprint-checkdecls blueprint/lean_decls
+blueprint/lean_deps` then `blueprint_uses.py --check` (`--fix` + `blueprint_depgraph_tikz.py` if it
+drifts); `check_target_names.sh`; `scripts/regen_verified_mlir.sh` with an empty
+`git diff verified_mlir/`; for `jax/` or config changes also `scripts/regen_jax_generated.sh check`.
+The audit's per-item claims were wrong often enough (counts, one non-finding) that each item is
+re-checked against the code before it is acted on.
+
 ## 0. Rules for this thread
 
 * No compatibility layer. A deleted or renamed declaration is not done until every consumer that
@@ -40,7 +67,8 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 | 4fa1bbce | §4.1 + §4.2 as tabled; §4.3 not started. Notes below |
 | ec6ad9cb | §5.2–5.4, §5.5 in part. Notes below |
 | f09b1e25 | §5.1 `UibParams` slots typed by kernel extent. Notes below |
-| (staged) | §6: 6.1, 6.3, 6.5 as tabled (namespace rename declined); 6.2 and 6.4 in part. Notes below |
+| 120cb099 | §6: 6.1, 6.3, 6.5 as tabled (namespace rename declined); 6.2 and 6.4 in part. Notes below |
+| (this commit) | §8 as tabled, plus 5.5's `ViTConfig.dh`/`scale`. Notes below |
 
 §2 deviations:
 
@@ -183,6 +211,30 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
   `LipschitzCertDemo` rename declined here: it is a naming change for the naming pass.
 * Also fixed: the `if_pos`/`if_neg` deprecations in §5.1's slot lemmas, and seven unused simp
   arguments §2 left in BackLinks / ConvBackCertifiedTie / DepthwiseBackCertifiedTie.
+
+§8 notes:
+
+* 8.1: the four `LowererSession` FFIs went all the way down, not just their `iree_lean_ffi.c`
+  bodies: `iree_ffi_train_step_mlp` / `_generic` were REQUIRED dlsyms in `lowerer.c`, implemented
+  in `iree_ffi.c` and stubbed `not_ported` in `pjrt_ffi.c`. All removed; both shims rebuilt (gcc
+  one-liner for PJRT, `historical/IREE_BUILD.md` §4 for IREE) and their `nm -D` exports differ from
+  the old ones only by those two symbols. The installed `libpjrt_ffi.so` predated 48344b04
+  (09-25), so the rebuild also brings in the optional `pjrt_ffi_resident_read_prefix`.
+  `yoloHflip` / `hflipNCHW` lost their `f32_helpers.c` bodies too. `ParamLayouts` keeps only the
+  five `specs` tables and `packShapes` / `packXShape`.
+* 8.2: the 21 app call sites write `.toNet.X`. `NetSpec.bnLayers` and `NetSpec.sanitizedName` are
+  defined in MlirCodegen (`collectBnLayers` gone; the codegen's own `sanitize spec.name` sites
+  use `sanitizedName`). `sanitize` stays: the trainer also sanitizes `buildTag`.
+* 8.3: `tests/ViTRender.lean`, built by a new `TestSupport` lean_lib (the nine importers are
+  `lake env lean` scripts, so the module still needs an olean); `regen_verified_mlir.sh` builds
+  it before its tests loop. `vitFwdModule` / `vitTrainStepModule` deleted, `vitTinyConfig` lost
+  `_depth`. `vitParamSig` keeps its name: the two live in different namespaces, and this one is
+  now test-only. 5.5: `ViTConfig.dh` is `d / h` and `scale` is `1/√dh` at 9 decimals
+  (`FloatFmt.fmt`), both derived.
+* Stale citations fixed along the way: the R34 and CIFAR-8-BN Adam apps and the blueprint's
+  optimizer-ablation paragraph said the AdamW tail was `ViTRender.emitAdamV`; the renders use the
+  proven nodes (`adamW_triple_faithful`; the blueprint's list is now `sgdParamF`,
+  `momParamF` with `momVNextF`, `adamWParamF`).
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

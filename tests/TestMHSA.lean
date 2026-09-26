@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Types
 import LeanMlir.GradcheckHelpers
-import LeanMlir.ViTRender
+import tests.ViTRender
 
 /-! # ch10 V3 — multi-head self-attention renderer (fwd + full backward)
 

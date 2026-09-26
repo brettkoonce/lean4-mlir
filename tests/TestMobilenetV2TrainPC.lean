@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
-import LeanMlir.ViTRender
+import tests.ViTRender
 import LeanMlir.Types
 
 /-! # Item B — structured MobileNetV2 train-step render (TRUE batch-norm, exact-parity)

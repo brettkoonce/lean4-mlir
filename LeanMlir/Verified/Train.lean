@@ -1300,70 +1300,6 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   | none => pure ()
   IO.println s!"done (trained {net.name} via the proof-rendered StableHLO)."
 
-/-- **AdamW training driver** — threads the first/second moment buffers as a single
-    packed `[θ|m|v]` param blob through the generic FFI (`n_params = 3k`; the moments
-    ride in the params slot, so the prebuilt `.so` is unchanged), against the committed
-    baked-hyperparameter render `<mlirDir>/<slug>_adam_train_step.mlir` (rendered by
-    LeanMlir/Proofs/Codegen/; its optimizer ops are tied to `Proofs.adamWStep` by
-    `Proofs.StableHLO.adamW_triple_faithful`). Compiles through `compileVmfb`, so it runs on
-    IREE only. Moments init to 0; eval reads the θ slice (first `nParams` floats). The Adam
-    analogue of `VerifiedNet.train`. -/
-def VerifiedNet.trainAdamPacked (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
-  let bs := cfg.batchSize
-  let d0 := net.d0
-  let nc := net.nClasses
-  net.printBlurb
-  let tsVmfb  := s!".lake/build/{net.slug}_adam_ts.vmfb"
-  let fwdVmfb := s!".lake/build/{net.slug}_fwd_v.vmfb"
-  compileVmfb s!"{net.mlirDir}/{net.slug}_adam_train_step.mlir" tsVmfb
-  compileVmfb s!"{net.mlirDir}/{net.slug}_fwd.mlir"             fwdVmfb
-  let tsSess  ← LowererSession.create tsVmfb
-  let fwdSess ← LowererSession.create fwdVmfb
-  let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
-    loadData net dataDir
-  let evalName := match net.data with | .imagenette => "val" | _ => "test"
-  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} AdamW (packed θ|m|v), He init"
-  (← IO.getStdout).flush
-  let nb  := nTrain / bs
-  let nbt := (nEval + bs - 1) / bs   -- ceil: the last partial batch is zero-padded, not dropped
-  -- θ|m|v packed: θ = He-init (one seed per slot, as `train`), m = v = 0. The
-  -- shapes descriptor lists every tensor three times (θ, then m, then v).
-  let adamShapes := packShapes (net.paramShapes ++ net.paramShapes ++ net.paramShapes)
-  let fwdShapes := net.shapesBA
-  let xShape := net.xShape bs
-  let tsFn  := s!"m.{net.slug}_adam_train_step"
-  let fwdFn := s!"m.{net.slug}_fwd"
-  let mut parts : Array ByteArray := #[]
-  let mut seed := ((← IO.getEnv "LEAN_MLIR_SEED").bind (·.toNat?)).getD 1
-  for spec in net.specs do
-    parts := parts.push (← mkParam seed spec.1 spec.2)
-    seed := seed + 1
-  let theta := F32.concat parts
-  let zeros ← F32.const net.nParams.toUSize 0.0
-  let mut params := F32.concat #[theta, zeros, zeros]
-  let pBytes := net.nParams * 4
-  for ep in [0:cfg.epochs] do
-    for bi in [0:nb] do
-      let xbRaw := F32.sliceImages trainImg (bi * bs) bs trainPix
-      let xb ← if crop then F32.centerCrop xbRaw bs.toUSize 3 256 256 224 224 else pure xbRaw
-      let yb := F32.sliceLabels trainLbl (bi * bs) bs
-      params ← LowererSession.mlpTrainStepV tsSess tsFn
-                  xb params adamShapes yb bs.toUSize d0.toUSize nc.toUSize
-    let thetaCur := params.extract 0 pBytes
-    let mut correct := 0
-    for bi in [0:nbt] do
-      let xb := F32.sliceImagesPad evalImg (bi * bs) bs d0 nEval
-      let logits ← LowererSession.forwardF32 fwdSess fwdFn thetaCur fwdShapes
-                      xb xShape bs.toUSize nc.toUSize
-      for j in [0:min bs (nEval - bi * bs)] do   -- score real rows only, not the pad
-        let pred := (F32.argmaxN logits (j * nc).toUSize nc.toUSize).toNat
-        let lbl  := F32.readLabel evalLbl (bi * bs + j)
-        if pred == lbl then correct := correct + 1
-    let acc := correct.toFloat / nEval.toFloat * 100.0
-    IO.println s!"  epoch {ep + 1}: {evalName}_acc = {correct}/{nEval} = {acc}%"
-    (← IO.getStdout).flush
-  IO.println s!"done (trained {net.name} with AdamW via packed θ|m|v threading)."
-
 /-- The eval forward's rendered input shape, `(batch, d0)`, off `%x: tensor<BxWxf32>`.
 
     Batch is baked into a render, not a runtime dimension, so the eval forward has a fixed width
@@ -1398,7 +1334,8 @@ private def fwdRenderedShape (path : String) : IO (Option (Nat × Nat)) := do
     | _, _ => return none
   | _ => return none
 
-/-- **Scheduled AdamW driver** — `trainAdamPacked` with a runtime LR and
+/-- **Scheduled AdamW driver** — threads the first/second moment buffers as one packed
+    `[θ|m|v]` param blob through the generic FFI (`n_params = 3k`), with a runtime LR and
     bias correction. `lr`/`bc₁`/`bc₂` ride as three rank-0 scalar params in the blob
     tail (`[θ|m|v|lr|bc₁|bc₂]`, the FFI takes no scalar slot) and are returned
     unchanged; the host recomputes them each step: cosine decay + linear warmup for
@@ -3333,13 +3270,5 @@ def toNet (s : VerifiedNetSpec) : VerifiedNet :=
     nClasses := s.nClasses, data := s.data, blurb := s.blurb, bnChannels := s.bnChannels,
     dropKeeps := s.dropKeeps, dropoutKeep := s.dropoutKeep, shimScript := s.shimScript,
     mlirDir := s.mlirDir, lossSlot := s.lossSlot }
-
-/-- Train end-to-end (delegates to the shared `VerifiedNet.train` driver). -/
-def train (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.train cfg dataDir
-
-/-- Train the 2-parameter linear path (Chapter 1); see `VerifiedNet.trainLinear`. -/
-def trainLinear (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.trainLinear cfg dataDir
 
 end VerifiedNetSpec

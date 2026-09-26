@@ -1,8 +1,7 @@
 /-! Lean FFI bindings for the lowerer runtime — PJRT/XLA by default, IREE optionally
     (`LowererSession` is lowerer-agnostic).
 
-    Links through the Lean shim in ffi/. Imports `ParamLayouts` (the verified nets'
-    parameter-layout tables, `*Layout`), so importers of this module see them too. -/
+    Links through the Lean shim in ffi/. -/
 
 /-- Opaque handle to a lowerer session (PJRT/XLA or IREE): a loaded module on a device. -/
 private opaque LowererSessionPointed : NonemptyType
@@ -39,51 +38,6 @@ opaque createDp (path : @& String) (replicas : USize) : IO LowererSession
     with the linked library. -/
 @[extern "lean_iree_backend_name"]
 opaque backendName : IO String
-
-/-- Run MNIST-MLP forward pass. Shapes are fixed:
-    `x` is `batch×784`, `W0` is `784×512`, `b0` is `512`,
-    `W1` is `512×512`, `b1` is `512`, `W2` is `512×10`, `b2` is `10`.
-    Returns the logits as a `batch×10` flattened `FloatArray`. -/
-@[extern "lean_iree_mlp_forward"]
-opaque mlpForward
-  (sess : @& LowererSession)
-  (x : @& FloatArray)
-  (W0 : @& FloatArray) (b0 : @& FloatArray)
-  (W1 : @& FloatArray) (b1 : @& FloatArray)
-  (W2 : @& FloatArray) (b2 : @& FloatArray)
-  (batch : USize) : IO FloatArray
-
-/-- Run one SGD training step. Params packed into a single FloatArray of
-    length 669706 in order `W0|b0|W1|b1|W2|b2`. Labels are a ByteArray of
-    `4*batch` bytes (int32 LE). Returns new params + loss as a single
-    FloatArray of length 669707; `result[669706]` is the loss. -/
-@[extern "lean_iree_mlp_train_step"]
-opaque mlpTrainStep
-  (sess : @& LowererSession)
-  (params : @& FloatArray)
-  (x : @& FloatArray)
-  (y : @& ByteArray)
-  (lr : Float)
-  (batch : USize) : IO FloatArray
-
-/-- Generic train step. Shapes are packed ByteArrays (see `packShapes`). -/
-@[extern "lean_iree_train_step_packed"]
-opaque trainStepPacked
-  (sess : @& LowererSession) (fnName : @& String)
-  (params : @& FloatArray) (shapes : @& ByteArray)
-  (x : @& FloatArray) (xShape : @& ByteArray)
-  (y : @& ByteArray)
-  (lr : Float) (batch : USize) : IO FloatArray
-
-/-- Zero-copy f32 train step. All tensors are ByteArray (raw float32 bytes).
-    No Float64↔Float32 conversion at the boundary. -/
-@[extern "lean_iree_train_step_f32"]
-opaque trainStepF32
-  (sess : @& LowererSession) (fnName : @& String)
-  (params : @& ByteArray) (shapes : @& ByteArray)
-  (x : @& ByteArray) (xShape : @& ByteArray)
-  (y : @& ByteArray)
-  (lr : Float) (batch : USize) : IO ByteArray
 
 /-- Adam train step (f32). Passes step counter t for bias correction.
     Params = weights ++ m ++ v. Returns params ++ loss ++ BN stats.

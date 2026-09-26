@@ -1,10 +1,10 @@
-import LeanMlir.ViTRender
+import tests.ViTRender
 
 /-! Scratch renderer for the Adam render smoke (Phase 3b). Writes:
   * `/tmp/adam/adam_step.mlir` — a tiny 2-param `@adam_step` (a [4,4] + a [4]) for
     an exact numeric faithfulness check vs `Proofs.adamWParam` on the GPU.
   * `/tmp/adam/vit_train_step_adam.mlir` — the full depth-12 ViT-Tiny AdamW step.
-Run: `lake env lean tests/RenderAdamSmoke.lean` (after `lake build LeanMlir.ViTRender`). -/
+Run: `lake env lean tests/RenderAdamSmoke.lean` (after `lake build TestSupport`). -/
 
 open ViTRender Proofs.StableHLO
 
@@ -20,7 +20,7 @@ def adamTinyModule : String :=
 def main : IO Unit := do
   IO.FS.createDirAll "/tmp/adam"
   IO.FS.writeFile "/tmp/adam/adam_step.mlir" adamTinyModule
-  let cfg := vitTinyConfig 32 12
+  let cfg := vitTinyConfig 32
   IO.FS.writeFile "/tmp/adam/vit_train_step_adam.mlir" (vitTrainStepModuleAdam cfg (vitTinyBlocks 12))
   -- Packed FFI-shaped form: (x, θ, m, v, onehot) → (θ',m',v'), hyperparams baked.
   IO.FS.writeFile "/tmp/adam/vit_adam_packed.mlir"

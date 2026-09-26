@@ -623,11 +623,6 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
 
 end Proofs.StableHLO
 
-/-- The SD forward's banner. Its own, because these bytes ARE a different render and a banner
-    claiming otherwise would misdescribe the artifact it heads. -/
-def vitDropFwdBanner : String :=
-  "    // ── ViT-Tiny forward at the BATCHED index N := B, with STOCHASTIC DEPTH ──\n"
-
 -- ════════════════════════════════════════════════════════════════
 -- § ▶ THE STOCHASTIC-DEPTH ARTIFACTS (`planning/archive/stochastic_depth.md`, handoff §0.2 ▶3)
 -- ════════════════════════════════════════════════════════════════

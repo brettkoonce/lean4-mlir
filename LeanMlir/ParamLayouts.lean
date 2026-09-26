@@ -1,24 +1,12 @@
 import LeanMlir.LEBytes
 /-! # The verified trainers' packed-parameter layouts
 
-One namespace per net family (`MlpLayout`, `CnnLayout`, `CifarLayout`, `ResNet34Layout`,
-`MobileNetV2Layout`, `EfficientNetLayout`, `ConvNeXtLayout`, `ViTLayout`): each net's
-`(dims, initKind)` list in the train step's argument order, its sizes, and the packed shape
-descriptors (`packShapes`, `packXShape`) the runtime passes to the FFI. Pure data — importing only `LEBytes` —
-so the spec side (`Verified.NetsCore`'s `#guard spec.toSpecs == XLayout.specs`) can read the tables
-without importing the runtime; `IreeRuntime` re-exports them. -/
-
-/- Sizes for the packed-params layout. -/
-namespace MlpLayout
-def nW0 : Nat := 784 * 512  -- 401408
-def nb0 : Nat := 512
-def nW1 : Nat := 512 * 512  -- 262144
-def nb1 : Nat := 512
-def nW2 : Nat := 512 * 10   -- 5120
-def nb2 : Nat := 10
-def nParams : Nat := nW0 + nb0 + nW1 + nb1 + nW2 + nb2  -- 669706
-def lossIdx : Nat := nParams
-end MlpLayout
+One namespace per verified ImageNet-scale net (`ResNet34Layout`, `MobileNetV2Layout`,
+`EfficientNetLayout`, `ConvNeXtLayout`, `ViTLayout`): each net's `(dims, initKind)` list in the
+train step's argument order, plus the packed shape descriptors (`packShapes`, `packXShape`) the
+runtime passes to the FFI. Pure data — importing only `LEBytes` — so the spec side
+(`Verified.NetsCore`'s `#guard spec.toSpecs == XLayout.specs`) can read the tables without
+importing the runtime. -/
 
 /-- Pack param shape descriptors: `[nParams, rank0, d0..., rank1, d1..., ...]` as int32 LE. -/
 def packShapes (shapes : Array (Array Nat)) : ByteArray := Id.run do
@@ -33,38 +21,6 @@ def packXShape (dims : Array Nat) : ByteArray := Id.run do
   let mut ba := pushU32LE .empty dims.size
   for d in dims do ba := pushU32LE ba d
   return ba
-
-namespace CnnLayout
-def paramShapes : Array (Array Nat) := #[
-  #[32, 1, 3, 3], #[32],          -- conv0
-  #[32, 32, 3, 3], #[32],         -- conv1
-  #[6272, 512], #[512],           -- dense0
-  #[512, 512], #[512],            -- dense1
-  #[512, 10], #[10]               -- dense2
-]
-def nParams : Nat := 32*1*3*3 + 32 + 32*32*3*3 + 32 + 6272*512 + 512 + 512*512 + 512 + 512*10 + 10
-def lossIdx : Nat := nParams
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 784]
-end CnnLayout
-
-namespace CifarLayout
-def paramShapes : Array (Array Nat) := #[
-  #[32, 3, 3, 3], #[32],          -- conv0: 3→32
-  #[32, 32, 3, 3], #[32],         -- conv1: 32→32
-  #[64, 32, 3, 3], #[64],         -- conv2: 32→64
-  #[64, 64, 3, 3], #[64],         -- conv3: 64→64
-  #[4096, 512], #[512],           -- dense0
-  #[512, 512], #[512],            -- dense1
-  #[512, 10], #[10]               -- dense2
-]
-def nParams : Nat :=
-  32*3*3*3 + 32 + 32*32*3*3 + 32 + 64*32*3*3 + 64 + 64*64*3*3 + 64 +
-  4096*512 + 512 + 512*512 + 512 + 512*10 + 10  -- 2430018
-def lossIdx : Nat := nParams
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3072]
-end CifarLayout
 
 namespace ResNet34Layout
 /-- Chapter-5 **real ResNet-34** params (IMAGENETTE 3×224×224 — paper-native ImageNet
@@ -97,10 +53,6 @@ def specs : Array (Array Nat × Nat) := Id.run do
   a := a ++ downBlk 256 512; for _ in [0:2] do a := a ++ idBlk 512                         -- stage4
   a := a ++ #[(#[512,10],0),(#[10],2)]                                                     -- dense
   return a
-def paramShapes : Array (Array Nat) := specs.map (·.1)
-def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end ResNet34Layout
 
 namespace MobileNetV2Layout
@@ -139,10 +91,6 @@ def specs : Array (Array Nat × Nat) := Id.run do
   a := a ++ #[(#[1280,320,1,1],0),(#[1280],1),(#[1280],2)]                                 -- head 1×1 conv→BN→relu6
   a := a ++ #[(#[1280,10],0),(#[10],2)]                                                    -- dense
   return a
-def paramShapes : Array (Array Nat) := specs.map (·.1)
-def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end MobileNetV2Layout
 
 namespace EfficientNetLayout
@@ -180,10 +128,6 @@ def specs : Array (Array Nat × Nat) := Id.run do
   a := a ++ #[(#[1280,320,1,1],0),(#[1280],1),(#[1280],2)]                                 -- head 320→1280
   a := a ++ #[(#[1280,10],0),(#[10],2)]                                                     -- dense
   return a
-def paramShapes : Array (Array Nat) := specs.map (·.1)
-def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end EfficientNetLayout
 
 namespace ConvNeXtLayout
@@ -227,10 +171,6 @@ def specs : Array (Array Nat × Nat) := Id.run do
   -- in `@convnext_train_step`'s signature, and the blob is read positionally.
   a := a ++ #[(#[768],1),(#[768],2),(#[768,10],0),(#[10],2)]
   return a
-def paramShapes : Array (Array Nat) := specs.map (·.1)
-def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end ConvNeXtLayout
 
 namespace ViTLayout
@@ -264,13 +204,4 @@ def specs : Array (Array Nat × Nat) := Id.run do
   for _ in [0:depth] do a := a ++ blockSpec
   a := a ++ #[(#[D],1),(#[D],2),(#[D,nCls],0),(#[nCls],2)]   -- final LN γ,β ; head W,b
   return a
-def paramShapes : Array (Array Nat) := specs.map (·.1)
-def nParams : Nat := (specs.map (fun s => s.1.foldl (·*·) 1)).foldl (·+·) 0
-def shapesBA : ByteArray := packShapes paramShapes
-def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- Imagenette 224²
 end ViTLayout
-
-def MlpLayout.paramShapes : Array (Array Nat) := #[
-  #[784, 512], #[512], #[512, 512], #[512], #[512, 10], #[10]
-]
-def MlpLayout.shapesBA : ByteArray := packShapes MlpLayout.paramShapes

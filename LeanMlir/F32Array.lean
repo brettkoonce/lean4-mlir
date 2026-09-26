@@ -209,10 +209,6 @@ def slice (ba : ByteArray) (start count : Nat) : ByteArray :=
 def extractLoss (out : ByteArray) (lossIdx : Nat) : Float :=
   read out lossIdx.toUSize
 
-/-- Drop the trailing loss float from train_step output. -/
-def dropLoss (out : ByteArray) (nParams : Nat) : ByteArray :=
-  out.extract 0 (nParams * 4)
-
 /-- Decode the little-endian **int32** label at record `i` of a packed label buffer.
 
     Reads all four bytes. Reading byte 0 alone (`lbl.get! (4 * i)`) is `label % 256`: invisible
@@ -365,23 +361,10 @@ opaque detSplitBatch (interleaved : @& ByteArray) (batch : USize)
     (gridH gridW perCell : USize)
     : IO (ByteArray × ByteArray)
 
-/-- Bbox-aware horizontal flip for a YOLOv1 batch. Per-image p=0.5
-    coin (xorshift64 seeded by `seed`); when flipped, reverses image
-    along W, target along gridW, mask along gridW, and replaces the
-    x_cell channel with `1 - x_cell` on cells where mask=1 (since the
-    cell itself mirrors). Returns the augmented (images, target, mask)
-    triple as fresh ByteArrays; inputs are not modified. `yoloAugment`, which
-    works from the raw bboxes, supersedes it. -/
-@[extern "lean_f32_yolo_hflip"]
-opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& ByteArray)
-    (batch : USize) (channels : USize) (imgH : USize) (imgW : USize)
-    (gridH : USize) (gridW : USize) (perCell : USize) (seed : USize)
-    : IO (ByteArray × ByteArray × ByteArray)
-
 /-- Unified bbox-aware augmentation for YOLOv1: per-image hflip + random
     crop, with target+mask re-encoded from the transformed raw bboxes
-    so the geometric correspondence is exact. Replaces `yoloHflip` for
-    records that store the raw bboxes alongside the pre-encoded target.
+    so the geometric correspondence is exact. Reads records that store the raw bboxes
+    alongside the pre-encoded target.
 
     * `images`: f32 image batch `[B, C, H, W]`
     * `boxes`: per-record YOLOv1 label block (target 5880 + mask 196 +
@@ -502,12 +485,6 @@ opaque scaleShift (ba : @& ByteArray) (scale : Float) (shift : Float) : IO ByteA
 /-- EMA update: running = (1-momentum)*running + momentum*batch. -/
 @[extern "lean_f32_ema"]
 opaque ema (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) : IO ByteArray
-
-/-- Per-image horizontal flip of an NCHW f32 batch (independent p=0.5
-    coin per image). Plain image aug for unconditional DDPM. -/
-@[extern "lean_f32_hflip_nchw"]
-opaque hflipNCHW (images : @& ByteArray) (batch : USize) (channels : USize)
-    (H : USize) (W : USize) (seed : USize) : IO ByteArray
 
 /-- Random crop: batch of NCHW images from src_size to crop_size. -/
 @[extern "lean_f32_random_crop"]

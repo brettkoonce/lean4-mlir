@@ -47,5 +47,5 @@ def main (argv : List String) : IO Unit := do
     let epochs := (rest.head?.bind (·.toNat?)).getD 10
     let dataDir := rest[1]?.getD "data"
     renderCnnGrid d
-    (cnnG d).train { epochs := epochs, batchSize := 128 } dataDir
+    (cnnG d).toNet.train { epochs := epochs, batchSize := 128 } dataDir
   | _ => throw (.userError "usage: mnist-cnn-grid <fc-width> [epochs] [dataDir]")

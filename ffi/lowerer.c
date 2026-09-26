@@ -22,8 +22,6 @@
 
 DEFINE_PTR(lowerer_session_release);
 DEFINE_PTR(lowerer_invoke_f32);
-DEFINE_PTR(lowerer_train_step_mlp);
-DEFINE_PTR(lowerer_train_step_generic);
 DEFINE_PTR(lowerer_train_step_adam);
 DEFINE_PTR(lowerer_train_step_adam_seg);
 DEFINE_PTR(lowerer_train_step_adam_softlabel);
@@ -96,8 +94,6 @@ static void* try_paths(const char* const* paths, int n) {
 static int bind_all(void* h) {
   REQ(lowerer_session_release,           "iree_ffi_session_release");
   REQ(lowerer_invoke_f32,                "iree_ffi_invoke_f32");
-  REQ(lowerer_train_step_mlp,            "iree_ffi_train_step_mlp");
-  REQ(lowerer_train_step_generic,        "iree_ffi_train_step_generic");
   REQ(lowerer_train_step_adam,           "iree_ffi_train_step_adam");
   REQ(lowerer_train_step_adam_seg,       "iree_ffi_train_step_adam_seg");
   REQ(lowerer_train_step_adam_softlabel, "iree_ffi_train_step_adam_softlabel");

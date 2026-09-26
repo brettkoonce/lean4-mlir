@@ -334,6 +334,13 @@ lean_lib «Apps» where
   roots := #[]
   globs := #[.submodules `apps, .submodules `demos]
 
+/-- **`lake build TestSupport`** — modules the `lake env lean tests/…` scripts import:
+    `tests/ViTRender.lean`, the hand-written ViT/AdamW StableHLO fragments nine tests use as a
+    numeric reference. Build it before running those scripts. -/
+lean_lib «TestSupport» where
+  srcDir := "."
+  roots := #[`tests.ViTRender]
+
 -- IREE FFI shim: Lean ↔ C bridge for libiree_ffi.so (see ffi/).
 target ireeLeanFfiO pkg : System.FilePath := do
   let oFile := pkg.buildDir / "ffi" / "iree_lean_ffi.o"

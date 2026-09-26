@@ -24,4 +24,4 @@ def cnnPgdConfig : VerifiedConfig where
 def main (argv : List String) : IO Unit := do
   -- CNN_PGD_EPOCHS overrides the epoch count (cheap smoke test); absent → full 10.
   let ep := ((← IO.getEnv "CNN_PGD_EPOCHS").bind (·.toNat?)).getD cnnPgdConfig.epochs
-  cnnVerified.attackPgdCnn { cnnPgdConfig with epochs := ep } (argv.head?.getD "data")
+  cnnVerified.toNet.attackPgdCnn { cnnPgdConfig with epochs := ep } (argv.head?.getD "data")

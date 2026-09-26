@@ -5,7 +5,7 @@ import LeanMlir.Verified.Train
 
 `planning/archive/xla_pjrt_handoff.md`, the ViT AdamW thread, step 3. `Proofs/Codegen/ViTRender.lean`'s
 `vitAdamTrainStepFaithful` renders the same train step the hand-written
-`LeanMlir/ViTRender.vitTrainStepModuleAdamSched` does — the one
+`ViTRender.vitTrainStepModuleAdamSched` (tests/ViTRender.lean) does — the one
 `apps/imagenette/MainViTVerifiedAdam.lean` writes at startup and trains on. This harness is what
 licenses swapping them; run it BEFORE deleting the driver's writer, because afterwards the
 comparison no longer exists.

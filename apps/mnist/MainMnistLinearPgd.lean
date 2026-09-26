@@ -22,4 +22,4 @@ def linearConfig : VerifiedConfig where
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=
-  linearVerified.attackPgd linearConfig (argv.head?.getD "data")
+  linearVerified.toNet.attackPgd linearConfig (argv.head?.getD "data")

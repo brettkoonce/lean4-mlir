@@ -49,5 +49,5 @@ def main (argv : List String) : IO Unit := do
     let epochs := (rest.head?.bind (·.toNat?)).getD 12
     let dataDir := rest[1]?.getD "data"
     renderGrid d₁ d₂
-    (mlpG d₁ d₂).train { epochs := epochs, batchSize := 128 } dataDir
+    (mlpG d₁ d₂).toNet.train { epochs := epochs, batchSize := 128 } dataDir
   | _ => throw (.userError "usage: mnist-mlp-grid <d₁> <d₂> [epochs] [dataDir]")

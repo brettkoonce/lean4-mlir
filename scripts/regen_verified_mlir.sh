@@ -584,6 +584,7 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "tests" ]; then
   # emit an artifact are the two cifar8 ones; every `_fwd`/`_train_step` writer has moved to
   # Proofs/Codegen. Running them is still the right smoke — it just no longer risks a clobber.
   export PATH="$PWD/.venv/bin:$PATH"
+  lake build TestSupport   # tests/ViTRender.lean, imported by four of the files below
   for f in \
     tests/TestMobilenetV2Fwd.lean \
     tests/TestMobilenetV2TrainPC.lean \

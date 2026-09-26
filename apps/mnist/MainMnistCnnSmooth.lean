@@ -24,4 +24,4 @@ def cnnSmoothConfig : VerifiedConfig where
 
 def main (argv : List String) : IO Unit := do
   let ep := ((← IO.getEnv "SMOOTH_EPOCHS").bind (·.toNat?)).getD cnnSmoothConfig.epochs
-  cnnVerified.smoothCertify { cnnSmoothConfig with epochs := ep } (argv.head?.getD "data") [0.12, 0.25, 0.5]
+  cnnVerified.toNet.smoothCertify { cnnSmoothConfig with epochs := ep } (argv.head?.getD "data") [0.12, 0.25, 0.5]

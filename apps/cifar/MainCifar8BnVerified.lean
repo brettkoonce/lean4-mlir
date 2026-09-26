@@ -33,6 +33,6 @@ def cifar8BnConfig : VerifiedConfig where
 
 /-- Entry point for both backends. The lr is baked into the render, not passed. -/
 def runCifar8Bn (argv : List String) : IO Unit :=
-  cifar8BnVerified.train cifar8BnConfig (argv.head?.getD "data")
+  cifar8BnVerified.toNet.train cifar8BnConfig (argv.head?.getD "data")
 
 def main (argv : List String) : IO Unit := runCifar8Bn argv

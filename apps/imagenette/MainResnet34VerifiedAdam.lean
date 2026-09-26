@@ -6,9 +6,9 @@ import LeanMlir.Verified.Train
 The ResNet-34 peer of the `vit`/`mnv2`/`enet` verified-adam trainers: the proof-rendered train step
 (`Proofs/Codegen/ResNet34RenderB.lean → verified_mlir/resnet34_adam_train_step.mlir`,
 `@resnet34_adam_train_step`) — 7×7-s2 stem → maxpool → [3,4,6,3] basic blocks (per-channel BN +
-strided downsamples) → GAP → dense — with the SGD update swapped for AdamW via
-`ViTRender.emitAdamV`, driven by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (146 params)
-packed as one blob + runtime `lr`/`bc₁`/`bc₂` scalars (cosine + warmup + per-step bias correction)
+strided downsamples) → GAP → dense — with the SGD update swapped for the proven AdamW triple
+(`Proofs.StableHLO.adamW_triple_faithful`), driven by the generic `VerifiedNet.trainAdamSched`:
+`[θ|m|v]` (146 params) packed as one blob + runtime `lr`/`bc₁`/`bc₂` scalars (cosine + warmup + per-step bias correction)
 through the unchanged FFI (`n_params = 3k`).
 
 Recipe: AdamW lr 1e-3 / wd 1e-4,

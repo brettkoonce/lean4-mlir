@@ -25,4 +25,4 @@ def convnextConfig : VerifiedConfig where
   batchSize := 32
 
 def main (argv : List String) : IO Unit :=
-  convnextVerified.train convnextConfig (argv.head?.getD "data")
+  convnextVerified.toNet.train convnextConfig (argv.head?.getD "data")

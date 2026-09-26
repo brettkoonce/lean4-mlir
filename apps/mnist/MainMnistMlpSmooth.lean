@@ -21,4 +21,4 @@ def mlpSmoothConfig : VerifiedConfig where
 
 def main (argv : List String) : IO Unit := do
   let ep := ((← IO.getEnv "SMOOTH_EPOCHS").bind (·.toNat?)).getD mlpSmoothConfig.epochs
-  mlpVerified.smoothCertify { mlpSmoothConfig with epochs := ep } (argv.head?.getD "data") [0.12, 0.25, 0.5]
+  mlpVerified.toNet.smoothCertify { mlpSmoothConfig with epochs := ep } (argv.head?.getD "data") [0.12, 0.25, 0.5]

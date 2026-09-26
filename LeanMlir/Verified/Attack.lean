@@ -785,37 +785,3 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
     IO.println s!"L2 PGD eps={eps}: adv acc = {correct.toFloat/tot*100.0}%  (sandwich: cert ≤ true ≤ this)"
   IO.println "done (phase-3 PGD: gradient computed by the proven input-VJP kernel via IREE)."
 
-namespace VerifiedNetSpec
-
-/-- PGD adversarial attack (Chapter 1 linear); see `VerifiedNet.attackPgd`. -/
-def attackPgd (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgd cfg dataDir
-
-/-- PGD attack on the MLP (Chapter 2); see `VerifiedNet.attackPgdMlp`. -/
-def attackPgdMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgdMlp cfg dataDir
-
-/-- PGD attack on the CNN (Chapter 3); see `VerifiedNet.attackPgdCnn`. -/
-def attackPgdCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgdCnn cfg dataDir
-
-/-- Spectral-norm-constrained MLP training study; see `VerifiedNet.attackPgdSpectralMlp`. -/
-def attackPgdSpectralMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (caps : List Float) : IO Unit :=
-  s.toNet.attackPgdSpectralMlp cfg dataDir caps
-
-/-- Spectral-norm-constrained CNN training study; see `VerifiedNet.attackPgdSpectralCnn`. -/
-def attackPgdSpectralCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (caps : List Float) : IO Unit :=
-  s.toNet.attackPgdSpectralCnn cfg dataDir caps
-
-/-- PGD attack on the CIFAR-10 CNN (the deeper conv rung); see `VerifiedNet.attackPgdCifar`. -/
-def attackPgdCifar (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
-  s.toNet.attackPgdCifar cfg dataDir
-
-/-- Spectral-norm-constrained CIFAR training study; see `VerifiedNet.attackPgdSpectralCifar`. -/
-def attackPgdSpectralCifar (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String)
-    (caps : List Float) : IO Unit :=
-  s.toNet.attackPgdSpectralCifar cfg dataDir caps
-
-end VerifiedNetSpec

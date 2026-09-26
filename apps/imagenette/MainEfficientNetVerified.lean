@@ -42,4 +42,4 @@ def efficientnetConfig : VerifiedConfig where
   batchSize := 32
 
 def main (argv : List String) : IO Unit :=
-  efficientnetVerified.train efficientnetConfig (argv.head?.getD "data")
+  efficientnetVerified.toNet.train efficientnetConfig (argv.head?.getD "data")

@@ -20,4 +20,4 @@ def cifarSmoothConfig : VerifiedConfig where
 
 def main (argv : List String) : IO Unit := do
   let ep := ((← IO.getEnv "SMOOTH_EPOCHS").bind (·.toNat?)).getD cifarSmoothConfig.epochs
-  cifarVerified.smoothCertify { cifarSmoothConfig with epochs := ep } (argv.head?.getD "data") [0.25, 0.5]
+  cifarVerified.toNet.smoothCertify { cifarSmoothConfig with epochs := ep } (argv.head?.getD "data") [0.25, 0.5]

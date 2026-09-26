@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Codegen.StableHLO.Pretty
-import LeanMlir.ViTRender
+import tests.ViTRender
 import LeanMlir.GradcheckHelpers
 import LeanMlir.Types
 
@@ -26,8 +26,8 @@ open Proofs Proofs.StableHLO
 open ViTRender ViTGradcheck
 
 private def cfg : ViTConfig :=
-  { b := 2, ic := 3, d := 8, ph := 2, pw := 2, s := 4, m := 16, h := 2, dh := 4,
-    nc := 10, eps := "1.0e-5", scale := "0.5" }   -- 1/√dh = 1/√4 = 0.5
+  { b := 2, ic := 3, d := 8, ph := 2, pw := 2, s := 4, m := 16, h := 2,
+    nc := 10, eps := "1.0e-5" }   -- dh = 4, scale = 1/√4 = 0.5
 
 private def mkBP (i : Nat) : BlockParams :=
   { g1 := s!"%g1_{i}", b1 := s!"%b1_{i}",

@@ -741,8 +741,7 @@ static int yolo_transform_box(
 
 // Unified bbox-aware augmentation for YOLOv1: per-image hflip + random crop,
 // with the target+mask re-encoded from the transformed bboxes (so the
-// geometric correspondence is exact). Replaces the simpler lean_f32_yolo_hflip
-// from Phase 3a now that the data file carries raw bboxes (Phase 3b).
+// geometric correspondence is exact).
 //
 //   `img_ba`   : f32 image batch [B, C, H, W]
 //   `box_ba`   : YOLOv1 label block per record (target 5880 + mask 196 +
@@ -854,116 +853,6 @@ LEAN_EXPORT lean_obj_res lean_f32_yolo_augment(
             dst_tgt + b * tgt_floats_per,
             dst_msk + b * msk_floats_per,
             (int)perCell, (int)gridH, (int)gridW, (int)numClasses);
-    }
-
-    lean_object* inner_pair = lean_alloc_ctor(0, 2, 0);  // (target, mask)
-    lean_ctor_set(inner_pair, 0, out_tgt_ba);
-    lean_ctor_set(inner_pair, 1, out_msk_ba);
-    lean_object* outer = lean_alloc_ctor(0, 2, 0);       // (image, (target, mask))
-    lean_ctor_set(outer, 0, out_img_ba);
-    lean_ctor_set(outer, 1, inner_pair);
-    return lean_io_result_mk_ok(outer);
-}
-
-// Bbox-aware horizontal flip for YOLOv1 batches. Per-image coin flip
-// (xorshift64 from `seed`); when flipped:
-//   * image  [B, C, H, W]: reverse the W axis for every (c, h) row
-//   * target [B, perCell, gH, gW]: reverse the gW axis for every
-//     (perCell, gH) row, then on cells where mask=1 replace the x_cell
-//     channel (channel 0 — box 0's x) with 1 - x_cell because the cell
-//     itself is mirrored. Other channels (y, w, h, conf, class one-hot,
-//     box-1 slots) are hflip-symmetric and stay put.
-//   * mask   [B, gH, gW]: reverse the gW axis for every gH row
-//
-// Returns (images, target, mask) as a 3-tuple of fresh ByteArrays.
-// Inputs are not modified. See yolo_demo_v3.md (folded into planning/archive/yolo_final.md at a0a33a3) Phase 3.
-//
-// LEGACY: superseded by lean_f32_yolo_augment (Phase 3b) which operates
-// on raw bboxes and re-encodes target+mask from scratch. Kept for the
-// hflip-only smoke path; once the v3 trainer commits fully to the
-// augment kernel this can be removed.
-LEAN_EXPORT lean_obj_res lean_f32_yolo_hflip(
-    b_lean_obj_arg img_ba, b_lean_obj_arg tgt_ba, b_lean_obj_arg msk_ba,
-    size_t batch, size_t channels, size_t imgH, size_t imgW,
-    size_t gridH, size_t gridW, size_t perCell, size_t seed) {
-    const size_t img_floats_per   = channels * imgH * imgW;
-    const size_t tgt_floats_per   = perCell * gridH * gridW;
-    const size_t msk_floats_per   = gridH * gridW;
-    const size_t img_bytes_per    = img_floats_per * 4;
-    const size_t tgt_bytes_per    = tgt_floats_per * 4;
-    const size_t msk_bytes_per    = msk_floats_per * 4;
-    const size_t total_img_bytes  = batch * img_bytes_per;
-    const size_t total_tgt_bytes  = batch * tgt_bytes_per;
-    const size_t total_msk_bytes  = batch * msk_bytes_per;
-
-    lean_object* out_img_ba = lean_alloc_sarray(1, total_img_bytes, total_img_bytes);
-    lean_object* out_tgt_ba = lean_alloc_sarray(1, total_tgt_bytes, total_tgt_bytes);
-    lean_object* out_msk_ba = lean_alloc_sarray(1, total_msk_bytes, total_msk_bytes);
-    const float* src_img = (const float*)lean_sarray_cptr(img_ba);
-    const float* src_tgt = (const float*)lean_sarray_cptr(tgt_ba);
-    const float* src_msk = (const float*)lean_sarray_cptr(msk_ba);
-    float* dst_img = (float*)lean_sarray_cptr(out_img_ba);
-    float* dst_tgt = (float*)lean_sarray_cptr(out_tgt_ba);
-    float* dst_msk = (float*)lean_sarray_cptr(out_msk_ba);
-
-    uint64_t rng = seed ? (uint64_t)seed : 0x9E3779B97F4A7C15ULL;
-    for (size_t b = 0; b < batch; b++) {
-        // xorshift64 next bit.
-        rng ^= rng << 13; rng ^= rng >> 7; rng ^= rng << 17;
-        int flip = (int)(rng & 1);
-
-        const float* sI = src_img + b * img_floats_per;
-        const float* sT = src_tgt + b * tgt_floats_per;
-        const float* sM = src_msk + b * msk_floats_per;
-        float* dI = dst_img + b * img_floats_per;
-        float* dT = dst_tgt + b * tgt_floats_per;
-        float* dM = dst_msk + b * msk_floats_per;
-
-        if (!flip) {
-            memcpy(dI, sI, img_bytes_per);
-            memcpy(dT, sT, tgt_bytes_per);
-            memcpy(dM, sM, msk_bytes_per);
-            continue;
-        }
-
-        // Image: reverse W per (c, h) row.
-        for (size_t c = 0; c < channels; c++) {
-            for (size_t h = 0; h < imgH; h++) {
-                const float* sr = sI + (c * imgH + h) * imgW;
-                float*       dr = dI + (c * imgH + h) * imgW;
-                for (size_t x = 0; x < imgW; x++) {
-                    dr[x] = sr[imgW - 1 - x];
-                }
-            }
-        }
-        // Target: reverse gW per (perCell, gH) row.
-        for (size_t pc = 0; pc < perCell; pc++) {
-            for (size_t gh = 0; gh < gridH; gh++) {
-                const float* sr = sT + (pc * gridH + gh) * gridW;
-                float*       dr = dT + (pc * gridH + gh) * gridW;
-                for (size_t gx = 0; gx < gridW; gx++) {
-                    dr[gx] = sr[gridW - 1 - gx];
-                }
-            }
-        }
-        // Mask: reverse gW per gH row.
-        for (size_t gh = 0; gh < gridH; gh++) {
-            const float* sr = sM + gh * gridW;
-            float*       dr = dM + gh * gridW;
-            for (size_t gx = 0; gx < gridW; gx++) {
-                dr[gx] = sr[gridW - 1 - gx];
-            }
-        }
-        // x_cell (channel 0) correction: where mask=1, replace x with 1-x.
-        // Channel 0 sits at offset pc=0 in the target NCHW layout.
-        for (size_t gh = 0; gh < gridH; gh++) {
-            for (size_t gx = 0; gx < gridW; gx++) {
-                size_t cell_off = gh * gridW + gx;
-                if (dM[cell_off] > 0.5f) {
-                    dT[cell_off] = 1.0f - dT[cell_off];
-                }
-            }
-        }
     }
 
     lean_object* inner_pair = lean_alloc_ctor(0, 2, 0);  // (target, mask)
@@ -1545,39 +1434,6 @@ LEAN_EXPORT lean_obj_res lean_f32_seg_confusion(
             }
             size_t t = mb[p];
             if (t < NC) conf[t * NC + best]++;
-        }
-    }
-    return lean_io_result_mk_ok(out);
-}
-
-// ---- per-image horizontal flip for an NCHW f32 batch ----
-// Each image gets an independent p=0.5 coin (xorshift64 seeded by `seed`);
-// when it comes up, the W axis is reversed for every channel/row. Plain
-// image aug for unconditional DDPM (no boxes/masks to co-transform) —
-// planning/archive/ddpm_demo_v2.md Workstream B3.
-LEAN_EXPORT lean_obj_res lean_f32_hflip_nchw(
-    b_lean_obj_arg images, size_t batch, size_t channels,
-    size_t H, size_t W, size_t seed) {
-    size_t nbytes = lean_sarray_size(images);
-    lean_object* out = lean_alloc_sarray(1, nbytes, nbytes);
-    const float* in = (const float*)lean_sarray_cptr(images);
-    float* o = (float*)lean_sarray_cptr(out);
-    uint64_t s = seed ? seed : 0x9e3779b97f4a7c15ULL;
-    size_t plane = H * W;
-    size_t imgsz = channels * plane;
-    for (size_t b = 0; b < batch; b++) {
-        s ^= s << 13; s ^= s >> 7; s ^= s << 17;
-        int flip = (s & 1);
-        const float* ib = in + b * imgsz;
-        float* ob = o + b * imgsz;
-        for (size_t c = 0; c < channels; c++) {
-            for (size_t y = 0; y < H; y++) {
-                const float* irow = ib + c * plane + y * W;
-                float* orow = ob + c * plane + y * W;
-                for (size_t x = 0; x < W; x++) {
-                    orow[x] = flip ? irow[W - 1 - x] : irow[x];
-                }
-            }
         }
     }
     return lean_io_result_mk_ok(out);

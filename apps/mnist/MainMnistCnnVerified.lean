@@ -48,4 +48,4 @@ def cnnConfig : VerifiedConfig where
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=
-  cnnVerified.train cnnConfig (argv.head?.getD "data")
+  cnnVerified.toNet.train cnnConfig (argv.head?.getD "data")

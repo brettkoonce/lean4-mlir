@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Codegen.ViTRender
-import LeanMlir.ViTRender
+import tests.ViTRender
 import LeanMlir.Types
 
 /-! # ch10 V6b — ViT-Tiny train step: iree-compile smoke on the COMMITTED render

@@ -4,7 +4,7 @@ Layout is `NetSpec.evalShapes` (LeanMlir/SpecHelpers.lean:195): after the params
 per BN layer, `[oc]` running mean then `[oc]` running var -- interleaved per
 layer, NOT all-means-then-all-vars.
 
-BN layer order is `collectBnLayers` (MlirCodegen.lean:2883): per residual block
+BN layer order is `NetSpec.bnLayers` (LeanMlir/MlirCodegen.lean): per residual block
 conv1 then conv2, and for block 0 of a projecting stage the projection LAST.
 torchvision's BasicBlock declares conv1, bn1, relu, conv2, bn2, downsample, so
 `named_modules()` yields bn1, bn2, downsample.1 -- the same order.
@@ -18,7 +18,7 @@ import torch.nn as nn
 
 
 def lean_ordered_bns(model):
-    """BatchNorm2d modules in collectBnLayers order."""
+    """BatchNorm2d modules in NetSpec.bnLayers order."""
     out = []
     for mod_name, mod in (("stem", model.stem), ("layer2", model.layer2),
                           ("layer3", model.layer3), ("layer4", model.layer4)):

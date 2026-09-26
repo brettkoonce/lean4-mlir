@@ -89,15 +89,4 @@ def writePPM (path : String) (H W : Nat) (pixels : ByteArray) : IO Unit := do
   ba := ba.append pixels
   IO.FS.writeBinFile path ba
 
-/-- Render a heatmap directly as a colored PPM (no overlay) — useful
-    for quick "did this work at all" checks. -/
-def writeHeatmapPPM (path : String) (heat : ByteArray) (H W : Nat) : IO Unit := do
-  let mut pixels : ByteArray := ByteArray.emptyWithCapacity (H * W * 3)
-  for i in [:H] do
-    for j in [:W] do
-      let h := F32.read heat (i * W + j).toUSize
-      let (r, g, b) := viridis h
-      pixels := pixels.push r |>.push g |>.push b
-  writePPM path H W pixels
-
 end Cam

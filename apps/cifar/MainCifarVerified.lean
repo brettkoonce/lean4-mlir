@@ -22,4 +22,4 @@ def cifarConfig : VerifiedConfig where
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=
-  cifarVerified.train cifarConfig (argv.head?.getD "data")
+  cifarVerified.toNet.train cifarConfig (argv.head?.getD "data")

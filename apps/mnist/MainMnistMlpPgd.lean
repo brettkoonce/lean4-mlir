@@ -17,4 +17,4 @@ def mlpConfig : VerifiedConfig where
   batchSize := 128
 
 def main (argv : List String) : IO Unit :=
-  mlpVerified.attackPgdMlp mlpConfig (argv.head?.getD "data")
+  mlpVerified.toNet.attackPgdMlp mlpConfig (argv.head?.getD "data")
