@@ -2,10 +2,11 @@ import LeanMlir.Proofs.Architectures.PerChannelBN
 
 /-! # Per-channel BN parameter-gradient bridges (dγ, dβ certified)
 
-The non-BN closes (`cnn_render_conv{W,b}_certified` + the M2 dense bridges) and the BN
+The non-BN closes (`cnn_render_conv{W,b}_certified` + the dense bridges
+`IR.weight_grad_bridge` / `IR.bias_grad_bridge`) and the BN
 **input**-grad (`bnPerChannelGradInput_correct`, under `0<ε`) already cover every
 parameter of a per-channel-BN train step except the BN scale/shift γ, β. This
-file supplies their bridges — the BN analogue of `IR.bias_grad_bridge` / `conv_bias_grad`.
+file supplies their bridges — the BN analogue of `IR.bias_grad_bridge` / `conv_bias_grad_bridge`.
 
 γ and β enter BN **affinely**: per channel `c`, `y_(c,s) = γ_c · x̂_(c,s) + β_c`, and x̂
 does not depend on γ or β. So as a function of γ (resp. β), per-channel BN is
@@ -16,7 +17,7 @@ basis vector as the sparse indicator
 cotangent `dy` gives exactly the rendered per-channel reduces
 `dγ_c = Σ_s dy·x̂`, `dβ_c = Σ_s dy` (the `bnGammaSgd` / `bnBetaSgd` ops). Unlike the BN
 input grad these need no `0<ε` (affine in the
-params; ε only enters the constant x̂). See `planning/archive/render_close_handoff.md` §2b.
+params; ε only enters the constant x̂).
 -/
 
 namespace Proofs

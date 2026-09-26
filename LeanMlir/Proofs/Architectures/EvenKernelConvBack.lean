@@ -1,35 +1,31 @@
 import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 
-/-! # ⛔⛔ `convFlatBack` is NOT the adjoint at an EVEN kernel — and the one-line repair
+/-! # `convFlatBack` is not the adjoint at an even kernel — and the one-line repair
 
 `convFlatBack W = flatConv (reverseSwap W) 0` is the reversed-kernel forward conv every backward
 in this repo runs, and `convFlatBack_eq_vjp_backward` (`ConvBackCertifiedTie`) ties it to
-the certified conv input-VJP **for ODD kernels only**. That hypothesis is not a convenience: it is
-load-bearing, and the statement is FALSE without it.
+the certified conv input-VJP for odd kernels only. That hypothesis is not a convenience: the
+statement is false without it.
 
 `conv2d` pads by `pH = (kH-1)/2`, so `convFlatBack`'s coefficient of `dy[j]` at output `hi` is
 `W[hi - j + (kH-1-pH)]`, while the adjoint's is `W[hi - j + pH]`. They agree iff
 `kH - 1 - pH = pH`, i.e. iff `kH` is odd. At `kH = 4` the reversed-kernel conv is the adjoint of a
 conv shifted one pixel.
 
-⛔ **ConvNeXt-T is the only net in the repo with an even kernel**, and it has four: the 4×4/s4
-patchify stem and the three 2×2/s2 downsamples. (ViT's 16×16 patch embed is NOT affected —
-`patchEmbedFlat` is its own definition over non-overlapping patches, with no `conv2d` and no
-padding convention.) Every other net is all-odd: R34 7×7/3×3/1×1, MobileNetV2 and
-EfficientNet-B0 1×1/3×3/5×5.
+Note: ConvNeXt-T has four even kernels: the 4×4/s4 patchify stem and the three 2×2/s2
+downsamples. (ViT's 16×16 patch embed is not affected — `patchEmbedFlat` is its own definition
+over non-overlapping patches, with no `conv2d` and no padding convention.) R34 (7×7/3×3/1×1),
+MobileNetV2 and EfficientNet-B0 (1×1/3×3/5×5) are all-odd.
 
-⚠⚠ **The codegen tier already knew.** `StableHLO.lean`'s `.convStridedBack` emitter pads
-ASYMMETRICALLY, `[[kH-1-pH, pH]]`, in both its per-example (`.convStridedBack`) and batched (`.convStridedBackBatched`) arms,
-and the batched one says so in as many words — *"The symmetric `[[p,p],[p,p]]` this emitted AGREES
-at every odd kernel and is WRONG at even ones (kH=2 ⇒ `[[0,0]]` where the VJP needs `[[1,0]]`) …
-Found by the whole-net backward tie"*. Its `den` is `(flatConvStride2HasVJP W b).backward`, the
-certified VJP, so the EMITTED ConvNeXt backward is correct and nothing trained is affected. What
-was never carried across is the third spelling of the same map — `BackwardMaps.lean`'s
-`flatConvStride2Back` / `flatConvStride4Back`, which are `convFlatBack ∘ scatter` at the SYMMETRIC
-pad. ⭐ That is the recurring twin-drift pattern in its "a fix landed on one tier and its twin
-kept the old spelling" form, for the third time
-(`planning/archive/float_budget_numbers_log.md` §3.10's pool and §3.16's head LayerNorm were the first two) —
-and here the fix landed on TWO tiers and missed the third.
+The emitter already pads correctly. The `.convStridedBack` emitter in StableHLOPretty.lean pads
+asymmetrically, `[[kH-1-pH, pH]]`, in both its per-example (`.convStridedBack`) and batched
+(`.convStridedBackBatched`) arms; the batched arm's comment records that the symmetric
+`[[p,p],[p,p]]` agrees at every odd kernel and is wrong at even ones (kH=2 ⇒ `[[0,0]]` where the
+VJP needs `[[1,0]]`). Its `den` is `(flatConvStride2HasVJP W b).backward`, the certified VJP, so
+the emitted ConvNeXt backward is correct and nothing trained is affected. The third spelling of
+the same map — `BackwardMaps.lean`'s `flatConvStride2Back` / `flatConvStride4Back`, which are
+`convFlatBack ∘ scatter` at the symmetric pad — is correct only at odd kernels; the leaf ties
+below apply it to `padOdd W` instead.
 
 ## The repair: spell the even kernel at an odd size
 
@@ -40,7 +36,7 @@ kernel whose leading tap is zero is the same program as the ASYMMETRIC `[[kH-1-p
 So this is not a third convention — it is the emitter's convention, expressed in the vocabulary
 `BackwardMaps.lean` already has.
 
-⭐ **The consequence is that no new conv machinery is needed anywhere.** The odd-kernel leaf tie
+No new conv machinery is needed. The odd-kernel leaf tie
 `convFlatBack_eq_vjp_backward` does all the work at `kH+1`, and `|padOdd W| ≤ w'` is free (the new
 entries are `0`), so every magnitude hypothesis transfers unchanged.
 -/
@@ -55,7 +51,7 @@ namespace Proofs
 /-- **Zero-extend a kernel to the next size, at offset `(+1, +1)`.** The `kh = 0` row and the
     `kw = 0` column are `0`; `padOdd W (kh+1) (kw+1) = W kh kw`.
 
-    ⭐ Written with `Fin.cons` rather than a `dite` on `0 < kh.val` on purpose: `Fin.cons_zero`
+    Written with `Fin.cons` rather than a `dite` on `0 < kh.val` on purpose: `Fin.cons_zero`
     and `Fin.cons_succ` are `simp` lemmas that match `Fin.sum_univ_succ` head-on, which is the
     whole proof of `conv2d_padOdd_eq`. -/
 noncomputable def padOdd {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW) :
@@ -81,7 +77,7 @@ noncomputable def padOdd {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW) :
     gives `pH' = (kH-1)/2 + 1 = pH + 1`, so the shifted tap `kh+1` reads
     `x[(kh+1) + hi - (pH+1)] = x[kh + hi - pH]` — the original's window, with the same guard.
 
-    ⚠ Evenness is stated as `2 * (kH / 2) = kH` rather than `kH % 2 = 0` because that is the form
+    Evenness is stated as `2 * (kH / 2) = kH` rather than `kH % 2 = 0` because that is the form
     `omega` consumes directly in the index arithmetic below. -/
 theorem conv2d_padOdd_eq {ic oc h w kH kW : Nat}
     (hH : 2 * (kH / 2) = kH) (hW : 2 * (kW / 2) = kW)

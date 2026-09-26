@@ -1,19 +1,20 @@
 import LeanMlir.Proofs.Float.Binary32Instance
 
-/-! # Descent at TRAINED weights (post_audit_roadmap §3)
+/-! # Descent at TRAINED weights
 
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
 arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
-`binary32_linear_sgd_descends_concrete` (the suite's only concrete descent
-instance) holds at the degenerate `W = 0` net — a satisfiability witness.
-This file retires that caveat: **one binary32 SGD step on a TRAINED,
+`binary32_linear_sgd_descends_concrete` (Float/Binary32Instance.lean) holds only at
+the degenerate `W = 0` net — a satisfiability witness. This file gives a trained
+instance: **one SGD step with the FloatModel binary32 gradient on a TRAINED,
 /128-rationalized bias-free 49→10 pooled-MNIST linear classifier (test acc
-0.874) provably decreases the real cross-entropy loss**, at MNIST test
-image #8 with learning rate 1/8192. The rounding model is the CONSTRUCTED
-`rndP 23` grid (`binary32`), so the whole statement is axiom-free.
+0.874) decreases the real cross-entropy loss of one example**, MNIST test
+image #8, with learning rate 1/8192. The update is taken in ℝ and the
+`exp` is exact (`fexp := Real.exp`, `eexp := 0`); the rounding model is the
+CONSTRUCTED `rndP 23` grid (`binary32`), not an assumed one.
 
 The trick that closes the descent window with zero `exp` evaluations: the
 witness sample is MISCLASSIFIED (true label 5, predicted 6), so
@@ -278,12 +279,13 @@ theorem heta0 : 0 ≤ FloatModel.mulErr binary32.u 1 1 0
 -- ── the capstone ──
 
 set_option maxRecDepth 8192 in
-/-- **Descent at TRAINED weights.** One binary32 SGD step (lr = ((1 : ℝ)/8192)) on
+/-- **Descent at TRAINED weights.** One SGD step with the FloatModel binary32 gradient (lr = ((1 : ℝ)/8192)) on
     the trained linear classifier, at the misclassified witness, decreases
     the real cross-entropy by ≥ lr·‖∇L‖²/2 — every hypothesis of
-    `linear_float_sgd_descends` discharged, the rounding model constructed
-    (`rndP 23`), zero axioms. Retires the `W = 0` degeneracy caveat of
-    `binary32_linear_sgd_descends_concrete`. -/
+    `linear_float_sgd_descends` discharged at exact `exp` (`fexp := Real.exp`,
+    `eexp := 0`), the update taken in ℝ, the rounding model constructed
+    (`rndP 23`). A trained-weight peer of `binary32_linear_sgd_descends_concrete`,
+    which holds only at `W = 0`. -/
 theorem trained_linear_sgd_descends_concrete :
     crossEntropy 10 (dense (Mat.unflatten (Mat.flatten Wd -
         ((1 : ℝ)/8192) • binary32.linearFloatGrad Wd bd xd Real.exp lblD)) bd xd)

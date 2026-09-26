@@ -10,10 +10,9 @@ says nothing about a real gradient. A non-vacuity fact of the weaker kind
 (`Mnv2FullBSeal.sealX_nonconstant`) only rules out a *constant forward* — strictly
 weaker than a non-trivial backward at the witness.
 
-This file supplies the missing **level-3 seal** (see `planning/archive/whole_network_backward.md`,
-Item B): the reusable bridge from a single nonzero Jacobian entry to a provably non-trivial
+This file supplies the **level-3 seal**: the reusable bridge from a single nonzero Jacobian entry to a provably non-trivial
 backward, and the equivalence with `fderiv ℝ f x ≠ 0`. A witness then upgrades from
-"forward ≠ const" to "the rendered backward at this point is not the zero map" by exhibiting
+"forward ≠ const" to "the proven backward at this point is not the zero map" by exhibiting
 **one** `pdiv f x i j ≠ 0` — which is what a genuine (non-degenerate) gradient requires.
 
 The bridge is stated for the pointwise `HasVJPAt` the kinked witnesses are built as. The
@@ -47,8 +46,8 @@ theorem fderiv_eq_zero_of_pdiv_all_zero {m n : Nat} (f : Vec m → Vec n) (x : V
   rw [← sum_smul_basisVec v, map_sum]
   simp [fun i => (funext (hall i) : fderiv ℝ f x (basisVec i) = 0)]
 
-/-- **The seal in `fderiv` form.** A nonzero Fréchet derivative at the witness yields a
-    nonzero Jacobian entry — the clean analytic hypothesis behind
+/-- **Nonzero `fderiv` ⇒ a nonzero Jacobian entry.** A nonzero Fréchet derivative at the
+    witness yields a nonzero Jacobian entry — the clean analytic hypothesis behind
     `HasVJPAt.backward_ne_zero_of_pdiv_ne`. (Contrapositive of the all-zero lemma.) -/
 theorem exists_pdiv_ne_of_fderiv_ne {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
     (hfd : fderiv ℝ f x ≠ 0) :

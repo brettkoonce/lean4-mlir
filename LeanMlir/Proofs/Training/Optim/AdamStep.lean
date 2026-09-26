@@ -1,18 +1,17 @@
 import LeanMlir.Proofs.Foundation.Tensor
 import Mathlib.Analysis.SpecialFunctions.Sqrt
 
-/-! # The Adam / AdamW optimizer step over ℝ — the verified core (Phase 3a)
+/-! # The Adam / AdamW optimizer step over ℝ
 
-The ℝ reference for `vit-train`'s optimizer, the load-bearing rung of
-`planning/archive/vit_train_to_vit_verified.md`. Coordinatewise over `Vec`, mirroring the
-emitted StableHLO update (`MlirCodegen.emitAdamUpdate`) op-for-op so the later
-faithfulness theorem (`den (adamGraph) = adamWStep …`) is a structural match.
+The ℝ reference for `vit-train`'s optimizer. Coordinatewise over `Vec`, mirroring the
+emitted StableHLO update (`MlirCodegen.emitAdamUpdate`) op-for-op so the faithfulness
+theorem `adamW_triple_faithful` (Codegen/StableHLO.lean) is a structural match.
 
 Unlike `SgdDescent`, this file proves **no** descent guarantee: Adam is not a
 monotone descent method (Reddi et al. 2018, the AMSGrad counterexample), so the
 verified target is *faithfulness* (the rendered update equals `adamWStep` of the
 certified gradient) plus *well-definedness* (the `√v̂ + ε` denominator is strictly
-positive) — NOT a loss-decrease bound. See the doc's proof/host boundary note.
+positive) — NOT a loss-decrease bound.
 
 `bc₁`/`bc₂` are the bias-correction denominators `1 − β₁ᵗ` / `1 − β₂ᵗ`, passed in
 (host-computed per step) rather than recomputed in-graph — matching the emitter,

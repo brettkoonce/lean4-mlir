@@ -40,7 +40,7 @@ the same input `X`. Every piece is something we already have:
 | three-way fan-in at X | `Residual.lean`    | `biPathHasVJP`         |
 
 So the **only genuinely new ingredient in attention** is the standalone
-softmax VJP (previously we only had it bundled inside CE loss). Once
+softmax VJP (`softmaxHasVJP`, separate from the CE-loss gradient). Once
 that's in hand, everything else is composition via tools we built in
 earlier chapters.
 
@@ -54,6 +54,8 @@ earlier chapters.
 3. **Multi-head wrapper** — reshape/transpose boilerplate, no new math.
 4. **Transformer block** — LN -> MHSA -> + -> LN -> MLP -> +, pure composition.
 5. **Final commentary** — why the taxonomy is complete.
+6. **Bridging ranks** — patch embedding, classifier head, and the weight-tied
+   whole-ViT witness `vitFullHasVJP` (`vitFullHasVJP_correct`).
 -/
 
 open Finset BigOperators
@@ -405,17 +407,14 @@ fan-in. Every piece has been proved. The composition is mechanical.
 
 /-! ### The backward, concretely
 
-Earlier drafts of this section ended with a single `axiom sdpaHasVJP`
-whose type was just `(... functions) × (... functions) × (... functions)`.
-That was **vacuous as a correctness claim** — a triple of zero functions
-satisfies it. The current state is:
+This section gives:
 
 1. **Concrete definitions** of `sdpaBackQ`, `sdpaBackK`, `sdpaBackV`
    transcribed from the step-by-step derivation above.
-2. **Honest correctness theorems** stated in terms of `pdivMat` (the
-   matrix-level partial derivative primitive from `Tensor.lean`),
-   proved compositionally via the four-step `vjpMatComp` chain
-   described in §Q-correctness below.
+2. **Correctness theorems** `sdpaBackQ_correct`, `sdpaBackK_correct`,
+   `sdpaBackV_correct`, stated in terms of `pdivMat` (the matrix-level
+   partial derivative primitive from `Tensor.lean`), each proved
+   compositionally as a `vjpMatComp` chain (four steps for Q).
 
 The concrete formulas are also numerically gradient-checked in
 `check_jacobians.py` (`test_sdpaBackQ/K/V`) for cross-validation.
@@ -662,8 +661,8 @@ theorem sdpaBackV_correct (n d : Nat) (Q K V dOut : Mat n d)
   unfold sdpaBackV Mat.mul Mat.transpose
   rfl
 
-/-- **Bundled SDPA ternary VJP.** Packages `sdpa_back_{Q, K, V}_correct`
-    into a single `HasVJPMat3` instance. The backward triple
+/-- **Bundled SDPA ternary VJP.** Packages `sdpaBackQ_correct`,
+    `sdpaBackK_correct` and `sdpaBackV_correct` into a single `HasVJPMat3` instance. The backward triple
     `(sdpaBackQ, sdpaBackK, sdpaBackV)` gives per-input
     gradients; correctness is the three existing per-input theorems
     in one structure. -/
@@ -699,12 +698,11 @@ In the MLIR (`emitMHSAForward`):
     reshape -> (B, N, D)
     dense projection (the "output projection" `Wo`)
 
-**Earlier** this section just narrated "no new VJP math" and moved on.
-The current state proves `mhsaHasVJPMat` end-to-end: we *define*
+This section proves `mhsaHasVJPMat` end-to-end: we *define*
 `mhsaLayer` concretely in Lean (Q/K/V projections → per-head slice
 → sdpa-per-head → concat → Wo projection), then prove its `HasVJPMat`
-via the new `pdivMat_colIndep` + `colSlabwiseHasVJPMat` framework
-(Phase 3, Apr 2026), which lifts the per-head SDPA backward over the
+via the `pdivMat_colIndep` + `colSlabwiseHasVJPMat` framework,
+which lifts the per-head SDPA backward over the
 head axis. Formula remains numerically gradient-checked in
 `check_jacobians.py` for cross-validation. -/
 
@@ -720,9 +718,9 @@ head axis. Formula remains numerically gradient-checked in
 
     The bundled VJP theorem below packages the correctness of this
     whole thing — composing dense Jacobians, the per-head SDPA
-    jacobians (we already proved `sdpa_back_{Q,K,V}_correct`), and
+    jacobians (`sdpaBackQ_correct`, `sdpaBackK_correct`, `sdpaBackV_correct`), and
     the reshape/unreshape `pdiv_reindex` facts, with the per-head
-    independence handled by Phase 3's column-stacking framework
+    independence handled by the column-stacking framework
     (`pdivMat_colIndep` + `colSlabwiseHasVJPMat`). -/
 noncomputable def mhsaLayer (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
@@ -747,12 +745,12 @@ noncomputable def mhsaLayer (N heads d_head : Nat)
   -- Output projection
   fun n j => (∑ k : Fin D, concat n k * Wo k j) + bo j
 
-/-! ## Phase 3: Column-stacked SDPA — the bridge from `HasVJPMat3` to multi-head.
+/-! ## Column-stacked SDPA — the bridge from `HasVJPMat3` to multi-head.
 
-    The two `mhsa_*` former axioms below were the project floor for two reasons:
+    Two facts are needed for multi-head attention:
     (1) joint differentiability of `(Q, K, V) ↦ sdpa Q K V`, which doesn't
-    follow from the existing per-input `_flat_diff` lemmas; (2) the per-head
-    "vmap" structure, which `colSlabwiseHasVJPMat` (Phase 1) handles for
+    follow from the per-input `_flat_diff` lemmas; (2) the per-head
+    "vmap" structure, which `colSlabwiseHasVJPMat` handles for
     *unary* per-slab functions but SDPA is naturally ternary.
 
     The fix: column-stack `(Q | K | V)` into a single `Mat n (3 * d_head)`
@@ -802,8 +800,7 @@ theorem mhsaWeights_flat_differentiable (n d : Nat) :
 
 /-- **Joint flat-diff of column-stacked SDPA.**
 
-    The blocker for Phase 3 (per `planning/archive/mhsa.md`): joint diff in `(Q, K, V)`
-    doesn't follow from the existing per-input `_flat_diff` lemmas. Here
+    Joint diff in `(Q, K, V)` doesn't follow from the existing per-input `_flat_diff` lemmas. Here
     we prove it by treating the qkv-slab as the variable, factoring SDPA
     as `Mat.mul ∘ rowSoftmax ∘ scaled-matmul`: the weights are differentiable
     (`mhsaWeights_flat_differentiable`), and the final matmul with the V-third of the
@@ -984,7 +981,7 @@ theorem pdivMat_mhsaG_split (n d : Nat) (slab : Mat n (3 * d))
     (fun u => by simpa using mhsaG_comp_embed n d 2 slab u)]
 
 /-- **HasVJPMat for column-stacked SDPA.** Backward column-stacks the three
-    `sdpa_back_*` outputs by their `c : Fin 3` slot. Correctness comes from
+    `sdpaBackQ`/`sdpaBackK`/`sdpaBackV` outputs by their `c : Fin 3` slot. Correctness comes from
     `pdivMat_mhsaG_split` (case-splits on c into the corresponding
     one-input SDPA pdivMat) and `sdpaHasVJPMat3.correct_*`. -/
 noncomputable def mhsaGHasVJPMat (n d : Nat) :
@@ -1134,16 +1131,14 @@ theorem mhsaLayer_eq_compose (N heads d_head : Nat)
 /-- **The composed MHSA VJP** — `Wo-dense ∘ colSlabApply mhsaG ∘ qkv-dense`,
     stated on the explicit composition (no `mhsaLayer_eq_compose` transport).
     This is the substantive witness; `mhsaHasVJPMat` below re-types it to
-    `mhsaLayer` with the cast confined to the `correct` field.
-
-    **Why the split (kernel-cost lesson, 2026-07):** the previous
-    `mhsaHasVJPMat := by rw [show mhsaLayer = …]; exact vjpMatComp …` made
-    the constant's VALUE an `Eq.mpr` cast around the structure. Any kernel
-    defeq that whnf'd `(mhsaHasVJPMat …).backward` had to replay the whole
-    `mhsaLayer` rewrite — ~200s of kernel type-checking PER downstream
-    declaration that forced it (no cross-declaration whnf cache), which was
-    almost all of `ViTBackB0`'s (3×) and `ViTMhsaBackCertifiedTie`'s (1×) build
-    time. With `backward` a direct field, the projection whnfs in one hop. -/
+    `mhsaLayer` with the cast confined to the `correct` field, so
+    `(mhsaHasVJPMat …).backward` reduces in one projection. -/
+-- Why the split: defining `mhsaHasVJPMat := by rw [show mhsaLayer = …]; exact vjpMatComp …`
+-- makes the constant's value an `Eq.mpr` cast around the structure. Any kernel defeq that
+-- whnf's `(mhsaHasVJPMat …).backward` then replays the whole `mhsaLayer` rewrite, ~200 s of
+-- kernel type-checking per downstream declaration that forces it (no cross-declaration whnf
+-- cache); that was most of `ViTBackB0`'s and `ViTMhsaBackCertifiedTie`'s build time. With
+-- `backward` a direct field, the projection whnfs in one hop.
 noncomputable def mhsaComposedHasVJPMat (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
@@ -1189,8 +1184,7 @@ noncomputable def mhsaComposedHasVJPMat (N heads d_head : Nat)
   -- Final compose with output.
   exact vjpMatComp _ _ h_body_qkv_diff h_output_diff h_body_qkv_vjp h_output_vjp
 
-/-- **Multi-head SDPA VJP (Phase 8).** Now a theorem (was an axiom),
-    composed from `mhsaGHasVJPMat`, `colSlabwiseHasVJPMat`, and
+/-- **Multi-head SDPA VJP**, composed from `mhsaGHasVJPMat`, `colSlabwiseHasVJPMat`, and
     the per-token dense framework. `backward` is the composed witness's
     field DIRECTLY (kernel-cheap projection); the `mhsaLayer_eq_compose`
     transport lives only in `correct` — a `Prop` the kernel never reduces.
@@ -1213,8 +1207,8 @@ noncomputable def mhsaHasVJPMat (N heads d_head : Nat)
     rw [hfun]
     exact (mhsaComposedHasVJPMat N heads d_head Wq Wk Wv Wo bq bk bv bo).correct A dY i j
 
-/-- **Differentiability of the flattened multi-head SDPA layer** — theorem
-    (was an axiom). Composition of three `_flat_diff` lemmas. -/
+/-- **Differentiability of the flattened multi-head SDPA layer** —
+    composition of three `_flat_diff` lemmas. -/
 theorem mhsaLayer_flat_differentiable (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
@@ -1235,7 +1229,7 @@ theorem mhsaLayer_flat_differentiable (N heads d_head : Nat)
 
 Every per-token operation in a transformer (LN, dense, GELU) lifts from
 `HasVJP` on `Vec D` to `HasVJPMat` on `Mat N D` via the single helper
-`rowwiseHasVJPMat` (Tensor.lean). These are theorems — no new axioms. -/
+`rowwiseHasVJPMat` (Tensor.lean). -/
 
 /-- Per-token layer norm across a sequence. Applies `layerNormForward`
     to each row of the `(N, D)` input; the backward is block-diagonal. -/
@@ -1272,12 +1266,12 @@ where `MLP(z) = dense(Wfc2, bfc2, gelu(dense(Wfc1, bfc1, z)))`.
 
 Every piece is now a `HasVJPMat` on `Mat N D`:
 - `LN1`, `LN2` — `layerNormPerTokenHasVJPMat` (theorem via `rowwiseHasVJPMat`)
-- `MHSA`       — `mhsaHasVJPMat` (bundled `HasVJPMat` def — Phase 8)
+- `MHSA`       — `mhsaHasVJPMat` (bundled `HasVJPMat` def)
 - `MLP`        — two `densePerTokenHasVJPMat` + one `geluPerTokenHasVJPMat`, glued with `vjpMatComp`
 - `+` residuals — `biPathMatHasVJP` (theorem, Tensor.lean) with identity
 
 The transformer block theorem below glues these with `vjpMatComp` and
-`biPathMatHasVJP`. Zero new axioms — every piece is a theorem. -/
+`biPathMatHasVJP`. -/
 
 /-- MLP sublayer of a transformer block: `dense ∘ GELU ∘ dense` applied per-token.
 
@@ -1301,9 +1295,8 @@ lemma transformerMlp_flat_differentiable (N D mlpDim : Nat)
   unfold transformerMlp Mat.unflatten Mat.flatten dense gelu geluScalar; fun_prop
 
 /-- `HasVJPMat` for the MLP sublayer — chain of two `vjpMatComp`
-    steps over per-token liftings (`dense ∘ gelu ∘ dense`). Theorem,
-    no longer axiom: every Diff hypothesis is discharged by the
-    per-token-flat helpers above. -/
+    steps over per-token liftings (`dense ∘ gelu ∘ dense`). Every Diff
+    hypothesis is discharged by the per-token-flat helpers above. -/
 noncomputable def transformerMlpHasVJPMat (N D mlpDim : Nat)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D) :
@@ -1475,9 +1468,9 @@ lemma transformerBlock_flat_differentiable (N heads d_head mlpDim : Nat)
     (transformerAttnSublayer_flat_differentiable N heads d_head ε γ1 β1 hε Wq Wk Wv Wo bq bk bv bo)
     (transformerMlpSublayer_flat_differentiable N heads d_head mlpDim ε γ2 β2 hε Wfc1 bfc1 Wfc2 bfc2)
 
-/-- **Transformer block VJP** — composition of attn + mlp sublayers.
-    Theorem, no longer axiom: a single `vjpMatComp` of the two sublayer
-    theorems with their Diff helpers. -/
+/-- **Transformer block VJP** — composition of attn + mlp sublayers:
+    a single `vjpMatComp` of the two sublayer witnesses with their Diff
+    helpers. Both LayerNorms are scalar-affine (`γ1 β1 γ2 β2 : ℝ`). -/
 noncomputable def transformerBlockHasVJPMat (N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
@@ -1509,12 +1502,11 @@ The stack is just k-fold composition of individual blocks. By
 `vjpMatComp` and induction on k, if each block has a `HasVJPMat`
 then so does the stack — for any depth.
 
-For the formal theorem we use a single shared parameter tuple across
-blocks (a mild simplification; in practice every block has its own
-weights). The Jacobian-composition structure doesn't change — the
-theorem generalizes trivially to per-block parameters by replacing
-the Nat induction with a `Fin k` parameter function, which is
-mechanical once the single-shared-param case is proved. -/
+The formal tower `transformerTower` uses a single shared parameter
+tuple across all `k` blocks (`Nat.rec` over one tuple), with
+scalar-affine LayerNorms; in practice every block has its own weights
+and a per-feature LN. Per-block parameters are not formalized in this
+file. -/
 
 /-- k-fold iterated transformer block, sharing parameters across all
     k layers. Defined by `Nat.rec` so the `HasVJPMat` proof is a
@@ -1555,8 +1547,9 @@ lemma transformerTower_flat_differentiable (k N heads d_head mlpDim : Nat)
     exact flat_differentiable_comp ih (transformerBlock_flat_differentiable N heads d_head mlpDim ε γ1 β1 hε
       Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
 
-/-- **Transformer tower VJP** — k-fold composition. Theorem, no longer axiom:
-    induction on `k` via `vjpMatComp` and `transformerBlockHasVJPMat`. -/
+/-- **Transformer tower VJP** — k-fold composition of one shared block
+    (`transformerTower`): induction on `k` via `vjpMatComp` and
+    `transformerBlockHasVJPMat`. -/
 noncomputable def transformerTowerHasVJPMat (k N heads d_head mlpDim : Nat)
     (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
@@ -1599,12 +1592,10 @@ The backbone is `finalLN ∘ transformerTower`. Both sides are `Mat N D`,
 so `vjpMatComp` glues the two VJPs.
 
 The patch-embedding and classifier-head steps exit `Mat`-land (they
-change type to/from `Tensor3` and `Vec` respectively). Both are trivial
-compositions of already-proved theorems (`conv2dHasVJP3` / `pdiv_reindex`
-for patch embed, `pdiv_reindex` / `denseHasVJP` / `softmaxCE_grad` for
-the classifier) but they don't fit in the uniform `HasVJPMat` frame.
-We mark them as future work; closing this would require a unified
-rank-polymorphic VJP framework that's not needed for the pedagogy. -/
+change type to/from `Tensor3` and `Vec` respectively), so they don't fit
+in the uniform `HasVJPMat` frame. They are bridged below (§ Bridging
+ranks): the body is flattened with `HasVJPMat.toHasVJP` and composed with
+`patchEmbedFlatHasVJP` and `classifierFlatHasVJP` in `vitFullHasVJP`. -/
 
 /-- **ViT body** — transformer tower followed by final per-token LayerNorm.
 
@@ -1643,15 +1634,14 @@ lemma vitBody_flat_differentiable (k N heads d_head mlpDim : Nat) (ε : ℝ) (h�
       Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2)
     (layerNorm_per_token_flat_differentiable N (heads * d_head) ε γF βF hε)
 
-/-- **The ViT body VJP** — `finalLN ∘ transformerTower`. Theorem, no longer
-    axiom: a single `vjpMatComp` of the tower + final LN with their
-    Diff helpers.
+/-- **The ViT body VJP** — `finalLN ∘ transformerTower`: a single
+    `vjpMatComp` of the tower + final LN with their Diff helpers.
 
-    Conceptually still the punchline: a depth-k ViT backbone has a
-    correct VJP, composed entirely from proved building blocks. With
-    Phase 3's column-stacking framework, even `mhsaHasVJPMat` and
-    its flat-diff sibling are theorems now, so this whole chain is
-    pure-Mathlib closure with no project axioms. -/
+    A depth-k weight-tied backbone (one parameter tuple for every block,
+    scalar-affine LayerNorms) has a correct VJP, composed entirely from
+    proved building blocks; `mhsaHasVJPMat` and
+    `mhsaLayer_flat_differentiable` are proved through the column-stacking
+    framework, so the chain uses no project axioms. -/
 noncomputable def vitBodyHasVJPMat (k N heads d_head mlpDim : Nat) (ε : ℝ)
     (hε : 0 < ε)
     (γ1 β1 : ℝ)
@@ -1680,21 +1670,25 @@ noncomputable def vitBodyHasVJPMat (k N heads d_head mlpDim : Nat) (ε : ℝ)
 
 **Proved (zero sorry's, machine-checked):**
 - Dense, ReLU (`MLP.lean`)
-- Softmax cross-entropy loss gradient (`MLP.lean`)
+- Softmax cross-entropy loss gradient (`softmaxCE_grad`, `Softmax.lean`)
 - Conv2d, MaxPool, Flatten (`CNN.lean`)
 - BatchNorm closed-form backward (`BatchNorm.lean`)
 - Residual / biPath fan-in (`Residual.lean`)
 - Depthwise conv (`Depthwise.lean`)
 - Squeeze-and-Excitation / elementwise product VJP (`SE.lean`)
 - LayerNorm, GELU (`LayerNorm.lean`)
-- Standalone softmax VJP (this file)
-- Scaled dot-product attention backwards `sdpa_back_{Q,K,V}` —
-  proved via `vjpMatComp` composition of four matrix-level VJP
-  building blocks (matmul, scalarScale, rowSoftmax, matmul). Formulas
-  are also numerically gradient-checked as a belt-and-braces check.
+- Standalone softmax VJP (`softmaxHasVJP`, `Softmax.lean`)
+- Scaled dot-product attention backwards `sdpaBackQ`/`sdpaBackK`/`sdpaBackV`
+  (`sdpaBackQ_correct` via `vjpMatComp` composition of four matrix-level
+  VJP building blocks: matmul, scalarScale, rowSoftmax, matmul). Formulas
+  are also numerically gradient-checked in `check_jacobians.py`.
+- Multi-head attention (`mhsaHasVJPMat`), the transformer block
+  (`transformerBlockHasVJPMat`), the weight-tied tower and body
+  (`transformerTowerHasVJPMat`, `vitBodyHasVJPMat`) and `vitFullHasVJP`
+  (this file).
 
-**Three calculus rules do all the structural work** (now theorems
-proved from Mathlib's `fderiv`, formerly axioms):
+**Three calculus rules do all the structural work** (theorems
+proved from Mathlib's `fderiv`):
 
     pdiv_comp   (chain rule — functions compose, derivatives compose)
     pdiv_add    (linearity — derivatives of sums are sums of derivatives)
@@ -1706,7 +1700,7 @@ whose Jacobians are dense but exploitable:
 1. **Diagonal** (activations) — collapse the sum_j to one term.
 2. **Sparse toeplitz** (conv, depthwise) — reversed/transposed kernels.
 3. **Binary selection** (max-pool) — route gradients to argmax cells.
-4. **Rank-1 correction to diagonal** (softmax, BN, LN, IN, GN) — one
+4. **Rank-1 correction to diagonal** (softmax, BN, LN) — one
    extra scalar reduction, everything else is pointwise.
 5. **Outer product + reductions** (dense, matmul) — rank-1 update
    accumulation.
@@ -1714,7 +1708,7 @@ whose Jacobians are dense but exploitable:
 **That is the complete taxonomy.** I've thought hard about this and
 cannot find a sixth trick or a fourth calculus rule anywhere in the
 modern architecture zoo. Every paper, every block, every optimization
-is a rearrangement of these ten things.
+is a rearrangement of these eight things.
 
 ## What this means for the reader
 
@@ -1753,7 +1747,7 @@ via plain `HasVJP`, glued by `vjpComp`.
 
 Two ingredients needed:
 
-- **`HasVJPMat.toHasVJP`** (Tensor.lean, Phase 10) — bridges any
+- **`HasVJPMat.toHasVJP`** (Tensor.lean) — bridges any
   `HasVJPMat` to `HasVJP` on the flattened endpoints. One theorem, no
   new axioms.
 - **`clsTokenFlatHasVJP`** — gathers row 0 of a flattened
@@ -1794,9 +1788,9 @@ lemma clsTokenFlat_differentiable (N D : Nat) :
     Differentiable ℝ (clsTokenFlat N D) := by
   unfold clsTokenFlat; fun_prop
 
-/-- **Classifier head VJP** — composition via `vjpComp`. Theorem, no
-    longer axiom: `clsTokenFlat` and `dense` are both linear, so their
-    Diff hypotheses discharge by `fun_prop`. -/
+/-- **Classifier head VJP** — composition via `vjpComp`. `clsTokenFlat`
+    and `dense` are both linear, so their Diff hypotheses discharge by
+    `fun_prop`. -/
 noncomputable def classifierFlatHasVJP (N D nClasses : Nat)
     (Wcls : Mat D nClasses) (bcls : Vec nClasses) :
     HasVJP (classifierFlat N D nClasses Wcls bcls) :=
@@ -1806,7 +1800,7 @@ noncomputable def classifierFlatHasVJP (N D nClasses : Nat)
     (clsTokenFlatHasVJP N D)
     (denseHasVJP Wcls bcls)
 
-/-! ## Patch embedding — Phase 6 (de-opaqued, no longer axiomatic)
+/-! ## Patch embedding
 
 The patch embedding takes a flattened image `Vec (ic*H*W)` and produces
 a flattened `Vec ((N+1)*D)` interpreted as `Mat (N+1) D`:
@@ -1817,10 +1811,9 @@ a flattened `Vec ((N+1)*D)` interpreted as `Mat (N+1) D`:
 3. Prepend learnable CLS token at row 0 → `(N+1, D)`.
 4. Add learnable positional embedding matrix → `(N+1, D)`.
 
-This was previously an `opaque` definition + two bundled axioms
-(`patchEmbedFlatHasVJP` / `patchEmbedFlat_differentiable`). Phase 6 (Apr 2026)
-de-opaques: the forward is a concrete `def` and both axioms become
-theorems via foundation rules.
+The forward `patchEmbedFlat` is a concrete `def`; its VJP
+`patchEmbedFlatHasVJP` and `patchEmbedFlat_differentiable` are proved
+from foundation rules.
 
 The `N` parameter is independent of `(H, W, patchSize)` — out-of-range
 patches contribute zero (via a `hpad` guard on the image read), so the
@@ -2054,7 +2047,9 @@ noncomputable def patchEmbedFlatHasVJP
 Compose patch embed + ViT body (via the Mat→Vec bridge) + classifier.
 All three are `HasVJP`s on `Vec`, so `vjpComp` chains them directly. -/
 
-/-- **vitFull** — full ViT forward from flattened image pixels to logits.
+/-- **vitFull** — a weight-tied ViT forward from flattened image pixels to logits:
+    all `kBlocks` transformer blocks share one parameter tuple, and every
+    LayerNorm (`γ1 β1`, `γ2 β2`, final `γF βF`) is scalar-affine.
 
     `Vec (ic*H*W) → Vec nClasses`
 
@@ -2092,7 +2087,7 @@ lemma classifierFlat_differentiable (N D nClasses : Nat)
   unfold classifierFlat
   exact (dense_differentiable Wcls bcls).comp (clsTokenFlat_differentiable N D)
 
-/-- **vitFull VJP — the grand finale.** Theorem, no longer axiom: three
+/-- **vitFull VJP** — the VJP of the weight-tied `vitFull`: three
     `vjpComp` steps glueing `patchEmbedFlatHasVJP`,
     `HasVJPMat.toHasVJP (vitBodyHasVJPMat ...)`, and
     `classifierFlatHasVJP`. Each `vjpComp`'s Diff hypotheses are
@@ -2156,8 +2151,9 @@ as a top-level proposition so consumers can refer to the contract
 directly without reaching into record internals. -/
 
 /-- **Public correctness theorem for `mhsaHasVJPMat`**: multi-head
-SDPA's backward equals the `pdivMat`-contracted Jacobian. Phase 3's
-column-stacking proof closes this without any project axiom. -/
+SDPA's backward equals the `pdivMat`-contracted Jacobian. The
+column-stacking proof (`mhsaGHasVJPMat`, `colSlabwiseHasVJPMat`) uses no
+project axiom. -/
 theorem mhsaHasVJPMat_correct (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
@@ -2191,12 +2187,12 @@ theorem transformerBlockHasVJPMat_correct
   (transformerBlockHasVJPMat N heads d_head mlpDim ε γ1 β1 hε
      Wq Wk Wv Wo bq bk bv bo γ2 β2 Wfc1 bfc1 Wfc2 bfc2).correct X dY i j
 
-/-- **Public correctness theorem for `vitFullHasVJP`**: the full ViT's
-    backward equals the `pdiv`-contracted Jacobian (Jacobian-transpose applied to
+/-- **Public correctness theorem for `vitFullHasVJP`**: the backward of
+    `vitFull` (weight-tied blocks, scalar-affine LayerNorms) equals the `pdiv`-contracted Jacobian (Jacobian-transpose applied to
     the cotangent). Exposes the witness's `.correct` field as a top-level
     proposition so consumers (and `#print axioms` audits) can cite the apex
     contract directly instead of reaching into the record. The long signature is
-    just the full ViT hyperparameter set; the proof is the witness field. -/
+    `vitFull`'s parameter set; the proof is the witness field. -/
 theorem vitFullHasVJP_correct
     (ic H W patchSize N mlpDim heads d_head kBlocks nClasses : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)

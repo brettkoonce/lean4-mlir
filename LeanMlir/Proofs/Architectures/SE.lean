@@ -56,8 +56,11 @@ All foundational definitions and proofs live in `Tensor.lean`:
   - `pdiv_mul` — product rule for partial derivatives (theorem)
 
 This file specializes to the SE pattern: `f = identity`, `g = gate`.
-The gate is left abstract (you only need `HasVJP gate`); we sketch the
-concrete gate from MobileNetV3 in a final commentary section.
+`seBlockHasVJP` takes the gate abstractly (it only needs `HasVJP gate`).
+The file then defines the concrete gate `seGate` (GAP → dense → swish →
+dense → sigmoid → broadcast) with its VJP `seGateHasVJP`, the pieces it
+needs (`sigmoidHasVJP`, `broadcastFlatHasVJP`), and the full block
+`seBlockFull` / `seBlockFullHasVJP`.
 -/
 
 namespace Proofs
@@ -132,17 +135,14 @@ So the `gate` is actually a *Vec-shaped* function that takes the spatial
 input, summarizes it via GAP, runs it through a tiny FC network, and
 broadcasts the per-channel result back to spatial.
 
-If you wanted a fully formalized SE, you'd build `gate` as a composition:
+`seGate` at the end of this file builds `gate` as the composition
 
     gate = broadcast ∘ sigmoid ∘ dense_exp ∘ swish ∘ dense_red ∘ globalAvgPool
 
-and use `vjpComp` (chain rule from `Tensor.lean`) to assemble its VJP.
-The dense and sigmoid VJPs are already in `MLP.lean`; you'd need to add
-`globalAvgPoolHasVJP` (linear, easy) and `broadcastHasVJP` (also
-linear — it's the adjoint of GAP, in fact).
-
-That's a few hours of mechanical work. The interesting part — the
-"main x gate" VJP — is what's in this file. The rest is plumbing.
+and `seGateHasVJP` assembles its VJP with `vjpComp` from
+`globalAvgPoolFlatHasVJP` (CNN.lean), `denseHasVJP`, `swishHasVJP`
+(LayerNorm.lean), `sigmoidHasVJP` and `broadcastFlatHasVJP` (this file;
+broadcast is the adjoint of GAP up to the `1/(h·w)` factor).
 
 ## Why this generalizes
 

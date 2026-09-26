@@ -9,7 +9,7 @@ MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
 arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
-The audit's "live witnesses use synthetic weights" gap, closed at the MLP rung:
+A trained-weight witness at the MLP rung (the full-width seals use synthetic weights):
 the SAME trained, /128-rationalized 49→8→10 pooled-MNIST network certified in
 `LipschitzCertInstance.lean` (test acc 89.8%) instantiates the conditional VJP
 framework at a REAL input — test digit #1895 — with every ReLU smoothness

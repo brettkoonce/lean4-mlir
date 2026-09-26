@@ -678,13 +678,13 @@ noncomputable def conv2dWeightGrad {ic oc h w kH kW : Nat}
     ((conv2dWeightGradHasVJP b x).backward
       (Kernel4.flatten W) (Tensor3.flatten dy))
 
-/-- **Conv2d bias-VJP** — proved from foundation rules. Now that `conv2d`
-    is a real def, the function `b ↦ flatten (conv2d W b x)` decomposes
+/-- **Conv2d bias-VJP** — proved from foundation rules. The function
+    `b ↦ flatten (conv2d W b x)` decomposes
     as `(channel broadcast of b) + (bias-free conv, constant in b)`, so
     `pdiv_of_affine` gives the channel Kronecker, collapsed over the
     `(c, hi, wi)` decomposition of `Fin (oc*h*w)`.
-    The backward is `db[o] = Σ_{hi, wi} dy[o, hi, wi]` (matches
-    `conv2dBiasGradFormula` below). -/
+    The backward is `db[o] = Σ_{hi, wi} dy[o, hi, wi]` (the same sum as
+    `conv2dBiasGradFormula` below, written on the flattened `dy`). -/
 noncomputable def conv2dBiasGradHasVJP {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w) :
     HasVJP (fun b : Vec oc => Tensor3.flatten (conv2d W b x)) where
@@ -712,10 +712,13 @@ noncomputable def conv2dBiasGrad {ic oc h w kH kW : Nat}
     (x : Tensor3 ic h w) (dy : Tensor3 oc h w) : Vec oc :=
   (conv2dBiasGradHasVJP W x).backward b (Tensor3.flatten dy)
 
-/-- **Conv2d bias gradient — closed-form formula** (documented, numerically
-    verified, expected to equal `conv2dBiasGrad` up to fp precision).
+/-- **Conv2d bias gradient — closed-form formula.**
 
     `db[o] = Σ_{h, w} dy[o, h, w]`
+
+    This is the sum `conv2dBiasGradHasVJP`'s backward is defined as, on
+    `Tensor3` instead of the flattened `dy`. No theorem in this file states
+    the equation between the two.
 
     Each output cell adds the same `b[o]`, so its gradient accumulates
     the contributions from every spatial position. MLIR emits this as
@@ -731,8 +734,8 @@ noncomputable def conv2dBiasGradFormula {oc h w : Nat}
 /-- **MaxPool 2×2 stride 2 forward** — concrete definition.
 
     Each output cell is the maximum of a 2×2 window of input cells:
-    `y[c, h, w] = max{ x[c, 2h+a, 2w+b] : a, b ∈ {0,1} }`. No longer
-    an axiom — replaced with the explicit four-way max.
+    `y[c, h, w] = max{ x[c, 2h+a, 2w+b] : a, b ∈ {0,1} }`, written as
+    an explicit four-way max.
 
     MLIR:
       %pool = "stablehlo.reduce_window"(%h1, %neginf) ({
@@ -1161,10 +1164,10 @@ theorem maxPool2_codegen_matches_canonical {c h w : Nat}
     the codegen tile-compare-select formula directly (route `dy` to
     the argmax cell, zero elsewhere); the `correct` field is
     `maxPool2_codegen_matches_canonical` flipped, not `rfl`.
-    Companion of `reluHasVJPAt` in MLP.lean — together they let
-    `mlpHasVJPAt` and (future) `cnnHasVJPAt3` discharge the chain
-    rule through every kinked operator without the global vacuous
-    witness. -/
+    Companion of `reluHasVJPAt` in MLP.lean: `mlpHasVJPAt` chains
+    through `reluHasVJPAt`, and `cnnHasVJPAt` chains through both (this
+    one via `maxPoolFlatHasVJPAt`), so neither uses the global canonical
+    witness at a kinked operator. -/
 noncomputable def maxPool2HasVJPAt3 {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x) :
     HasVJPAt3 (maxPool2 : Tensor3 c (2*h) (2*w) → Tensor3 c h w) x where
@@ -1189,7 +1192,7 @@ MLIR:
 
 The flatten / unflatten bijection is **already defined** in
 `Tensor.lean` as `Tensor3.flatten` / `Tensor3.unflatten` (used by the
-`pdiv3` derivation in Phase 5). We reuse those here rather than
+`pdiv3` derivation there). We reuse those here rather than
 duplicating — see `Tensor3.flatten_unflatten` / `unflatten_flatten`
 for the mutual-inverse proofs. -/
 
@@ -1199,11 +1202,11 @@ for the mutual-inverse proofs. -/
 
 /-- **Walking through the CNN backward pass**.
 
-    Unlike the MLP, where the chain rule (`vjpComp`) gave us the whole
-    backward pass in one go, here the layer types vary (Tensor3 ↔ Vec
-    via flatten) so a uniform `HasVJP`-style composition would need a
-    type family. For pedagogical clarity, we instead trace the backward
-    pass step-by-step, matching `hand_cnn_train_step.mlir`.
+    Unlike the MLP, here the layer types vary (Tensor3 ↔ Vec via
+    flatten). The composed whole-network witness for this chain is
+    `mnistCnnNoBnHasVJPAt` (Nets/Small/MnistCNN.lean), built with
+    `vjpCompAt` in flattened `Vec` space; this trace is the per-layer
+    reading of the same backward, matching `hand_cnn_train_step.mlir`.
 
     Forward:
         x ────conv W₀── h₀pre ──relu── h₀ ──conv W₁── h₁pre ──relu── h₁
@@ -1250,9 +1253,10 @@ example : True := trivial  -- anchor for the docstring above
 
 /-! ## Summary of derivations in this file
 
-- `conv2d`, `maxPool2` — forward operations (black-box forward).
-- `maxPool2HasVJP3` — input-path VJP for maxPool2 (argmax-routing
-  subgradient convention).
+- `conv2d`, `maxPool2` — forward operations, concrete definitions.
+- `maxPool2HasVJP3` — input-path VJP for maxPool2: the canonical
+  `pdiv3`-derived witness (zero at argmax ties); `maxPool2HasVJPAt3` is
+  the argmax-routing form under `MaxPool2Smooth`.
 
 Derived (not axioms):
 - `conv2dHasVJP3` — input-path VJP, proved with `pdiv_of_affine` (the
@@ -1260,11 +1264,11 @@ Derived (not axioms):
   basis vector, a pad-guarded Kronecker). Backward function is `conv2dInputGradFormula` (sum over
   `(co, ho, wo)` with reconstructed kernel offsets `kh = hi+pH-ho`,
   `kw = wi+pW-wo`).
-- `conv2dWeightGradHasVJP` — Phase 7: the weight-path VJP, bundled
+- `conv2dWeightGradHasVJP` — the weight-path VJP, bundled
   as a plain `HasVJP` on the Kernel4-flattened function. Numerically
   gradient-checked against the transpose-trick formula in
   `check_jacobians.py:test_conv2dWeightGrad`.
-- `conv2dBiasGradHasVJP` — Phase 9: the bias-path VJP, same bundled
+- `conv2dBiasGradHasVJP` — the bias-path VJP, same bundled
   `HasVJP` pattern. The closed-form "sum output cotangent over spatial
   dims per channel" is expressed as `conv2dBiasGradFormula`; the
   named `conv2dBiasGrad` extracts the backward via the VJP.
@@ -1273,8 +1277,10 @@ Derived (not axioms):
   flatten / unflatten housekeeping for the weight / bias variants) of
   the corresponding VJP.
 - `conv2dInputGradFormula`, `conv2dBiasGradFormula` — the
-  concrete closed-form formulas (numerically verified to equal the
-  VJP's backward).
+  concrete closed-form formulas. `conv2dInputGradFormula` is
+  `conv2dHasVJP3`'s backward by definition; `conv2dBiasGradFormula` is
+  the same sum as `conv2dBiasGradHasVJP`'s backward, with no theorem
+  stating the equation.
 - 3D reshape (`Tensor3.flatten` / `Tensor3.unflatten`) imported from
   `Tensor.lean`; 4D reshape (`Kernel4.flatten` / `Kernel4.unflatten`)
   defined here, both proved bijections. -/
@@ -1316,7 +1322,7 @@ theorem maxPool2HasVJPAt3_correct {c h w : Nat}
 `cnnHasVJPAt` is the CNN analogue of `vitFullHasVJP` — a single
 `HasVJPAt` for an end-to-end forward pass, chained entirely in flattened
 `Vec` space via `vjpCompAt`. It first needs **global average pooling**,
-which was previously only referenced in codegen, so we define it here:
+which we define here:
 `globalAvgPool x ci = (∑ hi ∑ wi x ci hi wi) / (h*w)` (mean over spatial
 per channel), bridge it to flat `Vec` space (`globalAvgPoolFlat`), and
 prove its linear VJP (`globalAvgPoolFlatHasVJP`, backward broadcasts
@@ -1436,7 +1442,7 @@ noncomputable def maxPoolFlatHasVJPAt {c h w : Nat}
     So a float `max` over operands within `e` of the reals stays within `e` —
     the `max`-peer of `relu_close` (`FloatBridge.lean`), with no rounding term
     and no amplification. The one genuinely-new fact the MNIST-CNN forward
-    rounding budget (planning §1b-A) needs beyond the dense/relu machinery. -/
+    rounding budget needs beyond the dense/relu machinery. -/
 theorem max_close {a b c d e : ℝ} (h1 : |a - c| ≤ e) (h2 : |b - d| ≤ e) :
     |max a b - max c d| ≤ e :=
   (abs_max_sub_max_le_max a b c d).trans (max_le h1 h2)

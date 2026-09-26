@@ -5,16 +5,16 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The channel LayerNorm — per-position LN over channels, with a per-channel affine
 
-`convnextVerified`'s LN was `bnForward` over the whole flattened `c·h·w` map with a **scalar**
-γ/β. ConvNeXt specifies `channel_layer_norm`: `h·w` statistics per example, each over the `c`
+ConvNeXt specifies `channel_layer_norm`: `h·w` statistics per example, each over the `c`
 channels at ONE spatial position, with a per-channel `[c]` affine. That is a different function
-on 21 of the net's 22 sites (the 22nd is the head, which runs after GAP where there is no
-spatial extent left, so reducing "everything" already IS reducing over channels).
+from `bnForward` over the whole flattened `c·h·w` map with a scalar γ/β on 22 of ConvNeXt-T's
+23 LayerNorm sites (stem, 18 blocks, 3 downsamples, head); the head runs after GAP where there
+is no spatial extent left, so reducing "everything" already is reducing over channels.
 
 **Route A — no new `SHlo` op, and no new VJP.** ConvNeXt's channel-LN *is* ViT's row-LN under a
 transpose: view one example as `[c, s]` with `s = h·w`, transpose to `[s, c]`, and each row is
 one spatial position holding its `c` channels — exactly what ViT's `layerNormVec` normalises.
-Every piece below is already proven and shipping:
+Every piece below is already proven:
 
 | piece | from |
 |---|---|
@@ -23,24 +23,22 @@ Every piece below is already proven and shipping:
 | `layerNormVec` + `layerNormVecPerTokenHasVJPMat` | `LayerNorm` (ViT's `[192]` LN uses the same op) |
 | `HasVJPMat.toHasVJP` | `Tensor.lean` |
 
-Settled on device before any of this was written (`lake build channel-ln`): the composition ties
-the closed form at rel 0 forward and on all three backward pieces, the incumbent `.bnF` control
-fires at rel 0.82, and the transposes measure free (Δ 0.00 ms on 16.1 ms of whole-net LN).
-
-## ⚠ The seam this file closes
+## The seam this file closes
 
 `Nat` multiplication is not definitionally associative: the ambient activation index is
 `c*h*w = (c*h)*w` while the transpose needs `c*(h*w)`. The **render** spells that with a `▸`
 transport (`ConvNeXtRender.reassoc`); the **math** spells it with `PerChannelBN`'s
 `finProdFinEquiv` re-association, whose "row `c` is channel `c`" reading is what makes the
 composition legibly a *channel* LN. Nothing forces those two to be the same map, and if they are
-not, the math and the artifact are different functions with no gate between them — §2k's own sin
-in a new place.
+not, the math and the artifact are different functions with no gate between them.
 
 They ARE the same map, and `reassocFwdIdx_val` proves it: row-major `finProdFinEquiv` sends both
 `((c,hi),wi)` and `(c,(hi,wi))` to the same linear offset, so the bridge preserves the underlying
 natural and is therefore exactly the type-level cast. `den_reassocS` lifts that to the graph.
 -/
+-- Device check (`lake build channel-ln`): the composition ties the closed form at rel 0 forward
+-- and on all three backward pieces, the whole-map `.bnF` control differs at rel 0.82, and the
+-- transposes measure free (Δ 0.00 ms on 16.1 ms of whole-net LN).
 
 namespace Proofs
 

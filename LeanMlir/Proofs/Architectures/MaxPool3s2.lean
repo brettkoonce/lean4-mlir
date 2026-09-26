@@ -2,29 +2,24 @@ import LeanMlir.Proofs.Architectures.CNN
 
 /-! # `maxPool3s2` — the 3×3 stride-2 max pool of He et al.'s ResNet stem
 
-The verified path's only pooling op is `maxPool2` — 2×2, stride 2, **non-overlapping**. Every
-ResNet in He et al. (18/34/50/101/152) specifies a **3×3 stride-2** pool after the stem conv, so
-`resnet34Verified` has been pooling a different function from the paper *and* from the reference
-it is paired against. This file is the missing op.
+`maxPool2` (CNN.lean) is 2×2, stride 2, non-overlapping. Every ResNet in He et al.
+(18/34/50/101/152) specifies a 3×3 stride-2 pool after the stem conv; this file is that op.
 
-## ⚠⚠ WHICH 3×3 pool — the PAPER's, which is not what the JAX reference emits today
+## Which 3×3 pool: the paper's symmetric padding
 
-This file implements **He et al. / torchvision**: `nn.MaxPool2d(3, stride=2, padding=1)` —
-**symmetric** padding, so **window `i` covers input `[2i−1, 2i+1]`**.
+This file implements He et al. / torchvision: `nn.MaxPool2d(3, stride=2, padding=1)` —
+symmetric padding, so window `i` covers input `[2i−1, 2i+1]`.
 
-⚠ The repo's JAX references emit `reduce_window(…, (1,1,3,3), (1,1,2,2), 'SAME')`, and XLA's
-`SAME` on a 112→56 axis gives `pad_total = max((56−1)·2 + 3 − 112, 0) = 1`, split
-`pad_low = 0, pad_high = 1` — window `i = [2i, 2i+2]`, padded at the **end**. Measured on device
-at `n = 12`: `SAME` windows peak at `[2,4,6,8,10,11]`, symmetric at `[1,3,5,7,9,11]`. The two
-grids are **offset by one input position** and are different functions everywhere.
+XLA's `reduce_window(…, 'SAME')` would be a different function: on a 112→56 axis it gives
+`pad_total = max((56−1)·2 + 3 − 112, 0) = 1`, split `pad_low = 0, pad_high = 1` — window
+`i = [2i, 2i+2]`, padded at the end. Measured on device at `n = 12`: `SAME` windows peak at
+`[2,4,6,8,10,11]`, symmetric at `[1,3,5,7,9,11]`; the two grids are offset by one input position.
+The JAX reference's `max_pool2d` uses the same symmetric padding `(p, p)` with `p = (size−1)//2`.
 
-Paper-faithfulness is the goal, so this file is symmetric and the JAX `max_pool2d` helper moves to
-match. ⚠ Until both land and are re-run, verified and JAX disagree at the stem pool.
+At 2×2 symmetric `(k−1)//2` padding is `p = 0`, bit-identical to `SAME`, so the choice only
+matters for the 3×3 pools (the ResNet-34 and ResNet-50 ImageNet stems).
 
-⭐ Measured: symmetric `(k−1)//2` padding is **bit-identical to `SAME` for every 2×2 pool**, so no
-cifar/mnist net moves — only the 3×3 users (R34-ImageNet, R50).
-
-## ⭐ THE PADDING NEEDS NO EXTENDED-REALS TYPE
+## The padding needs no extended-reals type
 
 `reduce_window` pads with `-∞`, which `Tensor3 _ _ _ = … → ℝ` cannot hold. It does not need to:
 **for `max`, clamping the index is equivalent to `-∞` padding.** The only out-of-range read is
@@ -32,7 +27,7 @@ cifar/mnist net moves — only the 3×3 users (R34-ImageNet, R50).
 contains at offset `a = 1`. So `max` over the clamped triple equals `max` over the unpadded pair,
 which is exactly what `-∞` padding computes. `win3RowInv_first_dup` is that statement.
 
-⭐ The symmetric form needs **no `min`**: the upper end `2(h−1)+2−1 = 2h−1` is in range by
+The symmetric form needs **no `min`**: the upper end `2(h−1)+2−1 = 2h−1` is in range by
 construction, so truncated subtraction is the whole story.
 
 ## The shape of the VJP, and why overlap costs less than it looks
@@ -42,8 +37,8 @@ disjoint. Here windows overlap — odd input `p` lies in windows `(p−1)/2` and
 input feeds up to **4** outputs and the backward must **accumulate**.
 
 That needs no new analytic argument. `HasVJPAt3.correct` already states the backward as
-`∑ co ∑ ho ∑ wo, pdiv3 f x … * dy co ho wo` — a sum over *all* outputs; `maxPool2`'s
-`codegen_matches_canonical` merely *collapses* it to one term using disjointness. Here it
+`∑ co ∑ ho ∑ wo, pdiv3 f x … * dy co ho wo` — a sum over *all* outputs;
+`maxPool2_codegen_matches_canonical` merely *collapses* it to one term using disjointness. Here it
 collapses to ≤4. The generic route (`maxPool2LocalReindex` → `reindexCLM` → `pdiv3`) is
 indifferent: at a smooth point the pool is locally a reindexing map, and overlap only makes that
 map non-injective, which `reindexCLM`'s adjoint already handles by summing over preimages.
@@ -72,7 +67,7 @@ def win3ColInv {w : Nat} (wi_out : Fin w) (b : Fin 3) : Fin (2 * w) :=
   ⟨2 * wi_out.val + b.val - 1, by
     have h1 := wi_out.isLt; have h2 := b.isLt; omega⟩
 
-/-- ⭐ **The padding statement.** In the FIRST window offset `a = 0` duplicates `a = 1` rather
+/-- **The padding statement.** In the FIRST window offset `a = 0` duplicates `a = 1` rather
     than reading out of range — exactly what a `-∞` pad contributes to a `max`. -/
 theorem win3RowInv_first_dup {h : Nat} (hi_out : Fin h) (hfirst : hi_out.val = 0) :
     win3RowInv hi_out ⟨0, by omega⟩ = win3RowInv hi_out ⟨1, by omega⟩ := by
@@ -127,9 +122,9 @@ theorem maxPool3s2_attained {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
 -- first question is whether the two sides should be equal at all.*
 
 /-- **The 3×3 pool never grows magnitudes** — it selects an existing window cell.
-    ⭐ `Finset.sup'` again makes the window size stop mattering: `maxPool2_abs_le` needs a nested
+    `Finset.sup'` again makes the window size stop mattering: `maxPool2_abs_le` needs a nested
     `abs_max_le (abs_max_le _ _) (abs_max_le _ _)` for 4 cells, which at 9 would be worse; here it
-    is `sup'_le` plus one `le_sup'`, independent of the window. Fourth collapse of the same kind. -/
+    is `sup'_le` plus one `le_sup'`, independent of the window. -/
 theorem maxPool3s2_abs_le {c h w : Nat} {x : Tensor3 c (2 * h) (2 * w)} {A : ℝ}
     (hx : ∀ ci hi wi, |x ci hi wi| ≤ A) (ci : Fin c) (hi : Fin h) (wi : Fin w) :
     |maxPool3s2 x ci hi wi| ≤ A := by
@@ -164,7 +159,7 @@ theorem maxPool3s2_close {c h w : Nat} (xt xa : Tensor3 c (2 * h) (2 * w)) {e : 
 
 /-- **Smoothness**: every 3×3 window has a *strict* argmax. Stated as "distinct offsets that land
     on distinct input POSITIONS have distinct values", so the clamped duplicate in the first
-    window (`a = 0` ≡ `a = 1`) is not counted as a tie. ⚠ That carve-out is forced by the padding
+    window (`a = 0` ≡ `a = 1`) is not counted as a tie. That carve-out is forced by the padding
     and has no `maxPool2` analogue — there, distinct offsets always meant distinct positions. -/
 def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
   ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w) (ab ab' : Fin 3 × Fin 3),
@@ -173,14 +168,14 @@ def MaxPool3s2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
     x ci (win3RowInv hi_out ab.1) (win3ColInv wi_out ab.2) ≠
       x ci (win3RowInv hi_out ab'.1) (win3ColInv wi_out ab'.2)
 
-/-- ⭐ **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the 3×3/s2 stem
+/-- **Positional injectivity ⇒ `MaxPool3s2Smooth`** — the discharge lemma for the 3×3/s2 stem
     pool's smoothness hypothesis (`maxPool3s2FlatHasVJPAt`, the R34 back ties), the peer of
-    `MnistCNN`'s `maxPool2Smooth_of_injective`. No whole-net witness discharges it yet: the R34
-    Live/Seal witnesses pool 2×2 and use the `MnistCNN` lemma. One injectivity
+    `MnistCNN`'s `maxPool2Smooth_of_injective`. Used by `BatchSeal.ctConv_pool_smooth` for the
+    ResNet-34 and ResNet-50 full-width seals. One injectivity
     argument in place of `36·c·h·w` per-window `decide`s (9 offsets pairwise, against 2×2's 6), which
     at ResNet-34's stem is why case-bashing is not an option.
 
-    ⚠⚠ **And it is STRICTLY SHORTER than its 2×2 peer, for the reason the padding forced.**
+    It is shorter than its 2×2 peer, for the reason the padding forced.
     `MaxPool2Smooth` is quantified over **offsets**, so its discharge lemma has to get from
     "the two input positions coincide" back to "the two offsets coincide" — two `Fin.mk.injEq` +
     `omega` decodes, valid only because there distinct offsets always meant distinct positions.
@@ -199,7 +194,7 @@ theorem maxPool3s2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2 * h) (2 * 
   obtain ⟨hr, hs⟩ := hinj ci _ _ _ _ hval
   exact hne (Prod.ext_iff.mpr ⟨hr, hs⟩)
 
-/-- ⭐ **The overlap fact, stated rather than assumed**: an input row lies in at most TWO windows —
+/-- **The overlap fact, stated rather than assumed**: an input row lies in at most TWO windows —
     `p/2` and `(p+1)/2`. With symmetric padding the shared cell is at ODD `p` (window `(p−1)/2`
     takes it at offset 2, window `(p+1)/2` at offset 0); even `p` lies in exactly one. So an input
     feeds at most 4 outputs and the backward accumulates at most 4 terms — the count `maxPool2`
@@ -240,7 +235,7 @@ theorem maxPool3s2Argmax_max {c h w : Nat}
       univ_nonempty)).2 ab (mem_univ ab)
 
 /-- If `(a, b)` dominates every window cell, the pooled value is the value there.
-    ⭐ The `sup'` formulation makes this two lines where `maxPool2_eq_at_max` needs a
+    The `sup'` formulation makes this two lines where `maxPool2_eq_at_max` needs a
     four-way `fin_cases` against an explicit `max (max _ _) (max _ _)` — and nine ways here. -/
 theorem maxPool3s2_eq_at_max {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w))
@@ -267,7 +262,7 @@ theorem maxPool3s2_eq_argmax_value {c h w : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- For each output flat index, the flat index of its argmax's input position.
-    ⚠ **Not injective** — two overlapping windows may select the same input. That is exactly
+    **Not injective** — two overlapping windows may select the same input. That is exactly
     what makes the backward accumulate, and `reindexCLM`'s adjoint already sums over preimages,
     so nothing here needs to change relative to `maxPool2LocalReindex`. -/
 noncomputable def maxPool3s2LocalReindex {c h w : Nat}
@@ -326,7 +321,7 @@ theorem maxPool3s2_flat_hasFDerivAt {c h w : Nat}
 /-- **Smooth-point Jacobian.** `pdiv3` is the 0/1 indicator that the local reindex sends output
     `(co, ho, wo)` to input `(ci, hi_in, wi_in)`.
 
-    ⚠⚠ **This is where the overlapping case genuinely differs from `maxPool2`, and it differs by
+    **This is where the overlapping case genuinely differs from `maxPool2`, and it differs by
     being SIMPLER to state.** `pdiv3_maxPool2_smooth` decodes the condition into
     `co = ci ∧ ho = winRow hi_in ∧ wo = winCol wi_in ∧ IsArgmax` — legitimate there because each
     input has exactly ONE owning window, so `winRow`/`winCol` name it. Here an input has up to
@@ -420,7 +415,7 @@ theorem maxPool3s2Flat_continuous (c h w : Nat) : Continuous (maxPool3s2Flat c h
   simp only [Tensor3.flatten, maxPool3s2, Tensor3.unflatten]
   exact Continuous.finset_sup'_apply Finset.univ_nonempty (fun ab _ => continuous_apply _)
 
-/-- ⭐ **The 3×3/s2 pool shifts with a uniform offset.** If one slab's channel is another's plus
+/-- **The 3×3/s2 pool shifts with a uniform offset.** If one slab's channel is another's plus
     the constant `δ`, so are their pooled values — `max` of a uniformly shifted family
     (`Finset.apply_sup'_eq_sup'_comp` at `(· + δ)`). No argmax or eventually-argument: this holds at
     every point of the ray, which is what lets the carrier cross the only real kink in the net. -/

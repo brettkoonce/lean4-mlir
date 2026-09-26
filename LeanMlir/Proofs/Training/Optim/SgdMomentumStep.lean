@@ -2,13 +2,13 @@ import LeanMlir.Proofs.Foundation.Tensor
 
 /-! # Plain SGD and Nesterov-momentum steps over ℝ — the optimizer peers of `AdamStep`
 
-The ℝ reference for the `cifar8_{sgd,mom}_train_step` family (handoff §2i). Coordinatewise over
+The ℝ reference for the `cifar8_{sgd,mom}_train_step` family. Coordinatewise over
 `Vec`, mirroring the emitted StableHLO op-for-op so the faithfulness theorems in `StableHLO.lean`
 are structural matches (`rfl`), exactly as `AdamStep.lean` is for the AdamW triple.
 
-**Why these did not exist.** The kit already had a `*Sgd` op family, but those **fuse** the gradient
-and the update and bake `lr` as a *literal* — so there was nothing to hand a scheduled optimizer, the
-same shape of blocker §2a found for Adam ("the fusion `θ − lr·g`, not Adam, was the actual blocker").
+**Why these are separate from the `*Sgd` ops.** The kit's `*Sgd` op family **fuses** the gradient
+and the update and bakes `lr` as a *literal*, so it cannot serve a scheduled optimizer (the fused
+`θ − lr·g` was also what the AdamW render had to replace).
 The renders that need these take `%lr` as a runtime `tensor<f32>` argument so one graph serves a
 whole LR schedule.
 

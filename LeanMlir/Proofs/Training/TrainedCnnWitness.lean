@@ -2,8 +2,8 @@ import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 /-! # Trained-weight whole-network VJP witness — CNN rung
 
-The `TrainedMlpWitness` program extended to a CONVOLUTIONAL net (the 2026-07
-audit's gap #3): the Chapter-3 `mnistCnnNoBn` conditional whole-net VJP
+The `TrainedMlpWitness` program extended to a CONVOLUTIONAL net: the
+Chapter-3 `mnistCnnNoBn` conditional whole-net VJP
 (`mnistCnnNoBnHasVJPAt`) instantiated at TRAINED, /128-rationalized
 weights and a REAL test input, with every smoothness hypothesis discharged
 by exact in-kernel rational arithmetic — inherited from training, not

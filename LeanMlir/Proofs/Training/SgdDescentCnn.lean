@@ -37,8 +37,9 @@ dense`). What's genuinely new versus the MLP:
 The capstone `cnn_conv2_sgd_descends` mirrors `mlp_input_sgd_descends`:
 under the four margins (relu₂, pool selection, relu₃, relu₄) at the step
 radius and the small-step condition, one inexact SGD step on the second
-conv kernel provably decreases the cross-entropy loss by ≥ `lr·‖∇L‖₂²/2`,
-with the segment-Lipschitz constant explicit.
+conv kernel (one example, every other parameter fixed) decreases that example's
+cross-entropy loss by ≥ `lr·‖∇L‖₂²/2`, with the segment-Lipschitz constant
+explicit.
 
 `cnn_conv1_sgd_descends` extends the program one layer deeper: the step
 now crosses conv2 AS A FUNCTION OF ITS INPUT. Conv is linear there, its
@@ -55,9 +56,15 @@ per-entry drift is exactly `|e o|` (no input bound `a`). Each conv layer's
 drift chain, margins and segment-Lipschitz gradient are stated once, for any
 parameter map with per-entry drift `ρ·‖e‖₁` (`Conv2Slot`, `Conv1Slot`): the
 kernel rungs are `ρ = a`, the bias rungs `ρ = 1` — the bare `D` radii and
-`a² ↦ 1` in the constants. EVERY parameter
-of the Chapter-3 CNN — both conv kernels, both conv biases, and the
-dense head — now has a proven descent statement.
+`a² ↦ 1` in the constants. Both conv kernels, both conv biases and the
+dense-head weights of the Chapter-3 CNN (the latter via the MLP rungs, which
+omit bias columns) each have a single-layer, single-example descent
+statement, conditional on the margins above and the oracle-accuracy,
+small-step and dominance hypotheses. `cnn_conv2_float_sgd_descends`,
+`cnn_conv1_float_sgd_descends`, `cnn_conv2_bias_float_sgd_descends` and
+`cnn_conv1_bias_float_sgd_descends` replace the oracle accuracy by the proven
+accuracy of the FloatModel binary32 gradient; there the update is taken in ℝ
+and only the gradient is float-modelled.
 
 The index plumbing and 2×2 max-pool window facts it reads tensors through are in `ConvIndex`; the
 conv as a weight-shared dense layer and its float forward (`flatConvF_close`) in `ConvFloat`. -/
@@ -88,7 +95,7 @@ noncomputable def FloatModel.mnistCnnNoBnForwardF
   ∘ (relu (c * (2*h) * (2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₂ b₂)
   ∘ (relu (c * (2*h) * (2*w)) ∘ M.flatConvF (h := 2*h) (w := 2*w) W₁ b₁)
 
-/-- **Whole-net MNIST-CNN forward rounding budget (Item A capstone).** The
+/-- **Whole-net MNIST-CNN forward rounding budget.** The
     rounded forward is within an explicit closed-form `layerBudget` of the real
     `conv→relu→conv→relu→maxpool→dense→relu→dense→relu→dense` forward, per
     output logit — the binary32 forward-error bound for the Chapter-3 CNN.
@@ -302,7 +309,7 @@ theorem conv2d_kernel_drift_sum {ic oc h w kH kW : Nat} (b : Vec oc)
   rw [sum_abs_k4]
   simp [Finset.mul_sum, mul_assoc]
 
-/-- **Float pool-backward closeness** (Increment 1 keystone). Under the pool
+/-- **Float pool-backward closeness.** Under the pool
     margin the float post-relu argmax matches the real one
     (`isArgmax_iff`), so the pool's backward selector
     `𝟙[(ci,hi,wi) is its window's argmax]·(pooled cotangent)` differs from the
@@ -603,7 +610,7 @@ theorem convBiasGrad_eq_sum {oc h w : Nat} (cot : Tensor3 oc h w) (o : Fin oc) :
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
   rw [cotWin_apply]
 
-/-- **Rounded conv weight update (Item B).** The float update
+/-- **Rounded conv weight update.** The float update
     `fl(Wₒ,cc,kh,kw − fl(lr·fl(convPadWin · cotWin)))` — the conv weight
     gradient is a correlation, a dot over the `h·w` spatial positions — is
     within `sgdErr` of the real step `W − lr·(Σ_{hi,wi} convPad·cot)`, the
@@ -626,7 +633,7 @@ theorem FloatModel.cnn_convW_step_float_close {ic oc h w kH kW : Nat}
   M.dotSgd_step_close (W o cc kh kw) (convPadWin kH kW x cc kh kw)
     (cotWin cot o) hG hlr
 
-/-- **Rounded conv bias update (Item B)** — the bias gradient is the spatial
+/-- **Rounded conv bias update** — the bias gradient is the spatial
     sum `Σ cot`, so the rounded update reduces to `sumSgd_step_close`. -/
 theorem FloatModel.cnn_convb_step_float_close {oc h w : Nat} (M : FloatModel)
     (b : Vec oc) (cot : Tensor3 oc h w) {lr G : ℝ} (o : Fin oc)
@@ -902,14 +909,13 @@ theorem head3_cot_reluMask {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃) (b₃ : Ve
   rw [dense_transpose_eq]
 
 /-- **The certified conv-2 loss gradient, head restated in `dense`/`reluMask`
-    form** — the conv peer of `mlp_input_loss_gradAt_reluMask` (Increment 1
-    keystone). The two head `Wᵀ` contractions (under the d₄/d₃ ReLU masks)
+    form** — the conv peer of `mlp_input_loss_gradAt_reluMask`. The two head `Wᵀ` contractions (under the d₄/d₃ ReLU masks)
     collapse via `reluMask_dense_transpose_eq`, the unmasked W₃ contraction via
     `dense_transpose_eq`; the conv-output ReLU mask `𝟙[z₂>0]` and the pool
     argmax selector are kept explicit (their float closeness is handled by
     `reluMask_close` and `MaxPool2MarginQ.poolBack_close`). The whole conv
     gradient is then packaged as the spatial dot `∑ₛ convPadWin·cotWin`
-    (`convWeightGrad_eq_dot`) — the exact quantity the rendered trainer's float
+    (`convWeightGrad_eq_dot`) — the exact quantity the FloatModel gradient's
     conv-weight dot rounds, so the conv grad-close bounds against this. -/
 theorem cnn_conv2_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
     (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
@@ -1018,8 +1024,8 @@ theorem FloatModel.dot_perturbed_close {n : ℕ} (M : FloatModel)
     _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * (a * Ct)) +
           (n : ℝ) * (a * eB) := add_le_add h1' h3
 
-/-- **The binary32 conv-2 weight gradient the rendered trainer computes** — the
-    conv peer of `mlpInputFloatGrad`. At kernel entry `(o,cc,kh,kw)` it is the
+/-- **The binary32 conv-2 weight gradient (FloatModel transcription of the
+    per-example gradient)** — the conv peer of `mlpInputFloatGrad`. At kernel entry `(o,cc,kh,kw)` it is the
     float dot of the (exact) padded-input window `convPadWin` against the float
     conv-output cotangent slab `cotWin c̃Conv o`, where the float cotangent
     `c̃Conv` rounds every step of the backward — conv-output ReLU mask `𝟙[z̃₂>0]`,
@@ -1180,7 +1186,7 @@ theorem FloatModel.cnnConv2CotBudget_nonneg (M : FloatModel) {c h w d₃ d₄ nC
 
 open FloatModel in
 /-- **The conv-2-output cotangent is float-close at a float conv-2 input**
-    (Increment 4 keystone) — Increment 2's conv-2 cotangent chain, factored to
+    — the conv-2 cotangent chain of `cnn_conv2_grad_close`, factored to
     take the conv-2 input `(X2, X2F)` with `|X2F − X2| ≤ eX2`, `|X2| ≤ aX2`. The
     conv-2 rungs instantiate the exact input `X2 = X2F = x₁`, `eX2 = 0`; the
     conv-1 rung `X2 = relu(z₁)`, `X2F = relu(z̃₁)`, `eX2 = E₁`. The
@@ -1468,9 +1474,8 @@ theorem abs_le_of_close {a b e C : ℝ} (h1 : |a - b| ≤ e) (h2 : |b| ≤ C) :
 
 open FloatModel in
 /-- **The binary32 conv-2 weight gradient is within an explicit budget of the
-    certified one** (Increment 2 capstone) — the conv-layer peer of
-    `mlp_w0_grad_close`, the project's deepest float-backward grad-close. With
-    the conv-2 input `x₁` exact, the rendered trainer's `W₂` gradient
+    certified one** — the conv-layer peer of `mlp_w0_grad_close`. With
+    the conv-2 input `x₁` exact, the FloatModel `W₂` gradient
     `M.cnnConv2FloatGrad …` stays within `cnnConv2GradBudget` of the certified
     `gradAt`. The chain: float forward (`convF_close` → `dense_close`×3, relu
     and pool error-transparent) ⟶ head (`softmax_ce_cot_close`) ⟶ two masked
@@ -2309,16 +2314,17 @@ noncomputable def cnnConv2KernelLoss {c h w d₃ d₄ nC kH kW : Nat} (b₂ : Ve
       (2*h) * (2*w)) (Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ x₁)))))))))
     label
 
-/-- **One inexact SGD step on the CNN's second conv kernel provably
-    decreases the cross-entropy loss.** All of `sgd_descends`'
-    hypotheses discharged for the loss-of-conv2-kernel map:
+/-- **One inexact SGD step on the CNN's second conv kernel decreases one
+    example's cross-entropy loss** (example `(x₁, label)` at the frozen conv-2
+    input, `W₂` moving, every other parameter fixed). `sgd_descends`'
+    smoothness hypotheses are discharged for the loss-of-conv2-kernel map:
     differentiability along the segment and the segment-Lipschitz
     constant both come from the FOUR margin hypotheses at the step
     radius `D = lr·(‖∇L‖₁ + |kernel|·η)` — relu₂, the pool-selection
     margin (POST-relu), relu₃, relu₄ — which freeze every mask and the
-    pool's entire routing pattern along the step. Remaining hypotheses
-    are checkable arithmetic: the oracle accuracy `η`, the margins, the
-    small-step condition, and the two dominance conditions. Conclusion:
+    pool's entire routing pattern along the step. Remaining hypotheses:
+    the oracle accuracy `η`, the margins, the small-step condition, and
+    the two dominance conditions. Conclusion:
     the loss drops by ≥ `lr·‖∇L‖₂²/2`. The conv-layer peer of
     `mlp_input_sgd_descends`; the descent program now reaches through
     weight sharing and max-pooling. -/
@@ -2451,17 +2457,19 @@ theorem cnn_conv2_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
   exact hmain
 
 open FloatModel in
-/-- **One binary32 SGD step on the CNN's second conv kernel provably decreases
-    the cross-entropy loss — with NO abstract gradient-accuracy parameter**
-    (Increment 3, the conv-2 rung capstone). The conv peer of
-    `mlp_input_float_sgd_descends`: the gradient is the *actual* binary32 `W₂`
-    gradient `M.cnnConv2FloatGrad …`, and its accuracy is *proven* by
+/-- **One SGD step with the FloatModel binary32 conv-2 kernel gradient decreases
+    one example's cross-entropy loss; the gradient's accuracy is proven, not
+    assumed.** The conv peer of `mlp_input_float_sgd_descends`: the gradient is the
+    FloatModel binary32 `W₂` gradient `M.cnnConv2FloatGrad …`, and its accuracy is *proven* by
     `cnn_conv2_grad_close` (η := `cnnConv2GradBudget`, discharged per kernel
     entry via `k4Idx_surj`), not assumed. The two rounding-margin families are
-    carried as hypotheses (the honest first cut): the per-layer ROUND margins
+    carried as hypotheses: the per-layer ROUND margins
     (`hmarginConv/Pool/3/4`, feeding the grad-close) and the gradient-radius
     STEP margins + `hsmall`/`h1`/`h2` (feeding `cnn_conv2_sgd_descends`'s
-    drift-freeze and the descent geometry). The conv-2 input `x₁` is exact. -/
+    drift-freeze and the descent geometry). The conv-2 input `x₁` is exact.
+
+    Scope: one example, `W₂` moving with every other parameter fixed, and the
+    update taken in ℝ — only the gradient is float-modelled. -/
 theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
@@ -3719,8 +3727,7 @@ theorem cnn_conv1_loss_gradAt {ic c h w d₃ d₄ nC kH kW : Nat}
     cnn1_pool_head_input_grad W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ label _ hz1 hz2 hmp hz3 hz4 ci hi wi]
 
 /-- **The certified conv-1 loss gradient, head restated in `dense`/`reluMask`
-    form** — the conv-1 peer of `cnn_conv2_loss_gradAt_reluMask` (Increment 4
-    keystone). One conv-backward deeper than conv-2: the conv-1-output
+    form** — the conv-1 peer of `cnn_conv2_loss_gradAt_reluMask`. One conv-backward deeper than conv-2: the conv-1-output
     cotangent is `𝟙[z₁>0] · ∑_{co,ho,wo} convTap·(conv-2-output cotangent)`,
     with the 3-dense head collapsed by `head3_cot_reluMask` exactly as in
     conv-2. The conv-1 ReLU mask, the conv-2 backward tap (`convTap`, the
@@ -3811,8 +3818,8 @@ theorem cnn_conv1_loss_gradAt_reluMask {ic c h w d₃ d₄ nC kH kW : Nat}
   simp only [ite_mul, zero_mul, Finset.sum_ite_irrel, Finset.sum_const_zero, Finset.sum_ite_eq',
     Finset.mem_univ, ite_true]
 
-/-- **The binary32 conv-1 weight gradient the rendered trainer computes** — the
-    conv-1 peer of `cnnConv2FloatGrad`, one conv-backward deeper. At kernel
+/-- **The binary32 conv-1 weight gradient (FloatModel transcription of the
+    per-example gradient)** — the conv-1 peer of `cnnConv2FloatGrad`, one conv-backward deeper. At kernel
     entry `(o,cc,kh,kw)` it is the float dot of the (exact) padded-input window
     `convPadWin x₀` against the float conv-1-output cotangent slab; that
     cotangent is the conv-1 ReLU mask `𝟙[z̃₁>0]` times the float conv-2 backward
@@ -4025,9 +4032,9 @@ theorem convTap_back_abs_le {c h w kH kW : Nat}
 
 open FloatModel in
 /-- **The binary32 conv-1 weight gradient is within an explicit budget of the
-    certified one** (Increment 4 capstone) — the conv-1 peer of
+    certified one** — the conv-1 peer of
     `cnn_conv2_grad_close`, one conv-backward deeper. With `x₀` exact, the
-    rendered trainer's `W₁` gradient `M.cnnConv1FloatGrad …` stays within
+    FloatModel `W₁` gradient `M.cnnConv1FloatGrad …` stays within
     `cnnConv1GradBudget`. The conv-2 cotangent chain is reused at a FLOAT conv-2
     input `relu(z̃₁)` (`cnn_conv2_cot_close`); the conv-2 backward is a rounded
     dot of the (exact) `convTap` slab against the float conv-2 cotangent slab
@@ -4301,15 +4308,16 @@ noncomputable def cnnConv1KernelLoss {ic c h w d₃ d₄ nC kH kW : Nat} (b₁ :
       (Tensor3.flatten (conv2d (Kernel4.unflatten u') b₁ x₀)))))))))))))
     label
 
-/-- **One inexact SGD step on the CNN's FIRST conv kernel provably
-    decreases the cross-entropy loss.** The deepest rung: the step
+/-- **One inexact SGD step on the CNN's FIRST conv kernel decreases one
+    example's cross-entropy loss** (`W₁` moving, every other parameter fixed).
+    The deepest rung: the step
     crosses relu₁, conv2 (as a function of its input — the point-free
     tap Jacobian with locality factor `c·kH·kW·w₂`), relu₂, the pool,
     and the 3-dense head. Under the FIVE margins at the step radius
     `D = lr·(‖∇L‖₁ + |kernel|·η)`, every mask and the pool's routing
     pattern freeze along the step, and the loss drops by
-    ≥ `lr·‖∇L‖₂²/2`. With this, every conv kernel of the Chapter-3 CNN
-    has a proven descent statement. -/
+    ≥ `lr·‖∇L‖₂²/2`. With this, both conv kernels of the Chapter-3 CNN
+    have a single-layer, single-example descent statement. -/
 theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w))
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -4442,16 +4450,18 @@ theorem cnn_conv1_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
   exact hmain
 
 open FloatModel in
-/-- **One binary32 SGD step on the CNN's FIRST conv kernel provably decreases
-    the cross-entropy loss — with NO abstract gradient-accuracy parameter**
-    (Increment 4 capstone, the deepest descent statement). The conv-1 peer of
-    `cnn_conv2_float_sgd_descends`: the gradient is the actual binary32 `W₁`
-    gradient `M.cnnConv1FloatGrad …`, accuracy *proven* by `cnn_conv1_grad_close`
+/-- **One SGD step with the FloatModel binary32 conv-1 kernel gradient decreases
+    one example's cross-entropy loss; the gradient's accuracy is proven, not
+    assumed.** The conv-1 peer of `cnn_conv2_float_sgd_descends`: the gradient is
+    the FloatModel binary32 `W₁` gradient `M.cnnConv1FloatGrad …`, accuracy *proven* by `cnn_conv1_grad_close`
     (η := `cnnConv1GradBudget`, discharged per kernel entry via `k4Idx_surj`),
     wired into the abstract `cnn_conv1_sgd_descends`. Five per-layer ROUND
     margins feed the grad-close; the gradient-radius STEP margins +
-    `hsmall`/`h1`/`h2` feed the drift-freeze and descent geometry. Every conv
-    kernel of the Chapter-3 CNN now has a float-faithful descent statement. -/
+    `hsmall`/`h1`/`h2` feed the drift-freeze and descent geometry. Both conv
+    kernels of the Chapter-3 CNN now have a float-gradient descent statement.
+
+    Scope: one example, `W₁` moving with every other parameter fixed, and the
+    update taken in ℝ — only the gradient is float-modelled. -/
 theorem cnn_conv1_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -4929,8 +4939,9 @@ noncomputable def cnnConv2BiasLoss {c h w d₃ d₄ nC kH kW : Nat} (W₂ : Kern
       (2*h) * (2*w)) (Tensor3.flatten (conv2d W₂ b' x₁)))))))))
     label
 
-/-- **One inexact SGD step on the CNN's second conv BIAS provably
-    decreases the cross-entropy loss.** The conv2-kernel capstone with
+/-- **One inexact SGD step on the CNN's second conv BIAS decreases one
+    example's cross-entropy loss** (`b₂` moving, every other parameter fixed).
+    The conv2-kernel capstone with
     the bias-rung radii: the four margins at the step radius
     `D = lr·(‖∇L‖₁ + c·η)` carry no input bound `a` (the bias Jacobian
     is a Kronecker indicator), and the parameter needs no
@@ -5397,15 +5408,16 @@ noncomputable def cnnConv1BiasLoss {ic c h w d₃ d₄ nC kH kW : Nat} (W₁ : K
       (Tensor3.flatten (conv2d W₁ b' x₀)))))))))))))
     label
 
-/-- **One inexact SGD step on the CNN's FIRST conv BIAS provably
-    decreases the cross-entropy loss.** The conv1-kernel capstone with
+/-- **One inexact SGD step on the CNN's FIRST conv BIAS decreases one
+    example's cross-entropy loss** (`b₁` moving, every other parameter fixed).
+    The conv1-kernel capstone with
     the bias-rung radii: the FIVE margins at the step radius
     `D = lr·(‖∇L‖₁ + c·η)` carry no input bound `a` (the bias Jacobian
     is a Kronecker indicator) and the parameter needs no
-    flatten/unflatten plumbing. With this theorem every parameter of
-    the Chapter-3 CNN — both conv kernels, both conv biases, and the
-    three dense layers (weights and biases via the MLP rungs) — has a
-    proven descent statement. -/
+    flatten/unflatten plumbing. With this theorem both conv kernels,
+    both conv biases and the three dense-layer weight matrices (via the
+    MLP rungs, which omit bias columns) of the Chapter-3 CNN each have a
+    single-layer, single-example descent statement. -/
 theorem cnn_conv1_bias_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c) (x₀ : Tensor3 ic (2*h) (2*w))
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
@@ -5530,8 +5542,8 @@ theorem FloatModel.sum_perturbed_close {n : ℕ} (M : FloatModel)
       ≤ |M.sum Bt - ∑ i, Bt i| + |(∑ i, Bt i) - ∑ i, B i| := abs_sub_le _ _ _
     _ ≤ ((1 + M.u) ^ (n + 1) - 1) * ((n : ℝ) * Ct) + (n : ℝ) * eB := add_le_add h1' h3
 
-/-- **The binary32 conv-2 bias gradient the rendered trainer computes** — the
-    bias peer of `cnnConv2FloatGrad`: at output channel `o` it is the float SUM
+/-- **The binary32 conv-2 bias gradient (FloatModel transcription of the
+    per-example gradient)** — the bias peer of `cnnConv2FloatGrad`: at output channel `o` it is the float SUM
     `M.sum (cotWin c̃Conv o)` of the same float conv-2-output cotangent slab
     (the bias Jacobian is the channel indicator, so there is no `convPadWin`
     left operand and no per-slot kernel index — one entry per channel). -/
@@ -5567,7 +5579,7 @@ noncomputable def FloatModel.cnnConv2BiasFloatGrad {c h w d₃ d₄ nC kH kW : N
     `head3_cot_reluMask`; the channel-Kronecker Jacobian `if ci = o` collapses
     the `∑ ci` to `ci = o` (`Finset.sum_ite_eq'`); the remaining spatial
     `∑ hi wi` is packaged as `∑ s, cotWin c o s` (`convBiasGrad_eq_sum`) — the
-    quantity the rendered trainer's float bias SUM rounds. -/
+    quantity the FloatModel gradient's bias SUM rounds. -/
 theorem cnn_conv2_bias_loss_gradAt_reluMask {c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
@@ -5719,14 +5731,15 @@ theorem cnn_conv2_bias_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatMod
     (fun s => by simp only [cotWin]; exact hc2close o _ _)
 
 open FloatModel in
-/-- **One inexact SGD step on the CNN's second conv BIAS provably decreases the
-    cross-entropy loss** — the bias peer of `cnn_conv2_float_sgd_descends`: the
-    gradient is the actual binary32 bias gradient `M.cnnConv2BiasFloatGrad …`,
+/-- **One SGD step with the FloatModel binary32 conv-2 bias gradient decreases one
+    example's cross-entropy loss; the gradient's accuracy is proven, not
+    assumed** — the bias peer of `cnn_conv2_float_sgd_descends`: the gradient is
+    the FloatModel binary32 bias gradient `M.cnnConv2BiasFloatGrad …`,
     and its accuracy is *proven* by `cnn_conv2_bias_grad_close`
     (η := `cnnConv2BiasGradBudget`, discharged per output channel — the bias IS
     a vector, so no flatten/unflatten plumbing), not assumed. The two
-    rounding-margin families are carried as the honest first cut, exactly as the
-    weight rungs. -/
+    rounding-margin families are carried as hypotheses, exactly as in the
+    weight rungs. Scope: one example, `b₂` moving, update taken in ℝ. -/
 theorem cnn_conv2_bias_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (x₁ : Tensor3 c (2*h) (2*w))
@@ -6147,13 +6160,15 @@ theorem cnn_conv1_bias_grad_close {ic c h w d₃ d₄ nC kH kW : Nat} (M : Float
         (convTap_back_close M W₂ _ _ hw₂ hW₂ hc2floatmag hc2close o _ _) hebacknn)
 
 open FloatModel in
-/-- **One inexact SGD step on the CNN's first conv BIAS provably decreases the
-    cross-entropy loss** — the bias peer of `cnn_conv1_float_sgd_descends`, the
-    deepest descent rung: the gradient is the actual binary32 bias gradient
+/-- **One SGD step with the FloatModel binary32 conv-1 bias gradient decreases one
+    example's cross-entropy loss; the gradient's accuracy is proven, not
+    assumed** — the bias peer of `cnn_conv1_float_sgd_descends`, the deepest
+    descent rung: the gradient is the FloatModel binary32 bias gradient
     `M.cnnConv1BiasFloatGrad …`, accuracy *proven* by `cnn_conv1_bias_grad_close`
     (η := `cnnConv1BiasGradBudget`, discharged per output channel — the bias IS a
-    vector), not assumed. With this, every conv weight AND bias of the
-    Chapter-3 CNN is a float-faithful descent step. -/
+    vector), not assumed. With this, both conv kernels and both conv biases of
+    the Chapter-3 CNN have a float-gradient descent statement. Scope: one
+    example, `b₁` moving, update taken in ℝ. -/
 theorem cnn_conv1_bias_float_sgd_descends {ic c h w d₃ d₄ nC kH kW : Nat}
     (M : FloatModel) (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
     (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)

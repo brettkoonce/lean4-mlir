@@ -3,19 +3,20 @@ import LeanMlir.Proofs.Training.Optim.SgdMomentumStep
 
 /-! # RMSProp with momentum over ℝ — the optimizer MobileNetV2 and EfficientNet actually use
 
-The ℝ reference for the `mobilenetv2in`/`efficientnetin` ImageNet train steps (`planning/archive/recipe_gaps.md` v1.2).
-Coordinatewise over `Vec`, mirroring the emitted StableHLO op-for-op so the faithfulness theorem in
-`StableHLO.lean` is a structural match (`rfl`), exactly as `AdamStep` is for the AdamW triple and
+The ℝ reference for the `mobilenetv2in`/`efficientnetin` ImageNet train steps.
+Coordinatewise over `Vec`, mirroring the emitted StableHLO op-for-op so the faithfulness theorem
+`rmsProp_triple_faithful` (Codegen/StableHLO.lean) is a structural match (`rfl`), exactly as `AdamStep` is for the AdamW triple and
 `SgdMomentumStep` for the SGD/Nesterov pair.
 
-**⚠ THIS IS TENSORFLOW'S RMSPROP, NOT THE TEXTBOOK ONE — and that is the whole point of the file.**
+**THIS IS TENSORFLOW'S RMSPROP, NOT THE TEXTBOOK ONE — and that is the whole point of the file.**
 The JAX reference ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), the `.rmsprop` branch) says so in its own comment: ε goes
 **inside** the square root and the running mean-square **initialises to 1.0**. `timm` ships
 `RMSpropTF` for exactly this reason. Reaching for the textbook spelling — `g / (√s + ε)` — would
 compile, render, train, descend, and be **a different optimizer than the one this exists to match**;
 `rmsBufNext_eps_placement_at_zero` below is the exact difference, and it is what the numeric tie's
-negative control drives. This is §2k's Nesterov-vs-heavy-ball trap in a second place, and the
-transferable rule is the same one: **check which variant the reference uses before rendering one.**
+negative control drives. The same trap exists between Nesterov and heavy-ball momentum
+(`SgdMomentumStep`), and the rule is the same: **check which variant the reference uses before
+rendering one.**
 
 **What is new here and what is not.** Three of the four steps of the update are already-certified ops
 and this file only gives them their RMSProp reading:
@@ -51,13 +52,13 @@ def rmsSqNext (ρ : ℝ) (sq g : Vec n) : Vec n :=
 /-- **The mean-square update IS Adam's second moment.** Stated, not assumed: the render emits
     `adamVNextF` for this slot, and this is the theorem that says doing so computes RMSProp's `s'`.
     Holds by `rfl` — same arithmetic, different reading of the two hyperparameter slots, exactly as
-    §2k's heavy-ball reuses `momVNext` at `(μ := wd, v := θ)`. -/
+    heavy-ball's coupled decay reuses `momVNext` at `(μ := wd, v := θ)`. -/
 theorem rmsSqNext_eq_adamVNext (ρ : ℝ) (sq g : Vec n) :
     rmsSqNext ρ sq g = adamVNext ρ sq g := rfl
 
 /-- **Coupled L2 as a momentum update.** `momVNext wd θ g = g + wd·θ` — the reference's
     `grads = jax.tree.map(lambda g, p: g + WD * p, grads, params)`, which is COUPLED (the decay
-    flows through the accumulator) and not AdamW's decoupled form. Same reuse §2k found for
+    flows through the accumulator) and not AdamW's decoupled form. Same reuse as for
     heavy-ball; restated here because RMSProp's `wd` is coupled for the same reason and a reader
     checking this chain should not have to rediscover it. -/
 theorem momVNext_as_coupled_l2 (wd : ℝ) (θ g : Vec n) :
@@ -67,7 +68,7 @@ theorem momVNext_as_coupled_l2 (wd : ℝ) (θ g : Vec n) :
 /-- **Momentum buffer on the normalised gradient — TENSORFLOW's placement**:
     `b' = μ·b + g / √(s' + ε)`.
 
-    ⚠ **ε is INSIDE the square root.** The textbook form is `g / (√s' + ε)`; see
+    **ε is INSIDE the square root.** The textbook form is `g / (√s' + ε)`; see
     `rmsBufNextVanilla` and `rmsBufNext_eps_placement_at_zero` for the exact difference and why it
     is not cosmetic. -/
 noncomputable def rmsBufNext (ρ μ ε : ℝ) (sq buf g : Vec n) : Vec n :=
@@ -90,8 +91,9 @@ noncomputable def rmsPropStep (ρ μ ε lr : ℝ) (θ sq buf g : Vec n) : Vec n 
 /-- **Mean-square invariant.** `s'` stays nonnegative when `0 ≤ ρ ≤ 1` and the incoming `s` is —
     so the square root below is real at every step.
 
-    ⚠ The reference starts `s` at **1.0**, not 0, so the hypothesis holds from step 0 and the FIRST
-    step is damped (`g/√(1−ρ+…)`) rather than amplified. Adam's `v = 0` start is the opposite
+    The reference starts `s` at **1.0**, not 0, so the hypothesis holds from step 0 and the FIRST
+    step is `g/√(ρ + (1−ρ)g² + ε)` rather than the `s = 0` start's `g/√((1−ρ)g² + ε)`, which for
+    small `g` is amplified by up to `1/√(1−ρ)`. Adam's `v = 0` start is the opposite
     convention and is bias-corrected for it; RMSProp here is not bias-corrected, which is why the
     init value is part of the recipe rather than an implementation detail. -/
 theorem rmsSqNext_nonneg {ρ : ℝ} (hρ0 : 0 ≤ ρ) (hρ1 : ρ ≤ 1)
@@ -125,7 +127,7 @@ theorem rmsBufNext_mu_zero (ρ ε : ℝ) (sq buf g : Vec n) :
     rmsBufNext ρ 0 ε sq buf g = fun i => g i / Real.sqrt (rmsSqNext ρ sq g i + ε) := by
   funext i; simp [rmsBufNext]
 
-/-- ▶ **THE ε-PLACEMENT DIFFERENCE, made exact.** At a coordinate whose running mean-square has
+/-- **THE ε-PLACEMENT DIFFERENCE, made exact.** At a coordinate whose running mean-square has
     collapsed to zero the two spellings scale the gradient by `1/√ε` (TensorFlow) against `1/ε`
     (textbook) — a factor of `1/√ε`, which at EfficientNet's `ε = 1e-3` is **31.6×** and at
     MobileNetV2's `ε = 1.0` is exactly **1×**.
@@ -154,7 +156,7 @@ theorem rmsBufNext_eps_placement_at_zero {ρ μ ε : ℝ}
 
     `momVNext_v_zero` gives `v' = g` and `adamMNextF` gives `m' = (1−β₁)·g`, both exactly linear, so
     those renders can use a moment slot as a gradient proxy and average it across replicas
-    (`shard-check`, handoff §5). At `buf = 0` RMSProp gives `g/√((1−ρ)g² + ε)` — the gradient
+    (`shard-check`). At `buf = 0` RMSProp gives `g/√((1−ρ)g² + ε)` — the gradient
     divided by a function OF the gradient. So `mean(step(gA), step(gB)) ≠ step(mean(gA, gB))` and
     **the asymmetric-batch `shard-check` construction does not transfer to an RMSProp DP render**.
     The duplicated-batch identity (`*-dp-check`) is unaffected: both replicas see the same `g`, so

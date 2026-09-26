@@ -49,9 +49,10 @@ noncomputable def residual {n : Nat} (f : Vec n → Vec n) : Vec n → Vec n :=
 /-- **Residual VJP**: `dx = f.back(x, dy) + dy`.
 
     The skip's contribution is just `dy` (identity backward). The block's
-    contribution is `f.back(x, dy)`. They add. This is **why** ResNets
-    are easier to train: the gradient floor is `dy` itself, so it can
-    never get smaller than the loss gradient at this layer.
+    contribution is `f.back(x, dy)`. They add. The skip passes `dy` to the
+    input unchanged, so the gradient does not have to go through `f`'s
+    Jacobian to reach `x` (the two terms can still cancel; no lower bound
+    on `dx` is claimed).
 
     MLIR (`MlirCodegen.lean`, the residual-block case of the backward walk):
       The "skip grad" is added to the first convBn of the block — exactly
@@ -150,7 +151,7 @@ theorem residualProjHasVJP_correct {m n : Nat}
 
 /-! ResNet residual bodies contain ReLU, which is only `DifferentiableAt`
 at smooth points (see `MLP.lean`), not `Differentiable` globally. So the
-end-to-end CNN VJP (`cnnHasVJPAt`, future) must chain through the
+end-to-end CNN VJP (`cnnHasVJPAt`, in CNN.lean) chains through the
 pointwise `HasVJPAt` framework — `vjpCompAt` + the witnesses below —
 exactly as `mlpHasVJPAt` does for the MLP. These mirror the everywhere
 versions above, at a fixed `x`; `pdiv_add` is already stated at-point so

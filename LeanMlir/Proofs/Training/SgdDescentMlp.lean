@@ -31,13 +31,16 @@ MLP (`dense → relu → dense → relu → dense`), layer by layer:
 The capstones `mlp_hidden_sgd_descends` / `mlp_input_sgd_descends` mirror
 `linear_sgd_descends`: an `η`-accurate gradient oracle (the float budgets),
 the margin(s) at the step radius, the small-step condition, and the two
-dominance conditions ⇒ **one inexact SGD step on that layer's weights
-provably decreases the cross-entropy loss by ≥ lr·‖∇L‖₂²/2.** Every
-hypothesis is checkable arithmetic at a concrete point; smoothness is
-proven, not assumed. Bias columns are the same argument with the layer
-input replaced by the constant `1` and are omitted. The joint all-layers
-step (every parameter moving at once, logits no longer affine in the moving
-parameters) is the remaining open rung. -/
+dominance conditions ⇒ **one inexact SGD step on that layer's weights, at one
+example `(x, label)` with every other parameter fixed, decreases that example's
+cross-entropy loss by ≥ lr·‖∇L‖₂²/2.** Smoothness is proven, not assumed; the
+oracle accuracy, the margins, the small-step and the two dominance conditions
+remain hypotheses. `mlp_output_float_sgd_descends`, `mlp_hidden_float_sgd_descends`
+and `mlp_input_float_sgd_descends` replace the oracle accuracy by the proven
+accuracy of the FloatModel binary32 gradient. Bias columns are the same argument
+with the layer input replaced by the constant `1` and are omitted. The joint
+all-layers step (every parameter moving at once, logits no longer affine in the
+moving parameters) is not proved here. -/
 
 namespace Proofs
 
@@ -393,16 +396,17 @@ noncomputable def mlpHiddenLoss {d₁ d₂ d₃ : Nat} (b₁ : Vec d₂) (W₂ :
     (a₀ : Vec d₁) (label : Fin d₃) : Vec (d₁ * d₂) → ℝ :=
   fun w => crossEntropy d₃ (dense W₂ b₂ (relu d₂ (dense (Mat.unflatten w) b₁ a₀))) label
 
-/-- **One inexact SGD step on the MLP's hidden weights provably decreases
-    the cross-entropy loss.** All of `sgd_descends`' hypotheses discharged
+/-- **One inexact SGD step on the MLP's hidden weights decreases one example's
+    cross-entropy loss** (example `(a₀, label)`, `W₁` moving, every other
+    parameter fixed). `sgd_descends`' smoothness hypotheses are discharged
     for the loss-of-`W₁` map: differentiability along the segment and the
     segment-Lipschitz constant `C = 2·d₃·w₂²·a²/(1−2·w₂·a·D)` at step radius
     `D = lr·(‖∇L‖₁ + d₁d₂·η)` both come from the **margin hypothesis** — the
     step radius is small enough that no hidden ReLU can change sign.
-    Remaining hypotheses are checkable arithmetic: the oracle accuracy `η`
-    (the float budgets), the margins, the small-step condition, and the two
-    dominance conditions. Conclusion: the loss drops by ≥ `lr·‖∇L‖₂²/2`.
-    The hidden-layer peer of `linear_sgd_descends`. -/
+    Remaining hypotheses: the oracle accuracy `η` (the float budgets), the
+    margins, the small-step condition, and the two dominance conditions.
+    Conclusion: the loss drops by ≥ `lr·‖∇L‖₂²/2`. The hidden-layer peer of
+    `linear_sgd_descends`. -/
 theorem mlp_hidden_sgd_descends {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂)
     (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (a₀ : Vec d₁)
     (label : Fin d₃) (gh : Vec (d₁ * d₂)) {lr η a w₂ : ℝ}
@@ -690,14 +694,16 @@ noncomputable def mlpInputLoss {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d₁) (W�
   fun w => crossEntropy d₃
     (dense W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense (Mat.unflatten w) b₀ x))))) label
 
-/-- **One inexact SGD step on the MLP's input weights provably decreases
-    the cross-entropy loss.** The deepest descent capstone: both ReLU
+/-- **One inexact SGD step on the MLP's input weights decreases one example's
+    cross-entropy loss** (example `(x, label)`, `W₀` moving, every other
+    parameter fixed). The deepest descent capstone: both ReLU
     layers' margins at the step radius `D = lr·(‖∇L‖₁ + d₀d₁·η)` freeze the
     masks, the segment-Lipschitz constant
     `C = 2·d₃·d₂²·w₁²·w₂²·a²/(1−2·w₂·d₂·w₁·a·D)` is proven, and the loss
-    drops by ≥ `lr·‖∇L‖₂²/2`. Remaining hypotheses are checkable
-    arithmetic. The input-layer peer of `linear_sgd_descends`; with this,
-    every MLP weight layer's descent statement is discharged. -/
+    drops by ≥ `lr·‖∇L‖₂²/2`. The oracle accuracy, the margins, the small-step
+    and the two dominance conditions remain hypotheses. The input-layer peer of
+    `linear_sgd_descends`; with this each MLP weight layer has a single-layer,
+    single-example descent statement. -/
 theorem mlp_input_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d₁)
     (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃)
     (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) (gh : Vec (d₀ * d₁))
@@ -791,24 +797,21 @@ noncomputable def mlpOutputLoss {d₀ d₁ d₂ d₃ : Nat} (W₀ : Mat d₀ d�
   fun w => crossEntropy d₃
     (dense (Mat.unflatten w) b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) label
 
-/-- **One binary32 SGD step on the MLP's output weights provably decreases the
-    cross-entropy loss — with NO abstract gradient-accuracy parameter.** The
-    output-layer rung of the η-composition (Item D / G1 for the MLP). Since the
+/-- **One SGD step with the FloatModel binary32 output-layer gradient decreases one
+    example's cross-entropy loss; the gradient's accuracy is proven, not assumed.**
+    The output-layer rung of the η-composition. Since the
     top dense layer sits directly below the softmax-CE loss with no ReLU between,
     the loss-of-`W₂` map *is* the linear net's loss at the hidden activation
     `a₁ = relu(dense W₁ b₁ (relu(dense W₀ b₀ x)))` — so this is
-    `linear_float_sgd_descends` instantiated there. The gradient is the *actual*
+    `linear_float_sgd_descends` instantiated there, with the same scope (one
+    example, `W₂` moving, update in ℝ). The gradient is the FloatModel
     binary32 output-layer gradient `M.linearFloatGrad W₂ b₂ a₁` and its accuracy
     `η = mulErr u a 1 0 (cotErr …)` is *proven* (by `linear_grad_close`, inside
     the linear theorem), not assumed. No margin needed — the output layer never
     crosses a kink.
 
-    The hidden/input rungs (`mlp_{hidden,input}_sgd_descends`) still take an
-    abstract `η`: their float gradients run back through the ReLU masks and the
-    `W₂`-cotangent fan-in, so the η-composition there needs a per-layer
-    float-backward grad-close (a `mlp_w{1,0}_grad_close`) under the descent
-    margins — the joint-step refinement flagged at the top of this file, left
-    open. -/
+    The hidden and input rungs are `mlp_hidden_float_sgd_descends` and
+    `mlp_input_float_sgd_descends`. -/
 theorem mlp_output_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) (fexp : ℝ → ℝ)
@@ -853,7 +856,7 @@ open FloatModel in
 /-- **The binary32 hidden-layer (W₁) gradient is within an explicit budget of
     the certified one**, per entry — the float-backward grad-close that the
     hidden η-composition needs. With the layer-1 input activation `a₀` *frozen
-    exact* (the descent moves only `W₁`), the rendered trainer computes the
+    exact* (the descent moves only `W₁`), the FloatModel transcription computes the
     `W₁` gradient as `fl(a₀ᵢ · c̃₁ⱼ)` where the float layer-1 cotangent
     `c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂)` reads the float pre-activation `z̃₁ = M.dense W₁ b₁ a₀`
     and the float softmax−onehot head `c̃₂` at the float logits. This is within
@@ -946,9 +949,9 @@ theorem mlp_w1_grad_close {d₁ d₂ d₃ : Nat} (M : FloatModel)
 --   gradient-accuracy parameter.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The binary32 hidden-layer (`W₁`) gradient of the MLP loss**, exactly
-    as the rendered trainer computes it (with the layer-1 input activation
-    `a₀` frozen exact): `fl(a₀ᵢ · c̃₁ⱼ)` where the float layer-1 cotangent
+/-- **The binary32 hidden-layer (`W₁`) gradient of the MLP loss** — the
+    FloatModel transcription of the per-example gradient (with the layer-1 input
+    activation `a₀` frozen exact): `fl(a₀ᵢ · c̃₁ⱼ)` where the float layer-1 cotangent
     `c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂)` reads the float pre-activation
     `z̃₁ = M.dense W₁ b₁ a₀` and the float softmax−onehot head `c̃₂` at the
     float logits. Flattened to the `Vec (d₁*d₂)` parameter layout that
@@ -1002,24 +1005,26 @@ theorem mlp_hidden_loss_gradAt_reluMask {d₁ d₂ d₃ : Nat}
   rw [FloatModel.reluMask]
   split_ifs <;> simp [dense, mul_comm]
 
-/-- **One binary32 SGD step on the MLP's hidden weights provably decreases
-    the cross-entropy loss — with NO abstract gradient-accuracy parameter.**
-    The hidden-layer rung of the η-composition (Item D / G1 for the MLP).
-    The gradient is the *actual* binary32 `W₁` gradient
+/-- **One SGD step with the FloatModel binary32 hidden-layer gradient decreases
+    one example's cross-entropy loss; the gradient's accuracy is proven, not
+    assumed.** The hidden-layer rung of the η-composition. The gradient is the
+    FloatModel binary32 `W₁` gradient
     `M.mlpHiddenFloatGrad W₁ b₁ W₂ b₂ a₀ fexp label`, and its accuracy
     `η = mulErr u a (layerAct …) 0 (layerBudget … (cotErr …))` is *proven*
     by `mlp_w1_grad_close` (via the `reluMask`↔`gradAt` bridge
     `mlp_hidden_loss_gradAt_reluMask`), not assumed.
 
-    Two margins are carried — the honest, lower-risk first cut (the linear
-    rung also carries several hypotheses): the **rounding** margin
+    Two margins are carried as hypotheses: the **rounding** margin
     `hmargin_round` (`layerBudget < |z₁|`, forward rounding must not flip the
     layer-1 ReLU — the grad-close precondition) and the **step** margin
     `hmargin_step` (`a·D < |z₁|`, the parameter step must not flip it along
     the segment — the smoothness precondition). They are the same shape
-    ("nothing flips the layer-1 ReLU"); collapsing one into the other is left
-    as a refinement. This is the hidden-layer peer of
-    `linear_float_sgd_descends` / `mlp_output_float_sgd_descends`. -/
+    ("nothing flips the layer-1 ReLU") and are not collapsed into one here.
+    This is the hidden-layer peer of
+    `linear_float_sgd_descends` / `mlp_output_float_sgd_descends`.
+
+    Scope: one example `(a₀, label)`, the layer's weights only (other parameters
+    fixed), and the update taken in ℝ — only the gradient is float-modelled. -/
 theorem mlp_hidden_float_sgd_descends {d₁ d₂ d₃ : Nat} (M : FloatModel)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂) (W₂ : Mat d₂ d₃) (b₂ : Vec d₃)
     (a₀ : Vec d₁) (label : Fin d₃) (fexp : ℝ → ℝ)
@@ -1140,8 +1145,8 @@ theorem reluMask_dense_transpose_eq {p n : Nat} (z : Vec p) (W : Mat p n)
   rw [FloatModel.reluMask]
   split_ifs <;> simp [dense, mul_comm]
 
-/-- **The binary32 input-layer (`W₀`) gradient of the MLP loss**, exactly as
-    the rendered trainer computes it (`x` the exact input): `fl(xᵢ · c̃₀ⱼ)`
+/-- **The binary32 input-layer (`W₀`) gradient of the MLP loss** — the FloatModel
+    transcription of the per-example gradient (`x` the exact input): `fl(xᵢ · c̃₀ⱼ)`
     where the float layer-0 cotangent `c̃₀ = mask(z̃₀, W₁ᵀ·c̃₁)` reads the float
     layer-1 cotangent `c̃₁ = mask(z̃₁, W₂ᵀ·c̃₂)` and the float softmax−onehot head
     `c̃₂`, all at the float pre-activations. Flattened to the `Vec (d₀*d₁)`
@@ -1207,7 +1212,7 @@ theorem mlp_input_loss_gradAt_reluMask {d₀ d₁ d₂ d₃ : Nat} (b₀ : Vec d
 open FloatModel in
 /-- **The binary32 input-layer (`W₀`) gradient is within an explicit budget of
     the certified one**, per entry — the float-backward grad-close for the
-    deepest rung. With `x` exact, the rendered trainer computes the `W₀`
+    deepest rung. With `x` exact, the FloatModel transcription computes the `W₀`
     gradient `fl(xᵢ·c̃₀ⱼ)`, `c̃₀ = mask(z̃₀, W₁ᵀ·mask(z̃₁, W₂ᵀ·c̃₂))` from the float
     softmax−onehot head `c̃₂` back through *two* ReLU masks. This is within
     `mulErr … 0 (layerBudget … (layerBudget … (cotErr …)))` of the certified
@@ -1364,21 +1369,24 @@ theorem mlp_w0_grad_close {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
   -- the final input multiply: exact left operand `x` (`ea = 0`)
   exact M.mul_close (by simp : |x i - x i| ≤ (0:ℝ)) hcot0 (hx i) hC0
 
-/-- **One binary32 SGD step on the MLP's input weights provably decreases the
-    cross-entropy loss — with NO abstract gradient-accuracy parameter.** The
-    input-layer rung of the η-composition (Item D / G1 for the MLP), one mask
-    deeper than the hidden rung. The gradient is the *actual* binary32 `W₀`
+/-- **One SGD step with the FloatModel binary32 input-layer gradient decreases one
+    example's cross-entropy loss; the gradient's accuracy is proven, not
+    assumed.** The input-layer rung of the η-composition, one mask deeper than
+    the hidden rung. The gradient is the FloatModel binary32 `W₀`
     gradient `M.mlpInputFloatGrad …`, and its accuracy is *proven* by
     `mlp_w0_grad_close` (via the nested `reluMask`↔`gradAt` bridge
     `mlp_input_loss_gradAt_reluMask`), not assumed.
 
-    Four margins are carried as hypotheses (the honest first cut): the two
+    Four margins are carried as hypotheses: the two
     **rounding** margins `hmargin0_round`/`hmargin1_round` (forward rounding
     must not flip either ReLU — the grad-close preconditions) and the two
     **step** margins `hmargin0_step`/`hmargin1_step` (the parameter step must
     not flip either along the segment — the smoothness preconditions). With
-    this, "one binary32 SGD step on any single MLP weight layer provably
-    decreases the loss" is closed for all three layers. -/
+    this each of the three MLP weight layers has a float-gradient descent
+    statement.
+
+    Scope: one example `(x, label)`, the layer's weights only (other parameters
+    fixed), and the update taken in ℝ — only the gradient is float-modelled. -/
 theorem mlp_input_float_sgd_descends {d₀ d₁ d₂ d₃ : Nat} (M : FloatModel)
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) (label : Fin d₃) (fexp : ℝ → ℝ)

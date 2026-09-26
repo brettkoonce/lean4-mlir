@@ -1,10 +1,9 @@
 import LeanMlir.Proofs.Architectures.CNN
 
-/-! # Strided convolution (stride-2 SAME) — Chapter 5 Milestone B, the hard new op
+/-! # Strided convolution (stride-2 SAME)
 
-Real ResNet-34 downsamples with **stride-2 convolutions**, the one genuinely-new
-operator the Chapter-5 handoff (`planning/archive/verified_r34.md` §3.6) flags as gating
-the jump from the ch6-A ResNet-*style* net to a true 34-layer ResNet.
+Real ResNet-34 downsamples with **stride-2 convolutions**; this file supplies that
+operator and its VJPs.
 
 **The key identity that makes this tractable.** A stride-2 SAME convolution is
 exactly a stride-1 SAME convolution followed by spatial decimation (keep every
@@ -14,7 +13,7 @@ other position):
 
 because both read `x_pad[c, 2·hi+kh−pH, 2·wi+kw−pW]` — the stride-1 conv computes
 that at *every* output position, and decimation throws away the odd ones. So we do
-**not** re-derive the ~800-line conv input-VJP / weight-grad with stride arithmetic;
+**not** re-derive the conv input-VJP / weight-grad with stride arithmetic;
 we reuse `conv2dHasVJP3` and `conv2dWeightGradHasVJP` verbatim and only add a
 small linear **decimation** map `decimateFlat` (a `reindex`, hence a CLM) with its
 VJP (the backward is the "zero-upsampling" / `lhs_dilation` scatter). The strided
@@ -103,7 +102,7 @@ noncomputable def flatConvStride2HasVJP {ic oc h w kH kW : Nat}
   show HasVJP (decimateFlat oc h w ∘ (flatConv (h := 2 * h) (w := 2 * w) W b)) from
   vjpComp _ _ hf_diff (decimateFlat_differentiable oc h w) hf_vjp (decimateFlatHasVJP oc h w)
 
-/-- **Stride-2 conv input-VJP correctness** (the ℝ-carrying audit headline): the
+/-- **Stride-2 conv input-VJP correctness**: the
     backward equals the `pdiv`-contracted Jacobian of `flatConvStride2`. -/
 theorem flatConvStride2HasVJP_correct {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
@@ -312,13 +311,13 @@ for the nets that use them:
 
 * **`flatConvStride2`** (above) pads symmetrically, `(k-1)/2` on each side. This is
   He et al. / torchvision — `nn.Conv2d(padding=k//2)` — and it is what ResNet-34, ResNet-50 and
-  ConvNeXt's references do (`emitHelpers` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), symmetric ON PURPOSE since 2026-08-04).
+  ConvNeXt's references do (`emitHelpers` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), symmetric).
 * **`flatConvStride2Xla`** (here) pads the way XLA `'SAME'` does: at an **even** input the total
   padding is `k-2`, split **asymmetrically** as `((k-2)/2, k/2)` — `(0,1)` at `k=3`, `(1,2)` at
   `k=5`, `(2,3)` at `k=7`. This is what the TF-origin ports do — MobileNetV2, MobileNetV4,
   EfficientNet — where `padding='SAME'` **is** the reference and must not be "fixed".
 
-⭐ **The identity that makes this nearly free.** A stride-2 XLA-`SAME` conv is the *same*
+**The identity that makes this nearly free.** A stride-2 XLA-`SAME` conv is the *same*
 symmetric stride-1 conv the even-decimation op already uses, decimated at the **odd** offsets:
 
   `convXlaSame_s2 W b X = decimateOddFlat (flatConv W b X)`,   `X : Tensor3 ic (2h) (2w)`
@@ -326,17 +325,16 @@ symmetric stride-1 conv the even-decimation op already uses, decimated at the **
 because output `ho` then reads `x[2·ho + 1 + kh − (k−1)/2] = x[2·ho + kh − ((k−2)/2)]`, and
 `(k−2)/2` is exactly XLA's `pad_low` at an even input. So the whole asymmetry is **a phase shift
 in the decimation**, not new padding arithmetic: `flatConv` is reused verbatim, and so is every
-one of its VJPs. `decimateOddFlat` and `decimateOddFlatHasVJP` already exist above (they were
-added for ConvNeXt's 4×4/s4 patchify stem), so this section adds **no new proof obligation** —
+one of its VJPs. `decimateOddFlat` and `decimateOddFlatHasVJP` already exist above, so this section adds
+**no new proof obligation** —
 only compositions of results already closed under the three standard axioms.
 
-⚠ **This holds at EVEN inputs only, which is the only case any net in this repo hits** (224, 112,
+**This holds at EVEN inputs only, which is the only case any net in this repo hits** (224, 112,
 56, 28, 14 — every strided site in mnv2/mnv4/enet). At an *odd* input XLA `SAME` pads
 `((k-1)/2, (k-1)/2)` — symmetric — so `flatConvStride2` is already the right op there and this one
 would be wrong. The type enforces it: the input index is `ic*(2*h)*(2*w)`, structurally even.
 Verified against `jax.lax.conv_general_dilated(…, 'SAME')` over
-`H ∈ {224,112,56,28,14,32,16,9,7,15,33} × k ∈ {3,5,7}` — 33 configs, all agreeing with this rule
-(`planning/archive/mnv4_verified.md` §3e). -/
+`H ∈ {224,112,56,28,14,32,16,9,7,15,33} × k ∈ {3,5,7}` — 33 configs, all agreeing with this rule. -/
 
 /-- **Stride-2 XLA-`SAME` convolution**, flattened: `Vec (ic·2h·2w) → Vec (oc·h·w)`.
     `decimateOddFlat ∘ flatConv` — the stride-1 symmetric-SAME conv on the `2h×2w` grid, then keep
@@ -362,8 +360,8 @@ theorem flatConvStride2Xla_continuous {ic oc h w kH kW : Nat} (W : Kernel4 oc ic
     proven stride-1 conv input-VJP and the odd-decimation VJP. The backward zero-upsamples the
     cotangent **onto the odd positions** and then runs the reversed-kernel conv — i.e. StableHLO's
     `lhs_dilation = [2,2]` with the transposed padding shifted by one, which is exactly the
-    asymmetry the forward introduced. ⚠ A symmetric backward against this forward is a silent
-    wrong-gradient (`planning/archive/mnv4_verified.md` §3b), and it is this composition that rules it out:
+    asymmetry the forward introduced. A symmetric backward against this forward is a silent
+    wrong-gradient, and it is this composition that rules it out:
     the offset lives in one place and both directions read it. -/
 noncomputable def flatConvStride2XlaHasVJP {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) :
@@ -377,7 +375,7 @@ noncomputable def flatConvStride2XlaHasVJP {ic oc h w kH kW : Nat}
   vjpComp _ _ hf_diff (decimateOddFlat_differentiable oc h w) hf_vjp
     (decimateOddFlatHasVJP oc h w)
 
-/-- **Stride-2 XLA-`SAME` input-VJP correctness** (the ℝ-carrying audit headline): the backward
+/-- **Stride-2 XLA-`SAME` input-VJP correctness**: the backward
     equals the `pdiv`-contracted Jacobian. Peer of `flatConvStride2HasVJP_correct`. -/
 theorem flatConvStride2XlaHasVJP_correct {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)

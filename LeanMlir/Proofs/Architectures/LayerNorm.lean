@@ -44,6 +44,19 @@ because it's faster than the exact erf form.
 Same template as ReLU/Swish/h-swish: elementwise -> diagonal Jacobian.
 Derivative is messier but it's still just a number you compute and
 multiply. One more `pdiv_*` theorem, one more `HasVJP` instance.
+
+## Also in this file
+
+- Swish: `swish`, `swishScalarDeriv_eq` (closed-form derivative), `swishHasVJP`.
+- Layer scale: `layerScale`, `layerScaleHasVJP`.
+- Vector-`[D]` LayerNorm (per-feature affine): `layerNormVec`, `layerNormVecHasVJP`,
+  and its per-token lift `layerNormVecPerTokenHasVJPMat`.
+- Its γ/β parameter gradients: `vecLNGradGamma`, `vecLNGradBeta`, the bridges
+  `vit_veclnGamma_grad_bridge` / `vit_veclnBeta_grad_bridge`, and their SGD forms
+  `vit_render_veclngamma_certified` / `vit_render_veclnbeta_certified`.
+
+Imported directly by Foundation/IR, Codegen/StableHLO, Spec, ChannelLN, TokenParamGrad,
+SE, Attention, DropPath, Nets/ConvNeXt/ConvNeXt and Nets/EfficientNet/EfficientNet.
 -/
 
 open Finset BigOperators
@@ -65,10 +78,9 @@ namespace Proofs
     4. `xhat_i = (x_i - mu) * istd`                    — normalized
     5. `y_i = gamma * xhat_i + beta`                    — affine
 
-    The only semantic difference from BN: in LN, `gamma` and `beta` are
-    per-feature (not per-channel), so they're full vectors. For the
-    VJP math this doesn't matter — `gamma` and `beta` still just scale and
-    shift the normalized output pointwise.
+    Here `γ` and `β` are scalars, exactly as in `bnForward`. The
+    per-feature `[D]` affine that LN uses in practice is `layerNormVec`
+    below, built as `γ ⊙ layerNormForward D ε 1 0 x + β`.
 
     MLIR (`MlirCodegen.emitLayerNormForward`):
     identical reduction structure to BN, just across a different axis. -/
@@ -82,8 +94,8 @@ noncomputable def layerNormForward (n : Nat) (ε : ℝ) (γ β : ℝ)
 
     where `dxhat_i = gamma * dy_i`.
 
-    If you built `layerNormHasVJP` you'd discover it's `bnHasVJP`
-    with the exact same proof. Rather than restate, we just reuse:
+    `layerNormForward` is `bnForward` by definition, so `layerNormHasVJP`
+    is `bnHasVJP`.
 -/
 noncomputable def layerNormHasVJP (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     HasVJP (layerNormForward n ε γ β) := by
@@ -101,18 +113,10 @@ distinctions often dissolve at the math level, and that's worth
 making explicit. A reader who assumed BN and LN needed separate
 proofs learns that the separation was an implementation artifact.
 
-The same observation applies to:
-- **RMSNorm**: LN with mean centering dropped. The closed-form has
-  one fewer term (the `-sum_j dxhat_j` part), but the derivation is the
-  same machinery.
-- **GroupNorm**: LN applied to slices of the channel axis. Again,
-  same primitive, different slicing.
-- **InstanceNorm** (which is what the ResNet code actually uses):
-  BN restricted to per-sample statistics. Literally the 1D primitive
-  applied per `(sample, channel)`. Same function.
-
-All four normalization variants share one `HasVJP` instance. The
-taxonomy is "1D normalization + your choice of axis."
+BN and LN share one `HasVJP` (`layerNormForward` is `bnForward`).
+GroupNorm and InstanceNorm apply the same 1D primitive to other slices
+of the tensor; RMSNorm drops the mean centering and is a different
+function. None of those three is formalized here.
 -/
 
 -- ════════════════════════════════════════════════════════════════
@@ -124,7 +128,7 @@ taxonomy is "1D normalization + your choice of axis."
     `gelu(x) = 0.5 · x · (1 + tanh(√(2/π) · (x + 0.044715 · x³)))`
 
     Matches the MLIR codegen (which emits the tanh approximation rather
-    than the exact `x · Φ(x)` erf form). No longer an axiom. -/
+    than the exact `x · Φ(x)` erf form). -/
 noncomputable def geluScalar (x : ℝ) : ℝ :=
   0.5 * x * (1 + Real.tanh (Real.sqrt (2 / Real.pi) * (x + 0.044715 * x^3)))
 
@@ -134,11 +138,10 @@ noncomputable def gelu (n : Nat) (x : Vec n) : Vec n :=
 
 /-- **Scalar derivative of `geluScalar`** — defined as Mathlib's `deriv`.
 
-    Concretely, this is `Φ(x) + x · φ(x)` for the exact form, or the
-    analytical derivative of the tanh approximation for our chosen
-    `geluScalar`. We define it via `deriv` rather than writing the
-    closed form so the connection to `geluScalar` is automatic.
-    No longer an axiom. -/
+    `geluScalar` is the tanh approximation, so this is the derivative of
+    that approximation; its closed form is `geluScalarDeriv_eq`. We define
+    it via `deriv` rather than writing the closed form so the connection
+    to `geluScalar` is automatic. -/
 noncomputable def geluScalarDeriv (x : ℝ) : ℝ :=
   deriv geluScalar x
 
@@ -211,7 +214,7 @@ lemma geluScalar_differentiable : Differentiable ℝ geluScalar := by
 lemma gelu_differentiable (D : Nat) : Differentiable ℝ (gelu D) := by
   unfold gelu; fun_prop
 
-/-- **Partial derivative of GELU** — proved (planning/archive/VJP.md follow-up E).
+/-- **Partial derivative of GELU.**
 
     `gelu n` has diagonal Jacobian: each output coord depends only on
     the corresponding input coord via `geluScalar`. So
@@ -247,13 +250,13 @@ elementwise -> diagonal Jacobian -> one-line VJP. Taking inventory:
 | Swish      | `sigma(x_i) * (1 + x_i * (1 - sigma(x_i)))`          |
 | h-swish    | piecewise: `0` / `(2x_i + 3)/6` / `1`                |
 | h-sigmoid  | piecewise: `0` / `1/6` / `0`                         |
-| GELU       | `Phi(x_i) + x_i * phi(x_i)`                           |
+| GELU (tanh approx.) | `geluScalarDeriv_eq`                        |
 | tanh       | `1 - tanh^2(x_i)`                                     |
 | sigmoid    | `sigma(x_i) * (1 - sigma(x_i))`                       |
 
-They all have the same proof shape. Writing each as a separate `HasVJP`
-instance is pure boilerplate. For the book, we show the template once
-(ReLU, in `MLP.lean`) and assert that GELU follows the same pattern.
+They all have the same proof shape (`pdiv_elementwise`, then collapse
+the diagonal sum). This file instantiates it as `geluHasVJP` and
+`swishHasVJP`; the other rows are not given separate `HasVJP` instances here.
 -/
 
 /-- **Public correctness theorem for `geluHasVJP`**: the GELU
@@ -550,8 +553,8 @@ theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec
   simp [vecLNGradBeta, Mat.unflatten]
 
 /-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes
-    the certified rowwise vector-LN ∂/∂γv contraction. Covers all five LN sites of
-    the vector-LN representative (and is the `ViTRender` per-channel LN-γ reduce). -/
+    the certified rowwise vector-LN ∂/∂γv contraction: a rewrite by
+    `vit_veclnGamma_grad_bridge`, stated at one LN site with generic `N`, `D`. -/
 theorem vit_render_veclngamma_certified {N D : Nat} (ε : ℝ) (βv : Vec D)
     (γ : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
     γ i - lr * vecLNGradGamma N D ε X (Mat.unflatten dy) i

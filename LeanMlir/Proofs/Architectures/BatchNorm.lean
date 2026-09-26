@@ -72,16 +72,14 @@ theorem bnVar_nonneg (n : ℕ) (x : Vec n) : 0 ≤ bnVar n x := by
 
 /-- Second moment: `E[x²] = (1/N) Σᵢ xᵢ²`.
 
-    ⭐ The quantity a SYNCHRONISED BatchNorm reduces across replicas — never the variance.
-    At equal shard sizes the second moment of the union IS the mean of the shards' second
-    moments, while the variance of the union is NOT the mean of the shards' variances (the
-    shard means differ, and that spread is missing from every shard's own variance). So `R`
-    replicas exchange `μ` and `E[x²]` and each recovers the global `σ²` through
-    `bnVar_eq_bnMeanSq_sub_sq`. See `planning/global_bn_verified.md` §2b. -/
+    At equal shard sizes the second moment of the union is the mean of the shards' second
+    moments (`bnMeanSq_shard`). `bnSyncTensor4` and the sync backward are stated at `μ` and a
+    second moment `m2`; the emitted sync-BN forward exchanges `μ` and `σ²` (two rounds, Chan's
+    parallel variance, `bnVar_shard_chan`), and its `den` supplies `m2 := σ² + μ²`. -/
 noncomputable def bnMeanSq (n : Nat) (x : Vec n) : ℝ :=
   (∑ i : Fin n, x i * x i) / (n : ℝ)
 
-/-- ⭐⭐ **The mean of a sharded vector is the mean of the shards' means** — at EQUAL shard
+/-- **The mean of a sharded vector is the mean of the shards' means** — at EQUAL shard
     sizes, which is what makes `allReduceMeanF` (a plain mean over replicas) the right
     collective for BatchNorm statistics.
 
@@ -99,19 +97,20 @@ theorem bnMean_shard {R m M : Nat} (_hR : R ≠ 0) (_hm : m ≠ 0)
     Finset.expect_product, Fintype.expect_eq_sum_div_card, Fintype.card_fin, div_eq_inv_mul,
     one_div]
 
-/-- ⭐⭐ **…and so is the SECOND MOMENT**, which is the whole reason sync-BN reduces `E[x²]`
-    rather than the variance. Free from `bnMean_shard`: `bnMeanSq n x` is definitionally
-    `bnMean n (x·x)`, and squaring commutes with the shard.
+/-- **…and so is the second moment.** Free from `bnMean_shard`: `bnMeanSq n x` is
+    definitionally `bnMean n (x·x)`, and squaring commutes with the shard.
 
-    ⛔ The variance has NO such lemma, and cannot: `bnVar` of the union is not the mean of the
-    shards' `bnVar` unless every shard mean coincides. That spread is exactly what a
-    per-replica BatchNorm drops on the floor. -/
+    The variance does not shard this way: `bnVar` of the union is not the mean of the shards'
+    `bnVar` unless every shard mean coincides, and that spread is what a per-replica BatchNorm
+    drops. The variance's shard formula is `bnVar_shard_chan`, which adds each shard mean's
+    squared offset from the global mean. -/
 theorem bnMeanSq_shard {R m M : Nat} (hR : R ≠ 0) (hm : m ≠ 0)
     (e : Fin R × Fin m ≃ Fin M) (x : Vec M) :
     bnMeanSq M x = (1 / (R : ℝ)) * ∑ r : Fin R, bnMeanSq m (fun k => x (e (r, k))) :=
   bnMean_shard hR hm e (fun i => x i * x i)
 
-/-- ⭐ The identity sync-BN is built on: `σ² = E[x²] − μ²`. -/
+/-- `σ² = E[x²] − μ²` — the identity that lets the sync-BN definitions be stated at the
+    second moment (`bnSyncXhat` reads `m2 − μ²`). -/
 theorem bnVar_eq_bnMeanSq_sub_sq (n : Nat) (hn : n ≠ 0) (x : Vec n) :
     bnVar n x = bnMeanSq n x - bnMean n x * bnMean n x := by
   have hnR : (n : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr hn
@@ -135,7 +134,7 @@ theorem bnVar_add_mean_mul_mean (n : Nat) (hn : n ≠ 0) (x : Vec n) :
     bnVar n x + bnMean n x * bnMean n x = bnMeanSq n x := by
   rw [bnVar_eq_bnMeanSq_sub_sq n hn]; ring
 
-/-- ⭐⭐ **Chan's parallel variance: the variance of the whole is the mean over shards of each
+/-- **Chan's parallel variance: the variance of the whole is the mean over shards of each
     shard's OWN variance plus its mean's squared offset from the global mean.**
 
     What a synchronised BatchNorm exchanges instead of `E[x²]`: every term is a two-pass
@@ -282,11 +281,9 @@ We need three sub-derivatives:
 
     ∂xⱼ/∂xᵢ  = δᵢⱼ                               (identity)
     ∂μ/∂xᵢ   = 1/N                                (mean is linear in x)
-    ∂σ²/∂xᵢ  = (2/N) · (xᵢ − μ) · (1 − 1/N)
-              ≈ (2/N) · (xᵢ − μ)                  (the (1−1/N) term
-                                                   eats into a Σ that
-                                                   sums to zero, so it
-                                                   doesn't survive)
+    ∂σ²/∂xᵢ  = (2/N) · (xᵢ − μ)                  (exactly: the −1/N term
+                                                   multiplies Σₖ (xₖ − μ) = 0;
+                                                   `bnVarDeriv_basisVec`)
     ∂istd/∂xᵢ = (−1/2) · istd³ · ∂σ²/∂xᵢ
               = −istd³ · (xᵢ − μ) / N
               = −istd · x̂ᵢ / N                    (since x̂ᵢ = (xᵢ−μ)·istd)
@@ -356,28 +353,28 @@ theorem bnSyncXhat_at_own_stats (n : Nat) (hn : n ≠ 0) (ε : ℝ) (x : Vec n) 
   simp only [bnSyncXhat, bnXhat, bnIstd]
   rw [← bnVar_eq_bnMeanSq_sub_sq n hn x]
 
-/-- ⭐⭐ **The SYNCHRONISED batch-norm input-VJP — every reduction HANDED IN.**
+/-- **The synchronised batch-norm input-VJP — every reduction handed in.**
 
     `bnGradInput` computes all four of its scalars from `x` and `dy`: the mean, the inverse
-    standard deviation, and the two sums. This one takes `μ`, `E[x²]` and the two reduction
-    MEANS as arguments, so under data parallelism they can be the all-reduced global ones and
-    a replica can produce the shard-`r` block of the global-batch gradient.
+    standard deviation, and the two sums. This one takes `μ`, the second moment `m2` and the
+    two reduction means `mdy`, `mdyx` as arguments, so under data parallelism they can be the
+    all-reduced global ones and a replica can produce the shard-`r` block of the global-batch
+    gradient.
 
-    ⭐ Why this is expressible at all: rewrite `bnGradInput` as
-    `istd · (dx̂ᵢ − mean(dx̂) − x̂ᵢ · mean(x̂·dx̂))`. Both reductions are **means**, and a mean over
-    equal shards is the mean of the shards' means (`bnMean_shard`) — so both survive an
-    `allReduceMeanF`, exactly as `μ` and `E[x²]` do in the forward. Nothing here needs a sum,
-    which is the whole reason one collective per direction suffices. -/
+    It is expressible this way because `bnGradInput` can be written as
+    `istd · (dx̂ᵢ − mean(dx̂) − x̂ᵢ · mean(x̂·dx̂))`. Both reductions are means, and a mean over
+    equal shards is the mean of the shards' means (`bnMean_shard`), so both survive an
+    `allReduceMeanF`, as `μ` does in the forward. Nothing here needs a sum. -/
 noncomputable def bnSyncGradInput (n : Nat) (ε γ μ m2 mdy mdyx : ℝ) (x dy : Vec n) : Vec n :=
   fun i => (1 / Real.sqrt (m2 - μ * μ + ε))
              * (γ * dy i - mdy - bnSyncXhat n ε μ m2 x i * mdyx)
 
-/-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bnGradInput`.**
+/-- **`R = 1`: the sync backward at its own statistics is `bnGradInput`.**
 
-    The backward peer of `bnEvalForward_at_own_stats`, and the `R = 1` anchor for P2: handed the
-    statistics and reductions the batch would itself have computed, the sync backward denotes
-    the existing three-term formula. So a single-device sync render computes the function the
-    committed tiers are already tied to. `planning/global_bn_verified.md` §2c. -/
+    The backward peer of `bnEvalForward_at_own_stats`: handed the statistics and reductions
+    the batch would itself have computed, the sync backward denotes the existing three-term
+    formula. So a single-device sync render computes the same function as the per-batch
+    `bnGradInput`. -/
 theorem bnSyncGradInput_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ : ℝ) (x dy : Vec n) :
     bnSyncGradInput n ε γ (bnMean n x) (bnMeanSq n x)
       (bnMean n (fun i => γ * dy i))
@@ -474,12 +471,11 @@ theorem pdiv_bnAffine (n : Nat) (γ β : ℝ)
 -- § The hard Jacobian: `pdiv_bnNormalize` — now derived
 -- ════════════════════════════════════════════════════════════════
 
-/-! The consolidated three-term formula used to be axiomatized directly.
-Now it's a theorem: we factor `bnXhat` as the elementwise product of
+/-! The consolidated three-term formula is a theorem: we factor `bnXhat` as the elementwise product of
 the centered input and the broadcast `istd`, apply `pdiv_mul`, and
 collapse via `ring` using the `x̂ᵢ = (xᵢ - μ) · istd` identity.
 
-Both elementary calculus facts are now proved from the foundation:
+Both elementary calculus facts are proved from the foundation:
 
 1. `pdiv_bnCentered` — ∂(xⱼ - μ(x))/∂xᵢ = δᵢⱼ - 1/n.
    Proved via `pdiv_of_linear`: centering is a linear map.
@@ -523,8 +519,7 @@ theorem pdiv_bnCentered (n : Nat) (x : Vec n) (i j : Fin n) :
   · intro a v; funext k
     simp only [bnCentered, bnMean, Pi.smul_apply, smul_eq_mul, ← Finset.mul_sum]; ring
 
-/-- **Smoothness of `bnIstdBroadcast`** — proved from Mathlib calculus
-    (planning/archive/VJP.md follow-up C).
+/-- **Smoothness of `bnIstdBroadcast`** — proved from Mathlib calculus.
 
     `bnIstdBroadcast n ε x = 1/√(σ²(x) + ε)`. Since `σ²(x) ≥ 0` (sum
     of squares ÷ n ≥ 0) and `ε > 0`, the argument `bnVar + ε` is
@@ -604,7 +599,7 @@ theorem bnVarDeriv_basisVec (n : Nat) (x : Vec n) (i : Fin n) :
   simp only [Finset.mem_univ, ite_true]
   rw [← Finset.mul_sum, sum_sub_bnMean n hn x, mul_zero, sub_zero, div_eq_inv_mul]
 
-/-- **Broadcast inverse-stddev Jacobian** — proved (was an axiom).
+/-- **Broadcast inverse-stddev Jacobian.**
 
     `∂istd(x,ε)/∂xᵢ = -istd³(x,ε) · (xᵢ - μ(x)) / n`
 
@@ -787,7 +782,7 @@ theorem bnForward_chan_diff_γ {n : Nat} (ε γ β : ℝ) (z : Vec n) (k₀ k₁
   simp only [bnForward, bnXhat]; ring
 
 /-- **The two-sided BN margin** `|bn − β| ≤ |γ|·√n`, with no mean/variance computation
-    (`bnXhat_sq_le`). `bnForward_lb`'s symmetric form; what makes a large `β` keep a relu off its
+    (`bnXhat_sq_le`). This is what makes a large `β` keep a relu off its
     kink at **every** input, so the structural net needs no eventually-argument for its relus. -/
 theorem bnForward_abs_sub_le {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (v : Vec n) (k : Fin n) :
     |bnForward n ε γ β v k - β| ≤ |γ| * Real.sqrt (n : ℝ) := by

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Architectures.LayerNorm
 
 /-! # Stochastic depth (drop-path) over ℝ — the per-example branch scale
 
-The ℝ reference for `planning/archive/stochastic_depth.md`. The JAX reference emits, verbatim
+The ℝ reference for stochastic depth. The JAX reference emits, verbatim
 (`_drop_branch` in `emitHelpers`, [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)):
 
 ```python
@@ -12,13 +12,12 @@ def _drop_branch(branch, drop_key, keep_prob):
     return branch * keep / keep_prob
 ```
 
-**⚠ It is a per-SAMPLE scale, not a switch on the block** — the mask is `(B, 1, …, 1)` and
+**It is a per-SAMPLE scale, not a switch on the block** — the mask is `(B, 1, …, 1)` and
 broadcasts over every non-batch axis, so "stochastic depth" is a diagonal linear map at the batched
-index and nothing about the architecture changes. `recipe_gaps.md` files this as Tier E, *"a new
-layer family"*; it is not one. What it genuinely costs is on the *plumbing* side (a per-step random
-graph INPUT), not here.
+index and nothing about the architecture changes; it is not a new layer family. What it costs is on
+the *plumbing* side (a per-step random graph INPUT), not here.
 
-**▶ Everything in this file is a reading of `layerScale`, so it adds NO new proof obligation.**
+**Everything in this file is a reading of `layerScale`, so it adds NO new proof obligation.**
 `dropPath` is `layerScale` at a per-example-broadcast scale vector, hence:
 
 | piece | where it comes from |
@@ -28,12 +27,7 @@ graph INPUT), not here.
 | the backward emitter | **none needed** — `dropPath_vjp_is_self` says the backward IS the forward at the same mask |
 | float story | none stated |
 
-That is the fourth time enumerating a reference feature against existing ops *at their other
-readings* has collapsed a scoped op family (§2k heavy-ball, recipe_gaps v1.2 RMSProp, the EMA
-shadow, here) — and note the pattern is now strong enough to be a first move rather than a lucky
-one: **read the reference's update, then look for it among the ops you have before adding one.**
-
-**⚠ WHERE THE RANDOMNESS IS NOT.** The mask is a graph **input**, drawn on the host next to the
+**WHERE THE RANDOMNESS IS NOT.** The mask is a graph **input**, drawn on the host next to the
 augmentation seed. `stablehlo.rng` is disqualified and not on taste: every numeric gate in this repo
 is a bit-exactness or known-answer argument over a *deterministic* graph — the tie harnesses' A-vs-A
 floor, `residency_gate.sh`'s bit-identity, the duplicated-batch DP identity, the cross-lowerer
@@ -46,14 +40,12 @@ improves generalisation, and no theorem in this repo could. -/
 
 namespace Proofs
 
-/-! ### ⚠⚠ WHERE `1/keep_prob` LIVES — a tension in the spec, settled here
+/-! ### Where `1/keep_prob` lives
 
-`planning/archive/stochastic_depth.md` asks for two things that **cannot both hold**, and neither §1 nor §3
-noticed:
+Two design requirements **cannot both hold**:
 
-* **§1 fact 3** — the keep probability is *"emitted as a constant, exactly like every other
-  hyperparameter"*;
-* **§3** — the FORWARD render emits the same drop sites at an all-ones mask, so the
+* the keep probability *"emitted as a constant, exactly like every other hyperparameter"*;
+* the FORWARD render emits the same drop sites at an all-ones mask, so the
   `forward ⊂ train-step` prefix audit survives and *"eval is the identity"* becomes a claim about
   one graph at a particular input.
 
@@ -62,13 +54,13 @@ site but the first, so eval would silently rescale every residual branch upward.
 unambiguous that this must be exact: `if drop_key is None or keep_prob >= 1.0: return branch`.
 
 **Settled by folding `1/keep_i` into the supplied mask**: the graph is a pure per-example scale, the
-driver passes `bernoulli(keep_i)/keep_i` at train and `1.0` at eval. Then §3 holds exactly, gate 1
-holds at `dropRate = 0`, and the emitted text is identical in the forward and the train step.
+driver passes `bernoulli(keep_i)/keep_i` at train and `1.0` at eval. Then the all-ones-mask forward
+is exactly the identity, `dropRate = 0` is inert, and the emitted text is identical in the forward and
+the train step.
 
-⚠ **That moves the ramp from the graph to the driver, and that is the repo's own strongest
-precedent rather than a concession.** `%lr` is a runtime operand for exactly this reason — one graph
-serves a whole schedule — and a learning rate baked into a graph constant is the documented
-RenderCifar8Sgd02 / enet-16× silent-hyperparameter failure. The keep ramp is a per-site
+That moves the ramp from the graph to the driver, as for `%lr`, which is a runtime operand for the
+same reason — one graph serves a whole schedule, and a learning rate baked into a graph constant is a
+silent-hyperparameter failure. The keep ramp is a per-site
 hyperparameter schedule; it belongs in the same place. What it costs is that no *render-level* check
 can see a wrong ramp, which is what `keepProb` below and the known-answer gate exist for. -/
 
@@ -91,7 +83,7 @@ noncomputable def dropPath (N n : Nat) (s : Vec N) : Vec (N * n) → Vec (N * n)
 @[simp] theorem dropPath_apply (N n : Nat) (s : Vec N) (x : Vec (N * n)) (idx : Fin (N * n)) :
     dropPath N n s x idx = s (finProdFinEquiv.symm idx).1 * x idx := rfl
 
-/-- ⭐ **The supplied scale IS the reference's `keep / keep_prob`.** Stated rather than assumed,
+/-- **The supplied scale IS the reference's `keep / keep_prob`.** Stated rather than assumed,
     because folding the inversion into the input is precisely the step at which "inverted
     stochastic depth" could quietly become the *un*-inverted kind — which trains, and shifts every
     activation's scale at eval. At `s b = keep b / kp` this op computes the reference's
@@ -102,16 +94,14 @@ theorem dropPath_eq_reference (N n : Nat) (keep : Vec N) (kp : ℝ) (x : Vec (N 
       = x idx * keep (finProdFinEquiv.symm idx).1 / kp := by
   simp [dropPath, dropScale, layerScale]; ring
 
-/-- ⭐ **EVAL IS THE IDENTITY, EXACTLY — and this is a theorem about ONE graph, not two.**
+/-- **EVAL IS THE IDENTITY, EXACTLY — and this is a theorem about ONE graph, not two.**
 
-    `planning/archive/stochastic_depth.md` §3's design turns the train/eval divergence into a *data*
-    difference: the forward render emits the drop sites too, and the driver supplies an all-ones
-    scale there. So the emitted text is identical in train and eval, the `forward ⊂ train-step`
-    prefix audit survives untouched (it is one of the two load-bearing structural gates in the repo
-    — it caught `resnet34_fwd` and `mobilenetv2_fwd` scoring nets they had not trained), and "eval
+    The design turns the train/eval divergence into a *data* difference: the forward render emits
+    the drop sites too, and the driver supplies an all-ones scale there. So the emitted text is
+    identical in train and eval, the `forward ⊂ train-step` prefix audit is unaffected, and "eval
     is the identity" stops being a claim about two graphs and becomes this:
 
-    `s ≡ 1 ⇒ dropPath = id`, exact in IEEE because `1 * x = x` is exact. ⚠ This is why `1/keep_i` is
+    `s ≡ 1 ⇒ dropPath = id`, exact in IEEE because `1 * x = x` is exact. This is why `1/keep_i` is
     folded into the supplied scale rather than baked (see the note above): a baked `1/keep_i` would
     make the ones-mask forward compute `x / keep_i`, and the reference is explicit that eval returns
     the branch untouched.
@@ -136,7 +126,7 @@ noncomputable def dropPathHasVJP (N n : Nat) (s : Vec N) :
     HasVJP (dropPath N n s) :=
   layerScaleHasVJP (dropScale N n s)
 
-/-- ⭐ **THE BACKWARD IS THE FORWARD.** `y = c ⊙ x ⇒ dx = c ⊙ dy` at the same `c`, so the renderer
+/-- **THE BACKWARD IS THE FORWARD.** `y = c ⊙ x ⇒ dx = c ⊙ dy` at the same `c`, so the renderer
     emits the *same op* on the cotangent that it emitted on the activation — the same mask, the same
     `invKeep`. Stated rather than assumed, because "reuse the forward op on the backward path" is
     exactly the kind of step that is obvious right up until the mask is per-example and someone
@@ -151,15 +141,14 @@ theorem dropPathHasVJP_correct (N n : Nat) (s : Vec N)
       ∑ j : Fin (N * n), pdiv (dropPath N n s) x i j * dy j :=
   (dropPathHasVJP N n s).correct x dy i
 
-/-- **The keep-probability ramp**, `keep_i = 1 − dropPath · i / (totalDrop − 1)`.
+/-- **The keep-probability ramp**, `keep_i = 1 − dropRate · i / (totalDrop − 1)`.
 
-    ⚠⚠ **`totalDrop` counts ALL blocks, including ones the drop never fires on.** The reference sums
+    Note: **`totalDrop` counts ALL blocks, including ones the drop never fires on.** The reference sums
     the block count of every stage (`emitForward`'s drop-path ramp in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)) and its own comment says *"the drop only
     actually fires where a skip exists … so no-skip blocks just carry a unit keep"* — so the ramp
     index advances over blocks that do not drop. **Deriving the denominator from the drop-ELIGIBLE
     blocks instead silently changes every keep probability in the net**, which compiles, runs,
-    descends, and trains a different objective. That is §2k's `α/K` bug in a new place and it has
-    the same signature; the gate for it is a known answer, not a tie (every tie compares the render
+    descends, and trains a different objective. The gate for it is a known answer, not a tie (every tie compares the render
     against a peer built from the same constant, so none of them can see it).
 
     Kept in ℝ here so the denotation side has one definition of the ramp; the renderer's Float peer
@@ -184,15 +173,15 @@ theorem keepProb_last (dropRate : ℝ) (totalDrop : Nat) (h : 2 ≤ totalDrop) :
   rw [keepProb, Nat.cast_sub (by omega), Nat.cast_one, mul_div_assoc, div_self hd, mul_one]
 
 /-- **`dropRate = 0` is the identity ramp** — every site keeps everything, so the whole feature is
-    inert. This is the denotation-side peer of gate 1's strong form (*"at `dropPath = 0` every
-    committed artifact re-renders byte-identically"*): the render emits nothing, and had it emitted
+    inert. This is the denotation-side peer of the render check *"at `dropPath = 0` every
+    committed artifact re-renders byte-identically"*: the render emits nothing, and had it emitted
     something, this says it would have computed nothing either. -/
 @[simp] theorem keepProb_zero_rate (i totalDrop : Nat) : keepProb 0 i totalDrop = 1 := by
   simp [keepProb]
 
 /-! ## Classifier dropout — the OTHER diagonal scale, and the reason both live in one file
 
-`recipe_gaps.md` gap C. The reference emits it in the `.dense` case
+The reference emits it in the `.dense` case
 (`emitForward`'s classifier dropout in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)), immediately before the classifier:
 
 ```python
@@ -201,7 +190,7 @@ if drop_key is not None:
                                  keep, x.shape).astype(x.dtype) / keep
 ```
 
-⚠⚠ **`x.shape`, NOT `(B, 1, …, 1)` — and that one argument is the whole difference.** Stochastic
+**`x.shape`, NOT `(B, 1, …, 1)` — and that one argument is the whole difference.** Stochastic
 depth draws ONE Bernoulli per example and broadcasts it over the branch; dropout draws one per
 ELEMENT. Everything else is identical: inverted (`/ keep`), train-only, a diagonal linear map.
 
@@ -218,16 +207,14 @@ rather than warning about it:
 | `dropPath` | `Vec N`, lifted by `dropScale` | uniform within an example (`dropPath_scales_uniformly`) |
 | `dropout` | `Vec (N*n)` | all of them — `dropout_of_dropScale` says `dropPath` is the special case |
 
-**And it is one MORE reading of `layerScale`** — the fifth time enumerating a reference feature
-against the ops already present has collapsed a scoped family (§2k heavy-ball, RMSProp, the EMA
-shadow, `dropPath`, here). Dropout is the *cheapest* of them: `dropPath` needed `dropScale` to lift
+**And it is one more reading of `layerScale`.** Dropout is the cheaper of the two: `dropPath` needed `dropScale` to lift
 a per-example vector to the batched index, and dropout needs nothing at all — the mask already has
 the value's type, so the denotation is `layerScale` applied directly. -/
 
 /-- **Classifier dropout at the batched index** — the per-ELEMENT inverted mask, `layerScale`
     applied with no lift at all.
 
-    ⚠ `N` and `n` are carried as explicit arguments even though the body ignores them, so that a
+    `N` and `n` are carried as explicit arguments even though the body ignores them, so that a
     `dropout` node and the `dropPath` node it could be confused with have the same shape of
     signature and the batched index is visible at every use site. The op that renders this
     (`SHlo.dropoutB`) needs `N` and `n` for its emitted type anyway. -/
@@ -237,7 +224,7 @@ noncomputable def dropout (_N _n : Nat) {m : Nat} (mask : Vec m) : Vec m → Vec
 @[simp] theorem dropout_apply (N n : Nat) {m : Nat} (mask x : Vec m) (idx : Fin m) :
     dropout N n mask x idx = mask idx * x idx := rfl
 
-/-- ⭐ **The supplied mask IS the reference's `bernoulli(…) / keep`.** `dropPath_eq_reference`'s
+/-- **The supplied mask IS the reference's `bernoulli(…) / keep`.** `dropPath_eq_reference`'s
     twin, and stated for the same reason: folding the `1/keep` inversion into the input is exactly
     the step at which inverted dropout could quietly become the un-inverted kind, which trains and
     shifts every classifier input's scale at eval. -/
@@ -246,13 +233,12 @@ theorem dropout_eq_reference (N n : Nat) {m : Nat} (keep : Vec m) (kp : ℝ) (x 
     dropout N n (fun i => keep i / kp) x idx = x idx * keep idx / kp := by
   simp [dropout, layerScale]; ring
 
-/-- ⭐ **EVAL IS THE IDENTITY, EXACTLY**, and — as with `dropPath_ones_id` — this is a theorem about
+/-- **EVAL IS THE IDENTITY, EXACTLY**, and — as with `dropPath_ones_id` — this is a theorem about
     ONE graph at a particular input, not about two graphs.
 
     The forward render emits the dropout site too and the driver supplies an all-ones mask there, so
     `@efficientnet_do_fwd` stays a byte-PREFIX of `@efficientnet_adamdo_train_step` and the
-    `forward ⊂ train-step` prefix audit — one of the two load-bearing structural gates in the repo —
-    survives untouched. `1 * x = x` is exact in IEEE, so "the identity" is bit-exact, not close. -/
+    `forward ⊂ train-step` prefix audit is unaffected. `1 * x = x` is exact in IEEE, so "the identity" is bit-exact, not close. -/
 @[simp] theorem dropout_ones_id (N n : Nat) {m : Nat} (x : Vec m) :
     dropout N n (fun _ => (1 : ℝ)) x = x := by
   funext idx; simp [dropout, layerScale]
@@ -269,16 +255,15 @@ noncomputable def dropoutHasVJP (N n : Nat) {m : Nat} (mask : Vec m) :
     HasVJP (dropout N n mask) :=
   layerScaleHasVJP mask
 
-/-- ⭐ **THE BACKWARD IS THE FORWARD**, at the same mask — `dropPath_vjp_is_self` one rank up.
+/-- **THE BACKWARD IS THE FORWARD**, at the same mask — `dropPath_vjp_is_self` one rank up.
 
-    ⚠⚠ **But note what this does NOT say, because it is where this feature's one real defect
-    lives.** It says the cotangent flowing *through* the site is scaled by the same mask. It says
+    Note what this does NOT say, because it is where this feature's one real defect
+    lives. It says the cotangent flowing *through* the site is scaled by the same mask. It says
     nothing about the classifier WEIGHT gradient, which reads the dense's INPUT — and the dense's
     input is the DROPPED activation, not the pooled one. `∂L/∂W = Σ_b dy_b ⊗ (mask_b ⊙ x_b)`.
     Feeding it the undropped activation type-checks, trains and descends, and is invisible at
-    `mask ≡ 1`, which is where every identity gate for this feature sits. It is
-    `planning/archive/xla_pjrt_handoff.md` §0.10's LayerScale-γ defect in the same shape: *when an op is
-    spliced into a chain, list every CONSUMER of the value it displaced.* -/
+    `mask ≡ 1`, which is where every identity gate for this feature sits. The general rule: *when an
+    op is spliced into a chain, list every CONSUMER of the value it displaced.* -/
 theorem dropout_vjp_is_self (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m) :
     (dropoutHasVJP N n mask).backward x dy = dropout N n mask dy := rfl
 
@@ -289,7 +274,7 @@ theorem dropoutHasVJP_correct (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m
       ∑ j : Fin m, pdiv (dropout N n mask) x i j * dy j :=
   (dropoutHasVJP N n mask).correct x dy i
 
-/-- ⭐⭐ **`dropPath` IS `dropout` AT A LIFTED MASK** — the bridge, and it is `rfl`.
+/-- **`dropPath` IS `dropout` AT A LIFTED MASK** — the bridge, and it is `rfl`.
 
     Both are `layerScale`; the only content of "stochastic depth" over "dropout" is that its mask
     factors through `dropScale`. Stating it makes the containment a theorem instead of a comment,
@@ -298,7 +283,7 @@ theorem dropoutHasVJP_correct (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m
 theorem dropout_of_dropScale (N n : Nat) (s : Vec N) :
     dropout N n (dropScale N n s) = dropPath N n s := rfl
 
-/-- ⭐⭐ **AND HERE IS THE FREEDOM `dropPath` DOES NOT HAVE** — the formal content of "per-SAMPLE".
+/-- **AND HERE IS THE FREEDOM `dropPath` DOES NOT HAVE** — the formal content of "per-SAMPLE".
 
     Within one example, `dropPath` scales every position by the same factor, so the output at two
     such positions stays in the ratio the *input* had: `y_i · x_j = y_j · x_i`. `dropout`'s mask is

@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Architectures.BatchNorm
 
-/-! # Per-channel BatchNorm (Chapter 5 Milestone B8) — the block-diagonal VJP
+/-! # Per-channel BatchNorm — the block-diagonal VJP
 
 Chapters 4–5 used a per-example **global** BatchNorm: one scalar `(γ, β)` over the
 whole `oc·h·w` activation (LayerNorm-shaped). Real ResNet wants **per-channel** BN:
@@ -222,7 +222,7 @@ noncomputable def bnPerChannelEvalTensor3 (oc h w : Nat) (ε : ℝ) (γ β μ v 
     Vec (oc * h * w) → Vec (oc * h * w) :=
   reassocBack oc h w ∘ (bnPerChannelEvalFlat oc (h * w) ε γ β μ v) ∘ reassocFwd oc h w
 
-/-- ⭐⭐ **Frozen-stats BN at a channel's OWN statistics is the training BN.**
+/-- **Frozen-stats BN at a channel's own statistics is the training BN.**
 
     Hand `bnEvalForward` the mean and the second moment of `x` itself and it reproduces
     `bnForward` exactly, the variance arriving through `bnVar_eq_bnMeanSq_sub_sq`.
@@ -231,7 +231,7 @@ noncomputable def bnPerChannelEvalTensor3 (oc h w : Nat) (ε : ℝ) (γ β μ v 
     a drop-in: **a graph that normalises with handed-in statistics denotes the same function
     as one that computes them, whenever the handed-in ones are the right ones.** At `R = 1`
     every `allReduceMeanF` threads its operand, so the sync forward collapses to exactly this
-    and the single-device artifacts need not move. See `planning/global_bn_verified.md` §2b. -/
+    and the single-device artifacts need not move. -/
 theorem bnEvalForward_at_own_stats (n : Nat) (hn : n ≠ 0) (ε γ β : ℝ) (x : Vec n) :
     bnEvalForward n ε γ β (bnMean n x) (bnMeanSq n x - bnMean n x * bnMean n x) x
       = bnForward n ε γ β x := by
@@ -296,8 +296,8 @@ theorem reassocFwdHasVJP_backward_eq (oc h w : Nat) (v : Vec (oc * h * w))
 
 /-- **Per-channel BatchNorm on the Tensor3 `(oc*h)*w` activation layout.** Conjugate
     the Mat-split `bnPerChannelFlat` by the layout bridge: relabel to Mat-split,
-    normalize each channel over its `h·w` spatial cells, relabel back. This is the
-    op B9 wires into the ResNet-34 trainer (its `den` target). -/
+    normalize each channel over its `h·w` spatial cells, relabel back. This is what
+    `SHlo.bnPerChannelF` denotes. -/
 noncomputable def bnPerChannelTensor3 (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
     Vec (oc * h * w) → Vec (oc * h * w) :=
   reassocBack oc h w ∘ (bnPerChannelFlat oc (h * w) ε γ β) ∘ reassocFwd oc h w
@@ -469,17 +469,16 @@ noncomputable def bnBatchTensor4 (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) :
     Vec (N * (oc * (h * w))) → Vec (N * (oc * (h * w))) :=
   bnchwBack N oc h w ∘ (bnPerChannelFlat oc (N * (h * w)) ε γ β) ∘ bnchwFwd N oc h w
 
-/-- ⭐⭐ **Synchronised batch-norm on the `[N,C,H,W]` layout — statistics HANDED IN.**
+/-- **Synchronised batch-norm on the `[N,C,H,W]` layout — statistics handed in.**
 
     `bnBatchTensor4`'s peer, conjugated by the same `[N,C,H,W] → [C, N·H·W]` bridge, but the
     per-channel normalisation reads `μ` and the second moment `m2` from its arguments instead
     of reducing `x` for them. Under data parallelism those arguments are the ALL-REDUCED
     global statistics — which is how one replica normalises over a batch it cannot see.
 
-    ⚠ It takes the SECOND MOMENT and forms the variance itself as `m2 − μ²`. That is not a
-    convenience: `E[x²]` of a union of equal shards is the mean of the shards' `E[x²]`, so it
-    survives an `allReduceMeanF`, whereas the variance of a union is not the mean of the
-    shards' variances and does not. -/
+    It is stated at `μ` and the second moment `m2`, and forms the variance as `m2 − μ²`. The
+    emitted sync forward exchanges `μ` and `σ²` (Chan's parallel variance, `bnVar_shard_chan`),
+    and `SHlo.bnSyncF`'s `den` supplies `m2 := σ² + μ²`, so `m2 − μ²` is that `σ²` in ℝ. -/
 noncomputable def bnSyncTensor4 (N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Vec oc) :
     Vec (N * (oc * (h * w))) → Vec (N * (oc * (h * w))) :=
   bnchwBack N oc h w ∘
@@ -498,12 +497,11 @@ theorem bnPerChannelEvalFlat_apply (oc m : Nat) (ε : ℝ) (γ β μ v : Vec oc)
   unfold bnPerChannelEvalFlat bnPerChannelEvalMat bnEvalForward Mat.flatten Mat.unflatten
   simp only [Prod.mk.eta, Equiv.apply_symm_apply]
 
-/-- ⭐⭐ **`R = 1`: the sync forward at the batch's own statistics IS `bnBatchTensor4`.**
+/-- **`R = 1`: the sync forward at the batch's own statistics is `bnBatchTensor4`.**
 
-    The anchor the whole sync-BN render rests on, and the reason single-device artifacts do
-    not move: at `R = 1` every `allReduceMeanF` threads its operand, so the sync graph hands
-    in exactly the statistics the batch would have computed, and this says that graph denotes
-    the function the existing tier is already tied to. `planning/global_bn_verified.md` §2b. -/
+    At `R = 1` every `allReduceMeanF` threads its operand, so the sync graph hands in exactly
+    the statistics the batch would have computed, and this says that graph denotes
+    `bnBatchTensor4`, the per-batch forward. -/
 theorem bnSyncTensor4_at_own_stats (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
     (ε : ℝ) (γ β : Vec oc) (x : Vec (N * (oc * (h * w)))) :
     bnSyncTensor4 N oc h w ε γ β
@@ -577,9 +575,9 @@ noncomputable def bnSyncPerChannelGradInput (oc m : Nat) (ε : ℝ) (γ μ m2 md
       (Mat.unflatten dy (finProdFinEquiv.symm idx).1)
       (finProdFinEquiv.symm idx).2
 
-/-- ⭐⭐ **The per-channel γ gradient with `x̂` at HANDED-IN statistics** —
+/-- **The per-channel γ gradient with `x̂` at handed-in statistics** —
     `bnPerChannelGradGamma`'s peer. Under sync-BN the forward normalised with the all-reduced
-    global `μ`/`E[x²]`, so `∂L/∂γ_c = Σ dy·x̂` must use the SAME `x̂`; `bnPerChannelGradGamma`
+    global statistics, so `∂L/∂γ_c = Σ dy·x̂` must use the SAME `x̂`; `bnPerChannelGradGamma`
     rebuilds it from the shard's own statistics (`bnXhat`), which is a different function once
     `R > 1`. β's gradient reads no statistic and needs no peer. -/
 noncomputable def bnSyncPerChannelGradGamma (oc m : Nat) (ε : ℝ) (μ m2 : Vec oc)
@@ -598,7 +596,7 @@ theorem bnSyncPerChannelGradGamma_at_own_stats (oc m : Nat) (hm : m ≠ 0) (ε :
   simp only [bnSyncPerChannelGradGamma, bnPerChannelGradGamma, bnSyncXhat_at_own_stats m hm,
              Mat.unflatten]
 
-/-- ⭐⭐ **The SYNC batch-norm input-VJP on `[N,C,H,W]`** — `bnBatchTensor4GradInput`'s peer,
+/-- **The sync batch-norm input-VJP on `[N,C,H,W]`** — `bnBatchTensor4GradInput`'s peer,
     through the same `bnchwFwd`/`bnchwBack` bridge. What a replica emits for its shard of the
     backward, given the four all-reduced per-channel statistic vectors. -/
 noncomputable def bnSyncTensor4GradInput (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy mdyx : Vec oc)
@@ -607,11 +605,11 @@ noncomputable def bnSyncTensor4GradInput (N oc h w : Nat) (ε : ℝ) (γ μ m2 m
     (bnSyncPerChannelGradInput oc (N * (h * w)) ε γ μ m2 mdy mdyx
       (bnchwFwd N oc h w x) (bnchwFwd N oc h w dy))
 
-/-- ⭐⭐ **`R = 1`: the sync backward at its own statistics IS `bnBatchTensor4GradInput`.**
+/-- **`R = 1`: the sync backward at its own statistics is `bnBatchTensor4GradInput`.**
 
     The `[N,C,H,W]` lift of `bnSyncGradInput_at_own_stats`, and the backward half of the
-    drop-in claim: a single-device sync render computes the same gradient the committed tier is
-    tied to, so the `R = 1` artifacts need not move. `planning/global_bn_verified.md` §2c. -/
+    drop-in claim: a single-device sync render computes the same gradient as the per-batch
+    `bnBatchTensor4GradInput`. -/
 theorem bnSyncTensor4GradInput_at_own_stats (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
     (ε : ℝ) (γ : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
     bnSyncTensor4GradInput N oc h w ε γ

@@ -25,10 +25,12 @@ The depthwise conv is **structurally a special case of regular conv**:
 - Regular conv kernel: `(oc, ic, kH, kW)` — full mixing.
 - Depthwise kernel:    `(c, 1, kH, kW)` — diagonal in the channel pair.
 
-So we don't re-derive the VJPs from scratch. We state them as the
-"channel-restricted" versions of `conv2dInputGrad` /
-`conv2dWeightGrad` from `CNN.lean`. The transpose trick still works,
-the reversed-kernel trick still works — they just operate per-channel.
+The VJPs (`depthwiseHasVJP3`, `depthwiseWeightGradHasVJP3`,
+`depthwiseBiasGradHasVJP`) are proved directly with `pdiv_of_affine`, not
+derived from the regular-conv ones; they have the same shape as
+`conv2dInputGrad` / `conv2dWeightGrad` from `CNN.lean` with the sum over
+input channels removed. The transpose trick and the reversed-kernel trick
+still apply — they just operate per-channel.
 -/
 
 open Finset BigOperators
@@ -294,7 +296,7 @@ noncomputable def depthwiseStride2FlatHasVJP {c h w kH kW : Nat}
   show HasVJP (decimateFlat c h w ∘ (depthwiseFlat (h := 2 * h) (w := 2 * w) W b)) from
   vjpComp _ _ hf_diff (decimateFlat_differentiable c h w) hf_vjp (decimateFlatHasVJP c h w)
 
-/-- **Stride-2 depthwise input-VJP correctness** (the ℝ-carrying audit headline):
+/-- **Stride-2 depthwise input-VJP correctness**:
     the backward equals the `pdiv`-contracted Jacobian of `depthwiseStride2Flat`. -/
 theorem depthwiseStride2FlatHasVJP_correct {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c)
@@ -303,7 +305,7 @@ theorem depthwiseStride2FlatHasVJP_correct {c h w kH kW : Nat}
       = ∑ j : Fin (c * h * w), pdiv (depthwiseStride2Flat W b) x i j * dy j :=
   (depthwiseStride2FlatHasVJP W b).correct x dy i
 
-/-! ### Depthwise weight gradient (Phase 7 — proved from foundation rules)
+/-! ### Depthwise weight gradient (proved from foundation rules)
 
 Per-channel transpose trick:
 
@@ -458,10 +460,13 @@ noncomputable def depthwiseConv2dBiasGrad {c h w kH kW : Nat}
     (x : Tensor3 c h w) (dy : Tensor3 c h w) : Vec c :=
   (depthwiseBiasGradHasVJP W x).backward b (Tensor3.flatten dy)
 
-/-- **Depthwise bias gradient — closed-form formula** (documented, numerically
-    verified, expected to equal `depthwiseConv2dBiasGrad` up to fp precision).
+/-- **Depthwise bias gradient — closed-form formula.**
 
     `db[c] = Σ_{h, w} dy[c, h, w]`
+
+    This is the sum `depthwiseBiasGradHasVJP`'s backward is defined as, on
+    `Tensor3` instead of the flattened `dy`. No theorem in this file states
+    the equation with `depthwiseConv2dBiasGrad`.
 
     Identical to regular conv's bias gradient — the bias is per-channel
     in both cases, and it adds the same value to every spatial cell
@@ -490,10 +495,10 @@ Two consequences for the VJPs:
    `(ic, oc, kH, kW)` tensor in principle, but only the diagonal slice
    is nonzero, and the implementation just stores the diagonal.
 
-So you don't have to derive depthwise VJPs from scratch — you derive
-them by **specializing** the regular conv VJPs to the sparsity pattern.
-This is a great example of how a constraint on the forward propagates
-mechanically to a constraint on the backward.
+So the depthwise VJPs have the regular-conv shape specialized to the
+sparsity pattern — a constraint on the forward propagates to a constraint
+on the backward. (This file proves them directly, not by specializing the
+regular-conv theorems.)
 
 ## Cost
 
@@ -540,7 +545,8 @@ Derived helpers (not axioms):
 - `depthwiseConv2dInputGradFormula` — the concrete sum-over-output-
   positions closed-form, used as the backward of `depthwiseHasVJP3`.
 - `depthwiseConv2dBiasGradFormula` — the concrete sum-over-spatial
-  closed-form (numerically verified to equal the bias-VJP's backward). -/
+  closed-form; the same sum as `depthwiseBiasGradHasVJP`'s backward, with
+  no theorem stating the equation. -/
 
 /-- **Public correctness theorem for `depthwiseHasVJP3`**: the
 proved input-VJP's backward equals the `pdiv3`-contracted Jacobian. -/
@@ -628,17 +634,18 @@ noncomputable def depthwiseStride2BiasGradHasVJP {c h w kH kW : Nat}
 for the same reason: `depthwise_conv` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `depthwise_conv` defaults to `padding='SAME'`,
 so MobileNetV2's four strided depthwises — and EfficientNet's — pad **asymmetrically**, while
 `depthwiseStride2Flat` above pads symmetrically. Both give the same output size, so only a forward
-tie can see it; `planning/archive/mnv4_verified.md` §3d measured MNv2's five sites at 2.9e-1 of a ~1.05
-logit range in its trainer's BN world.
+tie can see the difference.
 
-⭐ Identical structure to the regular-conv case, so identical cost: the asymmetry is a **phase
+Identical structure to the regular-conv case, so identical cost: the asymmetry is a **phase
 shift in the decimation**, `decimateOddFlat` instead of `decimateFlat`. `depthwiseFlat` and all of
 its VJPs are reused verbatim, and `decimateOddFlatHasVJP` is already proven, so nothing here is
 a new obligation.
 
-⚠ Even inputs only — which the type enforces (`c*(2*h)*(2*w)`) and which is every strided
+Even inputs only — which the type enforces (`c*(2*h)*(2*w)`) and which is every strided
 depthwise in mnv2/mnv4/enet (112, 56, 28, 14). At an odd input XLA `SAME` is symmetric and
 `depthwiseStride2Flat` is already correct. -/
+-- Measured (planning/archive/mnv4_verified.md §3d): at MNv2's five sites the symmetric/`SAME`
+-- difference was 2.9e-1 of a ~1.05 logit range in its trainer's BN world.
 
 /-- **Stride-2 XLA-`SAME` depthwise conv**, flattened: `Vec (c·2h·2w) → Vec (c·h·w)`.
     `decimateOddFlat ∘ depthwiseFlat` — the asymmetric-pad peer of `depthwiseStride2Flat`. -/

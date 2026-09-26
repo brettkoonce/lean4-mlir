@@ -45,7 +45,7 @@ like BatchNorm did.
 
     `d(softmax(z))_j/dz_i = softmax(z)_j * (delta_{ij} - softmax(z)_i)`
 
-    Proved (was an axiom). The j-th coord of `softmax c z` is
+    The j-th coord of `softmax c z` is
     `Real.exp (z j) / S` with `S := Σ_k Real.exp (z k) > 0`, so the j-th
     output coord function `z' ↦ exp(z' j) * (Σ_k exp(z' k))⁻¹` has
     `HasFDerivAt` derivative built from `HasFDerivAt.exp`,
@@ -160,8 +160,7 @@ theorem crossEntropy_differentiable (c : Nat) (label : Fin c) :
     unfold crossEntropy softmax; simp only [div_eq_mul_inv]
     fun_prop (disch := intro z; positivity)
 
-/-- **Softmax cross-entropy scalar gradient** — proved (was an axiom in
-    MLP.lean; relocated here to use `pdiv_softmax`).
+/-- **Softmax cross-entropy scalar gradient** — proved from `pdiv_softmax`.
 
     `∂(-log softmax(z)[label])/∂z_j = softmax(z)_j - onehot(label)_j`
 

@@ -5,15 +5,15 @@ import LeanMlir.Proofs.Foundation.BatchedStageLayers
 /-!
 # The batch-BatchNorm seal kit — non-degeneracy machinery for the full-width nets
 
-`planning/full_width_seals.md` §3. The level-2/3 witnesses ([`Training/JacobianSeal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/JacobianSeal.lean)'s
-`backward_nontrivial_of_fderiv_ne`) have until now been exhibited on **2-channel per-example
-proxies**, whose BatchNorm is `bnForward` over one activation. The nets the ImageNet artifacts
+The level-2/3 witnesses ([`Training/JacobianSeal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/JacobianSeal.lean)'s
+`backward_nontrivial_of_fderiv_ne`) on **2-channel per-example proxies** see a BatchNorm that is
+`bnForward` over one activation. The nets the ImageNet artifacts
 actually run normalize with `StableHLO.bnBatchLA` — `bnBatchTensor4` at the network's left-assoc
 index, i.e. `bnPerChannelFlat oc (N·h·w)`: **each channel over all its batch-and-spatial cells.**
 This file is the machinery for sealing those, shared by the four kinked full-width nets
 (ResNet-34/50, MobileNetV2/V4).
 
-## ⭐⭐ Why the carrier has to change, and what that costs
+## Why the carrier has to change, and what that costs
 
 A proxy seal carries a **channel** difference: `channel 0 = channel 1 + δ` at every position. Under
 per-channel batch BN that carrier dies — a channel-uniform offset is exactly what the channel's own
@@ -38,12 +38,12 @@ and `bnBatchLA_bcell` is the bridge. Everything after it is the usual BN algebra
   window `bnBatchLA_window` / `bnBatchLA_smooth6`), the example-difference identity, and
   within-example injectivity (the stem pool's no-tie).
 * §3 the centre-tap kernel `ctK` and its conv value: the one weight shape that carries a signal
-  through a channel-changing conv while staying transparent to a uniform offset. ⚠ Only the
+  through a channel-changing conv while staying transparent to a uniform offset. Only the
   **centre** tap is nonzero, which is what makes it padding-proof — a conv of a constant is not
   constant near a zero-padded border, but a centre tap is always in range.
 * §3b the XLA-`SAME` peers, which keep the **odd** spatial positions where the symmetric ops keep
   the even ones (`decimateOdd_unflatten`, `flatConvStride2Xla_ctK`, `bcell_convS2Xla_ctK`).
-* §3c the centre-tap **depthwise** kernel `ctDW`. ⭐ A depthwise cannot broadcast, so where `ctK`
+* §3c the centre-tap **depthwise** kernel `ctDW`. A depthwise cannot broadcast, so where `ctK`
   collapses the carrier to one value at every output channel, `ctDW` scales it channel by channel.
 * The op-level facts the ray argument leans on live with their ops, not here: the 3×3/s2 pool
   shifts with a uniform offset and keeps nonnegativity (`maxPool3s2_shift`, `maxPool3s2_nonneg`,
@@ -126,7 +126,7 @@ theorem bcell_eq_laIdx {N oc h w : Nat} (v : Vec (N * (oc * h * w))) (n : Fin N)
     (i : Fin h) (j : Fin w) :
     bcell v n c i j = v (laIdx N oc h w n c i j) := rfl
 
-/-- ⭐ **The one arithmetic fact**: `((c,i),j)` and `(c,(i,j))` are the same offset, so the
+/-- **The one arithmetic fact**: `((c,i),j)` and `(c,(i,j))` are the same offset, so the
     `mul_assoc` cast that defines `bnBatchLA` sends the network cell to the `bnBatchTensor4` cell.
     `finProdFinEquiv` is row-major, so both sides are `j + w·i + h·w·c + oc·h·w·n`. -/
 theorem laIdx_cast (N oc h w : Nat) (n : Fin N) (c : Fin oc) (i : Fin h) (j : Fin w) :
@@ -153,7 +153,7 @@ theorem bnRowLA_apply {N oc h w : Nat} (v : Vec (N * (oc * h * w))) (c : Fin oc)
   simp only [laIdx, Fin.val_cast, finProdFinEquiv_apply_val]
   ring
 
-/-- ⭐⭐ **The bridge**: a cell of a `bnBatchLA` output is the scalar `bnForward` of that cell's
+/-- **The bridge**: a cell of a `bnBatchLA` output is the scalar `bnForward` of that cell's
     channel row, at that cell's position in the row. Everything else in this file is BN algebra on
     one row. -/
 theorem bnBatchLA_bcell (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v : Vec (N * (oc * h * w)))
@@ -174,7 +174,7 @@ theorem bnBatchLA_bcell (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v : Vec (N
       simp only [bnchwBackIdx, Equiv.symm_apply_apply]]
   simp only [bnPerChannelFlat, Mat.flatten, bnPerChannelMat, Equiv.symm_apply_apply, bnRowLA]
 
-/-- ⭐ **The workhorse.** A property of every cell of a `bnBatchLA` output, reduced to the scalar
+/-- **The workhorse.** A property of every cell of a `bnBatchLA` output, reduced to the scalar
     `bnForward` on each channel's row — no index decomposition at the call site. Every clause of
     the shape "this BN output is off the kink / inside a window" goes through here. -/
 theorem bnBatchLA_pointwise {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc)
@@ -236,7 +236,7 @@ theorem bnBatchLA_pos {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc
 /-- **The relu6 window from the margin** — the two-sided twin of `bnBatchLA_pos`. With `β = b`
     strictly inside `(|g|√(N·h·w), 6 − |g|√(N·h·w))` the whole BN output sits strictly inside
     `(0, 6)`, **at every input**, so `relu6_id_window` collapses the stage that follows it.
-    ⭐ `b = 3` centres the window and makes both hypotheses the single check `|g|√(N·h·w) < 3`. -/
+    `b = 3` centres the window and makes both hypotheses the single check `|g|√(N·h·w) < 3`. -/
 theorem bnBatchLA_window {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (g b : ℝ)
     (hγ : ∀ ci, γ ci = g) (hβ : ∀ ci, β ci = b)
     (hlo : |g| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < b)
@@ -247,7 +247,7 @@ theorem bnBatchLA_window {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec
   have h := abs_le.mp (bnBatchLA_abs_sub_le ε hε γ β g b hγ hβ v k)
   exact ⟨by linarith [h.1], by linarith [h.2]⟩
 
-/-- ⭐⭐ **Both relu6 clauses at once**, in the `≠ 0 ∧ ≠ 6` shape every MobileNet smoothness bundle
+/-- **Both relu6 clauses at once**, in the `≠ 0 ∧ ≠ 6` shape every MobileNet smoothness bundle
     is stated in. Since the bound is input-independent, this discharges a relu6 clause **without
     reading the activation** — which is why a relu6 net's whole clause bundle is weight-only. -/
 theorem bnBatchLA_smooth6 {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (g b : ℝ)
@@ -259,7 +259,7 @@ theorem bnBatchLA_smooth6 {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Ve
   ⟨(bnBatchLA_window ε hε γ β g b hγ hβ hlo hhi v k).1.ne',
    (bnBatchLA_window ε hε γ β g b hγ hβ hlo hhi v k).2.ne⟩
 
-/-- ⭐⭐ **The carrier step.** Two examples of one channel share the channel's mean and `istd`, so
+/-- **The carrier step.** Two examples of one channel share the channel's mean and `istd`, so
     batch BN keeps their difference and multiplies it by `γ_c · istd_c`. This is what a
     channel-difference carrier cannot do under per-channel batch BN, and it is why the witness is
     at `N = 2`. -/
@@ -300,7 +300,7 @@ theorem bnBatchLA_cell_inj {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : V
 /-- **The centre-tap broadcast kernel.** Every output channel reads input channel `0` through the
     kernel's *centre* tap, scaled by `s`; every other tap is zero.
 
-    ⚠ Only the centre tap, and that is the point: `conv2d` pads with zeros, so a conv of a constant
+    Only the centre tap, and that is the point: `conv2d` pads with zeros, so a conv of a constant
     is **not** constant near the border — but the centre tap `kh = (kH−1)/2` reads position `hi`
     itself, which is in range at every output cell. So this kernel is transparent to a uniform
     offset at every position, which a multi-tap kernel is not. -/
@@ -309,7 +309,7 @@ noncomputable def ctK (oc ic kH kW : Nat) (s : ℝ) : Kernel4 oc ic kH kW :=
     if i.val = 0 ∧ kh.val = (kH - 1) / 2 ∧ kw.val = (kW - 1) / 2 then s else 0
 
 /-- **The centre-tap conv value**: `b o + s · (input channel 0 at the same position)`, at every
-    output channel. ⚠ `c₀` is passed in (rather than built from `0 < ic`) so that the carrier's
+    output channel. `c₀` is passed in (rather than built from `0 < ic`) so that the carrier's
     channel index is the same *term* at every use site — `ring` needs those `istd`s to be one atom. -/
 theorem conv2d_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW)
@@ -633,10 +633,10 @@ theorem rayX_continuous (H W : Nat) : Continuous (rayX H W) :=
 -- § 8. `EDiff` — the batch carrier, and what each op does to it
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The carrier**: example 0's slab is example 1's plus the per-channel constant `δ`. The
+/-- **The carrier**: example 0's slab is example 1's plus the per-channel constant `δ`. The
     replacement for a channel difference, which per-channel batch BN annihilates.
 
-    ⭐ `δ` is a FUNCTION of the channel, not one scalar, and that is what makes it cheap: BN
+    `δ` is a FUNCTION of the channel, not one scalar, and that is what makes it cheap: BN
     multiplies channel `c`'s offset by `γ_c · istd_c` with no need to prove the channels share an
     `istd`, a centre-tap conv collapses the whole function to `fun _ => s · δ 0`, and only `δ 0` is
     ever read (by the head, and at each channel-changing conv). -/
@@ -658,7 +658,7 @@ theorem eDiff_shift {c h w : Nat} (δ : Fin c → ℝ) (v : Vec (2 * (c * h * w)
   rw [bcell_shift, bcell_shift, hv ci i j]
   ring
 
-/-- ⭐⭐ **Batch BN scales the carrier by `γ_c · istd_c`** — the two examples share the channel's
+/-- **Batch BN scales the carrier by `γ_c · istd_c`** — the two examples share the channel's
     mean and `istd`, so centring keeps their difference (`bnBatchLA_exdiff`). -/
 theorem eDiff_bn (oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (δ δ' : Fin oc → ℝ)
     (v : Vec (2 * (oc * h * w))) (hv : EDiff δ v)
@@ -704,7 +704,7 @@ theorem eDiff_convS2Xla {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.va
     bcell_convS2Xla_ctK c₀ hc₀ hkH hkW s b v 1 o i j, hv c₀ _ _]
   ring
 
-/-- ⭐ **A centre-tap depthwise scales the carrier channel by channel.** Unlike `eDiff_conv`, which
+/-- **A centre-tap depthwise scales the carrier channel by channel.** Unlike `eDiff_conv`, which
     collapses δ to the single value `s * δ c₀` at every output channel, a depthwise reads only its
     own channel, so the whole function δ survives, scaled. -/
 theorem eDiff_dw {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
@@ -762,7 +762,7 @@ theorem ctConv_bn_pos (oc kH kW h w : Nat)
     0 < StableHLO.bnBatchLA 2 oc (2 * h) (2 * w) 1 (kv oc 1) (kv oc 160) (ctConv oc kH kW h w t) k :=
   bnBatchLA_pos 1 one_pos (kv oc 1) (kv oc 160) 1 160 (fun _ => rfl) (fun _ => rfl) hm _ k
 
-/-- ⭐ **The pre-BN stem activation is positionally injective** within each example and channel:
+/-- **The pre-BN stem activation is positionally injective** within each example and channel:
     the centre tap decimates the ramp, and example 0's uniform `+t` shifts every position alike. -/
 theorem ctConv_inj (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t : ℝ) (n : Fin 2)
     (o : Fin oc) (r r' : Fin (2 * h)) (s s' : Fin (2 * w))
@@ -789,7 +789,7 @@ theorem ctConv_inj (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t : ℝ) 
   obtain ⟨h1, h2⟩ := divmod_inj (W := 2 * (2 * w)) (by omega) (by omega) hcomm
   exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
 
-/-- ⭐ **The stem pool has no tie** at the witness: BN is injective within a channel
+/-- **The stem pool has no tie** at the witness: BN is injective within a channel
     (`bnBatchLA_cell_inj`) and the pre-BN activation is positionally injective. Stated in the
     `∀ example, MaxPool3s2Smooth (slab)` shape the nets' `*PoolSmoothAt` unfolds to. -/
 theorem ctConv_pool_smooth (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t : ℝ) :
@@ -806,7 +806,7 @@ theorem ctConv_pool_smooth (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t
 -- § 10. The head reads the carrier off channel 0
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **GAP and the dense head deliver the carrier to one class**: GAP of a uniformly shifted
+/-- **GAP and the dense head deliver the carrier to one class**: GAP of a uniformly shifted
     channel is shifted by the same constant, and a `Wd` that reads channel `c₀` into class `j`
     turns the per-channel carrier into `δ c₀`. Stated on the `batchMap`s a `*HeadB` unfolds to, so
     every net's head instantiates it. -/

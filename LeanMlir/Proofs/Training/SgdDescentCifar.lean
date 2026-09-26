@@ -1,32 +1,30 @@
 import LeanMlir.Proofs.Training.SgdDescentCnn
 import LeanMlir.Proofs.Nets.Small.CifarCNN
 
-/-! # CIFAR-8 last-conv SGD descent — the first non-MNIST provable descent (A2 probe)
+/-! # CIFAR-8 last-conv SGD descent
 
-`planning/archive/tier23_float_and_syntactic_faithfulness.md` A2 asked the genuinely-uncertain question: does
-the segment-Lipschitz SGD-descent argument (proven for the MNIST CNN, `SgdDescentCnn.lean`) reach a
-CIFAR net? This file answers it.
+Does the segment-Lipschitz SGD-descent argument (proven for the MNIST CNN, `SgdDescentCnn.lean`)
+reach a CIFAR net? At the last conv layer, yes.
 
-**The finding.** CIFAR-8's *tail* — its last conv `W₈` (c4→c4) → relu → maxpool → three denses → CE —
-is **byte-for-byte** the program `cnn_conv2_sgd_descends` proves descent for. So descent at the LAST
-conv layer reaches CIFAR-8 **for free**, with the SAME non-vacuous admissible `lr` as MNIST: it is an
-*instance* of the MNIST lemma at the frozen earlier-layer features. Made rigorous in two steps:
+CIFAR-8's *tail* — its last conv `W₈` (c4→c4) → relu → maxpool → three denses → CE — is
+**byte-for-byte** the program `cnn_conv2_sgd_descends` proves descent for. So descent at the LAST
+conv layer is an *instance* of the MNIST lemma at the frozen earlier-layer features, with the same
+hypotheses (oracle accuracy, the relu and post-ReLU pool margins, small-step and dominance
+conditions) stated at `x₁`. Made rigorous in two steps:
 
 * `cifarCnn8Forward_factor` — the actual committed net factors as
   `head ∘ (relu ∘ flatConv W₈) ∘ prefix7` (pure `rfl`; `Function.comp` is definitionally associative).
 * `cifar8_lastConv_sgd_descends` — one SGD step on `W₈` (the earlier seven conv layers held fixed, their
-  output on `image` being the frozen feature map `x₁`) decreases the CIFAR-8 cross-entropy by `≥
-  lr·‖∇‖²/2`. Proved by reducing the CIFAR-8 loss-as-a-function-of-`W₈` to the `cnn_conv2` program at
-  `x₁` (`hfac`, via the factor lemma + `flatConv = flatten∘conv2d∘unflatten`) and applying
+  output on `image` being the frozen feature map `x₁`) decreases the example's CIFAR-8 cross-entropy
+  by `≥ lr·‖∇‖²/2`. Proved by reducing the CIFAR-8 loss-as-a-function-of-`W₈` to the `cnn_conv2`
+  program at `x₁` (`hfac`, via the factor lemma + `flatConv = flatten∘conv2d∘unflatten`) and applying
   `cnn_conv2_sgd_descends`.
 
-**The honest stop (why this is the ceiling).** Descent through the *depth* of all eight conv layers is
-NOT proved, by design: `cnn_conv2_sgd_descends`'s admissible-`lr` condition `hsmall` is a PRODUCT of the
-per-layer operator-norm factors (the three dense bounds × spatial). Each additional conv layer would
-multiply another `(spatial · weight-bound)` factor into that product, so the admissible `lr` shrinks
-geometrically with depth ⇒ vacuous in any realistic regime. This is the SAME compounding mechanism that
-puts deep-net descent off-limits. So last-conv descent is the honest reach of provable descent for
-CIFAR; full-depth / end-to-end CIFAR descent stays open.
+**Scope.** Descent through the *depth* of all eight conv layers is not proved here.
+`cnn_conv2_sgd_descends`'s small-step condition `hsmall` is a PRODUCT of the per-layer operator-norm
+factors (the three dense bounds × spatial); each additional conv layer would multiply another
+`(spatial · weight-bound)` factor into that product, so the admissible `lr` shrinks geometrically
+with depth.
 -/
 
 namespace Proofs
@@ -93,14 +91,15 @@ noncomputable def cifar8LastConvLoss {c4 h w d1 nClasses kH kW : Nat} (b₈ : Ve
 
 /-- **CIFAR-8 last-conv SGD descent.** One SGD step on the LAST conv `W₈` of the actual
     `cifarCnn8Forward` net (the earlier seven conv layers held fixed — their output on `image` is the
-    frozen feature map `x₁`) decreases the CIFAR-8 cross-entropy loss by at least `lr·‖∇‖²/2`, under
+    frozen feature map `x₁`) decreases the cross-entropy loss of the example `(image, label)` by at
+    least `lr·‖∇‖²/2`, under
     the segment-margin conditions that freeze the ReLU/MaxPool routing along the step. Because
     CIFAR-8's tail (`W₈` → relu → maxpool → 3 denses) is byte-for-byte the architecture
     `cnn_conv2_sgd_descends` proves descent for, this is an INSTANCE of that lemma at the frozen
-    features `x₁`, via `cifarCnn8Forward_factor` — the admissible `lr` is the same non-vacuous MNIST
-    regime. The genuinely-distinct case (descent through the DEPTH of all eight conv layers) stays
-    open by design: each extra layer multiplies another operator-norm factor into `hsmall`'s
-    admissible-`lr` product, so it compounds to vacuity — the same honest stop as the deep nets. -/
+    features `x₁`, via `cifarCnn8Forward_factor`, with that lemma's hypotheses (oracle accuracy
+    `hgh`, the margins `hm2`/`hmq`/`hm3`/`hm4`, `hsmall`, `h1`, `h2`) stated at `x₁`. Descent through
+    the depth of all eight conv layers is not proved: each extra layer would multiply another
+    operator-norm factor into `hsmall`'s admissible-`lr` product. -/
 theorem cifar8_lastConv_sgd_descends {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1)
     (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)

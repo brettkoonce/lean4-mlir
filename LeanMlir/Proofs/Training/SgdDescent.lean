@@ -24,9 +24,10 @@ integration; the price is the constant `C·D²` instead of the textbook
 
 `sgd_descends` is the quotable form: if `lr·η·‖∇f‖₁ ≤ lr·‖∇f‖₂²/4` and the
 curvature term is similarly dominated, one inexact step decreases the loss
-by at least `lr·‖∇f‖₂²/2`. Discharging its hypotheses for the concrete MNIST
-nets (actual Lipschitz constants for the MLP loss) is future work; this file
-is the ℝ-side keystone the float budgets plug into. -/
+by at least `lr·‖∇f‖₂²/2`. The per-net discharges of the smoothness hypothesis
+(explicit segment-Lipschitz constants, one layer and one example at a time) are
+in `SgdDescentLinear`, `SgdDescentMlp` and `SgdDescentCnn`; this file is the
+ℝ-side statement the float budgets plug into. -/
 
 namespace Proofs
 

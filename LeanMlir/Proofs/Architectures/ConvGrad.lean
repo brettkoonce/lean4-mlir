@@ -2,31 +2,33 @@ import LeanMlir.Proofs.Architectures.CNN
 
 /-! # Convolution parameter-gradient bridges (the MNIST CNN train step's conv parameters)
 
-The MNIST CNN (`conv → relu → maxpool → conv → relu → maxpool → dense → … → dense`)
+The MNIST CNN (`conv → relu → conv → relu → maxpool → dense → relu → dense → relu → dense`)
 train step has two kinds of parameters: the dense classifier head (whose grads reuse
-M2's `weight_grad_bridge`/`bias_grad_bridge`) and the **convolution kernels/biases**,
+`IR.weight_grad_bridge`/`IR.bias_grad_bridge`) and the **convolution kernels/biases**,
 whose gradient is a *correlation*, not an outer product. This file supplies the conv
 analogue of the dense bridges.
 
-As in M2, the cotangent the backward chain delivers at each conv layer's output flows
+As for the MLP, the cotangent the backward chain delivers at each conv layer's output flows
 through a backward graph — here the Tensor3-level `IR.Back3` (`convBackDenote`,
 `maxPoolBackDenote`, with `IR.denote_subst3` the chain rule), exactly as the MLP used
 `IR.Back` (`mlpCotOut0`/`mlpCotOut1`). Given that cotangent `c`, the conv kernel and
 bias gradients (the transpose-trick `conv2dWeightGrad`/`conv2dBiasGrad`) are the
 certified Jacobian of `conv2d` — as a function of the flattened kernel / of the bias —
 contracted with `c`. Both bridges are the `.correct` field of the proven conv
-parameter VJPs (`conv2dWeightGradHasVJP`/`conv2dBiasGradHasVJP`).
+parameter VJPs (`conv2dWeightGradHasVJP`/`conv2dBiasGradHasVJP`). The statements are
+about those witnesses' backwards; no rendered text appears in them. The link from a
+rendered conv gradient op to these witnesses is that op's `den` theorem (see `CnnFold`).
 
-Together with M2's dense bridges and the `Back3` cotangent chain, this covers every
-parameter of the CNN train step. (The SGD wrapping `θ − lr·∇` is identical to the
+With the dense bridges in `IR` and the `Back3` cotangent chain, this gives a bridge for
+every parameter of the CNN train step. (The SGD wrapping `θ − lr·∇` is identical to the
 linear/MLP case.)
 -/
 
 namespace Proofs
 
 /-- **Conv weight-gradient bridge.** At any cotangent `c` at the conv layer's output
-    (and any kernel point `v = Kernel4.flatten W`), the emitted conv kernel gradient
-    equals the certified Jacobian of `conv2d` viewed as a function of the flattened
+    (and any kernel point `v = Kernel4.flatten W`), the backward of
+    `conv2dWeightGradHasVJP` (the transpose-trick kernel gradient) equals the certified Jacobian of `conv2d` viewed as a function of the flattened
     kernel, contracted with `c`. The convolution analogue of `IR.weight_grad_bridge`;
     it is the `.correct` field of `conv2dWeightGradHasVJP`. -/
 theorem conv_weight_grad_bridge {ic oc h w kH kW : Nat}
@@ -64,8 +66,10 @@ theorem conv_bias_grad_bridge {ic oc h w kH kW : Nat}
 -- (`weight_grad_bridge`/`bias_grad_bridge`) exactly as the MLP render close does.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Conv weight output, certified.** `Wⁿ = W − lr·(transpose-trick kernel grad)` denotes,
-    at the flattened kernel, `W − lr·(certified ∂conv/∂kernel · cotangent)`. -/
+/-- **Conv weight SGD step — SGD form of `conv_weight_grad_bridge`.** At the flattened
+    kernel `v`, `v − lr·(conv2dWeightGradHasVJP backward at c)` equals
+    `v − lr·(certified ∂conv/∂kernel · c)`. A rewrite by the bridge; no rendered text
+    appears in the statement. -/
 theorem cnn_render_convW_certified {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Tensor3 ic h w)
     (v : Vec (oc * ic * kH * kW)) (c : Vec (oc * h * w)) (lr : ℝ)
@@ -77,8 +81,9 @@ theorem cnn_render_convW_certified {ic oc h w kH kW : Nat}
                v idx j * c j := by
   rw [conv_weight_grad_bridge b x v c idx]
 
-/-- **Conv bias output, certified.** Likewise `bⁿ = b − lr·(batch/spatial reduce)` denotes
-    `b − lr·(certified ∂conv/∂bias · cotangent)`. -/
+/-- **Conv bias SGD step — SGD form of `conv_bias_grad_bridge`.** Likewise
+    `b − lr·(conv2dBiasGradHasVJP backward at c)` equals
+    `b − lr·(certified ∂conv/∂bias · c)`. -/
 theorem cnn_render_convb_certified {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
     (b : Vec oc) (c : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :

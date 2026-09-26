@@ -10,11 +10,8 @@ certified ties are stated about. `rowLNVecFlatBack` is the per-row input-VJP —
 `chanLNTensor3Back` is that map conjugated by the same four layout permutations the forward
 uses. `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp` proves the conjugation equals
 the certified `chanLNTensor3HasVJP` backward, and `rowLNVecFlatBack_eq_vecLN_vjp`
-(`ViTVecLNBackCertifiedTie.lean`) does the same for the row map, which is how ConvNeXt's LN
-backward turned out to be ViT's as well.
-
-Moved here from the float bridge that defined it beside its float twin on 2026-09-08
-(`planning/archive/float_second_pass.md`). -/
+(`ViTVecLNBackCertifiedTie.lean`) does the same for the row map, so ConvNeXt's LN backward
+and ViT's share `rowLNVecFlatBack`. -/
 
 namespace Proofs
 

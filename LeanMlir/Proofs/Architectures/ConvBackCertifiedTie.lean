@@ -55,7 +55,7 @@ theorem flatConvStride2Back_eq_vjp_backward {ic oc h w kH kW : Nat}
     (= `convFlatBack ∘ decimateOddBack`) IS the certified `(flatConvStride2XlaHasVJP W b).backward x`,
     for odd kernels: the conv leaf tie and the odd-scatter leaf (`decimateOddBack_eq_vjp`, `rfl`),
     matching `flatConvStride2Xla = decimateOddFlat ∘ flatConv`. The TF-origin stems' (B0,
-    MobileNetV2) leaf. ⚠ This is the theorem that fixes the odd-phase backward's DIRECTION: the
+    MobileNetV2) leaf. This is the theorem that fixes the odd-phase backward's DIRECTION: the
     emitted transposed-conv pad `[p+1, p-1]` (opposite to the weight grads' `[p-1, p+1]`) denotes
     this map, so a backward derived "by symmetry" with the weight grads cannot be tied here. -/
 theorem flatConvStride2XlaBack_eq_vjp_backward {ic oc h w kH kW : Nat}
@@ -73,8 +73,8 @@ theorem flatConvStride2XlaBack_eq_vjp_backward {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Dense head input-VJP leaf tie.** The chain's dense backward `dense (Wᵀ) 0` (= `Wᵀ·dy`)
-    IS the certified dense input-VJP `(denseHasVJP W b).backward x` (= `Mat.mulVec W dy`), conv is
-    linear so the activation `x` is ignored. One `mul_comm` per term. -/
+    IS the certified dense input-VJP `(denseHasVJP W b).backward x` (= `Mat.mulVec W dy`); dense
+    is linear in its input, so the activation `x` is ignored. One `mul_comm` per term. -/
 theorem dense_transpose_eq_vjp_backward {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) :
     dense (Mat.transpose W) (0 : Vec m) = (denseHasVJP W b).backward x := by
   funext dy i

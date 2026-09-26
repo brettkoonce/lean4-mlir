@@ -20,9 +20,13 @@ drift that is *linear in `t`* along the segment — exactly the shape
 
 `linear_sgd_descends` is the capstone: an `η`-accurate gradient oracle
 (e.g. the float budgets), the small-step condition, and the two dominance
-conditions ⇒ **one inexact SGD step on the MNIST-linear classifier
-provably decreases the cross-entropy loss by ≥ lr·‖∇L‖₂²/2.** Every
-hypothesis is checkable arithmetic; smoothness is proven, not assumed. -/
+conditions ⇒ **one inexact SGD step on the weights `W` of the MNIST-linear
+classifier, at one example `(x, label)` with the bias held fixed, decreases
+that example's cross-entropy loss by ≥ lr·‖∇L‖₂²/2.** The smoothness
+hypothesis of `sgd_descends` is proven here, not assumed; the oracle accuracy,
+the small-step condition and the two dominance conditions remain hypotheses.
+`linear_float_sgd_descends` then discharges the oracle accuracy for the
+FloatModel binary32 gradient. -/
 
 namespace Proofs
 
@@ -195,9 +199,11 @@ noncomputable def linearLoss {m n : Nat} (b : Vec n) (x : Vec m) (label : Fin n)
     Vec (m * n) → ℝ :=
   fun w => crossEntropy n (dense (Mat.unflatten w) b x) label
 
-/-- **One inexact SGD step on the MNIST-linear classifier provably
-    decreases the cross-entropy loss.** All of `sgd_descends`' hypotheses
-    discharged for the Chapter-1 net: differentiability is
+/-- **One inexact SGD step on the MNIST-linear weights decreases one example's
+    cross-entropy loss.** Stated at one example `(x, label)`, weights only (the
+    bias `b` is fixed), with an update `W − lr·gh` for any `η`-accurate `gh`.
+    `sgd_descends`' smoothness and differentiability hypotheses are discharged
+    for the Chapter-1 net: differentiability is
     `lossWeightMap_differentiable`, the segment-Lipschitz constant is the
     explicit `C = 2a²/(1−2aD)` at step radius `D = lr·(‖∇L‖₁ + mn·η)`.
     Remaining hypotheses are checkable arithmetic: the oracle accuracy `η`
@@ -258,8 +264,8 @@ theorem linear_sgd_descends {m n : Nat} (W : Mat m n) (b : Vec n)
 --   with NO abstract gradient-accuracy parameter.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The binary32 gradient of the MNIST-linear loss**, exactly as the
-    rendered trainer computes it: float forward logits `z̃ = M.dense W b x`,
+/-- **The binary32 gradient of the MNIST-linear loss** — the FloatModel
+    transcription of the per-example weight gradient: float forward logits `z̃ = M.dense W b x`,
     the rounded softmax−onehot cotangent head, and one final rounded
     multiply by the (exact) input `xᵢ` to form the outer-product weight
     gradient `∂L/∂Wᵢⱼ = xᵢ·(softmax(z)ⱼ − onehotⱼ)`. Flattened to the
@@ -305,22 +311,20 @@ theorem linear_grad_close {m n : Nat} (M : FloatModel) (W : Mat m n)
   have hxx : |x i - x i| ≤ (0:ℝ) := by simp
   exact M.mul_close hxx hcot (hx i) hy
 
-/-- **One binary32 SGD step on the MNIST-linear classifier provably
-    decreases the cross-entropy loss — with NO abstract gradient-accuracy
-    parameter.** This is Item D / G1, the η-composition: the descent side
-    (`linear_sgd_descends`) and the rounding side (FloatBridge's
-    `cotErr`/`mulErr` head budget) are fused into one statement. The
-    gradient `gh` is the *actual* float-computed gradient
-    (`M.linearFloatGrad`), and its accuracy `η = mulErr u a 1 0 (cotErr …)`
-    is *proven* by `linear_grad_close`, not assumed.
+/-- **One SGD step with the FloatModel binary32 gradient decreases one example's
+    cross-entropy loss; the gradient's accuracy is proven, not assumed.** The
+    descent side (`linear_sgd_descends`) and the rounding side (FloatBridge's
+    `cotErr`/`mulErr` head budget) are fused into one statement: the gradient is
+    `M.linearFloatGrad` (the FloatModel transcription of the per-example weight
+    gradient), and its accuracy `η = mulErr u a 1 0 (cotErr …)` is proven by
+    `linear_grad_close`.
 
-    What remains as hypotheses is exactly the honest residue: the input
-    bound `a`, `0 ≤ lr`, the GPU `exp` accuracy `eexp` and the a-posteriori
-    logit drift `δ` (the documented FloatModel → kernel trust boundary,
-    `softmax_ce_cot_close`), and the checkable-arithmetic small-step + two
-    dominance conditions. Depth-1 means there is no per-layer η-threading —
-    the clean pilot for the chain `binary32 → proximity → smoothness →
-    descent`, closed end-to-end for one net. -/
+    Scope: one example `(x, label)`, weights only (bias fixed), and the update
+    `Mat.flatten W − lr • g̃` taken in ℝ — only the gradient is float-modelled.
+    What remains as hypotheses: the input bound `a`, `0 ≤ lr`, the `exp`
+    accuracy `eexp` (`hfexp`), the logit drift `δ` (`hδ`, the FloatModel →
+    kernel trust boundary of `softmax_ce_cot_close`), and the small-step and two
+    dominance conditions. Depth-1 means there is no per-layer η-threading. -/
 theorem linear_float_sgd_descends {m n : Nat} (M : FloatModel) (W : Mat m n)
     (b : Vec n) (x : Vec m) (label : Fin n) (fexp : ℝ → ℝ) {lr a eexp δ : ℝ}
     (ha : 0 ≤ a) (hx : ∀ i, |x i| ≤ a) (hlr : 0 ≤ lr)

@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Foundation.IR
 
-/-! # §B shared prerequisite: the DEPTHWISE adjoint gate + leaf ties
+/-! # The depthwise adjoint gate + leaf ties
 
-The §B certified-VJP ties for the three CNNs (convnext / mnv2 / efficientnet) all reverse a
+The certified-VJP ties for the three CNNs (ConvNeXt / MobileNetV2 / EfficientNet) all reverse a
 **depthwise** convolution, so they all need the depthwise twin of the conv adjoint gate
 `IR.convBackDenote_eq_input_grad_formula`. This file builds it once.
 
@@ -29,7 +29,7 @@ namespace Proofs
     input-gradient `depthwiseConv2dInputGradFormula W`, for arbitrary `c h w kH kW` with odd
     kernels. The depthwise twin of `IR.convBackDenote_eq_input_grad_formula`: no `Σ co` (depthwise
     channel `ch` is fixed), so per output coordinate it is `IR.reverseSlab_eq_gradSlab` at the
-    channel's own slabs `W ch`, `dy ch`. The leaf the depthwise §B ties (convnext/mnv2/enet) stand
+    channel's own slabs `W ch`, `dy ch`. The leaf the depthwise certified-VJP ties (convnext/mnv2/enet) stand
     on. -/
 theorem depthwiseConv2d_dwReverse_eq_input_grad_formula {c h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)

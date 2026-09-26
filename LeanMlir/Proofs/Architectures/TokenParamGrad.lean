@@ -6,13 +6,13 @@ import LeanMlir.Proofs.Architectures.LayerNorm
 The per-parameter gradient bridges ViT's fold (`ViTFold`) delegates to, and that the bf16
 gradient nodes (`Bf16GradNodes`) reuse; the ops themselves are `Attention`'s.
 Generic in the cotangent `dy` the backward chain delivers at each site's output
-(pinning that cotangent to the actual attention chain is the optional Item D), batch-1 —
+(this file does not pin that cotangent to the attention chain), batch-1 —
 everything in a ViT is per-example separable (the EfficientNet contrast).
 
 | family (render SSA)                  | forward fn                 | certified by |
 |--------------------------------------|----------------------------|--------------|
-| Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the M2 outer-product bridge row-lifted |
-| classifier `Wcls`/`bcls`             | dense on the CLS row       | M2 `weight/bias_grad_bridge` (**reuse** — single-vector dense) |
+| Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the dense outer-product bridge `IR.weight_grad_bridge` row-lifted |
+| classifier `Wcls`/`bcls`             | dense on the CLS row       | `IR.weight_grad_bridge` / `IR.bias_grad_bridge` (**reuse** — single-vector dense) |
 | LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `vit_vecln{Gamma,Beta}_grad_bridge` (`LayerNorm`) |
 | `pos_embed`                          | additive (`patchEmbedFlat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
 | `cls_token`                          | row-0 scatter (`patchEmbedFlat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
@@ -27,8 +27,8 @@ One genuinely-new bridge family (everything else is reuse or a reindex):
   `dW_(i,j) = Σ_r X_(r,i)·dY_(r,j)` (one `dot_general` contracting the token axis) is the
   certified contraction. Covers Wq/Wk/Wv/Wo, Wfc1/Wfc2 and their biases at every block.
 
-The classifier head (`dense` on the CLS vector) is VERBATIM M2 `weight/bias_grad_bridge`
-reuse at `[D, nClasses]`. The patch-embed conv `Wp`/`bp` (§ E) closes over
+The classifier head (`dense` on the CLS vector) reuses `IR.weight_grad_bridge` /
+`IR.bias_grad_bridge` verbatim at `[D, nClasses]`. The patch-embed conv `Wp`/`bp` (§ E) closes over
 `patchEmbedFlat` directly — the kernel is the VARIABLE and the pad-guarded image reads
 are CONSTANT coefficients (the mirror of the input-grad case), so the forward is affine in
 the kernel and `pdiv_of_affine` applies with the CLS row masked out. 3-axiom clean by
