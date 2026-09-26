@@ -119,14 +119,26 @@ theorem clipFactor_eq_one_below (c ε s : ℝ) (h : Real.sqrt s + ε ≤ c) (hε
   have hd : 0 < Real.sqrt s + ε := clipDenom_pos ε s hε
   exact min_eq_left ((one_le_div hd).mpr h)
 
+@[simp] theorem clipScale_apply (fac : ℝ) (g : Vec n) (i : Fin n) :
+    clipScale fac g i = fac * g i := rfl
+
+/-- The clip is scalar multiplication by the (shared) factor. -/
+theorem clipScale_eq_smul (fac : ℝ) (g : Vec n) : clipScale fac g = fac • g := rfl
+
 /-- `clipScale 1 g = g`, the `Vec`-level reading of the line above. -/
 @[simp] theorem clipScale_one (g : Vec n) : clipScale 1 g = g := by
-  funext i; simp [clipScale]
+  rw [clipScale_eq_smul, one_smul]
 
 /-- `clipScale 0 g = 0` — the zero-factor control, and the reason a clip site on the wrong side of
     an update is detectable at all. -/
-@[simp] theorem clipScale_zero (g : Vec n) : clipScale (0 : ℝ) g = fun _ => 0 := by
-  funext i; simp [clipScale]
+@[simp] theorem clipScale_zero (g : Vec n) : clipScale (0 : ℝ) g = 0 := by
+  rw [clipScale_eq_smul, zero_smul]
+
+theorem gradSumSq_nonneg (g : Vec n) : 0 ≤ gradSumSq g :=
+  Finset.sum_nonneg fun i _ => sq_nonneg (g i)
+
+theorem clipFactor_pos (c ε s : ℝ) (hc : 0 < c) (hε : 0 < ε) : 0 < clipFactor c ε s :=
+  lt_min one_pos (div_pos hc (clipDenom_pos ε s hε))
 
 /-- **THE FACTOR IS SHARED — the theorem the numeric gate exists to check.**
 

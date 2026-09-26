@@ -1,5 +1,5 @@
 import Mathlib.Probability.Distributions.Gaussian.Multivariate
-import Mathlib.Probability.CDF
+import LeanMlir.Proofs.Foundation.UpstreamDraft
 
 /-! # The standard normal: `Φ`, its quantile `Φ⁻¹`, and full support
 
@@ -15,11 +15,6 @@ namespace Proofs
 
 open MeasureTheory ProbabilityTheory Filter
 open scoped Topology
-
-/-- `N(0,1)` charges every nonempty open set (the pdf is everywhere positive) —
-    packaged as the Mathlib `IsOpenPosMeasure` class. -/
-instance : (gaussianReal 0 1).IsOpenPosMeasure :=
-  (gaussianReal_absolutelyContinuous' 0 one_ne_zero).isOpenPosMeasure
 
 /-- The standard Gaussian on a finite-dimensional inner-product space charges
     every nonempty open set: it is the pushforward of the pi-Gaussian (open-pos
@@ -43,44 +38,27 @@ noncomputable def stdNormalCDF : ℝ → ℝ := fun t => cdf (gaussianReal 0 1) 
     `(0,1)`, which is where every guarded use below lives. -/
 noncomputable def stdNormalQuantile (p : ℝ) : ℝ := sSup {t | stdNormalCDF t < p}
 
-/-- Every open interval carries positive standard-Gaussian mass (the pdf is everywhere
-    positive). The engine of strict monotonicity. -/
-lemma stdGaussian_Ioo_pos {s t : ℝ} (hst : s < t) :
-    0 < gaussianReal 0 1 (Set.Ioo s t) :=
-  isOpen_Ioo.measure_pos _ (Set.nonempty_Ioo.2 hst)
+theorem stdNormalCDF_eq_real (t : ℝ) : stdNormalCDF t = (gaussianReal 0 1).real (Set.Iic t) :=
+  cdf_eq_real _ t
 
-/-- `Φ` is strictly monotone: `Φ t − Φ s = P(Ioc s t) > 0` for `s < t`. -/
-lemma stdNormalCDF_strictMono : StrictMono stdNormalCDF := by
-  intro s t hst
-  have hIoc : 0 < gaussianReal 0 1 (Set.Ioc s t) :=
-    lt_of_lt_of_le (stdGaussian_Ioo_pos hst) (measure_mono Set.Ioo_subset_Ioc_self)
-  have hreal : 0 < (gaussianReal 0 1).real (Set.Ioc s t) :=
-    ENNReal.toReal_pos hIoc.ne' (measure_ne_top _ _)
-  have hsplit : (gaussianReal 0 1).real (Set.Iic t)
-      = (gaussianReal 0 1).real (Set.Iic s) + (gaussianReal 0 1).real (Set.Ioc s t) := by
-    rw [← measureReal_union (by exact Set.Iic_disjoint_Ioc le_rfl) measurableSet_Ioc,
-      Set.Iic_union_Ioc_eq_Iic hst.le]
-  simp only [stdNormalCDF, cdf_eq_real]
-  linarith
+/-- The interval split `Φ b − Φ a = P(Ioc a b)`. -/
+theorem stdNormalCDF_sub {a b : ℝ} (hab : a ≤ b) :
+    stdNormalCDF b - stdNormalCDF a = (gaussianReal 0 1).real (Set.Ioc a b) := by
+  rw [stdNormalCDF_eq_real, stdNormalCDF_eq_real, ← Set.Iic_union_Ioc_eq_Iic hab,
+    measureReal_union (Set.Iic_disjoint_Ioc le_rfl) measurableSet_Ioc]
+  ring
 
-/-- Gaussian symmetry `Φ(−t) = 1 − Φ(t)`: the standard Gaussian is invariant under
-    negation, so `P(Iic (−t)) = P(Ici t)`, and (no atoms) the complement gives the rest. -/
-lemma stdNormalCDF_neg (t : ℝ) : stdNormalCDF (-t) = 1 - stdNormalCDF t := by
-  have : NullSingletonClass (gaussianReal 0 1) := nullSingletonClass_gaussianReal one_ne_zero
-  have hmap : (gaussianReal 0 1).map (fun x => -x) = gaussianReal 0 1 := by
-    simpa using gaussianReal_map_neg (μ := 0) (v := 1)
-  have hpre : (fun x : ℝ => -x) ⁻¹' Set.Iic (-t) = Set.Ici t := by
-    ext x; simp
-  have hIic : gaussianReal 0 1 (Set.Iic (-t)) = gaussianReal 0 1 (Set.Ici t) := by
-    conv_lhs => rw [← hmap]
-    rw [Measure.map_apply measurable_neg measurableSet_Iic, hpre]
-  have hIci : gaussianReal 0 1 (Set.Ici t) = gaussianReal 0 1 (Set.Ioi t) :=
-    measure_congr Ioi_ae_eq_Ici.symm
-  have hcompl : (gaussianReal 0 1).real (Set.Ioi t)
-      = 1 - (gaussianReal 0 1).real (Set.Iic t) := by
-    rw [← Set.compl_Iic, measureReal_compl measurableSet_Iic, probReal_univ]
-  simp only [stdNormalCDF, cdf_eq_real]
-  rw [Measure.real, hIic, hIci, ← Measure.real, hcompl]
+/-- `Φ` is strictly monotone (`MathlibUpstream.strictMono_cdf_gaussianReal`). -/
+lemma stdNormalCDF_strictMono : StrictMono stdNormalCDF :=
+  MathlibUpstream.strictMono_cdf_gaussianReal 0 one_ne_zero
+
+/-- `Φ` is continuous (`MathlibUpstream.continuous_cdf_gaussianReal`). -/
+theorem continuous_stdNormalCDF : Continuous stdNormalCDF :=
+  MathlibUpstream.continuous_cdf_gaussianReal 0 one_ne_zero
+
+/-- Gaussian symmetry `Φ(−t) = 1 − Φ(t)` (`MathlibUpstream.cdf_gaussianReal_neg`). -/
+lemma stdNormalCDF_neg (t : ℝ) : stdNormalCDF (-t) = 1 - stdNormalCDF t :=
+  MathlibUpstream.cdf_gaussianReal_neg one_ne_zero t
 
 -- ════════════════════════════════════════════════════════════════
 -- § Φ⁻¹ on (0,1): the defining sets behave, mono + odd-about-½
@@ -186,13 +164,8 @@ lemma stdNormalCDF_quantile {p : ℝ} (hp : p ∈ Set.Ioo (0:ℝ) 1) :
     exact absurd (le_csSup hAbdd huq) (not_le.mpr hu)
   -- (≤): no atoms — Φ q equals its left limit, and everything left of q is < p
   have hle : stdNormalCDF q ≤ p := by
-    have hsing : (gaussianReal 0 1) {q} = 0 := measure_singleton q
-    rw [← measure_cdf (μ := gaussianReal 0 1), StieltjesFunction.measure_singleton] at hsing
-    have h1 : stdNormalCDF q - Function.leftLim (cdf (gaussianReal 0 1)) q ≤ 0 :=
-      ENNReal.ofReal_eq_zero.mp hsing
-    have h2 : Function.leftLim (cdf (gaussianReal 0 1)) q ≤ stdNormalCDF q :=
-      (cdf (gaussianReal 0 1)).mono.leftLim_le le_rfl
-    have hll : Function.leftLim (cdf (gaussianReal 0 1)) q = stdNormalCDF q := by linarith
+    have hll : Function.leftLim (cdf (gaussianReal 0 1)) q = stdNormalCDF q :=
+      MathlibUpstream.leftLim_cdf _ q
     rw [show stdNormalCDF q = Function.leftLim (cdf (gaussianReal 0 1)) q from hll.symm]
     refine le_of_tendsto ((cdf (gaussianReal 0 1)).mono.tendsto_leftLim q) ?_
     filter_upwards [self_mem_nhdsWithin] with u hu
@@ -211,21 +184,13 @@ lemma stdNormalQuantile_cdf (s : ℝ) : stdNormalQuantile (stdNormalCDF s) = s :
       fun h => stdNormalCDF_strictMono h⟩
   rw [stdNormalQuantile, hset, csSup_Iio]
 
-/-- `Φ` never reaches 0: there is Gaussian mass below every point. -/
-lemma stdNormalCDF_pos (s : ℝ) : 0 < stdNormalCDF s := by
-  have h := stdGaussian_Ioo_pos (show s - 1 < s by linarith)
-  have hle : gaussianReal 0 1 (Set.Ioo (s - 1) s) ≤ gaussianReal 0 1 (Set.Iic s) :=
-    measure_mono (fun x hx => le_of_lt hx.2)
-  have : 0 < (gaussianReal 0 1).real (Set.Iic s) :=
-    ENNReal.toReal_pos (lt_of_lt_of_le h hle).ne' (measure_ne_top _ _)
-  rw [stdNormalCDF, cdf_eq_real]
-  exact this
+/-- `Φ` never reaches 0 (`MathlibUpstream.cdf_gaussianReal_pos`). -/
+lemma stdNormalCDF_pos (s : ℝ) : 0 < stdNormalCDF s :=
+  MathlibUpstream.cdf_gaussianReal_pos 0 one_ne_zero s
 
-/-- `Φ` never reaches 1 (symmetry + `stdNormalCDF_pos`). -/
-lemma stdNormalCDF_lt_one (s : ℝ) : stdNormalCDF s < 1 := by
-  have h := stdNormalCDF_pos (-s)
-  have hneg := stdNormalCDF_neg s
-  linarith
+/-- `Φ` never reaches 1 (`MathlibUpstream.cdf_gaussianReal_lt_one`). -/
+lemma stdNormalCDF_lt_one (s : ℝ) : stdNormalCDF s < 1 :=
+  MathlibUpstream.cdf_gaussianReal_lt_one 0 one_ne_zero s
 
 /-- `Φ` maps into the open unit interval. -/
 lemma stdNormalCDF_mem_Ioo (s : ℝ) : stdNormalCDF s ∈ Set.Ioo (0:ℝ) 1 :=

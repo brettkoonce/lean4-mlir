@@ -39,7 +39,8 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 | 502c0232 | §3: 3.2 as a guard (3.1 not needed), 3.3 minimal form. Deviations below |
 | 4fa1bbce | §4.1 + §4.2 as tabled; §4.3 not started. Notes below |
 | ec6ad9cb | §5.2–5.4, §5.5 in part. Notes below |
-| (staged) | §5.1 `UibParams` slots typed by kernel extent. Notes below |
+| f09b1e25 | §5.1 `UibParams` slots typed by kernel extent. Notes below |
+| (staged) | §6: 6.1, 6.3, 6.5 as tabled (namespace rename declined); 6.2 and 6.4 in part. Notes below |
 
 §2 deviations:
 
@@ -147,6 +148,41 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
   were left: each is a `by_cases` that the lemmas would not shorten.
 * Checks: corpus + all exes, `verified_mlir/` regen empty, `mnv4-fwd-smoke`, comparator tier and
   both tier files, AuditAxioms 1602/1602, blueprint `\uses`, name lint, import audit, docstring refs.
+
+§6 notes:
+
+* 6.1: `@[simp]` `_apply` lemmas for `adamMNext`, `adamVNext`, `sgdParam`, `momVNext`, `momParam`,
+  `clipScale`, plus `adamWParam_apply`, `lambDir_apply`, projection lemmas for `adamWStep`,
+  `momStep`, `lambStep`; `clipScale_eq_smul` (`clipScale_one`/`_zero` now `one_smul`/`zero_smul`),
+  `gradSumSq_nonneg`, `clipFactor_pos`, `lambTrust_of_pos`. The corpus rebuilt with the new simp
+  lemmas and nothing broke. `lambDir` is defined from `adamMNext`/`adamVNext`. Gone:
+  `rmsSqNext` (and its `_eq_adamVNext`, `_nonneg`; RMSProp's `s'` is `adamVNext ρ` everywhere,
+  including StableHLO's `rmsBufNextF_mu_zero`), `adamVNextF_as_rmsSqNext` (= `adamVNextF_faithful`),
+  `rmsBufScalar`/`rmsBufNext_eq_scalar`, `lambDenom_pos`. `adam_denom_pos` stays: it is the Adam-shaped
+  statement, `clipDenom_pos` the generic one.
+* 6.2 in part: `CertifiedAt.mono` and `CertifiedAt.of_margin` (`certified_at_eps` concluding the
+  certificate). The capstones' statements and the generated per-image theorems are unchanged:
+  restating them means rerunning the scorecard generators, which include the SDP pipelines and
+  `ScorecardSDPFull` (CertsHeavy). `certified_at_eps_pair` is per pair, not a `CertifiedAt`.
+* 6.3: `lipschitzL2_iff_lipschitzWith` (at `K : ℝ≥0`) and `LipschitzL2.mono`; the docstring's
+  reason is corrected (real constant; `LipschitzWith`'s is `ℝ≥0`, not `ℝ≥0∞`). `euclid_norm_sq` is
+  gone (`EuclideanSpace.real_norm_sq_eq`). `.comp` / `clm_lipschitzL2` keep their ℝ-constant proofs.
+  The pinned challenge statement is untouched.
+* 6.4 in part: `GaussianQuantile` imports `UpstreamDraft` and derives `stdNormalCDF_strictMono`,
+  `_neg`, `_pos`, `_lt_one` and the left-limit step from `MathlibUpstream`; its local
+  `IsOpenPosMeasure` instance and `stdGaussian_Ioo_pos` are gone. `stdNormalCDF_eq_real`,
+  `stdNormalCDF_sub` (PhiBounds' copy of the split now uses it), `continuous_stdNormalCDF` added.
+  `binomTail_eq_binomial` and `map_hitCount_pi` (the count's law is `Bin(N, ν.real A)`) added.
+  `integral_indicator_Iic_gaussianReal` is `integral_indicator_Iic_eq_cdf` over any probability
+  measure. Not done: moving `gaussianPDFReal_shift` and the 1-D Cameron–Martin identity into the
+  PR2 draft generalised to variance `v` (upstream-draft work, with `planning/mathlib_upstream_drafts/`
+  kept in sync).
+* 6.5: `sum_swap_12_3` → `Finset.sum_comm_cycle`; `one_add_u_le_pow` → `le_self_pow₀`;
+  `div_one_sub_mono`, `sum_channel_fiber` public in place (relocation is §7); `dropout` lost its
+  phantom `N n` (and so did `dropoutHasVJP`); the three zero-mask simp lemmas end in `0`.
+  `LipschitzCertDemo` rename declined here: it is a naming change for the naming pass.
+* Also fixed: the `if_pos`/`if_neg` deprecations in §5.1's slot lemmas, and seven unused simp
+  arguments §2 left in BackLinks / ConvBackCertifiedTie / DepthwiseBackCertifiedTie.
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

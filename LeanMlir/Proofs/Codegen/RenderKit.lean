@@ -50,7 +50,7 @@ def adamOne (B : Nat) (replicas : Nat) (g : PGrad) (wdName : String := "%wd") :
     | reference line | emitted here |
     |---|---|
     | `grads = g + WD * p` | `momVNextF` at `(μ := wd, v := θ)` — `Proofs.momVNext_as_coupled_l2` |
-    | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ`** — `Proofs.rmsSqNext_eq_adamVNext` |
+    | `sq = RHO*s + (1-RHO)*g*g` | **`adamVNextF` at `β₂ := ρ`** — `s'` is `adamVNext ρ` |
     | `buf = MOMENTUM*b + g/sqrt(sq+EPS)` | `rmsBufNextF` — the new op, ε INSIDE the root |
     | `params = p - lr*buf` | `sgdParamF` on the buffer's SSA |
 

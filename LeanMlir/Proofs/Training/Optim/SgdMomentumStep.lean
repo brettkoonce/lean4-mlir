@@ -52,6 +52,20 @@ def momParam (μ lr : ℝ) (θ v g : Vec n) : Vec n :=
 def momStep (μ lr : ℝ) (θ v g : Vec n) : Vec n × Vec n :=
   (momParam μ lr θ v g, momVNext μ v g)
 
+@[simp] theorem sgdParam_apply (lr : ℝ) (θ g : Vec n) (i : Fin n) :
+    sgdParam lr θ g i = θ i - lr * g i := rfl
+
+@[simp] theorem momVNext_apply (μ : ℝ) (v g : Vec n) (i : Fin n) :
+    momVNext μ v g i = μ * v i + g i := rfl
+
+@[simp] theorem momParam_apply (μ lr : ℝ) (θ v g : Vec n) (i : Fin n) :
+    momParam μ lr θ v g i = θ i - lr * (g i + μ * momVNext μ v g i) := rfl
+
+@[simp] theorem momStep_fst (μ lr : ℝ) (θ v g : Vec n) :
+    (momStep μ lr θ v g).1 = momParam μ lr θ v g := rfl
+@[simp] theorem momStep_snd (μ lr : ℝ) (θ v g : Vec n) :
+    (momStep μ lr θ v g).2 = momVNext μ v g := rfl
+
 /-- **`μ = 0` collapses Nesterov to plain SGD.** The bridge between the two renders, and a cheap
     check that the momentum formula has no stray term: at zero momentum `v' = g` and the look-ahead
     `g + 0·v'` is just `g`. -/

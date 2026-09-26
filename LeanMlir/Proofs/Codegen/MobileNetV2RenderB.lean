@@ -1378,8 +1378,8 @@ end Proofs.StableHLO
 -- **68.33%** (everything else — batch 256, 90 epochs, 5-epoch warmup, no label smoothing — already
 -- matches). recipe_gaps files this as Tier D, "a new proven `SHlo` op family, ten sites each";
 -- measured, it is **one** op: `momVNextF` already spells the coupled L2 and `adamVNextF` at
--- `β₂ := ρ` already IS the running mean-square (`Proofs.rmsSqNext_eq_adamVNext`, by `rfl`), so only
--- the ε-inside-the-root normalise had to be built.
+-- `β₂ := ρ` already IS the running mean-square (`Proofs.rmsPropStep`'s `s'` is `adamVNext ρ`),
+-- so only the ε-inside-the-root normalise had to be built.
 --
 -- Same shape/batch/replicas as the `adam64` peer above, so the two are comparable row for row: the
 -- signature is byte-identical apart from the entry name, and `%bc1`/`%bc2` ride through unused.

@@ -148,7 +148,7 @@ theorem pair_sq_bound {n h : ℕ} (W : Fin h → Fin n → ℝ)
     rw [← hEB] at hmul
     nlinarith [hmul, hCDρ, hsq]
   have hnorm : ‖x - x'‖ ^ 2 = ∑ j, (x j - x' j) ^ 2 := by
-    rw [euclid_norm_sq]
+    rw [EuclideanSpace.real_norm_sq_eq]
     exact Finset.sum_congr rfl fun j _ => rfl
   rw [hlhs, hnorm]
   exact le_of_mul_le_mul_left hfinal hρ

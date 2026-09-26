@@ -51,9 +51,7 @@ lemma stdNormalCDF_panel {a b : ℝ} (h0 : 0 ≤ a) (hab : a ≤ b) :
     stdNormalCDF b ≤ stdNormalCDF a + (b - a) * gaussianPDFReal 0 1 a := by
   have hsplit : stdNormalCDF b
       = stdNormalCDF a + (gaussianReal 0 1).real (Set.Ioc a b) := by
-    rw [stdNormalCDF, stdNormalCDF, cdf_eq_real, cdf_eq_real,
-      ← measureReal_union (Set.Iic_disjoint_Ioc le_rfl) measurableSet_Ioc,
-      Set.Iic_union_Ioc_eq_Iic hab]
+    linarith [stdNormalCDF_sub hab]
   rw [hsplit]
   have hpdf_mono : ∀ x ∈ Set.Ioc a b,
       gaussianPDF 0 1 x ≤ gaussianPDF 0 1 a := by

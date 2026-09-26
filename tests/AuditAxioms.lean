@@ -1406,7 +1406,8 @@ open Proofs
 #print axioms Proofs.lipschitz_margin_certified_radius
 #print axioms Proofs.logit_gap_stable
 #print axioms Proofs.coord_pair_bound
-#print axioms Proofs.euclid_norm_sq
+#print axioms Proofs.lipschitzL2_iff_lipschitzWith
+#print axioms Proofs.LipschitzL2.mono
 #print axioms Proofs.LipschitzL2.comp
 #print axioms Proofs.clm_lipschitzL2
 

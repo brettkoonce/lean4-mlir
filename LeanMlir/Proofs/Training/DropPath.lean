@@ -116,7 +116,7 @@ theorem dropPath_eq_reference (N n : Nat) (keep : Vec N) (kp : ℝ) (x : Vec (N 
     an all-zero mask on one site must make that branch contribute nothing, which is what pins the
     site to where the renderer claims it is. -/
 @[simp] theorem dropPath_zeros_zero (N n : Nat) (x : Vec (N * n)) :
-    dropPath N n (fun _ => 0) x = fun _ => 0 := by
+    dropPath N n (fun _ => 0) x = 0 := by
   funext idx; simp [dropPath, dropScale, layerScale]
 
 /-- **The VJP, and it is `layerScale`'s verbatim.** A diagonal linear map is its own transpose, so
@@ -211,19 +211,19 @@ the value's type, so the denotation is `layerScale` applied directly. -/
     `dropout` node and the `dropPath` node it could be confused with have the same shape of
     signature and the batched index is visible at every use site. The op that renders this
     (`SHlo.dropoutB`) needs `N` and `n` for its emitted type anyway. -/
-noncomputable def dropout (_N _n : Nat) {m : Nat} (mask : Vec m) : Vec m → Vec m :=
+noncomputable def dropout {m : Nat} (mask : Vec m) : Vec m → Vec m :=
   layerScale mask
 
-@[simp] theorem dropout_apply (N n : Nat) {m : Nat} (mask x : Vec m) (idx : Fin m) :
-    dropout N n mask x idx = mask idx * x idx := rfl
+@[simp] theorem dropout_apply {m : Nat} (mask x : Vec m) (idx : Fin m) :
+    dropout mask x idx = mask idx * x idx := rfl
 
 /-- **The supplied mask IS the reference's `bernoulli(…) / keep`.** `dropPath_eq_reference`'s
     twin, and stated for the same reason: folding the `1/keep` inversion into the input is exactly
     the step at which inverted dropout could quietly become the un-inverted kind, which trains and
     shifts every classifier input's scale at eval. -/
-theorem dropout_eq_reference (N n : Nat) {m : Nat} (keep : Vec m) (kp : ℝ) (x : Vec m)
+theorem dropout_eq_reference {m : Nat} (keep : Vec m) (kp : ℝ) (x : Vec m)
     (idx : Fin m) :
-    dropout N n (fun i => keep i / kp) x idx = x idx * keep idx / kp := by
+    dropout (fun i => keep i / kp) x idx = x idx * keep idx / kp := by
   simp [dropout, layerScale]; ring
 
 /-- **EVAL IS THE IDENTITY, EXACTLY**, and — as with `dropPath_ones_id` — this is a theorem about
@@ -232,20 +232,20 @@ theorem dropout_eq_reference (N n : Nat) {m : Nat} (keep : Vec m) (kp : ℝ) (x 
     The forward render emits the dropout site too and the driver supplies an all-ones mask there, so
     `@efficientnet_do_fwd` stays a byte-PREFIX of `@efficientnet_adamdo_train_step` and the
     `forward ⊂ train-step` prefix audit is unaffected. `1 * x = x` is exact in IEEE, so "the identity" is bit-exact, not close. -/
-@[simp] theorem dropout_ones_id (N n : Nat) {m : Nat} (x : Vec m) :
-    dropout N n (fun _ => (1 : ℝ)) x = x := by
+@[simp] theorem dropout_ones_id {m : Nat} (x : Vec m) :
+    dropout (fun _ => (1 : ℝ)) x = x := by
   funext idx; simp [dropout, layerScale]
 
 /-- A zero mask kills the input exactly — the other endpoint, and the control that pins the site to
     where the renderer claims it is. -/
-@[simp] theorem dropout_zeros_zero (N n : Nat) {m : Nat} (x : Vec m) :
-    dropout N n (fun _ => (0 : ℝ)) x = fun _ => 0 := by
+@[simp] theorem dropout_zeros_zero {m : Nat} (x : Vec m) :
+    dropout (fun _ => (0 : ℝ)) x = 0 := by
   funext idx; simp [dropout, layerScale]
 
 /-- **The VJP, `layerScale`'s verbatim again.** No second emitter, no `*Grad` peer, no new
     certificate. -/
-noncomputable def dropoutHasVJP (N n : Nat) {m : Nat} (mask : Vec m) :
-    HasVJP (dropout N n mask) :=
+noncomputable def dropoutHasVJP {m : Nat} (mask : Vec m) :
+    HasVJP (dropout mask) :=
   layerScaleHasVJP mask
 
 /-- **THE BACKWARD IS THE FORWARD**, at the same mask — `dropPath_vjp_is_self` one rank up.
@@ -257,8 +257,8 @@ noncomputable def dropoutHasVJP (N n : Nat) {m : Nat} (mask : Vec m) :
     Feeding it the undropped activation type-checks, trains and descends, and is invisible at
     `mask ≡ 1`, which is where every identity gate for this feature sits. The general rule: *when an
     op is spliced into a chain, list every CONSUMER of the value it displaced.* -/
-theorem dropout_vjp_is_self (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m) :
-    (dropoutHasVJP N n mask).backward x dy = dropout N n mask dy := rfl
+theorem dropout_vjp_is_self {m : Nat} (mask : Vec m) (x dy : Vec m) :
+    (dropoutHasVJP mask).backward x dy = dropout mask dy := rfl
 
 /-- **`dropPath` IS `dropout` AT A LIFTED MASK** — the bridge, and it is `rfl`.
 
@@ -267,7 +267,7 @@ theorem dropout_vjp_is_self (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m) 
     and it is the reason these two ops share a file: anything proved about one at a lifted mask
     transfers, and anything that *fails* to transfer is exactly the per-element freedom below. -/
 theorem dropout_of_dropScale (N n : Nat) (s : Vec N) :
-    dropout N n (dropScale N n s) = dropPath N n s := rfl
+    dropout (dropScale N n s) = dropPath N n s := rfl
 
 /-- **AND HERE IS THE FREEDOM `dropPath` DOES NOT HAVE** — the formal content of "per-SAMPLE".
 

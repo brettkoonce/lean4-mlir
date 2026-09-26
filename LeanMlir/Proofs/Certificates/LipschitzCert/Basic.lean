@@ -34,12 +34,22 @@ open scoped BigOperators
 -- § A pointwise-bound Lipschitz predicate (L2, explicit ε–δ form)
 -- ════════════════════════════════════════════════════════════════
 
-/-- `f` is `L`-Lipschitz in the (L2) norm: `‖f u − f w‖ ≤ L · ‖u − w‖`. The explicit
-    ε–δ form (vs Mathlib's `LipschitzWith`, which is `ℝ≥0∞`-valued) — it reads like the
-    math and composes by plain arithmetic. -/
+/-- `f` is `L`-Lipschitz in the (L2) norm: `‖f u − f w‖ ≤ L · ‖u − w‖`, with a REAL constant `L`
+    (the certificates carry rational constants as reals). At a nonnegative constant it is Mathlib's
+    `LipschitzWith` (`lipschitzL2_iff_lipschitzWith`), whose constant is an `ℝ≥0`. -/
 def LipschitzL2 {α β : Type*} [NormedAddCommGroup α] [NormedAddCommGroup β]
     (L : ℝ) (f : α → β) : Prop :=
   ∀ u w, ‖f u - f w‖ ≤ L * ‖u - w‖
+
+/-- The bridge to Mathlib: at a constant `K : ℝ≥0`, `LipschitzL2` is `LipschitzWith`. -/
+theorem lipschitzL2_iff_lipschitzWith {α β : Type*} [NormedAddCommGroup α] [NormedAddCommGroup β]
+    {K : NNReal} {f : α → β} : LipschitzL2 (K : ℝ) f ↔ LipschitzWith K f :=
+  lipschitzWith_iff_norm_sub_le.symm
+
+/-- A larger constant is still a Lipschitz constant. -/
+theorem LipschitzL2.mono {α β : Type*} [NormedAddCommGroup α] [NormedAddCommGroup β]
+    {L L' : ℝ} {f : α → β} (hf : LipschitzL2 L f) (hL : L ≤ L') : LipschitzL2 L' f :=
+  fun u w => (hf u w).trans (mul_le_mul_of_nonneg_right hL (norm_nonneg _))
 
 /-- Composition multiplies Lipschitz constants: `g ∘ h` is `(Lg·Lh)`-Lipschitz. This is
     exactly the per-layer **product** bound `L = ∏ᵢ ‖Wᵢ‖₂` — sound, and (past one layer)
@@ -71,18 +81,12 @@ theorem clm_lipschitzL2 {α β : Type*} [NormedAddCommGroup α] [NormedSpace ℝ
 
 variable {k : ℕ}
 
-/-- `‖v‖² = Σᵢ (vᵢ)²` on `EuclideanSpace ℝ (Fin k)` — Mathlib's
-    `EuclideanSpace.real_norm_sq_eq` at `Fin k`. -/
-theorem euclid_norm_sq (v : EuclideanSpace ℝ (Fin k)) :
-    ‖v‖ ^ 2 = ∑ i, (v i) ^ 2 :=
-  EuclideanSpace.real_norm_sq_eq v
-
 /-- Two distinct coordinates of `v` carry at most `2‖v‖²` of squared mass:
     `(vᵢ − vⱼ)² ≤ 2‖v‖²`. Equivalently `|vᵢ − vⱼ| ≤ √2·‖v‖` — the `√2` in the radius. -/
 theorem coord_pair_bound (v : EuclideanSpace ℝ (Fin k)) {i j : Fin k} (hij : i ≠ j) :
     (v i - v j) ^ 2 ≤ 2 * ‖v‖ ^ 2 := by
   have hpair : (v i) ^ 2 + (v j) ^ 2 ≤ ‖v‖ ^ 2 := by
-    rw [euclid_norm_sq]
+    rw [EuclideanSpace.real_norm_sq_eq]
     have hsub : ({i, j} : Finset (Fin k)) ⊆ Finset.univ := Finset.subset_univ _
     have hle := Finset.sum_le_sum_of_subset_of_nonneg hsub
       (fun l _ _ => by positivity : ∀ l ∈ Finset.univ, l ∉ ({i, j} : Finset (Fin k)) →

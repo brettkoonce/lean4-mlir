@@ -382,20 +382,21 @@ noncomputable def mnv4PostDWSlot (N : Nat) {c h w kH kW : Nat} (postDWk : Nat)
 
 theorem mnv4PreDWSlot_of_eq_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k = 0)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PreDWSlot (h := h) (w := w) N k W b ε hε γ β = CertLayer.id' _ := if_pos hk
+    mnv4PreDWSlot (h := h) (w := w) N k W b ε hε γ β = CertLayer.id' _ := ite_eq_left hk
 
 theorem mnv4PreDWSlot_of_ne_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k ≠ 0)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PreDWSlot (h := h) (w := w) N k W b ε hε γ β = mnv4DWBnLayer N W b ε hε γ β := if_neg hk
+    mnv4PreDWSlot (h := h) (w := w) N k W b ε hε γ β = mnv4DWBnLayer N W b ε hε γ β :=
+  ite_eq_right hk
 
 theorem mnv4PostDWSlot_of_eq_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k = 0)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
-    mnv4PostDWSlot (h := h) (w := w) N k W b ε hε γ β = CertLayer.id' _ := if_pos hk
+    mnv4PostDWSlot (h := h) (w := w) N k W b ε hε γ β = CertLayer.id' _ := ite_eq_left hk
 
 theorem mnv4PostDWSlot_of_ne_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k ≠ 0)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
     mnv4PostDWSlot (h := h) (w := w) N k W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
-  if_neg hk
+  ite_eq_right hk
 
 /-- The four families, named — read off the two kernel slots by **exactly** the rule the slots
     dispatch on and the render emits. -/

@@ -1390,7 +1390,7 @@ inductive SHlo : Nat → Type where
       (μ lr : ℝ) (θ v : Vec n)                                  : SHlo n → SHlo n
   -- ── RMSProp with momentum (`RmsPropStep.lean`), the optimizer the MobileNetV2 and
   --    EfficientNet ImageNet references use. Only ONE op is new: the mean-square slot is
-  --    `adamVNextF` at `β₂ := ρ` (`rmsSqNext_eq_adamVNext`, by `rfl`), the coupled-L2 gradient is
+  --    `adamVNextF` at `β₂ := ρ` (RMSProp's `s'` IS `adamVNext ρ`), the coupled-L2 gradient is
   --    `momVNextF` at `(μ := wd, v := θ)` (`momVNext_as_coupled_l2`), and the parameter update is
   --    `sgdParamF` applied to this op's output. ⚠ TENSORFLOW's placement — ε goes INSIDE the
   --    square root; the textbook `g/(√s' + ε)` is a DIFFERENT optimizer (see the ε-placement
@@ -2126,7 +2126,7 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .selectPosB _ x e => fun i => if x i > 0 then den e i else 0
   | _, .selectMidB _ x e => fun i => if 0 < x i ∧ x i < 6 then den e i else 0
   | _, .dropPathB (N := N) (n := n) _ s e => Proofs.dropPath N n s (den e)
-  | _, .dropoutB (N := N) (n := n) _ mask e => Proofs.dropout N n mask (den e)
+  | _, .dropoutB (N := N) (n := n) _ mask e => Proofs.dropout mask (den e)
   | _, .swishBackB (N := N) (n := n) _ x e => (swishHasVJP (N*n)).backward x (den e)
   -- `gelu` is POINTWISE, so its VJP at the batched width `N*n` is already the batch-lift of the
   -- per-example one — the same argument `swishBackB` rests on, and why neither needs `batchMapAux`.
@@ -2637,7 +2637,7 @@ theorem den_bnStatsVarB_allReduce_R1 {N oc h w : Nat} (t t' : String) (ds ds' : 
 @[simp] theorem den_dropPathB {N n : Nat} (mN : String) (s : Vec N) (e : SHlo (N*n)) :
     den (.dropPathB mN s e) = Proofs.dropPath N n s (den e) := rfl
 @[simp] theorem den_dropoutB {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.dropoutB mN mask e) = Proofs.dropout N n mask (den e) := rfl
+    den (.dropoutB mN mask e) = Proofs.dropout mask (den e) := rfl
 @[simp] theorem den_swishBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.swishBackB xN x e) = (swishHasVJP (N*n)).backward x (den e) := rfl
 @[simp] theorem den_geluBackB {N n : Nat} (xN : String) (x : Vec (N*n)) (e : SHlo (N*n)) :
@@ -2940,7 +2940,7 @@ theorem den_dropPathB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     per-ELEMENT inverted mask. `rfl`, because dropout is `layerScale` at a mask of the value's own
     type — no lift, which is what makes it cheaper than `dropPathB` rather than dearer. -/
 theorem dropoutB_faithful {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.dropoutB mN mask e) = Proofs.dropout N n mask (den e) := rfl
+    den (.dropoutB mN mask e) = Proofs.dropout mask (den e) := rfl
 
 /-- **Classifier-dropout BACKWARD faithfulness — the SAME constructor**, `dropPathB_back_faithful`
     one mask rank up. This covers the cotangent flowing THROUGH the site and nothing else; see
@@ -2948,7 +2948,7 @@ theorem dropoutB_faithful {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo
     and must therefore read the DROPPED activation. -/
 theorem dropoutB_back_faithful {N n : Nat} (mN : String) (mask : Vec (N*n))
     (x : Vec (N*n)) (e : SHlo (N*n)) :
-    den (.dropoutB mN mask e) = (Proofs.dropoutHasVJP N n mask).backward x (den e) := rfl
+    den (.dropoutB mN mask e) = (Proofs.dropoutHasVJP mask).backward x (den e) := rfl
 
 /-- **The ones-mask identity on the AST**, which is what licenses emitting the dropout site in
     the FORWARD artifact: `@efficientnet_do_fwd` and `@efficientnet_adamdo_train_step` are then one
@@ -3450,19 +3450,12 @@ theorem rmsProp_triple_faithful {n : Nat} (θN sqN bufN rhoN orhoN muN epsN lrN 
       = rmsPropStep ρ μ ε lr θ sq buf (den e) := by
   subst hb; rfl
 
-/-- **The mean-square slot really is the Adam op.** `adamVNextF` at `β₂ := ρ` denotes RMSProp's
-    `s'`, so reusing it is licensed rather than assumed — the emit-side twin of
-    `Proofs.rmsSqNext_eq_adamVNext`, and the reason this optimizer cost ONE op and not three. -/
-theorem adamVNextF_as_rmsSqNext {n : Nat} (sqN rhoN orhoN : String) (ds : List Nat)
-    (ρ : ℝ) (sq : Vec n) (e : SHlo n) :
-    den (.adamVNextF sqN rhoN orhoN ds ρ sq e) = rmsSqNext ρ sq (den e) := rfl
-
 /-- **`μ = 0` makes the rendered RMSProp buffer the bare normalised gradient.** The `mu_zero`
     bridge `momParamF_mu_zero` provides for Nesterov, at the denotation level. -/
 theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
     (ds : List Nat) (ρ ε : ℝ) (sq buf : Vec n) (e : SHlo n) :
     den (.rmsBufNextF sqN bufN rhoN orhoN muN epsN ds ρ 0 ε sq buf e)
-      = fun i => (den e) i / Real.sqrt (rmsSqNext ρ sq (den e) i + ε) := by
+      = fun i => (den e) i / Real.sqrt (adamVNext ρ sq (den e) i + ε) := by
   simp only [rmsBufNextF_faithful]
   exact rmsBufNext_mu_zero ρ ε sq buf (den e)
 

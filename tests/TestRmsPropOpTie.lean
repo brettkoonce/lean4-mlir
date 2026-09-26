@@ -98,7 +98,7 @@ private def rmsBuf : String :=
   render (.rmsBufNextF "%sq" "%buf" "%rho" "%orho" "%mu" "%eps" DS 0 0 0 z z gradOperand)
 
 /-- The mean-square slot as the render actually emits it: the EXISTING Adam second-moment op at
-    `β₂ := ρ` (`Proofs.rmsSqNext_eq_adamVNext`, and `adamVNextF_as_rmsSqNext` on the `den` side). -/
+    `β₂ := ρ`: `Proofs.rmsPropStep`'s `s'` is `adamVNext ρ`, which `adamVNextF_faithful` denotes. -/
 private def sqSlot : String :=
   render (.adamVNextF "%sq" "%rho" "%orho" DS 0 z gradOperand)
 

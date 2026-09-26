@@ -11,8 +11,9 @@ inside the namespace `MathlibUpstream` so nothing clashes with Mathlib or with
 `LeanMlir.Proofs`. Keep in sync with those two files.
 
 A `Certs` root (audited in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)) so the drafts can't rot between
-Mathlib pin bumps while the PRs are in flight. Once a PR merges and the pin catches up,
-delete the corresponding section here and cite Mathlib directly.
+Mathlib pin bumps while the PRs are in flight. `GaussianQuantile` derives its `Φ` facts from
+the PR2 lemmas. Once a PR merges and the pin catches up, delete the corresponding section here
+and repoint those uses at Mathlib.
 
 Fast check: [`lake env lean LeanMlir/Proofs/Foundation/UpstreamDraft.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/UpstreamDraft.lean) -/
 

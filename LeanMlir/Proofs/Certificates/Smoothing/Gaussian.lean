@@ -58,10 +58,10 @@ lemma gaussianPDFReal_shift (δ z : ℝ) :
       = δ * z - δ ^ 2 / 2 + -(z - 0) ^ 2 / (2 * 1) := by ring
   rw [mul_left_comm, ← Real.exp_add, harg]
 
-/-- The halfspace indicator's Gaussian mass is the cdf at the threshold. -/
-lemma integral_indicator_Iic_gaussianReal (μ t : ℝ) :
-    ∫ z, (Set.Iic t).indicator (1 : ℝ → ℝ) z ∂(gaussianReal μ 1)
-      = cdf (gaussianReal μ 1) t := by
+/-- A halfspace indicator's mass under any probability measure on `ℝ` is the cdf at the
+    threshold. -/
+lemma integral_indicator_Iic_eq_cdf (μ : Measure ℝ) [IsProbabilityMeasure μ] (t : ℝ) :
+    ∫ z, (Set.Iic t).indicator (1 : ℝ → ℝ) z ∂μ = cdf μ t := by
   rw [integral_indicator_one measurableSet_Iic, cdf_eq_real]
 
 -- ════════════════════════════════════════════════════════════════
@@ -263,7 +263,7 @@ theorem pi_gaussian_np_shift {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm 
   -- endpoints: ∫ h = Φ t and ∫ w·h = Φ (t − d)
   have hhval : ∫ z, h z ∂(stdGaussianPi n) = stdNormalCDF t := by
     simp only [hh]
-    rw [integral_comp_eval hh1d.aestronglyMeasurable, integral_indicator_Iic_gaussianReal]
+    rw [integral_comp_eval hh1d.aestronglyMeasurable, integral_indicator_Iic_eq_cdf]
     rfl
   have hWhval : ∫ z, Real.exp (d * z 0 - d ^ 2 / 2) * h z ∂(stdGaussianPi n)
       = stdNormalCDF (t - d) := by
@@ -275,7 +275,7 @@ theorem pi_gaussian_np_shift {n : ℕ} {F : (Fin (n + 1) → ℝ) → ℝ} (hFm 
         = (Set.Iic (t - d)).indicator (1 : ℝ → ℝ) s := fun s => by
       simp only [Set.indicator_apply, Set.mem_Iic, Pi.one_apply, le_sub_iff_add_le]
     simp only [hind]
-    rw [integral_indicator_Iic_gaussianReal]
+    rw [integral_indicator_Iic_eq_cdf]
     rfl
   rw [hhval] at hkey
   rw [hWhval] at hkey

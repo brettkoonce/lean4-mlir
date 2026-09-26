@@ -68,9 +68,11 @@ variable {n : Nat}
     That is timm's `Lamb`, and it is not AdamW's `θ' = … − lr·wd·θ` moved around: there the decay
     never enters a norm. -/
 noncomputable def lambDir (β₁ β₂ ε wd bc₁ bc₂ : ℝ) (θ m v g : Vec n) : Vec n := fun i =>
-  let m' := β₁ * m i + (1 - β₁) * g i
-  let v' := β₂ * v i + (1 - β₂) * (g i) ^ 2
-  (m' / bc₁) / (Real.sqrt (v' / bc₂) + ε) + wd * θ i
+  (adamMNext β₁ m g i / bc₁) / (Real.sqrt (adamVNext β₂ v g i / bc₂) + ε) + wd * θ i
+
+theorem lambDir_apply (β₁ β₂ ε wd bc₁ bc₂ : ℝ) (θ m v g : Vec n) (i : Fin n) :
+    lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v g i
+      = (adamMNext β₁ m g i / bc₁) / (Real.sqrt (adamVNext β₂ v g i / bc₂) + ε) + wd * θ i := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § The trust ratio — the layer-wise part
@@ -109,12 +111,8 @@ noncomputable def lambScale (wn2 : ℝ) (r : Vec n) : Vec n := fun i =>
 -- § Well-definedness, and the clauses a plausible wrong LAMB would drop
 -- ════════════════════════════════════════════════════════════════
 
-/-- The direction's divisor is strictly positive for `ε > 0` — `Real.sqrt` is unconditionally
-    nonnegative, including at the negative arguments it maps to 0, so this needs no hypothesis on
-    `v'`. `clipDenom_pos` / `adam_denom_pos` verbatim. This is why the reference's `+ 1e-6`
-    is necessary rather than cosmetic: at `ε = 0` with `v = 0` and `g = 0` the ratio is `0/0`. -/
-theorem lambDenom_pos (ε x : ℝ) (hε : 0 < ε) : 0 < Real.sqrt x + ε :=
-  clipDenom_pos ε x hε
+theorem lambTrust_of_pos {wn2 rn2 : ℝ} (hw : 0 < wn2) (hr : 0 < rn2) :
+    lambTrust wn2 rn2 = Real.sqrt wn2 / Real.sqrt rn2 := ite_eq_left ⟨hw, hr⟩
 
 /-- The trust ratio is nonnegative. -/
 theorem lambTrust_nonneg (wn2 rn2 : ℝ) : 0 ≤ lambTrust wn2 rn2 := by
@@ -146,6 +144,14 @@ noncomputable def lambStep (β₁ β₂ ε lr wd bc₁ bc₂ wn2 : ℝ) (θ m v 
   (sgdParam lr θ (lambScale wn2 (lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v g)),
    adamMNext β₁ m g,
    adamVNext β₂ v g)
+
+@[simp] theorem lambStep_fst (β₁ β₂ ε lr wd bc₁ bc₂ wn2 : ℝ) (θ m v g : Vec n) :
+    (lambStep β₁ β₂ ε lr wd bc₁ bc₂ wn2 θ m v g).1
+      = sgdParam lr θ (lambScale wn2 (lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v g)) := rfl
+@[simp] theorem lambStep_snd_fst (β₁ β₂ ε lr wd bc₁ bc₂ wn2 : ℝ) (θ m v g : Vec n) :
+    (lambStep β₁ β₂ ε lr wd bc₁ bc₂ wn2 θ m v g).2.1 = adamMNext β₁ m g := rfl
+@[simp] theorem lambStep_snd_snd (β₁ β₂ ε lr wd bc₁ bc₂ wn2 : ℝ) (θ m v g : Vec n) :
+    (lambStep β₁ β₂ ε lr wd bc₁ bc₂ wn2 θ m v g).2.2 = adamVNext β₂ v g := rfl
 
 /-- **At a zero weight norm the trust scaling is the IDENTITY.** `lambTrust_zero_weight` says
     the ratio is 1 there; this says what that does to the direction, which is what the emitted

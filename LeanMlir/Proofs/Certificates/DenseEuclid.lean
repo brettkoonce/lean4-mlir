@@ -44,7 +44,7 @@ theorem denseE_lipschitzL2_of_sq {n k : ℕ} (W : Fin k → Fin n → ℝ) {B : 
     LipschitzL2 B (denseE W) := by
   intro u w
   have hsq : ‖denseE W u - denseE W w‖ ^ 2 ≤ (B * ‖u - w‖) ^ 2 := by
-    rw [euclid_norm_sq, mul_pow, euclid_norm_sq]
+    rw [EuclideanSpace.real_norm_sq_eq, mul_pow, EuclideanSpace.real_norm_sq_eq]
     refine le_of_eq_of_le (Finset.sum_congr rfl fun i _ => ?_) (hW fun j => u j - w j)
     show ((∑ j, W i j * u j) - ∑ j, W i j * w j) ^ 2 = _
     rw [← Finset.sum_sub_distrib]; simp only [mul_sub]
@@ -108,7 +108,7 @@ theorem certified_at_eps {n k : ℕ} {L m ε : ℝ}
 theorem reluE_lipschitzL2 {n : ℕ} : LipschitzL2 1 (reluE (n := n)) := by
   intro u w
   have hsq : ‖reluE u - reluE w‖ ^ 2 ≤ ‖u - w‖ ^ 2 := by
-    rw [euclid_norm_sq, euclid_norm_sq]
+    rw [EuclideanSpace.real_norm_sq_eq, EuclideanSpace.real_norm_sq_eq]
     refine Finset.sum_le_sum fun i _ => ?_
     have habs : |max (u i) 0 - max (w i) 0| ≤ |u i - w i| :=
       abs_max_sub_max_le_abs (u i) (w i) 0
@@ -234,13 +234,13 @@ theorem lipschitzL2_lower_euclid {n k : ℕ} {L ℓ : ℝ}
     (hray : ℓ ^ 2 * (∑ j, ((u - w) j) ^ 2) ≤ ∑ i, ((f u - f w) i) ^ 2) :
     ℓ ≤ L := by
   have hnw : 0 < ‖u - w‖ := by
-    have h2 : 0 < ‖u - w‖ ^ 2 := by rw [euclid_norm_sq]; exact hpos
+    have h2 : 0 < ‖u - w‖ ^ 2 := by rw [EuclideanSpace.real_norm_sq_eq]; exact hpos
     rcases (norm_nonneg (u - w)).eq_or_lt with h | h
     · exfalso; rw [← h] at h2; simp at h2
     · exact h
   have h1 : ℓ * ‖u - w‖ ≤ ‖f u - f w‖ := by
     have e : (ℓ * ‖u - w‖) ^ 2 ≤ ‖f u - f w‖ ^ 2 := by
-      rw [mul_pow, euclid_norm_sq, euclid_norm_sq]
+      rw [mul_pow, EuclideanSpace.real_norm_sq_eq, EuclideanSpace.real_norm_sq_eq]
       exact hray
     calc ℓ * ‖u - w‖
         = Real.sqrt ((ℓ * ‖u - w‖) ^ 2) :=
@@ -258,6 +258,21 @@ def CertifiedAt {n k : ℕ} (f : EuclideanSpace ℝ (Fin n) → EuclideanSpace �
     (ε : ℝ) (x : EuclideanSpace ℝ (Fin n)) (i : Fin k) : Prop :=
   ∀ δ : EuclideanSpace ℝ (Fin n), ‖δ‖ < ε →
     ∀ j, j ≠ i → f (x + δ) j < f (x + δ) i
+
+/-- Certification is monotone in the radius — `CertifiedAtLinf.mono`'s L2 peer. -/
+theorem CertifiedAt.mono {n k : ℕ} {f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)}
+    {ε ε' : ℝ} {x : EuclideanSpace ℝ (Fin n)} {i : Fin k}
+    (hc : CertifiedAt f ε x i) (hle : ε' ≤ ε) : CertifiedAt f ε' x i :=
+  fun δ hδ => hc δ (lt_of_lt_of_le hδ hle)
+
+/-- `certified_at_eps`, concluding the certificate itself: an `L`-Lipschitz map whose margin at
+    `x` clears `(14143/10000)·L·ε` is `CertifiedAt` radius `ε`. -/
+theorem CertifiedAt.of_margin {n k : ℕ} {L m ε : ℝ}
+    {f : EuclideanSpace ℝ (Fin n) → EuclideanSpace ℝ (Fin k)}
+    (hf : LipschitzL2 L f) (hL : 0 < L) {x : EuclideanSpace ℝ (Fin n)}
+    {i : Fin k} (hmargin : ∀ j, j ≠ i → m ≤ f x i - f x j)
+    (hε : ((14143 : ℝ)/10000) * L * ε ≤ m) (hε0 : 0 ≤ ε) : CertifiedAt f ε x i :=
+  fun δ hδ => certified_at_eps hf hL hmargin hε hε0 δ hδ
 
 end LipschitzCertDemo
 end Proofs

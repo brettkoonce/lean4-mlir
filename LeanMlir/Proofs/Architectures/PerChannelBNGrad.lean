@@ -69,7 +69,7 @@ private theorem pdiv_bnPerChannelFlat_beta (oc m : Nat) (ε : ℝ) (γ β : Vec 
   simp [@eq_comm _ idx]
 
 /-- Sum-over-the-channel-fibre: `Σ_j [idx = chan j]·g j = Σ_s g (idx, s)`. -/
-private theorem sum_channel_fiber (oc m : Nat) (idx : Fin oc) (g : Fin (oc * m) → ℝ) :
+theorem sum_channel_fiber (oc m : Nat) (idx : Fin oc) (g : Fin (oc * m) → ℝ) :
     (∑ j : Fin (oc * m), (if idx = (finProdFinEquiv.symm j).1 then g j else 0))
       = ∑ s : Fin m, g (finProdFinEquiv (idx, s)) := by
   rw [← Equiv.sum_comp finProdFinEquiv

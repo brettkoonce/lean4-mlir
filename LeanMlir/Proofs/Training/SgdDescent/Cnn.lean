@@ -2598,16 +2598,6 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
 -- usable at trained magnitudes.
 -- ════════════════════════════════════════════════════════════════
 
-/-- Rotate the innermost summation index of a triple sum to the front. -/
-theorem sum_swap_12_3 {α β γ : Type*} [Fintype α] [Fintype β] [Fintype γ]
-    (f : α → β → γ → ℝ) :
-    ∑ a : α, ∑ b : β, ∑ c : γ, f a b c =
-      ∑ c : γ, ∑ a : α, ∑ b : β, f a b c :=
-  calc ∑ a : α, ∑ b : β, ∑ c : γ, f a b c
-      = ∑ a : α, ∑ c : γ, ∑ b : β, f a b c :=
-        Finset.sum_congr rfl fun _a _ => Finset.sum_comm
-    _ = ∑ c : γ, ∑ a : α, ∑ b : β, f a b c := Finset.sum_comm
-
 /-- Swap the two index pairs of a quadruple sum. -/
 theorem sum_swap_pair_pair {α β γ δ : Type*}
     [Fintype α] [Fintype β] [Fintype γ] [Fintype δ]
@@ -2616,7 +2606,7 @@ theorem sum_swap_pair_pair {α β γ δ : Type*}
       ∑ c : γ, ∑ d : δ, ∑ a : α, ∑ b : β, f a b c d :=
   calc ∑ a : α, ∑ b : β, ∑ c : γ, ∑ d : δ, f a b c d
       = ∑ c : γ, ∑ a : α, ∑ b : β, ∑ d : δ, f a b c d :=
-        sum_swap_12_3 (fun a b c => ∑ d : δ, f a b c d)
+        Finset.sum_comm_cycle (f := fun a b c => ∑ d : δ, f a b c d)
     _ = ∑ c : γ, ∑ a : α, ∑ d : δ, ∑ b : β, f a b c d :=
         Finset.sum_congr rfl fun _c _ =>
           Finset.sum_congr rfl fun _a _ => Finset.sum_comm
@@ -2905,7 +2895,7 @@ theorem conv2d_input_l1_drift {ic oc h w kH kW : Nat}
             wK * |convPad kH kW x' c kh kw ho wo -
               convPad kH kW x c kh kw ho wo| := by
         refine Finset.sum_congr rfl fun o _ => ?_
-        exact (sum_swap_12_3 _).trans
+        exact Finset.sum_comm_cycle.trans
           (Finset.sum_congr rfl fun c _ => sum_swap_pair_pair _)
     _ ≤ ∑ _o : Fin oc, ∑ c : Fin ic, ∑ _kh : Fin kH, ∑ _kw : Fin kW,
           wK * (∑ i : Fin h, ∑ j : Fin w, |x' c i j - x c i j|) := by

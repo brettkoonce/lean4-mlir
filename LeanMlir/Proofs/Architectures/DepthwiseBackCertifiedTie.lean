@@ -48,7 +48,7 @@ theorem depthwiseFlatBack_eq_vjp_backward {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (x : Vec (c * h * w)) :
     depthwiseFlatBack (h := h) (w := w) W = (depthwiseFlatHasVJP W b).backward x := by
   funext dy
-  simp only [depthwiseFlatBack, depthwiseFlat, depthwiseFlatHasVJP, HasVJP3.toHasVJP_backward,
+  simp only [depthwiseFlatBack, depthwiseFlat, depthwiseFlatHasVJP,
     depthwiseHasVJP3]
   rw [depthwiseConv2d_dwReverse_eq_input_grad_formula hkH hkW W (Tensor3.unflatten dy)]
   rfl

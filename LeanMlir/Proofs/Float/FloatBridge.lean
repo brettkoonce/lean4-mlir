@@ -116,11 +116,6 @@ private theorem one_le_one_add_u : (1 : ℝ) ≤ 1 + M.u := by
 theorem one_le_pow_one_add_u (k : ℕ) : (1 : ℝ) ≤ (1 + M.u) ^ k :=
   one_le_pow₀ M.one_le_one_add_u
 
-private theorem one_add_u_le_pow {k : ℕ} (hk : 1 ≤ k) :
-    1 + M.u ≤ (1 + M.u) ^ k := by
-  have h := pow_le_pow_right₀ M.one_le_one_add_u hk
-  simpa using h
-
 -- ════════════════════════════════════════════════════════════════
 -- § The two scalar assembly steps (pure-ℝ bookkeeping)
 -- ════════════════════════════════════════════════════════════════
@@ -232,7 +227,7 @@ theorem dot_close : ∀ {n : ℕ} (x y : Vec n),
         from pow_succ _ _]
     exact step_bound M.u_nonneg
       (Finset.abs_sum_le_sum_abs _ _)
-      (M.one_add_u_le_pow (by omega))
+      (le_self_pow₀ M.one_le_one_add_u (by omega))
       (ih (fun i => x i.castSucc) (fun i => y i.castSucc))
       (M.err _) (M.err _)
 
@@ -478,7 +473,7 @@ theorem pow_gamma_bound (u : ℝ) (hu : 0 ≤ u) (k : ℕ)
 
 /-- `x ↦ x/(1−x)` is monotone on `[0, 1)` — lets a `u ≤ u32` hypothesis ride
     through the γ-form. -/
-private theorem div_one_sub_mono {x y : ℝ} (hxy : x ≤ y)
+theorem div_one_sub_mono {x y : ℝ} (hxy : x ≤ y)
     (hy : y < 1) : x / (1 - x) ≤ y / (1 - y) := by
   have h1 : 0 < 1 - x := by linarith
   have h2 : 0 < 1 - y := by linarith
@@ -770,7 +765,7 @@ theorem sum_close : ∀ {n : ℕ} (x : Vec n),
         from pow_succ _ _]
     exact step_bound M.u_nonneg
       (Finset.abs_sum_le_sum_abs _ _)
-      (M.one_add_u_le_pow (by omega))
+      (le_self_pow₀ M.one_le_one_add_u (by omega))
       (ih (fun i => x i.castSucc))
       (by simp only [sub_self, abs_zero]
           exact mul_nonneg M.u_nonneg (abs_nonneg _))

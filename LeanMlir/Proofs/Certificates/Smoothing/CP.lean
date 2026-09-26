@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Certificates.Smoothing.Gaussian
+import Mathlib.Probability.Distributions.Binomial
 
 /-! # The exact Clopper–Pearson tie for randomized smoothing
 
@@ -53,6 +54,12 @@ open scoped BigOperators ENNReal NNReal
     polynomial in `q` — exactly what the driver evaluates. -/
 noncomputable def binomTail (N k : ℕ) (q : ℝ) : ℝ :=
   ∑ j ∈ Finset.Icc k N, (N.choose j : ℝ) * q ^ j * (1 - q) ^ (N - j)
+
+/-- `binomTail` is Mathlib's binomial measure of `[k, N]`. -/
+theorem binomTail_eq_binomial (N k : ℕ) (q : unitInterval) :
+    binomTail N k q = (binomial N q).real (↑(Finset.Icc k N) : Set ℕ) := by
+  rw [binomTail, ← sum_measureReal_singleton]
+  exact Finset.sum_congr rfl fun j _ => (binomial_real_singleton N j q).symm
 
 /-- The Clopper–Pearson lower confidence bound at level `α` for `k` successes
     in `N` trials: the smallest success probability whose upper tail at `k`
@@ -219,6 +226,19 @@ lemma pi_hitCount_real_eq_binomial (ν : Measure E) [IsProbabilityMeasure ν] {A
   rw [measureReal_def, pi_hitCount_eq_binomial ν hA N j, ENNReal.toReal_mul,
     ENNReal.toReal_mul, ENNReal.toReal_pow, ENNReal.toReal_pow,
     ENNReal.toReal_natCast, hc, measureReal_def]
+
+/-- **The vote count's law is Mathlib's binomial**: `N` i.i.d. draws from `ν`, counted on `A`,
+    push forward to `Bin(N, ν.real A)` — `pi_hitCount_real_eq_binomial` as a statement about
+    measures. -/
+theorem map_hitCount_pi (ν : Measure E) [IsProbabilityMeasure ν] {A : Set E}
+    (hA : MeasurableSet A) (N : ℕ) :
+    (Measure.pi fun _ : Fin N => ν).map (hitCount A N)
+      = binomial N ⟨ν.real A, measureReal_nonneg, measureReal_le_one⟩ := by
+  refine Measure.ext_iff_singleton.mpr fun j => ?_
+  rw [Measure.map_apply (measurable_hitCount hA N) (measurableSet_singleton j),
+    binomial_singleton, ← pi_hitCount_real_eq_binomial ν hA N j,
+    ofReal_measureReal (measure_ne_top _ _)]
+  rfl
 
 /-- **The upper-tail law**: `P(hitCount ≥ k)` over the product measure is
     exactly the `binomTail` polynomial the CP bound is defined from. -/
