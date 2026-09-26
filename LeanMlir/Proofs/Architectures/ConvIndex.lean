@@ -2,8 +2,8 @@ import LeanMlir.Proofs.Architectures.CNN
 
 /-! # Conv and max-pool index facts — the flat ↔ tensor index vocabulary
 
-The flat-index plumbing every conv-net proof reads tensors through (`t3Idx`, the window-tiling
-sums, `sum_s2`), and the 2×2 max-pool's window facts: the window max is Lipschitz in its cells,
+The flat-index plumbing every conv-net proof reads tensors through (`t3Idx` and its
+flat-sum `sum_t3`), and the 2×2 max-pool's window facts: the window max is Lipschitz in its cells,
 the pool is 1-Lipschitz per entry and ℓ1-contractive, and a selection margin beyond `2δ` freezes
 the argmax (`MaxPool2MarginQ`). The ℝ conv as a dense layer with weight sharing and its float
 forward are in `ConvFloat`.
@@ -299,11 +299,6 @@ theorem MaxPool2MarginQ.isArgmax_iff {c h w : Nat} {δ : ℝ}
         (hclose ci (winRowInv (winRow hi) a) (winColInv (winCol wi) b))
         (hclose ci hi wi))
 
-
-/-- The spatial `(hi, wi)` sum collapses to one flat sum over `Fin (h·w)`. -/
-theorem sum_s2 {h w : Nat} (g : Fin (h * w) → ℝ) :
-    ∑ s, g s = ∑ hi : Fin h, ∑ wi : Fin w, g (finProdFinEquiv (hi, wi)) :=
-  sum_finProdFinEquiv g
 
 /-- The padded input read that multiplies kernel entry `(·, c, kh, kw)` at
     output position `(hi, wi)` — names the `dite` inside `conv2d` so the

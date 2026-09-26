@@ -122,10 +122,7 @@ theorem depthwiseWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xN co
                (Tensor3.flatten W) idx j * rnd (batchSlice N (c * h * w) cot n j)) := by
   simp only [denStep, denStepApp]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  rw [← (HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 b
-      (Tensor3.unflatten (fun j => rnd (batchSlice N (c * h * w) x n j))))).correct
-      (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx]
-  simp only [HasVJP3.toHasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
+  exact HasVJP3.flatten_backward _ W _ idx
 
 /-- **bf16 SYMMETRIC strided depthwise weight GRADIENT**, rounded once. B0's stride-2 MBConvs and
     MobileNetV4's rows 1, 3, 11. -/

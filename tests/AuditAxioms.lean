@@ -795,7 +795,6 @@ open Proofs
 #print axioms maxPool2_close
 #print axioms maxPoolFlat_close
 -- Conv forward rounding budget (SgdDescent/Cnn.lean, planning §1b-A)
-#print axioms sum_w3
 #print axioms conv2d_eq_dense
 #print axioms convPad_close
 #print axioms FloatModel.convF
@@ -1007,7 +1006,6 @@ open Proofs
 -- ViT TRANSFORMER-BLOCK FOLD (planning/archive/floatbridge_enet_vit.md §2)
 #print axioms FloatModel.dotSgd_step_close
 #print axioms FloatModel.sumSgd_step_close
-#print axioms sum_s2
 #print axioms convWeightGrad_eq_dot
 #print axioms convBiasGrad_eq_sum
 #print axioms FloatModel.cnn_convW_step_float_close
@@ -1663,7 +1661,6 @@ open Proofs
 -- TRAINED-WEIGHT whole-net VJP witness (Trained/MlpWitness.lean)
 #print axioms Proofs.TrainedMlp.preact_eq
 #print axioms Proofs.TrainedMlp.preact_ne
-#print axioms Proofs.TrainedMlp.trainedMlpHasVJP_correct
 #print axioms Proofs.TrainedMlp.pdiv_fwd
 #print axioms Proofs.TrainedMlp.pdiv_fwd_val
 #print axioms Proofs.TrainedMlp.trainedMlp_backward_nontrivial
@@ -1727,11 +1724,9 @@ open Proofs
 
 -- Spec→math ties (SpecVJP.lean, rungs B/C/E)
 #print axioms linearVerified_denote_eq
-#print axioms linearVerifiedHasVJP_correct
 #print axioms linearVerified_fwd_faithful
 #print axioms linearVerified_lossCot_isCEgrad
 #print axioms mlpVerified_denote_eq
-#print axioms mlpVerifiedHasVJP_correct
 #print axioms mlpVerified_fwd_faithful
 #print axioms mlpVerified_back_faithful
 #print axioms cnnVerified_denote_eq
@@ -2091,7 +2086,7 @@ open Proofs
 
 -- 4d PIECE 3, THE MBCONV PIECES MOBILENETV2 AND EFFICIENTNET-B0 SHARE
 -- (MBConvSyncTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
-#print axioms Proofs.SyncKit.hasVJP3_backward_smul
+#print axioms Proofs.HasVJP3.backward_smul
 #print axioms Proofs.SyncKit.depthwiseWeightGradB_smul
 #print axioms Proofs.SyncKit.depthwiseStridedWeightGradB_smul
 #print axioms Proofs.SyncKit.convStridedXlaWeightGradB_smul

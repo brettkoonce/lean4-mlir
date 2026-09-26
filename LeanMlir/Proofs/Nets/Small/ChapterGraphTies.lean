@@ -91,7 +91,8 @@ noncomputable def maxPoolFlatHasVJPAt' {c h w : Nat} (v : Vec (c*(2*h)*(2*w)))
   correct := fun dy i => by
     have hbk : maxPoolBackFlat c h w v dy i
                 = (maxPoolFlatHasVJPAt (Tensor3.unflatten v) hs).backward dy i := by
-      simp only [maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt, maxPool2HasVJPAt3, maxPoolBackFlat]
+      simp only [maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt_backward, Tensor3.flatten_apply,
+        maxPool2HasVJPAt3, maxPoolBackFlat]
     rw [hbk, (maxPoolFlatHasVJPAt (Tensor3.unflatten v) hs).correct dy i,
         Tensor3.flatten_unflatten]
 

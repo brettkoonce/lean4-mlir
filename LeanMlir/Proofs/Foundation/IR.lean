@@ -403,7 +403,7 @@ theorem bn_back_bridge {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) 
   have h : (bnHasVJP n ε γ β hε).backward x dy
          = (bnNormalizeHasVJP n ε hε).backward x
              ((bnAffineHasVJP n γ β).backward (bnNormalize n ε x) dy) := by
-    simp only [bnHasVJP, eq_mpr_eq_cast]; rfl
+    simp only [bnHasVJP, HasVJP.congr_backward]; rfl
   rw [h]
   funext i
   simp only [bnNormalizeBackOf, Back.denote, bnNormalizeHasVJP, bnAffineHasVJP]
@@ -588,7 +588,7 @@ theorem conv_flatten_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     (Back3.conv W Back3.cot).flatDenote dy
       = (HasVJP3.toHasVJP (conv2dHasVJP3 W b)).backward v dy := by
   funext idx
-  simp only [Back3.flatDenote, Back3.denote, HasVJP3.toHasVJP, Tensor3.flatten]
+  simp only [Back3.flatDenote, Back3.denote, HasVJP3.toHasVJP_backward, Tensor3.flatten]
   rw [conv_back_bridge_1to2 W b (Tensor3.unflatten v) (Tensor3.unflatten dy)]
 
 -- ════════════════════════════════════════════════════════════════

@@ -434,13 +434,10 @@ theorem seal_smooth (nCls : Nat) (t : ℝ) : MNV2SmoothAtB 2 (sealW nCls) (sealX
 /-- **The whole-net VJP at the witness** — all 19 bundles discharged, on
     `mobilenetv2ForwardBFull` itself (through `mobilenetv2ForwardBFull_eq_chain`). -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
-    HasVJPAt (mobilenetv2ForwardBFull 2 (sealW nCls)) (sealX t) := by
-  rw [show mobilenetv2ForwardBFull 2 (sealW nCls)
-      = mnv2HeadB 2 7 7 (sealW nCls).hW (sealW nCls).hb (sealW nCls).hε (sealW nCls).hγ
-          (sealW nCls).hβ (sealW nCls).fcW (sealW nCls).fcb ∘ mnv2PreB17 2 (sealW nCls)
-      from funext (mobilenetv2ForwardBFull_eq_chain 2 (sealW nCls))]
-  exact mobilenetv2ForwardBFullHasVJPAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
-    (seal_smooth nCls t)
+    HasVJPAt (mobilenetv2ForwardBFull 2 (sealW nCls)) (sealX t) :=
+  (mobilenetv2ForwardBFullHasVJPAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
+    (seal_smooth nCls t)).congr
+    (funext (mobilenetv2ForwardBFull_eq_chain 2 (sealW nCls))).symm
 
 -- ════════════════════════════════════════════════════════════════
 -- § 11. The 22 pre-BatchNorm activations on the carrier's path

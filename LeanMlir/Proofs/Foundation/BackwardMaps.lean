@@ -224,7 +224,7 @@ theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2
         (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).2),
         (finProdFinEquiv.symm idx).2) = idx := by
     rw [Prod.mk.eta, Equiv.apply_symm_apply, Prod.mk.eta, Equiv.apply_symm_apply]
-  simp only [maxPool3s2FlatHasVJPAt, HasVJPAt3.toHasVJPAt, maxPool3s2HasVJPAt3,
+  simp only [maxPool3s2FlatHasVJPAt, HasVJPAt3.toHasVJPAt_backward, maxPool3s2HasVJPAt3,
     Tensor3.unflatten]
   refine Finset.sum_congr rfl fun co _ => Finset.sum_congr rfl fun ho _ =>
     Finset.sum_congr rfl fun wo _ => ?_

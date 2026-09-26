@@ -488,8 +488,8 @@ theorem r34SmoothAtB_ok (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (hq : R34P
 noncomputable def resnet34ForwardBFullHasVJPAt (N : Nat) {nCls : Nat} (w : R34BWeights nCls)
     (hq : R34PosB w) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) (hx : R34SmoothAtB N w x) :
     HasVJPAt (r34HeadB N 7 7 w.Wd w.bd ∘ r34Pre16 N w) x :=
-  (funext fun v => (r34NetLayer_fwd_apply N w hq v).trans (resnet34ForwardBFull_eq_chain N w v)
-    : (r34NetLayer N w hq).fwd = _) ▸ (r34NetLayer N w hq).vjp x (r34SmoothAtB_ok N w hq x hx)
+  ((r34NetLayer N w hq).vjp x (r34SmoothAtB_ok N w hq x hx)).congr
+    (funext fun v => (r34NetLayer_fwd_apply N w hq v).trans (resnet34ForwardBFull_eq_chain N w v))
 
 /-- **Public correctness theorem**: the sixteen-block batch-BN backward equals the
     `pdiv`-contracted Jacobian of `resnet34ForwardBFull` ITSELF — the committed

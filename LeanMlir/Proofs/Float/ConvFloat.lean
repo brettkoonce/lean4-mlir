@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Float.FloatBridge
 
 /-! # The conv forward in floating point — conv as a weight-shared dense layer, and its rounding budget
 
-The 2D conv read as a dense layer over the zero-padded window (`convPad`, `k4Idx`, `w3Idx`,
+The 2D conv read as a dense layer over the zero-padded window (`convPad`, `k4Idx`, `t3Idx`,
 `convWindow`), the kernel drift that makes it Lipschitz in the weights, and the float conv:
 `convF` / `flatConvF` and the `flatConvF_close` budget (used by `floatClose_flatConv` and
 `SgdDescent.Cnn`).
@@ -90,20 +90,6 @@ theorem sum_abs_kernel_slab_le {oc ic kH kW : Nat}
 --   per-output-coordinate flattened window.
 -- ════════════════════════════════════════════════════════════════
 
-/-- Flat index of a conv *window* slot `(c, kh, kw)` — `k4Idx` without the
-    output channel (row-major, fan-in `ic·kH·kW`). -/
-def w3Idx {ic kH kW : Nat} (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
-    Fin (ic * kH * kW) :=
-  finProdFinEquiv (finProdFinEquiv (c, kh), kw)
-
-/-- The triple conv-window sum collapses to one flat sum over the fan-in —
-    the conv analogue of `dot` being a single-index sum (mirrors `sum_abs_k4`,
-    one fewer axis). -/
-theorem sum_w3 {ic kH kW : Nat} (g : Fin (ic * kH * kW) → ℝ) :
-    ∑ idx, g idx =
-      ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW, g (w3Idx c kh kw) :=
-  sum_finProdFinEquiv₃ g
-
 /-- The per-output-coordinate conv *window* as a flat `Vec` over the fan-in:
     the (padded) input reads that the kernel slab dots against. -/
 noncomputable def convWindow {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
@@ -123,13 +109,13 @@ noncomputable def convKernelMat {oc ic kH kW : Nat}
 
 @[simp] theorem convWindow_w3 {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
     (hi : Fin h) (wi : Fin w) (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
-    convWindow kH kW x hi wi (w3Idx c kh kw) = convPad kH kW x c kh kw hi wi := by
-  simp [convWindow, w3Idx, Equiv.symm_apply_apply]
+    convWindow kH kW x hi wi (t3Idx c kh kw) = convPad kH kW x c kh kw hi wi := by
+  simp [convWindow, t3Idx, Equiv.symm_apply_apply]
 
 @[simp] theorem convKernelMat_w3 {oc ic kH kW : Nat} (W : Kernel4 oc ic kH kW)
     (o : Fin oc) (c : Fin ic) (kh : Fin kH) (kw : Fin kW) :
-    convKernelMat W (w3Idx c kh kw) o = W o c kh kw := by
-  simp [convKernelMat, w3Idx, Equiv.symm_apply_apply]
+    convKernelMat W (t3Idx c kh kw) o = W o c kh kw := by
+  simp [convKernelMat, t3Idx, Equiv.symm_apply_apply]
 
 /-- **conv2d is a dense layer at the conv fan-in** — `conv = dense-with-sharing`
     made exact: each output coordinate is `Proofs.dense` of the kernel slab
@@ -144,7 +130,7 @@ theorem conv2d_eq_dense {ic oc h w kH kW : Nat}
   show b o + ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
       W o c kh kw * convPad kH kW x c kh kw hi wi
     = (∑ idx, convWindow kH kW x hi wi idx * convKernelMat W idx o) + b o
-  rw [sum_w3 (fun idx => convWindow kH kW x hi wi idx * convKernelMat W idx o),
+  rw [sum_t3 (fun idx => convWindow kH kW x hi wi idx * convKernelMat W idx o),
       add_comm]
   refine congrArg (· + b o) ?_
   refine Finset.sum_congr rfl fun c _ => Finset.sum_congr rfl fun kh _ =>

@@ -130,7 +130,7 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
     Trained by `MainMnistCnnVerified`; [`Proofs/SpecVJP.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/SpecVJP.lean)
     ties it to `Proofs.mnistCnnNoBnForward` (`cnnVerified_denote_eq`), whose VJP folded through
     conv/maxpool/dense is `Proofs.mnistCnnNoBnHasVJPAt`, at an input satisfying its ReLU and
-    max-pool hypotheses (`cnnVerifiedHasVJP` is the canonical witness). -/
+    max-pool hypotheses. -/
 def cnnVerified : VerifiedNetSpec where
   name     := "MNIST-CNN"
   slug     := "cnn"

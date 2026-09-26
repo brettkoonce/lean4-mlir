@@ -31,7 +31,7 @@ theorem convFlatBack_eq_vjp_backward {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (x : Vec (ic * h * w)) :
     convFlatBack (h := h) (w := w) W = (flatConvHasVJP W b).backward x := by
   funext dy
-  simp only [convFlatBack, flatConv, flatConvHasVJP, HasVJP3.toHasVJP, conv2dHasVJP3]
+  simp only [convFlatBack, flatConv, flatConvHasVJP, HasVJP3.toHasVJP_backward, conv2dHasVJP3]
   rw [IR.convBackDenote_eq_input_grad_formula hkH hkW W (Tensor3.unflatten dy)]
   rfl
 

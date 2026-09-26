@@ -609,12 +609,10 @@ theorem seal_smooth (nCls : Nat) (t : ℝ) : R34SmoothAtB 2 (sealW nCls) (sealX 
     and the pool's no-tie discharged at `(sealW nCls, sealX t)`, on `resnet34ForwardBFull`
     itself (transported through `resnet34ForwardBFull_eq_chain`). -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
-    HasVJPAt (resnet34ForwardBFull 2 (sealW nCls)) (sealX t) := by
-  rw [show resnet34ForwardBFull 2 (sealW nCls)
-      = r34HeadB 2 7 7 (sealW nCls).Wd (sealW nCls).bd ∘ r34Pre16 2 (sealW nCls)
-      from funext (resnet34ForwardBFull_eq_chain 2 (sealW nCls))]
-  exact resnet34ForwardBFullHasVJPAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
-    (seal_smooth nCls t)
+    HasVJPAt (resnet34ForwardBFull 2 (sealW nCls)) (sealX t) :=
+  (resnet34ForwardBFullHasVJPAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
+    (seal_smooth nCls t)).congr
+    (funext (resnet34ForwardBFull_eq_chain 2 (sealW nCls))).symm
 
 /-- The net is differentiable at the witness — `fderiv_ne_zero_of_ray`'s first hypothesis. -/
 theorem seal_differentiableAt (nCls : Nat) (t : ℝ) :

@@ -232,12 +232,12 @@ theorem pdiv_reindexOut_contract {m n n' : Nat} (f : Vec m → Vec n) (x : Vec m
     `pdiv_comp` needs and what it does not export.) -/
 theorem rowLNVecFlat_gamma_diffAt (s c : Nat) (ε : ℝ) (β : Vec c) (X : Vec (s * c)) (γ : Vec c) :
     DifferentiableAt ℝ (fun γ' : Vec c => rowLNVecFlat s c ε γ' β X) γ := by
-  unfold rowLNVecFlat layerNormVec Mat.flatten; fun_prop
+  unfold rowLNVecFlat layerNormVec; fun_prop
 
 /-- The β peer: `const + gather β`. -/
 theorem rowLNVecFlat_beta_diffAt (s c : Nat) (ε : ℝ) (γ : Vec c) (X : Vec (s * c)) (β : Vec c) :
     DifferentiableAt ℝ (fun β' : Vec c => rowLNVecFlat s c ε γ β' X) β := by
-  unfold rowLNVecFlat layerNormVec Mat.flatten; fun_prop
+  unfold rowLNVecFlat layerNormVec; fun_prop
 
 /-- **The γ contraction, moved to the row layout.** The activation-layout Jacobian against the
     activation-layout cotangent equals the row-layout Jacobian against the TRANSPOSED cotangent —

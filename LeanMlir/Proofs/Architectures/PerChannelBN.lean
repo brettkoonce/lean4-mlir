@@ -50,7 +50,7 @@ theorem rowwisePerRow_flat_differentiable {m n p : Nat} (g : Fin m → (Vec n �
     (h_g_diff : ∀ r, Differentiable ℝ (g r)) :
     Differentiable ℝ (fun v : Vec (m * n) =>
       Mat.flatten ((fun A : Mat m n => fun r => g r (A r)) (Mat.unflatten v))) := by
-  unfold Mat.flatten Mat.unflatten; fun_prop
+  fun_prop
 
 -- ════════════════════════════════════════════════════════════════
 -- § Per-channel BatchNorm

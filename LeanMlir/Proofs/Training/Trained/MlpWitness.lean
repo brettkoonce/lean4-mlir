@@ -85,11 +85,6 @@ noncomputable def trainedMlpHasVJPAt : HasVJPAt fwd xtV := by
     step1
     ((denseHasVJP W2V b10).toHasVJPAt _)
 
-/-- The witness's contract, exposed: backward = the `pdiv`-contracted Jacobian. -/
-theorem trainedMlpHasVJP_correct (dy : Vec 10) (i : Fin 49) :
-    trainedMlpHasVJPAt.backward dy i = ∑ j, pdiv fwd xtV i j * dy j :=
-  trainedMlpHasVJPAt.correct dy i
-
 /-- The whole-net Jacobian in closed form at the witness: dense → masked-ReLU →
     dense collapses to `Σ_k W1[k,j]·mask_k·W2[c,k]` (chain rule through the two
     proven layer Jacobians, both kinks avoided). -/

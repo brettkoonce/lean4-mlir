@@ -18,7 +18,7 @@ Contents, in file order:
 |---|---|
 | Types, Matrix Operations | `Vec`, `Mat`, `Mat.mulVec`/`mul`/`transpose`/`outer`, `basisVec` |
 | Differentiation | `pdiv` and its rules (`pdiv_comp`, `pdiv_add`, `pdiv_mul`, `pdiv_reindex`, …); the linear-map kits `pdiv_of_affine` / `pdiv_of_linear`, `pdiv_elementwise`, `pdiv_finset_sum`, `pdiv_const_smul` |
-| VJP Framework, Pointwise VJP | `HasVJP` (global) and `HasVJPAt` (at a point), `canonical`, `backward_unique`, `vjpComp` / `vjpCompAt` / `vjpCompDiffAt` and their `_backward` peels, `biPath` |
+| VJP Framework, Pointwise VJP | `HasVJP` (global) and `HasVJPAt` (at a point), each `@[ext]` and a `Subsingleton`, `canonical`, `backward_unique`, `vjpComp` / `vjpCompAt` / `vjpCompDiffAt` and their `_backward` peels, `biPath` |
 | flattening | `Mat.flatten` / `unflatten` with `_apply` and `@[simp]` round-trips, `sum_finProdFinEquiv` |
 | Matrix-level | `pdivMat`, `HasVJPMat`, `vjpMatComp`, row-independence (`pdivMat_rowIndep*`, `rowwiseHasVJPMat`), and the matmul / scale / transpose Jacobians and VJPs. The multi-head column-slab kit and `HasVJPMat3` live in `Attention.lean` |
 | 3D tensors | `Tensor3`, `pdiv3`, `HasVJP3` / `HasVJPAt3` and `HasVJP3.toHasVJP` — nets compose at `Vec` through it |
@@ -97,6 +97,11 @@ noncomputable def reindexCLM {a b : Nat} (σ : Fin b → Fin a) :
 noncomputable def pdiv {m n : Nat} (f : Vec m → Vec n) (x : Vec m)
     (i : Fin m) (j : Fin n) : ℝ :=
   fderiv ℝ f x (basisVec i) j
+
+/-- A known derivative reads off as `pdiv`: output `j` of `F'` on the `i`-th basis vector. -/
+theorem pdiv_eq_of_hasFDerivAt {m n : Nat} {F : Vec m → Vec n} {F' : Vec m →L[ℝ] Vec n} {x : Vec m}
+    (h : HasFDerivAt F F' x) (i : Fin m) (j : Fin n) : pdiv F x i j = F' (basisVec i) j := by
+  rw [pdiv, h.fderiv]
 
 /-- **Identity Jacobian** — `δᵢⱼ`. -/
 theorem pdiv_id {n : Nat} (x : Vec n) (i j : Fin n) :
@@ -196,7 +201,7 @@ theorem pdiv_elementwise {n : Nat} (φ : ℝ → ℝ) (x : Vec n)
       have := (hφ k).hasDerivAt.comp_hasFDerivAt x
         (ContinuousLinearMap.proj k : Vec n →L[ℝ] ℝ).hasFDerivAt
       exact this
-  rw [pdiv, h.fderiv]
+  rw [pdiv_eq_of_hasFDerivAt h]
   rcases eq_or_ne i j with rfl | hij
   · simp
   · simp [hij, Ne.symm hij]
@@ -212,7 +217,7 @@ theorem pdiv_coordFun {K : Nat} (f : ℝ → ℝ) (f' : ℝ) (k : Fin K) (z : Ve
     hasFDerivAt_pi.2 fun _ => by
       have := hf.comp_hasFDerivAt z (ContinuousLinearMap.proj k : Vec K →L[ℝ] ℝ).hasFDerivAt
       exact this
-  rw [pdiv, h.fderiv]
+  rw [pdiv_eq_of_hasFDerivAt h]
   simp [@eq_comm _ k j]
 
 /-- **Finset-sum rule** — linearity of the derivative extended to
@@ -267,16 +272,29 @@ theorem pdiv_of_linear {m n : Nat} (f : Vec m → Vec n)
     `HasVJP.canonical` inhabits it for every `f` (its `backward` is the contraction itself), so
     a witness says something only when its `backward` is a formula proved equal to that
     contraction. -/
-structure HasVJP {m n : Nat} (f : Vec m → Vec n) where
+@[ext] structure HasVJP {m n : Nat} (f : Vec m → Vec n) where
   backward : Vec m → Vec n → Vec m
   correct : ∀ (x : Vec m) (dy : Vec n) (i : Fin m),
     backward x dy i = ∑ j : Fin n, pdiv f x i j * dy j
+
+/-- `correct` pins `backward` at every input, so a map has at most one VJP witness. -/
+instance {m n : Nat} {f : Vec m → Vec n} : Subsingleton (HasVJP f) :=
+  ⟨fun a b => HasVJP.ext (by funext x dy i; rw [a.correct, b.correct])⟩
 
 /-- **The canonical witness** — the backward IS the `pdiv` contraction, so `correct` is `rfl`.
     Exists for every `f`; a hand-written backward is tied to it by `HasVJP.backward_unique`. -/
 noncomputable def HasVJP.canonical {m n : Nat} (f : Vec m → Vec n) : HasVJP f where
   backward x dy i := ∑ j : Fin n, pdiv f x i j * dy j
   correct _ _ _ := rfl
+
+/-- Transport a witness along an equality of maps. The backward is carried over verbatim, so
+    unlike `h ▸ hf` it is never hidden behind a cast (`congr_backward` is `rfl`). -/
+def HasVJP.congr {m n : Nat} {f g : Vec m → Vec n} (h : f = g) (hf : HasVJP f) : HasVJP g where
+  backward := hf.backward
+  correct x dy i := by subst h; exact hf.correct x dy i
+
+@[simp] theorem HasVJP.congr_backward {m n : Nat} {f g : Vec m → Vec n} (h : f = g)
+    (hf : HasVJP f) : (hf.congr h).backward = hf.backward := rfl
 
 /-- **Two VJP witnesses for EQUAL maps have the same backward.** Both `.correct` to the same
     `∑ pdiv f x i j * dy j`. Going through `.correct` rather than `hfg ▸ ·` avoids an
@@ -290,8 +308,31 @@ theorem HasVJP.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} (hfg : 
     property of `f`, not of how the witness was assembled. Lets a hand-written chain be tied to a
     tactic-built witness without unfolding it. -/
 theorem HasVJP.backward_unique {m n : Nat} {f : Vec m → Vec n} (h₁ h₂ : HasVJP f)
-    (x : Vec m) (dy : Vec n) : h₁.backward x dy = h₂.backward x dy :=
-  HasVJP.backward_unique_of_eq rfl h₁ h₂ x dy
+    (x : Vec m) (dy : Vec n) : h₁.backward x dy = h₂.backward x dy := by
+  rw [Subsingleton.elim h₁ h₂]
+
+/-- **`f` scales with its argument**: `f (s • v) = s • f v`, spelled pointwise. The statement of
+    every cotangent-chain `_smul` lemma; an `abbrev`, so `rw [h]` and `h s v` see the equation. -/
+abbrev IsHomog {a b : Nat} (f : Vec a → Vec b) : Prop :=
+  ∀ (s : ℝ) (v : Vec a), f (fun i => s * v i) = fun i => s * f v i
+
+theorem IsHomog.comp {a b c : Nat} {g : Vec b → Vec c} {f : Vec a → Vec b} (hg : IsHomog g)
+    (hf : IsHomog f) : IsHomog (g ∘ f) := fun s v => by
+  simp only [Function.comp_apply, hf s v, hg s]
+
+/-- **A VJP backward is linear in its cotangent** — read off `HasVJP.correct`: it scales. -/
+theorem HasVJP.backward_smul {m n : Nat} {f : Vec m → Vec n} (hf : HasVJP f) (x : Vec m) :
+    IsHomog (hf.backward x) := by
+  intro a dy
+  funext i
+  rw [hf.correct, hf.correct, Finset.mul_sum]
+  exact Finset.sum_congr rfl (fun j _ => by ring)
+
+/-- **A VJP backward is linear in its cotangent** — it adds. -/
+theorem HasVJP.backward_add {m n : Nat} {f : Vec m → Vec n} (hf : HasVJP f) (x : Vec m)
+    (dy dy' : Vec n) : hf.backward x (dy + dy') = hf.backward x dy + hf.backward x dy' := by
+  funext i
+  simp only [Pi.add_apply, hf.correct, mul_add, Finset.sum_add_distrib]
 
 -- ════════════════════════════════════════════════════════════════
 -- § The VJP of a coordinate reindex (every layout bridge, decimation and broadcast)
@@ -393,10 +434,30 @@ at any point via `HasVJP.toHasVJPAt` when composing. -/
 /-- A vector–Jacobian product for `f` at one point `x`: a backward map with the proof that it
     contracts `f`'s Jacobian (`pdiv f x`) against the cotangent. The pointwise form of `HasVJP`,
     for operators that are differentiable only away from their kinks. -/
-structure HasVJPAt {m n : Nat} (f : Vec m → Vec n) (x : Vec m) where
+@[ext] structure HasVJPAt {m n : Nat} (f : Vec m → Vec n) (x : Vec m) where
   backward : Vec n → Vec m
   correct : ∀ (dy : Vec n) (i : Fin m),
     backward dy i = ∑ j : Fin n, pdiv f x i j * dy j
+
+/-- A map has at most one VJP witness at a point. -/
+instance {m n : Nat} {f : Vec m → Vec n} {x : Vec m} : Subsingleton (HasVJPAt f x) :=
+  ⟨fun a b => HasVJPAt.ext (by funext dy i; rw [a.correct, b.correct])⟩
+
+/-- The canonical witness at a point: the backward is the `pdiv` contraction itself. -/
+noncomputable def HasVJPAt.canonical {m n : Nat} (f : Vec m → Vec n) (x : Vec m) :
+    HasVJPAt f x where
+  backward dy i := ∑ j : Fin n, pdiv f x i j * dy j
+  correct _ _ := rfl
+
+/-- Transport a pointwise witness along an equality of maps; the backward is carried over
+    verbatim (`HasVJP.congr`'s pointwise peer). -/
+def HasVJPAt.congr {m n : Nat} {f g : Vec m → Vec n} {x : Vec m} (h : f = g)
+    (hf : HasVJPAt f x) : HasVJPAt g x where
+  backward := hf.backward
+  correct dy i := by subst h; exact hf.correct dy i
+
+@[simp] theorem HasVJPAt.congr_backward {m n : Nat} {f g : Vec m → Vec n} {x : Vec m}
+    (h : f = g) (hf : HasVJPAt f x) : (hf.congr h).backward = hf.backward := rfl
 
 /-- Two `HasVJPAt` witnesses for EQUAL maps at one point have the same backward — the pointwise
     peer of `HasVJP.backward_unique_of_eq`, through `.correct` rather than a transport. -/
@@ -408,8 +469,22 @@ theorem HasVJPAt.backward_unique_of_eq {m n : Nat} {f g : Vec m → Vec n} {x : 
 /-- **Any two `HasVJPAt` witnesses for the same map at the same point have the same backward** —
     `HasVJP.backward_unique`'s pointwise peer. -/
 theorem HasVJPAt.backward_unique {m n : Nat} {f : Vec m → Vec n} {x : Vec m}
-    (h₁ h₂ : HasVJPAt f x) (dy : Vec n) : h₁.backward dy = h₂.backward dy :=
-  HasVJPAt.backward_unique_of_eq rfl h₁ h₂ dy
+    (h₁ h₂ : HasVJPAt f x) (dy : Vec n) : h₁.backward dy = h₂.backward dy := by
+  rw [Subsingleton.elim h₁ h₂]
+
+/-- A pointwise VJP backward scales with its cotangent (`HasVJP.backward_smul`'s peer). -/
+theorem HasVJPAt.backward_smul {m n : Nat} {f : Vec m → Vec n} {x : Vec m} (hf : HasVJPAt f x) :
+    IsHomog hf.backward := by
+  intro a dy
+  funext i
+  rw [hf.correct, hf.correct, Finset.mul_sum]
+  exact Finset.sum_congr rfl (fun j _ => by ring)
+
+/-- A pointwise VJP backward adds (`HasVJP.backward_add`'s peer). -/
+theorem HasVJPAt.backward_add {m n : Nat} {f : Vec m → Vec n} {x : Vec m} (hf : HasVJPAt f x)
+    (dy dy' : Vec n) : hf.backward (dy + dy') = hf.backward dy + hf.backward dy' := by
+  funext i
+  simp only [Pi.add_apply, hf.correct, mul_add, Finset.sum_add_distrib]
 
 /-- Trivial lift: a global `HasVJP` gives a `HasVJPAt` at any point. -/
 def HasVJP.toHasVJPAt {m n : Nat} {f : Vec m → Vec n}
@@ -544,6 +619,41 @@ theorem unflatten_apply {m n : Nat} (v : Vec (m * n)) (i : Fin m) (j : Fin n) :
     flatten (unflatten v) = v := by
   funext k; exact congrArg v (finProdFinEquiv.apply_symm_apply k)
 
+/-- Reading a flattened matrix at an encoded index reads the entry. -/
+@[simp] theorem flatten_finProdFinEquiv {m n : Nat} (A : Mat m n) (i : Fin m) (j : Fin n) :
+    flatten A (finProdFinEquiv (i, j)) = A i j := by
+  simp [flatten]
+
+/-- `Mat.flatten` is a coordinate reindexing, hence differentiable. -/
+@[fun_prop]
+theorem flatten_differentiable {m n : Nat} :
+    Differentiable ℝ (flatten : Mat m n → Vec (m * n)) := by
+  unfold flatten; fun_prop
+
+/-- `Mat.unflatten` is a coordinate reindexing, hence differentiable. -/
+@[fun_prop]
+theorem unflatten_differentiable {m n : Nat} :
+    Differentiable ℝ (unflatten : Vec (m * n) → Mat m n) := by
+  unfold unflatten; fun_prop
+
+/-- `Mat.transpose` is a coordinate reindexing, hence differentiable. -/
+@[fun_prop]
+theorem transpose_differentiable {m n : Nat} :
+    Differentiable ℝ (transpose : Mat m n → Mat n m) := by
+  unfold transpose; fun_prop
+
+/-- Right-multiplying by a constant matrix is differentiable. -/
+@[fun_prop]
+theorem mul_const_differentiable {m p q : Nat} (D : Mat p q) :
+    Differentiable ℝ (fun A : Mat m p => mul A D) := by
+  unfold mul; fun_prop
+
+/-- Left-multiplying by a constant matrix is differentiable. -/
+@[fun_prop]
+theorem const_mul_differentiable {m p q : Nat} (C : Mat m p) :
+    Differentiable ℝ (fun B : Mat p q => mul C B) := by
+  unfold mul; fun_prop
+
 end Mat
 
 -- ════════════════════════════════════════════════════════════════
@@ -625,11 +735,21 @@ theorem pdivMat_id {a b : Nat} (A : Mat a b)
 /-- Matrix-level VJP: given a matrix-valued function of a matrix, a
     correct backward function contracts the `pdivMat` Jacobian against
     the output cotangent. Mirrors `HasVJP` for `Vec`. -/
-structure HasVJPMat {a b c d : Nat} (f : Mat a b → Mat c d) where
+@[ext] structure HasVJPMat {a b c d : Nat} (f : Mat a b → Mat c d) where
   backward : Mat a b → Mat c d → Mat a b
   correct : ∀ (A : Mat a b) (dY : Mat c d) (i : Fin a) (j : Fin b),
     backward A dY i j = ∑ k : Fin c, ∑ l : Fin d,
       pdivMat f A i j k l * dY k l
+
+/-- A matrix map has at most one VJP witness. -/
+instance {a b c d : Nat} {f : Mat a b → Mat c d} : Subsingleton (HasVJPMat f) :=
+  ⟨fun v w => HasVJPMat.ext (by funext A dY i j; rw [v.correct, w.correct])⟩
+
+/-- The canonical matrix witness: the backward is the `pdivMat` contraction itself. -/
+noncomputable def HasVJPMat.canonical {a b c d : Nat} (f : Mat a b → Mat c d) :
+    HasVJPMat f where
+  backward A dY i j := ∑ k : Fin c, ∑ l : Fin d, pdivMat f A i j k l * dY k l
+  correct _ _ _ _ := rfl
 
 /-- Two `HasVJPMat` witnesses for EQUAL maps have the same backward — the matrix peer of
     `HasVJP.backward_unique_of_eq`, through `.correct` rather than a transport. -/
@@ -736,6 +856,13 @@ noncomputable def HasVJPMat.toHasVJP {a b c d : Nat} {f : Mat a b → Mat c d}
     simp only [Equiv.symm_apply_apply, hf.correct, pdivMat, Mat.flatten_unflatten,
       sum_finProdFinEquiv]
     rfl
+
+/-- `HasVJPMat.toHasVJP`'s backward: decode the flat index, run the matrix backward. -/
+theorem HasVJPMat.toHasVJP_backward {a b c d : Nat} {f : Mat a b → Mat c d} (hf : HasVJPMat f)
+    (v : Vec (a * b)) (dy : Vec (c * d)) (idx : Fin (a * b)) :
+    hf.toHasVJP.backward v dy idx
+      = hf.backward (Mat.unflatten v) (Mat.unflatten dy)
+          (finProdFinEquiv.symm idx).1 (finProdFinEquiv.symm idx).2 := rfl
 
 -- ════════════════════════════════════════════════════════════════
 -- § Matrix VJP Building Blocks (matmul, row-independent functions)
@@ -846,6 +973,11 @@ noncomputable def rowwiseHasVJPMat {m n p : Nat} {g : Vec n → Vec p}
     simp_rw [pdivMat_rowIndep g hg_diff]
     simp [hg.correct]
 
+/-- `rowwiseHasVJPMat`'s backward: the row map's backward, row by row. -/
+theorem rowwiseHasVJPMat_backward {m n p : Nat} {g : Vec n → Vec p} (hg : HasVJP g)
+    (hg_diff : Differentiable ℝ g) (A : Mat m n) (dY : Mat m p) (r : Fin m) :
+    (rowwiseHasVJPMat hg hg_diff).backward A dY r = hg.backward (A r) (dY r) := rfl
+
 -- ════════════════════════════════════════════════════════════════
 -- § Scale and transpose Jacobians, and the matmul / scale / transpose VJPs
 -- ════════════════════════════════════════════════════════════════
@@ -951,6 +1083,11 @@ theorem unflatten_apply {c h w : Nat} (v : Vec (c * h * w)) (ci : Fin c) (hi : F
     flatten (unflatten v) = v := by
   funext k; simp only [flatten, unflatten, Prod.mk.eta, Equiv.apply_symm_apply]
 
+/-- Reading a flattened tensor at an encoded index reads the entry. -/
+@[simp] theorem flatten_finProdFinEquiv {c h w : Nat} (T : Tensor3 c h w) (ci : Fin c) (hi : Fin h)
+    (wi : Fin w) : flatten T (finProdFinEquiv (finProdFinEquiv (ci, hi), wi)) = T ci hi wi := by
+  simp [flatten]
+
 /-- **`Tensor3.flatten` is differentiable.** It is a coordinate
     reindexing: each output coordinate `flatten x k` is the single input
     coordinate `x (decode k)`, hence a projection. -/
@@ -985,7 +1122,7 @@ noncomputable def pdiv3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (finProdFinEquiv (finProdFinEquiv (co, ho), wo))
 
 /-- VJP for 3D→3D functions. -/
-structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+@[ext] structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂) where
   backward : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂ → Tensor3 c₁ h₁ w₁
   correct : ∀ (x : Tensor3 c₁ h₁ w₁) (dy : Tensor3 c₂ h₂ w₂)
@@ -994,6 +1131,31 @@ structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     ∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
       pdiv3 f x ci hi wi co ho wo * dy co ho wo
 
+/-- A rank-3 map has at most one VJP witness. -/
+instance {c₁ h₁ w₁ c₂ h₂ w₂ : Nat} {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂} :
+    Subsingleton (HasVJP3 f) :=
+  ⟨fun a b => HasVJP3.ext (by funext x dy ci hi wi; rw [a.correct, b.correct])⟩
+
+/-- The canonical rank-3 witness: the backward is the `pdiv3` contraction itself. -/
+noncomputable def HasVJP3.canonical {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂) : HasVJP3 f where
+  backward x dy ci hi wi :=
+    ∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂, pdiv3 f x ci hi wi co ho wo * dy co ho wo
+  correct _ _ _ _ _ := rfl
+
+/-- A rank-3 VJP backward scales with its cotangent (`HasVJP.backward_smul`'s peer). -/
+theorem HasVJP3.backward_smul {c₁ h₁ w₁ c₂ h₂ w₂ : Nat} {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
+    (hf : HasVJP3 f) (x : Tensor3 c₁ h₁ w₁) (a : ℝ) (dy : Tensor3 c₂ h₂ w₂) :
+    hf.backward x (fun i₁ i₂ i₃ => a * dy i₁ i₂ i₃)
+      = fun j₁ j₂ j₃ => a * hf.backward x dy j₁ j₂ j₃ := by
+  funext j₁ j₂ j₃
+  rw [hf.correct, hf.correct, Finset.mul_sum]
+  refine Finset.sum_congr rfl (fun _ _ => ?_)
+  rw [Finset.mul_sum]
+  refine Finset.sum_congr rfl (fun _ _ => ?_)
+  rw [Finset.mul_sum]
+  exact Finset.sum_congr rfl (fun _ _ => by ring)
+
 -- ════════════════════════════════════════════════════════════════
 -- § Pointwise VJP3 — Tensor3 analogue of HasVJPAt
 -- ════════════════════════════════════════════════════════════════
@@ -1001,7 +1163,7 @@ structure HasVJP3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
 /-- Tensor3 analogue of `HasVJPAt`: the same `pdiv3`-sum contract, but
     only required at the chosen smooth point `x`. The natural home for
     `maxPool2HasVJPAt3` and any other kinked Tensor3 operator. -/
-structure HasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+@[ext] structure HasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂)
     (x : Tensor3 c₁ h₁ w₁) where
   backward : Tensor3 c₂ h₂ w₂ → Tensor3 c₁ h₁ w₁
@@ -1010,6 +1172,18 @@ structure HasVJPAt3 {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     backward dy ci hi wi =
     ∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂,
       pdiv3 f x ci hi wi co ho wo * dy co ho wo
+
+/-- A rank-3 map has at most one VJP witness at a point. -/
+instance {c₁ h₁ w₁ c₂ h₂ w₂ : Nat} {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
+    {x : Tensor3 c₁ h₁ w₁} : Subsingleton (HasVJPAt3 f x) :=
+  ⟨fun a b => HasVJPAt3.ext (by funext dy ci hi wi; rw [a.correct, b.correct])⟩
+
+/-- The canonical rank-3 witness at a point: the backward is the `pdiv3` contraction itself. -/
+noncomputable def HasVJPAt3.canonical {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    (f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂) (x : Tensor3 c₁ h₁ w₁) : HasVJPAt3 f x where
+  backward dy ci hi wi :=
+    ∑ co : Fin c₂, ∑ ho : Fin h₂, ∑ wo : Fin w₂, pdiv3 f x ci hi wi co ho wo * dy co ho wo
+  correct _ _ _ _ := rfl
 
 /-- **Bridge: `HasVJP3` → `HasVJP` via the `Tensor3.flatten` bijection.**
 
@@ -1037,6 +1211,23 @@ noncomputable def HasVJP3.toHasVJP {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
       sum_finProdFinEquiv (m := c₂ * h₂), sum_finProdFinEquiv (m := c₂)]
     rfl
 
+/-- `HasVJP3.toHasVJP`'s backward: decode the flat index, run the rank-3 backward. -/
+theorem HasVJP3.toHasVJP_backward {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂} (hf : HasVJP3 f)
+    (v : Vec (c₁ * h₁ * w₁)) (dy : Vec (c₂ * h₂ * w₂)) (idx : Fin (c₁ * h₁ * w₁)) :
+    hf.toHasVJP.backward v dy idx
+      = Tensor3.flatten (hf.backward (Tensor3.unflatten v) (Tensor3.unflatten dy)) idx := rfl
+
+/-- **A rank-3 backward, flattened, is the flat `pdiv` contraction** — `HasVJP3.toHasVJP`'s
+    `correct`, read at a tensor activation. -/
+theorem HasVJP3.flatten_backward {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂} (hf : HasVJP3 f)
+    (x : Tensor3 c₁ h₁ w₁) (dy : Vec (c₂ * h₂ * w₂)) (idx : Fin (c₁ * h₁ * w₁)) :
+    Tensor3.flatten (hf.backward x (Tensor3.unflatten dy)) idx
+      = ∑ j, pdiv (fun v => Tensor3.flatten (f (Tensor3.unflatten v))) (Tensor3.flatten x) idx j
+          * dy j := by
+  rw [← hf.toHasVJP.correct, HasVJP3.toHasVJP_backward, Tensor3.unflatten_flatten]
+
 /-- **Bridge: `HasVJPAt3` → `HasVJPAt` via the `Tensor3.flatten` bijection.**
 
     Smooth-point analogue of `HasVJP3.toHasVJP`, with `x` fixed. Needed
@@ -1060,5 +1251,11 @@ noncomputable def HasVJPAt3.toHasVJPAt {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
     simp only [Equiv.symm_apply_apply, hf.correct, pdiv3,
       sum_finProdFinEquiv (m := c₂ * h₂), sum_finProdFinEquiv (m := c₂)]
     rfl
+
+/-- `HasVJPAt3.toHasVJPAt`'s backward: decode the flat index, run the rank-3 backward. -/
+theorem HasVJPAt3.toHasVJPAt_backward {c₁ h₁ w₁ c₂ h₂ w₂ : Nat}
+    {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂} {x : Tensor3 c₁ h₁ w₁} (hf : HasVJPAt3 f x)
+    (dy : Vec (c₂ * h₂ * w₂)) (idx : Fin (c₁ * h₁ * w₁)) :
+    hf.toHasVJPAt.backward dy idx = Tensor3.flatten (hf.backward (Tensor3.unflatten dy)) idx := rfl
 
 end Proofs

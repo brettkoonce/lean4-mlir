@@ -134,13 +134,6 @@ noncomputable def dropPathHasVJP (N n : Nat) (s : Vec N) :
 theorem dropPath_vjp_is_self (N n : Nat) (s : Vec N) (x dy : Vec (N * n)) :
     (dropPathHasVJP N n s).backward x dy = dropPath N n s dy := rfl
 
-/-- The `correct` field spelled out, matching every other `*HasVJP_correct` in the kit. -/
-theorem dropPathHasVJP_correct (N n : Nat) (s : Vec N)
-    (x dy : Vec (N * n)) (i : Fin (N * n)) :
-    (dropPathHasVJP N n s).backward x dy i =
-      ∑ j : Fin (N * n), pdiv (dropPath N n s) x i j * dy j :=
-  (dropPathHasVJP N n s).correct x dy i
-
 /-- **The keep-probability ramp**, `keep_i = 1 − dropRate · i / (totalDrop − 1)`.
 
     Note: **`totalDrop` counts ALL blocks, including ones the drop never fires on.** The reference sums
@@ -266,13 +259,6 @@ noncomputable def dropoutHasVJP (N n : Nat) {m : Nat} (mask : Vec m) :
     op is spliced into a chain, list every CONSUMER of the value it displaced.* -/
 theorem dropout_vjp_is_self (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m) :
     (dropoutHasVJP N n mask).backward x dy = dropout N n mask dy := rfl
-
-/-- The `correct` field spelled out, matching every other `*HasVJP_correct` in the kit. -/
-theorem dropoutHasVJP_correct (N n : Nat) {m : Nat} (mask : Vec m) (x dy : Vec m)
-    (i : Fin m) :
-    (dropoutHasVJP N n mask).backward x dy i =
-      ∑ j : Fin m, pdiv (dropout N n mask) x i j * dy j :=
-  (dropoutHasVJP N n mask).correct x dy i
 
 /-- **`dropPath` IS `dropout` AT A LIFTED MASK** — the bridge, and it is `rfl`.
 

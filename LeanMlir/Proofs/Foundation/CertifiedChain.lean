@@ -68,6 +68,13 @@ structure CertLayer (m n : Nat) where
 
 namespace CertLayer
 
+/-- A certified layer is determined by its forward, its certification domain and its backward
+    graph: `vjp` is pinned by `fwd` (`HasVJPAt` is a subsingleton), and `diff`, `faithful` are proofs. -/
+@[ext] theorem ext {m n : Nat} {L L' : CertLayer m n} (hf : L.fwd = L'.fwd) (hok : L.ok = L'.ok)
+    (hg : L.graph = L'.graph) : L = L' := by
+  cases L; cases L'; cases hf; cases hok; cases hg
+  congr; funext x hx; exact Subsingleton.elim _ _
+
 /-- The identity layer — certified everywhere, and its backward graph is the cotangent verbatim.
     The unit of `chain`. -/
 noncomputable def id' (n : Nat) : CertLayer n n where

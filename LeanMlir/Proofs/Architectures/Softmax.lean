@@ -175,10 +175,7 @@ theorem softmaxCE_grad (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
   cases c with
   | zero => exact label.elim0
   | succ c' =>
-  have h_softmax_pos : ∀ z : Vec (c' + 1), 0 < softmax (c' + 1) z label := fun z =>
-    div_pos (Real.exp_pos _)
-      (Finset.sum_pos (fun k _ => Real.exp_pos _) Finset.univ_nonempty)
-  have hp_ne : softmax (c' + 1) logits label ≠ 0 := (h_softmax_pos logits).ne'
+  have hp_ne : softmax (c' + 1) logits label ≠ 0 := (softmax_pos logits label).ne'
   -- Differentiability infrastructure.
   have h_softmax_label_diff : Differentiable ℝ
       (fun z : Vec (c' + 1) => softmax (c' + 1) z label) :=

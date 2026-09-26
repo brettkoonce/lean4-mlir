@@ -499,20 +499,6 @@ theorem rowDenseBackFlat_smul (N a c : Nat) (W : Mat a c) : IsHomog (rowDenseBac
   simp only [rowDenseBackFlat, Mat.flatten, Mat.unflatten, Mat.mulVec, Finset.mul_sum]
   exact Finset.sum_congr rfl (fun _ _ => by ring)
 
-/-- A `HasVJP3` backward is linear in its cotangent — `HasVJP.backward_smul`'s three-axis peer,
-    read off `HasVJP3.correct`. The stride-1 depthwise weight gradient is stated through one. -/
-theorem hasVJP3_backward_smul {c₁ h₁ w₁ c₂ h₂ w₂ : Nat} {f : Tensor3 c₁ h₁ w₁ → Tensor3 c₂ h₂ w₂}
-    (hf : HasVJP3 f) (x : Tensor3 c₁ h₁ w₁) (a : ℝ) (dy : Tensor3 c₂ h₂ w₂) :
-    hf.backward x (fun i₁ i₂ i₃ => a * dy i₁ i₂ i₃)
-      = fun j₁ j₂ j₃ => a * hf.backward x dy j₁ j₂ j₃ := by
-  funext j₁ j₂ j₃
-  rw [hf.correct, hf.correct, Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun _ _ => ?_)
-  rw [Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun _ _ => ?_)
-  rw [Finset.mul_sum]
-  exact Finset.sum_congr rfl (fun _ _ => by ring)
-
 theorem depthwiseWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
     (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) (s : ℝ)
     (idx : Fin (c * kH * kW)) :
@@ -522,7 +508,7 @@ theorem depthwiseWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : 
   refine Finset.sum_congr rfl (fun n _ => ?_)
   rw [show Tensor3.unflatten (fun i => s * batchSlice N (c * h * w) cot n i)
         = fun i₁ i₂ i₃ => s * Tensor3.unflatten (batchSlice N (c * h * w) cot n) i₁ i₂ i₃ from rfl,
-      hasVJP3_backward_smul]
+      HasVJP3.backward_smul]
   rfl
 
 theorem depthwiseStridedWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)

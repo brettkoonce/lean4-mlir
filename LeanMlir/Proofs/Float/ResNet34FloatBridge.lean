@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Float.BnFloatBridge
 
 The float global-average-pool `gapFlatF` and its budget `gapFlat_close`: GAP is a
 per-channel mean (`globalAvgPoolFlat_eq_bnMean`), so `gapFlat_close` reduces to
-`bnMean_close` on the channel slice (`sum_s2` flattens the spatial double sum).
+`bnMean_close` on the channel slice (`sum_finProdFinEquiv` flattens the spatial double sum).
 The other ResNet-34 ops' float lemmas are elsewhere: the residual add is `add_close`
 (`FloatBridge`), the conv is `flatConvF_close` (`ConvFloat`), per-channel BN is
 `bnForward_close_of` (`BnFloatBridge`), and the `FloatClose` instances are in
@@ -36,7 +36,7 @@ noncomputable def gapFlatF {c h w : Nat} (M : FloatModel) (v : Vec (c * h * w)) 
 
 /-- **Global-average-pool closeness.** GAP is the per-channel spatial mean, so the
     float GAP is within the `bnMean_close` budget of `globalAvgPoolFlat` per
-    channel (`sum_s2` flattens the spatial double sum to the `Fin (h·w)` slice the
+    channel (`sum_finProdFinEquiv` flattens the spatial double sum to the `Fin (h·w)` slice the
     mean rounds). -/
 theorem gapFlat_close {c h w : Nat} (M : FloatModel) (v : Vec (c * h * w)) {A : ℝ}
     (hhw : 0 < h * w) (hA : ∀ ci hi wi, |Tensor3.unflatten v ci hi wi| ≤ A) (ci : Fin c) :
@@ -47,7 +47,7 @@ theorem gapFlat_close {c h w : Nat} (M : FloatModel) (v : Vec (c * h * w)) {A : 
   have hgap : globalAvgPoolFlat c h w v ci = bnMean (h * w) cs := by
     simp only [globalAvgPoolFlat, globalAvgPool, bnMean]
     congr 1
-    · rw [sum_s2 cs]
+    · rw [sum_finProdFinEquiv cs]
       refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
       simp only [hcs, Equiv.symm_apply_apply]
     · push_cast; ring
@@ -66,7 +66,7 @@ theorem globalAvgPoolFlat_eq_bnMean {c h w : Nat} (v : Vec (c * h * w)) (ci : Fi
           (finProdFinEquiv.symm s).1 (finProdFinEquiv.symm s).2) := by
   simp only [globalAvgPoolFlat, globalAvgPool, bnMean]
   congr 1
-  · rw [sum_s2 _]
+  · rw [sum_finProdFinEquiv _]
     refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
     simp only [Equiv.symm_apply_apply]
   · push_cast; ring

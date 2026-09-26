@@ -367,10 +367,7 @@ theorem depthwiseWGradB_den {N c h w kH kW : Nat}
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  rw [← (HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 b
-      (Tensor3.unflatten (batchSlice N (c * h * w) x n)))).correct
-      (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx]
-  simp only [HasVJP3.toHasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
+  exact HasVJP3.flatten_backward _ W _ idx
 
 /-- **Batched strided depthwise weight GRADIENT denotes the certified `Σ_n` weight gradient.** The
     strided VJP is already flat, so this is `Σ_n` of

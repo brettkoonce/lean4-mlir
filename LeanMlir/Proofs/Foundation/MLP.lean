@@ -151,8 +151,7 @@ theorem pdiv_of_hasFDerivAt_mask {n : Nat} (f : Vec n → Vec n) (x : Vec n) (p 
     (hf : HasFDerivAt f (ContinuousLinearMap.pi fun k =>
         if p k then ContinuousLinearMap.proj k else (0 : Vec n →L[ℝ] ℝ)) x) (i j : Fin n) :
     pdiv f x i j = if i = j then (if p i then 1 else 0) else 0 := by
-  unfold pdiv
-  rw [hf.fderiv, ContinuousLinearMap.pi_apply]
+  rw [pdiv_eq_of_hasFDerivAt hf, ContinuousLinearMap.pi_apply]
   by_cases hij : i = j
   · subst hij; split_ifs <;> simp_all [basisVec_apply]
   · split_ifs <;> simp [basisVec_apply, Ne.symm hij]
@@ -276,6 +275,23 @@ noncomputable def crossEntropy (c : Nat) (logits : Vec c) (label : Fin c) : ℝ 
 
 theorem softmax_apply (c : Nat) (z : Vec c) (j : Fin c) :
     softmax c z j = Real.exp (z j) / ∑ k : Fin c, Real.exp (z k) := rfl
+
+theorem softmax_pos {c : Nat} (z : Vec c) (j : Fin c) : 0 < softmax c z j :=
+  div_pos (Real.exp_pos _) (Finset.sum_pos (fun _ _ => Real.exp_pos _) ⟨j, Finset.mem_univ j⟩)
+
+theorem softmax_nonneg {c : Nat} (z : Vec c) (j : Fin c) : 0 ≤ softmax c z j :=
+  (softmax_pos z j).le
+
+theorem softmax_le_one {c : Nat} (z : Vec c) (j : Fin c) : softmax c z j ≤ 1 := by
+  have hD : 0 < ∑ k, Real.exp (z k) :=
+    Finset.sum_pos (fun _ _ => Real.exp_pos _) ⟨j, Finset.mem_univ j⟩
+  exact (div_le_one hD).mpr
+    (Finset.single_le_sum (fun k _ => (Real.exp_pos (z k)).le) (Finset.mem_univ j))
+
+/-- The softmax entries sum to one (over a nonempty class set). -/
+theorem sum_softmax {c : Nat} [NeZero c] (z : Vec c) : ∑ j, softmax c z j = 1 := by
+  simp only [softmax_apply, div_eq_mul_inv, ← Finset.sum_mul]
+  exact mul_inv_cancel₀ (Finset.sum_pos (fun _ _ => Real.exp_pos _) Finset.univ_nonempty).ne'
 
 theorem oneHot_apply (c : Nat) (label j : Fin c) :
     oneHot c label j = if j = label then 1 else 0 := rfl

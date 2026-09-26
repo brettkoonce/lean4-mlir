@@ -598,14 +598,14 @@ theorem convWeightGrad_eq_dot {ic oc h w kH kW : Nat} (x : Tensor3 ic h w)
     ∑ s, convPadWin kH kW x cc kh kw s * cotWin cot o s =
       ∑ hi : Fin h, ∑ wi : Fin w,
         convPad kH kW x cc kh kw hi wi * cot o hi wi := by
-  rw [sum_s2 (fun s => convPadWin kH kW x cc kh kw s * cotWin cot o s)]
+  rw [sum_finProdFinEquiv (fun s => convPadWin kH kW x cc kh kw s * cotWin cot o s)]
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
   rw [convPadWin_apply, cotWin_apply]
 
 /-- The conv bias gradient is the spatial sum `Σ_{hi,wi} cot`. -/
 theorem convBiasGrad_eq_sum {oc h w : Nat} (cot : Tensor3 oc h w) (o : Fin oc) :
     ∑ s, cotWin cot o s = ∑ hi : Fin h, ∑ wi : Fin w, cot o hi wi := by
-  rw [sum_s2 (fun s => cotWin cot o s)]
+  rw [sum_finProdFinEquiv (fun s => cotWin cot o s)]
   refine Finset.sum_congr rfl fun hi _ => Finset.sum_congr rfl fun wi _ => ?_
   rw [cotWin_apply]
 

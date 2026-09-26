@@ -157,7 +157,7 @@ theorem batchMap_differentiable {N a b : Nat} (f : Vec a → Vec b) (hf : Differ
 noncomputable def batchMapHasVJP {N a b : Nat} (f : Vec a → Vec b)
     (hf : HasVJP f) (hf_diff : Differentiable ℝ f) :
     HasVJP (StableHLO.batchMap N f) :=
-  (batchMap_eq_rowwiseFlat f).symm ▸ HasVJPMat.toHasVJP (rowwiseHasVJPMat hf hf_diff)
+  (HasVJPMat.toHasVJP (rowwiseHasVJPMat hf hf_diff)).congr (batchMap_eq_rowwiseFlat f).symm
 
 -- ════════════════════════════════════════════════════════════════
 -- § True batch-norm `bnBatchLA` VJP — the proven `bnBatchTensor4`, reindex-conjugated
@@ -196,13 +196,12 @@ theorem bnBatchLA_continuous (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β :
 /-- **True batch-norm VJP at the network's flat index.** `bnBatchLA`'s backward is the proven
     `bnBatchTensor4` VJP (batch-coupled — NOT a `batchMap`), conjugated by the reindex isos. -/
 noncomputable def bnBatchLAHasVJP (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) :
-    HasVJP (StableHLO.bnBatchLA N oc h w ε γ β) := by
-  rw [bnBatchLA_eq_comp]
-  exact vjpComp _ _
+    HasVJP (StableHLO.bnBatchLA N oc h w ε γ β) :=
+  (vjpComp _ _
     ((bnBatchTensor4_differentiable N oc h w ε hε γ β).comp (reindexCLM _).differentiable)
     (reindexCLM _).differentiable
     (vjpComp _ _ (reindexCLM _).differentiable (bnBatchTensor4_differentiable N oc h w ε hε γ β)
       (reindexHasVJP _) (bnBatchTensor4HasVJP N oc h w ε hε γ β))
-    (reindexHasVJP _)
+    (reindexHasVJP _)).congr (bnBatchLA_eq_comp N oc h w ε γ β).symm
 
 end Proofs

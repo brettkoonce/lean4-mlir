@@ -421,8 +421,8 @@ noncomputable def resnet50ForwardBFullHasVJPAt (N q : Nat) (hq0 : 0 < q) {nCls :
     (hp : R50PosB w) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q))))))))
     (hx : R50SmoothAtB N q w x) :
     HasVJPAt (r34HeadB N q q w.Wd w.bd ∘ r50Pre16 N q w) x :=
-  (funext fun v => (r50NetLayer_fwd_apply N q hq0 w hp v).trans (resnet50ForwardBFull_eq_chain N q w v)
-    : (r50NetLayer N q hq0 w hp).fwd = _) ▸ (r50NetLayer N q hq0 w hp).vjp x (r50SmoothAtB_ok N q hq0 w hp x hx)
+  ((r50NetLayer N q hq0 w hp).vjp x (r50SmoothAtB_ok N q hq0 w hp x hx)).congr
+    (funext fun v => (r50NetLayer_fwd_apply N q hq0 w hp v).trans (resnet50ForwardBFull_eq_chain N q w v))
 
 /-- **Public correctness theorem**: the sixteen-bottleneck batch-BN backward equals the
     `pdiv`-contracted Jacobian of `resnet50ForwardBFull` ITSELF — the committed

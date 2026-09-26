@@ -3050,8 +3050,8 @@ theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)
     den (.maxPoolBack xN x e)
       = (maxPoolFlatHasVJPAt (Tensor3.unflatten x) h_smooth).backward (den e) := by
   funext idx
-  simp only [denStepApp, maxPoolBackFlat, maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt,
-             maxPool2HasVJPAt3]
+  simp only [denStepApp, maxPoolBackFlat, maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt_backward,
+             Tensor3.flatten_apply, maxPool2HasVJPAt3]
 
 /-- **3×3/s2 max-pool backward faithfulness (smooth point).** The emitted `select_and_scatter`
     graph at window 3 / stride 2 / symmetric padding 1 denotes the proven
@@ -3068,8 +3068,8 @@ theorem maxPool3s2Back_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2
     den (.maxPool3s2Back xN x e)
       = (maxPool3s2FlatHasVJPAt (Tensor3.unflatten x) h_smooth).backward (den e) := by
   funext idx
-  simp only [denStepApp, maxPool3s2BackFlat, maxPool3s2FlatHasVJPAt, HasVJPAt3.toHasVJPAt,
-             maxPool3s2HasVJPAt3]
+  simp only [denStepApp, maxPool3s2BackFlat, maxPool3s2FlatHasVJPAt, HasVJPAt3.toHasVJPAt_backward,
+             Tensor3.flatten_apply, maxPool3s2HasVJPAt3]
 
 /-- **BN forward faithfulness.** The per-example reduce/normalize/affine graph
     (γ·(x−μ)·istd + β, μ/var over the feature axis) denotes the proven

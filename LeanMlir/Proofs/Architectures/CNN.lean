@@ -1071,8 +1071,8 @@ theorem pdiv3_maxPool2_smooth {c h w : Nat}
   have hh : 0 < h := Fin.pos ho
   have hw : 0 < w := Fin.pos wo
   have h_fderiv := maxPool2_flat_hasFDerivAt x h_smooth hc hh hw
-  unfold pdiv3 pdiv
-  rw [h_fderiv.fderiv]
+  unfold pdiv3
+  rw [pdiv_eq_of_hasFDerivAt h_fderiv]
   show reindexCLM (maxPool2LocalReindex x)
         (basisVec (finProdFinEquiv (finProdFinEquiv (ci, hi_in), wi_in)))
         (finProdFinEquiv (finProdFinEquiv (co, ho), wo)) = _

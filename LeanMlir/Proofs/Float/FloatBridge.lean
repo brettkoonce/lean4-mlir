@@ -815,19 +815,6 @@ noncomputable def softmaxCECotF (fexp : ℝ → ℝ) {n : Nat} (z : Vec n)
     (label : Fin n) : Vec n :=
   fun k => M.sub (M.softmaxF fexp z k) (oneHot n label k)
 
-theorem softmax_nonneg {n : ℕ} (z : Vec n) (k : Fin n) :
-    0 ≤ softmax n z k :=
-  div_nonneg (Real.exp_pos _).le
-    (Finset.sum_nonneg fun j _ => (Real.exp_pos (z j)).le)
-
-theorem softmax_le_one {n : ℕ} (z : Vec n) (k : Fin n) :
-    softmax n z k ≤ 1 := by
-  have hD : 0 < ∑ j, Real.exp (z j) :=
-    Finset.sum_pos (fun j _ => Real.exp_pos _) ⟨k, Finset.mem_univ k⟩
-  exact (div_le_one hD).mpr
-    (Finset.single_le_sum (fun j _ => (Real.exp_pos (z j)).le)
-      (Finset.mem_univ k))
-
 /-- **`|softmax − oneHot| ≤ 1`** — the magnitude of every softmax-CE head cotangent:
     `softmax` lies in `[0, 1]` and a one-hot entry is `0` or `1`. -/
 theorem _root_.Proofs.abs_softmax_sub_oneHot_le_one {n : ℕ} (z : Vec n) (label k : Fin n) :

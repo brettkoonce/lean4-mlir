@@ -375,15 +375,6 @@ noncomputable def flatConvStride2XlaHasVJP {ic oc h w kH kW : Nat}
   vjpComp _ _ hf_diff (decimateOddFlat_differentiable oc h w) hf_vjp
     (decimateOddFlatHasVJP oc h w)
 
-/-- **Stride-2 XLA-`SAME` input-VJP correctness**: the backward
-    equals the `pdiv`-contracted Jacobian. Peer of `flatConvStride2HasVJP_correct`. -/
-theorem flatConvStride2XlaHasVJP_correct {ic oc h w kH kW : Nat}
-    (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (x : Vec (ic * (2 * h) * (2 * w))) (dy : Vec (oc * h * w)) (i : Fin (ic * (2 * h) * (2 * w))) :
-    (flatConvStride2XlaHasVJP W b).backward x dy i
-      = ∑ j : Fin (oc * h * w), pdiv (flatConvStride2Xla W b) x i j * dy j :=
-  (flatConvStride2XlaHasVJP W b).correct x dy i
-
 /-- **Stride-2 XLA-`SAME` weight-VJP.** The same composition viewed as a function of the *kernel*
     (input `x` fixed): `conv2dWeightGrad` run on the odd-zero-upsampled cotangent. -/
 noncomputable def flatConvStride2XlaWeightGradHasVJP {ic oc h w kH kW : Nat}
@@ -399,16 +390,6 @@ noncomputable def flatConvStride2XlaWeightGradHasVJP {ic oc h w kH kW : Nat}
   show HasVJP (decimateOddFlat oc h w ∘ f) from
   vjpComp f (decimateOddFlat oc h w) hf_diff (decimateOddFlat_differentiable oc h w)
     hf_vjp (decimateOddFlatHasVJP oc h w)
-
-/-- **Stride-2 XLA-`SAME` weight-VJP correctness** (ℝ-headline). -/
-theorem flatConvStride2XlaWeightGradHasVJP_correct {ic oc h w kH kW : Nat}
-    (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
-    (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (i : Fin (oc * ic * kH * kW)) :
-    (flatConvStride2XlaWeightGradHasVJP b x).backward v dy i
-      = ∑ j : Fin (oc * h * w),
-          pdiv (fun v' : Vec (oc * ic * kH * kW) =>
-            flatConvStride2Xla (Kernel4.unflatten v') b x) v i j * dy j :=
-  (flatConvStride2XlaWeightGradHasVJP b x).correct v dy i
 
 /-- **Stride-2 XLA-`SAME` bias-VJP.** `fun b => flatConvStride2Xla W b x` = the odd decimation of
     the stride-1 conv-in-`b`; by `vjpComp` of `conv2dBiasGradHasVJP` with the odd-decimation

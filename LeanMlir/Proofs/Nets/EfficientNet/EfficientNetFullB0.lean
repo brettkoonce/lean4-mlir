@@ -201,9 +201,8 @@ theorem mbNoExpW_differentiable (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoEx
   exact mbNoExpFwdB_differentiable N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 noncomputable def mbNoExpWHasVJP (N h w : Nat) {ic oc kh kw r : Nat} (p : MBWNoExp ic oc r kh kw)
-    (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbNoExpW N h w p) := by
-  unfold mbNoExpW
-  exact mbNoExpFwdBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
+    (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbNoExpW N h w p) :=
+  mbNoExpFwdBHasVJP N (h := h) (w := w) p.dW p.db p.dε hd p.dγ p.dβ
     p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 theorem mbStridedW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
@@ -212,9 +211,8 @@ theorem mbStridedW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : M
   exact mbStridedFwdB_differentiable N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 noncomputable def mbStridedWHasVJP (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbStridedW N h w p) := by
-  unfold mbStridedW
-  exact mbStridedFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
+    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbStridedW N h w p) :=
+  mbStridedFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 theorem mbResidW_differentiable (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
@@ -223,9 +221,8 @@ theorem mbResidW_differentiable (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c m
   exact mbResidFwdB_differentiable N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 noncomputable def mbResidWHasVJP (N h w : Nat) {c mid kh kw r : Nat} (p : MBW c mid c r kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbResidW N h w p) := by
-  unfold mbResidW
-  exact mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
+    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbResidW N h w p) :=
+  mbResidFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 theorem mbExpW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
@@ -234,9 +231,8 @@ theorem mbExpW_differentiable (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW i
   exact mbExpFwdB_differentiable N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 noncomputable def mbExpWHasVJP (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW ic mid oc r kh kw)
-    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbExpW N h w p) := by
-  unfold mbExpW
-  exact mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
+    (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) : HasVJP (mbExpW N h w p) :=
+  mbExpFwdBHasVJP N (h := h) (w := w) p.eW p.eb p.eε he p.eγ p.eβ
     p.dW p.db p.dε hd p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pε hp p.pγ p.pβ
 
 -- ════════════════════════════════════════════════════════════════

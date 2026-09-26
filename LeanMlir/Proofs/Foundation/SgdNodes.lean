@@ -182,8 +182,7 @@ theorem mnv2_render_depthwiseW_flat_certified {c h w kH kW : Nat}
                (Tensor3.flatten W) idx j * cot j := by
   congr 1
   congr 1
-  rw [← (HasVJP3.toHasVJP (depthwiseWeightGradHasVJP3 b x)).correct (Tensor3.flatten W) cot idx]
-  simp only [HasVJP3.toHasVJP, Tensor3.flatten, Tensor3.unflatten_flatten]
+  exact HasVJP3.flatten_backward _ W _ idx
 
 /-- **Stride-1 depthwise weight op = certified.** The `depthwiseWeightSgd` op denotes
     `flatten W − lr·(certified ∂(depthwiseConv2d)/∂W · c)` (flat pdiv form). The stride-1 depthwise

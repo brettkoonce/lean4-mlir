@@ -65,7 +65,7 @@ theorem depthwiseConv2d_eq_dense {c h w kH kW : Nat}
       Proofs.dense (dwKernelMat W ch) (fun _ => b ch) (dwWindow kH kW x ch hi wi) 0 := by
   show b ch + ∑ kh : Fin kH, ∑ kw : Fin kW, W ch kh kw * convPad kH kW x ch kh kw hi wi
     = (∑ idx, dwWindow kH kW x ch hi wi idx * dwKernelMat W ch idx 0) + b ch
-  rw [sum_s2 (fun idx => dwWindow kH kW x ch hi wi idx * dwKernelMat W ch idx 0), add_comm]
+  rw [sum_finProdFinEquiv (fun idx => dwWindow kH kW x ch hi wi idx * dwKernelMat W ch idx 0), add_comm]
   refine congrArg (· + b ch) ?_
   refine Finset.sum_congr rfl fun kh _ => Finset.sum_congr rfl fun kw _ => ?_
   rw [dwWindow_k, dwKernelMat_k]; ring

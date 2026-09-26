@@ -15,7 +15,7 @@ Each declaration below IS the corresponding generic theorem at `(784, 512, 512, 
 `#check` shows the specialized statement; the 3-axiom audit covers them all. Nothing else
 in Lean consumes them: [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)
 is this file's only importer, by design.
-The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerifiedHasVJP*`
+The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerifiedHasVJP` / `mlpVerifiedHasVJPAt`
 (stated over `mlpVerified.layers` itself; that file lives outside the Mathlib-only seam).
 
 The OTHER MNIST proof population — the trained-weight certificate instances

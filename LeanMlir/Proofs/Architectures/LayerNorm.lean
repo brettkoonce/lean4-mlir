@@ -453,7 +453,7 @@ lemma rowwise_flat_differentiable {N D P : Nat} (g : Vec D → Vec P)
     (hg : Differentiable ℝ g) :
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten ((fun X : Mat N D => fun n => g (X n)) (Mat.unflatten v))) := by
-  unfold Mat.flatten Mat.unflatten; fun_prop
+  fun_prop
 
 lemma layerNormVec_per_token_flat_differentiable (N D : Nat) (ε : ℝ) (γv βv : Vec D)
     (hε : 0 < ε) :

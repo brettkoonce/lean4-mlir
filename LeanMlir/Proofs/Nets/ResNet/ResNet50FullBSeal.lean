@@ -702,12 +702,10 @@ theorem seal_smooth (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ
     pool's no-tie discharged at `(sealW nCls, sealX q t)`, on `resnet50ForwardBFull` itself
     (transported through `resnet50ForwardBFull_eq_chain`), at BOTH shipped resolutions. -/
 noncomputable def sealVJP (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
-    HasVJPAt (resnet50ForwardBFull 2 q (sealW nCls)) (sealX q t) := by
-  rw [show resnet50ForwardBFull 2 q (sealW nCls)
-      = r34HeadB 2 q q (sealW nCls).Wd (sealW nCls).bd ∘ r50Pre16 2 q (sealW nCls)
-      from funext (resnet50ForwardBFull_eq_chain 2 q (sealW nCls))]
-  exact resnet50ForwardBFullHasVJPAt 2 q hq0 (sealW nCls) (seal_pos nCls) (sealX q t)
-    (seal_smooth q hq0 hq nCls t)
+    HasVJPAt (resnet50ForwardBFull 2 q (sealW nCls)) (sealX q t) :=
+  (resnet50ForwardBFullHasVJPAt 2 q hq0 (sealW nCls) (seal_pos nCls) (sealX q t)
+    (seal_smooth q hq0 hq nCls t)).congr
+    (funext (resnet50ForwardBFull_eq_chain 2 q (sealW nCls))).symm
 
 /-- The net is differentiable at the witness — `fderiv_ne_zero_of_ray`'s first hypothesis. -/
 theorem seal_differentiableAt (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :

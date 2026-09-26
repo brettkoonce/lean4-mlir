@@ -204,20 +204,6 @@ and the `Wo`-back cotangent to head `h`'s columns, runs `sdpaBack{Q,K,V}` at
 `d_head`, and the qkv-stack dense-back contracts head `h`'s SDPA backward against
 the `finProdFinEquiv (h, ·)` columns of `Wq/Wk/Wv`. -/
 
-/-- General-`heads` reindex of a sum over the qkv-slab column axis
-    `Fin (heads * (3 * d))` into `(h, c, j)`. -/
-private lemma sum_heads_3d {M : Type*} [AddCommMonoid M] (heads d : Nat)
-    (f : Fin (heads * (3 * d)) → M) :
-    (∑ k : Fin (heads * (3 * d)), f k)
-      = ∑ h : Fin heads, ∑ c : Fin 3, ∑ j : Fin d,
-          f (finProdFinEquiv (h, finProdFinEquiv (c, j))) := by
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin heads × Fin (3*d) ≃ Fin (heads * (3*d))) f]
-  rw [Fintype.sum_prod_type]
-  apply Finset.sum_congr rfl; intro h _
-  rw [← Equiv.sum_comp (finProdFinEquiv : Fin 3 × Fin d ≃ Fin (3*d))
-      (fun kk => f (finProdFinEquiv (h, kk)))]
-  rw [Fintype.sum_prod_type]
-
 /-- The multi-head QKV-stack dense-back fan-in: contracting the column-stacked
     per-head SDPA backward against `mhsaQkvW` splits into a sum over heads of
     the three per-projection dense-backs at head `h`'s columns. -/
@@ -233,7 +219,7 @@ private lemma qkv_back_fanin_MH (N heads d : Nat)
            + (∑ j : Fin d, Wk c (finProdFinEquiv (h, j)) * G 1 h r j)
            + (∑ j : Fin d, Wv c (finProdFinEquiv (h, j)) * G 2 h r j)) := by
   unfold Mat.mulVec
-  rw [sum_heads_3d]
+  rw [sum_finProdFinEquiv]; simp_rw [sum_finProdFinEquiv]
   apply Finset.sum_congr rfl; intro h _
   rw [Fin.sum_univ_three]
   simp only [Equiv.symm_apply_apply, mhsaQkvW_eq0, mhsaQkvW_eq1, mhsaQkvW_eq2]

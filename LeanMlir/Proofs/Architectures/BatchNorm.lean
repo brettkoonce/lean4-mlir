@@ -728,7 +728,7 @@ noncomputable def bnNormalizeHasVJP (n : Nat) (ε : ℝ) (hε : 0 < ε) :
 -/
 noncomputable def bnHasVJP (n : Nat) (ε γ β : ℝ) (hε : 0 < ε) :
     HasVJP (bnForward n ε γ β) := by
-  rw [bnForward_eq_compose]
+  refine HasVJP.congr (bnForward_eq_compose n ε γ β).symm ?_
   have h_normalize_diff : Differentiable ℝ (bnNormalize n ε) := by
     rw [show bnNormalize n ε =
           (fun y : Vec n => fun k : Fin n =>

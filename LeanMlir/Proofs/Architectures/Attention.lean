@@ -131,7 +131,7 @@ theorem pdivMat_colIndep {n heads d_in d_out : Nat} (g : Mat n d_in → Mat n d_
     rcases eq_or_ne h_j h_l with rfl | hne
     · simp
     · simp [hne, hne.symm]
-  rw [pdivMat, pdiv, hF.fderiv]
+  rw [pdivMat, pdiv_eq_of_hasFDerivAt hF]
   simp only [ContinuousLinearMap.pi_apply, Equiv.symm_apply_apply, D,
     ContinuousLinearMap.comp_apply, ContinuousLinearMap.proj_apply, hslab, hb]
   split_ifs <;> simp [G, pdivMat, pdiv]
@@ -174,7 +174,7 @@ holds independently for each input (with the others fixed). -/
     `Mat n d_out`. Backward returns the triple of per-input gradients;
     `correct_{1,2,3}` ensure each gradient matches the partial derivative
     treating the other two inputs as constants. -/
-structure HasVJPMat3 {n d_in d_out : Nat}
+@[ext] structure HasVJPMat3 {n d_in d_out : Nat}
     (F : Mat n d_in → Mat n d_in → Mat n d_in → Mat n d_out) where
   backward : Mat n d_in → Mat n d_in → Mat n d_in → Mat n d_out →
              (Mat n d_in × Mat n d_in × Mat n d_in)
@@ -191,6 +191,28 @@ structure HasVJPMat3 {n d_in d_out : Nat}
     ∑ k : Fin n, ∑ l : Fin d_out,
       pdivMat (fun C' => F A B C') C i j k l * dY k l
 
+/-- A ternary matrix map has at most one VJP witness: each component of `backward` is pinned by
+    its `correct_i`. -/
+instance {n d_in d_out : Nat} {F : Mat n d_in → Mat n d_in → Mat n d_in → Mat n d_out} :
+    Subsingleton (HasVJPMat3 F) :=
+  ⟨fun a b => HasVJPMat3.ext (by
+    funext A B C dY
+    refine Prod.ext ?_ (Prod.ext ?_ ?_) <;> funext i j
+    · rw [a.correct_1, b.correct_1]
+    · rw [a.correct_2, b.correct_2]
+    · rw [a.correct_3, b.correct_3])⟩
+
+/-- The canonical ternary witness: each component of the backward is its `pdivMat` contraction. -/
+noncomputable def HasVJPMat3.canonical {n d_in d_out : Nat}
+    (F : Mat n d_in → Mat n d_in → Mat n d_in → Mat n d_out) : HasVJPMat3 F where
+  backward A B C dY :=
+    (fun i j => ∑ k : Fin n, ∑ l : Fin d_out, pdivMat (fun A' => F A' B C) A i j k l * dY k l,
+     fun i j => ∑ k : Fin n, ∑ l : Fin d_out, pdivMat (fun B' => F A B' C) B i j k l * dY k l,
+     fun i j => ∑ k : Fin n, ∑ l : Fin d_out, pdivMat (fun C' => F A B C') C i j k l * dY k l)
+  correct_1 _ _ _ _ _ _ := rfl
+  correct_2 _ _ _ _ _ _ := rfl
+  correct_3 _ _ _ _ _ _ := rfl
+
 -- ════════════════════════════════════════════════════════════════
 -- § 0. Differentiable helpers for the matrix-VJP building blocks
 --
@@ -205,22 +227,22 @@ structure HasVJPMat3 {n d_in d_out : Nat}
 lemma matmul_right_const_flat_differentiable {m p q : Nat} (D : Mat p q) :
     Differentiable ℝ (fun v : Vec (m * p) =>
       Mat.flatten (Mat.mul (Mat.unflatten v) D)) := by
-  unfold Mat.unflatten Mat.flatten Mat.mul; fun_prop
+  fun_prop
 
 lemma matmul_left_const_flat_differentiable {m p q : Nat} (C : Mat m p) :
     Differentiable ℝ (fun v : Vec (p * q) =>
       Mat.flatten (Mat.mul C (Mat.unflatten v))) := by
-  unfold Mat.unflatten Mat.flatten Mat.mul; fun_prop
+  fun_prop
 
 lemma scalarScale_flat_differentiable {m n : Nat} (s : ℝ) :
     Differentiable ℝ (fun v : Vec (m * n) =>
       Mat.flatten (fun r c => s * (Mat.unflatten v) r c)) := by
-  unfold Mat.unflatten Mat.flatten; fun_prop
+  fun_prop
 
 lemma transpose_flat_differentiable {m n : Nat} :
     Differentiable ℝ (fun v : Vec (m * n) =>
       Mat.flatten (Mat.transpose (Mat.unflatten v) : Mat n m)) := by
-  unfold Mat.unflatten Mat.flatten Mat.transpose; fun_prop
+  fun_prop
 
 /-- Differentiability of the flattened per-token dense map.
     `fun X => fun n => dense W b (X n)` is linear in `X`, so the
@@ -230,7 +252,7 @@ lemma dense_per_token_flat_differentiable {N inD outD : Nat}
     Differentiable ℝ (fun v : Vec (N * inD) =>
       Mat.flatten ((fun X : Mat N inD => fun n => dense W b (X n))
                    (Mat.unflatten v))) := by
-  unfold Mat.unflatten Mat.flatten dense; fun_prop
+  unfold dense; fun_prop
 
 /-- Differentiability of the flattened per-token GELU map.
     `geluScalar = 0.5 · x · (1 + tanh(√(2/π)(x + 0.044715·x³)))`. With
@@ -240,7 +262,7 @@ theorem gelu_per_token_flat_differentiable (N D : Nat) :
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten ((fun X : Mat N D => fun n => gelu D (X n))
                    (Mat.unflatten v))) := by
-  unfold Mat.unflatten Mat.flatten gelu geluScalar; fun_prop
+  unfold gelu geluScalar; fun_prop
 
 /-- Differentiability of `layerNormForward D ε γ β` — it is `bnForward` (definitionally),
     differentiable when `ε > 0`. Tagged for `fun_prop`. -/
@@ -255,7 +277,7 @@ theorem layerNorm_per_token_flat_differentiable (N D : Nat) (ε γ β : ℝ) (h�
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten ((fun X : Mat N D => fun n => layerNormForward D ε γ β (X n))
                    (Mat.unflatten v))) := by
-  unfold Mat.flatten Mat.unflatten; fun_prop (disch := assumption)
+  fun_prop (disch := assumption)
 
 /-- Differentiability of the flattened identity matrix map.
     `Mat.flatten ∘ id ∘ Mat.unflatten = id` on `Vec (a*b)`. -/
@@ -308,7 +330,7 @@ theorem rowSoftmax_flat_differentiable (m n : Nat) :
     Differentiable ℝ (fun v : Vec (m * n) =>
       Mat.flatten (rowSoftmax (Mat.unflatten v) : Mat m n)) := by
   have := softmax_differentiable n
-  unfold rowSoftmax Mat.flatten Mat.unflatten; fun_prop
+  unfold rowSoftmax; fun_prop
 
 /-- **Row-wise softmax VJP** — proved, no sorry.
 
@@ -495,7 +517,7 @@ noncomputable def sdpaQChainHasVJP (n d : Nat) (K V : Mat n d) :
       (fun v : Vec (n * d) =>
         Mat.flatten ((fun s : Mat n n => fun r c => sdpaScale d * s r c)
           ((fun Q' : Mat n d => Mat.mul Q' (Mat.transpose K)) (Mat.unflatten v)))) := by
-    unfold Mat.unflatten Mat.flatten Mat.mul; fun_prop
+    fun_prop
   -- Middle chain (… → rowSoftmax):
   let middleHasVJP :=
     vjpMatComp _ (@rowSoftmax n n)
@@ -564,7 +586,7 @@ noncomputable def sdpaKChainHasVJP (n d : Nat) (Q V : Mat n d) :
       (fun v : Vec (n * d) =>
         Mat.flatten ((fun Kt' : Mat d n => Mat.mul Q Kt')
           (Mat.transpose (Mat.unflatten v : Mat n d) : Mat d n))) := by
-    unfold Mat.unflatten Mat.flatten Mat.mul Mat.transpose; fun_prop
+    fun_prop
   -- Add scalar scale:
   let l2HasVJP :=
     vjpMatComp _ (fun s : Mat n n => fun r c => sdpaScale d * s r c)
@@ -577,7 +599,7 @@ noncomputable def sdpaKChainHasVJP (n d : Nat) (Q V : Mat n d) :
         Mat.flatten ((fun s : Mat n n => fun r c => sdpaScale d * s r c)
           ((fun Kt' : Mat d n => Mat.mul Q Kt')
             (Mat.transpose (Mat.unflatten v : Mat n d) : Mat d n)))) := by
-    unfold Mat.unflatten Mat.flatten Mat.mul Mat.transpose; fun_prop
+    fun_prop
   -- Add rowSoftmax:
   let l3HasVJP :=
     vjpMatComp _ (@rowSoftmax n n)
@@ -1011,7 +1033,7 @@ theorem colSlabApply_flat_differentiable {n heads d_in d_out : Nat}
   obtain ⟨⟨h, j⟩, rfl⟩ := finProdFinEquiv.surjective q
   -- Coordinate `(r, (h, j))` is coordinate `(r, j)` of `g` on the `h`-th column slab.
   have hh := flat_differentiable_comp (G := g) (F := fun M : Mat n (heads * d_in) =>
-    fun r' j' => M r' (finProdFinEquiv (h, j'))) (by unfold Mat.flatten Mat.unflatten; fun_prop)
+    fun r' j' => M r' (finProdFinEquiv (h, j'))) (by fun_prop)
     hg_diff
   simpa [Mat.flatten, colSlabApply] using differentiable_pi.mp hh (finProdFinEquiv (r, j))
 
@@ -1283,7 +1305,7 @@ lemma transformerMlp_flat_differentiable (N D mlpDim : Nat)
     Differentiable ℝ (fun v : Vec (N * D) =>
       Mat.flatten (transformerMlp N D mlpDim Wfc1 bfc1 Wfc2 bfc2
                      (Mat.unflatten v))) := by
-  unfold transformerMlp Mat.unflatten Mat.flatten dense gelu geluScalar; fun_prop
+  unfold transformerMlp dense gelu geluScalar; fun_prop
 
 /-- `HasVJPMat` for the MLP sublayer — chain of two `vjpMatComp`
     steps over per-token liftings (`dense ∘ gelu ∘ dense`). Every Diff

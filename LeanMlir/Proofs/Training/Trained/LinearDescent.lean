@@ -167,7 +167,7 @@ theorem sm_cot_l1 :
   have hlbl : |softmax 10 (dense Wd bd xd) lblD - oneHot 10 lblD lblD| =
       1 - softmax 10 (dense Wd bd xd) lblD := by
     rw [show oneHot 10 lblD lblD = 1 from ite_eq_left rfl,
-        abs_of_nonpos (by linarith [FloatModel.softmax_le_one (dense Wd bd xd) lblD]), neg_sub]
+        abs_of_nonpos (by linarith [softmax_le_one (dense Wd bd xd) lblD]), neg_sub]
   have hs := sm_pos lblD
   linarith [hsplit, hsplit1, herase, hlbl]
 
