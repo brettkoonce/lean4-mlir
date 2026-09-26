@@ -104,6 +104,13 @@ theorem reluMaskB_smul (n : Nat) (pre : Vec n) : IsHomog (reluMaskB n pre) := by
   unfold reluMaskB
   split_ifs <;> simp
 
+/-- The two-sided relu6 mask is linear in the cotangent it gates. -/
+theorem relu6MaskB_smul (n : Nat) (pre : Vec n) : IsHomog (relu6MaskB n pre) := by
+  intro s dy
+  funext i
+  unfold relu6MaskB
+  split_ifs <;> simp
+
 /-- The three-term BatchNorm input-gradient is linear in `dy` — both its reductions are. -/
 theorem bnGradInput_smul (n : Nat) (ε γ : ℝ) (x : Vec n) : IsHomog (bnGradInput n ε γ x) := by
   intro s dy
@@ -520,6 +527,15 @@ theorem depthwiseStridedWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String
   refine Finset.sum_congr rfl (fun n _ => ?_)
   rw [HasVJP.backward_smul]
 
+theorem depthwiseStridedXlaWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    (cot : Vec (N * (c * h * w))) (s : ℝ) (idx : Fin (c * kH * kW)) :
+    den (SHlo.depthwiseStridedXlaWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
+      = s * den (SHlo.depthwiseStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx := by
+  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
+  refine Finset.sum_congr rfl (fun n _ => ?_)
+  rw [HasVJP.backward_smul]
+
 theorem convStridedXlaWeightGradB_smul {N ic oc h w kH kW : Nat} (xN cotN : String) (b : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
     (cot : Vec (N * (oc * h * w))) (s : ℝ) (idx : Fin (oc * ic * kH * kW)) :
@@ -671,5 +687,50 @@ theorem convStridedXlaWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic o
   rw [den_allReduceMeanF_convStridedXlaWeightGradB_shard R hR t xN cotN _ b W X
       (fun i => (R : ℝ) * COT i) (fun r => .operand cotN (cots r)) (fun r => hc r) idx,
     convStridedXlaWeightGradB_smul, inv_mul_R R hR]
+
+/-! ### The swish, sigmoid, SE and sync-BN links shard -/
+
+open Proofs.BackLinks (swBackB sigBackB gateCotB seInB bnBackB bnInB_eq_bnBackB
+  seInB_eq_batchMapAux)
+
+theorem swBackB_shard {R N n : Nat} (X DY : Vec ((R * N) * n)) (r : Fin R) :
+    swBackB (N * n) (batchShard R N n X r) (batchShard R N n DY r)
+      = batchShard R N n (swBackB ((R * N) * n) X DY) r := rfl
+
+theorem sigBackB_shard {R N n : Nat} (X DY : Vec ((R * N) * n)) (r : Fin R) :
+    sigBackB (N * n) (batchShard R N n X r) (batchShard R N n DY r)
+      = batchShard R N n (sigBackB ((R * N) * n) X DY) r := rfl
+
+/-- The SE gate cotangent, per example: channel `k`'s spatial sum of `x ⊙ dy`. -/
+noncomputable def gateEx (c h w : Nat) (xs ds : Vec (c * h * w)) : Vec c :=
+  fun k => ∑ q : Fin (c * h * w), if flatChannel c h w q = k then xs q * ds q else 0
+
+/-- **The SE gate cotangent reads one example at a time** — `seReduceB` is `batchMapAux` of
+    `gateEx` — so it shards like ResNet-34's pool backward. -/
+theorem gateCotB_shard {R N : Nat} (c h w : Nat) (X DY : Vec ((R * N) * (c * h * w))) (r : Fin R) :
+    gateCotB N c h w (batchShard R N (c * h * w) X r) (batchShard R N (c * h * w) DY r)
+      = batchShard R N c (gateCotB (R * N) c h w X DY) r :=
+  (batchShard_batchMapAux (gateEx c h w) X DY r).symm
+
+theorem seInB_shard {R N : Nat} {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd) (W₂ : Mat rd c)
+    (b₂ : Vec c) (X DY : Vec ((R * N) * (c * h * w))) (r : Fin R) :
+    seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ (batchShard R N (c * h * w) X r)
+        (batchShard R N (c * h * w) DY r)
+      = batchShard R N (c * h * w) (seInB (R * N) (h := h) (w := w) W₁ b₁ W₂ b₂ X DY) r := by
+  rw [seInB_eq_batchMapAux, seInB_eq_batchMapAux]
+  exact (batchShard_batchMapAux _ X DY r).symm
+
+/-- **The sync-BN backward on replica `r` is shard `r` of the certified global BN backward** —
+    `bnSyncInB_shard` (P2 at the network index) read through `bnInB_eq_bnBackB`, so the right-hand
+    side is `bnBackB`, the single-device tie's own BN link. -/
+theorem bnSyncInB_shard_bnBackB (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (xs dys : Fin R → Vec (N * (oc * h * w))) (X DY : Vec ((R * N) * (oc * h * w)))
+    (hxs : ∀ r, xs r = batchShard R N (oc * h * w) X r)
+    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
+    bnSyncInB R hR N oc h w ε γ xs dys r
+      = batchShard R N (oc * h * w) (bnBackB (R * N) oc h w ε hε γ β X DY) r := by
+  rw [bnSyncInB_shard R hR N oc h w hm ε γ xs dys X DY hxs hdys r,
+    bnInB_eq_bnBackB (R * N) oc h w ε hε γ β]
 
 end Proofs.SyncKit

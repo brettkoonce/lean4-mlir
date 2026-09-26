@@ -128,9 +128,8 @@ def r34SigList (nClasses : Nat) (convBias : Bool := false) : List (String × Str
     (`bnChannels.foldl (fun acc c => acc ++ #[#[c], #[c]])`) — μ and var interleaved per layer,
     NOT all-μ-then-all-var. Appended after the parameters, so `@resnet34_fwd_eval` takes
     1 + 110 + 72 = **183** inputs as committed (1 + 146 + 72 = 219 at `convBias := true`). -/
-def r34StatSigList : List (String × String) :=
-  let bn (p : String) (oc : Nat) : List (String × String) :=
-    [(s!"%{p}mu", ty [oc]), (s!"%{p}var", ty [oc])]
+def r34StatSigList : List (String × String) := List.map (fun (n, ds) => (n, ty ds)) <|
+  let bn := bnStatSlots
   let idB (p : String) (c : Nat) := bn s!"{p}n1" c ++ bn s!"{p}n2" c
   let downB (p : String) (c : Nat) := bn s!"{p}n1" c ++ bn s!"{p}n2" c ++ bn s!"{p}np" c
   bn "stn" 64 ++
@@ -244,13 +243,6 @@ structure BFwdB where
   stp : String
 deriving Inhabited
 
-/-- Backward result: code, the dx cotangent to the previous block, and the block's parameter
-    gradients in func-arg order. -/
-structure BBackB where
-  code : String
-  dx : String
-  ps : List PGrad
-
 -- ════════════════════════════════════════════════════════════════
 -- § Block forward (batch BN)
 -- ════════════════════════════════════════════════════════════════
@@ -305,7 +297,7 @@ def downFwdB (B cin c hh : Nat) (epsStr p xName : String)
 
 /-- Identity block backward + its 8 parameter gradients. -/
 private def idBackGradB (B c hh : Nat) (epsStr p : String) (f : BFwdB) (dyName : String)
-    (convBias : Bool) (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (convBias : Bool) (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BlockBack := do
   let xName := f.xin
   let ww := hh
   let zc  : Vec c := fun _ => 0
@@ -340,7 +332,7 @@ private def idBackGradB (B c hh : Nat) (epsStr p : String) (f : BFwdB) (dyName :
 
 /-- Downsample block backward + its 12 parameter gradients. -/
 private def downBackGradB (B cin c hh : Nat) (epsStr p : String) (f : BFwdB) (dyName : String)
-    (convBias : Bool) (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (convBias : Bool) (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BlockBack := do
   let xName := f.xin
   let ww := hh
   let zc   : Vec c := fun _ => 0

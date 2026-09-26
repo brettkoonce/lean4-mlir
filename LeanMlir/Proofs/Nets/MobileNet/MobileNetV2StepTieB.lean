@@ -73,20 +73,13 @@ namespace Proofs.MobileNetV2TieB
 
 open scoped BigOperators
 open Proofs.BackLinks (reassocB bnBackB cInB dInB gapInB)
-open Proofs.BackLinks (bnInB bnInB_eq_bnBackB unrowB rowB)
+open Proofs.BackLinks (bnInB bnInB_eq_bnBackB unrowB rowB relu6MaskB)
 open Proofs.GradNodeB (bnPairTiedB_holds convBTiedB_holds convStridedXlaWTiedB_holds
   convWTiedB_holds denseBTiedB_holds denseWTiedB_holds depthwiseBTiedB_holds depthwiseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
--- § The two chain helpers MobileNetV2 adds
+-- § The chain helper MobileNetV2 adds (its relu6 mask `relu6MaskB` is in `Batched.BackLinks`)
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The relu6 backward mask** — `den (.selectMidB _ pre e) = fun i => if 0 < pre i ∧ pre i < 6
-    then e i else 0`. TWO-sided, where ResNet-34's `reluMaskB` tests `pre i > 0` only. MobileNetV2
-    applies it at 35 sites: two per expand-bearing block, one in `b1`, one at the stem, one in the
-    head. -/
-noncomputable def relu6MaskB (n : Nat) (pre dy : Vec n) : Vec n :=
-  fun i => if 0 < pre i ∧ pre i < 6 then dy i else 0
 
 /-- **Batched XLA-`SAME` STRIDED depthwise input-VJP** (= `den depthwiseStridedXlaBackBatched`;
     upsamples `h → 2h`). Not `BackLinks.dStridedInB`, which is the SYMMETRIC

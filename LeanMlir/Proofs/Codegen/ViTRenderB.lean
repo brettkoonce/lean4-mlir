@@ -68,9 +68,6 @@ MLP 768; depth 12. -/
 -- (`VitDims` and the Ti/S instances live in `ViTRender.lean`: the parameter-signature
 -- builders there need them too, and this file imports that one.)
 
-private def zVb {n : Nat} : Vec n := fun _ => 0
-private def zMb {a b : Nat} : Mat a b := fun _ _ => 0
-private def zKb {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 
 
 /-! ## The sites, one per per-example site in `ViTRender.lean` -/
@@ -86,13 +83,13 @@ private def vlnFwdB (V : VitDims) (vbB : Nat) (gName btName xin : String) :
   let vbD := V.d
   let (c1, a) ← pretty vbB (.batchOp (N := vbB)
       (.lnRow (m := vbTok) (n := vbD) "%one" "%zero" vEPS 0 1 0)
-      (.operand xin (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.operand xin (0 : Vec (vbB*(vbTok*vbD)))))
   let (c2, b) ← pretty vbB (.batchOp (N := vbB)
-      (.rowScale (m := vbTok) (n := vbD) gName (zVb : Vec vbD))
-      (.operand a (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.rowScale (m := vbTok) (n := vbD) gName (0 : Vec vbD))
+      (.operand a (0 : Vec (vbB*(vbTok*vbD)))))
   let (c3, o) ← pretty vbB (.batchOp (N := vbB)
-      (.rowBias (m := vbTok) (n := vbD) btName (zVb : Vec vbD))
-      (.operand b (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.rowBias (m := vbTok) (n := vbD) btName (0 : Vec vbD))
+      (.operand b (0 : Vec (vbB*(vbTok*vbD)))))
   pure (c1 ++ c2 ++ c3, o)
 
 /-- One **transformer block** forward, batched: LN1 → Q/K/V dense → per-head SDPA
@@ -125,9 +122,9 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
   let dpM := drop.map (fun i => dpName (vitSiteIdx i 1))
   let (c1, ln1) ← vlnFwdB V vbB s!"%{pfx}g1" s!"%{pfx}bt1" xin
   let qkv := fun (w b : String) => pretty vbB (.batchOp (N := vbB)
-      (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbD) zrnd w b (zMb : Mat vbD vbD)
-          (zVb : Vec vbD))
-      (.operand ln1 (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbD) zrnd w b (0 : Mat vbD vbD)
+          (0 : Vec vbD))
+      (.operand ln1 (0 : Vec (vbB*(vbTok*vbD)))))
   let (cq, q) ← qkv s!"%{pfx}Wq" s!"%{pfx}bq"
   let (ck, k) ← qkv s!"%{pfx}Wk" s!"%{pfx}bk"
   let (cv, v) ← qkv s!"%{pfx}Wv" s!"%{pfx}bv"
@@ -142,65 +139,65 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
     let h : Fin vbH := ⟨hh % vbH, Nat.mod_lt _ V.heads_pos⟩
     let hslice := fun (src : String) => pretty vbB (.batchOp (N := vbB)
         (.headSlice (N := vbTok) (heads := vbH) (d := vbHd) h)
-        (.operand src (zVb : Vec (vbB*(vbTok*(vbH*vbHd))))))
+        (.operand src (0 : Vec (vbB*(vbTok*(vbH*vbHd))))))
     let (cqs, qs) ← hslice q
     let (cks, ks) ← hslice k
     let (cvs, vs) ← hslice v
     let (ckt, kt) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbHd))
-        (.operand ks (zVb : Vec (vbB*(vbTok*vbHd)))))
+        (.operand ks (0 : Vec (vbB*(vbTok*vbHd)))))
     let (cmm, qk) ← pretty vbB (.matmulFBAt bf16 (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok)
           zrnd
-          (.operand qs (zVb : Vec (vbB*(vbTok*vbHd))))
-          (.operand kt (zVb : Vec (vbB*(vbHd*vbTok)))))
+          (.operand qs (0 : Vec (vbB*(vbTok*vbHd))))
+          (.operand kt (0 : Vec (vbB*(vbHd*vbTok)))))
     let (csc, sc) ← pretty vbB (.scaleB (N := vbB) (n := vbTok*vbTok) vSCALE 0
-        (.operand qk (zVb : Vec (vbB*(vbTok*vbTok)))))
+        (.operand qk (0 : Vec (vbB*(vbTok*vbTok)))))
     let (csm, sm) ← pretty vbB (.batchOp (N := vbB) (.softmaxRow (m := vbTok) (n := vbTok))
-        (.operand sc (zVb : Vec (vbB*(vbTok*vbTok)))))
+        (.operand sc (0 : Vec (vbB*(vbTok*vbTok)))))
     let (cpv, pv) ← pretty vbB (.matmulFBAt bf16 (N := vbB) (m := vbTok) (k := vbTok) (n := vbHd)
           zrnd
-          (.operand sm (zVb : Vec (vbB*(vbTok*vbTok))))
-          (.operand vs (zVb : Vec (vbB*(vbTok*vbHd)))))
+          (.operand sm (0 : Vec (vbB*(vbTok*vbTok))))
+          (.operand vs (0 : Vec (vbB*(vbTok*vbHd)))))
     let (cpd, pd) ← pretty vbB (.batchOp (N := vbB)
         (.headPad (N := vbTok) (heads := vbH) (d := vbHd) h)
-        (.operand pv (zVb : Vec (vbB*(vbTok*vbHd)))))
+        (.operand pv (0 : Vec (vbB*(vbTok*vbHd)))))
     code := code ++ cqs ++ cks ++ cvs ++ ckt ++ cmm ++ csc ++ csm ++ cpv ++ cpd
     qss := qss.push qs; kss := kss.push ks; vss := vss.push vs; scs := scs.push sc; sms := sms.push sm
     if hh == 0 then
       acc := pd
     else
-      let (cad, s) ← pretty vbB (.addVB (.operand acc (zVb : Vec (vbB*(vbTok*vbD))))
-          (.operand pd (zVb : Vec (vbB*(vbTok*vbD)))))
+      let (cad, s) ← pretty vbB (.addVB (.operand acc (0 : Vec (vbB*(vbTok*vbD))))
+          (.operand pd (0 : Vec (vbB*(vbTok*vbD)))))
       code := code ++ cad; acc := s
   let (co, o) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbD) zrnd s!"%{pfx}Wo" s!"%{pfx}bo"
-          (zMb : Mat vbD vbD) (zVb : Vec vbD))
-      (.operand acc (zVb : Vec (vbB*(vbTok*vbD)))))
+          (0 : Mat vbD vbD) (0 : Vec vbD))
+      (.operand acc (0 : Vec (vbB*(vbTok*vbD)))))
   -- ▶ SITE 1 of 2: the ATTENTION branch, between the out-dense and the skip add. The reference's
   -- `x = x + _drop_branch(mhsa(…), ka, keep_prob)` — the drop scales `mhsa`, never `x`.
   let (cdA, oD) ← match dpA with
     | some m => pretty vbB (.dropPathB (N := vbB) (n := vbTok*vbD) m (fun _ => 0 : Vec vbB)
-                              (.operand o (zVb : Vec (vbB*(vbTok*vbD)))))
+                              (.operand o (0 : Vec (vbB*(vbTok*vbD)))))
     | none   => pure ("", o)
-  let (ch, hres) ← pretty vbB (.addVB (.operand xin (zVb : Vec (vbB*(vbTok*vbD))))
-      (.operand oD (zVb : Vec (vbB*(vbTok*vbD)))))
+  let (ch, hres) ← pretty vbB (.addVB (.operand xin (0 : Vec (vbB*(vbTok*vbD))))
+      (.operand oD (0 : Vec (vbB*(vbTok*vbD)))))
   let (c2, ln2) ← vlnFwdB V vbB s!"%{pfx}g2" s!"%{pfx}bt2" hres
   let (cf1, f1) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowAt bf16 (N := vbTok) (a := vbD) (c := vbM) zrnd s!"%{pfx}Wfc1" s!"%{pfx}bfc1"
-          (zMb : Mat vbD vbM) (zVb : Vec vbM))
-      (.operand ln2 (zVb : Vec (vbB*(vbTok*vbD)))))
+          (0 : Mat vbD vbM) (0 : Vec vbM))
+      (.operand ln2 (0 : Vec (vbB*(vbTok*vbD)))))
   let (cg, g) ← pretty vbB (.batchOp (N := vbB) (.gelu (n := vbTok*vbM))
-      (.operand f1 (zVb : Vec (vbB*(vbTok*vbM)))))
+      (.operand f1 (0 : Vec (vbB*(vbTok*vbM)))))
   let (cf2, f2) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowAt bf16 (N := vbTok) (a := vbM) (c := vbD) zrnd s!"%{pfx}Wfc2" s!"%{pfx}bfc2"
-          (zMb : Mat vbM vbD) (zVb : Vec vbD))
-      (.operand g (zVb : Vec (vbB*(vbTok*vbM)))))
+          (0 : Mat vbM vbD) (0 : Vec vbD))
+      (.operand g (0 : Vec (vbB*(vbTok*vbM)))))
   -- ▶ SITE 2 of 2: the MLP branch, between fc2 and the skip add.
   let (cdM, f2D) ← match dpM with
     | some m => pretty vbB (.dropPathB (N := vbB) (n := vbTok*vbD) m (fun _ => 0 : Vec vbB)
-                              (.operand f2 (zVb : Vec (vbB*(vbTok*vbD)))))
+                              (.operand f2 (0 : Vec (vbB*(vbTok*vbD)))))
     | none   => pure ("", f2)
-  let (cr, bout) ← pretty vbB (.addVB (.operand hres (zVb : Vec (vbB*(vbTok*vbD))))
-      (.operand f2D (zVb : Vec (vbB*(vbTok*vbD)))))
+  let (cr, bout) ← pretty vbB (.addVB (.operand hres (0 : Vec (vbB*(vbTok*vbD))))
+      (.operand f2D (0 : Vec (vbB*(vbTok*vbD)))))
   pure (code ++ co ++ cdA ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cdM ++ cr,
     { xin, ln1, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
 
@@ -231,12 +228,12 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
       (if bf16 && bf16Conv then
         .patchEmbedBf16 (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD) zrnd
           "%wConv" "%bConv" "%cls" "%pos"
-          (zKb : Kernel4 vbD 3 16 16) (zVb : Vec vbD) (zVb : Vec vbD) (zMb : Mat vbTok vbD)
+          (0 : Kernel4 vbD 3 16 16) (0 : Vec vbD) (0 : Vec vbD) (0 : Mat vbTok vbD)
        else
         .patchEmbed (ic := 3) (H := 224) (W := 224) (P := 16) (N := vbTk) (D := vbD)
           "%wConv" "%bConv" "%cls" "%pos"
-          (zKb : Kernel4 vbD 3 16 16) (zVb : Vec vbD) (zVb : Vec vbD) (zMb : Mat vbTok vbD))
-      (.operand "%x" (zVb : Vec (vbB*(3*224*224)))))
+          (0 : Kernel4 vbD 3 16 16) (0 : Vec vbD) (0 : Vec vbD) (0 : Mat vbTok vbD))
+      (.operand "%x" (0 : Vec (vbB*(3*224*224)))))
   let mut code := ce
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
@@ -247,10 +244,10 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
   -- ⚠ `(N := vbTk)` is the PATCH count (196), so the operand's token axis is 197 and the result is
   -- one `[192]` row per example. Passing the batch here instead type-checks and keeps example 0.
   let (cs, sl) ← pretty vbB (.batchOp (N := vbB) (.clsSlice (N := vbTk) (D := vbD))
-      (.operand fl (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.operand fl (0 : Vec (vbB*(vbTok*vbD)))))
   let (cl, logits) ← pretty vbB (.batchOp (N := vbB)
-      (.dense "%Wc" "%bc" (zMb : Mat vbD nClasses) (zVb : Vec nClasses))
-      (.operand sl (zVb : Vec (vbB*vbD))))
+      (.dense "%Wc" "%bc" (0 : Mat vbD nClasses) (0 : Vec nClasses))
+      (.operand sl (0 : Vec (vbB*vbD))))
   pure (code ++ cf ++ cs ++ cl, { blocks, flnIn := cur, clsTok := sl, logits })
 
 /-- **`@vit_fwd` from the batched chain** — the batched-index peer of `vitFwdRenderV`, same
@@ -316,14 +313,14 @@ private def vlnBackB (V : VitDims) (vbB : Nat) (gName _btName xin dyOut : String
   let vbTok := V.tok
   let vbD := V.d
   let (cb, nb) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
-      (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.operand dyOut (0 : Vec (vbB*(vbTok*vbD)))))
   let (cg, ng) ← pretty vbB (.veclnGammaGradB (N := vbB) (R := vbTok) (D := vbD) xin vEPS 0
-      (zVb : Vec (vbB*(vbTok*vbD))) (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
+      (0 : Vec (vbB*(vbTok*vbD))) (.operand dyOut (0 : Vec (vbB*(vbTok*vbD)))))
   let (cs, da) ← pretty vbB (.batchOp (N := vbB)
-      (.rowScale (m := vbTok) (n := vbD) gName (zVb : Vec vbD))
-      (.operand dyOut (zVb : Vec (vbB*(vbTok*vbD)))))
+      (.rowScale (m := vbTok) (n := vbD) gName (0 : Vec vbD))
+      (.operand dyOut (0 : Vec (vbB*(vbTok*vbD)))))
   let (cn, dx) ← pretty vbB (.lnRowBackB (N := vbB) (m := vbTok) (n := vbD) "%one" xin vEPS 0 1
-      (zVb : Vec (vbB*(vbTok*vbD))) (.operand da (zVb : Vec (vbB*(vbTok*vbD)))))
+      (0 : Vec (vbB*(vbTok*vbD))) (.operand da (0 : Vec (vbB*(vbTok*vbD)))))
   pure (cb ++ cg ++ cs ++ cn, dx, ng, nb)
 
 /-- One **transformer block backward**, batched. Returns `(code, dxin, the 16 gradient SSAs in
@@ -364,24 +361,24 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
     | none   => pure ("", dyOut)
   let (c1, dg) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowBackAt bf16 (rows := vbTok) (a := vbM) (c := vbD) zrnd s!"%{p}Wfc2"
-          (zMb : Mat vbM vbD))
+          (0 : Mat vbM vbD))
       (.operand dyD zTok))
   let (c2, nWfc2) ← pretty vbB (.rowDenseWeightGradBAt bf16 (N := vbB) (tk := vbTok) (a := vbM)
         (c := vbD) zrnd
-        sv.g (zVb : Vec (vbB*(vbTok*vbM))) (.operand dyD zTok))
+        sv.g (0 : Vec (vbB*(vbTok*vbM))) (.operand dyD zTok))
   let (c3, nbfc2) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbD)
       (.operand dyD zTok))
-  let (c4, df1) ← pretty vbB (.geluBackB sv.f1 (zVb : Vec (vbB*(vbTok*vbM)))
-      (.operand dg (zVb : Vec (vbB*(vbTok*vbM)))))
+  let (c4, df1) ← pretty vbB (.geluBackB sv.f1 (0 : Vec (vbB*(vbTok*vbM)))
+      (.operand dg (0 : Vec (vbB*(vbTok*vbM)))))
   let (c5, dln2) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowBackAt bf16 (rows := vbTok) (a := vbD) (c := vbM) zrnd s!"%{p}Wfc1"
-          (zMb : Mat vbD vbM))
-      (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
+          (0 : Mat vbD vbM))
+      (.operand df1 (0 : Vec (vbB*(vbTok*vbM)))))
   let (c6, nWfc1) ← pretty vbB (.rowDenseWeightGradBAt bf16 (N := vbB) (tk := vbTok) (a := vbD)
         (c := vbM) zrnd
-        sv.ln2 zTok (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
+        sv.ln2 zTok (.operand df1 (0 : Vec (vbB*(vbTok*vbM)))))
   let (c7, nbfc1) ← pretty vbB (.rowDenseBiasGradB (N := vbB) (R := vbTok) (c := vbM)
-      (.operand df1 (zVb : Vec (vbB*(vbTok*vbM)))))
+      (.operand df1 (0 : Vec (vbB*(vbTok*vbM)))))
   let (c8, dhresLn2, ng2, nbt2) ← vlnBackB V vbB s!"%{p}g2" s!"%{p}bt2" sv.hres dln2
   let (c9, dhres) ← pretty vbB (.addVB (.operand dyOut zTok) (.operand dhresLn2 zTok))
   -- ─ Attention sublayer back ─
@@ -393,7 +390,7 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
     | none   => pure ("", dhres)
   let (c10, dacc) ← pretty vbB (.batchOp (N := vbB)
       (.denseRowBackAt bf16 (rows := vbTok) (a := vbD) (c := vbD) zrnd s!"%{p}Wo"
-          (zMb : Mat vbD vbD))
+          (0 : Mat vbD vbD))
       (.operand dhD zTok))
   let (c11, nWo) ← pretty vbB (.rowDenseWeightGradBAt bf16 (N := vbB) (tk := vbTok) (a := vbD)
         (c := vbD) zrnd
@@ -409,7 +406,7 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
     let h : Fin vbH := ⟨hh % vbH, Nat.mod_lt _ V.heads_pos⟩
     let (ca, dpv) ← pretty vbB (.batchOp (N := vbB)
         (.headSlice (N := vbTok) (heads := vbH) (d := vbHd) h)
-        (.operand dacc (zVb : Vec (vbB*(vbTok*(vbH*vbHd))))))
+        (.operand dacc (0 : Vec (vbB*(vbTok*(vbH*vbHd))))))
     let (cb, vsT) ← pretty vbB (.batchOp (N := vbB) (.transpose (m := vbTok) (n := vbHd))
         (.operand (sv.vss[hh]!) zHd))
     let (cc, dsm) ← pretty vbB (.matmulFBAt bf16 (N := vbB) (m := vbTok) (k := vbHd) (n := vbTok)
@@ -450,7 +447,7 @@ private def vBlockBackB (V : VitDims) (vbB : Nat) (pfx : String) (sv : BSaves) (
   -- Q/K/V dense backward
   let qkvBack := fun (w acc : String) => do
     let (c1', dln) ← pretty vbB (.batchOp (N := vbB)
-        (.denseRowBackAt bf16 (rows := vbTok) (a := vbD) (c := vbD) zrnd w (zMb : Mat vbD vbD))
+        (.denseRowBackAt bf16 (rows := vbTok) (a := vbD) (c := vbD) zrnd w (0 : Mat vbD vbD))
         (.operand acc zTok))
     let (c2', nW) ← pretty vbB (.rowDenseWeightGradBAt bf16 (N := vbB) (tk := vbTok) (a := vbD)
           (c := vbD) zrnd
@@ -528,12 +525,12 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     let cDy := cSm ++ cD0 ++ cSmooth
     -- head
     let (cDc, dcls) ← pretty vbB (.batchOp (N := vbB)
-        (.dotOut (m := vbD) (n := nClasses) "%Wc" (zMb : Mat vbD nClasses)) (.operand nDy zCls))
+        (.dotOut (m := vbD) (n := nClasses) "%Wc" (0 : Mat vbD nClasses)) (.operand nDy zCls))
     let (cWc, nWc) ← pretty vbB (.weightGradB (N := vbB) (m := vbD) (n := nClasses) sv.clsTok
-        (zVb : Vec (vbB*vbD)) (.operand nDy zCls))
+        (0 : Vec (vbB*vbD)) (.operand nDy zCls))
     let (cbc, nbc) ← pretty vbB (.biasGradB (N := vbB) (n := nClasses) (.operand nDy zCls))
     let (cPad, dfln) ← pretty vbB (.batchOp (N := vbB) (.clsPad (N := vbTk) (D := vbD))
-        (.operand dcls (zVb : Vec (vbB*vbD))))
+        (.operand dcls (0 : Vec (vbB*vbD))))
     let (cFln, dflnIn, ngF, nbtF) ← vlnBackB V vbB "%gF" "%btF" sv.flnIn dfln
     let mut code := fwd ++ cDy ++ cDc ++ cWc ++ cbc ++ cPad ++ cFln
     let mut dcur := dflnIn
@@ -551,11 +548,11 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     -- this net needs six ops rather than seven.
     let (cwC, nwConv) ← pretty vbB (if bf16 && bf16ConvW then
         .patchEmbedWeightGradBBf16 (N := vbB) (ic := 3) (H := 224) (W := 224)
-          (P := 16) (tk := vbTk) (D := vbD) zrnd "%ximg" (zVb : Vec (vbB*(3*224*224)))
+          (P := 16) (tk := vbTk) (D := vbD) zrnd "%ximg" (0 : Vec (vbB*(3*224*224)))
           (.operand dcur zTok)
       else
         .patchEmbedWeightGradB (N := vbB) (ic := 3) (H := 224) (W := 224)
-          (P := 16) (tk := vbTk) (D := vbD) "%ximg" (zVb : Vec (vbB*(3*224*224)))
+          (P := 16) (tk := vbTk) (D := vbD) "%ximg" (0 : Vec (vbB*(3*224*224)))
           (.operand dcur zTok))
     let (cbC, nbConv) ← pretty vbB (.patchEmbedBiasGradB (N := vbB) (tk := vbTk) (c := vbD)
         (.operand dcur zTok))
@@ -568,7 +565,7 @@ def vitBackAllB (vbB : Nat) (nClasses : Nat) (smooth : Option (String × String 
     -- must be over it. Same emitted text either way (the emit reduces the `B` axis); the byte tie
     -- cannot see this and `den_rowDenseBiasGradB_at_one`'s argument is why.
     let (cCl, ncls) ← pretty vbB (.denseBiasGradB (N := vbB) (c := vbD)
-        (.operand dclsRow (zVb : Vec (vbB*vbD))))
+        (.operand dclsRow (0 : Vec (vbB*vbD))))
     let (cPo, npos) ← pretty vbB (.posEmbedGradB (N := vbB) (tk := vbTk) (D := vbD)
         (.operand dcur zTok))
     let blkOutOrdered := (List.range vDEPTH).flatMap (fun i => blkNames[vDEPTH - 1 - i]!)

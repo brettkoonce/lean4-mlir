@@ -435,11 +435,6 @@ theorem unflatten_from11 {N c : Nat} (v : Vec (N * (c * 1 * 1))) (n : Fin N) (ci
   simp only [Fin.val_cast, finProdFinEquiv_apply_val, Fin.val_zero, Nat.mul_one, Nat.one_mul,
     Nat.zero_add]
 
-/-- The pool is continuous — for `Rr_continuous`'s `fun_prop`, which reads it through `Pl`. -/
-@[fun_prop]
-theorem globalAvgPoolFlat_continuous (c h w : Nat) : Continuous (globalAvgPoolFlat c h w) :=
-  (globalAvgPoolFlat_differentiable c h w).continuous
-
 /-- **GAP, then the relabel to `[N, c, 1, 1]`, keeps the carrier**: a per-channel shift of every
     cell shifts the average by the same amount. -/
 theorem eDiff_gapTo11 {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (δ : Fin c → ℝ)

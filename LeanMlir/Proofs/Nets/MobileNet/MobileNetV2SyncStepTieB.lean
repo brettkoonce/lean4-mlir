@@ -62,7 +62,7 @@ namespace Proofs.MobileNetV2SyncTieB
 
 open scoped BigOperators
 open Proofs.BackLinks (reassocB cInB dInB gapInB)
-open Proofs.BackLinks (bnInB unrowB rowB)
+open Proofs.BackLinks (bnInB unrowB rowB relu6MaskB)
 open Proofs.SyncKit
 open Proofs.SyncKit
 open Proofs.MobileNetV2TieB
@@ -70,13 +70,6 @@ open Proofs.MobileNetV2TieB
 -- ════════════════════════════════════════════════════════════════
 -- § 1. Homogeneity — the single-device chain is linear in its cotangent
 -- ════════════════════════════════════════════════════════════════
-
-/-- The two-sided relu6 mask is linear in the cotangent it gates. -/
-theorem relu6MaskB_smul (n : Nat) (pre : Vec n) : IsHomog (relu6MaskB n pre) := by
-  intro s dy
-  funext i
-  unfold relu6MaskB
-  split_ifs <;> simp
 
 theorem dStridedXlaInB_smul (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     : IsHomog (dStridedXlaInB N (h := h) (w := w) W b) :=
@@ -202,17 +195,6 @@ theorem mnv2HeadCotBlk_smul (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic
     IsHomog (mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin) := by
   intro s g
   unfold mnv2HeadCotBlk; rw [mnv2HeadCotHc_smul, cInB_smul]
-
-/-! The gradient nodes MobileNetV2 adds to the ResNet-34 kit. -/
-
-theorem depthwiseStridedXlaWeightGradB_smul {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
-    (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
-    (cot : Vec (N * (c * h * w))) (s : ℝ) (idx : Fin (c * kH * kW)) :
-    den (SHlo.depthwiseStridedXlaWeightGradB xN b x W (.operand cotN (fun i => s * cot i))) idx
-      = s * den (SHlo.depthwiseStridedXlaWeightGradB xN b x W (.operand cotN cot)) idx := by
-  simp only [denStep, denStepApp, batchSlice_smul, Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun n _ => ?_)
-  rw [HasVJP.backward_smul]
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. Sharding — every non-BN link of the chain commutes with the batch cut

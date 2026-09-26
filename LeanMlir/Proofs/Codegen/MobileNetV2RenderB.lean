@@ -55,13 +55,6 @@ structure MBFwdB where
   stP : String := ""
 deriving Inhabited
 
-/-- Backward result: code, the dx cotangent to the previous block, and the block's parameter
-    gradients in func-arg order. -/
-structure MBBackB where
-  code : String
-  dx : String
-  ps : List PGrad
-
 -- ════════════════════════════════════════════════════════════════
 -- § Block forward (batch BN), all at `N := B`
 --   inverted residual: expand(1×1)→BN→relu6 → depthwise(3×3)→BN→relu6 → project(1×1)→BN
@@ -197,7 +190,7 @@ def irFwdNoExpB (B ic oc hh : Nat) (epsStr p xName : String) (convBias : Bool)
 private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS MBBackB := do
+    StateM Proofs.StableHLO.EmitS BlockBack := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -268,7 +261,7 @@ private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
 private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS MBBackB := do
+    StateM Proofs.StableHLO.EmitS BlockBack := do
   let ww := hh
   let zmid : Vec mid := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -338,7 +331,7 @@ private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xN
 private def irBackNoExpGradB (B ic oc hh : Nat) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS MBBackB := do
+    StateM Proofs.StableHLO.EmitS BlockBack := do
   let ww := hh
   let zic  : Vec ic := fun _ => 0
   let zoc  : Vec oc := fun _ => 0
@@ -423,19 +416,15 @@ def mnv2SigList (nClasses : Nat) (convBias : Bool) : List (String × String) :=
   [("%hg", ty [1280]), ("%hbt", ty [1280])] ++
   [("%Wd", ty [1280, nClasses]), ("%bd", ty [nClasses])]
 
-/-- The running-mean/var slots for one BN layer. -/
-private def bnStatSig (nm : String) (c : Nat) : List (String × String) :=
-  [(s!"%{nm}mu", ty [c]), (s!"%{nm}var", ty [c])]
-
 /-- A 3-BN block's stat slots (expand-BN, depthwise-BN, project-BN). -/
-private def blockStatSig (i : String) (mid oc : Nat) : List (String × String) :=
-  bnStatSig s!"b{i}en" mid ++ bnStatSig s!"b{i}dn" mid ++ bnStatSig s!"b{i}pn" oc
+private def blockStatSig (i : String) (mid oc : Nat) : List (String × List Nat) :=
+  bnStatSlots s!"b{i}en" mid ++ bnStatSlots s!"b{i}dn" mid ++ bnStatSlots s!"b{i}pn" oc
 
 /-- **The 104 BN running-statistic slots** = 52 BN layers × (μ, var): stem 1, b1 two (no expand
     BN), b2..b17 three each (48), head 1. Both an input (`…i`) and an output slot. -/
-def mnv2StatSigList : List (String × String) :=
-  bnStatSig "stn" 32 ++
-  (bnStatSig "b1dn" 32 ++ bnStatSig "b1pn" 16) ++
+def mnv2StatSigList : List (String × String) := List.map (fun (n, ds) => (n, ty ds)) <|
+  bnStatSlots "stn" 32 ++
+  (bnStatSlots "b1dn" 32 ++ bnStatSlots "b1pn" 16) ++
   blockStatSig "2"  96  24 ++ blockStatSig "3" 144  24 ++
   blockStatSig "4" 144  32 ++ blockStatSig "5" 192  32 ++
   blockStatSig "6" 192  32 ++ blockStatSig "7" 192  64 ++
@@ -444,7 +433,7 @@ def mnv2StatSigList : List (String × String) :=
   blockStatSig "12" 576  96 ++ blockStatSig "13" 576  96 ++
   blockStatSig "14" 576 160 ++ blockStatSig "15" 960 160 ++
   blockStatSig "16" 960 160 ++ blockStatSig "17" 960 320 ++
-  bnStatSig "hn" 1280
+  bnStatSlots "hn" 1280
 
 -- ════════════════════════════════════════════════════════════════
 -- § The AdamW tail — one proven triple per parameter, folded in signature order
@@ -501,17 +490,9 @@ structure MNV2FwdRecB where
   cin : String := ""      -- the dense's input (= gap, or the dropout output when cd is on)
 deriving Inhabited
 
-/-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), relu6 output. -/
-structure MNV2StemFwdB where
-  code : String
-  c : String
-  n : String
-  st : String
-  o : String
-
 /-- Stem forward: 3×3/s2 XLA-`SAME` conv (3→32, 224→112) → batch BN → relu6 (no max-pool). -/
 def mnv2StemFwdB (B : Nat) (epsStr : String) (convBias : Bool) (bf16 : Bool := false)
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS MNV2StemFwdB := do
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS StemFwdB := do
   let zx    : Vec (B*(3*224*224)) := fun _ => 0
   let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
   let z32   : Vec 32 := fun _ => 0

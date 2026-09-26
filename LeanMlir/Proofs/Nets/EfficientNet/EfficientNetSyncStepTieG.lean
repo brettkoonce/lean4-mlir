@@ -69,38 +69,14 @@ open scoped BigOperators
 open Proofs.BackLinks (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
   gateCotB)
 open Proofs.BackLinks (bnInB bnInB_eq_bnBackB rowB unrowB)
-open Proofs.SyncKit
+open Proofs.BackLinks (den_bnBatchLABack_eq_bnBackB cbsB_back_eq dwbsB_back_eq dwbsSB_back_eq
+  projB_back_eq bnBackB_smul swBackB_smul sigBackB_smul seInB_smul gateCotB_smul
+  seInB_eq_batchMapAux)
 open Proofs.SyncKit
 
 -- ════════════════════════════════════════════════════════════════
 -- § 0. The single-device chain, named — and each block's input cotangent IS its VJP
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The tail every MBConv block shares** — depthwise BatchNorm → swish → squeeze-excite →
-    1×1 project → project BatchNorm. `MBW` and `MBWNoExp` both carry it; naming it once lets the
-    three block kinds share one tail chain. -/
-structure EnTail (mid oc rd : Nat) where
-  dε : ℝ
-  dγ : Vec mid
-  dβ : Vec mid
-  z1 : Mat mid rd
-  zb1 : Vec rd
-  z2 : Mat rd mid
-  zb2 : Vec mid
-  pW : Kernel4 oc mid 1 1
-  pb : Vec oc
-  pε : ℝ
-  pγ : Vec oc
-  pβ : Vec oc
-
-/-- The tail of an MBConv6 block's weights. Reducible, so `(tailOf p).dε` IS `p.dε` to every
-    tactic — the block's positivity hypotheses are the tail's. -/
-@[reducible] def tailOf {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw) : EnTail mid oc rd :=
-  ⟨p.dε, p.dγ, p.dβ, p.z1, p.zb1, p.z2, p.zb2, p.pW, p.pb, p.pε, p.pγ, p.pβ⟩
-
-/-- The tail of the MBConv1 block's weights. -/
-@[reducible] def tailOfNoExp {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc rd kh kw) : EnTail ic oc rd :=
-  ⟨p.dε, p.dγ, p.dβ, p.z1, p.zb1, p.z2, p.zb2, p.pW, p.pb, p.pε, p.pγ, p.pβ⟩
 
 /-! The tail's forward activations, from the depthwise conv output `dc` — `enetExpTiedG`'s `dn`,
 `dr`, `s`, `e1`, `z`, `e2`, `se`, `pc`, definitionally. -/
@@ -194,7 +170,7 @@ noncomputable def xDc (xin : Vec (N * (ic * h * w))) : Vec (N * (mid * h * w)) :
 noncomputable def xCotEr (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
     (dy : Vec (N * (oc * h * w))) :
     Vec (N * (mid * h * w)) :=
-  dInB N p.dW p.db (tCotDc N h w (tailOf p) hd hp (xDc N h w p xin) dy)
+  dInB N p.dW p.db (tCotDc N h w p.toEnTail hd hp (xDc N h w p xin) dy)
 
 noncomputable def xCotEn (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
     (dy : Vec (N * (oc * h * w))) :
@@ -240,7 +216,7 @@ noncomputable def sDc (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : Vec (N * (mid
 
 noncomputable def sCotEr (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
-  dStridedInB N p.dW p.db (tCotDc N h w (tailOf p) hd hp (sDc N h w p xin) dy)
+  dStridedInB N p.dW p.db (tCotDc N h w p.toEnTail hd hp (sDc N h w p xin) dy)
 
 noncomputable def sCotEn (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
     (dy : Vec (N * (oc * h * w))) : Vec (N * (mid * (2 * h) * (2 * w))) :=
@@ -269,7 +245,7 @@ noncomputable def nDc (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc r
 noncomputable def nCotIn (N h w : Nat) {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc rd kh kw)
     (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
     Vec (N * (ic * h * w)) :=
-  dInB N p.dW p.db (tCotDc N h w (tailOfNoExp p) hd hp (nDc N h w p xin) dy)
+  dInB N p.dW p.db (tCotDc N h w p.toEnTail hd hp (nDc N h w p xin) dy)
 
 /-! The stem (`enetStemTiedG`'s chain) and the head (`enetHeadTiedG`'s). -/
 
@@ -331,66 +307,6 @@ noncomputable def hdCotIn (hεh : 0 < εh) (γh βh : Vec oc) (Wfc : Mat oc nC)
   cInB N (h := h) (w := w) Wh bh (hdCotHbn N h w Wh bh εh hεh γh βh Wfc xin g)
 
 end
-
-/-! ### The stage backwards, written out
-
-Each is the `Batched.BackLinks` stage graph's faithfulness read at an `.operand` leaf: the graph's
-`den` IS the chain above node for node, except the BatchNorm link, which `bnBatchLABack_faithful`
-turns into `bnBackB`. -/
-
-theorem den_bnBatchLABack_eq_bnBackB {N oc h w : Nat} (gN xN es : String) (ε : ℝ) (hε : 0 < ε)
-    (γ β : Vec oc) (x : Vec (N * (oc * h * w))) (e : SHlo (N * (oc * h * w))) :
-    den (SHlo.bnBatchLABack gN xN es ε γ x e) = bnBackB N oc h w ε hε γ β x (den e) :=
-  bnBatchLABack_faithful gN xN es ε γ β hε x e
-
-theorem cbsB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
-    (cbsBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
-      = cInB N (h := h) (w := w) W b (bnBackB N oc h w ε hε γ β (batchMap N (flatConv W b) x)
-          (swBackB (N * (oc * h * w)) (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x)) dy)) := by
-  have hg := cbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
-  rw [den_operand] at hg
-  rw [← hg]
-  show cInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
-  rfl
-
-theorem dwbsB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) (x dy : Vec (N * (c * h * w))) :
-    (dwbsBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
-      = dInB N W b (bnBackB N c h w ε hε γ β (batchMap N (depthwiseFlat W b) x)
-          (swBackB (N * (c * h * w)) (bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x)) dy)) := by
-  have hg := dwbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
-  rw [den_operand] at hg
-  rw [← hg]
-  show dInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
-  rfl
-
-theorem dwbsSB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w))))
-    (dy : Vec (N * (c * h * w))) :
-    (dwbsSBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
-      = dStridedInB N W b (bnBackB N c h w ε hε γ β (batchMap N (depthwiseStride2Flat W b) x)
-          (swBackB (N * (c * h * w))
-            (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) dy)) := by
-  have hg := dwbsSBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
-  rw [den_operand] at hg
-  rw [← hg]
-  show dStridedInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
-  rfl
-
-theorem projB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
-    (projBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
-      = cInB N (h := h) (w := w) W b (bnBackB N oc h w ε hε γ β (batchMap N (flatConv W b) x) dy) := by
-  have hg := projBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
-  rw [den_operand] at hg
-  rw [← hg]
-  show cInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
-  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
-  rfl
 
 /-! ### Each block's input cotangent IS its certified VJP
 
@@ -494,85 +410,8 @@ theorem hdCotIn_eq_vjp (N h w : Nat) {c oc nC : Nat} (Wh : Kernel4 oc c 1 1) (bh
   rw [den_bnBatchLABack_eq_bnBackB _ _ _ εh hεh γh βh]
   rfl
 
--- ════════════════════════════════════════════════════════════════
--- § 1. Homogeneity — every link B0 adds to ResNet-34's is linear in its cotangent
--- ════════════════════════════════════════════════════════════════
-
-theorem bnBackB_smul (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
-    (x : Vec (N * (oc * h * w))) : IsHomog (bnBackB N oc h w ε hε γ β x) :=
-  HasVJP.backward_smul _ _
-
-theorem swBackB_smul (n : Nat) (x : Vec n) : IsHomog (swBackB n x) :=
-  HasVJP.backward_smul _ _
-
-theorem sigBackB_smul (n : Nat) (x : Vec n) : IsHomog (sigBackB n x) :=
-  HasVJP.backward_smul _ _
-
-theorem seInB_smul (N : Nat) {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd) (W₂ : Mat rd c)
-    (b₂ : Vec c) (x : Vec (N * (c * h * w))) : IsHomog (seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x) :=
-  HasVJP.backward_smul _ _
-
-/-- The SE gate cotangent `Σ_{h,w} x ⊙ dy` is linear in `dy`. -/
-theorem gateCotB_smul (N c h w : Nat) (x : Vec (N * (c * h * w))) :
-    IsHomog (gateCotB N c h w x) := by
-  intro s dy
-  funext idx
-  simp only [gateCotB, batchSlice, Finset.mul_sum]
-  refine Finset.sum_congr rfl (fun _ _ => ?_)
-  split_ifs <;> ring
-
--- ════════════════════════════════════════════════════════════════
--- § 2. Sharding — every link, on a replica, is the shard of the global link
--- ════════════════════════════════════════════════════════════════
-
-theorem swBackB_shard {R N n : Nat} (X DY : Vec ((R * N) * n)) (r : Fin R) :
-    swBackB (N * n) (batchShard R N n X r) (batchShard R N n DY r)
-      = batchShard R N n (swBackB ((R * N) * n) X DY) r := rfl
-
-theorem sigBackB_shard {R N n : Nat} (X DY : Vec ((R * N) * n)) (r : Fin R) :
-    sigBackB (N * n) (batchShard R N n X r) (batchShard R N n DY r)
-      = batchShard R N n (sigBackB ((R * N) * n) X DY) r := rfl
-
-/-- The SE gate cotangent, per example: channel `k`'s spatial sum of `x ⊙ dy`. -/
-noncomputable def gateEx (c h w : Nat) (xs ds : Vec (c * h * w)) : Vec c :=
-  fun k => ∑ q : Fin (c * h * w), if flatChannel c h w q = k then xs q * ds q else 0
-
-/-- **The SE gate cotangent reads one example at a time** — `seReduceB` is `batchMapAux` of
-    `gateEx` — so it shards like ResNet-34's pool backward. -/
-theorem gateCotB_shard {R N : Nat} (c h w : Nat) (X DY : Vec ((R * N) * (c * h * w))) (r : Fin R) :
-    gateCotB N c h w (batchShard R N (c * h * w) X r) (batchShard R N (c * h * w) DY r)
-      = batchShard R N c (gateCotB (R * N) c h w X DY) r :=
-  (batchShard_batchMapAux (gateEx c h w) X DY r).symm
-
-/-- The fused SE input-VJP is the per-example `seBlockFull` VJP, lifted — `seBackBatched`'s `den`. -/
-theorem seInB_eq_batchMapAux (N : Nat) {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd)
-    (W₂ : Mat rd c) (b₂ : Vec c) (x dy : Vec (N * (c * h * w))) :
-    seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x dy
-      = batchMapAux N (seBlockFullHasVJP (h := h) (w := w) W₁ b₁ W₂ b₂).backward x dy := by
-  have hg := seBackBatched_faithful "" "" "" "" "" W₁ b₁ W₂ b₂ x (.operand "" dy)
-  rw [den_operand] at hg
-  exact hg.symm
-
-theorem seInB_shard {R N : Nat} {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd) (W₂ : Mat rd c)
-    (b₂ : Vec c) (X DY : Vec ((R * N) * (c * h * w))) (r : Fin R) :
-    seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ (batchShard R N (c * h * w) X r)
-        (batchShard R N (c * h * w) DY r)
-      = batchShard R N (c * h * w) (seInB (R * N) (h := h) (w := w) W₁ b₁ W₂ b₂ X DY) r := by
-  rw [seInB_eq_batchMapAux, seInB_eq_batchMapAux]
-  exact (batchShard_batchMapAux _ X DY r).symm
-
-/-- **The sync-BN backward on replica `r` is shard `r` of the certified global BN backward** —
-    `bnSyncInB_shard` (P2 at the network index) read through `bnInB_eq_bnBackB`, so the right-hand
-    side is `bnBackB`, the single-device tie's own BN link. -/
-theorem bnSyncInB_shard_bnBackB (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
-    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
-    (xs dys : Fin R → Vec (N * (oc * h * w))) (X DY : Vec ((R * N) * (oc * h * w)))
-    (hxs : ∀ r, xs r = batchShard R N (oc * h * w) X r)
-    (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r) (r : Fin R) :
-    bnSyncInB R hR N oc h w ε γ xs dys r
-      = batchShard R N (oc * h * w) (bnBackB (R * N) oc h w ε hε γ β X DY) r := by
-  rw [bnSyncInB_shard R hR N oc h w hm ε γ xs dys X DY hxs hdys r,
-    bnInB_eq_bnBackB (R * N) oc h w ε hε γ β]
+-- § 1–2 (each link B0 adds to ResNet-34's is linear in its cotangent, and shards) live in
+-- `Batched.BackLinks` (`*_smul`) and `DataParallel.SyncKit` (`*_shard`).
 
 -- ════════════════════════════════════════════════════════════════
 -- § 4. The single-device chain is linear in the block-output cotangent
@@ -844,7 +683,7 @@ end
 noncomputable def xsCotEr {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
     Vec (N * (mid * h * w)) :=
-  dInB N p.dW p.db (tsCotDc R hR N h w (tailOf p) (xDc (R * N) h w p XIN) dys r)
+  dInB N p.dW p.db (tsCotDc R hR N h w p.toEnTail (xDc (R * N) h w p XIN) dys r)
 
 noncomputable def xsCotEn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
@@ -873,7 +712,7 @@ noncomputable def rsCotIn {c mid rd kh kw : Nat} (p : MBW c mid c rd kh kw)
 noncomputable def ssCotEr {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
-  dStridedInB N p.dW p.db (tsCotDc R hR N h w (tailOf p) (sDc (R * N) h w p XIN) dys r)
+  dStridedInB N p.dW p.db (tsCotDc R hR N h w p.toEnTail (sDc (R * N) h w p XIN) dys r)
 
 noncomputable def ssCotEn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
@@ -899,7 +738,7 @@ noncomputable def ssCotIn {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw
 noncomputable def nsCotIn {ic oc rd kh kw : Nat} (p : MBWNoExp ic oc rd kh kw)
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) :
     Vec (N * (ic * h * w)) :=
-  dInB N p.dW p.db (tsCotDc R hR N h w (tailOfNoExp p) (nDc (R * N) h w p XIN) dys r)
+  dInB N p.dW p.db (tsCotDc R hR N h w p.toEnTail (nDc (R * N) h w p XIN) dys r)
 
 end
 
@@ -950,7 +789,7 @@ theorem xsCotEr_shard (hd : 0 < p.dε) (hp : 0 < p.pε) (XIN : Vec ((R * N) * (i
     xsCotEr R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (xCotEr (R * N) h w p hd hp XIN DY) r := by
   unfold xsCotEr
-  rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys DY hdys r, dInB_shard]
+  rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys DY hdys r, dInB_shard]
   rfl
 
 theorem xsCotEn_shard (hd : 0 < p.dε) (hp : 0 < p.pε) (XIN : Vec ((R * N) * (ic * h * w)))
@@ -1007,7 +846,7 @@ theorem ssCotEr_shard (hd : 0 < p.dε) (hp : 0 < p.pε)
     ssCotEr R hR N h w p XIN dys r
       = batchShard R N (mid * (2 * h) * (2 * w)) (sCotEr (R * N) h w p hd hp XIN DY) r := by
   unfold ssCotEr
-  rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys DY hdys r, dStridedInB_shard]
+  rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys DY hdys r, dStridedInB_shard]
   rfl
 
 theorem ssCotEn_shard (hd : 0 < p.dε) (hp : 0 < p.pε)
@@ -1051,7 +890,7 @@ theorem nsCotIn_shard {ic oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 <
     nsCotIn R hR N h w p XIN dys r
       = batchShard R N (ic * h * w) (nCotIn (R * N) h w p hd hp XIN DY) r := by
   unfold nsCotIn
-  rw [tsCotDc_shard R hR N h w hN hh hw (tailOfNoExp p) hd hp _ dys DY hdys r, dInB_shard]
+  rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys DY hdys r, dInB_shard]
   rfl
 
 end
@@ -1234,9 +1073,9 @@ def expSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
   ∧ BnSync R hR N mid h w s!"{pfx}eg" s!"{pfx}ebt" vN epsStr cotN p.eε (xEc (R * N) h w p XIN)
       (xsCotEn R hR N h w p XIN dys) (xCotEn (R * N) h w p hd hp XIN DY)
   ∧ DepthwiseWSync R hR N h w s!"{pfx}dW" xN cotN p.db (xEr (R * N) h w p XIN) p.dW
-      (tsCotDc R hR N h w (tailOf p) (xDc (R * N) h w p XIN) dys)
-      (tCotDc (R * N) h w (tailOf p) hd hp (xDc (R * N) h w p XIN) DY)
-  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr (tailOf p) hp (xDc (R * N) h w p XIN) dys DY
+      (tsCotDc R hR N h w p.toEnTail (xDc (R * N) h w p XIN) dys)
+      (tCotDc (R * N) h w p.toEnTail hd hp (xDc (R * N) h w p XIN) DY)
+  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp (xDc (R * N) h w p XIN) dys DY
 
 theorem exp_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String)
@@ -1246,14 +1085,14 @@ theorem exp_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw :
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     expSyncTiedG R hR N h w pfx xN cotN vN epsStr p he hd hp XIN dys DY := by
   have hm := nhw_ne_zero hN hh hw
-  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr (tailOf p) hp _
+  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp _
     dys DY hdys⟩
   · exact convWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
       rw [xsCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, xCotEc_smul])
   · exact bnSync_of_scaled R hR N mid h w hm _ _ _ _ _ _ _ _ _ (fun r => by
       rw [xsCotEn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, xCotEn_smul])
   · exact depthwiseWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
-      rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys _ hdys r, tCotDc_smul])
+      rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys _ hdys r, tCotDc_smul])
 
 /-- **A strided MBConv6 block, DP-tied** (b2, b4, b6, b12) — thirteen collectives, the expand pair
     at the input grid `2h×2w` and the depthwise strided. -/
@@ -1266,9 +1105,9 @@ def stridedSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : 
   ∧ BnSync R hR N mid (2 * h) (2 * w) s!"{pfx}eg" s!"{pfx}ebt" vN epsStr cotN p.eε
       (sEc (R * N) h w p XIN) (ssCotEn R hR N h w p XIN dys) (sCotEn (R * N) h w p hd hp XIN DY)
   ∧ DepthwiseStridedWSync R hR N h w s!"{pfx}dW" xN cotN p.db (sEr (R * N) h w p XIN) p.dW
-      (tsCotDc R hR N h w (tailOf p) (sDc (R * N) h w p XIN) dys)
-      (tCotDc (R * N) h w (tailOf p) hd hp (sDc (R * N) h w p XIN) DY)
-  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr (tailOf p) hp (sDc (R * N) h w p XIN) dys DY
+      (tsCotDc R hR N h w p.toEnTail (sDc (R * N) h w p XIN) dys)
+      (tCotDc (R * N) h w p.toEnTail hd hp (sDc (R * N) h w p XIN) DY)
+  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp (sDc (R * N) h w p XIN) dys DY
 
 theorem strided_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh kw : Nat}
     (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String)
@@ -1279,14 +1118,14 @@ theorem strided_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc rd kh 
     stridedSyncTiedG R hR N h w pfx xN cotN vN epsStr p he hd hp XIN dys DY := by
   have h2h : 0 < 2 * h := Nat.mul_pos (by norm_num) hh
   have h2w : 0 < 2 * w := Nat.mul_pos (by norm_num) hw
-  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr (tailOf p) hp _
+  refine ⟨?_, ?_, ?_, tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp _
     dys DY hdys⟩
   · exact convWSync_of_scaled R hR N (2 * h) (2 * w) _ _ _ _ _ _ _ _ (fun r => by
       rw [ssCotEc_shard R hR N h w hN hh hw p he hd hp XIN dys _ hdys r, sCotEc_smul])
   · exact bnSync_of_scaled R hR N mid (2 * h) (2 * w) (nhw_ne_zero hN h2h h2w) _ _ _ _ _ _ _ _ _ (fun r => by
       rw [ssCotEn_shard R hR N h w hN hh hw p hd hp XIN dys _ hdys r, sCotEn_smul])
   · exact depthwiseStridedWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
-      rw [tsCotDc_shard R hR N h w hN hh hw (tailOf p) hd hp _ dys _ hdys r, tCotDc_smul])
+      rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys _ hdys r, tCotDc_smul])
 
 /-- **The MBConv1 block, DP-tied** (b1) — ten collectives: the depthwise weight, then the tail's
     nine. -/
@@ -1295,9 +1134,9 @@ def noExpSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat}
     (XIN : Vec ((R * N) * (ic * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
   DepthwiseWSync R hR N h w s!"{pfx}dW" xN cotN p.db XIN p.dW
-      (tsCotDc R hR N h w (tailOfNoExp p) (nDc (R * N) h w p XIN) dys)
-      (tCotDc (R * N) h w (tailOfNoExp p) hd hp (nDc (R * N) h w p XIN) DY)
-  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr (tailOfNoExp p) hp (nDc (R * N) h w p XIN)
+      (tsCotDc R hR N h w p.toEnTail (nDc (R * N) h w p XIN) dys)
+      (tCotDc (R * N) h w p.toEnTail hd hp (nDc (R * N) h w p XIN) DY)
+  ∧ tailSyncTiedG R hR N h w pfx xN cotN vN epsStr p.toEnTail hp (nDc (R * N) h w p XIN)
       dys DY
 
 theorem noExp_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : Nat}
@@ -1308,8 +1147,8 @@ theorem noExp_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc rd kh kw : N
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) :
     noExpSyncTiedG R hR N h w pfx xN cotN vN epsStr p hd hp XIN dys DY :=
   ⟨depthwiseWSync_of_scaled R hR N h w _ _ _ _ _ _ _ _ (fun r => by
-      rw [tsCotDc_shard R hR N h w hN hh hw (tailOfNoExp p) hd hp _ dys _ hdys r, tCotDc_smul]),
-    tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr (tailOfNoExp p) hp _ dys DY hdys⟩
+      rw [tsCotDc_shard R hR N h w hN hh hw p.toEnTail hd hp _ dys _ hdys r, tCotDc_smul]),
+    tail_syncTiedG R hR N h w hN hh hw pfx xN cotN vN epsStr p.toEnTail hp _ dys DY hdys⟩
 
 /-- **The stem, DP-tied** — three collectives: the 3×3/s2 XLA-`SAME` conv weight and its
     BatchNorm's γ and β. -/
@@ -1372,8 +1211,8 @@ theorem head_syncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {c oc nC : Nat} (hN 
     `N := R·N`, driven by the global cotangent `g`; `e16 … e0` are the replicas' sync-BN chain,
     driven by the family `gs`; the 18 conjuncts are one per stage. -/
 def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : String)
-    (w : B0Weights) (hεw : w.EpsPos) (x : Vec ((R * N) * (3 * 224 * 224)))
-    (g : Vec ((R * N) * 10)) (gs : Fin R → Vec (N * 10)) : Prop :=
+    {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos) (x : Vec ((R * N) * (3 * 224 * 224)))
+    (g : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
   -- ── the single-device chain at the global batch `R·N` (T3's), driven by `g` ──
   let a0  : Vec ((R * N) * (32 * 112 * 112)) :=
     stemB (R * N) (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
@@ -1485,9 +1324,9 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
     BatchNorms (`bnSyncInB`, a collective each), per-example conv / depthwise / squeeze-excite /
     swish / head links. -/
 theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
-    (xN vN epsStr cotN dN : String) (w : B0Weights) (hεw : w.EpsPos)
-    (x : Vec ((R * N) * (3 * 224 * 224))) (g : Vec ((R * N) * 10)) (gs : Fin R → Vec (N * 10))
-    (hgs : ∀ r, gs r = batchShard R N 10 (fun i => (R : ℝ) * g i) r) :
+    (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos)
+    (x : Vec ((R * N) * (3 * 224 * 224))) (g : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls))
+    (hgs : ∀ r, gs r = batchShard R N nCls (fun i => (R : ℝ) * g i) r) :
     enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x g gs := by
   unfold enetNetSyncTiedG
   intro a0 a1 a2 a3 a4 a5 a6 a7 a8 a9 a10 a11 a12 a13 a14 a15 a16
@@ -1546,16 +1385,16 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
     gradient the DP render emits IS the single-device node at batch `R·N`, loss divided by `R·B`. -/
 theorem efficientnet_net_syncTiedG_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
-    (xN vN epsStr cotN dN : String) (w : B0Weights) (hεw : w.EpsPos)
+    (xN vN epsStr cotN dN : String) {nCls : Nat} (w : B0Weights nCls) (hεw : w.EpsPos)
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
-    (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * 10))) :
+    (x : Vec ((R * N) * (3 * 224 * 224))) (t : Vec ((R * N) * (1 * nCls))) :
     enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x
-      (unrowB (R * N) 10 (den (smoothedLossCotGraph (R * N) 10 α ((R : ℝ) * B) aStr negAK bStr
-        logN ohN (rowB (R * N) 10 (efficientnetForwardBFull (R * N) w x)) t)))
-      (fun r => unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
-        (rowB N 10 (batchShard R N 10 (efficientnetForwardBFull (R * N) w x) r))
-        (batchShard R N (1 * 10) t r)))) :=
+      (unrowB (R * N) nCls (den (smoothedLossCotGraph (R * N) nCls α ((R : ℝ) * B) aStr negAK bStr
+        logN ohN (rowB (R * N) nCls (efficientnetForwardBFull (R * N) w x)) t)))
+      (fun r => unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
+        (rowB N nCls (batchShard R N nCls (efficientnetForwardBFull (R * N) w x) r))
+        (batchShard R N (1 * nCls) t r)))) :=
   efficientnet_net_syncTiedG R hR N hN xN vN epsStr cotN dN w hεw x _ _
-    (fun r => replicaLossCot_eq R N 10 hR α B aStr negAK bStr logN ohN _ t r)
+    (fun r => replicaLossCot_eq R N nCls hR α B aStr negAK bStr logN ohN _ t r)
 
 end Proofs.EnetSyncTieG

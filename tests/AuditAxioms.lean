@@ -2110,8 +2110,8 @@ open Proofs
 #print axioms Proofs.StableHLO.mnv2StridedGraphSync_shard
 #print axioms Proofs.StableHLO.mnv2HeadGraphSync_shard
 #print axioms Proofs.StableHLO.mobilenetv2FwdGraphSyncFull_shard
-#print axioms Proofs.MobileNetV2SyncTieB.relu6MaskB_smul
-#print axioms Proofs.MobileNetV2SyncTieB.depthwiseStridedXlaWeightGradB_smul
+#print axioms Proofs.SyncKit.relu6MaskB_smul
+#print axioms Proofs.SyncKit.depthwiseStridedXlaWeightGradB_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2NoExpCotIn_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2ResidCotIn_smul
 #print axioms Proofs.MobileNetV2SyncTieB.mnv2StridedCotIn_smul
@@ -2145,12 +2145,12 @@ open Proofs
 #print axioms Proofs.EnetSyncTieG.nCotIn_eq_vjp
 #print axioms Proofs.EnetSyncTieG.hdCotIn_eq_vjp
 -- ...the single-device chain is homogeneous in its cotangent
-#print axioms Proofs.EnetSyncTieG.gateCotB_smul
+#print axioms Proofs.BackLinks.gateCotB_smul
 #print axioms Proofs.EnetSyncTieG.tCotDc_smul
 -- ...each replica's sync-BN backward chain is the shard of the single-device one
-#print axioms Proofs.EnetSyncTieG.gateCotB_shard
-#print axioms Proofs.EnetSyncTieG.seInB_shard
-#print axioms Proofs.EnetSyncTieG.bnSyncInB_shard_bnBackB
+#print axioms Proofs.SyncKit.gateCotB_shard
+#print axioms Proofs.SyncKit.seInB_shard
+#print axioms Proofs.SyncKit.bnSyncInB_shard_bnBackB
 #print axioms Proofs.EnetSyncTieG.tsCotDc_shard
 #print axioms Proofs.EnetSyncTieG.xsCotIn_scaled
 #print axioms Proofs.EnetSyncTieG.rsCotIn_scaled

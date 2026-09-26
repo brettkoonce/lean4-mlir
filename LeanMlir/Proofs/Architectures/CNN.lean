@@ -1368,6 +1368,11 @@ theorem globalAvgPoolFlat_differentiable (c h w : Nat) :
   unfold globalAvgPoolFlat globalAvgPool Tensor3.unflatten
   fun_prop
 
+/-- The pool is continuous (the `fun_prop` form of `globalAvgPoolFlat_differentiable`). -/
+@[fun_prop]
+theorem globalAvgPoolFlat_continuous (c h w : Nat) : Continuous (globalAvgPoolFlat c h w) :=
+  (globalAvgPoolFlat_differentiable c h w).continuous
+
 /-- The channel of a flat index `idx : Fin (c*h*w)`. -/
 noncomputable def flatChannel (c h w : Nat) (idx : Fin (c * h * w)) : Fin c :=
   (finProdFinEquiv.symm (finProdFinEquiv.symm idx).1).1

@@ -455,9 +455,9 @@ identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so i
     gate fan-in, true-BN backs, the residual fan-in folded into the block VJPs), the stem, all 16
     MBConv blocks, the conv-bn-swish head, and the dense head all denote the certified batched Σ_n
     loss-descent step. -/
-theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N : Nat) (w : B0Weights)
+theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos)
-    (x : Vec (N * (3 * 224 * 224))) (onehot : Vec (N * 10)) (lr : ℝ) :
+    (x : Vec (N * (3 * 224 * 224))) (onehot : Vec (N * nCls)) (lr : ℝ) :
     -- forward block inputs (the prefixes of efficientnetForwardBFull)
     let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
     let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
@@ -477,8 +477,8 @@ theorem efficientnet_net_tied (xN wN bN gN vN epsStr lrStr cotN dN : String) (N 
     let a15 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b15 a14
     let a16 : Vec (N * (320 * 7 * 7))    := mbExpW N 7 7 w.b16 a15
     -- loss cotangent + backward block-output cotangents (composed top-down by the block VJPs)
-    let g    : Vec (N * 10) := fun idx =>
-      rowSoftmaxFlat N 10 (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16) idx
+    let g    : Vec (N * nCls) := fun idx =>
+      rowSoftmaxFlat N nCls (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16) idx
         - onehot idx
     let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
     let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16

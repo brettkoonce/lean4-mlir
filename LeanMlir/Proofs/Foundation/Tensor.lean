@@ -592,6 +592,22 @@ theorem sum_finProdFinEquiv₃ {M : Type*} [AddCommMonoid M] {a b c : Nat}
       f (finProdFinEquiv (finProdFinEquiv (i, j), l)) := by
   rw [sum_finProdFinEquiv, sum_finProdFinEquiv]
 
+/-- Sum-over-the-channel-fibre: `Σ_j [idx = chan j]·g j = Σ_s g (idx, s)`. -/
+theorem sum_channel_fiber (oc m : Nat) (idx : Fin oc) (g : Fin (oc * m) → ℝ) :
+    (∑ j : Fin (oc * m), (if idx = (finProdFinEquiv.symm j).1 then g j else 0))
+      = ∑ s : Fin m, g (finProdFinEquiv (idx, s)) := by
+  rw [← Equiv.sum_comp finProdFinEquiv
+        (fun j => if idx = (finProdFinEquiv.symm j).1 then g j else 0)]
+  rw [Fintype.sum_prod_type]
+  simp only [Equiv.symm_apply_apply]
+  have hpull : ∀ c : Fin oc,
+      (∑ s : Fin m, if idx = c then g (finProdFinEquiv (c, s)) else 0)
+        = if idx = c then ∑ s : Fin m, g (finProdFinEquiv (c, s)) else 0 := by
+    intro c; by_cases h : idx = c <;> simp [h]
+  simp only [hpull]
+  rw [Finset.sum_ite_eq Finset.univ idx (fun c => ∑ s : Fin m, g (finProdFinEquiv (c, s)))]
+  simp
+
 namespace Mat
 
 /-- Row-major flatten: `Mat m n → Vec (m * n)`. Uses Mathlib's

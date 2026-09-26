@@ -339,7 +339,7 @@ theorem resnet34VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : R34BWeig
 /-- Math denotation of the committed EfficientNet-B0 spec at batch `N`: the 21-entry
     `[t,c,n,s,k]` layer list denotes to `efficientnetForwardBFull` (all 16 MBConv
     blocks, true batch-norm + SE). The spec ties the batched net at EVERY batch size. -/
-noncomputable def denoteEfficientnetB0 (N : Nat) (layers : List VLayer) (w : B0Weights) :
+noncomputable def denoteEfficientnetB0 (N : Nat) (layers : List VLayer) (w : B0Weights 10) :
     Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
   match layers with
   | [.convBnNB 3 32 3 2,
@@ -357,14 +357,14 @@ noncomputable def denoteEfficientnetB0 (N : Nat) (layers : List VLayer) (w : B0W
 
 /-- **Spec ≡ the full proven net.** `efficientnetVerified`'s denotation is exactly
     `efficientnetForwardBFull` (16 MBConv, batched, per-channel BN + SE) — by `rfl`. -/
-theorem efficientnetVerified_denote_eq (N : Nat) (w : B0Weights) :
+theorem efficientnetVerified_denote_eq (N : Nat) (w : B0Weights 10) :
     denoteEfficientnetB0 N efficientnetVerified.layers w
       = efficientnetForwardBFull N w := rfl
 
 open Proofs.StableHLO in
 /-- **Forward graph ↔ the committed spec (batched).** The full 16-MBConv batched graph denotes
     the committed spec's function: `efficientnetFwdGraphBFull_faithful` ∘ the tie. -/
-theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Weights)
+theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Weights 10)
     (x : Vec (N * (3 * 224 * 224))) :
     den (efficientnetFwdGraphBFull N epsStr w x)
       = denoteEfficientnetB0 N efficientnetVerified.layers w x :=

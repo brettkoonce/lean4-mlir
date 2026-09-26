@@ -13,15 +13,11 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 
 ## ▶ Start here (next session)
 
-Branch `api-design`, §2–§6 and §8 committed (433b433a … 120cb099, then §8), not pushed.
-Remaining, in this order:
+Branch `api-design`: §2–§6 and §8 pushed (origin/main 866395bf with the IREE CI and blueprint
+fixes); §7 committed, not pushed. Remaining:
 
-1. **§7** relocations and dedup — forward stage graphs (7.1), stranded lemmas (7.2), ConvNeXt
-   record bridge + `EnTail` `extends` (7.3; `B0Weights` nCls is the 09-24 correctness finding),
-   RenderKit shared records / `bnStatSlots` / `wdzConst` comment arg / zero placeholders /
-   `reassoc` to IndexCast (7.4). §6.5 made `div_one_sub_mono` and `sum_channel_fiber` public in
-   place; they move here.
-2. **§9** bulk `private` sweep — last, after §7 (rerun the same-file-use scan then).
+1. **§9** bulk `private` sweep — rerun the same-file-use scan first (§7 moved lemmas into
+   Foundation, so the list at 373059db is stale).
 
 Also open, lower priority: §4.3 flag+parameter pairs; 6.2 restating the L2 capstones (needs the
 scorecard generators rerun); 6.4 Gaussian shift / Cameron–Martin into UpstreamDraft PR2 (keep
@@ -68,7 +64,8 @@ re-checked against the code before it is acted on.
 | ec6ad9cb | §5.2–5.4, §5.5 in part. Notes below |
 | f09b1e25 | §5.1 `UibParams` slots typed by kernel extent. Notes below |
 | 120cb099 | §6: 6.1, 6.3, 6.5 as tabled (namespace rename declined); 6.2 and 6.4 in part. Notes below |
-| (this commit) | §8 as tabled, plus 5.5's `ViTConfig.dh`/`scale`. Notes below |
+| d60b56c8 | §8 as tabled, plus 5.5's `ViTConfig.dh`/`scale`. Notes below |
+| (this commit) | §7: 7.2, 7.3, 7.4 (7.2 and 7.4 in part); 7.1 declined. Notes below |
 
 §2 deviations:
 
@@ -235,6 +232,44 @@ re-checked against the code before it is acted on.
   optimizer-ablation paragraph said the AdamW tail was `ViTRender.emitAdamV`; the renders use the
   proven nodes (`adamW_triple_faithful`; the blueprint's list is now `sgdParamF`,
   `momParamF` with `momVNextF`, `adamWParamF`).
+
+§7 notes:
+
+* 7.2: the 17 EfficientNet sync-tie lemmas moved — stage backwards (`*_back_eq`,
+  `den_bnBatchLABack_eq_bnBackB`), `seInB_eq_batchMapAux` and the homogeneity lemmas to
+  `Batched.BackLinks`, the `*_shard` lemmas and `gateEx` to `DataParallel.SyncKit`.
+  `relu6MaskB` joined `reluMaskB` in BackLinks (its `_smul` beside `reluMaskB_smul`), and
+  `depthwiseStridedXlaWeightGradB_smul` joined its peers in SyncKit. `dStridedXlaInB` and its
+  `_smul` stay in MobileNetV2: MNv2-only, and the file is where its distinction from B0's strided
+  depthwise is recorded. `geluFlat_eq_backward` → Attention, `globalAvgPoolFlat_continuous` →
+  CNN, `sum_channel_fiber` → Tensor (beside `sum_finProdFinEquiv`). Not moved:
+  `rowDenseBackFlat_eq_backward` / `rowLNBackFlat_eq_backward` (their subject is a StableHLO den
+  helper, which Architectures cannot import; the other home is the root file StableHLO/Basic, for
+  one consumer) and `div_one_sub_mono` (four lines, one consumer, already in it; §9 decides).
+* 7.3: ConvNeXt took the audit's fallback, not the record swap. The StepTie records are the
+  render's shape (one shared ε, blocks by name); FullT's carry an ε per record and `Fin`-indexed
+  stages, and swapping them rewrites most of ConvNeXtStepTie. Added: `cnxBlockFwdChO_eq_cnxBlockChW`
+  and `cnxDownFwdChO_eq_cnxDownChW` (`rfl`), `toCh` on the three Tie records, and
+  `CnxTieWeights.forward_eq_convNextForwardTCh` (the capstone's forward chain is
+  `convNextForwardTCh (w.toCh ε)`), with `convNextStageChK_three`/`_nine` in FullT (`rfl` at
+  variable shapes; the whole-net `rfl` times out, the rewrite proof takes 2.4 s). `MBW` and
+  `MBWNoExp` extend `EnTail` (defined in FullB0; `tailOf`/`tailOfNoExp` → `toEnTail`; checked no
+  positional construction or destructuring exists). `B0Weights nCls`: every B0 statement is generic
+  in the class count, so the 1000-class artifacts are covered; three comparator-tier statements
+  regenerate to the ∀-`nCls` form; SpecVJP pins `B0Weights 10`. Both seals' `Rr_continuous` drop
+  the block unfold (`fun_prop` sees through), and R34's `sealX_continuous` is `rayX_continuous`.
+* 7.4: `BlockBack` (was `BBackB`/`MBBackB`/`UibBackB`) and `StemFwdB` (was
+  `MNV2StemFwdB`/`Mnv4StemFwdB`/`ENetStemFwdB`) in RenderKit; `bnStatSlots` (shapes; the three
+  type lists map `ty` once) replaces the four μ/var spellings; `wdzConst` takes the banner's
+  parameter phrase, and ViT/ConvNeXt's constant emitters call it; the 15 zero placeholders are `0`;
+  `reassoc`/`unassoc` are public in IndexCast, and `chanLNGraph`/`chanLNBackGraph` and
+  `den_reassocS`/`den_unassocS` are stated over them instead of `▸`. `reassocB` stays private:
+  public, it collides with `BackLinks.reassocB` in files that open both.
+* 7.1 declined. The measured sites are 29 `unfold …; simp only […]` proofs of two or three lines
+  (not 21 + 15 + … as audited), and the builders would redefine the forward graphs of five nets in
+  the layer whose text must stay byte-identical and which the text ties match term for term, to
+  shorten one `unfold` list per site. `residual_apply` already gives the pointwise form; a vector
+  `residual_eq_add` would have no consumer.
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

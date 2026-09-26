@@ -58,21 +58,21 @@ namespace Proofs.StableHLO
 /-- **One channel-LN backward site**, mirroring `ConvNeXtRender.lnBackSite` at `chLN := true`
     op-for-op: transpose the cotangent to `[h·w, c]`, scale it by the real `[c]` γ, run the rowwise
     LN input gradient at `γ = 1` against the saved input's transposed view, transpose back. The two
-    `▸` transports are the same `Nat`-associativity casts `chanLNGraph` uses.
+    transports are the `reassoc` / `unassoc` casts `chanLNGraph` uses.
 
     The saved LN input enters as a VALUE (`chanLNRows` — its `[h·w, c]` view) alongside its SSA
     name, as `bnBack` carries its own: `lnRowBack` recomputes x̂/istd from the
     input rather than saving them. The backward peer of `ConvNeXtFullT.chanLNGraph`. -/
 noncomputable def chanLNBackGraph (gN xN epsStr : String) {c h w : Nat} (ε : ℝ) (γ : Vec c)
     (x : Vec (c * h * w)) (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
-  (Nat.mul_assoc c h w).symm ▸
+  unassoc
     (.transposeF (m := h * w) (n := c)
       (.lnRowBack (m := h * w) (n := c) "%one" xN epsStr ε 1 (chanLNRows c h w x)
         (.rowScaleF (m := h * w) (n := c) gN γ
-          (.transposeF (m := c) (n := h * w) ((Nat.mul_assoc c h w) ▸ e)))))
+          (.transposeF (m := c) (n := h * w) (reassoc e)))))
 
 /-- **Channel-LN backward-graph faithfulness** — the `den`-level peer of `chanLNGraph_faithful`.
-    Same six-step shape as the forward: the two `▸`
+    Same six-step shape as the forward: the two
     transports through `den_{un,re}assocS`, the three permutation/scale ops and the row backward
     through their `rfl` gates, and the graph's `rowScaleF`-then-`lnRowBack` pair collapsed onto
     `rowLNVecFlatBack` by `rowLNBack_affine_eq`. -/

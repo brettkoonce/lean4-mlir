@@ -443,6 +443,13 @@ open scoped BigOperators
 noncomputable def reluMaskB (n : Nat) (pre dy : Vec n) : Vec n :=
   fun i => if pre i > 0 then dy i else 0
 
+/-- **The relu6 backward mask** — `den (.selectMidB _ pre e) = fun i => if 0 < pre i ∧ pre i < 6
+    then e i else 0`. TWO-sided, where ResNet-34's `reluMaskB` tests `pre i > 0` only. MobileNetV2
+    applies it at 35 sites: two per expand-bearing block, one in `b1`, one at the stem, one in the
+    head. -/
+noncomputable def relu6MaskB (n : Nat) (pre dy : Vec n) : Vec n :=
+  fun i => if 0 < pre i ∧ pre i < 6 then dy i else 0
+
 /-- **Batched STRIDED conv input-VJP** (= `den convStridedBackBatched`; upsamples `h → 2h`). The
     strided peer of EfficientNet's `cInB`. Note: SYMMETRIC padding — `flatConvStride2`, not the
     XLA-`SAME` twin. -/
@@ -499,5 +506,98 @@ noncomputable def unrowB (N K : Nat) (v : Vec (N * (1 * K))) : Vec (N * K) :=
     chain's `softmaxRow` consumes. -/
 noncomputable def rowB (N K : Nat) (v : Vec (N * K)) : Vec (N * (1 * K)) :=
   fun i => v (Fin.cast (congrArg (N * ·) (Nat.one_mul K)) i)
+
+/-! ### The stage backwards, written out
+
+Each is a stage graph's faithfulness read at an `.operand` leaf: the graph's `den` IS the chain
+node for node, except the BatchNorm link, which `bnBatchLABack_faithful` turns into `bnBackB`. -/
+
+theorem den_bnBatchLABack_eq_bnBackB {N oc h w : Nat} (gN xN es : String) (ε : ℝ) (hε : 0 < ε)
+    (γ β : Vec oc) (x : Vec (N * (oc * h * w))) (e : SHlo (N * (oc * h * w))) :
+    den (SHlo.bnBatchLABack gN xN es ε γ x e) = bnBackB N oc h w ε hε γ β x (den e) :=
+  bnBatchLABack_faithful gN xN es ε γ β hε x e
+
+theorem cbsB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
+    (cbsBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
+      = cInB N (h := h) (w := w) W b (bnBackB N oc h w ε hε γ β (batchMap N (flatConv W b) x)
+          (swBackB (N * (oc * h * w)) (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x)) dy)) := by
+  have hg := cbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
+  rw [den_operand] at hg
+  rw [← hg]
+  show cInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
+  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rfl
+
+theorem dwbsB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) (x dy : Vec (N * (c * h * w))) :
+    (dwbsBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
+      = dInB N W b (bnBackB N c h w ε hε γ β (batchMap N (depthwiseFlat W b) x)
+          (swBackB (N * (c * h * w)) (bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x)) dy)) := by
+  have hg := dwbsBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
+  rw [den_operand] at hg
+  rw [← hg]
+  show dInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
+  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rfl
+
+theorem dwbsSB_back_eq (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w))))
+    (dy : Vec (N * (c * h * w))) :
+    (dwbsSBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
+      = dStridedInB N W b (bnBackB N c h w ε hε γ β (batchMap N (depthwiseStride2Flat W b) x)
+          (swBackB (N * (c * h * w))
+            (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) dy)) := by
+  have hg := dwbsSBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
+  rw [den_operand] at hg
+  rw [← hg]
+  show dStridedInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
+  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rfl
+
+theorem projB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (dy : Vec (N * (oc * h * w))) :
+    (projBHasVJP N (h := h) (w := w) W b ε hε γ β).backward x dy
+      = cInB N (h := h) (w := w) W b (bnBackB N oc h w ε hε γ β (batchMap N (flatConv W b) x) dy) := by
+  have hg := projBackBatchedGraph_faithful W b ε hε γ β x (.operand "" dy)
+  rw [den_operand] at hg
+  rw [← hg]
+  show cInB N W b (den (SHlo.bnBatchLABack _ _ _ ε γ _ _)) = _
+  rw [den_bnBatchLABack_eq_bnBackB _ _ _ ε hε γ β]
+  rfl
+
+/-- The fused SE input-VJP is the per-example `seBlockFull` VJP, lifted — `seBackBatched`'s `den`. -/
+theorem seInB_eq_batchMapAux (N : Nat) {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd)
+    (W₂ : Mat rd c) (b₂ : Vec c) (x dy : Vec (N * (c * h * w))) :
+    seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x dy
+      = batchMapAux N (seBlockFullHasVJP (h := h) (w := w) W₁ b₁ W₂ b₂).backward x dy := by
+  have hg := seBackBatched_faithful "" "" "" "" "" W₁ b₁ W₂ b₂ x (.operand "" dy)
+  rw [den_operand] at hg
+  exact hg.symm
+
+/-! ### Homogeneity: each link is linear in its cotangent -/
+
+theorem bnBackB_smul (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+    (x : Vec (N * (oc * h * w))) : IsHomog (bnBackB N oc h w ε hε γ β x) :=
+  HasVJP.backward_smul _ _
+
+theorem swBackB_smul (n : Nat) (x : Vec n) : IsHomog (swBackB n x) :=
+  HasVJP.backward_smul _ _
+
+theorem sigBackB_smul (n : Nat) (x : Vec n) : IsHomog (sigBackB n x) :=
+  HasVJP.backward_smul _ _
+
+theorem seInB_smul (N : Nat) {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec rd) (W₂ : Mat rd c)
+    (b₂ : Vec c) (x : Vec (N * (c * h * w))) : IsHomog (seInB N (h := h) (w := w) W₁ b₁ W₂ b₂ x) :=
+  HasVJP.backward_smul _ _
+
+/-- The SE gate cotangent `Σ_{h,w} x ⊙ dy` is linear in `dy`. -/
+theorem gateCotB_smul (N c h w : Nat) (x : Vec (N * (c * h * w))) :
+    IsHomog (gateCotB N c h w x) := by
+  intro s dy
+  funext idx
+  simp only [gateCotB, batchSlice, Finset.mul_sum]
+  refine Finset.sum_congr rfl (fun _ _ => ?_)
+  split_ifs <;> ring
 
 end Proofs.BackLinks

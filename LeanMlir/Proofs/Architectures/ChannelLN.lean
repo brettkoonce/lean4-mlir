@@ -23,8 +23,8 @@ Every piece below is already proven:
 ## The seam this file closes
 
 `Nat` multiplication is not definitionally associative: the ambient activation index is
-`c*h*w = (c*h)*w` while the transpose needs `c*(h*w)`. The **render** spells that with a `▸`
-transport (`ConvNeXtRender.reassoc`); the **math** spells it with `PerChannelBN`'s
+`c*h*w = (c*h)*w` while the transpose needs `c*(h*w)`. The **render** spells that with the
+index cast `reassoc` (`IndexCast`); the **math** spells it with `PerChannelBN`'s
 `finProdFinEquiv` re-association, whose "row `c` is channel `c`" reading is what makes the
 composition legibly a *channel* LN. Nothing forces those two to be the same map, and if they are
 not, the math and the artifact are different functions with no gate between them.

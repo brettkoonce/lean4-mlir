@@ -107,25 +107,21 @@ def mnv4ShapeList (nClasses : Nat) : List (String × List Nat) :=
 def mnv4SigList (nClasses : Nat) : List (String × String) :=
   (mnv4ShapeList nClasses).map (fun (n, ds) => (n, ty ds))
 
-/-- The running-mean/var slots for one BN layer. -/
-private def bnStatSig4 (nm : String) (c : Nat) : List (String × List Nat) :=
-  [(s!"%{nm}mu", [c]), (s!"%{nm}var", [c])]
-
 /-- One UIB block's BN stat slots, in the SAME order `uibSig` lays out its parameters — pre-DW
     (at `ic`), expand (at `mid`), post-DW (at `mid`), project (at `oc`), each present exactly when
     its conv is. The `if`s are the same `k = 0` dispatch, so a family that drops a depthwise drops
     its stat slot too and the two lists cannot go out of step. -/
 private def uibStatSig (p : String) (ic oc expand preDWk postDWk : Nat) : List (String × List Nat) :=
   let mid := ic * expand
-  (if preDWk > 0 then bnStatSig4 s!"u{p}qn" ic else []) ++
-  bnStatSig4 s!"u{p}en" mid ++
-  (if postDWk > 0 then bnStatSig4 s!"u{p}dn" mid else []) ++
-  bnStatSig4 s!"u{p}pn" oc
+  (if preDWk > 0 then bnStatSlots s!"u{p}qn" ic else []) ++
+  bnStatSlots s!"u{p}en" mid ++
+  (if postDWk > 0 then bnStatSlots s!"u{p}dn" mid else []) ++
+  bnStatSlots s!"u{p}pn" oc
 
 /-- The fused stage's BN stat slots — the `k×k` conv's, then the 1×1 project's. -/
 private def fusedStatSig (p : String) (ic oc expand : Nat) : List (String × List Nat) :=
   let mid := if expand == 1 then oc else ic * expand
-  bnStatSig4 s!"f{p}cn" mid ++ (if expand == 1 then [] else bnStatSig4 s!"f{p}pn" oc)
+  bnStatSlots s!"f{p}cn" mid ++ (if expand == 1 then [] else bnStatSlots s!"f{p}pn" oc)
 
 /-- **The 154 BN running-statistic slots** = 77 BN layers × (μ, var), in forward-traversal order:
     stem, the fused stage's two, each UIB block's (2–4 depending on family), the head.
@@ -135,11 +131,11 @@ private def fusedStatSig (p : String) (ic oc expand : Nat) : List (String × Lis
     train step returns them in are both derived from the same block table, and why the eval forward
     reads them through `mnv4Bn`'s `statP` rather than an independently-numbered list. -/
 def mnv4StatShapeList : List (String × List Nat) :=
-  bnStatSig4 "stn" 32 ++
+  bnStatSlots "stn" 32 ++
   fusedStatSig "0" 32 48 4 ++
   mnv4Blocks.flatMap (fun b => uibStatSig b.p b.ic b.oc b.expand b.preDWk b.postDWk) ++
-  bnStatSig4 "h1n" 960 ++
-  bnStatSig4 "hn" 1280
+  bnStatSlots "h1n" 960 ++
+  bnStatSlots "hn" 1280
 
 /-- The stat slots as MLIR types. Derived, so the widths have one definition. -/
 def mnv4StatSigList : List (String × String) :=
@@ -381,14 +377,6 @@ structure Mnv4FwdRec where
   hst : String := ""
 deriving Inhabited
 
-/-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), relu output. -/
-structure Mnv4StemFwdB where
-  code : String
-  c : String
-  n : String
-  st : String
-  o : String
-
 /-- Stem forward: 3×3/s2 conv (3→32), 224→112 → batch BN → relu, on `%x`.
     Symmetric `(1,1)` padding (`.convStridedAt`), as timm's `conv_stem`. XLA-`SAME` padding
     (`.convStridedXlaAt`, (0,1) for a 3×3/s2 at 224) also gives 112×112, so only a forward on shared
@@ -397,7 +385,7 @@ structure Mnv4StemFwdB where
 def mnv4StemFwdB (B : Nat) (epsStr : String) (mode : BnMode := .train) (bf16 : Bool := false)
     (replicas : Nat := 1) (sync : Bool := false)
     -- ▶ `f`, the FINAL feature side (`mnv4FwdChainB`'s): the input is `32·f`, the stem out `16·f`.
-    (f : Nat := 7) : StateM Proofs.StableHLO.EmitS Mnv4StemFwdB := do
+    (f : Nat := 7) : StateM Proofs.StableHLO.EmitS StemFwdB := do
   let zx    : Vec (B*(3*(2*(16*f))*(2*(16*f)))) := fun _ => 0
   let zSk   : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
   let z32   : Vec 32 := fun _ => 0
@@ -591,13 +579,6 @@ def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
 --    because the UIB bottleneck is LINEAR — no activation after project, none after the skip add)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Backward result: code, the dx cotangent to the previous block, and the block's parameter
-    gradients in func-arg order. -/
-private structure UibBackB where
-  code : String
-  dx : String
-  ps : List PGrad
-
 /-- Pair a block's `uibSig`/`fusedSig` slice with the gradient SSA names its backward produced, in
     the same order.
 
@@ -622,7 +603,7 @@ private def zipPs (sig : List (String × List Nat)) (grads : List String) : List
 private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS UibBackB := do
+    StateM Proofs.StableHLO.EmitS BlockBack := do
   let mid := c * expand
   let zc   : Vec c := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -702,7 +683,7 @@ private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
 private def uibBackStridedGradB (B ic oc expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS UibBackB := do
+    StateM Proofs.StableHLO.EmitS BlockBack := do
   let mid := ic * expand
   let zic  : Vec ic := fun _ => 0
   let zqk  : DepthwiseKernel ic preDWk preDWk := fun _ _ _ => 0
@@ -775,7 +756,7 @@ private def uibBackStridedGradB (B ic oc expand preDWk postDWk h : Nat)
 private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS UibBackB := do
+    StateM Proofs.StableHLO.EmitS BlockBack := do
   let mid := if expand == 1 then oc else ic * expand
   let zoc  : Vec oc := fun _ => 0
   let zm   : Vec mid := fun _ => 0
@@ -816,7 +797,7 @@ private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
     for the dispatch to be written down differently. -/
 private def uibBackDispatch (B : Nat) (b : UibSpec) (epsStr xName : String)
     (f : UibFwdB) (dyName : String) (bf16 : Bool := false)
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS UibBackB :=
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BlockBack :=
   if b.stride2 then
     uibBackStridedGradB B b.ic b.oc b.expand b.preDWk b.postDWk b.h epsStr b.p xName f dyName bf16 replicas sync
   else

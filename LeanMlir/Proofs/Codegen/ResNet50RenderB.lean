@@ -99,21 +99,19 @@ def r50SigList (nClasses : Nat) : List (String × String) :=
   (r50ShapeList nClasses).map (fun (n, ds) => (n, ty ds))
 
 /-- One block's BN running-stat slots, in BN-forward order `n1 n2 n3 [np]`. -/
-private def bnkStatSig (p : String) (mid oc : Nat) (proj : Bool) : List (String × String) :=
-  [(s!"%{p}n1mu", ty [mid]), (s!"%{p}n1var", ty [mid]),
-   (s!"%{p}n2mu", ty [mid]), (s!"%{p}n2var", ty [mid]),
-   (s!"%{p}n3mu", ty [oc]),  (s!"%{p}n3var", ty [oc])] ++
-  (if proj then [(s!"%{p}npmu", ty [oc]), (s!"%{p}npvar", ty [oc])] else [])
+private def bnkStatSig (p : String) (mid oc : Nat) (proj : Bool) : List (String × List Nat) :=
+  bnStatSlots s!"{p}n1" mid ++ bnStatSlots s!"{p}n2" mid ++ bnStatSlots s!"{p}n3" oc ++
+  (if proj then bnStatSlots s!"{p}np" oc else [])
 
-private def bnkStageStatSig (s : String) (oc count : Nat) : List (String × String) :=
+private def bnkStageStatSig (s : String) (oc count : Nat) : List (String × List Nat) :=
   let mid := oc / 4
   (bnkStatSig s!"{s}b0" mid oc true) ++
   ((List.range (count - 1)).flatMap (fun i => bnkStatSig s!"{s}b{i+1}" mid oc false))
 
 /-- **The 106 running-stat inputs** — 53 BN layers × (μ, var), μ and var interleaved per layer,
     which is how the driver packs `runningBnStats` off `bnChannels`. -/
-def r50StatSigList : List (String × String) :=
-  [("%stnmu", ty [64]), ("%stnvar", ty [64])] ++
+def r50StatSigList : List (String × String) := List.map (fun (n, ds) => (n, ty ds)) <|
+  bnStatSlots "stn" 64 ++
   bnkStageStatSig "s1"  256 3 ++
   bnkStageStatSig "s2"  512 4 ++
   bnkStageStatSig "s3" 1024 6 ++
@@ -300,7 +298,7 @@ def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     bn2, `dr1` for bn1 — off by one and the gradient is silently wrong. -/
 private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (dyName : String)
     (bf16 : Bool := false) (drop : Option Nat := none)
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BlockBack := do
   let xName := f.xin
   let ww := hh
   let zm    : Vec mid := fun _ => 0
@@ -360,7 +358,7 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
     (`dnp`/`dcp`) and `dx = dc1 + dcp`. -/
 private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
     (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none)
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BlockBack := do
   let xName := f.xin
   let ww := hh
   let zm    : Vec mid := fun _ => 0
@@ -429,7 +427,7 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
     everything upstream of it (`dr1`, `dn1`, `dc1`, `W1`'s grad) lives at `2hh`. -/
 private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
     (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none)
-    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BBackB := do
+    (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS BlockBack := do
   let xName := f.xin
   let ww := hh
   let zm    : Vec mid := fun _ => 0

@@ -414,10 +414,10 @@ theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
     at the cotangent that chain delivers, the chain's top being `smoothedLossCotGraph` at the
     target `t`. The statement is at one replica's `*GradB` nodes; the optimizer update and the
     bf16 `*GradBBf16` nodes are outside it. -/
-theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) (w : B0Weights)
+theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos)
     (aStr negAK bStr logN ohN : String) (α B : ℝ)
-    (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * 10))) :
+    (x : Vec (N * (3 * 224 * 224))) (t : Vec (N * (1 * nCls))) :
     -- forward block inputs (the prefixes of efficientnetForwardBFull)
     let a0  : Vec (N * (32 * 112 * 112)) := stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ x
     let a1  : Vec (N * (16 * 112 * 112)) := mbNoExpW N 112 112 w.b1 a0
@@ -437,9 +437,9 @@ theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) (w : B0
     let a15 : Vec (N * (192 * 7 * 7))    := mbResidW N 7 7 w.b15 a14
     let a16 : Vec (N * (320 * 7 * 7))    := mbExpW N 7 7 w.b16 a15
     -- loss cotangent + backward block-output cotangents (composed top-down by the block VJPs)
-    let g    : Vec (N * 10) :=
-      Proofs.BackLinks.unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
-        (Proofs.BackLinks.rowB N 10
+    let g    : Vec (N * nCls) :=
+      Proofs.BackLinks.unrowB N nCls (den (smoothedLossCotGraph N nCls α B aStr negAK bStr logN ohN
+        (Proofs.BackLinks.rowB N nCls
           (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
     let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
     let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16

@@ -10,7 +10,7 @@ through `Fin.cast`. `la_assoc` is the batched seam `N·(c·h·w) = N·(c·(h·w)
 
 The same reshuffle on plain vectors is `BackLinks.reassocB` (batched, `Batched.BackLinks`) and
 `reassocFwd` / `reassocBack` (per example, `PerChannelBN`); `den_reassocS` / `den_unassocS`
-(`ConvNeXtChannelLN`) identify the graph cast with those.
+(`ConvNeXtChannelLN`) identify the graph casts `reassoc` / `unassoc` with those.
 -/
 
 namespace Proofs.StableHLO
@@ -22,6 +22,14 @@ def castIdx {n m : Nat} (h : n = m) (e : SHlo n) : SHlo m := h ▸ e
 theorem den_castIdx {n m : Nat} (h : n = m) (e : SHlo n) :
     den (castIdx h e) = fun i => den e (Fin.cast h.symm i) := by
   subst h; rfl
+
+/-- `c·h·w → c·(h·w)`: the `Nat.mul_assoc` relabelling a channel-last transpose needs. -/
+def reassoc {c h w : Nat} (e : SHlo (c * h * w)) : SHlo (c * (h * w)) :=
+  castIdx (Nat.mul_assoc c h w) e
+
+/-- `c·(h·w) → c·h·w`, the inverse relabelling of `reassoc`. -/
+def unassoc {c h w : Nat} (e : SHlo (c * (h * w))) : SHlo (c * h * w) :=
+  castIdx (Nat.mul_assoc c h w).symm e
 
 /-- The `mul_assoc` relabelling under `N * ·` — the seam between the network's left-assoc
     `N·(c·h·w)` and the BatchNorm ops' `N·(c·(h·w))`. -/

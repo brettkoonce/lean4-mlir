@@ -799,22 +799,22 @@ theorem chk_mnv2_net_syncTiedB :
 theorem chk_efficientnetFwdGraphSyncFull_shard :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ (epsStr : String) (w : Proofs.B0Weights)
+        ∀ (epsStr : String) {nCls : ℕ} (w : Proofs.B0Weights nCls)
           (e : Fin R → Proofs.StableHLO.SHlo (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ))))
           (X : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
           (∀ (r : Fin R), Proofs.StableHLO.den (e r) = Proofs.batchShard R N ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)) X r) →
             ∀ (r : Fin R),
               Proofs.StableHLO.den (Proofs.StableHLO.efficientnetFwdGraphSyncFull R hR N epsStr w e r) =
-                Proofs.batchShard R N (10 : ℕ) (Proofs.efficientnetForwardBFull (R * N) w X) r := by sorry
+                Proofs.batchShard R N nCls (Proofs.efficientnetForwardBFull (R * N) w X) r := by sorry
 
 /-- `Proofs.EnetSyncTieG.efficientnet_net_syncTiedG` -/
 theorem chk_efficientnet_net_syncTiedG :
     ∀ (R : ℕ) (hR : (0 : ℕ) < R) (N : ℕ),
       (0 : ℕ) < N →
-        ∀ (xN vN epsStr cotN dN : String) (w : Proofs.B0Weights) (hεw : w.EpsPos)
-          (x : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (g : Proofs.Vec (R * N * (10 : ℕ)))
-          (gs : Fin R → Proofs.Vec (N * (10 : ℕ))),
-          (∀ (r : Fin R), gs r = Proofs.batchShard R N (10 : ℕ) (fun (i : Fin (R * N * (10 : ℕ))) => ↑R * g i) r) →
+        ∀ (xN vN epsStr cotN dN : String) {nCls : ℕ} (w : Proofs.B0Weights nCls) (hεw : w.EpsPos)
+          (x : Proofs.Vec (R * N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (g : Proofs.Vec (R * N * nCls))
+          (gs : Fin R → Proofs.Vec (N * nCls)),
+          (∀ (r : Fin R), gs r = Proofs.batchShard R N nCls (fun (i : Fin (R * N * nCls)) => ↑R * g i) r) →
             Proofs.EnetSyncTieG.enetNetSyncTiedG R hR N xN vN epsStr cotN dN w hεw x g gs := by sorry
 
 /-- `Proofs.StableHLO.resnet50FwdGraphSyncFull_shard` -/
@@ -989,8 +989,8 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
 
 /-- `Proofs.efficientnetInputGradBFull_correct` -/
 theorem chk_efficientnetInputGradBFull_correct :
-    ∀ (N : ℕ) (w : Proofs.B0Weights) (hεw : w.EpsPos)
-      (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (dy : Proofs.Vec (N * (10 : ℕ)))
+    ∀ (N : ℕ) {nCls : ℕ} (w : Proofs.B0Weights nCls) (hεw : w.EpsPos)
+      (x : Proofs.Vec (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))) (dy : Proofs.Vec (N * nCls))
       (i : Fin (N * ((3 : ℕ) * (224 : ℕ) * (224 : ℕ)))),
       Proofs.efficientnetInputGradBFull N w.sW w.hW w.fcW
           (Proofs.HasVJP.backward (f := Proofs.StableHLO.bnBatchLA N (32 : ℕ) (112 : ℕ) (112 : ℕ) w.sε w.sγ w.sβ)
@@ -1112,7 +1112,7 @@ theorem chk_efficientnetInputGradBFull_correct :
               (Proofs.mbStridedW N (7 : ℕ) (7 : ℕ) w.b12) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b13)
               (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b14) (Proofs.mbResidW N (7 : ℕ) (7 : ℕ) w.b15) x))
           dy i =
-        ∑ j : Fin (N * (10 : ℕ)), Proofs.pdiv (Proofs.efficientnetForwardBFull N w) x i j * dy j := by sorry
+        ∑ j : Fin (N * nCls), Proofs.pdiv (Proofs.efficientnetForwardBFull N w) x i j * dy j := by sorry
 
 /-- `Proofs.convnextImagenetInputGradB_eq_vjp` -/
 theorem chk_convnextImagenetInputGradB_eq_vjp :

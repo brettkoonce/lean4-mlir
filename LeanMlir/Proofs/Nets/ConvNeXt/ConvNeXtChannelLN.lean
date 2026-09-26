@@ -49,17 +49,17 @@ namespace Proofs.StableHLO
 -- § The graph-side transport
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The graph's `▸` transport IS the math's Mat-split bridge** — `den_castIdx` composed with
-    `reassocFwdIdx_val`. This is the lemma that keeps `ConvNeXtRender`'s `reassoc` and
+/-- **The graph's `reassoc` transport IS the math's Mat-split bridge** — `den_castIdx` composed
+    with `reassocFwdIdx_val`. This is the lemma that keeps `ConvNeXtRender`'s channel-LN sites and
     `chanLNTensor3` describing one function. -/
 theorem den_reassocS {c h w : Nat} (e : SHlo (c * h * w)) :
-    den ((Nat.mul_assoc c h w) ▸ e) = reassocFwd c h w (den e) := by
+    den (reassoc e) = reassocFwd c h w (den e) := by
   refine (den_castIdx (Nat.mul_assoc c h w) e).trans ?_
   funext k
   exact congrArg (den e) (Fin.ext (reassocFwdIdx_val c h w k).symm)
 
 theorem den_unassocS {c h w : Nat} (e : SHlo (c * (h * w))) :
-    den ((Nat.mul_assoc c h w).symm ▸ e) = reassocBack c h w (den e) := by
+    den (unassoc e) = reassocBack c h w (den e) := by
   refine (den_castIdx (Nat.mul_assoc c h w).symm e).trans ?_
   funext k
   exact congrArg (den e) (Fin.ext (reassocBackIdx_val c h w k).symm)

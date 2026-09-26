@@ -12,7 +12,7 @@ replicas, denotes on replica `r` exactly `batchShard r` of the single-device for
 batch `R·N`.
 
     den (efficientnetFwdGraphSyncFull R hR N epsStr w e r)
-      = batchShard R N 10 (efficientnetForwardBFull (R * N) w X) r
+      = batchShard R N nCls (efficientnetForwardBFull (R * N) w X) r
 
 given that each replica's input is its shard of one global batch `X`. **The spec does not move**:
 the right-hand side is the committed `efficientnetForwardBFull`, at `N := R·N`.
@@ -279,7 +279,7 @@ theorem headGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Na
     over all `R` replicas, fed each replica's own input subgraph `e r`; block prefixes and
     collective tags are `EfficientNetRender.Basic`'s. -/
 def efficientnetFwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String)
-    (w : B0Weights) (e : Fin R → SHlo (N * (3 * 224 * 224))) : Fin R → SHlo (N * 10) :=
+    {nCls : Nat} (w : B0Weights nCls) (e : Fin R → SHlo (N * (3 * 224 * 224))) : Fin R → SHlo (N * nCls) :=
   headGraphSync epsStr R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mbExpGraphSync "b16" epsStr R hR N 7 7 w.b16
       (mbResidGraphSync "b15" epsStr R hR N 7 7 w.b15
@@ -306,11 +306,11 @@ def efficientnetFwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : Stri
     — the committed batch-BN forward, at the global batch. One block lemma per stage, the shard
     hypothesis threaded from each into the next. -/
 theorem efficientnetFwdGraphSyncFull_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
-    (epsStr : String) (w : B0Weights) (e : Fin R → SHlo (N * (3 * 224 * 224)))
+    (epsStr : String) {nCls : Nat} (w : B0Weights nCls) (e : Fin R → SHlo (N * (3 * 224 * 224)))
     (X : Vec ((R * N) * (3 * 224 * 224)))
     (he : ∀ r, den (e r) = batchShard R N (3 * 224 * 224) X r) (r : Fin R) :
     den (efficientnetFwdGraphSyncFull R hR N epsStr w e r)
-      = batchShard R N 10 (efficientnetForwardBFull (R * N) w X) r := by
+      = batchShard R N nCls (efficientnetForwardBFull (R * N) w X) r := by
   have h112 : 0 < 112 := by norm_num
   have h56 : 0 < 56 := by norm_num
   have h28 : 0 < 28 := by norm_num

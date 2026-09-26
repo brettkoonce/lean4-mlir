@@ -1264,6 +1264,15 @@ noncomputable def geluPerTokenHasVJPMat (N D : Nat) :
     HasVJPMat (fun X : Mat N D => fun n => gelu D (X n)) :=
   rowwiseHasVJPMat (geluHasVJP D) (gelu_differentiable D)
 
+/-- Per-token GELU input-VJP: the flat `geluHasVJP (N*D)` backward IS the
+    flatten of the rowwise `geluPerTokenHasVJPMat.backward` at the saved
+    pre-GELU activation `A` (GELU is elementwise, so flat and rowwise agree). -/
+theorem geluFlat_eq_backward {N D : Nat} (A : Mat N D) (dY : Mat N D) :
+    (geluHasVJP (N * D)).backward (Mat.flatten A) (Mat.flatten dY)
+      = Mat.flatten ((geluPerTokenHasVJPMat N D).backward A dY) := by
+  unfold geluPerTokenHasVJPMat rowwiseHasVJPMat geluHasVJP Mat.flatten
+  rfl
+
 /-! ## A transformer encoder block
 
 From `MlirCodegen.emitTransformerBlockForward`:

@@ -716,18 +716,10 @@ structure ENetFwd where
   bnSt   : List String := []  -- every BN site's packed statistics, aligned with `bns`
   deriving Inhabited
 
-/-- The stem's saved SSA names: conv, BN, BN stats (`""` at one replica), swish output. -/
-structure ENetStemFwdB where
-  code : String
-  c : String
-  n : String
-  st : String
-  o : String
-
 /-- Stem forward: 3×3/s2 XLA-`SAME` conv (3→32, 224→112) → BN → swish, on `%x`. -/
 def enetStemFwdB (B : Nat) (mode : BnMode) (epsStr : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
-    StateM Proofs.StableHLO.EmitS ENetStemFwdB := do
+    StateM Proofs.StableHLO.EmitS StemFwdB := do
   let zx   : Vec (B * (3*224*224)) := fun _ => 0
   let zSk  : Kernel4 32 3 3 3 := fun _ _ _ _ => 0
   let z32  : Vec 32 := fun _ => 0

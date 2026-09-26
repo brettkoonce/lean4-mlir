@@ -107,11 +107,6 @@ def cnxBase  : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[128, 256, 512,
 #guard cnxBase.depths == cnxSmall.depths      -- … and B widens S rather than deepening it again
 #guard cnxBase.dims != cnxTiny.dims
 
-private def zK {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
-private def zD {c kh kw : Nat} : DepthwiseKernel c kh kw := fun _ _ _ => 0
-private def zV {n : Nat} : Vec n := fun _ => 0
-private def zM {a b : Nat} : Mat a b := fun _ _ => 0
-private def zT {c h w : Nat} : Tensor3 c h w := fun _ _ _ => 0
 
 -- ════════════════════════════════════════════════════════════════
 -- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`, handoff §0.10) ────────────────────────
@@ -263,11 +258,10 @@ holding its `c` channels, which is exactly what `rowLNFlat` normalises. Checked 
 **free** (Δ 0.00 ms on 16.1 ms of whole-net LN — XLA folds a transpose into the consumer's layout).
 
 **`Nat` multiplication is not definitionally associative**, and the ambient index here is
-`c*h*h = (c*h)*h` while the transpose needs `c*(h*h)`. `reassoc`/`unassoc` are `castIdx` along
-`Nat.mul_assoc`; they are casts on the index, not on the value, so `pretty` walks the same tree. -/
+`c*h*h = (c*h)*h` while the transpose needs `c*(h*h)`. `reassoc`/`unassoc` (`IndexCast`) are
+`castIdx` along `Nat.mul_assoc`; they are casts on the index, not on the value, so `pretty` walks the
+same tree. -/
 
-private def reassoc {c h : Nat} (e : SHlo (c*h*h)) : SHlo (c*(h*h)) := castIdx (Nat.mul_assoc c h h) e
-private def unassoc {c h : Nat} (e : SHlo (c*(h*h))) : SHlo (c*h*h) := castIdx (Nat.mul_assoc c h h).symm e
 
 /-- The `%one`/`%zero` constants the channel-LN chain binds `lnRowF`/`lnRowBack`'s SCALAR γ/β to —
     the real per-channel affine is `rowScaleF`/`rowBiasF` downstream, exactly as ViT does it.
@@ -289,14 +283,14 @@ def chLnPrelude : String :=
 private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty cBS (.transposeF (m := c) (n := h*h)
-                                  (reassoc (.operand xin (zV : Vec (c*h*h)))))
+                                  (reassoc (.operand xin (0 : Vec (c*h*h)))))
     let (k2, n)  ← pretty cBS (.lnRowF (m := h*h) (n := c) "%one" "%zero" cEPS 0 1 0
-                                  (.operand t (zV : Vec (h*h*c))))
-    let (k3, sc) ← pretty cBS (.rowScaleF (m := h*h) (n := c) gN (zV : Vec c)
-                                  (.operand n (zV : Vec (h*h*c))))
-    let (k4, bi) ← pretty cBS (.rowBiasF (m := h*h) (n := c) btN (zV : Vec c)
-                                  (.operand sc (zV : Vec (h*h*c))))
-    let (k5, o)  ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand bi (zV : Vec (h*h*c))))
+                                  (.operand t (0 : Vec (h*h*c))))
+    let (k3, sc) ← pretty cBS (.rowScaleF (m := h*h) (n := c) gN (0 : Vec c)
+                                  (.operand n (0 : Vec (h*h*c))))
+    let (k4, bi) ← pretty cBS (.rowBiasF (m := h*h) (n := c) btN (0 : Vec c)
+                                  (.operand sc (0 : Vec (h*h*c))))
+    let (k5, o)  ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand bi (0 : Vec (h*h*c))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
 /-- **The HEAD LN forward site** — the paper's `norm(x.mean([-2,-1]))`.
@@ -313,54 +307,54 @@ private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
 private def headLnFwdSite (cBS : Nat) (gN btN xin : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, n)  ← pretty cBS (.lnRowF (m := 1) (n := d) "%one" "%zero" cEPS 0 1 0
-                                  (.operand xin (zV : Vec (1*d))))
-    let (k2, sc) ← pretty cBS (.rowScaleF (m := 1) (n := d) gN (zV : Vec d)
-                                  (.operand n (zV : Vec (1*d))))
-    let (k3, o)  ← pretty cBS (.rowBiasF (m := 1) (n := d) btN (zV : Vec d)
-                                  (.operand sc (zV : Vec (1*d))))
+                                  (.operand xin (0 : Vec (1*d))))
+    let (k2, sc) ← pretty cBS (.rowScaleF (m := 1) (n := d) gN (0 : Vec d)
+                                  (.operand n (0 : Vec (1*d))))
+    let (k3, o)  ← pretty cBS (.rowBiasF (m := 1) (n := d) btN (0 : Vec d)
+                                  (.operand sc (0 : Vec (1*d))))
     pure (k1 ++ k2 ++ k3, o)
 
 /-- The head LN's **input-VJP**: `dx = lnRowBack γ=1 (rowScale γ dy)`. `xName` is the saved LN
     input — the GAP output — which `lnRowBack` re-normalises from rather than saving x̂/istd. -/
 private def headLnBackSite (cBS : Nat) (gN xName cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
-    let (k1, da) ← pretty cBS (.rowScaleF (m := 1) (n := d) gN (zV : Vec d)
-                                  (.operand cot (zV : Vec (1*d))))
-    let (k2, o)  ← pretty cBS (.lnRowBack (m := 1) (n := d) "%one" xName cEPS 0 1 (zV : Vec (1*d))
-                                  (.operand da (zV : Vec (1*d))))
+    let (k1, da) ← pretty cBS (.rowScaleF (m := 1) (n := d) gN (0 : Vec d)
+                                  (.operand cot (0 : Vec (1*d))))
+    let (k2, o)  ← pretty cBS (.lnRowBack (m := 1) (n := d) "%one" xName cEPS 0 1 (0 : Vec (1*d))
+                                  (.operand da (0 : Vec (1*d))))
     pure (k1 ++ k2, o)
 
 /-- The head LN's **γ tail** — `veclnGamma{Grad,Sgd}` at `N = 1`. -/
 private def headLnGammaTail (cBS : Nat) (adam : Bool) (gN xName cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     if adam then
-      pretty cBS (.veclnGammaGrad (N := 1) (D := d) xName cEPS 0 (zV : Vec (1*d))
-                     (.operand cot (zV : Vec (1*d))))
-    else pretty cBS (.veclnGammaSgd (N := 1) (D := d) gN xName cEPS cLR 0 (zV : Vec (1*d))
-                        (zV : Vec d) 0 (.operand cot (zV : Vec (1*d))))
+      pretty cBS (.veclnGammaGrad (N := 1) (D := d) xName cEPS 0 (0 : Vec (1*d))
+                     (.operand cot (0 : Vec (1*d))))
+    else pretty cBS (.veclnGammaSgd (N := 1) (D := d) gN xName cEPS cLR 0 (0 : Vec (1*d))
+                        (0 : Vec d) 0 (.operand cot (0 : Vec (1*d))))
 
 /-- The head LN's **β tail** — `rowDenseBias{Grad,Sgd}` at `N = 1`, reducing `dims = [0,1]`, i.e.
     contracting the batch (and the single row) as a shared `[d]` parameter needs. -/
 private def headLnBetaTail (cBS : Nat) (adam : Bool) (btN cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     if adam then
-      pretty cBS (.rowDenseBiasGrad (N := 1) (c := d) (.operand cot (zV : Vec (1*d))))
-    else pretty cBS (.rowDenseBiasSgd (N := 1) (c := d) btN cLR (zV : Vec d) 0
-                        (.operand cot (zV : Vec (1*d))))
+      pretty cBS (.rowDenseBiasGrad (N := 1) (c := d) (.operand cot (0 : Vec (1*d))))
+    else pretty cBS (.rowDenseBiasSgd (N := 1) (c := d) btN cLR (0 : Vec d) 0
+                        (.operand cot (0 : Vec (1*d))))
 
 /-- One **LayerNorm input-VJP** site: `dx = transposeᵀ (lnRowBack γ=1 (rowScale γ dyᵀ))`. `xName`
     is the saved LN INPUT — `lnRowBack` recomputes x̂/istd from it rather than saving them. -/
 private def lnBackSite (cBS : Nat) (gN xName cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT)  ← pretty cBS (.transposeF (m := c) (n := h*h)
-                                   (reassoc (.operand xName (zV : Vec (c*h*h)))))
+                                   (reassoc (.operand xName (0 : Vec (c*h*h)))))
     let (k2, dT)  ← pretty cBS (.transposeF (m := c) (n := h*h)
-                                   (reassoc (.operand cot (zV : Vec (c*h*h)))))
-    let (k3, da)  ← pretty cBS (.rowScaleF (m := h*h) (n := c) gN (zV : Vec c)
-                                   (.operand dT (zV : Vec (h*h*c))))
-    let (k4, dxT) ← pretty cBS (.lnRowBack (m := h*h) (n := c) "%one" xT cEPS 0 1 zV
-                                   (.operand da (zV : Vec (h*h*c))))
-    let (k5, o)   ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand dxT (zV : Vec (h*h*c))))
+                                   (reassoc (.operand cot (0 : Vec (c*h*h)))))
+    let (k3, da)  ← pretty cBS (.rowScaleF (m := h*h) (n := c) gN (0 : Vec c)
+                                   (.operand dT (0 : Vec (h*h*c))))
+    let (k4, dxT) ← pretty cBS (.lnRowBack (m := h*h) (n := c) "%one" xT cEPS 0 1 0
+                                   (.operand da (0 : Vec (h*h*c))))
+    let (k5, o)   ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand dxT (0 : Vec (h*h*c))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
 /-- The **γ tail** for one LN site — the per-channel `veclnGamma{Grad,Sgd}`. The transposes of `xName`/`cot` are re-emitted here rather
@@ -369,14 +363,14 @@ private def lnBackSite (cBS : Nat) (gN xName cot : String) (c h : Nat) :
 private def lnGammaTail (cBS : Nat) (adam : Bool) (gN xName cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT) ← pretty cBS (.transposeF (m := c) (n := h*h)
-                                  (reassoc (.operand xName (zV : Vec (c*h*h)))))
+                                  (reassoc (.operand xName (0 : Vec (c*h*h)))))
     let (k2, dT) ← pretty cBS (.transposeF (m := c) (n := h*h)
-                                  (reassoc (.operand cot (zV : Vec (c*h*h)))))
+                                  (reassoc (.operand cot (0 : Vec (c*h*h)))))
     let (k3, o) ← if adam then
-        pretty cBS (.veclnGammaGrad (N := h*h) (D := c) xT cEPS 0 (zV : Vec (h*h*c))
-                       (.operand dT (zV : Vec (h*h*c))))
-      else pretty cBS (.veclnGammaSgd (N := h*h) (D := c) gN xT cEPS cLR 0 (zV : Vec (h*h*c))
-                          (zV : Vec c) 0 (.operand dT (zV : Vec (h*h*c))))
+        pretty cBS (.veclnGammaGrad (N := h*h) (D := c) xT cEPS 0 (0 : Vec (h*h*c))
+                       (.operand dT (0 : Vec (h*h*c))))
+      else pretty cBS (.veclnGammaSgd (N := h*h) (D := c) gN xT cEPS cLR 0 (0 : Vec (h*h*c))
+                          (0 : Vec c) 0 (.operand dT (0 : Vec (h*h*c))))
     pure (k1 ++ k2 ++ k3, o)
 
 /-- The **β tail** — the per-channel `rowDenseBias{Grad,Sgd}`. It reduces `dims = [0,1]`, i.e. it contracts the
@@ -384,11 +378,11 @@ private def lnGammaTail (cBS : Nat) (adam : Bool) (gN xName cot : String) (c h :
 private def lnBetaTail (cBS : Nat) (adam : Bool) (btN cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, dT) ← pretty cBS (.transposeF (m := c) (n := h*h)
-                                  (reassoc (.operand cot (zV : Vec (c*h*h)))))
+                                  (reassoc (.operand cot (0 : Vec (c*h*h)))))
     let (k2, o) ← if adam then
-        pretty cBS (.rowDenseBiasGrad (N := h*h) (c := c) (.operand dT (zV : Vec (h*h*c))))
-      else pretty cBS (.rowDenseBiasSgd (N := h*h) (c := c) btN cLR (zV : Vec c) 0
-                          (.operand dT (zV : Vec (h*h*c))))
+        pretty cBS (.rowDenseBiasGrad (N := h*h) (c := c) (.operand dT (0 : Vec (h*h*c))))
+      else pretty cBS (.rowDenseBiasSgd (N := h*h) (c := c) btN cLR (0 : Vec c) 0
+                          (.operand dT (0 : Vec (h*h*c))))
     pure (k1 ++ k2, o)
 
 -- ── captured forward names per ConvNeXt block ──
@@ -404,34 +398,34 @@ structure FNames where
 
 -- ── forward + backward-cotangent block helpers (verbatim pretty(SHlo), from the committed emitter) ──
 private def fwdBlock (cBS : Nat) (pfx xin : String) (c e h : Nat) : StateM Proofs.StableHLO.EmitS (String × FNames) := do
-  let (k1, d) ← pretty cBS (.depthwiseF (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (zD : DepthwiseKernel c 7 7) zV (.operand xin zV))
+  let (k1, d) ← pretty cBS (.depthwiseF (h := h) (w := h) s!"%{pfx}dW" s!"%{pfx}db" (0 : DepthwiseKernel c 7 7) 0 (.operand xin 0))
   let (k2, n) ← lnFwdSite cBS s!"%{pfx}ng" s!"%{pfx}nbt" d c h
-  let (k3, e') ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (zK : Kernel4 e c 1 1) zV (.operand n zV))
-  let (k4, g) ← pretty cBS (.geluF (.operand e' (zV : Vec (e*h*h))))
-  let (k5, p) ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}pW" s!"%{pfx}pb" (zK : Kernel4 c e 1 1) zV (.operand g zV))
-  let (k6, ls) ← pretty cBS (.layerScaleChF (h := h) (w := h) s!"%{pfx}lg" (zV : Vec c) (.operand p zV))
-  let (k7, bout) ← pretty cBS (.addV (.operand ls (zV : Vec (c*h*h))) (.operand xin zV))
+  let (k3, e') ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}eW" s!"%{pfx}eb" (0 : Kernel4 e c 1 1) 0 (.operand n 0))
+  let (k4, g) ← pretty cBS (.geluF (.operand e' (0 : Vec (e*h*h))))
+  let (k5, p) ← pretty cBS (.flatConvF (h := h) (w := h) s!"%{pfx}pW" s!"%{pfx}pb" (0 : Kernel4 c e 1 1) 0 (.operand g 0))
+  let (k6, ls) ← pretty cBS (.layerScaleChF (h := h) (w := h) s!"%{pfx}lg" (0 : Vec c) (.operand p 0))
+  let (k7, bout) ← pretty cBS (.addV (.operand ls (0 : Vec (c*h*h))) (.operand xin 0))
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, ⟨xin, d, n, e', g, p, bout⟩)
 
 private def bwdBlock (cBS : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String) := do
-  let (k1, cot_p) ← pretty cBS (.layerScaleChF (h := h) (w := h) s!"%{pfx}lg" (zV : Vec c) (.operand dy zV))
-  let (k2, cot_g) ← pretty cBS (.convBack (h := h) (w := h) s!"%{pfx}pW" (zK : Kernel4 c e 1 1) zV zV (.operand cot_p zV))
-  let (k3, cot_e) ← pretty cBS (.geluBack b.e (zV : Vec (e*h*h)) (.operand cot_g zV))
-  let (k4, cot_n) ← pretty cBS (.convBack (h := h) (w := h) s!"%{pfx}eW" (zK : Kernel4 e c 1 1) zV zV (.operand cot_e zV))
+  let (k1, cot_p) ← pretty cBS (.layerScaleChF (h := h) (w := h) s!"%{pfx}lg" (0 : Vec c) (.operand dy 0))
+  let (k2, cot_g) ← pretty cBS (.convBack (h := h) (w := h) s!"%{pfx}pW" (0 : Kernel4 c e 1 1) 0 0 (.operand cot_p 0))
+  let (k3, cot_e) ← pretty cBS (.geluBack b.e (0 : Vec (e*h*h)) (.operand cot_g 0))
+  let (k4, cot_n) ← pretty cBS (.convBack (h := h) (w := h) s!"%{pfx}eW" (0 : Kernel4 e c 1 1) 0 0 (.operand cot_e 0))
   let (k5, cot_d) ← lnBackSite cBS s!"%{pfx}ng" b.d cot_n c h
-  let (k6, cot_main) ← pretty cBS (.depthwiseBack (h := h) (w := h) s!"%{pfx}dW" (zD : DepthwiseKernel c 7 7) zV zV (.operand cot_d zV))
-  let (k7, cot_xin) ← pretty cBS (.addV (.operand cot_main (zV : Vec (c*h*h))) (.operand dy zV))
+  let (k6, cot_main) ← pretty cBS (.depthwiseBack (h := h) (w := h) s!"%{pfx}dW" (0 : DepthwiseKernel c 7 7) 0 0 (.operand cot_d 0))
+  let (k7, cot_xin) ← pretty cBS (.addV (.operand cot_main (0 : Vec (c*h*h))) (.operand dy 0))
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d)
 
 private def fwdDown (cBS : Nat) (pfx xin : String) (ci co h2 : Nat) : StateM Proofs.StableHLO.EmitS (String × String × String) := do
   let (k1, n) ← lnFwdSite cBS s!"%{pfx}ng" s!"%{pfx}nbt" xin ci (2*h2)
-  let (k2, o) ← pretty cBS (.flatConvStridedF (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (zK : Kernel4 co ci 2 2) zV (.operand n zV))
+  let (k2, o) ← pretty cBS (.flatConvStridedF (h := h2) (w := h2) s!"%{pfx}W" s!"%{pfx}b" (0 : Kernel4 co ci 2 2) 0 (.operand n 0))
   pure (k1 ++ k2, n, o)
 
 private def bwdDown (cBS : Nat) (pfx dy xin : String) (ci co h2 : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String × String) := do
-  let (k1, cot_n) ← pretty cBS (.convStridedBack (h := h2) (w := h2) s!"%{pfx}W" (zK : Kernel4 co ci 2 2) zV zV (.operand dy (zV : Vec (co*h2*h2))))
+  let (k1, cot_n) ← pretty cBS (.convStridedBack (h := h2) (w := h2) s!"%{pfx}W" (0 : Kernel4 co ci 2 2) 0 0 (.operand dy (0 : Vec (co*h2*h2))))
   let (k2, cot_x) ← lnBackSite cBS s!"%{pfx}ng" xin cot_n ci (2*h2)
   pure (k1 ++ k2, cot_n, cot_x)
 
@@ -451,28 +445,28 @@ private def blockParamSgd (cBS : Nat) (adam : Bool) (pfx : String) (b : FNames)
     (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
   let (cLg, nLg) ← if adam then
-      pretty cBS (.layerScaleChGammaGrad (c := c) (h := h) (w := h) b.p (zV : Vec (c*h*h)) (.operand dy zV))
-    else pretty cBS (.layerScaleChGammaSgd s!"%{pfx}lg" b.p cLR (zV : Vec (c*h*h)) (zV : Vec c) 0 (.operand dy zV))
+      pretty cBS (.layerScaleChGammaGrad (c := c) (h := h) (w := h) b.p (0 : Vec (c*h*h)) (.operand dy 0))
+    else pretty cBS (.layerScaleChGammaSgd s!"%{pfx}lg" b.p cLR (0 : Vec (c*h*h)) (0 : Vec c) 0 (.operand dy 0))
   let (cPw, nPw) ← if adam then
-      pretty cBS (.convWeightGrad b.g (zV : Vec c) (zT : Tensor3 e h h) (zK : Kernel4 c e 1 1) (.operand cot_p zV))
-    else pretty cBS (.convWeightSgd b.g s!"%{pfx}pW" cLR (zV : Vec c) (zT : Tensor3 e h h) (zK : Kernel4 c e 1 1) 0 (.operand cot_p zV))
+      pretty cBS (.convWeightGrad b.g (0 : Vec c) (0 : Tensor3 e h h) (0 : Kernel4 c e 1 1) (.operand cot_p 0))
+    else pretty cBS (.convWeightSgd b.g s!"%{pfx}pW" cLR (0 : Vec c) (0 : Tensor3 e h h) (0 : Kernel4 c e 1 1) 0 (.operand cot_p 0))
   let (cPb, nPb) ← if adam then
-      pretty cBS (.convBiasGrad (zK : Kernel4 c e 1 1) (zT : Tensor3 e h h) (zV : Vec c) (.operand cot_p zV))
-    else pretty cBS (.convBiasSgd s!"%{pfx}pb" cLR (zK : Kernel4 c e 1 1) (zT : Tensor3 e h h) (zV : Vec c) 0 (.operand cot_p zV))
+      pretty cBS (.convBiasGrad (0 : Kernel4 c e 1 1) (0 : Tensor3 e h h) (0 : Vec c) (.operand cot_p 0))
+    else pretty cBS (.convBiasSgd s!"%{pfx}pb" cLR (0 : Kernel4 c e 1 1) (0 : Tensor3 e h h) (0 : Vec c) 0 (.operand cot_p 0))
   let (cEw, nEw) ← if adam then
-      pretty cBS (.convWeightGrad b.n (zV : Vec e) (zT : Tensor3 c h h) (zK : Kernel4 e c 1 1) (.operand cot_e zV))
-    else pretty cBS (.convWeightSgd b.n s!"%{pfx}eW" cLR (zV : Vec e) (zT : Tensor3 c h h) (zK : Kernel4 e c 1 1) 0 (.operand cot_e zV))
+      pretty cBS (.convWeightGrad b.n (0 : Vec e) (0 : Tensor3 c h h) (0 : Kernel4 e c 1 1) (.operand cot_e 0))
+    else pretty cBS (.convWeightSgd b.n s!"%{pfx}eW" cLR (0 : Vec e) (0 : Tensor3 c h h) (0 : Kernel4 e c 1 1) 0 (.operand cot_e 0))
   let (cEb, nEb) ← if adam then
-      pretty cBS (.convBiasGrad (zK : Kernel4 e c 1 1) (zT : Tensor3 c h h) (zV : Vec e) (.operand cot_e zV))
-    else pretty cBS (.convBiasSgd s!"%{pfx}eb" cLR (zK : Kernel4 e c 1 1) (zT : Tensor3 c h h) (zV : Vec e) 0 (.operand cot_e zV))
+      pretty cBS (.convBiasGrad (0 : Kernel4 e c 1 1) (0 : Tensor3 c h h) (0 : Vec e) (.operand cot_e 0))
+    else pretty cBS (.convBiasSgd s!"%{pfx}eb" cLR (0 : Kernel4 e c 1 1) (0 : Tensor3 c h h) (0 : Vec e) 0 (.operand cot_e 0))
   let (cNg, nNg) ← lnGammaTail cBS adam s!"%{pfx}ng" b.d cot_n c h
   let (cNb, nNb) ← lnBetaTail cBS adam s!"%{pfx}nbt" cot_n c h
   let (cDw, nDw) ← if adam then
-      pretty cBS (.depthwiseWeightGrad b.xin (zV : Vec c) (zT : Tensor3 c h h) (zD : DepthwiseKernel c 7 7) (.operand cot_d zV))
-    else pretty cBS (.depthwiseWeightSgd b.xin s!"%{pfx}dW" cLR (zV : Vec c) (zT : Tensor3 c h h) (zD : DepthwiseKernel c 7 7) 0 (.operand cot_d zV))
+      pretty cBS (.depthwiseWeightGrad b.xin (0 : Vec c) (0 : Tensor3 c h h) (0 : DepthwiseKernel c 7 7) (.operand cot_d 0))
+    else pretty cBS (.depthwiseWeightSgd b.xin s!"%{pfx}dW" cLR (0 : Vec c) (0 : Tensor3 c h h) (0 : DepthwiseKernel c 7 7) 0 (.operand cot_d 0))
   let (cDb, nDb) ← if adam then
-      pretty cBS (.depthwiseBiasGrad (zD : DepthwiseKernel c 7 7) (zT : Tensor3 c h h) (zV : Vec c) (.operand cot_d zV))
-    else pretty cBS (.depthwiseBiasSgd s!"%{pfx}db" cLR (zD : DepthwiseKernel c 7 7) (zT : Tensor3 c h h) (zV : Vec c) 0 (.operand cot_d zV))
+      pretty cBS (.depthwiseBiasGrad (0 : DepthwiseKernel c 7 7) (0 : Tensor3 c h h) (0 : Vec c) (.operand cot_d 0))
+    else pretty cBS (.depthwiseBiasSgd s!"%{pfx}db" cLR (0 : DepthwiseKernel c 7 7) (0 : Tensor3 c h h) (0 : Vec c) 0 (.operand cot_d 0))
   pure (cLg ++ cPw ++ cPb ++ cEw ++ cEb ++ cNg ++ cNb ++ cDw ++ cDb,
     [(s!"{pfx}dW", nDw), (s!"{pfx}db", nDb), (s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb),
      (s!"{pfx}eW", nEw), (s!"{pfx}eb", nEb), (s!"{pfx}pW", nPw), (s!"{pfx}pb", nPb), (s!"{pfx}lg", nLg)])
@@ -490,17 +484,17 @@ private def downParamSgd (cBS : Nat) (adam : Bool) (pfx downLn downIn cot_n dy :
   -- 2×2 result — type-invalid MLIR. `StableHLO.sWGradGeom` now splits odd/even (odd byte-for-byte
   -- unchanged), so this call site is certified like every other.
   let (cB, nB) ← if adam then
-      pretty cBS (.convStridedBiasGrad (zK : Kernel4 co ci 2 2) (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec co) (.operand dy zV))
-    else pretty cBS (.convStridedBiasSgd s!"%{pfx}b" cLR (zK : Kernel4 co ci 2 2) (zV : Vec (ci*(2*h2)*(2*h2))) (zV : Vec co) 0 (.operand dy zV))
+      pretty cBS (.convStridedBiasGrad (0 : Kernel4 co ci 2 2) (0 : Vec (ci*(2*h2)*(2*h2))) (0 : Vec co) (.operand dy 0))
+    else pretty cBS (.convStridedBiasSgd s!"%{pfx}b" cLR (0 : Kernel4 co ci 2 2) (0 : Vec (ci*(2*h2)*(2*h2))) (0 : Vec co) 0 (.operand dy 0))
   let (cNg, nNg) ← lnGammaTail cBS adam s!"%{pfx}ng" downIn cot_n ci (2*h2)
   let (cNb, nNb) ← lnBetaTail cBS adam s!"%{pfx}nbt" cot_n ci (2*h2)
   let (wcode, nW) ← if adam then
       pretty cBS (.convStridedWeightGrad (ic := ci) (oc := co) (h := h2) (w := h2) (kH := 2) (kW := 2)
-        downLn (zV : Vec co) (zV : Vec (ci*(2*h2)*(2*h2))) (zK : Kernel4 co ci 2 2)
-        (.operand dy (zV : Vec (co*h2*h2))))
+        downLn (0 : Vec co) (0 : Vec (ci*(2*h2)*(2*h2))) (0 : Kernel4 co ci 2 2)
+        (.operand dy (0 : Vec (co*h2*h2))))
     else pretty cBS (.convStridedWeightSgd (ic := ci) (oc := co) (h := h2) (w := h2) (kH := 2) (kW := 2)
-        downLn s!"%{pfx}W" cLR (zV : Vec co) (zV : Vec (ci*(2*h2)*(2*h2))) (zK : Kernel4 co ci 2 2) 0
-        (.operand dy (zV : Vec (co*h2*h2))))
+        downLn s!"%{pfx}W" cLR (0 : Vec co) (0 : Vec (ci*(2*h2)*(2*h2))) (0 : Kernel4 co ci 2 2) 0
+        (.operand dy (0 : Vec (co*h2*h2))))
   pure (cB ++ cNg ++ cNb ++ wcode,
     [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", nW), (s!"{pfx}b", nB)])
 
@@ -622,7 +616,7 @@ structure CFwd where
 private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     : StateM Proofs.StableHLO.EmitS CFwd := do
   let (cS, stemC) ← pretty cBS (.flatConvStride4F (h := 56) (w := 56) "%psW" "%psb"
-    (zK : Kernel4 (V.dims[0]!) 3 4 4) zV (.operand "%x" (zV : Vec (3*(2*(2*56))*(2*(2*56))))))
+    (0 : Kernel4 (V.dims[0]!) 3 4 4) 0 (.operand "%x" (0 : Vec (3*(2*(2*56))*(2*(2*56))))))
   -- §2m: the reference's `convnext_stem` is patchify conv → channel-LN. The PRE-§2m render had
   -- NO stem LN, and had a head LN the reference does not — the two nearly cancel in the parameter
   -- count (+2×768 − 2×96 = +1,344 out of 28.6M), which is why the count alone never caught it.
@@ -643,14 +637,14 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
       downIn := downIn.push cur
       let (code, n, o) ← fwdDown cBS s!"d{si}" cur c V.dims[si+1]! cSpats[si+1]!
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
-  let (cG, gap) ← pretty cBS (.gapF (c := V.dims[3]!) (h := 7) (w := 7) (.operand cur zV))
+  let (cG, gap) ← pretty cBS (.gapF (c := V.dims[3]!) (h := 7) (w := 7) (.operand cur 0))
   -- ⭐⭐ **THE HEAD LN, RESTORED 2026-08-30.** §2m deleted it to match
   -- `jax/MainConvNeXtImagenet.lean`, which was itself missing it; the paper and timm both do
   -- `GAP → LN → Linear` (`facebookresearch/ConvNeXt`: `self.norm(x.mean([-2,-1]))`; timm:
   -- `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`). The parameter count
   -- was the tell all along — 28,587,592 against timm's 28,589,128 is short by exactly 2×768.
   let (cHn, hn) ← headLnFwdSite cBS "%hng" "%hnbt" gap V.dims[3]!
-  let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (zM : Mat (V.dims[3]!) nClasses) zV (.operand hn zV))
+  let (cLog, logits) ← pretty cBS (denseF "%Wd" "%bd" (0 : Mat (V.dims[3]!) nClasses) 0 (.operand hn 0))
   pure { code := fwd ++ cG ++ cHn ++ cLog,
          blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
@@ -707,8 +701,8 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     -- ═══ forward — the SAME chain `convNextFwdFaithfulV` emits, so `@convnext_fwd` and the two
     --     train steps cannot drift into computing different functions (§2a) ═══
     let F : CFwd ← convNextFwdChain cBS nClasses V
-    let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (zV : Vec nClasses))))
-    let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (zV : Vec nClasses)) (.operand "%onehot" zV))
+    let (cSm, nSm) ← pretty cBS (.softmaxDiv (.expe (.operand F.logits (0 : Vec nClasses))))
+    let (cSub, dyr) ← pretty cBS (.sub (.operand nSm (0 : Vec nClasses)) (.operand "%onehot" 0))
     let blksAll := F.blksAll
     let downLn := F.downLn
     let downIn := F.downIn
@@ -719,26 +713,26 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     let (cDyC, dyName) ← match smooth with
       | none => pure (s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [cBS, nClasses]}\n", "%dy")
       | some (aStr, negAK, bStr) => do
-          let (c1, n1) ← pretty cBS (.scaleF (n := nClasses) aStr 0 (.operand "%onehot" (zV : Vec nClasses)))
-          let (c2, n2) ← pretty cBS (.addV (.operand dyr (zV : Vec nClasses)) (.operand n1 (zV : Vec nClasses)))
+          let (c1, n1) ← pretty cBS (.scaleF (n := nClasses) aStr 0 (.operand "%onehot" (0 : Vec nClasses)))
+          let (c2, n2) ← pretty cBS (.addV (.operand dyr (0 : Vec nClasses)) (.operand n1 (0 : Vec nClasses)))
           -- ⚠ the operands are annotated at `Vec (1 * nClasses)`, not `Vec nClasses`: `shiftB`/
           -- `divConstB` are indexed `SHlo (N*n)`, and `1 * n` reduces definitionally only when `n`
           -- is a literal. It did while this render was pinned at 10; it stops the moment `nClasses`
           -- is a variable. `ViTRender` carries the same annotation for the same reason.
-          let (c3, n3) ← pretty cBS (.shiftB (N := 1) (n := nClasses) negAK 0 (.operand n2 (zV : Vec (1 * nClasses))))
-          let (c4, n4) ← pretty cBS (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (zV : Vec (1 * nClasses))))
+          let (c3, n3) ← pretty cBS (.shiftB (N := 1) (n := nClasses) negAK 0 (.operand n2 (0 : Vec (1 * nClasses))))
+          let (c4, n4) ← pretty cBS (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (0 : Vec (1 * nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ backward: head cotangent chain + param-SGD ═══
-    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (zM : Mat (V.dims[3]!) nClasses) (.operand dyName zV))
+    let (cDd, cot_hn) ← pretty cBS (.dotOut "%Wd" (0 : Mat (V.dims[3]!) nClasses) (.operand dyName 0))
     -- ▶ back through the HEAD LN before GAP's own backward sees the cotangent. Its γ/β tails go
     -- into `updMap` below, beside Wd/bd.
     let (cHnB, cot_gap) ← headLnBackSite cBS "%hng" F.gap cot_hn V.dims[3]!
     let (cWd, nWd) ← if adam then
-        pretty cBS (.weightGrad (m := V.dims[3]!) (n := nClasses) hn (zV : Vec (V.dims[3]!)) (.operand dyName (zV : Vec nClasses)))
-      else pretty cBS (.weightSgd hn "%Wd" cLR (zV : Vec (V.dims[3]!)) (zM : Mat (V.dims[3]!) nClasses) 0 (.operand dyName zV))
+        pretty cBS (.weightGrad (m := V.dims[3]!) (n := nClasses) hn (0 : Vec (V.dims[3]!)) (.operand dyName (0 : Vec nClasses)))
+      else pretty cBS (.weightSgd hn "%Wd" cLR (0 : Vec (V.dims[3]!)) (0 : Mat (V.dims[3]!) nClasses) 0 (.operand dyName 0))
     let (cBd, nBd) ← if adam then
-        pretty cBS (.biasGrad (n := nClasses) (.operand dyName (zV : Vec nClasses)))
-      else pretty cBS (.biasSgd "%bd" cLR (zV : Vec nClasses) 0 (.operand dyName zV))
+        pretty cBS (.biasGrad (n := nClasses) (.operand dyName (0 : Vec nClasses)))
+      else pretty cBS (.biasSgd "%bd" cLR (0 : Vec nClasses) 0 (.operand dyName 0))
     let (cHg, nHg) ← headLnGammaTail cBS adam "%hng" F.gap cot_hn V.dims[3]!
     let (cHb, nHb) ← headLnBetaTail cBS adam "%hnbt" cot_hn V.dims[3]!
     let mut updMap : List (String × String) :=
@@ -784,11 +778,11 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     updMap := updMap ++ [("psng", ng), ("psnbt", nb)]
     dy := dx
     let (cPsb, nPsb) ← if adam then
-        pretty cBS (.convBiasGrad (zK : Kernel4 (V.dims[0]!) 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec (V.dims[0]!)) (.operand dy zV))
-      else pretty cBS (.convBiasSgd "%psb" cLR (zK : Kernel4 (V.dims[0]!) 3 4 4) (zT : Tensor3 3 56 56) (zV : Vec (V.dims[0]!)) 0 (.operand dy zV))
+        pretty cBS (.convBiasGrad (0 : Kernel4 (V.dims[0]!) 3 4 4) (0 : Tensor3 3 56 56) (0 : Vec (V.dims[0]!)) (.operand dy 0))
+      else pretty cBS (.convBiasSgd "%psb" cLR (0 : Kernel4 (V.dims[0]!) 3 4 4) (0 : Tensor3 3 56 56) (0 : Vec (V.dims[0]!)) 0 (.operand dy 0))
     let (cPsW, nPsW) ← pretty cBS (.convStride4WeightGrad (ic := 3) (oc := V.dims[0]!) (h := 56) (w := 56)
-      (kH := 4) (kW := 4) "%x" (zV : Vec (V.dims[0]!)) (zV : Vec (3*(2*(2*56))*(2*(2*56))))
-      (zK : Kernel4 (V.dims[0]!) 3 4 4) (.operand dy (zV : Vec (V.dims[0]!*56*56))))
+      (kH := 4) (kW := 4) "%x" (0 : Vec (V.dims[0]!)) (0 : Vec (3*(2*(2*56))*(2*(2*56))))
+      (0 : Kernel4 (V.dims[0]!) 3 4 4) (.operand dy (0 : Vec (V.dims[0]!*56*56))))
     bwd := bwd ++ cPsW ++ (if adam then "" else sgdOf nPsW "psW" (ty [V.dims[0]!,3,4,4])) ++ cPsb
     updMap := updMap ++ [("psW", if adam then nPsW else "%psWn"), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
@@ -886,11 +880,7 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
     `convnextTinyImagenetConfig.weightDecay := 0.05`. The default is unchanged, so every committed
     artifact keeps its bytes; only the ImageNet `wx` render passes 0.05. -/
 private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
-  (if wdExclude then
-    "    // ── timm no_weight_decay (wdExcludeNormBias): 121 of 180 params take %wdz, not %wd ──\n" ++
-    "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
-   else "") ++
-  adamWConsts wdStr
+  wdzConst wdExclude "121 of 180 params" ++ adamWConsts wdStr
 
 /-- **ConvNeXt AdamW train step rendered from the verified AST** — the wrapper `ConvNeXtRenderB`
     calls (with `traversal` set to its batched chain) to write `convnext_adam_train_step.mlir` and

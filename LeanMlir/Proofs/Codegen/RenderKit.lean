@@ -34,6 +34,28 @@ structure PGrad where
   ds   : List Nat        -- parameter shape, for the emitted optimizer ops
 deriving Inhabited
 
+/-- A BatchNorm layer's running-statistic slots `%{nm}mu`, `%{nm}var`, each `[c]`, μ before var —
+    the order the driver packs `runningBnStats` in. Every render's stat signature is built from this
+    one pair: a misaligned slot keeps the arities and silently feeds the wrong layer's statistics. -/
+def bnStatSlots (nm : String) (c : Nat) : List (String × List Nat) :=
+  [(s!"%{nm}mu", [c]), (s!"%{nm}var", [c])]
+
+/-- A block's backward: its code, the `dx` cotangent to the previous block, and the block's
+    parameter gradients in func-arg order. -/
+structure BlockBack where
+  code : String
+  dx : String
+  ps : List PGrad
+
+/-- A stem's saved SSA names: conv out, BN out, the BN's packed statistics (`""` at one replica),
+    activation out. -/
+structure StemFwdB where
+  code : String
+  c : String
+  n : String
+  st : String
+  o : String
+
 /-- `(θ', m', v')` for one parameter under **AdamW**: the replica mean of its gradient
     (`prettyAllReduceMean`, `pretty` of the `allReduceMeanF` node) and then the proven
     `adamMNextF`/`adamVNextF`/`adamWParamF` triple (`prettyAdamW`). -/
@@ -157,10 +179,11 @@ def fwdEvalEntry (slug epsStr : String) : String :=
   match bnEpsMarker epsStr with | "" => s!"{slug}_fwd_eval" | m => s!"{slug}_fwd_eval_{m}"
 
 /-- The `%wdz` declaration an excluding render needs. Emitted only when the flag is on, so at
-    `wdExclude := false` not one byte moves and every committed artifact is untouched. -/
-def wdzConst (wdExclude : Bool) : String :=
+    `wdExclude := false` not one byte moves and every committed artifact is untouched. `params`
+    names which parameters take it, in the banner comment only. -/
+def wdzConst (wdExclude : Bool) (params : String := "1-D params") : String :=
   if wdExclude then
-    "    // ── timm no_weight_decay (wdExcludeNormBias): 1-D params take %wdz, not %wd ──\n" ++
+    s!"    // ── timm no_weight_decay (wdExcludeNormBias): {params} take %wdz, not %wd ──\n" ++
     "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
   else ""
 

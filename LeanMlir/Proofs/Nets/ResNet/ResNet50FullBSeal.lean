@@ -924,8 +924,6 @@ theorem sealX_continuous (q : Nat) : Continuous (sealX q) := rayX_continuous _ _
 theorem Rr_continuous (q : Nat) (_hq0 : 0 < q) (nCls : Nat) : Continuous (Rr q nCls) := by
   unfold Rr Zs Zp1 Zp2 Zp3 Zp4 ctConv sealX r50Pre13 r50Pre12 r50Pre11 r50Pre10 r50Pre9 r50Pre8
     r50Pre7 r50Pre6 r50Pre5 r50Pre4 r50Pre3 r50Pre2 r50Pre1 r50Pre0
-  unfold r50IdB r50ProjB r50DownB r34StemB projB StableHLO.cbReluB StableHLO.cbReluStridedB
-    StableHLO.projStridedB
   fun_prop (disch := exact one_pos)
 
 -- ════════════════════════════════════════════════════════════════

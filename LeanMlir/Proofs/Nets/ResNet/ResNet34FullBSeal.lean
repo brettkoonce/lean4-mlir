@@ -798,8 +798,7 @@ theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
 -- § 11. `R` is continuous (every block is, `relu` and the pool included)
 -- ════════════════════════════════════════════════════════════════
 
-theorem sealX_continuous : Continuous sealX :=
-  continuous_const.add (continuous_id.smul continuous_const)
+theorem sealX_continuous : Continuous sealX := rayX_continuous _ _
 
 theorem r34StemB_continuous (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
     (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) : Continuous (r34StemB N h w Ws bs εs γs βs) := by
@@ -812,8 +811,6 @@ theorem r34StemB_continuous (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7)
 theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
   unfold Rr Zs Zp2 Zp3 Zp4 ctConv sealX r34Pre13 r34Pre12 r34Pre11 r34Pre10 r34Pre9 r34Pre8
     r34Pre7 r34Pre6 r34Pre5 r34Pre4 r34Pre3 r34Pre2 r34Pre1 r34Pre0
-  unfold r34IdB r34DownB r34StemB projB StableHLO.cbReluB StableHLO.cbReluStridedB
-    StableHLO.projStridedB
   fun_prop (disch := exact one_pos)
 
 -- ════════════════════════════════════════════════════════════════

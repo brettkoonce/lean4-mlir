@@ -177,7 +177,7 @@ theorem efficientnetInputGradBFull_eq_efficientnetB_full_vjp
     `B0Weights`'s widths, then `HasVJP.backward_unique` between the generic apex and the
     tactic-built whole-net witness — both are VJPs of the same eighteen-stage composition, so
     they have the same backward, and neither is unfolded. -/
-theorem efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp (N : Nat) (w : B0Weights)
+theorem efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos)
     (x : Vec (N * (3 * 224 * 224))) :
     efficientnetInputGradBFull N w.sW w.hW w.fcW
@@ -220,9 +220,9 @@ theorem efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp (N : Nat) (w
     The tie above read through `efficientnetForwardBFullHasVJP_correct`, whose proof is the
     shape check `efficientnetForwardBFull_eq_chain`: the nested-application forward the render
     denotes and the `∘`-chain the VJP was assembled on are one function. -/
-theorem efficientnetInputGradBFull_correct (N : Nat) (w : B0Weights)
+theorem efficientnetInputGradBFull_correct (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos)
-    (x : Vec (N * (3 * 224 * 224))) (dy : Vec (N * 10)) (i : Fin (N * (3 * 224 * 224))) :
+    (x : Vec (N * (3 * 224 * 224))) (dy : Vec (N * nCls)) (i : Fin (N * (3 * 224 * 224))) :
     efficientnetInputGradBFull N w.sW w.hW w.fcW
       ((bnBatchLAHasVJP N 32 112 112 w.sε hεw.s w.sγ w.sβ).backward
         (StableHLO.batchMap N (flatConvStride2Xla w.sW w.sb) x))
@@ -251,7 +251,7 @@ theorem efficientnetInputGradBFull_correct (N : Nat) (w : B0Weights)
       ((mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p).backward (opaqueA14 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) x))
       ((mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward (opaqueA15 (stemB N (h := 112) (w := 112) w.sW w.sb w.sε w.sγ w.sβ) (mbNoExpW N 112 112 w.b1) (mbStridedW N 56 56 w.b2) (mbResidW N 56 56 w.b3) (mbStridedW N 28 28 w.b4) (mbResidW N 28 28 w.b5) (mbStridedW N 14 14 w.b6) (mbResidW N 14 14 w.b7) (mbResidW N 14 14 w.b8) (mbExpW N 14 14 w.b9) (mbResidW N 14 14 w.b10) (mbResidW N 14 14 w.b11) (mbStridedW N 7 7 w.b12) (mbResidW N 7 7 w.b13) (mbResidW N 7 7 w.b14) (mbResidW N 7 7 w.b15) x))
       dy i
-      = ∑ j : Fin (N * 10), pdiv (efficientnetForwardBFull N w) x i j * dy j := by
+      = ∑ j : Fin (N * nCls), pdiv (efficientnetForwardBFull N w) x i j * dy j := by
   rw [congrFun (efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp N w
     hεw x) dy]
   exact efficientnetForwardBFullHasVJP_correct N w hεw x dy i

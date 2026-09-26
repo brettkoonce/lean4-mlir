@@ -68,15 +68,6 @@ lemma rowLNBackFlat_eq_backward {N D : Nat} (ε γ β : ℝ) (hε : 0 < ε)
   simp only [Mat.unflatten_flatten]
   rfl
 
-/-- Per-token GELU input-VJP: the flat `geluHasVJP (N*D)` backward IS the
-    flatten of the rowwise `geluPerTokenHasVJPMat.backward` at the saved
-    pre-GELU activation `A` (GELU is elementwise, so flat and rowwise agree). -/
-lemma geluFlat_eq_backward {N D : Nat} (A : Mat N D) (dY : Mat N D) :
-    (geluHasVJP (N * D)).backward (Mat.flatten A) (Mat.flatten dY)
-      = Mat.flatten ((geluPerTokenHasVJPMat N D).backward A dY) := by
-  unfold geluPerTokenHasVJPMat rowwiseHasVJPMat geluHasVJP Mat.flatten
-  rfl
-
 -- ════════════════════════════════════════════════════════════════
 -- § Stage 1 — MLP sublayer backward graph
 -- ════════════════════════════════════════════════════════════════

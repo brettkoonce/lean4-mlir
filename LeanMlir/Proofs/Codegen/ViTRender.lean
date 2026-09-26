@@ -65,9 +65,6 @@ def vitBDims : VitDims := ⟨196, 12, 64, 3072, by decide⟩
 #guard vitTiDims.d == 192
 #guard vitSDims.d == 384
 
-private def zVv {n : Nat} : Vec n := fun _ => 0
-private def zMm {a b : Nat} : Mat a b := fun _ _ => 0
-private def zKk {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 
 -- ════════════════════════════════════════════════════════════════
 -- ── ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`, handoff §0.2 ▶3) ───────────────────────
@@ -135,9 +132,9 @@ def vitDropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd (List.range vi
 /-- One **vector-LN** site (`lnRow(1,0) → rowScale γ → rowBias β`) on the `[197,192]` token matrix,
     with explicit γ/β param names. Returns the LN-output SSA. -/
 private def vlnFwd (bs : Nat) (gName btName xin : String) : StateM Proofs.StableHLO.EmitS (String × String) := do
-  let (c1, a) ← pretty bs (.lnRowF "%one" "%zero" vEPS 0 1 0 (.operand xin (zVv : Vec (197*192))))
-  let (c2, b) ← pretty bs (.rowScaleF gName (zVv : Vec 192) (.operand a (zVv : Vec (197*192))))
-  let (c3, o) ← pretty bs (.rowBiasF btName (zVv : Vec 192) (.operand b (zVv : Vec (197*192))))
+  let (c1, a) ← pretty bs (.lnRowF "%one" "%zero" vEPS 0 1 0 (.operand xin (0 : Vec (197*192))))
+  let (c2, b) ← pretty bs (.rowScaleF gName (0 : Vec 192) (.operand a (0 : Vec (197*192))))
+  let (c3, o) ← pretty bs (.rowBiasF btName (0 : Vec 192) (.operand b (0 : Vec (197*192))))
   pure (c1 ++ c2 ++ c3, o)
 
 /-- The forward SSA names a block's backward + param-SGD reference (the ConvNeXt-`FNames` analogue).
@@ -163,9 +160,9 @@ structure BSaves where
     summed) → out dense → +res → LN2 → fc1 → GELU → fc2 → +res. Returns (code, the saved SSA names). -/
 private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.EmitS (String × BSaves) := do
   let (c1, ln1) ← vlnFwd bs s!"%{pfx}g1" s!"%{pfx}bt1" xin
-  let (cq, q) ← pretty bs (.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" (zMm : Mat 192 192) zVv (.operand ln1 (zVv : Vec (197*192))))
-  let (ck, k) ← pretty bs (.denseRowF s!"%{pfx}Wk" s!"%{pfx}bk" (zMm : Mat 192 192) zVv (.operand ln1 (zVv : Vec (197*192))))
-  let (cv, v) ← pretty bs (.denseRowF s!"%{pfx}Wv" s!"%{pfx}bv" (zMm : Mat 192 192) zVv (.operand ln1 (zVv : Vec (197*192))))
+  let (cq, q) ← pretty bs (.denseRowF s!"%{pfx}Wq" s!"%{pfx}bq" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
+  let (ck, k) ← pretty bs (.denseRowF s!"%{pfx}Wk" s!"%{pfx}bk" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
+  let (cv, v) ← pretty bs (.denseRowF s!"%{pfx}Wv" s!"%{pfx}bv" (0 : Mat 192 192) 0 (.operand ln1 (0 : Vec (197*192))))
   -- per-head SDPA, accumulate the padded heads with addV
   let mut code := c1 ++ cq ++ ck ++ cv
   let mut acc : String := ""
@@ -173,29 +170,29 @@ private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.Em
   let mut scs : Array String := #[]; let mut sms : Array String := #[]
   for hh in [0:3] do
     let h : Fin 3 := ⟨hh % 3, by omega⟩
-    let (cqs, qs) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand q (zVv : Vec (197*(3*64)))))
-    let (cks, ks) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand k (zVv : Vec (197*(3*64)))))
-    let (cvs, vs) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand v (zVv : Vec (197*(3*64)))))
-    let (ckt, kt) ← pretty bs (.transposeF (m := 197) (n := 64) (.operand ks (zVv : Vec (197*64))))
-    let (cmm, qk) ← pretty bs (.matmulF (m := 197) (k := 64) (n := 197) (.operand qs (zVv : Vec (197*64))) (.operand kt (zVv : Vec (64*197))))
-    let (csc, sc) ← pretty bs (.scaleF vSCALE 0 (.operand qk (zVv : Vec (197*197))))
-    let (csm, sm) ← pretty bs (.softmaxRowF (m := 197) (n := 197) (.operand sc (zVv : Vec (197*197))))
-    let (cpv, pv) ← pretty bs (.matmulF (m := 197) (k := 197) (n := 64) (.operand sm (zVv : Vec (197*197))) (.operand vs (zVv : Vec (197*64))))
-    let (cpd, pd) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand pv (zVv : Vec (197*64))))
+    let (cqs, qs) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand q (0 : Vec (197*(3*64)))))
+    let (cks, ks) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand k (0 : Vec (197*(3*64)))))
+    let (cvs, vs) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand v (0 : Vec (197*(3*64)))))
+    let (ckt, kt) ← pretty bs (.transposeF (m := 197) (n := 64) (.operand ks (0 : Vec (197*64))))
+    let (cmm, qk) ← pretty bs (.matmulF (m := 197) (k := 64) (n := 197) (.operand qs (0 : Vec (197*64))) (.operand kt (0 : Vec (64*197))))
+    let (csc, sc) ← pretty bs (.scaleF vSCALE 0 (.operand qk (0 : Vec (197*197))))
+    let (csm, sm) ← pretty bs (.softmaxRowF (m := 197) (n := 197) (.operand sc (0 : Vec (197*197))))
+    let (cpv, pv) ← pretty bs (.matmulF (m := 197) (k := 197) (n := 64) (.operand sm (0 : Vec (197*197))) (.operand vs (0 : Vec (197*64))))
+    let (cpd, pd) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand pv (0 : Vec (197*64))))
     code := code ++ cqs ++ cks ++ cvs ++ ckt ++ cmm ++ csc ++ csm ++ cpv ++ cpd
     qss := qss.push qs; kss := kss.push ks; vss := vss.push vs; scs := scs.push sc; sms := sms.push sm
     if hh == 0 then
       acc := pd
     else
-      let (cad, s) ← pretty bs (.addV (.operand acc (zVv : Vec (197*192))) (.operand pd (zVv : Vec (197*192))))
+      let (cad, s) ← pretty bs (.addV (.operand acc (0 : Vec (197*192))) (.operand pd (0 : Vec (197*192))))
       code := code ++ cad; acc := s
-  let (co, o) ← pretty bs (.denseRowF s!"%{pfx}Wo" s!"%{pfx}bo" (zMm : Mat 192 192) zVv (.operand acc (zVv : Vec (197*192))))
-  let (ch, hres) ← pretty bs (.addV (.operand xin (zVv : Vec (197*192))) (.operand o (zVv : Vec (197*192))))
+  let (co, o) ← pretty bs (.denseRowF s!"%{pfx}Wo" s!"%{pfx}bo" (0 : Mat 192 192) 0 (.operand acc (0 : Vec (197*192))))
+  let (ch, hres) ← pretty bs (.addV (.operand xin (0 : Vec (197*192))) (.operand o (0 : Vec (197*192))))
   let (c2, ln2) ← vlnFwd bs s!"%{pfx}g2" s!"%{pfx}bt2" hres
-  let (cf1, f1) ← pretty bs (.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" (zMm : Mat 192 768) zVv (.operand ln2 (zVv : Vec (197*192))))
-  let (cg, g) ← pretty bs (.geluF (.operand f1 (zVv : Vec (197*768))))
-  let (cf2, f2) ← pretty bs (.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" (zMm : Mat 768 192) zVv (.operand g (zVv : Vec (197*768))))
-  let (cr, bout) ← pretty bs (.addV (.operand hres (zVv : Vec (197*192))) (.operand f2 (zVv : Vec (197*192))))
+  let (cf1, f1) ← pretty bs (.denseRowF s!"%{pfx}Wfc1" s!"%{pfx}bfc1" (0 : Mat 192 768) 0 (.operand ln2 (0 : Vec (197*192))))
+  let (cg, g) ← pretty bs (.geluF (.operand f1 (0 : Vec (197*768))))
+  let (cf2, f2) ← pretty bs (.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" (0 : Mat 768 192) 0 (.operand g (0 : Vec (197*768))))
+  let (cr, bout) ← pretty bs (.addV (.operand hres (0 : Vec (197*192))) (.operand f2 (0 : Vec (197*192))))
   pure (code ++ co ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cr,
     { xin, ln1, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
 
@@ -211,7 +208,7 @@ structure FwdSaves where
 /-- The depth-12 ViT-Tiny **forward**, node-by-node. Returns (body, saves). -/
 private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Proofs.StableHLO.EmitS (String × FwdSaves) := do
   let (ce, embed) ← pretty bs (.patchEmbedF "%wConv" "%bConv" "%cls" "%pos"
-    (zKk : Kernel4 192 3 16 16) zVv zVv (zMm : Mat 197 192) (.operand "%x" (zVv : Vec (3*224*224))))
+    (0 : Kernel4 192 3 16 16) 0 0 (0 : Mat 197 192) (.operand "%x" (0 : Vec (3*224*224))))
   let mut code := ce
   let mut cur := embed
   let mut blocks : Array BSaves := #[]
@@ -219,8 +216,8 @@ private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Proofs.StableHLO.EmitS
     let (cb, sv) ← vBlockFwd bs s!"b{i}_" cur
     code := code ++ cb; cur := sv.bout; blocks := blocks.push sv
   let (cf, fl) ← vlnFwd bs "%gF" "%btF" cur
-  let (cs, sl) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand fl (zVv : Vec (197*192))))
-  let (cl, logits) ← pretty bs (denseF "%Wc" "%bc" (zMm : Mat 192 nClasses) zVv (.operand sl (zVv : Vec 192)))
+  let (cs, sl) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand fl (0 : Vec (197*192))))
+  let (cl, logits) ← pretty bs (denseF "%Wc" "%bc" (0 : Mat 192 nClasses) 0 (.operand sl (0 : Vec 192)))
   pure (code ++ cf ++ cs ++ cl, { blocks, flnIn := cur, clsTok := sl, logits })
 
 /-- Per-block func-arg signature (committed forward order). -/
@@ -263,16 +260,16 @@ def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
     one backward traversal, two endings, which is what keeps `vit_train_step.mlir` byte-identical
     while `vit_adam_train_step.mlir` gets its gradients. -/
 private def rdB (bs : Nat) (adam : Bool) (c : Nat) (bN lrS dy : String) : StateM Proofs.StableHLO.EmitS (String × String) :=
-  if adam then pretty bs (.rowDenseBiasGrad (N := 197) (c := c) (.operand dy (zVv : Vec (197*c))))
-  else pretty bs (.rowDenseBiasSgd (N := 197) (c := c) bN lrS (zVv : Vec c) 0
-                    (.operand dy (zVv : Vec (197*c))))
+  if adam then pretty bs (.rowDenseBiasGrad (N := 197) (c := c) (.operand dy (0 : Vec (197*c))))
+  else pretty bs (.rowDenseBiasSgd (N := 197) (c := c) bN lrS (0 : Vec c) 0
+                    (.operand dy (0 : Vec (197*c))))
 
 /-- Rowwise-dense **weight** tail, same dispatch. -/
 private def rdW (bs : Nat) (adam : Bool) (a c : Nat) (xSSA wN lrS dy : String) : StateM Proofs.StableHLO.EmitS (String × String) :=
   if adam then pretty bs (.rowDenseWeightGrad (N := 197) (a := a) (c := c) xSSA
-                            (zVv : Vec (197*a)) (.operand dy (zVv : Vec (197*c))))
+                            (0 : Vec (197*a)) (.operand dy (0 : Vec (197*c))))
   else pretty bs (.rowDenseWeightSgd (N := 197) (a := a) (c := c) xSSA wN lrS
-                    (zVv : Vec (197*a)) (zMm : Mat a c) 0 (.operand dy (zVv : Vec (197*c))))
+                    (0 : Vec (197*a)) (0 : Mat a c) 0 (.operand dy (0 : Vec (197*c))))
 
 /-- One **vector-LN backward** site (the reverse of `vlnFwd`): given the LN-output cotangent `dyOut`
     on `[197,192]` and the saved LN INPUT `xin`, emit (a) the β tail (`rowDenseBias{Sgd,Grad}`,
@@ -285,14 +282,14 @@ private def vlnBack (bs : Nat) (gName btName xin dyOut lrStr : String) (adam : B
   let (cb, nb) ← rdB bs adam 192 btName lrStr dyOut
   let (cg, ng) ← if adam then
       pretty bs (.veclnGammaGrad (N := 197) (D := 192) xin vEPS 0
-                    (zVv : Vec (197*192)) (.operand dyOut (zVv : Vec (197*192))))
+                    (0 : Vec (197*192)) (.operand dyOut (0 : Vec (197*192))))
     else
       pretty bs (.veclnGammaSgd (N := 197) (D := 192) gName xin vEPS lrStr 0
-                    (zVv : Vec (197*192)) (zVv : Vec 192) 0 (.operand dyOut (zVv : Vec (197*192))))
-  let (cs, da) ← pretty bs (.rowScaleF (m := 197) (n := 192) gName (zVv : Vec 192)
-                              (.operand dyOut (zVv : Vec (197*192))))
-  let (cn, dx) ← pretty bs (.lnRowBack (m := 197) (n := 192) "%one" xin vEPS 0 1 (zVv : Vec (197*192))
-                              (.operand da (zVv : Vec (197*192))))
+                    (0 : Vec (197*192)) (0 : Vec 192) 0 (.operand dyOut (0 : Vec (197*192))))
+  let (cs, da) ← pretty bs (.rowScaleF (m := 197) (n := 192) gName (0 : Vec 192)
+                              (.operand dyOut (0 : Vec (197*192))))
+  let (cn, dx) ← pretty bs (.lnRowBack (m := 197) (n := 192) "%one" xin vEPS 0 1 (0 : Vec (197*192))
+                              (.operand da (0 : Vec (197*192))))
   pure (cb ++ cg ++ cs ++ cn, dx, ng, nb)
 
 /-- One **transformer block backward** (the reverse of `vBlockFwd`), prefix `pfx`, with the forward
@@ -306,26 +303,26 @@ private def vBlockBack (bs : Nat) (pfx : String) (sv : BSaves) (dyOut lrStr : St
   let p := pfx
   -- ─ MLP sublayer back: bout = addV(hres, f2); df2 = dyOut, dhres ⊇ dyOut ─
   -- fc2: f2 = denseRow(Wfc2,bfc2)(g)  [g:197*768 → f2:197*192]
-  let (c1, dg) ← pretty bs (.denseRowBack (N := 197) (a := 768) (c := 192) s!"%{p}Wfc2" (zMm : Mat 768 192)
-                              (.operand dyOut (zVv : Vec (197*192))))
+  let (c1, dg) ← pretty bs (.denseRowBack (N := 197) (a := 768) (c := 192) s!"%{p}Wfc2" (0 : Mat 768 192)
+                              (.operand dyOut (0 : Vec (197*192))))
   let (c2, nWfc2) ← rdW bs adam 768 192 sv.g s!"%{p}Wfc2" lrStr dyOut
   let (c3, nbfc2) ← rdB bs adam 192 s!"%{p}bfc2" lrStr dyOut
   -- gelu: g = gelu(f1)  [197*768]
-  let (c4, df1) ← pretty bs (.geluBack (n := 197*768) sv.f1 (zVv : Vec (197*768))
-                              (.operand dg (zVv : Vec (197*768))))
+  let (c4, df1) ← pretty bs (.geluBack (n := 197*768) sv.f1 (0 : Vec (197*768))
+                              (.operand dg (0 : Vec (197*768))))
   -- fc1: f1 = denseRow(Wfc1,bfc1)(ln2)  [ln2:197*192 → f1:197*768]
-  let (c5, dln2) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 768) s!"%{p}Wfc1" (zMm : Mat 192 768)
-                              (.operand df1 (zVv : Vec (197*768))))
+  let (c5, dln2) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 768) s!"%{p}Wfc1" (0 : Mat 192 768)
+                              (.operand df1 (0 : Vec (197*768))))
   let (c6, nWfc1) ← rdW bs adam 192 768 sv.ln2 s!"%{p}Wfc1" lrStr df1
   let (c7, nbfc1) ← rdB bs adam 768 s!"%{p}bfc1" lrStr df1
   -- LN2 back (input = hres)
   let (c8, dhresLn2, ng2, nbt2) ← vlnBack bs s!"%{p}g2" s!"%{p}bt2" sv.hres dln2 lrStr adam
   -- dhres = dyOut (res₂ skip) + dhresLn2 (LN2 path)
-  let (c9, dhres) ← pretty bs (.addV (.operand dyOut (zVv : Vec (197*192))) (.operand dhresLn2 (zVv : Vec (197*192))))
+  let (c9, dhres) ← pretty bs (.addV (.operand dyOut (0 : Vec (197*192))) (.operand dhresLn2 (0 : Vec (197*192))))
   -- ─ Attention sublayer back: hres = addV(xin, o); do = dhres, dxin ⊇ dhres ─
   -- out-dense: o = denseRow(Wo,bo)(acc)  [acc=att:197*192 → o:197*192]
-  let (c10, dacc) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wo" (zMm : Mat 192 192)
-                              (.operand dhres (zVv : Vec (197*192))))
+  let (c10, dacc) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wo" (0 : Mat 192 192)
+                              (.operand dhres (0 : Vec (197*192))))
   let (c11, nWo) ← rdW bs adam 192 192 sv.att s!"%{p}Wo" lrStr dhres
   let (c12, nbo) ← rdB bs adam 192 s!"%{p}bo" lrStr dhres
   -- per-head SDPA backward; accumulate dq/dk/dv over the 3 heads
@@ -334,51 +331,51 @@ private def vBlockBack (bs : Nat) (pfx : String) (sv : BSaves) (dyOut lrStr : St
   for hh in [0:3] do
     let h : Fin 3 := ⟨hh % 3, by omega⟩
     -- pd[h] = headPad(h)(pv[h]); dpv = headSlice(h)(dacc)
-    let (ca, dpv) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand dacc (zVv : Vec (197*(3*64)))))
+    let (ca, dpv) ← pretty bs (.headSliceF (N := 197) (heads := 3) (d := 64) h (.operand dacc (0 : Vec (197*(3*64)))))
     -- pv[h] = matmul(sm[h][197,197], vs[h][197,64]) → [197,64]
-    let (cb, vsT) ← pretty bs (.transposeF (m := 197) (n := 64) (.operand (sv.vss[hh]!) (zVv : Vec (197*64))))
-    let (cc, dsm) ← pretty bs (.matmulF (m := 197) (k := 64) (n := 197) (.operand dpv (zVv : Vec (197*64))) (.operand vsT (zVv : Vec (64*197))))
-    let (cd, smT) ← pretty bs (.transposeF (m := 197) (n := 197) (.operand (sv.sms[hh]!) (zVv : Vec (197*197))))
-    let (ce, dvs) ← pretty bs (.matmulF (m := 197) (k := 197) (n := 64) (.operand smT (zVv : Vec (197*197))) (.operand dpv (zVv : Vec (197*64))))
+    let (cb, vsT) ← pretty bs (.transposeF (m := 197) (n := 64) (.operand (sv.vss[hh]!) (0 : Vec (197*64))))
+    let (cc, dsm) ← pretty bs (.matmulF (m := 197) (k := 64) (n := 197) (.operand dpv (0 : Vec (197*64))) (.operand vsT (0 : Vec (64*197))))
+    let (cd, smT) ← pretty bs (.transposeF (m := 197) (n := 197) (.operand (sv.sms[hh]!) (0 : Vec (197*197))))
+    let (ce, dvs) ← pretty bs (.matmulF (m := 197) (k := 197) (n := 64) (.operand smT (0 : Vec (197*197))) (.operand dpv (0 : Vec (197*64))))
     -- sm[h] = softmaxRow(sc[h]); dsc = softmaxRowBack(sc[h])(dsm)
-    let (cf, dsc) ← pretty bs (.softmaxRowBack (m := 197) (n := 197) (sv.scs[hh]!) (zVv : Vec (197*197)) (.operand dsm (zVv : Vec (197*197))))
+    let (cf, dsc) ← pretty bs (.softmaxRowBack (m := 197) (n := 197) (sv.scs[hh]!) (0 : Vec (197*197)) (.operand dsm (0 : Vec (197*197))))
     -- sc[h] = scale(qk[h]); dqk = scale(dsc)
-    let (cg2, dqk) ← pretty bs (.scaleF vSCALE 0 (.operand dsc (zVv : Vec (197*197))))
+    let (cg2, dqk) ← pretty bs (.scaleF vSCALE 0 (.operand dsc (0 : Vec (197*197))))
     -- qk[h] = matmul(qs[h][197,64], kt[h][64,197]); dqs = dqk·ktᵀ = matmul(dqk[197,197], ks[h][197,64])
-    let (ch, dqs) ← pretty bs (.matmulF (m := 197) (k := 197) (n := 64) (.operand dqk (zVv : Vec (197*197))) (.operand (sv.kss[hh]!) (zVv : Vec (197*64))))
+    let (ch, dqs) ← pretty bs (.matmulF (m := 197) (k := 197) (n := 64) (.operand dqk (0 : Vec (197*197))) (.operand (sv.kss[hh]!) (0 : Vec (197*64))))
     -- dkt = qsᵀ·dqk = matmul(qsᵀ[64,197], dqk[197,197]) → [64,197]; dks = transpose(dkt) → [197,64]
-    let (ci, qsT) ← pretty bs (.transposeF (m := 197) (n := 64) (.operand (sv.qss[hh]!) (zVv : Vec (197*64))))
-    let (cj, dkt) ← pretty bs (.matmulF (m := 64) (k := 197) (n := 197) (.operand qsT (zVv : Vec (64*197))) (.operand dqk (zVv : Vec (197*197))))
-    let (ck, dks) ← pretty bs (.transposeF (m := 64) (n := 197) (.operand dkt (zVv : Vec (64*197))))
+    let (ci, qsT) ← pretty bs (.transposeF (m := 197) (n := 64) (.operand (sv.qss[hh]!) (0 : Vec (197*64))))
+    let (cj, dkt) ← pretty bs (.matmulF (m := 64) (k := 197) (n := 197) (.operand qsT (0 : Vec (64*197))) (.operand dqk (0 : Vec (197*197))))
+    let (ck, dks) ← pretty bs (.transposeF (m := 64) (n := 197) (.operand dkt (0 : Vec (64*197))))
     -- scatter each head's grad back into the [197,192] feature block
-    let (cl, dqH) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand dqs (zVv : Vec (197*64))))
-    let (cm, dkH) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand dks (zVv : Vec (197*64))))
-    let (cn, dvH) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand dvs (zVv : Vec (197*64))))
+    let (cl, dqH) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand dqs (0 : Vec (197*64))))
+    let (cm, dkH) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand dks (0 : Vec (197*64))))
+    let (cn, dvH) ← pretty bs (.headPadF (N := 197) (heads := 3) (d := 64) h (.operand dvs (0 : Vec (197*64))))
     code := code ++ ca ++ cb ++ cc ++ cd ++ ce ++ cf ++ cg2 ++ ch ++ ci ++ cj ++ ck ++ cl ++ cm ++ cn
     if hh == 0 then
       dqAcc := dqH; dkAcc := dkH; dvAcc := dvH
     else
-      let (cq, dqs2) ← pretty bs (.addV (.operand dqAcc (zVv : Vec (197*192))) (.operand dqH (zVv : Vec (197*192))))
-      let (cr, dks2) ← pretty bs (.addV (.operand dkAcc (zVv : Vec (197*192))) (.operand dkH (zVv : Vec (197*192))))
-      let (cs, dvs2) ← pretty bs (.addV (.operand dvAcc (zVv : Vec (197*192))) (.operand dvH (zVv : Vec (197*192))))
+      let (cq, dqs2) ← pretty bs (.addV (.operand dqAcc (0 : Vec (197*192))) (.operand dqH (0 : Vec (197*192))))
+      let (cr, dks2) ← pretty bs (.addV (.operand dkAcc (0 : Vec (197*192))) (.operand dkH (0 : Vec (197*192))))
+      let (cs, dvs2) ← pretty bs (.addV (.operand dvAcc (0 : Vec (197*192))) (.operand dvH (0 : Vec (197*192))))
       code := code ++ cq ++ cr ++ cs; dqAcc := dqs2; dkAcc := dks2; dvAcc := dvs2
   -- Q/K/V dense backward: q/k/v = denseRow(W*,b*)(ln1)  [ln1:197*192 → 197*192]
-  let (cq1, dln1q) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wq" (zMm : Mat 192 192) (.operand dqAcc (zVv : Vec (197*192))))
+  let (cq1, dln1q) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wq" (0 : Mat 192 192) (.operand dqAcc (0 : Vec (197*192))))
   let (cq2, nWq) ← rdW bs adam 192 192 sv.ln1 s!"%{p}Wq" lrStr dqAcc
   let (cq3, nbq) ← rdB bs adam 192 s!"%{p}bq" lrStr dqAcc
-  let (ck1, dln1k) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wk" (zMm : Mat 192 192) (.operand dkAcc (zVv : Vec (197*192))))
+  let (ck1, dln1k) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wk" (0 : Mat 192 192) (.operand dkAcc (0 : Vec (197*192))))
   let (ck2, nWk) ← rdW bs adam 192 192 sv.ln1 s!"%{p}Wk" lrStr dkAcc
   let (ck3, nbk) ← rdB bs adam 192 s!"%{p}bk" lrStr dkAcc
-  let (cv1, dln1v) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wv" (zMm : Mat 192 192) (.operand dvAcc (zVv : Vec (197*192))))
+  let (cv1, dln1v) ← pretty bs (.denseRowBack (N := 197) (a := 192) (c := 192) s!"%{p}Wv" (0 : Mat 192 192) (.operand dvAcc (0 : Vec (197*192))))
   let (cv2, nWv) ← rdW bs adam 192 192 sv.ln1 s!"%{p}Wv" lrStr dvAcc
   let (cv3, nbv) ← rdB bs adam 192 s!"%{p}bv" lrStr dvAcc
   -- dln1 = dln1q + dln1k + dln1v
-  let (cs1, dln1a) ← pretty bs (.addV (.operand dln1q (zVv : Vec (197*192))) (.operand dln1k (zVv : Vec (197*192))))
-  let (cs2, dln1) ← pretty bs (.addV (.operand dln1a (zVv : Vec (197*192))) (.operand dln1v (zVv : Vec (197*192))))
+  let (cs1, dln1a) ← pretty bs (.addV (.operand dln1q (0 : Vec (197*192))) (.operand dln1k (0 : Vec (197*192))))
+  let (cs2, dln1) ← pretty bs (.addV (.operand dln1a (0 : Vec (197*192))) (.operand dln1v (0 : Vec (197*192))))
   -- LN1 back (input = xin)
   let (cl1, dxinLn1, ng1, nbt1) ← vlnBack bs s!"%{p}g1" s!"%{p}bt1" sv.xin dln1 lrStr adam
   -- dxin = dhres (res₁ skip) + dxinLn1 (LN1 path)
-  let (cx, dxin) ← pretty bs (.addV (.operand dhres (zVv : Vec (197*192))) (.operand dxinLn1 (zVv : Vec (197*192))))
+  let (cx, dxin) ← pretty bs (.addV (.operand dhres (0 : Vec (197*192))) (.operand dxinLn1 (0 : Vec (197*192))))
   let names := [ng1, nbt1, nWq, nbq, nWk, nbk, nWv, nbv, nWo, nbo, ng2, nbt2, nWfc1, nbfc1, nWfc2, nbfc2]
   pure (code ++ cq1 ++ cq2 ++ cq3 ++ ck1 ++ ck2 ++ ck3 ++ cv1 ++ cv2 ++ cv3 ++ cs1 ++ cs2 ++ cl1 ++ cx, dxin, names)
 
@@ -402,8 +399,8 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     -- `.sub`, so its SSA can also feed the report-only `%loss`; `.operand` is a leaf that emits
     -- nothing, so the fresh-name sequence — and therefore the text — is unchanged (checked: the
     -- SGD artifact stays byte-identical).
-    let (cSm, nSm) ← pretty bs (.softmaxDiv (.expe (.operand sv.logits (zVv : Vec nClasses))))
-    let (cD0, nD0) ← pretty bs (.sub (.operand nSm (zVv : Vec nClasses)) (.operand "%onehot" (zVv : Vec nClasses)))
+    let (cSm, nSm) ← pretty bs (.softmaxDiv (.expe (.operand sv.logits (0 : Vec nClasses))))
+    let (cD0, nD0) ← pretty bs (.sub (.operand nSm (0 : Vec nClasses)) (.operand "%onehot" (0 : Vec nClasses)))
     -- `none` → plain CE with the batch mean folded into `lrStr` (the SGD recipe, unchanged).
     -- `some (α, −α/K, B)` → the LABEL-SMOOTHED cotangent with an explicit ÷B, which is what the
     -- AdamW recipe uses: dy = ((softmax − onehot) + α·onehot − α/K) / B. `shiftB`/`divConstB` at
@@ -414,24 +411,24 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     let (cSmooth, nDy) ← match smooth with
       | none => pure ("", nD0)
       | some (aStr, negAK, bStr) => do
-          let (c1, n1) ← pretty bs (.scaleF (n := nClasses) aStr 0 (.operand "%onehot" (zVv : Vec nClasses)))
-          let (c2, n2) ← pretty bs (.addV (.operand nD0 (zVv : Vec nClasses)) (.operand n1 (zVv : Vec nClasses)))
-          let (c3, n3) ← pretty bs (.shiftB (N := 1) (n := nClasses) negAK 0 (.operand n2 (zVv : Vec (1 * nClasses))))
-          let (c4, n4) ← pretty bs (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (zVv : Vec (1 * nClasses))))
+          let (c1, n1) ← pretty bs (.scaleF (n := nClasses) aStr 0 (.operand "%onehot" (0 : Vec nClasses)))
+          let (c2, n2) ← pretty bs (.addV (.operand nD0 (0 : Vec nClasses)) (.operand n1 (0 : Vec nClasses)))
+          let (c3, n3) ← pretty bs (.shiftB (N := 1) (n := nClasses) negAK 0 (.operand n2 (0 : Vec (1 * nClasses))))
+          let (c4, n4) ← pretty bs (.divConstB (N := 1) (n := nClasses) bStr 0 (.operand n3 (0 : Vec (1 * nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     let cDy := cSm ++ cD0 ++ cSmooth
     -- head: logits = denseF(Wc,bc)(clsTok)  [clsTok:192 → logits:nClasses]
-    let (cDc, dcls) ← pretty bs (.dotOut (m := 192) (n := nClasses) "%Wc" (zMm : Mat 192 nClasses) (.operand nDy (zVv : Vec nClasses)))
+    let (cDc, dcls) ← pretty bs (.dotOut (m := 192) (n := nClasses) "%Wc" (0 : Mat 192 nClasses) (.operand nDy (0 : Vec nClasses)))
     let (cWc, nWc) ← if adam then
-        pretty bs (.weightGrad sv.clsTok (zVv : Vec 192) (.operand nDy (zVv : Vec nClasses)))
+        pretty bs (.weightGrad sv.clsTok (0 : Vec 192) (.operand nDy (0 : Vec nClasses)))
       else
-        pretty bs (.weightSgd sv.clsTok "%Wc" lrStr (zVv : Vec 192) (zMm : Mat 192 nClasses) 0 (.operand nDy (zVv : Vec nClasses)))
+        pretty bs (.weightSgd sv.clsTok "%Wc" lrStr (0 : Vec 192) (0 : Mat 192 nClasses) 0 (.operand nDy (0 : Vec nClasses)))
     let (cbc, nbc) ← if adam then
-        pretty bs (.biasGrad (.operand nDy (zVv : Vec nClasses)))
+        pretty bs (.biasGrad (.operand nDy (0 : Vec nClasses)))
       else
-        pretty bs (.biasSgd "%bc" lrStr (zVv : Vec nClasses) 0 (.operand nDy (zVv : Vec nClasses)))
+        pretty bs (.biasSgd "%bc" lrStr (0 : Vec nClasses) 0 (.operand nDy (0 : Vec nClasses)))
     -- scatter the CLS-token cotangent back into the final-LN output (row 0), zero elsewhere
-    let (cPad, dfln) ← pretty bs (.clsPadF (N := 196) (D := 192) (.operand dcls (zVv : Vec 192)))
+    let (cPad, dfln) ← pretty bs (.clsPadF (N := 196) (D := 192) (.operand dcls (0 : Vec 192)))
     -- final LN back (input = flnIn = last block output)
     let (cFln, dflnIn, ngF, nbtF) ← vlnBack bs "%gF" "%btF" sv.flnIn dfln lrStr adam
     -- 12 blocks reversed; thread the cotangent from the final-LN input down to the embed
@@ -446,27 +443,27 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
     -- patch-embed params: wConv, bConv, cls (clsSlice→denseBias), pos
     let (cwC, nwConv) ← if adam then
         pretty bs (.patchEmbedWeightGrad (ic := 3) (H := 224) (W := 224) (P := 16) (N := 196) (D := 192)
-                      "%ximg" (zVv : Vec (3*224*224)) (.operand dcur (zVv : Vec (197*192))))
+                      "%ximg" (0 : Vec (3*224*224)) (.operand dcur (0 : Vec (197*192))))
       else
         pretty bs (.patchEmbedWeightSgd (ic := 3) (H := 224) (W := 224) (P := 16) (N := 196) (D := 192)
-                      "%wConv" "%ximg" lrStr (zVv : Vec (3*224*224)) (zKk : Kernel4 192 3 16 16) 0
-                      (.operand dcur (zVv : Vec (197*192))))
+                      "%wConv" "%ximg" lrStr (0 : Vec (3*224*224)) (0 : Kernel4 192 3 16 16) 0
+                      (.operand dcur (0 : Vec (197*192))))
     let (cbC, nbConv) ← if adam then
-        pretty bs (.patchEmbedBiasGrad (N := 196) (c := 192) (.operand dcur (zVv : Vec (197*192))))
+        pretty bs (.patchEmbedBiasGrad (N := 196) (c := 192) (.operand dcur (0 : Vec (197*192))))
       else
-        pretty bs (.patchEmbedBiasSgd (N := 196) (c := 192) "%bConv" lrStr (zVv : Vec 192) 0
-                      (.operand dcur (zVv : Vec (197*192))))
-    let (cClSl, dclsRow) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand dcur (zVv : Vec (197*192))))
+        pretty bs (.patchEmbedBiasSgd (N := 196) (c := 192) "%bConv" lrStr (0 : Vec 192) 0
+                      (.operand dcur (0 : Vec (197*192))))
+    let (cClSl, dclsRow) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand dcur (0 : Vec (197*192))))
     let (cCl, ncls) ← if adam then
-        pretty bs (.denseBiasGradB (N := 1) (c := 192) (.operand dclsRow (zVv : Vec 192)))
+        pretty bs (.denseBiasGradB (N := 1) (c := 192) (.operand dclsRow (0 : Vec 192)))
       else
-        pretty bs (.denseBiasSgdB (N := 1) (c := 192) "%cls" lrStr (zVv : Vec 192) 0
-                      (.operand dclsRow (zVv : Vec 192)))
+        pretty bs (.denseBiasSgdB (N := 1) (c := 192) "%cls" lrStr (0 : Vec 192) 0
+                      (.operand dclsRow (0 : Vec 192)))
     let (cPo, npos) ← if adam then
-        pretty bs (.posEmbedGrad (N := 196) (D := 192) (.operand dcur (zVv : Vec (197*192))))
+        pretty bs (.posEmbedGrad (N := 196) (D := 192) (.operand dcur (0 : Vec (197*192))))
       else
-        pretty bs (.posEmbedSgd (N := 196) (D := 192) "%pos" lrStr (zMm : Mat 197 192) 0
-                      (.operand dcur (zVv : Vec (197*192))))
+        pretty bs (.posEmbedSgd (N := 196) (D := 192) "%pos" lrStr (0 : Mat 197 192) 0
+                      (.operand dcur (0 : Vec (197*192))))
     -- 200 params in func-arg order. `blkNames` was pushed in reverse build order (j=0 → block 11,
     -- …, j=11 → block 0), so `blkNames[vDEPTH-1-i]` = block i's 16 SSAs.
     let blkOutOrdered := (List.range vDEPTH).flatMap (fun i => blkNames[vDEPTH - 1 - i]!)
@@ -650,13 +647,7 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
     changing them is a separate call with its own blast radius (the DP peer, the residency-gate
     row). Recorded as owed in `recipe_gaps.md` rather than fixed in passing. -/
 private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
-  (if wdExclude then
-    -- The no-decay operand. Declared ONLY when the variant is on, so every committed artifact
-    -- re-renders byte-identically at the default — gate 1 in its strong form, for free.
-    "    // ── timm no_weight_decay (wdExcludeNormBias): 126 of 200 params take %wdz, not %wd ──\n" ++
-    "    %wdz = stablehlo.constant dense<0.0> : tensor<f32>\n"
-   else "") ++
-  adamWConsts wdStr
+  wdzConst wdExclude "126 of 200 params" ++ adamWConsts wdStr
 
 /-- **ViT-Tiny depth-12 AdamW train step, rendered from the verified AST.** The certified peer of
     the hand-written `ViTRender.vitTrainStepModuleAdamSched` that `vit-verified-adam` has been

@@ -44,10 +44,6 @@ is unaffected, since `skel` never sees the index. -/
 private def reassocB {N c h : Nat} (e : SHlo (N*(c*h*h))) : SHlo (N*(c*(h*h))) :=
   castIdx (la_assoc N c h h) e
 
-private def zVB {n : Nat} : Vec n := fun _ => 0
-private def zKB {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
-private def zDB {c kh kw : Nat} : DepthwiseKernel c kh kw := fun _ _ _ => 0
-private def zMB {a b : Nat} : Mat a b := fun _ _ => 0
 
 /- **The per-replica batch — a PARAMETER now, not a private constant** (2026-09-17).
 
@@ -132,16 +128,16 @@ private def bBase  : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[128, 256
 private def lnFwdSiteB (bB : Nat) (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
-                                  (reassocB (.operand xin (zVB : Vec (bB*(c*h*h))))))
+                                  (reassocB (.operand xin (0 : Vec (bB*(c*h*h))))))
     let (k2, n)  ← pretty bB (.batchOp (N := bB)
                                   (.lnRow (m := h*h) (n := c) "%one" "%zero" bEPS 0 1 0)
-                                  (.operand t (zVB : Vec (bB*(h*h*c)))))
-    let (k3, sc) ← pretty bB (.batchOp (N := bB) (.rowScale (m := h*h) (n := c) gN (zVB : Vec c))
-                                  (.operand n (zVB : Vec (bB*(h*h*c)))))
-    let (k4, bi) ← pretty bB (.batchOp (N := bB) (.rowBias (m := h*h) (n := c) btN (zVB : Vec c))
-                                  (.operand sc (zVB : Vec (bB*(h*h*c)))))
+                                  (.operand t (0 : Vec (bB*(h*h*c)))))
+    let (k3, sc) ← pretty bB (.batchOp (N := bB) (.rowScale (m := h*h) (n := c) gN (0 : Vec c))
+                                  (.operand n (0 : Vec (bB*(h*h*c)))))
+    let (k4, bi) ← pretty bB (.batchOp (N := bB) (.rowBias (m := h*h) (n := c) btN (0 : Vec c))
+                                  (.operand sc (0 : Vec (bB*(h*h*c)))))
     let (k5, o)  ← pretty bB (.batchOp (N := bB) (.transpose (m := h*h) (n := c))
-                                  (.operand bi (zVB : Vec (bB*(h*h*c)))))
+                                  (.operand bi (0 : Vec (bB*(h*h*c)))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
 /-- **The HEAD LN, batched-index peer** — `lnFwdSiteB` with the transposes deleted, at `m = 1`:
@@ -152,20 +148,20 @@ private def headLnFwdSiteB (bB : Nat) (gN btN xin : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, n)  ← pretty bB (.batchOp (N := bB)
                                 (.lnRow (m := 1) (n := d) "%one" "%zero" bEPS 0 1 0)
-                                (.operand xin (zVB : Vec (bB*(1*d)))))
-    let (k2, sc) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (zVB : Vec d))
-                                (.operand n (zVB : Vec (bB*(1*d)))))
-    let (k3, o)  ← pretty bB (.batchOp (N := bB) (.rowBias (m := 1) (n := d) btN (zVB : Vec d))
-                                (.operand sc (zVB : Vec (bB*(1*d)))))
+                                (.operand xin (0 : Vec (bB*(1*d)))))
+    let (k2, sc) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (0 : Vec d))
+                                (.operand n (0 : Vec (bB*(1*d)))))
+    let (k3, o)  ← pretty bB (.batchOp (N := bB) (.rowBias (m := 1) (n := d) btN (0 : Vec d))
+                                (.operand sc (0 : Vec (bB*(1*d)))))
     pure (k1 ++ k2 ++ k3, o)
 
 /-- The head LN's **input-VJP**, batched peer. -/
 private def headLnBackSiteB (bB : Nat) (gN xName cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
-    let (k1, da) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (zVB : Vec d))
-                                 (.operand cot (zVB : Vec (bB*(1*d)))))
-    let (k2, o)  ← pretty bB (.lnRowBackB (N := bB) (m := 1) (n := d) "%one" xName bEPS 0 1 zVB
-                                 (.operand da (zVB : Vec (bB*(1*d)))))
+    let (k1, da) ← pretty bB (.batchOp (N := bB) (.rowScale (m := 1) (n := d) gN (0 : Vec d))
+                                 (.operand cot (0 : Vec (bB*(1*d)))))
+    let (k2, o)  ← pretty bB (.lnRowBackB (N := bB) (m := 1) (n := d) "%one" xName bEPS 0 1 0
+                                 (.operand da (0 : Vec (bB*(1*d)))))
     pure (k1 ++ k2, o)
 
 /-- The head LN's **γ / β tails**, batched peers — both contract the batch. -/
@@ -176,12 +172,12 @@ private def headLnBackSiteB (bB : Nat) (gN xName cot : String) (d : Nat) :
 private def headLnGammaTailB (bB : Nat) (_gN xName cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) :=
   pretty bB (.veclnGammaGradB (N := bB) (R := 1) (D := d) xName bEPS 0
-                (zVB : Vec (bB*(1*d))) (.operand cot (zVB : Vec (bB*(1*d)))))
+                (0 : Vec (bB*(1*d))) (.operand cot (0 : Vec (bB*(1*d)))))
 
 private def headLnBetaTailB (bB : Nat) (cot : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) :=
   pretty bB (.rowDenseBiasGradB (N := bB) (R := 1) (c := d)
-                (.operand cot (zVB : Vec (bB*(1*d)))))
+                (.operand cot (0 : Vec (bB*(1*d)))))
 
 /-- One **ConvNeXt block** forward, batched: depthwise 7×7 → channel-LN → 1×1 expand → GELU →
     1×1 project → LayerScale → [drop] → `+ skip`. The residual add is `addVB`, the binary batched
@@ -205,28 +201,28 @@ private def fwdBlockB (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option
     StateM Proofs.StableHLO.EmitS (String × FNames) := do
   let (k1, d) ← pretty bB (.batchOp (N := bB)
       (.depthwiseAt bf16 (h := h) (w := h) zrnd s!"%{pfx}dW" s!"%{pfx}db"
-          (zDB : DepthwiseKernel c 7 7) zVB)
-      (.operand xin zVB))
+          (0 : DepthwiseKernel c 7 7) 0)
+      (.operand xin 0))
   let (k2, n) ← lnFwdSiteB bB s!"%{pfx}ng" s!"%{pfx}nbt" d c h
   -- ⚠ The block's 1×1s are `.conv` at `kH = kW = 1`, so they take `convBf16` — NOT a new matmul op.
   -- §10.3's guess that ConvNeXt's "large 1×1s are matmuls in disguise" needing new activation ×
   -- activation ops is wrong for THIS render; the only true matmul is the classifier head, which
   -- stays f32 like every other net's.
   let (k3, e') ← pretty bB (.batchOp (N := bB)
-      (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}eW" s!"%{pfx}eb" (zKB : Kernel4 e c 1 1) zVB)
-      (.operand n zVB))
+      (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}eW" s!"%{pfx}eb" (0 : Kernel4 e c 1 1) 0)
+      (.operand n 0))
   let (k4, g) ← pretty bB (.batchOp (N := bB) (.gelu (n := e*h*h))
-      (.operand e' (zVB : Vec (bB*(e*h*h)))))
+      (.operand e' (0 : Vec (bB*(e*h*h)))))
   let (k5, p) ← pretty bB (.batchOp (N := bB)
-      (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}pW" s!"%{pfx}pb" (zKB : Kernel4 c e 1 1) zVB)
-      (.operand g zVB))
+      (.convAt bf16 (h := h) (w := h) zrnd s!"%{pfx}pW" s!"%{pfx}pb" (0 : Kernel4 c e 1 1) 0)
+      (.operand g 0))
   let (k6, ls) ← pretty bB (.batchOp (N := bB)
-      (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (zVB : Vec c)) (.operand p zVB))
+      (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (0 : Vec c)) (.operand p 0))
   let (kD, br) ← match drop with
     | some i => pretty bB (.dropPathB (N := bB) (n := c*h*h) (dpName i) (fun _ => 0 : Vec bB)
-                             (.operand ls (zVB : Vec (bB*(c*h*h)))))
+                             (.operand ls (0 : Vec (bB*(c*h*h)))))
     | none   => pure ("", ls)
-  let (k7, bout) ← pretty bB (.addVB (.operand br (zVB : Vec (bB*(c*h*h)))) (.operand xin zVB))
+  let (k7, bout) ← pretty bB (.addVB (.operand br (0 : Vec (bB*(c*h*h)))) (.operand xin 0))
   pure (k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ kD ++ k7, ⟨xin, d, n, e', g, p, bout⟩)
 
 /-- One **downsample** forward, batched: channel-LN then 2×2/s2 conv. -/
@@ -237,8 +233,8 @@ private def fwdDownB (bB : Nat) (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool
   -- spellings give the same output size at every kernel, so only a forward tie separates them.
   let (k2, o) ← pretty bB (.batchOp (N := bB)
       (.convStridedAt bf16 (h := h2) (w := h2) zrnd s!"%{pfx}W" s!"%{pfx}b"
-          (zKB : Kernel4 co ci 2 2) zVB)
-      (.operand n zVB))
+          (0 : Kernel4 co ci 2 2) 0)
+      (.operand n 0))
   pure (k1 ++ k2, n, o)
 
 /-- **The full ConvNeXt-T `[3,3,9,3]` forward at the batched index.** Node for node the same chain
@@ -266,8 +262,8 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
   -- other forward conv uses; `BatchableOp.convStride4Bf16` carries the note.
   let (cS, stemC) ← pretty bB (.batchOp (N := bB)
       (.convStride4At bf16 (h := 8*f) (w := 8*f) zrnd "%psW" "%psb"
-          (zKB : Kernel4 (V.dims[0]!) 3 4 4) zVB)
-      (.operand "%x" (zVB : Vec (bB*(3*(2*(2*(8*f)))*(2*(2*(8*f))))))))
+          (0 : Kernel4 (V.dims[0]!) 3 4 4) 0)
+      (.operand "%x" (0 : Vec (bB*(3*(2*(2*(8*f)))*(2*(2*(8*f))))))))
   let (cSln, stem) ← lnFwdSiteB bB "%psng" "%psnbt" stemC V.dims[0]! (8*f)
   let mut fwd := cS ++ cSln
   let mut cur := stem
@@ -293,11 +289,11 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
       let (code, n, o) ← fwdDownB bB s!"d{si}" cur c V.dims[si+1]! (bSpats[si+1]! * f / 7) bf16
       fwd := fwd ++ code; downLn := downLn.push n; cur := o
   let (cG, gap) ← pretty bB (.batchOp (N := bB) (.gap (c := V.dims[3]!) (h := f) (w := f))
-      (.operand cur zVB))
+      (.operand cur 0))
   -- ⭐ head LN (2026-08-30, §7.1) — the per-example peer of `ConvNeXtRender`'s.
   let (cHn, hn) ← headLnFwdSiteB bB "%hng" "%hnbt" gap V.dims[3]!
   let (cLog, logits) ← pretty bB (.batchOp (N := bB)
-      (.dense "%Wd" "%bd" (zMB : Mat (V.dims[3]!) nClasses) zVB) (.operand hn zVB))
+      (.dense "%Wd" "%bd" (0 : Mat (V.dims[3]!) nClasses) 0) (.operand hn 0))
   pure { code := fwd ++ cG ++ cHn ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
 
@@ -354,34 +350,34 @@ cannot judge:
 private def lnBackSiteB (bB : Nat) (gN xName cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
-                                   (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
+                                   (reassocB (.operand xName (0 : Vec (bB*(c*h*h))))))
     let (k2, dT)  ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
-                                   (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
-    let (k3, da)  ← pretty bB (.batchOp (N := bB) (.rowScale (m := h*h) (n := c) gN (zVB : Vec c))
-                                   (.operand dT (zVB : Vec (bB*(h*h*c)))))
-    let (k4, dxT) ← pretty bB (.lnRowBackB (N := bB) (m := h*h) (n := c) "%one" xT bEPS 0 1 zVB
-                                   (.operand da (zVB : Vec (bB*(h*h*c)))))
+                                   (reassocB (.operand cot (0 : Vec (bB*(c*h*h))))))
+    let (k3, da)  ← pretty bB (.batchOp (N := bB) (.rowScale (m := h*h) (n := c) gN (0 : Vec c))
+                                   (.operand dT (0 : Vec (bB*(h*h*c)))))
+    let (k4, dxT) ← pretty bB (.lnRowBackB (N := bB) (m := h*h) (n := c) "%one" xT bEPS 0 1 0
+                                   (.operand da (0 : Vec (bB*(h*h*c)))))
     let (k5, o)   ← pretty bB (.batchOp (N := bB) (.transpose (m := h*h) (n := c))
-                                   (.operand dxT (zVB : Vec (bB*(h*h*c)))))
+                                   (.operand dxT (0 : Vec (bB*(h*h*c)))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
 /-- The **γ tail** for one LN site — the two-level `veclnGammaGradB`. -/
 private def lnGammaTailB (bB : Nat) (_gN xName cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
-                                  (reassocB (.operand xName (zVB : Vec (bB*(c*h*h))))))
+                                  (reassocB (.operand xName (0 : Vec (bB*(c*h*h))))))
     let (k2, dT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
-                                  (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
+                                  (reassocB (.operand cot (0 : Vec (bB*(c*h*h))))))
     let (k3, o) ← pretty bB (.veclnGammaGradB (N := bB) (R := h*h) (D := c) xT bEPS 0
-                                 (zVB : Vec (bB*(h*h*c))) (.operand dT (zVB : Vec (bB*(h*h*c)))))
+                                 (0 : Vec (bB*(h*h*c))) (.operand dT (0 : Vec (bB*(h*h*c)))))
     pure (k1 ++ k2 ++ k3, o)
 
 /-- The **β tail** — the two-level `rowDenseBiasGradB`, contracting batch and spatial rows. -/
 private def lnBetaTailB (bB : Nat) (cot : String) (c h : Nat) : StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, dT) ← pretty bB (.batchOp (N := bB) (.transpose (m := c) (n := h*h))
-                                  (reassocB (.operand cot (zVB : Vec (bB*(c*h*h))))))
+                                  (reassocB (.operand cot (0 : Vec (bB*(c*h*h))))))
     let (k2, o) ← pretty bB (.rowDenseBiasGradB (N := bB) (R := h*h) (c := c)
-                                 (.operand dT (zVB : Vec (bB*(h*h*c)))))
+                                 (.operand dT (0 : Vec (bB*(h*h*c)))))
     pure (k1 ++ k2, o)
 
 /-- One **ConvNeXt block** backward: the cotangent chain only, param tails separate (the
@@ -410,21 +406,21 @@ private def bwdBlockB (bB : Nat) (pfx dy : String) (b : FNames) (c e h : Nat) (d
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String × String) := do
   let (kD, dyd) ← match drop with
     | some i => pretty bB (.dropPathB (N := bB) (n := c*h*h) (dpName i) (fun _ => 0 : Vec bB)
-                             (.operand dy (zVB : Vec (bB*(c*h*h)))))
+                             (.operand dy (0 : Vec (bB*(c*h*h)))))
     | none   => pure ("", dy)
   let (k1, cot_p) ← pretty bB (.batchOp (N := bB)
-      (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (zVB : Vec c)) (.operand dyd zVB))
+      (.layerScaleCh (h := h) (w := h) s!"%{pfx}lg" (0 : Vec c)) (.operand dyd 0))
   let (k2, cot_g) ← pretty bB (.convBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}pW"
-        (zKB : Kernel4 c e 1 1) zVB (.operand cot_p zVB))
-  let (k3, cot_e) ← pretty bB (.geluBackB b.e (zVB : Vec (bB*(e*h*h))) (.operand cot_g zVB))
+        (0 : Kernel4 c e 1 1) 0 (.operand cot_p 0))
+  let (k3, cot_e) ← pretty bB (.geluBackB b.e (0 : Vec (bB*(e*h*h))) (.operand cot_g 0))
   let (k4, cot_n) ← pretty bB (.convBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd s!"%{pfx}eW"
-        (zKB : Kernel4 e c 1 1) zVB (.operand cot_e zVB))
+        (0 : Kernel4 e c 1 1) 0 (.operand cot_e 0))
   let (k5, cot_d) ← lnBackSiteB bB s!"%{pfx}ng" b.d cot_n c h
   let (k6, cot_main) ← pretty bB (.depthwiseBackBatchedAt bf16 (N := bB) (h := h) (w := h) zrnd
         s!"%{pfx}dW"
-        (zDB : DepthwiseKernel c 7 7) zVB (.operand cot_d zVB))
-  let (k7, cot_xin) ← pretty bB (.addVB (.operand cot_main (zVB : Vec (bB*(c*h*h))))
-      (.operand dy zVB))
+        (0 : DepthwiseKernel c 7 7) 0 (.operand cot_d 0))
+  let (k7, cot_xin) ← pretty bB (.addVB (.operand cot_main (0 : Vec (bB*(c*h*h))))
+      (.operand dy 0))
   pure (kD ++ k1 ++ k2 ++ k3 ++ k4 ++ k5 ++ k6 ++ k7, cot_xin, cot_p, cot_e, cot_n, cot_d, dyd)
 
 /-- One **downsample** backward. -/
@@ -437,7 +433,7 @@ private def bwdDownB (bB : Nat) (pfx dy xin : String) (ci co h2 : Nat) (bf16 : B
   -- `convStridedBackBatchedBf16` preserves it verbatim; do not "tidy" it.
   let (k1, cot_n) ← pretty bB (.convStridedBackBatchedAt bf16 (N := bB) (h := h2) (w := h2) zrnd
         s!"%{pfx}W"
-        (zKB : Kernel4 co ci 2 2) zVB (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
+        (0 : Kernel4 co ci 2 2) 0 (.operand dy (0 : Vec (bB*(co*h2*h2)))))
   let (k2, cot_x) ← lnBackSiteB bB s!"%{pfx}ng" xin cot_n ci (2*h2)
   pure (k1 ++ k2, cot_n, cot_x)
 
@@ -453,29 +449,29 @@ private def blockParamGradB (bB : Nat) (pfx : String) (b : FNames)
     (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
   let (cLg, nLg) ← pretty bB (.layerScaleChGammaGradB (N := bB) (c := c) (h := h) (w := h) b.p
-      (zVB : Vec (bB*(c*h*h))) (.operand dy zVB))
+      (0 : Vec (bB*(c*h*h))) (.operand dy 0))
   let (cPw, nPw) ← pretty bB (.convWeightGradBAt bf16 (N := bB) (ic := e) (oc := c) (h := h)
         (w := h)
-        (kH := 1) (kW := 1) zrnd b.g (zVB : Vec c) (zVB : Vec (bB*(e*h*h))) (zKB : Kernel4 c e 1 1)
-        (.operand cot_p zVB))
+        (kH := 1) (kW := 1) zrnd b.g (0 : Vec c) (0 : Vec (bB*(e*h*h))) (0 : Kernel4 c e 1 1)
+        (.operand cot_p 0))
   let (cPb, nPb) ← pretty bB (.convBiasGradB (N := bB) (ic := e) (oc := c) (h := h) (w := h)
-      (kH := 1) (kW := 1) (zKB : Kernel4 c e 1 1) (zVB : Vec (bB*(e*h*h))) (zVB : Vec c)
-      (.operand cot_p zVB))
+      (kH := 1) (kW := 1) (0 : Kernel4 c e 1 1) (0 : Vec (bB*(e*h*h))) (0 : Vec c)
+      (.operand cot_p 0))
   let (cEw, nEw) ← pretty bB (.convWeightGradBAt bf16 (N := bB) (ic := c) (oc := e) (h := h)
         (w := h)
-        (kH := 1) (kW := 1) zrnd b.n (zVB : Vec e) (zVB : Vec (bB*(c*h*h))) (zKB : Kernel4 e c 1 1)
-        (.operand cot_e zVB))
+        (kH := 1) (kW := 1) zrnd b.n (0 : Vec e) (0 : Vec (bB*(c*h*h))) (0 : Kernel4 e c 1 1)
+        (.operand cot_e 0))
   let (cEb, nEb) ← pretty bB (.convBiasGradB (N := bB) (ic := c) (oc := e) (h := h) (w := h)
-      (kH := 1) (kW := 1) (zKB : Kernel4 e c 1 1) (zVB : Vec (bB*(c*h*h))) (zVB : Vec e)
-      (.operand cot_e zVB))
+      (kH := 1) (kW := 1) (0 : Kernel4 e c 1 1) (0 : Vec (bB*(c*h*h))) (0 : Vec e)
+      (.operand cot_e 0))
   let (cNg, nNg) ← lnGammaTailB bB s!"%{pfx}ng" b.d cot_n c h
   let (cNb, nNb) ← lnBetaTailB bB cot_n c h
   let (cDw, nDw) ← pretty bB (.depthwiseWeightGradBAt bf16 (N := bB) (c := c) (h := h) (w := h)
-        (kH := 7) (kW := 7) zrnd b.xin (zVB : Vec c) (zVB : Vec (bB*(c*h*h)))
-        (zDB : DepthwiseKernel c 7 7) (.operand cot_d zVB))
+        (kH := 7) (kW := 7) zrnd b.xin (0 : Vec c) (0 : Vec (bB*(c*h*h)))
+        (0 : DepthwiseKernel c 7 7) (.operand cot_d 0))
   let (cDb, nDb) ← pretty bB (.depthwiseBiasGradB (N := bB) (c := c) (h := h) (w := h)
-      (kH := 7) (kW := 7) (zDB : DepthwiseKernel c 7 7) (zVB : Vec (bB*(c*h*h))) (zVB : Vec c)
-      (.operand cot_d zVB))
+      (kH := 7) (kW := 7) (0 : DepthwiseKernel c 7 7) (0 : Vec (bB*(c*h*h))) (0 : Vec c)
+      (.operand cot_d 0))
   pure (cLg ++ cPw ++ cPb ++ cEw ++ cEb ++ cNg ++ cNb ++ cDw ++ cDb,
     [(s!"{pfx}dW", nDw), (s!"{pfx}db", nDb), (s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb),
      (s!"{pfx}eW", nEw), (s!"{pfx}eb", nEb), (s!"{pfx}pW", nPw), (s!"{pfx}pb", nPb),
@@ -486,8 +482,8 @@ private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci 
     (bf16 : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × List (String × String)) := do
   let (cB, nB) ← pretty bB (.convStridedBiasGradB (N := bB) (ic := ci) (oc := co) (h := h2)
-      (w := h2) (kH := 2) (kW := 2) (zKB : Kernel4 co ci 2 2)
-      (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zVB : Vec co) (.operand dy zVB))
+      (w := h2) (kH := 2) (kW := 2) (0 : Kernel4 co ci 2 2)
+      (0 : Vec (bB*(ci*(2*h2)*(2*h2)))) (0 : Vec co) (.operand dy 0))
   let (cNg, nNg) ← lnGammaTailB bB s!"%{pfx}ng" downIn cot_n ci (2*h2)
   let (cNb, nNb) ← lnBetaTailB bB cot_n ci (2*h2)
   -- ⚠ The wgrad pad is `[[p-1, p+1], …]`, the OPPOSITE shift from the dgrad's `[[p+1, p-1], …]`
@@ -495,9 +491,9 @@ private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci 
   -- `scripts/gates/xla_pad_op_check.py` caught this pair being "fixed by symmetry" once already.
   let (wcode, nW) ← pretty bB (.convStridedWeightGradBAt bf16 (N := bB) (ic := ci) (oc := co)
         (h := h2)
-        (w := h2) (kH := 2) (kW := 2) zrnd downLn (zVB : Vec co)
-        (zVB : Vec (bB*(ci*(2*h2)*(2*h2)))) (zKB : Kernel4 co ci 2 2)
-        (.operand dy (zVB : Vec (bB*(co*h2*h2)))))
+        (w := h2) (kH := 2) (kW := 2) zrnd downLn (0 : Vec co)
+        (0 : Vec (bB*(ci*(2*h2)*(2*h2)))) (0 : Kernel4 co ci 2 2)
+        (.operand dy (0 : Vec (bB*(co*h2*h2)))))
   pure (cB ++ cNg ++ cNb ++ wcode,
     [(s!"{pfx}ng", nNg), (s!"{pfx}nbt", nNb), (s!"{pfx}W", nW), (s!"{pfx}b", nB)])
 
@@ -531,35 +527,35 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     let F : CFwd ← convNextFwdChainB nClasses sd V bf16 (bB := bB)
     let (cSm, nSm) ← pretty bB (.batchOp (N := bB) (.softmaxDiv (n := nClasses))
         (.batchOp (N := bB) (.expe (n := nClasses))
-          (.operand F.logits (zVB : Vec (bB*nClasses)))))
-    let (cSub, dyr) ← pretty bB (.subB (.operand nSm (zVB : Vec (bB*nClasses)))
-        (.operand "%onehot" zVB))
+          (.operand F.logits (0 : Vec (bB*nClasses)))))
+    let (cSub, dyr) ← pretty bB (.subB (.operand nSm (0 : Vec (bB*nClasses)))
+        (.operand "%onehot" 0))
     let fwd := F.code ++ cSm ++ cSub
     -- ═══ the cotangent ═══
     let (cDyC, dyName) ← match smooth with
       | none => pure (s!"    %dy = stablehlo.divide {dyr}, %bsc : {ty [bB, nClasses]}\n", "%dy")
       | some (aStr, negAK, bStr) => do
           let (c1, n1) ← pretty bB (.scaleB (N := bB) (n := nClasses) aStr 0
-              (.operand "%onehot" (zVB : Vec (bB*nClasses))))
-          let (c2, n2) ← pretty bB (.addVB (.operand dyr (zVB : Vec (bB*nClasses)))
-              (.operand n1 (zVB : Vec (bB*nClasses))))
+              (.operand "%onehot" (0 : Vec (bB*nClasses))))
+          let (c2, n2) ← pretty bB (.addVB (.operand dyr (0 : Vec (bB*nClasses)))
+              (.operand n1 (0 : Vec (bB*nClasses))))
           -- ⚠ At the batched index these are `N := bB`, where the per-example render writes
           -- `N := 1` — the SAME emitted text (the tag's `n` is what the emitter reads), and the
           -- annotation trap that note warns about disappears, because `bB * nClasses` never has to
           -- reduce definitionally to anything.
           let (c3, n3) ← pretty bB (.shiftB (N := bB) (n := nClasses) negAK 0
-              (.operand n2 (zVB : Vec (bB*nClasses))))
+              (.operand n2 (0 : Vec (bB*nClasses))))
           let (c4, n4) ← pretty bB (.divConstB (N := bB) (n := nClasses) bStr 0
-              (.operand n3 (zVB : Vec (bB*nClasses))))
+              (.operand n3 (0 : Vec (bB*nClasses))))
           pure (c1 ++ c2 ++ c3 ++ c4, n4)
     -- ═══ head ═══
-    let (cDd, cot_hn) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (zMB : Mat (V.dims[3]!) nClasses))
-        (.operand dyName zVB))
+    let (cDd, cot_hn) ← pretty bB (.batchOp (N := bB) (.dotOut "%Wd" (0 : Mat (V.dims[3]!) nClasses))
+        (.operand dyName 0))
     let (cHnB, cot_gap) ← headLnBackSiteB bB "%hng" F.gap cot_hn V.dims[3]!
     let (cWd, nWd) ← pretty bB (.weightGradB (N := bB) (m := V.dims[3]!) (n := nClasses) F.hn
-        (zVB : Vec (bB*V.dims[3]!)) (.operand dyName (zVB : Vec (bB*nClasses))))
+        (0 : Vec (bB*V.dims[3]!)) (.operand dyName (0 : Vec (bB*nClasses))))
     let (cBd, nBd) ← pretty bB (.biasGradB (N := bB) (n := nClasses)
-        (.operand dyName (zVB : Vec (bB*nClasses))))
+        (.operand dyName (0 : Vec (bB*nClasses))))
     -- ⚠⚠ THE CALL ORDER IS THE EMIT ORDER, and it must match `ConvNeXtRender`'s exactly —
     -- `pretty` allocates fresh SSA names from the state monad as it is CALLED, so a renderer that
     -- calls the γ/β tails before `Wd`/`bd` numbers the same graph differently and
@@ -611,16 +607,16 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     updMap := updMap ++ [("psng", ng), ("psnbt", nb)]
     dy := dx
     let (cPsb, nPsb) ← pretty bB (.convBiasGradB (N := bB) (ic := 3) (oc := V.dims[0]!) (h := 56) (w := 56)
-        (kH := 4) (kW := 4) (zKB : Kernel4 (V.dims[0]!) 3 4 4) (zVB : Vec (bB*(3*56*56))) (zVB : Vec (V.dims[0]!))
-        (.operand dy zVB))
+        (kH := 4) (kW := 4) (0 : Kernel4 (V.dims[0]!) 3 4 4) (0 : Vec (bB*(3*56*56))) (0 : Vec (V.dims[0]!))
+        (.operand dy 0))
     -- ⭐ **The stem weight grad — ConvNeXt's second and last new bf16 op.** ⚠ There is no
     -- `convStride4BackBatched` and no bf16 twin of one: this is the patchify stem, its input is
     -- `%x`, and there is no input gradient to compute. TWO new ops for this net, not three.
     let (cPsW, nPsW) ← pretty bB (.convStride4WeightGradBAt bf16 (N := bB) (ic := 3)
           (oc := V.dims[0]!) (h := 56)
-          (w := 56) (kH := 4) (kW := 4) zrnd "%x" (zVB : Vec (V.dims[0]!))
-          (zVB : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (zKB : Kernel4 (V.dims[0]!) 3 4 4)
-          (.operand dy (zVB : Vec (bB*(V.dims[0]!*56*56)))))
+          (w := 56) (kH := 4) (kW := 4) zrnd "%x" (0 : Vec (V.dims[0]!))
+          (0 : Vec (bB*(3*(2*(2*56))*(2*(2*56))))) (0 : Kernel4 (V.dims[0]!) 3 4 4)
+          (.operand dy (0 : Vec (bB*(V.dims[0]!*56*56)))))
     bwd := bwd ++ cPsW ++ cPsb
     updMap := updMap ++ [("psW", nPsW), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)

@@ -151,6 +151,18 @@ noncomputable def convNextStageChK {c cExp h w kH kW : Nat} :
   | 0, _ => fun v => v
   | k + 1, ps => convNextStageChK k (fun i => ps i.succ) ∘ cnxBlockChW (ps 0)
 
+/-- A three-block stage, unrolled. -/
+theorem convNextStageChK_three {c cExp h w kH kW : Nat}
+    (a b d : CnxBlockParamsCh c cExp h w kH kW) (v : Vec (c * h * w)) :
+    convNextStageChK 3 ![a, b, d] v = cnxBlockChW d (cnxBlockChW b (cnxBlockChW a v)) := rfl
+
+/-- A nine-block stage, unrolled. -/
+theorem convNextStageChK_nine {c cExp h w kH kW : Nat}
+    (a₁ a₂ a₃ a₄ a₅ a₆ a₇ a₈ a₉ : CnxBlockParamsCh c cExp h w kH kW) (v : Vec (c * h * w)) :
+    convNextStageChK 9 ![a₁, a₂, a₃, a₄, a₅, a₆, a₇, a₈, a₉] v
+      = cnxBlockChW a₉ (cnxBlockChW a₈ (cnxBlockChW a₇ (cnxBlockChW a₆ (cnxBlockChW a₅
+          (cnxBlockChW a₄ (cnxBlockChW a₃ (cnxBlockChW a₂ (cnxBlockChW a₁ v)))))))) := rfl
+
 theorem convNextStageChK_differentiable {c cExp h w kH kW : Nat} :
     ∀ (k : Nat) (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW),
       (∀ i, 0 < (ps i).εn) → Differentiable ℝ (convNextStageChK k ps)
@@ -415,17 +427,17 @@ namespace Proofs.StableHLO
 
 /-- **One channel-LN forward site**, mirroring `ConvNeXtRender.lnFwdSite` at `chLN := true`
     op-for-op: transpose to `[h·w, c]`, normalise each spatial row over its channels at the
-    scalar identities `%one`/`%zero`, apply the real `[c]` affine, transpose back. The two `▸`
-    transports are the `Nat`-associativity casts the render spells the same way; `den_reassocS`
+    scalar identities `%one`/`%zero`, apply the real `[c]` affine, transpose back. The two
+    transports are the `reassoc` / `unassoc` casts the render uses; `den_reassocS`
     (`ConvNeXtChannelLN.lean`) is what makes them the math's Mat-split bridge. -/
 def chanLNGraph (gN btN epsStr : String) {c h w : Nat} (ε : ℝ) (γ β : Vec c)
     (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
-  (Nat.mul_assoc c h w).symm ▸
+  unassoc
     (.transposeF (m := h * w) (n := c)
       (.rowBiasF (m := h * w) (n := c) btN β
         (.rowScaleF (m := h * w) (n := c) gN γ
           (.lnRowF (m := h * w) (n := c) "%one" "%zero" epsStr ε 1 0
-            (.transposeF (m := c) (n := h * w) ((Nat.mul_assoc c h w) ▸ e))))))
+            (.transposeF (m := c) (n := h * w) (reassoc e))))))
 
 theorem chanLNGraph_faithful (gN btN epsStr : String) {c h w : Nat} (ε : ℝ) (γ β : Vec c)
     (e : SHlo (c * h * w)) :

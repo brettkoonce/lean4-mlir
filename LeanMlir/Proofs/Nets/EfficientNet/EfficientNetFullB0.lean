@@ -29,21 +29,16 @@ open scoped BigOperators
 -- § Per-block weight bundles (so the 262-param net stays manageable)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Weights of one MBConv6 block (expand `ic→mid`, depthwise `k×k`, SE `mid→r→mid`, project `mid→oc`). -/
-structure MBW (ic mid oc r kh kw : Nat) where
-  eW : Kernel4 mid ic 1 1
-  eb : Vec mid
-  eε : ℝ
-  eγ : Vec mid
-  eβ : Vec mid
-  dW : DepthwiseKernel mid kh kw
-  db : Vec mid
+/-- **The tail every MBConv block shares** — depthwise BatchNorm → swish → squeeze-excite →
+    1×1 project → project BatchNorm. `MBW` and `MBWNoExp` both extend it, so the three block kinds
+    share one tail chain through `toEnTail`. -/
+structure EnTail (mid oc rd : Nat) where
   dε : ℝ
   dγ : Vec mid
   dβ : Vec mid
-  z1 : Mat mid r
-  zb1 : Vec r
-  z2 : Mat r mid
+  z1 : Mat mid rd
+  zb1 : Vec rd
+  z2 : Mat rd mid
   zb2 : Vec mid
   pW : Kernel4 oc mid 1 1
   pb : Vec oc
@@ -51,26 +46,26 @@ structure MBW (ic mid oc r kh kw : Nat) where
   pγ : Vec oc
   pβ : Vec oc
 
-/-- Weights of the MBConv1 block (`t=1`, no expand; depthwise on `ic`, SE `ic→r→ic`, project `ic→oc`). -/
-structure MBWNoExp (ic oc r kh kw : Nat) where
+/-- Weights of one MBConv6 block (expand `ic→mid`, depthwise `k×k`, SE `mid→r→mid`, project `mid→oc`):
+    the expand conv + BN and the depthwise kernel, then the shared tail. -/
+structure MBW (ic mid oc r kh kw : Nat) extends EnTail mid oc r where
+  eW : Kernel4 mid ic 1 1
+  eb : Vec mid
+  eε : ℝ
+  eγ : Vec mid
+  eβ : Vec mid
+  dW : DepthwiseKernel mid kh kw
+  db : Vec mid
+
+/-- Weights of the MBConv1 block (`t=1`, no expand; depthwise on `ic`, SE `ic→r→ic`, project `ic→oc`):
+    the depthwise kernel, then the shared tail. -/
+structure MBWNoExp (ic oc r kh kw : Nat) extends EnTail ic oc r where
   dW : DepthwiseKernel ic kh kw
   db : Vec ic
-  dε : ℝ
-  dγ : Vec ic
-  dβ : Vec ic
-  z1 : Mat ic r
-  zb1 : Vec r
-  z2 : Mat r ic
-  zb2 : Vec ic
-  pW : Kernel4 oc ic 1 1
-  pb : Vec oc
-  pε : ℝ
-  pγ : Vec oc
-  pβ : Vec oc
 
 /-- All 262 EfficientNet-B0 parameters: stem (3×3-s2 3→32) + 16 MBConv blocks (the real `[t,c,n,s,k]`
-    spec) + head (1×1 320→1280) + dense (1280→10). -/
-structure B0Weights where
+    spec) + head (1×1 320→1280) + dense (1280→nCls). -/
+structure B0Weights (nCls : Nat) where
   sW : Kernel4 32 3 3 3
   sb : Vec 32
   sε : ℝ
@@ -97,8 +92,8 @@ structure B0Weights where
   hε : ℝ
   hγ : Vec 1280
   hβ : Vec 1280
-  fcW : Mat 1280 10
-  fcb : Vec 10
+  fcW : Mat 1280 nCls
+  fcb : Vec nCls
 
 /-- The three BatchNorm `ε`s of an MBConv6 block are positive. -/
 structure MBW.EpsPos {ic mid oc r kh kw : Nat} (b : MBW ic mid oc r kh kw) : Prop where
@@ -112,7 +107,7 @@ structure MBWNoExp.EpsPos {ic oc r kh kw : Nat} (b : MBWNoExp ic oc r kh kw) : P
   p : 0 < b.pε
 
 /-- All 49 BatchNorm `ε`s of EfficientNet-B0 are positive: stem, the 16 blocks, head. -/
-structure B0Weights.EpsPos (w : B0Weights) : Prop where
+structure B0Weights.EpsPos {nCls : Nat} (w : B0Weights nCls) : Prop where
   s : 0 < w.sε
   b1 : w.b1.EpsPos
   b2 : w.b2.EpsPos
@@ -241,8 +236,8 @@ noncomputable def mbExpWHasVJP (N h w : Nat) {ic mid oc kh kw r : Nat} (p : MBW 
 --   → b12(14→7) → b13,b14,b15,b16@7 → head@7 → GAP → dense
 -- ════════════════════════════════════════════════════════════════
 
-noncomputable def efficientnetForwardBFull (N : Nat) (w : B0Weights)
-    (x : Vec (N * (3 * 224 * 224))) : Vec (N * 10) :=
+noncomputable def efficientnetForwardBFull (N : Nat) {nCls : Nat} (w : B0Weights nCls)
+    (x : Vec (N * (3 * 224 * 224))) : Vec (N * nCls) :=
   headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mbExpW N 7 7 w.b16
       (mbResidW N 7 7 w.b15
@@ -317,8 +312,8 @@ theorem mbExpGraphW_faithful (pfx epsStr : String) (N h w : Nat) {ic mid oc kh k
 /-- The full **batched EfficientNet-B0 forward graph** at the batched index `N·(c·h·w)`: stem → 16
     MBConv blocks (the real `[t,c,n,s,k]` spec, 3×3 and 5×5 depthwise, true batch-norm, squeeze-excite,
     4 stride-2 downsamples, identity residuals where `s=1 ∧ ic=oc`) → head → GAP → dense. -/
-def efficientnetFwdGraphBFull (N : Nat) (epsStr : String) (w : B0Weights)
-    (x : Vec (N * (3 * 224 * 224))) : SHlo (N * 10) :=
+def efficientnetFwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : B0Weights nCls)
+    (x : Vec (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
   headGraphB epsStr (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
     (mbExpGraphW "b16" epsStr N 7 7 w.b16
       (mbResidGraphW "b15" epsStr N 7 7 w.b15
@@ -343,7 +338,7 @@ def efficientnetFwdGraphBFull (N : Nat) (epsStr : String) (w : B0Weights)
     batch-norm + SE) denotes `efficientnetForwardBFull`. Chained from the per-block `*GraphW_faithful`
     lemmas (one `rw` per block, outermost→innermost), then a structural `rfl` (the forward is
     nested-application form, blocks opaque) — the `ResNet34RenderPC.lean` recipe (since retired) at full depth. -/
-theorem efficientnetFwdGraphBFull_faithful (N : Nat) (epsStr : String) (w : B0Weights)
+theorem efficientnetFwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat} (w : B0Weights nCls)
     (x : Vec (N * (3 * 224 * 224))) :
     den (efficientnetFwdGraphBFull N epsStr w x) = efficientnetForwardBFull N w x := by
   rw [efficientnetFwdGraphBFull, headGraphB_faithful,
@@ -364,7 +359,7 @@ end StableHLO
     MBConv blocks → head) via `vjpComp`. Stated on the `∘`-composition of the blocks (= the full
     forward by construction; keeps the blocks opaque so the chain closes structurally). The full-depth,
     batched, true-batch-norm + SE analogue of `efficientnetHasVJP`. -/
-noncomputable def efficientnetForwardBFullHasVJP (N : Nat) (w : B0Weights)
+noncomputable def efficientnetForwardBFullHasVJP (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos) :
     HasVJP
       (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘
@@ -435,7 +430,7 @@ noncomputable def efficientnetForwardBFullHasVJP (N : Nat) (w : B0Weights)
     rewrites close syntactically; a `simp`/`rfl` proof of the same statement makes
     the kernel reduce the block bodies (no reducibility, no defeq cache) and
     deterministically time out. -/
-theorem efficientnetForwardBFull_eq_chain (N : Nat) (w : B0Weights)
+theorem efficientnetForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (x : Vec (N * (3 * 224 * 224))) :
     efficientnetForwardBFull N w x =
       (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘
@@ -456,11 +451,11 @@ theorem efficientnetForwardBFull_eq_chain (N : Nat) (w : B0Weights)
     B0's backward equals the `pdiv`-contracted Jacobian of `efficientnetForwardBFull`
     itself at every input, tying the chain-stated VJP back to the nested forward via
     `efficientnetForwardBFull_eq_chain`. -/
-theorem efficientnetForwardBFullHasVJP_correct (N : Nat) (w : B0Weights)
+theorem efficientnetForwardBFullHasVJP_correct (N : Nat) {nCls : Nat} (w : B0Weights nCls)
     (hεw : w.EpsPos)
-    (x : Vec (N * (3 * 224 * 224))) (dy : Vec (N * 10)) (i : Fin (N * (3 * 224 * 224))) :
+    (x : Vec (N * (3 * 224 * 224))) (dy : Vec (N * nCls)) (i : Fin (N * (3 * 224 * 224))) :
     (efficientnetForwardBFullHasVJP N w hεw).backward x dy i =
-      ∑ j : Fin (N * 10), pdiv (efficientnetForwardBFull N w) x i j * dy j := by
+      ∑ j : Fin (N * nCls), pdiv (efficientnetForwardBFull N w) x i j * dy j := by
   have h := (efficientnetForwardBFullHasVJP N w hεw).correct x dy i
   rwa [show efficientnetForwardBFull N w =
         (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘

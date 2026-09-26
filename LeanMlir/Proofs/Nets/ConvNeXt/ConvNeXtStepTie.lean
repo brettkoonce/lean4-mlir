@@ -3,6 +3,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Foundation.SgdNodes
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
+import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 
 /-! # The full [3,3,9,3] ConvNeXt-T step tie — the whole net tied through the real forward
 
@@ -536,6 +537,71 @@ theorem tied_at {h w : Nat} (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
   cnx_down_ch_tiedAt xN wN bN gN epsStr lrStr cotN ε _ _ _ _ xin dyOut lr
 
 end CnxTieDown
+
+/-! ## The same net as `ConvNeXtFullT` states it
+
+The records above are the render's shape: one shared `ε`, the eighteen blocks by name.
+`ConvNeXtFullT` states ConvNeXt-T with an `ε` per record and `Fin`-indexed stages. These say the
+two describe one function: block by block (`rfl`), and whole-net at `toCh ε`. -/
+
+theorem cnxBlockFwdChO_eq_cnxBlockChW {c cExp h w : Nat} (ε : ℝ)
+    (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
+    (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
+    (lg : Vec c) :
+    cnxBlockFwdChO (h := h) (w := w) ε Wdw bdw ng nbt Wex bex Wpr bpr lg
+      = cnxBlockChW (h := h) (w := w) ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ := rfl
+
+theorem cnxDownFwdChO_eq_cnxDownChW {ci co h w : Nat} (ε : ℝ) (dng dnbt : Vec ci)
+    (Wd : Kernel4 co ci 2 2) (bd : Vec co) :
+    cnxDownFwdChO (h := h) (w := w) ε dng dnbt Wd bd
+      = cnxDownChW h w ⟨ε, dng, dnbt, Wd, bd⟩ := rfl
+
+namespace CnxTieBlk
+/-- The FullT record for this block at the shared `ε`. -/
+def toCh {c cExp : Nat} (p : CnxTieBlk c cExp) (h w : Nat) (ε : ℝ) :
+    CnxBlockParamsCh c cExp h w 7 7 :=
+  ⟨p.aW, p.aB, ε, p.nG, p.nB, p.eW, p.eB, p.pW, p.pB, p.sL⟩
+end CnxTieBlk
+
+namespace CnxTieDown
+/-- The FullT record for this downsample at the shared `ε`. -/
+def toCh {ci co : Nat} (p : CnxTieDown ci co) (ε : ℝ) : CnxDownParamsCh ci co :=
+  ⟨ε, p.G, p.T, p.W, p.B⟩
+end CnxTieDown
+
+namespace CnxTieWeights
+/-- The FullT weights at the shared `ε`, which every LayerNorm (stem, blocks, downsamples, head)
+    takes. -/
+noncomputable def toCh {nC : Nat} (w : CnxTieWeights nC) (ε : ℝ) : CnxTWeightsCh nC where
+  sW := w.sW; sb := w.sb; sε := ε; sγ := w.sγ; sβ := w.sβ
+  s1 := ![w.b1.toCh 56 56 ε, w.b2.toCh 56 56 ε, w.b3.toCh 56 56 ε]
+  d1 := w.d0.toCh ε
+  s2 := ![w.b4.toCh 28 28 ε, w.b5.toCh 28 28 ε, w.b6.toCh 28 28 ε]
+  d2 := w.d1.toCh ε
+  s3 := ![w.b7.toCh 14 14 ε, w.b8.toCh 14 14 ε, w.b9.toCh 14 14 ε, w.b10.toCh 14 14 ε,
+    w.b11.toCh 14 14 ε, w.b12.toCh 14 14 ε, w.b13.toCh 14 14 ε, w.b14.toCh 14 14 ε,
+    w.b15.toCh 14 14 ε]
+  d3 := w.d2.toCh ε
+  s4 := ![w.b16.toCh 7 7 ε, w.b17.toCh 7 7 ε, w.b18.toCh 7 7 ε]
+  hε := ε; hγ := w.hG; hβ := w.hT; Wd := w.Wfc; bd := w.bfc
+
+/-- **The capstone's forward IS `convNextForwardTCh`.** The chain `cnx_net_tied_certified` threads
+    (stem, eighteen blocks, three downsamples, GAP → LN → dense) is the FullT forward at
+    `w.toCh ε`, so `convNextForwardTChHasVJP` is a VJP of the function the ties are stated on. -/
+theorem forward_eq_convNextForwardTCh {nC : Nat} (w : CnxTieWeights nC) (ε : ℝ)
+    (x : Vec (3 * 224 * 224)) :
+    mnistLinear w.Wfc w.bfc (rowLNVecFlat 1 768 ε w.hG w.hT (globalAvgPoolFlat 768 7 7
+      (w.b18.fwdO ε (w.b17.fwdO ε (w.b16.fwdO ε (w.d2.fwdO (h := 7) (w := 7) ε (w.b15.fwdO ε
+      (w.b14.fwdO ε (w.b13.fwdO ε (w.b12.fwdO ε (w.b11.fwdO ε (w.b10.fwdO ε (w.b9.fwdO ε
+      (w.b8.fwdO ε (w.b7.fwdO ε (w.d1.fwdO (h := 14) (w := 14) ε (w.b6.fwdO ε (w.b5.fwdO ε
+      (w.b4.fwdO ε (w.d0.fwdO (h := 28) (w := 28) ε (w.b3.fwdO ε (w.b2.fwdO ε (w.b1.fwdO ε
+      (cnxStemFwdO (h := 56) (w := 56) ε w.sW w.sb w.sγ w.sβ x))))))))))))))))))))))))
+      = convNextForwardTCh (w.toCh ε) x := by
+  simp only [convNextForwardTCh, toCh, convNextStageChK_three, convNextStageChK_nine,
+    CnxTieBlk.fwdO, CnxTieDown.fwdO, cnxBlockFwdChO_eq_cnxBlockChW, cnxDownFwdChO_eq_cnxDownChW,
+    CnxTieBlk.toCh, CnxTieDown.toCh]
+  rfl
+end CnxTieWeights
 
 /-! ## The whole-net capstone — all 182 params through the REAL forward + composed cotangent
 
