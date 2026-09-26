@@ -28,9 +28,9 @@
 # `|`-separated array no generic pattern can see. Tokens holding a shell variable,
 # a glob, a brace or a dot (module paths) are skipped rather than guessed at.
 #
-# ▶ PACKAGES. jax/ is its own Lake package with its own targets, and jax.yml sets
-# `working-directory: jax` per STEP rather than per job, so that one file is linted
-# against BOTH lakefiles: a name live in either package is not a dead name, which is
+# ▶ PACKAGES. jax/ is its own Lake package with its own targets, and jax.yml and
+# iree.yml set `working-directory: jax` per STEP rather than per job, so those files are
+# linted against BOTH lakefiles: a name live in either package is not a dead name, which is
 # all this gate claims. comparator.yml builds two repos that are not in this tree at
 # all (~/lean4export, ~/comparator); those two names are allowed below.
 set -uo pipefail
@@ -54,7 +54,7 @@ BAD=0; CHECKED=0
 FILES=$(ls scripts/*.sh scripts/*/*.sh tests/*.sh run.sh .github/workflows/*.yml 2>/dev/null | grep -v "^$SELF\$")
 
 for f in $FILES; do
-  if [ "$f" = ".github/workflows/jax.yml" ]
+  if [ "$f" = ".github/workflows/jax.yml" ] || [ "$f" = ".github/workflows/iree.yml" ]
   then set -- "${ROOT_TARGETS[@]}" "${JAX_TARGETS[@]}"
   else set -- "${ROOT_TARGETS[@]}"; fi
   ok=" $* $EXTERNAL "
