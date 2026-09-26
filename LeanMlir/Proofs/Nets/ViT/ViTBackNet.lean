@@ -57,7 +57,7 @@ namespace Proofs.StableHLO
 
     `ok = True`: GELU and LayerNorm are smooth, so the graph denotes the VJP at **every**
     input, with no side condition to discharge. -/
-noncomputable def vitBlockVLayer {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
+private noncomputable def vitBlockVLayer {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
     (p : BlockParamsV ((hm1+1) * d) mlpDim) :
     CertLayer (Np1 * ((hm1+1) * d)) (Np1 * ((hm1+1) * d)) where
   fwd := blockVFlat Np1 (hm1+1) d mlpDim ε p
@@ -137,7 +137,7 @@ theorem vitTrunkV_graph {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
 /-- **A ViT trunk's `ok` is `True` at every depth.** `CertLayer.comp` conjoins preconditions, so
     for a relu net this is a stack of side conditions growing with depth; for ViT the conjunction
     collapses and the whole depth-`k` trunk is certified at every input. -/
-theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
+private theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
       (v : Vec (Np1 * ((hm1+1) * d))), (vitTrunkV (Np1 := Np1) ε hε k ps).ok v
   | 0, _, _ => trivial

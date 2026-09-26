@@ -44,7 +44,7 @@ open scoped BigOperators
 
 /-- The batched patch-embed witness at `x`: `batchMapHasVJPAt` over the global per-example
     witness at each row. -/
-noncomputable def vitEmbedBAt (B ic H W patchSize N D : Nat)
+private noncomputable def vitEmbedBAt (B ic H W patchSize N D : Nat)
     (W_conv : Kernel4 D ic patchSize patchSize) (b_conv cls_token : Vec D)
     (pos_embed : Mat (N + 1) D) (x : Vec (B * (ic * H * W))) :
     HasVJPAt (StableHLO.batchMap B

@@ -84,7 +84,7 @@ noncomputable def convNextBlockBody {c cExp h w kH kW : Nat}
 
 /-- The block body is differentiable everywhere (composition of
     everywhere-differentiable maps). -/
-theorem convNextBlockBody_differentiable {c cExp h w kH kW : Nat}
+private theorem convNextBlockBody_differentiable {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)
@@ -149,7 +149,7 @@ noncomputable def convNextBlock {c cExp h w kH kW : Nat}
 
 /-- The full ConvNeXt block is differentiable everywhere (residual of an
     everywhere-differentiable body). -/
-theorem convNextBlock_differentiable {c cExp h w kH kW : Nat}
+private theorem convNextBlock_differentiable {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : ℝ)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp)

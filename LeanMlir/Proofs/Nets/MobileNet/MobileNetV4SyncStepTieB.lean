@@ -96,14 +96,14 @@ open Proofs.Mnv4TieB
 -- § 0. The head's relabellings — linear, and per-example
 -- ════════════════════════════════════════════════════════════════
 
-theorem mnv4To11_smul (N c : Nat) : IsHomog (mnv4To11 (N := N) (c := c)) := fun _ _ => rfl
-theorem mnv4From11_smul (N c : Nat) : IsHomog (mnv4From11 (N := N) (c := c)) := fun _ _ => rfl
+private theorem mnv4To11_smul (N c : Nat) : IsHomog (mnv4To11 (N := N) (c := c)) := fun _ _ => rfl
+private theorem mnv4From11_smul (N c : Nat) : IsHomog (mnv4From11 (N := N) (c := c)) := fun _ _ => rfl
 
-theorem mnv4To11_shard {R N : Nat} (c : Nat) (DY : Vec ((R * N) * c)) (r : Fin R) :
+private theorem mnv4To11_shard {R N : Nat} (c : Nat) (DY : Vec ((R * N) * c)) (r : Fin R) :
     mnv4To11 (batchShard R N c DY r) = batchShard R N (c * 1 * 1) (mnv4To11 DY) r :=
   (batchShard_castIdx (by rw [Nat.mul_one, Nat.mul_one] : c = c * 1 * 1) DY r).symm
 
-theorem mnv4From11_shard {R N : Nat} (c : Nat) (DY : Vec ((R * N) * (c * 1 * 1))) (r : Fin R) :
+private theorem mnv4From11_shard {R N : Nat} (c : Nat) (DY : Vec ((R * N) * (c * 1 * 1))) (r : Fin R) :
     mnv4From11 (batchShard R N (c * 1 * 1) DY r) = batchShard R N c (mnv4From11 DY) r :=
   (batchShard_castIdx (by rw [Nat.mul_one, Nat.mul_one] : c * 1 * 1 = c) DY r).symm
 
@@ -114,21 +114,21 @@ theorem mnv4From11_shard {R N : Nat} (c : Nat) (DY : Vec ((R * N) * (c * 1 * 1))
 /-! The stride-1 body (ExtraDW / ConvNeXt-like / FFN), each one line from the previous link's. The
 two `if`s are `MobileNetV4StepTieB`'s table dispatch; they split on both sides at once. -/
 
-theorem mnv4CotPc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4CotPc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotPc N s p xin) :=
   bnInB_smul _ _ _ _ _ _ _
 
-theorem mnv4CotDn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4CotDn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotDn N s p xin) := by
   intro a dy
   unfold mnv4CotDn; rw [mnv4CotPc_smul, cInB_smul, reluMaskB_smul]
 
-theorem mnv4CotDc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4CotDc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotDc N s p xin) := by
   intro a dy
   unfold mnv4CotDc; rw [mnv4CotDn_smul, bnInB_smul]
 
-theorem mnv4CotEn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4CotEn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotEn N s p xin) := by
   intro a dy
   unfold mnv4CotEn
@@ -136,17 +136,17 @@ theorem mnv4CotEn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
   · rw [mnv4CotPc_smul, cInB_smul, reluMaskB_smul]
   · rw [mnv4CotDc_smul, dInB_smul, reluMaskB_smul]
 
-theorem mnv4CotEc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4CotEc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotEc N s p xin) := by
   intro a dy
   unfold mnv4CotEc; rw [mnv4CotEn_smul, bnInB_smul]
 
-theorem mnv4CotQn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4CotQn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotQn N s p xin) := by
   intro a dy
   unfold mnv4CotQn; rw [mnv4CotEc_smul, cInB_smul]
 
-theorem mnv4CotQc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4CotQc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotQc N s p xin) := by
   intro a dy
   unfold mnv4CotQc; rw [mnv4CotQn_smul, bnInB_smul]
@@ -161,36 +161,36 @@ theorem mnv4BodyCotIn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
 
 /-! The strided block (rows 1, 3, 11). -/
 
-theorem mnv4SCotPc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4SCotPc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotPc N s p xin) :=
   bnInB_smul _ _ _ _ _ _ _
 
-theorem mnv4SCotDn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4SCotDn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotDn N s p xin) := by
   intro a dy
   unfold mnv4SCotDn; rw [mnv4SCotPc_smul, cInB_smul, reluMaskB_smul]
 
-theorem mnv4SCotDc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4SCotDc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotDc N s p xin) := by
   intro a dy
   unfold mnv4SCotDc; rw [mnv4SCotDn_smul, bnInB_smul]
 
-theorem mnv4SCotEn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4SCotEn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotEn N s p xin) := by
   intro a dy
   unfold mnv4SCotEn; rw [mnv4SCotDc_smul, dStridedInB_smul, reluMaskB_smul]
 
-theorem mnv4SCotEc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4SCotEc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotEc N s p xin) := by
   intro a dy
   unfold mnv4SCotEc; rw [mnv4SCotEn_smul, bnInB_smul]
 
-theorem mnv4SCotQn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4SCotQn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotQn N s p xin) := by
   intro a dy
   unfold mnv4SCotQn; rw [mnv4SCotEc_smul, cInB_smul]
 
-theorem mnv4SCotQc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
+private theorem mnv4SCotQc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) : IsHomog (mnv4SCotQc N s p xin) := by
   intro a dy
   unfold mnv4SCotQc; rw [mnv4SCotQn_smul, bnInB_smul]
@@ -205,7 +205,7 @@ theorem mnv4SBodyCotIn_smul (N : Nat) (s : UibSpec) (p : UibParams s)
 
 /-! The stem, the fused stage and the head. -/
 
-theorem mnv4StemCotN_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
+private theorem mnv4StemCotN_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
     (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
     IsHomog (mnv4StemCotN N h w Ws bs εs γs βs x) :=
   reluMaskB_smul _ _
@@ -216,20 +216,20 @@ theorem mnv4StemCotC_smul (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic 
   intro a dy
   unfold mnv4StemCotC; rw [mnv4StemCotN_smul, bnInB_smul]
 
-theorem mnv4FusedCotPc_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
+private theorem mnv4FusedCotPc_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
     (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
     IsHomog (mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin) :=
   bnInB_smul _ _ _ _ _ _ _
 
-theorem mnv4FusedCotN_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
+private theorem mnv4FusedCotN_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
     (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
     IsHomog (mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin) := by
   intro a dy
   unfold mnv4FusedCotN; rw [mnv4FusedCotPc_smul, cInB_smul, reluMaskB_smul]
 
-theorem mnv4FusedCotC_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
+private theorem mnv4FusedCotC_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
     (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w)))) :
     IsHomog (mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin) := by
@@ -243,21 +243,21 @@ theorem mnv4FusedCotIn_smul (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 
   intro a dy
   unfold mnv4FusedCotIn; rw [mnv4FusedCotC_smul, cStridedInB_smul]
 
-theorem mnv4HeadCotHn_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+private theorem mnv4HeadCotHn_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
     (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
     (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
     IsHomog (mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
   intro a g
   unfold mnv4HeadCotHn; rw [rowDenseBackFlat_smul, mnv4To11_smul, reluMaskB_smul]
 
-theorem mnv4HeadCotHc_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+private theorem mnv4HeadCotHc_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
     (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
     (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
     IsHomog (mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
   intro a g
   unfold mnv4HeadCotHc; rw [mnv4HeadCotHn_smul, bnInB_smul]
 
-theorem mnv4HeadCotH1n_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+private theorem mnv4HeadCotH1n_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
     (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
     (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
     IsHomog (mnv4HeadCotH1n N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
@@ -265,7 +265,7 @@ theorem mnv4HeadCotH1n_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mi
   unfold mnv4HeadCotH1n; rw [mnv4HeadCotHc_smul, cInB_smul, mnv4From11_smul, gapInB_smul,
     reluMaskB_smul]
 
-theorem mnv4HeadCotH1c_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
+private theorem mnv4HeadCotH1c_smul (N h w : Nat) {c mid oc nCls : Nat} (W1 : Kernel4 mid c 1 1)
     (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid) (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ)
     (γ2 β2 : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls) (xin : Vec (N * (c * h * w))) :
     IsHomog (mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin) := by
@@ -293,7 +293,7 @@ variable (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec) (p : UibParams s)
 
 /-- Stride-1 body, replica `r`: the project BatchNorm's sync backward of the block-output cotangent
     (the bottleneck is linear, so nothing masks it). Feeds `u{p}pW`. -/
-noncomputable def mnv4SyncCotPc (r : Fin R) : Vec (N * (s.oc * s.h * s.h)) :=
+private noncomputable def mnv4SyncCotPc (r : Fin R) : Vec (N * (s.oc * s.h * s.h)) :=
   bnSyncInB R hR N s.oc s.h s.h p.ez p.gz
     (fun r => batchShard R N (s.oc * s.h * s.h) (batchMap (R * N) (flatConv p.Wz p.bz)
       ((mnv4PostDWSlot (h := s.h) (w := s.h) (R * N) s.postDWk p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd
@@ -303,7 +303,7 @@ noncomputable def mnv4SyncCotPc (r : Fin R) : Vec (N * (s.oc * s.h * s.h)) :=
     dys r
 
 /-- Stride-1 body, replica `r`: the post-DW BN's output cotangent. Feeds `u{p}dg`/`u{p}dbt`. -/
-noncomputable def mnv4SyncCotDn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
+private noncomputable def mnv4SyncCotDn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   reluMaskB (N * (s.ic * s.expand * s.h * s.h))
     (batchShard R N (s.ic * s.expand * s.h * s.h)
       (bnBatchLA (R * N) (s.ic * s.expand) s.h s.h p.ed p.gd p.bd2
@@ -314,7 +314,7 @@ noncomputable def mnv4SyncCotDn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * 
     (cInB N p.Wz p.bz (mnv4SyncCotPc R hR N s p XIN dys r))
 
 /-- Stride-1 body, replica `r`: the post-DW conv's output cotangent. Feeds `u{p}dW`. -/
-noncomputable def mnv4SyncCotDc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
+private noncomputable def mnv4SyncCotDc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   bnSyncInB R hR N (s.ic * s.expand) s.h s.h p.ed p.gd
     (fun r => batchShard R N (s.ic * s.expand * s.h * s.h) (batchMap (R * N) (depthwiseFlat p.Wd p.bd)
       ((cbReluLayer (h := s.h) (w := s.h) (R * N) p.We p.be p.ee p.he p.ge p.be2).fwd
@@ -324,7 +324,7 @@ noncomputable def mnv4SyncCotDc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * 
 
 /-- Stride-1 body, replica `r`: the expand BN's output cotangent — dispatching on the row exactly
     as `mnv4CotEn` does. Feeds `u{p}eg`/`u{p}ebt`. -/
-noncomputable def mnv4SyncCotEn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
+private noncomputable def mnv4SyncCotEn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   reluMaskB (N * (s.ic * s.expand * s.h * s.h))
     (batchShard R N (s.ic * s.expand * s.h * s.h)
       (bnBatchLA (R * N) (s.ic * s.expand) s.h s.h p.ee p.ge p.be2
@@ -335,7 +335,7 @@ noncomputable def mnv4SyncCotEn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * 
      else dInB N p.Wd p.bd (mnv4SyncCotDc R hR N s p XIN dys r))
 
 /-- Stride-1 body, replica `r`: the expand conv's output cotangent. Feeds `u{p}eW`. -/
-noncomputable def mnv4SyncCotEc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
+private noncomputable def mnv4SyncCotEc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   bnSyncInB R hR N (s.ic * s.expand) s.h s.h p.ee p.ge
     (fun r => batchShard R N (s.ic * s.expand * s.h * s.h) (batchMap (R * N) (flatConv p.We p.be)
       ((mnv4PreDWSlot (h := s.h) (w := s.h) (R * N) s.preDWk p.Wq p.bq p.eq_ p.hq p.gq
@@ -344,11 +344,11 @@ noncomputable def mnv4SyncCotEc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * 
 
 /-- Stride-1 body, replica `r`: the pre-DW BN's output cotangent — unmasked, the pre-DW is BN
     only. Feeds `u{p}qg`/`u{p}qbt`. -/
-noncomputable def mnv4SyncCotQn (r : Fin R) : Vec (N * (s.ic * s.h * s.h)) :=
+private noncomputable def mnv4SyncCotQn (r : Fin R) : Vec (N * (s.ic * s.h * s.h)) :=
   cInB N p.We p.be (mnv4SyncCotEc R hR N s p XIN dys r)
 
 /-- Stride-1 body, replica `r`: the pre-DW conv's output cotangent. Feeds `u{p}qW`. -/
-noncomputable def mnv4SyncCotQc (r : Fin R) : Vec (N * (s.ic * s.h * s.h)) :=
+private noncomputable def mnv4SyncCotQc (r : Fin R) : Vec (N * (s.ic * s.h * s.h)) :=
   bnSyncInB R hR N s.ic s.h s.h p.eq_ p.gq
     (fun r => batchShard R N (s.ic * s.h * s.h) (batchMap (R * N) (depthwiseFlat p.Wq p.bq) XIN) r)
     (mnv4SyncCotQn R hR N s p XIN dys) r
@@ -368,25 +368,25 @@ variable (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (s : UibSpec) (hh : 0 < s
   (hdys : ∀ r, dys r = batchShard R N (s.oc * s.h * s.h) DY r)
 include hN hh hdys
 
-theorem mnv4SyncCotPc_shard (r : Fin R) :
+private theorem mnv4SyncCotPc_shard (r : Fin R) :
     mnv4SyncCotPc R hR N s p XIN dys r
       = batchShard R N (s.oc * s.h * s.h) (mnv4CotPc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N s.oc s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl) hdys r
 
-theorem mnv4SyncCotDn_shard (r : Fin R) :
+private theorem mnv4SyncCotDn_shard (r : Fin R) :
     mnv4SyncCotDn R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4CotDn (R * N) s p XIN DY) r := by
   unfold mnv4SyncCotDn
   rw [mnv4SyncCotPc_shard R hR N hN s hh p XIN dys DY hdys, cInB_shard]
   rfl
 
-theorem mnv4SyncCotDc_shard (r : Fin R) :
+private theorem mnv4SyncCotDc_shard (r : Fin R) :
     mnv4SyncCotDc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4CotDc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SyncCotDn_shard R hR N hN s hh p XIN dys DY hdys) r
 
-theorem mnv4SyncCotEn_shard (r : Fin R) :
+private theorem mnv4SyncCotEn_shard (r : Fin R) :
     mnv4SyncCotEn R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4CotEn (R * N) s p XIN DY) r := by
   unfold mnv4SyncCotEn mnv4CotEn
@@ -396,20 +396,20 @@ theorem mnv4SyncCotEn_shard (r : Fin R) :
   · rw [mnv4SyncCotDc_shard R hR N hN s hh p XIN dys DY hdys, dInB_shard]
     rfl
 
-theorem mnv4SyncCotEc_shard (r : Fin R) :
+private theorem mnv4SyncCotEc_shard (r : Fin R) :
     mnv4SyncCotEc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4CotEc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SyncCotEn_shard R hR N hN s hh p XIN dys DY hdys) r
 
-theorem mnv4SyncCotQn_shard (r : Fin R) :
+private theorem mnv4SyncCotQn_shard (r : Fin R) :
     mnv4SyncCotQn R hR N s p XIN dys r
       = batchShard R N (s.ic * s.h * s.h) (mnv4CotQn (R * N) s p XIN DY) r := by
   unfold mnv4SyncCotQn
   rw [mnv4SyncCotEc_shard R hR N hN s hh p XIN dys DY hdys, cInB_shard]
   rfl
 
-theorem mnv4SyncCotQc_shard (r : Fin R) :
+private theorem mnv4SyncCotQc_shard (r : Fin R) :
     mnv4SyncCotQc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.h * s.h) (mnv4CotQc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N s.ic s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
@@ -431,7 +431,7 @@ variable (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec) (p : UibParams s)
   (dys : Fin R → Vec (N * (s.oc * s.h * s.h)))
 
 /-- Strided block, replica `r`: the project BatchNorm's sync backward. Feeds `u{p}pW`. -/
-noncomputable def mnv4SSyncCotPc (r : Fin R) : Vec (N * (s.oc * s.h * s.h)) :=
+private noncomputable def mnv4SSyncCotPc (r : Fin R) : Vec (N * (s.oc * s.h * s.h)) :=
   bnSyncInB R hR N s.oc s.h s.h p.ez p.gz
     (fun r => batchShard R N (s.oc * s.h * s.h) (batchMap (R * N) (flatConv p.Wz p.bz)
       ((mnv4DWReluStridedLayer (h := s.h) (w := s.h) (R * N) p.Wd p.bd p.ed p.hd p.gd p.bd2).fwd
@@ -442,7 +442,7 @@ noncomputable def mnv4SSyncCotPc (r : Fin R) : Vec (N * (s.oc * s.h * s.h)) :=
 
 /-- Strided block, replica `r`: the strided post-DW BN's output cotangent. Feeds
     `u{p}dg`/`u{p}dbt`. -/
-noncomputable def mnv4SSyncCotDn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
+private noncomputable def mnv4SSyncCotDn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   reluMaskB (N * (s.ic * s.expand * s.h * s.h))
     (batchShard R N (s.ic * s.expand * s.h * s.h)
       (bnBatchLA (R * N) (s.ic * s.expand) s.h s.h p.ed p.gd p.bd2
@@ -453,7 +453,7 @@ noncomputable def mnv4SSyncCotDn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h *
     (cInB N p.Wz p.bz (mnv4SSyncCotPc R hR N s p XIN dys r))
 
 /-- Strided block, replica `r`: the strided post-DW conv's output cotangent. Feeds `u{p}dW`. -/
-noncomputable def mnv4SSyncCotDc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
+private noncomputable def mnv4SSyncCotDc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   bnSyncInB R hR N (s.ic * s.expand) s.h s.h p.ed p.gd
     (fun r => batchShard R N (s.ic * s.expand * s.h * s.h)
       (batchMap (R * N) (depthwiseStride2Flat p.Wd p.bd)
@@ -464,7 +464,7 @@ noncomputable def mnv4SSyncCotDc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h *
 
 /-- Strided block, replica `r`: the expand BN's output cotangent, at `2h`. Feeds
     `u{p}eg`/`u{p}ebt`. -/
-noncomputable def mnv4SSyncCotEn (r : Fin R) : Vec (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h))) :=
+private noncomputable def mnv4SSyncCotEn (r : Fin R) : Vec (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h))) :=
   reluMaskB (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h)))
     (batchShard R N (s.ic * s.expand * (2 * s.h) * (2 * s.h))
       (bnBatchLA (R * N) (s.ic * s.expand) (2 * s.h) (2 * s.h) p.ee p.ge p.be2
@@ -474,7 +474,7 @@ noncomputable def mnv4SSyncCotEn (r : Fin R) : Vec (N * (s.ic * s.expand * (2 * 
     (dStridedInB N p.Wd p.bd (mnv4SSyncCotDc R hR N s p XIN dys r))
 
 /-- Strided block, replica `r`: the expand conv's output cotangent, at `2h`. Feeds `u{p}eW`. -/
-noncomputable def mnv4SSyncCotEc (r : Fin R) : Vec (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h))) :=
+private noncomputable def mnv4SSyncCotEc (r : Fin R) : Vec (N * (s.ic * s.expand * (2 * s.h) * (2 * s.h))) :=
   bnSyncInB R hR N (s.ic * s.expand) (2 * s.h) (2 * s.h) p.ee p.ge
     (fun r => batchShard R N (s.ic * s.expand * (2 * s.h) * (2 * s.h))
       (batchMap (R * N) (flatConv p.We p.be)
@@ -484,11 +484,11 @@ noncomputable def mnv4SSyncCotEc (r : Fin R) : Vec (N * (s.ic * s.expand * (2 * 
 
 /-- Strided block, replica `r`: the pre-DW BN's output cotangent, at `2h` — unmasked. Feeds
     `u{p}qg`/`u{p}qbt`. -/
-noncomputable def mnv4SSyncCotQn (r : Fin R) : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))) :=
+private noncomputable def mnv4SSyncCotQn (r : Fin R) : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))) :=
   cInB N p.We p.be (mnv4SSyncCotEc R hR N s p XIN dys r)
 
 /-- Strided block, replica `r`: the pre-DW conv's output cotangent, at `2h`. Feeds `u{p}qW`. -/
-noncomputable def mnv4SSyncCotQc (r : Fin R) : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))) :=
+private noncomputable def mnv4SSyncCotQc (r : Fin R) : Vec (N * (s.ic * (2 * s.h) * (2 * s.h))) :=
   bnSyncInB R hR N s.ic (2 * s.h) (2 * s.h) p.eq_ p.gq
     (fun r => batchShard R N (s.ic * (2 * s.h) * (2 * s.h))
       (batchMap (R * N) (depthwiseFlat p.Wq p.bq) XIN) r)
@@ -509,46 +509,46 @@ variable (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (s : UibSpec) (hh : 0 < s
   (hdys : ∀ r, dys r = batchShard R N (s.oc * s.h * s.h) DY r)
 include hN hh hdys
 
-theorem mnv4SSyncCotPc_shard (r : Fin R) :
+private theorem mnv4SSyncCotPc_shard (r : Fin R) :
     mnv4SSyncCotPc R hR N s p XIN dys r
       = batchShard R N (s.oc * s.h * s.h) (mnv4SCotPc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N s.oc s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl) hdys r
 
-theorem mnv4SSyncCotDn_shard (r : Fin R) :
+private theorem mnv4SSyncCotDn_shard (r : Fin R) :
     mnv4SSyncCotDn R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4SCotDn (R * N) s p XIN DY) r := by
   unfold mnv4SSyncCotDn
   rw [mnv4SSyncCotPc_shard R hR N hN s hh p XIN dys DY hdys, cInB_shard]
   rfl
 
-theorem mnv4SSyncCotDc_shard (r : Fin R) :
+private theorem mnv4SSyncCotDc_shard (r : Fin R) :
     mnv4SSyncCotDc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * s.h * s.h) (mnv4SCotDc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N (s.ic * s.expand) s.h s.h (nhw_ne_zero hN hh hh) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SSyncCotDn_shard R hR N hN s hh p XIN dys DY hdys) r
 
-theorem mnv4SSyncCotEn_shard (r : Fin R) :
+private theorem mnv4SSyncCotEn_shard (r : Fin R) :
     mnv4SSyncCotEn R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * (2 * s.h) * (2 * s.h)) (mnv4SCotEn (R * N) s p XIN DY) r := by
   unfold mnv4SSyncCotEn
   rw [mnv4SSyncCotDc_shard R hR N hN s hh p XIN dys DY hdys, dStridedInB_shard]
   rfl
 
-theorem mnv4SSyncCotEc_shard (r : Fin R) :
+private theorem mnv4SSyncCotEc_shard (r : Fin R) :
     mnv4SSyncCotEc R hR N s p XIN dys r
       = batchShard R N (s.ic * s.expand * (2 * s.h) * (2 * s.h)) (mnv4SCotEc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N (s.ic * s.expand) (2 * s.h) (2 * s.h)
     (nhw_ne_zero hN (by omega) (by omega)) _ _ _ _ _ _ (fun _ => rfl)
     (mnv4SSyncCotEn_shard R hR N hN s hh p XIN dys DY hdys) r
 
-theorem mnv4SSyncCotQn_shard (r : Fin R) :
+private theorem mnv4SSyncCotQn_shard (r : Fin R) :
     mnv4SSyncCotQn R hR N s p XIN dys r
       = batchShard R N (s.ic * (2 * s.h) * (2 * s.h)) (mnv4SCotQn (R * N) s p XIN DY) r := by
   unfold mnv4SSyncCotQn
   rw [mnv4SSyncCotEc_shard R hR N hN s hh p XIN dys DY hdys, cInB_shard]
   rfl
 
-theorem mnv4SSyncCotQc_shard (r : Fin R) :
+private theorem mnv4SSyncCotQc_shard (r : Fin R) :
     mnv4SSyncCotQc R hR N s p XIN dys r
       = batchShard R N (s.ic * (2 * s.h) * (2 * s.h)) (mnv4SCotQc (R * N) s p XIN DY) r :=
   bnSyncInB_shard R hR N s.ic (2 * s.h) (2 * s.h) (nhw_ne_zero hN (by omega) (by omega))
@@ -572,7 +572,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 
 
 /-- Stem, replica `r`: the stem relu's mask of the cotangent the fused stage hands down. Feeds
     `sg`/`sbt`. -/
-noncomputable def mnv4StemSyncCotN (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def mnv4StemSyncCotN (r : Fin R) : Vec (N * (oc * h * w)) :=
   reluMaskB (N * (oc * h * w))
     (batchShard R N (oc * h * w)
       (bnBatchLA (R * N) oc h w εs γs βs (batchMap (R * N) (flatConvStride2 Ws bs) X)) r)
@@ -593,7 +593,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat} (hN : 0 < N) (
   (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
 include hdys
 
-theorem mnv4StemSyncCotN_shard (r : Fin R) :
+private theorem mnv4StemSyncCotN_shard (r : Fin R) :
     mnv4StemSyncCotN R N h w Ws bs εs γs βs X dys r
       = batchShard R N (oc * h * w) (mnv4StemCotN (R * N) h w Ws bs εs γs βs X DY) r := by
   unfold mnv4StemSyncCotN; rw [hdys]; rfl
@@ -615,7 +615,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kern
 
 /-- Fused stage, replica `r`: the project BatchNorm's sync backward of the stage-output cotangent
     (no activation after the project). Feeds `f0pW`. -/
-noncomputable def mnv4FusedSyncCotPc (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def mnv4FusedSyncCotPc (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w εp γp
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConv Wp bp)
       (cbReluStridedB (R * N) (h := h) (w := w) Wc bc εc γc βc XIN)) r)
@@ -623,14 +623,14 @@ noncomputable def mnv4FusedSyncCotPc (r : Fin R) : Vec (N * (oc * h * w)) :=
 
 /-- Fused stage, replica `r`: the fused BN's output cotangent, masked by the fused relu. Feeds
     `f0cg`/`f0cbt`. -/
-noncomputable def mnv4FusedSyncCotN (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def mnv4FusedSyncCotN (r : Fin R) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (batchShard R N (mid * h * w)
       (bnBatchLA (R * N) mid h w εc γc βc (batchMap (R * N) (flatConvStride2 Wc bc) XIN)) r)
     (cInB N Wp bp (mnv4FusedSyncCotPc R hR N h w Wc bc εc γc βc Wp bp εp γp XIN dys r))
 
 /-- Fused stage, replica `r`: the fused conv's output cotangent. Feeds `f0cW`. -/
-noncomputable def mnv4FusedSyncCotC (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def mnv4FusedSyncCotC (r : Fin R) : Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w εc γc
     (fun r => batchShard R N (mid * h * w) (batchMap (R * N) (flatConvStride2 Wc bc) XIN) r)
     (mnv4FusedSyncCotN R hR N h w Wc bc εc γc βc Wp bp εp γp XIN dys) r
@@ -650,14 +650,14 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc kH kW : Nat} (hN : 0 < 
   (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
 include hN hh hw hdys
 
-theorem mnv4FusedSyncCotPc_shard (r : Fin R) :
+private theorem mnv4FusedSyncCotPc_shard (r : Fin R) :
     mnv4FusedSyncCotPc R hR N h w Wc bc εc γc βc Wp bp εp γp XIN dys r
       = batchShard R N (oc * h * w)
           (mnv4FusedCotPc (R * N) h w Wc bc εc γc βc Wp bp εp γp βp XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) hdys r
 
-theorem mnv4FusedSyncCotN_shard (r : Fin R) :
+private theorem mnv4FusedSyncCotN_shard (r : Fin R) :
     mnv4FusedSyncCotN R hR N h w Wc bc εc γc βc Wp bp εp γp XIN dys r
       = batchShard R N (mid * h * w)
           (mnv4FusedCotN (R * N) h w Wc bc εc γc βc Wp bp εp γp βp XIN DY) r := by
@@ -666,7 +666,7 @@ theorem mnv4FusedSyncCotN_shard (r : Fin R) :
     cInB_shard]
   rfl
 
-theorem mnv4FusedSyncCotC_shard (r : Fin R) :
+private theorem mnv4FusedSyncCotC_shard (r : Fin R) :
     mnv4FusedSyncCotC R hR N h w Wc bc εc γc βc Wp bp εp γp XIN dys r
       = batchShard R N (mid * h * w)
           (mnv4FusedCotC (R * N) h w Wc bc εc γc βc Wp bp εp γp βp XIN DY) r :=
@@ -694,7 +694,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls : Nat}
 
 /-- Head, replica `r`: `conv_head`'s relu mask of the classifier's input-VJP of this replica's loss
     cotangent, relabelled to `[N, oc, 1, 1]`. Feeds `hg`/`hbt`. -/
-noncomputable def mnv4HeadSyncCotHn (r : Fin R) : Vec (N * (oc * 1 * 1)) :=
+private noncomputable def mnv4HeadSyncCotHn (r : Fin R) : Vec (N * (oc * 1 * 1)) :=
   -- `bd` is read by no head cotangent (the dense input-VJP does not see the bias); named here so
   -- the section keeps it in every head chain's argument list, T3's.
   let _bias := bd
@@ -705,14 +705,14 @@ noncomputable def mnv4HeadSyncCotHn (r : Fin R) : Vec (N * (oc * 1 * 1)) :=
 
 /-- Head, replica `r`: `conv_head`'s BatchNorm sync backward — its statistics over the GLOBAL batch
     alone (`h = w = 1`). Feeds `hW`. -/
-noncomputable def mnv4HeadSyncCotHc (r : Fin R) : Vec (N * (oc * 1 * 1)) :=
+private noncomputable def mnv4HeadSyncCotHc (r : Fin R) : Vec (N * (oc * 1 * 1)) :=
   bnSyncInB R hR N oc 1 1 ε2 γ2
     (fun r => batchShard R N (oc * 1 * 1) (batchMap (R * N) (flatConv W2 b2) (mnv4HeadPool (R * N) h w W1 b1 ε1 γ1 β1 XIN)) r)
     (mnv4HeadSyncCotHn R N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs) r
 
 /-- Head, replica `r`: the first head relu's mask of the GAP backward of `conv_head`'s input-VJP,
     relabelled. Feeds `h1g`/`h1bt`. -/
-noncomputable def mnv4HeadSyncCotH1n (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def mnv4HeadSyncCotH1n (r : Fin R) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (batchShard R N (mid * h * w)
       (bnBatchLA (R * N) mid h w ε1 γ1 β1 (batchMap (R * N) (flatConv W1 b1) XIN)) r)
@@ -721,7 +721,7 @@ noncomputable def mnv4HeadSyncCotH1n (r : Fin R) : Vec (N * (mid * h * w)) :=
         gs r))))
 
 /-- Head, replica `r`: the first head BatchNorm's sync backward. Feeds `h1W`. -/
-noncomputable def mnv4HeadSyncCotH1c (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def mnv4HeadSyncCotH1c (r : Fin R) : Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w ε1 γ1
     (fun r => batchShard R N (mid * h * w) (batchMap (R * N) (flatConv W1 b1) XIN) r)
     (mnv4HeadSyncCotH1n R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs) r
@@ -741,7 +741,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls : Nat} (hN : 0 < N)
   (hgs : ∀ r, gs r = batchShard R N nCls G r)
 include hgs
 
-theorem mnv4HeadSyncCotHn_shard (r : Fin R) :
+private theorem mnv4HeadSyncCotHn_shard (r : Fin R) :
     mnv4HeadSyncCotHn R N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs r
       = batchShard R N (oc * 1 * 1)
           (mnv4HeadCotHn (R * N) h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN G) r := by
@@ -750,7 +750,7 @@ theorem mnv4HeadSyncCotHn_shard (r : Fin R) :
   rfl
 
 include hN in
-theorem mnv4HeadSyncCotHc_shard (r : Fin R) :
+private theorem mnv4HeadSyncCotHc_shard (r : Fin R) :
     mnv4HeadSyncCotHc R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs r
       = batchShard R N (oc * 1 * 1)
           (mnv4HeadCotHc (R * N) h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN G) r :=
@@ -759,7 +759,7 @@ theorem mnv4HeadSyncCotHc_shard (r : Fin R) :
     (mnv4HeadSyncCotHn_shard R N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs G hgs) r
 
 include hN in
-theorem mnv4HeadSyncCotH1n_shard (r : Fin R) :
+private theorem mnv4HeadSyncCotH1n_shard (r : Fin R) :
     mnv4HeadSyncCotH1n R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs r
       = batchShard R N (mid * h * w)
           (mnv4HeadCotH1n (R * N) h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN G) r := by
@@ -769,7 +769,7 @@ theorem mnv4HeadSyncCotH1n_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem mnv4HeadSyncCotH1c_shard (r : Fin R) :
+private theorem mnv4HeadSyncCotH1c_shard (r : Fin R) :
     mnv4HeadSyncCotH1c R hR N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN gs r
       = batchShard R N (mid * h * w)
           (mnv4HeadCotH1c (R * N) h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd XIN G) r :=

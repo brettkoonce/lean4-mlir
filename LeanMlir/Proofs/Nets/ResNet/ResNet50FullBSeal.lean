@@ -126,7 +126,7 @@ theorem sealW_Wd (nCls : Nat) :
 /-- Every BN width in the witness clears the `β = 160` margin once `q ≤ 7`. The widest is the
     stem's `2·(16q)² = 512q² ≤ 25088 < 25600`; the five carrier sites are `512q²`, `128q²`, `32q²`,
     `8q²` and `2q²`. -/
-theorem margin_q (n q : Nat) (hq : q ≤ 7) (hn : n ≤ 512 * (q * q)) :
+private theorem margin_q (n q : Nat) (hq : q ≤ 7) (hn : n ≤ 512 * (q * q)) :
     |(1 : ℝ)| * Real.sqrt ((n : ℕ) : ℝ) < 160 := by
   refine margin160 n ?_
   have hq2 : q * q ≤ 49 := Nat.mul_le_mul hq hq
@@ -135,7 +135,7 @@ theorem margin_q (n q : Nat) (hq : q ≤ 7) (hn : n ≤ 512 * (q * q)) :
   linarith
 
 /-- `0 < 2 * (a * a)` — the `0 < N * (h * w)` a zeroed body's BN needs. -/
-theorem two_sq_pos (a : Nat) (ha : 0 < a) : 0 < 2 * (a * a) :=
+private theorem two_sq_pos (a : Nat) (ha : 0 < a) : 0 < 2 * (a * a) :=
   Nat.mul_pos (by norm_num) (Nat.mul_pos ha ha)
 
 -- ════════════════════════════════════════════════════════════════
@@ -157,7 +157,7 @@ theorem seal_id_body (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (
     (fun _ => rfl) _
 
 /-- The stride-1 projection block's body is the constant `1`. -/
-theorem seal_pr_body (N h w ic mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (ic * h * w))) :
+private theorem seal_pr_body (N h w ic mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (ic * h * w))) :
     (projB N (h := h) (w := w) (sealPrW ic mid oc).W₃ (sealPrW ic mid oc).b₃
         (sealPrW ic mid oc).ε₃ (sealPrW ic mid oc).γ₃ (sealPrW ic mid oc).β₃ ∘
       StableHLO.cbReluB N (h := h) (w := w) (sealPrW ic mid oc).W₂ (sealPrW ic mid oc).b₂
@@ -206,19 +206,19 @@ noncomputable def sealProj1 (N h w ic oc : Nat) :
     Vec (N * (ic * h * w)) → Vec (N * (oc * h * w)) :=
   projB N (h := h) (w := w) (ctK oc ic 1 1 1) (kv oc 0) 1 (kv oc 1) (kv oc 160)
 
-theorem sealProj1_apply (N h w ic oc : Nat) (v : Vec (N * (ic * h * w))) :
+private theorem sealProj1_apply (N h w ic oc : Nat) (v : Vec (N * (ic * h * w))) :
     sealProj1 N h w ic oc v
       = StableHLO.bnBatchLA N oc h w 1 (kv oc 1) (kv oc 160)
           (StableHLO.batchMap N (flatConv (h := h) (w := w) (ctK oc ic 1 1 1) (kv oc 0)) v) := rfl
 
-theorem sealProj1_pos (N h w ic oc : Nat)
+private theorem sealProj1_pos (N h w ic oc : Nat)
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
     (v : Vec (N * (ic * h * w))) (k : Fin (N * (oc * h * w))) :
     0 < sealProj1 N h w ic oc v k :=
   bnBatchLA_pos 1 one_pos (kv oc 1) (kv oc 160) 1 160 (fun _ => rfl) (fun _ => rfl) hm _ k
 
 /-- **The structural stride-1 projection block is its projection plus one.** -/
-theorem sealPrB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
+private theorem sealPrB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160) (v : Vec (N * (ic * h * w))) :
     r50ProjB N h w (sealPrW ic mid oc) v = fun k => sealProj1 N h w ic oc v k + 1 := by
   have hbody := seal_pr_body N h w ic mid oc hn v
@@ -272,20 +272,20 @@ theorem sealDnB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
 -- § 4. Every running activation is nonnegative, and the clause bundles
 -- ════════════════════════════════════════════════════════════════
 
-theorem r50IdB_nonneg (N h w mid oc : Nat) (p : R50IdW mid oc) (v : Vec (N * (oc * h * w)))
+private theorem r50IdB_nonneg (N h w mid oc : Nat) (p : R50IdW mid oc) (v : Vec (N * (oc * h * w)))
     (k : Fin (N * (oc * h * w))) : 0 ≤ r50IdB N h w p v k := relu_nonneg _ _ k
 
-theorem r50ProjB_nonneg (N h w ic mid oc : Nat) (p : R50ProjW ic mid oc)
+private theorem r50ProjB_nonneg (N h w ic mid oc : Nat) (p : R50ProjW ic mid oc)
     (v : Vec (N * (ic * h * w))) (k : Fin (N * (oc * h * w))) :
     0 ≤ r50ProjB N h w p v k := relu_nonneg _ _ k
 
-theorem r50DownB_nonneg (N h w ic mid oc : Nat) (p : R50ProjW ic mid oc)
+private theorem r50DownB_nonneg (N h w ic mid oc : Nat) (p : R50ProjW ic mid oc)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) (k : Fin (N * (oc * h * w))) :
     0 ≤ r50DownB N h w p v k := relu_nonneg _ _ k
 
 theorem seal_id_pos (mid oc : Nat) : R50IdPos (sealIdW mid oc) := ⟨one_pos, one_pos, one_pos⟩
 
-theorem seal_pr_pos (ic mid oc : Nat) : R50ProjPos (sealPrW ic mid oc) :=
+private theorem seal_pr_pos (ic mid oc : Nat) : R50ProjPos (sealPrW ic mid oc) :=
   ⟨one_pos, one_pos, one_pos, one_pos⟩
 
 /-- **The bottleneck's three relu clauses.** Both interior ones see a constant channel (their
@@ -315,7 +315,7 @@ theorem seal_id_smooth (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N *
     linarith [hv k]
 
 /-- The stride-1 projection block's three relu clauses — all weight-only. -/
-theorem seal_pr_smooth (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
+private theorem seal_pr_smooth (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160) (v : Vec (N * (ic * h * w))) :
     R50ProjSmoothAt N h w (sealPrW ic mid oc) v where
   hm1 := by
@@ -392,7 +392,7 @@ noncomputable def Zs (q : Nat) (t : ℝ) : Vec (2 * (64 * (2 * (2 * (2 * (2 * q)
   ctConv 64 7 7 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) t
 
 /-- `2·a² ≤ 512·q²` whenever `a ≤ 16q` — every BN width against the stem's. -/
-theorem bnd (a q : Nat) (ha : a ≤ 16 * q) : 2 * (a * a) ≤ 512 * (q * q) := by
+private theorem bnd (a q : Nat) (ha : a ≤ 16 * q) : 2 * (a * a) ≤ 512 * (q * q) := by
   calc 2 * (a * a) ≤ 2 * ((16 * q) * (16 * q)) :=
         Nat.mul_le_mul_left _ (Nat.mul_le_mul ha ha)
     _ = 512 * (q * q) := by ring
@@ -403,22 +403,22 @@ theorem margin_stem (q : Nat) (hq : q ≤ 7) :
   margin_q _ q hq (bnd _ q (by omega))
 
 /-- The `β = 160` margin at stage 1's `2·(8q)²`. -/
-theorem margin_p1 (q : Nat) (hq : q ≤ 7) :
+private theorem margin_p1 (q : Nat) (hq : q ≤ 7) :
     |(1 : ℝ)| * Real.sqrt ((2 * ((2 * (2 * (2 * q))) * (2 * (2 * (2 * q)))) : ℕ) : ℝ) < 160 :=
   margin_q _ q hq (bnd _ q (by omega))
 
 /-- The `β = 160` margin at stage 2's `2·(4q)²`. -/
-theorem margin_p2 (q : Nat) (hq : q ≤ 7) :
+private theorem margin_p2 (q : Nat) (hq : q ≤ 7) :
     |(1 : ℝ)| * Real.sqrt ((2 * ((2 * (2 * q)) * (2 * (2 * q))) : ℕ) : ℝ) < 160 :=
   margin_q _ q hq (bnd _ q (by omega))
 
 /-- The `β = 160` margin at stage 3's `2·(2q)²`. -/
-theorem margin_p3 (q : Nat) (hq : q ≤ 7) :
+private theorem margin_p3 (q : Nat) (hq : q ≤ 7) :
     |(1 : ℝ)| * Real.sqrt ((2 * ((2 * q) * (2 * q)) : ℕ) : ℝ) < 160 :=
   margin_q _ q hq (bnd _ q (by omega))
 
 /-- The `β = 160` margin at stage 4's `2·q²`. -/
-theorem margin_p4 (q : Nat) (hq : q ≤ 7) :
+private theorem margin_p4 (q : Nat) (hq : q ≤ 7) :
     |(1 : ℝ)| * Real.sqrt ((2 * (q * q) : ℕ) : ℝ) < 160 :=
   margin_q _ q hq (bnd _ q (by omega))
 
@@ -609,70 +609,70 @@ theorem pc16 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
 -- § 7. The 48 relu clauses at the witness
 -- ════════════════════════════════════════════════════════════════
 
-theorem sc_s1b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
+private theorem sc_s1b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     R50ProjSmoothAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (sealW nCls).s1b0 (r50Pre0 2 q (sealW nCls) (sealX q t)) :=
   seal_pr_smooth 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 64 64 256 (two_sq_pos (2 * (2 * (2 * q))) (by omega)) (margin_p1 q hq) _
 
-theorem sc_s1b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s1b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (sealW nCls).s1b1 (r50Pre1 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 64 256 (two_sq_pos (2 * (2 * (2 * q))) (by omega)) _ (nn1 q nCls t)
 
-theorem sc_s1b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s1b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) (sealW nCls).s1b2 (r50Pre2 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 64 256 (two_sq_pos (2 * (2 * (2 * q))) (by omega)) _ (nn2 q nCls t)
 
-theorem sc_s2b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
+private theorem sc_s2b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     R50DownSmoothAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b0 (r50Pre3 2 q (sealW nCls) (sealX q t)) :=
   seal_dn_smooth 2 (2 * (2 * q)) (2 * (2 * q)) 256 128 512 (two_sq_pos (2 * (2 * (2 * q))) (by omega))
     (two_sq_pos (2 * (2 * q)) (by omega)) (margin_p2 q hq) _
 
-theorem sc_s2b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s2b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b1 (r50Pre4 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * (2 * q)) (2 * (2 * q)) 128 512 (two_sq_pos (2 * (2 * q)) (by omega)) _ (nn4 q nCls t)
 
-theorem sc_s2b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s2b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b2 (r50Pre5 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * (2 * q)) (2 * (2 * q)) 128 512 (two_sq_pos (2 * (2 * q)) (by omega)) _ (nn5 q nCls t)
 
-theorem sc_s2b3 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s2b3 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * (2 * q)) (2 * (2 * q)) (sealW nCls).s2b3 (r50Pre6 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * (2 * q)) (2 * (2 * q)) 128 512 (two_sq_pos (2 * (2 * q)) (by omega)) _ (nn6 q nCls t)
 
-theorem sc_s3b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
+private theorem sc_s3b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     R50DownSmoothAt 2 (2 * q) (2 * q) (sealW nCls).s3b0 (r50Pre7 2 q (sealW nCls) (sealX q t)) :=
   seal_dn_smooth 2 (2 * q) (2 * q) 512 256 1024 (two_sq_pos (2 * (2 * q)) (by omega))
     (two_sq_pos (2 * q) (by omega)) (margin_p3 q hq) _
 
-theorem sc_s3b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s3b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * q) (2 * q) (sealW nCls).s3b1 (r50Pre8 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * q) (2 * q) 256 1024 (two_sq_pos (2 * q) (by omega)) _ (nn8 q nCls t)
 
-theorem sc_s3b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s3b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * q) (2 * q) (sealW nCls).s3b2 (r50Pre9 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * q) (2 * q) 256 1024 (two_sq_pos (2 * q) (by omega)) _ (nn9 q nCls t)
 
-theorem sc_s3b3 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s3b3 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * q) (2 * q) (sealW nCls).s3b3 (r50Pre10 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * q) (2 * q) 256 1024 (two_sq_pos (2 * q) (by omega)) _ (nn10 q nCls t)
 
-theorem sc_s3b4 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s3b4 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * q) (2 * q) (sealW nCls).s3b4 (r50Pre11 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * q) (2 * q) 256 1024 (two_sq_pos (2 * q) (by omega)) _ (nn11 q nCls t)
 
-theorem sc_s3b5 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s3b5 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 (2 * q) (2 * q) (sealW nCls).s3b5 (r50Pre12 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 (2 * q) (2 * q) 256 1024 (two_sq_pos (2 * q) (by omega)) _ (nn12 q nCls t)
 
-theorem sc_s4b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
+private theorem sc_s4b0 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     R50DownSmoothAt 2 q q (sealW nCls).s4b0 (r50Pre13 2 q (sealW nCls) (sealX q t)) :=
   seal_dn_smooth 2 q q 1024 512 2048 (two_sq_pos (2 * q) (by omega))
     (two_sq_pos q (by omega)) (margin_p4 q hq) _
 
-theorem sc_s4b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s4b1 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 q q (sealW nCls).s4b1 (r50Pre14 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 q q 512 2048 (two_sq_pos q (by omega)) _ (nn14 q nCls t)
 
-theorem sc_s4b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
+private theorem sc_s4b2 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
     R50IdSmoothAt 2 q q (sealW nCls).s4b2 (r50Pre15 2 q (sealW nCls) (sealX q t)) :=
   seal_id_smooth 2 q q 512 2048 (two_sq_pos q (by omega)) _ (nn15 q nCls t)
 
@@ -726,7 +726,7 @@ noncomputable def dS (q : Nat) (t : ℝ) : Fin 64 → ℝ :=
     (bnRowLA 2 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) (Zs q t) ci) 1
 
 /-- The stage-1 projection's pre-BN activation. -/
-noncomputable def Zp1 (q : Nat) (nCls : Nat) (t : ℝ) : Vec (2 * (256 * (2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))) :=
+private noncomputable def Zp1 (q : Nat) (nCls : Nat) (t : ℝ) : Vec (2 * (256 * (2 * (2 * (2 * q))) * (2 * (2 * (2 * q))))) :=
   StableHLO.batchMap 2 (flatConv (ctK 256 64 1 1 1) (kv 256 0))
     (r50Pre0 2 q (sealW nCls) (sealX q t))
 

@@ -186,7 +186,7 @@ noncomputable def cnxDn2 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (192 * 28 * 28)
   cnxDownChW 14 14 w.d2
 theorem cnxDn2_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) :
     Differentiable ℝ (cnxDn2 w) := cnxDownChW_differentiable 14 14 w.d2 hd2
-noncomputable def cnxDn2Vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) :
+private noncomputable def cnxDn2Vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) :
     HasVJP (cnxDn2 w) := cnxDownChWHasVJP 14 14 w.d2 hd2
 
 /-- Downsample 3 at the chain's dimension spelling. -/
@@ -309,7 +309,7 @@ private noncomputable def cnxV7 {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.
     (cnxV6 w hsε h1 hd1 h2 hd2 h3) (cnxDn3Vjp w hd3)
 
 /-- GAP's saved input. -/
-noncomputable def cnxSavedA8 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (768 * 7 * 7) :=
+private noncomputable def cnxSavedA8 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (768 * 7 * 7) :=
   convNextStageChK 3 w.s4 ∘ cnxSavedA7 w
 
 private theorem cnxSavedA8_differentiable {nC : Nat} (w : CnxTWeightsCh nC) (hsε : 0 < w.sε) (h1 : ∀ i, 0 < (w.s1 i).εn)
@@ -450,7 +450,7 @@ theorem cnxDn1Back_eq_vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd1 : 0 < w.d1.ε) 
       = (cnxDn1Vjp w hd1).backward v :=
   cnxDownChBack_eq_vjp (h := 28) (w := 28) w.d1 hd1 v
 
-theorem cnxDn2Back_eq_vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) (v : Vec (192 * 28 * 28)) :
+private theorem cnxDn2Back_eq_vjp {nC : Nat} (w : CnxTWeightsCh nC) (hd2 : 0 < w.d2.ε) (v : Vec (192 * 28 * 28)) :
     cnxDownBack (h := 14) (w := 14) (padOdd w.d2.W)
         (chanLNTensor3Back 192 28 28 w.d2.ε w.d2.γ v)
       = (cnxDn2Vjp w hd2).backward v :=

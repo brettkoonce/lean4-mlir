@@ -210,15 +210,15 @@ theorem r34StemB_eq {N h w ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (
 -- ════════════════════════════════════════════════════════════════
 
 /-- A block output is a relu, hence nonnegative — whatever the weights. -/
-theorem r34IdB_nonneg (N h w c : Nat) (p : R34IdW c) (v : Vec (N * (c * h * w)))
+private theorem r34IdB_nonneg (N h w c : Nat) (p : R34IdW c) (v : Vec (N * (c * h * w)))
     (k : Fin (N * (c * h * w))) : 0 ≤ r34IdB N h w p v k := relu_nonneg _ _ k
 
-theorem r34DownB_nonneg (N h w ic oc : Nat) (p : R34DownW ic oc)
+private theorem r34DownB_nonneg (N h w ic oc : Nat) (p : R34DownW ic oc)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) (k : Fin (N * (oc * h * w))) :
     0 ≤ r34DownB N h w p v k := relu_nonneg _ _ k
 
 /-- The stem's pool preserves the relu's nonnegativity. -/
-theorem r34StemB_nonneg (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
+private theorem r34StemB_nonneg (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc)
     (εs : ℝ) (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (k : Fin (N * (oc * h * w))) :
     0 ≤ r34StemB N h w Ws bs εs γs βs x k := by
@@ -239,7 +239,7 @@ theorem r34StemB_nonneg (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs
 theorem seal_id_pos (c : Nat) : R34IdPos (sealIdW c) := ⟨one_pos, one_pos⟩
 
 /-- All three `ε`s of a structural downsample are positive. -/
-theorem seal_dn_pos (ic oc : Nat) : R34DownPos (sealDnW ic oc) := ⟨one_pos, one_pos, one_pos⟩
+private theorem seal_dn_pos (ic oc : Nat) : R34DownPos (sealDnW ic oc) := ⟨one_pos, one_pos, one_pos⟩
 
 /-- **The identity block's two relu clauses**: the mid-relu sees the constant `β₁ = 1`
     (weight-only), the outer one sees `1 + activation > 0`. -/
@@ -316,13 +316,13 @@ noncomputable def Zs (t : ℝ) : Vec (2 * (64 * (2 * 56) * (2 * 56))) := ctConv 
 theorem margin_stem : |(1 : ℝ)| * Real.sqrt ((2 * ((2 * 56) * (2 * 56)) : ℕ) : ℝ) < 160 :=
   margin160 _ (by norm_num)
 
-theorem margin28 : |(1 : ℝ)| * Real.sqrt ((2 * (28 * 28) : ℕ) : ℝ) < 160 :=
+private theorem margin28 : |(1 : ℝ)| * Real.sqrt ((2 * (28 * 28) : ℕ) : ℝ) < 160 :=
   margin160 _ (by norm_num)
 
-theorem margin14 : |(1 : ℝ)| * Real.sqrt ((2 * (14 * 14) : ℕ) : ℝ) < 160 :=
+private theorem margin14 : |(1 : ℝ)| * Real.sqrt ((2 * (14 * 14) : ℕ) : ℝ) < 160 :=
   margin160 _ (by norm_num)
 
-theorem margin7 : |(1 : ℝ)| * Real.sqrt ((2 * (7 * 7) : ℕ) : ℝ) < 160 :=
+private theorem margin7 : |(1 : ℝ)| * Real.sqrt ((2 * (7 * 7) : ℕ) : ℝ) < 160 :=
   margin160 _ (by norm_num)
 
 /-- The stem BN is strictly positive at every point of the ray. -/
@@ -333,7 +333,7 @@ theorem Zs_bn_pos (t : ℝ) (k : Fin (2 * (64 * (2 * 56) * (2 * 56)))) :
 
 /-- The stem pool has no tie at the witness — the ramp is positionally injective and BN is
     injective within a channel. -/
-theorem seal_pool_smooth (t : ℝ) :
+private theorem seal_pool_smooth (t : ℝ) :
     StemPoolSmoothAt 2 56 56
       (StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t)) := by
   rw [Zs]
@@ -346,7 +346,7 @@ theorem seal_pool_smooth (t : ℝ) :
 -- ════════════════════════════════════════════════════════════════
 
 /-- The stem's output is nonnegative (a pool of a relu). -/
-theorem nn0 (nCls : Nat) (t : ℝ) : ∀ k, 0 ≤ r34Pre0 2 (sealW nCls) (sealX t) k := by
+private theorem nn0 (nCls : Nat) (t : ℝ) : ∀ k, 0 ≤ r34Pre0 2 (sealW nCls) (sealX t) k := by
   intro k
   rw [r34Pre0_apply]
   exact r34StemB_nonneg 2 56 56 _ _ _ _ _ (sealX t) k
@@ -526,67 +526,67 @@ theorem seal_stem_clause (nCls : Nat) (t : ℝ) :
       (sealW nCls).sβ (sealX t) :=
   seal_stem_smooth 2 56 56 3 64 _ _ margin_stem (sealX t)
 
-theorem sc_a0 (nCls : Nat) (t : ℝ) :
+private theorem sc_a0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 56 56 (sealW nCls).a0 (r34Pre0 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 56 56 64 (by norm_num) _ (nn0 nCls t)
 
-theorem sc_a1 (nCls : Nat) (t : ℝ) :
+private theorem sc_a1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 56 56 (sealW nCls).a1 (r34Pre1 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 56 56 64 (by norm_num) _ (nn1 nCls t)
 
-theorem sc_a2 (nCls : Nat) (t : ℝ) :
+private theorem sc_a2 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 56 56 (sealW nCls).a2 (r34Pre2 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 56 56 64 (by norm_num) _ (nn2 nCls t)
 
-theorem sc_d2 (nCls : Nat) (t : ℝ) :
+private theorem sc_d2 (nCls : Nat) (t : ℝ) :
     R34DownSmoothAt 2 28 28 (sealW nCls).d2 (r34Pre3 2 (sealW nCls) (sealX t)) :=
   seal_dn_smooth 2 28 28 64 128 (by norm_num) margin28 _
 
-theorem sc_b0 (nCls : Nat) (t : ℝ) :
+private theorem sc_b0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 28 28 (sealW nCls).b0 (r34Pre4 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 28 28 128 (by norm_num) _ (nn4 nCls t)
 
-theorem sc_b1 (nCls : Nat) (t : ℝ) :
+private theorem sc_b1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 28 28 (sealW nCls).b1 (r34Pre5 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 28 28 128 (by norm_num) _ (nn5 nCls t)
 
-theorem sc_b2 (nCls : Nat) (t : ℝ) :
+private theorem sc_b2 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 28 28 (sealW nCls).b2 (r34Pre6 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 28 28 128 (by norm_num) _ (nn6 nCls t)
 
-theorem sc_d3 (nCls : Nat) (t : ℝ) :
+private theorem sc_d3 (nCls : Nat) (t : ℝ) :
     R34DownSmoothAt 2 14 14 (sealW nCls).d3 (r34Pre7 2 (sealW nCls) (sealX t)) :=
   seal_dn_smooth 2 14 14 128 256 (by norm_num) margin14 _
 
-theorem sc_c0 (nCls : Nat) (t : ℝ) :
+private theorem sc_c0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c0 (r34Pre8 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 14 14 256 (by norm_num) _ (nn8 nCls t)
 
-theorem sc_c1 (nCls : Nat) (t : ℝ) :
+private theorem sc_c1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c1 (r34Pre9 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 14 14 256 (by norm_num) _ (nn9 nCls t)
 
-theorem sc_c2 (nCls : Nat) (t : ℝ) :
+private theorem sc_c2 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c2 (r34Pre10 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 14 14 256 (by norm_num) _ (nn10 nCls t)
 
-theorem sc_c3 (nCls : Nat) (t : ℝ) :
+private theorem sc_c3 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c3 (r34Pre11 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 14 14 256 (by norm_num) _ (nn11 nCls t)
 
-theorem sc_c4 (nCls : Nat) (t : ℝ) :
+private theorem sc_c4 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 14 14 (sealW nCls).c4 (r34Pre12 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 14 14 256 (by norm_num) _ (nn12 nCls t)
 
-theorem sc_d4 (nCls : Nat) (t : ℝ) :
+private theorem sc_d4 (nCls : Nat) (t : ℝ) :
     R34DownSmoothAt 2 7 7 (sealW nCls).d4 (r34Pre13 2 (sealW nCls) (sealX t)) :=
   seal_dn_smooth 2 7 7 256 512 (by norm_num) margin7 _
 
-theorem sc_e0 (nCls : Nat) (t : ℝ) :
+private theorem sc_e0 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 7 7 (sealW nCls).e0 (r34Pre14 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 7 7 512 (by norm_num) _ (nn14 nCls t)
 
-theorem sc_e1 (nCls : Nat) (t : ℝ) :
+private theorem sc_e1 (nCls : Nat) (t : ℝ) :
     R34IdSmoothAt 2 7 7 (sealW nCls).e1 (r34Pre15 2 (sealW nCls) (sealX t)) :=
   seal_id_smooth 2 7 7 512 (by norm_num) _ (nn15 nCls t)
 

@@ -252,68 +252,68 @@ noncomputable def Bp : Vec 1 := fun _ => 1
 noncomputable def Wd7 : Mat 1 2 := fun _ _ => 1
 noncomputable def Bz2 : Vec 2 := fun _ => 0
 
-theorem T0_pos : ∀ (ci : Fin 1) (hi wi : Fin (2*(2*1))), 0 < T0 ci hi wi := by
+private theorem T0_pos : ∀ (ci : Fin 1) (hi wi : Fin (2*(2*1))), 0 < T0 ci hi wi := by
   intro ci hi wi; simp only [T0]; positivity
 
 /-- `T0` is positionally injective: `4·hi + wi + 1` pins down `(hi, wi)`. -/
-theorem T0_inj (ci : Fin 1) (r r' s s' : Fin (2*(2*1)))
+private theorem T0_inj (ci : Fin 1) (r r' s s' : Fin (2*(2*1)))
     (h : T0 ci r s = T0 ci r' s') : r = r' ∧ s = s' := by
   simp only [T0, Nat.cast_inj] at h
   have hr := r.isLt; have hs := s.isLt; have hr' := r'.isLt; have hs' := s'.isLt
   exact ⟨Fin.ext (by omega), Fin.ext (by omega)⟩
 
-theorem X_pos : ∀ k, 0 < X k :=
+private theorem X_pos : ∀ k, 0 < X k :=
   fun k => flatten_pos_of_pos (fun ci hi wi => T0_pos ci hi wi) k
 
 /-- 1×1 unit conv is the identity (single channel). -/
-theorem conv2dK_id {h w : Nat} (t : Tensor3 1 h w) : conv2d K Bz t = t := by
+private theorem conv2dK_id {h w : Nat} (t : Tensor3 1 h w) : conv2d K Bz t = t := by
   funext o hi wi
   rw [conv2d_1x1]
   simp only [Bz, K, Fin.sum_univ_one, one_mul, zero_add]
   rw [Fin.fin_one_eq_zero o]
 
 /-- Hence `flatConv K Bz` is the identity at any spatial size. -/
-theorem flatConvK_id {h w : Nat} (v : Vec (1*h*w)) :
+private theorem flatConvK_id {h w : Nat} (v : Vec (1*h*w)) :
     flatConv (h := h) (w := w) K Bz v = v := by
   simp only [flatConv, conv2dK_id, Tensor3.flatten_unflatten]
 
 /-- The conv→relu block returns its (positive) input unchanged. -/
-theorem CRK_id {h w : Nat} (v : Vec (1*h*w)) (hv : ∀ i, 0 < v i) :
+private theorem CRK_id {h w : Nat} (v : Vec (1*h*w)) (hv : ∀ i, 0 < v i) :
     (relu (1*h*w) ∘ flatConv (h := h) (w := w) K Bz) v = v := by
   simp only [Function.comp_apply, flatConvK_id]
   exact relu_id_of_pos hv
 
 /-- Both stage-1 conv→relu blocks fold (identity convs, positive ReLUs) to `X`. -/
-theorem stage1_X :
+private theorem stage1_X :
     ((relu (1*(2*(2*1))*(2*(2*1))) ∘ flatConv (h := 2*(2*1)) (w := 2*(2*1)) K Bz)
       ∘ (relu (1*(2*(2*1))*(2*(2*1))) ∘ flatConv (h := 2*(2*1)) (w := 2*(2*1)) K Bz)) X = X := by
   rw [Function.comp_apply, CRK_id X X_pos, CRK_id X X_pos]
 
 /-- The first pool collapses (identity convs) to the maxpool of `T0`. -/
-theorem pool1_eq :
+private theorem pool1_eq :
     maxPoolFlat 1 (2*1) (2*1) X = Tensor3.flatten (maxPool2 T0) := by
   simp only [maxPoolFlat, X, Tensor3.unflatten_flatten]
 
 /-- The first pool's output is everywhere positive. -/
-theorem pool1X_pos : ∀ k, 0 < maxPoolFlat 1 (2*1) (2*1) X k := by
+private theorem pool1X_pos : ∀ k, 0 < maxPoolFlat 1 (2*1) (2*1) X k := by
   intro k; rw [pool1_eq]
   exact flatten_pos_of_pos
     (fun ci hi wi => maxPool2_pos (fun c r s => T0_pos c r s) ci hi wi) k
 
 /-- A positive vector unflattens to a positive tensor. -/
-theorem unflatten_pos {c h w : Nat} {v : Vec (c*h*w)} (hv : ∀ k, 0 < v k) :
+private theorem unflatten_pos {c h w : Nat} {v : Vec (c*h*w)} (hv : ∀ k, 0 < v k) :
     ∀ ci hi wi, 0 < Tensor3.unflatten v ci hi wi := by
   intro ci hi wi; simp only [Tensor3.unflatten]; exact hv _
 
 /-- The second pool's input (= the first pool's output, post identity stage-2)
     is everywhere positive. -/
-theorem pool2X_pos : ∀ k, 0 < maxPoolFlat 1 1 1 (maxPoolFlat 1 (2*1) (2*1) X) k := by
+private theorem pool2X_pos : ∀ k, 0 < maxPoolFlat 1 1 1 (maxPoolFlat 1 (2*1) (2*1) X) k := by
   intro k
   exact flatten_pos_of_pos
     (fun ci hi wi => maxPool2_pos (fun c r s => unflatten_pos pool1X_pos c r s) ci hi wi) k
 
 /-- Both stage-2 conv→relu blocks fold to the (positive) first-pool output. -/
-theorem stage2_pool1 :
+private theorem stage2_pool1 :
     ((relu (1*(2*1)*(2*1)) ∘ flatConv (h := 2*1) (w := 2*1) K Bz)
       ∘ (relu (1*(2*1)*(2*1)) ∘ flatConv (h := 2*1) (w := 2*1) K Bz))
       (maxPoolFlat 1 (2*1) (2*1) X) = maxPoolFlat 1 (2*1) (2*1) X := by
@@ -323,7 +323,7 @@ theorem stage2_pool1 :
     `T0` is strictly increasing in row-major, so each 2×2 window's max is its
     bottom-right corner. Proved by folding the real `max`es back through
     `Nat.cast_max` and discharging the resulting `Nat` identity with `omega`. -/
-theorem maxPool2T0_val (r s : Fin (2*1)) :
+private theorem maxPool2T0_val (r s : Fin (2*1)) :
     maxPool2 T0 0 r s = ((8 * r.val + 2 * s.val + 6 : ℕ) : ℝ) := by
   simp only [maxPool2, T0]
   rw [← Nat.cast_max, ← Nat.cast_max, ← Nat.cast_max, Nat.cast_inj]
@@ -331,7 +331,7 @@ theorem maxPool2T0_val (r s : Fin (2*1)) :
 
 /-- Hence the first pool's output is positionally injective (the four window
     maxima are pairwise distinct) — the second pool's no-tie condition. -/
-theorem pool1_inj : ∀ (ci : Fin 1) (r r' s s' : Fin (2*1)),
+private theorem pool1_inj : ∀ (ci : Fin 1) (r r' s s' : Fin (2*1)),
     maxPool2 T0 ci r s = maxPool2 T0 ci r' s' → r = r' ∧ s = s' := by
   intro ci r r' s s' heq
   rw [Fin.fin_one_eq_zero ci, maxPool2T0_val, maxPool2T0_val, Nat.cast_inj] at heq
@@ -743,7 +743,7 @@ noncomputable def convBnReluPCHasVJPAt {ic oc h w kH kW : Nat}
     (reluHasVJPAt (oc * h * w) _ h_smooth)
 
 /-- **conv → per-channel-BN → relu is differentiable at a smooth point.** -/
-theorem convBnReluPC_differentiableAt {ic oc h w kH kW : Nat}
+private theorem convBnReluPC_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, bnPerChannelTensor3 oc h w ε γ β (flatConv W b v) k ≠ 0) :

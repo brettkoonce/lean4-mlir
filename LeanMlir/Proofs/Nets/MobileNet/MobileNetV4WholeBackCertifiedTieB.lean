@@ -106,7 +106,7 @@ theorem mnv4StemBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
 
 /-- A `Fin.cast` reindex's certified backward is the reverse relabel: along a bijection exactly
     one term of `reindexHasVJP`'s masked sum survives. -/
-theorem reindex_cast_backward {n m : Nat} (h : n = m) (x : Vec n) (dy : Vec m) :
+private theorem reindex_cast_backward {n m : Nat} (h : n = m) (x : Vec n) (dy : Vec m) :
     (reindexHasVJP (Fin.cast h.symm)).backward x dy = fun i => dy (Fin.cast h i) := by
   funext i
   show ∑ k : Fin m, (if i = Fin.cast h.symm k then dy k else 0) = dy (Fin.cast h i)
@@ -121,19 +121,19 @@ theorem reindex_cast_backward {n m : Nat} (h : n = m) (x : Vec n) (dy : Vec m) :
     Vec (N * (c * h * w)) → Vec (N * (c * 1 * 1)) :=
   reindexCLM (Fin.cast (mnv4_pool11 N c).symm) ∘ StableHLO.batchMap N (globalAvgPoolFlat c h w)
 
-theorem mnv4PoolB_differentiable (N h w : Nat) {c : Nat} :
+private theorem mnv4PoolB_differentiable (N h w : Nat) {c : Nat} :
     Differentiable ℝ (mnv4PoolB N h w (c := c)) :=
   (reindexCLM _).differentiable.comp
     (batchMap_differentiable _ (globalAvgPoolFlat_differentiable c h w))
 
-noncomputable def mnv4PoolBHasVJP (N h w : Nat) {c : Nat} : HasVJP (mnv4PoolB N h w (c := c)) :=
+private noncomputable def mnv4PoolBHasVJP (N h w : Nat) {c : Nat} : HasVJP (mnv4PoolB N h w (c := c)) :=
   vjpComp _ _ (batchMap_differentiable _ (globalAvgPoolFlat_differentiable c h w))
     (reindexCLM _).differentiable
     (batchMapHasVJP _ (globalAvgPoolFlatHasVJP c h w) (globalAvgPoolFlat_differentiable c h w))
     (reindexHasVJP _)
 
 /-- The pool stage's certified backward: the reverse relabel, then GAP-back. -/
-theorem mnv4PoolB_backward (N h w : Nat) {c : Nat} (v : Vec (N * (c * h * w)))
+private theorem mnv4PoolB_backward (N h w : Nat) {c : Nat} (v : Vec (N * (c * h * w)))
     (d : Vec (N * (c * 1 * 1))) :
     (mnv4PoolBHasVJP N h w (c := c)).backward v d
       = StableHLO.batchMap N (gapBack c h w) (fun i => d (Fin.cast (mnv4_pool11 N c) i)) := by
@@ -190,7 +190,7 @@ noncomputable def mnv4ClsBHasVJP (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (b
     (reindexHasVJP _) (batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd))
 
 /-- The classifier stage's certified backward: dense-back, then the reverse relabel. -/
-theorem mnv4ClsB_backward (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (bd : Vec nCls)
+private theorem mnv4ClsB_backward (N : Nat) {oc nCls : Nat} (Wd : Mat oc nCls) (bd : Vec nCls)
     (x : Vec (N * (oc * 1 * 1))) (d : Vec (N * nCls)) :
     (mnv4ClsBHasVJP N Wd bd).backward x d
       = fun i => StableHLO.batchMap N ((denseHasVJP Wd bd).backward (fun _ => 0)) d
@@ -308,7 +308,7 @@ noncomputable def mnv4BFullHasVJPAt {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s
 /-- **The apex's backward, peeled** — each stage's backward in turn, head first. `rfl` over
     VARIABLE stages; the tie below instantiates it by `rw`, so the kernel never re-derives the
     concrete chain (the ResNet-34 apex's `r34BFullHasVJPAt_backward`). -/
-theorem mnv4BFullHasVJPAt_backward
+private theorem mnv4BFullHasVJPAt_backward
     {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 s22 s23 s24 s25 s26 : Nat}
     (stem : Vec s0 → Vec s1)
     (fused : Vec s1 → Vec s2)
@@ -647,7 +647,7 @@ theorem mnv4InputGradB_correct (N : Nat) {nCls : Nat}
 
 /-- The **head**, as the tie's three stages: `cn_960` conv-BN-relu, the pool with `conv_head`, the
     relabelled classifier. -/
-theorem mnv4HeadStack_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+private theorem mnv4HeadStack_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (v : Vec (N * (256 * 7 * 7))) :
     (mnv4HeadStack N w).fwd v
       = mnv4ClsB N w.Wd w.bd
@@ -659,7 +659,7 @@ theorem mnv4HeadStack_fwd_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
 
 /-- The forward at GROUP granularity — `rfl`, because `mobilenetv4ForwardBFull` IS the nest of
     `mnv4Pre0 … mnv4Pre6`. Nothing is peeled here; the seven `.fwd`s stay folded. -/
-theorem mnv4_fwd_eq_groups (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
+private theorem mnv4_fwd_eq_groups (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) :
     mobilenetv4ForwardBFull N w x
       = (mnv4HeadStack N w).fwd
@@ -673,7 +673,7 @@ theorem mnv4_fwd_eq_groups (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
 
 /-- The twenty-six-stage composition, APPLIED — the apex's chain read as a nested application.
     Generic in every dimension and every stage, so it costs nothing here. -/
-theorem mnv4Chain_apply {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 s22 s23 s24 s25 s26 : Nat}
+private theorem mnv4Chain_apply {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 s22 s23 s24 s25 s26 : Nat}
     (stem : Vec s0 → Vec s1)
     (fused : Vec s1 → Vec s2)
     (b1 : Vec s2 → Vec s3)

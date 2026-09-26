@@ -40,7 +40,7 @@ open StableHLO
 
 /-- Head `h`'s pre-softmax scaled scores `Q_h·K_hᵀ · 1/√d`, recomputed from the full saved
     Q/K — the `ss` argument the rendered per-head `vitCotDQ`/`vitCotDK` consume (`d` = d_head). -/
-noncomputable def headScoresF (Np1 heads d : Nat) (h : Fin heads)
+private noncomputable def headScoresF (Np1 heads d : Nat) (h : Fin heads)
     (q k : Vec (Np1 * (heads * d))) : Vec (Np1 * Np1) :=
   Mat.flatten (fun i j => sdpaScale d *
     Mat.mul (headSliceMat Np1 heads d h (Mat.unflatten q))
@@ -48,7 +48,7 @@ noncomputable def headScoresF (Np1 heads d : Nat) (h : Fin heads)
 
 /-- Head `h`'s post-softmax weights `softmax(Q_h·K_hᵀ · 1/√d)`, recomputed from the full saved
     Q/K — the `p` argument the rendered per-head `vitCotDV` consumes. -/
-noncomputable def headWeightsF (Np1 heads d : Nat) (h : Fin heads)
+private noncomputable def headWeightsF (Np1 heads d : Nat) (h : Fin heads)
     (q k : Vec (Np1 * (heads * d))) : Vec (Np1 * Np1) :=
   Mat.flatten (sdpaWeights Np1 d
     (headSliceMat Np1 heads d h (Mat.unflatten q))
@@ -104,7 +104,7 @@ noncomputable def vitCotLn1MH (Np1 heads d : Nat)
 /-- One head's Q term: `headPadFlat h (vitCotDQ d …)` at the saved slices of the full Q/K/V/dOut
     IS `Mat.flatten (headPadMat h (sdpaBackQ d Q_h K_h V_h dOut_h))` — the single-head pin
     `vitCotDQ_eq_sdpaBackQ` at `d_head`, slid through the slice/pad commutation bridges. -/
-lemma vitCotDQ_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
+private lemma vitCotDQ_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
     headPadFlat Np1 heads d h
         (vitCotDQ d (headScoresF Np1 heads d h (Mat.flatten Q) (Mat.flatten K))
           (headSliceFlat Np1 heads d h (Mat.flatten K))
@@ -119,7 +119,7 @@ lemma vitCotDQ_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1
       headPadFlat_flat]
 
 /-- One head's K term — `vitCotDK_eq_sdpaBackK` at `d_head` through the bridges. -/
-lemma vitCotDK_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
+private lemma vitCotDK_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
     headPadFlat Np1 heads d h
         (vitCotDK d (headScoresF Np1 heads d h (Mat.flatten Q) (Mat.flatten K))
           (headSliceFlat Np1 heads d h (Mat.flatten Q))
@@ -134,7 +134,7 @@ lemma vitCotDK_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1
       headPadFlat_flat]
 
 /-- One head's V term — `vitCotDV_eq_sdpaBackV` at `d_head` through the bridges. -/
-lemma vitCotDV_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
+private lemma vitCotDV_head_eq (Np1 heads d : Nat) (h : Fin heads) (Q K V dOut : Mat Np1 (heads * d)) :
     headPadFlat Np1 heads d h
         (vitCotDV (headWeightsF Np1 heads d h (Mat.flatten Q) (Mat.flatten K))
           (headSliceFlat Np1 heads d h (Mat.flatten dOut)))

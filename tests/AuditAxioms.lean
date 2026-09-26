@@ -1243,7 +1243,6 @@ open Proofs
 #print axioms StableHLO.chanLNBackGraph_faithful
 #print axioms StableHLO.chanLNBackGraph_eq_vjp
 #print axioms StableHLO.cnxBlockBodyChBackGraph_faithful
-#print axioms StableHLO.cnxResidBlockChBackGraph_faithful
 #print axioms StableHLO.cnxDownChBackGraph_faithful
 #print axioms StableHLO.bnBatchBack_faithful
 #print axioms StableHLO.convBackBatched_faithful
@@ -1311,7 +1310,6 @@ open Proofs
 #print axioms StableHLO.vitNetBackGraph_faithful
 
 -- ViT folded onto the net-agnostic `CertLayer` machinery (ViTBackNet.lean, 2026-08-10)
-#print axioms StableHLO.vitBlockVLayer
 #print axioms StableHLO.vitTrunkV_fwd
 #print axioms StableHLO.vitTrunkV_graph
 
@@ -1342,9 +1340,6 @@ open Proofs
 #print axioms StableHLO.r34DownBlockLayer
 
 -- MNv4 — the four UIB families COLLAPSED into one body
-#print axioms StableHLO.dwbReluBackBatchedGraph_faithful
-#print axioms StableHLO.dwbReluBstridedBackBatchedGraph_faithful
-#print axioms StableHLO.dwbBackBatchedGraph_faithful
 
 -- MNv4's NET level (T1, T2)
 #print axioms StableHLO.mobilenetv4ForwardBFullHasVJPAt
@@ -1900,7 +1895,6 @@ open Proofs
 #print axioms Proofs.mnv2ExpOnlyBHasVJPAt
 #print axioms Proofs.mnv2ResidBHasVJPAt
 #print axioms Proofs.mnv2StridedBHasVJPAt
-#print axioms Proofs.mnv2HeadBHasVJPAt
 #print axioms Proofs.mobilenetv2ForwardBFullHasVJPAt
 #print axioms Proofs.mobilenetv2ForwardBFull_eq_chain
 #print axioms Proofs.mobilenetv2ForwardBFullHasVJPAt_correct
@@ -2260,7 +2254,6 @@ open Proofs
 #print axioms Proofs.r50DownBHasVJPAt
 #print axioms Proofs.r50NetLayer
 #print axioms Proofs.r50NetLayer_fwd_apply
-#print axioms Proofs.r50SmoothAtB_ok
 #print axioms Proofs.resnet50ForwardBFullHasVJPAt
 #print axioms Proofs.resnet50ForwardBFull_eq_chain
 #print axioms Proofs.resnet50ForwardBFullHasVJPAt_correct

@@ -40,7 +40,7 @@ open scoped BigOperators ENNReal NNReal
 
 -- ════════ § Φ(0) = 1/2 and the one-panel bound ════════
 
-lemma stdNormalCDF_zero : stdNormalCDF 0 = 1/2 := by
+private lemma stdNormalCDF_zero : stdNormalCDF 0 = 1/2 := by
   have h := stdNormalCDF_neg 0
   rw [neg_zero] at h
   linarith
@@ -88,14 +88,14 @@ lemma stdNormalCDF_panel {a b : ℝ} (h0 : 0 ≤ a) (hab : a ≤ b) :
     argument the 3300-panel `h = 1/1000` grid of `Smoothing.DecScorecard` uses). -/
 def ratExpLB (x : ℚ) : ℚ := ∑ i ∈ Finset.range 32, x ^ i / i.factorial
 
-lemma ratExpLB_le {x : ℚ} (hx : 0 ≤ x) : (ratExpLB x : ℝ) ≤ Real.exp x := by
+private lemma ratExpLB_le {x : ℚ} (hx : 0 ≤ x) : (ratExpLB x : ℝ) ≤ Real.exp x := by
   have h := Real.sum_le_exp_of_nonneg (x := (x:ℝ)) (by exact_mod_cast hx) 32
   refine le_trans (le_of_eq ?_) h
   rw [ratExpLB]
   push_cast
   rfl
 
-lemma one_le_ratExpLB {x : ℚ} (hx : 0 ≤ x) : 1 ≤ ratExpLB x := by
+private lemma one_le_ratExpLB {x : ℚ} (hx : 0 ≤ x) : 1 ≤ ratExpLB x := by
   rw [ratExpLB]
   calc (1:ℚ) = ∑ i ∈ Finset.range 1, x ^ i / i.factorial := by
         simp [Nat.factorial]
@@ -104,7 +104,7 @@ lemma one_le_ratExpLB {x : ℚ} (hx : 0 ≤ x) : 1 ≤ ratExpLB x := by
           (Finset.range_subset.mpr (by norm_num))
           (fun i _ _ => by positivity)
 
-lemma sqrt_two_pi_ge : (2.5066282 : ℝ) ≤ Real.sqrt (2 * π) := by
+private lemma sqrt_two_pi_ge : (2.5066282 : ℝ) ≤ Real.sqrt (2 * π) := by
   refine (Real.le_sqrt' (by norm_num)).mpr ?_
   nlinarith [Real.pi_gt_d20]
 
@@ -114,7 +114,7 @@ lemma sqrt_two_pi_ge : (2.5066282 : ℝ) ≤ Real.sqrt (2 * π) := by
     rational point: `φ(a) = 1/(√(2π)·exp(a²/2)) ≤ 1/(2.5066282·ratExpLB(a²/2))`. -/
 def ratPdfUB (a : ℚ) : ℚ := ((25066282 : ℚ)/10000000 * ratExpLB (a^2/2))⁻¹
 
-lemma gaussianPDFReal_le_ratPdfUB (a : ℚ) :
+private lemma gaussianPDFReal_le_ratPdfUB (a : ℚ) :
     gaussianPDFReal 0 1 (a:ℝ) ≤ (ratPdfUB a : ℝ) := by
   have hx : (0:ℚ) ≤ a^2/2 := by positivity
   have hLB := ratExpLB_le hx
@@ -147,7 +147,7 @@ lemma gaussianPDFReal_le_ratPdfUB (a : ℚ) :
     numerators whose lcm across the 3300 grid points is astronomical). -/
 def ratCeil9 (q : ℚ) : ℚ := (⌈q * 1000000000⌉ : ℤ) / 1000000000
 
-lemma le_ratCeil9 (q : ℚ) : q ≤ ratCeil9 q := by
+private lemma le_ratCeil9 (q : ℚ) : q ≤ ratCeil9 q := by
   rw [ratCeil9]
   rw [le_div_iff₀ (by norm_num : (0:ℚ) < 1000000000)]
   exact_mod_cast Int.le_ceil (q * 1000000000)
@@ -199,7 +199,7 @@ lemma stdNormalCDF_le_phiGridUB {h : ℚ} (hh : 0 ≤ h) (m : ℕ) :
 
 -- ════════ § transfer through the quantile ════════
 
-lemma le_stdNormalQuantile_of_cdf_le {t q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1)
+private lemma le_stdNormalQuantile_of_cdf_le {t q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1)
     (h : stdNormalCDF t ≤ q) : t ≤ stdNormalQuantile q := by
   have hm := stdNormalQuantile_monotoneOn (stdNormalCDF_mem_Ioo t) hq h
   rwa [stdNormalQuantile_cdf] at hm
@@ -226,7 +226,7 @@ def phiScanRev (h : ℚ) : ℕ → List ℚ
     | [] => []
     | x :: xs => (x + h * ratCeil9 (ratPdfUB ((m:ℚ) * h))) :: x :: xs
 
-lemma phiScanRev_ne_nil (h : ℚ) (n : ℕ) : phiScanRev h n ≠ [] := by
+private lemma phiScanRev_ne_nil (h : ℚ) (n : ℕ) : phiScanRev h n ≠ [] := by
   induction n with
   | zero => simp [phiScanRev]
   | succ m ih =>
@@ -246,7 +246,7 @@ lemma phiScanRev_headI (h : ℚ) (n : ℕ) :
       simp only [List.headI] at ih
       simp [phiScanRev, hm, phiGridUB, ih]
 
-lemma phiScanRev_succ (h : ℚ) (m : ℕ) :
+private lemma phiScanRev_succ (h : ℚ) (m : ℕ) :
     phiScanRev h (m+1) = phiGridUB h (m+1) :: phiScanRev h m := by
   cases hm : phiScanRev h m with
   | nil => exact absurd hm (phiScanRev_ne_nil h m)
@@ -302,7 +302,7 @@ def phiScanRevFrom (h : ℚ) (k : ℕ) (v : ℚ) : ℕ → List ℚ
     | [] => []
     | x :: xs => (x + h * ratCeil9 (ratPdfUB (((k + j : ℕ):ℚ) * h))) :: x :: xs
 
-lemma phiScanRevFrom_ne_nil (h : ℚ) (k : ℕ) (v : ℚ) (j : ℕ) :
+private lemma phiScanRevFrom_ne_nil (h : ℚ) (k : ℕ) (v : ℚ) (j : ℕ) :
     phiScanRevFrom h k v j ≠ [] := by
   induction j with
   | zero => simp [phiScanRevFrom]

@@ -426,7 +426,7 @@ def mnv4StemGraphB (epsStr : String) (N h w : Nat) {ic oc kH kW : Nat}
     (.bnBatchF "%sg" "%sbt" epsStr εs γs βs
       (.batchOp (N := N) (.convStrided (h := h) (w := w) "%sW" s!"%zb{oc}" Ws bs) e))
 
-theorem mnv4StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc kH kW : Nat}
+private theorem mnv4StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
     den (mnv4StemGraphB epsStr N h w Ws bs εs γs βs e)
@@ -447,7 +447,7 @@ def mnv4FusedGraphB (epsStr : String) (N h w : Nat) {ic mid oc kH kW : Nat}
         (.bnBatchF "%f0cg" "%f0cbt" epsStr εc γc βc
           (.batchOp (N := N) (.convStrided (h := h) (w := w) "%f0cW" s!"%zb{mid}" Wc bc) e))))
 
-theorem mnv4FusedGraphB_faithful (epsStr : String) (N h w : Nat) {ic mid oc kH kW : Nat}
+private theorem mnv4FusedGraphB_faithful (epsStr : String) (N h w : Nat) {ic mid oc kH kW : Nat}
     (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (εc : ℝ) (hεc : 0 < εc) (γc βc : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc)
     (e : SHlo (N * (ic * (2 * h) * (2 * w)))) :
@@ -596,7 +596,7 @@ def mnv4SkipGraphB {N n : Nat} (body : SHlo (N * n) → SHlo (N * n)) (e : SHlo 
 
 /-- A skip row denotes `residual` of whatever its body denotes — generic in both, so one
     theorem covers all eighteen and the body's own faithfulness lemma is the only input. -/
-theorem mnv4SkipGraphB_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n))
+private theorem mnv4SkipGraphB_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n))
     (f : Vec (N * n) → Vec (N * n))
     (hb : ∀ e' : SHlo (N * n), den (body e') = f (den e')) (e : SHlo (N * n)) :
     den (mnv4SkipGraphB body e) = Proofs.residual f (den e) := by
@@ -622,7 +622,7 @@ def mnv4HeadGraphB (epsStr : String) (N h w : Nat) {c mid oc nCls : Nat}
                     (.batchOp (N := N) (.conv (h := h) (w := w) "%h1W" s!"%zb{mid}" W1 b1)
                       e)))))))))
 
-theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid oc nCls : Nat}
+private theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (hε1 : 0 < ε1) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (hε2 : 0 < ε2) (γ2 β2 : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (e : SHlo (N * (c * h * w))) :
@@ -640,13 +640,13 @@ theorem mnv4HeadGraphB_faithful (epsStr : String) (N h w : Nat) {c mid oc nCls :
 -- ════════════════════════════════════════════════════════════════
 
 /-- Trunk group **Res28**'s graph — rows 1–2: the 56→28 reduction and the block that follows it. -/
-def mnv4Res28GraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+private def mnv4Res28GraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : SHlo (N * (48 * 56 * 56))) : SHlo (N * (80 * 28 * 28)) :=
   mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row2 w.b2)
       (mnv4StridedGraphB epsStr N mnv4Row1 w.b1
       (e))
 
-theorem mnv4Res28GraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+private theorem mnv4Res28GraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (48 * 56 * 56))) :
     den (mnv4Res28GraphB N epsStr w e) = (mnv4Res28Layer N w).fwd (den e) := by
   simp only [mnv4Res28GraphB, mnv4Res28Layer, CertLayer.comp_fwd, CertLayer.residual_fwd,
@@ -656,7 +656,7 @@ theorem mnv4Res28GraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
       (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row2 w.b2 (by decide) (by decide)),]
 
 /-- Trunk group **Res14a**'s graph — rows 3–6: the 28→14 reduction, then three ExtraDW blocks. -/
-def mnv4Res14aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+private def mnv4Res14aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : SHlo (N * (80 * 28 * 28))) : SHlo (N * (160 * 14 * 14)) :=
   mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row6 w.b6)
       (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row5 w.b5)
@@ -664,7 +664,7 @@ def mnv4Res14aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights 
       (mnv4StridedGraphB epsStr N mnv4Row3 w.b3
       (e))))
 
-theorem mnv4Res14aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+private theorem mnv4Res14aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (80 * 28 * 28))) :
     den (mnv4Res14aGraphB N epsStr w e) = (mnv4Res14aLayer N w).fwd (den e) := by
   simp only [mnv4Res14aGraphB, mnv4Res14aLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
@@ -678,7 +678,7 @@ theorem mnv4Res14aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
       (mnv4ExtraDWBodyGraphB_faithful epsStr N mnv4Row6 w.b6 (by decide) (by decide)),]
 
 /-- Trunk group **Res14b**'s graph — rows 7–10 at 14×14: ExtraDW, ConvNeXt, FFN, ConvNeXt — three families in four blocks. -/
-def mnv4Res14bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+private def mnv4Res14bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (160 * 14 * 14)) :=
   mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row10 w.b10)
       (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row9 w.b9)
@@ -686,7 +686,7 @@ def mnv4Res14bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights 
       (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row7 w.b7)
       (e))))
 
-theorem mnv4Res14bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+private theorem mnv4Res14bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (160 * 14 * 14))) :
     den (mnv4Res14bGraphB N epsStr w e) = (mnv4Res14bLayer N w).fwd (den e) := by
   simp only [mnv4Res14bGraphB, mnv4Res14bLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
@@ -701,7 +701,7 @@ theorem mnv4Res14bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
       (mnv4ConvNeXtBodyGraphB_faithful epsStr N mnv4Row10 w.b10 (by decide) (by decide)),]
 
 /-- Trunk group **Res7a**'s graph — rows 11–15: the last reduction (14→7), then four blocks at 7×7. -/
-def mnv4Res7aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+private def mnv4Res7aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : SHlo (N * (160 * 14 * 14))) : SHlo (N * (256 * 7 * 7)) :=
   mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row15 w.b15)
       (mnv4SkipGraphB (mnv4ExtraDWBodyGraphB epsStr N mnv4Row14 w.b14)
@@ -710,7 +710,7 @@ def mnv4Res7aGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights n
       (mnv4StridedGraphB epsStr N mnv4Row11 w.b11
       (e)))))
 
-theorem mnv4Res7aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+private theorem mnv4Res7aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (160 * 14 * 14))) :
     den (mnv4Res7aGraphB N epsStr w e) = (mnv4Res7aLayer N w).fwd (den e) := by
   simp only [mnv4Res7aGraphB, mnv4Res7aLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
@@ -726,7 +726,7 @@ theorem mnv4Res7aGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
       (mnv4FfnBodyGraphB_faithful epsStr N mnv4Row15 w.b15 (by decide) (by decide)),]
 
 /-- Trunk group **Res7b**'s graph — rows 16–21 at 7×7: the net's tail. -/
-def mnv4Res7bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
+private def mnv4Res7bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : SHlo (N * (256 * 7 * 7))) : SHlo (N * (256 * 7 * 7)) :=
   mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row21 w.b21)
       (mnv4SkipGraphB (mnv4FfnBodyGraphB epsStr N mnv4Row20 w.b20)
@@ -736,7 +736,7 @@ def mnv4Res7bGraphB (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights n
       (mnv4SkipGraphB (mnv4ConvNeXtBodyGraphB epsStr N mnv4Row16 w.b16)
       (e))))))
 
-theorem mnv4Res7bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+private theorem mnv4Res7bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (256 * 7 * 7))) :
     den (mnv4Res7bGraphB N epsStr w e) = (mnv4Res7bLayer N w).fwd (den e) := by
   simp only [mnv4Res7bGraphB, mnv4Res7bLayer, CertLayer.comp_fwd, CertLayer.residual_fwd,
@@ -770,7 +770,7 @@ theorem mnv4FusedStack_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     w.f0pW w.f0pb w.f0pE w.hf0pE w.f0pg w.f0pbt e
 
 /-- The head's graph faithfulness, restated at `mnv4HeadStack` itself. Same reason. -/
-theorem mnv4HeadStack_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+private theorem mnv4HeadStack_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (256 * 7 * 7))) :
     den (mnv4HeadGraphB epsStr N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt
           w.hW w.hb w.hE w.hg w.hbt w.Wd w.bd e)
@@ -779,7 +779,7 @@ theorem mnv4HeadStack_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     w.hW w.hb w.hE w.hhE w.hg w.hbt w.Wd w.bd e
 
 /-- The stem's, likewise, at the net's own widths. -/
-theorem mnv4StemB_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
+private theorem mnv4StemB_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : SHlo (N * (3 * 224 * 224))) :
     den (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)
       = mnv4StemB N 112 112 w.sW w.sb w.sE w.sg w.sbt (den e) :=

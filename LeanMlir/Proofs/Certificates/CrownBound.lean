@@ -246,7 +246,7 @@ theorem linf_lower_bound {n : ℕ} (A : Fin n → ℝ) (x : EuclideanSpace ℝ (
 /-- The two-layer net, evaluated one logit at a time — `denseE`/`reluE` peeled
     exactly once, so the inner `denseE W1 x'` stays folded (unfolding it would
     put a 784-term sum under every `max`). -/
-theorem mlp2_apply {n h k : ℕ} (W1 : Fin h → Fin n → ℝ) (W2 : Fin k → Fin h → ℝ)
+private theorem mlp2_apply {n h k : ℕ} (W1 : Fin h → Fin n → ℝ) (W2 : Fin k → Fin h → ℝ)
     (x' : EuclideanSpace ℝ (Fin n)) (c : Fin k) :
     (denseE W2 ∘ reluE ∘ denseE W1) x' c = ∑ t, W2 c t * max (denseE W1 x' t) 0 := by
   show denseE W2 (reluE (denseE W1 x')) c = _
@@ -328,7 +328,7 @@ the 16×784 combination and the absolute sum in one `decide +kernel`.
 `Σₜ aₜ·⟨W1ₜ, x₀⟩`, i.e. a 16-term rational sum over the committed `hpre` dots. -/
 
 /-- Entrywise `c · row + acc`. -/
-def scaleAddZ (c : ℤ) (row acc : List ℤ) : List ℤ :=
+private def scaleAddZ (c : ℤ) (row acc : List ℤ) : List ℤ :=
   List.zipWith (fun r a => c * r + a) row acc
 
 /-- `Σₜ csₜ · rowsₜ`, entrywise: the CROWN row `A`, at integer scale. -/
@@ -337,9 +337,7 @@ def combZ (n : ℕ) : List ℤ → List (List ℤ) → List ℤ
   | _ :: _, [] => List.replicate n 0
   | c :: cs, r :: rs => scaleAddZ c r (combZ n cs rs)
 
-theorem getD_replicate_zero (n i : ℕ) : (List.replicate n (0 : ℤ)).getD i 0 = 0 := by simp
-
-theorem length_combZ (n : ℕ) : ∀ (cs : List ℤ) (rows : List (List ℤ)),
+private theorem length_combZ (n : ℕ) : ∀ (cs : List ℤ) (rows : List (List ℤ)),
     (∀ r ∈ rows, r.length = n) → (combZ n cs rows).length = n
   | [], _, _ => by simp [combZ]
   | _ :: _, [], _ => by simp [combZ]
@@ -348,7 +346,7 @@ theorem length_combZ (n : ℕ) : ∀ (cs : List ℤ) (rows : List (List ℤ)),
       have hrec := length_combZ n cs rs (fun q hq => hr q (by simp [hq]))
       simp [combZ, scaleAddZ, hrn, hrec]
 
-theorem getD_scaleAddZ (c : ℤ) : ∀ (row acc : List ℤ), row.length = acc.length → ∀ i : ℕ,
+private theorem getD_scaleAddZ (c : ℤ) : ∀ (row acc : List ℤ), row.length = acc.length → ∀ i : ℕ,
     (scaleAddZ c row acc).getD i 0 = c * row.getD i 0 + acc.getD i 0
   | [], [], _, _ => by simp [scaleAddZ]
   | [], _ :: _, h, _ => by simp at h
@@ -358,18 +356,13 @@ theorem getD_scaleAddZ (c : ℤ) : ∀ (row acc : List ℤ), row.length = acc.le
       simp only [scaleAddZ, List.zipWith_cons_cons, List.getD_cons_succ]
       exact getD_scaleAddZ c rs as (by simpa using h) i
 
-theorem getD_map_getD (rows : List (List ℤ)) (i : ℕ) : ∀ t : ℕ,
-    (rows.map (fun r => r.getD i 0)).getD t 0 = (rows.getD t []).getD i 0 := fun t => by
-  simpa using List.getD_map (fun r : List ℤ => r.getD i 0) (l := rows) (d := []) (n := t)
-
 /-- The combined row, entry by entry, is a plain `dotZ` of the coefficients
     against the rows' `i`-th column. -/
-theorem getD_combZ (n : ℕ) : ∀ (cs : List ℤ) (rows : List (List ℤ)),
+private theorem getD_combZ (n : ℕ) : ∀ (cs : List ℤ) (rows : List (List ℤ)),
     cs.length = rows.length → (∀ r ∈ rows, r.length = n) → ∀ i : ℕ,
     (combZ n cs rows).getD i 0 = dotZ cs (rows.map (fun r => r.getD i 0))
   | [], [], _, _, i => by
-      rw [show combZ n ([] : List ℤ) ([] : List (List ℤ)) = List.replicate n 0 from rfl,
-        getD_replicate_zero]
+      rw [show combZ n ([] : List ℤ) ([] : List (List ℤ)) = List.replicate n 0 from rfl]
       simp [dotZ]
   | [], _ :: _, h, _, _ => by simp at h
   | _ :: _, [], h, _, _ => by simp at h
@@ -396,7 +389,8 @@ theorem crownRow_comb {n h : ℕ} (cs : List ℤ) (rows : List (List ℤ))
   rw [getD_combZ n cs rows (by rw [hcl, hrl]) hrn (i : ℕ)]
   rw [← sum_getD_div hcl hmap rfl dc dw]
   refine Finset.sum_congr rfl fun t _ => ?_
-  rw [hW t i, getD_map_getD rows (i : ℕ) (t : ℕ)]
+  rw [hW t i, ← List.getD_map (fun r : List ℤ => r.getD (i : ℕ) 0) (l := rows) (d := [])]
+  rfl
 
 /-- **`‖A‖₁` from one `absSumZ … := by decide +kernel` fact.** One `ℓ1` norm per
     `(image, class)`, where IBP pays one per `(image, neuron)` — and the 784

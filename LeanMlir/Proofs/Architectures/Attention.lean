@@ -497,7 +497,7 @@ noncomputable def sdpaQChain (n d : Nat) (K V : Mat n d) : Mat n d → Mat n d :
   (fun s : Mat n n => fun r c => sdpaScale d * s r c) ∘
   (fun Q' : Mat n d => Mat.mul Q' (Mat.transpose K))
 
-theorem sdpaQChain_eq (n d : Nat) (Q K V : Mat n d) :
+private theorem sdpaQChain_eq (n d : Nat) (Q K V : Mat n d) :
     sdpaQChain n d K V Q = sdpa n d Q K V := by
   unfold sdpaQChain sdpa sdpaScale
   rfl
@@ -568,7 +568,7 @@ noncomputable def sdpaKChain (n d : Nat) (Q V : Mat n d) : Mat n d → Mat n d :
   (fun Kt' : Mat d n => Mat.mul Q Kt') ∘
   (fun K' : Mat n d => Mat.transpose K')
 
-theorem sdpaKChain_eq (n d : Nat) (Q K V : Mat n d) :
+private theorem sdpaKChain_eq (n d : Nat) (Q K V : Mat n d) :
     sdpaKChain n d Q V K = sdpa n d Q K V := by
   unfold sdpaKChain sdpa sdpaScale
   rfl
@@ -858,7 +858,7 @@ noncomputable def mhsaLiftCCLM (n d : Nat) (c : Fin 3) :
                         (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).2))
     else 0)
 
-theorem mhsaLiftCCLM_apply (n d : Nat) (c : Fin 3) (u : Vec (n * d))
+private theorem mhsaLiftCCLM_apply (n d : Nat) (c : Fin 3) (u : Vec (n * d))
     (idx : Fin (n * (3 * d))) :
     mhsaLiftCCLM n d c u idx =
       (if (finProdFinEquiv.symm (finProdFinEquiv.symm idx).2).1 = c
@@ -877,7 +877,7 @@ noncomputable def mhsaEmbedC (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     let q := finProdFinEquiv.symm p.2
     if q.1 = c then u (finProdFinEquiv (p.1, q.2)) else Mat.flatten slab idx
 
-theorem mhsaEmbedC_eq (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
+private theorem mhsaEmbedC_eq (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     (u : Vec (n * d)) :
     mhsaEmbedC n d c slab u = mhsaLiftCCLM n d c u +
       (fun idx =>
@@ -890,7 +890,7 @@ theorem mhsaEmbedC_eq (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     simp only [mhsaEmbedC, mhsaLiftCCLM_apply, Pi.add_apply, Equiv.symm_apply_apply, hc,
       ite_true, ite_false, add_zero, zero_add]
 
-theorem mhsaEmbedC_hasFDerivAt (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
+private theorem mhsaEmbedC_hasFDerivAt (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     (u₀ : Vec (n * d)) :
     HasFDerivAt (mhsaEmbedC n d c slab) (mhsaLiftCCLM n d c) u₀ := by
   rw [funext (mhsaEmbedC_eq n d c slab)]
@@ -899,7 +899,7 @@ theorem mhsaEmbedC_hasFDerivAt (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
 /-- The composition `mhsaG ∘ mhsaEmbedC c slab` equals "SDPA with the c-th
     argument variable, the other two fixed at `slab`'s projections". This is
     the freezing identity. -/
-theorem mhsaG_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
+private theorem mhsaG_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
     (u : Vec (n * d)) :
     Mat.flatten ((mhsaG n d) (Mat.unflatten (mhsaEmbedC n d c slab u))) =
       (if c = (0 : Fin 3) then
@@ -922,7 +922,7 @@ theorem mhsaG_comp_embed (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d))
   rw [hg, h_proj_match, h_proj_match, h_proj_match]
   fin_cases c <;> simp
 
-theorem mhsaEmbedC_at_proj (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d)) :
+private theorem mhsaEmbedC_at_proj (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d)) :
     mhsaEmbedC n d c slab (Mat.flatten (mhsaProjC c slab)) = Mat.flatten slab := by
   funext idx
   obtain ⟨⟨r, q⟩, rfl⟩ := finProdFinEquiv.surjective idx
@@ -933,7 +933,7 @@ theorem mhsaEmbedC_at_proj (n d : Nat) (c : Fin 3) (slab : Mat n (3 * d)) :
     For each `c : Fin 3`, the chain rule gives:
     `fderiv flat_g flat_slab ∘L mhsaLiftCCLM = fderiv flat_freeze_c flat_proj_c_slab`.
     Used in `pdivMat_mhsaG_split` after the basis-vector lift identity. -/
-theorem pdivMat_mhsaG_split_chain (n d : Nat) (slab : Mat n (3 * d)) (c : Fin 3)
+private theorem pdivMat_mhsaG_split_chain (n d : Nat) (slab : Mat n (3 * d)) (c : Fin 3)
     (freeze_fn : Mat n d → Mat n d)
     (h_g_freeze_eq : ∀ u : Vec (n * d),
       Mat.flatten ((mhsaG n d) (Mat.unflatten (mhsaEmbedC n d c slab u))) =
@@ -1396,7 +1396,7 @@ noncomputable def transformerBlock (N heads d_head mlpDim : Nat) (ε γ1 β1 : �
 /-- Differentiability of the flattened attention sublayer's non-trivial arm
     (`mhsa ∘ LN1`). Used by both the sublayer VJP proof and any downstream
     composition that needs Diff for the sublayer's arm. -/
-lemma transformerAttnSublayer_inner_flat_differentiable
+private lemma transformerAttnSublayer_inner_flat_differentiable
     (N heads d_head : Nat) (ε γ1 β1 : ℝ) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
@@ -1436,7 +1436,7 @@ noncomputable def transformerAttnSublayerHasVJPMat (N heads d_head : Nat)
 /-- Differentiability of the MLP sublayer's non-trivial arm
     (`transformerMlp ∘ LN2`). Composition of `transformerMlp_flat_differentiable`
     and `layerNorm_per_token_flat_differentiable`. -/
-lemma transformerMlpSublayer_inner_flat_differentiable
+private lemma transformerMlpSublayer_inner_flat_differentiable
     (N heads d_head mlpDim : Nat) (ε γ2 β2 : ℝ) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :

@@ -267,7 +267,7 @@ theorem cnx_head_ch_tied (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ
   · intro i; exact SgdNode.denseB_den bdN lrStr dyN Wfc hn bfc g lr i
 
 /-- **Dense head weight `Wd`, tied to the WHOLE softmax-CE loss** — `Wd − lr·∂(CE ∘ dense)/∂Wd`. -/
-theorem cnx_dense_tied_totalloss {m : Nat} (aN wN lrStr dyN : String)
+private theorem cnx_dense_tied_totalloss {m : Nat} (aN wN lrStr dyN : String)
     (Wd : Mat m 10) (bd : Vec 10) (a : Vec m) (label : Fin 10)
     (lr : ℝ) (i : Fin m) (j : Fin 10) :
     den (SHlo.weightSgd aN wN lrStr a Wd lr
@@ -295,7 +295,7 @@ noncomputable def cnxStemFwdO {c h w : Nat} (ε : ℝ)
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) : Vec (c*h*w) :=
   chanLNTensor3 c h w ε psng psnbt (flatConvStride4 Wst bst x)
 
-noncomputable def cnxBlockBodyChO {c cExp h w : Nat} (ε : ℝ)
+private noncomputable def cnxBlockBodyChO {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin : Vec (c*h*w)) : Vec (c*h*w) :=
@@ -357,7 +357,7 @@ Note: only `cnxStemChTiedAt` is `@[irreducible]`: without it the capstone's
 `refine ⟨cnx_stem_ch_tiedAt …, ?_, …⟩` times out in `whnf`, and moving it to its own goal does not
 help. Every other definition in this section and the two above is a plain `def`. -/
 
-def cnxBlockChTiedAt {c cExp h w : Nat}
+private def cnxBlockChTiedAt {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
@@ -370,7 +370,7 @@ def cnxBlockChTiedAt {c cExp h w : Nat}
   cnxBlockChTied xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
     xin d nl p e g dyOut lr
 
-theorem cnx_block_ch_tiedAt {c cExp h w : Nat}
+private theorem cnx_block_ch_tiedAt {c cExp h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
@@ -381,14 +381,14 @@ theorem cnx_block_ch_tiedAt {c cExp h w : Nat}
   exact cnx_block_ch_tied xN wN bN gN epsStr lrStr cotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg
     xin d nl p e g dyOut lr
 
-def cnxDownChTiedAt {ci co h w : Nat}
+private def cnxDownChTiedAt {ci co h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) : Prop :=
   let n := chanLNTensor3 ci (2*h) (2*w) ε dng dnbt xin
   cnxDownChTied xN wN bN gN epsStr lrStr cotN ε dng dnbt Wd bd xin n dyOut lr
 
-theorem cnx_down_ch_tiedAt {ci co h w : Nat}
+private theorem cnx_down_ch_tiedAt {ci co h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) (lr : ℝ) :
@@ -405,7 +405,7 @@ theorem cnx_down_ch_tiedAt {ci co h w : Nat}
   let patch := flatConvStride4 Wst psb x
   cnxStemChTied xN wN bN gN epsStr lrStr cotN ε Wst psb psng psnbt x xstem patch dyStem lr
 
-theorem cnx_stem_ch_tiedAt {c h w : Nat}
+private theorem cnx_stem_ch_tiedAt {c h w : Nat}
     (xN wN bN gN epsStr lrStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c)
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) (xstem : Tensor3 3 h w)
@@ -423,7 +423,7 @@ def cnxHeadChTiedAt {h w : Nat}
   let hn : Vec 768 := rowLNVecFlat 1 768 ε hng hnbt gap
   cnxHeadChTied gN xN bN bdN epsStr lrStr cotN dyN ε hng hnbt Wfc bfc gap hn g lr
 
-theorem cnx_head_ch_tiedAt {h w : Nat}
+private theorem cnx_head_ch_tiedAt {h w : Nat}
     (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 10) (bfc : Vec 10)
     (xhead : Vec (768*h*w)) (g : Vec 10) (lr : ℝ) :
@@ -544,28 +544,28 @@ The records above are the render's shape: one shared `ε`, the eighteen blocks b
 `ConvNeXtFullT` states ConvNeXt-T with an `ε` per record and `Fin`-indexed stages. These say the
 two describe one function: block by block (`rfl`), and whole-net at `toCh ε`. -/
 
-theorem cnxBlockFwdChO_eq_cnxBlockChW {c cExp h w : Nat} (ε : ℝ)
+private theorem cnxBlockFwdChO_eq_cnxBlockChW {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) :
     cnxBlockFwdChO (h := h) (w := w) ε Wdw bdw ng nbt Wex bex Wpr bpr lg
       = cnxBlockChW (h := h) (w := w) ⟨Wdw, bdw, ε, ng, nbt, Wex, bex, Wpr, bpr, lg⟩ := rfl
 
-theorem cnxDownFwdChO_eq_cnxDownChW {ci co h w : Nat} (ε : ℝ) (dng dnbt : Vec ci)
+private theorem cnxDownFwdChO_eq_cnxDownChW {ci co h w : Nat} (ε : ℝ) (dng dnbt : Vec ci)
     (Wd : Kernel4 co ci 2 2) (bd : Vec co) :
     cnxDownFwdChO (h := h) (w := w) ε dng dnbt Wd bd
       = cnxDownChW h w ⟨ε, dng, dnbt, Wd, bd⟩ := rfl
 
 namespace CnxTieBlk
 /-- The FullT record for this block at the shared `ε`. -/
-def toCh {c cExp : Nat} (p : CnxTieBlk c cExp) (h w : Nat) (ε : ℝ) :
+private def toCh {c cExp : Nat} (p : CnxTieBlk c cExp) (h w : Nat) (ε : ℝ) :
     CnxBlockParamsCh c cExp h w 7 7 :=
   ⟨p.aW, p.aB, ε, p.nG, p.nB, p.eW, p.eB, p.pW, p.pB, p.sL⟩
 end CnxTieBlk
 
 namespace CnxTieDown
 /-- The FullT record for this downsample at the shared `ε`. -/
-def toCh {ci co : Nat} (p : CnxTieDown ci co) (ε : ℝ) : CnxDownParamsCh ci co :=
+private def toCh {ci co : Nat} (p : CnxTieDown ci co) (ε : ℝ) : CnxDownParamsCh ci co :=
   ⟨ε, p.G, p.T, p.W, p.B⟩
 end CnxTieDown
 

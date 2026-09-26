@@ -13,11 +13,8 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 
 ## ▶ Start here (next session)
 
-Branch `api-design`: §2–§6 and §8 pushed (origin/main 866395bf with the IREE CI and blueprint
-fixes); §7 committed, not pushed. Remaining:
-
-1. **§9** bulk `private` sweep — rerun the same-file-use scan first (§7 moved lemmas into
-   Foundation, so the list at 373059db is stale).
+Branch `api-design`: §2–§6 and §8 pushed (origin/main 866395bf); §7 (5116ca3c) and §9
+committed, not pushed. §2–§9 are done; what remains is the lower-priority list below.
 
 Also open, lower priority: §4.3 flag+parameter pairs; 6.2 restating the L2 capstones (needs the
 scorecard generators rerun); 6.4 Gaussian shift / Cameron–Martin into UpstreamDraft PR2 (keep
@@ -65,7 +62,8 @@ re-checked against the code before it is acted on.
 | f09b1e25 | §5.1 `UibParams` slots typed by kernel extent. Notes below |
 | 120cb099 | §6: 6.1, 6.3, 6.5 as tabled (namespace rename declined); 6.2 and 6.4 in part. Notes below |
 | d60b56c8 | §8 as tabled, plus 5.5's `ViTConfig.dh`/`scale`. Notes below |
-| (this commit) | §7: 7.2, 7.3, 7.4 (7.2 and 7.4 in part); 7.1 declined. Notes below |
+| 5116ca3c | §7: 7.2, 7.3, 7.4 (7.2 and 7.4 in part); 7.1 declined. Notes below |
+| (this commit) | §9: 939 declarations private, in the plan's scope. Notes below |
 
 §2 deviations:
 
@@ -270,6 +268,34 @@ re-checked against the code before it is acted on.
   the layer whose text must stay byte-identical and which the text ties match term for term, to
   shorten one `unfold` list per site. `residual_apply` already gives the pointwise form; a vector
   `residual_eq_add` would have no consumer.
+
+§9 notes:
+
+* Scan (scripts in the session scratchpad, not committed): a candidate is a public
+  `def`/`theorem`/`abbrev` whose name occurs in its own file's CODE (comments stripped) beyond
+  its declaration and nowhere in any consumer text — LeanMlir, apps, demos, tests (AuditAxioms and
+  the comparator included), jax, scripts, blueprint, yaml, markdown. Excluded: generated files (36;
+  fix the generator instead), structures/inductives/classes/instances/opaques, anything carrying
+  `@[simp]`/`@[ext]`/`@[fun_prop]`/`@[reducible]`/`@[extern]` and similar, `protected` names, and
+  declarations used nowhere at all (a file's headline or dead code — not this sweep's call).
+  1,461 candidates + 528 whose only outside mention was an AuditAxioms line.
+* The compiler accepted all 1,989. Two Lean-side checks then decided: (1) no public statement may
+  mention a private constant — a fixed point over statements, 810 reverted; (2) an AuditAxioms
+  line is dropped only if a still-public audited declaration depends on the constant transitively
+  (it inherits the audit) — 495 reverted for want of that, 7 lines dropped.
+* Scoped to the plan's list, not the whole tree: the first pass also privatized Foundation,
+  Architectures, Float and Codegen helpers whose only consumers are in-file today (for example
+  `cbrBackBatchedGraph_faithful`, a public graph's faithfulness theorem). Those are
+  characteristic lemmas of public definitions, so 237 were reverted: private now = the Nets tree,
+  `SgdDescent/Cnn`, the named Certificates/Training files, the named Architectures/Pretty/
+  `Verified.Train` internals and the top-level helpers (Blackjack, Pong, E4M3, GradcheckHelpers,
+  `Ddpm.sBias`, `MlirCodegen.inChannels`, `F32.dropoutFill`).
+* Pre-existing, left: `bTiny` (a private default argument of six public ConvNeXt render functions)
+  and the `Inhabited` instances of private `FwdRec` / `DatasetIO`.
+* `getD_replicate_zero` / `getD_map_getD` deleted (`simp` / `List.getD_map` at the use sites).
+  `bnEmaWeight`'s docstring now says what the single definition buys (the banner prints the
+  weight the loop applies) instead of reading as if a gate existed. The `SgdDescent/Cnn` docstring
+  finding (:975–983) no longer holds: `mask_scalar_close`'s docstring describes it.
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

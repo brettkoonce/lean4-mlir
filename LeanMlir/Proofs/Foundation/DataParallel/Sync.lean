@@ -341,7 +341,7 @@ theorem bnSyncTensor4GradInput_batchShard (R N oc h w : Nat) (ε : ℝ)
 /-- The `R = 1` backward anchor restated with `bnSyncXhat` in the `mdyx` reduction — the form
     the sync GRAPH produces, since `bnSyncDyStatsB` builds `x̂` from the statistics handed to it
     rather than from `x` directly. -/
-theorem bnSyncTensor4GradInput_at_own_stats' (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
+private theorem bnSyncTensor4GradInput_at_own_stats' (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
     (ε : ℝ) (γ : Vec oc) (x dy : Vec (N * (oc * (h * w)))) :
     bnSyncTensor4GradInput N oc h w ε γ
         (fun c => bnMean   (N*(h*w)) (Mat.unflatten (bnchwFwd N oc h w x) c))

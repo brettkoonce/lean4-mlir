@@ -78,7 +78,7 @@ theorem bcell_bfrom {N c h w : Nat} (f : Fin N → Tensor3 c h w) (n : Fin N) :
   simp only [bcell, bfrom]
   rw [h, Tensor3.unflatten_flatten]
 
-theorem bcell_add {N c h w : Nat} (u v : Vec (N * (c * h * w))) (n : Fin N)
+private theorem bcell_add {N c h w : Nat} (u v : Vec (N * (c * h * w))) (n : Fin N)
     (ci : Fin c) (i : Fin h) (j : Fin w) :
     bcell (u + v) n ci i j = bcell u n ci i j + bcell v n ci i j := rfl
 
@@ -88,12 +88,12 @@ theorem bcell_smul {N c h w : Nat} (t : ℝ) (v : Vec (N * (c * h * w))) (n : Fi
 
 /-- Adding a batch-uniform vector shifts every example's slab the same way — the shape a zeroed
     residual body contributes, and the reason it is transparent to the example difference. -/
-theorem bcell_shift {N c h w : Nat} (v : Vec (N * (c * h * w))) (s : ℝ) (n : Fin N)
+private theorem bcell_shift {N c h w : Nat} (v : Vec (N * (c * h * w))) (s : ℝ) (n : Fin N)
     (ci : Fin c) (i : Fin h) (j : Fin w) :
     bcell (fun k => v k + s) n ci i j = bcell v n ci i j + s := rfl
 
 /-- **`batchMap` acts slab by slab.** -/
-theorem bcell_batchMap {N a oc h' w' : Nat} (f : Vec a → Vec (oc * h' * w'))
+private theorem bcell_batchMap {N a oc h' w' : Nat} (f : Vec a → Vec (oc * h' * w'))
     (x : Vec (N * a)) (n : Fin N) :
     bcell (StableHLO.batchMap N f x) n = Tensor3.unflatten (f (Mat.unflatten x n)) := by
   simp only [bcell]
@@ -127,7 +127,7 @@ theorem bcell_eq_laIdx {N oc h w : Nat} (v : Vec (N * (oc * h * w))) (n : Fin N)
 /-- **The one arithmetic fact**: `((c,i),j)` and `(c,(i,j))` are the same offset, so the
     `mul_assoc` cast that defines `bnBatchLA` sends the network cell to the `bnBatchTensor4` cell.
     `finProdFinEquiv` is row-major, so both sides are `j + w·i + h·w·c + oc·h·w·n`. -/
-theorem laIdx_cast (N oc h w : Nat) (n : Fin N) (c : Fin oc) (i : Fin h) (j : Fin w) :
+private theorem laIdx_cast (N oc h w : Nat) (n : Fin N) (c : Fin oc) (i : Fin h) (j : Fin w) :
     Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) (laIdx N oc h w n c i j)
       = finProdFinEquiv (n, finProdFinEquiv (c, finProdFinEquiv (i, j))) := by
   apply Fin.ext
@@ -141,7 +141,7 @@ noncomputable def bnRowLA (N oc h w : Nat) (v : Vec (N * (oc * h * w))) (c : Fin
     (v ∘ Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)).symm)) c
 
 /-- The row, read at `(n, (i, j))`, is the cell `(n, c, i, j)`. -/
-theorem bnRowLA_apply {N oc h w : Nat} (v : Vec (N * (oc * h * w))) (c : Fin oc) (n : Fin N)
+private theorem bnRowLA_apply {N oc h w : Nat} (v : Vec (N * (oc * h * w))) (c : Fin oc) (n : Fin N)
     (i : Fin h) (j : Fin w) :
     bnRowLA N oc h w v c (finProdFinEquiv (n, finProdFinEquiv (i, j))) = bcell v n c i j := by
   simp only [bnRowLA, Mat.unflatten, bnchwFwd, bnchwFwdIdx, Equiv.symm_apply_apply,
@@ -154,7 +154,7 @@ theorem bnRowLA_apply {N oc h w : Nat} (v : Vec (N * (oc * h * w))) (c : Fin oc)
 /-- **The bridge**: a cell of a `bnBatchLA` output is the scalar `bnForward` of that cell's
     channel row, at that cell's position in the row. Everything else in this file is BN algebra on
     one row. -/
-theorem bnBatchLA_bcell (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v : Vec (N * (oc * h * w)))
+private theorem bnBatchLA_bcell (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v : Vec (N * (oc * h * w)))
     (n : Fin N) (c : Fin oc) (i : Fin h) (j : Fin w) :
     bcell (StableHLO.bnBatchLA N oc h w ε γ β v) n c i j
       = bnForward (N * (h * w)) ε (γ c) (β c) (bnRowLA N oc h w v c)
@@ -175,7 +175,7 @@ theorem bnBatchLA_bcell (N oc h w : Nat) (ε : ℝ) (γ β : Vec oc) (v : Vec (N
 /-- **The workhorse.** A property of every cell of a `bnBatchLA` output, reduced to the scalar
     `bnForward` on each channel's row — no index decomposition at the call site. Every clause of
     the shape "this BN output is off the kink / inside a window" goes through here. -/
-theorem bnBatchLA_pointwise {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc)
+private theorem bnBatchLA_pointwise {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc)
     (v : Vec (N * (oc * h * w))) (P : ℝ → Prop)
     (hP : ∀ (c : Fin oc) (q : Fin (N * (h * w))),
             P (bnForward (N * (h * w)) ε (γ c) (β c) (bnRowLA N oc h w v c) q)) :
@@ -197,7 +197,7 @@ theorem bnBatchLA_pointwise {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc)
 -- ════════════════════════════════════════════════════════════════
 
 /-- A constant activation has a constant row. -/
-theorem bnRowLA_const {N oc h w : Nat} (c₀ : ℝ) (ci : Fin oc) :
+private theorem bnRowLA_const {N oc h w : Nat} (c₀ : ℝ) (ci : Fin oc) :
     bnRowLA N oc h w (fun _ => c₀) ci = fun _ => c₀ := by funext _; rfl
 
 /-- **A constant channel normalizes to `β`** (variance 0, `xhat = 0`): a zeroed residual body is
@@ -211,7 +211,7 @@ theorem bnBatchLA_const {N oc h w : Nat} (hn : 0 < N * (h * w)) (ε : ℝ) (γ �
 
 /-- **The batched margin**: with `γ`, `β` channel-constant, every cell is within `|g|√(N·h·w)`
     of `b`. -/
-theorem bnBatchLA_abs_sub_le {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (g b : ℝ)
+private theorem bnBatchLA_abs_sub_le {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc) (g b : ℝ)
     (hγ : ∀ ci, γ ci = g) (hβ : ∀ ci, β ci = b) (v : Vec (N * (oc * h * w))) :
     ∀ k, |StableHLO.bnBatchLA N oc h w ε γ β v k - b| ≤ |g| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) := by
   refine bnBatchLA_pointwise ε γ β v
@@ -272,7 +272,7 @@ theorem bnBatchLA_exdiff {N oc h w : Nat} (ε : ℝ) (γ β : Vec oc) (v : Vec (
 /-- **Batch BN is injective within one example and channel** (`γ_c ≠ 0`): it is the strictly
     monotone affine map `γ_c·istd_c·(· − μ_c) + β_c` there. The stem pool's no-tie discharge —
     equal pooled cells force equal pre-BN cells, and the witness's ramp is positionally injective. -/
-theorem bnBatchLA_cell_inj {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
+private theorem bnBatchLA_cell_inj {N oc h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (v : Vec (N * (oc * h * w))) (n : Fin N) (c : Fin oc) (hγ : γ c ≠ 0)
     (i j : Fin h) (i' j' : Fin w)
     (heq : bcell (StableHLO.bnBatchLA N oc h w ε γ β v) n c i i'
@@ -309,7 +309,7 @@ noncomputable def ctK (oc ic kH kW : Nat) (s : ℝ) : Kernel4 oc ic kH kW :=
 /-- **The centre-tap conv value**: `b o + s · (input channel 0 at the same position)`, at every
     output channel. `c₀` is passed in (rather than built from `0 < ic`) so that the carrier's
     channel index is the same *term* at every use site — `ring` needs those `istd`s to be one atom. -/
-theorem conv2d_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+private theorem conv2d_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec oc) (x : Tensor3 ic h w) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
     conv2d (ctK oc ic kH kW s) b x o hi wi = b o + s * x c₀ hi wi := by
@@ -343,7 +343,7 @@ theorem conv2d_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0
       refine ⟨?_, ?_, ?_, ?_⟩ <;> omega) hcond
 
 /-- The flat centre-tap conv, in cell coordinates. -/
-theorem flatConv_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+private theorem flatConv_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec oc) (v : Vec (ic * h * w)) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (flatConv (h := h) (w := w) (ctK oc ic kH kW s) b v) o hi wi
@@ -353,7 +353,7 @@ theorem flatConv_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val =
 
 /-- Decimation reads position `(2i, 2j)`, channel for channel (the generic peer of the retired
     2-channel `decimate_unflatten`). -/
-theorem decimate_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) (c : Fin oc)
+private theorem decimate_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) (c : Fin oc)
     (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (decimateFlat oc h w z) c hi wi
       = (Tensor3.unflatten z : Tensor3 oc (2 * h) (2 * w)) c
@@ -361,7 +361,7 @@ theorem decimate_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) (c 
   simp only [Tensor3.unflatten, decimateFlat, decimateIdx, Equiv.symm_apply_apply]
 
 /-- The strided centre-tap conv: `b o + s · (input channel 0 at the even position)`. -/
-theorem flatConvStride2_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+private theorem flatConvStride2_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec oc) (v : Vec (ic * (2 * h) * (2 * w))) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (flatConvStride2 (h := h) (w := w) (ctK oc ic kH kW s) b v) o hi wi
@@ -372,7 +372,7 @@ theorem flatConvStride2_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c�
 
 /-- The batched centre-tap conv, in cell coordinates — the carrier's conv step at stride 1
     (ResNet-50's stage-1 projection is the one site that needs it). -/
-theorem bcell_conv_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+private theorem bcell_conv_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc)
     (x : Vec (N * (ic * h * w))) (n : Fin N) (o : Fin oc) (i : Fin h) (j : Fin w) :
     bcell (StableHLO.batchMap N (flatConv (h := h) (w := w) (ctK oc ic kH kW s) b) x) n o i j
@@ -381,7 +381,7 @@ theorem bcell_conv_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.v
   exact flatConv_ctK c₀ hc₀ hkH hkW s b _ o i j
 
 /-- The batched strided centre-tap conv, in cell coordinates — the carrier's conv step. -/
-theorem bcell_convS2_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+private theorem bcell_convS2_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (n : Fin N) (o : Fin oc) (i : Fin h) (j : Fin w) :
     bcell (StableHLO.batchMap N (flatConvStride2 (h := h) (w := w) (ctK oc ic kH kW s) b) x) n o i j
@@ -420,7 +420,7 @@ theorem batchMap_flatConvStride2_zero {N ic oc h w kH kW : Nat} (W : Kernel4 oc 
 
 /-- Odd decimation reads position `(2i+1, 2j+1)`, channel for channel — the peer of
     `decimate_unflatten`. -/
-theorem decimateOdd_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) (c : Fin oc)
+private theorem decimateOdd_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) (c : Fin oc)
     (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (decimateOddFlat oc h w z) c hi wi
       = (Tensor3.unflatten z : Tensor3 oc (2 * h) (2 * w)) c
@@ -431,7 +431,7 @@ theorem decimateOdd_unflatten (oc h w : Nat) (z : Vec (oc * (2 * h) * (2 * w))) 
 /-- The strided XLA-`SAME` centre-tap conv: `b o + s · (input channel 0 at the ODD position)`.
     `flatConvStride2Xla` is `decimateOddFlat ∘ flatConv`, so this is `flatConvStride2_ctK` with
     `decimateOdd_unflatten` in place of `decimate_unflatten`. -/
-theorem flatConvStride2Xla_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+private theorem flatConvStride2Xla_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec oc) (v : Vec (ic * (2 * h) * (2 * w))) (o : Fin oc) (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (flatConvStride2Xla (h := h) (w := w) (ctK oc ic kH kW s) b v) o hi wi
@@ -442,7 +442,7 @@ theorem flatConvStride2Xla_ctK {ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : 
   rw [decimateOdd_unflatten, flatConv_ctK c₀ hc₀ hkH hkW]
 
 /-- The batched strided XLA-`SAME` centre-tap conv, in cell coordinates — MobileNetV2's stem. -/
-theorem bcell_convS2Xla_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
+private theorem bcell_convS2Xla_ctK {N ic oc h w kH kW : Nat} (c₀ : Fin ic) (hc₀ : c₀.val = 0)
     (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (n : Fin N) (o : Fin oc) (i : Fin h) (j : Fin w) :
     bcell (StableHLO.batchMap N
@@ -467,7 +467,7 @@ noncomputable def ctDW (c kH kW : Nat) (s : ℝ) : DepthwiseKernel c kH kW :=
   fun _ch kh kw => if kh.val = (kH - 1) / 2 ∧ kw.val = (kW - 1) / 2 then s else 0
 
 /-- **The centre-tap depthwise value**: `b ch + s · (the same channel at the same position)`. -/
-theorem depthwise2d_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+private theorem depthwise2d_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec c) (x : Tensor3 c h w) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
     depthwiseConv2d (ctDW c kH kW s) b x ch hi wi = b ch + s * x ch hi wi := by
   have hpH : (kH - 1) / 2 < kH := by omega
@@ -496,7 +496,7 @@ theorem depthwise2d_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
       refine ⟨?_, ?_, ?_, ?_⟩ <;> omega) hcond
 
 /-- The flat centre-tap depthwise, in cell coordinates. -/
-theorem depthwiseFlat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+private theorem depthwiseFlat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec c) (v : Vec (c * h * w)) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (depthwiseFlat (h := h) (w := w) (ctDW c kH kW s) b v) ch hi wi
       = b ch + s * Tensor3.unflatten v ch hi wi := by
@@ -504,7 +504,7 @@ theorem depthwiseFlat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
   exact depthwise2d_ctDW hkH hkW s b _ ch hi wi
 
 /-- The batched centre-tap depthwise — the carrier's depthwise step at stride 1. -/
-theorem bcell_dw_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+private theorem bcell_dw_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (x : Vec (N * (c * h * w))) (n : Fin N) (ch : Fin c) (i : Fin h) (j : Fin w) :
     bcell (StableHLO.batchMap N (depthwiseFlat (h := h) (w := w) (ctDW c kH kW s) b) x) n ch i j
       = b ch + s * bcell x n ch i j := by
@@ -512,7 +512,7 @@ theorem bcell_dw_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : �
   exact depthwiseFlat_ctDW hkH hkW s b _ ch i j
 
 /-- The strided XLA-`SAME` centre-tap depthwise, at the odd position. -/
-theorem depthwiseStride2FlatXla_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+private theorem depthwiseStride2FlatXla_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec c) (v : Vec (c * (2 * h) * (2 * w))) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (depthwiseStride2FlatXla (h := h) (w := w) (ctDW c kH kW s) b v) ch hi wi
       = b ch + s * (Tensor3.unflatten v : Tensor3 c (2 * h) (2 * w)) ch
@@ -522,7 +522,7 @@ theorem depthwiseStride2FlatXla_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0
   rw [decimateOdd_unflatten, depthwiseFlat_ctDW hkH hkW]
 
 /-- The batched strided XLA-`SAME` centre-tap depthwise — MobileNetV2's four downsampling blocks. -/
-theorem bcell_dwS2Xla_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+private theorem bcell_dwS2Xla_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (n : Fin N) (ch : Fin c) (i : Fin h) (j : Fin w) :
     bcell (StableHLO.batchMap N
         (depthwiseStride2FlatXla (h := h) (w := w) (ctDW c kH kW s) b) x) n ch i j
@@ -598,10 +598,10 @@ theorem margin192 (n : ℕ) (h : (n : ℝ) < 36864) :
     injective, which is a stem pool's no-tie condition — and the other two channels are zero (a
     centre-tap stem reads only channel 0). Both examples carry the same slab, so the carrier
     vanishes at `t = 0`. -/
-noncomputable def rayRamp (H W : Nat) : Tensor3 3 H W :=
+private noncomputable def rayRamp (H W : Nat) : Tensor3 3 H W :=
   fun ci i j => if ci.val = 0 then -((i.val : ℝ) * (W : ℝ) + (j.val : ℝ)) else 0
 
-noncomputable def rayBase (H W : Nat) : Vec (2 * (3 * H * W)) := bfrom (fun _ => rayRamp H W)
+private noncomputable def rayBase (H W : Nat) : Vec (2 * (3 * H * W)) := bfrom (fun _ => rayRamp H W)
 
 /-- The perturbation: **all** of example 0's channel 0. Uniform over the spatial grid, so it
     survives a max-pool for every `t` (`maxPool3s2_shift`) with no argmax argument. -/
@@ -612,7 +612,7 @@ noncomputable def rayV (H W : Nat) : Vec (2 * (3 * H * W)) :=
 noncomputable def rayX (H W : Nat) (t : ℝ) : Vec (2 * (3 * H * W)) :=
   rayBase H W + t • rayV H W
 
-theorem bcell_rayX (H W : Nat) (t : ℝ) (n : Fin 2) (ci : Fin 3) (i : Fin H) (j : Fin W) :
+private theorem bcell_rayX (H W : Nat) (t : ℝ) (n : Fin 2) (ci : Fin 3) (i : Fin H) (j : Fin W) :
     bcell (rayX H W t) n ci i j
       = (if ci.val = 0 then -((i.val : ℝ) * (W : ℝ) + (j.val : ℝ)) else 0)
         + t * (if n.val = 0 ∧ ci.val = 0 then (1 : ℝ) else 0) := by
@@ -716,7 +716,7 @@ theorem eDiff_dw {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b 
 
 /-- The strided XLA-`SAME` peer of `eDiff_dw`. The carrier is spatially uniform, so decimation —
     whichever phase it keeps — is transparent to it. -/
-theorem eDiff_dwS2Xla {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+private theorem eDiff_dwS2Xla {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w)))) (hv : EDiff δ v)
     (hδ : ∀ ch, δ' ch = s * δ ch) :
     EDiff δ'
@@ -740,7 +740,7 @@ theorem eDiff_pool (c h w : Nat) (δ : Fin c → ℝ) (v : Vec (2 * (c * (2 * h)
 -- ════════════════════════════════════════════════════════════════
 
 /-- `W·a + b` determines `a` and `b` when `b < W` (division with remainder). -/
-theorem divmod_inj {W a b a' b' : ℕ} (hb : b < W) (hb' : b' < W)
+private theorem divmod_inj {W a b a' b' : ℕ} (hb : b < W) (hb' : b' < W)
     (h : W * a + b = W * a' + b') : a = a' ∧ b = b' := by
   have hW : 0 < W := by omega
   obtain ⟨h1, h2⟩ := (Nat.div_mod_unique hW).2 ⟨add_comm b (W * a), hb⟩
@@ -762,7 +762,7 @@ theorem ctConv_bn_pos (oc kH kW h w : Nat)
 
 /-- **The pre-BN stem activation is positionally injective** within each example and channel:
     the centre tap decimates the ramp, and example 0's uniform `+t` shifts every position alike. -/
-theorem ctConv_inj (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t : ℝ) (n : Fin 2)
+private theorem ctConv_inj (oc kH kW h w : Nat) (hkH : 0 < kH) (hkW : 0 < kW) (t : ℝ) (n : Fin 2)
     (o : Fin oc) (r r' : Fin (2 * h)) (s s' : Fin (2 * w))
     (heq : bcell (ctConv oc kH kW h w t) n o r s = bcell (ctConv oc kH kW h w t) n o r' s') :
     r = r' ∧ s = s' := by
@@ -851,7 +851,7 @@ theorem head_diff_ct {c h w nCls : Nat} (hh : 0 < h) (hw : 0 < w) (c₀ : Fin c)
 --   ⚠ MobileNetV2's strided depthwises are XLA-`SAME` (odd decimation); MobileNetV4's are
 --   symmetric (even). One lemma per padding token, as at the strided convs.
 -- ════════════════════════════════════════════════════════════════
-theorem depthwiseStride2Flat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
+private theorem depthwiseStride2Flat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW)
     (s : ℝ) (b : Vec c) (v : Vec (c * (2 * h) * (2 * w))) (ch : Fin c) (hi : Fin h) (wi : Fin w) :
     Tensor3.unflatten (depthwiseStride2Flat (h := h) (w := w) (ctDW c kH kW s) b v) ch hi wi
       = b ch + s * (Tensor3.unflatten v : Tensor3 c (2 * h) (2 * w)) ch
@@ -860,7 +860,7 @@ theorem depthwiseStride2Flat_ctDW {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < 
   simp only [depthwiseStride2Flat, Function.comp_apply]
   rw [decimate_unflatten, depthwiseFlat_ctDW hkH hkW]
 
-theorem bcell_dwS2_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+private theorem bcell_dwS2_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (n : Fin N) (ch : Fin c) (i : Fin h) (j : Fin w) :
     bcell (StableHLO.batchMap N
         (depthwiseStride2Flat (h := h) (w := w) (ctDW c kH kW s) b) x) n ch i j
@@ -869,7 +869,7 @@ theorem bcell_dwS2_ctDW {N c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s :
   rw [bcell_batchMap]
   exact depthwiseStride2Flat_ctDW hkH hkW s b _ ch i j
 
-theorem eDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
+private theorem eDiff_dwS2 {c h w kH kW : Nat} (hkH : 0 < kH) (hkW : 0 < kW) (s : ℝ) (b : Vec c)
     (δ δ' : Fin c → ℝ) (v : Vec (2 * (c * (2 * h) * (2 * w)))) (hv : EDiff δ v)
     (hδ : ∀ ch, δ' ch = s * δ ch) :
     EDiff δ'

@@ -156,20 +156,20 @@ theorem r34HeadB_differentiable (N h w : Nat) {c nCls : Nat}
 
 
 /-- The identity basic block as a `CertLayer`, at its weight record. -/
-noncomputable def r34IdLayer (N h w : Nat) {c : Nat} (p : R34IdW c) (hq : R34IdPos p) :
+private noncomputable def r34IdLayer (N h w : Nat) {c : Nat} (p : R34IdW c) (hq : R34IdPos p) :
     StableHLO.CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
   StableHLO.r34BasicBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂
 
 /-- The downsample basic block as a `CertLayer`, at its weight record. -/
-noncomputable def r34DownLayer (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+private noncomputable def r34DownLayer (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (hq : R34DownPos p) : StableHLO.CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (oc * h * w)) :=
   StableHLO.r34DownBlockLayer N (h := h) (w := w) p.W₁ p.b₁ p.ε₁ hq.h1 p.γ₁ p.β₁
     p.W₂ p.b₂ p.ε₂ hq.h2 p.γ₂ p.β₂ p.Wp p.bp p.εp hq.hp p.γp p.βp
 
-theorem r34IdLayer_fwd (N h w : Nat) {c : Nat} (p : R34IdW c) (hq : R34IdPos p) :
+private theorem r34IdLayer_fwd (N h w : Nat) {c : Nat} (p : R34IdW c) (hq : R34IdPos p) :
     (r34IdLayer N h w p hq).fwd = r34IdB N h w p := rfl
-theorem r34DownLayer_fwd (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc) (hq : R34DownPos p) :
+private theorem r34DownLayer_fwd (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc) (hq : R34DownPos p) :
     (r34DownLayer N h w p hq).fwd = r34DownB N h w p := rfl
 
 -- ════════════════════════════════════════════════════════════════

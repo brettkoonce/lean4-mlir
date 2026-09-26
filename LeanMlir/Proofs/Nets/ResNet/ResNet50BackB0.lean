@@ -60,7 +60,7 @@ namespace Proofs.StableHLO
 
 /-- The batched R50 bottleneck body backward graph: the three stage graphs chained at their
     cumulative forward activations (`cbReluB⁻¹ ∘ cbReluB⁻¹ ∘ projB⁻¹`). -/
-noncomputable def r50BodyBackBatchedGraph {N ic mid oc h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ : Nat}
+private noncomputable def r50BodyBackBatchedGraph {N ic mid oc h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ : Nat}
     (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (γ₁ β₁ : Vec mid)
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (γ₂ β₂ : Vec mid)
     (W₃ : Kernel4 oc mid kH₃ kW₃) (b₃ : Vec oc) (ε₃ : ℝ) (γ₃ β₃ : Vec oc)
@@ -265,7 +265,7 @@ theorem r50ProjBlockBackBatchedGraph_faithful
 /-- The batched R50 downsample body backward graph: the three stage graphs chained at their
     cumulative forward activations. `convStridedBackBatched` appears at the **3×3**, matching the
     forward's stride placement. -/
-noncomputable def r50DownBodyBackBatchedGraph
+private noncomputable def r50DownBodyBackBatchedGraph
     {N ic mid oc h w kH₁ kW₁ kH₂ kW₂ kH₃ kW₃ : Nat}
     (W₁ : Kernel4 mid ic kH₁ kW₁) (b₁ : Vec mid) (ε₁ : ℝ) (γ₁ β₁ : Vec mid)
     (W₂ : Kernel4 mid mid kH₂ kW₂) (b₂ : Vec mid) (ε₂ : ℝ) (γ₂ β₂ : Vec mid)

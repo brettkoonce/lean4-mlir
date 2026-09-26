@@ -293,7 +293,7 @@ noncomputable def b₂ : Vec 2 := fun _ => 1
 noncomputable def x  : Vec 2 := fun _ => 1
 
 /-- First-layer pre-activation is strictly positive at every coordinate. -/
-theorem preact0_pos (k : Fin 2) : 0 < dense W₀ b₀ x k :=
+private theorem preact0_pos (k : Fin 2) : 0 < dense W₀ b₀ x k :=
   dense_pos_of_nonneg (fun _ _ => by simp [W₀]) (fun _ => by simp [b₀]) (fun _ => by simp [x]) k
 
 /-- **Unconditional whole-network VJP for a concrete 3-layer MLP.** Both
@@ -334,7 +334,7 @@ open Finset BigOperators
 /-- BN with γ = 0 collapses to the constant shift β (no input constraint) —
     discharges the resblock smoothness conditions, whose BN inputs need not
     be constant. -/
-theorem bnForward_gamma_zero {n : Nat} (ε β : ℝ) (v : Vec n) :
+private theorem bnForward_gamma_zero {n : Nat} (ε β : ℝ) (v : Vec n) :
     bnForward n ε 0 β v = (fun _ => β) := by
   funext k; simp [bnForward, bnXhat]
 
@@ -360,7 +360,7 @@ noncomputable def Wd  : Mat 1 2 := fun _ _ => 0
 noncomputable def bd  : Vec 2 := fun _ => 0
 
 /-- The 1×1 identity stem conv is the identity on the (flattened) input. -/
-theorem flatConv_ws : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
+private theorem flatConv_ws : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
   have hc : conv2d Ws bs (Tensor3.unflatten X) = Tensor3.unflatten X := by
     funext o hi wi
     rw [conv2d_1x1]
@@ -369,33 +369,33 @@ theorem flatConv_ws : flatConv (h := 2*1) (w := 2*1) Ws bs X = X := by
     exact (Fin.fin_one_eq_zero o).symm ▸ rfl
   simp only [flatConv, hc, Tensor3.flatten_unflatten]
 
-theorem bnMean_x : bnMean (1 * (2*1) * (2*1)) X = 3/2 := by
+private theorem bnMean_x : bnMean (1 * (2*1) * (2*1)) X = 3/2 := by
   unfold bnMean
   change (∑ i : Fin 4, X i) / ((4:ℕ):ℝ) = 3/2
   rw [Fin.sum_univ_four]; norm_num [X]
 
-theorem bnVar_x : bnVar (1 * (2*1) * (2*1)) X = 5/4 := by
+private theorem bnVar_x : bnVar (1 * (2*1) * (2*1)) X = 5/4 := by
   unfold bnVar
   rw [bnMean_x]
   change (∑ i : Fin 4, (X i - 3/2) * (X i - 3/2)) / ((4:ℕ):ℝ) = 5/4
   rw [Fin.sum_univ_four]; norm_num [X]
 
-theorem bnIstd_x : bnIstd (1 * (2*1) * (2*1)) X (11/4) = 1/2 := by
+private theorem bnIstd_x : bnIstd (1 * (2*1) * (2*1)) X (11/4) = 1/2 := by
   unfold bnIstd
   rw [bnVar_x, show (5/4 + 11/4 : ℝ) = 2^2 by norm_num, Real.sqrt_sq (by norm_num)]
 
-theorem bnX_eq (k : Fin (1 * (2*1) * (2*1))) :
+private theorem bnX_eq (k : Fin (1 * (2*1) * (2*1))) :
     bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X k = (X k - 3/2) * (1/2) + 10 := by
   unfold bnForward bnXhat
   rw [bnMean_x, bnIstd_x]; ring
 
-theorem bnX_pos (k : Fin (1 * (2*1) * (2*1))) :
+private theorem bnX_pos (k : Fin (1 * (2*1) * (2*1))) :
     0 < bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X k := by
   rw [bnX_eq]
   have hx : 0 ≤ X k := by simp only [X]; positivity
   nlinarith [hx]
 
-theorem bnX_inj : Function.Injective (bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X) := by
+private theorem bnX_inj : Function.Injective (bnForward (1 * (2*1) * (2*1)) (11/4) 1 10 X) := by
   intro a b hab
   rw [bnX_eq, bnX_eq] at hab
   have hXab : X a = X b := by linarith

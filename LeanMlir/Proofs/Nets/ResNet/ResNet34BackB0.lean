@@ -73,7 +73,7 @@ namespace Proofs.StableHLO
 
 /-- The batched ResNet-34 body backward graph: the two stage graphs chained at
     their cumulative forward activations (`cbReluB⁻¹ ∘ projB⁻¹`). -/
-noncomputable def r34BodyBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
+private noncomputable def r34BodyBackBatchedGraph {N c h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 c c kH₁ kW₁) (b₁ : Vec c) (ε₁ : ℝ) (γ₁ β₁ : Vec c)
     (W₂ : Kernel4 c c kH₂ kW₂) (b₂ : Vec c) (ε₂ : ℝ) (γ₂ β₂ : Vec c)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
@@ -173,7 +173,7 @@ theorem r34BasicBlockBackBatchedGraph_faithful {N c h w kH₁ kW₁ kH₂ kW₂ 
 /-- The batched ResNet-34 downsample body backward graph: the two stage graphs
     chained at their cumulative forward activations (`cbReluStridedB⁻¹ ∘ projB⁻¹`).
     The strided sibling of `r34BodyBackBatchedGraph`. -/
-noncomputable def r34DownBodyBackBatchedGraph {N ic oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
+private noncomputable def r34DownBodyBackBatchedGraph {N ic oc h w kH₁ kW₁ kH₂ kW₂ : Nat}
     (W₁ : Kernel4 oc ic kH₁ kW₁) (b₁ : Vec oc) (ε₁ : ℝ) (γ₁ β₁ : Vec oc)
     (W₂ : Kernel4 oc oc kH₂ kW₂) (b₂ : Vec oc) (ε₂ : ℝ) (γ₂ β₂ : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (e : SHlo (N * (oc * h * w))) :

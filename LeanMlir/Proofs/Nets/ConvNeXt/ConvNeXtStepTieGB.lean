@@ -73,7 +73,7 @@ arguments; `batchMapAux` lifts a function of (one saved value, one input), so th
 activations from the block input, exactly as `cnxBlockCotInChAt` does. -/
 
 /-- Cotangent at the expand output (pre-GELU), from the block input and output cotangent. -/
-noncomputable def blkCotE {c cExp h w : Nat} (ε : ℝ)
+private noncomputable def blkCotE {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (cExp*h*w) :=
@@ -83,7 +83,7 @@ noncomputable def blkCotE {c cExp h w : Nat} (ε : ℝ)
   cnxCotE γlsB Wpr bpr (gelu (cExp*h*w) e) e dyOut
 
 /-- Cotangent at the channel-LN output, from the block input and output cotangent. -/
-noncomputable def blkCotN {c cExp h w : Nat} (ε : ℝ)
+private noncomputable def blkCotN {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
@@ -93,7 +93,7 @@ noncomputable def blkCotN {c cExp h w : Nat} (ε : ℝ)
   cnxCotN γlsB Wex bex Wpr bpr nl (gelu (cExp*h*w) e) e dyOut
 
 /-- Cotangent at the depthwise output (the channel-LN input-VJP of `blkCotN`). -/
-noncomputable def blkCotD {c cExp h w : Nat} (ε : ℝ)
+private noncomputable def blkCotD {c cExp h w : Nat} (ε : ℝ)
     (Wdw : DepthwiseKernel c 7 7) (bdw : Vec c) (ng nbt : Vec c)
     (Wex : Kernel4 cExp c 1 1) (bex : Vec cExp) (Wpr : Kernel4 c cExp 1 1) (bpr : Vec c)
     (lg : Vec c) (xin dyOut : Vec (c*h*w)) : Vec (c*h*w) :=
@@ -101,19 +101,19 @@ noncomputable def blkCotD {c cExp h w : Nat} (ε : ℝ)
     (blkCotN ε Wdw bdw ng nbt Wex bex Wpr bpr lg xin dyOut)
 
 /-- Downsample: cotangent at the LN output, i.e. the strided conv's input-VJP. -/
-noncomputable def dnCotN {ci co h w : Nat} (ε : ℝ)
+private noncomputable def dnCotN {ci co h w : Nat} (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
     (xin : Vec (ci*(2*h)*(2*w))) (dyOut : Vec (co*h*w)) : Vec (ci*(2*h)*(2*w)) :=
   (flatConvStride2HasVJP Wd bd).backward (chanLNTensor3 ci (2*h) (2*w) ε dng dnbt xin) dyOut
 
 /-- Stem: cotangent at the patchify output, the stem LN's input-VJP of `dyStem`. -/
-noncomputable def stemCotPatch {c h w : Nat} (ε : ℝ)
+private noncomputable def stemCotPatch {c h w : Nat} (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng : Vec c)
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) (dyStem : Vec (c*h*w)) : Vec (c*h*w) :=
   chanLNTensor3Back c h w ε psng (flatConvStride4 Wst psb x) dyStem
 
 /-- Head: the dense backward at one example's LN output and loss cotangent. -/
-noncomputable def headCotHn {nC : Nat} (Wfc : Mat 768 nC) (bfc : Vec nC)
+private noncomputable def headCotHn {nC : Nat} (Wfc : Mat 768 nC) (bfc : Vec nC)
     (hn : Vec 768) (g : Vec nC) : Vec (1*768) :=
   (denseHasVJP Wfc bfc).backward hn g
 
@@ -312,7 +312,7 @@ default budget. The block, downsample and head ties need no wrapper: the capston
     (dyStem : Vec (N * (c*h*w))) : Prop :=
   cnxStemChTiedGB N xN epsStr cotN ε Wst psb psng psnbt x xstem dyStem
 
-theorem cnx_stem_ch_tiedGBAt (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
+private theorem cnx_stem_ch_tiedGBAt (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (psb psng psnbt : Vec c)
     (x : Vec (N * (3*(2*(2*h))*(2*(2*w))))) (xstem : Vec (N * (3*h*w)))
     (dyStem : Vec (N * (c*h*w))) :

@@ -217,15 +217,16 @@ def wilson95 (correct nEval : Nat) : String :=
     `none` otherwise.
 
     One definition for its three consumers — `trainAdamSched`'s loop, its startup banner, and
-    the fp8 trainer — so a gate on it is a gate on the driver's expression.
+    the fp8 trainer — so the weight the banner prints is the weight the loop applies.
 
     The `== 0.99` arm returns the double `0.01` rather than `1.0 - 0.99`
     (= 0.010000000000000009 — different bits, 9e-16 relative), so every net that leaves
     `bnMomentum` at its default keeps the exact weight `0.01`.
     `some 0` is reachable — `VerifiedVariant.accK` returns 0 when it cannot parse a k out of
     the variant name — and lands on `1/0 = inf`, `pow → 0`, weight 1.0, i.e. the running stats
-    become the latest batch. That is kept deliberately rather than quietly repaired: a variant name whose k does not parse is already training at a wrong
-    effective LR (see `accK`), and this should not be the thing that hides it. -/
+    become the latest batch. That is kept deliberately rather than quietly repaired: a variant name
+    whose k does not parse is already training at a wrong effective LR (see `accK`), and this
+    should not be the thing that hides it. -/
 def VerifiedConfig.bnEmaWeight (cfg : VerifiedConfig) : Option Nat → Float
   | some k => 1.0 - Float.pow cfg.bnMomentum (1.0 / k.toFloat)
   | none   => if cfg.bnMomentum == 0.99 then 0.01 else 1.0 - cfg.bnMomentum
@@ -557,7 +558,7 @@ def readExact (h : IO.FS.Handle) (n : Nat) : IO ByteArray :=
 /-- Resolve a net's generated shim to a path on disk, or `none`. The candidate list is
     `spawnShim`'s, factored out so the two callers cannot disagree about WHICH file they are
     reading — one of them decides the wire, the other spawns it. -/
-def resolveShimScript (shimScript : String) : IO (Option System.FilePath) := do
+private def resolveShimScript (shimScript : String) : IO (Option System.FilePath) := do
   let candidates : List System.FilePath := match ← IO.getEnv "SHIM_SCRIPT" with
     | some p => [p]
     | none   => if shimScript.isEmpty then []
@@ -569,7 +570,7 @@ def resolveShimScript (shimScript : String) : IO (Option System.FilePath) := do
 
     The shim text is the single source: a `useMixup` field on `VerifiedNet` would be a second
     definition of what `generateShim` already baked from the same config. -/
-def shimMixDefault (shimScript : String) : IO String := do
+private def shimMixDefault (shimScript : String) : IO String := do
   match ← resolveShimScript shimScript with
   | none => pure ""
   | some script => do
@@ -729,7 +730,7 @@ the render wants batch={batch} flat={flat} — refusing rather than reading misa
 
 /-- One batch off the wire: `int32[batch]` labels then `float32[batch*flat]` images, in that order
     (the shim writes labels first so a partial record is detectable at the smaller read). -/
-def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
+private def readShimBatch (h : IO.FS.Handle) (batch flat : Nat) (nclasses : Nat := 0)
     (imgBuf : Option (IO.Ref ByteArray) := none) : IO (ByteArray × ByteArray) := do
   -- `nclasses = 0` ⇒ v1: `int32[batch]`. Otherwise v2: `float32[batch*nclasses]`. The FFI accepts
   -- either without a flag — `lean_fill_targets` dispatches on the buffer's SIZE — so nothing
@@ -834,7 +835,7 @@ reading a misframed batch"
     Each worker gets a distinct seed (`seed + i`). With one shared seed every worker draws the
     same augmentation sequence, and since the shards hold different images that is not a
     correctness bug — but it needlessly correlates the crops across workers. -/
-def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n : Nat)
+private def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n : Nat)
     (nclasses : Nat := 0) (extraEnv : Array (String × Option String) := #[]) :
     IO (Array ShimProc) := do
   if n <= 1 then
@@ -848,7 +849,7 @@ def spawnShimSharded (shimScript : String) (split : String) (batch flat seed n :
 
 /-- Round-robin read: batch `k` comes from worker `k % n`. `readExact` already blocks until a whole
     record has arrived, so a slow worker throttles rather than corrupting — the framing cannot slip. -/
-def readShimBatchRR (hs : Array ShimProc) (k batch flat : Nat) (nclasses : Nat := 0)
+private def readShimBatchRR (hs : Array ShimProc) (k batch flat : Nat) (nclasses : Nat := 0)
     (imgBuf : Option (IO.Ref ByteArray) := none) : IO (ByteArray × ByteArray) := do
   match hs[k % hs.size]? with
   | some p => readShimBatch p.h batch flat nclasses imgBuf
@@ -883,7 +884,7 @@ structure ValCarry where
     `b % n` has exactly `⌊b / n⌋` of them when global batch `b` is the first past the end).
     Sequential by construction — `evalScore` issues the next pull only after awaiting this one — so
     the carry needs no lock. -/
-def pullValRows (st : IO.Ref ValCarry) (hs : Array ShimProc) (shimBatch flat offset gB : Nat)
+private def pullValRows (st : IO.Ref ValCarry) (hs : Array ShimProc) (shimBatch flat offset gB : Nat)
     (dropTail : Bool) : IO (ByteArray × ByteArray × Nat) := do
   let mut c ← st.get
   while c.rows < gB && !c.ended do
@@ -934,7 +935,7 @@ planning/streaming_val.md)"
 
 /-- Kill then wait, so no `<defunct>` child is left: the val stream ends by itself, but a dropped tail or a
     refusal can leave a child still writing. -/
-def reapValStream : EvalRows → IO Unit
+private def reapValStream : EvalRows → IO Unit
   | .stream hs .. => do
       for p in hs do
         try p.child.kill catch _ => pure ()
@@ -1124,7 +1125,7 @@ private def mkSynthData (data : VerifiedData) (d0 bs : Nat) :
 /-- Write `bytes` to `path` all-or-nothing: a sibling `.tmp`, then `rename(2)` over the target.
     A crash mid-write leaves the PREVIOUS file intact rather than a truncated one — the same
     guarantee the JAX reference's `save_train_state` gets from `os.replace`. -/
-def writeBinAtomic (path : String) (bytes : ByteArray) : IO Unit := do
+private def writeBinAtomic (path : String) (bytes : ByteArray) : IO Unit := do
   let tmp := path ++ ".tmp"
   IO.FS.writeBinFile tmp bytes
   IO.FS.rename tmp path

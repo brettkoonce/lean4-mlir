@@ -462,7 +462,7 @@ def headLNGraph (gN btN epsStr : String) {c : Nat} (ε : ℝ) (γ β : Vec c)
     (.rowScaleF (m := 1) (n := c) gN γ
       (.lnRowF (m := 1) (n := c) "%one" "%zero" epsStr ε 1 0 e))
 
-theorem headLNGraph_faithful (gN btN epsStr : String) {c : Nat} (ε : ℝ) (γ β : Vec c)
+private theorem headLNGraph_faithful (gN btN epsStr : String) {c : Nat} (ε : ℝ) (γ β : Vec c)
     (e : SHlo (1 * c)) :
     den (headLNGraph gN btN epsStr ε γ β e) = rowLNVecFlat 1 c ε γ β (den e) := by
   unfold headLNGraph

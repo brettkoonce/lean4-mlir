@@ -119,7 +119,7 @@ def flowSamplerNfe : List (String × Nat) :=
 def piF : Float := 3.14159265358979323846
 
 /-- Nichol & Dhariwal's `s`, the same 0.008 `cosineSchedule` uses. -/
-def sBias : Float := 0.008
+private def sBias : Float := 0.008
 
 private def theta (t : Float) : Float :=
   (t + sBias) / (1.0 + sBias) * (piF / 2.0)

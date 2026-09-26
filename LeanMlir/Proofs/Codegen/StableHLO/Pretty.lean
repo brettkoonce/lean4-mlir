@@ -283,7 +283,7 @@ deriving Repr, Inhabited
 /-- The `(tag, names, info)` skeleton descriptor of a batched per-example op — the
     discriminator + the SSA names the emit references + the shape dims. Keeps the
     `batchOp` skel one line and isolates the 7-variant match into a pure function. -/
-def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List String × List Nat)
+private def batchOpDescr {a b : Nat} (N : Nat) : BatchableOp a b → (String × List String × List Nat)
   | .conv (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
       ("conv", [wN, bN], [N, ic, oc, h, w, kH, kW])
   | .convStrided (ic := ic) (oc := oc) (h := h) (w := w) (kH := kH) (kW := kW) wN bN _ _ =>
@@ -1044,12 +1044,12 @@ private def sWGradGeom (k s : Nat) : Nat × Nat × Nat × Nat :=
 -- ════════════════════════════════════════════════════════════════
 
 /-- The full entry — `[c,h,w]` plus the row-view flag — recorded for SSA name `nm`. -/
-def lookupEntry (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat × Bool) :=
+private def lookupEntry (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat × Bool) :=
   tbl.lookup nm
 
 /-- The `[c,h,w]` `nm` carries **as a map**. A row view answers `none`: it holds the same elements
     in a different order, so unflattening it to `[B,c,h,w]` would not be an inverse pair. -/
-def lookupShape (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat) :=
+private def lookupShape (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat) :=
   match lookupEntry tbl nm with
   | some (c, h, w, false) => some (c, h, w)
   | _                     => none
@@ -1146,22 +1146,22 @@ private def tokIO : Tok → Option (Nat × Nat × Nat) × Option (Nat × Nat × 
 
 /-- Record `nm ↦ [c,h,w]` + layout, newest first. `fresh` never reuses a name, so an entry can
     never be contradicted by a later one; an `.operand` name re-pushed in a later fragment repeats. -/
-def noteEntry (nm : String) : Option (Nat × Nat × Nat × Bool) → StateM EmitS Unit
+private def noteEntry (nm : String) : Option (Nat × Nat × Nat × Bool) → StateM EmitS Unit
   | none               => pure ()
   | some (c, h, w, rv) => modify fun (k, tbl) => (k, (nm, c, h, w, rv) :: tbl)
 
 /-- Record `nm` as carrying the `[c,h,w]` MAP (not a row view). -/
-def noteShapeOf (nm : String) : Option (Nat × Nat × Nat) → StateM EmitS Unit
+private def noteShapeOf (nm : String) : Option (Nat × Nat × Nat) → StateM EmitS Unit
   | none           => pure ()
   | some (c, h, w) => noteEntry nm (some (c, h, w, false))
 
 /-- The `[c,h,w]` the running table has for the value bound to `nm`, as a map. -/
-def lookupShapeM (nm : String) : StateM EmitS (Option (Nat × Nat × Nat)) := do
+private def lookupShapeM (nm : String) : StateM EmitS (Option (Nat × Nat × Nat)) := do
   let (_, tbl) ← get
   pure (lookupShape tbl nm)
 
 /-- The full entry the running table has for `nm`. -/
-def lookupEntryM (nm : String) : StateM EmitS (Option (Nat × Nat × Nat × Bool)) := do
+private def lookupEntryM (nm : String) : StateM EmitS (Option (Nat × Nat × Nat × Bool)) := do
   let (_, tbl) ← get
   pure (lookupEntry tbl nm)
 
@@ -1189,7 +1189,7 @@ private def transposeMN (t : Tok) : Option (Nat × Nat) :=
     the layout flag when its `(m,n)` match the operand's `[c,h,w]` (and records nothing when they
     do not, e.g. ViT's attention transposes, which are not maps at all), and the row ops carry it
     through unchanged. Everything else reads its shapes off the tag. -/
-def noteTokShapes (t : Tok) (before after : List String) : StateM EmitS Unit := do
+private def noteTokShapes (t : Tok) (before after : List String) : StateM EmitS Unit := do
   if rowViewPass t then
     match before, after with
     | i :: _, o :: _ => noteEntry o (← lookupEntryM i)
@@ -1243,7 +1243,7 @@ def liftPointwise (B n : Nat) (r : String)
 /-- Two-tensor-operand peer of `liftPointwise`; both operands carry the same flat width.
     The shape comes from whichever operand has one — the cotangent first, since it is the stack
     operand and was produced nearby, then the saved activation. -/
-def liftPointwise2 (B n : Nat) (r s : String)
+private def liftPointwise2 (B n : Nat) (r s : String)
     (k : String → String → List Nat → StateM EmitS (String × String)) :
     StateM EmitS (String × String) := do
   let sh ← match ← lookupShapeM r with
@@ -1285,7 +1285,7 @@ def allReduceMeanText (g : String) (ds : List Nat) (t : String) (R : Nat) : Stri
 
 /-- The compute precision a contraction tag asks for: `…Bf16` bf16, `…F8` fp8 (E4M3), otherwise f32
     (`none`) — as the type printer of the low-precision operands. -/
-def lowOf (tag : String) : Option (List Nat → String) :=
+private def lowOf (tag : String) : Option (List Nat → String) :=
   if tag.endsWith "Bf16" then some tyBf16 else if tag.endsWith "F8" then some tyF8 else none
 
 /-- **One contraction at a compute precision** — the `stablehlo.convolution` / `dot_general` line of
@@ -1296,7 +1296,7 @@ def lowOf (tag : String) : Option (List Nat → String) :=
     shape whose f32 result IS the accumulator (`dotInBf16`). Names are drawn in that order (the two
     converts, the op, the convert back), so an arm draws the same `%v` numbers at every precision.
     Returns the text and the f32 result's name. -/
-def emitContract (lp : Option (List Nat → String)) (x y : String) (xs ys rs : List Nat)
+private def emitContract (lp : Option (List Nat → String)) (x y : String) (xs ys rs : List Nat)
     (op : String → String → String) (lowResult : Bool := true) : StateM EmitS (String × String) := do
   match lp with
   | none =>
@@ -1314,12 +1314,12 @@ def emitContract (lp : Option (List Nat → String)) (x y : String) (xs ys rs : 
       pure (cvt ++ s!"    {o} = {op xb yb} : ({t xs}, {t ys}) -> {ty rs}\n", o)
 
 /-- The input-side dense contraction `x · W` (`dotIn` / `dotInBf16`). -/
-def dotInOp (lhs rhs : String) : String :=
+private def dotInOp (lhs rhs : String) : String :=
   s!"stablehlo.dot_general {lhs}, {rhs}, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT]"
 
 /-- The flat-carrier SAME conv + bias (`flatConvF` / `flatConvFBf16`): reshape the `[B, ic·h·w]`
     carrier to NCHW, convolve at `lp`'s precision (`emitContract`), add the broadcast bias, flatten. -/
-def emitFlatConv (B : Nat) (lp : Option (List Nat → String)) (w b : String)
+private def emitFlatConv (B : Nat) (lp : Option (List Nat → String)) (w b : String)
     (ic oc h w' kH kW : Nat) (r : String) : StateM EmitS (String × String) := do
   let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
   let xn ← fresh
@@ -1338,7 +1338,7 @@ def emitFlatConv (B : Nat) (lp : Option (List Nat → String)) (w b : String)
 /-- The flattened batched matrix multiply `C = A·B` (`matmulF` / `"matmulFBf16"`): reshape both
     operands to rank 3, `dot_general` with batching dim 0 (A's last axis against B's middle) at
     `lp`'s precision, reshape back to flat. -/
-def emitMatmul (B : Nat) (lp : Option (List Nat → String)) (a b : String) (m k n : Nat) :
+private def emitMatmul (B : Nat) (lp : Option (List Nat → String)) (a b : String) (m k n : Nat) :
     StateM EmitS (String × String) := do
   let an ← fresh; let bn ← fresh
   let (cs, mm) ← emitContract lp an bn [B,m,k] [B,k,n] [B,m,n] fun lhs rhs =>
@@ -4502,7 +4502,7 @@ def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List Str
   | _, st => pure ("    // MALFORMED token stream\n", st)
 
 /-- Fold a token stream to accumulated `(code, result-name-stack)`. -/
-def serializeToks (B : Nat) : List Tok → (String × List String) → StateM EmitS (String × List String)
+private def serializeToks (B : Nat) : List Tok → (String × List String) → StateM EmitS (String × List String)
   | [], acc           => pure acc
   | t :: ts, (code, st) => do
       let (c, st') ← emitTok B t st

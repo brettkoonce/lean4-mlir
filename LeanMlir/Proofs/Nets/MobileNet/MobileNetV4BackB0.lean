@@ -67,25 +67,25 @@ namespace Proofs.StableHLO
     Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
   bnBatchLA N c h w ε γ β ∘ batchMap N (depthwiseFlat W b)
 
-theorem dwbB_differentiable (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+private theorem dwbB_differentiable (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
     (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
     Differentiable ℝ (dwbB N (h := h) (w := w) W b ε γ β) :=
   bnStage_differentiable N (depthwiseFlat W b) (depthwiseFlat_differentiable W b) ε hε γ β
 
-noncomputable def dwbBHasVJP (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+private noncomputable def dwbBHasVJP (N : Nat) {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
     (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
     HasVJP (dwbB N (h := h) (w := w) W b ε γ β) :=
   bnStageHasVJP N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
     (depthwiseFlatHasVJP W b) ε hε γ β
 
 /-- `dwbB`'s backward graph: the BN backward, then the depthwise input-VJP — no mask. -/
-noncomputable def dwbBackBatchedGraph {N c h w kH kW : Nat}
+private noncomputable def dwbBackBatchedGraph {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ _β : Vec c)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   .depthwiseBackBatched (N := N) "%dwbW" W b
     (.bnBatchLABack "%dwbG" "%dwbX" "dwbE" ε γ (batchMap N (depthwiseFlat W b) x) e)
 
-theorem dwbBackBatchedGraph_faithful {N c h w kH kW : Nat}
+private theorem dwbBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
     den (dwbBackBatchedGraph W b ε γ β x e)
@@ -126,7 +126,7 @@ noncomputable def mnv4DWBnLayer (N : Nat) {c h w kH kW : Nat}
 
 /-- `dwbReluB`'s `_at` VJP — one instantiation of `bnReluStageHasVJPAt` at `depthwiseFlat`.
     The same lemma `cbReluBHasVJPAt` uses at `flatConv`; nothing analytic is new. -/
-noncomputable def dwbReluBHasVJPAt (N : Nat) {c h w kH kW : Nat}
+private noncomputable def dwbReluBHasVJPAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0) :
@@ -134,7 +134,7 @@ noncomputable def dwbReluBHasVJPAt (N : Nat) {c h w kH kW : Nat}
   bnReluStageHasVJPAt N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
     (depthwiseFlatHasVJP W b) ε hε γ β x h_smooth
 
-theorem dwbReluB_differentiableAt (N : Nat) {c h w kH kW : Nat}
+private theorem dwbReluB_differentiableAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0) :
@@ -142,7 +142,7 @@ theorem dwbReluB_differentiableAt (N : Nat) {c h w kH kW : Nat}
   bnReluStage_differentiableAt N (depthwiseFlat W b) (depthwiseFlat_differentiable W b)
     ε hε γ β x h_smooth
 
-noncomputable def dwbReluBstridedHasVJPAt (N : Nat) {c h w kH kW : Nat}
+private noncomputable def dwbReluBstridedHasVJPAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w))))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0) :
@@ -150,7 +150,7 @@ noncomputable def dwbReluBstridedHasVJPAt (N : Nat) {c h w kH kW : Nat}
   bnReluStageHasVJPAt N (depthwiseStride2Flat W b) (depthwiseStride2Flat_differentiable W b)
     (depthwiseStride2FlatHasVJP W b) ε hε γ β x h_smooth
 
-theorem dwbReluBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
+private theorem dwbReluBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w))))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0) :
@@ -161,14 +161,14 @@ theorem dwbReluBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
 /-- `dwbReluB`'s backward graph. `.selectPos` (relu's ONE-sided mask) where `dwbrBackBatchedGraph`
     uses `.selectMid` (relu6's two-sided one) — that token is the whole relu-vs-relu6 difference at
     the backward, and swapping them is well-typed. -/
-noncomputable def dwbReluBackBatchedGraph {N c h w kH kW : Nat}
+private noncomputable def dwbReluBackBatchedGraph {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) : SHlo (N * (c * h * w)) :=
   .depthwiseBackBatched (N := N) "%dwrpW" W b
     (.bnBatchLABack "%dwrpG" "%dwrpX" "dwrpE" ε γ (batchMap N (depthwiseFlat W b) x)
       (.selectPos "%dwrpR" (bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x)) e))
 
-theorem dwbReluBackBatchedGraph_faithful {N c h w kH kW : Nat}
+private theorem dwbReluBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseFlat W b) x) k ≠ 0) :
@@ -181,7 +181,7 @@ theorem dwbReluBackBatchedGraph_faithful {N c h w kH kW : Nat}
     HasVJP.toHasVJPAt, Function.comp_apply]
 
 /-- The strided depthwise-relu stage's backward graph. -/
-noncomputable def dwbReluBstridedBackBatchedGraph {N c h w kH kW : Nat}
+private noncomputable def dwbReluBstridedBackBatchedGraph {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w))) :
     SHlo (N * (c * (2 * h) * (2 * w))) :=
@@ -190,7 +190,7 @@ noncomputable def dwbReluBstridedBackBatchedGraph {N c h w kH kW : Nat}
       (.selectPos "%dwrpsR"
         (bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x)) e))
 
-theorem dwbReluBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
+private theorem dwbReluBstridedBackBatchedGraph_faithful {N c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (e : SHlo (N * (c * h * w)))
     (h_smooth : ∀ k, bnBatchLA N c h w ε γ β (batchMap N (depthwiseStride2Flat W b) x) k ≠ 0) :

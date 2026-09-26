@@ -145,7 +145,7 @@ noncomputable def mnv2NoExpBHasVJPAt (N h w : Nat) {ic oc : Nat} (p : IVWNoExp i
   ((StableHLO.dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
     (StableHLO.projLayer N p.pW p.pb p.pε hq.hp p.pγ p.pβ)).vjp v ⟨hs.hd, trivial⟩
 
-theorem mnv2NoExpB_differentiableAt (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
+private theorem mnv2NoExpB_differentiableAt (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (v : Vec (N * (ic * h * w))) (hs : IVNoExpSmoothAtB N h w p v) :
     DifferentiableAt ℝ (mnv2NoExpB N h w p) v :=
   ((StableHLO.dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
@@ -158,7 +158,7 @@ noncomputable def mnv2ExpOnlyBHasVJPAt (N h w : Nat) {ic mid oc : Nat} (p : IVW 
   StableHLO.mnv2BodyBHasVJPAt N p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ v hs.he hs.hd
 
-theorem mnv2ExpOnlyB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
+private theorem mnv2ExpOnlyB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
     (hq : IVPos p) (v : Vec (N * (ic * h * w))) (hs : IVSmoothAtB N h w p v) :
     DifferentiableAt ℝ (mnv2ExpOnlyB N h w p) v :=
   StableHLO.mnv2BodyB_differentiableAt N p.eW p.eb p.eε hq.he p.eγ p.eβ
@@ -172,7 +172,7 @@ noncomputable def mnv2ResidBHasVJPAt (N h w : Nat) {c mid : Nat} (p : IVW c mid 
   residualHasVJPAt _ v (mnv2ExpOnlyB_differentiableAt N h w p hq v hs)
     (mnv2ExpOnlyBHasVJPAt N h w p hq v hs)
 
-theorem mnv2ResidB_differentiableAt (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
+private theorem mnv2ResidB_differentiableAt (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
     (hq : IVPos p) (v : Vec (N * (c * h * w))) (hs : IVSmoothAtB N h w p v) :
     DifferentiableAt ℝ (mnv2ResidB N h w p) v := by
   exact residual_differentiableAt (mnv2ExpOnlyB_differentiableAt N h w p hq v hs)
@@ -185,7 +185,7 @@ noncomputable def mnv2StridedBHasVJPAt (N h w : Nat) {ic mid oc : Nat} (p : IVW 
   StableHLO.mnv2DownBodyBHasVJPAt N p.eW p.eb p.eε hq.he p.eγ p.eβ
     p.dW p.db p.dε hq.hd p.dγ p.dβ p.pW p.pb p.pε hq.hp p.pγ p.pβ v hs.he hs.hd
 
-theorem mnv2StridedB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
+private theorem mnv2StridedB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc)
     (hq : IVPos p) (v : Vec (N * (ic * (2 * h) * (2 * w))))
     (hs : IVStridedSmoothAtB N h w p v) :
     DifferentiableAt ℝ (mnv2StridedB N h w p) v :=
@@ -196,7 +196,7 @@ theorem mnv2StridedB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW i
     both `batchMap` of a per-example op, so both lift with the GLOBAL `batchMapHasVJP`.
     Unlike r34's, this head is not hypothesis-free: MobileNetV2 puts a relu6 in front of the
     pool, so the head carries the net's 35th kink site. -/
-noncomputable def mnv2HeadBHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
+private noncomputable def mnv2HeadBHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (v : Vec (N * (ic * h * w)))
     (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh v) :
@@ -216,7 +216,7 @@ noncomputable def mnv2HeadBHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
     ((batchMap_differentiable _ (dense_differentiable Wd bd)) _) g_vjp
     ((batchMapHasVJP _ (denseHasVJP Wd bd) (dense_differentiable Wd bd)).toHasVJPAt _)
 
-theorem mnv2HeadB_differentiableAt (N h w : Nat) {ic oc nCls : Nat}
+private theorem mnv2HeadB_differentiableAt (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (v : Vec (N * (ic * h * w)))
     (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh v) :

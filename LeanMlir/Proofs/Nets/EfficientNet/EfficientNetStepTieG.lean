@@ -369,7 +369,7 @@ def enetExpTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
   enetExpTiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
 
-theorem enet_exp_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
+private theorem enet_exp_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
     enetExpTiedGAt xN vN epsStr cotN h w p he hd hp xin dyOut := by
@@ -383,7 +383,7 @@ def enetStridedTiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
   enetStridedTiedG xN vN epsStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
 
-theorem enet_strided_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
+private theorem enet_strided_tiedGAt (xN vN epsStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) :
     enetStridedTiedGAt xN vN epsStr cotN h w p he hd hp xin dyOut := by
@@ -397,7 +397,7 @@ def enetNoExpTiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
   enetNoExpTiedG xN vN epsStr cotN p.dε hd p.pε hp
     p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
 
-theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
+private theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
     (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) :
     enetNoExpTiedGAt xN vN epsStr cotN h w p hd hp xin dyOut := by

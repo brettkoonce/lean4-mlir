@@ -138,7 +138,7 @@ theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
   rfl
 
 /-- The whole channel-LN residual block backward graph (block body + identity skip). -/
-noncomputable def cnxResidBlockChBackGraph {c cExp h w kH kW : Nat}
+private noncomputable def cnxResidBlockChBackGraph {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) : SHlo (c * h * w) :=
   residualBackGraph
     (cnxBlockBodyChBackGraph p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
@@ -148,7 +148,7 @@ noncomputable def cnxResidBlockChBackGraph {c cExp h w kH kW : Nat}
     the shipped stages are built from. Assembles the
     body backward graph + the identity skip into `cnxBlockChWHasVJP`'s backward via
     `residualBackGraph_faithful`, no hypotheses beyond `0 < p.εn`. -/
-theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
+private theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) (x : Vec (c * h * w)) (ecot : SHlo (c * h * w)) :
     den (cnxResidBlockChBackGraph p x ecot) = (cnxBlockChWHasVJP p hε).backward x (den ecot) :=
   residualBackGraph_faithful

@@ -37,7 +37,7 @@ open scoped BigOperators ENNReal NNReal RealInnerProductSpace
 
 open scoped Classical in
 /-- Some logit is maximal: the maximizer set `argmaxNet` takes the least of is nonempty. -/
-lemma argmaxNet_nonempty {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ) (x : E) :
+private lemma argmaxNet_nonempty {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ) (x : E) :
     (Finset.univ.filter fun c => ∀ j, f x j ≤ f x c).Nonempty := by
   obtain ⟨c, -, hc⟩ := Finset.exists_max_image Finset.univ (f x) ⟨0, Finset.mem_univ 0⟩
   exact ⟨c, Finset.mem_filter.mpr ⟨Finset.mem_univ c, fun j => hc j (Finset.mem_univ j)⟩⟩
@@ -50,14 +50,14 @@ noncomputable def argmaxNet {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ
     (x : E) : Fin (k + 1) :=
   (Finset.univ.filter fun c => ∀ j, f x j ≤ f x c).min' (argmaxNet_nonempty f x)
 
-lemma argmaxNet_isMax {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ) (x : E) :
+private lemma argmaxNet_isMax {E : Type*} {k : ℕ} (f : E → Fin (k + 1) → ℝ) (x : E) :
     ∀ j, f x j ≤ f x (argmaxNet f x) := by
   classical
   have h := Finset.min'_mem _ (argmaxNet_nonempty f x)
   exact (Finset.mem_filter.mp h).2
 
 /-- At a STRICT argmax the tie-break is irrelevant: `argmaxNet` returns it. -/
-lemma argmaxNet_eq_of_strict {E : Type*} {k : ℕ} {f : E → Fin (k + 1) → ℝ}
+private lemma argmaxNet_eq_of_strict {E : Type*} {k : ℕ} {f : E → Fin (k + 1) → ℝ}
     {x : E} {c : Fin (k + 1)} (h : ∀ j, j ≠ c → f x j < f x c) :
     argmaxNet f x = c := by
   classical
@@ -119,7 +119,7 @@ lemma measurable_argmaxNet {E : Type*} [MeasurableSpace E] {k : ℕ}
 
 -- ════════ § strict decision regions are open ════════
 
-lemma isOpen_strictRegion {E : Type*} [TopologicalSpace E] {k : ℕ}
+private lemma isOpen_strictRegion {E : Type*} [TopologicalSpace E] {k : ℕ}
     {f : E → Fin (k + 1) → ℝ} (hf : ∀ j, Continuous fun x => f x j)
     (c : Fin (k + 1)) :
     IsOpen {x | ∀ j, j ≠ c → f x j < f x c} := by

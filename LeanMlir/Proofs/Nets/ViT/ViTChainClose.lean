@@ -49,7 +49,7 @@ open StableHLO
     block cotangent `dyOut` straight to the fc2 output (`bout = h + fc2(…)`, no
     post-add activation), and fc2's input-VJP is the per-token `dX = W·dy`
     (`denseRowBack`'s denotation). -/
-noncomputable def vitCotG {Np1 D mlpDim : Nat} (Wfc2 : Mat mlpDim D)
+private noncomputable def vitCotG {Np1 D mlpDim : Nat} (Wfc2 : Mat mlpDim D)
     (dyOut : Vec (Np1 * D)) : Vec (Np1 * mlpDim) :=
   rowDenseBackFlat Np1 mlpDim D Wfc2 dyOut
 

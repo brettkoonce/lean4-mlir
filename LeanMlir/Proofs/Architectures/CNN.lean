@@ -970,7 +970,7 @@ theorem maxPool2_eq_at_max {c h w : Nat}
 
 /-- Under smoothness, the argmax of any window is unique: two positions
     that both dominate the window coincide. -/
-theorem maxPool2_argmax_unique {c h w : Nat}
+private theorem maxPool2_argmax_unique {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
     (ci : Fin c) (ho : Fin h) (wo : Fin w)
     (ab ab' : Fin 2 × Fin 2)
@@ -988,7 +988,7 @@ theorem maxPool2_argmax_unique {c h w : Nat}
 
 /-- Under smoothness, `MaxPool2IsArgmax` pins `maxPool2Argmax` to the
     `(winRowMod, winColMod)` position of the witness. -/
-theorem maxPool2Argmax_eq_of_isArgmax {c h w : Nat}
+private theorem maxPool2Argmax_eq_of_isArgmax {c h w : Nat}
     (x : Tensor3 c (2 * h) (2 * w)) (h_smooth : MaxPool2Smooth x)
     (ci : Fin c) (hi_in : Fin (2 * h)) (wi_in : Fin (2 * w))
     (h_arg : MaxPool2IsArgmax x ci hi_in wi_in) :

@@ -38,7 +38,7 @@ noncomputable def stdNormalCDF : ℝ → ℝ := fun t => cdf (gaussianReal 0 1) 
     `(0,1)`, which is where every guarded use below lives. -/
 noncomputable def stdNormalQuantile (p : ℝ) : ℝ := sSup {t | stdNormalCDF t < p}
 
-theorem stdNormalCDF_eq_real (t : ℝ) : stdNormalCDF t = (gaussianReal 0 1).real (Set.Iic t) :=
+private theorem stdNormalCDF_eq_real (t : ℝ) : stdNormalCDF t = (gaussianReal 0 1).real (Set.Iic t) :=
   cdf_eq_real _ t
 
 /-- The interval split `Φ b − Φ a = P(Ioc a b)`. -/
@@ -66,16 +66,16 @@ lemma stdNormalCDF_neg (t : ℝ) : stdNormalCDF (-t) = 1 - stdNormalCDF t :=
 
 /-- `Φ → 0` at `−∞`, so for `p > 0` some `t` has `Φ t < p` — the quantile's set is
     nonempty. -/
-lemma stdNormalCDF_exists_lt {p : ℝ} (hp : 0 < p) : ∃ t, stdNormalCDF t < p :=
+private lemma stdNormalCDF_exists_lt {p : ℝ} (hp : 0 < p) : ∃ t, stdNormalCDF t < p :=
   ((tendsto_cdf_atBot (μ := gaussianReal 0 1)).eventually_lt_const hp).exists
 
 /-- `Φ → 1` at `+∞`, so for `p < 1` some `t` has `Φ t > p`. -/
-lemma stdNormalCDF_exists_gt {p : ℝ} (hp : p < 1) : ∃ t, p < stdNormalCDF t :=
+private lemma stdNormalCDF_exists_gt {p : ℝ} (hp : p < 1) : ∃ t, p < stdNormalCDF t :=
   ((tendsto_cdf_atTop (μ := gaussianReal 0 1)).eventually_const_lt hp).exists
 
 /-- For `p < 1` the sub-level set `{Φ < p}` is bounded above (anything past a point with
     `Φ > p` is excluded). -/
-lemma stdNormalCDF_sublevel_bddAbove {p : ℝ} (hp : p < 1) :
+private lemma stdNormalCDF_sublevel_bddAbove {p : ℝ} (hp : p < 1) :
     BddAbove {t | stdNormalCDF t < p} := by
   obtain ⟨T, hT⟩ := stdNormalCDF_exists_gt hp
   exact ⟨T, fun t ht =>
@@ -92,7 +92,7 @@ lemma stdNormalQuantile_monotoneOn :
 /-- **No flat step at level `q`:** `sSup {Φ < q} = sInf {Φ > q}`. Any gap between them
     would contain two points where `Φ = q` exactly — impossible for a strictly monotone
     `Φ`. The bridge between the quantile's `sSup` form and its mirrored `sInf` form. -/
-lemma stdNormalCDF_sSup_lt_eq_sInf_gt {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
+private lemma stdNormalCDF_sSup_lt_eq_sInf_gt {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
     sSup {t | stdNormalCDF t < q} = sInf {t | q < stdNormalCDF t} := by
   have hAne : Set.Nonempty {t | stdNormalCDF t < q} := stdNormalCDF_exists_lt hq.1
   have hBne : Set.Nonempty {t | q < stdNormalCDF t} := stdNormalCDF_exists_gt hq.2
@@ -185,11 +185,11 @@ lemma stdNormalQuantile_cdf (s : ℝ) : stdNormalQuantile (stdNormalCDF s) = s :
   rw [stdNormalQuantile, hset, csSup_Iio]
 
 /-- `Φ` never reaches 0 (`MathlibUpstream.cdf_gaussianReal_pos`). -/
-lemma stdNormalCDF_pos (s : ℝ) : 0 < stdNormalCDF s :=
+private lemma stdNormalCDF_pos (s : ℝ) : 0 < stdNormalCDF s :=
   MathlibUpstream.cdf_gaussianReal_pos 0 one_ne_zero s
 
 /-- `Φ` never reaches 1 (`MathlibUpstream.cdf_gaussianReal_lt_one`). -/
-lemma stdNormalCDF_lt_one (s : ℝ) : stdNormalCDF s < 1 :=
+private lemma stdNormalCDF_lt_one (s : ℝ) : stdNormalCDF s < 1 :=
   MathlibUpstream.cdf_gaussianReal_lt_one 0 one_ne_zero s
 
 /-- `Φ` maps into the open unit interval. -/

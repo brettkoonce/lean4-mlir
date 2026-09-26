@@ -39,7 +39,7 @@ theorem sum_sq_matvec_le {k n : ℕ} (M : Fin k → Fin n → ℝ) (y : Fin n �
 /-- **The common tail of every dense bound**: a raw-sum bound `‖Wd‖² ≤ B²·‖d‖²` for every `d`
     makes the dense layer `B`-Lipschitz in L2. The Frobenius and Gram bounds below differ only in
     how they prove `hW`. -/
-theorem denseE_lipschitzL2_of_sq {n k : ℕ} (W : Fin k → Fin n → ℝ) {B : ℝ} (hB : 0 ≤ B)
+private theorem denseE_lipschitzL2_of_sq {n k : ℕ} (W : Fin k → Fin n → ℝ) {B : ℝ} (hB : 0 ≤ B)
     (hW : ∀ d : Fin n → ℝ, ∑ i, (∑ j, W i j * d j) ^ 2 ≤ B ^ 2 * ∑ j, d j ^ 2) :
     LipschitzL2 B (denseE W) := by
   intro u w
@@ -147,7 +147,7 @@ theorem sum_sq_matTvec_eq {p q : ℕ} (A : Fin p → Fin q → ℝ) (y : Fin p �
         exact Finset.sum_congr rfl fun b _ => by rw [hK]; ring
 
 /-- Cauchy–Schwarz on a quadratic form: `‖My‖² ≤ c²·‖y‖²` gives `⟨y, My⟩ ≤ c·‖y‖²`. -/
-theorem quad_le_of_sq_matvec {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k → ℝ) {c : ℝ}
+private theorem quad_le_of_sq_matvec {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k → ℝ) {c : ℝ}
     (hc : 0 ≤ c) (hM : ∑ a, (∑ b, M a b * y b) ^ 2 ≤ c ^ 2 * ∑ a, y a ^ 2) :
     ∑ a, y a * ∑ b, M a b * y b ≤ c * ∑ a, y a ^ 2 := by
   have hS0 : 0 ≤ ∑ a, y a ^ 2 := Finset.sum_nonneg fun _ _ => sq_nonneg _
@@ -158,7 +158,7 @@ theorem quad_le_of_sq_matvec {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k 
     _ = (c * ∑ a, y a ^ 2) ^ 2 := by ring
 
 /-- The Frobenius form of `quad_le_of_sq_matvec`: `‖M‖_F ≤ c` gives `⟨y, My⟩ ≤ c·‖y‖²`. -/
-theorem quad_le_of_frob {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k → ℝ) {c : ℝ}
+private theorem quad_le_of_frob {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k → ℝ) {c : ℝ}
     (hc : 0 ≤ c) (hMF : ∑ a, ∑ b, M a b ^ 2 ≤ c ^ 2) :
     ∑ a, y a * ∑ b, M a b * y b ≤ c * ∑ a, y a ^ 2 :=
   quad_le_of_sq_matvec M y hc <| (sum_sq_matvec_le M y).trans <|
@@ -166,7 +166,7 @@ theorem quad_le_of_frob {k : ℕ} (M : Fin k → Fin k → ℝ) (y : Fin k → �
 
 /-- **The Gram step**: with `G = W·Wᵀ` and `y = Wd`, a bound `⟨y, Gy⟩ ≤ c·‖y‖²` gives
     `‖y‖² ≤ c·‖d‖²` — because `‖y‖² = ⟨d, Wᵀy⟩ ≤ ‖d‖·‖Wᵀy‖` and `‖Wᵀy‖² = ⟨y, Gy⟩`. -/
-theorem sq_le_of_gram_quad {n k : ℕ} (W : Fin k → Fin n → ℝ) (G : Fin k → Fin k → ℝ)
+private theorem sq_le_of_gram_quad {n k : ℕ} (W : Fin k → Fin n → ℝ) (G : Fin k → Fin k → ℝ)
     (hG : ∀ a b, G a b = ∑ j, W a j * W b j) (d : Fin n → ℝ) {c : ℝ} (hc : 0 ≤ c)
     (hq : ∑ a, (∑ j, W a j * d j) * ∑ b, G a b * ∑ j, W b j * d j
       ≤ c * ∑ a, (∑ j, W a j * d j) ^ 2) :

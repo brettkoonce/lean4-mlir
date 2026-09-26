@@ -55,7 +55,7 @@ open Finset BigOperators
 
 /-- **1×1 conv → bn → relu6** (expand stage / stem). Mirror of
     `convBnReluHasVJPAt` with relu6 in place of relu. -/
-noncomputable def convBnRelu6HasVJPAt {ic oc h w kH kW : Nat}
+private noncomputable def convBnRelu6HasVJPAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * h * w))
@@ -68,7 +68,7 @@ noncomputable def convBnRelu6HasVJPAt {ic oc h w kH kW : Nat}
     (relu6_differentiableAt_of_smooth (oc * h * w) _ h_smooth)
     (relu6HasVJPAt (oc * h * w) _ h_smooth)
 
-theorem convBnRelu6_differentiableAt {ic oc h w kH kW : Nat}
+private theorem convBnRelu6_differentiableAt {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (ic * h * w))
     (h_smooth : ∀ k, (bnForward (oc * h * w) ε γ β (flatConv W b v) k ≠ 0 ∧
@@ -78,7 +78,7 @@ theorem convBnRelu6_differentiableAt {ic oc h w kH kW : Nat}
 
 /-- **Depthwise → bn → relu6** (depthwise stage of an inverted residual).
     Channels & spatial dims preserved: `Vec (c*h*w) → Vec (c*h*w)`. -/
-noncomputable def dwBnRelu6HasVJPAt {c h w kH kW : Nat}
+private noncomputable def dwBnRelu6HasVJPAt {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c)
     (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (c * h * w))
@@ -91,7 +91,7 @@ noncomputable def dwBnRelu6HasVJPAt {c h w kH kW : Nat}
     (relu6_differentiableAt_of_smooth (c * h * w) _ h_smooth)
     (relu6HasVJPAt (c * h * w) _ h_smooth)
 
-theorem dwBnRelu6_differentiableAt {c h w kH kW : Nat}
+private theorem dwBnRelu6_differentiableAt {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε γ β : ℝ) (hε : 0 < ε)
     (v : Vec (c * h * w))
     (h_smooth : ∀ k, (bnForward (c * h * w) ε γ β (depthwiseFlat W b v) k ≠ 0 ∧
@@ -138,7 +138,7 @@ theorem dwBnRelu6_differentiableAt {c h w kH kW : Nat}
 /-- **Inverted-residual body VJP at a smooth point.** Two `vjpCompAt`
     chains: (1) `depthwise ∘ expand` over the two relu6 smoothness families,
     (2) `project` (everywhere) on top. -/
-noncomputable def invresBodyHasVJPAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+private noncomputable def invresBodyHasVJPAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp γp βp : ℝ) (hεp : 0 < εp)
@@ -178,7 +178,7 @@ noncomputable def invresBodyHasVJPAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Na
     hde_vjp
     ((convBnHasVJP Wp bp εp γp βp hεp).toHasVJPAt _)
 
-theorem invresBody_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
+private theorem invresBody_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid ic kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Wp : Kernel4 oc mid kHp kWp) (bp : Vec oc) (εp γp βp : ℝ) (hεp : 0 < εp)
@@ -201,7 +201,7 @@ theorem invresBody_differentiableAt {ic mid oc h w kHe kWe kHd kWd kHp kWp : Nat
     `residual (invresBody)` — `body(x) + x`. No final activation
     (MobileNetV2 uses linear bottleneck; the project stage has no relu6,
     and the residual add is the block output). -/
-noncomputable def invresSkipHasVJPAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
+private noncomputable def invresSkipHasVJPAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid c kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Wp : Kernel4 c mid kHp kWp) (bp : Vec c) (εp γp βp : ℝ) (hεp : 0 < εp)
@@ -221,7 +221,7 @@ noncomputable def invresSkipHasVJPAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
     invresBodyHasVJPAt We be εe γe βe hεe Wd bd εd γd βd hεd Wp bp εp γp βp hεp v h_se h_sd
   exact residualHasVJPAt _ v hF_diff hF
 
-theorem invresSkip_differentiableAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
+private theorem invresSkip_differentiableAt {c mid h w kHe kWe kHd kWd kHp kWp : Nat}
     (We : Kernel4 mid c kHe kWe) (be : Vec mid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel mid kHd kWd) (bd : Vec mid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Wp : Kernel4 c mid kHp kWp) (bp : Vec c) (εp γp βp : ℝ) (hεp : 0 < εp)

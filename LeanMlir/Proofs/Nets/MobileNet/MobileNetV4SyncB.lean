@@ -452,13 +452,13 @@ theorem mnv4HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
 -- ════════════════════════════════════════════════════════════════
 
 /-- Trunk group **Res28** at sync-BN — rows 1–2. -/
-def mnv4Res28GraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
+private def mnv4Res28GraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (48 * 56 * 56))) :
     Fin R → SHlo (N * (80 * 28 * 28)) :=
   mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row2 w.b2)
     (mnv4StridedGraphSync epsStr R hR N mnv4Row1 w.b1 e)
 
-theorem mnv4Res28GraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (epsStr : String)
+private theorem mnv4Res28GraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (epsStr : String)
     {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (48 * 56 * 56)))
     (X : Vec ((R * N) * (48 * 56 * 56))) (he : ∀ r, den (e r) = batchShard R N (48 * 56 * 56) X r)
     (r : Fin R) :
@@ -474,7 +474,7 @@ theorem mnv4Res28GraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (
     _ _ b1 r
 
 /-- Trunk group **Res14a** at sync-BN — rows 3–6. -/
-def mnv4Res14aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
+private def mnv4Res14aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (80 * 28 * 28))) :
     Fin R → SHlo (N * (160 * 14 * 14)) :=
   mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row6 w.b6)
@@ -482,7 +482,7 @@ def mnv4Res14aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row4 w.b4)
     (mnv4StridedGraphSync epsStr R hR N mnv4Row3 w.b3 e)))
 
-theorem mnv4Res14aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+private theorem mnv4Res14aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (80 * 28 * 28)))
     (X : Vec ((R * N) * (80 * 28 * 28))) (he : ∀ r, den (e r) = batchShard R N (80 * 28 * 28) X r)
     (r : Fin R) :
@@ -506,7 +506,7 @@ theorem mnv4Res14aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
       (by decide)) _ _ b5 r
 
 /-- Trunk group **Res14b** at sync-BN — rows 7–10: ExtraDW, ConvNeXt, FFN, ConvNeXt. -/
-def mnv4Res14bGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
+private def mnv4Res14bGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (160 * 14 * 14))) :
     Fin R → SHlo (N * (160 * 14 * 14)) :=
   mnv4SkipGraphSync (mnv4ConvNeXtBodyGraphSync epsStr R hR N mnv4Row10 w.b10)
@@ -514,7 +514,7 @@ def mnv4Res14bGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls
     (mnv4SkipGraphSync (mnv4ConvNeXtBodyGraphSync epsStr R hR N mnv4Row8 w.b8)
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row7 w.b7) e)))
 
-theorem mnv4Res14bGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+private theorem mnv4Res14bGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (160 * 14 * 14)))
     (X : Vec ((R * N) * (160 * 14 * 14)))
     (he : ∀ r, den (e r) = batchShard R N (160 * 14 * 14) X r) (r : Fin R) :
@@ -540,7 +540,7 @@ theorem mnv4Res14bGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
       (by decide)) _ _ b9 r
 
 /-- Trunk group **Res7a** at sync-BN — rows 11–15. -/
-def mnv4Res7aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
+private def mnv4Res7aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (160 * 14 * 14))) :
     Fin R → SHlo (N * (256 * 7 * 7)) :=
   mnv4SkipGraphSync (mnv4FfnBodyGraphSync epsStr R hR N mnv4Row15 w.b15)
@@ -549,7 +549,7 @@ def mnv4Res7aGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls 
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row12 w.b12)
     (mnv4StridedGraphSync epsStr R hR N mnv4Row11 w.b11 e))))
 
-theorem mnv4Res7aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+private theorem mnv4Res7aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (160 * 14 * 14)))
     (X : Vec ((R * N) * (160 * 14 * 14)))
     (he : ∀ r, den (e r) = batchShard R N (160 * 14 * 14) X r) (r : Fin R) :
@@ -577,7 +577,7 @@ theorem mnv4Res7aGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
       (by decide)) _ _ b14 r
 
 /-- Trunk group **Res7b** at sync-BN — rows 16–21. -/
-def mnv4Res7bGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
+private def mnv4Res7bGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
     (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (256 * 7 * 7))) :
     Fin R → SHlo (N * (256 * 7 * 7)) :=
   mnv4SkipGraphSync (mnv4ConvNeXtBodyGraphSync epsStr R hR N mnv4Row21 w.b21)
@@ -587,7 +587,7 @@ def mnv4Res7bGraphSync (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls 
     (mnv4SkipGraphSync (mnv4ExtraDWBodyGraphSync epsStr R hR N mnv4Row17 w.b17)
     (mnv4SkipGraphSync (mnv4ConvNeXtBodyGraphSync epsStr R hR N mnv4Row16 w.b16) e)))))
 
-theorem mnv4Res7bGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+private theorem mnv4Res7bGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls) (e : Fin R → SHlo (N * (256 * 7 * 7)))
     (X : Vec ((R * N) * (256 * 7 * 7))) (he : ∀ r, den (e r) = batchShard R N (256 * 7 * 7) X r)
     (r : Fin R) :
@@ -622,7 +622,7 @@ theorem mnv4Res7bGraphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
 
 /-- The fused stage's shard lemma, restated at `mnv4FusedStack (R * N) w` — so the whole-net proof
     never unfolds the stack, for the reason `mnv4FusedStack_graph_faithful` records. -/
-theorem mnv4FusedStack_graphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+private theorem mnv4FusedStack_graphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : Fin R → SHlo (N * (32 * 112 * 112))) (X : Vec ((R * N) * (32 * 112 * 112)))
     (he : ∀ r, den (e r) = batchShard R N (32 * 112 * 112) X r) (r : Fin R) :
@@ -633,7 +633,7 @@ theorem mnv4FusedStack_graphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 
     w.f0cW w.f0cb w.f0cE w.hf0cE w.f0cg w.f0cbt w.f0pW w.f0pb w.f0pE w.hf0pE w.f0pg w.f0pbt e X he r
 
 /-- The head's, restated at `mnv4HeadStack (R * N) w`. Same reason. -/
-theorem mnv4HeadStack_graphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
+private theorem mnv4HeadStack_graphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : Fin R → SHlo (N * (256 * 7 * 7))) (X : Vec ((R * N) * (256 * 7 * 7)))
     (he : ∀ r, den (e r) = batchShard R N (256 * 7 * 7) X r) (r : Fin R) :

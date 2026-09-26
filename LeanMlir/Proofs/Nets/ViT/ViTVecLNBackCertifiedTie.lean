@@ -50,7 +50,7 @@ theorem rowLNVecFlatBack_eq_vecLN_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γ 
 -- live in `ViTBackB0.lean`, whose multi-head graph capstones rewrite with them too.
 
 /-- **The vector-LN MLP sublayer's VJP backward decomposes** — the MLP peer, also `rfl`. -/
-theorem transformerMlpSublayerV_backward_decomp (dff : Nat) (ε : ℝ) (hε : 0 < ε)
+private theorem transformerMlpSublayerV_backward_decomp (dff : Nat) (ε : ℝ) (hε : 0 < ε)
     (γ2 β2 : Vec (h * dh))
     (Wfc1 : Mat (h * dh) dff) (bfc1 : Vec dff) (Wfc2 : Mat dff (h * dh)) (bfc2 : Vec (h * dh))
     (hM dz : Mat N (h * dh)) :

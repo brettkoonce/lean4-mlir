@@ -40,7 +40,7 @@ def parseFloat (tok : String) : Float := (parseFloat? tok).getD 0.0
 
 /-- Extract the parsed result buffers (in `result[i]` order) from an
     iree-run-module stdout: each value line is `…xf32=[a b][c d]…`. -/
-def parseResults (out : String) : Array (Array Float) := Id.run do
+private def parseResults (out : String) : Array (Array Float) := Id.run do
   let mut res : Array (Array Float) := #[]
   for line in out.splitOn "\n" do
     if let some idx := (line.splitOn "f32=")[1]? then
@@ -58,7 +58,7 @@ def runDevice : IO String := do
   | b => return b
 
 /-- Run a compiled `.vmfb` function; `inputs` are `(shapeStr, flatValues)`. -/
-def runFn (vmfb fn : String) (inputs : List (String × Array Float)) : IO (Array (Array Float)) := do
+private def runFn (vmfb fn : String) (inputs : List (String × Array Float)) : IO (Array (Array Float)) := do
   let inArgs := inputs.map (fun (sh, xs) =>
     s!"--input={sh}=" ++ String.intercalate " " (xs.toList.map toString))
   let args := #[s!"--module={vmfb}", s!"--device={← runDevice}", s!"--function={fn}"] ++ inArgs.toArray
@@ -80,7 +80,7 @@ def dot (a b : Array Float) : Float :=
   (a.zip b).foldl (fun acc (x, y) => acc + x * y) 0.0
 
 /-- `y + a·x` (elementwise). -/
-def axpy (a : Float) (x y : Array Float) : Array Float :=
+private def axpy (a : Float) (x y : Array Float) : Array Float :=
   (y.zip x).map (fun (yi, xi) => yi + a * xi)
 
 /-- **Adjoint/finite-difference gradcheck** of a compiled fwd/back pair, checking

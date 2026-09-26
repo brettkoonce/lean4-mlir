@@ -63,27 +63,27 @@ open Proofs.ResNet34TieB Proofs.BackLinks
 --   (the per-op `*_smul` facts are in `DataParallel.SyncKit`)
 -- ════════════════════════════════════════════════════════════════
 
-theorem r34HeadCotBlk_smul (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
+private theorem r34HeadCotBlk_smul (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
     (xin : Vec (N * (c * h * w))) : IsHomog (r34HeadCotBlk N h w Wd bd xin) :=
   HasVJP.backward_smul _ _
 
 /-! The block cotangents, each one line from the previous link's. -/
 
-theorem r34IdCotA_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+private theorem r34IdCotA_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
     IsHomog (r34IdCotA N h w p xin) :=
   reluMaskB_smul _ _
 
-theorem r34IdCotC2_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+private theorem r34IdCotC2_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
     IsHomog (r34IdCotC2 N h w p xin) := by
   intro s dy
   unfold r34IdCotC2; rw [r34IdCotA_smul, bnInB_smul]
 
-theorem r34IdCotN1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+private theorem r34IdCotN1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
     IsHomog (r34IdCotN1 N h w p xin) := by
   intro s dy
   unfold r34IdCotN1; rw [r34IdCotC2_smul, cInB_smul, reluMaskB_smul]
 
-theorem r34IdCotC1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
+private theorem r34IdCotC1_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (c * h * w))) :
     IsHomog (r34IdCotC1 N h w p xin) := by
   intro s dy
   unfold r34IdCotC1; rw [r34IdCotN1_smul, bnInB_smul]
@@ -97,26 +97,26 @@ theorem r34IdCotIn_smul (N h w : Nat) {c : Nat} (p : R34IdW c) (xin : Vec (N * (
   beta_reduce
   ring
 
-theorem r34DownCotA_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+private theorem r34DownCotA_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotA N h w p xin) :=
   reluMaskB_smul _ _
 
-theorem r34DownCotC2_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+private theorem r34DownCotC2_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotC2 N h w p xin) := by
   intro s dy
   unfold r34DownCotC2; rw [r34DownCotA_smul, bnInB_smul]
 
-theorem r34DownCotN1_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+private theorem r34DownCotN1_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotN1 N h w p xin) := by
   intro s dy
   unfold r34DownCotN1; rw [r34DownCotC2_smul, cInB_smul, reluMaskB_smul]
 
-theorem r34DownCotC1_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+private theorem r34DownCotC1_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotC1 N h w p xin) := by
   intro s dy
   unfold r34DownCotC1; rw [r34DownCotN1_smul, bnInB_smul]
 
-theorem r34DownCotCp_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
+private theorem r34DownCotCp_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) : IsHomog (r34DownCotCp N h w p xin) := by
   intro s dy
   unfold r34DownCotCp; rw [r34DownCotA_smul, bnInB_smul]
@@ -130,18 +130,18 @@ theorem r34DownCotIn_smul (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
   beta_reduce
   ring
 
-theorem r34StemCotP_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+private theorem r34StemCotP_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
     (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
     IsHomog (r34StemCotP N h w Ws bs εs γs βs x) :=
   mpInB_smul _ _ _ _ _
 
-theorem r34StemCotN_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+private theorem r34StemCotN_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
     (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
     IsHomog (r34StemCotN N h w Ws bs εs γs βs x) := by
   intro s dy
   unfold r34StemCotN; rw [r34StemCotP_smul, reluMaskB_smul]
 
-theorem r34StemCotC_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
+private theorem r34StemCotC_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ)
     (γs βs : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) :
     IsHomog (r34StemCotC N h w Ws bs εs γs βs x) := by
   intro s dy
@@ -175,24 +175,24 @@ section IdBlock
 variable (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (p : R34IdW c)
   (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
 
-noncomputable def r34IdSyncCotA (r : Fin R) : Vec (N * (c * h * w)) :=
+private noncomputable def r34IdSyncCotA (r : Fin R) : Vec (N * (c * h * w)) :=
   reluMaskB (N * (c * h * w))
     (batchShard R N (c * h * w) (residual (projB (R * N) (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂ ∘
       cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) XIN) r) (dys r)
 
-noncomputable def r34IdSyncCotC2 (r : Fin R) : Vec (N * (c * h * w)) :=
+private noncomputable def r34IdSyncCotC2 (r : Fin R) : Vec (N * (c * h * w)) :=
   bnSyncInB R hR N c h w p.ε₂ p.γ₂
     (fun r => batchShard R N (c * h * w) (batchMap (R * N) (flatConv p.W₂ p.b₂)
       (cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN)) r)
     (r34IdSyncCotA R N h w p XIN dys) r
 
-noncomputable def r34IdSyncCotN1 (r : Fin R) : Vec (N * (c * h * w)) :=
+private noncomputable def r34IdSyncCotN1 (r : Fin R) : Vec (N * (c * h * w)) :=
   reluMaskB (N * (c * h * w))
     (batchShard R N (c * h * w)
       (bnBatchLA (R * N) c h w p.ε₁ p.γ₁ p.β₁ (batchMap (R * N) (flatConv p.W₁ p.b₁) XIN)) r)
     (cInB N p.W₂ p.b₂ (r34IdSyncCotC2 R hR N h w p XIN dys r))
 
-noncomputable def r34IdSyncCotC1 (r : Fin R) : Vec (N * (c * h * w)) :=
+private noncomputable def r34IdSyncCotC1 (r : Fin R) : Vec (N * (c * h * w)) :=
   bnSyncInB R hR N c h w p.ε₁ p.γ₁
     (fun r => batchShard R N (c * h * w) (batchMap (R * N) (flatConv p.W₁ p.b₁) XIN) r)
     (r34IdSyncCotN1 R hR N h w p XIN dys) r
@@ -210,19 +210,19 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN : 0 < N) (hh : 0 < h
   (DY : Vec ((R * N) * (c * h * w))) (hdys : ∀ r, dys r = batchShard R N (c * h * w) DY r)
 include hdys
 
-theorem r34IdSyncCotA_shard (r : Fin R) :
+private theorem r34IdSyncCotA_shard (r : Fin R) :
     r34IdSyncCotA R N h w p XIN dys r = batchShard R N (c * h * w) (r34IdCotA (R * N) h w p XIN DY) r := by
   unfold r34IdSyncCotA; rw [hdys]; rfl
 
 include hN hh hw in
-theorem r34IdSyncCotC2_shard (r : Fin R) :
+private theorem r34IdSyncCotC2_shard (r : Fin R) :
     r34IdSyncCotC2 R hR N h w p XIN dys r
       = batchShard R N (c * h * w) (r34IdCotC2 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N c h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34IdSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r34IdSyncCotN1_shard (r : Fin R) :
+private theorem r34IdSyncCotN1_shard (r : Fin R) :
     r34IdSyncCotN1 R hR N h w p XIN dys r
       = batchShard R N (c * h * w) (r34IdCotN1 (R * N) h w p XIN DY) r := by
   unfold r34IdSyncCotN1
@@ -230,7 +230,7 @@ theorem r34IdSyncCotN1_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem r34IdSyncCotC1_shard (r : Fin R) :
+private theorem r34IdSyncCotC1_shard (r : Fin R) :
     r34IdSyncCotC1 R hR N h w p XIN dys r
       = batchShard R N (c * h * w) (r34IdCotC1 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N c h w (nhw_ne_zero hN hh hw)
@@ -251,27 +251,27 @@ section DownBlock
 variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc)
   (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
 
-noncomputable def r34DownSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r34DownSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
   reluMaskB (N * (oc * h * w)) (batchShard R N (oc * h * w) (r34DownPre (R * N) h w p XIN) r) (dys r)
 
-noncomputable def r34DownSyncCotC2 (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r34DownSyncCotC2 (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.ε₂ p.γ₂
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConv p.W₂ p.b₂)
       (cbReluStridedB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN)) r)
     (r34DownSyncCotA R N h w p XIN dys) r
 
-noncomputable def r34DownSyncCotN1 (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r34DownSyncCotN1 (r : Fin R) : Vec (N * (oc * h * w)) :=
   reluMaskB (N * (oc * h * w))
     (batchShard R N (oc * h * w)
       (bnBatchLA (R * N) oc h w p.ε₁ p.γ₁ p.β₁ (batchMap (R * N) (flatConvStride2 p.W₁ p.b₁) XIN)) r)
     (cInB N p.W₂ p.b₂ (r34DownSyncCotC2 R hR N h w p XIN dys r))
 
-noncomputable def r34DownSyncCotC1 (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r34DownSyncCotC1 (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.ε₁ p.γ₁
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConvStride2 p.W₁ p.b₁) XIN) r)
     (r34DownSyncCotN1 R hR N h w p XIN dys) r
 
-noncomputable def r34DownSyncCotCp (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r34DownSyncCotCp (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.εp p.γp
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConvStride2 p.Wp p.bp) XIN) r)
     (r34DownSyncCotA R N h w p XIN dys) r
@@ -290,20 +290,20 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (hN : 0 < N) (hh : 0
   (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
 include hdys
 
-theorem r34DownSyncCotA_shard (r : Fin R) :
+private theorem r34DownSyncCotA_shard (r : Fin R) :
     r34DownSyncCotA R N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotA (R * N) h w p XIN DY) r := by
   unfold r34DownSyncCotA; rw [hdys]; rfl
 
 include hN hh hw in
-theorem r34DownSyncCotC2_shard (r : Fin R) :
+private theorem r34DownSyncCotC2_shard (r : Fin R) :
     r34DownSyncCotC2 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotC2 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34DownSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r34DownSyncCotN1_shard (r : Fin R) :
+private theorem r34DownSyncCotN1_shard (r : Fin R) :
     r34DownSyncCotN1 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotN1 (R * N) h w p XIN DY) r := by
   unfold r34DownSyncCotN1
@@ -311,14 +311,14 @@ theorem r34DownSyncCotN1_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem r34DownSyncCotC1_shard (r : Fin R) :
+private theorem r34DownSyncCotC1_shard (r : Fin R) :
     r34DownSyncCotC1 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotC1 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r34DownSyncCotN1_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r34DownSyncCotCp_shard (r : Fin R) :
+private theorem r34DownSyncCotCp_shard (r : Fin R) :
     r34DownSyncCotCp R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r34DownCotCp (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
@@ -340,11 +340,11 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 
   (εs : ℝ) (γs βs : Vec oc) (X : Vec ((R * N) * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
   (dys : Fin R → Vec (N * (oc * h * w)))
 
-noncomputable def r34StemSyncCotP (r : Fin R) : Vec (N * (oc * (2 * h) * (2 * w))) :=
+private noncomputable def r34StemSyncCotP (r : Fin R) : Vec (N * (oc * (2 * h) * (2 * w))) :=
   mpInB N oc h w
     (batchShard R N _ (cbReluStridedB (R * N) (h := 2 * h) (w := 2 * w) Ws bs εs γs βs X) r) (dys r)
 
-noncomputable def r34StemSyncCotN (r : Fin R) : Vec (N * (oc * (2 * h) * (2 * w))) :=
+private noncomputable def r34StemSyncCotN (r : Fin R) : Vec (N * (oc * (2 * h) * (2 * w))) :=
   reluMaskB (N * (oc * (2 * h) * (2 * w)))
     (batchShard R N _
       (bnBatchLA (R * N) oc (2 * h) (2 * w) εs γs βs (batchMap (R * N) (flatConvStride2 Ws bs) X)) r)
@@ -364,12 +364,12 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (hN : 0 < N) (hh : 0
   (DY : Vec ((R * N) * (oc * h * w))) (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
 include hdys
 
-theorem r34StemSyncCotP_shard (r : Fin R) :
+private theorem r34StemSyncCotP_shard (r : Fin R) :
     r34StemSyncCotP R N h w Ws bs εs γs βs X dys r
       = batchShard R N _ (r34StemCotP (R * N) h w Ws bs εs γs βs X DY) r := by
   unfold r34StemSyncCotP; rw [hdys, mpInB_shard]; rfl
 
-theorem r34StemSyncCotN_shard (r : Fin R) :
+private theorem r34StemSyncCotN_shard (r : Fin R) :
     r34StemSyncCotN R N h w Ws bs εs γs βs X dys r
       = batchShard R N _ (r34StemCotN (R * N) h w Ws bs εs γs βs X DY) r := by
   unfold r34StemSyncCotN; rw [r34StemSyncCotP_shard R N h w Ws bs εs γs βs X dys DY hdys]; rfl
@@ -392,7 +392,7 @@ end StemShard
     weights, bn₁/bn₂ γ and β — each equal the single-device node at the global batch, at the
     single-device chain cotangents driven by `DY`, when the replicas' block-output cotangents are
     `R ×` its shards. -/
-def r34IdSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (pfx xN cotN vN epsStr : String)
+private def r34IdSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (pfx xN cotN vN epsStr : String)
     (p : R34IdW c) (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
     (DY : Vec ((R * N) * (c * h * w))) : Prop :=
   let r1 := cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN
@@ -409,7 +409,7 @@ def r34IdSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (pfx xN cotN v
 
 /-- The scaled-shard invariant, carried through one identity block: replicas at `R ×` the shards
     of `DY` produce block-input cotangents at `R ×` the shards of the single-device one. -/
-theorem r34IdSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN : 0 < N)
+private theorem r34IdSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (p : R34IdW c) (XIN : Vec ((R * N) * (c * h * w)))
     (dys : Fin R → Vec (N * (c * h * w))) (DY : Vec ((R * N) * (c * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (c * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
@@ -417,7 +417,7 @@ theorem r34IdSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN
       = batchShard R N (c * h * w) (fun i => (R : ℝ) * r34IdCotIn (R * N) h w p XIN DY i) r := by
   rw [r34IdSyncCotIn_shard R hR N h w hN hh hw p XIN dys _ hdys, r34IdCotIn_smul]
 
-theorem r34_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN : 0 < N)
+private theorem r34_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : R34IdW c)
     (XIN : Vec ((R * N) * (c * h * w))) (dys : Fin R → Vec (N * (c * h * w)))
     (DY : Vec ((R * N) * (c * h * w)))
@@ -436,7 +436,7 @@ theorem r34_idblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c : Nat} (hN
 
 /-- **Downsample basic block, DP-tied** — nine emitted collectives: the strided conv₁, the
     stride-1 conv₂ and the 1×1/s2 projection weights, and the three BatchNorms' γ and β. -/
-def r34DownSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat}
+private def r34DownSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat}
     (pfx xN cotN vN epsStr : String) (p : R34DownW ic oc)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) : Prop :=
@@ -457,7 +457,7 @@ def r34DownSyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat}
   ∧ BnSync R hR N oc h w s!"{pfx}gp" s!"{pfx}btp" vN epsStr cotN p.εp cp
       (r34DownSyncCotA R N h w p XIN dys) (r34DownCotA (R * N) h w p XIN DY)
 
-theorem r34DownSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (hN : 0 < N)
+private theorem r34DownSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (p : R34DownW ic oc) (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
     (dys : Fin R → Vec (N * (oc * h * w))) (DY : Vec ((R * N) * (oc * h * w)))
     (hdys : ∀ r, dys r = batchShard R N (oc * h * w) (fun i => (R : ℝ) * DY i) r) (r : Fin R) :
@@ -466,7 +466,7 @@ theorem r34DownSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Na
           (fun i => (R : ℝ) * r34DownCotIn (R * N) h w p XIN DY i) r := by
   rw [r34DownSyncCotIn_shard R hR N h w hN hh hw p XIN dys _ hdys, r34DownCotIn_smul]
 
-theorem r34_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (hN : 0 < N)
+private theorem r34_downblock_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} (hN : 0 < N)
     (hh : 0 < h) (hw : 0 < w) (pfx xN cotN vN epsStr : String) (p : R34DownW ic oc)
     (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
     (DY : Vec ((R * N) * (oc * h * w)))

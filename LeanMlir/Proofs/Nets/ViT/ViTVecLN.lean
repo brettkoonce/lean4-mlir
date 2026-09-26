@@ -62,7 +62,7 @@ noncomputable def transformerBlockV (N heads d_head mlpDim : Nat) (ε : ℝ)
   (transformerAttnSublayerV N heads d_head ε γ1 β1 Wq Wk Wv Wo bq bk bv bo)
 
 /-- Flat Diff of the attentionᵥ sublayer's non-trivial arm (`mhsa ∘ LNᵥ`). -/
-lemma transformerAttnSublayerV_inner_flat_differentiable
+private lemma transformerAttnSublayerV_inner_flat_differentiable
     (N heads d_head : Nat) (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
@@ -77,7 +77,7 @@ lemma transformerAttnSublayerV_inner_flat_differentiable
       (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ1 β1 hε)
 
 /-- Flat Diff of the attentionᵥ sublayer. -/
-lemma transformerAttnSublayerV_flat_differentiable
+private lemma transformerAttnSublayerV_flat_differentiable
     (N heads d_head : Nat) (ε : ℝ) (γ1 β1 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head)) :
@@ -100,7 +100,7 @@ noncomputable def transformerAttnSublayerVHasVJPMat (N heads d_head : Nat)
     (mhsaHasVJPMat N heads d_head Wq Wk Wv Wo bq bk bv bo)
 
 /-- Flat Diff of the MLPᵥ sublayer's non-trivial arm. -/
-lemma transformerMlpSublayerV_inner_flat_differentiable
+private lemma transformerMlpSublayerV_inner_flat_differentiable
     (N heads d_head mlpDim : Nat) (ε : ℝ) (γ2 β2 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :
@@ -115,7 +115,7 @@ lemma transformerMlpSublayerV_inner_flat_differentiable
       (layerNormVec_per_token_flat_differentiable N (heads * d_head) ε γ2 β2 hε)
 
 /-- Flat Diff of the MLPᵥ sublayer. -/
-lemma transformerMlpSublayerV_flat_differentiable
+private lemma transformerMlpSublayerV_flat_differentiable
     (N heads d_head mlpDim : Nat) (ε : ℝ) (γ2 β2 : Vec (heads * d_head)) (hε : 0 < ε)
     (Wfc1 : Mat (heads * d_head) mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim (heads * d_head)) (bfc2 : Vec (heads * d_head)) :

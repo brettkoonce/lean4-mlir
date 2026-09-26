@@ -23,7 +23,7 @@ namespace MlirCodegen
 
 /-- The NCHW input channels when the first layer takes an image (a conv or a conv block);
     `none` for a flat input. -/
-def inputChannels (spec : NetSpec) : Option Nat :=
+private def inputChannels (spec : NetSpec) : Option Nat :=
   match spec.layers.head? with
   | some (.conv2d ic ..) | some (.convBn ic ..) | some (.invertedResidual ic ..)
   | some (.mbConv ic ..) | some (.fusedMbConv ic ..) | some (.mbConvV3 ic ..) | some (.uib ic ..)

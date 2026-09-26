@@ -338,7 +338,7 @@ theorem t3Idx_def {c h w : Nat} (ci : Fin c) (hi : Fin h) (wi : Fin w) :
 
 /-- The 3-dense head `CE ∘ d₅ ∘ relu ∘ d₄ ∘ relu ∘ d₃` is differentiable
     at any point whose two ReLU pre-activations are off the kinks. -/
-theorem ce_head3_differentiableAt {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
+private theorem ce_head3_differentiableAt {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
     (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC)
     (b₅ : Vec nC) (label : Fin nC) (u : Vec p)
     (hz3 : ∀ l, dense W₃ b₃ u l ≠ 0)
@@ -394,7 +394,7 @@ theorem ce_head3_input_grad {p d₃ d₄ nC : Nat} (W₃ : Mat p d₃)
     is differentiable at any point with the relu₂ pre-activation off the
     kinks, no pool ties (POST-relu), and the two head masks off the
     kinks. -/
-theorem pool_head_differentiableAt {c h w d₃ d₄ nC : Nat}
+private theorem pool_head_differentiableAt {c h w d₃ d₄ nC : Nat}
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
     (hc : 0 < c) (hh : 0 < h) (hw : 0 < w)
@@ -792,7 +792,7 @@ theorem cnn_conv2_loss_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
     (`pdiv_comp`) with the flat activation index split into its triple: `Z`'s Jacobian row
     contracted with the head's input gradient. Each conv rung's `gradAt` closed form is this,
     the conv Jacobian (`conv2d_weight_pdiv` / `conv2d_bias_pdiv`) and the head gradient. -/
-theorem gradAt_comp_t3 {P c h w : Nat} (Z : Vec P → Vec (c * h * w))
+private theorem gradAt_comp_t3 {P c h w : Nat} (Z : Vec P → Vec (c * h * w))
     (G : Vec (c * h * w) → ℝ) (v : Vec P) (hZ : DifferentiableAt ℝ Z v)
     (hG : DifferentiableAt ℝ (fun y => fun _ : Fin 1 => G y) (Z v)) (idx : Fin P) :
     gradAt (fun v' => G (Z v')) v idx =
@@ -1154,7 +1154,7 @@ noncomputable def FloatModel.cnnConv2CotMag (d₃ d₄ nC : ℕ)
 
 open FloatModel in
 /-- `cnnConv2CotMag` is nonnegative. -/
-theorem FloatModel.cnnConv2CotMag_nonneg {d₃ d₄ nC : ℕ} {w₃ w₄ w₅ : ℝ}
+private theorem FloatModel.cnnConv2CotMag_nonneg {d₃ d₄ nC : ℕ} {w₃ w₄ w₅ : ℝ}
     (hw₃ : 0 ≤ w₃) (hw₄ : 0 ≤ w₄) (hw₅ : 0 ≤ w₅) :
     0 ≤ FloatModel.cnnConv2CotMag d₃ d₄ nC w₃ w₄ w₅ :=
   layerAct_nonneg hw₃ le_rfl (layerAct_nonneg hw₄ le_rfl
@@ -1163,7 +1163,7 @@ theorem FloatModel.cnnConv2CotMag_nonneg {d₃ d₄ nC : ℕ} {w₃ w₄ w₅ : 
 open FloatModel in
 /-- `cnnConv2CotBudget` is nonnegative for nonnegative input magnitude/rounding and layer
     bounds. -/
-theorem FloatModel.cnnConv2CotBudget_nonneg (M : FloatModel) {c h w d₃ d₄ nC kH kW : ℕ}
+private theorem FloatModel.cnnConv2CotBudget_nonneg (M : FloatModel) {c h w d₃ d₄ nC kH kW : ℕ}
     {aX2 eX2 w₂ β₂ w₃ β₃ w₄ β₄ w₅ β₅ eexp : ℝ} (haX2 : 0 ≤ aX2) (heX2 : 0 ≤ eX2)
     (hw₂ : 0 ≤ w₂) (hβ₂ : 0 ≤ β₂) (hw₃ : 0 ≤ w₃) (hβ₃ : 0 ≤ β₃) (hw₄ : 0 ≤ w₄)
     (hβ₄ : 0 ≤ β₄) (hw₅ : 0 ≤ w₅) (hβ₅ : 0 ≤ β₅) (heexp0 : 0 ≤ eexp)
@@ -1565,7 +1565,7 @@ theorem cnn_conv2_grad_close {c h w d₃ d₄ nC kH kW : Nat} (M : FloatModel)
 -- ════════════════════════════════════════════════════════════════
 
 /-- Per-entry conv drift, flat-index form of `conv2d_kernel_drift_total`. -/
-theorem conv2d_flat_kernel_drift_total {ic oc h w kH kW : Nat} (b : Vec oc)
+private theorem conv2d_flat_kernel_drift_total {ic oc h w kH kW : Nat} (b : Vec oc)
     (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
     (hx : ∀ c i j, |x c i j| ≤ a) (v e : Vec (oc * ic * kH * kW))
     (k : Fin (oc * h * w)) :
@@ -1577,7 +1577,7 @@ theorem conv2d_flat_kernel_drift_total {ic oc h w kH kW : Nat} (b : Vec oc)
   exact conv2d_kernel_drift_total b x ha hx v e o hi wi
 
 /-- `ℓ1` conv drift, flat-index form of `conv2d_kernel_drift_sum`. -/
-theorem conv2d_flat_kernel_drift_sum {ic oc h w kH kW : Nat} (b : Vec oc)
+private theorem conv2d_flat_kernel_drift_sum {ic oc h w kH kW : Nat} (b : Vec oc)
     (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
     (hx : ∀ c i j, |x c i j| ≤ a) (v e : Vec (oc * ic * kH * kW)) :
     ∑ k, |Tensor3.flatten (conv2d (Kernel4.unflatten (v + e)) b x) k -
@@ -1606,7 +1606,7 @@ theorem conv2d_flat_kernel_drift_sum {ic oc h w kH kW : Nat} (b : Vec oc)
 
 /-- Row mass of the conv kernel Jacobian: kernel tap `(o,cc,kh,kw)` reads output channel `o`
     only, through one bounded input read per output position. -/
-theorem convPad_row_l1 {ic oc h w kH kW : Nat} (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
+private theorem convPad_row_l1 {ic oc h w kH kW : Nat} (x : Tensor3 ic h w) {a : ℝ} (ha : 0 ≤ a)
     (hx : ∀ c i j, |x c i j| ≤ a) (o : Fin oc) (cc : Fin ic) (kh : Fin kH) (kw : Fin kW) :
     ∑ ci : Fin oc, ∑ hi : Fin h, ∑ wi : Fin w,
       |if ci = o then convPad kH kW x cc kh kw hi wi else 0| ≤ ((h * w : ℕ) : ℝ) * a := by
@@ -1617,7 +1617,7 @@ theorem convPad_row_l1 {ic oc h w kH kW : Nat} (x : Tensor3 ic h w) {a : ℝ} (h
 
 /-- Row mass of the conv bias Jacobian: bias entry `o` feeds output channel `o` at every
     position. -/
-theorem biasRow_l1 {oc h w : Nat} (o : Fin oc) :
+private theorem biasRow_l1 {oc h w : Nat} (o : Fin oc) :
     ∑ ci : Fin oc, ∑ _hi : Fin h, ∑ _wi : Fin w, |if ci = o then (1:ℝ) else 0| ≤
       ((h * w : ℕ) : ℝ) * 1 := by
   simp [apply_ite (fun t : ℝ => |t|), Finset.sum_ite_irrel]
@@ -1626,7 +1626,7 @@ namespace Conv2Slot
 
 /-- **Pooled `ℓ1` drift**: the conv2 output moves by `(2h)·(2w)·ρ·‖e‖₁` in `ℓ1` (`hZ1`);
     relu and the pool are `ℓ1` contractions. -/
-theorem pool_l1_drift {P c h w : Nat}
+private theorem pool_l1_drift {P c h w : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) {ρ : ℝ}
     (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
       ((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |e idx|))
@@ -1642,7 +1642,7 @@ theorem pool_l1_drift {P c h w : Nat}
 
 /-- Per-entry POST-relu tensor drift — the form the pool margin
     (`MaxPool2MarginQ`) consumes. -/
-theorem postrelu_close {P c h w : Nat}
+private theorem postrelu_close {P c h w : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) {ρ : ℝ}
     (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|) (v e : Vec P)
     (ci : Fin c) (hi : Fin (2*h)) (wi : Fin (2*w)) :
@@ -1658,7 +1658,7 @@ theorem postrelu_close {P c h w : Nat}
     (hZ v e _)
 
 /-- Per-entry drift of the relu₃ pre-activation. -/
-theorem z3_drift {P c h w d₃ : Nat}
+private theorem z3_drift {P c h w d₃ : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     {ρ w₃ : ℝ} (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
       ((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |e idx|))
@@ -1673,7 +1673,7 @@ theorem z3_drift {P c h w d₃ : Nat}
     (mul_le_mul_of_nonneg_left (pool_l1_drift Z hZ1 v e) hw₃)
 
 /-- Per-entry drift of the relu₄ pre-activation. -/
-theorem z4_drift {P c h w d₃ d₄ : Nat}
+private theorem z4_drift {P c h w d₃ d₄ : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     {ρ w₃ w₄ : ℝ} (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
@@ -1706,7 +1706,7 @@ theorem z4_drift {P c h w d₃ d₄ : Nat}
     conv2 output → relu → pool → d₃ → relu → d₄ → relu → d₅. Each dense crossing
     contributes its `ℓ1→ℓ1` operator factor `dᵢ·wᵢ`; the conv output contributes
     the weight-sharing multiplicity `(2h)·(2w)`. -/
-theorem logit_drift {P c h w d₃ d₄ nC : Nat}
+private theorem logit_drift {P c h w d₃ d₄ nC : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄) (W₅ : Mat d₄ nC) (b₅ : Vec nC)
     {ρ w₃ w₄ w₅ : ℝ} (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
@@ -1740,7 +1740,7 @@ theorem logit_drift {P c h w d₃ d₄ nC : Nat}
 /-- The POST-relu tensor stays within the pool margin radius `ρ·D` along
     the whole step segment — what `MaxPool2MarginQ.{smooth_of_close,
     isArgmax_iff}` consume. -/
-theorem postrelu_close_seg {P c h w : Nat}
+private theorem postrelu_close_seg {P c h w : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) {ρ D : ℝ} (hρ : 0 ≤ ρ)
     (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|) (v e : Vec P)
     (he : (∑ idx, |e idx|) ≤ D)
@@ -1757,7 +1757,7 @@ theorem postrelu_close_seg {P c h w : Nat}
 
 /-- The relu₃ margin keeps the first head pre-activation off the kink,
     same sign, along the whole step segment. -/
-theorem margin3_keeps_offkink {P c h w d₃ : Nat}
+private theorem margin3_keeps_offkink {P c h w d₃ : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     {ρ w₃ D : ℝ} (hρ : 0 ≤ ρ) (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
       ((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |e idx|))
@@ -1784,7 +1784,7 @@ theorem margin3_keeps_offkink {P c h w d₃ : Nat}
 
 /-- The relu₄ margin keeps the second head pre-activation off the kink,
     same sign, along the whole step segment. -/
-theorem margin4_keeps_offkink {P c h w d₃ d₄ : Nat}
+private theorem margin4_keeps_offkink {P c h w d₃ d₄ : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     {ρ w₃ w₄ D : ℝ} (hρ : 0 ≤ ρ) (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
@@ -1836,7 +1836,7 @@ theorem cnn_margin2_keeps_offkink {c h w kH kW : Nat} (b₂ : Vec c)
 /-- The POST-relu tensor stays within the pool margin radius `a·D` along
     the whole step segment — what `MaxPool2MarginQ.{smooth_of_close,
     isArgmax_iff}` consume. -/
-theorem cnn_postrelu_close_seg {c h w kH kW : Nat} (b₂ : Vec c)
+private theorem cnn_postrelu_close_seg {c h w kH kW : Nat} (b₂ : Vec c)
     (x₁ : Tensor3 c (2*h) (2*w)) {a D : ℝ} (ha : 0 ≤ a)
     (hx : ∀ cc i j, |x₁ cc i j| ≤ a) (v e : Vec (c * c * kH * kW))
     (he : (∑ idx, |e idx|) ≤ D)
@@ -2599,7 +2599,7 @@ theorem cnn_conv2_float_sgd_descends {c h w d₃ d₄ nC kH kW : Nat} (M : Float
 -- ════════════════════════════════════════════════════════════════
 
 /-- Swap the two index pairs of a quadruple sum. -/
-theorem sum_swap_pair_pair {α β γ δ : Type*}
+private theorem sum_swap_pair_pair {α β γ δ : Type*}
     [Fintype α] [Fintype β] [Fintype γ] [Fintype δ]
     (f : α → β → γ → δ → ℝ) :
     ∑ a : α, ∑ b : β, ∑ c : γ, ∑ d : δ, f a b c d =
@@ -2614,7 +2614,7 @@ theorem sum_swap_pair_pair {α β γ δ : Type*}
         Finset.sum_congr rfl fun _c _ => Finset.sum_comm
 
 /-- Swap the two index triples of a six-fold sum. -/
-theorem sum_swap_triple_triple {α β γ δ ε ζ : Type*} [Fintype α] [Fintype β] [Fintype γ]
+private theorem sum_swap_triple_triple {α β γ δ ε ζ : Type*} [Fintype α] [Fintype β] [Fintype γ]
     [Fintype δ] [Fintype ε] [Fintype ζ] (f : α → β → γ → δ → ε → ζ → ℝ) :
     ∑ a : α, ∑ b : β, ∑ c : γ, ∑ d : δ, ∑ e : ε, ∑ g : ζ, f a b c d e g =
       ∑ d : δ, ∑ e : ε, ∑ g : ζ, ∑ a : α, ∑ b : β, ∑ c : γ, f a b c d e g :=
@@ -2765,7 +2765,7 @@ theorem conv2d_flat_input_pdiv {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- Padded reads move no more than the input entries. -/
-theorem abs_convPad_sub_le {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
+private theorem abs_convPad_sub_le {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
     {δ : ℝ} (hδ : 0 ≤ δ) (hclose : ∀ c i j, |x' c i j - x c i j| ≤ δ)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (hi : Fin h) (wi : Fin w) :
     |convPad kH kW x' c kh kw hi wi - convPad kH kW x c kh kw hi wi| ≤
@@ -2778,7 +2778,7 @@ theorem abs_convPad_sub_le {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
 /-- The conv output difference under an input perturbation, exactly: the kernel taps
     contract the padded-input differences — `conv2d` is linear in its input (the input-side
     peer of `conv2d_kernel_sub` / `conv2d_bias_sub`). -/
-theorem conv2d_input_sub {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+private theorem conv2d_input_sub {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (x x' : Tensor3 ic h w) (o : Fin oc) (ho : Fin h) (wo : Fin w) :
     conv2d W b x' o ho wo - conv2d W b x o ho wo =
       ∑ c : Fin ic, ∑ kh : Fin kH, ∑ kw : Fin kW,
@@ -2822,7 +2822,7 @@ theorem conv2d_input_entry_drift {ic oc h w kH kW : Nat}
 
 /-- The padded-read drift as a position-pinned indicator sum — the
     input-side peer of `abs_convTap_expand`, for the `ℓ1` bound. -/
-theorem abs_convPad_sub_expand {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
+private theorem abs_convPad_sub_expand {ic h w kH kW : Nat} (x x' : Tensor3 ic h w)
     (c : Fin ic) (kh : Fin kH) (kw : Fin kW) (ho : Fin h) (wo : Fin w) :
     |convPad kH kW x' c kh kw ho wo - convPad kH kW x c kh kw ho wo| =
       ∑ i : Fin h, ∑ j : Fin w,
@@ -2945,7 +2945,7 @@ namespace Conv1Slot
 /-- Per-entry conv2-preactivation drift: the conv1 pre-activation `Z` moves by `ρ·‖e‖₁`
     per entry and crosses conv2 as a function of its INPUT, picking up the locality
     factor `c·kH·kW·w₂`. -/
-theorem z2_entry_drift {P c h w kH kW : Nat}
+private theorem z2_entry_drift {P c h w kH kW : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     {ρ w₂ : ℝ} (hρ : 0 ≤ ρ) (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|)
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
@@ -2963,7 +2963,7 @@ theorem z2_entry_drift {P c h w kH kW : Nat}
 
 /-- `ℓ1` conv2-preactivation drift: conv1 (`ℓ1`, `hZ1`) → relu → conv2-as-input (`ℓ1`,
     locality multiplicity `c·kH·kW`). -/
-theorem z2_l1_drift {P c h w kH kW : Nat}
+private theorem z2_l1_drift {P c h w kH kW : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     {ρ w₂ : ℝ} (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
       ((2*h * (2*w) : ℕ) : ℝ) * (ρ * ∑ idx, |e idx|))
@@ -2988,7 +2988,7 @@ theorem z2_l1_drift {P c h w kH kW : Nat}
   exact le_trans (Finset.sum_le_sum fun k _ => relu_entry_lipschitz _ _ _ k) (hZ1 v e)
 
 /-- The relu₂ margin (at the conv1 radius) keeps the conv2 pre-activation off the kink. -/
-theorem margin2_keeps_offkink {P c h w kH kW : Nat}
+private theorem margin2_keeps_offkink {P c h w kH kW : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     {ρ w₂ D : ℝ} (hρ : 0 ≤ ρ) (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|)
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
@@ -3012,7 +3012,7 @@ theorem margin2_keeps_offkink {P c h w kH kW : Nat}
 
 /-- The POST-relu₂ tensor stays within the conv1-slot pool margin radius along the whole
     step segment. -/
-theorem postrelu2_close_seg {P c h w kH kW : Nat}
+private theorem postrelu2_close_seg {P c h w kH kW : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     {ρ w₂ D : ℝ} (hρ : 0 ≤ ρ) (hZ : ∀ v e k, |Z (v + e) k - Z v k| ≤ ρ * ∑ idx, |e idx|)
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
@@ -3037,7 +3037,7 @@ theorem postrelu2_close_seg {P c h w kH kW : Nat}
 
 /-- The relu₃ margin (at the conv1 radius) keeps the first head pre-activation off the
     kink. -/
-theorem margin3_keeps_offkink {P c h w d₃ kH kW : Nat}
+private theorem margin3_keeps_offkink {P c h w d₃ kH kW : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃)
     {ρ w₂ w₃ D : ℝ} (hρ : 0 ≤ ρ) (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
@@ -3069,7 +3069,7 @@ theorem margin3_keeps_offkink {P c h w d₃ kH kW : Nat}
 
 /-- The relu₄ margin (at the conv1 radius) keeps the second head pre-activation off the
     kink. -/
-theorem margin4_keeps_offkink {P c h w d₃ d₄ kH kW : Nat}
+private theorem margin4_keeps_offkink {P c h w d₃ d₄ kH kW : Nat}
     (Z : Vec P → Vec (c * (2*h) * (2*w))) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     {ρ w₂ w₃ w₄ D : ℝ} (hρ : 0 ≤ ρ) (hZ1 : ∀ v e, ∑ k, |Z (v + e) k - Z v k| ≤
@@ -3314,7 +3314,7 @@ theorem cnn1_margin2_keeps_offkink {ic c h w kH kW : Nat} (b₁ : Vec c)
 
 /-- The POST-relu₂ tensor stays within the conv1-rung pool margin radius
     along the whole step segment. -/
-theorem cnn1_postrelu2_close_seg {ic c h w kH kW : Nat} (b₁ : Vec c)
+private theorem cnn1_postrelu2_close_seg {ic c h w kH kW : Nat} (b₁ : Vec c)
     (x₀ : Tensor3 ic (2*h) (2*w)) (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     {a w₂ D : ℝ} (ha : 0 ≤ a) (hx : ∀ cc i j, |x₀ cc i j| ≤ a)
     (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)
@@ -3410,7 +3410,7 @@ theorem cnn1_margin4_keeps_offkink {ic c h w d₃ d₄ kH kW : Nat}
 /-- The whole head above the conv1 output — `CE∘head3∘pool∘relu∘
     (flatConv W₂ b₂)∘relu` — is differentiable at any five-condition
     point. -/
-theorem cnn1_pool_head_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
+private theorem cnn1_pool_head_differentiableAt {c h w d₃ d₄ nC kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     (W₃ : Mat (c * h * w) d₃) (b₃ : Vec d₃) (W₄ : Mat d₃ d₄) (b₄ : Vec d₄)
     (W₅ : Mat d₄ nC) (b₅ : Vec nC) (label : Fin nC)
@@ -4711,7 +4711,7 @@ theorem cnnb2_margin2_keeps_offkink {c h w kH kW : Nat}
 
 /-- The POST-relu tensor stays within the bias-rung pool margin radius
     `D` along the whole step segment. -/
-theorem cnnb2_postrelu_close_seg {c h w kH kW : Nat}
+private theorem cnnb2_postrelu_close_seg {c h w kH kW : Nat}
     (W₂ : Kernel4 c c kH kW) (x₁ : Tensor3 c (2*h) (2*w))
     {D : ℝ} (b e : Vec c) (he : (∑ idx, |e idx|) ≤ D)
     (t : ℝ) (ht0 : 0 ≤ t) (ht1 : t ≤ 1)
@@ -5068,7 +5068,7 @@ theorem cnnb1_margin2_keeps_offkink {ic c h w kH kW : Nat}
 
 /-- The POST-relu₂ tensor stays within the conv1-bias pool margin radius
     along the whole step segment. -/
-theorem cnnb1_postrelu2_close_seg {ic c h w kH kW : Nat}
+private theorem cnnb1_postrelu2_close_seg {ic c h w kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (x₀ : Tensor3 ic (2*h) (2*w))
     (W₂ : Kernel4 c c kH kW) (b₂ : Vec c)
     {w₂ D : ℝ} (hw₂ : 0 ≤ w₂) (hW₂ : ∀ o cc kh kw, |W₂ o cc kh kw| ≤ w₂)

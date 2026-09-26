@@ -84,7 +84,7 @@ structure BlkSaves (Np1 heads d mlpDim : Nat) where
   g   : Vec (Np1 * mlpDim)
 
 /-- The saves from the block input — `vitBlockTiedAtMHV`'s `let` chain, verbatim. -/
-noncomputable def blkSaves {Np1 heads d mlpDim : Nat} (ε : ℝ)
+private noncomputable def blkSaves {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim)
     (xin : Vec (Np1 * (heads * d))) : BlkSaves Np1 heads d mlpDim :=
@@ -137,7 +137,7 @@ noncomputable def cV {Np1 heads d mlpDim : Nat} (ε : ℝ)
   vitCotDVmh Np1 heads d s.q s.k s.v (vitCotAttV ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut)
 
 /-- Per example, the LN₁-output cotangent: the three-way Q/K/V fan-in (`vitCotLn1`), from the block input and output cotangent. -/
-noncomputable def cLn1 {Np1 heads d mlpDim : Nat} (ε : ℝ)
+private noncomputable def cLn1 {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
     (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
@@ -148,7 +148,7 @@ noncomputable def cLn1 {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (vitCotDVmh Np1 heads d s.q s.k s.v (vitCotAttV ε γ2 Wo Wfc1 Wfc2 s.h s.m1 dyOut))
 
 /-- Per example, the MLP-residual fan-in at `h` (`vitCotHV`), from the block input and output cotangent. -/
-noncomputable def cH {Np1 heads d mlpDim : Nat} (ε : ℝ)
+private noncomputable def cH {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
     (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
@@ -156,7 +156,7 @@ noncomputable def cH {Np1 heads d mlpDim : Nat} (ε : ℝ)
   vitCotHV ε γ2 Wfc1 Wfc2 s.h s.m1 dyOut
 
 /-- Per example, the LN₂-output cotangent (`vitCotLn2`), from the block input and output cotangent. -/
-noncomputable def cLn2 {Np1 heads d mlpDim : Nat} (ε : ℝ)
+private noncomputable def cLn2 {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
     (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * (heads * d)) :=
@@ -164,7 +164,7 @@ noncomputable def cLn2 {Np1 heads d mlpDim : Nat} (ε : ℝ)
   vitCotLn2 Wfc1 Wfc2 s.m1 dyOut
 
 /-- Per example, the fc1-output cotangent through the GELU mask (`vitCotM1`), from the block input and output cotangent. -/
-noncomputable def cM1 {Np1 heads d mlpDim : Nat} (ε : ℝ)
+private noncomputable def cM1 {Np1 heads d mlpDim : Nat} (ε : ℝ)
     (γ1 β1 γ2 β2 : Vec (heads * d)) (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (Wfc1 : Mat (heads * d) mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim (heads * d))
     (xin dyOut : Vec (Np1 * (heads * d))) : Vec (Np1 * mlpDim) :=

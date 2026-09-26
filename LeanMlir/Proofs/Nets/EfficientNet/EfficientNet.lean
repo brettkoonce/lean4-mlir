@@ -52,7 +52,7 @@ noncomputable def convBnSwishHasVJP {ic oc h w kH kW : Nat}
     (convBnHasVJP W b ε γ β hε)
     (swishHasVJP (oc * h * w))
 
-theorem convBnSwish_differentiable {ic oc h w kH kW : Nat}
+private theorem convBnSwish_differentiable {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε γ β : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (swish (oc * h * w) ∘ bnForward (oc * h * w) ε γ β ∘ flatConv W b
       : Vec (ic * h * w) → Vec (oc * h * w)) :=
@@ -79,7 +79,7 @@ noncomputable def dwBnSwishHasVJP {c h w kH kW : Nat}
       (bnHasVJP (c * h * w) ε γ β hε))
     (swishHasVJP (c * h * w))
 
-theorem dwBnSwish_differentiable {c h w kH kW : Nat}
+private theorem dwBnSwish_differentiable {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε γ β : ℝ) (hε : 0 < ε) :
     Differentiable ℝ (swish (c * h * w) ∘ bnForward (c * h * w) ε γ β ∘ depthwiseFlat W b
       : Vec (c * h * w) → Vec (c * h * w)) :=
@@ -166,7 +166,7 @@ theorem mbconvBody_differentiable {cin cmid cout h w kHe kWe kHd kWd kHp kWp r :
     the MBConv body's input and output shapes match, so the identity skip
     applies: `residual (mbconvBody …)`. The body is differentiable
     everywhere (global `HasVJP`), so the residual VJP is global too. -/
-noncomputable def mbconvResidualHasVJP {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
+private noncomputable def mbconvResidualHasVJP {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
     (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Ws₁ : Mat cmid r) (bs₁ : Vec r) (Ws₂ : Mat r cmid) (bs₂ : Vec cmid)
@@ -177,7 +177,7 @@ noncomputable def mbconvResidualHasVJP {c cmid h w kHe kWe kHd kWd kHp kWp r : N
     (mbconvBody_differentiable We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
     (mbconvBodyHasVJP We be εe γe βe hεe Wd bd εd γd βd hεd Ws₁ bs₁ Ws₂ bs₂ Wp bp εp γp βp hεp)
 
-theorem mbconvResidual_differentiable {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
+private theorem mbconvResidual_differentiable {c cmid h w kHe kWe kHd kWd kHp kWp r : Nat}
     (We : Kernel4 cmid c kHe kWe) (be : Vec cmid) (εe γe βe : ℝ) (hεe : 0 < εe)
     (Wd : DepthwiseKernel cmid kHd kWd) (bd : Vec cmid) (εd γd βd : ℝ) (hεd : 0 < εd)
     (Ws₁ : Mat cmid r) (bs₁ : Vec r) (Ws₂ : Mat r cmid) (bs₂ : Vec cmid)

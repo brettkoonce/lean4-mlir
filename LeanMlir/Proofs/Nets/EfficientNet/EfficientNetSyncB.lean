@@ -152,12 +152,12 @@ theorem mbBodyGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
     R hR hm q.pε q.pγ q.pβ _ _ hpc r
 
 /-- The no-skip widening block (b9, b16) is the body alone. -/
-def mbExpGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
+private def mbExpGraphSync (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
     {ic mid oc rd kh kw : Nat} (q : MBW ic mid oc rd kh kw) (e : Fin R → SHlo (N * (ic * h * w))) :
     Fin R → SHlo (N * (oc * h * w)) :=
   mbBodyGraphSync p epsStr R hR N h w q e
 
-theorem mbExpGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
+private theorem mbExpGraphSync_shard (p epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat)
     {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) (q : MBW ic mid oc rd kh kw)
     (e : Fin R → SHlo (N * (ic * h * w))) (X : Vec ((R * N) * (ic * h * w)))
     (he : ∀ r, den (e r) = batchShard R N (ic * h * w) X r) (r : Fin R) :

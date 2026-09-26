@@ -60,7 +60,7 @@ lemma rowDenseBackFlat_eq_backward {N a c : Nat} (W : Mat a c) (b : Vec c)
     `layerNormPerTokenHasVJPMat.backward` at the saved pre-LN activation `A`.
     (`layerNormHasVJP` is definitionally `bnHasVJP`, whose backward is
     `bnGradInput`; `rowLNBackFlat` is the rowwise `bnGradInput`.) -/
-lemma rowLNBackFlat_eq_backward {N D : Nat} (ε γ β : ℝ) (hε : 0 < ε)
+private lemma rowLNBackFlat_eq_backward {N D : Nat} (ε γ β : ℝ) (hε : 0 < ε)
     (A : Mat N D) (dY : Mat N D) :
     rowLNBackFlat N D ε γ (Mat.flatten A) (Mat.flatten dY)
       = Mat.flatten ((layerNormPerTokenHasVJPMat N D ε γ β hε).backward A dY) := by
@@ -95,7 +95,7 @@ noncomputable def transformerMlpBackGraph {Np1 D mlpDim : Nat}
     Stated over an arbitrary incoming-cotangent subgraph `ecot` (any graph whose
     den is the flattened cotangent), so this arm can sit downstream of another graph;
     at a fixed `Vec` cotangent it is `ecot := .operand "%dz" (Mat.flatten dz)`. -/
-theorem transformerMlpBackGraph_faithful {Np1 D mlpDim : Nat}
+private theorem transformerMlpBackGraph_faithful {Np1 D mlpDim : Nat}
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
     (Y : Mat Np1 D) (dz : Mat Np1 D)
@@ -171,7 +171,7 @@ noncomputable def mhsaClean (N heads d_head : Nat)
 
 /-- The clean witness's backward IS `mhsaHasVJPMat`'s backward (both VJPs of
     `mhsaLayer`, tied by determinism). -/
-theorem mhsaClean_backward_eq (N heads d_head : Nat)
+private theorem mhsaClean_backward_eq (N heads d_head : Nat)
     (Wq Wk Wv Wo : Mat (heads * d_head) (heads * d_head))
     (bq bk bv bo : Vec (heads * d_head))
     (X dY : Mat N (heads * d_head)) :
@@ -236,14 +236,14 @@ noncomputable def mhsaBackCollapsedMH (N heads d : Nat)
        + (∑ j : Fin d, Wv c (finProdFinEquiv (h, j)) * dVg h r j))
 
 /-- The SDPA backward `mhsaG`'s slab backward reads for column third `q` (Q / K / V). -/
-noncomputable def sdpaBackSel (N d : Nat) (q : Fin 3) (Q K V dA : Mat N d) : Mat N d :=
+private noncomputable def sdpaBackSel (N d : Nat) (q : Fin 3) (Q K V dA : Mat N d) : Mat N d :=
   fun r j =>
     if q = 0 then sdpaBackQ N d Q K V dA r j
     else if q = 1 then sdpaBackK N d Q K V dA r j
     else sdpaBackV N d Q K V dA r j
 
 /-- `mhsaG`'s backward, read through `sdpaBackSel` (its `backward` field, by definition). -/
-theorem mhsaG_backward_eq_sel (N d : Nat) (M : Mat N (3 * d)) (dY : Mat N d) (r : Fin N)
+private theorem mhsaG_backward_eq_sel (N d : Nat) (M : Mat N (3 * d)) (dY : Mat N d) (r : Fin N)
     (j : Fin (3 * d)) :
     (mhsaGHasVJPMat N d).backward M dY r j
       = sdpaBackSel N d (finProdFinEquiv.symm j).1 (mhsaProjC 0 M) (mhsaProjC 1 M)
@@ -251,7 +251,7 @@ theorem mhsaG_backward_eq_sel (N d : Nat) (M : Mat N (3 * d)) (dY : Mat N d) (r 
 
 /-- Head `h`'s slab of the fused QKV projection, third `q`, is head `h`'s columns of the `q`-th
     projection. -/
-theorem mhsaProjC_qkv_slab (N heads d : Nat) (Wq Wk Wv : Mat (heads * d) (heads * d))
+private theorem mhsaProjC_qkv_slab (N heads d : Nat) (Wq Wk Wv : Mat (heads * d) (heads * d))
     (bq bk bv : Vec (heads * d)) (X : Mat N (heads * d)) (h : Fin heads) (q : Fin 3) :
     mhsaProjC q (fun r' (j_in : Fin (3 * d)) =>
         dense (mhsaQkvW heads d Wq Wk Wv) (mhsaQkvB heads d bq bk bv) (X r')
@@ -263,7 +263,7 @@ theorem mhsaProjC_qkv_slab (N heads d : Nat) (Wq Wk Wv : Mat (heads * d) (heads 
 /-- `mhsaClean`'s backward, unfolded: the fused-QKV dense backward (`mulVec` against
     `mhsaQkvW`) of the column-slabwise `mhsaG` backward at the `Wo`-back cotangent. `rfl`
     through `vjpComp`, `rowwiseHasVJPMat` and `colSlabwiseHasVJPMat`. -/
-theorem mhsaClean_backward_apply (N heads d : Nat)
+private theorem mhsaClean_backward_apply (N heads d : Nat)
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv bo : Vec (heads * d))
     (X dh : Mat N (heads * d)) (r : Fin N) (c : Fin (heads * d)) :
     (mhsaClean N heads d Wq Wk Wv Wo bq bk bv bo).backward X dh r c
@@ -321,7 +321,7 @@ theorem mhsa_backward_collapseMH (N heads d : Nat)
 
 /-- SDPA dQ-segment subgraph: `matmulF(scaleF(softmaxRowBack(matmulF(dAtt, transposeF v))), k)`
     — denotes `vitCotDQ`. `ss` = saved pre-softmax scaled scores; `k`/`v`/`dAtt` saved. -/
-noncomputable def sdpaBackQGraph (Np1 D : Nat) (ss : Vec (Np1*Np1))
+private noncomputable def sdpaBackQGraph (Np1 D : Nat) (ss : Vec (Np1*Np1))
     (k v : Vec (Np1*D)) (e : SHlo (Np1*D)) : SHlo (Np1*D) :=
   .matmulF (m := Np1) (k := Np1) (n := D)
     (.scaleF "%sdpaS" (sdpaScale D)
@@ -330,7 +330,7 @@ noncomputable def sdpaBackQGraph (Np1 D : Nat) (ss : Vec (Np1*Np1))
     (.operand "%k" k)
 
 /-- SDPA dK-segment subgraph — denotes `vitCotDK`. -/
-noncomputable def sdpaBackKGraph (Np1 D : Nat) (ss : Vec (Np1*Np1))
+private noncomputable def sdpaBackKGraph (Np1 D : Nat) (ss : Vec (Np1*Np1))
     (q v : Vec (Np1*D)) (e : SHlo (Np1*D)) : SHlo (Np1*D) :=
   .matmulF (m := Np1) (k := Np1) (n := D)
     (.transposeF (m := Np1) (n := Np1)
@@ -340,26 +340,26 @@ noncomputable def sdpaBackKGraph (Np1 D : Nat) (ss : Vec (Np1*Np1))
     (.operand "%q" q)
 
 /-- SDPA dV-segment subgraph — denotes `vitCotDV`. `p` = saved post-softmax weights. -/
-noncomputable def sdpaBackVGraph (Np1 D : Nat) (p : Vec (Np1*Np1))
+private noncomputable def sdpaBackVGraph (Np1 D : Nat) (p : Vec (Np1*Np1))
     (e : SHlo (Np1*D)) : SHlo (Np1*D) :=
   .matmulF (m := Np1) (k := Np1) (n := D)
     (.transposeF (m := Np1) (n := Np1) (.operand "%p" p)) e
 
-theorem sdpaBackQGraph_faithful (Np1 D : Nat) (ss : Vec (Np1*Np1))
+private theorem sdpaBackQGraph_faithful (Np1 D : Nat) (ss : Vec (Np1*Np1))
     (k v : Vec (Np1*D)) (e : SHlo (Np1*D)) :
     den (sdpaBackQGraph Np1 D ss k v e) = vitCotDQ D ss k v (den e) := by
   unfold sdpaBackQGraph vitCotDQ vitCotDS vitCotDP
   simp only [matmulF_faithful, scaleF_faithful, softmaxRowBack_faithful,
     transposeF_faithful, den_operand]
 
-theorem sdpaBackKGraph_faithful (Np1 D : Nat) (ss : Vec (Np1*Np1))
+private theorem sdpaBackKGraph_faithful (Np1 D : Nat) (ss : Vec (Np1*Np1))
     (q v : Vec (Np1*D)) (e : SHlo (Np1*D)) :
     den (sdpaBackKGraph Np1 D ss q v e) = vitCotDK D ss q v (den e) := by
   unfold sdpaBackKGraph vitCotDK vitCotDS vitCotDP
   simp only [matmulF_faithful, transposeF_faithful, scaleF_faithful, softmaxRowBack_faithful,
     den_operand]
 
-theorem sdpaBackVGraph_faithful (Np1 D : Nat) (p : Vec (Np1*Np1)) (e : SHlo (Np1*D)) :
+private theorem sdpaBackVGraph_faithful (Np1 D : Nat) (p : Vec (Np1*Np1)) (e : SHlo (Np1*D)) :
     den (sdpaBackVGraph Np1 D p e) = vitCotDV p (den e) := by
   unfold sdpaBackVGraph vitCotDV
   simp only [matmulF_faithful, transposeF_faithful, den_operand]
@@ -564,7 +564,7 @@ re-targeting the `HasVJPMat` to the `…V…` (vec-LN) versions. -/
     `biasAdd.backward = id`, `layerScaleHasVJP.backward _ dy = (γv · * dy ·) =
     layerScale γv dy`. Rowwise-lifted, this is the normalize-only (`layerNorm` at
     γ=1, β=0) per-token backward fed the rowwise `layerScale γv` of the cotangent. -/
-theorem layerNormVec_per_token_backward_eq {N D : Nat} (ε : ℝ) (γv βv : Vec D)
+private theorem layerNormVec_per_token_backward_eq {N D : Nat} (ε : ℝ) (γv βv : Vec D)
     (hε : 0 < ε) (X dY : Mat N D) :
     (layerNormVecPerTokenHasVJPMat N D ε γv βv hε).backward X dY
       = (layerNormPerTokenHasVJPMat N D ε 1 0 hε).backward X
@@ -598,7 +598,7 @@ theorem rowVecLNBack_eq_backward {N D : Nat} (ε : ℝ) (γv βv : Vec D) (hε :
     outermost backward token = earliest forward op = LN₂). REUSES `transformerMlpBackGraph`
     verbatim (the MLP body is LN-agnostic), after the vector-LN back fragment
     `lnRowBack(γ=1) ∘ rowScaleF γ2v`. `Y = LNᵥ₂ h` is the saved MLP input. -/
-noncomputable def mlpSublayerVInnerBackGraph {Np1 D mlpDim : Nat}
+private noncomputable def mlpSublayerVInnerBackGraph {Np1 D mlpDim : Nat}
     (ε : ℝ) (γ2v : Vec D)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D)
     (h : Vec (Np1 * D)) (Y : Mat Np1 D) (e : SHlo (Np1 * D)) : SHlo (Np1 * D) :=
@@ -607,7 +607,7 @@ noncomputable def mlpSublayerVInnerBackGraph {Np1 D mlpDim : Nat}
 
 /-- **Vec-LN MLP-sublayer inner-arm backward-graph faithfulness.** Denotes the proven
     `(vjpMatComp LNᵥ₂ transformerMlp).backward h ·`. `Y = LNᵥ₂ h`. -/
-theorem mlpSublayerVInnerBackGraph_faithful {Np1 D mlpDim : Nat}
+private theorem mlpSublayerVInnerBackGraph_faithful {Np1 D mlpDim : Nat}
     (ε : ℝ) (γ2v β2v : Vec D) (hε : 0 < ε)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
     (h : Mat Np1 D) (dz : Mat Np1 D)
@@ -687,7 +687,7 @@ noncomputable def attnSublayerVInnerBackGraphMH {Np1 hm1 d : Nat} (ε : ℝ)
           (fun r j' => dense Wk bk (X r) (finProdFinEquiv (h, j')))))
         (den e)))
 
-theorem attnSublayerVInnerBackGraphMH_faithful {Np1 hm1 d : Nat} (ε : ℝ)
+private theorem attnSublayerVInnerBackGraphMH_faithful {Np1 hm1 d : Nat} (ε : ℝ)
     (γ1v β1v : Vec ((hm1+1) * d)) (hε : 0 < ε)
     (Wq Wk Wv Wo : Mat ((hm1+1) * d) ((hm1+1) * d)) (bq bk bv bo : Vec ((hm1+1) * d))
     (x : Mat Np1 ((hm1+1) * d)) (dh : Mat Np1 ((hm1+1) * d))

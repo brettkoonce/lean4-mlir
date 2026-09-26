@@ -126,7 +126,7 @@ theorem dense_transpose_eq_mulVec {m n : Nat} (W : Mat m n) :
 /-- The chain's GELU backward `diagBack (act'(s))` IS the certified `geluHasVJP.backward`
     at the saved pre-activation `s` (the elementwise derivative scaling — `geluHasVJP.backward s
     dy i = dy i · geluScalarDeriv (s i)`, `diagBack` is the same scaling, `mul_comm`). -/
-theorem diagBack_eq_gelu_vjp {n : Nat} (s : Vec n) :
+private theorem diagBack_eq_gelu_vjp {n : Nat} (s : Vec n) :
     diagBack (fun c => geluScalarDeriv (s c)) = (geluHasVJP n).backward s := by
   funext dy i
   simp only [diagBack, geluHasVJP, mul_comm]
@@ -135,7 +135,7 @@ theorem diagBack_eq_gelu_vjp {n : Nat} (s : Vec n) :
     (`dense₂ ∘ gelu ∘ dense₁`, per token) reduces to: each token's `dz r` runs `mulVec Wfc2`,
     the GELU backward at the saved pre-activation `dense₁(Y r)`, then `mulVec Wfc1`. Pure
     `rfl` (the per-token VJPs are `rowwise`/`vjpMatComp` structure projections). -/
-theorem transformerMlp_backward_pertoken (N D dff : Nat)
+private theorem transformerMlp_backward_pertoken (N D dff : Nat)
     (Wfc1 : Mat D dff) (bfc1 : Vec dff) (Wfc2 : Mat dff D) (bfc2 : Vec D)
     (Y : Mat N D) (dz : Mat N D) :
     (transformerMlpHasVJPMat N D dff Wfc1 bfc1 Wfc2 bfc2).backward Y dz

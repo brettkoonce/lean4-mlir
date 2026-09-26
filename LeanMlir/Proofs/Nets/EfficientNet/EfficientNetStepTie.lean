@@ -404,7 +404,7 @@ def enetExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh 
   enetExpTied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
 
-theorem enet_exp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+private theorem enet_exp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) :
     enetExpTiedAt xN wN bN gN vN epsStr lrStr cotN h w p he hd hp xin dyOut lr := by
@@ -418,7 +418,7 @@ def enetStridedTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r
   enetStridedTied xN wN bN gN vN epsStr lrStr cotN p.eε he p.dε hd p.pε hp
     p.eW p.eb p.eγ p.eβ p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
 
-theorem enet_strided_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
+private theorem enet_strided_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic mid oc r kh kw : Nat}
     (h w : Nat) (p : MBW ic mid oc r kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) :
     enetStridedTiedAt xN wN bN gN vN epsStr lrStr cotN h w p he hd hp xin dyOut lr := by
@@ -432,7 +432,7 @@ def enetNoExpTiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r kh kw
   enetNoExpTied xN wN bN gN vN epsStr lrStr cotN p.dε hd p.pε hp
     p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut lr
 
-theorem enet_noexp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r kh kw : Nat}
+private theorem enet_noexp_tiedAt (xN wN bN gN vN epsStr lrStr cotN : String) {N ic oc r kh kw : Nat}
     (h w : Nat) (p : MBWNoExp ic oc r kh kw) (hd : 0 < p.dε) (hp : 0 < p.pε)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) (lr : ℝ) :
     enetNoExpTiedAt xN wN bN gN vN epsStr lrStr cotN h w p hd hp xin dyOut lr := by

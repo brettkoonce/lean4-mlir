@@ -69,7 +69,7 @@ open Proofs BatchSeal Proofs.BatchSeal
 --   body is the constant `0` and its block is the exact identity.
 -- ════════════════════════════════════════════════════════════════
 
-noncomputable def sealIVW (ic mid oc : Nat) : IVW ic mid oc where
+private noncomputable def sealIVW (ic mid oc : Nat) : IVW ic mid oc where
   eW := ctK mid ic 1 1 1
   eb := kv mid 0
   eε := 1
@@ -86,7 +86,7 @@ noncomputable def sealIVW (ic mid oc : Nat) : IVW ic mid oc where
   pγ := kv oc (1 / 64)
   pβ := kv oc 0
 
-noncomputable def sealResW (c mid : Nat) : IVW c mid c where
+private noncomputable def sealResW (c mid : Nat) : IVW c mid c where
   eW := zk mid c 1 1
   eb := kv mid 0
   eε := 1
@@ -103,7 +103,7 @@ noncomputable def sealResW (c mid : Nat) : IVW c mid c where
   pγ := kv c (1 / 64)
   pβ := kv c 0
 
-noncomputable def sealNoExpW (ic oc : Nat) : IVWNoExp ic oc where
+private noncomputable def sealNoExpW (ic oc : Nat) : IVWNoExp ic oc where
   dW := ctDW ic 3 3 1
   db := kv ic 0
   dε := 1
@@ -161,7 +161,7 @@ theorem win (N oc h w : Nat) (hm : Mg N h w) (v : Vec (N * (oc * h * w))) :
   bnBatchLA_window 1 one_pos (kv oc (1 / 64)) (kv oc 3) (1 / 64) 3 (fun _ => rfl) (fun _ => rfl)
     hm (by have := hm; linarith) v
 
-theorem win6 (N oc h w : Nat) (hm : Mg N h w) (v : Vec (N * (oc * h * w))) :
+private theorem win6 (N oc h w : Nat) (hm : Mg N h w) (v : Vec (N * (oc * h * w))) :
     ∀ k, StableHLO.bnBatchLA N oc h w 1 (kv oc (1 / 64)) (kv oc 3) v k ≠ 0 ∧
          StableHLO.bnBatchLA N oc h w 1 (kv oc (1 / 64)) (kv oc 3) v k ≠ 6 :=
   fun k => ⟨(win N oc h w hm v k).1.ne', (win N oc h w hm v k).2.ne⟩
@@ -173,28 +173,28 @@ theorem win6 (N oc h w : Nat) (hm : Mg N h w) (v : Vec (N * (oc * h * w))) :
 --   proved lemma is substitution, while a numeral-shaped defeq kills the kernel
 --   (`planning/full_width_seals.md` §3.5).
 -- ════════════════════════════════════════════════════════════════
-theorem cbrB_eq {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+private theorem cbrB_eq {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (hm : Mg N h w) (x : Vec (N * (ic * h * w))) :
     StableHLO.cbrB N (h := h) (w := w) W b 1 (kv oc (1 / 64)) (kv oc 3) x
       = StableHLO.bnBatchLA N oc h w 1 (kv oc (1 / 64)) (kv oc 3)
           (StableHLO.batchMap N (flatConv W b) x) :=
   relu6_id_window _ _ (win N oc h w hm _)
 
-theorem dwbrB_eq {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+private theorem dwbrB_eq {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (hm : Mg N h w) (x : Vec (N * (c * h * w))) :
     StableHLO.dwbrB N (h := h) (w := w) W b 1 (kv c (1 / 64)) (kv c 3) x
       = StableHLO.bnBatchLA N c h w 1 (kv c (1 / 64)) (kv c 3)
           (StableHLO.batchMap N (depthwiseFlat W b) x) :=
   relu6_id_window _ _ (win N c h w hm _)
 
-theorem dwbrBstrided_eq {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+private theorem dwbrBstrided_eq {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
     (hm : Mg N h w) (x : Vec (N * (c * (2 * h) * (2 * w)))) :
     StableHLO.dwbrBstrided N (h := h) (w := w) W b 1 (kv c (1 / 64)) (kv c 3) x
       = StableHLO.bnBatchLA N c h w 1 (kv c (1 / 64)) (kv c 3)
           (StableHLO.batchMap N (depthwiseStride2FlatXla W b) x) :=
   relu6_id_window _ _ (win N c h w hm _)
 
-theorem mnv2StemB_eq {N h w ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
+private theorem mnv2StemB_eq {N h w ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : Vec oc)
     (hm : Mg N h w) (x : Vec (N * (ic * (2 * h) * (2 * w)))) :
     mnv2StemB N h w Ws bs 1 (kv oc (1 / 64)) (kv oc 3) x
       = StableHLO.bnBatchLA N oc h w 1 (kv oc (1 / 64)) (kv oc 3)
@@ -204,11 +204,11 @@ theorem mnv2StemB_eq {N h w ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : 
 -- ════════════════════════════════════════════════════════════════
 -- § 4. The residual blocks are the exact identity
 -- ════════════════════════════════════════════════════════════════
-theorem seal_res_body (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
+private theorem seal_res_body (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
     mnv2ExpOnlyB N h w (sealResW c mid) v = fun _ => (0 : ℝ) :=
   projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 0 (fun _ => rfl) _
 
-theorem sealResB_eq (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
+private theorem sealResB_eq (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c * h * w))) :
     mnv2ResidB N h w (sealResW c mid) v = v := by
   funext k
   rw [mnv2ResidB, residual_apply, congrFun (seal_res_body N h w c mid hn v) k]
@@ -216,7 +216,7 @@ theorem sealResB_eq (N h w c mid : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (c 
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The three channel-changing block collapses
 -- ════════════════════════════════════════════════════════════════
-theorem sealExpB_eq (N h w ic mid oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
+private theorem sealExpB_eq (N h w ic mid oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     mnv2ExpOnlyB N h w (sealIVW ic mid oc) v
       = StableHLO.bnBatchLA N oc h w 1 (kv oc (1 / 64)) (kv oc 0)
           (StableHLO.batchMap N (flatConv (h := h) (w := w) (ctK oc mid 1 1 1) (kv oc 0))
@@ -234,7 +234,7 @@ theorem sealExpB_eq (N h w ic mid oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * 
   rw [cbrB_eq _ _ hm, dwbrB_eq _ _ hm]
   rfl
 
-theorem sealStridedB_eq (N h w ic mid oc : Nat) (hme : Mg N (2 * h) (2 * w)) (hmd : Mg N h w)
+private theorem sealStridedB_eq (N h w ic mid oc : Nat) (hme : Mg N (2 * h) (2 * w)) (hmd : Mg N h w)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
     mnv2StridedB N h w (sealIVW ic mid oc) v
       = StableHLO.bnBatchLA N oc h w 1 (kv oc (1 / 64)) (kv oc 0)
@@ -254,7 +254,7 @@ theorem sealStridedB_eq (N h w ic mid oc : Nat) (hme : Mg N (2 * h) (2 * w)) (hm
   rw [cbrB_eq _ _ hme, dwbrBstrided_eq _ _ hmd]
   rfl
 
-theorem sealNoExpB_eq (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
+private theorem sealNoExpB_eq (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     mnv2NoExpB N h w (sealNoExpW ic oc) v
       = StableHLO.bnBatchLA N oc h w 1 (kv oc (1 / 64)) (kv oc 0)
           (StableHLO.batchMap N (flatConv (h := h) (w := w) (ctK oc ic 1 1 1) (kv oc 0))
@@ -299,29 +299,29 @@ theorem rf_pos (n : Nat) (z : Vec n) : 0 < rf n z :=
 -- ════════════════════════════════════════════════════════════════
 -- § 9. Positivity and the 19 clause bundles, generically
 -- ════════════════════════════════════════════════════════════════
-theorem seal_iv_pos (ic mid oc : Nat) : IVPos (sealIVW ic mid oc) := ⟨one_pos, one_pos, one_pos⟩
+private theorem seal_iv_pos (ic mid oc : Nat) : IVPos (sealIVW ic mid oc) := ⟨one_pos, one_pos, one_pos⟩
 
-theorem seal_res_pos (c mid : Nat) : IVPos (sealResW c mid) := ⟨one_pos, one_pos, one_pos⟩
+private theorem seal_res_pos (c mid : Nat) : IVPos (sealResW c mid) := ⟨one_pos, one_pos, one_pos⟩
 
-theorem seal_noExp_pos (ic oc : Nat) : IVNoExpPos (sealNoExpW ic oc) := ⟨one_pos, one_pos⟩
+private theorem seal_noExp_pos (ic oc : Nat) : IVNoExpPos (sealNoExpW ic oc) := ⟨one_pos, one_pos⟩
 
-theorem seal_iv_smooth (N h w ic mid oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
+private theorem seal_iv_smooth (N h w ic mid oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     IVSmoothAtB N h w (sealIVW ic mid oc) v where
   he := win6 N mid h w hm _
   hd := win6 N mid h w hm _
 
-theorem seal_res_smooth (N h w c mid : Nat) (hm : Mg N h w) (v : Vec (N * (c * h * w))) :
+private theorem seal_res_smooth (N h w c mid : Nat) (hm : Mg N h w) (v : Vec (N * (c * h * w))) :
     IVSmoothAtB N h w (sealResW c mid) v where
   he := win6 N mid h w hm _
   hd := win6 N mid h w hm _
 
-theorem seal_strided_smooth (N h w ic mid oc : Nat) (hme : Mg N (2 * h) (2 * w)) (hmd : Mg N h w)
+private theorem seal_strided_smooth (N h w ic mid oc : Nat) (hme : Mg N (2 * h) (2 * w)) (hmd : Mg N h w)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
     IVStridedSmoothAtB N h w (sealIVW ic mid oc) v where
   he := win6 N mid (2 * h) (2 * w) hme _
   hd := win6 N mid h w hmd _
 
-theorem seal_noExp_smooth (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
+private theorem seal_noExp_smooth (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     IVNoExpSmoothAtB N h w (sealNoExpW ic oc) v where
   hd := win6 N ic h w hm _
 
@@ -330,7 +330,7 @@ theorem seal_stem_smooth (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic k
     MNV2StemSmoothAtB N h w Ws bs 1 (kv oc (1 / 64)) (kv oc 3) x :=
   win6 N oc h w hm _
 
-theorem seal_head_smooth (N h w : Nat) {ic oc : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
+private theorem seal_head_smooth (N h w : Nat) {ic oc : Nat} (Wh : Kernel4 oc ic 1 1) (bh : Vec oc)
     (hm : Mg N h w) (v : Vec (N * (ic * h * w))) :
     MNV2HeadSmoothAtB N h w Wh bh 1 (kv oc (1 / 64)) (kv oc 3) v :=
   win6 N oc h w hm _
@@ -364,51 +364,51 @@ theorem sc5 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 28 28 (sealW nCls).b5 (mnv2PreB4 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 28 28 32 192 (margin192 _ (by norm_num)) _
 
-theorem sc6 (nCls : Nat) (t : ℝ) :
+private theorem sc6 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 28 28 (sealW nCls).b6 (mnv2PreB5 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 28 28 32 192 (margin192 _ (by norm_num)) _
 
-theorem sc7 (nCls : Nat) (t : ℝ) :
+private theorem sc7 (nCls : Nat) (t : ℝ) :
     IVStridedSmoothAtB 2 14 14 (sealW nCls).b7 (mnv2PreB6 2 (sealW nCls) (sealX t)) :=
   seal_strided_smooth 2 14 14 32 192 64 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
 
-theorem sc8 (nCls : Nat) (t : ℝ) :
+private theorem sc8 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b8 (mnv2PreB7 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
 
-theorem sc9 (nCls : Nat) (t : ℝ) :
+private theorem sc9 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b9 (mnv2PreB8 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
 
-theorem sc10 (nCls : Nat) (t : ℝ) :
+private theorem sc10 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b10 (mnv2PreB9 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 14 14 64 384 (margin192 _ (by norm_num)) _
 
-theorem sc11 (nCls : Nat) (t : ℝ) :
+private theorem sc11 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b11 (mnv2PreB10 2 (sealW nCls) (sealX t)) :=
   seal_iv_smooth 2 14 14 64 384 96 (margin192 _ (by norm_num)) _
 
-theorem sc12 (nCls : Nat) (t : ℝ) :
+private theorem sc12 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b12 (mnv2PreB11 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 14 14 96 576 (margin192 _ (by norm_num)) _
 
-theorem sc13 (nCls : Nat) (t : ℝ) :
+private theorem sc13 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 14 14 (sealW nCls).b13 (mnv2PreB12 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 14 14 96 576 (margin192 _ (by norm_num)) _
 
-theorem sc14 (nCls : Nat) (t : ℝ) :
+private theorem sc14 (nCls : Nat) (t : ℝ) :
     IVStridedSmoothAtB 2 7 7 (sealW nCls).b14 (mnv2PreB13 2 (sealW nCls) (sealX t)) :=
   seal_strided_smooth 2 7 7 96 576 160 (margin192 _ (by norm_num)) (margin192 _ (by norm_num)) _
 
-theorem sc15 (nCls : Nat) (t : ℝ) :
+private theorem sc15 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 7 7 (sealW nCls).b15 (mnv2PreB14 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 7 7 160 960 (margin192 _ (by norm_num)) _
 
-theorem sc16 (nCls : Nat) (t : ℝ) :
+private theorem sc16 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 7 7 (sealW nCls).b16 (mnv2PreB15 2 (sealW nCls) (sealX t)) :=
   seal_res_smooth 2 7 7 160 960 (margin192 _ (by norm_num)) _
 
-theorem sc17 (nCls : Nat) (t : ℝ) :
+private theorem sc17 (nCls : Nat) (t : ℝ) :
     IVSmoothAtB 2 7 7 (sealW nCls).b17 (mnv2PreB16 2 (sealW nCls) (sealX t)) :=
   seal_iv_smooth 2 7 7 160 960 320 (margin192 _ (by norm_num)) _
 
@@ -448,113 +448,113 @@ noncomputable def Zs (t : ℝ) : Vec (2 * (32 * 112 * 112)) :=
   StableHLO.batchMap 2 (flatConvStride2Xla (h := 112) (w := 112) (ctK 32 3 3 3 1) (kv 32 0))
     (sealX t)
 
-noncomputable def Z1d (nCls : Nat) (t : ℝ) : Vec (2 * (32 * 112 * 112)) :=
+private noncomputable def Z1d (nCls : Nat) (t : ℝ) : Vec (2 * (32 * 112 * 112)) :=
   StableHLO.batchMap 2 (depthwiseFlat (h := 112) (w := 112) (ctDW 32 3 3 1) (kv 32 0))
     (mnv2PreB0 2 (sealW nCls) (sealX t))
 
-noncomputable def A1d (nCls : Nat) (t : ℝ) : Vec (2 * (32 * 112 * 112)) :=
+private noncomputable def A1d (nCls : Nat) (t : ℝ) : Vec (2 * (32 * 112 * 112)) :=
   StableHLO.bnBatchLA 2 32 112 112 1 (kv 32 (1 / 64)) (kv 32 3) (Z1d nCls t)
 
 noncomputable def Z1p (nCls : Nat) (t : ℝ) : Vec (2 * (16 * 112 * 112)) :=
   StableHLO.batchMap 2 (flatConv (h := 112) (w := 112) (ctK 16 32 1 1 1) (kv 16 0)) (A1d nCls t)
 
-noncomputable def Z2e (nCls : Nat) (t : ℝ) : Vec (2 * (96 * (2 * 56) * (2 * 56))) :=
+private noncomputable def Z2e (nCls : Nat) (t : ℝ) : Vec (2 * (96 * (2 * 56) * (2 * 56))) :=
   StableHLO.batchMap 2 (flatConv (h := (2 * 56)) (w := (2 * 56)) (ctK 96 16 1 1 1) (kv 96 0))
     (mnv2PreB1 2 (sealW nCls) (sealX t))
 
-noncomputable def A2e (nCls : Nat) (t : ℝ) : Vec (2 * (96 * (2 * 56) * (2 * 56))) :=
+private noncomputable def A2e (nCls : Nat) (t : ℝ) : Vec (2 * (96 * (2 * 56) * (2 * 56))) :=
   StableHLO.bnBatchLA 2 96 (2 * 56) (2 * 56) 1 (kv 96 (1 / 64)) (kv 96 3) (Z2e nCls t)
 
-noncomputable def Z2d (nCls : Nat) (t : ℝ) : Vec (2 * (96 * 56 * 56)) :=
+private noncomputable def Z2d (nCls : Nat) (t : ℝ) : Vec (2 * (96 * 56 * 56)) :=
   StableHLO.batchMap 2 (depthwiseStride2FlatXla (h := 56) (w := 56) (ctDW 96 3 3 1) (kv 96 0)) (A2e nCls t)
 
-noncomputable def A2d (nCls : Nat) (t : ℝ) : Vec (2 * (96 * 56 * 56)) :=
+private noncomputable def A2d (nCls : Nat) (t : ℝ) : Vec (2 * (96 * 56 * 56)) :=
   StableHLO.bnBatchLA 2 96 56 56 1 (kv 96 (1 / 64)) (kv 96 3) (Z2d nCls t)
 
 noncomputable def Z2p (nCls : Nat) (t : ℝ) : Vec (2 * (24 * 56 * 56)) :=
   StableHLO.batchMap 2 (flatConv (h := 56) (w := 56) (ctK 24 96 1 1 1) (kv 24 0)) (A2d nCls t)
 
-noncomputable def Z4e (nCls : Nat) (t : ℝ) : Vec (2 * (144 * (2 * 28) * (2 * 28))) :=
+private noncomputable def Z4e (nCls : Nat) (t : ℝ) : Vec (2 * (144 * (2 * 28) * (2 * 28))) :=
   StableHLO.batchMap 2 (flatConv (h := (2 * 28)) (w := (2 * 28)) (ctK 144 24 1 1 1) (kv 144 0))
     (mnv2PreB3 2 (sealW nCls) (sealX t))
 
-noncomputable def A4e (nCls : Nat) (t : ℝ) : Vec (2 * (144 * (2 * 28) * (2 * 28))) :=
+private noncomputable def A4e (nCls : Nat) (t : ℝ) : Vec (2 * (144 * (2 * 28) * (2 * 28))) :=
   StableHLO.bnBatchLA 2 144 (2 * 28) (2 * 28) 1 (kv 144 (1 / 64)) (kv 144 3) (Z4e nCls t)
 
-noncomputable def Z4d (nCls : Nat) (t : ℝ) : Vec (2 * (144 * 28 * 28)) :=
+private noncomputable def Z4d (nCls : Nat) (t : ℝ) : Vec (2 * (144 * 28 * 28)) :=
   StableHLO.batchMap 2 (depthwiseStride2FlatXla (h := 28) (w := 28) (ctDW 144 3 3 1) (kv 144 0)) (A4e nCls t)
 
-noncomputable def A4d (nCls : Nat) (t : ℝ) : Vec (2 * (144 * 28 * 28)) :=
+private noncomputable def A4d (nCls : Nat) (t : ℝ) : Vec (2 * (144 * 28 * 28)) :=
   StableHLO.bnBatchLA 2 144 28 28 1 (kv 144 (1 / 64)) (kv 144 3) (Z4d nCls t)
 
 noncomputable def Z4p (nCls : Nat) (t : ℝ) : Vec (2 * (32 * 28 * 28)) :=
   StableHLO.batchMap 2 (flatConv (h := 28) (w := 28) (ctK 32 144 1 1 1) (kv 32 0)) (A4d nCls t)
 
-noncomputable def Z7e (nCls : Nat) (t : ℝ) : Vec (2 * (192 * (2 * 14) * (2 * 14))) :=
+private noncomputable def Z7e (nCls : Nat) (t : ℝ) : Vec (2 * (192 * (2 * 14) * (2 * 14))) :=
   StableHLO.batchMap 2 (flatConv (h := (2 * 14)) (w := (2 * 14)) (ctK 192 32 1 1 1) (kv 192 0))
     (mnv2PreB6 2 (sealW nCls) (sealX t))
 
-noncomputable def A7e (nCls : Nat) (t : ℝ) : Vec (2 * (192 * (2 * 14) * (2 * 14))) :=
+private noncomputable def A7e (nCls : Nat) (t : ℝ) : Vec (2 * (192 * (2 * 14) * (2 * 14))) :=
   StableHLO.bnBatchLA 2 192 (2 * 14) (2 * 14) 1 (kv 192 (1 / 64)) (kv 192 3) (Z7e nCls t)
 
-noncomputable def Z7d (nCls : Nat) (t : ℝ) : Vec (2 * (192 * 14 * 14)) :=
+private noncomputable def Z7d (nCls : Nat) (t : ℝ) : Vec (2 * (192 * 14 * 14)) :=
   StableHLO.batchMap 2 (depthwiseStride2FlatXla (h := 14) (w := 14) (ctDW 192 3 3 1) (kv 192 0)) (A7e nCls t)
 
-noncomputable def A7d (nCls : Nat) (t : ℝ) : Vec (2 * (192 * 14 * 14)) :=
+private noncomputable def A7d (nCls : Nat) (t : ℝ) : Vec (2 * (192 * 14 * 14)) :=
   StableHLO.bnBatchLA 2 192 14 14 1 (kv 192 (1 / 64)) (kv 192 3) (Z7d nCls t)
 
 noncomputable def Z7p (nCls : Nat) (t : ℝ) : Vec (2 * (64 * 14 * 14)) :=
   StableHLO.batchMap 2 (flatConv (h := 14) (w := 14) (ctK 64 192 1 1 1) (kv 64 0)) (A7d nCls t)
 
-noncomputable def Z11e (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
+private noncomputable def Z11e (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
   StableHLO.batchMap 2 (flatConv (h := 14) (w := 14) (ctK 384 64 1 1 1) (kv 384 0))
     (mnv2PreB10 2 (sealW nCls) (sealX t))
 
-noncomputable def A11e (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
+private noncomputable def A11e (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
   StableHLO.bnBatchLA 2 384 14 14 1 (kv 384 (1 / 64)) (kv 384 3) (Z11e nCls t)
 
-noncomputable def Z11d (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
+private noncomputable def Z11d (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
   StableHLO.batchMap 2 (depthwiseFlat (h := 14) (w := 14) (ctDW 384 3 3 1) (kv 384 0)) (A11e nCls t)
 
-noncomputable def A11d (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
+private noncomputable def A11d (nCls : Nat) (t : ℝ) : Vec (2 * (384 * 14 * 14)) :=
   StableHLO.bnBatchLA 2 384 14 14 1 (kv 384 (1 / 64)) (kv 384 3) (Z11d nCls t)
 
 noncomputable def Z11p (nCls : Nat) (t : ℝ) : Vec (2 * (96 * 14 * 14)) :=
   StableHLO.batchMap 2 (flatConv (h := 14) (w := 14) (ctK 96 384 1 1 1) (kv 96 0)) (A11d nCls t)
 
-noncomputable def Z14e (nCls : Nat) (t : ℝ) : Vec (2 * (576 * (2 * 7) * (2 * 7))) :=
+private noncomputable def Z14e (nCls : Nat) (t : ℝ) : Vec (2 * (576 * (2 * 7) * (2 * 7))) :=
   StableHLO.batchMap 2 (flatConv (h := (2 * 7)) (w := (2 * 7)) (ctK 576 96 1 1 1) (kv 576 0))
     (mnv2PreB13 2 (sealW nCls) (sealX t))
 
-noncomputable def A14e (nCls : Nat) (t : ℝ) : Vec (2 * (576 * (2 * 7) * (2 * 7))) :=
+private noncomputable def A14e (nCls : Nat) (t : ℝ) : Vec (2 * (576 * (2 * 7) * (2 * 7))) :=
   StableHLO.bnBatchLA 2 576 (2 * 7) (2 * 7) 1 (kv 576 (1 / 64)) (kv 576 3) (Z14e nCls t)
 
-noncomputable def Z14d (nCls : Nat) (t : ℝ) : Vec (2 * (576 * 7 * 7)) :=
+private noncomputable def Z14d (nCls : Nat) (t : ℝ) : Vec (2 * (576 * 7 * 7)) :=
   StableHLO.batchMap 2 (depthwiseStride2FlatXla (h := 7) (w := 7) (ctDW 576 3 3 1) (kv 576 0)) (A14e nCls t)
 
-noncomputable def A14d (nCls : Nat) (t : ℝ) : Vec (2 * (576 * 7 * 7)) :=
+private noncomputable def A14d (nCls : Nat) (t : ℝ) : Vec (2 * (576 * 7 * 7)) :=
   StableHLO.bnBatchLA 2 576 7 7 1 (kv 576 (1 / 64)) (kv 576 3) (Z14d nCls t)
 
 noncomputable def Z14p (nCls : Nat) (t : ℝ) : Vec (2 * (160 * 7 * 7)) :=
   StableHLO.batchMap 2 (flatConv (h := 7) (w := 7) (ctK 160 576 1 1 1) (kv 160 0)) (A14d nCls t)
 
-noncomputable def Z17e (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
+private noncomputable def Z17e (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
   StableHLO.batchMap 2 (flatConv (h := 7) (w := 7) (ctK 960 160 1 1 1) (kv 960 0))
     (mnv2PreB16 2 (sealW nCls) (sealX t))
 
-noncomputable def A17e (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
+private noncomputable def A17e (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
   StableHLO.bnBatchLA 2 960 7 7 1 (kv 960 (1 / 64)) (kv 960 3) (Z17e nCls t)
 
-noncomputable def Z17d (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
+private noncomputable def Z17d (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
   StableHLO.batchMap 2 (depthwiseFlat (h := 7) (w := 7) (ctDW 960 3 3 1) (kv 960 0)) (A17e nCls t)
 
-noncomputable def A17d (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
+private noncomputable def A17d (nCls : Nat) (t : ℝ) : Vec (2 * (960 * 7 * 7)) :=
   StableHLO.bnBatchLA 2 960 7 7 1 (kv 960 (1 / 64)) (kv 960 3) (Z17d nCls t)
 
-noncomputable def Z17p (nCls : Nat) (t : ℝ) : Vec (2 * (320 * 7 * 7)) :=
+private noncomputable def Z17p (nCls : Nat) (t : ℝ) : Vec (2 * (320 * 7 * 7)) :=
   StableHLO.batchMap 2 (flatConv (h := 7) (w := 7) (ctK 320 960 1 1 1) (kv 320 0)) (A17d nCls t)
 
-noncomputable def Zh (nCls : Nat) (t : ℝ) : Vec (2 * (1280 * 7 * 7)) :=
+private noncomputable def Zh (nCls : Nat) (t : ℝ) : Vec (2 * (1280 * 7 * 7)) :=
   StableHLO.batchMap 2 (flatConv (h := 7) (w := 7) (ctK 1280 320 1 1 1) (kv 1280 0))
     (mnv2PreB17 2 (sealW nCls) (sealX t))
 
@@ -657,7 +657,7 @@ theorem pc16 (nCls : Nat) (t : ℝ) :
   rw [mnv2PreB16_apply]
   exact sealResB_eq 2 7 7 160 960 (by norm_num) _
 
-theorem pc17 (nCls : Nat) (t : ℝ) :
+private theorem pc17 (nCls : Nat) (t : ℝ) :
     mnv2PreB17 2 (sealW nCls) (sealX t)
       = StableHLO.bnBatchLA 2 320 7 7 1 (kv 320 (1 / 64)) (kv 320 0) (Z17p nCls t) := by
   rw [mnv2PreB17_apply]
@@ -678,7 +678,7 @@ noncomputable def d1d (nCls : Nat) (t : ℝ) : Fin 32 → ℝ :=
 noncomputable def d1p (nCls : Nat) (t : ℝ) : Fin 16 → ℝ :=
   fun ci => d1d nCls t 0 * rf (2 * (112 * 112)) (bnRowLA 2 16 112 112 (Z1p nCls t) ci)
 
-noncomputable def d2e (nCls : Nat) (t : ℝ) : Fin 96 → ℝ :=
+private noncomputable def d2e (nCls : Nat) (t : ℝ) : Fin 96 → ℝ :=
   fun ci => d1p nCls t 0 * rf (2 * ((2 * 56) * (2 * 56))) (bnRowLA 2 96 (2 * 56) (2 * 56) (Z2e nCls t) ci)
 
 noncomputable def d2d (nCls : Nat) (t : ℝ) : Fin 96 → ℝ :=
@@ -687,49 +687,49 @@ noncomputable def d2d (nCls : Nat) (t : ℝ) : Fin 96 → ℝ :=
 noncomputable def d2p (nCls : Nat) (t : ℝ) : Fin 24 → ℝ :=
   fun ci => d2d nCls t 0 * rf (2 * (56 * 56)) (bnRowLA 2 24 56 56 (Z2p nCls t) ci)
 
-noncomputable def d4e (nCls : Nat) (t : ℝ) : Fin 144 → ℝ :=
+private noncomputable def d4e (nCls : Nat) (t : ℝ) : Fin 144 → ℝ :=
   fun ci => d2p nCls t 0 * rf (2 * ((2 * 28) * (2 * 28))) (bnRowLA 2 144 (2 * 28) (2 * 28) (Z4e nCls t) ci)
 
-noncomputable def d4d (nCls : Nat) (t : ℝ) : Fin 144 → ℝ :=
+private noncomputable def d4d (nCls : Nat) (t : ℝ) : Fin 144 → ℝ :=
   fun ci => d4e nCls t ci * rf (2 * (28 * 28)) (bnRowLA 2 144 28 28 (Z4d nCls t) ci)
 
 noncomputable def d4p (nCls : Nat) (t : ℝ) : Fin 32 → ℝ :=
   fun ci => d4d nCls t 0 * rf (2 * (28 * 28)) (bnRowLA 2 32 28 28 (Z4p nCls t) ci)
 
-noncomputable def d7e (nCls : Nat) (t : ℝ) : Fin 192 → ℝ :=
+private noncomputable def d7e (nCls : Nat) (t : ℝ) : Fin 192 → ℝ :=
   fun ci => d4p nCls t 0 * rf (2 * ((2 * 14) * (2 * 14))) (bnRowLA 2 192 (2 * 14) (2 * 14) (Z7e nCls t) ci)
 
-noncomputable def d7d (nCls : Nat) (t : ℝ) : Fin 192 → ℝ :=
+private noncomputable def d7d (nCls : Nat) (t : ℝ) : Fin 192 → ℝ :=
   fun ci => d7e nCls t ci * rf (2 * (14 * 14)) (bnRowLA 2 192 14 14 (Z7d nCls t) ci)
 
 noncomputable def d7p (nCls : Nat) (t : ℝ) : Fin 64 → ℝ :=
   fun ci => d7d nCls t 0 * rf (2 * (14 * 14)) (bnRowLA 2 64 14 14 (Z7p nCls t) ci)
 
-noncomputable def d11e (nCls : Nat) (t : ℝ) : Fin 384 → ℝ :=
+private noncomputable def d11e (nCls : Nat) (t : ℝ) : Fin 384 → ℝ :=
   fun ci => d7p nCls t 0 * rf (2 * (14 * 14)) (bnRowLA 2 384 14 14 (Z11e nCls t) ci)
 
-noncomputable def d11d (nCls : Nat) (t : ℝ) : Fin 384 → ℝ :=
+private noncomputable def d11d (nCls : Nat) (t : ℝ) : Fin 384 → ℝ :=
   fun ci => d11e nCls t ci * rf (2 * (14 * 14)) (bnRowLA 2 384 14 14 (Z11d nCls t) ci)
 
 noncomputable def d11p (nCls : Nat) (t : ℝ) : Fin 96 → ℝ :=
   fun ci => d11d nCls t 0 * rf (2 * (14 * 14)) (bnRowLA 2 96 14 14 (Z11p nCls t) ci)
 
-noncomputable def d14e (nCls : Nat) (t : ℝ) : Fin 576 → ℝ :=
+private noncomputable def d14e (nCls : Nat) (t : ℝ) : Fin 576 → ℝ :=
   fun ci => d11p nCls t 0 * rf (2 * ((2 * 7) * (2 * 7))) (bnRowLA 2 576 (2 * 7) (2 * 7) (Z14e nCls t) ci)
 
-noncomputable def d14d (nCls : Nat) (t : ℝ) : Fin 576 → ℝ :=
+private noncomputable def d14d (nCls : Nat) (t : ℝ) : Fin 576 → ℝ :=
   fun ci => d14e nCls t ci * rf (2 * (7 * 7)) (bnRowLA 2 576 7 7 (Z14d nCls t) ci)
 
 noncomputable def d14p (nCls : Nat) (t : ℝ) : Fin 160 → ℝ :=
   fun ci => d14d nCls t 0 * rf (2 * (7 * 7)) (bnRowLA 2 160 7 7 (Z14p nCls t) ci)
 
-noncomputable def d17e (nCls : Nat) (t : ℝ) : Fin 960 → ℝ :=
+private noncomputable def d17e (nCls : Nat) (t : ℝ) : Fin 960 → ℝ :=
   fun ci => d14p nCls t 0 * rf (2 * (7 * 7)) (bnRowLA 2 960 7 7 (Z17e nCls t) ci)
 
-noncomputable def d17d (nCls : Nat) (t : ℝ) : Fin 960 → ℝ :=
+private noncomputable def d17d (nCls : Nat) (t : ℝ) : Fin 960 → ℝ :=
   fun ci => d17e nCls t ci * rf (2 * (7 * 7)) (bnRowLA 2 960 7 7 (Z17d nCls t) ci)
 
-noncomputable def d17p (nCls : Nat) (t : ℝ) : Fin 320 → ℝ :=
+private noncomputable def d17p (nCls : Nat) (t : ℝ) : Fin 320 → ℝ :=
   fun ci => d17d nCls t 0 * rf (2 * (7 * 7)) (bnRowLA 2 320 7 7 (Z17p nCls t) ci)
 
 noncomputable def dH (nCls : Nat) (t : ℝ) : Fin 1280 → ℝ :=
@@ -744,7 +744,7 @@ theorem ed0 (nCls : Nat) (t : ℝ) : EDiff (dS t) (mnv2PreB0 2 (sealW nCls) (sea
     simp only [dS, rf, kv_apply]
     ring
 
-theorem ed1d (nCls : Nat) (t : ℝ) : EDiff (d1d nCls t) (A1d nCls t) :=
+private theorem ed1d (nCls : Nat) (t : ℝ) : EDiff (d1d nCls t) (A1d nCls t) :=
   eDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z1d nCls t) (ed0 nCls t) rfl
     (fun ci => by simp only [d1d, rf]; ring)
 
@@ -753,11 +753,11 @@ theorem ed1 (nCls : Nat) (t : ℝ) : EDiff (d1p nCls t) (mnv2PreB1 2 (sealW nCls
   exact eDiff_convBn (h := 112) (w := 112) (0 : Fin 32) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z1p nCls t) (ed1d nCls t) rfl (fun ci => by simp only [d1p, rf]; ring)
 
-theorem ed2e (nCls : Nat) (t : ℝ) : EDiff (d2e nCls t) (A2e nCls t) :=
+private theorem ed2e (nCls : Nat) (t : ℝ) : EDiff (d2e nCls t) (A2e nCls t) :=
   eDiff_convBn (h := (2 * 56)) (w := (2 * 56)) (0 : Fin 16) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z2e nCls t) (ed1 nCls t) rfl (fun ci => by simp only [d2e, rf]; ring)
 
-theorem ed2d (nCls : Nat) (t : ℝ) : EDiff (d2d nCls t) (A2d nCls t) :=
+private theorem ed2d (nCls : Nat) (t : ℝ) : EDiff (d2d nCls t) (A2d nCls t) :=
   eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z2d nCls t) (ed2e nCls t) rfl
     (fun ci => by simp only [d2d, rf]; ring)
 
@@ -772,11 +772,11 @@ theorem ed3 (nCls : Nat) (t : ℝ) :
   rw [pc3]
   exact ed2 nCls t
 
-theorem ed4e (nCls : Nat) (t : ℝ) : EDiff (d4e nCls t) (A4e nCls t) :=
+private theorem ed4e (nCls : Nat) (t : ℝ) : EDiff (d4e nCls t) (A4e nCls t) :=
   eDiff_convBn (h := (2 * 28)) (w := (2 * 28)) (0 : Fin 24) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z4e nCls t) (ed3 nCls t) rfl (fun ci => by simp only [d4e, rf]; ring)
 
-theorem ed4d (nCls : Nat) (t : ℝ) : EDiff (d4d nCls t) (A4d nCls t) :=
+private theorem ed4d (nCls : Nat) (t : ℝ) : EDiff (d4d nCls t) (A4d nCls t) :=
   eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z4d nCls t) (ed4e nCls t) rfl
     (fun ci => by simp only [d4d, rf]; ring)
 
@@ -796,11 +796,11 @@ theorem ed6 (nCls : Nat) (t : ℝ) :
   rw [pc6]
   exact ed5 nCls t
 
-theorem ed7e (nCls : Nat) (t : ℝ) : EDiff (d7e nCls t) (A7e nCls t) :=
+private theorem ed7e (nCls : Nat) (t : ℝ) : EDiff (d7e nCls t) (A7e nCls t) :=
   eDiff_convBn (h := (2 * 14)) (w := (2 * 14)) (0 : Fin 32) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z7e nCls t) (ed6 nCls t) rfl (fun ci => by simp only [d7e, rf]; ring)
 
-theorem ed7d (nCls : Nat) (t : ℝ) : EDiff (d7d nCls t) (A7d nCls t) :=
+private theorem ed7d (nCls : Nat) (t : ℝ) : EDiff (d7d nCls t) (A7d nCls t) :=
   eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z7d nCls t) (ed7e nCls t) rfl
     (fun ci => by simp only [d7d, rf]; ring)
 
@@ -825,11 +825,11 @@ theorem ed10 (nCls : Nat) (t : ℝ) :
   rw [pc10]
   exact ed9 nCls t
 
-theorem ed11e (nCls : Nat) (t : ℝ) : EDiff (d11e nCls t) (A11e nCls t) :=
+private theorem ed11e (nCls : Nat) (t : ℝ) : EDiff (d11e nCls t) (A11e nCls t) :=
   eDiff_convBn (h := 14) (w := 14) (0 : Fin 64) rfl (by norm_num) (by norm_num) (1 / 64) 3
     (Z11e nCls t) (ed10 nCls t) rfl (fun ci => by simp only [d11e, rf]; ring)
 
-theorem ed11d (nCls : Nat) (t : ℝ) : EDiff (d11d nCls t) (A11d nCls t) :=
+private theorem ed11d (nCls : Nat) (t : ℝ) : EDiff (d11d nCls t) (A11d nCls t) :=
   eDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z11d nCls t) (ed11e nCls t) rfl
     (fun ci => by simp only [d11d, rf]; ring)
 
@@ -849,11 +849,11 @@ theorem ed13 (nCls : Nat) (t : ℝ) :
   rw [pc13]
   exact ed12 nCls t
 
-theorem ed14e (nCls : Nat) (t : ℝ) : EDiff (d14e nCls t) (A14e nCls t) :=
+private theorem ed14e (nCls : Nat) (t : ℝ) : EDiff (d14e nCls t) (A14e nCls t) :=
   eDiff_convBn (h := (2 * 7)) (w := (2 * 7)) (0 : Fin 96) rfl (by norm_num) (by norm_num)
     (1 / 64) 3 (Z14e nCls t) (ed13 nCls t) rfl (fun ci => by simp only [d14e, rf]; ring)
 
-theorem ed14d (nCls : Nat) (t : ℝ) : EDiff (d14d nCls t) (A14d nCls t) :=
+private theorem ed14d (nCls : Nat) (t : ℝ) : EDiff (d14d nCls t) (A14d nCls t) :=
   eDiff_dwS2XlaBn (by norm_num) (by norm_num) (1 / 64) 3 (Z14d nCls t) (ed14e nCls t) rfl
     (fun ci => by simp only [d14d, rf]; ring)
 
@@ -873,21 +873,21 @@ theorem ed16 (nCls : Nat) (t : ℝ) :
   rw [pc16]
   exact ed15 nCls t
 
-theorem ed17e (nCls : Nat) (t : ℝ) : EDiff (d17e nCls t) (A17e nCls t) :=
+private theorem ed17e (nCls : Nat) (t : ℝ) : EDiff (d17e nCls t) (A17e nCls t) :=
   eDiff_convBn (h := 7) (w := 7) (0 : Fin 160) rfl (by norm_num) (by norm_num) (1 / 64) 3
     (Z17e nCls t) (ed16 nCls t) rfl (fun ci => by simp only [d17e, rf]; ring)
 
-theorem ed17d (nCls : Nat) (t : ℝ) : EDiff (d17d nCls t) (A17d nCls t) :=
+private theorem ed17d (nCls : Nat) (t : ℝ) : EDiff (d17d nCls t) (A17d nCls t) :=
   eDiff_dwBn (by norm_num) (by norm_num) (1 / 64) 3 (Z17d nCls t) (ed17e nCls t) rfl
     (fun ci => by simp only [d17d, rf]; ring)
 
-theorem ed17 (nCls : Nat) (t : ℝ) :
+private theorem ed17 (nCls : Nat) (t : ℝ) :
     EDiff (d17p nCls t) (mnv2PreB17 2 (sealW nCls) (sealX t)) := by
   rw [pc17]
   exact eDiff_convBn (h := 7) (w := 7) (0 : Fin 960) rfl (by norm_num) (by norm_num) (1 / 64) 0
     (Z17p nCls t) (ed17d nCls t) rfl (fun ci => by simp only [d17p, rf]; ring)
 
-theorem eDiff_dH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) :=
+private theorem eDiff_dH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) :=
   eDiff_convBn (h := 7) (w := 7) (0 : Fin 320) rfl (by norm_num) (by norm_num) (1 / 64) 3
     (Zh nCls t) (ed17 nCls t) rfl (fun ci => by simp only [dH, rf]; ring)
 
@@ -973,7 +973,7 @@ theorem Rr_continuous (nCls : Nat) : Continuous (Rr nCls) := by
 -- ════════════════════════════════════════════════════════════════
 -- § 16. The head reads the carrier off channel 0
 -- ════════════════════════════════════════════════════════════════
-theorem sealW_fcW (nCls : Nat) :
+private theorem sealW_fcW (nCls : Nat) :
     (sealW nCls).fcW = fun (i : Fin 1280) (j : Fin nCls) =>
       if i.val = 0 ∧ j.val = 0 then (1 : ℝ) else 0 := rfl
 

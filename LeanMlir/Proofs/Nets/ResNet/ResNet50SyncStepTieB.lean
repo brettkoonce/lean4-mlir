@@ -78,26 +78,26 @@ section IdSmul
 variable (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc) (xin dy : Vec (N * (oc * h * w)))
   (s : ℝ)
 
-theorem r50IdCotA_smul : IsHomog (r50IdCotA N h w p xin) :=
+private theorem r50IdCotA_smul : IsHomog (r50IdCotA N h w p xin) :=
   reluMaskB_smul _ _
 
-theorem r50IdCotC3_smul : IsHomog (r50IdCotC3 N h w p xin) := by
+private theorem r50IdCotC3_smul : IsHomog (r50IdCotC3 N h w p xin) := by
   intro s dy
   unfold r50IdCotC3; rw [r50IdCotA_smul, bnInB_smul]
 
-theorem r50IdCotN2_smul : IsHomog (r50IdCotN2 N h w p xin) := by
+private theorem r50IdCotN2_smul : IsHomog (r50IdCotN2 N h w p xin) := by
   intro s dy
   unfold r50IdCotN2; rw [r50IdCotC3_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50IdCotC2_smul : IsHomog (r50IdCotC2 N h w p xin) := by
+private theorem r50IdCotC2_smul : IsHomog (r50IdCotC2 N h w p xin) := by
   intro s dy
   unfold r50IdCotC2; rw [r50IdCotN2_smul, bnInB_smul]
 
-theorem r50IdCotN1_smul : IsHomog (r50IdCotN1 N h w p xin) := by
+private theorem r50IdCotN1_smul : IsHomog (r50IdCotN1 N h w p xin) := by
   intro s dy
   unfold r50IdCotN1; rw [r50IdCotC2_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50IdCotC1_smul : IsHomog (r50IdCotC1 N h w p xin) := by
+private theorem r50IdCotC1_smul : IsHomog (r50IdCotC1 N h w p xin) := by
   intro s dy
   unfold r50IdCotC1; rw [r50IdCotN1_smul, bnInB_smul]
 
@@ -115,30 +115,30 @@ section ProjSmul
 variable (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc) (xin : Vec (N * (ic * h * w)))
   (dy : Vec (N * (oc * h * w))) (s : ℝ)
 
-theorem r50ProjCotA_smul : IsHomog (r50ProjCotA N h w p xin) :=
+private theorem r50ProjCotA_smul : IsHomog (r50ProjCotA N h w p xin) :=
   reluMaskB_smul _ _
 
-theorem r50ProjCotC3_smul : IsHomog (r50ProjCotC3 N h w p xin) := by
+private theorem r50ProjCotC3_smul : IsHomog (r50ProjCotC3 N h w p xin) := by
   intro s dy
   unfold r50ProjCotC3; rw [r50ProjCotA_smul, bnInB_smul]
 
-theorem r50ProjCotN2_smul : IsHomog (r50ProjCotN2 N h w p xin) := by
+private theorem r50ProjCotN2_smul : IsHomog (r50ProjCotN2 N h w p xin) := by
   intro s dy
   unfold r50ProjCotN2; rw [r50ProjCotC3_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50ProjCotC2_smul : IsHomog (r50ProjCotC2 N h w p xin) := by
+private theorem r50ProjCotC2_smul : IsHomog (r50ProjCotC2 N h w p xin) := by
   intro s dy
   unfold r50ProjCotC2; rw [r50ProjCotN2_smul, bnInB_smul]
 
-theorem r50ProjCotN1_smul : IsHomog (r50ProjCotN1 N h w p xin) := by
+private theorem r50ProjCotN1_smul : IsHomog (r50ProjCotN1 N h w p xin) := by
   intro s dy
   unfold r50ProjCotN1; rw [r50ProjCotC2_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50ProjCotC1_smul : IsHomog (r50ProjCotC1 N h w p xin) := by
+private theorem r50ProjCotC1_smul : IsHomog (r50ProjCotC1 N h w p xin) := by
   intro s dy
   unfold r50ProjCotC1; rw [r50ProjCotN1_smul, bnInB_smul]
 
-theorem r50ProjCotCp_smul : IsHomog (r50ProjCotCp N h w p xin) := by
+private theorem r50ProjCotCp_smul : IsHomog (r50ProjCotCp N h w p xin) := by
   intro s dy
   unfold r50ProjCotCp; rw [r50ProjCotA_smul, bnInB_smul]
 
@@ -156,31 +156,31 @@ section DownSmul
 variable (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid oc)
   (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dy : Vec (N * (oc * h * w))) (s : ℝ)
 
-theorem r50DownCotA_smul : IsHomog (r50DownCotA N h w p xin) :=
+private theorem r50DownCotA_smul : IsHomog (r50DownCotA N h w p xin) :=
   reluMaskB_smul _ _
 
-theorem r50DownCotC3_smul : IsHomog (r50DownCotC3 N h w p xin) := by
+private theorem r50DownCotC3_smul : IsHomog (r50DownCotC3 N h w p xin) := by
   intro s dy
   unfold r50DownCotC3; rw [r50DownCotA_smul, bnInB_smul]
 
-theorem r50DownCotN2_smul : IsHomog (r50DownCotN2 N h w p xin) := by
+private theorem r50DownCotN2_smul : IsHomog (r50DownCotN2 N h w p xin) := by
   intro s dy
   unfold r50DownCotN2; rw [r50DownCotC3_smul, cInB_smul, reluMaskB_smul]
 
-theorem r50DownCotC2_smul : IsHomog (r50DownCotC2 N h w p xin) := by
+private theorem r50DownCotC2_smul : IsHomog (r50DownCotC2 N h w p xin) := by
   intro s dy
   unfold r50DownCotC2; rw [r50DownCotN2_smul, bnInB_smul]
 
 /-- The strided 3×3's input-VJP carries the cotangent from `h × w` up to bn₁'s `2h × 2w`. -/
-theorem r50DownCotN1_smul : IsHomog (r50DownCotN1 N h w p xin) := by
+private theorem r50DownCotN1_smul : IsHomog (r50DownCotN1 N h w p xin) := by
   intro s dy
   unfold r50DownCotN1; rw [r50DownCotC2_smul, cStridedInB_smul, reluMaskB_smul]
 
-theorem r50DownCotC1_smul : IsHomog (r50DownCotC1 N h w p xin) := by
+private theorem r50DownCotC1_smul : IsHomog (r50DownCotC1 N h w p xin) := by
   intro s dy
   unfold r50DownCotC1; rw [r50DownCotN1_smul, bnInB_smul]
 
-theorem r50DownCotCp_smul : IsHomog (r50DownCotCp N h w p xin) := by
+private theorem r50DownCotCp_smul : IsHomog (r50DownCotCp N h w p xin) := by
   intro s dy
   unfold r50DownCotCp; rw [r50DownCotA_smul, bnInB_smul]
 
@@ -206,7 +206,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat} (p : R50IdW mid oc)
   (XIN : Vec ((R * N) * (oc * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
 
 /-- Replica `r`'s cotangent at the pre-relu sum. Feeds bn₃'s γ/β and the identity skip. -/
-noncomputable def r50IdSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50IdSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
   reluMaskB (N * (oc * h * w))
     (batchShard R N (oc * h * w)
       (residual (projB (R * N) (h := h) (w := w) p.W₃ p.b₃ p.ε₃ p.γ₃ p.β₃ ∘
@@ -215,7 +215,7 @@ noncomputable def r50IdSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
     (dys r)
 
 /-- …at conv₃'s output, through bn₃'s sync backward. Feeds `W₃`. -/
-noncomputable def r50IdSyncCotC3 (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50IdSyncCotC3 (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.ε₃ p.γ₃
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConv p.W₃ p.b₃)
       (cbReluB (R * N) (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂
@@ -223,7 +223,7 @@ noncomputable def r50IdSyncCotC3 (r : Fin R) : Vec (N * (oc * h * w)) :=
     (r50IdSyncCotA R N h w p XIN dys) r
 
 /-- …at bn₂'s output. Feeds `γ₂`/`β₂`. -/
-noncomputable def r50IdSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50IdSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (batchShard R N (mid * h * w)
       (bnBatchLA (R * N) mid h w p.ε₂ p.γ₂ p.β₂ (batchMap (R * N) (flatConv p.W₂ p.b₂)
@@ -231,21 +231,21 @@ noncomputable def r50IdSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
     (cInB N p.W₃ p.b₃ (r50IdSyncCotC3 R hR N h w p XIN dys r))
 
 /-- …at conv₂'s output. Feeds `W₂`. -/
-noncomputable def r50IdSyncCotC2 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50IdSyncCotC2 (r : Fin R) : Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w p.ε₂ p.γ₂
     (fun r => batchShard R N (mid * h * w) (batchMap (R * N) (flatConv p.W₂ p.b₂)
       (cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN)) r)
     (r50IdSyncCotN2 R hR N h w p XIN dys) r
 
 /-- …at bn₁'s output. Feeds `γ₁`/`β₁`. -/
-noncomputable def r50IdSyncCotN1 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50IdSyncCotN1 (r : Fin R) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (batchShard R N (mid * h * w)
       (bnBatchLA (R * N) mid h w p.ε₁ p.γ₁ p.β₁ (batchMap (R * N) (flatConv p.W₁ p.b₁) XIN)) r)
     (cInB N p.W₂ p.b₂ (r50IdSyncCotC2 R hR N h w p XIN dys r))
 
 /-- …at conv₁'s output. Feeds `W₁`. -/
-noncomputable def r50IdSyncCotC1 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50IdSyncCotC1 (r : Fin R) : Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w p.ε₁ p.γ₁
     (fun r => batchShard R N (mid * h * w) (batchMap (R * N) (flatConv p.W₁ p.b₁) XIN) r)
     (r50IdSyncCotN1 R hR N h w p XIN dys) r
@@ -264,20 +264,20 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc : Nat} (hN : 0 < N) (hh : 
   (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
 include hdys
 
-theorem r50IdSyncCotA_shard (r : Fin R) :
+private theorem r50IdSyncCotA_shard (r : Fin R) :
     r50IdSyncCotA R N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50IdCotA (R * N) h w p XIN DY) r := by
   unfold r50IdSyncCotA; rw [hdys]; rfl
 
 include hN hh hw in
-theorem r50IdSyncCotC3_shard (r : Fin R) :
+private theorem r50IdSyncCotC3_shard (r : Fin R) :
     r50IdSyncCotC3 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50IdCotC3 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r50IdSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50IdSyncCotN2_shard (r : Fin R) :
+private theorem r50IdSyncCotN2_shard (r : Fin R) :
     r50IdSyncCotN2 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50IdCotN2 (R * N) h w p XIN DY) r := by
   unfold r50IdSyncCotN2
@@ -285,14 +285,14 @@ theorem r50IdSyncCotN2_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem r50IdSyncCotC2_shard (r : Fin R) :
+private theorem r50IdSyncCotC2_shard (r : Fin R) :
     r50IdSyncCotC2 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50IdCotC2 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r50IdSyncCotN2_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50IdSyncCotN1_shard (r : Fin R) :
+private theorem r50IdSyncCotN1_shard (r : Fin R) :
     r50IdSyncCotN1 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50IdCotN1 (R * N) h w p XIN DY) r := by
   unfold r50IdSyncCotN1
@@ -300,7 +300,7 @@ theorem r50IdSyncCotN1_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem r50IdSyncCotC1_shard (r : Fin R) :
+private theorem r50IdSyncCotC1_shard (r : Fin R) :
     r50IdSyncCotC1 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50IdCotC1 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
@@ -323,7 +323,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic
 
 /-- Replica `r`'s cotangent at the stride-1 projection block's pre-relu sum. Feeds bn₃'s and the
     projection's γ/β, and the projection's backward branch. -/
-noncomputable def r50ProjSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50ProjSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
   reluMaskB (N * (oc * h * w))
     (batchShard R N (oc * h * w)
       (residualProj (projB (R * N) (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp)
@@ -332,40 +332,40 @@ noncomputable def r50ProjSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
           cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) XIN) r)
     (dys r)
 
-noncomputable def r50ProjSyncCotC3 (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50ProjSyncCotC3 (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.ε₃ p.γ₃
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConv p.W₃ p.b₃)
       (cbReluB (R * N) (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂
         (cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN))) r)
     (r50ProjSyncCotA R N h w p XIN dys) r
 
-noncomputable def r50ProjSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50ProjSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (batchShard R N (mid * h * w)
       (bnBatchLA (R * N) mid h w p.ε₂ p.γ₂ p.β₂ (batchMap (R * N) (flatConv p.W₂ p.b₂)
         (cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN))) r)
     (cInB N p.W₃ p.b₃ (r50ProjSyncCotC3 R hR N h w p XIN dys r))
 
-noncomputable def r50ProjSyncCotC2 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50ProjSyncCotC2 (r : Fin R) : Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w p.ε₂ p.γ₂
     (fun r => batchShard R N (mid * h * w) (batchMap (R * N) (flatConv p.W₂ p.b₂)
       (cbReluB (R * N) (h := h) (w := w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN)) r)
     (r50ProjSyncCotN2 R hR N h w p XIN dys) r
 
-noncomputable def r50ProjSyncCotN1 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50ProjSyncCotN1 (r : Fin R) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (batchShard R N (mid * h * w)
       (bnBatchLA (R * N) mid h w p.ε₁ p.γ₁ p.β₁ (batchMap (R * N) (flatConv p.W₁ p.b₁) XIN)) r)
     (cInB N p.W₂ p.b₂ (r50ProjSyncCotC2 R hR N h w p XIN dys r))
 
-noncomputable def r50ProjSyncCotC1 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50ProjSyncCotC1 (r : Fin R) : Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w p.ε₁ p.γ₁
     (fun r => batchShard R N (mid * h * w) (batchMap (R * N) (flatConv p.W₁ p.b₁) XIN) r)
     (r50ProjSyncCotN1 R hR N h w p XIN dys) r
 
 /-- …at the stride-1 1×1 projection conv's output, through the skip BN's sync backward. Feeds
     `Wp`. -/
-noncomputable def r50ProjSyncCotCp (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50ProjSyncCotCp (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.εp p.γp
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConv p.Wp p.bp) XIN) r)
     (r50ProjSyncCotA R N h w p XIN dys) r
@@ -384,20 +384,20 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat} (hN : 0 < N) (hh
   (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
 include hdys
 
-theorem r50ProjSyncCotA_shard (r : Fin R) :
+private theorem r50ProjSyncCotA_shard (r : Fin R) :
     r50ProjSyncCotA R N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50ProjCotA (R * N) h w p XIN DY) r := by
   unfold r50ProjSyncCotA; rw [hdys]; rfl
 
 include hN hh hw in
-theorem r50ProjSyncCotC3_shard (r : Fin R) :
+private theorem r50ProjSyncCotC3_shard (r : Fin R) :
     r50ProjSyncCotC3 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50ProjCotC3 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r50ProjSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50ProjSyncCotN2_shard (r : Fin R) :
+private theorem r50ProjSyncCotN2_shard (r : Fin R) :
     r50ProjSyncCotN2 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50ProjCotN2 (R * N) h w p XIN DY) r := by
   unfold r50ProjSyncCotN2
@@ -405,14 +405,14 @@ theorem r50ProjSyncCotN2_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem r50ProjSyncCotC2_shard (r : Fin R) :
+private theorem r50ProjSyncCotC2_shard (r : Fin R) :
     r50ProjSyncCotC2 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50ProjCotC2 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r50ProjSyncCotN2_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50ProjSyncCotN1_shard (r : Fin R) :
+private theorem r50ProjSyncCotN1_shard (r : Fin R) :
     r50ProjSyncCotN1 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50ProjCotN1 (R * N) h w p XIN DY) r := by
   unfold r50ProjSyncCotN1
@@ -420,14 +420,14 @@ theorem r50ProjSyncCotN1_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem r50ProjSyncCotC1_shard (r : Fin R) :
+private theorem r50ProjSyncCotC1_shard (r : Fin R) :
     r50ProjSyncCotC1 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50ProjCotC1 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r50ProjSyncCotN1_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50ProjSyncCotCp_shard (r : Fin R) :
+private theorem r50ProjSyncCotCp_shard (r : Fin R) :
     r50ProjSyncCotCp R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50ProjCotCp (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
@@ -449,7 +449,7 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic
   (XIN : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (dys : Fin R → Vec (N * (oc * h * w)))
 
 /-- Replica `r`'s cotangent at the strided block's pre-relu sum. -/
-noncomputable def r50DownSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50DownSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
   reluMaskB (N * (oc * h * w))
     (batchShard R N (oc * h * w)
       (residualProj (projStridedB (R * N) (h := h) (w := w) p.Wp p.bp p.εp p.γp p.βp)
@@ -458,14 +458,14 @@ noncomputable def r50DownSyncCotA (r : Fin R) : Vec (N * (oc * h * w)) :=
           cbReluB (R * N) (h := 2 * h) (w := 2 * w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁) XIN) r)
     (dys r)
 
-noncomputable def r50DownSyncCotC3 (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50DownSyncCotC3 (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.ε₃ p.γ₃
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConv p.W₃ p.b₃)
       (cbReluStridedB (R * N) (h := h) (w := w) p.W₂ p.b₂ p.ε₂ p.γ₂ p.β₂
         (cbReluB (R * N) (h := 2 * h) (w := 2 * w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN))) r)
     (r50DownSyncCotA R N h w p XIN dys) r
 
-noncomputable def r50DownSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50DownSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
   reluMaskB (N * (mid * h * w))
     (batchShard R N (mid * h * w)
       (bnBatchLA (R * N) mid h w p.ε₂ p.γ₂ p.β₂ (batchMap (R * N) (flatConvStride2 p.W₂ p.b₂)
@@ -473,14 +473,14 @@ noncomputable def r50DownSyncCotN2 (r : Fin R) : Vec (N * (mid * h * w)) :=
     (cInB N p.W₃ p.b₃ (r50DownSyncCotC3 R hR N h w p XIN dys r))
 
 /-- …at the STRIDED 3×3's output. Feeds `W₂`. -/
-noncomputable def r50DownSyncCotC2 (r : Fin R) : Vec (N * (mid * h * w)) :=
+private noncomputable def r50DownSyncCotC2 (r : Fin R) : Vec (N * (mid * h * w)) :=
   bnSyncInB R hR N mid h w p.ε₂ p.γ₂
     (fun r => batchShard R N (mid * h * w) (batchMap (R * N) (flatConvStride2 p.W₂ p.b₂)
       (cbReluB (R * N) (h := 2 * h) (w := 2 * w) p.W₁ p.b₁ p.ε₁ p.γ₁ p.β₁ XIN)) r)
     (r50DownSyncCotN2 R hR N h w p XIN dys) r
 
 /-- …at bn₁'s output — at the INPUT grid `2h × 2w`, the strided 3×3's input-VJP having upsampled. -/
-noncomputable def r50DownSyncCotN1 (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+private noncomputable def r50DownSyncCotN1 (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
   reluMaskB (N * (mid * (2 * h) * (2 * w)))
     (batchShard R N (mid * (2 * h) * (2 * w))
       (bnBatchLA (R * N) mid (2 * h) (2 * w) p.ε₁ p.γ₁ p.β₁
@@ -488,13 +488,13 @@ noncomputable def r50DownSyncCotN1 (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * 
     (cStridedInB N p.W₂ p.b₂ (r50DownSyncCotC2 R hR N h w p XIN dys r))
 
 /-- …at conv₁'s output, through bn₁'s sync backward at `2h × 2w`. Feeds `W₁`. -/
-noncomputable def r50DownSyncCotC1 (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
+private noncomputable def r50DownSyncCotC1 (r : Fin R) : Vec (N * (mid * (2 * h) * (2 * w))) :=
   bnSyncInB R hR N mid (2 * h) (2 * w) p.ε₁ p.γ₁
     (fun r => batchShard R N (mid * (2 * h) * (2 * w)) (batchMap (R * N) (flatConv p.W₁ p.b₁) XIN) r)
     (r50DownSyncCotN1 R hR N h w p XIN dys) r
 
 /-- …at the strided 1×1 projection's output. Feeds `Wp`. -/
-noncomputable def r50DownSyncCotCp (r : Fin R) : Vec (N * (oc * h * w)) :=
+private noncomputable def r50DownSyncCotCp (r : Fin R) : Vec (N * (oc * h * w)) :=
   bnSyncInB R hR N oc h w p.εp p.γp
     (fun r => batchShard R N (oc * h * w) (batchMap (R * N) (flatConvStride2 p.Wp p.bp) XIN) r)
     (r50DownSyncCotA R N h w p XIN dys) r
@@ -513,20 +513,20 @@ variable (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat} (hN : 0 < N) (hh
   (hdys : ∀ r, dys r = batchShard R N (oc * h * w) DY r)
 include hdys
 
-theorem r50DownSyncCotA_shard (r : Fin R) :
+private theorem r50DownSyncCotA_shard (r : Fin R) :
     r50DownSyncCotA R N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50DownCotA (R * N) h w p XIN DY) r := by
   unfold r50DownSyncCotA; rw [hdys]; rfl
 
 include hN hh hw in
-theorem r50DownSyncCotC3_shard (r : Fin R) :
+private theorem r50DownSyncCotC3_shard (r : Fin R) :
     r50DownSyncCotC3 R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50DownCotC3 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r50DownSyncCotA_shard R N h w p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50DownSyncCotN2_shard (r : Fin R) :
+private theorem r50DownSyncCotN2_shard (r : Fin R) :
     r50DownSyncCotN2 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50DownCotN2 (R * N) h w p XIN DY) r := by
   unfold r50DownSyncCotN2
@@ -534,14 +534,14 @@ theorem r50DownSyncCotN2_shard (r : Fin R) :
   rfl
 
 include hN hh hw in
-theorem r50DownSyncCotC2_shard (r : Fin R) :
+private theorem r50DownSyncCotC2_shard (r : Fin R) :
     r50DownSyncCotC2 R hR N h w p XIN dys r
       = batchShard R N (mid * h * w) (r50DownCotC2 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N mid h w (nhw_ne_zero hN hh hw)
     _ _ _ _ _ _ (fun _ => rfl) (r50DownSyncCotN2_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50DownSyncCotN1_shard (r : Fin R) :
+private theorem r50DownSyncCotN1_shard (r : Fin R) :
     r50DownSyncCotN1 R hR N h w p XIN dys r
       = batchShard R N (mid * (2 * h) * (2 * w)) (r50DownCotN1 (R * N) h w p XIN DY) r := by
   unfold r50DownSyncCotN1
@@ -551,7 +551,7 @@ theorem r50DownSyncCotN1_shard (r : Fin R) :
 include hN hh hw in
 /-- bn₁'s sync site reduces over `N·(2h)·(2w)` per replica — the one site in the net where the
     reduction width is not the block's output grid. -/
-theorem r50DownSyncCotC1_shard (r : Fin R) :
+private theorem r50DownSyncCotC1_shard (r : Fin R) :
     r50DownSyncCotC1 R hR N h w p XIN dys r
       = batchShard R N (mid * (2 * h) * (2 * w)) (r50DownCotC1 (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N mid (2 * h) (2 * w)
@@ -559,7 +559,7 @@ theorem r50DownSyncCotC1_shard (r : Fin R) :
     _ _ _ _ _ _ (fun _ => rfl) (r50DownSyncCotN1_shard R hR N h w hN hh hw p XIN dys DY hdys) r
 
 include hN hh hw in
-theorem r50DownSyncCotCp_shard (r : Fin R) :
+private theorem r50DownSyncCotCp_shard (r : Fin R) :
     r50DownSyncCotCp R hR N h w p XIN dys r
       = batchShard R N (oc * h * w) (r50DownCotCp (R * N) h w p XIN DY) r :=
   bnSyncInB_shard R hR N oc h w (nhw_ne_zero hN hh hw)

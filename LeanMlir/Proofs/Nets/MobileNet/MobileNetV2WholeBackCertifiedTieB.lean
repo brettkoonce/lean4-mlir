@@ -127,7 +127,7 @@ noncomputable def mobilenetv2PaperPCHasVJPAt
 /-- **The apex's backward, peeled** — each stage's backward in turn, head first. `rfl` over
     VARIABLE stages; the tie below instantiates it by `rw`, so the kernel never re-derives the
     concrete chain (the ResNet-34 apex's `r34BFullHasVJPAt_backward`). -/
-theorem mobilenetv2PaperPCHasVJPAt_backward
+private theorem mobilenetv2PaperPCHasVJPAt_backward
     {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 : Nat}
     (stem : Vec s0 → Vec s1)
     (b1 : Vec s1 → Vec s2)

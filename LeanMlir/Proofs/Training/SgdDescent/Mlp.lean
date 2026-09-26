@@ -183,7 +183,7 @@ theorem ce_head_relu_input_grad {d₂ d₃ : Nat} (W₂ : Mat d₂ d₃)
 
 /-- ReLU then a dense layer: an input drift of `ℓ1` mass `B` moves each output entry by at
     most `w·B`. -/
-theorem dense_relu_drift {m n : Nat} (W : Mat m n) (b : Vec n) {wb : ℝ} (hw : 0 ≤ wb)
+private theorem dense_relu_drift {m n : Nat} (W : Mat m n) (b : Vec n) {wb : ℝ} (hw : 0 ≤ wb)
     (hW : ∀ i j, |W i j| ≤ wb) (u u' : Vec m) (j : Fin n) :
     |dense W b (relu m u') j - dense W b (relu m u) j| ≤ wb * ∑ i, |u' i - u i| :=
   (dense_input_drift W b hW _ _ j).trans

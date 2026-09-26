@@ -91,30 +91,30 @@ noncomputable def hitCount (A : Set E) (N : ℕ) (ω : Fin N → E) : ℕ :=
 
 omit [MeasurableSpace E] in
 /-- A vote count written as a sum of `if`s is `hitCount` of the voting set. -/
-lemma hitCount_setOf (P : E → Prop) [DecidablePred P] (N : ℕ) (ω : Fin N → E) :
+private lemma hitCount_setOf (P : E → Prop) [DecidablePred P] (N : ℕ) (ω : Fin N → E) :
     (∑ i, if P (ω i) then 1 else 0) = hitCount {v | P v} N ω :=
   Finset.sum_congr rfl fun i _ => by by_cases h : P (ω i) <;> simp [h]
 
 omit [MeasurableSpace E] in
 /-- The count is monotone in the target set. -/
-lemma hitCount_mono {A B : Set E} (hAB : A ⊆ B) (N : ℕ) (ω : Fin N → E) :
+private lemma hitCount_mono {A B : Set E} (hAB : A ⊆ B) (N : ℕ) (ω : Fin N → E) :
     hitCount A N ω ≤ hitCount B N ω :=
   Finset.sum_le_sum fun i _ => Set.indicator_le_indicator_of_subset hAB (fun _ => Nat.zero_le _) (ω i)
 
 omit [MeasurableSpace E] in
-lemma hitCount_le (A : Set E) (N : ℕ) (ω : Fin N → E) : hitCount A N ω ≤ N := by
+private lemma hitCount_le (A : Set E) (N : ℕ) (ω : Fin N → E) : hitCount A N ω ≤ N := by
   have := Finset.sum_le_card_nsmul Finset.univ (fun i => A.indicator (1 : E → ℕ) (ω i)) 1
     (fun i _ => Set.indicator_le_self' (fun _ _ => zero_le_one) (ω i))
   simpa [hitCount] using this
 
-lemma measurable_hitCount {A : Set E} (hA : MeasurableSet A) (N : ℕ) :
+private lemma measurable_hitCount {A : Set E} (hA : MeasurableSet A) (N : ℕ) :
     Measurable (hitCount A N) :=
   Finset.measurable_sum _ fun i _ =>
     (measurable_const.indicator hA).comp (measurable_pi_apply i)
 
 omit [MeasurableSpace E] in
 /-- Prepending a sample to the tuple adds its indicator to the count. -/
-lemma hitCount_insertNth_zero (A : Set E) (N : ℕ) (x : E) (τ : Fin N → E) :
+private lemma hitCount_insertNth_zero (A : Set E) (N : ℕ) (x : E) (τ : Fin N → E) :
     hitCount A (N + 1) ((0 : Fin (N + 1)).insertNth x τ)
       = A.indicator 1 x + hitCount A N τ := by
   simp only [hitCount, Fin.sum_univ_succ]
@@ -217,7 +217,7 @@ lemma pi_hitCount_eq_binomial (ν : Measure E) [IsProbabilityMeasure ν] {A : Se
         simp
 
 /-- The point law in real form. -/
-lemma pi_hitCount_real_eq_binomial (ν : Measure E) [IsProbabilityMeasure ν] {A : Set E}
+private lemma pi_hitCount_real_eq_binomial (ν : Measure E) [IsProbabilityMeasure ν] {A : Set E}
     (hA : MeasurableSet A) (N j : ℕ) :
     (Measure.pi fun _ : Fin N => ν).real {ω | hitCount A N ω = j}
       = (N.choose j : ℝ) * (ν.real A) ^ j * (1 - ν.real A) ^ (N - j) := by
@@ -356,7 +356,7 @@ lemma binomTail_monotoneOn (N k : ℕ) :
   exact hω.trans (hitCount_mono (Set.Icc_subset_Icc le_rfl hqp) N ω)
 
 /-- At `q = 1` the tail is exactly 1 (only the `j = N` term survives). -/
-lemma binomTail_one {N k : ℕ} (hk : k ≤ N) : binomTail N k 1 = 1 := by
+private lemma binomTail_one {N k : ℕ} (hk : k ≤ N) : binomTail N k 1 = 1 := by
   rw [binomTail, Finset.sum_eq_single_of_mem N (Finset.mem_Icc.mpr ⟨hk, le_rfl⟩)]
   · simp
   · intro j hj hjN
