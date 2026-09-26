@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 
 /-! # The ViT encoder-block backward tie at the VECTOR LayerNorm the net runs
 

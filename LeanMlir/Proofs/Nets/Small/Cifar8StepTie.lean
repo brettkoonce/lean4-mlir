@@ -74,7 +74,7 @@ theorem cifar8_Wb_tied_totalloss {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
   rw [denseW_den aN "%Wb" lrStr dyN a_head Wb bb
         (fun k => softmax nClasses (cifarCnn8Forward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ W₈ b₈
             W₉ b₉ Wa ba Wb bb x) k - oneHot nClasses label k) lr i j,
-      mlp_output_total_loss_grad Wb bb a_head label i j, hlog]
+      StableHLO.lossWeightGrad_eq_sum Wb bb a_head label i j, hlog]
 
 /-- **Whole cifar8 conv tail, tied.** All 16 conv params (8 conv `W`+`b`), at the real cifar8 forward,
     denote `θ − lr·(certified ∂convₖ/∂θ · c)` with `c` the rendered backward-chain cotangent driven by

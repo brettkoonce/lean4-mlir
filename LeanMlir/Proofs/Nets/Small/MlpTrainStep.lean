@@ -20,7 +20,7 @@ assembly is choosing the right cotangent subgraph per layer:
 
 This file supplies `mlpCotOut0` and its weight/bias bridges — completing the three-layer
 assembly, the multi-layer step the one-layer `linear` net has no analogue of — and the
-total-loss folds (`mlp_output_total_loss_grad`, and at smooth points
+total-loss folds (`StableHLO.lossWeightGrad_eq_sum`, and at smooth points
 `mlp_hidden_total_loss_grad`, `mlp_input_total_loss_grad`, `mlp_whole_net_weight_grads`). The SGD
 wrapping `θ − lr·∇` on top is identical to the linear case (`StableHLO.sgdW`).
 -/
@@ -120,22 +120,6 @@ theorem mlpCotOut0_denote {d₁ d₂ d₃ : Nat} (W₁ : Mat d₁ d₂) (W₂ : 
 -- hidden layers (`W₁`,`W₀`) fold only at smooth points (the chain runs back through the
 -- ReLU kinks): `mlp_hidden_total_loss_grad` / `mlp_input_total_loss_grad` below.
 -- ════════════════════════════════════════════════════════════════
-
-/-- **Output-layer total-loss gradient.** For the top dense layer on activation `a₁`
-    (in the MLP, `a₁ = relu(dense W₁ b₁ (relu(dense W₀ b₀ x)))`), the single gradient of
-    the whole softmax-CE loss wrt `W₂` equals the certified `∂logits/∂W₂` contracted with
-    the softmax-CE residual `softmax − onehot`. Unconditional — a direct instance of the
-    linear fold `lossWeightGrad_eq_sum`. -/
-theorem mlp_output_total_loss_grad {d₂ d₃ : Nat}
-    (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (a₁ : Vec d₂) (label : Fin d₃) (i : Fin d₂) (j : Fin d₃) :
-    pdiv (fun v : Vec (d₂ * d₃) => fun _ : Fin 1 =>
-            crossEntropy d₃ (dense (Mat.unflatten v) b₂ a₁) label)
-         (Mat.flatten W₂) (finProdFinEquiv (i, j)) 0
-      = ∑ k : Fin d₃,
-          pdiv (fun v : Vec (d₂ * d₃) => dense (Mat.unflatten v) b₂ a₁)
-               (Mat.flatten W₂) (finProdFinEquiv (i, j)) k
-            * (softmax d₃ (mnistLinear W₂ b₂ a₁) k - oneHot d₃ label k) :=
-  StableHLO.lossWeightGrad_eq_sum W₂ b₂ a₁ label i j
 
 /-- **Hidden-layer total-loss fold (conditional).** At a smooth point — the hidden
     pre-activation `p₁ = dense W₁ b₁ a₀` off the ReLU kinks — the single gradient of the
@@ -274,6 +258,6 @@ theorem mlp_whole_net_weight_grads {d₀ d₁ d₂ d₃ : Nat}
                   - oneHot d₃ label k)) :=
   ⟨fun i j => mlp_input_total_loss_grad W₀ b₀ W₁ b₁ W₂ b₂ x label h_smooth_0 h_smooth_1 i j,
    fun i j => mlp_hidden_total_loss_grad W₁ b₁ W₂ b₂ (relu d₁ (dense W₀ b₀ x)) label h_smooth_1 i j,
-   fun i j => mlp_output_total_loss_grad W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label i j⟩
+   fun i j => StableHLO.lossWeightGrad_eq_sum W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label i j⟩
 
 end Proofs.IR

@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.Small.CifarCNN
 import LeanMlir.Proofs.Foundation.SgdNodes
-import LeanMlir.Proofs.Nets.Small.MlpTrainStep
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # PoC: the CIFAR-CNN (Chapter 4, no-BN) train step, proof-tied to the certified SGD step
 
@@ -151,7 +151,7 @@ theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
                   (flatConv (h := 2*(2*h)) (w := 2*(2*w)) W₁ b₁ x))))))))))
         (fun k => softmax nClasses (cifarCnnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x) k
           - oneHot nClasses label k) lr i j,
-      mlp_output_total_loss_grad W₇ b₇
+      StableHLO.lossWeightGrad_eq_sum W₇ b₇
         (relu d1 (dense W₆ b₆ (relu d1 (dense W₅ b₅
           (maxPoolFlat c2 h w (relu (c2*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₄ b₄
             (relu (c2*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₃ b₃
@@ -233,17 +233,5 @@ theorem cifar_conv_tied_certified {ic c1 c2 h w d1 nClasses kH kW : Nat}
   · intro o;   exact convB_den bN lrStr cotN W₂ ac1 b₂ cotW2 lr o
   · intro idx; exact convW_den xN wN lrStr cotN b₁ x W₁ cotW1 lr idx
   · intro o;   exact convB_den bN lrStr cotN W₁ x b₁ cotW1 lr o
-
-/-! Each fused conv clause holds, every argument implicit (read off the goal by a step tie's
-constructor). `ConvWSgdTied` / `ConvBSgdTied` live in `CnnChainClose`, which does not see
-`SgdNodes`; this file sees both. -/
-
-theorem _root_.Proofs.convWSgdTied_holds {ic oc h w kH kW : Nat} {xN wN lrStr cotN : String}
-    {b : Vec oc} {x : Tensor3 ic h w} {W : Kernel4 oc ic kH kW} {c : Vec (oc*h*w)} {lr : ℝ} :
-    ConvWSgdTied xN wN lrStr cotN b x W c lr := fun idx => convW_den xN wN lrStr cotN b x W c lr idx
-
-theorem _root_.Proofs.convBSgdTied_holds {ic oc h w kH kW : Nat} {bN lrStr cotN : String}
-    {W : Kernel4 oc ic kH kW} {x : Tensor3 ic h w} {b : Vec oc} {c : Vec (oc*h*w)} {lr : ℝ} :
-    ConvBSgdTied bN lrStr cotN W x b c lr := fun o => convB_den bN lrStr cotN W x b c lr o
 
 end Proofs.CifarPoC

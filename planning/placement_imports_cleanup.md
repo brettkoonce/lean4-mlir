@@ -32,7 +32,8 @@ measured on that tree.
 | commit | change |
 |---|---|
 | 70d623be | `LeanMlir/MnistData.lean` (no build target reached it; MNIST loads through `F32.loadIdxImages` / `loadIdxLabels` in `ffi/f32_helpers.c`) and its three `historical/` importers deleted; README row fixed |
-| (staged) | Batch A: §2.1 and §2.2 as tabled, §2.3 on the leaf files (113 imports, 68 files). Deviations below |
+| 94c16b30 | Batch A: §2.1 and §2.2 as tabled, §2.3 on the leaf files (113 imports, 68 files). Deviations below |
+| (staged) | Batch B: §3.1–3.6 and two of the three re-derived statements. Deviations below |
 
 Batch A deviations:
 
@@ -53,6 +54,33 @@ Batch A deviations:
   closure and are not checked: no `lean_exe` or lib builds them.
 * Gate: `lake build Certs LeanMlir Apps CertsHeavy Reference` (3613 jobs), the ten affected test
   exes, `lake env lean` on `AuditAxioms` and both tier files, `gen_comparator_tier.py --check`.
+
+Batch B deviations:
+
+* §3.3 and §3.4 emptied three files, which are deleted with their lakefile roots and imports:
+  `MobileNetV2Close` (its importers take `ConvGrad`), `MobileNetV2Fold` and `ResNet34Fold`.
+  Certs is now 185 roots reaching 233 proof modules (lakefile and `Proofs/README.md` updated).
+* `vecLNBetaSgdTied_holds` (§3.4) and `vecLNBetaTiedB_holds` (§3.5) move with their γ twins.
+* `ConvGrad` imports `Depthwise` in place of `CNN` (which `Depthwise` reaches).
+* Edges cut beyond the table: `ConvNeXtStepTie` imports no small-net, ViT, MobileNetV2 or
+  ResNet-34 module (it takes `SgdNodes` and `SmoothedLossCot`); `ConvNeXtStepTieGB` drops
+  `ViTFoldGB`; `CifarFold` and `CnnFold` take `SmoothedLossCot` in place of `MlpTrainStep`.
+  `MobileNetV4WholeBackCertifiedTieB` needed `ConvBackCertifiedTie` and `Foundation.OpaquePrefix`
+  directly once `ResNet34BackCertifiedTieB` went. `ViTWholeBackCertifiedTieB` needed `Foundation.BatchMapVJPAt`
+  once ViT's LN tie stopped importing ConvNeXt (§3.1).
+* Re-derived statements: `IR.mlp_output_total_loss_grad` and `ViTPoC.headW_den` / `headB_den`
+  deleted, users repointed, their three `#print axioms` lines removed from `tests/AuditAxioms.lean`.
+  `Mnv4FullBSeal.cbReluStridedB_eq` / `cbReluB_eq` stay: `BatchSealKit` has a general
+  `cbReluStridedB_eq` (in `R34FullBSeal`) but no `cbReluB_eq`, so only one of the pair could go.
+* Left for §4 (a root file): the comments at `Codegen/StableHLO.lean:498` and `:525` still name
+  `ResNet34Fold` / `MobileNetV2Fold`; the lemmas are `ResNet34PoC.convStrided{W,B}_den` and
+  `Mnv2PoC.depthwise{W,B}_den` in `SgdNodes`.
+* Gate: `lake build Certs LeanMlir Apps CertsHeavy Reference ProofsMinimal` (3611 jobs) and
+  `Proofs`; `AuditAxioms` (1607 prints, 1602 on the three standard axioms, the 5 others on a
+  subset) and both tier files elaborate; `gen_comparator_tier.py --check`, `check_audit_coverage`,
+  `check_render_coverage`, `regen_verified_mlir.sh check`, `gen_mlir_manifest --check`,
+  `check_target_names`, `name_lint`, `docstring-checkrefs`, `blueprint-checkdecls` +
+  `blueprint_uses --check` (lean_deps unchanged).
 
 ## 2. Batch A — leaf imports (cheap, no root file)
 
@@ -189,6 +217,7 @@ each and no copy elsewhere.
 | all of the above + `StableHLO`, `Attention` | their implied imports (§2.3) |
 | `Codegen/StableHLO.lean` | move the chapter-net graphs `mlpFwdGraph`, `mlpBackGraph`, `cnnFwdGraph`, `cnnBackGraph`, `cifarFwdGraph`, `cifar8FwdGraph`, `cifar8BnFwdGraph` out (users: `ChapterGraphTies`, `SpecVJP`, their printers) |
 | `Codegen/StableHLOPretty.lean` | with them, the printers `linear{Fwd,Back,TrainStep}ModuleV`, `mlpFwdModuleV`, `cnnFwdModuleV`, `cifarFwdModuleV`, `cifar8FwdModuleV`, `cifar8BnFwdModuleV` (users: `ChapterArtifacts`'s `#eval`s, `LinearFold`); and `mnv2RmsHyper` → `Codegen/MobileNetV2RenderB.lean` (its only user) |
+| `Codegen/StableHLO.lean:498`, `:525` | the comments name the deleted `ResNet34Fold` / `MobileNetV2Fold`; point them at `SgdNodes` |
 | new chapter render module under `Codegen/` | receives the graphs and printers; `ChapterGraphTies`, `ChapterArtifacts`, `SpecVJP`, `LinearFold` import it |
 | `Float/FloatBridge.lean` | split the MLP/MNIST chain into `Float/MlpFloatBridge.lean` (the pattern `ResNet34FloatBridge` already follows): `mlpF`, `mlp_float_close`, `mlp_float_close_uniform`, `mlp_l1_close`, `mlp_{w,b}{0,1,2}_step_float_close`, `mnist_mlp_float_budget`, `mnist_w2_step_float_budget`, `mnist_cot_budget` with the private `mnist_E{0,1}_*`, `linear_e4m3_logit_budget`, `linear_e4m3_argmax_preserved`; none has a Lean user, so `tests/AuditAxioms.lean` and the `Certs` roots are the consumers |
 

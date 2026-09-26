@@ -129,7 +129,7 @@ the cotangent the EMITTED loss graph `sub(softmaxDiv(expe(logits)), onehot)` pro
 `logits` is the real forward output. The lemma below pins that graph's `den` to the composed
 softmax-CE gradient of the forward (`∂CE/∂logits`, the mlp analogue of `lossCotGraph_isCEgrad`);
 instantiating the six certified theorems at it ties the train step forward→loss→backward, with
-the output layer folding to the WHOLE-loss gradient `∂CE/∂W₂` (`mlp_output_total_loss_grad`). -/
+the output layer folding to the WHOLE-loss gradient `∂CE/∂W₂` (`StableHLO.lossWeightGrad_eq_sum`). -/
 
 /-- **The emitted loss-cotangent graph denotes the composed softmax-CE gradient of the forward**
     (`= softmax(logits) − onehot = ∂CE/∂logits` at the real forward logits). -/
@@ -157,7 +157,7 @@ theorem mlp_W2_tied_totalloss (aN lrStr dyN : String) (label : Fin d₃) (i : Fi
   rw [W2_den_certified W₀ b₀ W₁ b₁ W₂ b₂ x
         (fun k => softmax d₃ (mnistLinear W₂ b₂
             (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) k - oneHot d₃ label k) lr aN lrStr dyN i j,
-      mlp_output_total_loss_grad W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label i j]
+      StableHLO.lossWeightGrad_eq_sum W₂ b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))) label i j]
 
 /-- **Whole mlp train step, tied.** With the top loss cotangent `g` pinned to the composed
     softmax-CE gradient of the forward (`mlpLossCot_den`), the output-weight op denotes

@@ -144,34 +144,4 @@ theorem cnn_render_convb1_chain_certified {ic c h w kH kW : Nat}
             * cnnChainCotW1 W₂ hc1 cotW2 j :=
   cnn_render_convb_certified W₁ x b₁ (cnnChainCotW1 W₂ hc1 cotW2) lr o
 
-/-! ## Clause Props for the per-example conv ties
-
-Each is a conv `_den` lemma's statement (`CifarPoC.convW_den` / `convB_den`, `CnnPoC.cW2_den` …)
-under `∀`, so a tie theorem states one line per parameter tensor and `intro` unfolds it back. The
-batched peers are `ResNet34PoCB.ConvWTiedB` and `EnetPoC.ConvWSgdTiedB`. -/
-
-section
-open StableHLO
-
-/-- The emitted `convWeightSgd` op, fed the cotangent `c` at the conv output, is the certified SGD
-    step on the kernel `W`. -/
-def ConvWSgdTied {ic oc h w kH kW : Nat} (xN wN lrStr cotN : String) (b : Vec oc)
-    (x : Tensor3 ic h w) (W : Kernel4 oc ic kH kW) (c : Vec (oc*h*w)) (lr : ℝ) : Prop :=
-  ∀ idx : Fin (oc*ic*kH*kW),
-    den (SHlo.convWeightSgd xN wN lrStr b x W lr (.operand cotN c)) idx
-      = Kernel4.flatten W idx - lr * ∑ j : Fin (oc*h*w),
-          pdiv (fun v' : Vec (oc*ic*kH*kW) => Tensor3.flatten (conv2d (Kernel4.unflatten v') b x))
-               (Kernel4.flatten W) idx j * c j
-
-/-- The emitted `convBiasSgd` op, fed the cotangent `c` at the conv output, is the certified SGD
-    step on the bias `b`. -/
-def ConvBSgdTied {ic oc h w kH kW : Nat} (bN lrStr cotN : String) (W : Kernel4 oc ic kH kW)
-    (x : Tensor3 ic h w) (b : Vec oc) (c : Vec (oc*h*w)) (lr : ℝ) : Prop :=
-  ∀ o : Fin oc,
-    den (SHlo.convBiasSgd bN lrStr W x b lr (.operand cotN c)) o
-      = b o - lr * ∑ j : Fin (oc*h*w),
-          pdiv (fun b' : Vec oc => Tensor3.flatten (conv2d W b' x)) b o j * c j
-
-end
-
 end Proofs

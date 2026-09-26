@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
+import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 

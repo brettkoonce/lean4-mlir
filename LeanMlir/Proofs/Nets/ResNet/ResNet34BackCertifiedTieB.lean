@@ -17,8 +17,9 @@ checks with no budget raised.
 
 ## The four pieces
 
-1. `cbReluStridedBBack_eq_vjp_backward` / `r34HeadBBack_eq_vjp_backward` — the concrete
-   endpoints; the stem is the first and the pool needs no lemma.
+1. `r34HeadBBack_eq_vjp_backward` and `ConvBackCertifiedTie`'s stage tie
+   `cbReluStridedBBack_eq_vjp_backward` — the concrete endpoints (head and stem); the pool needs
+   no lemma.
    The pool endpoint is **`rfl`**: `batchMapHasVJPAt` and `maxPool3s2FlatHasVJPAtVec` are built
    field by field rather than transported with `▸`, so `batchMapAux` of the leaf and the lift's
    `.backward` are the same term.
@@ -64,51 +65,6 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 -- § The concrete endpoint ties
 -- ════════════════════════════════════════════════════════════════
-
-/-- **The conv-BN-relu STAGE tie.** The hand-written
-    `batchMap (flatConvStride2Back) ∘ bnBack ∘ reluMaskBack` IS `cbReluStridedB`'s certified
-    backward at a smooth point. One `rw` of the odd-kernel strided leaf tie, then `rfl` — the
-    stage's VJP is `vjpCompAt`-built so its backward is already the composition, and the conv
-    leaf's backward is input-independent (a convolution is linear), so the row-wise `batchMap`
-    lift matches at every saved input.
-
-    SYMMETRIC padding (`flatConvStride2Back`), not the XLA-`SAME` phase B0's and MobileNetV2's
-    stems take. Identical types, different certificates. -/
-theorem cbReluStridedBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
-    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
-    (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
-    (x : Vec (N * (ic * (2 * h) * (2 * w))))
-    (hrelu : ∀ k, StableHLO.bnBatchLA N oc h w ε γ β
-      (StableHLO.batchMap N (flatConvStride2 Ws bs) x) k ≠ 0) :
-    (StableHLO.batchMap N (flatConvStride2Back (h := h) (w := w) Ws)
-        ∘ (bnBatchLAHasVJP N oc h w ε hε γ β).backward
-            (StableHLO.batchMap N (flatConvStride2 Ws bs) x)
-        ∘ reluMaskBack (fun i => StableHLO.bnBatchLA N oc h w ε γ β
-            (StableHLO.batchMap N (flatConvStride2 Ws bs) x) i > 0))
-      = (StableHLO.cbReluStridedBHasVJPAt N Ws bs ε hε γ β x hrelu).backward := by
-  rw [flatConvStride2Back_eq_vjp_backward hkH hkW Ws bs (fun _ => 0)]
-  rfl
-
-/-- **The HEAD CONV tie.** `batchMap (convFlatBack) ∘ bnBack ∘ reluMaskBack` IS `cbReluB`'s
-    certified backward at a smooth point — the stride-1, plain-convolution peer of the stem's.
-
-    The kernel extent is a binder, so a 1×1 conv-BN-relu is one instance of this stage and not
-    a new one: MobileNetV4's two head convs (`%h1W` 256 → 960, `%hW` 960 → 1280) tie by applying
-    this twice, and its head is therefore not hypothesis-free the way ResNet-34's is. -/
-theorem cbReluBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
-    (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
-    (W : Kernel4 oc ic kH kW) (b : Vec oc) (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
-    (v : Vec (N * (ic * h * w)))
-    (hs : ∀ k, StableHLO.bnBatchLA N oc h w ε γ β
-           (StableHLO.batchMap N (flatConv W b) v) k ≠ 0) :
-    (StableHLO.batchMap N (convFlatBack (h := h) (w := w) W)
-        ∘ (bnBatchLAHasVJP N oc h w ε hε γ β).backward
-            (StableHLO.batchMap N (flatConv W b) v)
-        ∘ reluMaskBack (fun i => StableHLO.bnBatchLA N oc h w ε γ β
-            (StableHLO.batchMap N (flatConv W b) v) i > 0))
-      = (StableHLO.cbReluBHasVJPAt N W b ε hε γ β v hs).backward := by
-  rw [convFlatBack_eq_vjp_backward hkH hkW W b (fun _ => 0)]
-  rfl
 
 /-- **The HEAD tie.** `batchMap (gapBack) ∘ batchMap (dense Wᵀ 0)` IS `r34HeadB`'s certified
     backward. The head takes no hypothesis at all: GAP and dense are smooth and each is

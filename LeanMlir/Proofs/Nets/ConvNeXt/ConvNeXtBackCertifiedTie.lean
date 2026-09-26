@@ -50,47 +50,12 @@ The proof is piecewise, and every piece is already in the repo:
 the chain — the `+β` translation's VJP is the identity, which is why `chanLNTensor3Back` never
 took a `β` in the first place. -/
 
-/-- **The concrete three-term BN/LN input gradient IS the certified VJP backward.** `bnGradInput`
-    is not `rfl`-equal to `(bnHasVJP …).backward` — the witness is built through a
-    `rw [bnForward_eq_compose]` cast — but both reduce to the canonical `∑ pdiv` form
-    (`bn_input_grad_correct` and `.correct`). The function-level peer of `bnBack_faithful_fn`. -/
-theorem bnGradInput_eq_vjp_backward {n : Nat} (ε γ β : ℝ) (hε : 0 < ε) (x dy : Vec n) :
-    bnGradInput n ε γ x dy = (bnHasVJP n ε γ β hε).backward x dy := by
-  funext i
-  rw [bn_input_grad_correct n ε γ β hε x dy i]
-  exact ((bnHasVJP n ε γ β hε).correct x dy i).symm
-
 /-- **The flat transpose's VJP backward is the flat transpose back** — `transposeHasVJP`'s
     backward is `fun i j => dY j i`, and `HasVJPMat.toHasVJP` reads it at the row-major split, so
     this is definitional. The permutation adjoint the channel-LN conjugation needs, alongside
     `reassoc{Fwd,Back}HasVJP_backward_eq`. -/
 theorem transposeFlatHasVJP_backward_eq (m n : Nat) (v : Vec (m * n)) (dy : Vec (n * m)) :
     (transposeFlatHasVJP m n).backward v dy = StableHLO.transposeFlat n m dy := rfl
-
-/-- **The vector-LN row backward is `bnGradInput` after the `γ` scale.** `layerNormVec` is
-    `(+β) ∘ layerScale γ ∘ LN(1,0)`, so its VJP applies: the bias translation's identity backward,
-    then `diagBack γ`, then the LN input gradient at `γ = 1`. The `+β` drops out — this is where
-    the whole channel-LN backward story becomes β-free. -/
-theorem layerNormVecHasVJP_backward_eq {D : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec D)
-    (x dy : Vec D) :
-    (layerNormVecHasVJP D ε γ β hε).backward x dy
-      = bnGradInput D ε 1 x (diagBack γ dy) := by
-  rw [bnGradInput_eq_vjp_backward ε 1 0 hε x (diagBack γ dy)]
-  rfl
-
-/-- **The rowwise vector-LN backward is `rowLNVecFlatBack`.** `rowLNVecFlatHasVJP` is the
-    `rowwiseHasVJPMat` lift of the row VJP through `HasVJPMat.toHasVJP`, and
-    `rowLNVecFlatBack` is `perRowFlatPR` of the row's closed form — the same per-row map at the
-    same row of the saved input, so this is the row lemma read at each `(row, col)`. -/
-theorem rowLNVecFlatHasVJP_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
-    (X dy : Vec (s * c)) :
-    (rowLNVecFlatHasVJP s c ε γ β hε).backward X dy = rowLNVecFlatBack s c ε γ X dy := by
-  funext idx
-  show (layerNormVecHasVJP c ε γ β hε).backward
-      (Mat.unflatten X (finProdFinEquiv.symm idx).1)
-      (Mat.unflatten dy (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2 = _
-  rw [layerNormVecHasVJP_backward_eq ε hε γ β]
-  rfl
 
 /-- **The channel-LN backward tie: the chain is the certified VJP.** `chanLNTensor3Back` —
     the hand-composed reverse of `chanLNTensor3` — equals `(chanLNTensor3HasVJP …).backward` at

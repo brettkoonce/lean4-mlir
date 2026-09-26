@@ -27,7 +27,7 @@ import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
+import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose

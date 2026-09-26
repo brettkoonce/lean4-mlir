@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
-import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
+import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
+import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 
 /-! # `mnv4InputGradB` and the certified whole-net MobileNetV4-Conv-M input VJP

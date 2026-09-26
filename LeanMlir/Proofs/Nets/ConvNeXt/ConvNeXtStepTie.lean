@@ -1,10 +1,8 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
-import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
-import LeanMlir.Proofs.Nets.ViT.ViTFold
 import LeanMlir.Proofs.Architectures.ChannelLNBack
-import LeanMlir.Proofs.Nets.Small.CifarFold
+import LeanMlir.Proofs.Foundation.SgdNodes
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # The full [3,3,9,3] ConvNeXt-T step tie — the whole net tied through the real forward
 
@@ -279,7 +277,7 @@ theorem cnx_dense_tied_totalloss {m : Nat} (aN wN lrStr dyN : String)
           (Mat.flatten Wd) (finProdFinEquiv (i, j)) 0 := by
   rw [Cifar8PoC.denseW_den aN wN lrStr dyN a Wd bd
         (fun k => softmax 10 (mnistLinear Wd bd a) k - oneHot 10 label k) lr i j,
-      mlp_output_total_loss_grad Wd bd a label i j]
+      StableHLO.lossWeightGrad_eq_sum Wd bd a label i j]
 
 /-- **The emitted loss-cotangent graph denotes the softmax-CE gradient at the logits.** -/
 theorem cnxLossCot_den (nlogN ohN : String) (logits : Vec 10) (label : Fin 10) :

@@ -559,10 +559,9 @@ theorem depthwiseHasVJP3_correct {c h w kH kW : Nat}
   (depthwiseHasVJP3 (h := h) (w := w) W b).correct x dy ci hi wi
 
 -- ════════════════════════════════════════════════════════════════
--- § Strided (stride-2) depthwise param VJPs — RELOCATED here from
---   `MobileNetV2Close.lean` so the `depthwiseStrided{Weight,Bias}Sgd` ops'
---   `den` in `StableHLO` can reference them upstream (the same move the strided
---   *conv* bias VJP made into `StridedConv.lean`). Each strided forward is
+-- § Strided (stride-2) depthwise param VJPs — here, upstream of `StableHLO`, so the
+--   `depthwiseStrided{Weight,Bias}Sgd` ops' `den` can reference them (as the strided
+--   *conv* bias VJP sits in `StridedConv.lean`). Each strided forward is
 --   `decimateFlat ∘ (stride-1 depthwise op)`, so the param VJP is `vjpComp`
 --   of a proven stride-1 depthwise VJP with the decimation VJP — the backward
 --   is "zero-upsample the cotangent (StableHLO `pad` interior=1), then the

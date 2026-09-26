@@ -227,8 +227,8 @@ theorem vit_head_tied (aN wN bN lrStr cotN : String)
     (hn : Vec 192) (Wcls : Mat 192 10) (bcls : Vec 10) (g : Vec 10) (lr : ℝ) :
     vitHeadTied aN wN bN lrStr cotN hn Wcls bcls g lr := by
   refine ⟨?_, ?_⟩
-  · intro i j; exact ViTPoC.headW_den aN wN lrStr cotN hn Wcls bcls g lr i j
-  · intro i;   exact ViTPoC.headB_den bN lrStr cotN Wcls hn bcls g lr i
+  · intro i j; exact Cifar8PoC.denseW_den aN wN lrStr cotN hn Wcls bcls g lr i j
+  · intro i;   exact Cifar8PoC.denseB_den bN lrStr cotN Wcls hn bcls g lr i
 
 /-- Patch embed wConv/bConv/cls/pos tied at the embed-output cot `dyEmbed`. -/
 def vitEmbedTied (wN xN bN clsN pN lrStr cotN : String)

@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.Small.MnistCNN
 import LeanMlir.Proofs.Foundation.SgdNodes
-import LeanMlir.Proofs.Nets.Small.MlpTrainStep
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # PoC: the MNIST-CNN train step, proof-tied to the certified SGD step
 
@@ -194,7 +194,7 @@ theorem cnn_W5_tied_totalloss {ic c h w d1 nClasses kH kW : Nat}
           (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₁ b₁ x)))))
         (fun k => softmax nClasses (mnistCnnNoBnForward W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x) k
           - oneHot nClasses label k) lr i j,
-      mlp_output_total_loss_grad W₅ b₅
+      StableHLO.lossWeightGrad_eq_sum W₅ b₅
         (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃
           (maxPoolFlat c h w (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₂ b₂
             (relu (c*(2*h)*(2*w)) (flatConv (h := 2*h) (w := 2*w) W₁ b₁ x))))))))) label i j]

@@ -29,14 +29,11 @@ import LeanMlir.Proofs.Nets.Small.MlpTrainStep
 import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
-import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
@@ -473,7 +470,6 @@ open Proofs
 -- Chain: the composed cotangent subgraphs reduce to the explicit relu'⊙Wᵀ·… backprop
 #print axioms IR.mlpCotOut1_denote
 #print axioms IR.mlpCotOut0_denote
-#print axioms IR.mlp_output_total_loss_grad
 -- The conditional hidden-layer folds
 #print axioms IR.mlp_hidden_total_loss_grad
 #print axioms IR.mlp_input_total_loss_grad
@@ -1393,8 +1389,6 @@ open Proofs
 #print axioms Proofs.ViTPoC.patchEmbedWeightSgd_den
 #print axioms Proofs.ViTPoC.patchEmbedBiasSgd_den
 #print axioms Proofs.ViTPoC.posEmbedSgd_den
-#print axioms Proofs.ViTPoC.headW_den
-#print axioms Proofs.ViTPoC.headB_den
 -- ViT-Tiny §1a TIE — MULTI-HEAD promotion (ViTMultiHeadChain + ViTStepTie)
 #print axioms Proofs.vitCotDQmh_eq
 #print axioms Proofs.vitCotDKmh_eq

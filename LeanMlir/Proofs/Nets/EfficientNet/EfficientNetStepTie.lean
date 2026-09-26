@@ -42,7 +42,7 @@ tie builds explicit chain-cotangent constructors rather than reading them off.
   takes the `B0Weights` block bundle.
 
 Not done: the dense head's total-loss fold (`Wfc → ∂CE/∂Wfc`, the batched `Σ_n` analogue of
-`mlp_output_total_loss_grad`); the head dense ties at `g` directly. -/
+`StableHLO.lossWeightGrad_eq_sum`); the head dense ties at `g` directly. -/
 
 open Proofs Proofs.StableHLO
 

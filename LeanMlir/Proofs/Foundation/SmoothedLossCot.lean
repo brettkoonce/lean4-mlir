@@ -226,3 +226,51 @@ theorem smoothedLossCotGraphDiv_row (N K : Nat) (hK : 0 < K) (α B : ℝ)
   ring
 
 end Proofs
+
+namespace Proofs.StableHLO
+
+/-! ## The hard-label cotangent and the output-layer chain rule
+
+The per-example ties' top of chain: any emitted `softmax − onehot` cotangent denotes the plain
+cross-entropy gradient at a hard label (`softmaxCELossCot_den`), and the whole-loss gradient
+wrt a top dense layer's weight is the certified `∂logits/∂W` contracted with that cotangent
+(`lossWeightGrad_eq_sum`, by `pdiv_comp`). -/
+
+/-- **Any emitted softmax-CE loss cotangent denotes `softmax(logits) − onehot`**, generic in the
+    class count and the logits. Every net's `*LossCot_den` is this at its forward's logits. -/
+theorem softmaxCELossCot_den {K : Nat} (nlogN ohN : String) (logits : Vec K) (label : Fin K) :
+    den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN logits)))
+          (.operand ohN (oneHot K label)))
+      = fun j => softmax K logits j - oneHot K label j := by
+  funext j; simp only [denStepApp, softmax]
+
+/-- **The dense layer is differentiable in its (flattened) weights.** The map
+    `v ↦ dense (unflatten v) b x` is affine — a finite sum of coordinate
+    evaluations scaled by `x`, plus the constant bias. -/
+theorem denseWeightMap_differentiable {m n : Nat} (b : Vec n) (x : Vec m) :
+    Differentiable ℝ (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) := by
+  unfold dense Mat.unflatten
+  fun_prop
+
+/-- The total-loss gradient wrt a weight entry equals the certified
+    `(∂logits/∂W) · (softmax − onehot)` contraction (the chain rule, `pdiv_comp`). -/
+theorem lossWeightGrad_eq_sum {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
+    (label : Fin n) (i : Fin m) (j : Fin n) :
+    pdiv (fun v : Vec (m * n) => fun _ : Fin 1 => crossEntropy n (dense (Mat.unflatten v) b x) label)
+         (Mat.flatten W) (finProdFinEquiv (i, j)) 0
+      = ∑ k : Fin n,
+          pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
+               (Mat.flatten W) (finProdFinEquiv (i, j)) k
+            * (softmax n (mnistLinear W b x) k - oneHot n label k) := by
+  rw [show (fun v : Vec (m * n) => fun _ : Fin 1 => crossEntropy n (dense (Mat.unflatten v) b x) label)
+        = (fun z : Vec n => fun _ : Fin 1 => crossEntropy n z label)
+            ∘ (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) from rfl,
+      pdiv_comp _ _ _ (denseWeightMap_differentiable b x _)
+        (differentiable_pi.mpr (fun _ => crossEntropy_differentiable n label) _)]
+  refine Finset.sum_congr rfl (fun k _ => ?_)
+  congr 1
+  rw [Mat.unflatten_flatten]
+  exact softmaxCE_grad n (mnistLinear W b x) label k
+
+end Proofs.StableHLO
+

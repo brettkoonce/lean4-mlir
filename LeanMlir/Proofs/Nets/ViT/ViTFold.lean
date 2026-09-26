@@ -3,9 +3,10 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # ViT-Tiny fold — each emitted param-SGD op `den`otes the certified loss-descent step
 
-The ViT peer of `MobileNetV2Fold`/`ConvNeXtFold`/`EfficientNetFold`: for every
-param-SGD op the `vitTrainStepRenderV` renderer emits, prove `den(op) = θ − lr·(certified Jacobian ·
-cotangent)`. Each is a one-or-few-line delegation to the already-proven render certs in
+The ViT peer of `ConvNeXtFold`/`EfficientNetFold`: for every param-SGD op the
+`vitTrainStepRenderV` renderer emits, prove `den(op) = θ − lr·(certified Jacobian · cotangent)`. The
+vector-LN γ / β nodes (`veclnGammaSgd_den`, `rowDenseBiasSgd_den_lnbeta` and their tie clauses) are
+in `SgdNodes`, under this namespace, because ConvNeXt's head uses them too. Each is a one-or-few-line delegation to the already-proven render certs in
 `ViTVecLN` (vector-[D] LN γ/β) and `TokenParamGrad` (rowwise dense W/b, patch conv W/b, cls, pos); the
 classifier head reuses `Cifar8PoC.dense{W,B}_den`. Together these cover EVERY parameter family
 of the depth-12 ViT-Tiny train step (200 params), so the step tie (`ViTStepTie`) can thread them at
@@ -22,18 +23,6 @@ namespace Proofs.ViTPoC
 
 open scoped BigOperators
 open Proofs Proofs.StableHLO
-
-/-- **Vector-LN γ op denotes the certified step.** `den(veclnGammaSgd)` = `γ − lr·(Σ_tokens dy·x̂)`,
-    the certified ∂(rowwise vector-LN)/∂γ contraction. Covers all 25 LN-γ sites (LN1/LN2 × 12 + final).
-    One-line delegation to `vit_render_veclngamma_certified` (the den's sum IS `vecLNGradGamma`). -/
-theorem veclnGammaSgd_den {N D : Nat} (gN xN epsStr lrStr cotN : String)
-    (ε : ℝ) (βv : Vec D) (x : Vec (N * D)) (γ : Vec D) (dy : Vec (N * D)) (lr : ℝ) (k : Fin D) :
-    den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε x γ lr (.operand cotN dy)) k
-      = γ k - lr * ∑ o : Fin (N * D),
-          pdiv (fun gv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε gv βv (Mat.unflatten x r))) γ k o * dy o := by
-  simp only [denStep, denStepApp]
-  exact vit_render_veclngamma_certified ε βv γ (Mat.unflatten x) dy lr k
 
 /-- **Per-token dense weight op denotes the certified step.** `den(rowDenseWeightSgd) (flat (i,j))` =
     `W_ij − lr·(Σ_tokens x·dy)`, the certified ∂(rowwise dense)/∂W contraction. Covers Wq/Wk/Wv/Wo/
@@ -57,18 +46,6 @@ theorem rowDenseBiasSgd_den {N a c : Nat} (bN lrStr cotN : String)
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r))) b i o * dy o := by
   simp only [denStep, denStepApp]
   exact vit_render_rowdenseb_certified W X b dy lr i
-
-/-- **The SAME per-token bias op, certified against the vector-LN β forward.** The LN β grad is
-    `Σ_tokens dy` — identical reduce to the dense bias — so `rowDenseBiasSgd` ALSO denotes the certified
-    ∂(rowwise vector-LN)/∂β contraction. Covers all 25 LN-β sites. Delegation to `vit_render_veclnbeta_certified`. -/
-theorem rowDenseBiasSgd_den_lnbeta {N D : Nat} (bN lrStr cotN : String)
-    (ε : ℝ) (γv : Vec D) (X : Mat N D) (β : Vec D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
-    den (SHlo.rowDenseBiasSgd bN lrStr β lr (.operand cotN dy)) i
-      = β i - lr * ∑ o : Fin (N * D),
-          pdiv (fun bv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o * dy o := by
-  simp only [denStep, denStepApp]
-  exact vit_render_veclnbeta_certified ε γv β X dy lr i
 
 /-- **Patch-embed conv weight op denotes the certified step.** `den(patchEmbedWeightSgd) (flat
     (d,c,kh,kw))` = `W − lr·(certified patchify-conv weight grad)`. The ViT analogue of ConvNeXt's
@@ -116,24 +93,6 @@ theorem posEmbedSgd_den {ic H W P N D : Nat} (pN lrStr cotN : String)
 -- (`vit_render_cls_certified`) is threaded at the §1a tie (where the cls cotangent IS the cls slice),
 -- exactly as the reused conv/dense/BN ops are in the mnv2/r34/convnext ties — no NEW fold lemma here.
 
-/-- **Classifier head weight op denotes the certified step** — the CLS-vector dense `[D,nClasses]`,
-    covered VERBATIM by the M2 generic (single-vector dense, nothing to row-lift). -/
-theorem headW_den {D nC : Nat} (aN wN lrStr cotN : String)
-    (a : Vec D) (Wc : Mat D nC) (bc : Vec nC) (cot : Vec nC) (lr : ℝ) (i : Fin D) (j : Fin nC) :
-    den (SHlo.weightSgd aN wN lrStr a Wc lr (.operand cotN cot)) (finProdFinEquiv (i, j))
-      = Wc i j - lr * ∑ k : Fin nC,
-          pdiv (fun v : Vec (D * nC) => dense (Mat.unflatten v) bc a) (Mat.flatten Wc)
-               (finProdFinEquiv (i, j)) k * cot k :=
-  Proofs.Cifar8PoC.denseW_den aN wN lrStr cotN a Wc bc cot lr i j
-
-/-- **Classifier head bias op denotes the certified step.** Peer of `headW_den`. -/
-theorem headB_den {D nC : Nat} (bN lrStr cotN : String)
-    (Wc : Mat D nC) (a : Vec D) (bc : Vec nC) (cot : Vec nC) (lr : ℝ) (i : Fin nC) :
-    den (SHlo.biasSgd bN lrStr bc lr (.operand cotN cot)) i
-      = bc i - lr * ∑ j : Fin nC,
-          pdiv (fun b' : Vec nC => dense Wc b' a) bc i j * cot j :=
-  Proofs.Cifar8PoC.denseB_den bN lrStr cotN Wc a bc cot lr i
-
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one per-token SGD node each (each its `_den` lemma's statement with the index
 --   bound, over the flat input `x`; each `…_holds` below proves it)
@@ -158,24 +117,6 @@ def RowDenseBSgdTied (N : Nat) {a c : Nat} (bN lrStr cotN : String) (W : Mat a c
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (Mat.unflatten x r))) b i o
             * dy o
 
-/-- A vector-LN γ SGD node, tied (`veclnGammaSgd_den`). -/
-def VecLNGammaSgdTied (N : Nat) {D : Nat} (gN xN epsStr lrStr cotN : String) (ε : ℝ)
-    (βv : Vec D) (x : Vec (N * D)) (γ : Vec D) (dy : Vec (N * D)) (lr : ℝ) : Prop :=
-  ∀ k : Fin D,
-    den (SHlo.veclnGammaSgd gN xN epsStr lrStr ε x γ lr (.operand cotN dy)) k
-      = γ k - lr * ∑ o : Fin (N * D),
-          pdiv (fun gv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε gv βv (Mat.unflatten x r))) γ k o * dy o
-
-/-- A vector-LN β SGD node, tied (`rowDenseBiasSgd_den_lnbeta`). -/
-def VecLNBetaSgdTied (N : Nat) {D : Nat} (bN lrStr cotN : String) (ε : ℝ) (γv : Vec D)
-    (x : Vec (N * D)) (β : Vec D) (dy : Vec (N * D)) (lr : ℝ) : Prop :=
-  ∀ i : Fin D,
-    den (SHlo.rowDenseBiasSgd bN lrStr β lr (.operand cotN dy)) i
-      = β i - lr * ∑ o : Fin (N * D),
-          pdiv (fun bv : Vec D =>
-                  Mat.flatten (fun r => layerNormVec D ε γv bv (Mat.unflatten x r))) β i o * dy o
-
 /-! Each clause holds, every argument implicit (read off the goal by a step tie's constructor). -/
 
 theorem rowDenseWSgdTied_holds {N a c : Nat} {xN wN lrStr cotN : String} {bb : Vec c}
@@ -187,15 +128,5 @@ theorem rowDenseBSgdTied_holds {N a c : Nat} {bN lrStr cotN : String} {W : Mat a
     {x : Vec (N * a)} {b : Vec c} {dy : Vec (N * c)} {lr : ℝ} :
     RowDenseBSgdTied N bN lrStr cotN W x b dy lr := fun i =>
   rowDenseBiasSgd_den bN lrStr cotN W (Mat.unflatten x) b dy lr i
-
-theorem vecLNGammaSgdTied_holds {N D : Nat} {gN xN epsStr lrStr cotN : String} {ε : ℝ}
-    {βv : Vec D} {x : Vec (N * D)} {γ : Vec D} {dy : Vec (N * D)} {lr : ℝ} :
-    VecLNGammaSgdTied N gN xN epsStr lrStr cotN ε βv x γ dy lr := fun k =>
-  veclnGammaSgd_den gN xN epsStr lrStr cotN ε βv x γ dy lr k
-
-theorem vecLNBetaSgdTied_holds {N D : Nat} {bN lrStr cotN : String} {ε : ℝ} {γv : Vec D}
-    {x : Vec (N * D)} {β : Vec D} {dy : Vec (N * D)} {lr : ℝ} :
-    VecLNBetaSgdTied N bN lrStr cotN ε γv x β dy lr := fun i =>
-  rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε γv (Mat.unflatten x) β dy lr i
 
 end Proofs.ViTPoC

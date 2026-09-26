@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # The linear train step descends the certified softmax-CE gradient
 
@@ -17,9 +17,9 @@ trusted optimizer step. This is the *denotation* half for `linear`
 (what the emitted train step computes), for one example `x`.
 
 The chain-rule fold is here too: by `pdiv_comp`, the two-factor sum is the single
-gradient `∂/∂θ (crossEntropy ∘ mnistLinear)`, so the weight update is literally one step
-of gradient descent on the loss (`sgdW_descends_loss_gradient`, using
-`crossEntropy_differentiable`). The rendering half — that the emitted text is `pretty`
+gradient `∂/∂θ (crossEntropy ∘ mnistLinear)` (`lossWeightGrad_eq_sum`, in `SmoothedLossCot` with
+the other loss-cotangent lemmas), so the weight update is literally one step of gradient descent on
+the loss (`sgdW_descends_loss_gradient`, using `crossEntropy_differentiable`). The rendering half — that the emitted text is `pretty`
 of these graphs — is `linTrainStepFaithfulV` and `LinearFold`.
 -/
 
@@ -36,14 +36,6 @@ theorem lossCot_eq_softmax_sub_onehot (label : Fin n) (k : Fin n) :
       = softmax n (mnistLinear W b x) k - oneHot n label k := by
   rw [lossCotGraph_isCEgrad W b x label k,
       softmaxCE_grad n (mnistLinear W b x) label k]
-
-/-- **Any emitted softmax-CE loss cotangent denotes `softmax(logits) − onehot`**, generic in the
-    class count and the logits. Every net's `*LossCot_den` is this at its forward's logits. -/
-theorem softmaxCELossCot_den {K : Nat} (nlogN ohN : String) (logits : Vec K) (label : Fin K) :
-    den (SHlo.sub (SHlo.softmaxDiv (SHlo.expe (.operand nlogN logits)))
-          (.operand ohN (oneHot K label)))
-      = fun j => softmax K logits j - oneHot K label j := by
-  funext j; simp only [denStepApp, softmax]
 
 /-- **Weight update.** The emitted linear SGD weight update subtracts `lr` times the
     certified ∂logits/∂W Jacobian contracted with the certified closed-form
@@ -77,39 +69,12 @@ theorem sgdB_descends_softmaxCE_grad (lr : ℝ) (label : Fin n) (j : Fin n) :
 -- `softmaxCE_grad` proof) and for the dense-wrt-flattened-weights map.
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The dense layer is differentiable in its (flattened) weights.** The map
-    `v ↦ dense (unflatten v) b x` is affine — a finite sum of coordinate
-    evaluations scaled by `x`, plus the constant bias. -/
-theorem denseWeightMap_differentiable {m n : Nat} (b : Vec n) (x : Vec m) :
-    Differentiable ℝ (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) := by
-  unfold dense Mat.unflatten
-  fun_prop
-
 /-- **The softmax-CE loss is differentiable in the (flattened) weights.** -/
 theorem lossWeightMap_differentiable {m n : Nat} (b : Vec n) (x : Vec m) (label : Fin n) :
     Differentiable ℝ
       (fun v : Vec (m * n) => fun _ : Fin 1 => crossEntropy n (dense (Mat.unflatten v) b x) label) :=
   differentiable_pi.mpr (fun _ =>
     (crossEntropy_differentiable n label).comp (denseWeightMap_differentiable b x))
-
-/-- The total-loss gradient wrt a weight entry equals the certified
-    `(∂logits/∂W) · (softmax − onehot)` contraction (the chain rule, `pdiv_comp`). -/
-theorem lossWeightGrad_eq_sum (label : Fin n) (i : Fin m) (j : Fin n) :
-    pdiv (fun v : Vec (m * n) => fun _ : Fin 1 => crossEntropy n (dense (Mat.unflatten v) b x) label)
-         (Mat.flatten W) (finProdFinEquiv (i, j)) 0
-      = ∑ k : Fin n,
-          pdiv (fun v : Vec (m * n) => dense (Mat.unflatten v) b x)
-               (Mat.flatten W) (finProdFinEquiv (i, j)) k
-            * (softmax n (mnistLinear W b x) k - oneHot n label k) := by
-  rw [show (fun v : Vec (m * n) => fun _ : Fin 1 => crossEntropy n (dense (Mat.unflatten v) b x) label)
-        = (fun z : Vec n => fun _ : Fin 1 => crossEntropy n z label)
-            ∘ (fun v : Vec (m * n) => dense (Mat.unflatten v) b x) from rfl,
-      pdiv_comp _ _ _ (denseWeightMap_differentiable b x _)
-        (differentiable_pi.mpr (fun _ => crossEntropy_differentiable n label) _)]
-  refine Finset.sum_congr rfl (fun k _ => ?_)
-  congr 1
-  rw [Mat.unflatten_flatten]
-  exact softmaxCE_grad n (mnistLinear W b x) label k
 
 /-- **Weight update, folded.** The emitted linear SGD weight update is *literally*
     one step of gradient descent on the certified softmax-CE loss:

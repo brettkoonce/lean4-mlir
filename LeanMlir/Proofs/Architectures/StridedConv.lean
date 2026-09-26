@@ -156,8 +156,8 @@ theorem flatConvStride2WeightGradHasVJP_correct {ic oc h w kH kW : Nat}
 -- ════════════════════════════════════════════════════════════════
 -- § Stride-2 conv bias-VJP (reuses the stride-1 bias-grad)
 -- ════════════════════════════════════════════════════════════════
--- (Relocated here from `MobileNetV2Close` so the `convStridedBiasSgd` op's `den` in
---  `StableHLO` can reference it — same upstream-move pattern as the per-channel BN grads.)
+-- (Here, upstream of `StableHLO`, so the `convStridedBiasSgd` op's `den` can reference it —
+--  as the per-channel BN grads sit upstream too.)
 
 /-- **`conv2d` (as a function of its bias) is differentiable** — affine in `b` (bias broadcast
     plus a `b`-independent `W,x` term). The `vjpComp` hypothesis for the strided-conv bias-grad. -/

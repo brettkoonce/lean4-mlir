@@ -72,8 +72,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ViTRender,
              `LeanMlir.Proofs.Codegen.ViTRenderB]
 
-/-- **`lake build Certs`** — the certificate corpus (187 roots reaching 235 proof modules,
-    ~121k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
+/-- **`lake build Certs`** — the certificate corpus (185 roots reaching 233 proof modules,
+    ~120k lines: the certified ties, seals, descent, Lipschitz/LipSDP, smoothing,
     Muon, the float model, …): the VJP proof suite's apex modules; their transitive
     imports cover every proof file (they subsume the `Proofs` roots above, so
     building `Certs` builds everything the axiom audit needs). Built +
@@ -106,7 +106,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Codegen.CnnArtifacts,
              `LeanMlir.Proofs.Architectures.PerChannelBNGrad,
              `LeanMlir.Proofs.Nets.Small.CnnChainClose,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC,
              `LeanMlir.Proofs.Nets.ViT.ViTFwdGraph,
              `LeanMlir.Proofs.Architectures.TokenParamGrad,
@@ -223,8 +222,6 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.SgdNodes,
              `LeanMlir.Proofs.Nets.Small.Cifar8StepTie,
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie,
-             `LeanMlir.Proofs.Nets.ResNet.ResNet34Fold,
-             `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold,
              `LeanMlir.Proofs.Codegen.EfficientNetRender,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie,
