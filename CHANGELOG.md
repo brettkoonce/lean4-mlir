@@ -43,7 +43,7 @@ the ties' `bnBatchLABack` denote one map, the two spellings of the stem-pool
 scatter are one map, and the MLP train-step tie now states all six parameter
 ops. Compile time followed — SmoothingCP's tail check 97 → 22 s, 57 dead
 heartbeat bumps out, the IBP/CROWN scorecards built in parallel. The comparator
-re-checks **73** theorems (was 52), the tie, faithfulness and certificate tier
+re-checks **87** theorems (was 52), the tie, faithfulness and certificate tier
 included; `docstring-checkrefs` resolves private, `File.decl`, module and
 namespace citations and demands that a cited file be a real link, and the three
 test defects the audit turned up are fixed — `parseFloat` read `abc` as 5451.0,
@@ -87,7 +87,7 @@ The verified path reaches ImageNet-1k at the paper recipes. ResNet-50 arrives
 from nothing — three bottleneck VJPs, a 25,557,032-parameter train-step
 renderer, LAMB, BCE-with-logits, gradient accumulation and the 160/224
 resolution split, each certified — and trains RSB-A3 on the verified path to
-**78.26%**, ahead of its JAX reference. MobileNetV4-Conv-M gets the Universal
+**77.91%**, beside its JAX reference's 78.26. MobileNetV4-Conv-M gets the Universal
 Inverted Bottleneck's backward, its fold, and a 4-GPU job (**75.48%**);
 ConvNeXt-T re-runs 300 epochs on the current artifact at **81.53%**,
 EfficientNet-B0 350 paper-faithful epochs at **77.15%**, and ResNet-34,

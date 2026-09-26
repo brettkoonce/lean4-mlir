@@ -1,6 +1,6 @@
 # Comparator-based independent kernel re-check
 
-This directory holds an end-to-end verification of 73 theorems from the
+This directory holds an end-to-end verification of 87 theorems from the
 proof suite using
 [leanprover/comparator](https://github.com/leanprover/comparator) — the
 trustworthy-judge tool the Lean Zulip community recommended for projects
@@ -36,7 +36,7 @@ cannot be phrased without ResNet-34 in scope. Making those Mathlib-only would
 mean a second copy of every architecture, which must then never drift from the
 first; that is a weaker guarantee than an import, not a stronger one.
 
-`ChallengeTier.lean` holds the remaining 21 and is **machine-generated**
+`ChallengeTier.lean` holds the remaining 35 and is **machine-generated**
 (`scripts/gates/gen_comparator_tier.py`). It is the layer above the Jacobians: the step
 ties, the codegen faithfulness results, the whole-net back-chains, the
 data-parallel results, the float bridge, the descent result and the three
@@ -60,7 +60,7 @@ nothing else.
 
 ## What gets verified
 
-The 73 theorems span foundation rules (incl. `chk_pdiv_is_fderiv`, which pins
+The 87 theorems span foundation rules (incl. `chk_pdiv_is_fderiv`, which pins
 `pdiv` to Mathlib's `fderiv`), every chapter's headline Jacobian, the public
 `*HasVJP_correct` wrappers, six whole-network VJPs, and the tie /
 faithfulness / certificate tier. The first two buckets are `Challenge.lean`,
@@ -205,11 +205,11 @@ keeps the audit reproducible until they land.
 - **The remaining theorems in the proof suite** (downstream compositions,
   `_diff` smoothness lemmas, `_eq_compose` rewrites, the per-leaf ties beneath
   each whole-net chain). `tests/AuditAxioms.lean` prints the axiom closure of
-  all 1,374 of them on every proof-path push; this directory re-checks 73 of
+  all 1,596 of them on every proof-path push; this directory re-checks 87 of
   them with an independent kernel. The gap between those two numbers is
   deliberate: what the comparator adds is a second, non-elaborator opinion, and
   a second opinion on the advertised set plus the calculus floor it rests on is
-  the claim being made. It is not a claim that 73 is all that is proved.
+  the claim being made. It is not a claim that 87 is all that is proved.
 - **`noncomputable def` *witnesses*** themselves like `vitFullHasVJP`,
   `cnnHasVJPAt`, `mhsaLayerHasVJPMat`, etc. comparator's
   `theorem_names` matches `Lean.ConstantInfo.thm`, not `defn`, so the

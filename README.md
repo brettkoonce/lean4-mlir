@@ -50,7 +50,7 @@ lake exe cache get && ./scripts/datasets/download_mnist.sh && lake run mnist    
 |---|---|---|---|---|
 | 1 | `lake run mnist` | linear, MLP and CNN on MNIST, 12 epochs each (~1 min) | 92.10 · 97.81 · 98.77 % | [1](https://lean.brettkoonce.com/blueprint/chap-tensor.html) · [2](https://lean.brettkoonce.com/blueprint/chap-mlp.html) · [3](https://lean.brettkoonce.com/blueprint/chap-cnn.html) |
 | 2 | `lake run cifar` | the wide 8-conv net on CIFAR-10: SGD / momentum / AdamW × no-BN / BN, 40 epochs at a constant lr (~19 min) | 76.3 % — BN + momentum, median of five | [4](https://lean.brettkoonce.com/blueprint/chap-bn.html) |
-| 3 | `lake run imagenette` | seven nets on Imagenette at 224², 80 epochs AdamW, book order (~9 h) | R34 89.50 · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 % | [5](https://lean.brettkoonce.com/blueprint/chap-residual.html) · [6](https://lean.brettkoonce.com/blueprint/chap-depthwise.html) · [7](https://lean.brettkoonce.com/blueprint/chap-se.html) · [8](https://lean.brettkoonce.com/blueprint/chap-layernorm.html) · [9](https://lean.brettkoonce.com/blueprint/chap-attention.html) |
+| 3 | `lake run imagenette` | seven nets on Imagenette at 224², 80 epochs AdamW, book order (~9 h) | R34 89.99 (mean of five seeds) · R50 89.71 · MNv2 89.25 · MNv4-Conv-M 86.24 · B0 89.96 · ConvNeXt-T 85.07 · ViT-Tiny 68.74 % | [5](https://lean.brettkoonce.com/blueprint/chap-residual.html) · [6](https://lean.brettkoonce.com/blueprint/chap-depthwise.html) · [7](https://lean.brettkoonce.com/blueprint/chap-se.html) · [8](https://lean.brettkoonce.com/blueprint/chap-layernorm.html) · [9](https://lean.brettkoonce.com/blueprint/chap-attention.html) |
 | 4 | `lake run imagenet` | the same nets on ImageNet-1k at the paper recipes, 4× 3060 / 4060 Ti, weeks of wall-clock; bare it prints the plan and every row's estimate, `start` runs it | R34 74.17 · R50 (RSB-A3) 78.33 · MNv2 71.91 · B0 76.88 · ConvNeXt-T 81.30 · ViT-Tiny 72.35 % on the verified path, each within 0.3 of its JAX reference; MNv4-Conv-M's 75.48 is a pre-timm-parity reference (rerun queued), its verified run still to come | [Track 4](https://lean.brettkoonce.com/blueprint/app-getting_started.html) |
 
 The demos ride on the chapter nets, in the order Chapter 10 meets them — recognition, then
@@ -83,7 +83,8 @@ EfficientNet-B0, ConvNeXt-T and ViT-Tiny, with zero project axioms. For every ch
 committed train-step render in `verified_mlir/` is tied to those proofs at the denotational level:
 each emitted parameter-update node denotes the certified descent step, and the tiers train on
 exactly those bytes. What stays trusted is the ℝ→Float32 numerics, the per-op text printing, and
-the lowerer with its runtime. The book's
+the lowerer with its runtime. [TRUST.md](TRUST.md) puts that on one page: which kind of check
+stands behind each claim, and which hypotheses are discharged. The book's
 [On Verification](https://lean.brettkoonce.com/blueprint/app-verification.html)
 appendix is the full argument, gap by gap; [LeanMlir/Proofs/README.md](LeanMlir/Proofs/README.md)
 is the file-level map, and the [API docs](https://lean.brettkoonce.com/docs/) open on the same map

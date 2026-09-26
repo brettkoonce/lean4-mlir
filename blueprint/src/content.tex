@@ -16522,7 +16522,7 @@ else, and Appendix~\ref{app:verification} is the accounting.
 \texttt{\#print axioms} and \texttt{lake build} both run through Lean's
 elaborator, so they share a trust path with whatever the elaborator did.
 \texttt{tests/comparator/} re-runs Lean's kernel typechecker independently over
-73 theorems, sandboxed, verifying each one's axiom closure statically:
+87 theorems, sandboxed, verifying each one's axiom closure statically:
 
 \begin{verbatim}
 tests/comparator/run.sh
@@ -16547,7 +16547,7 @@ ResNet-34 in scope. Once the \texttt{fderiv} pin and the structural rules are
 checked over Mathlib alone, the architecture theorems are applications of them,
 and what you must additionally trust is the forward functions and nothing else.
 
-The last 21 are \texttt{ChallengeTier.lean}, the layer this book's second
+The last 35 are \texttt{ChallengeTier.lean}, the layer this book's second
 half rests on: the step ties, the codegen faithfulness results, the whole-net
 back-chains, the data-parallel results, the float bridge and the three
 certificate theorems. Their statements run to hundreds of lines apiece, so the
@@ -16916,14 +16916,14 @@ and the empirical layer are for.
 \texttt{tests/comparator/} wires the project up to
 \href{https://github.com/leanprover/comparator}{leanprover/comparator},
 the Lean community's trustworthy-judge tool for projects that claim
-zero project axioms. It runs 73 theorems (the foundation rules,
+zero project axioms. It runs 87 theorems (the foundation rules,
 every chapter's headline Jacobian, the public
 \texttt{*HasVJP\_correct} wrappers, three smooth-point
 pointwise variants (\texttt{reluHasVJPAt\_correct},
 \texttt{mlpHasVJPAt\_correct},
 \texttt{maxPool2HasVJPAt3\_correct}) whose underlying
 \texttt{.correct} field is a real proof rather than \texttt{rfl},
-and the 21-theorem tie / faithfulness / certificate tier)
+and the 35-theorem tie / faithfulness / certificate tier)
 through Lean's kernel typechecker independently of the elaborator,
 with an axiom-allowlist of exactly \(\{\texttt{propext},
 \texttt{Quot.sound}, \texttt{Classical.choice}\}\). Any project
@@ -16933,10 +16933,10 @@ the run.
 This is what closes the gap between ``the elaborator accepted my
 proofs'' (which \texttt{lake build} confirms) and ``the kernel
 agrees, audited from a separate process'' (which comparator confirms).
-The 73 are not the whole proof suite --- \texttt{tests/AuditAxioms.lean}
-prints the axiom closure of 1{,}374 declarations, and the same allowlist
+The 87 are not the whole proof suite --- \texttt{tests/AuditAxioms.lean}
+prints the axiom closure of 1{,}596 declarations, and the same allowlist
 applies to all of them, because every theorem in the project closes the
-same way. What the 73 add is a second, non-elaborator opinion, and they
+same way. What the 87 add is a second, non-elaborator opinion, and they
 include every declaration \texttt{formalization.yaml} puts forward as a
 result, together with the calculus floor those rest on.
 

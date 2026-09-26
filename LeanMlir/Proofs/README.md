@@ -414,9 +414,8 @@ convention for the canonical Lean witness. Typical max-error is
 
 `tests/comparator/` runs
 [leanprover/comparator](https://github.com/leanprover/comparator) on
-73 theorems spanning the foundation rules, every chapter's headline
-Jacobian, the public `*HasVJP_correct` wrappers, and the five
-whole-network VJPs (ViT, ResNet, MobileNetV2, ConvNeXt, EfficientNet).
+87 theorems; [its README](../../tests/comparator/README.md) lists
+them by configuration.
 comparator
 re-runs Lean's kernel typechecker independently
 of the elaborator and verifies the transitive axiom closure of each
