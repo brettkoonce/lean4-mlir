@@ -78,17 +78,8 @@ def runConvNeXtBImagenet (argv : List String) : IO Unit := do
   -- trains. It is an ENDPOINT gate and blind to PLACEMENT, which `scripts/probes/misplace_drop_sites.py`
   -- is the control for.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
-    | some 0 => { convnextBImagenetVerified.toNet with
-                    dropKeeps := convnextBImagenetVerified.dropKeeps.map (fun _ => 1.0) }
-    | some u =>
-        -- Re-derive the ramp at a different rate from the SPEC's own keeps, so the block indices
-        -- stay the renderer's: `(1 − k)/0.5` recovers `i/35`.
-        -- ⚠ The `0.5` is B's committed rate — S's copy of this line divides by 0.4 and T's by 0.1.
-        -- Three sizes, three divisors; carrying the wrong one silently rescales every request.
-        let rate := u.toFloat * 1e-6
-        { convnextBImagenetVerified.toNet with
-            dropKeeps := convnextBImagenetVerified.dropKeeps.map
-              (fun k => 1.0 - rate * ((1.0 - k) / 0.5)) }
+    | some u => { convnextBImagenetVerified.toNet with
+                  dropKeeps := convnextBImagenetVerified.dropKeepsAt (u.toFloat * 1e-6) }
     | none   => convnextBImagenetVerified.toNet
   dropNet.trainAdamSched
     { convnextBImagenetConfig with batchSize := bs, epochs := epochs }

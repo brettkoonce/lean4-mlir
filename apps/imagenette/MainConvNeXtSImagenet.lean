@@ -96,17 +96,8 @@ def runConvNeXtSImagenet (argv : List String) : IO Unit := do
   -- endpoint gates are blind to PLACEMENT (`1 ⊙ (branch + x) = branch + x` exactly), which is what
   -- `scripts/probes/misplace_drop_sites.py` is the control for.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
-    | some 0 => { convnextSImagenetVerified.toNet with
-                    dropKeeps := convnextSImagenetVerified.dropKeeps.map (fun _ => 1.0) }
-    | some u =>
-        -- Re-derive the ramp at a different rate from the SPEC's own keeps, so the block indices
-        -- stay the renderer's: `(1 − k)/0.4` recovers `i/35`, the index the spec encoded.
-        -- ⚠ The `0.4` here is S's committed rate, NOT Tiny's 0.1 — the Tiny driver's copy of this
-        -- line divides by 0.1, and carrying it over would rescale every requested rate by 4×.
-        let rate := u.toFloat * 1e-6
-        { convnextSImagenetVerified.toNet with
-            dropKeeps := convnextSImagenetVerified.dropKeeps.map
-              (fun k => 1.0 - rate * ((1.0 - k) / 0.4)) }
+    | some u => { convnextSImagenetVerified.toNet with
+                  dropKeeps := convnextSImagenetVerified.dropKeepsAt (u.toFloat * 1e-6) }
     | none   => convnextSImagenetVerified.toNet
   dropNet.trainAdamSched
     { convnextSImagenetConfig with batchSize := bs, epochs := epochs }

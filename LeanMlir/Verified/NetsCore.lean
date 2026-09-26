@@ -62,7 +62,6 @@ def linearVerified : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.dense 784 10]
   blurb    := "MNIST-Linear via the VERIFIED renderer (pretty∘emit) → %LOWERER% → GPU"
@@ -80,7 +79,6 @@ def mlpVerified : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.dense 784 512, .relu, .dense 512 512, .relu, .dense 512 10]
   blurb    := "MNIST-MLP via the VERIFIED renderer (784→512→512→10) → %LOWERER% → GPU"
@@ -111,7 +109,6 @@ def mlpG (d₁ d₂ : Nat) : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.dense 784 d₁, .relu, .dense d₁ d₂, .relu, .dense d₂ 10]
   blurb    := s!"MNIST-MLP-{d₁}x{d₂} via the VERIFIED renderer (784→{d₁}→{d₂}→10) → %LOWERER% → GPU"
@@ -137,7 +134,6 @@ def cnnVerified : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 6272 512, .relu, .dense 512 512, .relu, .dense 512 10]
@@ -171,7 +167,6 @@ def cnnG (d : Nat) : VerifiedNetSpec where
   inC      := 1
   imageH   := 28
   imageW   := 28
-  nClasses := 10
   data     := .mnist
   layers   := [.conv 1 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2, .flatten,
                .dense 6272 d, .relu, .dense d d, .relu, .dense d 10]
@@ -194,7 +189,6 @@ def cifarVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 32 3 1, .relu, .conv 32 32 3 1, .relu, .maxPool 2 2,
                .conv 32 64 3 1, .relu, .conv 64 64 3 1, .relu, .maxPool 2 2, .flatten,
@@ -217,7 +211,6 @@ def cifar8Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
                .conv 16 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
@@ -251,7 +244,6 @@ def cifar8BnVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
                .conv 16 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
@@ -279,7 +271,7 @@ def cifar8BnVerified : VerifiedNetSpec where
     `trainAdamSched "adam"` on the width-slugged renders
     `.lake/build/cifar8_bn_{d}_{adam_train_step,fwd}.mlir` (`mlirDir`, a build product, emitted by
     [`tests/TestCifar8AdamTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestCifar8AdamTrain.lean) with `D1` a parameter). Per-channel BN ⇒ train=eval (no running
-    stats, `bnChannels` empty). Slug `cifar8_bn_{d}`. -/
+    stats, `runningBN` off). Slug `cifar8_bn_{d}`. -/
 def cifar8BnG (d : Nat) : VerifiedNetSpec where
   name     := s!"CIFAR-CNN8-BN-fc{d}"
   slug     := s!"cifar8_bn_{d}"
@@ -294,7 +286,6 @@ def cifar8BnG (d : Nat) : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
                .conv 16 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
@@ -316,7 +307,6 @@ def cifar8wVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
                .conv 16 16 3 1, .relu, .conv 16 16 3 1, .relu, .maxPool 2 2,
@@ -352,7 +342,6 @@ def cifar8wBnVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 32
   imageW   := 32
-  nClasses := 10
   data     := .cifar
   layers   := [.conv 3 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
                .conv 16 16 3 1, .bnPerChannel 16, .relu, .conv 16 16 3 1, .bnPerChannel 16, .relu, .maxPool 2 2,
@@ -399,7 +388,6 @@ def resnet34Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 64 7 2,          -- 7×7-s2 stem → BN → relu       224→112 (no conv bias)
@@ -413,11 +401,7 @@ def resnet34Verified : VerifiedNetSpec where
   blurb := "Real ResNet-34 on Imagenette 224² (7×7-s2 stem→3×3-s2 overlapping max pool→[3,4,6,3] blocks w/ batch-norm, He et al. option-B 1×1 projection shortcuts, no conv biases; 56→28→14→7→GAP→dense) via the VERIFIED renderer → %LOWERER% → GPU"
   -- 36 BN layers in forward order (stem; then per basic block 2, per downsample block 3) — the
   -- running-stats layout for trainAdamSched + @resnet34_fwd_eval. Matches TestResnet34Train.bnLayers.
-  bnChannels := #[64,
-    64,64, 64,64, 64,64,                              -- stage1: 3 id blocks
-    128,128,128, 128,128, 128,128, 128,128,           -- d2 + stage2: 3 id blocks
-    256,256,256, 256,256, 256,256, 256,256, 256,256, 256,256,  -- d3 + stage3: 5 id blocks
-    512,512,512, 512,512, 512,512]                    -- d4 + stage4: 2 id blocks
+  runningBN  := true
 
 -- Derived layout (110 params) == the audited hand-list ResNet34Layout.specs. This `#guard` is
 -- the one §2k said would have caught the spec/render drift; it fired on the §2l step-B change and
@@ -443,7 +427,6 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- `resnet34ImagenetConfig` sets only `augment := true` ⇒ RandomResizedCrop + hflip, nothing else.
   -- This is the shim every OTHER net was streaming too, until `shimScript` existed.
@@ -459,11 +442,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
     .dense 512 1000 ]
   blurb := "ResNet-34 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
   -- Same 36 BN layers, same order — the architecture is unchanged above the head.
-  bnChannels := #[64,
-    64,64, 64,64, 64,64,
-    128,128,128, 128,128, 128,128, 128,128,
-    256,256,256, 256,256, 256,256, 256,256, 256,256, 256,256,
-    512,512,512, 512,512, 512,512]
+  runningBN  := true
 
 -- The two nets differ in EXACTLY one parameter shape — the head. Anything else moving means the
 -- ImageNet spec drifted from the Imagenette one it is supposed to be the 1000-class twin of.
@@ -491,7 +470,6 @@ def resnet50Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 64 7 2,              -- 7×7-s2 stem → BN → relu        224→112 (no conv bias)
@@ -504,16 +482,7 @@ def resnet50Verified : VerifiedNetSpec where
     .dense 2048 10 ]
   blurb := "ResNet-50 (bottleneck, v1.5 — stride on the 3×3) on Imagenette 224². LAYOUT SKELETON: no render, no proof chain, no artifact yet."
   -- 53 BN layers, in `conv_bn` call order: per block the three body convs, then the projection.
-  bnChannels := #[64,
-    -- stage1 @ mid 64, oc 256: proj-block (4) + 2 identity (3 each)
-    64,64,256,256,  64,64,256,  64,64,256,
-    -- stage2 @ mid 128, oc 512
-    128,128,512,512,  128,128,512,  128,128,512,  128,128,512,
-    -- stage3 @ mid 256, oc 1024
-    256,256,1024,1024,  256,256,1024,  256,256,1024,  256,256,1024,
-    256,256,1024,  256,256,1024,
-    -- stage4 @ mid 512, oc 2048
-    512,512,2048,2048,  512,512,2048,  512,512,2048]
+  runningBN  := true
 
 /-- **ResNet-50 on full 1000-class ImageNet** — the verified peer of [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean).
     Same backbone as `resnet50Verified`, head widened to 2048→1000.
@@ -528,7 +497,6 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   shimScript := "generated_resnet50_imagenet_shim.py"   -- ⚠ NOT generated yet; scripts/gen_shims.sh
   layers   := [
@@ -541,7 +509,7 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
     .globalAvgPool,
     .dense 2048 1000 ]
   blurb := "ResNet-50 on full 1000-class ImageNet via the VERIFIED renderer. LAYOUT SKELETON: no render, no proof chain, no artifact yet."
-  bnChannels := resnet50Verified.bnChannels
+  runningBN  := true
   -- ▶▶ **STOCHASTIC DEPTH, RSB-A2/A1's `dropPath := 0.05`** (2026-08-27). Sixteen sites, one per
   -- bottleneck block, on the residual branch — `bottleneck_block` drops `out` and leaves the
   -- shortcut alone.
@@ -557,7 +525,9 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
   -- `denom := Nat.max 1 (totalDrop - 1)`. So block 0 keeps 1.0 exactly and block 15 keeps 0.95;
   -- an off-by-one gives sixteen slightly-wrong keeps that train and descend. Checked against the
   -- regenerated reference's own call sites: `dpkeys[1], 0.996667` and `dpkeys[3], 0.990000`.
-  dropKeeps := (Array.range 16).map (fun i => 1.0 - 0.05 * i.toFloat / 15.0)
+  dropSites := Array.range 16
+  dropDenom := 15
+  dropRate  := 0.05
 
 -- ▶ §2k's precondition, and it is FREE here: the derived layout must total the reference's own
 -- reported parameter count. `jax/.lake/build/generated_resnet50_imagenet.py` reports 25,557,032,
@@ -571,17 +541,6 @@ def resnet50ImagenetVerified : VerifiedNetSpec where
 -- 53 BN layers = 1 stem + 16 blocks × 3 + 4 projections (all four stages project — stage 1
 -- changes 64→256 at stride 1, where R34's stage 1 is ic = oc and needs none).
 #guard resnet50Verified.bnChannels.size == 53
--- ⚠⚠ AND `bnChannels` IS A HAND-WRITTEN LITERAL WITH NOTHING TYING IT TO `layers`. Measured:
--- deleting a stage-3 block reddens all three counts above and leaves the `.size == 53` check
--- GREEN, because that array is not derived from anything. So pin it to the layout the way §2m
--- says — two independent routes, both gated. Every BN γ is the `(#[c], 1)` entry (initKind 1 =
--- ones), and `toSpecs` emits them in func-arg order, so filtering them out reproduces the BN
--- width list exactly. This is the audit whose ABSENCE let mnv2 ship a 158-param train step
--- against a 160-param eval forward (§2m).
-#guard (resnet50Verified.toSpecs.filterMap
-          (fun (d, k) => if k == 1 then some d[0]! else none)) == resnet50Verified.bnChannels
-#guard (resnet50ImagenetVerified.toSpecs.filterMap
-          (fun (d, k) => if k == 1 then some d[0]! else none)) == resnet50ImagenetVerified.bnChannels
 -- 161 param tensors = 53 W + 53 γ + 53 β + dense {W, b}.
 #guard resnet50ImagenetVerified.toSpecs.size == 161
 -- The two differ in EXACTLY the head, the `resnet34in`/`resnet34` contract one net over.
@@ -613,7 +572,6 @@ def resnet50Imagenet160Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 160
   imageW   := 160
-  nClasses := 1000
   data     := .imagenet
   -- ⚠ The `short`/A3 recipe's shim (`--shim` writes `<out minus .py>_shim.py`), NOT `default`'s.
   shimScript := "generated_resnet50_imagenet_short_shim.py"
@@ -622,7 +580,7 @@ def resnet50Imagenet160Verified : VerifiedNetSpec where
   -- §2k/§2l's two-different-ResNet-34s, one resolution over.
   layers   := resnet50ImagenetVerified.layers
   blurb := "ResNet-50 on full 1000-class ImageNet at RSB-A3's 160² train resolution, via the VERIFIED renderer."
-  bnChannels := resnet50Verified.bnChannels
+  runningBN  := true
 
 -- ▶ §2.1's check, and it is the whole point: the 160 spec must be the SAME NET. Params, tensor
 -- count and elementwise layout are resolution-independent (conv weights do not see spatial size,
@@ -631,8 +589,6 @@ def resnet50Imagenet160Verified : VerifiedNetSpec where
 #guard (resnet50Imagenet160Verified.toSpecs.foldl
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 25557032
 #guard resnet50Imagenet160Verified.toSpecs.size == 161
-#guard (resnet50Imagenet160Verified.toSpecs.filterMap
-          (fun (d, k) => if k == 1 then some d[0]! else none)) == resnet50Imagenet160Verified.bnChannels
 -- ⭐ AND THE ONE THING THAT MUST DIFFER. Without this the guards above are all satisfied by simply
 -- aliasing the 224 spec, which would render the whole definition a no-op. 3·160·160 = 76,800, and
 -- it is the exact width `verified_mlir/resnet50in160_fwd.mlir` declares (`tensor<64x76800xf32>`).
@@ -727,7 +683,6 @@ def mobilenetv2Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 32 3 2,             -- stem (no conv bias — §2m)
@@ -746,13 +701,7 @@ def mobilenetv2Verified : VerifiedNetSpec where
   -- but b1 is t=1 → NO expand, so only depthwise-BN/project-BN; head) — running-stats layout for
   -- trainAdamSched + @mobilenetv2_fwd_eval. Matches TestMobilenetV2TrainPC.bnLayers. True batch-norm
   -- (reduce [0,2,3]) → batch-BN eval degenerate on sorted val, so the adam trainer evals through running stats.
-  bnChannels := #[32,
-    32,16,  96,96,24, 144,144,24,  144,144,32, 192,192,32, 192,192,32,
-    192,192,64, 384,384,64, 384,384,64, 384,384,64,
-    384,384,96, 576,576,96, 576,576,96,
-    576,576,160, 960,960,160, 960,960,160,
-    960,960,320,
-    1280]
+  runningBN  := true
 
 -- Derived layout (210 param tensors == the canonical no-t=1-expand net, torchvision-standard:
 -- b1 is t=1 so its expand 1×1 is skipped) == the audited hand-list MobileNetV2Layout.specs.
@@ -782,7 +731,6 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- ⚠ `mobilenetV2ImagenetConfig` sets `useAutoAugment := false` explicitly ("MNv2 paper used
   -- crop/flip only"), so this shim is R34's pipeline — MEASURED: the two generated files differ in
@@ -806,13 +754,7 @@ def mobilenetv2ImagenetVerified : VerifiedNetSpec where
     .globalAvgPool,
     .dense 1280 1000 ]
   blurb := "MobileNetV2 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
-  bnChannels := #[32,
-    32,16,  96,96,24, 144,144,24,  144,144,32, 192,192,32, 192,192,32,
-    192,192,64, 384,384,64, 384,384,64, 384,384,64,
-    384,384,96, 576,576,96, 576,576,96,
-    576,576,160, 960,960,160, 960,960,160,
-    960,960,320,
-    1280]
+  runningBN  := true
 
 -- Exactly one parameter shape may differ (the head), and the BN layout must be IDENTICAL — the
 -- running-stat region is positional, so a drift there misaligns every frozen statistic at eval.
@@ -837,7 +779,6 @@ def efficientnetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 32 3 2,            -- stem 3×3-s2
@@ -864,9 +805,7 @@ def efficientnetVerified : VerifiedNetSpec where
   -- 49 BN layers in forward order (stem; per MBConv: expand-BN [t≠1 only], depthwise-BN, project-BN;
   -- head) — running-stats layout for trainAdamSched + @efficientnet_fwd_eval. Printed by
   -- TestEfficientNetTrain.bnChannelsList; true batch-norm makes batch-BN eval degenerate on sorted val.
-  bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
-    480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
-    1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
+  runningBN  := true
   -- ▶ STOCHASTIC DEPTH (`planning/archive/stochastic_depth.md`), used only by the `*sd` variants.
   -- `keep_i = 1 − 0.2·i/(16−1)` at the NINE block indices that carry a skip: 2,4,6,7,9,10,12,13,14.
   --
@@ -876,8 +815,9 @@ def efficientnetVerified : VerifiedNetSpec where
   -- them from the site ordinal instead gives nine evenly-spaced keeps: it compiles, runs, descends
   -- and trains a different objective. §2k's α/K bug in a new place, and no numeric tie can see it,
   -- because every tie compares the render against a peer built from the same constants.
-  dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
-    (fun i => 1.0 - 0.2 * i.toFloat / 15.0)
+  dropSites := #[2, 4, 6, 7, 9, 10, 12, 13, 14]
+  dropDenom := 15
+  dropRate  := 0.2
   -- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C). `efficientNetB0ImagenetConfig` sets
   -- `dropout := 0.2` (`jax/MainEfficientNetImagenet.lean`), so keep = 0.8, and the width is the
   -- head's 1280 — the GAP output the classifier consumes, NOT `nClasses`.
@@ -916,7 +856,6 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- `efficientNetB0ImagenetConfig` sets `useAutoAugment := true` — the full ImageNet policy,
   -- geometric ops included. Streaming R34's shim here dropped it entirely.
@@ -943,17 +882,16 @@ def efficientnetImagenetVerified : VerifiedNetSpec where
     .globalAvgPool,
     .dense 1280 1000 ]
   blurb := "EfficientNet-B0 on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the same augmentation the Lean→JAX reference trainer uses"
-  bnChannels := #[32, 32, 16, 96, 96, 24, 144, 144, 24, 144, 144, 40, 240, 240, 40, 240, 240, 80,
-    480, 480, 80, 480, 480, 80, 480, 480, 112, 672, 672, 112, 672, 672, 112, 672, 672, 192,
-    1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 192, 1152, 1152, 320, 1280]
+  runningBN  := true
   -- ▶ v1.2c: the ImageNet peer of `efficientnetVerified.dropKeeps`. The SITES are identical —
   -- `enetDropIdxs` is a property of the ARCHITECTURE (16 MBConv blocks, 9 with skips) — but since
   -- 2026-09-25 the ramp is TF's `0.2 · i/16` (`efficientNetB0ImagenetConfig.dropPathOverN`), where
   -- the Imagenette peer keeps timm's `i/15`. Checked against the regenerated reference's call
   -- sites: `dpkeys[2], 0.975000` and `dpkeys[14], 0.825000`.
   -- ⚠ Host-fed, so it reaches every `…drop…` variant this driver runs, the older renders included.
-  dropKeeps := (#[2, 4, 6, 7, 9, 10, 12, 13, 14] : Array Nat).map
-    (fun i => 1.0 - 0.2 * i.toFloat / 16.0)
+  dropSites := #[2, 4, 6, 7, 9, 10, 12, 13, 14]
+  dropDenom := 16
+  dropRate  := 0.2
   -- The ImageNet peer, and IDENTICAL for the reason the drop SITES are: the mask width is the head's
   -- input (1280), which is a property of the ARCHITECTURE. Only the classifier's OUTPUT moves
   -- between scales (10 → 1000), and the dropout site sits before it.
@@ -989,7 +927,6 @@ def convnextVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .conv 3 96 4 4, .layerNorm 96,                                     -- patchify 4×4/s4 + stem LN
@@ -1020,7 +957,9 @@ def convnextVerified : VerifiedNetSpec where
   -- ⚠ Block 0's keep is exactly 1.0, so `F32.dropScales` hands that site an exact 1.0 and the op is
   -- the identity in IEEE — which is the reference's `keep_prob < 1.0` guard, obtained as data rather
   -- than as a missing site.
-  dropKeeps := (Array.range 18).map (fun i => 1.0 - 0.1 * i.toFloat / 17.0)
+  dropSites := Array.range 18
+  dropDenom := 17
+  dropRate  := 0.1
 
 /-- **ConvNeXt-T on full 1000-class ImageNet** — the ConvNeXt peer of `resnet34ImagenetVerified`
     and `vitImagenetVerified`. Identical architecture to `convnextVerified`; only the head moves
@@ -1051,7 +990,6 @@ def convnextImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- `convNeXtTinyImagenetConfig`: RandAugment m9/mstd0.5/inc1 (geometric) + random erasing p0.25.
   -- Mixup/CutMix are in that config too but ride the PRODUCER's `SHIM_MIX`, not the pipeline.
@@ -1075,7 +1013,9 @@ def convnextImagenetVerified : VerifiedNetSpec where
   -- REFERENCE recipe item — `convNeXtTinyImagenetConfig.dropPath := 0.1`, the ConvNeXt-T paper
   -- value — so `convnextin_adamdpwxclipdrop` is the first ConvNeXt artifact carrying every
   -- optimizer-and-regulariser knob its reference sets.
-  dropKeeps := (Array.range 18).map (fun i => 1.0 - 0.1 * i.toFloat / 17.0)
+  dropSites := Array.range 18
+  dropDenom := 17
+  dropRate  := 0.1
 
 /-- **ConvNeXt-Small on full ImageNet-1k** — ConvNeXt-T deepened: `[3,3,9,3] → [3,3,27,3]`,
     dims unchanged at `[96,192,384,768]`. The renderer takes the depth table as a parameter
@@ -1102,7 +1042,6 @@ def convnextSImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- ⚠ ConvNeXt-T's shim, and that is correct rather than lazy: the shim is the DATA pipeline
   -- (RandAugment m9/mstd0.5/inc1 + random erasing p0.25), which the paper does not change between
@@ -1127,7 +1066,9 @@ def convnextSImagenetVerified : VerifiedNetSpec where
   -- ramp SHAPE is architectural (one site per block, global index) but the RATE is per-size recipe.
   -- Copying T's 0.1 here would have been the silent-hyperparameter shape (§2a-quater) — it renders,
   -- trains and descends, at a regularisation strength the reference does not use for this size.
-  dropKeeps := (Array.range 36).map (fun i => 1.0 - 0.4 * i.toFloat / 35.0)
+  dropSites := Array.range 36
+  dropDenom := 35
+  dropRate  := 0.4
 
 -- 344 parameter tensors and 50,223,688 scalars: ConvNeXt-T's 182/28,589,128 plus 18 stage-3 blocks
 -- at 9 tensors and 1,201,920 scalars each. S DEEPENS — it is the first net here added by adding
@@ -1170,7 +1111,6 @@ def convnextBImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- ConvNeXt-T's shim: the paper does not change the DATA pipeline across T/S/B, only the model
   -- and the drop rate. Same reasoning as ConvNeXt-S's.
@@ -1188,7 +1128,9 @@ def convnextBImagenetVerified : VerifiedNetSpec where
   blurb := "ConvNeXt-Base on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (ConvNeXt-S's [3,3,27,3] depth at [128,256,512,1024], 88.6M params)"
   -- 36 sites, denominator 35, rate **0.5** — the paper's B value. ⚠ Same ramp SHAPE as S, different
   -- rate: the shape is architectural, the rate is per-size recipe. Three sizes, three rates.
-  dropKeeps := (Array.range 36).map (fun i => 1.0 - 0.5 * i.toFloat / 35.0)
+  dropSites := Array.range 36
+  dropDenom := 35
+  dropRate  := 0.5
 
 -- Same 344 tensors as S — B widens every one and adds none, which is the width-generic claim
 -- stated as arithmetic. 88,591,464 scalars against S's 50,223,688.
@@ -1226,7 +1168,6 @@ def vitVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .conv 3 192 16 16,            -- patch embed 16×16/s16 (3→192)   224→14×14=196
@@ -1257,7 +1198,9 @@ def vitVerified : VerifiedNetSpec where
   -- (`stochastic_depth.md` §6.3); `tests/TestDropPathRamp.lean` is what pins it.
   -- ⚠ The denominator is 11 = 12 blocks - 1, and block 11 keeps exactly `1 - dropPath` — unlike
   -- EfficientNet, whose deepest SITE is one ramp step short because its last block has no skip.
-  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
+  dropSites := (Array.range 24).map (· / 2)
+  dropDenom := 11
+  dropRate  := 0.1
 
 -- Derived layout (200 params) == the audited hand-list ViTLayout.specs.
 #guard vitVerified.toSpecs == ViTLayout.specs
@@ -1288,7 +1231,6 @@ def vitImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- `vitTinyImagenetConfig` is the DeiT suite: RandAugment m9/mstd0.5/inc1 (geometric) + random
   -- erasing p0.25 + **repeated augmentation ×3**. The last one changes the STREAM, not just the
@@ -1318,7 +1260,9 @@ def vitImagenetVerified : VerifiedNetSpec where
   -- ARCHITECTURE (12 blocks, 2 sites each) and of `dropPath := 0.1`, neither of which moves with the
   -- class count. ⚠ Here it IS a reference recipe item (`vitTinyImagenetConfig.dropPath`, the DeiT
   -- value), where on Imagenette it is a gate vehicle.
-  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
+  dropSites := (Array.range 24).map (· / 2)
+  dropDenom := 11
+  dropRate  := 0.1
 
 /-- **ViT-Small on full ImageNet-1k** — ViT-Tiny widened.
 
@@ -1340,7 +1284,6 @@ def vitSImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers   := [
@@ -1364,7 +1307,9 @@ def vitSImagenetVerified : VerifiedNetSpec where
   blurb := "ViT-Small on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU (Tiny widened: D 384 = 6 heads x 64, MLP 1536, same depth 12)"
   -- Identical to Tiny's: the ramp is a property of the DEPTH (12 blocks, 2 sites each) and of
   -- `dropPath := 0.1`. Width does not enter it, which is why widening needs no new ramp.
-  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
+  dropSites := (Array.range 24).map (· / 2)
+  dropDenom := 11
+  dropRate  := 0.1
 
 -- 200 parameter tensors, the SAME count as ViT-Tiny — S widens every tensor and adds none, which
 -- is the whole claim of the depth-k/width-generic renderer stated as arithmetic. 22,050,664
@@ -1390,7 +1335,6 @@ def vitBImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   shimScript := "generated_vit_tiny_imagenet_shim.py"
   layers   := [
@@ -1412,7 +1356,9 @@ def vitBImagenetVerified : VerifiedNetSpec where
     .layerNorm 768,
     .dense 768 1000 ]
   blurb := "ViT-Base on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU"
-  dropKeeps := (Array.range 24).map (fun sIdx => 1.0 - 0.1 * (sIdx / 2).toFloat / 11.0)
+  dropSites := (Array.range 24).map (· / 2)
+  dropDenom := 11
+  dropRate  := 0.1
 
 -- 86,567,656 parameters, DeiT-B's published 86.57M, in the SAME 200 tensors as Ti and S. Three
 -- widths, one renderer, one theorem. `jax/MainVitBImagenet.lean` emits the same count from an
@@ -1462,7 +1408,6 @@ def mobilenetv4Verified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 10
   data     := .imagenette
   layers   := [
     .convBnNB 3 32 3 2,                 -- stem, 224→112 (symmetric pad, timm `conv_stem`)
@@ -1493,21 +1438,11 @@ def mobilenetv4Verified : VerifiedNetSpec where
     .convBnNB 960 1280 1 1,             -- head conv 2 (`conv_head` on the pooled features)
     .dense 1280 10 ]
   blurb := "MobileNetV4-Conv-M on Imagenette 224² (stem-s2 → fused MBConv → 21 Universal Inverted Bottleneck blocks spanning all four families from ONE constructor, 224→7 → head conv 256→960 → GAP → conv_head 960→1280 → dense, timm order) via the VERIFIED renderer → %LOWERER% → GPU"
-  -- 52 BN layers in forward order: stem; the fused stage's k×k-BN and project-BN; then per UIB
+  -- 77 BN layers in forward order: stem; the fused stage's k×k-BN and project-BN; then per UIB
   -- block pre-DW-BN (if preDWk≠0) / expand-BN / post-DW-BN (if postDWk≠0) / project-BN; head.
-  -- ⚠ The `if`s are the `k = 0` family dispatch, so this list's LENGTH varies per block (2, 3 or 4)
-  -- — which is exactly why it is `#guard`ed against `toSpecs` below rather than eyeballed.
-  bnChannels := #[32,
-    128, 48,
-    48, 192, 192, 80,        80, 160, 160, 80,        80, 480, 480, 160,
-    160, 640, 640, 160,      160, 640, 640, 160,      160, 640, 640, 160,
-    160, 640, 640, 160,      160, 640, 160,           320, 160,
-    160, 640, 160,
-    160, 960, 960, 256,      256, 1024, 1024, 256,    256, 1024, 1024, 256,
-    256, 1024, 1024, 256,    1024, 256,               256, 1024, 256,
-    256, 512, 512, 256,      256, 1024, 1024, 256,    1024, 256,
-    1024, 256,               256, 512, 256,
-    960, 1280]
+  -- The `if`s are the `k = 0` family dispatch, so the count varies per block (2, 3 or 4); the
+  -- conv-output route below cross-checks the γ route `bnChannels` is read off.
+  runningBN  := true
 
 -- 233 parameter tensors — the same count `mnv4-fwd-smoke` ties to `mnv4ShapeList` shape-for-shape,
 -- and 8,447,322 parameters. ⭐ `jax/MainMobilenetV4.lean`'s `totalParams` reads 8447322 too, from
@@ -1518,10 +1453,10 @@ def mobilenetv4Verified : VerifiedNetSpec where
           (fun acc (d, _) => acc + d.foldl (· * ·) 1) 0) == 8447322
 -- ⭐ Every conv in this net is BN-followed, so the BN channel list must be, in forward order, the
 -- OUTPUT channel count of every conv weight — which is the kernel's first dimension for a regular
--- conv `[oc,ic,kH,kW]` and for a depthwise `[c,1,k,k]` alike. This pins `bnChannels`'s length,
--- widths AND order against the layer list, so the `k = 0` dispatch cannot be written one way in
--- `layers` and another in `bnChannels`. A misaligned stat slot is otherwise SILENT: the arities
--- still match and the wrong layer's statistics simply flow into the wrong `@mnv4_fwd_eval` slot.
+-- conv `[oc,ic,kH,kW]` and for a depthwise `[c,1,k,k]` alike. `bnChannels` is read off the BN γ
+-- entries (`VLayer.bnWidths`); this reads the same list off the conv kernels, a second route to
+-- the same layout. A misaligned stat slot is otherwise SILENT: the arities still match and the
+-- wrong layer's statistics simply flow into the wrong `@mnv4_fwd_eval` slot.
 #guard mobilenetv4Verified.bnChannels ==
   (mobilenetv4Verified.toSpecs.filterMap (fun (d, _) => if d.size == 4 then some d[0]! else none))
 #guard mobilenetv4Verified.bnChannels.size == 77
@@ -1551,7 +1486,6 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
   inC      := 3
   imageH   := 224
   imageW   := 224
-  nClasses := 1000
   data     := .imagenet
   -- ⚠ Generated from the Conv-M reference recipe (`gen_shims.sh`'s `mobilenet-v4-imagenet:default`).
   -- That is correct and deliberate: a shim supplies AUGMENTED BATCHES, not weights, so what it
@@ -1587,7 +1521,7 @@ def mnv4ImagenetVerified : VerifiedNetSpec where
     .convBnNB 960 1280 1 1,
     .dense 1280 1000 ]
   blurb := "MobileNetV4-Conv-M on full 1000-class ImageNet via the VERIFIED renderer → %LOWERER% → GPU, with the tfds batch shim supplying the MNv4 reference augmentation"
-  bnChannels := mobilenetv4Verified.bnChannels
+  runningBN  := true
   -- ▶ classifier dropout at the reference's 0.1 (keep 0.9) on the 1280-wide head, read only by
   -- `do` variants (`VerifiedVariant.cdOn`); `adamdp64*` carry no mask and are untouched.
   dropoutKeep := some (0.9, 1280)

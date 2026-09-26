@@ -37,7 +37,8 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 |---|---|
 | 433b433a | §2 root batch: 2.1–2.4, 2.6, 2.7 as tabled, 2.5 in part. Deviations below |
 | 502c0232 | §3: 3.2 as a guard (3.1 not needed), 3.3 minimal form. Deviations below |
-| (staged) | §4.1 + §4.2 as tabled; §4.3 not started. Notes below |
+| 4fa1bbce | §4.1 + §4.2 as tabled; §4.3 not started. Notes below |
+| (staged) | §5.2–5.4, §5.5 in part (5.1 next). Notes below |
 
 §2 deviations:
 
@@ -105,6 +106,29 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
   `.lamb`. `generateTrainStep`'s own `useAdam` parameter is codegen API and stays.
 * Checks: `jax/generated/` drift guard (74 artifacts re-emitted, identical), `verified_mlir/` full
   regen (empty diff), `test-yolov1-mutex` C1–C7, every touched exe built, the full gate.
+
+§5 notes (5.2–5.5):
+
+* 5.4 as tabled: the write-only fields are gone from `MBFwd`, `MNV2Fwd`, `BFwd`, `R34Fwd`,
+  `R34FwdRecB`, `ENetFwd`, `Mnv4FwdRec`, `UibFwdB`, `BSaves`, `FwdSaves`; the trap comments now
+  say the record has no pre-dropout name to read. `verified_mlir/` regen: empty diff.
+* 5.2: `CnxDims` is `Vector Nat 4` × 2 (`#v[…]`); indices stay `[i]!`.
+* 5.3: `bnChannels` is `VerifiedNetSpec.bnChannels`, read off `layers` by `VLayer.bnWidths`
+  (BN γ entries of `toSpecs`, LN-bearing layers excluded) under a new `runningBN` flag; checked
+  equal to all 12 hand lists before they were deleted, and empty for the per-example-BN CIFAR-8
+  nets (flag off). The R50 kind-1 guards became the definition and are gone; MNv4's conv-output
+  guard stays as the independent second route. `dropKeeps` is `dropKeepsAt dropRate` over
+  `dropSites`/`dropDenom`; the keeps are bit-identical to the old literals for all 15 specs
+  (compared as `Float.toBits`), and the five apps' `LEAN_MLIR_DROP_RATE_U` overrides call
+  `dropKeepsAt` instead of inverting with per-net constants. `nClasses` is read off the head
+  `.dense` (every spec ends in one). `inC` stays a field: dense-first nets carry `inC·H·W`, not
+  `inC`. `VerifiedConfig.lr` is gone (the banner said "lr baked into the render").
+* 5.5: `ViTConfig` goes with §8.3. `ValCarry.rows` stays (two adjacent writers on the
+  streamed-eval hot path; not worth the risk). `RmsSchedule.warmup` is not a finding: the MNv2
+  and B0 Imagenette demos train AdamW by default, and the literal `3` their apps pass is AdamW's
+  warmup. `RmsSchedule` is read only by the `rms`-named descent-check variants (not a recipe), which
+  share that `3`; the ImageNet apps pass `if rms then sched.warmup else 5`. Mirroring that in the
+  two Imagenette apps would only move the `rms` variants (3 → 5), no published number. Open, low.
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

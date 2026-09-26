@@ -693,20 +693,18 @@ structure ENetFwd where
   blocks : Array EFwd        -- the 16 MBConv forwards, in forward order
   hc     : String            -- head 1×1 conv out (= head BN input)
   hn     : String            -- head BN out (= head swish pre-act)
-  hr     : String            -- head swish out (= GAP input)
-  gap    : String            -- global-average-pool out
-  /-- **THE CLASSIFIER'S ACTUAL INPUT** — `gap` with classifier dropout OFF, the `dropoutB`
-      output with it ON. It exists as its own field, rather than every consumer reading `gap`,
-      because there are TWO consumers and one of them is easy to miss:
+  /-- **THE CLASSIFIER'S ACTUAL INPUT** — the pooled activation with classifier dropout OFF, the
+      `dropoutB` output with it ON. The record carries no separate pooled name, because there are
+      TWO consumers of this value and one of them is easy to miss:
 
       * the dense forward, which obviously reads it; and
       * **the dense WEIGHT gradient**, `∂L/∂W = Σ_b dy_b ⊗ (input_b)` — which reads the dense's
         input, i.e. the DROPPED activation, not the pooled one.
 
-      Feeding `dnW` the undropped `gap` type-checks, trains, descends, and is wrong on the one
-      parameter dropout acts through. It is invisible to every ones-mask gate this feature has,
-      because at `mask ≡ 1` the two values are equal. It is a named field so that every consumer
-      of the value dropout displaces reads it by name. -/
+      Feeding `dnW` the undropped pooled activation type-checks, trains, descends, and is wrong on
+      the one parameter dropout acts through. It is invisible to every ones-mask gate this feature
+      has, because at `mask ≡ 1` the two values are equal; leaving the pooled name off the record
+      means there is nothing else to read. -/
   cin    : String            -- dense input (= gap, or the dropout output when cd is on)
   logits : String            -- dense out
   /-- The 49 BN layers as `(BN-input SSA, stat prefix, channels, spatial side)`, stem → blocks in
@@ -803,7 +801,7 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
     let f16 ← eFwdNoSkip  B 192 1152 320 7 3 48 mode epsStr "b16" f15.o convBias (bf16 := bf16) (replicas := replicas) (sync := sync)
     -- ═══ head: 1×1 conv (320→1280) → bn → swish → GAP → dense ═══
     let hd ← enetHeadFwdB B nClasses mode epsStr f16.o convBias bf16 replicas sync
-    let (nHc, nHn, hst, nHr, nGap) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap)
+    let (nHc, nHn, hst, nGap) := (hd.hc, hd.hn, hd.hst, hd.gap)
     let z1280c : Vec (B * 1280) := fun _ => 0
     let zWd   : Mat 1280 nClasses := fun _ _ => 0
     let zNC   : Vec nClasses := fun _ => 0
@@ -826,7 +824,7 @@ private def enetFwdChain (B nClasses : Nat) (mode : BnMode) (epsStr : String) (c
              f15.code ++ f16.code ++ hd.code ++ cDo ++ cLog,
            stc := nStc, stn := nStn, str := nStr,
            blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
-           hc := nHc, hn := nHn, hr := nHr, gap := nGap, cin := nCin, logits := nLog,
+           hc := nHc, hn := nHn, cin := nCin, logits := nLog,
            bns := (nStc, "stn", 32, 112) ::
              (f1.bns ++ f2.bns ++ f3.bns ++ f4.bns ++ f5.bns ++ f6.bns ++ f7.bns ++ f8.bns ++
               f9.bns ++ f10.bns ++ f11.bns ++ f12.bns ++ f13.bns ++ f14.bns ++ f15.bns ++
@@ -934,11 +932,9 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     let f12 := F.blocks[11]!; let f13 := F.blocks[12]!; let f14 := F.blocks[13]!
     let f15 := F.blocks[14]!; let f16 := F.blocks[15]!
     let nStc := F.stc; let nStn := F.stn; let nStr := F.str
-    -- ⚠ `F.gap` is deliberately NOT bound here. Its one backward consumer was the classifier weight
-    -- gradient, which must read `F.cin` (the dense's actual input — see `ENetFwd.cin`), and a
-    -- convenient `nGap` sitting in scope beside it is exactly how that gradient would silently get
-    -- the undropped activation back. The cotangent path reaches GAP through `gapBackBatched`, which
-    -- needs no forward name at all.
+    -- ⚠ `ENetFwd` carries no pooled (pre-dropout) name: the classifier weight gradient must read
+    -- `F.cin` (the dense's actual input — see `ENetFwd.cin`). The cotangent path reaches GAP through
+    -- `gapBackBatched`, which needs no forward name at all.
     let nHc := F.hc; let nHn := F.hn; let nLog := F.logits
     let z32  : Vec 32 := fun _ => 0
     let z112F : Vec (B * (32*112*112)) := fun _ => 0

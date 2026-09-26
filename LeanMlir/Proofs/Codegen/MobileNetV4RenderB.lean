@@ -180,8 +180,7 @@ structure UibFwdB where
   code : String
   o  : String        -- block output (project-BN out, or the skip add)
   qc : String        -- pre-DW conv / BN out; "" when preDWk = 0
-  qn : String
-  qr : String        -- the pre-DW's output (= `qn`: timm's `dw_start` has no activation)
+  qr : String        -- the pre-DW's BN output (timm's `dw_start` has no activation)
   ec : String        -- expand conv out (= expand-BN input)
   en : String        -- expand BN out   (= expand-relu pre-activation)
   er : String        -- expand relu out (= post-DW input, or project input when postDWk = 0)
@@ -248,7 +247,7 @@ private def uibFwdSkipB (B c expand preDWk postDWk h : Nat) (mode : BnMode)
   let (cA, nA) ← pretty B (.addVB (.operand nPn zcb) (.operand xName zcb))
   code := code ++ cPc ++ cPn ++ cA
 
-  pure { code := code, o := nA, qc := qc, qn := qn, qr := qr,
+  pure { code := code, o := nA, qc := qc, qr := qr,
          ec := nEc, en := nEn, er := nEr, dc := dc, dn := dn, dr := dr, pc := nPc,
          qst := qst, est := est, dst := dst, pst := pst }
 
@@ -298,7 +297,7 @@ private def uibFwdStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : BnMod
   let (cPn, nPn, pst) ← mnv4Bn B oc h mode epsStr s!"%u{p}pg" s!"%u{p}pbt" s!"u{p}pn" nPc replicas sync
 
   pure { code := code ++ cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, qc := qc, qn := qn, qr := qn,
+         o := nPn, qc := qc, qr := qn,
          ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
          qst := qst, est := est, dst := dst, pst := pst }
 
@@ -339,7 +338,7 @@ def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
   let (cPn, nPn, pst) ← mnv4Bn B oc h mode epsStr s!"%f{p}pg" s!"%f{p}pbt" s!"f{p}pn" nPc replicas sync
 
   pure { code := cFc ++ cFn ++ cFs ++ cPc ++ cPn,
-         o := nPn, qc := "", qn := "", qr := "",
+         o := nPn, qc := "", qr := "",
          ec := nFc, en := nFn, er := nFs, dc := "", dn := "", dr := "", pc := nPc,
          est := est, pst := pst }
 
@@ -369,13 +368,11 @@ structure Mnv4FwdRec where
   inputs : List String  -- each block's input SSA, same order
   h1c : String          -- head conv 1 out (256→960)  (= its BN input)
   h1n : String          -- head BN 1 out              (= its relu pre-activation)
-  h1r : String          -- head relu 1 out            (= the GAP's input)
   gap : String          -- GAP of head relu 1, `[B, 960]` (= head conv 2's input)
   hc : String           -- head conv 2 out (960→1280, at 1×1) (= head-BN input)
   hn : String           -- head BN out   (= head-relu pre-activation)
-  hr : String           -- head relu out
-  -- the dense's input: `hr`, or `hr` under the classifier-dropout mask `%do`. The classifier
-  -- WEIGHT gradient reads this, not `hr` (with dropout on the two differ; see the train step).
+  -- the dense's input: the head relu out, or it under the classifier-dropout mask `%do`. The
+  -- classifier WEIGHT gradient reads this (with dropout on the two differ; see the train step).
   cin : String
   last : String         -- the last block's output (= head conv input)
   -- ⭐ SYNC-BN: the stem's and the two head BNs' all-reduced packed stats (`""` at one replica).
@@ -528,14 +525,14 @@ def mnv4FwdChainB (B nClasses : Nat) (epsStr : String) (mode : BnMode := .train)
 
   -- ═══ head: 1×1 conv-BN-relu (256→960) → GAP(7×7) → 1×1 conv-BN-relu (960→1280) → dense ═══
   let hd ← mnv4HeadFwdB B nClasses epsStr cur mode bf16 replicas sync cd f
-  let (nH1c, nH1n, h1st, nH1r) := (hd.h1c, hd.h1n, hd.h1st, hd.h1r)
-  let (nHc, nHn, hst, nHr, nGap, nLog) := (hd.hc, hd.hn, hd.hst, hd.hr, hd.gap, hd.log)
+  let (nH1c, nH1n, h1st) := (hd.h1c, hd.h1n, hd.h1st)
+  let (nHc, nHn, hst, nGap, nLog) := (hd.hc, hd.hn, hd.hst, hd.gap, hd.log)
 
   pure { code := st.code ++ f0.code ++ bcode ++ hd.code,
          logits := nLog, stc := nStc, stn := nStn, str := nStr,
          f0 := f0, blocks := blocks, inputs := inputs,
-         h1c := nH1c, h1n := nH1n, h1r := nH1r,
-         hc := nHc, hn := nHn, hr := nHr, gap := nGap, cin := hd.cin, last := cur,
+         h1c := nH1c, h1n := nH1n,
+         hc := nHc, hn := nHn, gap := nGap, cin := hd.cin, last := cur,
          sst := sst, h1st := h1st, hst := hst }
 
 /-- Every distinct channel width a bias-free conv in this net binds `%zb{c}` at: the stem, the fused
@@ -621,7 +618,7 @@ private def zipPs (sig : List (String × List Nat)) (grads : List String) : List
     *other* depthwise from the one the forward emitted still type-checks (both positions are
     shape-preserving at stride 1) and still descends — it computes the gradient of a different net.
     So the forward record `f` is read for which
-    positions exist (`f.qn`/`f.dn` are `""` when absent) rather than re-deriving it. -/
+    positions exist (`f.qr`/`f.dn` are `""` when absent) rather than re-deriving it. -/
 private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
@@ -942,8 +939,8 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     --     timm's order: dense → conv_head (960→1280 at 1×1) → GAP back → cn_960 (256→960 at 7×7). ═══
     let (cDgi, nDgi) ← pretty B (.batchOp (N := B)
       (.denseRowBack (rows := 1) (a := 1280) (c := nClasses) "%Wd" zWd) (.operand nDy zNCb))
-    -- ⚠⚠ `fwd.cin`, NOT `fwd.hr`: the classifier weight gradient reads the DENSE'S INPUT, which
-    -- under classifier dropout is the dropped activation. The two names coincide when `cd` is off.
+    -- ⚠⚠ `fwd.cin`: the classifier weight gradient reads the DENSE'S INPUT, which under classifier
+    -- dropout is the dropped activation (`Mnv4FwdRec` carries no pre-dropout head name).
     let (cWdg, nWdg) ← pretty B (.denseWeightGradB (c := nClasses) fwd.cin z1280b (.operand nDy zNCp))
     let (cbdg, nbdg) ← pretty B (.denseBiasGradB (N := B) (.operand nDy zNCp))
     -- dropout's backward is the same op at the same mask (`Proofs.dropout_vjp_is_self`), on the

@@ -136,16 +136,8 @@ LeanMlir/Proofs/Codegen/ViTRender.lean; run `lake build LeanMlir.Proofs.Codegen.
   -- green run mean anything, and on ViT it needed fixing first: the branch is the SECOND operand of
   -- this net's residual add, which the script could not match.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
-    | some 0 => { vitVerified.toNet with
-                    dropKeeps := vitVerified.dropKeeps.map (fun _ => 1.0) }
-    | some u =>
-        -- Re-derive from the SPEC's own keeps so the site→block pairing stays the renderer's:
-        -- `i = (1 − keep)·11/0.1` recovers the BLOCK index the spec encoded, which is shared by
-        -- each site pair. Deriving it from the site ordinal would unpair them.
-        let rate := u.toFloat * 1e-6
-        { vitVerified.toNet with
-            dropKeeps := vitVerified.dropKeeps.map
-              (fun k => 1.0 - rate * ((1.0 - k) * 11.0 / 0.1) / 11.0) }
+    | some u => { vitVerified.toNet with
+                  dropKeeps := vitVerified.dropKeepsAt (u.toFloat * 1e-6) }
     | none   => vitVerified.toNet
   dropNet.trainAdamSched { vitAdamConfig with batchSize := bs }
     (argv.head?.getD "data") baseLR 0.9 0.999 5 variant 0.0 1.0 emaDecay

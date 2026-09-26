@@ -97,15 +97,8 @@ def runEfficientNetAdam (argv : List String) : IO Unit := do
   -- the peer of EMA's `decay = 0`, and it is what pins the WIRING: a drop site on the wrong side of
   -- the skip add, or a scale reaching the identity path, fails it immediately.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
-    | some 0 => { efficientnetVerified.toNet with
-                    dropKeeps := efficientnetVerified.dropKeeps.map (fun _ => 1.0) }
-    | some u =>
-        -- Re-derive the ramp at a different rate from the SPEC's own keeps, so the block indices
-        -- stay the renderer's: `i = (1 − keep) · 15 / 0.2` recovers the index the spec encoded.
-        let rate := u.toFloat * 1e-6
-        { efficientnetVerified.toNet with
-            dropKeeps := efficientnetVerified.dropKeeps.map
-              (fun k => 1.0 - rate * ((1.0 - k) * 15.0 / 0.2) / 15.0) }
+    | some u => { efficientnetVerified.toNet with
+                  dropKeeps := efficientnetVerified.dropKeepsAt (u.toFloat * 1e-6) }
     | none   => efficientnetVerified.toNet
 
   dropNet.trainAdamSched { efficientnetAdamConfig with batchSize := bs }

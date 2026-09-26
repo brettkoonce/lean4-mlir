@@ -28,7 +28,7 @@ studies are `Verified.Attack` (on `Verified.PgdGen`'s kernels), the smoothing ce
 `Verified.Smoothing`. An entry point imports `Verified.NetsCore` (the specs) and whichever of
 these three it runs.
 
-NB `VerifiedConfig.lr` is for the banner only. The SGD-inline train steps bake the learning rate
+NB `VerifiedConfig` carries no learning rate. The SGD-inline train steps bake it
 into the rendered MLIR (re-render to change it); the Adam-family steps take it as a runtime operand,
 from `trainAdamSched`'s own `baseLR` argument and schedule.
 -/
@@ -139,14 +139,10 @@ structure VerifiedConfig where
       only, and only the eval pass: the checkpoint is still written every epoch.
       `LEAN_MLIR_VAL_EVERY=<n>` overrides it at launch, like `LEAN_MLIR_MAX_EPOCHS`. -/
   valEveryEpochs : Nat := 1
-  /-- Learning rate. DISPLAY ONLY — SGD-inline steps bake it into `<slug>_train_step.mlir`;
-      `trainAdamSched` takes its own `baseLR`. Changing it here does not change training. -/
-  lr        : Float := 0.1
   /-- timm/DeiT ViT weight init — the verified peer of `TrainConfig.vitInit`, i.e. of the
       `deit-init` recipe of the JAX reference. Every weight at
-      σ = 0.02 except the patch-embed conv on PyTorch's `U(±1/√fan_in)`. Unlike `lr`, this is
-      NOT display-only: init is host-side, so the flag genuinely changes training and no
-      re-render is needed. Off by default — every other net keeps its seed reproducibility. -/
+      σ = 0.02 except the patch-embed conv on PyTorch's `U(±1/√fan_in)`. Init is host-side, so
+      the flag changes training with no re-render. Off by default — every other net keeps its seed reproducibility. -/
   vitInit   : Bool := false
   -- History: a ConvNeXt/ImageNet pair run once diverged because the verified arm used the default
   -- conv init while the reference set `cnxInit := true`; runs/2026-09-17-cnx-verified-300ep/RESULTS.md
@@ -1174,7 +1170,7 @@ def VerifiedNet.train (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : Stri
   let (trainImg, trainLbl, nTrain, evalImg, evalLbl, nEval, trainPix, crop) ←
     if synth then mkSynthData net.data d0 bs else loadData net dataDir
   let evalName := match net.data with | .imagenette => "val" | _ => "test"
-  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), mean-loss SGD lr={cfg.lr}, He init{if synth then " [SYNTH]" else ""}"
+  IO.println s!"  train {nTrain}, {evalName} {nEval}; bs {bs}, {net.name} ({net.specs.size} params, {net.nParams} floats), mean-loss SGD (lr baked into the render), He init{if synth then " [SYNTH]" else ""}"
   (← IO.getStdout).flush
   -- LEAN_MLIR_MAX_STEPS caps batches per epoch. Needed to run gate G2 at small
   -- N: over a full run, ReLU branch flips amplify f32 noise, so a large final

@@ -269,6 +269,13 @@ def toSpecs : VLayer → Array (Array Nat × Nat)
       (#[d,m],0),(#[m],2),(#[m,d],0),(#[d],2)]
   | param dims kind         => #[(dims, kind)]
 
+/-- The layer's BatchNorm widths, in `toSpecs` (func-arg) order: each BN γ is a `(#[c], 1)` entry
+    (initKind 1 = ones). LayerNorm γ has the same shape and kind, so the LN-bearing layers answer
+    `#[]`. -/
+def bnWidths : VLayer → Array Nat
+  | .convNextBlock .. | .convNextBlockCh .. | .layerNorm .. | .transformerBlock .. => #[]
+  | L => L.toSpecs.filterMap (fun (d, k) => if k == 1 && d.size == 1 then some d[0]! else none)
+
 end VLayer
 
 /-- A verified net as a NetSpec-style architecture. `layers` is the single source of truth;
@@ -280,21 +287,26 @@ structure VerifiedNetSpec where
   inC      : Nat
   imageH   : Nat
   imageW   : Nat
-  nClasses : Nat := 10
   data     : VerifiedData
   layers   : List VLayer
   blurb    : String
-  /-- Per-BN-layer channel counts in forward order (empty = LayerNorm / no-BN). Drives running-stats
-      BN threading in `trainAdamSched` — see `VerifiedNet.bnChannels`. -/
-  bnChannels : Array Nat := #[]
-  /-- **Stochastic-depth keep probabilities**, one per drop site, in the render's signature order.
-      Empty = no drop sites. Read only by `*drop*` variants (`VerifiedVariant.sdOn`).
+  /-- Does the train step carry running BatchNorm statistics? When set, `bnChannels` (derived from
+      `layers`) drives the running-stats threading in `trainAdamSched`. Off for LayerNorm / no-BN
+      nets and for the per-example-BN CIFAR-8 renders, whose BN keeps no running statistics. -/
+  runningBN : Bool := false
+  /-- **Stochastic-depth sites**: each drop site's ramp index `i`, in the render's signature order.
+      Site `i` keeps with probability `1 − dropRate · i / dropDenom` (`dropKeeps`). Empty = no drop
+      sites. Read only by `*drop*` variants (`VerifiedVariant.sdOn`).
 
       A second hand-list beside the renderers' own site tables (e.g.
       `Proofs.StableHLO.enetDropIdxs` / `Proofs.StableHLO.enetDropTotal`): the spec modules do not
       import `Proofs/Codegen`, so the two cannot share a definition.
       [`tests/TestDropPathRamp.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestDropPathRamp.lean) is the `#guard` that pins them together. -/
-  dropKeeps : Array Float := #[]
+  dropSites : Array Nat := #[]
+  /-- The ramp denominator: the reference's block count minus one. -/
+  dropDenom : Nat := 1
+  /-- The drop-path rate at the deepest site. -/
+  dropRate : Float := 0.0
   /-- Which directory this net's artifacts live in — see `VerifiedNet.mlirDir`. Default
       `verified_mlir/` (the certified, pinned corpus); the width/batch SWEEP specs set
       `.lake/build` because they render from argv at run time and their output is a build product. -/
@@ -319,5 +331,26 @@ def toSpecs (s : VerifiedNetSpec) : Array (Array Nat × Nat) :=
 
 /-- Per-example flattened input width. -/
 def d0 (s : VerifiedNetSpec) : Nat := s.inC * s.imageH * s.imageW
+
+/-- The class count: the head `.dense`'s output width (every committed spec ends in one; anything
+    else answers `0`). -/
+def nClasses (s : VerifiedNetSpec) : Nat :=
+  match s.layers.getLast? with
+  | some (.dense _ oc) => oc
+  | _ => 0
+
+/-- The stochastic-depth keeps at drop-path rate `rate`, one per site: `1 − rate · i / dropDenom`.
+    Rate `0` gives exactly `1.0` everywhere (the identity endpoint). -/
+def dropKeepsAt (s : VerifiedNetSpec) (rate : Float) : Array Float :=
+  s.dropSites.map (fun i => 1.0 - rate * i.toFloat / s.dropDenom.toFloat)
+
+/-- The stochastic-depth keeps at the spec's own rate. -/
+def dropKeeps (s : VerifiedNetSpec) : Array Float := s.dropKeepsAt s.dropRate
+
+/-- Per-BN-layer channel counts in forward order, read off `layers` (`VLayer.bnWidths`); empty
+    unless `runningBN`. The order is the running-stats layout the driver packs and the eval forward
+    reads, so it cannot drift from the layer list. See `VerifiedNet.bnChannels`. -/
+def bnChannels (s : VerifiedNetSpec) : Array Nat :=
+  if s.runningBN then s.layers.foldl (fun acc L => acc ++ L.bnWidths) #[] else #[]
 
 end VerifiedNetSpec

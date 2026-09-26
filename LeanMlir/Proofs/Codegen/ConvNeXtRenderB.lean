@@ -107,9 +107,9 @@ private def bSpats  : Array Nat := #[56, 28, 14, 7]
 -- discipline `bB`/`bEPS` carry, kept because the byte tie is meant to test the RENDER rather than
 -- the constants. ⚠ Restating a RECORD is what makes that discipline still work now that a size is
 -- two tables: an `#[3,3,27,3]` that drifted into the wrong `dims` would be caught by one `==`.
-private def bTiny  : CnxDims := { depths := #[3, 3,  9, 3], dims := #[ 96, 192, 384,  768] }
-private def bSmall : CnxDims := { depths := #[3, 3, 27, 3], dims := #[ 96, 192, 384,  768] }
-private def bBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 512, 1024] }
+private def bTiny  : CnxDims := { depths := #v[3, 3,  9, 3], dims := #v[ 96, 192, 384,  768] }
+private def bSmall : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[ 96, 192, 384,  768] }
+private def bBase  : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[128, 256, 512, 1024] }
 #guard bTiny  == cnxTiny
 #guard bSmall == cnxSmall
 #guard bBase  == cnxBase

@@ -40,19 +40,10 @@ namespace Proofs.StableHLO
 -- `resnet34_fwd_eval` is correct against either. Same call R50 makes (`r50FwdChainB`'s docstring).
 -- ════════════════════════════════════════════════════════════════
 
-/-- Saved forward SSA names a block's backward + SGD passes reference. `xin` is carried by the
-    forward itself so the backward never has to re-derive which block fed which — the wiring the
-    train step reads back is the wiring the forward emitted. -/
+/-- A basic block's eval forward: its code and its output name (the next block's input). -/
 structure BFwd where
   code : String
-  xin : String       -- block input (the merged dx flows back to this)
   o  : String        -- block output (post-relu)
-  a  : String        -- pre-output-relu sum (the add result)
-  c1 : String        -- conv1 output (= BN1 input)
-  n1 : String        -- BN1 output (= relu1 pre-activation)
-  r1 : String        -- relu1 output (= conv2 input activation)
-  c2 : String        -- conv2 output (= BN2 input)
-  cp : String        -- projection conv output (downsample only; "" for identity)
 deriving Inhabited
 
 -- ════════════════════════════════════════════════════════════════
@@ -73,8 +64,7 @@ private def idFwd (B c hh : Nat) (epsStr p xName : String)
   let (cN2, nN2) ← bnEvalSite B c hh hh epsStr s!"%{p}g2" s!"%{p}bt2" s!"{p}n2" nC2
   let (cA,  nA)  ← pretty B (.addV (.operand nN2 zin) (.operand xName zin))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zin))
-  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cA ++ cO, xin := xName,
-         o := nO, a := nA, c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, cp := "" }
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cA ++ cO, o := nO }
 
 /-- Downsample block forward: strided `conv1→BN1→relu1→conv2→BN2` body + strided projection
     `convp→BNp` skip, `add`, `relu`. `cin→c` channels, input `2hh×2ww`, output `hh×ww`. -/
@@ -98,8 +88,7 @@ private def downFwd (B cin c hh : Nat) (epsStr p xName : String)
   let (cNp, nNp) ← bnEvalSite B c hh hh epsStr s!"%{p}gp" s!"%{p}btp" s!"{p}np" nCp
   let (cA,  nA)  ← pretty B (.addV (.operand nN2 zout) (.operand nNp zout))
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zout))
-  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cCp ++ cNp ++ cA ++ cO, xin := xName,
-         o := nO, a := nA, c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, cp := nCp }
+  pure { code := cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cCp ++ cNp ++ cA ++ cO, o := nO }
 
 -- ════════════════════════════════════════════════════════════════
 -- § Param signature lists (func-arg order — names + types, shared by sig + return types)
@@ -158,16 +147,10 @@ def r34StatSigList : List (String × String) :=
 -- § The shared forward chain (all three renders emit this, so they cannot disagree)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Every SSA name the ResNet-34 forward produces. A forward-only render returns just `logits`;
-    the train step additionally consumes the stem and per-block names on the way back. -/
+/-- The ResNet-34 eval forward: its code and the `logits` name the eval function returns. (The train
+    step walks the batched `r34FwdChainB` instead.) -/
 structure R34Fwd where
   code   : String        -- stem → 16 blocks → GAP → dense, in emission order
-  stc    : String        -- stem conv output (= stem BN input)
-  stn    : String        -- stem BN output (= stem relu pre-activation)
-  str    : String        -- stem relu output (= maxpool input)
-  stp    : String        -- maxpool output (= block-1 input)
-  blocks : Array BFwd    -- the 16 block forwards, in forward order
-  gap    : String        -- global-average-pool output
   logits : String        -- dense output
 
 /-- **The ResNet-34 `[3,4,6,3]` EVAL forward as `pretty` of the verified AST** (per-example index).
@@ -219,9 +202,7 @@ private def r34FwdChain (B nClasses : Nat) (epsStr : String)
            f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
            f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
            f16.code ++ cGap ++ cLog,
-         stc := nStc, stn := nStn, str := nStr, stp := nStp,
-         blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16],
-         gap := nGap, logits := nLog }
+         logits := nLog }
 
 /-- **`@resnet34_fwd_eval` rendered ENTIRELY from the verified AST** — the inference forward, with
     every BN site consuming frozen per-channel running stats (`bnPerChannelEvalF`) instead of
@@ -1203,7 +1184,6 @@ structure R34FwdRecB where
   stc : String            -- stem conv out (the stem BN's input)
   stn : String            -- stem BN out
   str : String            -- stem relu out (the pool's input)
-  stp : String            -- stem pool out (block 1's input)
   sst : String            -- the stem BN's all-reduced packed stats (sync-BN; "" at one replica)
   gap : String            -- GAP out (= dense input)
   log : String            -- logits
@@ -1277,7 +1257,7 @@ def r34FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
            f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++ f8.code ++
            f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++ f15.code ++
            f16.code ++ cHead,
-         stc := nStc, stn := nStn, str := nStr, stp := nStp, sst := sst, gap := nGap, log := nLog,
+         stc := nStc, stn := nStn, str := nStr, sst := sst, gap := nGap, log := nLog,
          b := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16] }
 
 /-- **`@resnet34_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN train

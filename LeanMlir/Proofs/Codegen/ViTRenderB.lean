@@ -202,7 +202,7 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
   let (cr, bout) ← pretty vbB (.addVB (.operand hres (zVb : Vec (vbB*(vbTok*vbD))))
       (.operand f2D (zVb : Vec (vbB*(vbTok*vbD)))))
   pure (code ++ co ++ cdA ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cdM ++ cr,
-    { xin, ln1, q, k, v, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
+    { xin, ln1, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
 
 /-- **The depth-12 ViT-Tiny forward at the batched index.** Node for node the same chain
     `vitFwd12` emits — patch embed (16×16/s16, 196 patches + CLS + pos) → 12 blocks → final
@@ -251,7 +251,7 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
   let (cl, logits) ← pretty vbB (.batchOp (N := vbB)
       (.dense "%Wc" "%bc" (zMb : Mat vbD nClasses) (zVb : Vec nClasses))
       (.operand sl (zVb : Vec (vbB*vbD))))
-  pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
+  pure (code ++ cf ++ cs ++ cl, { blocks, flnIn := cur, clsTok := sl, logits })
 
 /-- **`@vit_fwd` from the batched chain** — the batched-index peer of `vitFwdRenderV`, same
     signature (200 parameters at ViT-Tiny) and same `%x`. It writes every committed ViT forward:

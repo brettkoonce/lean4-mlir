@@ -120,15 +120,8 @@ def runConvNeXtAdam (argv : List String) : IO Unit := do
   -- bit-for-bit (`stochastic_depth.md` §7b, measured). `scripts/probes/misplace_drop_sites.py` is the
   -- control that makes a green run mean anything.
   let dropNet := match (← IO.getEnv "LEAN_MLIR_DROP_RATE_U").bind (·.toNat?) with
-    | some 0 => { convnextVerified.toNet with
-                    dropKeeps := convnextVerified.dropKeeps.map (fun _ => 1.0) }
-    | some u =>
-        -- Re-derive the ramp at a different rate from the SPEC's own keeps, so the block indices
-        -- stay the renderer's: `i = (1 − keep)·17/0.1` recovers the index the spec encoded.
-        let rate := u.toFloat * 1e-6
-        { convnextVerified.toNet with
-            dropKeeps := convnextVerified.dropKeeps.map
-              (fun k => 1.0 - rate * ((1.0 - k) * 17.0 / 0.1) / 17.0) }
+    | some u => { convnextVerified.toNet with
+                  dropKeeps := convnextVerified.dropKeepsAt (u.toFloat * 1e-6) }
     | none   => convnextVerified.toNet
   dropNet.trainAdamSched convnextAdamConfig
     (argv.head?.getD "data") 0.001 0.9 0.999 3 variant 0.0 1.0 emaDecay

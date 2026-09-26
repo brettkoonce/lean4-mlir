@@ -968,13 +968,6 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
 structure MBFwd where
   code : String
   o  : String        -- block output (project-BN out, or the addV result for skip blocks)
-  ec : String        -- expand conv output (= expand-BN input)
-  en : String        -- expand BN output (= expand-relu6 pre-activation)
-  er : String        -- expand relu6 output (= depthwise input)
-  dc : String        -- depthwise conv output (= depthwise-BN input)
-  dn : String        -- depthwise BN output (= depthwise-relu6 pre-activation)
-  dr : String        -- depthwise relu6 output (= project input)
-  pc : String        -- project conv output (= project-BN input)
   /-- The block's BN layers in forward order, `(stat prefix, channels, spatial side)`. The eval
       forward turns each into a `%{prefix}mu`/`%{prefix}var` input pair; `MobileNetV2RenderB`'s
       AdamW step hands the matching batch μ/var back in the SAME order (it walks the same block
@@ -1015,7 +1008,7 @@ private def irFwdStrided (B ic mid oc hh : Nat) (epsStr p xName : String) (convB
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zdb))
   let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         o := nPn,
          bns := [(s!"b{p}en", mid, 2*hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
 /-- **STRIDE-1 inverted-residual forward** (b2/b4): everything at `hh×ww`, with an `addV` skip on the
@@ -1040,7 +1033,7 @@ private def irFwd (B ic mid oc hh : Nat) (epsStr p xName : String) (convBias : B
   let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   let (cA, nA) ← pretty B (.addV (.operand nPn zob) (.operand xName zob))
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn ++ cA,
-         o := nA, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         o := nA,
          bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
 
@@ -1066,7 +1059,7 @@ private def irFwdNoExp (B ic oc hh : Nat) (epsStr p xName : String) (convBias : 
   let (cPc, nPc) ← pretty B (.flatConvF (ic := ic) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zib))
   let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, ec := xName, en := xName, er := xName, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         o := nPn,
          -- NO expand entry: b1 has two BN layers, not three.
          bns := [(s!"b{p}dn", ic, hh), (s!"b{p}pn", oc, hh)] }
 
@@ -1096,7 +1089,7 @@ private def irFwdNoSkip (B ic mid oc hh : Nat) (epsStr p xName : String) (convBi
   let (cPc, nPc) ← pretty B (.flatConvF (ic := mid) (oc := oc) (h := hh) (w := ww) s!"%Wp{p}" (biasName convBias s!"%bp{p}" oc) zkp zoc (.operand nDr zeb))
   let (cPn, nPn) ← bnEvalSite B oc hh ww epsStr s!"%gp{p}" s!"%btp{p}" s!"b{p}pn" nPc
   pure { code := cEc ++ cEn ++ cEr ++ cDc ++ cDn ++ cDr ++ cPc ++ cPn,
-         o := nPn, ec := nEc, en := nEn, er := nEr, dc := nDc, dn := nDn, dr := nDr, pc := nPc,
+         o := nPn,
          bns := [(s!"b{p}en", mid, hh), (s!"b{p}dn", mid, hh), (s!"b{p}pn", oc, hh)] }
 
 -- ════════════════════════════════════════════════════════════════
@@ -1144,19 +1137,10 @@ private def paperSig (nClasses : Nat) (convBias : Bool) : List (String × String
 -- § The FULL 17-block paper-spec renderer
 -- ════════════════════════════════════════════════════════════════
 
-/-- Every SSA name the 17-block MobileNetV2 forward produces, plus the 52-entry BN stat layout.
-    `mnv2Fwd{,Eval}FaithfulV` return just `logits`; the train step additionally consumes the stem,
-    head and per-block names on the way back. -/
+/-- The 17-block MobileNetV2 eval forward: its code, the `logits` name the eval function returns,
+    and the 52-entry BN stat layout. (The train step walks the batched `mnv2FwdChainB` instead.) -/
 structure MNV2Fwd where
   code   : String            -- stem -> 17 blocks -> head -> GAP -> dense, in emission order
-  stc    : String            -- stem conv out (= stem BN input)
-  stn    : String            -- stem BN out (= stem relu6 pre-act)
-  str    : String            -- stem relu6 out (= b1 input)
-  blocks : Array MBFwd       -- the 17 inverted-residual forwards, in forward order
-  hc     : String            -- head 1x1 conv out (= head BN input)
-  hn     : String            -- head BN out (= head relu6 pre-act)
-  hr     : String            -- head relu6 out (= GAP input)
-  gap    : String            -- global-average-pool out (= dense input)
   logits : String            -- dense out
   /-- The 52 BN layers as `(stat prefix, channels, spatial side)`, stem -> blocks in forward order
       -> head. Single source for the eval signature and the eval BN sites. -/
@@ -1213,9 +1197,7 @@ private def mnv2FwdChain (B nClasses : Nat) (epsStr : String) (convBias : Bool) 
              f1.code ++ f2.code ++ f3.code ++ f4.code ++ f5.code ++ f6.code ++ f7.code ++
              f8.code ++ f9.code ++ f10.code ++ f11.code ++ f12.code ++ f13.code ++ f14.code ++
              f15.code ++ f16.code ++ f17.code ++ cHc ++ cHn ++ cHr ++ cGap ++ cLog,
-           stc := nStc, stn := nStn, str := nStr,
-           blocks := #[f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14, f15, f16, f17],
-           hc := nHc, hn := nHn, hr := nHr, gap := nGap, logits := nLog,
+           logits := nLog,
            bns := ("stn", 32, 112) ::
              (f1.bns ++ f2.bns ++ f3.bns ++ f4.bns ++ f5.bns ++ f6.bns ++ f7.bns ++ f8.bns ++
               f9.bns ++ f10.bns ++ f11.bns ++ f12.bns ++ f13.bns ++ f14.bns ++ f15.bns ++

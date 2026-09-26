@@ -79,23 +79,27 @@ private def cSpats  : Array Nat := #[56, 28, 14, 7]
     not exist. Same reasoning as `VitDims`, arrived at from the opposite direction: ViT bundled to
     keep `d = heads * hd` definitional, this bundles to keep two tables from drifting.
 
-    `deriving DecidableEq` is load-bearing: `ConvNeXtRenderB` restates these and `#guard`s the
-    restatement against them, and `cnxModelName` matches on the whole record rather than on the
-    block count — which is what stops B (36 blocks, like S) from introducing itself as an S. -/
+    Both tables are `Vector Nat 4`: ConvNeXt has four stages at every size, and the renders read
+    exactly stages 0–3. With a bare `Array` a fifth depth entry rendered the same bytes while
+    `cnxDropTotal` counted it, and a short one read `0` through `!`.
+
+    `deriving DecidableEq` is what `ConvNeXtRenderB`'s `#guard`s on its restatement use, and
+    `cnxModelName` matches on the whole record rather than on the block count — which is what stops
+    B (36 blocks, like S) from introducing itself as an S. -/
 structure CnxDims where
-  depths : Array Nat
-  dims   : Array Nat
+  depths : Vector Nat 4
+  dims   : Vector Nat 4
   deriving DecidableEq, Repr, Inhabited
 
 /-- ConvNeXt-**T**: `[3,3,9,3]` @ `[96,192,384,768]`, 28.6 M at K=1000. The DEFAULT everywhere, so
     every pre-existing call site is unchanged and every committed artifact re-renders byte-identical. -/
-def cnxTiny  : CnxDims := { depths := #[3, 3,  9, 3], dims := #[ 96, 192, 384,  768] }
+def cnxTiny  : CnxDims := { depths := #v[3, 3,  9, 3], dims := #v[ 96, 192, 384,  768] }
 /-- ConvNeXt-**S**: T deepened — stage 3 goes 9 → 27, dims UNCHANGED. 50.2 M at K=1000. -/
-def cnxSmall : CnxDims := { depths := #[3, 3, 27, 3], dims := #[ 96, 192, 384,  768] }
+def cnxSmall : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[ 96, 192, 384,  768] }
 /-- ConvNeXt-**B**: S's depth AND a wider net — `[128,256,512,1024]`. 88.6 M at K=1000.
     B is the size that made the dims a parameter: it shares S's depth table exactly, so anything
     keying on block count alone cannot tell them apart. -/
-def cnxBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 512, 1024] }
+def cnxBase  : CnxDims := { depths := #v[3, 3, 27, 3], dims := #v[128, 256, 512, 1024] }
 
 -- The expansion ratio is 4 at every stage and every size (`e := 4 * c` at the call sites), and the
 -- depthwise kernel is 7×7 at every size. Neither is a parameter, and neither moves T → S → B.
@@ -208,7 +212,7 @@ def cnxModelName (V : CnxDims := cnxTiny) : String :=
   if V == cnxTiny then "ConvNeXt-T"
   else if V == cnxSmall then "ConvNeXt-S"
   else if V == cnxBase then "ConvNeXt-B"
-  else s!"ConvNeXt-?({cnxDropTotal V} blocks @ {V.dims})"
+  else s!"ConvNeXt-?({cnxDropTotal V} blocks @ {V.dims.toArray})"
 
 #guard cnxModelName == "ConvNeXt-T"
 #guard cnxModelName cnxSmall == "ConvNeXt-S"

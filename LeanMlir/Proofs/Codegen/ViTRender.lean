@@ -145,9 +145,6 @@ private def vlnFwd (bs : Nat) (gName btName xin : String) : StateM Proofs.Stable
 structure BSaves where
   xin : String       -- block input (LN1 input, residual1)
   ln1 : String       -- LN1 output (Q/K/V dense input)
-  q : String         -- Q output
-  k : String         -- K output
-  v : String         -- V output
   qss : Array String -- per-head Q slices
   kss : Array String -- per-head K slices
   vss : Array String -- per-head V slices
@@ -200,15 +197,13 @@ private def vBlockFwd (bs : Nat) (pfx xin : String) : StateM Proofs.StableHLO.Em
   let (cf2, f2) ← pretty bs (.denseRowF s!"%{pfx}Wfc2" s!"%{pfx}bfc2" (zMm : Mat 768 192) zVv (.operand g (zVv : Vec (197*768))))
   let (cr, bout) ← pretty bs (.addV (.operand hres (zVv : Vec (197*192))) (.operand f2 (zVv : Vec (197*192))))
   pure (code ++ co ++ ch ++ c2 ++ cf1 ++ cg ++ cf2 ++ cr,
-    { xin, ln1, q, k, v, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
+    { xin, ln1, qss, kss, vss, scs, sms, att := acc, hres, ln2, f1, g, bout })
 
-/-- Forward saves the whole-net backward references: the patch embed SSA, the per-block saves, the
-    final-LN input (last block output) + output, and the logits SSA. -/
+/-- Forward saves the whole-net backward references: the per-block saves, the final-LN input (last
+    block output), the CLS-slice output and the logits SSA. -/
 structure FwdSaves where
-  embed : String
   blocks : Array BSaves
   flnIn : String        -- final-LN input (= last block output)
-  fln : String          -- final-LN output (= CLS-slice input)
   clsTok : String       -- CLS-slice output (= head-dense input)
   logits : String
   deriving Inhabited
@@ -226,7 +221,7 @@ private def vitFwd12 (bs : Nat) (nClasses : Nat) : StateM Proofs.StableHLO.EmitS
   let (cf, fl) ← vlnFwd bs "%gF" "%btF" cur
   let (cs, sl) ← pretty bs (.clsSliceF (N := 196) (D := 192) (.operand fl (zVv : Vec (197*192))))
   let (cl, logits) ← pretty bs (denseF "%Wc" "%bc" (zMm : Mat 192 nClasses) zVv (.operand sl (zVv : Vec 192)))
-  pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
+  pure (code ++ cf ++ cs ++ cl, { blocks, flnIn := cur, clsTok := sl, logits })
 
 /-- Per-block func-arg signature (committed forward order). -/
 def blkArgSig (i : Nat) (V : VitDims := vitTiDims) : String :=
