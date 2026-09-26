@@ -1,3 +1,5 @@
+import LeanMlir.FloatFmt
+
 /-! Blackjack under Gymnasium Blackjack-v1 `sab=True` rules (Sutton & Barto
     Example 5.1): the environment, the exact DP instrument, the comparison arms,
     Monte Carlo scoring and tabular Q-learning. Pure Lean, no FFI. Shared by the
@@ -5,6 +7,8 @@
     `planning/blackjack_dqn_demo.md`. -/
 
 namespace BJ
+
+export FloatFmt (fmt)
 
 /-- Cards 1..10, ten with probability 4/13 (infinite deck). -/
 def draw (g : StdGen) : Nat × StdGen :=
@@ -322,17 +326,5 @@ def tabularQCurve (hands every : Nat) (alpha eps : Float) (seed : Nat) :
     done := done + chunk
     out := out.push (done, gameValue (some (qPol Q)), agreement (qPol Q))
   return out
-
-/-- Fixed-point decimal for the tables; `Float.toString` prints 17 digits. -/
-def fmt (x : Float) (d : Nat) : String :=
-  let m := Float.pow 10.0 d.toFloat
-  let y := Float.round (x * m)
-  let neg := y < 0.0
-  let yi := (Float.abs y).toUInt64.toNat
-  let ip := yi / (10 ^ d)
-  let fp := yi % (10 ^ d)
-  let fs := toString fp
-  let fs := String.ofList (List.replicate (d - fs.length) '0') ++ fs
-  (if neg then "-" else "") ++ toString ip ++ "." ++ fs
 
 end BJ

@@ -1,4 +1,4 @@
-import LeanMlir
+import LeanMlir.Train
 import LeanMlir.Pong
 
 /-! DQN on the Lean Pong — rung 3 of `planning/pong_dqn_demo.md`.
@@ -34,23 +34,6 @@ import LeanMlir.Pong
 open PongEnv
 
 namespace PongDqn
-
-/-- Widen u8 bytes to f32, times `scale` (`ffi/f32_helpers.c`): the replay keeps
-    frames as u8 and a batch of stacks is converted in one pass. -/
-@[extern "lean_f32_u8_scaled"]
-opaque u8Scaled (ba : @& ByteArray) (scale : Float) : IO ByteArray
-
-/-- `recs[idx[0]] ++ recs[idx[1]] ++ …` in one C pass (`idx` = u32 LE); every record
-    is `recBytes`. The replay's batch of stacks, for the f32 state records. `dst` is
-    reused in place when it is unshared and the right size (last batch's buffer). -/
-@[extern "lean_gather_concat"]
-opaque gatherConcat (recs : @& Array ByteArray) (idx : @& ByteArray) (dst : ByteArray)
-  (recBytes : USize) : IO ByteArray
-
-/-- `gatherConcat` widening u8 → f32 × `scale` in the same pass: the pixel replay. -/
-@[extern "lean_gather_u8_scaled"]
-opaque gatherU8Scaled (recs : @& Array ByteArray) (idx : @& ByteArray) (dst : ByteArray)
-  (recBytes : USize) (scale : Float) : IO ByteArray
 
 def stateNet : NetSpec where
   name := "pong dqn state"
@@ -172,11 +155,11 @@ def main (args : List String) : IO Unit := do
   -- the replay's per-step record: 24 bytes of f32 state, or one 7056-byte u8 frame
   let obsOf : Pong → ByteArray := if pixels then Pong.render else stateObs
   -- the network's input from concatenated records
-  let enc (x : ByteArray) : IO ByteArray := if pixels then u8Scaled x (1.0 / 255.0) else pure x
+  let enc (x : ByteArray) : IO ByteArray := if pixels then F32.u8Scaled x (1.0 / 255.0) else pure x
   let recBytes : USize := if pixels then 84 * 84 else 24
   let gather (idx : ByteArray) (recs : Array ByteArray) (dst : ByteArray) : IO ByteArray :=
-    if pixels then gatherU8Scaled recs idx dst recBytes (1.0 / 255.0)
-    else gatherConcat recs idx dst recBytes
+    if pixels then F32.gatherU8Scaled recs idx dst recBytes (1.0 / 255.0)
+    else F32.gatherConcat recs idx dst recBytes
   -- last update's batches, handed back to the gather so it writes in place
   let mut xsBuf := ByteArray.empty
   let mut xnBuf := ByteArray.empty

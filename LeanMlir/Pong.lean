@@ -1,8 +1,12 @@
+import LeanMlir.FloatFmt
+
 /-! Pong in Lean (`planning/pong_dqn_demo.md`): the game, the renderer, the
     frame-skip wrapper and the scripted policies. Pure Lean, no FFI. Shared by the
     `pong-env` and `pong-dqn` demos. -/
 
 namespace PongEnv
+
+export FloatFmt (fmt)
 
 structure Pong where
   ballX : Float
@@ -175,17 +179,6 @@ def playGame (seed : Nat) (o : Opp) (pol : Policy) : Int × Nat := Id.run do
     gm := gm'
     done := d
   return ((gm.scoreP : Int) - (gm.scoreO : Int), gm.frames)
-
-def fmt (x : Float) (d : Nat) : String :=
-  let m := Float.pow 10.0 d.toFloat
-  let y := Float.round (x * m)
-  let neg := y < 0.0
-  let yi := (Float.abs y).toUInt64.toNat
-  let ip := yi / (10 ^ d)
-  let fp := yi % (10 ^ d)
-  let fs := toString fp
-  let fs := String.ofList (List.replicate (d - fs.length) '0') ++ fs
-  (if neg then "-" else "") ++ toString ip ++ "." ++ fs
 
 def runGames (n seed0 : Nat) (o : Opp) (pol : Policy) : IO (Float × Float × Nat) := do
   let mut diffs : Array Float := #[]

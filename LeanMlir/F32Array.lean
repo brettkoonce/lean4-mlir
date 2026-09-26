@@ -65,6 +65,23 @@ opaque dropoutFill (keep : Float) (n : USize) (seed : USize) : IO ByteArray
 opaque blit (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)
   (srcOff count : USize) : IO ByteArray
 
+/-- Widen u8 bytes to f32, times `scale` (`ffi/f32_helpers.c`): a replay that keeps
+    frames as u8 converts a batch in one pass (`pong-dqn`). -/
+@[extern "lean_f32_u8_scaled"]
+opaque u8Scaled (ba : @& ByteArray) (scale : Float) : IO ByteArray
+
+/-- `recs[idx[0]] ++ recs[idx[1]] ++ …` in one C pass (`idx` = u32 LE); every record
+    is `recBytes`. A replay buffer's batch, e.g. `pong-dqn`'s f32 state records. `dst` is
+    reused in place when it is unshared and the right size (last batch's buffer). -/
+@[extern "lean_gather_concat"]
+opaque gatherConcat (recs : @& Array ByteArray) (idx : @& ByteArray) (dst : ByteArray)
+  (recBytes : USize) : IO ByteArray
+
+/-- `gatherConcat` widening u8 → f32 × `scale` in the same pass (`pong-dqn`'s pixel replay). -/
+@[extern "lean_gather_u8_scaled"]
+opaque gatherU8Scaled (recs : @& Array ByteArray) (idx : @& ByteArray) (dst : ByteArray)
+  (recBytes : USize) (scale : Float) : IO ByteArray
+
 /-- `dst[dstOff + i] += a · src[srcOff + i]` for `i < count`, **in place** when `dst` is
     unshared. The perturbation primitive of the adjoint gradcheck
     ([`tests/TestR50GradCheck.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestR50GradCheck.lean)): parameter tensors are packed in func-arg order, so a
