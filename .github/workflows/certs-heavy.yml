@@ -125,7 +125,7 @@ jobs:
         # invariant is enforced, not remembered (two roots were missing for two months).
         run: |
           set -euo pipefail
-          roots=$(awk '/lean_lib «CertsHeavy»/,/\]/' lakefile.lean | grep -oP 'LeanMlir\.Proofs\.Certificates\.\K[A-Za-z0-9_]+')
+          roots=$(awk '/lean_lib «CertsHeavy»/,/\]/' lakefile.lean | grep -oP 'LeanMlir\.Proofs\.Certificates\.\K[A-Za-z0-9_.]+')
           test -n "$roots"
           for r in $roots; do
             grep -qE "(^| )$r( \\\\|; do)\$" .github/workflows/certs-heavy.yml \
@@ -169,21 +169,21 @@ jobs:
           # CertsHeavy): their PSD witnesses are ~16 GB for a SINGLE `hS*`
           # goal, which no per-image cap can reduce — see
           # planning/archive/certs_heavy_psd_memory.md. They stay kernel-verified locally.
-          for m in LipschitzCertScorecardFullNets \
-                   LipschitzCertScorecardFullImgsA \
-                   LipschitzCertScorecardFullImgsB \
-                   LipschitzCertScorecardFull \
-                   LipschitzCertScorecardIBPData \
-                   LipschitzCertScorecardIBP \
-                   LipschitzCertScorecardCrown \
-                   LipschitzCertScorecardIBPUncon \
-                   LipschitzCertScorecardCrownUncon \
-                   IbpConvScorecardNet \
-                   IbpConvScorecardImgsA \
-                   IbpConvScorecardImgsB \
-                   IbpConvScorecardImgsC \
-                   IbpConvScorecardImgsD \
-                   IbpConvScorecard; do
+          for m in LipschitzCert.ScorecardFullNets \
+                   LipschitzCert.ScorecardFullImgsA \
+                   LipschitzCert.ScorecardFullImgsB \
+                   LipschitzCert.ScorecardFull \
+                   LipschitzCert.ScorecardIBPData \
+                   LipschitzCert.ScorecardIBP \
+                   LipschitzCert.ScorecardCrown \
+                   LipschitzCert.ScorecardIBPUncon \
+                   LipschitzCert.ScorecardCrownUncon \
+                   IbpConvScorecard.Net \
+                   IbpConvScorecard.ImgsA \
+                   IbpConvScorecard.ImgsB \
+                   IbpConvScorecard.ImgsC \
+                   IbpConvScorecard.ImgsD \
+                   IbpConvScorecard.Basic; do
             echo "=== building $m ==="
             free -m | head -2
             lake build LeanMlir.Proofs.Certificates.$m
