@@ -10,7 +10,7 @@ end to end in about 650 lines.
 | `Types`, `Spec`, `SpecHelpers` | the `NetSpec` DSL: layers, specs, `TrainConfig`, parameter counting |
 | `VerifiedSpec`, `VerifiedNetsCore`, `VerifiedNets`, `VerifiedTrain`, `ParamLayouts`, `ViTRender` | the verified path: the nets the proofs are about, and the driver that trains them on the committed renders in [`verified_mlir/`](../verified_mlir/) |
 | `MlirCodegen`, `Train`, `ReferenceNets` | the reference path: `NetSpec` → StableHLO at run time, unverified; the BraTS UNet and the ablations run on it |
-| `IreeRuntime`, `F32Array`, `LEBytes`, `MnistData` | the runtime: bindings to [`ffi/`](../ffi/) (XLA/PJRT by default, IREE optionally) and host-side buffers |
+| `IreeRuntime`, `F32Array`, `LEBytes` | the runtime: bindings to [`ffi/`](../ffi/) (XLA/PJRT by default, IREE optionally) and host-side buffers |
 | `SyncBnCheck`, `GradcheckHelpers`, `VjpOracleNets` | support for the gates in [`tests/`](../tests/) |
 | `VerifiedAttack`, `VerifiedPgdGen`, `VerifiedSmoothing`, `E4M3Quant` | the robustness and fp8 studies |
 | `Blackjack`, `Cam`, `Ddpm` | support for the Chapter 10 demos |
