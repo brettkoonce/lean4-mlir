@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.Small.CifarFold
-import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # PoC: the cifar8 (Chapter 4 deeper, 8-conv no-BN) TIE — tied through the real forward
 

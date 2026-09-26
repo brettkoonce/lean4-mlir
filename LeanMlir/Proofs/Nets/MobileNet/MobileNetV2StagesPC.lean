@@ -1,4 +1,5 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Architectures.Depthwise
+import LeanMlir.Proofs.Architectures.PerChannelBN
 
 /-! # The per-channel-BN MobileNetV2 stage vocabulary
 

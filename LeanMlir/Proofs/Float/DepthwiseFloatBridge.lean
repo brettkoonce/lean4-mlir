@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Architectures.Depthwise
-import LeanMlir.Proofs.Float.FloatComposeBridge
+import LeanMlir.Proofs.Float.ConvFloat
+import LeanMlir.Proofs.Float.FloatClose
 
 /-!
 # ℝ→Float32 bridge: depthwise convolution

@@ -1,5 +1,4 @@
-import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
-import LeanMlir.Proofs.Foundation.HeadLayers
+import LeanMlir.Proofs.Foundation.BatchedStageLayers
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 import LeanMlir.Proofs.Foundation.IndexCast
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Training.Optim.AdamStep
+import LeanMlir.Proofs.Foundation.Tensor
 
 /-! # Global-norm gradient clipping over ℝ — the ViT / ConvNeXt recipes' clip
 

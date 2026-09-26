@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
-import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 
 /-! # ResNet-50 at TRUE BATCH-NORM — the whole net's forward and graph
 

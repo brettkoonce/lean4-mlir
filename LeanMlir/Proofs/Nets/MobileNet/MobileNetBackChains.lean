@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The MobileNetV2 / MobileNetV4 backward chains — the ℝ maps the MobileNet ties are about
 

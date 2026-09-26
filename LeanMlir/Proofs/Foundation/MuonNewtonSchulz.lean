@@ -1,6 +1,7 @@
-import LeanMlir.Proofs.Foundation.MuonGeometry
-import Mathlib.Logic.Function.Iterate
-import Mathlib.Topology.Order.MonotoneConvergence
+import Mathlib.Algebra.Order.Star.Real
+import Mathlib.Analysis.Normed.Field.Basic
+import Mathlib.Topology.Instances.Matrix
+import Mathlib.Topology.Metrizable.Uniformity
 import Mathlib.Dynamics.FixedPoints.Topology
 
 /-! # Newton–Schulz iteration for the polar factor

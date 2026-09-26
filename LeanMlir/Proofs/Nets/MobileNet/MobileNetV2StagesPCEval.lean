@@ -1,4 +1,5 @@
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
+import LeanMlir.Proofs.Architectures.Depthwise
+import LeanMlir.Proofs.Architectures.PerChannelBN
 
 /-! # MobileNetV2 — the inference (frozen-statistics) stage vocabulary
 

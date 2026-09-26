@@ -1,4 +1,5 @@
 import LeanMlir.SyncBnCheck
+import LeanMlir.VerifiedNetsCore
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 import LeanMlir.Proofs.Codegen.EfficientNetRender

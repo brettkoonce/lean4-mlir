@@ -1,6 +1,4 @@
-import LeanMlir.Proofs.Codegen.ResNet34RenderB
 import LeanMlir.Proofs.Codegen.ResNet50RenderB
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullB
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB

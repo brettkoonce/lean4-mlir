@@ -1,9 +1,5 @@
 import LeanMlir.Proofs.Certificates.GaussianQuantile
 import LeanMlir.Proofs.Certificates.LipschitzCert
-import Mathlib.Probability.Distributions.Gaussian.Real
-import Mathlib.Probability.Distributions.Gaussian.Multivariate
-import Mathlib.Probability.CDF
-import Mathlib.Analysis.InnerProductSpace.Projection.Reflection
 
 /-! # The real Gaussian probit: Φ, Φ⁻¹, and the Cohen radius as a THEOREM
 

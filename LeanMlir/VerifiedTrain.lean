@@ -1,8 +1,8 @@
 import LeanMlir.Types
-import LeanMlir.F32Array
 import LeanMlir.IreeRuntime
 import LeanMlir.E4M3Quant
 import LeanMlir.VerifiedSpec
+import LeanMlir.ParamLayouts
 
 /-! # Shared driver for the `*-verified` trainers
 

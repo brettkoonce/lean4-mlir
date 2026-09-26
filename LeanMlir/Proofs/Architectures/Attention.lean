@@ -3,7 +3,6 @@ import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.Architectures.Softmax
 import LeanMlir.Proofs.Architectures.CNN          -- needed for Kernel4 in patchEmbed
 import LeanMlir.Proofs.Architectures.Residual
-import LeanMlir.Proofs.Architectures.SE
 import LeanMlir.Proofs.Architectures.LayerNorm
 import Mathlib.Analysis.SpecialFunctions.ExpDeriv
 import Mathlib.Analysis.SpecialFunctions.Log.Deriv

@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
-import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 
 /-! # `vitInputGradKB` is the certified whole-net ViT gradient at a batch
 

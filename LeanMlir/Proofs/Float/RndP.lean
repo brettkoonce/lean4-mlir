@@ -1,5 +1,4 @@
 import Mathlib.Data.Int.Log
-import Mathlib.Algebra.Order.Round
 import Mathlib.Algebra.Order.Archimedean.Real.Basic
 
 /-! # `rndP` — round-to-nearest on the unbounded-exponent `p`-bit grid

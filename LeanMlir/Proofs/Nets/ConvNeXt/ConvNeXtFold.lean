@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN

@@ -3,9 +3,7 @@ import LeanMlir.Proofs.Foundation.Tensor
 -- which exists on both v4.30 (`Data.Real.Sqrt`) and v4.31 (`Analysis.Real.Sqrt`, moved
 -- by mathlib #39964; old path is a deprecation shim on 4.31) — so we don't name it.
 import Mathlib.Analysis.SpecialFunctions.Sqrt
-import Mathlib.Analysis.Calculus.FDeriv.Mul
 import Mathlib.Analysis.Calculus.Deriv.Inv
-import Mathlib.Algebra.BigOperators.Expect
 
 /-!
 # Batch Normalization VJP

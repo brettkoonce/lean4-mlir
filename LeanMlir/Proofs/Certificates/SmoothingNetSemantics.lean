@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Certificates.SmoothingCP
-import LeanMlir.Proofs.Certificates.DenseEuclid
 
 /-! # Net semantics for the smoothing chain — the classifier becomes a NET
 

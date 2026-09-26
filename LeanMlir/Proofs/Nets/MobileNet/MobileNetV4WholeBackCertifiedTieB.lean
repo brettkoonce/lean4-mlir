@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
-import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 

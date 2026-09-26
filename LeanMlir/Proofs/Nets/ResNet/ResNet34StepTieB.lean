@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
-import LeanMlir.Proofs.Foundation.BatchedBackLinks
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 

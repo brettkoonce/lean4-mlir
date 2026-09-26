@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Architectures.ChannelLN
+import LeanMlir.Proofs.Foundation.IndexCast
 
 /-! # ConvNeXt's channel LayerNorm — the render's γ/β outputs and the graph transport
 

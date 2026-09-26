@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # StableHLOLex — the decimal `Nat ⟷ String` round trip
 

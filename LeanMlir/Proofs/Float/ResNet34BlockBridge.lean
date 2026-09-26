@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Float.BnInputBridge
-import LeanMlir.Proofs.Float.ResNet34FloatBridge
 
 /-!
 # ℝ→Float32 bridge: assembling a ResNet block step

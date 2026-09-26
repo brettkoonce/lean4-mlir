@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Architectures.TokenParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
 
 /-! # ViT — the attention-block cotangent chain

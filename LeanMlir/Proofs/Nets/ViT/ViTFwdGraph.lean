@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Architectures.Attention
 
 /-!
 # ViT forward-graph pieces — the flat ↔ Mat bridges

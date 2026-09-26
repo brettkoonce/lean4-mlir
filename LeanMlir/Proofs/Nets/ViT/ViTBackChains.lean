@@ -1,7 +1,5 @@
-import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
-import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The ViT-Tiny backward chains — the ℝ maps the ViT ties are about
 

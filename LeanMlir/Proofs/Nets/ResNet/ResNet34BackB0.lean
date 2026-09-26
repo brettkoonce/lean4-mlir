@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.BatchedStageLayers
-import LeanMlir.Proofs.Foundation.CertifiedChain
 
 /-! # Backward-graph faithfulness for the VERIFIED ResNet-34 basic block
 

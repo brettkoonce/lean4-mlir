@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Training.Optim.GradClip
 import LeanMlir.Proofs.Training.Optim.SgdMomentumStep
+import LeanMlir.Proofs.Training.Optim.AdamStep
 
 /-! # LAMB over ℝ — RSB-A3's optimizer
 

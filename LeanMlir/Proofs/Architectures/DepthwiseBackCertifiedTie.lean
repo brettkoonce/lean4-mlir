@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Foundation.IR
 
 /-! # The depthwise adjoint gate + leaf ties
 

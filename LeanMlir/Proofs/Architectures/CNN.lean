@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Foundation.Tensor
 import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.Architectures.BatchNorm
 import LeanMlir.Proofs.Architectures.Residual

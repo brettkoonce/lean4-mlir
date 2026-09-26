@@ -1,8 +1,5 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
-import LeanMlir.Proofs.Foundation.BatchMapVJPAt
-import LeanMlir.Proofs.Foundation.BackwardMaps
 import LeanMlir.Proofs.Foundation.HeadLayers
-import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 
 /-! # ResNet-34's whole-net input-VJP at TRUE BATCH-NORM
 

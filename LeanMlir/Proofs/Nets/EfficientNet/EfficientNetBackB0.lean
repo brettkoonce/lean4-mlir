@@ -1,8 +1,5 @@
 import LeanMlir.Proofs.Foundation.BatchedBackLinks
-import LeanMlir.Proofs.Architectures.Residual
-import LeanMlir.Proofs.Architectures.SE
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
-import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 
 /-! # EfficientNet-B0 block backward graphs — the residual and squeeze-excite fan-ins

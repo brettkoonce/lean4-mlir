@@ -1,6 +1,4 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldG
-import LeanMlir.Proofs.Foundation.GradNodesB
-import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 
 /-! # The gradient-node fold for ConvNeXt-T at the batched index
 

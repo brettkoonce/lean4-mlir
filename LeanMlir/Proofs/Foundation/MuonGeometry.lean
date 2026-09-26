@@ -1,8 +1,3 @@
-import Mathlib.Analysis.InnerProductSpace.Basic
-import Mathlib.Analysis.InnerProductSpace.PiL2
-import Mathlib.LinearAlgebra.Matrix.Trace
-import Mathlib.Analysis.Matrix.Spectrum
-import Mathlib.Analysis.Matrix.PosDef
 import Mathlib.Analysis.Matrix.Order
 
 /-! # Muon geometry: the optimizer as steepest descent under a norm

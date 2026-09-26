@@ -1,9 +1,4 @@
-import LeanMlir.Proofs.Architectures.Attention
-import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
-import LeanMlir.Proofs.Nets.ViT.ViTChainClose
-import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
-import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # ViT backward-graph faithfulness (per-token Mat VJP)
 

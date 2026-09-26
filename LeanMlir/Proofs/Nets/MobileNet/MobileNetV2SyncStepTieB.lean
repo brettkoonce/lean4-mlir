@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
 import LeanMlir.Proofs.Foundation.DataParallelSyncKit
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB
 
 /-! # MobileNetV2's data-parallel step at synchronised BatchNorm is the single-device step at `R·N`
 

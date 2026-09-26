@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
+import LeanMlir.Proofs.Nets.ResNet.ResNet50BackB0
 
 /-! # ResNet-50's whole-net input-VJP at TRUE BATCH-NORM
 

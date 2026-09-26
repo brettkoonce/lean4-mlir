@@ -1,18 +1,9 @@
 import LeanMlir.VerifiedNetsCore
-import LeanMlir.Proofs.Foundation.MLP
-import LeanMlir.Proofs.Nets.Small.MnistCNN
-import LeanMlir.Proofs.Nets.Small.CifarCNN
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
-import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
-import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
 
 /-! # Spec → math: each committed `VerifiedNetSpec` denotes its proven forward

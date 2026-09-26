@@ -1,4 +1,3 @@
-import LeanMlir.Types
 import LeanMlir.Spec
 
 set_option maxRecDepth 2000

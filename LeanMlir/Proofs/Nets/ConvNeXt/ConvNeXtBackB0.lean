@@ -1,8 +1,5 @@
 import LeanMlir.Proofs.Foundation.CertifiedChain
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
-import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
+import LeanMlir.Proofs.Foundation.BatchedBackLinks
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 
 /-! # ConvNeXt whole-block backward-graph faithfulness (per-example / batch-1)

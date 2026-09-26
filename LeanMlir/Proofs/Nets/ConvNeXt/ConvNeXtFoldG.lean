@@ -1,6 +1,4 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
-import LeanMlir.Proofs.Nets.ViT.ViTFoldG
 
 /-! # ConvNeXt-T un-fused gradient nodes at the per-example index
 

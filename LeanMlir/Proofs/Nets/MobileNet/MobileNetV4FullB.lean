@@ -1,4 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
+import LeanMlir.Proofs.Foundation.HeadLayers
 
 /-! # MobileNetV4-Conv-M at batch BatchNorm — the whole net's forward and graph
 

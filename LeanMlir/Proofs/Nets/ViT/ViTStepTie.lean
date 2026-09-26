@@ -1,6 +1,4 @@
 import LeanMlir.Proofs.Nets.ViT.ViTFold
-import LeanMlir.Proofs.Nets.ViT.ViTVecLN
-import LeanMlir.Proofs.Nets.ViT.ViTChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHeadChain
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 

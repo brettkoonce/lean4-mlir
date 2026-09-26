@@ -1,5 +1,3 @@
-import LeanMlir.Proofs.Foundation.Tensor
-import LeanMlir.Proofs.Architectures.CNN
 import LeanMlir.Proofs.Architectures.StridedConv
 
 /-!

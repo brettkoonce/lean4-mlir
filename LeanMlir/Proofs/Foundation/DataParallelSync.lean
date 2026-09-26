@@ -1,5 +1,4 @@
-import LeanMlir.Proofs.Foundation.DataParallelNode
-import LeanMlir.Proofs.Architectures.PerChannelBN
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # Data parallelism with synchronised BatchNorm — the DP step IS the global-batch step
 

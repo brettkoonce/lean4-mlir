@@ -1,7 +1,6 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
-import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
-import LeanMlir.Proofs.Foundation.BatchedBackLinks
+import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # The train-step tie for MobileNetV4-Conv-M — every gradient node at its chain cotangent
 

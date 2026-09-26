@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
-import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 
 /-! # `convnextInputGradB` is the certified whole-net ConvNeXt-T gradient at a batch
 

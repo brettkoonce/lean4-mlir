@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Fold
 import LeanMlir.Proofs.Nets.ResNet.ResNet34Fold
 import LeanMlir.Proofs.Nets.ViT.ViTFold
 import LeanMlir.Proofs.Architectures.ChannelLNBack
-import LeanMlir.Proofs.Foundation.SgdNodes
+import LeanMlir.Proofs.Nets.Small.CifarFold
 
 /-! # The full [3,3,9,3] ConvNeXt-T step tie — the whole net tied through the real forward
 

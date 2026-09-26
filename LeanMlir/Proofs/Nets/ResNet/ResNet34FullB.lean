@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackB0
-import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # ResNet-34 at TRUE BATCH-NORM — the whole net's forward and graph
 

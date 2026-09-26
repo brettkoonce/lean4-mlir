@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Architectures.CNN
+import LeanMlir.Proofs.Foundation.Tensor
 
 /-! # `maxPool3s2` — the 3×3 stride-2 max pool of He et al.'s ResNet stem
 

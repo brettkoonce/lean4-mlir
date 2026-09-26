@@ -1,7 +1,4 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Foundation.IR
-import LeanMlir.Proofs.Architectures.Depthwise
-import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # The per-op ℝ backward maps — what the certified backward ties are stated about
 

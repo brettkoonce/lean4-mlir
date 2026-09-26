@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Architectures.SE
-import LeanMlir.Proofs.Architectures.LayerNorm
 
 /-!
 # EfficientNet — MBConv with Squeeze-Excite, end-to-end VJP

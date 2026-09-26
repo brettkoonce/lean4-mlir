@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The EfficientNet-B0 backward chain — the ℝ map the B0 whole-net tie is about
 

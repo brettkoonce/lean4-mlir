@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 

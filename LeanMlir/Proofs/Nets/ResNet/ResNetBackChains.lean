@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The ResNet-34 / ResNet-50 backward chains — the ℝ maps the ResNet ties are about
 

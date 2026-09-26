@@ -185,14 +185,16 @@ def emit_net(tag, W1q, W2q, out_path):
 
     L = []
     A = L.append
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP")
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
-    if tag != "SF":
+    if tag == "SF":
+        A("import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP")
+        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
+        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
+    else:
         # the capped base no longer carries every image, so each net emits its
         # own fallback data; chain the second file onto the first so a shared
         # image is DEFINED once (otherwise both files declare e.g. `imgF10` and
-        # importing both into one environment is a name clash).
+        # importing both into one environment is a name clash). The chained file
+        # already imports the three above.
         A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPFull")
     A("")
     netdesc = ("spectrally-capped σ≤2 net (`mlpSF`)" if tag == "SF"

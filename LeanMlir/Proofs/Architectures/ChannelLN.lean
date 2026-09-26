@@ -1,6 +1,3 @@
-import LeanMlir.Proofs.Architectures.LayerNorm
-import LeanMlir.Proofs.Architectures.PerChannelBN
-import LeanMlir.Proofs.Foundation.IndexCast
 import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The channel LayerNorm — per-position LN over channels, with a per-channel affine

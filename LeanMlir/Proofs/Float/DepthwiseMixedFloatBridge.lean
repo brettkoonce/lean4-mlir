@@ -1,5 +1,3 @@
-import LeanMlir.Proofs.Float.FloatBridge
-import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Float.DepthwiseFloatBridge
 import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 

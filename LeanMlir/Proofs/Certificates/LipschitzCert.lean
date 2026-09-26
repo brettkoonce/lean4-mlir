@@ -1,4 +1,3 @@
-import Mathlib.Tactic.Positivity.Finset
 import Mathlib.Analysis.InnerProductSpace.PiL2
 
 /-! # Lipschitz-margin certified robustness radius (Tsuzuku–Sato–Sugiyama 2018)

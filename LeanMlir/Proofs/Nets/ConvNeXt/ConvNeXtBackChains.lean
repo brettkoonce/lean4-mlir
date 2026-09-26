@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.BackwardMaps
-import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The ConvNeXt-T backward chains — the ℝ maps the ConvNeXt ties are about
 

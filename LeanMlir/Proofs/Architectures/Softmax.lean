@@ -1,7 +1,5 @@
 import LeanMlir.Proofs.Foundation.MLP
-import Mathlib.Analysis.SpecialFunctions.ExpDeriv
 import Mathlib.Analysis.SpecialFunctions.Log.Deriv
-import Mathlib.Analysis.Calculus.Deriv.Inv
 
 /-! # Softmax and the softmax–cross-entropy gradient
 

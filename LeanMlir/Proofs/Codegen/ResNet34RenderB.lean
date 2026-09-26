@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Proofs.Codegen.SyncBnSites
 import LeanMlir.Proofs.Codegen.RenderKit
 

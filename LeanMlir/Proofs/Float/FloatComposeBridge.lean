@@ -4,6 +4,7 @@ import LeanMlir.Proofs.Float.ResNet34BlockBridge
 -- `Architectures.CNN`, which this file already has transitively (it uses `maxPoolFlat_abs_le`),
 -- so this adds no cycle. `planning/archive/rsb_a3_r50_verified.md` §4b.
 import LeanMlir.Proofs.Architectures.MaxPool3s2
+import LeanMlir.Proofs.Float.ResNet34FloatBridge
 
 /-!
 # ℝ→Float32 bridge: per-op `FloatClose` instances for the conv-net op set

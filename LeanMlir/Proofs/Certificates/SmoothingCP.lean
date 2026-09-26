@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Certificates.SmoothingMC
+import LeanMlir.Proofs.Certificates.SmoothingGaussian
 
 /-! # The exact Clopper–Pearson tie for randomized smoothing
 

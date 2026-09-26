@@ -1,4 +1,5 @@
 import LeanMlir.SyncBnCheck
+import LeanMlir.VerifiedNetsCore
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
 /-! # `resnet34-syncbn-check` — synchronised BatchNorm: 2×b IS 1×2b

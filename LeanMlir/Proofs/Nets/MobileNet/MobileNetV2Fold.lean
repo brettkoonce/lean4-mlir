@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # The stride-1 depthwise param updates, proof-tied to the certified SGD step

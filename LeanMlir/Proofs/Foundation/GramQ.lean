@@ -1,6 +1,5 @@
 import Mathlib.Basic.Real.Basic
 import Mathlib.Data.Rat.BigOperators
-import Mathlib.Data.Rat.Cast.CharZero
 import Mathlib.Data.Rat.Cast.Order
 import Mathlib.Algebra.BigOperators.Fin
 

@@ -1,4 +1,5 @@
-import LeanMlir.Proofs.Nets.ViT.ViTFold
+import LeanMlir.Proofs.Architectures.TokenParamGrad
+import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # ViT-Tiny un-fused embedding-gradient nodes at the per-example index
 

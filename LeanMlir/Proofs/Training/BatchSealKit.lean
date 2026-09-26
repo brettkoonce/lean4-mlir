@@ -1,5 +1,3 @@
-import LeanMlir.Proofs.Codegen.StableHLO
-import LeanMlir.Proofs.Architectures.MaxPool3s2
 import LeanMlir.Proofs.Foundation.BatchedStageLayers
 
 /-!

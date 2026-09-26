@@ -1,6 +1,8 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTie
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
+import LeanMlir.Proofs.Foundation.GradNodesB
+import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 
 /-! # ConvNeXt-T's step tie at the batched index, the un-fused gradient and the smoothed loss
 

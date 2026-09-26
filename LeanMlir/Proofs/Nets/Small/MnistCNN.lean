@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Architectures.CNN
-import LeanMlir.Proofs.Foundation.MLP
 
 /-! # Chapter 3: MNIST 2D CNN (no BatchNorm) — whole-network VJP
 

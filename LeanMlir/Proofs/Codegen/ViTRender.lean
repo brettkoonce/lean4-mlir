@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # ViT per-example render: forward, backward traversal, SGD step, AdamW tail

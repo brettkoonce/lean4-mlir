@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
-import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncB
 
 /-! # ResNet-50's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
 

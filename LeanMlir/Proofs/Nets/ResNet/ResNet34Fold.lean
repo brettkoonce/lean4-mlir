@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
-import LeanMlir.Proofs.Nets.Small.CifarFold
 import LeanMlir.Proofs.Foundation.SgdNodes
 
 /-! # The strided-convolution SGD ops denote the certified step

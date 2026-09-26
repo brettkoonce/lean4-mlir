@@ -1,6 +1,4 @@
-import LeanMlir.Types
-import LeanMlir.Spec
-import LeanMlir.IreeRuntime
+import LeanMlir.ParamLayouts
 import LeanMlir.MlirCodegen
 import LeanMlir.F32Array
 

@@ -1,5 +1,4 @@
 import Mathlib.Analysis.InnerProductSpace.EuclideanDist
-import Mathlib.Tactic
 
 /-! # Kernel-fast ℤ-list dot products for certificate data
 

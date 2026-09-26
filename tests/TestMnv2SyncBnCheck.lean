@@ -1,4 +1,5 @@
 import LeanMlir.SyncBnCheck
+import LeanMlir.VerifiedNetsCore
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 
 /-! # `mobilenetv2-syncbn-check` — synchronised BatchNorm on MobileNetV2: 2×32 IS 1×64

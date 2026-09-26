@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
-import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
+import LeanMlir.Proofs.Training.BatchSealKit
+import LeanMlir.Proofs.Training.JacobianSeal
 
 /-!
 # MobileNetV4-Conv-M's non-degeneracy seal, on the full-width batched net (levels 2 and 3)

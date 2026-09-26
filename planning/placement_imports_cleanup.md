@@ -32,6 +32,27 @@ measured on that tree.
 | commit | change |
 |---|---|
 | 70d623be | `LeanMlir/MnistData.lean` (no build target reached it; MNIST loads through `F32.loadIdxImages` / `loadIdxLabels` in `ffi/f32_helpers.c`) and its three `historical/` importers deleted; README row fixed |
+| (staged) | Batch A: §2.1 and §2.2 as tabled, §2.3 on the leaf files (113 imports, 68 files). Deviations below |
+
+Batch A deviations:
+
+* `MobileNetV2Close` keeps `ConvGrad` (§3.3 needs it back); `MobileNetV2Fold` drops `StagesPC` and
+  keeps `SgdNodes`.
+* The §2 claim that no downstream file needs a new import was wrong. Nineteen consumers had reached
+  a declaration through an import §2.1/§2.2 removed, and now import its home directly:
+  `Lamb` (`AdamStep`); `MobileNetV2FullPaperEval`, `EfficientNetRenderPC`, `BatchedBackLinks`
+  (`StableHLO`); `FloatComposeBridge` (`ResNet34FloatBridge`); `VerifiedTrain` (`ParamLayouts`);
+  `CnnFold`, `CifarFold` (`MlpTrainStep`); `ConvNeXtChannelLN` (`IndexCast`); `MobileNetV4FullB`
+  (`HeadLayers`); `ResNet50FullBVJP` (`ResNet50BackB0`); `ConvNeXtStepTie` (`CifarFold`);
+  `ConvNeXtStepTieGB` (`GradNodesB`, `ViTFoldGB`); `tests/AuditAxioms.lean` and the comparator
+  tier (via `gen_comparator_tier.py`'s `MODULES`) (the four `*SyncB`); the four `tests/*SyncBnCheck`
+  (`VerifiedNetsCore`). Several §2.1 rows therefore move an edge down a level rather than cut it;
+  §3 is what cuts them.
+* `scripts/certs/lipschitz_cert_pair_sdp_full.py` emits the Uncon file's narrowed imports.
+* `tests/TestDropPathRamp.lean`, `TestViTFwd.lean`, `TestViTTrain.lean` lost ViT modules from their
+  closure and are not checked: no `lean_exe` or lib builds them.
+* Gate: `lake build Certs LeanMlir Apps CertsHeavy Reference` (3613 jobs), the ten affected test
+  exes, `lake env lean` on `AuditAxioms` and both tier files, `gen_comparator_tier.py --check`.
 
 ## 2. Batch A — leaf imports (cheap, no root file)
 

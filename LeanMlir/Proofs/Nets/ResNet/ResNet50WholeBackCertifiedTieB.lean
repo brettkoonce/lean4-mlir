@@ -1,6 +1,5 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
-import LeanMlir.Proofs.Nets.ResNet.ResNetBackChains
 
 /-! # `r50InputGradB` IS the certified whole-net ResNet-50 gradient
 

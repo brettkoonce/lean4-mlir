@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Foundation.IR
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
 
 /-! # The MLP train step: per-layer parameter-gradient assembly

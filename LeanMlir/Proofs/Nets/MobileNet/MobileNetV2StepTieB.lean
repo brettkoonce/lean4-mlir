@@ -1,7 +1,6 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
-import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 
 /-! # MobileNetV2's train-step tie at batch BatchNorm — the un-fused, batched whole-net thread
 

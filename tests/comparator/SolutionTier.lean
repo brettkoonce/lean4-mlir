@@ -20,6 +20,10 @@ import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet50StepTieB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB
+import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB
+import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncB
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG

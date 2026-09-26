@@ -1,4 +1,5 @@
-import LeanMlir.Proofs.Float.FloatComposeBridge
+import LeanMlir.Proofs.Float.ConvFloat
+import LeanMlir.Proofs.Float.FloatClose
 import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 
 /-! # The mixed-precision conv as a `FloatClose`

@@ -1,7 +1,5 @@
 import LeanMlir.Proofs.Architectures.Depthwise
-import LeanMlir.Proofs.Architectures.StridedConv
 import LeanMlir.Proofs.Architectures.ConvGrad
-import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 
 /-! # Depthwise-bias and stride-2 conv SGD bridges
 

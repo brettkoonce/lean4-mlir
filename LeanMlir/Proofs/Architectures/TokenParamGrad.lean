@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Architectures.Attention
-import LeanMlir.Proofs.Architectures.LayerNorm
 
 /-! # Parameter-gradient bridges for the token ops — per-token dense, patch embedding, position, CLS
 

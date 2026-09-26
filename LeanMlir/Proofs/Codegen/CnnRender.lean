@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
 import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # CNN + CIFAR render half — conv train-step text as `pretty` of proven graphs

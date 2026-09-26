@@ -1,4 +1,3 @@
-import LeanMlir.F32Array
 
 /-! DDPM noise schedule + per-step input plumbing.
 

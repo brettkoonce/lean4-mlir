@@ -1,7 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB
-import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Foundation.DataParallelSyncKit
-import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncB
 
 /-! # MobileNetV4-Conv-M's data-parallel step at synchronised BatchNorm is the single-device step at `R·N`
 

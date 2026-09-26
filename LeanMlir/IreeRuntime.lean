@@ -1,4 +1,3 @@
-import LeanMlir.ParamLayouts
 /-! Lean FFI bindings for the lowerer runtime — PJRT/XLA by default, IREE optionally
     (`LowererSession` is lowerer-agnostic).
 

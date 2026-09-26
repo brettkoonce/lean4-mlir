@@ -1,6 +1,3 @@
-import LeanMlir.Proofs.Foundation.MLP
-import LeanMlir.Proofs.Architectures.CNN
-import LeanMlir.Proofs.Architectures.LayerNorm
 import LeanMlir.Proofs.Architectures.Softmax
 import LeanMlir.Proofs.Architectures.SE
 
