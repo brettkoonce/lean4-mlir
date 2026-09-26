@@ -8,8 +8,11 @@
 # Usage: tests/vjp_oracle/run.sh [case1 case2 ...]
 # Runs phase 2 (JAX) on whatever JAX_PLATFORMS resolves to, and phase 3
 # (IREE) on $IREE_BACKEND (LeanMlir/Train.lean's default: cuda).
+# Data: MNIST IDX files in $VJP_ORACLE_DATA (default data/). The diff reads steps 1-2 only, so
+# CI points it at jax/tests/vjp_oracle/make_tiny_mnist.py's synthetic set.
 set -u
 cd "$(dirname "$0")/../.."  # → repo root
+DATA=$(realpath "${VJP_ORACLE_DATA:-data}")
 
 # On NVIDIA hosts, pin to a single GPU so phase 2's auto-sharding
 # doesn't inflate the effective batch size and diverge from phase 3.
@@ -40,7 +43,7 @@ for name in "${CASES[@]}"; do
   LEAN_MLIR_INIT_DUMP="$init_bin" \
   LEAN_MLIR_NO_SHUFFLE=1 \
   LEAN_MLIR_TRACE_OUT="$p3_trace" \
-    ./.lake/build/bin/vjp-oracle-${name} data > "$p3_log" 2>&1 \
+    ./.lake/build/bin/vjp-oracle-${name} "$DATA" > "$p3_log" 2>&1 \
     || { echo "FAIL  ${name}  phase-3 crashed (see $p3_log)"; FAIL=1; continue; }
 
   # Phase 2 — invoke the binary once to emit the generated Python
@@ -49,7 +52,7 @@ for name in "${CASES[@]}"; do
   # Python directly from repo root with env vars so `.venv/` resolves.
   # Pass an absolute path so the generated Python still finds data
   # when invoked from repo root.
-  ( cd jax && ./.lake/build/bin/vjp-oracle-${name} "$(cd .. && pwd)/data" > /dev/null 2>&1 ) || true
+  ( cd jax && ./.lake/build/bin/vjp-oracle-${name} "$DATA" > /dev/null 2>&1 ) || true
   # Generated Python filename uses underscores; case names use hyphens.
   script=jax/.lake/build/generated_vjp_oracle_${name//-/_}.py
   [ -f "$script" ] || { echo "FAIL  ${name}  phase-2 did not emit $script"; FAIL=1; continue; }

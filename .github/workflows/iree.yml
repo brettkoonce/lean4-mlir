@@ -11,8 +11,10 @@ name: IREE
 # fragments (single-head SDPA, MHSA, one pre-norm ViT block, a tiny whole ViT), each gated on its
 # `✅ PASS` line, plus a control that must go red; then the `iree-compile` smokes of
 # scripts/regen_verified_mlir.sh (26 committed verified_mlir/ artifacts, ~2 min on CPU). A second job
-# runs the forward ties: the MNv4 and MNv2 renders against their JAX references on shared weights.
-# Grow it here rather than by hand: see planning/iree_ci.md.
+# runs the forward ties: the MNv4 and MNv2 renders against their JAX references on shared weights. A
+# third runs the VJP oracle whole: the hand-derived VJPs through IREE (a CPU build of
+# libiree_ffi.so) against JAX autodiff, 14 layer families. Grow it here rather than by hand: see
+# planning/iree_ci.md.
 
 on:
   push:
@@ -40,6 +42,19 @@ on:
       - 'scripts/lib/_iree.py'
       - 'scripts/regen_jax_generated.sh'
       - 'jax/**'
+      # the VJP oracle: its runner, the FFI it drives, and the Lean side it lowers
+      - 'tests/vjp_oracle/**'
+      - 'ffi/iree_ffi.c'
+      - 'ffi/iree_ffi.h'
+      - 'ffi/lowerer.c'
+      - 'ffi/lowerer.h'
+      - 'LeanMlir/VjpOracleNets.lean'
+      - 'LeanMlir/MlirCodegen.lean'
+      - 'LeanMlir/Train.lean'
+      - 'LeanMlir/IreeRuntime.lean'
+      - 'LeanMlir/F32Array.lean'
+      - 'LeanMlir/Spec.lean'
+      - 'LeanMlir/SpecHelpers.lean'
       - 'LeanMlir/GradcheckHelpers.lean'
       - 'LeanMlir/Types.lean'          # ireeCompileArgs / compileCheckB
       - 'LeanMlir/Proofs/Codegen/StableHLO/Pretty.lean'
@@ -244,4 +259,122 @@ jobs:
             echo '```'
             grep -E '^\[|max\|Δ\|/max|CONTROL|FORWARD TIE|⛔' /tmp/ties.log || true
             echo '```'
+          } >> $GITHUB_STEP_SUMMARY
+
+  vjp-oracle:
+    name: VJP oracle (phase 3 through IREE vs phase 2 JAX)
+    # tests/vjp_oracle/run.sh, whole: each of the 14 layer-family nets trains in phase 3 (Lean → MLIR →
+    # IREE, the hand-derived VJPs) and in phase 2 (Lean → JAX, autodiff) from one init, and step 2's
+    # loss — the first that depends on the backward — must agree. jax.yml's oracle job runs phase 2
+    # alone; this is the half that checks the VJPs. Phase 3 drives IREE through libiree_ffi.so, which
+    # pip does not ship: it is built here, CPU-only, from the IREE release the compiler comes from.
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      IREE_VERSION: '3.11.0'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        run: |
+          curl https://raw.githubusercontent.com/leanprover/elan/master/elan-init.sh -sSf | sh -s -- -y
+          echo "$HOME/.elan/bin" >> $GITHUB_PATH
+
+      - name: Restore .lake (certs build, read-only)
+        # ⚠ The path block must stay BYTE-IDENTICAL to certs.yml's (see the gradcheck job).
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            .lake/build
+            !.lake/build/doc
+            !.lake/build/doc-data
+          key: lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-${{ github.run_id }}
+          restore-keys: |
+            lake-certs-${{ hashFiles('lean-toolchain', 'lakefile.lean', 'lake-manifest.json') }}-
+            lake-certs-
+
+      - name: Cache libiree_ffi.so (CPU)
+        id: ffi
+        uses: actions/cache@v4
+        with:
+          path: ffi/libiree_ffi.so
+          key: iree-ffi-cpu-${{ env.IREE_VERSION }}-${{ hashFiles('ffi/iree_ffi.c', 'ffi/iree_ffi.h') }}
+
+      - name: Build libiree_ffi.so (IREE runtime from source, CPU only)
+        if: steps.ffi.outputs.cache-hit != 'true'
+        # Runtime-only: the runtime submodules (~220 MB, not the LLVM chain), four static archives,
+        # local-task/local-sync drivers. `-DUSE_CPU` compiles the wrapper without a GPU driver.
+        # `--no-undefined`: a missing archive fails here, not at the first session create.
+        run: |
+          set -e
+          python3 -m pip install --quiet cmake ninja
+          git clone -q --depth 1 --branch v$IREE_VERSION https://github.com/iree-org/iree.git /tmp/iree
+          (cd /tmp/iree && xargs -a build_tools/scripts/git/runtime_submodules.txt git submodule update -q --init --depth 1)
+          cmake -S /tmp/iree -B /tmp/iree-build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DIREE_BUILD_COMPILER=OFF -DIREE_BUILD_TESTS=OFF -DIREE_BUILD_SAMPLES=OFF \
+            -DIREE_HAL_DRIVER_DEFAULTS=OFF -DIREE_HAL_DRIVER_LOCAL_SYNC=ON -DIREE_HAL_DRIVER_LOCAL_TASK=ON \
+            -DBUILD_SHARED_LIBS=OFF > /tmp/cmake.log
+          B=/tmp/iree-build
+          ninja -C $B runtime/src/iree/runtime/libiree_runtime_unified.a \
+            build_tools/third_party/flatcc/libflatcc_runtime.a build_tools/third_party/flatcc/libflatcc_parsing.a \
+            build_tools/third_party/printf/libprintf_printf.a
+          gcc -fPIC -O2 -c ffi/iree_ffi.c -o /tmp/iree_ffi.o -I/tmp/iree/runtime/src -I$B/runtime/src \
+            -DIREE_ALLOCATOR_SYSTEM_CTL=iree_allocator_libc_ctl -DUSE_CPU
+          gcc -shared -o ffi/libiree_ffi.so /tmp/iree_ffi.o \
+            -Wl,--whole-archive $B/runtime/src/iree/runtime/libiree_runtime_unified.a -Wl,--no-whole-archive \
+            -Wl,--start-group $B/build_tools/third_party/flatcc/libflatcc_runtime.a \
+              $B/build_tools/third_party/flatcc/libflatcc_parsing.a $B/build_tools/third_party/printf/libprintf_printf.a \
+            -Wl,--end-group -lm -lpthread -ldl -Wl,--no-undefined
+
+      - name: Python (IREE compiler; .venv with jax CPU at the lockfile's version, for phase 2)
+        run: |
+          set -e
+          python3 -m pip install --quiet iree-base-compiler==$IREE_VERSION
+          python3 -m venv .venv
+          .venv/bin/pip install --quiet "jax[cpu]==$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)"
+
+      - name: Build the oracle exes (phase 3 at the root, phase 2 in jax/)
+        run: |
+          set -e
+          lake exe cache get || true
+          oracles() { grep -oP '^lean_exe\s+«?\K[^»\s]+' lakefile.lean | sed 's/»$//' | grep '^vjp-oracle-' | tr '\n' ' '; }
+          lake build $(oracles)
+          (cd jax && lake build $(oracles))
+
+      - name: VJP oracle (14 layer families)
+        run: |
+          set -o pipefail
+          .venv/bin/python3 jax/tests/vjp_oracle/make_tiny_mnist.py /tmp/tiny 64 512
+          export LEAN_MLIR_LOWERER=iree IREE_BACKEND=llvm-cpu JAX_PLATFORMS=cpu VJP_ORACLE_DATA=/tmp/tiny
+          rc=0
+          tests/vjp_oracle/run.sh 2>&1 | tee /tmp/oracle.log || rc=1
+          {
+            echo "## VJP oracle"
+            echo ""
+            echo "Each layer family trains one step in phase 3 (Lean → MLIR → IREE on the CPU, the hand-derived VJPs) and in phase 2 (Lean → JAX, autodiff) from the same init. Step 2 is the first loss that depends on the backward, so |Δ step 2| below the tolerance means the VJPs agree with autodiff. Synthetic MNIST (64 / 512); IREE $IREE_VERSION."
+            echo ""
+            echo "| | case | Δ step 1 | Δ step 2 | tol |"
+            echo "|---|---|---|---|---|"
+            sed -nE 's/^(PASS|FAIL) +([a-z-]+) +step1 Δ=([^ ]+) +step2 Δ=([^ ]+) +\(tol=([^)]+)\).*/\1 \2 \3 \4 \5/p' /tmp/oracle.log |
+              while read v c d1 d2 t; do
+                [ "$v" = PASS ] && m=✅ || m=❌
+                echo "| $m | \`$c\` | $d1 | $d2 | $t |"
+              done
+            grep -E '^FAIL +[a-z-]+ +phase' /tmp/oracle.log | sed -E 's/^FAIL +([a-z-]+) +(.*)/| ❌ | `\1` | \2 | | |/' || true
+          } >> $GITHUB_STEP_SUMMARY
+          n=$(grep -c '^PASS' /tmp/oracle.log)
+          [ "$n" = 14 ] || { echo "::error::$n of 14 oracle cases passed"; rc=1; }
+          exit $rc
+
+      - name: Control (mismatched traces must go red)
+        run: |
+          # dense's phase-3 trace against dense-relu's phase-2 trace: two different nets. If the differ
+          # passes that, a green row above says nothing.
+          if .venv/bin/python3 tests/vjp_oracle/diff_step.py /tmp/vo_p3_dense.jsonl /tmp/vo_p2_dense-relu.jsonl control 1e-5; then
+            echo "::error::control came out GREEN — the differ cannot fail"
+            echo "" >> $GITHUB_STEP_SUMMARY; echo "❌ **Control came out green.**" >> $GITHUB_STEP_SUMMARY; exit 1
+          fi
+          {
+            echo ""
+            echo "✅ **Control is red, as it must be:** dense's phase-3 trace against dense-relu's phase-2 trace fails the differ."
           } >> $GITHUB_STEP_SUMMARY
