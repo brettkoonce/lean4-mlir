@@ -481,7 +481,7 @@ def resnet34ImagenetVerified : VerifiedNetSpec where
 /-- Chapter 5 **ResNet-50 on Imagenette 224²** — the bottleneck sibling of `resnet34Verified`:
     7×7-s2 stem → BN → relu → pool → `[3,4,6,3]` bottleneck stages → GAP → dense.
 
-    The stem pool is He et al.'s 3×3/s2 (`SHlo.maxPool3s2F` / the `BatchableOp.maxPool3s2`
+    The stem pool is He et al.'s 3×3/s2 (`Proofs.StableHLO.SHlo.maxPool3s2F` / the `Proofs.StableHLO.BatchableOp.maxPool3s2`
     descriptor, denoting `Proofs.maxPool3s2Flat`), with symmetric padding 1 — the paper's window
     `[2i−1, 2i+1]`, not XLA `'SAME'`'s `[2i, 2i+2]`. A 2×2/s2 pool has the same output shape
     (112→56), so no arity or op-count check can tell the two apart; only the emitted window does. -/
