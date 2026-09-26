@@ -9,8 +9,9 @@ name: IREE
 #
 # Today it runs the four adjoint/finite-difference gradchecks of the ViT chapter's hand-written
 # fragments (single-head SDPA, MHSA, one pre-norm ViT block, a tiny whole ViT), each gated on its
-# `✅ PASS` line, plus a control that must go red. Grow it here rather than by hand: see
-# planning/iree_ci.md.
+# `✅ PASS` line, plus a control that must go red; then the `iree-compile` smokes of
+# scripts/regen_verified_mlir.sh (26 committed verified_mlir/ artifacts, ~2 min on CPU). Grow it here
+# rather than by hand: see planning/iree_ci.md.
 
 on:
   push:
@@ -21,6 +22,17 @@ on:
       - 'tests/TestMHSA.lean'
       - 'tests/TestViTBlock.lean'
       - 'tests/TestViTTiny.lean'
+      - 'tests/TestMobilenetV2Fwd.lean'
+      - 'tests/TestMobilenetV2TrainPC.lean'
+      - 'tests/TestEfficientNetFwd.lean'
+      - 'tests/TestEfficientNetTrain.lean'
+      - 'tests/TestConvNeXtFwd.lean'
+      - 'tests/TestConvNeXtTrain.lean'
+      - 'tests/TestViTFwd.lean'
+      - 'tests/TestViTTrain.lean'
+      - 'tests/TestCifar8AdamTrain.lean'
+      - 'verified_mlir/**'
+      - 'scripts/regen_verified_mlir.sh'
       - 'LeanMlir/GradcheckHelpers.lean'
       - 'LeanMlir/Types.lean'          # ireeCompileArgs / compileCheckB
       - 'LeanMlir/Proofs/Codegen/StableHLO/Pretty.lean'
@@ -69,6 +81,9 @@ jobs:
         run: |
           lake exe cache get || true
           lake build TestSupport LeanMlir.GradcheckHelpers LeanMlir.Types
+          # the smokes' imports (regen_verified_mlir.sh's tests/ files)
+          lake build LeanMlir.Verified.Train LeanMlir.Proofs.Codegen.ChapterGraphs \
+            LeanMlir.Proofs.Codegen.ViTRender LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 
       - name: IREE (PyPI, the version jax.yml's forward ties use)
         run: python3 -m pip install --quiet iree-base-compiler==3.11.0 iree-base-runtime==3.11.0
@@ -123,3 +138,20 @@ jobs:
             echo ""
             echo "✅ **Control is red, as it must be:** TestMHSA pointed at \`hip\`, a device this runner doesn't have, produced no PASS line. So a green row above is the test's own verdict."
           } >> $GITHUB_STEP_SUMMARY
+
+      - name: iree-compile smokes (regen_verified_mlir.sh tests)
+        run: |
+          # Nine tests/ files iree-compile the committed verified_mlir/ artifacts (TestCifar8AdamTrain
+          # also re-renders its own). The script fails on a missing compiler or a FAILED/skipped verdict.
+          export IREE_BACKEND=llvm-cpu
+          set -o pipefail
+          scripts/regen_verified_mlir.sh tests 2>&1 | tee /tmp/smokes.log
+          n=$(grep -c 'compile OK → verified_mlir/' /tmp/smokes.log)
+          {
+            echo ""
+            echo "## iree-compile smokes"
+            echo ""
+            echo "✅ $n committed \`verified_mlir/\` artifacts compile on llvm-cpu (\`scripts/regen_verified_mlir.sh tests\`)."
+          } >> $GITHUB_STEP_SUMMARY
+          # A re-rendered artifact that differs from the committed bytes means two writers disagree.
+          git diff --exit-code --stat verified_mlir/

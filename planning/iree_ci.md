@@ -28,13 +28,19 @@ is the loop: IREE 3.11.0 from PyPI, `IREE_BACKEND=llvm-cpu` on `local-task`, no 
 * TestSDPA (step 1): the backward was right. Seed 0 draws a direction nearly orthogonal to the
   gradient (directional derivative 1.7e-3, median ~0.5 over seeds 0–19), so even the f32 floor is
   1% of it. The test now uses seed 1 (rel 5.6e-5); seeds 1–19 all pass (1.4e-5 to 1.9e-3).
+* `regen_verified_mlir.sh tests` (steps 2–3): exits 1 when `iree-compile` is not on PATH, and
+  when any of the nine files prints FAILED / skipped or no `compile OK`. Measured on llvm-cpu: all
+  nine pass, 26 committed `verified_mlir/` artifacts (every net's fwd + SGD/AdamW train steps,
+  ViT-Tiny, the twelve cifar8 optimizer variants), 2 min, 2.9 GB peak. Negative checks: no compiler
+  → rc 1; `IREE_EXTRA_FLAGS=--no-such-flag` → all nine red. In `iree.yml` after the gradchecks,
+  plus `git diff --exit-code verified_mlir/` (TestCifar8AdamTrain re-renders its artifacts).
 
 ## Next, one at a time (each measured on llvm-cpu before it joins the job)
 
 1. ~~TestSDPA~~ — landed, see above.
-2. `regen_verified_mlir.sh` tests loop: fail on a missing compiler instead of printing FAILED.
-3. `iree-compile` smoke over a small, fixed subset of `verified_mlir/` (time the 224² train steps
-   on CPU first; the full set is ~200 artifacts).
+2. ~~`regen_verified_mlir.sh` tests loop~~ — landed, see above.
+3. ~~`iree-compile` smoke over a subset of `verified_mlir/`~~ — the step-2 loop is that subset
+   (26 artifacts incl. the 224² train steps, ~2 min). A wider sweep only if something slips past it.
 4. Move jax.yml's "Forward ties through IREE" step here.
 5. VJP oracle phase 3 (needs a CPU-mode `libiree_ffi.so` source build, cached): last, only if
    the build fits a runner.

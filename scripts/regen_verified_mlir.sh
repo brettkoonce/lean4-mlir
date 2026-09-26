@@ -11,8 +11,8 @@
 #   Proofs/Codegen/*.lean   `#eval` at ELABORATION time — `lake build <module>` writes the file.
 #                           These are `pretty(provenGraph)`: the committed bytes ARE the
 #                           certified render.
-#   tests/Test*.lean        `#eval main` — `lake env lean <file>` writes the file (and tries
-#                           iree-compile, which needs .venv/bin on PATH).
+#   tests/Test*.lean        `#eval main` — `lake env lean <file>` writes the file (and runs
+#                           iree-compile: .venv/bin or $PATH, and the run fails without it).
 #                           These are hand-written string emitters: faithful per-op, NOT certified.
 #
 # Usage:
@@ -583,8 +583,16 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "tests" ]; then
   # PATH) and they throw if an artifact is missing. As of 2026-07-28 the only files below that still
   # emit an artifact are the two cifar8 ones; every `_fwd`/`_train_step` writer has moved to
   # Proofs/Codegen. Running them is still the right smoke — it just no longer risks a clobber.
+  # The smokes print their verdict and exit 0 either way, and `tryCompile` steps over a missing
+  # compiler, so a run with no `iree-compile` used to print FAILED/skipped and finish green. The
+  # gate is the printed verdict: every file must compile OK and print neither.
   export PATH="$PWD/.venv/bin:$PATH"
+  if ! command -v iree-compile > /dev/null; then
+    echo "  ✗ iree-compile not on PATH (.venv/bin or \$PATH): the tests/ smokes cannot run" >&2
+    exit 1
+  fi
   lake build TestSupport   # tests/ViTRender.lean, imported by four of the files below
+  smoke_rc=0
   for f in \
     tests/TestMobilenetV2Fwd.lean \
     tests/TestMobilenetV2TrainPC.lean \
@@ -597,7 +605,13 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "tests" ]; then
     tests/TestCifar8AdamTrain.lean
   do
     echo "  lake env lean $f"
-    lake env lean "$f"
+    log=$(mktemp)
+    lake env lean "$f" 2>&1 | tee "$log" || smoke_rc=1
+    if grep -qE 'FAILED|skipped \(compiler unavailable\)' "$log" || ! grep -q 'compile OK' "$log"; then
+      echo "  ✗ $f: an iree-compile smoke did not pass" >&2
+      smoke_rc=1
+    fi
+    rm -f "$log"
   done
 fi
 
@@ -612,3 +626,4 @@ check_no_malformed || true
 echo
 echo "── git diff verified_mlir/ (should be empty) ──"
 git diff --stat verified_mlir/ || true
+exit "${smoke_rc:-0}"
