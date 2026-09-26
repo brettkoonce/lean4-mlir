@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 
 /-! # MobileNetV4-Conv-M's data-parallel forward at synchronised BatchNorm — replica `r` is shard `r`
 
@@ -27,7 +27,7 @@ shard hypothesis `∀ r, den (e r) = batchShard R N _ X r` carried from block to
 * relu is pointwise (`den_relu_shard`); the identity skip is `den_addVB_shard`; the head's two
   `1×1` relabellings are `den_castIdx_shard` (sharding commutes with a per-example relabel);
 * every BatchNorm site is `bnSyncSiteLA`, whose shard lemma `den_bnSyncSiteLA` is
-  `DataParallelSync`'s P1 (the sync-BN forward shard identity) on the graph, read at the network
+  `DataParallel.Sync`'s P1 (the sync-BN forward shard identity) on the graph, read at the network
   index.
 
 **Same shape as `MobileNetV4FullB`, and for its reasons.** The block lemmas are generic in the
@@ -62,7 +62,7 @@ Every conv here is bias-free by construction: `MobileNetV4RenderB` has no `convB
 binds each bias slot to the zero `%zb{c}`, so no bias is trained and no bias gradient is emitted
 (the statement is `∀ w`, and zero biases are one instance). The
 statement is at the f32 nodes; the `*bf16` artifact's bf16 conv twins are outside it. That the
-`R` replicas' inputs are the shards of one batch is the driver's, as in `DataParallelSync.lean`.
+`R` replicas' inputs are the shards of one batch is the driver's, as in `DataParallel.Sync`.
 The lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 

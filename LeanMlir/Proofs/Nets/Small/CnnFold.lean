@@ -18,7 +18,7 @@ biases — structurally a 3-layer MLP over the flattened pool output) and the
 via `weight_grad_bridge`/`bias_grad_bridge` at the `mlpCotOut`-style chain
 cotangents — the head is a 3-layer MLP, so the IR `mlpCotOut0/1` apply verbatim).
 The conv layers use the core ops `convWeightSgd`/`convBiasSgd`
-(StableHLO.lean): their `den` is `flatten(W − lr·conv2dWeightGrad…)` /
+(StableHLO/Basic.lean): their `den` is `flatten(W − lr·conv2dWeightGrad…)` /
 `b − lr·conv2dBiasGrad…`, proven = certified by the chain-pinned conv bridges
 `cnn_render_conv{W,b}{1,2}_chain_certified` (CnnChainClose.lean) at the cotangents
 the CNN backward chain delivers (`cnnChainCotW1`/`cnnChainCotW2`).

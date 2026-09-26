@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 import LeanMlir.Proofs.Codegen.ViTRenderB
 
 /-! # EMA **and** stochastic depth in one ViT render: the arity the driver expects is the arity the

@@ -15,7 +15,7 @@ namespace LowererSession
 
     On the **XLA backend** (`libpjrt_ffi.so`) the argument is instead the
     `.mlir` source — XLA compiles the StableHLO in-process, so there is no
-    separate `iree-compile` step. Use `mkSession` (`VerifiedTrain`) rather than
+    separate `iree-compile` step. Use `mkSession` (`Verified.Train`) rather than
     calling this directly; it picks the right path per `backendName`. -/
 @[extern "lean_iree_session_create"]
 opaque create (path : @& String) : IO LowererSession

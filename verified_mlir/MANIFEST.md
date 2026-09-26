@@ -6,7 +6,7 @@
 
 ## How these are addressed — read this before pruning
 
-⚠⚠ **Nothing references these files by name.** `VerifiedTrain` builds the path at runtime
+⚠⚠ **Nothing references these files by name.** `Verified/Train` builds the path at runtime
 as `{net.slug}_{variant}_train_step.mlir` from `LEAN_MLIR_VARIANT`, so *every* artifact
 looks unreferenced to grep and *every* one is reachable by setting one env var. A
 "nothing uses this" measurement over this directory is meaningless; deciding what to drop
@@ -186,47 +186,47 @@ and `gen_mlir_manifest.py --selftest` replays those collisions through this deco
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `efficientnet_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 6 |
-| `efficientnet_do_fwd.mlir` | fwd | `do` | classifier dropout | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 6 |
-| `efficientnet_do_fwd_eval.mlir` | fwd_eval | `do` | classifier dropout | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_drop_fwd_eval.mlir` | fwd_eval | `drop` | stochastic depth | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_train_step.mlir` | train_step | `—` | — | 0.6 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 6 |
-| `efficientnet_adam128_train_step.mlir` | train_step | `adam128` | AdamW, batch 128 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_adambf16_train_step.mlir` | train_step | `adambf16` | AdamW, bf16 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_adamdo_train_step.mlir` | train_step | `adamdo` | AdamW, classifier dropout | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_adamdp_train_step.mlir` | train_step | `adamdp` | AdamW, data-parallel | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_adamdp128_train_step.mlir` | train_step | `adamdp128` | AdamW, data-parallel, batch 128 per replica | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_adamdpdrop_train_step.mlir` | train_step | `adamdpdrop` | AdamW, data-parallel, stochastic depth | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 3 |
-| `efficientnet_adamdrop_train_step.mlir` | train_step | `adamdrop` | AdamW, stochastic depth | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_emarms_train_step.mlir` | train_step | `emarms` | EMA shadow (4-region blob), RMSProp | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnet_rms_train_step.mlir` | train_step | `rms` | RMSProp | 1.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
+| `efficientnet_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 6 |
+| `efficientnet_do_fwd.mlir` | fwd | `do` | classifier dropout | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 6 |
+| `efficientnet_do_fwd_eval.mlir` | fwd_eval | `do` | classifier dropout | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_drop_fwd_eval.mlir` | fwd_eval | `drop` | stochastic depth | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_train_step.mlir` | train_step | `—` | — | 0.6 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_adam_train_step.mlir` | train_step | `adam` | AdamW | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 6 |
+| `efficientnet_adam128_train_step.mlir` | train_step | `adam128` | AdamW, batch 128 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_adambf16_train_step.mlir` | train_step | `adambf16` | AdamW, bf16 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_adamdo_train_step.mlir` | train_step | `adamdo` | AdamW, classifier dropout | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_adamdp_train_step.mlir` | train_step | `adamdp` | AdamW, data-parallel | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_adamdp128_train_step.mlir` | train_step | `adamdp128` | AdamW, data-parallel, batch 128 per replica | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_adamdpdrop_train_step.mlir` | train_step | `adamdpdrop` | AdamW, data-parallel, stochastic depth | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 3 |
+| `efficientnet_adamdrop_train_step.mlir` | train_step | `adamdrop` | AdamW, stochastic depth | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_emarms_train_step.mlir` | train_step | `emarms` | EMA shadow (4-region blob), RMSProp | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnet_rms_train_step.mlir` | train_step | `rms` | RMSProp | 1.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
 
 ## `efficientnetin` — 19 artifacts, 18.5 MB
 
 | file | kind | variant | decoded | MB | writer | runs |
 |---|---|---|---|---|---|---|
-| `efficientnetin_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 4 |
-| `efficientnetin_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_dropdo_fwd.mlir` | fwd | `dropdo` | stochastic depth, classifier dropout | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 2 |
-| `efficientnetin_fwd_eval_eps0001.mlir` | fwd_eval BN ε 0.001 | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 2 |
-| `efficientnetin_adam64_train_step.mlir` | train_step | `adam64` | AdamW, batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_adamdp64_train_step.mlir` | train_step | `adamdp64` | AdamW, data-parallel, batch 64 per replica | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_emarms64_train_step.mlir` | train_step | `emarms64` | EMA shadow (4-region blob), RMSProp, batch 64 | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_emarms64drop_train_step.mlir` | train_step | `emarms64drop` | EMA shadow (4-region blob), RMSProp, stochastic depth, batch 64 | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_emarms64dropdo_train_step.mlir` | train_step | `emarms64dropdo` | EMA shadow (4-region blob), RMSProp, stochastic depth, classifier dropout, batch 64 | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_emarmsdp128dropdo_train_step.mlir` | train_step | `emarmsdp128dropdo` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, batch 128 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_emarmsdp64_train_step.mlir` | train_step | `emarmsdp64` | EMA shadow (4-region blob), RMSProp, data-parallel, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_emarmsdp64dropdo_train_step.mlir` | train_step | `emarmsdp64dropdo` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_emarmsdp64dropdobf16_train_step.mlir` | train_step | `emarmsdp64dropdobf16` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, bf16, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 2 |
-| `efficientnetin_emarmsdp64dropdowxeps0001bf16_train_step.mlir` | train_step | `emarmsdp64dropdowxeps0001bf16` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, no decay on norm/bias, bf16, BN ε 0.001, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | 2 |
-| `efficientnetin_rms64_train_step.mlir` | train_step | `rms64` | RMSProp, batch 64 | 1.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_rms64bf16_train_step.mlir` | train_step | `rms64bf16` | RMSProp, bf16, batch 64 | 1.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_rmsdp64_train_step.mlir` | train_step | `rmsdp64` | RMSProp, data-parallel, batch 64 per replica | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
-| `efficientnetin_rmsdp64bf16_train_step.mlir` | train_step | `rmsdp64bf16` | RMSProp, data-parallel, bf16, batch 64 per replica | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` | — |
+| `efficientnetin_fwd.mlir` | fwd | `—` | — | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 4 |
+| `efficientnetin_drop_fwd.mlir` | fwd | `drop` | stochastic depth | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_dropdo_fwd.mlir` | fwd | `dropdo` | stochastic depth, classifier dropout | 0.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_fwd_eval.mlir` | fwd_eval | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 2 |
+| `efficientnetin_fwd_eval_eps0001.mlir` | fwd_eval BN ε 0.001 | `—` | — | 0.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 2 |
+| `efficientnetin_adam64_train_step.mlir` | train_step | `adam64` | AdamW, batch 64 | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_adamdp64_train_step.mlir` | train_step | `adamdp64` | AdamW, data-parallel, batch 64 per replica | 1.5 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_emarms64_train_step.mlir` | train_step | `emarms64` | EMA shadow (4-region blob), RMSProp, batch 64 | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_emarms64drop_train_step.mlir` | train_step | `emarms64drop` | EMA shadow (4-region blob), RMSProp, stochastic depth, batch 64 | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_emarms64dropdo_train_step.mlir` | train_step | `emarms64dropdo` | EMA shadow (4-region blob), RMSProp, stochastic depth, classifier dropout, batch 64 | 1.2 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_emarmsdp128dropdo_train_step.mlir` | train_step | `emarmsdp128dropdo` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, batch 128 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_emarmsdp64_train_step.mlir` | train_step | `emarmsdp64` | EMA shadow (4-region blob), RMSProp, data-parallel, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_emarmsdp64dropdo_train_step.mlir` | train_step | `emarmsdp64dropdo` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_emarmsdp64dropdobf16_train_step.mlir` | train_step | `emarmsdp64dropdobf16` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, bf16, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 2 |
+| `efficientnetin_emarmsdp64dropdowxeps0001bf16_train_step.mlir` | train_step | `emarmsdp64dropdowxeps0001bf16` | EMA shadow (4-region blob), RMSProp, data-parallel, stochastic depth, classifier dropout, no decay on norm/bias, bf16, BN ε 0.001, batch 64 per replica | 1.4 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | 2 |
+| `efficientnetin_rms64_train_step.mlir` | train_step | `rms64` | RMSProp, batch 64 | 1.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_rms64bf16_train_step.mlir` | train_step | `rms64bf16` | RMSProp, bf16, batch 64 | 1.1 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_rmsdp64_train_step.mlir` | train_step | `rmsdp64` | RMSProp, data-parallel, batch 64 per replica | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
+| `efficientnetin_rmsdp64bf16_train_step.mlir` | train_step | `rmsdp64bf16` | RMSProp, data-parallel, bf16, batch 64 per replica | 1.3 | `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` | — |
 
 ## `linear` — 2 artifacts, 0.0 MB
 

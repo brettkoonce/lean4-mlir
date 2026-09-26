@@ -3635,7 +3635,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   "    # with determinism ON, 592 OFF — i.e. nothing, at 5.3x the producer speed. The producer was\n" ++
   "    # never the binding constraint; the consumer was reading ONE handle at a time while the other\n" ++
   "    # seven producers slept in write() (70% of the box idle). The real fix was depth-n prefetch\n" ++
-  "    # (`LeanMlir/VerifiedTrain.lean`, 567 -> 287 ms/step), and it is orthogonal to this line.\n" ++
+  "    # (`LeanMlir/Verified/Train.lean`, 567 -> 287 ms/step), and it is orthogonal to this line.\n" ++
   "    # ▶ THE LESSON, since it cost a session: an isolated component measurement (SHIM_HASH) tells\n" ++
   "    # you a component's CAPACITY, not what limits the pipeline. Capacity is irrelevant when the\n" ++
   "    # consumer pulls one batch and walks away.\n" ++
@@ -3671,7 +3671,7 @@ def generateShim (spec : NetSpec) (cfg : TrainConfig) : String :=
   -- with it off, **639 img/s**. Neither number predicts the step time. The ViT job sat at 567
   -- ms/step against a 249 ms floor at BOTH producer speeds, because the consumer drained one handle
   -- at a time and the rest slept in `write()`. What fixed it was depth-n prefetch in
-  -- `LeanMlir/VerifiedTrain.lean` (567 -> 287 ms/step, 1.98x) — a consumer change, with the
+  -- `LeanMlir/Verified/Train.lean` (567 -> 287 ms/step, 1.98x) — a consumer change, with the
   -- producers untouched.
   -- ▶ This row measures CAPACITY. The step is set by whether the consumer lets that capacity run.
   "    shard = None\n" ++

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 import LeanMlir.Proofs.Architectures.ConvGrad
 
@@ -10,7 +10,7 @@ lemma per op kind — "this node denotes the certified `Σ_n` gradient" — cert
 variant of every net at once. Each proof is `Finset.sum_congr rfl` over the batch and then the
 per-example VJP at `batchSlice n`. The bf16 kinds (`*GradBBf16`) are a different real number and
 are folded in `Bf16GradNodes`; the fused `*SgdB` ops are these through
-`StableHLO.lean`'s `*SgdB_eq_grad` family (`rfl`).
+`StableHLO.Basic`'s `*SgdB_eq_grad` family (`rfl`).
 
 Namespaces are the net that first needed the op (kept so that every citation keeps its name):
 
@@ -628,7 +628,7 @@ theorem headWGradB_den {N D nC : Nat} (aN cotN : String)
     Note: `biasGradB` is the identity on its operand — the reduce over the batch is in the emitted
     text, outside the AST — so the statement this node supports is the per-example one at every
     `batchSlice n`, and it is the per-example `biasGrad` carve-out carried over rather than a new
-    one. `StableHLO.lean`'s constructor comment records the same thing on the emitter side. -/
+    one. `StableHLO.Basic`'s constructor comment records the same thing on the emitter side. -/
 theorem headBGradB_den {N D nC : Nat} (cotN : String)
     (Wc : Mat D nC) (a : Vec D) (bc : Vec nC) (cot : Vec (N * nC)) (n : Fin N) (i : Fin nC) :
     batchSlice N nC (den (SHlo.biasGradB (N := N) (n := nC) (.operand cotN cot))) n i

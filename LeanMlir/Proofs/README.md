@@ -16,14 +16,14 @@ namespace is `Proofs.*` throughout — only module paths carry the bucket:
 
 | directory | what lives there |
 |---|---|
-| [`Foundation/`](Foundation/) | the roots (`Tensor`: pdiv/HasVJP kit; `MLP`; `DataParallel`; `OpaquePrefix`; the batched conv-net kit (`BatchedStages` → `BatchedStageLayers` → `BatchedBackLinks`, `GradNodesB` for the batched gradient nodes, `SgdNodes` for the per-example fused-SGD ones, `HeadLayers` for the stem pool / GAP / dense, `IndexCast` for the `c·h·w ↔ c·(h·w)` relabelling, `DataParallelSyncKit` for sync-BN); `GramQ`, `ListDot`, `Muon*`, `MatBridge` — opt-in `Mat` ↔ Mathlib `Matrix` interop) plus cross-net kits that sit *above* some nets (`IR`, `CertifiedChain`, `HeadLayers`, `BackwardMaps`, the batched-VJP and data-parallel-sync calculus, `Bf16GradNodes`, the conv interval bounds). Directories are by content; no Foundation file imports a net or a certificate. |
-| [`SpecVJP.lean`](SpecVJP.lean) | the apex, not a starting point: the executable `VerifiedNetSpec`s (`LeanMlir/VerifiedNetsCore.lean`) denote the functions the proofs are about, and each net's whole-model VJP is stated at the spec's denotation |
+| [`Foundation/`](Foundation/) | the roots (`Tensor`: pdiv/HasVJP kit; `MLP`; `DataParallel/`; `OpaquePrefix`; the batched conv-net kit (`Batched/Stages` → `Batched/StageLayers` → `Batched/BackLinks`, `GradNodesB` for the batched gradient nodes, `SgdNodes` for the per-example fused-SGD ones, `HeadLayers` for the stem pool / GAP / dense, `IndexCast` for the `c·h·w ↔ c·(h·w)` relabelling, `DataParallel/SyncKit` for sync-BN); `GramQ`, `ListDot`, `Muon/`, `MatBridge` — opt-in `Mat` ↔ Mathlib `Matrix` interop) plus cross-net kits that sit *above* some nets (`IR`, `CertifiedChain`, `HeadLayers`, `BackwardMaps`, the batched-VJP and data-parallel-sync calculus, `Bf16GradNodes`, the conv interval bounds). Directories are by content; no Foundation file imports a net or a certificate. |
+| [`SpecVJP.lean`](SpecVJP.lean) | the apex, not a starting point: the executable `VerifiedNetSpec`s (`LeanMlir/Verified/NetsCore.lean`) denote the functions the proofs are about, and each net's whole-model VJP is stated at the spec's denotation |
 | [`Architectures/`](Architectures/) | generic ops: `Attention`, `CNN`, `BatchNorm`, `LayerNorm`, `Depthwise`, `SE`, `Residual`, `MaxPool3s2`, the channel-LN and depthwise backward ties, and the per-op parameter-gradient bridges (`ConvGrad`, `PerChannelBNGrad`, `TokenParamGrad`) |
 | [`Nets/`](Nets/) | one directory per net family — `Small/` (MNIST linear/MLP/CNN, CIFAR), `ResNet/`, `MobileNet/`, `EfficientNet/`, `ConvNeXt/`, `ViT/`: each net's forward, VJP, folds, step ties and whole-net backward ties |
 | [`Float/`](Float/) | the rounding model: `FloatBridge`, `Binary32Instance`, bf16/E4M3, the ResNet-34 float chain |
-| [`Codegen/`](Codegen/) | `StableHLO` (the `SHlo` AST and its `den` semantics), `StableHLOPretty` (the printer), the per-net `*Render*` artifact writers, `IRPrint` (a scratch-only execution oracle) |
+| [`Codegen/`](Codegen/) | `StableHLO/Basic` (the `SHlo` AST and its `den` semantics), `StableHLO/Pretty` (the printer), `ChapterGraphs` (the chapter 1–4 graphs and printers), the per-net `*Render*` artifact writers, `IRPrint` (a scratch-only execution oracle) |
 | [`Certificates/`](Certificates/) | Lipschitz + smoothing scorecards — **machine-emitted**, see its README |
-| [`Training/`](Training/) | `SgdDescent*`, Jacobian seals, trained witnesses; `Optim/` — the ℝ optimizer specs the emitted optimizer ops denote (`AdamStep`, `SgdMomentumStep`, `RmsPropStep`, `Lamb`, `GradClip`); `DropPath` |
+| [`Training/`](Training/) | `SgdDescent/`, Jacobian seals, trained witnesses (`Trained/`); `Optim/` — the ℝ optimizer specs the emitted optimizer ops denote (`AdamStep`, `SgdMomentumStep`, `RmsPropStep`, `Lamb`, `GradClip`); `DropPath` |
 
 ## Two populations, two build targets
 
@@ -58,7 +58,7 @@ Read these three, in order:
 
 1. [`LinearTrainStep.lean`](Nets/Small/LinearTrainStep.lean) (~170 L) — the linear train-step spec + ops.
 2. [`LinearFold.lean`](Nets/Small/LinearFold.lean) (~110 L) — **capstone**: emitted step = certified math.
-3. [`SgdDescentLinear.lean`](Training/SgdDescentLinear.lean) (~370 L) — **capstone**: that step decreases the loss.
+3. [`SgdDescent/Linear.lean`](Training/SgdDescent/Linear.lean) (~370 L) — **capstone**: that step decreases the loss.
 
 Build *just* this slice (Linear + the shared foundation it needs, nothing else):
 
@@ -67,7 +67,7 @@ lake build ProofsMinimal
 ```
 
 **Foundation (read once; shared by every net — big because reusable, not per-net work):**
-`Tensor.lean` (chain rule / `fderiv`), `StableHLO.lean` (the AST + `den` denotation),
+`Tensor.lean` (chain rule / `fderiv`), `StableHLO/Basic.lean` (the AST + `den` denotation),
 `FloatBridge.lean`, `IR.lean` (the small-net backward IR; ResNet onward uses `StableHLO`'s `SHlo`).
 
 ### The per-net file chain
@@ -119,8 +119,8 @@ that first needed each op), `ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStep
 `reluMaskB`, …, in namespaces `EnetTiePoC` / `ResNet34TieB`) in `Foundation/BatchedBackLinks`, and the
 sync-BN twin kit (namespaces `ResNet34SyncTieB` / `MBConvSyncTieB`) in `Foundation/DataParallelSyncKit`.
 
-**Don't start with the big files:** `SgdDescentCnn.lean` (~6.8k), `Attention.lean` (~2.3k), the
-`StableHLO.lean` denotation internals, or the per-net `*Render*` files (1–2k lines each of
+**Don't start with the big files:** `SgdDescent/Cnn.lean` (~6.8k), `Attention.lean` (~2.3k), the
+`StableHLO/Basic.lean` denotation internals, or the per-net `*Render*` files (1–2k lines each of
 string assembly, no theorems). Start from a `*FullB` file — the net's forward, stated once.
 
 ## Foundation: Mathlib's `fderiv`

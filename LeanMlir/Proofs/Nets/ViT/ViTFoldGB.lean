@@ -38,7 +38,7 @@ this namespace, because ConvNeXt's batched tier uses them too.
 **No new mathematics: every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n`.** That is `ResNet34PoCB.denseWGradB_den`'s shape, and
 it is available because each batched `den` arm is literally `∑_batch` of the per-example one — the
-constructors were written that way (`StableHLO.lean`'s own comment on `veclnGammaGradB`: *"TWO-LEVEL:
+constructors were written that way (`StableHLO.Basic`'s own comment on `veclnGammaGradB`: *"TWO-LEVEL:
 the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example"*).
 
 **One lemma per f32 node kind.** Every lemma is `∀ cot`: the f32 AdamW, `wx`/`clip` and EMA
@@ -60,7 +60,7 @@ bf16 one, so its weight gradients go through the bf16 kinds listed below.
 * The `*bf16` artifacts emit `rowDenseWeightGradBBf16` / `patchEmbedWeightGradBBf16`, their own
   kinds; [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) folds them (the row-dense one keeps its f32 result).
 * `vitin_*dp128x4*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
-  gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
+  gradient node (`DataParallel.Node`), so these lemmas are about the per-replica gradient node
   it averages.
 -/
 

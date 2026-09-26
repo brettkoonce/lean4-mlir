@@ -1,8 +1,8 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 
 /-! # The LAMB triple, assembled — the peer of `adamW_triple_faithful`
 
-`Lamb.lean` gives the ℝ reference (`lambDir`, `lambTrust`, `lambScale`) and `StableHLO.lean`
+`Lamb.lean` gives the ℝ reference (`lambDir`, `lambTrust`, `lambScale`) and `StableHLO.Basic`
 gives each emitted op its own `den` (`lambDirF_faithful`, `lambScaleF_faithful`,
 `gradSumSqAccF_faithful`). What was missing is the level above: the `(θ', m', v')` a train step
 returns per parameter, which is what `adamW_triple_faithful` states for AdamW and what the
@@ -48,7 +48,7 @@ rather than against `g`, so `lamb_triple_faithful` covers it at `e := ` that nod
 `∀ e`. Likewise the clip, which sits between the two.
 
 **One replica.** Under `*dp*` the gradient node feeds `allReduceMeanF`, the collective as an
-AST node, so `den e` is the per-replica gradient here and `DataParallelNode.lean`'s
+AST node, so `den e` is the per-replica gradient here and `DataParallel.Node`'s
 `adamW_at_allReduceMeanF` is the shape that composes a tail with the replica mean.
 
 `lambStep` and `lambScale_zero_weight` are defined in `Lamb.lean`.

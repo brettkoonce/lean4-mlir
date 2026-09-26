@@ -111,7 +111,7 @@ def main : IO Unit := do
   -- ⭐ The signature and VLayer.toSpecs are two hand-written readings of one layout. Tie them.
   let sigShapes := (mnv4ShapeList 10).map (fun (_, ds) => ds)
   -- ⭐ Read off `mobilenetv4Verified`, NOT a list spelled again here. This test used to carry its
-  -- own copy of the block table; the spec now exists (`LeanMlir/VerifiedNetsCore.lean`), so the tie is
+  -- own copy of the block table; the spec now exists (`LeanMlir/Verified/NetsCore.lean`), so the tie is
   -- against the object the TRAINER runs rather than against a twin of it — which is the whole
   -- point of the tie. One fewer transcription of the 14 rows.
   let specShapes : List (List Nat) :=

@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `cifar8wb-bn-ablation` — wide head, BATCHED render, BatchNorm, f32 and bf16
 

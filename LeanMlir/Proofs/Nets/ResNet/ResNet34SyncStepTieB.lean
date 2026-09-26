@@ -21,17 +21,17 @@ single-device chain at `N := R·N`.
 
 ## Four steps
 
-The per-op facts behind each step are in `DataParallelSyncKit`; this file states ResNet-34's block
+The per-op facts behind each step are in `DataParallel.SyncKit`; this file states ResNet-34's block
 chains and ties over them.
 
 1. **Sharding** — each replica's backward chain, handed its shard of a global cotangent, computes
    the shard of the global chain. Every non-BN link (relu mask, conv and strided-conv input-VJP,
    the 3×3/s2 pool's scatter, the head) is a per-example map and commutes with sharding by
    definition; the BN link is `bnSyncInB`, whose shard lemma `bnSyncInB_shard` is P2 on the
-   graph (`DataParallelSync.den_bnSyncBack_allReduce`) carried across the `mul_assoc` seam.
+   graph (`DataParallel.Sync.den_bnSyncBack_allReduce`) carried across the `mul_assoc` seam.
 2. **The collectives** — the mean over replicas of each replica's gradient node is `1/R` of the
-   global node at the global cotangent (the P4 lemmas of `DataParallelSync` and
-   `DataParallelSyncKit`). The γ node is the sync one, `bnSyncGammaGradB`, reading the forward's
+   global node at the global cotangent (the P4 lemmas of `DataParallel.Sync` and
+   `DataParallel.SyncKit`). The γ node is the sync one, `bnSyncGammaGradB`, reading the forward's
    all-reduced statistics — the one parameter gradient sync-BN changes.
 3. **Homogeneity** — the single-device chain and its gradient nodes are linear in the loss
    cotangent (`*_smul`): `R ×` the cotangent gives `R ×` every node.
@@ -59,7 +59,7 @@ open Proofs.ResNet34TieB
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. Homogeneity — the ResNet-34 block cotangents are linear in their cotangent
---   (the per-op `*_smul` facts are in `DataParallelSyncKit`)
+--   (the per-op `*_smul` facts are in `DataParallel.SyncKit`)
 -- ════════════════════════════════════════════════════════════════
 
 theorem r34HeadCotBlk_smul (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (bd : Vec nCls)
@@ -150,7 +150,7 @@ theorem r34StemCotC_smul (N h w : Nat) {ic oc : Nat} (Ws : Kernel4 oc ic 7 7) (b
 
 -- ════════════════════════════════════════════════════════════════
 -- § 2. Sharding — the head cotangent, on a replica, is the shard of the global one
---   (the per-op `*_shard` facts and `bnSyncInB_shard` are in `DataParallelSyncKit`)
+--   (the per-op `*_shard` facts and `bnSyncInB_shard` are in `DataParallel.SyncKit`)
 -- ════════════════════════════════════════════════════════════════
 
 theorem r34HeadCotBlk_shard {R N : Nat} (h w : Nat) {c nCls : Nat} (Wd : Mat c nCls)

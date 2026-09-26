@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedSmoothing
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Smoothing
 
 /-! # `mnist-mlp-smooth` — randomized-smoothing certificate on the verified MNIST MLP
 

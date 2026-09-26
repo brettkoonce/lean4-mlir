@@ -10,7 +10,7 @@ the MLP render. Hand-written text: the signatures and constants, the report-only
 appended by `cnnTrainStepFaithfulV` and by the packed-optimizer (`[θ|m|v]`) renders, and the
 packed renders' `%bc1`/`%bc2` passthroughs; none of it feeds a parameter. The forward is rendered
 flat: each `.flatConvF`/`.maxPoolF` token reshapes flat→NCHW internally and back at its boundary
-(`emitTok`, in StableHLOPretty.lean), so the names `pretty` exposes are flat. `CnnFold` / `CifarFold` / `Cifar8StepTie` prove each output's `den` is the certified
+(`emitTok`, in StableHLO/Pretty.lean), so the names `pretty` exposes are flat. `CnnFold` / `CifarFold` / `Cifar8StepTie` prove each output's `den` is the certified
 update. The `#eval` writers that produce the `verified_mlir/cnn_*` / `cifar*` artifacts are in
 `CnnArtifacts.lean`, which nothing imports.
 -/

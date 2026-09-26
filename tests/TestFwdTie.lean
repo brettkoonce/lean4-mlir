@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `@<slug>_fwd` render tie — do two renders compute the same function?
 

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.BatchedStageLayers
+import LeanMlir.Proofs.Foundation.Batched.StageLayers
 
 /-! # Backward-graph faithfulness for the VERIFIED ResNet-34 basic block
 
@@ -34,9 +34,9 @@ relu sibling of `cbrB`), `cbReluStridedB` and `projStridedB`, with their `_at` V
 graph `cbReluBackBatchedGraph` + `cbReluBackBatchedGraph_faithful` (chaining
 `selectPos_faithful` + `bnBatchLABack_faithful` + `convBackBatched_faithful`), and the four
 `CertLayer`s `cbReluLayer` / `projLayer` / `cbReluStridedLayer` / `projStridedLayer`, are in
-Foundation/BatchedStageLayers.lean; `projB` (conv → bn, no activation, the body's `cbB`) is in
-Foundation/BatchedStages.lean; `projBackBatchedGraph` / `projBackBatchedGraph_faithful` are in
-Foundation/BatchedBackLinks.lean. This file holds the ResNet-34 assemblies:
+Foundation/Batched/StageLayers.lean; `projB` (conv → bn, no activation, the body's `cbB`) is in
+Foundation/Batched/Stages.lean; `projBackBatchedGraph` / `projBackBatchedGraph_faithful` are in
+Foundation/Batched/BackLinks.lean. This file holds the ResNet-34 assemblies:
 
 * the body `cbB ∘ cbReluB` — its backward graph `r34BodyBackBatchedGraph`, the two stage
   graphs chained at their cumulative activations, certified through the block layer.
@@ -53,8 +53,8 @@ Foundation/BatchedBackLinks.lean. This file holds the ResNet-34 assemblies:
 
 The downsample-block capstone (`r34DownBlockBackBatchedGraph_faithful`) reuses the
 **strided** batched-conv backward primitive `convStridedBackBatched`
-(`StableHLO.lean`, the stride-2 analog of `convBackBatched`; `convStridedBackBatched_faithful`
-is in Foundation/BatchedBackLinks.lean). The body `F_s = projB ∘ cbReluStridedB` has a stride-2
+(`StableHLO.Basic`, the stride-2 analog of `convBackBatched`; `convStridedBackBatched_faithful`
+is in Foundation/Batched/BackLinks.lean). The body `F_s = projB ∘ cbReluStridedB` has a stride-2
 conv1 (`cbReluStridedB`, the strided sibling of `cbReluB`) and a stride-1 conv2
 (`projB`); the projection skip `projStridedB` is a stride-2 conv-bn. The whole
 block composes `vjpCompAt(residualProjHasVJPAt(proj, F_s), relu)` exactly like

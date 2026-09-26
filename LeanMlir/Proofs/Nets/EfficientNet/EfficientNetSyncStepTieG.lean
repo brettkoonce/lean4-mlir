@@ -1,11 +1,11 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 
 /-! # EfficientNet-B0's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
 
 `EfficientNetStepTieG.lean` threads the label-smoothed loss cotangent down the batch-BN
 backward chain on ONE device and ties every parameter gradient node to the certified gradient.
-This is its data-parallel twin, for the render `EfficientNetRender` emits at `replicas > 1`: `R`
+This is its data-parallel twin, for the render `EfficientNetRender.Basic` emits at `replicas > 1`: `R`
 replicas at batch `N`, every one of the 49 BatchNorms synchronised (`bnFwdSite` / `bnBackSite` /
 `bnGammaSite`), every parameter gradient all-reduced by its mean. The capstone
 `efficientnet_net_syncTiedG` says that, for every parameter,
@@ -27,7 +27,7 @@ tie is written.
 0. **The block VJP is the chain** (§ 0). The single-device tie threads each block's input cotangent
    as a certified VJP's `.backward`; a replica computes its own by the explicit chain, and only the
    explicit chain can be sharded. `xCotIn_eq_vjp` and its four peers say the two agree — the
-   `BatchedBackLinks` stage graphs, read at an `.operand` leaf, with `bnBatchLABack_faithful`
+   `Batched.BackLinks` stage graphs, read at an `.operand` leaf, with `bnBatchLABack_faithful`
    turning the one non-`rfl` link into `bnBackB`.
 1. **Sharding** (§§ 2, 5). Every non-BN link is per-example — conv, depthwise and strided
    depthwise input-VJPs, swish and sigmoid masks, and the squeeze-excite backward: the gate
@@ -36,7 +36,7 @@ tie is written.
    `bnSyncInB`, P2 on the graph, read through `bnInB_eq_bnBackB` onto the single-device tie's
    `bnBackB`.
 2. **The collectives.** ResNet-34's conv, dense and BatchNorm ones, plus the depthwise,
-   strided-depthwise and XLA-`SAME` stem conv weights from `DataParallelSyncKit`, which also
+   strided-depthwise and XLA-`SAME` stem conv weights from `DataParallel.SyncKit`, which also
    holds the depthwise, GAP and dense links of steps 1 and 3 that MobileNetV2 shares.
 3. **Homogeneity** (§§ 1, 4). Every link is linear in its cotangent; most are a certified VJP's
    `.backward`, so `HasVJP.backward_smul` is the whole proof.
@@ -334,7 +334,7 @@ end
 
 /-! ### The stage backwards, written out
 
-Each is the `BatchedBackLinks` stage graph's faithfulness read at an `.operand` leaf: the graph's
+Each is the `Batched.BackLinks` stage graph's faithfulness read at an `.operand` leaf: the graph's
 `den` IS the chain above node for node, except the BatchNorm link, which `bnBatchLABack_faithful`
 turns into `bnBackB`. -/
 

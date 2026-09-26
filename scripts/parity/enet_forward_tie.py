@@ -40,7 +40,7 @@ BN_BATCH  = "axis=(0, 2, 3)"
 BN_PEREX  = "axis=(2, 3)"
 
 # ⚠⚠ THE THIRD AXIS, and the one nobody was looking for. The verified render's stem and head are
-# **swish** (`EfficientNetRender.lean:722,729` — "stem … → bn → swish"), which is EfficientNet-B0 as
+# **swish** (`EfficientNetRender/Basic.lean:722,729` — "stem … → bn → swish"), which is EfficientNet-B0 as
 # PUBLISHED: the paper uses SiLU throughout. The JAX reference uses **relu** at both, not by
 # design but because the generic `.convBn` layer emitter appends `jax.nn.relu(x)` unconditionally
 # (`jax/Jax/Codegen.lean`, the `.convBn` case) and has no activation parameter. So here the RENDER

@@ -354,7 +354,7 @@ def _main():
     # with determinism ON, 592 OFF — i.e. nothing, at 5.3x the producer speed. The producer was
     # never the binding constraint; the consumer was reading ONE handle at a time while the other
     # seven producers slept in write() (70% of the box idle). The real fix was depth-n prefetch
-    # (`LeanMlir/VerifiedTrain.lean`, 567 -> 287 ms/step), and it is orthogonal to this line.
+    # (`LeanMlir/Verified/Train.lean`, 567 -> 287 ms/step), and it is orthogonal to this line.
     # ▶ THE LESSON, since it cost a session: an isolated component measurement (SHIM_HASH) tells
     # you a component's CAPACITY, not what limits the pipeline. Capacity is irrelevant when the
     # consumer pulls one batch and walks away.

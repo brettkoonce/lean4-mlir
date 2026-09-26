@@ -1,14 +1,14 @@
-import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
+import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
 
 /-! # EfficientNet — the batched backward (cotangent) math, step by step
 
 The batched analogue of the per-example cotangent chains. The forward graph
-(`EfficientNetRenderPC.lean`) lives at the batched index `N·(c·h·w)`; here we sort the **backward**
+(`EfficientNetRender.PC`) lives at the batched index `N·(c·h·w)`; here we sort the **backward**
 math at that same index — proving the per-block gradient (`HasVJP`) by composing the proven per-op
 VJPs, lifted to the batch.
 
 The lemma everything rests on is `batchMapHasVJP` (now in `BatchMapVJPAt`, with `bnBatchLAHasVJP`; the
-per-stage VJPs are in `BatchedStages`): a batch-separable op `batchMap N f` (every spatial op
+per-stage VJPs are in `Batched.Stages`): a batch-separable op `batchMap N f` (every spatial op
 in the forward graph) has a **block-diagonal** VJP — `f`'s VJP applied per example. This is what lets
 `seBlockFullHasVJP`, the conv/depthwise/dense VJPs, etc. lift from one example to the whole batch.
 Mechanically it reuses the existing row-wise machinery: `batchMap N f` IS `Mat.flatten ∘ (apply f to

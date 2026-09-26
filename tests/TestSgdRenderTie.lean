@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 import LeanMlir.GradcheckHelpers
 
 /-! # SGD `@<slug>_train_step` render tie — the `tests/` emitter vs `pretty(provenGraph)`
@@ -21,7 +21,7 @@ per side and ties **that**. Two consequences, both deliberate:
 
 * the two sides may carry **different `lr`** and still be tied — which is not hypothetical:
   `tests/TestEfficientNetTrain.lean` bakes `LR = 0.1` while the committed
-  `efficientnet_train_step.mlir` (from `Proofs/Codegen/EfficientNetRender.lean`) bakes `0.05`. The
+  `efficientnet_train_step.mlir` (from `Proofs/Codegen/EfficientNetRender/Basic.lean`) bakes `0.05`. The
   lr is passed per side on the command line rather than assumed, so that divergence is *recorded*
   instead of silently failing the tie for a reason that has nothing to do with the graph;
 * the gate is **per-parameter** norm-relative, `max|gA−gB| / max|gA|` within each parameter. A

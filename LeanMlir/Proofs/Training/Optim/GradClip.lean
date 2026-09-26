@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Foundation.Tensor
 
 The ℝ reference for the global-norm gradient clip. Coordinatewise over `Vec`
 where it can be, mirroring the emitted StableHLO op-for-op so the faithfulness theorems in
-`StableHLO.lean` are structural matches (`rfl`), exactly as `AdamStep` is for the AdamW triple and
+`StableHLO.Basic` are structural matches (`rfl`), exactly as `AdamStep` is for the AdamW triple and
 `RmsPropStep` for RMSProp's buffer.
 
 **The reference** (`emitLossAndTraining` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean), emitted verbatim into every trainer whose config

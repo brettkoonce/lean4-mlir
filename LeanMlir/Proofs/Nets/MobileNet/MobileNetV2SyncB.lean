@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 
 /-! # MobileNetV2's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
@@ -42,7 +42,7 @@ statistics as `%arsum` / `%armean` of `b{k}dgmu` and `b{k}dgvar`, each over a `[
 ## What is NOT claimed here
 
 The backward and the parameter collectives are `MobileNetV2SyncStepTieB.lean`'s. That the `R`
-replicas' inputs are the shards of one batch is the driver's, as in `DataParallelSync.lean`. The
+replicas' inputs are the shards of one batch is the driver's, as in `DataParallel.Sync`. The
 lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 

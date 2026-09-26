@@ -3,8 +3,8 @@ import LeanMlir.Proofs.Codegen.ChapterGraphs
 /-! # The chapter 1–4 forward-artifact writers
 
 The `#eval` below writes the committed `verified_mlir/{linear,mlp,cnn,cifar,cifar8,cifar8_bn,cifar8w}_*`
-forwards and the linear train step from `StableHLOPretty`'s `*ModuleV` renderers, when this module is
-elaborated. Nothing imports this file, so building the modules that import `StableHLOPretty`
+forwards and the linear train step from `StableHLO.Pretty`'s `*ModuleV` renderers, when this module is
+elaborated. Nothing imports this file, so building the modules that import `StableHLO.Pretty`
 never rewrites an artifact. `scripts/regen_verified_mlir.sh proofs` and the proofs.yml
 drift guard both elaborate it. -/
 

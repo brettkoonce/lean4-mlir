@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Foundation.CertifiedChain
-import LeanMlir.Proofs.Foundation.BatchedStages
+import LeanMlir.Proofs.Foundation.Batched.Stages
 import LeanMlir.Proofs.Foundation.BackwardMaps
 
 /-! # Shared stem-pool and head `CertLayer`s — batched GAP, the dense classifier, the 3×3/s2 pool

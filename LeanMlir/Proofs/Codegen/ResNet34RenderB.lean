@@ -718,7 +718,7 @@ def optOne (opt : R34Opt) (B : Nat) (replicas : Nat) (g : PGrad)
     pure (arS ++ cG ++ cM ++ cV ++ cR ++ cN ++ cS ++ cT ++ cE, nT, nM, nV, some nG, nE)
   | .heavyBall =>
     -- ── Three applications of ops that ALREADY EXIST. No new `SHlo` constructor, so none of the
-    -- ten-site surgery (and none of the `StableHLOParse` roundtrip risk) an added op costs.
+    -- ten-site surgery (and none of the `StableHLO.Parse` roundtrip risk) an added op costs.
     --
     -- ① COUPLED L2 decay, `g ← g + wd·θ`. This reuses **`momVNextF`**, which is not a pun:
     -- `Proofs.momVNext μ v g = μ·v + g`, so instantiating `(μ := wd, v := θ)` denotes exactly
@@ -1861,7 +1861,7 @@ end Proofs.StableHLO
 -- ▶ And the marker must not collide with the DRIVER's variant predicates, which read the same
 -- string to decide the blob layout. `cdOn` is the dangerous one: it is a substring test for "do",
 -- and a slug that tripped it would silently add a dropout region to the checkpoint.
--- These are `cdOn`/`accOn`/`emaOn` (`VerifiedTrain.lean`) evaluated on the bf16 slug: each is a
+-- These are `cdOn`/`accOn`/`emaOn` (`Verified.Train`) evaluated on the bf16 slug: each is a
 -- SUBSTRING test, and a false positive changes `nRegions`/`nScalars` — i.e. the checkpoint layout —
 -- with no error anywhere.
 #guard !"momdp64bf16".contains "do"

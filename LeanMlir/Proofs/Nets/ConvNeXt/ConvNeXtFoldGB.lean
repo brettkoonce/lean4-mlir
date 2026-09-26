@@ -50,7 +50,7 @@ lemmas.
 * Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
   delivers and the smoothed loss, is `CnxTiePoCGB.cnx_net_tiedGB`.
 * `convnextin_adamdp*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
-  gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
+  gradient node (`DataParallel.Node`), so these lemmas are about the per-replica gradient node
   it averages.
 * Symmetric padding at the three 2×2/s2 downsamples and the 4×4/s4 stem (`flatConvStride2`,
   `flatConvStride4`); ConvNeXt is PyTorch-origin and has no XLA-`SAME` site.

@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedAttack
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Attack
 
 /-! # `mnist-mlp-spectral` — spectral-norm-constrained training (the gap-shrinking lever)
 
@@ -10,7 +10,7 @@ proof-rendered steps each weight `Wᵢ` is rescaled to `‖Wᵢ‖₂ ≤ c` —
 
 Shrinking `c` pulls the global Lipschitz `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the
 **vacuous** product certificate **non-vacuous** — the empirical face of
-`lipschitz_margin_certified_radius` (`LeanMlir/Proofs/Certificates/LipschitzCert.lean`: smaller `L` ⇒ larger
+`lipschitz_margin_certified_radius` (`LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean`: smaller `L` ⇒ larger
 certified radius `m/(√2·L)`) — at the cost of clean accuracy. The verified cross-entropy
 gradient stays in the proven kernel; the projection is host-side weight rescaling only.
 

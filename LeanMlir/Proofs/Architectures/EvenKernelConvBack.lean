@@ -17,7 +17,7 @@ downsamples. (ViT's 16×16 patch embed is not affected — `patchEmbedFlat` is i
 over non-overlapping patches, with no `conv2d` and no padding convention.) R34 (7×7/3×3/1×1),
 MobileNetV2 and EfficientNet-B0 (1×1/3×3/5×5) are all-odd.
 
-The emitter already pads correctly. The `.convStridedBack` emitter in StableHLOPretty.lean pads
+The emitter already pads correctly. The `.convStridedBack` emitter in StableHLO/Pretty.lean pads
 asymmetrically, `[[kH-1-pH, pH]]`, in both its per-example (`.convStridedBack`) and batched
 (`.convStridedBackBatched`) arms; the batched arm's comment records that the symmetric
 `[[p,p],[p,p]]` agrees at every odd kernel and is wrong at even ones (kH=2 ⇒ `[[0,0]]` where the

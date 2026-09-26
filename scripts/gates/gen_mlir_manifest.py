@@ -5,7 +5,7 @@
 was came from reading the renderer that wrote it. Two things made that worse than a long
 directory listing:
 
-  * **Nothing addresses these files by name.** `VerifiedTrain` builds the path at runtime as
+  * **Nothing addresses these files by name.** `Verified/Train` builds the path at runtime as
     `{net.slug}_{variant}_train_step.mlir` from `LEAN_MLIR_VARIANT`, so grep finds no reader for
     any of them and "unreferenced" is meaningless. Reachability is a decision, not a measurement.
   * **The variant suffix is a grown DSL** — `lambaccdp8x64bce`, `emarms64dropdo`,
@@ -45,7 +45,7 @@ MLIR = ROOT / "verified_mlir"
 MANIFEST = MLIR / "MANIFEST.md"
 
 # ── The four independent axes, spelled exactly as `trainAdamSched` tests them ────────────────
-# (LeanMlir/VerifiedTrain.lean; the collision history is in tests/TestVariantPredicates.lean)
+# (LeanMlir/Verified/Train.lean; the collision history is in tests/TestVariantPredicates.lean)
 #   EMA              variant.startsWith "ema"   — PREFIX, not substring
 #   RMSProp          "rms" substring            — SUBSTRING: `emarms` does not START with rms
 #   stochastic depth "drop" substring           — marker is "drop", NOT "sd": `rms`++`dp` = `rmsdp`
@@ -222,15 +222,15 @@ def batch_shape(v: str) -> str | None:
     return f"batch {m.group(1)}" if m else None
 
 
-# Slugs with committed artifacts but no `VerifiedNetsCore` entry: renders kept after their trainer
+# Slugs with committed artifacts but no `Verified/NetsCore` entry: renders kept after their trainer
 # was retired. `cifar8b` — the narrow-head CIFAR-8 trainers went on 2026-09-20; its
 # `cifar8b{,_bf16,_fp8}` renders stay as `CnnRender` outputs (the §4.1/§5.2 provenance), per the
-# note beside `cifar8Verified` in `VerifiedNetsCore.lean`.
+# note beside `cifar8Verified` in `Verified/NetsCore.lean`.
 RENDER_ONLY_SLUGS = {"cifar8b"}
 
 
 def slugs_from_verified_nets() -> list[str]:
-    src = (ROOT / "LeanMlir" / "VerifiedNetsCore.lean").read_text(encoding="utf-8")
+    src = (ROOT / "LeanMlir" / "Verified/NetsCore.lean").read_text(encoding="utf-8")
     found = set(re.findall(r'slug\s*:=\s*"([^"]+)"', src)) | RENDER_ONLY_SLUGS
     return sorted(found, key=len, reverse=True)  # longest first, for prefix matching
 
@@ -317,7 +317,7 @@ def build() -> str:
         "",
         "## How these are addressed — read this before pruning",
         "",
-        "⚠⚠ **Nothing references these files by name.** `VerifiedTrain` builds the path at runtime",
+        "⚠⚠ **Nothing references these files by name.** `Verified/Train` builds the path at runtime",
         "as `{net.slug}_{variant}_train_step.mlir` from `LEAN_MLIR_VARIANT`, so *every* artifact",
         "looks unreferenced to grep and *every* one is reachable by setting one env var. A",
         "\"nothing uses this\" measurement over this directory is meaningless; deciding what to drop",

@@ -1,9 +1,9 @@
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.Train
 
 /-! # E6 — EfficientNet-B0 artifact smoke (iree-compile over the COMMITTED bytes)
 
 **This file no longer renders anything.** Both EfficientNet train-step artifacts are written by the
-`#eval`s in `LeanMlir/Proofs/Codegen/EfficientNetRender.lean` as `pretty(provenGraph)`, and those
+`#eval`s in `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean` as `pretty(provenGraph)`, and those
 are their only writers:
 
 | artifact | renderer |
@@ -49,7 +49,7 @@ bit-exact A-vs-A determinism floor. Recover it from
 side A) is `git show c96bd36:verified_mlir/efficientnet_adam_train_step.mlir`.
 
 The `bnChannels` layout this file used to print lives in `efficientnetVerified.bnChannels`
-(49 layers, `LeanMlir/VerifiedNetsCore.lean`), and the certified AdamW render now derives its 49 stat
+(49 layers, `LeanMlir/Verified/NetsCore.lean`), and the certified AdamW render now derives its 49 stat
 slots from the same forward traversal that computes them.
 
 Run (needs iree-compile on PATH): lake env lean tests/TestEfficientNetTrain.lean
@@ -61,8 +61,8 @@ Run (needs iree-compile on PATH): lake env lean tests/TestEfficientNetTrain.lean
 private def smoke (path dst label : String) : IO Unit := do
   if !(← System.FilePath.pathExists path) then
     throw (IO.userError s!"{path} missing — it is written by \
-LeanMlir/Proofs/Codegen/EfficientNetRender.lean; run \
-`lake build LeanMlir.Proofs.Codegen.EfficientNetRender` first")
+LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean; run \
+`lake build LeanMlir.Proofs.Codegen.EfficientNetRender.Basic` first")
   tryCompile path dst label
 
 def main : IO Unit := do

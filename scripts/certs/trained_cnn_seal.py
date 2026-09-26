@@ -1,6 +1,6 @@
 """Level-3 seal for the trained-CNN witness (the MLP rung's pdiv_fwd, CNN edition).
 
-Emits LeanMlir/Proofs/Training/TrainedCnnSeal.lean: one whole-net Jacobian entry
+Emits LeanMlir/Proofs/Training/Trained/CnnSeal.lean: one whole-net Jacobian entry
 pdiv fwd X ic jc computed in CLOSED FORM at the trained weights, by peeling
 the network with pdiv_comp from the output side and carrying exact
 backward-cotangent tables:
@@ -30,11 +30,11 @@ import numpy as np
 from fractions import Fraction
 
 # ---- reproduce the witness (trains the net and computes the exact tables; WITNESS_NO_WRITE
-# ---- keeps it from rewriting TrainedCnnWitness.lean — run that generator for that file)
+# ---- keeps it from rewriting Trained/CnnWitness.lean — run that generator for that file)
 WITNESS_NO_WRITE = True
 exec(open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "trained_cnn_witness.py")).read())
 
-SEAL_OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedCnnSeal.lean")
+SEAL_OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/Trained/CnnSeal.lean")
 JC = 7  # sealed output class = the witness's (correct) prediction
 
 # ---------------------------------------------------------------- seal tables (exact)
@@ -204,7 +204,7 @@ def mask_fold_bullets(preV, maskT, inV, n72='2*(2*3)*(2*3)'):
 s2r_bullets = mask_fold_bullets("c2V", "M2T", "t2V")
 s0r_bullets = mask_fold_bullets("c1V", "M1T", "t1V")
 
-body = f'''import LeanMlir.Proofs.Training.TrainedCnnWitness
+body = f'''import LeanMlir.Proofs.Training.Trained.CnnWitness
 import LeanMlir.Proofs.Training.JacobianSeal
 
 /-! # Level-3 seal for the trained-CNN witness

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 
 /-! # The E4M3 (fp8) quantized MNIST-linear render-tie
 

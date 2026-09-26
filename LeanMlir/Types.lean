@@ -5,7 +5,7 @@ conventions), `TrainConfig` (optimizer, schedule, loss and augmentation settings
 `OptimizerKind` and `DatasetKind`. `Spec` counts and validates specs; `MlirCodegen` (NetSpec →
 StableHLO at run time) and the JAX emitter (jax/Jax/Codegen.lean) lower them; `Train` runs them.
 None of this is the verified path, which trains from the committed `verified_mlir/` renders
-(`VerifiedSpec`, `VerifiedTrain`). Also here: the `iree-compile` argument builders. -/
+(`Verified.Spec`, `Verified.Train`). Also here: the `iree-compile` argument builders. -/
 
 /-- Pointwise activation carried by a layer: ReLU, ReLU6, identity, swish (SiLU), hard-swish,
     GELU. -/
@@ -869,7 +869,7 @@ structure TrainConfig where
 
       The default 0.99 keeps every net that does not set it byte-identical, on both
       the JAX emitter ([`Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `_bn`) and the verified host-side EMA
-      (`VerifiedTrain.lean`'s `bnMom`). Under gradient accumulation both sides
+      (`Verified.Train`'s `bnMom`). Under gradient accumulation both sides
       compensate to `bnMomentum^(1/K)` per micro-batch. -/
   bnMomentum : Float := 0.99
   /-- BatchNorm ε — `_bn`'s `eps`, on the running-BN path (`runningBN`). 1e-5 is PyTorch's and

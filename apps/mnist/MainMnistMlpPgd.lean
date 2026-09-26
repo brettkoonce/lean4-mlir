@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedAttack
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Attack
 
 /-! # `mnist-mlp-pgd` — phase-3 PGD attack on the verified MNIST MLP
 

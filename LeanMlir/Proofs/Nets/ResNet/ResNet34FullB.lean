@@ -12,8 +12,8 @@ reduces `[0,2,3]`; the `*_fwd_eval` artifacts normalise with running statistics.
 ## What is new here, and what is not
 
 **Nothing about the blocks is new.** The batched stages (`cbReluB`, `cbReluStridedB`,
-`projStridedB` in Foundation/BatchedStageLayers.lean, and `projB` in
-Foundation/BatchedStages.lean), their `_at` VJPs and their backward-graph faithfulness are all at
+`projStridedB` in Foundation/Batched/StageLayers.lean, and `projB` in
+Foundation/Batched/Stages.lean), their `_at` VJPs and their backward-graph faithfulness are all at
 `bnBatchLA`, and `ResNet34BackB0` assembles them into the two block kinds. This file adds the
 level above: a net-level ℝ forward, a net-level forward graph, and the faithfulness tying them.
 

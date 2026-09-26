@@ -49,7 +49,7 @@ all 25 sites, 3 heads × d_head 64, depth 12, D 192, MLP 768, 16×16 patches, GE
 smoothness hypothesis anywhere). Stated at ViT-Tiny's literal dims; S and B are other nets.
 
 **Scope.** One replica: in `vitin_adamdp128x4*` (four replicas of 128) every gradient node feeds
-`allReduceMeanF`, and `DataParallelNode.lean` composes the per-replica statement with the replica
+`allReduceMeanF`, and `DataParallel.Node` composes the per-replica statement with the replica
 mean. The drop-free chain: the `*drop*` artifacts' cotangent chains carry `dropPathB` sites not
 stated here.
 -/

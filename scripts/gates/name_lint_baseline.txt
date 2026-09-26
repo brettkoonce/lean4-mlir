@@ -2,19 +2,19 @@
 # file<TAB>name<TAB>rule. Regenerate with:
 #   python3 scripts/gates/name_lint.py --update-baseline
 # This list may SHRINK, never grow.
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	G1t_eq	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	G2t_eq	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	H1t_eq	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	H2t_eq	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W1t_lip	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W1t_lip_gram	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W1t_lip_gram2	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W1t_lip_lower	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W2t_lip	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W2t_lip_gram	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W2t_lip_gram2	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	W2t_lip_lower	theorem-case
-LeanMlir/Proofs/Certificates/LipschitzCertInstance.lean	Wlin_lip	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	G1t_eq	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	G2t_eq	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	H1t_eq	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	H2t_eq	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W1t_lip	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W1t_lip_gram	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W1t_lip_gram2	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W1t_lip_lower	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W2t_lip	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W2t_lip_gram	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W2t_lip_gram2	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	W2t_lip_lower	theorem-case
+LeanMlir/Proofs/Certificates/LipschitzCert/Instance.lean	Wlin_lip	theorem-case
 LeanMlir/Proofs/Float/Binary32Instance.lean	W0	def-case
 LeanMlir/Proofs/Nets/MobileNet/MobileNetV2FullBSeal.lean	Rr_continuous	theorem-case
 LeanMlir/Proofs/Nets/MobileNet/MobileNetV2FullBSeal.lean	Rr_pos	theorem-case
@@ -41,5 +41,5 @@ LeanMlir/Proofs/Nets/Small/MlpCanonical.lean	w1_grad_close	def-case
 LeanMlir/Proofs/Nets/Small/MlpFold.lean	W0_den_certified	theorem-case
 LeanMlir/Proofs/Nets/Small/MlpFold.lean	W1_den_certified	theorem-case
 LeanMlir/Proofs/Nets/Small/MlpFold.lean	W2_den_certified	theorem-case
-LeanMlir/Proofs/Training/TrainedMlpWitness.lean	W1V	def-case
-LeanMlir/Proofs/Training/TrainedMlpWitness.lean	W2V	def-case
+LeanMlir/Proofs/Training/Trained/MlpWitness.lean	W1V	def-case
+LeanMlir/Proofs/Training/Trained/MlpWitness.lean	W2V	def-case

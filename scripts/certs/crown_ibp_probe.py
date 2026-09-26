@@ -1,6 +1,6 @@
 """crown_ibp.md gotcha 5: unstable-neuron fraction + a float CROWN-IBP payoff probe.
 
-Weights come from the COMMITTED LipschitzCertScorecardFullNets.lean (the exact
+Weights come from the COMMITTED LipschitzCert/ScorecardFullNets.lean (the exact
 /256 integers the certificates are proved against), not from retraining.
 Images are the first 100 MNIST test images at exact k/255, as the scorecards use.
 
@@ -19,7 +19,7 @@ import numpy as np
 
 
 REPO = Path(__file__).resolve().parents[2]
-NETS = REPO / "LeanMlir/Proofs/Certificates/LipschitzCertScorecardFullNets.lean"
+NETS = REPO / "LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardFullNets.lean"
 DATA = REPO / "data"
 sys.path.insert(0, str(REPO / "scripts" / "lib"))
 from _mnist_io import mnist  # noqa: E402

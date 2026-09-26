@@ -53,7 +53,7 @@ sources:
     type: "paper"
     location: "Proposition 1"
     relationship: "other"
-    note: "formalized: certified radius m / (sqrt 2 * L) (LipschitzCert.lean)"
+    note: "formalized: certified radius m / (sqrt 2 * L) (LipschitzCert/Basic.lean)"
     license: ""
     author_endorsement: "not-contacted"
   - title: "Certified Adversarial Robustness via Randomized Smoothing"
@@ -62,7 +62,7 @@ sources:
     type: "paper"
     location: "Theorem 1; appendix Lemmas 3-4 (Neyman-Pearson)"
     relationship: "other"
-    note: "formalized: radius and the Gaussian Neyman-Pearson core end to end (SmoothingGaussian.lean); the tightness result, Theorem 2, is not formalized"
+    note: "formalized: radius and the Gaussian Neyman-Pearson core end to end (Smoothing/Gaussian.lean); the tightness result, Theorem 2, is not formalized"
     license: ""
     author_endorsement: "not-contacted"
   - title: "Provably Robust Deep Learning via Adversarially Trained Smoothed Classifiers"
@@ -71,7 +71,7 @@ sources:
     type: "paper"
     location: "appendix Lemma 2"
     relationship: "other"
-    note: "formalized: the probit of a Gaussian-smoothed map is Lipschitz; proved in SmoothingGaussian.lean, used by the Cohen radius"
+    note: "formalized: the probit of a Gaussian-smoothed map is Lipschitz; proved in Smoothing/Gaussian.lean, used by the Cohen radius"
     license: ""
     author_endorsement: "not-contacted"
   - title: "Efficient and Accurate Estimation of Lipschitz Constants for Deep Neural Networks (LipSDP)"
@@ -80,7 +80,7 @@ sources:
     type: "paper"
     location: "Theorem 1 (single-layer certificate)"
     relationship: "other"
-    note: "adapted: the one-hidden-layer instance of LipSDP-Neuron, per class pair, with exact-rational LDL^T PSD witnesses solved off-line (LipschitzCertPairSDP.lean)"
+    note: "adapted: the one-hidden-layer instance of LipSDP-Neuron, per class pair, with exact-rational LDL^T PSD witnesses solved off-line (LipschitzCert/PairSDP.lean)"
     license: ""
     author_endorsement: "not-contacted"
   - title: "Old Optimizer, New Norm: An Anthology"
@@ -89,7 +89,7 @@ sources:
     type: "paper"
     location: "Propositions 1, 2, 4, 5"
     relationship: "other"
-    note: "formalized: steepest descent, sign descent, nearest semi-orthogonal matrix, Shampoo = spectral-norm steepest descent; square matrices (MuonGeometry.lean)"
+    note: "formalized: steepest descent, sign descent, nearest semi-orthogonal matrix, Shampoo = spectral-norm steepest descent; square matrices (Muon/Geometry.lean)"
     license: ""
     author_endorsement: "not-contacted"
 
@@ -168,13 +168,13 @@ status:
     #
     # --- Data parallelism ---
     # with batch coupling (training-mode BN) the DP mean gradient is NOT the global-batch gradient: the two-replica witness
-    - {declaration: "Proofs.dpMeanGrad_ne_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.dpMeanGrad_ne_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and with SYNCHRONISED statistics it IS: the positive twin (replica r sums ITS examples' terms of the global gradient)
-    - {declaration: "Proofs.dpSyncGrad_eq_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.dpSyncGrad_eq_globalBatchGrad", file: "LeanMlir/Proofs/Foundation/DataParallel/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the sync-BN backward subgraph a DP render emits denotes the shard-r block of the batch-R*N input-VJP, at any R
-    - {declaration: "Proofs.den_bnSyncBack_allReduce", file: "LeanMlir/Proofs/Foundation/DataParallelSync.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.den_bnSyncBack_allReduce", file: "LeanMlir/Proofs/Foundation/DataParallel/Sync.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # at bf16 the all-reduced conv weight gradient differs from the batch-R*N node only by rounding each replica's partial sum
-    - {declaration: "Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global", file: "LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.den_allReduceMeanF_convWeightGradBBf16_sub_global", file: "LeanMlir/Proofs/Foundation/DataParallel/SyncBf16.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ResNet-34's sync-BN DP forward graph on replica r denotes shard r of the single-device forward at batch R*N
     - {declaration: "Proofs.StableHLO.resnet34FwdGraphSyncFull_shard", file: "LeanMlir/Proofs/Nets/ResNet/ResNet34SyncB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # ...and its 110 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, loss divided by R*B
@@ -196,7 +196,7 @@ status:
     # ...and its 233 all-reduced parameter gradients ARE the single-device gradient nodes at batch R*N, for any cotangent sharded as R x the global one
     - {declaration: "Proofs.MobileNetV4SyncTieB.mnv4_net_syncTiedB", file: "LeanMlir/Proofs/Nets/MobileNet/MobileNetV4SyncStepTieB.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # the collective as an AST node: den (adamW tail (allReduceMeanF R g)) = adamWStep at the replica mean
-    - {declaration: "Proofs.adamW_at_allReduceMeanF", file: "LeanMlir/Proofs/Foundation/DataParallelNode.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.adamW_at_allReduceMeanF", file: "LeanMlir/Proofs/Foundation/DataParallel/Node.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Certified backward ties (T6): the float tier's hand-written backward chain IS the
     #     certified whole-net VJP (fidelity 4d) ---
@@ -211,17 +211,17 @@ status:
     # fp8-E4M3 quantization argmax preservation
     - {declaration: "Proofs.FloatModel.linear_e4m3_argmax_preserved", file: "LeanMlir/Proofs/Float/MlpFloatBridge.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a binary32 SGD step provably decreases CE at TRAINED weights
-    - {declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends", file: "LeanMlir/Proofs/Training/TrainedLinearDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends", file: "LeanMlir/Proofs/Training/Trained/LinearDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #
     # --- Certificates and optimizer geometry ---
     # Tsuzuku 2018 certified radius
-    - {declaration: "Proofs.lipschitz_margin_certified_radius", file: "LeanMlir/Proofs/Certificates/LipschitzCert.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "Lipschitz-margin certified radius", source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"}]}
+    - {declaration: "Proofs.lipschitz_margin_certified_radius", file: "LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "Lipschitz-margin certified radius", source: "Tsuzuku, Sato, Sugiyama 2018 (arXiv:1802.04034)"}]}
     # mechanized 100-image LipSDP scorecard at trained weights (69/100)
-    - {declaration: "Proofs.LipschitzCertDemo.scorecard_sdp", file: "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "LipSDP-Neuron one-hidden-layer SDP bound", source: "Fazlyab et al. 2019 (arXiv:1906.04893)"}]}
+    - {declaration: "Proofs.LipschitzCertDemo.scorecard_sdp", file: "LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDP.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "LipSDP-Neuron one-hidden-layer SDP bound", source: "Fazlyab et al. 2019 (arXiv:1906.04893)"}]}
     # Cohen 2019 smoothing radius END-TO-END (the Gaussian Neyman-Pearson core is proved)
-    - {declaration: "Proofs.smoothing_certified_radius_classifier", file: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)", source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"}]}
+    - {declaration: "Proofs.smoothing_certified_radius_classifier", file: "LeanMlir/Proofs/Certificates/Smoothing/Gaussian.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "randomized-smoothing certified radius incl. the (1/sigma)-Lipschitz Gaussian probit (Neyman-Pearson core)", source: "Cohen, Rosenfeld, Kolter 2019 (arXiv:1902.02918); Salman et al. 2019 Lemma 2"}]}
     # optimizer geometry: Shampoo's single-step preconditioner = Muon's polar factor
-    - {declaration: "Proofs.MuonGeometry.shampoo_eq_muon", file: "LeanMlir/Proofs/Foundation/MuonGeometry.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "optimizer = steepest descent under a norm; Muon polar factor realizes the nuclear-norm dual", source: "Bernstein, Newhouse 2024 (arXiv:2409.20325)"}]}
+    - {declaration: "Proofs.MuonGeometry.shampoo_eq_muon", file: "LeanMlir/Proofs/Foundation/Muon/Geometry.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: [{statement: "optimizer = steepest descent under a norm; Muon polar factor realizes the nuclear-norm dual", source: "Bernstein, Newhouse 2024 (arXiv:2409.20325)"}]}
 
 automation:
   methods:
@@ -301,7 +301,7 @@ fidelity:
        pinned spec, `scripts/parity/mnv4_timm_parity.py`) -- its 38 relu clauses are weight-only for the
        same reason, and its witness is grid-constant (one value per example and channel). With it
        every kinked net in the book is sealed on the forward its artifacts run. Plus trained-weight witnesses and a
-       provable strict CE-descent step for the MLP/CNN/linear rungs (`TrainedMlpWitness`, `TrainedCnnSeal`,
+       provable strict CE-descent step for the MLP/CNN/linear rungs (`Trained/MlpWitness`, `Trained/CnnSeal`,
        `TrainedLinearDescent`).
 
     4b. CERTIFICATE-LAYER CONDITIONING (disclosed hypotheses, all in-statement): the smoothing
@@ -330,7 +330,7 @@ fidelity:
        an input-error -> output-error modulus `L`, composing by `FloatClose.comp` and through the
        additive skip by `floatClose_residual`; the per-operator `floatClose_*` lemmas, the CIFAR
        block chains, the ResNet-34 stage fold and the bf16-mixed two-roundoff bounds are stated
-       on it. The MNIST/CNN descent chain (`Training/SgdDescent*.lean`) takes the model and
+       on it. The MNIST/CNN descent chain (`Training/SgdDescent/*.lean`) takes the model and
        `FloatBridge.lean`'s per-layer `*_close` lemmas directly.
 
        THE TIES. Every net's hand-written backward chain is proven to BE the certified whole-net
@@ -485,17 +485,17 @@ alignment:
       note: "rounding model CONSTRUCTED (former hardware axioms discharged); no whole-net numeric budget and no adjoint-chain tier are stated (fidelity 4c, 4d)"
     - source: "Tsuzuku 2018 Lipschitz-margin certified radius + LipSDP scorecards at trained weights"
       lean: "lipschitz_margin_certified_radius; scorecard; scorecard_sdp / scorecard_sdp_uncon"
-      module: "LeanMlir/Proofs/Certificates/LipschitzCert.lean, LeanMlir/Proofs/Certificates/LipschitzCertScorecard*.lean"
+      module: "LeanMlir/Proofs/Certificates/LipschitzCert/Basic.lean, LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard*.lean"
       status: "proved"
       note: "fixed 100-image subset at fixed epsilon -- honest lower bound (69/100 vs 72/100 PGD bracket)"
     - source: "Cohen 2019 randomized-smoothing certified radius (incl. the Gaussian Neyman-Pearson core)"
       lean: "smoothing_certified_radius_classifier via smoothing_probit_lipschitz / stdGaussian_np_shift; smoothing_cp_certified; smoothing_cp_certified_net"
-      module: "LeanMlir/Proofs/Certificates/SmoothingGaussian.lean, LeanMlir/Proofs/Certificates/SmoothingCP.lean, LeanMlir/Proofs/Certificates/SmoothingNetSemantics.lean"
+      module: "LeanMlir/Proofs/Certificates/Smoothing/Gaussian.lean, LeanMlir/Proofs/Certificates/Smoothing/CP.lean, LeanMlir/Proofs/Certificates/Smoothing/NetSemantics.lean"
       status: "proved"
       note: "end-to-end: quantile inversion, Cameron-Martin shift, rotation-invariance dimension reduction all proved; the Monte-Carlo gap is closed (Hoeffding, then exact Clopper-Pearson at the driver's tail polynomial) and the (0,1) hypothesis is discharged for a net's argmax; the 784-dim driver checkpoints are not themselves tied (fidelity 4b)"
     - source: "Optimizer-as-steepest-descent ladder (SGD / sign / Muon / Shampoo, Newton-Schulz)"
       lean: "muon_polar_steepest, shampoo_eq_muon, muon_polar_nearest_orthogonal + spectral-step lemma"
-      module: "LeanMlir/Proofs/Foundation/MuonGeometry.lean, LeanMlir/Proofs/Foundation/MuonNewtonSchulz.lean"
+      module: "LeanMlir/Proofs/Foundation/Muon/Geometry.lean, LeanMlir/Proofs/Foundation/Muon/NewtonSchulz.lean"
       status: "proved"
       note: "14 theorems; singular-G SVD completion + Newton-Schulz convergence dynamics left open"
     - source: "StableHLO/XLA codegen faithfulness, JAX numeric agreement, training accuracy"

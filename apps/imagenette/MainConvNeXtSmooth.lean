@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedSmoothing
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Smoothing
 
 /-! # `convnext-smooth` — randomized-smoothing certificate on the verified ConvNeXt-T (Imagenette 224²)
 

@@ -99,11 +99,11 @@ def check(ok, label, detail=""):
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 
 def read_shim_scripts():
-    """slug -> shimScript, straight out of LeanMlir/VerifiedNetsCore.lean (the spec table).
+    """slug -> shimScript, straight out of LeanMlir/Verified/NetsCore.lean (the spec table).
 
     Reads the ACTUAL wiring the driver compiles against. A gate restating the map here would pass
     while the driver spawned something else — the shape of defect this whole thread is about."""
-    src = open(os.path.join(ROOT, "LeanMlir", "VerifiedNetsCore.lean")).read()
+    src = open(os.path.join(ROOT, "LeanMlir", "Verified/NetsCore.lean")).read()
     out, imagenet_slugs = {}, []
     # Split on `def <name> : VerifiedNetSpec where` so a field is attributed to the right net.
     for block in re.split(r"^def\s+\w+\s*:\s*VerifiedNetSpec\s+where", src, flags=re.M)[1:]:
@@ -234,7 +234,7 @@ print("── gate 0: every .imagenet net names a shim — base nets distinct, s
 wiring, imagenet_slugs = read_shim_scripts()
 expected_slugs = {s for s, _, _, _ in NETS} | set(SIZE_VARIANTS)
 check(set(imagenet_slugs) == expected_slugs,
-      f"{len(expected_slugs)} .imagenet nets in VerifiedNetsCore.lean ({len(NETS)} base + "
+      f"{len(expected_slugs)} .imagenet nets in Verified/NetsCore.lean ({len(NETS)} base + "
       f"{len(SIZE_VARIANTS)} size variants)",
       f"found {len(imagenet_slugs)}: unexpected {sorted(set(imagenet_slugs) - expected_slugs)}, "
       f"missing {sorted(expected_slugs - set(imagenet_slugs))}")

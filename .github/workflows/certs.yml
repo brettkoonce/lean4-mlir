@@ -23,11 +23,11 @@ on:
       # SpecVJP's rfl ties break when a spec's layer list drifts — the exact
       # failure the corpus must catch on the push that causes it, not nightly
       # (mnv2 6→17-block promotion rotted the orphaned SpecVJP for weeks).
-      - 'LeanMlir/VerifiedNetsCore.lean'
-      - 'LeanMlir/VerifiedSpec.lean'
+      - 'LeanMlir/Verified/NetsCore.lean'
+      - 'LeanMlir/Verified/Spec.lean'
       # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`
       # below is the only thing that elaborates them. Added 2026-09-20 with that step.
-      - 'LeanMlir/VerifiedTrain.lean'
+      - 'LeanMlir/Verified/Train.lean'
       # The gates this job runs and what they read: a change to any of these flips the verdict
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
@@ -47,11 +47,11 @@ on:
       - 'lean-toolchain'
       - 'lake-manifest.json'
       - '.github/workflows/certs.yml'
-      - 'LeanMlir/VerifiedNetsCore.lean'
-      - 'LeanMlir/VerifiedSpec.lean'
+      - 'LeanMlir/Verified/NetsCore.lean'
+      - 'LeanMlir/Verified/Spec.lean'
       # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`
       # below is the only thing that elaborates them. Added 2026-09-20 with that step.
-      - 'LeanMlir/VerifiedTrain.lean'
+      - 'LeanMlir/Verified/Train.lean'
       # The gates this job runs and what they read: a change to any of these flips the verdict
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.

@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Foundation.Tensor
 /-! # Plain SGD and Nesterov-momentum steps over ℝ — the optimizer peers of `AdamStep`
 
 The ℝ reference for the `cifar8_{sgd,mom}_train_step` family. Coordinatewise over
-`Vec`, mirroring the emitted StableHLO op-for-op so the faithfulness theorems in `StableHLO.lean`
+`Vec`, mirroring the emitted StableHLO op-for-op so the faithfulness theorems in `StableHLO.Basic`
 are structural matches (`rfl`), exactly as `AdamStep.lean` is for the AdamW triple.
 
 **Why these are separate from the `*Sgd` ops.** The kit's `*Sgd` op family **fuses** the gradient
@@ -14,7 +14,7 @@ whole LR schedule.
 
 **Claim ceiling.** Like `AdamStep`, the verified target here is **faithfulness** — the rendered
 update denotes these functions — *not* a loss-decrease bound. Plain SGD does have descent results in
-this repo (`Proofs/Training/SgdDescent*`), but they are about a specific net's loss under smoothness
+this repo (`Proofs/Training/SgdDescent/`), but they are about a specific net's loss under smoothness
 hypotheses; nothing below claims Nesterov descends. Say "the momentum render is certified", never
 "momentum is proven to descend".
 

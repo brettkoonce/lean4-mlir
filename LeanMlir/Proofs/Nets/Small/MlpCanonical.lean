@@ -1,9 +1,9 @@
-import LeanMlir.Proofs.Training.SgdDescentMlp
+import LeanMlir.Proofs.Training.SgdDescent.Mlp
 import LeanMlir.Proofs.Nets.Small.MlpFold
 
 /-! # The CANONICAL MNIST MLP — 784→512→512→10 (ReLU, biased)
 
-`mlpVerified` ([`LeanMlir/VerifiedNetsCore.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/VerifiedNetsCore.lean), Chapter 2) is the repo's canonical MNIST
+`mlpVerified` ([`LeanMlir/Verified/NetsCore.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Verified/NetsCore.lean), Chapter 2) is the repo's canonical MNIST
 reference architecture: `[.dense 784 512, .relu, .dense 512 512, .relu, .dense 512 10]`.
 Every runnable MNIST MLP path uses it (verified/e4m3/pgd/spectral/smooth trainers, the
 committed `verified_mlir/mlp_train_step.mlir` render, `margin_probe.py`).
@@ -19,7 +19,7 @@ The spec-level partner is `SpecVJP.lean`'s `mlpVerified_denote_eq` / `mlpVerifie
 (stated over `mlpVerified.layers` itself; that file lives outside the Mathlib-only seam).
 
 The OTHER MNIST proof population — the trained-weight certificate instances
-(`LipschitzCert{Instance,Scorecard*,Float}`, `TrainedMlpWitness`, `TrainedLinearDescent`)
+(`LipschitzCert{Instance,Scorecard*,Float}`, `Trained.MlpWitness`, `TrainedLinearDescent`)
 — deliberately lives on a REDUCED model (4×4-pooled 49-dim inputs, width-8 hidden,
 /128–/256 rational weights): every margin, Schatten/Gram sum, and LDLᵀ SOS witness is
 exact rational arithmetic checked in-kernel, which is infeasible today at 512-wide

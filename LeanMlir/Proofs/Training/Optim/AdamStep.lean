@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Foundation.Tensor
 
 The ℝ reference for `vit-train`'s optimizer. Coordinatewise over `Vec`, mirroring the
 emitted StableHLO update (`MlirCodegen.emitAdamUpdate`) op-for-op so the faithfulness
-theorem `adamW_triple_faithful` (Codegen/StableHLO.lean) is a structural match.
+theorem `adamW_triple_faithful` (Codegen/StableHLO/Basic.lean) is a structural match.
 
 Unlike `SgdDescent`, this file proves **no** descent guarantee: Adam is not a
 monotone descent method (Reddi et al. 2018, the AMSGrad counterexample), so the

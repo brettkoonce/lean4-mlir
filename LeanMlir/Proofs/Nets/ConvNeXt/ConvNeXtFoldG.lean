@@ -6,7 +6,7 @@ Three per-example lemmas that `ConvNeXtFoldGB` lifts over the batch: the per-cha
 γ gradient (`layerScaleChGammaGrad_den`) and the channel-LN γ/β gradients (`chanLnGammaGrad_den`,
 `chanLnBetaGrad_den`). Each is `den`-faithful at the RAW gradient node, the one every optimizer
 tail (AdamW, the clipped and weight-decayed variants, SGD) consumes. The fusion is `rfl`
-(`StableHLO.lean`'s `*Sgd_eq_grad` family), so each proof is its fused peer's in `ConvNeXtFold`
+(`StableHLO.Basic`'s `*Sgd_eq_grad` family), so each proof is its fused peer's in `ConvNeXtFold`
 with the `θ − lr·` wrapper dropped. Every Adam artifact of this net renders from the batched chain;
 its fold is `ConvNeXtFoldGB`.
 -/

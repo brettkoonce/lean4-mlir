@@ -4,7 +4,7 @@ Legacy printers from `Hlo`/`HloF` terms and plain `String` builders to StableHLO
 per layer family: linear, MLP and CNN backward passes and train steps, BN/LN, softmax, SDPA, the
 pointwise activations, residual + SE, a ViT block, a ResNet train step, an MBConv block, the
 MobileNetV2 inverted residual and a ConvNeXt block. The text is trusted. The verified renderers
-are `StableHLOPretty` and the `*Render*` files; nothing imports this file. The `#eval`s at the bottom write scratch modules
+are `StableHLO.Pretty` and the `*Render*` files; nothing imports this file. The `#eval`s at the bottom write scratch modules
 to `/tmp`.
 
 Why a separate AST and not `Back` directly: `Back` (in `IR.lean`) carries abstract `Vec`/`Mat`

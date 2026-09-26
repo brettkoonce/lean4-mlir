@@ -7,13 +7,13 @@ import LeanMlir.GradcheckHelpers
 import LeanMlir.ViTRender
 import LeanMlir.SpecHelpers
 import LeanMlir.Train
-import LeanMlir.VerifiedTrain
-import LeanMlir.VerifiedPgdGen
-import LeanMlir.VerifiedAttack
-import LeanMlir.VerifiedSmoothing
-import LeanMlir.VerifiedSpec
+import LeanMlir.Verified.Train
+import LeanMlir.Verified.PgdGen
+import LeanMlir.Verified.Attack
+import LeanMlir.Verified.Smoothing
+import LeanMlir.Verified.Spec
 import LeanMlir.ParamLayouts
-import LeanMlir.VerifiedNetsCore
+import LeanMlir.Verified.NetsCore
 import LeanMlir.Ddpm
 import LeanMlir.Cam
 -- VJP proofs (Attention pulls in Tensor/MLP/Residual/SE/LayerNorm/BatchNorm
@@ -28,7 +28,7 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
-import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
+import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
@@ -46,14 +46,14 @@ import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 import LeanMlir.Proofs.Float.ConvMixedComposeBridge
 import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
 -- Inexact-gradient descent over ℝ: the keystone the float budgets plug into.
-import LeanMlir.Proofs.Training.SgdDescent
-import LeanMlir.Proofs.Training.SgdDescentLinear
-import LeanMlir.Proofs.Training.SgdDescentMlp
-import LeanMlir.Proofs.Training.SgdDescentCnn
+import LeanMlir.Proofs.Training.SgdDescent.Basic
+import LeanMlir.Proofs.Training.SgdDescent.Linear
+import LeanMlir.Proofs.Training.SgdDescent.Mlp
+import LeanMlir.Proofs.Training.SgdDescent.Cnn
 -- Robustness certificate: the Lipschitz-margin certified radius (cert ≤ TRUE ≤ PGD).
-import LeanMlir.Proofs.Certificates.LipschitzCert
+import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
 -- The real Gaussian probit: Φ/Φ⁻¹ facts + the smoothing radius at the true quantile.
-import LeanMlir.Proofs.Certificates.SmoothingGaussian
+import LeanMlir.Proofs.Certificates.Smoothing.Gaussian
 -- Verified-codegen bridges (denoted IR + per-op bridge theorems) so doc-gen4
 -- documents them. IRPrint.lean is deliberately left out: its file-writing
 -- #evals run at elaboration time (use `lake env lean …/IRPrint.lean`).
@@ -85,7 +85,7 @@ The linear classifier shows the two kinds of result in about 650 lines:
    [`LinearFold`](LeanMlir/Proofs/Nets/Small/LinearFold.html) is emitted step = certified math.
 2. **Descent** — one inexact SGD step on the weight matrix decreases one example's cross-entropy
    by at least `lr·‖∇L‖²/2`, given a step-size hypothesis and two dominance hypotheses:
-   `Proofs.linear_sgd_descends` in `LeanMlir.Proofs.Training.SgdDescentLinear`.
+   `Proofs.linear_sgd_descends` in `LeanMlir.Proofs.Training.SgdDescent.Linear`.
 
 Faithfulness extends, as a train-step tie with the scope stated under "The chapter nets", to
 each of the seven nets listed there. Descent extends to one parameter tensor at a time of the
@@ -110,7 +110,7 @@ it is the Jacobian-transpose of the forward, and every layer has one: convolutio
 `LeanMlir.Proofs.Architectures.Residual`, `LeanMlir.Proofs.Architectures.SE`,
 `LeanMlir.Proofs.Architectures.LayerNorm` (with GELU); softmax, scaled-dot-product and multi-head
 attention up to the ViT body in `LeanMlir.Proofs.Architectures.Attention`. The emitted graph is the
-`SHlo` AST of [`StableHLO`](LeanMlir/Proofs/Codegen/StableHLO.html), and its `den` is the ℝ
+`SHlo` AST of [`StableHLO`](LeanMlir/Proofs/Codegen/StableHLO/Basic.html), and its `den` is the ℝ
 denotation every tie below is stated about. Zero project axioms: every theorem closes under
 `propext`, `Classical.choice` and `Quot.sound` alone, and
 [`tests/comparator`](https://github.com/brettkoonce/lean4-mlir/tree/main/tests/comparator)
@@ -170,7 +170,7 @@ with other suffixes; the table and the suffix legend are in the
 
 ## Around the ties
 
-* **Descent over ℝ** — `LeanMlir.Proofs.Training.SgdDescent`, with the linear, MLP, CNN and
+* **Descent over ℝ** — `LeanMlir.Proofs.Training.SgdDescent.Basic`, with the linear, MLP, CNN and
   CIFAR-8 last-convolution capstones beside it: the SGD step decreases the loss, the float budget
   as its inexactness.
 * **The float model** — `LeanMlir.Proofs.Float.FloatBridge`: standard-model rounding bounds for
@@ -178,11 +178,11 @@ with other suffixes; the table and the suffix legend are in the
   convolution and `FloatClose` to compose them; where no bound is stated, the ℝ→Float32 gap
   stays trusted.
 * **Data parallelism** — the all-reduce as an AST node and which function a data-parallel run
-  minimises, [`DataParallel`](LeanMlir/Proofs/Foundation/DataParallel.html); the sync-BatchNorm
-  kit in [`DataParallelSync`](LeanMlir/Proofs/Foundation/DataParallelSync.html).
+  minimises, [`DataParallel`](LeanMlir/Proofs/Foundation/DataParallel/Basic.html); the sync-BatchNorm
+  kit in [`DataParallel.Sync`](LeanMlir/Proofs/Foundation/DataParallel/Sync.html).
 * **Robustness certificates** — the Lipschitz-margin radius in
-  `LeanMlir.Proofs.Certificates.LipschitzCert` and the smoothing radius at the true Gaussian
-  quantile in `LeanMlir.Proofs.Certificates.SmoothingGaussian`.
+  `LeanMlir.Proofs.Certificates.LipschitzCert.Basic` and the smoothing radius at the true Gaussian
+  quantile in `LeanMlir.Proofs.Certificates.Smoothing.Gaussian`.
 
 ## What stays trusted
 

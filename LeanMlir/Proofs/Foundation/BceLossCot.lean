@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 
 /-! # BCE-with-logits: the loss, and the cotangent the RSB renders emit
 
@@ -47,7 +47,7 @@ Note: **`%loss` itself is report-only.** The renderer's `lossCodeBce` block is h
 is about the COTANGENT chain, which is on the gradient path and is `pretty(provenGraph)`.
 
 Note: **One replica**, as everywhere: under `*dp*` each gradient node feeds the
-`allReduceMeanF` node (`DataParallelNode.lean`), which composes this with the replica mean.
+`allReduceMeanF` node (`DataParallel.Node`), which composes this with the replica mean.
 -/
 
 open Finset BigOperators

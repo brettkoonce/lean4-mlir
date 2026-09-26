@@ -29,7 +29,7 @@ certificate at rounded slices.
 
 Note: **`rowDenseWeightGradBBf16` has NO outer rounding**, and that is the measurement rather than
 an omission: its `dot_general` contracts batch and token in one op and keeps its f32-typed result
-deliberately (`StableHLO.lean`'s constructor says why), so only the two leaf reads round.
+deliberately (`StableHLO.Basic`'s constructor says why), so only the two leaf reads round.
 
 Note: Padding rides along invisibly, as in the f32 folds: the symmetric and XLA-`SAME` strided kinds
 have identical types and identical emitted shapes, and only the certificate tells them apart.

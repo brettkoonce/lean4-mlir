@@ -1,10 +1,10 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `efficientnet-verified-adam` — train EfficientNet-B0 with the VERIFIED-rendered **AdamW** step
 
 The enet peer of `vit`/`mnv2-verified-adam`: the proof-rendered EfficientNet-B0 train step
-(`LeanMlir/Proofs/Codegen/EfficientNetRender.lean → verified_mlir/efficientnet_adam_train_step.mlir`,
+(`LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean → verified_mlir/efficientnet_adam_train_step.mlir`,
 `@efficientnet_adam_train_step`) — all-swish + squeeze-excite + per-channel batch-norm, with the
 gradients un-fused and handed to the proven `adamMNextF`/`adamVNextF`/`adamWParamF` triple — driven
 by the generic `VerifiedNet.trainAdamSched`: `[θ|m|v]` (213 params) packed as one blob + runtime
@@ -47,7 +47,7 @@ def efficientnetAdamConfig : VerifiedConfig where
     `LEAN_MLIR_VARIANT` selects the rendered train step, i.e. which
     `verified_mlir/efficientnet_<variant>_train_step.mlir` is loaded (and with it a distinct vmfb
     and checkpoint). Two exist, and **both are `pretty(provenGraph)` out of
-    `Proofs/Codegen/EfficientNetRender.lean`** — unlike ResNet-34, this net never had a
+    `Proofs/Codegen/EfficientNetRender/Basic.lean`** — unlike ResNet-34, this net never had a
     hand-written DP emitter to migrate off:
 
     * **`adam`** (default) — the certified single-device render, tied bit-exactly against the

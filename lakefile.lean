@@ -31,8 +31,8 @@ lean_lib «LeanMlir» where
 
 -- Scoped targets, so CI and contributors can build one slice without the
 -- rest, along the seam between the proof suite and the program side. `Proofs` reaches no
--- program module. `Certs` reaches four, all pure data (`VerifiedSpec`, `ParamLayouts` and its
--- byte writer `LEBytes`, `VerifiedNetsCore`), through `SpecVJP`, the executable-spec ↔ proof
+-- program module. `Certs` reaches four, all pure data (`Verified.Spec`, `ParamLayouts` and its
+-- byte writer `LEBytes`, `Verified.NetsCore`), through `SpecVJP`, the executable-spec ↔ proof
 -- bridge — never the trainer or the FFI.
 
 /-- **`lake build Proofs`** — the fast per-push slice: the IR/render layer
@@ -57,8 +57,8 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Architectures.StridedConv,
              `LeanMlir.Proofs.Architectures.PerChannelBN,
              `LeanMlir.Proofs.Foundation.IR,
-             `LeanMlir.Proofs.Codegen.StableHLO,
-             `LeanMlir.Proofs.Codegen.StableHLOPretty,
+             `LeanMlir.Proofs.Codegen.StableHLO.Basic,
+             `LeanMlir.Proofs.Codegen.StableHLO.Pretty,
              `LeanMlir.Proofs.Codegen.ChapterArtifacts,
              `LeanMlir.Proofs.Codegen.MlpArtifacts,
              `LeanMlir.Proofs.Codegen.CnnArtifacts,
@@ -66,7 +66,7 @@ lean_lib «Proofs» where
              `LeanMlir.Proofs.Codegen.ResNet50RenderB,
              `LeanMlir.Proofs.Codegen.MobileNetV2RenderB,
              `LeanMlir.Proofs.Codegen.MobileNetV4RenderB,
-             `LeanMlir.Proofs.Codegen.EfficientNetRender,
+             `LeanMlir.Proofs.Codegen.EfficientNetRender.Basic,
              `LeanMlir.Proofs.Codegen.ConvNeXtRender,
              `LeanMlir.Proofs.Codegen.ConvNeXtRenderB,
              `LeanMlir.Proofs.Codegen.ViTRender,
@@ -93,11 +93,11 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Architectures.PerChannelBN,
              `LeanMlir.Proofs.Foundation.MatBridge,
              `LeanMlir.Proofs.Foundation.IR,
-             `LeanMlir.Proofs.Codegen.StableHLO,
-             `LeanMlir.Proofs.Codegen.StableHLOPretty,
+             `LeanMlir.Proofs.Codegen.StableHLO.Basic,
+             `LeanMlir.Proofs.Codegen.StableHLO.Pretty,
              `LeanMlir.Proofs.Codegen.FwdGraphTextTies,
-             `LeanMlir.Proofs.Codegen.StableHLOParse,
-             `LeanMlir.Proofs.Codegen.StableHLOLex,
+             `LeanMlir.Proofs.Codegen.StableHLO.Parse,
+             `LeanMlir.Proofs.Codegen.StableHLO.Lex,
              `LeanMlir.Proofs.Nets.Small.LinearTrainStep,
              `LeanMlir.Proofs.Nets.Small.MlpTrainStep,
              `LeanMlir.Proofs.Architectures.ConvGrad,
@@ -119,11 +119,11 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper,
              `LeanMlir.Proofs.Float.FloatBridge,
              `LeanMlir.Proofs.Float.FloatSubnormalBridge,
-             `LeanMlir.Proofs.Training.SgdDescent,
-             `LeanMlir.Proofs.Training.SgdDescentLinear,
-             `LeanMlir.Proofs.Training.SgdDescentMlp,
-             `LeanMlir.Proofs.Training.SgdDescentCnn,
-             `LeanMlir.Proofs.Training.SgdDescentCifar,
+             `LeanMlir.Proofs.Training.SgdDescent.Basic,
+             `LeanMlir.Proofs.Training.SgdDescent.Linear,
+             `LeanMlir.Proofs.Training.SgdDescent.Mlp,
+             `LeanMlir.Proofs.Training.SgdDescent.Cnn,
+             `LeanMlir.Proofs.Training.SgdDescent.Cifar,
              `LeanMlir.Proofs.Float.BnFloatBridge,
              `LeanMlir.Proofs.Float.ResNet34FloatBridge,
              `LeanMlir.Proofs.Float.BnInputBridge,
@@ -131,7 +131,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Float.FloatComposeBridge,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPCEval,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval,
-             `LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval,
+             `LeanMlir.Proofs.Codegen.EfficientNetRender.PCEval,
              `LeanMlir.Proofs.Foundation.BatchMapVJPAt,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34FullB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP,
@@ -153,13 +153,13 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTieG,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB,
              `LeanMlir.Proofs.Nets.ViT.ViTStepTieGB,
-             `LeanMlir.Proofs.Foundation.DataParallel,
-             `LeanMlir.Proofs.Foundation.DataParallelNode,
-             `LeanMlir.Proofs.Foundation.DataParallelSync,
-             `LeanMlir.Proofs.Foundation.DataParallelSyncBf16,
+             `LeanMlir.Proofs.Foundation.DataParallel.Basic,
+             `LeanMlir.Proofs.Foundation.DataParallel.Node,
+             `LeanMlir.Proofs.Foundation.DataParallel.Sync,
+             `LeanMlir.Proofs.Foundation.DataParallel.SyncBf16,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB,
              `LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB,
-             `LeanMlir.Proofs.Foundation.DataParallelSyncKit,
+             `LeanMlir.Proofs.Foundation.DataParallel.SyncKit,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB,
@@ -222,7 +222,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Foundation.SgdNodes,
              `LeanMlir.Proofs.Nets.Small.Cifar8StepTie,
              `LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie,
-             `LeanMlir.Proofs.Codegen.EfficientNetRender,
+             `LeanMlir.Proofs.Codegen.EfficientNetRender.Basic,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold,
              `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie,
              `LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFold,
@@ -233,33 +233,33 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Codegen.ViTRenderB,
              `LeanMlir.Proofs.Nets.ViT.ViTFold,
              `LeanMlir.Proofs.Nets.ViT.ViTStepTie,
-             `LeanMlir.Proofs.Certificates.LipschitzCert,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.Basic,
              `LeanMlir.Proofs.Foundation.UpstreamDraft,
-             `LeanMlir.Proofs.Certificates.SmoothingGaussian,
-             `LeanMlir.Proofs.Certificates.SmoothingMC,
-             `LeanMlir.Proofs.Certificates.SmoothingCP,
-             `LeanMlir.Proofs.Certificates.SmoothingCPScorecard,
-             `LeanMlir.Proofs.Certificates.SmoothingPhiBounds,
-             `LeanMlir.Proofs.Certificates.SmoothingDecScorecard,
-             `LeanMlir.Proofs.Certificates.SmoothingNetSemantics,
-             `LeanMlir.Proofs.Certificates.SmoothingNetWitness,
-             `LeanMlir.Proofs.Foundation.MuonGeometry,
-             `LeanMlir.Proofs.Foundation.MuonNewtonSchulz,
-             `LeanMlir.Proofs.Certificates.LipschitzCertInstance,
-             `LeanMlir.Proofs.Training.TrainedMlpWitness,
-             `LeanMlir.Proofs.Certificates.LipschitzCertScorecard,
-             `LeanMlir.Proofs.Certificates.LipschitzCertPairSDP,
-             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDP,
-             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPUncon,
+             `LeanMlir.Proofs.Certificates.Smoothing.Gaussian,
+             `LeanMlir.Proofs.Certificates.Smoothing.MC,
+             `LeanMlir.Proofs.Certificates.Smoothing.CP,
+             `LeanMlir.Proofs.Certificates.Smoothing.CPScorecard,
+             `LeanMlir.Proofs.Certificates.Smoothing.PhiBounds,
+             `LeanMlir.Proofs.Certificates.Smoothing.DecScorecard,
+             `LeanMlir.Proofs.Certificates.Smoothing.NetSemantics,
+             `LeanMlir.Proofs.Certificates.Smoothing.NetWitness,
+             `LeanMlir.Proofs.Foundation.Muon.Geometry,
+             `LeanMlir.Proofs.Foundation.Muon.NewtonSchulz,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.Instance,
+             `LeanMlir.Proofs.Training.Trained.MlpWitness,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.PairSDP,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDP,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDPUncon,
              `LeanMlir.Proofs.Foundation.ListDot,
              `LeanMlir.Proofs.Certificates.IntervalBound,
              `LeanMlir.Proofs.Foundation.IntervalBoundConv,
              `LeanMlir.Proofs.Certificates.CrownBound,
              `LeanMlir.Proofs.Float.Binary32Instance,
-             `LeanMlir.Proofs.Training.TrainedLinearDescent,
-             `LeanMlir.Proofs.Training.TrainedCnnWitness,
-             `LeanMlir.Proofs.Training.TrainedCnnSeal,
-             `LeanMlir.Proofs.Certificates.LipschitzCertFloat,
+             `LeanMlir.Proofs.Training.Trained.LinearDescent,
+             `LeanMlir.Proofs.Training.Trained.CnnWitness,
+             `LeanMlir.Proofs.Training.Trained.CnnSeal,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.Float,
              `LeanMlir.Proofs.SpecVJP,
              `LeanMlir.Proofs.Nets.Small.MlpCanonical,
              `LeanMlir.Proofs.Codegen.ResNet34RenderB,
@@ -277,33 +277,33 @@ lean_lib «Certs» where
     on-demand + pushes touching these files) so it can never break the core.
     Results (all 3-axiom, audited by tests/AuditAxiomsHeavy.lean): L2 capped
     σ≤2 92/100 @ ε=0.1; IBP pixel-L∞ 92/88/69/24 per 100 at ε = 1/2/4/8 /255
-    (PGD 93/93/92/88). ⚠ The full-input LipSDP files (`LipschitzCertScorecardSDPFull{,Uncon}`,
+    (PGD 93/93/92/88). ⚠ The full-input LipSDP files (`LipschitzCert/ScorecardSDPFull{,Uncon}`,
     93/100 = the PGD bound) are NOT roots here: their linarith PSD witnesses OOM the runners
     (planning/archive/certs_heavy_psd_memory.md), so no lib builds them and their audit lines
     are commented out. -/
 lean_lib «CertsHeavy» where
   srcDir := "."
-  roots := #[`LeanMlir.Proofs.Certificates.LipschitzCertScorecardFull,
-             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP,
-             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon,
-             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardCrown,
-             `LeanMlir.Proofs.Certificates.LipschitzCertScorecardCrownUncon,
-             `LeanMlir.Proofs.Certificates.IbpConvScorecard]
+  roots := #[`LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFull,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBP,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPUncon,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardCrown,
+             `LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardCrownUncon,
+             `LeanMlir.Proofs.Certificates.IbpConvScorecard.Basic]
 
 /-- **`lake build ProofsMinimal`** — the suite's "hello world": the smallest
     end-to-end story (the Linear classifier), both halves — faithfulness
     (`LinearFold`: emitted train-step = certified math) and descent
-    (`SgdDescentLinear`: that step decreases the loss). Their transitive closure is
+    (`SgdDescent.Linear`: that step decreases the loss). Their transitive closure is
     exactly the minimum working set (LinearTrainStep + the shared StableHLO/Tensor/
     FloatBridge/IR foundation), nothing per-net beyond Linear. Point a newcomer here
     before the full `Proofs` target. See `LeanMlir/Proofs/README.md` (Start here). -/
 lean_lib «ProofsMinimal» where
   srcDir := "."
-  roots := #[`LeanMlir.Proofs.Nets.Small.LinearFold, `LeanMlir.Proofs.Training.SgdDescentLinear]
+  roots := #[`LeanMlir.Proofs.Nets.Small.LinearFold, `LeanMlir.Proofs.Training.SgdDescent.Linear]
 
 /-- **`lake build Reference`** — the REFERENCE path's codegen + spec core, no proofs:
     `MlirCodegen` (NetSpec → MLIR at run time, unverified) and the modules around it. It does
-    not build the verified path (`VerifiedSpec`/`VerifiedNetsCore`/`VerifiedTrain`, which load
+    not build the verified path (`Verified.Spec`/`Verified.NetsCore`/`Verified.Train`, which load
     `verified_mlir/`) or anything in `LeanMlir/Proofs/Codegen/`, and no CI job uses it. -/
 lean_lib «Reference» where
   srcDir := "."
@@ -565,7 +565,7 @@ lean_exe «mobilenetv2-imagenet-verified» where
     `_fwd_eval` peer and a running-stat region.
 
     ⭐ **Conv-M as of a 2026-08-26 audit — this docstring said Conv-S, and it was true when
-    written.** `mnv4ImagenetVerified` (`VerifiedNetsCore.lean`) now carries the Conv-M block table and
+    written.** `mnv4ImagenetVerified` (`Verified.NetsCore`) now carries the Conv-M block table and
     names itself "MobileNetV4-Conv-M (ImageNet-1k)", so the chapter's 75.51% IS this network's
     target. It is not this network's RESULT: nothing here has been trained to convergence.
 
@@ -1585,7 +1585,7 @@ lean_exe «shard-check» where
 /-- `resnet34-syncbn-check` — the SYNC-BN gate, the identity no batch-BN net could state before
     2026-09-21: `DP_sync([xA|xB])` at 2×32 equals `single([xA|xB])` at 1×64 on EVERY output region
     (θ', m', v', the 72 BN statistics), because the sync render's replicas compute their shards of
-    one global-batch function (`planning/global_bn_verified.md`, `Foundation/DataParallelSync.lean`).
+    one global-batch function (`planning/global_bn_verified.md`, `Foundation/DataParallel/Sync.lean`).
     CONTROL: the old per-replica identity `DP == mean(single_32(xA), single_32(xB))` must now FAIL
     by a margin, or the statistics are not synchronised. The first numeric check any of the seven
     sync ops' emitted MLIR has had. Needs two GPUs and the XLA backend. -/

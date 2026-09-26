@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 
 /-! # The FULL EfficientNet-B0 — all 16 MBConv blocks, batched forward graph + faithfulness
 
-Scales `EfficientNetRenderPC.lean`'s representative (stem + 3 MBConv + head) to the real B0
+Scales `EfficientNetRender.PC`'s representative (stem + 3 MBConv + head) to the real B0
 `[t,c,n,s,k]` spec — 16 MBConv layers — at the batched index `N·(c·h·w)`. Pure enumeration + chaining
 of the generic per-block machinery; the only genuinely-new piece is the 4th block shape
 (`mbExp`: expand + stride-1 + **no** residual, used by stage-5/stage-7 first blocks where `ic ≠ oc`).

@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.Train
 
 /-! # ConvNeXt-T artifact smoke (iree-compile over the COMMITTED bytes)
 

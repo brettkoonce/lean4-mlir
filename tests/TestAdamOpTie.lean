@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.ViTRender
 
 /-! # The AdamW `SHlo` ops emit exactly what the trusted string emitter emitted

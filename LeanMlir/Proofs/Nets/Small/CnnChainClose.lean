@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Architectures.ConvGrad
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 
 /-! # Upgrading the CNN conv close from a generic cotangent to the actual backward chain
 

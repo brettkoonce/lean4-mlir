@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
 /-! # The RMSProp `SHlo` op emits TENSORFLOW's ε placement, and the guard is shown to catch the
     textbook one

@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `efficientnet-imagenet-verified` — EfficientNet-B0 on full ImageNet-1k, verified → XLA
 
@@ -56,7 +56,7 @@ def runEfficientNetImagenet (argv : List String) : IO Unit := do
   -- INDEPENDENT axes in this net's variant names, so RMSProp+EMA is spelled `emarms`, which does
   -- NOT start with "rms" — and six committed artifacts are spelled that way, including the paper
   -- recipe `emarmsdp64dropdo`. Under a prefix test the SHARED TRAINER still classified them as
-  -- RMSProp (`VerifiedTrain.lean`'s own test is a substring) and initialised the mean-square to
+  -- RMSProp (`Verified.Train`'s own test is a substring) and initialised the mean-square to
   -- 1.0, while this file handed them AdamW's 0.001 and a cosine schedule instead of the paper's
   -- 0.016 with ×0.97 every 2.4 epochs. That split is not loud: it descends and prints a normal log.
   -- `tests/TestVariantPredicates.lean` is the collision table, and this is its case 1.

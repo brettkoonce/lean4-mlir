@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Types
 
 /-! # ch9 N2+N4 — one ConvNeXt block (fwd + backward) render + iree-compile

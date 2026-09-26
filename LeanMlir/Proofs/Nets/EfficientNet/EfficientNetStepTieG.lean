@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
-import LeanMlir.Proofs.Foundation.BatchedBackLinks
+import LeanMlir.Proofs.Foundation.Batched.BackLinks
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
 /-! # EfficientNet-B0's step tie at the un-fused gradient and the smoothed loss
@@ -43,7 +43,7 @@ hypothesis anywhere), and the SE gate's fan-in folded into the block VJPs.
 
 **One replica.** In a data-parallel artifact such as `efficientnetin_emarmsdp64` every
 gradient node feeds `allReduceMeanF`. Every statement here is at the per-replica node;
-`DataParallelNode.lean` composes it with the replica mean and the tail
+`DataParallel.Node` composes it with the replica mean and the tail
 (`adamW_at_allReduceMeanF`). For the sync-BN data-parallel render, `EfficientNetSyncStepTieG.lean`
 states the whole step: its `efficientnet_net_syncTiedG` says each all-reduced gradient is this
 file's node at `N := R·N` (without drop-path and dropout).

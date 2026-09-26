@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `resnet50-imagenet-verified` — ResNet-50 on full ImageNet-1k, verified renderer → XLA/PJRT
 
@@ -34,7 +34,7 @@ backend is a run-time choice about transport, not a different program.
     specified for; the 4-GPU@160 probe measured 240 ms/step, so 100 epochs is ~33 h.
 
     ⚠⚠ **THIS FIELD IS THE LR SCHEDULE, NOT JUST A LOOP BOUND.**
-    `totalSteps := cfg.epochs * nb / accK` (`VerifiedTrain.lean` 1166) — the cosine anneals over
+    `totalSteps := cfg.epochs * nb / accK` (`Verified.Train` 1166) — the cosine anneals over
     exactly this many epochs. `LEAN_MLIR_MAX_EPOCHS` caps the LOOP (`min n cfg.epochs`) and does
     NOT touch the schedule, which is precisely what makes a capped run a resumable PREFIX of the
     full one rather than its own shorter experiment:
@@ -130,7 +130,7 @@ def runResnet50Imagenet (argv : List String) : IO Unit := do
   IO.println s!"  ▸ RECIPE: {recipe} — augmentation comes from {net.shimScript}"
   -- ✅ The 160 net is EVALUABLE as of 2026-08-06. Its shim emits A3's split — 76,800 floats/img on
   -- train, 150,528 on val — and the driver now reads the eval width off `@<slug>_fwd_eval` rather
-  -- than reusing `net.d0` (`fwdRenderedShape`/`evalD0` in `VerifiedTrain.lean`). The refusal that
+  -- than reusing `net.d0` (`fwdRenderedShape`/`evalD0` in `Verified.Train`). The refusal that
   -- stood here until then is gone; the run announces "EVAL RES SPLIT" instead.
   net.toNet.trainAdamSched
     { resnet50ImagenetConfig with batchSize := bs, epochs := epochs }

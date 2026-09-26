@@ -1,12 +1,12 @@
 import LeanMlir.Proofs.Codegen.ResNet50RenderB
-import LeanMlir.VerifiedNetsCore
+import LeanMlir.Verified.NetsCore
 
 /-! # The R50 render ↔ driver parameter contract, run rather than reasoned about
 
     lake env lean tests/TestR50Contract.lean
 
 **What this gates.** The renderer (`ResNet50RenderB.r50ShapeList`) and the driver
-(`resnet50ImagenetVerified.toSpecs` in `VerifiedNetsCore`, via `VerifiedSpec.bottleneckStageSpec`) each
+(`resnet50ImagenetVerified.toSpecs` in `Verified.NetsCore`, via `VerifiedSpec.bottleneckStageSpec`) each
 carry a list of R50's parameter tensors. The driver packs `[θ|m|v]` off ITS list and hands the blob
 to a graph laid out by the OTHER one. If the two disagree in count, in order, or in any single
 shape, every parameter after the first divergence is fed to the wrong slot — and the run does not

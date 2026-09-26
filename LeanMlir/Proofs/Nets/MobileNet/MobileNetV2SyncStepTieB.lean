@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 
 /-! # MobileNetV2's data-parallel step at synchronised BatchNorm is the single-device step at `R·N`
 
@@ -24,7 +24,7 @@ rather than restated: the replica BN link `bnSyncInB` and its shard lemma, the `
 `BnSync` / `DenseSync` statements and their `*_of_scaled` closers, the divisor step
 `replicaLossCot_eq`, and the homogeneity of `bnInB` and `cInB`. The inverted-residual pieces it
 shares with EfficientNet-B0 — the depthwise, GAP and dense input-VJPs, the depthwise and
-XLA-`SAME` stem weight collectives — come from `DataParallelSyncKit`.
+XLA-`SAME` stem weight collectives — come from `DataParallel.SyncKit`.
 
 1. **Sharding** — each replica's backward chain, handed its shard of a global cotangent, computes
    the shard of the global chain. The relu6 mask is pointwise, so it shards by `rfl`; the

@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4StepTieB
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 
 /-! # MobileNetV4-Conv-M's data-parallel step at synchronised BatchNorm is the single-device step at `R·N`
 
@@ -31,7 +31,7 @@ single-device step by `R·B`.
 `ResNet34SyncStepTieB.lean` is the template, and everything net-agnostic is imported from it: the
 replica BN link `bnSyncInB` and its shard lemma, the `ConvWSync` / `ConvStridedWSync` / `BnSync` /
 `DenseSync` statements and their `*_of_scaled` closers, and the homogeneity of `bnInB`, `cInB`,
-`cStridedInB` and the head. The MBConv pieces come from `DataParallelSyncKit` — the depthwise and
+`cStridedInB` and the head. The MBConv pieces come from `DataParallel.SyncKit` — the depthwise and
 SYMMETRIC strided-depthwise input-VJPs and weight collectives, the GAP backward and the row-wise
 dense input-VJP. The head's two `1×1` relabellings are per-example reindexes, so they commute with
 the batch cut (`mnv4To11_shard`, `mnv4From11_shard`) and with scaling.
@@ -57,7 +57,7 @@ BN-only pre-DW has no mask at all.
 
 ℝ-level, as `MobileNetV4StepTieB` is: the replica BN link `bnSyncInB` is the `den` of the
 emitted nodes (`bnSyncDyStatsB` → all-reduce → `bnSyncBack`) over `.operand` leaves at
-`reassocB`, and `bnSyncInB_shard` carries `DataParallelSync`'s P2 (the sync-BN input-VJP shard
+`reassocB`, and `bnSyncInB_shard` carries `DataParallel.Sync`'s P2 (the sync-BN input-VJP shard
 identity) across the `N·(c·h·w)` / `N·(c·(h·w))` seam; `BnSync`'s γ and β collectives read
 `reassocB` of the pre-BN activation and of the cotangent, exactly as the `BnPairTiedB` nodes
 `MobileNetV4StepTieB` uses do.

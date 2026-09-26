@@ -1,9 +1,9 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 
 /-!
 # ViT forward-graph pieces — the flat ↔ Mat bridges
 
-The ch10 token layer's ViT den helpers (`StableHLO.lean`) are local re-spellings; this file
+The ch10 token layer's ViT den helpers (`StableHLO.Basic`) are local re-spellings; this file
 ties them back to the proven Attention forms for the forward-graph faithfulness proofs
 (`ViTMultiHead`, `ViTDepthK`): each den helper applied to a `Mat.flatten` is the flatten of
 the Mat-level op, and `patchEmbedF_x_den` is the patch-embed stage every ViT forward-graph

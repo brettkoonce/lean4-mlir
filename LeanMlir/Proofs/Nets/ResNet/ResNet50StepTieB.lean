@@ -57,7 +57,7 @@ The identity block needs none. Same seam `resnet50FwdGraphBFull_faithful` has, f
 **ONE REPLICA.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
 `allReduceMeanF` — the collective as an AST node — so every statement here is at the per-replica
 gradient node and
-[`Foundation/DataParallelNode.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallelNode.lean) composes it with the replica mean. The 8× accumulation sits between the gradient
+[`Foundation/DataParallel/Node.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallel/Node.lean) composes it with the replica mean. The 8× accumulation sits between the gradient
 and the optimizer as `momVNextF` at `(μ := akeep)`, and the LAMB tail is `lamb_triple_faithful` —
 both certified, neither part of this file.
 
@@ -499,7 +499,7 @@ theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr :
     hypotheses.
 
     **One replica.** In `resnet50in160_lambaccdp8x64bce` every gradient node feeds
-    `allReduceMeanF`, an AST node (`DataParallelNode.lean`), and the 8×
+    `allReduceMeanF`, an AST node (`DataParallel.Node`), and the 8×
     accumulation and the LAMB tail sit downstream of every node named here. -/
 theorem r50_net_tiedB (N q : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) (g : Vec (N * nCls)) :

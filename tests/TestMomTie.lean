@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # §2k's owed gate — the heavy-ball momentum render, numerically certified
 
@@ -36,7 +36,7 @@ here — small, but three orders above the f32 floor, so a missing coupled-L2 te
 is shown to be. ⚠ It was ~3e-4 (and four orders) until 2026-09-02, when the gate moved off its
 hand-copied He fan-IN init onto the driver's `mkParam`; that makes R34's gradients 4.6× larger
 against a fixed `wd`, so this control's margin fell from ~480× the tie to ~87×. Still decisive,
-but it is now the tightest margin in the harness — see `LeanMlir/VerifiedTrain.lean`'s `heFanIn`.
+but it is now the tightest margin in the harness — see `LeanMlir/Verified/Train.lean`'s `heFanIn`.
 
     lake build r34-mom-tie && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/r34-mom-tie
 -/

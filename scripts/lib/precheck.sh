@@ -55,7 +55,7 @@ pc_exe() {
   local exe="$1"; shift
   local bin=".lake/build/bin/$exe"
   local srcs=("$@")
-  [ ${#srcs[@]} -gt 0 ] || srcs=(LeanMlir/VerifiedTrain.lean ffi/f32_helpers.c)
+  [ ${#srcs[@]} -gt 0 ] || srcs=(LeanMlir/Verified/Train.lean ffi/f32_helpers.c)
   if [ "${DRY_RUN:-0}" != "0" ]; then
     if [ ! -x "$bin" ]; then echo "⚠ $bin not built yet — a launch builds it"; return 0; fi
     local s

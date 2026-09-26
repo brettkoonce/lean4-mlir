@@ -75,8 +75,10 @@ def artifact_writers() -> dict[str, list[str]]:
     """
     WINDOW = 400
     out: dict[str, list[str]] = {}
-    for path in sorted(CODEGEN.glob("*.lean")):
-        if path.stem in SCRATCH_ONLY:
+    for path in sorted(CODEGEN.rglob("*.lean")):
+        # keyed by the path under Codegen/, so `EfficientNetRender/Basic` names its module
+        rel = path.relative_to(CODEGEN).with_suffix("").as_posix()
+        if rel in SCRATCH_ONLY:
             continue
         text = path.read_text()
         # collapse the `#eval IO.FS.writeFile\n  "path"` wrap before matching
@@ -90,7 +92,7 @@ def artifact_writers() -> dict[str, list[str]]:
         # rendered with the module) has no committed bytes for a `git diff` guard to pin.
         committed = [h for h in hits if not h.startswith(("/tmp", ".lake/"))]
         if committed:
-            out[path.stem] = sorted(set(committed))
+            out[rel] = sorted(set(committed))
     return out
 
 
@@ -142,7 +144,7 @@ def main() -> None:
     unbuilt: list[tuple[str, str]] = []
     unguarded: list[tuple[str, list[str]]] = []
     for stem, artifacts in writers.items():
-        module = f"LeanMlir.Proofs.Codegen.{stem}"
+        module = "LeanMlir.Proofs.Codegen." + stem.replace("/", ".")
         for lib, covered in (("Proofs", proofs), ("Certs", certs)):
             if module not in covered:
                 unbuilt.append((module, lib))

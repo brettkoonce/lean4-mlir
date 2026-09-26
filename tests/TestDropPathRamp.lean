@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 import LeanMlir.Proofs.Codegen.ConvNeXtRenderB
 import LeanMlir.Proofs.Codegen.ViTRenderB
 
@@ -7,13 +7,13 @@ import LeanMlir.Proofs.Codegen.ViTRenderB
 
 `planning/archive/stochastic_depth.md`'s keep ramp is described **twice**, and it has to be:
 
-* the RENDERER (`Proofs/Codegen/EfficientNetRender.lean`) owns `enetDropIdxs` / `enetDropTotal` —
+* the RENDERER (`Proofs/Codegen/EfficientNetRender/Basic.lean`) owns `enetDropIdxs` / `enetDropTotal` —
   which blocks carry a drop site, and the ramp denominator;
 * the DRIVER (`efficientnetVerified.dropKeeps`) owns the keep VALUES, because `1/keep_i` is folded
   into the supplied scale rather than baked into the graph (`Proofs.dropPath`'s note has the
   argument: a baked constant and "the forward emits the sites too" cannot both hold).
 
-`LeanMlir/VerifiedSpec.lean` imports `VerifiedTrain`, so the renderer cannot share the definition by
+`LeanMlir/Verified/Spec.lean` imports `Verified.Train`, so the renderer cannot share the definition by
 import without inverting the dependency — the driver would drag the whole proof corpus into the app
 build. That is exactly the situation `#guard spec.toSpecs == XLayout.specs` already handles for the
 parameter layout, and this file is its peer for the ramp.

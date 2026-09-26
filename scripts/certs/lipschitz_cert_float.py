@@ -1,6 +1,6 @@
 """Robustness certificate x float bridge (the 2026-07-02 audit's gap #1).
 
-Emits LeanMlir/Proofs/Certificates/LipschitzCertFloat.lean: the scorecard's Lipschitz-margin
+Emits LeanMlir/Proofs/Certificates/LipschitzCert/Float.lean: the scorecard's Lipschitz-margin
 certificates composed with the FloatBridge forward budgets, so the certified
 images are provably robust for the FLOAT-EVALUATED net, not just its exact-R
 idealization:
@@ -15,7 +15,7 @@ logit gap at img+delta >= m - sqrt(2)*L*eps; the 2-layer FloatBridge budget B
 (layerBudget chain, gamma-form rational bound) perturbs each float logit by at
 most B; so any margin clearing (14143/10000)*L*eps + 2*B keeps the float argmax
 (strict). Images and margins are parsed from the committed
-LipschitzCertScorecard.lean (the source of truth) — no retraining.
+LipschitzCert/Scorecard.lean (the source of truth) — no retraining.
 """
 import os
 import re
@@ -29,8 +29,8 @@ from fractions import Fraction
 N_EMIT = int(os.environ.get("SCORECARD_N_EMIT", 8))
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SRC = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")
-OUT = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertFloat.lean")
+SRC = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard.lean")
+OUT = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCert/Float.lean")
 src = open(SRC).read()
 
 FRAC_RE = re.compile(r"\(\((-?\d+) : [ℝℚ]\)/(\d+)\)|\((-?\d+) : [ℝℚ]\)")
@@ -136,7 +136,7 @@ theorem certifiedC{k}_float (M : FloatModel) (hMu : M.u ≤ u32)
     (by norm_num) δ hδ y hy
 """)
 
-body = f'''import LeanMlir.Proofs.Certificates.LipschitzCertScorecard
+body = f'''import LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard
 import LeanMlir.Proofs.Float.FloatBridge
 
 /-! # The robustness certificate composed with the float bridge
@@ -146,7 +146,7 @@ MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
 arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
-The scorecard's per-image Lipschitz-margin certificates (`LipschitzCertScorecard.lean`,
+The scorecard's per-image Lipschitz-margin certificates (`LipschitzCert.Scorecard`,
 exact-ℝ net) composed with the FloatBridge forward budgets, certifying the
 FLOAT-EVALUATED capped net.
 

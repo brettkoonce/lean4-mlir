@@ -11,7 +11,7 @@ pinned to the certified per-op backward at its own saved activation, is
 **Even kernels.** `conv2d` pads by `pH = (kH-1)/2`, so the reversed-kernel forward conv
 (`convFlatBack`) is the adjoint only when `kH - 1 - pH = pH`, i.e. only for odd `kH`. ConvNeXt's
 4×4/s4 patchify stem and its three 2×2/s2 downsamples are even-kernel sites; at `kH = 4` the
-symmetric-pad backward is the adjoint of a conv shifted one pixel. `StableHLO.lean`'s
+symmetric-pad backward is the adjoint of a conv shifted one pixel. `StableHLO.Basic`'s
 `.convStridedBack` / `.convStridedBackBatched` pad asymmetrically, `[[kH-1-pH, pH]]`, and their
 `den` is the certified VJP; `BackwardMaps.lean`'s `flatConvStride2Back` / `flatConvStride4Back`
 are `convFlatBack ∘ scatter` at the symmetric pad. The repair is `padOdd`

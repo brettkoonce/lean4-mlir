@@ -1,6 +1,6 @@
 import LeanMlir.SyncBnCheck
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 
 /-! # `efficientnet-syncbn-check` — synchronised BatchNorm on EfficientNet-B0: 2×32 IS 1×64
 

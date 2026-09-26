@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 

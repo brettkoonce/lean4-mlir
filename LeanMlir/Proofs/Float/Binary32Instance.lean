@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Training.SgdDescentLinear
+import LeanMlir.Proofs.Training.SgdDescent.Linear
 import LeanMlir.Proofs.Float.RndP
 import LeanMlir.Proofs.Float.MlpFloatBridge
 

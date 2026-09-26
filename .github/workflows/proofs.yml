@@ -100,7 +100,7 @@ jobs:
         run: python3 scripts/gates/gen_mlir_manifest.py --check
 
       - name: Certificate generators reproduce their committed Lean
-        # Three generators whose inputs are all committed (LipschitzCertScorecard.lean, the
+        # Three generators whose inputs are all committed (LipschitzCert/Scorecard.lean, the
         # 2026-07-12 smoothing CSVs), so CI can re-run them: the Lipschitz float certificate, the
         # smoothing CP scorecard and the decimal-radius scorecard + its six chunks. `--check`
         # writes nothing and fails on any byte of drift. The MNIST-retraining generators stay
@@ -405,7 +405,7 @@ jobs:
           # the SGD train step left thirteen of them unguarded-but-baselined. Diffing the full set
           # costs nothing extra (the `lake env lean` above already ran every writer) and is why ten
           # lines came OUT of scripts/gates/render_guard_baseline.txt when the RMSProp render landed.
-          lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean
+          lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean
           git diff --exit-code -- \
               verified_mlir/efficientnet_train_step.mlir \
               verified_mlir/efficientnet_fwd.mlir verified_mlir/efficientnet_fwd_eval.mlir \
@@ -441,7 +441,7 @@ jobs:
               verified_mlir/efficientnetin_emarmsdp64dropdowxeps0001bf16_train_step.mlir \
               verified_mlir/efficientnetin_fwd_eval_eps0001.mlir \
               verified_mlir/efficientnet_adambf16_train_step.mlir \
-            || { echo "::error::committed verified_mlir/{efficientnet,efficientnetin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender.lean)"; exit 1; }
+            || { echo "::error::committed verified_mlir/{efficientnet,efficientnetin}_*.mlir drifted (regen: lake env lean LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean)"; exit 1; }
           # ⛔ ONE artifact left here since 4c leg 4 (2026-09-07): the SGD-inline train step is the
           # only ViT render still on the per-example traversal, because `vitBackAllB` has no
           # fused-SGD arm and `ViTStepTie.lean`'s 200-parameter tie is stated at these bytes.

@@ -14,10 +14,10 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNet
 import LeanMlir.Proofs.Nets.Small.MnistCNN
 import LeanMlir.Proofs.Nets.Small.CifarCNN
 import LeanMlir.Proofs.Foundation.IR
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
-import LeanMlir.Proofs.Codegen.StableHLOParse
-import LeanMlir.Proofs.Codegen.StableHLOLex
+import LeanMlir.Proofs.Codegen.StableHLO.Parse
+import LeanMlir.Proofs.Codegen.StableHLO.Lex
 import LeanMlir.Proofs.Architectures.StridedConv
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 import LeanMlir.Proofs.Nets.ResNet.ResNet50FullBSeal
@@ -30,7 +30,7 @@ import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 import LeanMlir.Proofs.Nets.Small.CnnChainClose
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
-import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
+import LeanMlir.Proofs.Codegen.EfficientNetRender.PC
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetChainClose
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0Eval
@@ -49,10 +49,10 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Float.MlpFloatBridge
 import LeanMlir.Proofs.Float.FloatSubnormalBridge
-import LeanMlir.Proofs.Training.SgdDescent
-import LeanMlir.Proofs.Training.SgdDescentLinear
-import LeanMlir.Proofs.Training.SgdDescentCnn
-import LeanMlir.Proofs.Training.SgdDescentCifar
+import LeanMlir.Proofs.Training.SgdDescent.Basic
+import LeanMlir.Proofs.Training.SgdDescent.Linear
+import LeanMlir.Proofs.Training.SgdDescent.Cnn
+import LeanMlir.Proofs.Training.SgdDescent.Cifar
 import LeanMlir.Proofs.Float.BnFloatBridge
 import LeanMlir.Proofs.Float.ResNet34FloatBridge
 import LeanMlir.Proofs.Float.BnInputBridge
@@ -63,7 +63,7 @@ import LeanMlir.Proofs.Float.DepthwiseMixedFloatBridge
 import LeanMlir.Proofs.Float.DepthwiseFloatBridge
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPCEval
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaperEval
-import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
+import LeanMlir.Proofs.Codegen.EfficientNetRender.PCEval
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBVJP
@@ -79,17 +79,17 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTieG
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
 import LeanMlir.Proofs.Nets.ViT.ViTStepTieGB
-import LeanMlir.Proofs.Foundation.DataParallel
-import LeanMlir.Proofs.Foundation.DataParallelNode
-import LeanMlir.Proofs.Foundation.DataParallelSync
-import LeanMlir.Proofs.Foundation.DataParallelSyncBf16
+import LeanMlir.Proofs.Foundation.DataParallel.Basic
+import LeanMlir.Proofs.Foundation.DataParallel.Node
+import LeanMlir.Proofs.Foundation.DataParallel.Sync
+import LeanMlir.Proofs.Foundation.DataParallel.SyncBf16
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncB
 import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncStepTieB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncStepTieG
 import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB
@@ -121,7 +121,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTieB
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
-import LeanMlir.Proofs.Training.SgdDescentMlp
+import LeanMlir.Proofs.Training.SgdDescent.Mlp
 import LeanMlir.Proofs.Training.Optim.AdamStep
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
@@ -147,33 +147,33 @@ import LeanMlir.Proofs.Nets.Small.Cifar8StepTie
 import LeanMlir.Proofs.Nets.Small.Cifar8BnStepTie
 import LeanMlir.Proofs.Nets.ViT.ViTFold
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
-import LeanMlir.Proofs.Certificates.LipschitzCert
-import LeanMlir.Proofs.Certificates.SmoothingGaussian
-import LeanMlir.Proofs.Certificates.LipschitzCertInstance
-import LeanMlir.Proofs.Training.TrainedMlpWitness
-import LeanMlir.Proofs.Training.TrainedCnnWitness
-import LeanMlir.Proofs.Training.TrainedCnnSeal
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecard
-import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDP
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPUncon
-import LeanMlir.Proofs.Certificates.LipschitzCertFloat
+import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
+import LeanMlir.Proofs.Certificates.Smoothing.Gaussian
+import LeanMlir.Proofs.Certificates.LipschitzCert.Instance
+import LeanMlir.Proofs.Training.Trained.MlpWitness
+import LeanMlir.Proofs.Training.Trained.CnnWitness
+import LeanMlir.Proofs.Training.Trained.CnnSeal
+import LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard
+import LeanMlir.Proofs.Certificates.LipschitzCert.PairSDP
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDP
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDPUncon
+import LeanMlir.Proofs.Certificates.LipschitzCert.Float
 import LeanMlir.Proofs.Foundation.ListDot
 import LeanMlir.Proofs.Certificates.IntervalBound
 import LeanMlir.Proofs.Foundation.IntervalBoundConv
 import LeanMlir.Proofs.Certificates.CrownBound
-import LeanMlir.Proofs.Certificates.SmoothingMC
-import LeanMlir.Proofs.Certificates.SmoothingCP
-import LeanMlir.Proofs.Certificates.SmoothingCPScorecard
-import LeanMlir.Proofs.Certificates.SmoothingPhiBounds
-import LeanMlir.Proofs.Certificates.SmoothingDecScorecard
-import LeanMlir.Proofs.Certificates.SmoothingNetSemantics
-import LeanMlir.Proofs.Certificates.SmoothingNetWitness
+import LeanMlir.Proofs.Certificates.Smoothing.MC
+import LeanMlir.Proofs.Certificates.Smoothing.CP
+import LeanMlir.Proofs.Certificates.Smoothing.CPScorecard
+import LeanMlir.Proofs.Certificates.Smoothing.PhiBounds
+import LeanMlir.Proofs.Certificates.Smoothing.DecScorecard
+import LeanMlir.Proofs.Certificates.Smoothing.NetSemantics
+import LeanMlir.Proofs.Certificates.Smoothing.NetWitness
 import LeanMlir.Proofs.Foundation.UpstreamDraft
 import LeanMlir.Proofs.Float.Binary32Instance
-import LeanMlir.Proofs.Training.TrainedLinearDescent
-import LeanMlir.Proofs.Foundation.MuonGeometry
-import LeanMlir.Proofs.Foundation.MuonNewtonSchulz
+import LeanMlir.Proofs.Training.Trained.LinearDescent
+import LeanMlir.Proofs.Foundation.Muon.Geometry
+import LeanMlir.Proofs.Foundation.Muon.NewtonSchulz
 import LeanMlir.Proofs.SpecVJP
 import LeanMlir.Proofs.Nets.Small.MlpCanonical
 import LeanMlir.Proofs.Foundation.SgdNodes
@@ -794,13 +794,13 @@ open Proofs
 #print axioms max_close
 #print axioms maxPool2_close
 #print axioms maxPoolFlat_close
--- Conv forward rounding budget (SgdDescentCnn.lean, planning §1b-A)
+-- Conv forward rounding budget (SgdDescent/Cnn.lean, planning §1b-A)
 #print axioms sum_w3
 #print axioms conv2d_eq_dense
 #print axioms convPad_close
 #print axioms FloatModel.convF
 #print axioms FloatModel.convF_close
--- Whole-net capstone (SgdDescentCnn.lean, planning §1b-A)
+-- Whole-net capstone (SgdDescent/Cnn.lean, planning §1b-A)
 #print axioms FloatModel.flatConvF
 #print axioms FloatModel.flatConvF_close
 #print axioms FloatModel.mnistCnnNoBnForwardF
@@ -1012,11 +1012,11 @@ open Proofs
 #print axioms convBiasGrad_eq_sum
 #print axioms FloatModel.cnn_convW_step_float_close
 #print axioms FloatModel.cnn_convb_step_float_close
--- Item C — the numeric conv-weight-step capstone (SgdDescentCnn.lean)
+-- Item C — the numeric conv-weight-step capstone (SgdDescent/Cnn.lean)
 #print axioms FloatModel.mnist_cnn_convW_step_float_budget
--- Item C, bias peer (SgdDescentCnn.lean)
+-- Item C, bias peer (SgdDescent/Cnn.lean)
 #print axioms FloatModel.mnist_cnn_convb_step_float_budget
--- CIFAR-8 last-conv SGD descent (SgdDescentCifar.lean)
+-- CIFAR-8 last-conv SGD descent (SgdDescent/Cifar.lean)
 #print axioms Proofs.cifarCnn8Forward_factor
 #print axioms Proofs.cifar8_lastConv_sgd_descends
 #print axioms FloatModel.mlp_float_close
@@ -1056,7 +1056,7 @@ open Proofs
 -- §3b (planning/archive/floatbridge_quantization.md)
 #print axioms QuantPoC.dequant_factors
 #print axioms QuantPoC.e4m3_render_faithful
--- Inexact-gradient descent over ℝ (SgdDescent.lean)
+-- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment
 #print axioms sgd_descent_inexact
@@ -1110,7 +1110,7 @@ open Proofs
 #print axioms mlp_input_loss_gradAt_reluMask
 #print axioms mlp_w0_grad_close
 #print axioms mlp_input_float_sgd_descends
--- The descent program reaches the Chapter-4 CNN (SgdDescentCnn.lean)
+-- The descent program reaches the Chapter-4 CNN (SgdDescent/Cnn.lean)
 #print axioms max4_sub_abs_le
 #print axioms max4_sub_abs_le_sum
 #print axioms flatten_t3Idx
@@ -1133,7 +1133,7 @@ open Proofs
 #print axioms conv2d_kernel_drift
 #print axioms conv2d_kernel_drift_total
 #print axioms conv2d_kernel_drift_sum
--- The conv2-layer rung, assembled (SgdDescentCnn.lean)
+-- The conv2-layer rung, assembled (SgdDescent/Cnn.lean)
 #print axioms ce_head3_input_grad
 #print axioms pool_relu_input_grad
 #print axioms conv2d_weight_pdiv
@@ -1161,7 +1161,7 @@ open Proofs
 #print axioms flatten_k4Idx
 #print axioms k4Idx_surj
 #print axioms cnn_conv2_float_sgd_descends
--- The conv1 rung (SgdDescentCnn.lean)
+-- The conv1 rung (SgdDescent/Cnn.lean)
 #print axioms abs_convTap_expand
 #print axioms convTap_out_l1
 #print axioms conv2d_input_pdiv3
@@ -1193,7 +1193,7 @@ open Proofs
 #print axioms FloatModel.cnnConv1GradBudget
 #print axioms cnn_conv1_grad_close
 #print axioms cnn_conv1_float_sgd_descends
--- The conv BIAS rungs (SgdDescentCnn.lean)
+-- The conv BIAS rungs (SgdDescent/Cnn.lean)
 #print axioms conv2d_bias_sub
 #print axioms conv2d_flat_bias_drift_total
 #print axioms conv2d_flat_bias_drift_sum
@@ -1415,7 +1415,7 @@ open Proofs
 -- Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019)
 #print axioms Proofs.smoothed_margin_certified_radius
 
--- The smoothing radius at the REAL Gaussian quantile (SmoothingGaussian.lean, G1)
+-- The smoothing radius at the REAL Gaussian quantile (Smoothing/Gaussian.lean, G1)
 #print axioms Proofs.smoothing_certified_radius_probit
 #print axioms Proofs.stdNormalCDF_strictMono
 #print axioms Proofs.stdNormalCDF_neg
@@ -1438,12 +1438,12 @@ open Proofs
 #print axioms Proofs.smoothing_probit_lipschitz
 #print axioms Proofs.smoothing_certified_radius_cohen
 #print axioms Proofs.smoothing_certified_radius_classifier
--- ...and the MONTE-CARLO tie (SmoothingMC.lean)
+-- ...and the MONTE-CARLO tie (Smoothing/MC.lean)
 #print axioms Proofs.mc_mean_lower_bound
 #print axioms Proofs.stdNormalQuantile_of_nonpos
 #print axioms Proofs.smoothing_mc_certified
 
--- ...and the EXACT Clopper-Pearson tie (SmoothingCP.lean, 2026-07-12)
+-- ...and the EXACT Clopper-Pearson tie (Smoothing/CP.lean, 2026-07-12)
 #print axioms Proofs.pi_hitCount_eq_binomial
 #print axioms Proofs.pi_hitCount_tail_real
 #print axioms Proofs.binomTail_le_of_lt_cpLower
@@ -1462,12 +1462,12 @@ open Proofs
 #print axioms Proofs.binomTail_eq_kernel
 #print axioms Proofs.binomTail_le_of_kernel_check
 
--- ...and the SCORECARD (SmoothingCPScorecard.lean, generated)
+-- ...and the SCORECARD (Smoothing/CPScorecard.lean, generated)
 #print axioms Proofs.smoothCpMlp_certified
 #print axioms Proofs.smoothCpCnn_certified
 #print axioms Proofs.smoothCpCifar_certified
 
--- ...and certified DECIMAL quantile bounds (SmoothingPhiBounds.lean)
+-- ...and certified DECIMAL quantile bounds (Smoothing/PhiBounds.lean)
 #print axioms Proofs.stdNormalCDF_panel
 #print axioms Proofs.stdNormalCDF_le_phiGridUB
 #print axioms Proofs.le_stdNormalQuantile_of_grid
@@ -1481,7 +1481,7 @@ open Proofs
 #print axioms Proofs.smoothDecCnn_certified
 #print axioms Proofs.smoothDecCifar_certified
 
--- ...and the NET-SEMANTICS closure (SmoothingNetSemantics.lean)
+-- ...and the NET-SEMANTICS closure (Smoothing/NetSemantics.lean)
 #print axioms Proofs.measurable_argmaxNet
 #print axioms Proofs.argmaxNet_smoothProb_mem_Ioo
 #print axioms Proofs.smoothing_cp_certified_net
@@ -1490,7 +1490,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.smoothing_cp_certified_mlpT
 #print axioms Proofs.LipschitzCertDemo.smooth_cp_mlpT_demo
 
--- ...and the two-sided quantile packaging (SmoothingGaussian.lean, 2026-07-12)
+-- ...and the two-sided quantile packaging (Smoothing/Gaussian.lean, 2026-07-12)
 #print axioms Proofs.stdNormalQuantile_strictMonoOn
 #print axioms Proofs.stdNormalQuantile_surjOn
 #print axioms Proofs.stdNormalQuantile_continuousAt
@@ -1504,7 +1504,7 @@ open Proofs
 #print axioms MathlibUpstream.cdf_gaussianReal_neg
 #print axioms MathlibUpstream.cdf_gaussianReal_sub_const
 
--- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCertInstance.lean)
+-- ...and the Tsuzuku certificate INSTANTIATED (LipschitzCert/Instance.lean)
 #print axioms Proofs.LipschitzCertDemo.denseE_lipschitzL2
 #print axioms Proofs.LipschitzCertDemo.reluE_lipschitzL2
 #print axioms Proofs.LipschitzCertDemo.linear_demo_certified
@@ -1542,7 +1542,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.trained_radius_gram2_pos
 #print axioms Proofs.LipschitzCertDemo.trained_demo_certified_gram2
 
--- CERTIFIED-ACCURACY SCORECARD (LipschitzCertScorecard.lean, post_audit_roadmap §1)
+-- CERTIFIED-ACCURACY SCORECARD (LipschitzCert/Scorecard.lean, post_audit_roadmap §1)
 #print axioms Proofs.LipschitzCertDemo.sqrt_two_le_rat
 #print axioms Proofs.LipschitzCertDemo.certified_at_eps
 #print axioms Proofs.LipschitzCertDemo.G1s_eq
@@ -1567,7 +1567,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.unconCerts_certified
 #print axioms Proofs.LipschitzCertDemo.scorecard
 
--- Per-pair LipSDP tightening (LipschitzCertPairSDP.lean + the generated instances)
+-- Per-pair LipSDP tightening (LipschitzCert/PairSDP.lean + the generated instances)
 #print axioms Proofs.LipschitzCertDemo.relu_slope_restricted
 #print axioms Proofs.LipschitzCertDemo.pair_sq_bound
 #print axioms Proofs.LipschitzCertDemo.mlp_gap_eq
@@ -1587,7 +1587,7 @@ open Proofs
 #print axioms Proofs.LipschitzCertDemo.scorecard_sdp
 #print axioms Proofs.LipschitzCertDemo.scorecard_sdp_uncon
 
--- The certificate × float bridge (LipschitzCertFloat.lean, 2026-07 audit gap #1)
+-- The certificate × float bridge (LipschitzCert/Float.lean, 2026-07 audit gap #1)
 #print axioms Proofs.FloatModel.mlp2_float_close_uniform
 #print axioms Proofs.LipschitzCertDemo.certified_at_eps_close
 #print axioms Proofs.LipschitzCertDemo.capped_B_le
@@ -1650,7 +1650,7 @@ open Proofs
 #print axioms Proofs.binary32_e4m3_argmax_small
 #print axioms Proofs.binary32_linear_sgd_descends_concrete
 
--- DESCENT AT TRAINED WEIGHTS (TrainedLinearDescent.lean, post_audit_roadmap §3)
+-- DESCENT AT TRAINED WEIGHTS (Trained/LinearDescent.lean, post_audit_roadmap §3)
 #print axioms Proofs.TrainedLinearDescent.hz_lbl_le
 #print axioms Proofs.TrainedLinearDescent.sm_lbl_le_half
 #print axioms Proofs.TrainedLinearDescent.gradL1_le
@@ -1660,7 +1660,7 @@ open Proofs
 #print axioms Proofs.TrainedLinearDescent.trained_linear_sgd_descends_concrete
 #print axioms Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends
 
--- TRAINED-WEIGHT whole-net VJP witness (TrainedMlpWitness.lean)
+-- TRAINED-WEIGHT whole-net VJP witness (Trained/MlpWitness.lean)
 #print axioms Proofs.TrainedMlp.preact_eq
 #print axioms Proofs.TrainedMlp.preact_ne
 #print axioms Proofs.TrainedMlp.trainedMlpHasVJP_correct
@@ -1670,7 +1670,7 @@ open Proofs
 #print axioms Proofs.TrainedMlp.trainedMlp_jacobian_nonzero
 #print axioms Proofs.TrainedMlp.trainedMlp_not_constant
 
--- TRAINED-WEIGHT whole-net VJP witness, CNN rung (TrainedCnnWitness.lean, post_audit gap #3)
+-- TRAINED-WEIGHT whole-net VJP witness, CNN rung (Trained/CnnWitness.lean, post_audit gap #3)
 #print axioms Proofs.TrainedCnn.conv1_eq
 #print axioms Proofs.TrainedCnn.conv2_eq
 #print axioms Proofs.TrainedCnn.r2_smooth
@@ -1679,7 +1679,7 @@ open Proofs
 #print axioms Proofs.TrainedCnn.d4_ne
 #print axioms Proofs.TrainedCnn.trainedCnnHasVJP_correct
 
--- Level-3 seal for the CNN witness (TrainedCnnSeal.lean)
+-- Level-3 seal for the CNN witness (Trained/CnnSeal.lean)
 #print axioms Proofs.TrainedCnn.S2
 #print axioms Proofs.TrainedCnn.S1
 #print axioms Proofs.TrainedCnn.pdiv_fwd_entry
@@ -1978,7 +1978,7 @@ open Proofs
 #print axioms Proofs.ViTTiePoCGB.vit_embed_tiedGB
 #print axioms Proofs.ViTTiePoCGB.vit_net_tiedGB
 
--- 4d PIECE 1: DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel.lean, 2026-09-06)
+-- 4d PIECE 1: DATA PARALLELISM -- WHAT FUNCTION A *dp* RUN MINIMISED (DataParallel/Basic.lean, 2026-09-06)
 #print axioms Proofs.pdiv_const_smul
 #print axioms Proofs.meanLoss_differentiableAt
 #print axioms Proofs.lossGrad_meanLoss
@@ -1995,7 +1995,7 @@ open Proofs
 #print axioms Proofs.dpSingleStep_eq_meanLoss_step
 #print axioms Proofs.dpIterate_eq_meanLossTrain
 
--- 4d PIECE 2: THE COLLECTIVE AS AN AST NODE (StableHLO.allReduceMeanF, DataParallelNode.lean, 2026-09-07)
+-- 4d PIECE 2: THE COLLECTIVE AS AN AST NODE (StableHLO.allReduceMeanF, DataParallel/Node.lean, 2026-09-07)
 #print axioms Proofs.StableHLO.den_allReduceMeanF
 #print axioms Proofs.den_allReduceMeanF_eq_dpMean
 #print axioms Proofs.skel_allReduceMeanF_of_spmd
@@ -2004,7 +2004,7 @@ open Proofs
 #print axioms Proofs.adamW_at_allReduceMeanF
 
 -- 4d PIECE 3: SYNCHRONISED BATCHNORM -- THE DP STEP IS THE GLOBAL-BATCH STEP
--- (DataParallel.lean §sync + DataParallelSync.lean, planning/global_bn_verified.md §3.1b, 2026-09-21)
+-- (DataParallel/Basic.lean §sync + DataParallel/Sync.lean, planning/global_bn_verified.md §3.1b, 2026-09-21)
 -- P4 at the ℝ level: the positive twin of dpMeanGrad_ne_globalBatchGrad
 #print axioms Proofs.dpMean_shardSum
 #print axioms Proofs.dpSyncGrad_eq_globalBatchGrad
@@ -2031,7 +2031,7 @@ open Proofs
 #print axioms Proofs.HasVJP.backward_smul
 
 -- 4d PIECE 3 AT bf16: EVERY NODE SHARDS EXACTLY BUT THE CONV WEIGHT GRADIENT
--- (DataParallelSyncBf16.lean, planning/global_bn_verified.md §3.6, 2026-09-21)
+-- (DataParallel/SyncBf16.lean, planning/global_bn_verified.md §3.6, 2026-09-21)
 -- forward convs and input-VJPs: replica r's node is shard r of the same node at batch R·N
 #print axioms Proofs.den_batchOp_shard_node
 #print axioms Proofs.den_convBf16_shard

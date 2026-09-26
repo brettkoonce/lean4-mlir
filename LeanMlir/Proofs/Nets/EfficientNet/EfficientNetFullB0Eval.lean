@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
+import LeanMlir.Proofs.Codegen.EfficientNetRender.PCEval
 
 /-! # The full EfficientNet-B0 at inference — all 16 MBConv blocks, eval forward + graph +
 faithfulness
@@ -9,7 +9,7 @@ the same ladder at INFERENCE BatchNorm — frozen running statistics at all **49
 `ε`, as the shipped `efficientnet_fwd_eval` does — and proves its typed `SHlo` graph denotes
 it: the graph of `efficientnet_fwd_eval.mlir` and its 1000-class twin.
 
-Pure enumeration and chaining of `EfficientNetRenderPCEval.lean`'s per-block machinery, at the
+Pure enumeration and chaining of `EfficientNetRender.PCEval`'s per-block machinery, at the
 batched index `N·(c·h·w)` and generic in the class count. The one block shape added here is
 the fourth at inference — `mbExpFwdBEval` / `mbExpGraphBEval`: expand, stride 1, no residual
 (`ic ≠ oc`; the stage-5 and stage-7 first blocks `b9`/`b16`) — the eval twin of
@@ -26,7 +26,7 @@ the render folds away; it names the statistic slots `%smu`/`%svar`, `%b{k}{e,d,p
 `%hnmu`/`%hnvar`; it names the SE denses `zWa/zba/zWb/zbb` where the artifact has
 `zW1/zb1/zW2/zb2`; and its classifier is `%Wfc`/`%bfc` where the artifact's is `%Wd`/`%bd`. The
 `den`-level statement is what the number needs; matching the text is a separate, cosmetic pass
-over `EfficientNetRenderPCEval.lean`.
+over `EfficientNetRender.PCEval`.
 
 B0 stage spec `[t,c,n,s,k]`: s1 (1,16,1,1,3) s2 (6,24,2,2,3) s3 (6,40,2,2,5) s4 (6,80,3,2,3)
 s5 (6,112,3,1,5) s6 (6,192,4,2,5) s7 (6,320,1,1,3); stem 3×3/s2 (3→32) at the XLA-`SAME` phase,

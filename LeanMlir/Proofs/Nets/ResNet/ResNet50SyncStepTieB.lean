@@ -37,7 +37,7 @@ its hypothesis, and two corollaries discharge it, one per loss:
    the strided block bn₁ runs at the INPUT grid `2h × 2w` (v1.5: the stride is on the 3×3), so that
    site's statistics reduce over `N·(2h)·(2w)` per replica.
 2. **The collectives** — the mean over replicas of each replica's gradient node is `1/R` of the
-   global node at the global cotangent (`DataParallelSync`'s P4 lemmas and ResNet-34's strided and
+   global node at the global cotangent (`DataParallel.Sync`'s P4 lemmas and ResNet-34's strided and
    dense ones). The γ node is the sync one, `bnSyncGammaGradB`, reading the forward's all-reduced
    statistics.
 3. **Homogeneity** — the single-device chain is linear in its cotangent (`*_smul` below for the

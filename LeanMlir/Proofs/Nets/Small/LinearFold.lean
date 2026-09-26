@@ -6,7 +6,7 @@ import LeanMlir.Proofs.Codegen.ChapterGraphs
 `MainMnistLinearVerified`
 trains on `verified_mlir/linear_train_step.mlir`, which is written by
 `Proofs.StableHLO.linTrainStepFaithfulV` (the `#eval` writer at the end of
-`StableHLO.lean`). This file certifies *that* renderer for a single example `x`: the emitted
+`StableHLO.Basic`). This file certifies *that* renderer for a single example `x`: the emitted
 weight output denotes `W − lr·∂(crossEntropy ∘ dense)/∂W` (Mathlib-`fderiv`-derived) and the bias
 output denotes `b − lr·(certified ∂dense/∂b · (softmax − onehot))`. The committed module
 batch-contracts over `B` examples, which this file does not state.

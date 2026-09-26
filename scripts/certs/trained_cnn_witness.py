@@ -1,6 +1,6 @@
 """Trained-weight whole-net VJP witness, CNN rung (post-audit gap #3).
 
-Emits LeanMlir/Proofs/Training/TrainedCnnWitness.lean: the Chapter-3 mnistCnnNoBn
+Emits LeanMlir/Proofs/Training/Trained/CnnWitness.lean: the Chapter-3 mnistCnnNoBn
 conditional whole-network VJP (`mnistCnnNoBnHasVJPAt`) instantiated at
 TRAINED, /128-rationalized weights and a REAL test input, with every
 smoothness hypothesis discharged from exact rational arithmetic:
@@ -31,7 +31,7 @@ from fractions import Fraction
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.insert(0, os.path.join(ROOT, "scripts", "lib"))
 from _mnist_io import mnist  # noqa: E402
-OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/TrainedCnnWitness.lean")
+OUT = os.path.join(ROOT, "LeanMlir/Proofs/Training/Trained/CnnWitness.lean")
 DEN_W = 128          # weight rationalization grid
 DEN_X = 4080         # 16 * 255 exact pooled-pixel denominator
 C = 2                # conv channels
@@ -414,7 +414,7 @@ hdr = f'''import LeanMlir.Proofs.Nets.Small.MnistCNN
 
 /-! # Trained-weight whole-network VJP witness — CNN rung
 
-The `TrainedMlpWitness` program extended to a CONVOLUTIONAL net: the
+The `Trained/MlpWitness` program extended to a CONVOLUTIONAL net: the
 Chapter-3 `mnistCnnNoBn` conditional whole-net VJP
 (`mnistCnnNoBnHasVJPAt`) instantiated at TRAINED, /128-rationalized
 weights and a REAL test input, with every smoothness hypothesis discharged
@@ -683,7 +683,7 @@ end Proofs
 '''
 
 # `trained_cnn_seal.py` execs this file for its tables and sets WITNESS_NO_WRITE, so that running
-# the seal generator does not also rewrite TrainedCnnWitness.lean.
+# the seal generator does not also rewrite Trained/CnnWitness.lean.
 if not globals().get("WITNESS_NO_WRITE", False):
     with open(OUT, "w") as f:
         f.write(hdr + mid1 + mid2 + mid3 + mid4 + mid5 + mid6)

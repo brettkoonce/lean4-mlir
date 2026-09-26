@@ -1,6 +1,6 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
-import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
+import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 import LeanMlir.Proofs.Codegen.ConvNeXtRenderB
 import LeanMlir.Proofs.Codegen.ViTRenderB
 
@@ -241,7 +241,7 @@ coordinates, at values spanning 0, 1 and the real 1/keep ramp"
 -- ════════════════════════════════════════════════════════════════
 
 /-! The renderer splices the drop op onto the residual branch, *before* the skip add
-(`EfficientNetRender.eFwd`), which is where the reference puts it:
+(`EfficientNetRender.Basic.eFwd`), which is where the reference puts it:
 
     correct      block_out = s ⊙ branch + x
     misplaced    block_out = s ⊙ (branch + x)
@@ -278,7 +278,7 @@ private def uniform (bs : Nat) (v : Float) : Array Float := Array.replicate bs v
     `_eval` peer), and every one of them is read from the renderer or the spec rather than restated.
 
     ⚠ **A green EfficientNet run does not license ConvNeXt.** The two place their sites in different
-    renderers (`EfficientNetRender.eFwd` at the per-example index, `ConvNeXtRenderB.fwdBlockB` at the
+    renderers (`EfficientNetRender.Basic.eFwd` at the per-example index, `ConvNeXtRenderB.fwdBlockB` at the
     batched one) and around different residual algebra — enet's branch is a project-BN, ConvNeXt's is
     a LayerScale. That is the `rms-tie` ε-placement lesson one knob over: the same edit on two
     renderers has already behaved differently once (§0.4 finding 5). -/

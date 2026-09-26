@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
-import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
 /-! # FwdGraphTextTies — the rendered forward blocks are `pretty` of the typed block graphs

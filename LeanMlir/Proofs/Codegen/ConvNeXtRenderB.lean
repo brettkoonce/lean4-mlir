@@ -1177,7 +1177,7 @@ end Proofs.StableHLO
 -- `ConvNeXtRenderB.lean`, because the `drop` variants are batched-only — the per-example render
 -- cannot express a per-EXAMPLE mask at all (that is the whole reason that file exists).
 --
--- ⚠⚠ IT IS LOAD-BEARING AND IT IS EASY TO OMIT. `VerifiedTrain` resolves the eval forward as
+-- ⚠⚠ IT IS LOAD-BEARING AND IT IS EASY TO OMIT. `Verified.Train` resolves the eval forward as
 -- `<slug>_<variant>_fwd.mlir` if present else **`<slug>_fwd.mlir`**, BY NAME — so a net whose only
 -- forward is `convnextsin_drop_fwd.mlir` trains fine and then dies at the first eval on a missing
 -- file. That is ViT-S trap 2 (`vit_convnext_sb_scaleup.md` §Traps), which no build-time check

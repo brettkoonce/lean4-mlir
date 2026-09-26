@@ -29,7 +29,7 @@ The batch size is never pinned (the 224-px resolution and the 64…512 widths ar
 **The all-reduce.** In `resnet34in_momdp64` each `*GradB` node
 feeds `allReduceMeanF` — the collective as an AST node whose `den` is the replica MEAN of the
 per-replica gradient nodes. Every statement below is at the PER-REPLICA gradient node;
-`DataParallelNode.lean` composes it with the mean and the tail. For the sync-BN data-parallel
+`DataParallel.Node` composes it with the mean and the tail. For the sync-BN data-parallel
 render `ResNet34SyncStepTieB.lean` is the whole step: its `r34_net_syncTiedB` says
 each all-reduced gradient IS this file's node at `N := R·N`.
 

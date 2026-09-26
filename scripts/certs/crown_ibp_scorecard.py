@@ -1,7 +1,7 @@
 """CROWN-IBP L-infinity scorecard for the full-input nets (planning/archive/crown_ibp.md phase 2).
 
-Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardCrown.lean (capped
-sigma<=2 net) and LipschitzCertScorecardCrownUncon.lean: per-image pixel-L-infinity
+Produces LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardCrown.lean (capped
+sigma<=2 net) and LipschitzCert/ScorecardCrownUncon.lean: per-image pixel-L-infinity
 certificates on the SAME first-100 MNIST test subset, same nets and same eps grid
 {1,2,4,8}/255 as the IBP tier -- so the result is a NEW COLUMN in the existing
 table, directly comparable, not a new experiment.
@@ -39,7 +39,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from _mnist_io import mnist  # noqa: E402
 OUTDIR = ROOT / "LeanMlir" / "Proofs" / "Certificates"
-NETS = OUTDIR / "LipschitzCertScorecardFullNets.lean"
+NETS = OUTDIR / "LipschitzCert/ScorecardFullNets.lean"
 
 H, K, DIM, DEN, PIX, N_IMG = 16, 10, 784, 256, 255, 100
 EPS_GRID = [(1, "e1"), (2, "e2"), (4, "e4"), (8, "e8")]
@@ -92,7 +92,7 @@ def available_images(tag):
     about which witnesses are exhibited; the MEASURED counts run over all 100
     images regardless and are unaffected."""
     avail = set()
-    for f in ("LipschitzCertScorecardFullImgsA", "LipschitzCertScorecardFullImgsB"):
+    for f in ("LipschitzCert/ScorecardFullImgsA", "LipschitzCert/ScorecardFullImgsB"):
         src = (OUTDIR / f"{f}.lean").read_text()
         avail |= {int(m) for m in re.findall(rf"theorem hpre{tag}(\d+)_eval", src)}
     return avail
@@ -452,9 +452,9 @@ if __name__ == "__main__":
            "TF": {"e1": 87, "e2": 42, "e4": 2, "e8": 0}}
     PGD = {"SF": {"e1": 93, "e2": 93, "e4": 92, "e8": 88},
            "TF": {"e1": 95, "e2": 92, "e4": 85, "e8": 36}}
-    emit("SF", *nets["SF"], Xraw, yte, OUTDIR / "LipschitzCertScorecardCrown.lean",
+    emit("SF", *nets["SF"], Xraw, yte, OUTDIR / "LipschitzCert/ScorecardCrown.lean",
          IBP["SF"], PGD["SF"], "spectrally-capped σ≤2 net (`mlpSF`)",
-         "LipschitzCertScorecardIBPData")
-    emit("TF", *nets["TF"], Xraw, yte, OUTDIR / "LipschitzCertScorecardCrownUncon.lean",
+         "LipschitzCert.ScorecardIBPData")
+    emit("TF", *nets["TF"], Xraw, yte, OUTDIR / "LipschitzCert/ScorecardCrownUncon.lean",
          IBP["TF"], PGD["TF"], "unconstrained net (`mlpTF`)",
-         "LipschitzCertScorecardIBPData")
+         "LipschitzCert.ScorecardIBPData")

@@ -1,6 +1,6 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
-import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
+import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 
 /-! # Classifier dropout — the two gates its own identity checks cannot make
 

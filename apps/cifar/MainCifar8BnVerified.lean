@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `cifar8-bn-verified` — train the deeper 8-conv CIFAR-10 CNN **with BatchNorm**
 
@@ -12,7 +12,7 @@ stats). Trains on `verified_mlir/cifar8_bn_train_step.mlir`
 (`Proofs.StableHLO.cifar8BnTrainStepFaithfulV`); the whole-network VJP is
 `Proofs.cifarCnnBn8HasVJPAt` (folds `convBnReluPCHasVJPAt`) — audited 3-axiom-clean.
 
-The model is the `cifar8BnVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNetsCore`); trains
+The model is the `cifar8BnVerified` `VerifiedNetSpec` (in `LeanMlir.Verified.NetsCore`); trains
 through `VerifiedNet.train` (He-init for conv/dense, γ=1/β=0 `[c]` for BN).
 
 

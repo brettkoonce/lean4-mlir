@@ -35,7 +35,8 @@ measured on that tree.
 | 94c16b30 | Batch A: §2.1 and §2.2 as tabled, §2.3 on the leaf files (113 imports, 68 files). Deviations below |
 | 204f6a5f | Batch B: §3.1–3.6 and two of the three re-derived statements. Deviations below |
 | 57630c41 | Batch C: §4 except `mnv2RmsHyper`. Deviations below |
-| (staged) | Batch D: §5.1 and §5.2. Notes below |
+| 8915cc61 | Batch D: §5.1 and §5.2. Notes below |
+| (staged) | Batch E: §6 rows 1–11 (not the optional three). Notes below |
 
 Batch A deviations:
 
@@ -123,6 +124,42 @@ Batch D notes:
   `jax/MainMobilenetV4.lean`'s note.
 * §5.2: `Blackjack` and `Pong` `open FloatFmt`; the four demos `open FloatFmt` after their module
   docstrings.
+
+Batch E notes:
+
+* 71 modules moved (`git mv`, no renames of declarations). A file that was the group's own name
+  became `Basic` (`StableHLO/Basic`, `LipschitzCert/Basic`, …).
+* References rewritten mechanically in three forms — dotted module names, paths (full, relative,
+  GitHub blob and doc-gen4 `.html`) and bare filenames — 962 lines in 346 files: Lean imports,
+  lakefile roots, `tests/AuditAxioms*.lean`, the comparator tier and its generator, `regen_verified_mlir.sh`,
+  CI filters and steps, `formalization.yaml`, `verified_mlir/MANIFEST.md`, the name-lint baseline,
+  the generated jax shims and `gen_shims.sh`, job configs, READMEs and prose. By hand: the
+  generators' templated paths (`smooth_dec_scorecard_gen.py`'s chunks, `lipschitz_cert_scorecard_full.py`'s
+  parts, `ibp_conv_scorecard.py`'s image parts, `crown_ibp_scorecard.py`'s data import), the
+  `certs-heavy.yml` globs, the README layout tables, and backticked short module names (dotted
+  `Group.Rest` in Lean so `docstring-checkrefs` resolves them, `Group/Rest` in markdown). The
+  three short names that are also namespaces (`TrainedLinearDescent`, `MuonGeometry`,
+  `MuonNewtonSchulz`) are left as written.
+* Not rewritten, on purpose: the emitted comment in `ResNet34RenderB` / `ResNet50RenderB` that
+  names `LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean`. It is inside six committed
+  `verified_mlir/` bf16 artifacts, and a directory move should not change artifact bytes; point
+  it at `DataParallel/SyncBf16.lean` with the next deliberate regeneration of those renders.
+* The generators that CI re-runs (`lipschitz_cert_float`, `smooth_scorecard_gen`,
+  `smooth_dec_scorecard_gen`) reproduce their moved files byte for byte (`--check`).
+* Stale `.olean`/`.ilean` build outputs of every old module name (and of the modules Batches B/D
+  deleted) were removed before the gate, so a missed import cannot resolve locally.
+* In Lean files, a bare filename that became a `Group/Rest.lean` path is written as the dotted
+  module suffix (`StableHLO.Basic`, `DataParallel.Node`): a backticked `dir/File.lean` is a dead
+  doc-gen4 link (`docstring-checkrefs` flags it), while the dotted suffix resolves as a module
+  citation. Three citations whose last component moved were updated
+  (`EfficientNetRender` → `EfficientNetRender.Basic`, `EfficientNetRender.Basic.eFwd`,
+  `DataParallel.Sync.den_bnSyncBack_allReduce`).
+* `scripts/gates/check_render_coverage.py` scanned `Codegen/*.lean` one level deep, so after the
+  move it silently dropped the EfficientNet writers (238/252 → 202/216 diffed). It now recurses and
+  keys writers by their path under `Codegen/`; back to 238/252.
+* Not run: `scripts/gen_shims.sh`, which rewrites the live `jax/.lake/build/*_shim.py` the trainers
+  read; the committed shims and the `Jax/Codegen.lean` template carry the same one-line comment
+  change and `shim_wiring_gate.py` passes.
 
 ## 2. Batch A — leaf imports (cheap, no root file)
 

@@ -1,13 +1,13 @@
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFull
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFull
 -- (LipschitzCertScorecardSDPFull{,Uncon} imports DISABLED with their lib
 -- membership — the linarith PSD witnesses OOM the free-tier runners; see
 -- planning/archive/certs_heavy_psd_memory.md. Their prints below are commented out
 -- with them; re-enable both together.)
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBP
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPUncon
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardCrown
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardCrownUncon
-import LeanMlir.Proofs.Certificates.IbpConvScorecard
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBP
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPUncon
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardCrown
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardCrownUncon
+import LeanMlir.Proofs.Certificates.IbpConvScorecard.Basic
 
 /-! # Axiom audit — the HEAVY generated certificate corpus (`CertsHeavy`)
 
@@ -21,7 +21,7 @@ exactly `[propext, Classical.choice, Quot.sound]`. The hand-written engine
 cores (ListDot.lean, IntervalBound.lean) stay in `Certs` and are audited by
 the MAIN audit. -/
 
--- FULL-INPUT scorecard (2026-07 audit gap #3, LipschitzCertScorecardFull*.lean): the
+-- FULL-INPUT scorecard (2026-07 audit gap #3, LipschitzCert/ScorecardFull*.lean): the
 -- pooled 49-dim reduction lifted to the genuine 784-dim input (exact k/255 pixels),
 -- per-image certificates at pixel-L2 ε = 1/10 AND 3/10 on two 784→16→10 nets —
 -- capped σ≤2: 92/100 @0.1 (PGD bracket 93 — within ONE image of the attack bound) +
@@ -153,7 +153,7 @@ the MAIN audit. -/
 #print axioms Proofs.LipschitzCertDemo.scorecard_ibp
 #print axioms Proofs.LipschitzCertDemo.scorecard_ibp_uncon
 
--- CONVOLUTIONAL IBP instance (Certificates/IbpConvScorecard.lean, engine
+-- CONVOLUTIONAL IBP instance (Certificates/IbpConvScorecard/Basic.lean, engine
 -- Proofs.Foundation.IntervalBoundConv): the first certificate in the repo covering a
 -- convolution, a max-pool, and more than two layers — `conv2d(1→4, 3×3 SAME) → reluT
 -- → maxPool2 → denseT(64→10)` at trained k/256 weights, on 8×8 4×4-pooled MNIST,

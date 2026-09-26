@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.ViTRender
 import LeanMlir.GradcheckHelpers
 import LeanMlir.Types

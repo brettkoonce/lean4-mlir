@@ -1,14 +1,14 @@
 import LeanMlir.Proofs.Architectures.BatchNorm
-import LeanMlir.Proofs.Certificates.LipschitzCert
-import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDP
-import LeanMlir.Proofs.Certificates.SmoothingGaussian
+import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
+import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDP
+import LeanMlir.Proofs.Certificates.Smoothing.Gaussian
 import LeanMlir.Proofs.Float.FloatBridge
 import LeanMlir.Proofs.Float.MlpFloatBridge
-import LeanMlir.Proofs.Foundation.DataParallel
-import LeanMlir.Proofs.Foundation.DataParallelNode
-import LeanMlir.Proofs.Foundation.DataParallelSync
-import LeanMlir.Proofs.Foundation.DataParallelSyncBf16
-import LeanMlir.Proofs.Foundation.MuonGeometry
+import LeanMlir.Proofs.Foundation.DataParallel.Basic
+import LeanMlir.Proofs.Foundation.DataParallel.Node
+import LeanMlir.Proofs.Foundation.DataParallel.Sync
+import LeanMlir.Proofs.Foundation.DataParallel.SyncBf16
+import LeanMlir.Proofs.Foundation.Muon.Geometry
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTieGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTieB
@@ -32,7 +32,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet50SyncStepTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncStepTieB
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
-import LeanMlir.Proofs.Training.TrainedLinearDescent
+import LeanMlir.Proofs.Training.Trained.LinearDescent
 
 universe u_1
 

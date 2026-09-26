@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Foundation.GradNodesB
 /-! # The full-16 (262-param) EfficientNet-B0 train step, proof-tied (the fold, den)
 
 The fold for the batched 262-param EfficientNet-B0
-train step `efficientnetTrainStepFaithfulV` (`EfficientNetRender.lean`). Every emitted param-SGD op
+train step `efficientnetTrainStepFaithfulV` (`EfficientNetRender.Basic`). Every emitted param-SGD op
 `den`otes the certified loss-descent step — `θ − lr·(certified Jacobian · cotangent)`.
 
 **The batched wrinkle vs mnv2.** EfficientNet trains at the batched index `N·(c·h·w)` with the
@@ -14,7 +14,7 @@ inside `Σ_n`" — the **batch-sum bridge**. For the linear families (conv/dense
 `Finset.sum_congr` of the per-example `.correct`; for BN γ/β the `den` already folds `N` into the
 per-channel reduction count `m = N·(h·w)`, so it is the cert's exact LHS (delegation).
 
-Each fused op is `θ − lr·` its un-fused gradient node by `rfl` (`StableHLO.lean`'s `*SgdB_eq_grad`),
+Each fused op is `θ − lr·` its un-fused gradient node by `rfl` (`StableHLO.Basic`'s `*SgdB_eq_grad`),
 so every lemma here is the un-fused fold — `ResNet34PoCB` (conv, dense weight, BN) or `EnetPoCG`
 (the XLA-`SAME` stem, depthwise, the rectangular dense bias) — under that wrapper. -/
 
@@ -44,7 +44,7 @@ theorem convWB_den {N ic oc h w kH kW : Nat}
 
 /-- **Batched strided-stem 3×3 conv weight op denotes the certified Σ_n batched weight gradient.**
     `Σ_n` of `flatConvStride2XlaWeightGradHasVJP.correct`. The op is the XLA-`SAME`
-    `convStridedXlaWeightSgdB` the render emits at the stem (`EfficientNetRender.lean`), whose
+    `convStridedXlaWeightSgdB` the render emits at the stem (`EfficientNetRender.Basic`), whose
     weight-grad correlation pad is shifted one position; its `den` is the odd-phase weight VJP,
     so the certified gradient here is the gradient of the net that ships. -/
 theorem convStridedWB_den {N ic oc h w kH kW : Nat}

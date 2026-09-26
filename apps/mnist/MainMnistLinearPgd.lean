@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedAttack
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Attack
 
 /-! # `mnist-linear-pgd` — phase-3 PGD adversarial attack on the verified linear net
 

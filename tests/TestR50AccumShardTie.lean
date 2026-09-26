@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 import LeanMlir.Proofs.Codegen.ResNet50RenderB
 
 /-! # Accumulation over DIFFERENT micro-batches — the identity `r50-accum-tie` is blind to
@@ -84,7 +84,7 @@ private def cmpRegion (a b : ByteArray) (off n : Nat) : Float × Float × Nat :=
 
 def main : IO Unit := do
   -- ▶ Resolution selects the NET (slug + `d0`); the 160 artifacts are their own family. Parameter
-  -- layout is identical by construction (`VerifiedNetsCore.lean` `#guard`s `toSpecs` equal), so only
+  -- layout is identical by construction (`Verified.NetsCore` `#guard`s `toSpecs` equal), so only
   -- the input width moves.
   let net ← match (← IO.getEnv "R50_ACC_RES").getD "224" with
     | "224" => pure resnet50ImagenetVerified.toNet

@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `mnist-linear-verified` — train MNIST on the VERIFIED-rendered codegen
 
@@ -8,7 +8,7 @@ renderer** emits — `verified_mlir/linear_train_step.mlir`, which is
 `Proofs.StableHLO.linTrainStepFaithfulV` = `pretty` of proven `SHlo` nodes
 throughout, the text whose denotation is machine-proven equal to the Mathlib
 `fderiv` math
-(`LeanMlir/Proofs/Codegen/StableHLO.lean`, audited 3-axiom-clean). The forward,
+(`LeanMlir/Proofs/Codegen/StableHLO/Basic.lean`, audited 3-axiom-clean). The forward,
 softmax-CE cotangent, parameter gradients, and SGD update are all the
 proof-backed ops.
 
@@ -22,7 +22,7 @@ not a different program, which is exactly what the G2 gate asserts.
 The model is expressed as a `VerifiedNetSpec` (a single dense layer) — the same
 readable layer list whose **math VJP is proven** in
 `LeanMlir/Proofs/SpecVJP.lean` (`linearVerifiedHasVJP`). The spec
-itself lives in `LeanMlir.VerifiedNetsCore` rather than here, deliberately: the
+itself lives in `LeanMlir.Verified.NetsCore` rather than here, deliberately: the
 trainer and the theorem must name the *same* object, or the proof would be about
 a different network than the one that runs.
 
@@ -32,7 +32,7 @@ zero-init) rather than the packed-params `mlpTrainStepV` the shared
 `VerifiedNet.train` driver expects. Every dimension is read from the spec.
 
 Regenerate the `verified_mlir/*.mlir` with
-`lake env lean LeanMlir/Proofs/Codegen/StableHLO.lean`.
+`lake env lean LeanMlir/Proofs/Codegen/StableHLO/Basic.lean`.
 
 Run:
 ```

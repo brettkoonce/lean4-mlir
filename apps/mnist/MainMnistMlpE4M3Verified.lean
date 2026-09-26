@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `mnist-mlp-e4m3-verified` — fp8 (E4M3) MLP training on the VERIFIED codegen
 

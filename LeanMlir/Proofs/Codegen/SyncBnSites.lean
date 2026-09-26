@@ -1,12 +1,12 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
 /-! # The three BatchNorm emit sites every batch-BN renderer shares — batch BN or SYNCHRONISED BN
 
 Used by `ResNet34RenderB`, `ResNet50RenderB` (through `ResNet34RenderB`), `MobileNetV2RenderB`,
-`MobileNetV4RenderB` and `EfficientNetRender`, so every batch-BN renderer emits the same sync-BN
+`MobileNetV4RenderB` and `EfficientNetRender.Basic`, so every batch-BN renderer emits the same sync-BN
 composition. Each
 site is one BatchNorm node at `replicas ≤ 1` and at `replicas > 1` the sync-BN subgraph whose `den`
-[`Foundation/DataParallelSync.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallelSync.lean) states
+[`Foundation/DataParallel/Sync.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallel/Sync.lean) states
 (the forward's two collectives, the backward's one, the γ gradient reading the forward's
 statistics).
 

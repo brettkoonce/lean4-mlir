@@ -1,7 +1,7 @@
 """Per-pair LipSDP pass for the FULL-INPUT (784-dim) scorecard.
 
-Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDPFull.lean (capped sigma<=2
-net) and LipschitzCertScorecardSDPFullUncon.lean: for each ordered class pair
+Produces LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDPFull.lean (capped sigma<=2
+net) and LipschitzCert/ScorecardSDPFullUncon.lean: for each ordered class pair
 needed by a certified image, a LipSDP-Neuron certificate (Fazlyab 2019, one
 hidden layer)
 
@@ -16,7 +16,7 @@ fractions hurt 512 separate norm_num goals far more than one linarith
 goal.) Everything pair-level is 16x16 (Schur:
 the input dimension never appears); the 784-dim ingredients (G1*_eq Gram
 wrappers, per-image hpre evals) are REUSED from the committed full-input
-scorecard (LipschitzCertScorecardFull*.lean, kernel dotZ engine).
+scorecard (LipschitzCert/ScorecardFull*.lean, kernel dotZ engine).
 
 Certification per image at eps in {1/10, 3/10}: for every j != y,
 Lp_{y,j} * eps <= logit_y - logit_j (exact rationals).
@@ -186,16 +186,16 @@ def emit_net(tag, W1q, W2q, out_path):
     L = []
     A = L.append
     if tag == "SF":
-        A("import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP")
-        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
-        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
+        A("import LeanMlir.Proofs.Certificates.LipschitzCert.PairSDP")
+        A("import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFullImgsA")
+        A("import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFullImgsB")
     else:
         # the capped base no longer carries every image, so each net emits its
         # own fallback data; chain the second file onto the first so a shared
         # image is DEFINED once (otherwise both files declare e.g. `imgF10` and
         # importing both into one environment is a name clash). The chained file
         # already imports the three above.
-        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDPFull")
+        A("import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardSDPFull")
     A("")
     netdesc = ("spectrally-capped σ≤2 net (`mlpSF`)" if tag == "SF"
                else "unconstrained net (`mlpTF`)")
@@ -204,7 +204,7 @@ def emit_net(tag, W1q, W2q, out_path):
     A(f"/-! # Per-pair LipSDP scorecard, FULL 784-dim input — {netdesc}")
     A("")
     A(f"A tighter Lipschitz constant over the SAME first-{N_IMG} MNIST test")
-    A(f"subset as `LipschitzCertScorecardFull.lean`, at BOTH ε = 1/10 and 3/10:")
+    A(f"subset as `LipschitzCert.ScorecardFull`, at BOTH ε = 1/10 and 3/10:")
     A(f"per-pair LipSDP constants lift the counts from **{b10}→{measured10}/{N_IMG} @ ε=0.1**")
     A(f"(PGD bracket {p10}) and **{b30}→{measured30}/{N_IMG} @ ε=0.3** (PGD {p30}) — no")
     A("retraining, no new data, a less lossy constant per pairwise logit gap.")
@@ -218,7 +218,7 @@ def emit_net(tag, W1q, W2q, out_path):
     A("")
     sname = "scorecard_sdp_full" + ("" if tag == "SF" else "_uncon")
     A("**Theorem vs. measurement — read this before quoting a number.** The")
-    A("soundness of a LipSDP certificate lives in the ENGINE (`LipschitzCertPairSDP`:")
+    A("soundness of a LipSDP certificate lives in the ENGINE (`LipschitzCert/PairSDP`:")
     A("`pair_sq_bound`, `certified_at_eps_pair`), proved once — kernel-checking the")
     A("57th image buys nothing the 56th didn\'t. So the counts above are exact-")
     A(f"rational MEASUREMENTS over the first {N_IMG} images, while the first {N_EMIT}")
@@ -393,5 +393,5 @@ def emit_net(tag, W1q, W2q, out_path):
     print(f"[{tag}] wrote {out_path}: {len(L)} lines")
     return cert10, cert30
 
-c10, c30 = emit_net("SF", *base.nets["SF"], OUTDIR / "LipschitzCertScorecardSDPFull.lean")
-u10, u30 = emit_net("TF", *base.nets["TF"], OUTDIR / "LipschitzCertScorecardSDPFullUncon.lean")
+c10, c30 = emit_net("SF", *base.nets["SF"], OUTDIR / "LipschitzCert/ScorecardSDPFull.lean")
+u10, u30 = emit_net("TF", *base.nets["TF"], OUTDIR / "LipschitzCert/ScorecardSDPFullUncon.lean")

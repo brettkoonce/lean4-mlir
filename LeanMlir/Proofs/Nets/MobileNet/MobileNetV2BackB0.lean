@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.BatchedStageLayers
+import LeanMlir.Proofs.Foundation.Batched.StageLayers
 
 /-! # Backward-graph faithfulness for the batched MobileNetV2 inverted-residual block
 
@@ -8,10 +8,10 @@ that denotes the proven VJP of the batched MobileNetV2 inverted-residual block �
 
 The block is the EfficientNet MBConv body **minus the squeeze-excite stage**, with
 **relu6 in place of swish** and the **same** linear-bottleneck `projB` (1×1 conv →
-bn, no activation). The stages come from `BatchedStageLayers` (`cbrB`, `dwbrB`,
+bn, no activation). The stages come from `Batched.StageLayers` (`cbrB`, `dwbrB`,
 `dwbrBstrided` and their `CertLayer`s `cbrLayer`, `dwbrLayer`, `dwbrStridedLayer`, `projLayer`)
-and `BatchedStages` (`projB`); the residual fan-in's backward graph is
-`residualBackGraph` (`BatchedBackLinks`). The project stage and the fan-in need no
+and `Batched.Stages` (`projB`); the residual fan-in's backward graph is
+`residualBackGraph` (`Batched.BackLinks`). The project stage and the fan-in need no
 smoothness hypothesis.
 
 ## The relu6 wrinkle

@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
 /-! # The chapter-net graphs and their printers (chapters 1–4)
 
@@ -15,7 +15,7 @@ book's small nets, and the `renderModule` printers that write the committed
 
 The MLP graphs' faithfulness theorems are here; that the chapter 3–4 graphs denote their nets is
 `ChapterGraphTies`, since the IR imports no net. The op vocabulary, `den`, `pretty`
-and `renderModule` are `StableHLO` / `StableHLOPretty`, which the batched ImageNet nets share,
+and `renderModule` are `StableHLO` / `StableHLO.Pretty`, which the batched ImageNet nets share,
 so an edit to a chapter net stays out of their rebuild.
 -/
 

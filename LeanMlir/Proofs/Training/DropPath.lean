@@ -195,7 +195,7 @@ depth draws ONE Bernoulli per example and broadcasts it over the branch; dropout
 ELEMENT. Everything else is identical: inverted (`/ keep`), train-only, a diagonal linear map.
 
 **They are therefore the same op at two different mask ranks, which is exactly why they are
-dangerous to each other.** `StableHLO.lean`'s `dropPathP` emit case, [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean)
+dangerous to each other.** `StableHLO.Basic`'s `dropPathP` emit case, [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean)
 and `Proofs.dropScale`'s docstring have each independently written down the warning that emitting a
 `tensor<B×n>` scale where a `tensor<B>` one belongs *"typechecks, compiles, runs, descends, and is
 per-element dropout — a different regulariser"*. That sentence is now a live op rather than a

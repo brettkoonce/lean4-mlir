@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # The linear train step descends the certified softmax-CE gradient
 
-`StableHLO.lean` proves the Chapter-1 linear train step piecewise: the forward
+`StableHLO.Basic` proves the Chapter-1 linear train step piecewise: the forward
 graph (`fwdGraph_faithful`), the loss cotangent (`lossCotGraph_isCEgrad`), the
 per-parameter Jacobians (`wGrad/bGrad_isWeightJacobian`), and the plain-SGD update
 (`sgdW/sgdB_isCertifiedGradStep`). Each of those, however, still mentions the

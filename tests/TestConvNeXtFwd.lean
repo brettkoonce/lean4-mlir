@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Types
 
 /-! # ch9 N5 — ConvNeXt-T forward: the `iree-compile` smoke over the COMMITTED bytes

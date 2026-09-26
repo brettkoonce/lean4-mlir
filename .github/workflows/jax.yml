@@ -33,8 +33,8 @@ on:
       # The shim-wiring gate reads the VERIFIED side too — which net names which generated shim.
       # Without these, the most likely regression (a sixth .imagenet net added with no
       # `shimScript`) touches nothing this workflow watches. See handoff §0.9.
-      - 'LeanMlir/VerifiedNetsCore.lean'
-      - 'LeanMlir/VerifiedSpec.lean'
+      - 'LeanMlir/Verified/NetsCore.lean'
+      - 'LeanMlir/Verified/Spec.lean'
       - 'scripts/gen_shims.sh'
       - 'scripts/shim_wiring_gate.py'
       # The convention audit diffs the RENDER against the reference, so a render change is exactly
@@ -72,8 +72,8 @@ on:
       # The shim-wiring gate reads the VERIFIED side too — which net names which generated shim.
       # Without these, the most likely regression (a sixth .imagenet net added with no
       # `shimScript`) touches nothing this workflow watches. See handoff §0.9.
-      - 'LeanMlir/VerifiedNetsCore.lean'
-      - 'LeanMlir/VerifiedSpec.lean'
+      - 'LeanMlir/Verified/NetsCore.lean'
+      - 'LeanMlir/Verified/Spec.lean'
       - 'scripts/gen_shims.sh'
       - 'scripts/shim_wiring_gate.py'
       # The convention audit diffs the RENDER against the reference, so a render change is exactly

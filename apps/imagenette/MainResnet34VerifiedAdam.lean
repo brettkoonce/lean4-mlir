@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `resnet34-verified-adam` — train ResNet-34 with the VERIFIED-rendered **AdamW** step
 

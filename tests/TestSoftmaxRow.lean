@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Proofs.Architectures.Attention
 import LeanMlir.Types
 

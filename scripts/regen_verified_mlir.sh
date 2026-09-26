@@ -94,7 +94,7 @@ check_manifest() {
   tmp_disk="$(mktemp)"; tmp_writer="$(mktemp)"
   ls verified_mlir/*.mlir 2>/dev/null | sed 's|verified_mlir/||' | sort > "$tmp_disk"
   # ⚠ The `\.mlir"` suffix is REQUIRED and it is not decoration. Prose that quotes this pattern
-  # counts as a writer otherwise: this gate's own docstring in `VerifiedTrain.lean` contains
+  # counts as a writer otherwise: this gate's own docstring in `Verified/Train.lean` contains
   # `IO.FS.writeFile "verified_mlir/…"`, and the FIRST run of this check duly reported `…` as
   # "named by a writer but absent from disk". Two renderers carry the same shape of comment.
   # A good failure, though — the gate tripped on its own documentation, which is evidence it reads
@@ -125,7 +125,7 @@ check_manifest() {
 
 # ── ⭐ the path/entry audit: an artifact's FILENAME must equal the function it declares ──
 # The driver derives BOTH from one string: the path from `verified_mlir/{slug}_{variant}_train_step
-# .mlir` (VerifiedTrain.lean:771) and the entry from `m.{slug}_{variant}_train_step` (:868). So the
+# .mlir` (Verified/Train.lean:771) and the entry from `m.{slug}_{variant}_train_step` (:868). So the
 # two spellings must coincide or the artifact is unreachable at EVERY value of LEAN_MLIR_VARIANT —
 # one spelling finds the file and asks for an entry it does not contain, the other names the right
 # entry at a path that does not exist.
@@ -261,7 +261,7 @@ NO_PARTNER = {
 #    drifted apart with this audit green, which is the exact failure §3d(b) is about.
 #    ⚠ NONE of these make a quoted number wrong — traced (§3d(c)) and re-confirmed 2026-08-10 for
 #    all three: the driver compiles `<net>_fwd` unconditionally but scores through
-#    `<net>_fwd_eval` (`VerifiedTrain.lean:1617`, `useRunning = hasBn && !batchStatEval`), and the
+#    `<net>_fwd_eval` (`Verified/Train.lean:1617`, `useRunning = hasBn && !batchStatEval`), and the
 #    run logs say so outright. The per-example artifact is compiled and never invoked. But that is
 #    a runtime `if`, not an invariant — and `LEAN_MLIR_EVAL_BATCHSTATS=1` routes eval straight
 #    through the divergent artifact, which is then a different ARCHITECTURE, not just different
@@ -564,7 +564,7 @@ if [ "$WHAT" = "all" ] || [ "$WHAT" = "proofs" ]; then
     LeanMlir.Proofs.Codegen.ResNet50RenderB \
     LeanMlir.Proofs.Codegen.MobileNetV2RenderB \
     LeanMlir.Proofs.Codegen.MobileNetV4RenderB \
-    LeanMlir.Proofs.Codegen.EfficientNetRender \
+    LeanMlir.Proofs.Codegen.EfficientNetRender.Basic \
     LeanMlir.Proofs.Codegen.ConvNeXtRender \
     LeanMlir.Proofs.Codegen.ConvNeXtRenderB \
     LeanMlir.Proofs.Codegen.ViTRender \

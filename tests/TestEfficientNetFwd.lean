@@ -1,11 +1,11 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Types
 
 /-! # E6 — EfficientNet-B0 forward: the `iree-compile` smoke over the COMMITTED bytes
 
 **The hand-written emitter that used to live here is RETIRED (2026-07-28).**
 `verified_mlir/efficientnet_fwd.mlir` and `verified_mlir/efficientnet_fwd_eval.mlir` are now
-written by `LeanMlir/Proofs/Codegen/EfficientNetRender.lean`'s `efficientnetFwd{,Eval}FaithfulV` —
+written by `LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean`'s `efficientnetFwd{,Eval}FaithfulV` —
 `pretty(provenGraph)`, both off the single `enetFwdChain` the train steps differentiate — and those
 `#eval`s are their only writers. This file keeps only the part `lake build` genuinely cannot do:
 running `iree-compile`, which needs the compiler on PATH.
@@ -67,8 +67,8 @@ open Proofs Proofs.StableHLO
 private def smoke (path dst label : String) : IO Unit := do
   if !(← System.FilePath.pathExists path) then
     throw (IO.userError s!"{path} missing — it is written by \
-LeanMlir/Proofs/Codegen/EfficientNetRender.lean; run \
-`lake build LeanMlir.Proofs.Codegen.EfficientNetRender` first")
+LeanMlir/Proofs/Codegen/EfficientNetRender/Basic.lean; run \
+`lake build LeanMlir.Proofs.Codegen.EfficientNetRender.Basic` first")
   tryCompile path dst label
 
 def main : IO Unit := do

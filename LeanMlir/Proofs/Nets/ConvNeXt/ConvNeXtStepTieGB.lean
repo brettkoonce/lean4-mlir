@@ -48,7 +48,7 @@ SYMMETRIC padding at the 4×4/s4 stem and the three 2×2/s2 downsamples. Stated 
 widths of ConvNeXt-T; S and B are other nets.
 
 **Scope.** One replica: in `convnextin_adamdp*` every gradient node feeds `allReduceMeanF`;
-`DataParallelNode.lean` composes the per-replica statement with the replica mean. The drop-free
+`DataParallel.Node` composes the per-replica statement with the replica mean. The drop-free
 chain: the `*drop*` artifacts' cotangent chains carry `dropPathB` sites not stated here. Note:
 the `%dgi…%dgapf` GAP backward is hand-written text on both chains; its value here is
 `globalAvgPoolFlatHasVJP.backward`, as in the fused file.
@@ -364,7 +364,7 @@ theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tied_gb {ci co h w : Nat} (p : CnxTie
     statements instantiated at explicitly constructed cotangents, and ConvNeXt has no kink. The
     batch enters only through `batchMap`/`batchMapAux`, because no ConvNeXt op couples examples.
     The statement is at one replica: in `convnextin_adamdp*` every gradient node feeds
-    `allReduceMeanF`, and `DataParallelNode.lean` composes the per-replica statement with the
+    `allReduceMeanF`, and `DataParallel.Node` composes the per-replica statement with the
     replica mean. It is stated at the drop-free chain: the `*drop*` artifacts' parameter nodes are
     the same `*GradB` constructors (the folds are `∀ cot`) but their cotangent chain carries the
     `dropPathB` sites, which this thread does not name. -/

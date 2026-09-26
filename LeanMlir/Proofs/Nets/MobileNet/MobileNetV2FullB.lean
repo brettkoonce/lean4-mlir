@@ -12,8 +12,8 @@ the two.
 
 ## What this file adds
 
-The batched relu6 stages (`cbrB`, `dwbrB`, `dwbrBstrided` in `BatchedStageLayers`, `projB` in
-`BatchedStages`), their `_at` VJPs and their backward-graph faithfulness are one level down, all at
+The batched relu6 stages (`cbrB`, `dwbrB`, `dwbrBstrided` in `Batched.StageLayers`, `projB` in
+`Batched.Stages`), their `_at` VJPs and their backward-graph faithfulness are one level down, all at
 `bnBatchLA`; `MobileNetV2BackB0.lean` composes them into block bodies. This file adds the
 net-level ℝ forward, the net-level forward graph, and the faithfulness tying them.
 

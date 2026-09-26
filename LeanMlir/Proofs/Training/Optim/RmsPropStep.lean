@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Training.Optim.SgdMomentumStep
 
 The ℝ reference for the `mobilenetv2in`/`efficientnetin` ImageNet train steps.
 Coordinatewise over `Vec`, mirroring the emitted StableHLO op-for-op so the faithfulness theorem
-`rmsProp_triple_faithful` (Codegen/StableHLO.lean) is a structural match (`rfl`), exactly as `AdamStep` is for the AdamW triple and
+`rmsProp_triple_faithful` (Codegen/StableHLO/Basic.lean) is a structural match (`rfl`), exactly as `AdamStep` is for the AdamW triple and
 `SgdMomentumStep` for the SGD/Nesterov pair.
 
 **THIS IS TENSORFLOW'S RMSPROP, NOT THE TEXTBOOK ONE — and that is the whole point of the file.**

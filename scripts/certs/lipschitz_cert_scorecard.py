@@ -1,11 +1,11 @@
 """Certified-accuracy scorecard generator (planning/archive/post_audit_roadmap.md §1).
 
-Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean: over the first 100 MNIST
+Produces LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard.lean: over the first 100 MNIST
 test images (4x4-pooled, exact pixel-sum rationals), the images whose prediction
 is certified robust at eps = 1/10 (pooled-feature L2) by the Lipschitz-margin
 certificate, on two nets:
 
-* the UNCONSTRAINED trained /128 net committed in LipschitzCertInstance.lean
+* the UNCONSTRAINED trained /128 net committed in LipschitzCert/Instance.lean
   (L = Schatten-8 product 63.79 -- reproduced here from the same seed/recipe);
 * a SPECTRALLY-CAPPED sibling: same recipe + projected SGD onto sigma_max <= 4
   after every step (host-side rescaling, as mnist-mlp-spectral), 36 epochs,
@@ -28,7 +28,7 @@ from fractions import Fraction
 from math import ceil
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUT = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")
+OUT = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard.lean")
 N_IMG = 100
 # How many of the certified images carry per-image THEOREMS (hpre/margin/
 # certified blocks). The counts stay MEASURED over all N_IMG in exact rationals
@@ -172,7 +172,7 @@ print(f"emitting theorems for {len(cert_c)}/{measured_c} capped, "
 DEN_HC = DEN_C * 4080
 L = []
 A = L.append
-A("import LeanMlir.Proofs.Certificates.LipschitzCertInstance")
+A("import LeanMlir.Proofs.Certificates.LipschitzCert.Instance")
 A("")
 A("/-! # Certified-accuracy scorecard")
 A("")
@@ -183,7 +183,7 @@ A("MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonica
 A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
 A("arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
 A("")
-A("The one-input certificate of `LipschitzCertInstance.lean`, scaled to a")
+A("The one-input certificate of `LipschitzCert.Instance`, scaled to a")
 A(f"dataset-level claim over a FIXED subset — the first {N_IMG} MNIST test images")
 A(f"(4×4-pooled, exact pixel-sum rationals) — at a FIXED radius ε = {EPS}")
 A("(pooled-feature L2; a pooled coordinate is a 16-pixel block average, so ε")
@@ -203,7 +203,7 @@ A(f"bites (tighter caps, 1.5–2, cost too much clean accuracy at this scale:")
 A(f"σ ≤ 2 → 66% test acc; σ ≤ 4 keeps {acc_c:.1%} vs {acc_u:.1%} unconstrained).")
 A("")
 A("**Theorem vs. measurement — read this before quoting a number.** Soundness")
-A("lives in the ENGINE (`certified_at_eps` + `LipschitzCert.lean`), proved once —")
+A("lives in the ENGINE (`certified_at_eps` + `LipschitzCert.Basic`), proved once —")
 A("kernel-checking the 57th image buys nothing the 56th didn't. The counts above")
 A(f"are exact-rational MEASUREMENTS over the first {N_IMG} images, carried in full by")
 A("the `certMargin*` data table at the aggregate below (which is what downstream")

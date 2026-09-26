@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 
 /-! # EfficientNet-B0's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
@@ -277,7 +277,7 @@ theorem headGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Na
 /-- **The sync-BN data-parallel EfficientNet-B0 forward graph, over the replica family.** The
     single-device `efficientnetFwdGraphBFull` with every one of the 49 BatchNorms a `bnSyncSiteLA`
     over all `R` replicas, fed each replica's own input subgraph `e r`; block prefixes and
-    collective tags are `EfficientNetRender`'s. -/
+    collective tags are `EfficientNetRender.Basic`'s. -/
 def efficientnetFwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String)
     (w : B0Weights) (e : Fin R → SHlo (N * (3 * 224 * 224))) : Fin R → SHlo (N * 10) :=
   headGraphSync epsStr R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb

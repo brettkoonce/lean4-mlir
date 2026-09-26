@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `mobilenetv2-imagenet-verified` — MobileNetV2 on full ImageNet-1k, verified → XLA
 

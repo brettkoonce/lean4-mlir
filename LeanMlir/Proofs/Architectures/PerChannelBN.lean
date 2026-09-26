@@ -17,7 +17,7 @@ activation as `Mat oc (h·w)` (row = channel), per-channel BN is exactly
 The file also holds inference BN (frozen statistics), batch BN on the `[N,C,H,W]` layout
 (`bnBatchTensor4`, chapter 7) and the sync-BN op at supplied statistics (`bnSyncTensor4`, its
 γ and input gradients) — the forms `StableHLO`'s `den` reads. Sharding that layout across
-replicas (`batchShard` and the shard = global identities) is `DataParallelSync`'s.
+replicas (`batchShard` and the shard = global identities) is `DataParallel.Sync`'s.
 
 Everything closes under `[propext, Classical.choice, Quot.sound]`.
 -/

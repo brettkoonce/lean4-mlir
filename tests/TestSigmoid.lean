@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 import LeanMlir.Types
 
 /-! Standalone render + `iree-compile` validation for the Chapter-8 E2 sigmoid SHlo

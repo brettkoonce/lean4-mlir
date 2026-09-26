@@ -1,5 +1,5 @@
 import LeanMlir.SyncBnCheck
-import LeanMlir.VerifiedNetsCore
+import LeanMlir.Verified.NetsCore
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
 /-! # `resnet34-syncbn-check` — synchronised BatchNorm: 2×b IS 1×2b
@@ -31,7 +31,7 @@ seven sync ops' MLIR has had.
 **What is compared, and why all of it.** With `m = 0` fed in, `m' = 0.1·g` is linear in the
 gradient (the `shard-check` trick). Here the gradient itself is equal, not just averagable — the
 per-replica divisor `1/b` and the collective's `1/2` compose to the single device's `1/(2b)`
-(`DataParallelSync.lean`, "the 1/R") — so `v' = 0.001·g² + 0.999·v` and Adam's `θ'` are equal too,
+(`DataParallel.Sync`, "the 1/R") — so `v' = 0.001·g² + 0.999·v` and Adam's `θ'` are equal too,
 and so are the 72 handed-back BN statistics (global μ / σ² on every replica, versus the 2b batch's
 own). Every output region is checked; only the report-only `%loss` slot is skipped, since the DP
 render logs replica 0's shard loss and does not all-reduce it.

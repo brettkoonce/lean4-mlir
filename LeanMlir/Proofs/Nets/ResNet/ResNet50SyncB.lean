@@ -50,7 +50,7 @@ f32 nodes — the bf16 conv twins are not this statement. The DP artifacts run w
 the bias operand is `biasName false "" c`, the render's own function, and the bias fields stay
 `∀`-quantified as in `ResNet50FullB`. The backward and the parameter collectives are
 `ResNet50SyncTieB.r50_net_syncTiedB`'s. That the `R` replicas' inputs ARE the shards of one batch
-is the driver's, as in `DataParallelSync`. The lowerer's `all_reduce` is trusted as every other
+is the driver's, as in `DataParallel.Sync`. The lowerer's `all_reduce` is trusted as every other
 op's lowering is.
 -/
 

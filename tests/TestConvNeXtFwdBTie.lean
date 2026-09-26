@@ -28,7 +28,7 @@ which a numeric tie cannot do. §2b had no such per-form corpus at the time and 
 ⚠ **What this does NOT establish.** The `den` side. `skel` erases values, so a batched form with the
 wrong denotation emits identical bytes and passes this file — which is precisely the trap the whole
 thread is about (`softmaxDiv`'s batched `den` would have divided by the whole batch's sum while
-emitting the same MLIR). That half is `den_batchOp` / `denOp` in `StableHLO.lean`, and neither half
+emitting the same MLIR). That half is `den_batchOp` / `denOp` in `StableHLO.Basic`, and neither half
 implies the other.
 
 ⚠ The banner comment is passed in rather than compared modulo: a tie with a one-line hole is a tie

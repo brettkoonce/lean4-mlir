@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.Train
 
 /-! # The variant-string predicates, run rather than reasoned about
 
@@ -59,7 +59,7 @@ to the driver's own `variant.startsWith "ema"` could not turn this file red, and
 drift exactly the way `emarmsdrop64` drifted from `emarms64drop` — the drift this file's own
 closing rule warns about, one level up from names to logic.
 
-▶ The five predicates and `accK` now live in `LeanMlir/VerifiedTrain.lean`'s `VerifiedVariant`
+▶ The five predicates and `accK` now live in `LeanMlir/Verified/Train.lean`'s `VerifiedVariant`
 namespace, with their history in their docstrings; `trainAdamSched` and
 `VerifiedNet.scoreCheckpoint` both consume them, and so does this table. That is
 `next_session_verified_trainer_code.md` §5's lesson applied here: *a gate on "the feature is

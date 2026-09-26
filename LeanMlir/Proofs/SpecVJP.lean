@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNetsCore
+import LeanMlir.Verified.NetsCore
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
@@ -8,7 +8,7 @@ import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
 
 /-! # Spec → math: each committed `VerifiedNetSpec` denotes its proven forward
 
-The shape `#guard` beside `resnet34Verified` in `VerifiedNetsCore.lean` only checks the
+The shape `#guard` beside `resnet34Verified` in `Verified.NetsCore` only checks the
 *parameter interface* (typechecking). This file ties each committed spec's layer list —
 the linear classifier, MLP, MNIST CNN, CIFAR CNN, MobileNetV2, ResNet-34, EfficientNet-B0,
 ConvNeXt-T and ViT-Tiny — to the math the proofs are about. Per net, up to three pieces:
@@ -27,7 +27,7 @@ ConvNeXt-T and ViT-Tiny — to the math the proofs are about. Per net, up to thr
 
 open Proofs
 
-/- `linearVerified` (the single dense 784→10 spec) is imported from `LeanMlir.VerifiedNetsCore`
+/- `linearVerified` (the single dense 784→10 spec) is imported from `LeanMlir.Verified.NetsCore`
    — the *same* object `MainMnistLinearVerified` trains, so the VJP below is about the
    trainer's exact spec, not a copy. The shape tie (`toSpecs == …`) lives there too. -/
 

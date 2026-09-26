@@ -1694,7 +1694,7 @@ seed. From Chapter~\ref{chap:mlp} onward the He(fan-in) in code
 \texttt{0} is what actually runs.
 
 That binding is why the type exists. The spec lives in
-\texttt{LeanMlir/VerifiedNetsCore.lean} rather than beside the trainer,
+\texttt{LeanMlir/Verified/NetsCore.lean} rather than beside the trainer,
 because the theorem and the program have to name the same object. In
 \texttt{LeanMlir/Proofs/SpecVJP.lean}:
 
@@ -1714,8 +1714,8 @@ The trainer is 54 lines including its docstring, so here it is entire,
 with the comments stripped:
 
 \begin{verbatim}
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 def linearConfig : VerifiedConfig where
   epochs    := 12
@@ -1864,7 +1864,7 @@ The section above treated \texttt{linearVerified.trainLinear} as a black
 box. You named the network, you named the epochs and the batch size, and
 training happened. That is deliberately the user-facing interface, but
 there is no magic underneath it. The driver is ordinary Lean in
-\texttt{LeanMlir/VerifiedTrain.lean}, and the interesting thing about it
+\texttt{LeanMlir/Verified/Train.lean}, and the interesting thing about it
 is how little it does.
 
 \paragraph{The training loop, the way a math book would write it.}
@@ -2547,8 +2547,8 @@ Again the VJP is proved for the denotation of the spec's own
 its graph. The whole program is short enough to print:
 
 \begin{verbatim}
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 def mlpConfig : VerifiedConfig where
   epochs    := 12
@@ -3365,8 +3365,8 @@ This is the spec \S\ref{sec:cnn_runit} actually ran.
 
 \begin{verbatim}
 -- 1
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 -- 2
 def cnnVerified : VerifiedNetSpec where
@@ -17001,8 +17001,8 @@ and bounded:
   \item \emph{Trusted} (validated numerically, not proven): that the
     StableHLO text faithfully denotes $[\![\cdot]\!]$. Its
     syntactic half is now partly closed, because the emitted text lexes
-    and parses back to the proven op-graph (\texttt{StableHLOLex.lean},
-    \texttt{StableHLOParse.lean}). That leaves three things trusted: a formal
+    and parses back to the proven op-graph (\texttt{StableHLO/Lex.lean},
+    \texttt{StableHLO/Parse.lean}). That leaves three things trusted: a formal
     StableHLO semantics, which does not yet exist, that the lowerer
     compiles the text correctly, and that the hardware's rounding
     approximates $\mathbb{R}$ within the modelled unit roundoff. The last of those is now a conditional theorem validated on

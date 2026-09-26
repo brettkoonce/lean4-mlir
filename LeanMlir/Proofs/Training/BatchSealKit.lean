@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.BatchedStageLayers
+import LeanMlir.Proofs.Foundation.Batched.StageLayers
 
 /-!
 # The batch-BatchNorm seal kit — non-degeneracy machinery for the full-width nets

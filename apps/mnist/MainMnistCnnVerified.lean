@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `mnist-cnn-verified` — train the MNIST CNN on the VERIFIED-rendered codegen
 
@@ -12,11 +12,11 @@ proven faithful to the Mathlib `fderiv` math (`cnnFwdGraph_faithful`,
 `selectPos_faithful`, `wGrad/bGrad_is*Jacobian`, `lossCotGraph_isCEgrad`) —
 audited 3-axiom-clean. The conv weight grad is the transpose-trick render.
 
-The model is the `cnnVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNetsCore`) — the same
+The model is the `cnnVerified` `VerifiedNetSpec` (in `LeanMlir.Verified.NetsCore`) — the same
 readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/SpecVJP.lean`
 (`cnnVerifiedHasVJPAt`, folded through conv→relu→conv→relu→maxpool→dense→…). It trains
 through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, He-init, 4-D kernels).
-The spec stays in `VerifiedNetsCore` on purpose: the trainer and the theorem must name
+The spec stays in `Verified.NetsCore` on purpose: the trainer and the theorem must name
 the *same* object, or the proof would be about a different network than the one
 that runs.
 

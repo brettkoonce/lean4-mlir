@@ -1,7 +1,7 @@
 """Per-pair LipSDP scorecard generator (the tighter-Lipschitz-constant pass).
 
-Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean (capped net) and
-LipschitzCertScorecardSDPUncon.lean (unconstrained net): for each ordered
+Produces LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDP.lean (capped net) and
+LipschitzCert/ScorecardSDPUncon.lean (unconstrained net): for each ordered
 class pair (i,j) needed by a certified image, a LipSDP-Neuron certificate
 (Fazlyab et al. 2019, one hidden layer)
 
@@ -9,7 +9,7 @@ class pair (i,j) needed by a certified image, a LipSDP-Neuron certificate
 
 witnessed in Lean by an exact rational LDL^T factorization of
 S = 2 diag(T) - vv^T - (1/rho) T G1 T  (PSD <=> the bound, via
-LeanMlir/Proofs/Certificates/LipschitzCertPairSDP.lean). The SDP over diagonal T is
+LeanMlir/Proofs/Certificates/LipschitzCert/PairSDP.lean). The SDP over diagonal T is
 solved numerically here; only the rationalized (rho, T, L, d) enters Lean.
 
 Certification criterion per image (exact rationals, what Lean checks):
@@ -32,11 +32,11 @@ from scipy.optimize import minimize
 import os
 import re
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-OUT_C = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDP.lean")
-OUT_U = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecardSDPUncon.lean")
+OUT_C = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDP.lean")
+OUT_U = os.path.join(ROOT, "LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardSDPUncon.lean")
 N_IMG = 100
 # How many of the certifying images carry a per-image `CertifiedAt` THEOREM.
-# Soundness is in the engine (LipschitzCertPairSDP.lean), proved once — the
+# Soundness is in the engine (LipschitzCert/PairSDP.lean), proved once — the
 # counts stay MEASURED over all N_IMG by exact rational arithmetic; the emitted
 # set only witnesses non-vacuity at real trained weights. Matches the other
 # tiers' default (see planning/archive/scorecard_trim.md); SCORECARD_N_EMIT=100
@@ -47,13 +47,13 @@ CAP, EPOCHS, LR, BS = 4.0, 36, 0.15, 64
 DEN_U, DEN_C = 128, 256
 H, K, DIM = 8, 10, 49
 
-# What LipschitzCertScorecard.lean actually defines, READ FROM THE FILE rather
+# What LipschitzCert/Scorecard.lean actually defines, READ FROM THE FILE rather
 # than hardcoded: that file caps how many images carry hpre/margin theorems
 # (SCORECARD_N_EMIT) while keeping every `img<i>` def, so a hardcoded copy of
 # these sets silently desynchronizes the moment it is regenerated — exactly the
 # trap flagged in planning/archive/scorecard_trim.md.
 _BASE_SRC = open(os.path.join(
-    ROOT, "LeanMlir/Proofs/Certificates/LipschitzCertScorecard.lean")).read()
+    ROOT, "LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard.lean")).read()
 EXISTING_IMGS = {int(m.group(1))
                  for m in re.finditer(r"^noncomputable def img(\d+) :", _BASE_SRC, re.M)}
 EXISTING_HPRE_C = {int(m.group(1))
@@ -217,8 +217,8 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
 
     L = []
     A = L.append
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertPairSDP")
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecard")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCert.PairSDP")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard")
     A("")
     netdesc = ("spectrally-capped /256 net (`mlpS`)" if tag == "C"
                else "unconstrained /128 net (`mlpT`)")
@@ -234,7 +234,7 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A("arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
     A("")
     A(f"A tighter Lipschitz constant over the SAME first-{N_IMG} MNIST test")
-    A(f"subset and SAME ε = {EPS} as `LipschitzCertScorecard.lean`: replacing the")
+    A(f"subset and SAME ε = {EPS} as `LipschitzCert.Scorecard`: replacing the")
     A("global `√2·∏‖Wᵢ‖` criterion by per-pair LipSDP certificates lifts the")
     A(f"count from **{base}/{N_IMG} to {measured}/{N_IMG}** — no retraining, no new data, just a")
     A("less lossy constant on each pairwise logit gap. Each class pair carries")
@@ -246,7 +246,7 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A(f"{'72' if tag == 'C' else '69'}/{N_IMG} — the cert ≤ TRUE ≤ PGD sandwich is nearly closed.")
     A("")
     A("**Theorem vs. measurement — read this before quoting a number.** Soundness")
-    A("lives in the ENGINE (`LipschitzCertPairSDP.lean`), proved once — kernel-")
+    A("lives in the ENGINE (`LipschitzCert.PairSDP`), proved once — kernel-")
     A("checking the 57th image buys nothing the 56th didn\'t. The count above is an")
     A(f"exact-rational MEASUREMENT over the first {N_IMG} images; the first {N_EMIT} certifying")
     A("images (test-set order — an unbiased, reproducible rule) each carry a")

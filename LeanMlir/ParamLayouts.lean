@@ -5,7 +5,7 @@ One namespace per net family (`MlpLayout`, `CnnLayout`, `CifarLayout`, `ResNet34
 `MobileNetV2Layout`, `EfficientNetLayout`, `ConvNeXtLayout`, `ViTLayout`): each net's
 `(dims, initKind)` list in the train step's argument order, its sizes, and the packed shape
 descriptors (`packShapes`, `packXShape`) the runtime passes to the FFI. Pure data — importing only `LEBytes` —
-so the spec side (`VerifiedNetsCore`'s `#guard spec.toSpecs == XLayout.specs`) can read the tables
+so the spec side (`Verified.NetsCore`'s `#guard spec.toSpecs == XLayout.specs`) can read the tables
 without importing the runtime; `IreeRuntime` re-exports them. -/
 
 /- Sizes for the packed-params layout. -/
@@ -158,7 +158,7 @@ namespace EfficientNetLayout
     count). SE's two biases stay: those 1×1 convs are followed by the sigmoid gate, not by
     BN, so nothing absorbs them and the reference carries them. Spatial
     224→112→56→28→14→7 (stride-2 stem, 4 strided stages). The `(dims, initKind)` order MUST match
-    `@efficientnet_train_step`'s signature, rendered by Proofs/Codegen/EfficientNetRender.lean.
+    `@efficientnet_train_step`'s signature, rendered by Proofs/Codegen/EfficientNetRender/Basic.lean.
     `initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot), 1 = ones (γ), 2 = zeros (β / bias). -/
 private def stages : Array (Nat × Nat × Nat × Nat × Nat) :=
   #[(1,16,1,1,3),(6,24,2,2,3),(6,40,2,2,5),(6,80,3,2,3),(6,112,3,1,5),(6,192,4,2,5),(6,320,1,1,3)]

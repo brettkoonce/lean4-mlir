@@ -705,7 +705,7 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     -- ⚠⚠ **THIS IS THE PARAMETER RSB-A2 AND RSB-A1 COULD NOT BE RENDERED WITHOUT**, and the reason
     -- is worth keeping: `resnet50ImagenetConfigA2Accum` sets `useEMA := true` AND
     -- `gradAccumSteps := 4`, and until this landed the shadow and the accumulator were the SAME
-    -- fourth region — `VerifiedTrain.lean` threw on the pairing rather than letting one win. A3 met
+    -- fourth region — `Verified.Train` threw on the pairing rather than letting one win. A3 met
     -- neither obstacle because A3's own recipe sets `useEMA := false`, which is exactly why the
     -- limitation was invisible from A3's success.
     --
@@ -1366,7 +1366,7 @@ end Proofs.StableHLO
 #guard Proofs.StableHLO.r34WdDecays "bn1b" [64] == false             -- BN β: excluded
 #guard Proofs.StableHLO.r34WdDecays "fcb" [1000] == false            -- dense bias: excluded
 #guard Proofs.StableHLO.r34WdDecays "fcw" [2048,1000] == true        -- dense weight: decayed
--- ⚠ The driver reads `k` back OUT of this string (`VerifiedTrain`'s `accK`). Pin the round trip
+-- ⚠ The driver reads `k` back OUT of this string (`Verified.Train`'s `accK`). Pin the round trip
 -- here, where the name is produced, rather than trusting two parsers to agree.
 #guard ((Proofs.StableHLO.r34AdamVariant 64 4 (Proofs.StableHLO.R34Opt.adamwAccum 8)).drop 5
           |>.takeWhile (· != 'x')) == "8"
@@ -1878,7 +1878,7 @@ end Proofs.StableHLO
 #guard "emalambaccdp8x64wxclipdropbce".startsWith "ema"
 -- ⚠ and `drop` must not reach the `k` parse, which reads digits between `acc`/`accdp` and the `x`.
 #guard "emalambaccdp8x64wxclipdropbcewd001".contains "acc"
--- ▶ `accK`/`nRegions`/`sdOn` are the CONSUMING side and live in `VerifiedTrain.lean`, which imports
+-- ▶ `accK`/`nRegions`/`sdOn` are the CONSUMING side and live in `Verified.Train`, which imports
 -- this file — pinned for these names in `tests/TestVariantPredicates.lean`.
 
 -- ⚠ THE FOUR EMA SPELLINGS, pinned on the PRODUCING side like every one below them. The `ema`
@@ -1903,7 +1903,7 @@ end Proofs.StableHLO
 #guard !"emalambaccdp8x64wxclipbce".contains "drop"
 #guard !"emalambaccdp8x64wxclipbce".contains "do"
 #guard "emalambaccdp8x64wxclipbce".contains "acc"
--- ▶ `nRegions`/`nScalars`/`emaRegion` are the CONSUMING side and live in `VerifiedTrain.lean`,
+-- ▶ `nRegions`/`nScalars`/`emaRegion` are the CONSUMING side and live in `Verified.Train`,
 -- which imports this file — pinned for these names in `tests/TestVariantPredicates.lean`.
 
 -- ⚠ THE FOUR NEW SPELLINGS, pinned on the PRODUCING side like every one above them. Two of these
@@ -1935,7 +1935,7 @@ end Proofs.StableHLO
 #guard ("lambaccdp8x64wxclipbcewd001bf16".startsWith "ema") == false
 #guard !"lambaccdp8x64wxclipbcewd001bf16".contains "do"
 #guard !"lambacc8x64wxclipbcewd001bf16".contains "do"
--- ▶ `accK` and `nRegions` are the CONSUMING side and live in `LeanMlir/VerifiedTrain.lean`, which
+-- ▶ `accK` and `nRegions` are the CONSUMING side and live in `LeanMlir/Verified/Train.lean`, which
 -- imports this file — so they cannot be guarded from here without a cycle. They are pinned for
 -- these four names in `tests/TestVariantPredicates.lean`, which is where that file's own header
 -- says the consuming half belongs.

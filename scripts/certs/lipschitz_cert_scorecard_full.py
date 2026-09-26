@@ -1,7 +1,7 @@
 """FULL-INPUT certified-accuracy scorecard generator (post-audit gap #3:
 lift the Lipschitz scorecard off the 4x4-pooled 49-dim reduction).
 
-Produces LeanMlir/Proofs/Certificates/LipschitzCertScorecardFull{Nets,ImgsA,ImgsB,}.lean:
+Produces LeanMlir/Proofs/Certificates/LipschitzCert/ScorecardFull{Nets,ImgsA,ImgsB,}.lean:
 over the first 100 MNIST test images at FULL 784-dim input (exact k/255
 pixels), per-image Tsuzuku certificates at pixel-L2 eps = 1/10 AND 3/10, on
 two 784->16->10 nets:
@@ -37,7 +37,7 @@ sys.path.insert(0, str(ROOT / "scripts" / "lib"))
 from _mnist_io import mnist, train_mlp  # noqa: E402
 N_IMG = 100                 # images the COUNTS are measured over (exact rationals, no Lean)
 # How many of the certifying images carry a per-image `CertifiedAt` THEOREM.
-# Soundness is in the engine (LipschitzCert.lean), proved once — kernel-checking
+# Soundness is in the engine (LipschitzCert/Basic.lean), proved once — kernel-checking
 # the 57th image buys nothing the 56th didn't; the emitted set only witnesses
 # that the certificate is non-vacuous at real trained weights. The dataset-level
 # counts stay MEASURED over all N_IMG and are reported as measurements.
@@ -361,7 +361,7 @@ def write_files():
     # ═══ file 1: nets ═══
     L1 = []
     A = L1.append
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecard")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCert.Scorecard")
     A("import LeanMlir.Proofs.Foundation.ListDot")
     A("")
     A("/-! # Full-input scorecard, part 1/4: the two 784→16→10 nets")
@@ -380,14 +380,14 @@ def write_files():
         emit_net(A, tag, W1q, W2q, info[tag]["B1"], info[tag]["B2"], info[tag]["L"])
     A("end LipschitzCertDemo")
     A("end Proofs")
-    (OUTDIR / "LipschitzCertScorecardFullNets.lean").write_text("\n".join(L1) + "\n")
+    (OUTDIR / "LipschitzCert/ScorecardFullNets.lean").write_text("\n".join(L1) + "\n")
 
     # ═══ files 2+3: images (split halves) ═══
 
     for part, rng_ in (("A", range(0, 50)), ("B", range(50, 100))):
         L2 = []
         A = L2.append
-        A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullNets")
+        A("import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFullNets")
         A("")
         A(f"/-! # Full-input scorecard, part {'2' if part == 'A' else '3'}/4: images {rng_.start}–{rng_.stop - 1}")
         A("")
@@ -401,13 +401,13 @@ def write_files():
                 emit_image(A, i, need[i])
         A("end LipschitzCertDemo")
         A("end Proofs")
-        (OUTDIR / f"LipschitzCertScorecardFullImgs{part}.lean").write_text("\n".join(L2) + "\n")
+        (OUTDIR / f"LipschitzCert/ScorecardFullImgs{part}.lean").write_text("\n".join(L2) + "\n")
 
     # ═══ file 4: certificates + aggregate ═══
     L4 = []
     A = L4.append
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsA")
-    A("import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFullImgsA")
+    A("import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFullImgsB")
     A("")
     A("/-! # Full-input certified-accuracy scorecard (4/4): the certificates")
     A("")
@@ -424,14 +424,14 @@ def write_files():
     A("  at the larger radius the σ-projection is what keeps the certificate alive.")
     A("")
     A("ε here is FULL-pixel-space L2 (pixels in [0,1]), the perturbation model the")
-    A("literature reports. It is not the pooled-feature L2 of `LipschitzCertScorecard.lean`:")
+    A("literature reports. It is not the pooled-feature L2 of `LipschitzCert.Scorecard`:")
     A("4×4 averaging maps a raw-pixel perturbation of L2 norm r to a pooled one of norm at")
     A("most r/4, so a pooled-L2 radius ε covers raw-pixel radii up to 4ε, and the two")
     A("tiers' ε are not directly comparable. Width 16 (vs the canonical 512) is the")
     A("honest cost: 512-wide Gram certificates are ~10⁵× this kernel work.")
     A("")
     A("**Theorem vs. measurement — read this before quoting a number.** Soundness")
-    A("lives in the ENGINE (`LipschitzCert.lean`), proved once; kernel-checking the")
+    A("lives in the ENGINE (`LipschitzCert.Basic`), proved once; kernel-checking the")
     A("57th image buys nothing the 56th didn\'t. So the counts above are exact-rational")
     A("MEASUREMENTS over the first %d images, while the first %d certifying images (test-" % (N_IMG, N_EMIT))
     A("set order — an unbiased, reproducible rule) each carry a `CertifiedAt` THEOREM.")
@@ -488,9 +488,9 @@ def write_files():
     A("")
     A("end LipschitzCertDemo")
     A("end Proofs")
-    (OUTDIR / "LipschitzCertScorecardFull.lean").write_text("\n".join(L4) + "\n")
+    (OUTDIR / "LipschitzCert/ScorecardFull.lean").write_text("\n".join(L4) + "\n")
 
-    tot = sum(len(open(OUTDIR / f"LipschitzCertScorecardFull{s}.lean").readlines())
+    tot = sum(len(open(OUTDIR / f"LipschitzCert/ScorecardFull{s}.lean").readlines())
               for s in ("Nets", "ImgsA", "ImgsB", ""))
     print(f"wrote 4 files, {tot} lines total; images with theorems: {len(need)}")
 

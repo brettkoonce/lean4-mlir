@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.StableHLO.Basic
 import LeanMlir.Types
 
 /-! # C4a/D3 — MobileNetV2 forward: the `iree-compile` smoke over the COMMITTED bytes

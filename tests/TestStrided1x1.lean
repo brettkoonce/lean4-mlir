@@ -1,5 +1,5 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
-import LeanMlir.VerifiedTrain
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
+import LeanMlir.Verified.Train
 import LeanMlir.Types
 
 /-! # §2l step 1 — can the emitter spell a **1×1 strided** conv, and does it compute the right one?
@@ -40,7 +40,7 @@ Two gates, and the second is the one that matters:
 so it cannot drift from the inputs. It is a reference implementation, not a second render.
 
 Run (render-only, no GPU):
-  `lake build LeanMlir.Proofs.Codegen.StableHLO && lake env lean tests/TestStrided1x1.lean`
+  `lake build LeanMlir.Proofs.Codegen.StableHLO.Basic && lake env lean tests/TestStrided1x1.lean`
   (the `lake build` first is §4's `lake env lean` trap — it links committed `.olean`s.)
 Run (the numeric gate):
   `lake build strided-1x1 && CUDA_VISIBLE_DEVICES=0 .lake/build/bin/strided-1x1`

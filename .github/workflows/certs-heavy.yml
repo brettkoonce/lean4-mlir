@@ -24,15 +24,15 @@ name: Certify Heavy Corpus
 # what blocked this workflow.
 #
 # `paths` is written against the CURRENT layout. The pre-2026-07 filters
-# (LeanMlir/Proofs/LipschitzCertScorecard*.lean, Proofs/ListDot.lean, …)
+# (LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard*.lean, Proofs/ListDot.lean, …)
 # were left behind by the Proofs/ bucket refactor and matched NOTHING, so a
 # push trigger restored verbatim would silently never fire.
 on:
   push:
     branches: [main]
     paths:
-      - 'LeanMlir/Proofs/Certificates/LipschitzCertScorecard*.lean'
-      - 'LeanMlir/Proofs/Certificates/IbpConvScorecard*.lean'
+      - 'LeanMlir/Proofs/Certificates/LipschitzCert/Scorecard*.lean'
+      - 'LeanMlir/Proofs/Certificates/IbpConvScorecard/*.lean'
       - 'LeanMlir/Proofs/Foundation/ListDot.lean'
       - 'LeanMlir/Proofs/Certificates/IntervalBound.lean'
       - 'LeanMlir/Proofs/Foundation/IntervalBoundConv.lean'

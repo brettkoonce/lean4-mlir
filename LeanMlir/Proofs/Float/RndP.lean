@@ -4,7 +4,7 @@ import Mathlib.Algebra.Order.Archimedean.Real.Basic
 /-! # `rndP` — round-to-nearest on the unbounded-exponent `p`-bit grid
 
 The rounding operator behind the named float models (`binary32`, `fp8E4M3` in
-`Binary32Instance.lean`) and the bf16 sharding lemmas (`DataParallelSyncBf16.lean`), with the
+`Binary32Instance.lean`) and the bf16 sharding lemmas (`DataParallel.SyncBf16`), with the
 standard model `|rndP p x − x| ≤ 2⁻¹⁻ᵖ·|x|` proved. A leaf on Mathlib alone, so a consumer that
 needs only the operator does not import `FloatBridge`.
 -/

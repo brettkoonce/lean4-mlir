@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
-import LeanMlir.Proofs.Foundation.DataParallelSyncKit
+import LeanMlir.Proofs.Foundation.DataParallel.SyncKit
 
 /-! # ResNet-34's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
@@ -42,7 +42,7 @@ at both types (`bnFwdSite`'s `zbn` operand beside its `zin` one).
 
 The backward and the parameter collectives are `ResNet34SyncStepTieB.lean`'s. That
 the `R` replicas' inputs ARE the shards of one batch is the driver's, as in
-`DataParallelSync.lean`. The lowerer's `all_reduce` is trusted as every other op's lowering is.
+`DataParallel.Sync`. The lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 
 namespace Proofs

@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `efficientnet-verified` — train a small EfficientNet on the VERIFIED-rendered codegen
 
@@ -11,7 +11,7 @@ norm — on IMAGENETTE 3×224×224 (native B0 resolution):
   project 1×1 → BN; + residual iff s=1 ∧ ic=oc) → head 1×1 conv (320→1280) → BN → swish →
   GAP → dense 1280→10 + softmax-CE.
 
-The model is `efficientnetVerified` (in `LeanMlir.VerifiedNetsCore`); its derived 213-tensor
+The model is `efficientnetVerified` (in `LeanMlir.Verified.NetsCore`); its derived 213-tensor
 layout is kernel-`#guard`ed against the audited `EfficientNetLayout`. Trains on
 `verified_mlir/efficientnet_{train_step,fwd}.mlir` (rendered by tests/TestEfficientNet*)
 through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, batch-norm, He-init).

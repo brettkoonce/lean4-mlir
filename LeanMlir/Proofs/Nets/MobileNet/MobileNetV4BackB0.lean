@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.BatchedStageLayers
+import LeanMlir.Proofs.Foundation.Batched.StageLayers
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 import LeanMlir.Proofs.Foundation.IndexCast
 
@@ -293,7 +293,7 @@ noncomputable def mnv4UibStridedBody (N : Nat) {ic mid oc h w : Nat}
 /-! MNv4's stage 0 is `.fusedMbConv 32 48 4 3 2 1 false .relu` (timm's `EdgeResidual`): a regular
 k×k conv (not a depthwise) doing expansion and downsampling at once, then a 1×1 project.
 `32 → mid = 32·4 = 128 → 48`, stride 2, symmetric padding, **relu** — so the strided conv-bn-relu
-stage is `cbReluStridedLayer` and the project is `projLayer` (both `BatchedStageLayers`). -/
+stage is `cbReluStridedLayer` and the project is `projLayer` (both `Batched.StageLayers`). -/
 
 /-- **MNv4's fused stage (stage 0)** — the strided k×k conv-bn-relu, then the 1×1 project.
     No skip: `ic = 32 ≠ 48 = oc` and stride 2, so the stage IS the body. -/

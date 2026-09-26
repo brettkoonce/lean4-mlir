@@ -14,7 +14,7 @@ about a NAMED chain of the forward's shape.
 Note: `maxPool3s2FlatBackB`, the batched pool backward, is `StableHLO.batchMapAux` and not
 `batchMap`: the pool's backward is indexed by the saved forward activation and every example
 has its own, so a `batchMap` would hand example 0's argmax pattern to all of them. It is the one
-endpoint the batch axis changed, and the reason this leaf imports `StableHLO.lean`.
+endpoint the batch axis changed, and the reason this leaf imports `StableHLO.Basic`.
 
 Padding is SYMMETRIC at every stride-2 site of both nets (`flatConvStride2Back`), the
 PyTorch-origin convention — not the XLA-`SAME` `flatConvStride2XlaBack` the TF-origin stems take.

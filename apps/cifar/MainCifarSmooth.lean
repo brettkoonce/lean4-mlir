@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedSmoothing
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Smoothing
 
 /-! # `cifar-smooth` — randomized-smoothing certificate on the verified CIFAR-10 CNN
 

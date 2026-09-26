@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 
 /-! # `cifar8-bn-grid` — FC-head width sweep of the 8-conv CIFAR CNN + per-channel BN, AdamW
 

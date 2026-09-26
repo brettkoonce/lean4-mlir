@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
 /-! # MLP render half — the train-step text as `pretty` of proven graphs
 
@@ -66,7 +66,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   -- byte-identical to what this renderer emitted before it existed and
   -- `MlpFold` is untouched. Verified by diffing the render.
   -- ⚠ It must stay the LAST output: the driver keeps the leading parameter tensors
-  -- device-resident and reads only the tail (`VerifiedTrain.lean`, handoff §2d.3).
+  -- device-resident and reads only the tail (`Verified.Train`, handoff §2d.3).
   let lossCode :=
     "    // ── %loss below is REPORT-ONLY (logging), NOT pretty(AST node) ──\n" ++
     s!"    %lz = stablehlo.constant dense<0.0> : tensor<f32>\n" ++

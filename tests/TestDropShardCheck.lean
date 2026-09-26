@@ -1,6 +1,6 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
-import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
+import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 
 /-! # The stochastic-depth mask is SHARDED, not replicated — `stochastic_depth.md` §5b
 
@@ -10,7 +10,7 @@ should be settled before the render lands, not after."*
 
 **The hole.** The drop mask is a **per-example** input (`%dp<i> : tensor<Bxf32>`, one Bernoulli per
 example), so under data parallelism replica `r` must receive mask rows `[r·b, (r+1)·b)` — the same
-split `x` gets. The masks ride in the PARAMETER blob (`VerifiedTrain`'s `dropShapes`), and the DP
+split `x` gets. The masks ride in the PARAMETER blob (`Verified.Train`'s `dropShapes`), and the DP
 shim's rule was *"x and the labels shard, everything between them replicates"*, so every replica got
 replica 0's mask and applied it to its own rows. ⚠ **That was true of the shim before any DP drop
 render existed to expose it** — §5b's prediction, found by building the render it predicted about.

@@ -93,7 +93,7 @@ noncomputable def lambTrust (wn2 rn2 : ℝ) : ℝ :=
 
     The asymmetry is deliberate and it is what keeps the emitted op inside a shape the AST already
     has. `clipScaleF` is `SHlo 1 → SHlo n → SHlo n`; a LAMB scale that took both norms as children
-    would be the kit's first TERNARY constructor, and `StableHLO.lean`'s own note records what
+    would be the kit's first TERNARY constructor, and `StableHLO.Basic`'s own note records what
     adding an unfamiliar constructor SHAPE cost last time — nine unrelated `simp only [… den …]`
     proofs dying with a `whnf` timeout that 4× the heartbeat budget did not fix. `r` is already the
     tensor child, so `‖r‖²` is free to recompute and `‖θ‖²` is the one scalar that must be threaded.

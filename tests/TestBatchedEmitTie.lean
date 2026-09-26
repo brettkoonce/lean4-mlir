@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.StableHLO.Pretty
 
 /-! # The batched pointwise/row forms emit exactly what their per-example peers emit
 
@@ -17,7 +17,7 @@ exercises — so the tie is nailed down BEFORE the batched R34 render depends on
 What this does NOT check is the `den` side: the render is value-independent (`skel` erases values),
 so a form with the wrong denotation emits identical bytes. That half is
 `den_batchOp_swish_eq_swishF` / `den_batchOp_relu_eq_reluF` / `selectPosB_faithful` and the `rfl`
-faithfulness lemmas in `StableHLO.lean`. Both halves are needed; neither implies the other.
+faithfulness lemmas in `StableHLO.Basic`. Both halves are needed; neither implies the other.
 
     lake env lean tests/TestBatchedEmitTie.lean
 -/

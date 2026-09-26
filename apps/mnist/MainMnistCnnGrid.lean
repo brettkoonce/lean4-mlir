@@ -1,5 +1,5 @@
-import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedTrain
+import LeanMlir.Verified.NetsCore
+import LeanMlir.Verified.Train
 import LeanMlir.Proofs.Codegen.ChapterGraphs
 import LeanMlir.Proofs.Codegen.CnnRender
 
@@ -14,7 +14,7 @@ node — and `cnnFwdModuleV`), then trains on that render (Lean → IREE FFI →
 
 The faithful CNN renderer takes a single dense width (both FC hidden layers share `d`), so
 this is a 1-D sweep of the classifier head — the honest den-certified path. Architecture is
-`cnnG d` (`LeanMlir.VerifiedNetsCore`); the canonical Chapter-3 demo is `mnist-cnn-grid 512`.
+`cnnG d` (`LeanMlir.Verified.NetsCore`); the canonical Chapter-3 demo is `mnist-cnn-grid 512`.
 
 Run (GPU): `IREE_BACKEND=rocm .lake/build/bin/mnist-cnn-grid 128 [epochs] [dataDir]`
 -/

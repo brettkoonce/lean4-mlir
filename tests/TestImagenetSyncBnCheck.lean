@@ -1,8 +1,8 @@
 import LeanMlir.SyncBnCheck
-import LeanMlir.VerifiedNetsCore
+import LeanMlir.Verified.NetsCore
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 import LeanMlir.Proofs.Codegen.MobileNetV2RenderB
-import LeanMlir.Proofs.Codegen.EfficientNetRender
+import LeanMlir.Proofs.Codegen.EfficientNetRender.Basic
 import LeanMlir.Proofs.Codegen.ResNet50RenderB
 import LeanMlir.Proofs.Codegen.MobileNetV4RenderB
 

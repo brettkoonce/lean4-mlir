@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Foundation.Batched
+import LeanMlir.Proofs.Foundation.Batched.Basic
 
 /-! # `batchMap` at a POINT — the pointwise peer of `batchMapHasVJP`
 

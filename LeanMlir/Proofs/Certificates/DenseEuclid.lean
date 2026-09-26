@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Certificates.LipschitzCert
+import LeanMlir.Proofs.Certificates.LipschitzCert.Basic
 
 /-! # The dense Euclidean engine — dense and ReLU layers on `EuclideanSpace`, and their L2 bounds
 
@@ -10,7 +10,7 @@ witness vector gives (`lipschitzL2_lower_euclid`). The upper bounds share one ta
 (`denseE_lipschitzL2_of_sq`) and the Gram ones one Cauchy–Schwarz step (`sq_le_of_gram_quad`,
 `quad_le_of_frob`). `certified_at_eps` specialises the
 Tsuzuku certificate to a rational radius check. The trained instances are in
-`LipschitzCertInstance`; the namespace is theirs, kept so every citation keeps its name.
+`LipschitzCert.Instance`; the namespace is theirs, kept so every citation keeps its name.
 -/
 
 namespace Proofs
