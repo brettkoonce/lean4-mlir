@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.ChapterGraphs
 
 /-! # The chapter 1–4 forward-artifact writers
 

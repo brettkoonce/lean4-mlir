@@ -77,6 +77,7 @@ MODULES = [
     "LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDP",
     "LeanMlir.Proofs.Certificates.SmoothingGaussian",
     "LeanMlir.Proofs.Float.FloatBridge",
+    "LeanMlir.Proofs.Float.MlpFloatBridge",
     "LeanMlir.Proofs.Foundation.DataParallel",
     "LeanMlir.Proofs.Foundation.DataParallelNode",
     "LeanMlir.Proofs.Foundation.DataParallelSync",

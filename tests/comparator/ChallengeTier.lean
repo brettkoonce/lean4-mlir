@@ -3,6 +3,7 @@ import LeanMlir.Proofs.Certificates.LipschitzCert
 import LeanMlir.Proofs.Certificates.LipschitzCertScorecardSDP
 import LeanMlir.Proofs.Certificates.SmoothingGaussian
 import LeanMlir.Proofs.Float.FloatBridge
+import LeanMlir.Proofs.Float.MlpFloatBridge
 import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Foundation.DataParallelSync

@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # The E4M3 (fp8) quantized MNIST-linear render-tie
 
 The **structural faithfulness** of the low-precision scheme. Where
-`linear_e4m3_argmax_preserved` (`FloatBridge`) bounds the *accuracy* of E4M3-mixed inference,
+`linear_e4m3_argmax_preserved` (`MlpFloatBridge`) bounds the *accuracy* of E4M3-mixed inference,
 this file proves the *correctness of the implementation*: the emitted block-scaled-E4M3
 matmul graph **denotes** the intended algorithm, with **no accuracy claim**.
 

@@ -1,5 +1,5 @@
 import LeanMlir.Proofs.Nets.Small.LinearTrainStep
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.ChapterGraphs
 
 /-! # PoC: the MNIST-linear train step, proof-tied to the certified SGD step
 
@@ -39,7 +39,7 @@ linTrainStepFaithfulV(…)`) is enforced in CI (regenerate + `git diff`, the
   `IR.emitWeightGrad` by `wGrad_faithful`).
 * **Single example (B = 1):** `wGrad x dy = x ⊗ dy`; the emitted module
   batch-contracts. The mean-loss cotangent makes the batch sum the mean gradient.
-* **ℝ → Float32:** not stated here; `FloatBridge.lean` covers the
+* **ℝ → Float32:** not stated here; `FloatBridge.lean` and `MlpFloatBridge.lean` cover the
   linear/MLP rounding budget separately.
 -/
 

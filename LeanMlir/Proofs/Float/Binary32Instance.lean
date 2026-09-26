@@ -1,5 +1,6 @@
 import LeanMlir.Proofs.Training.SgdDescentLinear
 import LeanMlir.Proofs.Float.RndP
+import LeanMlir.Proofs.Float.MlpFloatBridge
 
 /-! # The binary32 / E4M3 rounding models, CONSTRUCTED (zero axioms)
 

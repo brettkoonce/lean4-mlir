@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLOPretty
+import LeanMlir.Proofs.Codegen.ChapterGraphs
 import LeanMlir.ViTRender
 import LeanMlir.Types
 

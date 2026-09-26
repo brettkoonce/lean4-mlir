@@ -1,14 +1,6 @@
-import LeanMlir.Proofs.Foundation.Tensor
-import LeanMlir.Proofs.Foundation.MLP
 import LeanMlir.Proofs.Architectures.Softmax
 import LeanMlir.Proofs.Architectures.CNN          -- needed for Kernel4 in patchEmbed
-import LeanMlir.Proofs.Architectures.Residual
 import LeanMlir.Proofs.Architectures.LayerNorm
-import Mathlib.Analysis.SpecialFunctions.ExpDeriv
-import Mathlib.Analysis.SpecialFunctions.Log.Deriv
-import Mathlib.Analysis.Calculus.Deriv.Inv
-import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
-import Mathlib.Analysis.Complex.Trigonometric
 
 /-!
 # Attention — the Capstone

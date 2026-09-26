@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.Tensor
-import Mathlib.Analysis.SpecialFunctions.Sqrt
 
 /-! # The Adam / AdamW optimizer step over ℝ
 

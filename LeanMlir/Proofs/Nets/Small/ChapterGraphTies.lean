@@ -1,4 +1,4 @@
-import LeanMlir.Proofs.Codegen.StableHLO
+import LeanMlir.Proofs.Codegen.ChapterGraphs
 import LeanMlir.Proofs.Nets.Small.CifarCNN
 
 /-! # The chapter 3–4 graphs denote the chapter nets

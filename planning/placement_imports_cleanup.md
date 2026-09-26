@@ -33,7 +33,8 @@ measured on that tree.
 |---|---|
 | 70d623be | `LeanMlir/MnistData.lean` (no build target reached it; MNIST loads through `F32.loadIdxImages` / `loadIdxLabels` in `ffi/f32_helpers.c`) and its three `historical/` importers deleted; README row fixed |
 | 94c16b30 | Batch A: §2.1 and §2.2 as tabled, §2.3 on the leaf files (113 imports, 68 files). Deviations below |
-| (staged) | Batch B: §3.1–3.6 and two of the three re-derived statements. Deviations below |
+| 204f6a5f | Batch B: §3.1–3.6 and two of the three re-derived statements. Deviations below |
+| (staged) | Batch C: §4 except `mnv2RmsHyper`. Deviations below |
 
 Batch A deviations:
 
@@ -81,6 +82,29 @@ Batch B deviations:
   `check_render_coverage`, `regen_verified_mlir.sh check`, `gen_mlir_manifest --check`,
   `check_target_names`, `name_lint`, `docstring-checkrefs`, `blueprint-checkdecls` +
   `blueprint_uses --check` (lean_deps unchanged).
+
+Batch C deviations:
+
+* The new module is `Codegen/ChapterGraphs.lean` (graphs, the MLP graphs' two faithfulness
+  theorems, and the eight printers). Its importers: `ChapterGraphTies`, `ChapterArtifacts`,
+  `LinearFold`, `tests/TestCifar8AdamTrain.lean`, and three apps (`MainMnistMlpGrid`,
+  `MainMnistCnnGrid`, `MainCifar8WideBnAblation`) that call a printer. `linTrainStepFaithfulV`
+  stays in `StableHLOPretty` (not tabled; it renders from `lossCotGraph`, which stays in
+  `StableHLO`).
+* `mnv2RmsHyper` stays in `StableHLOPretty`: it shares the `#guard` block that pins every
+  RMSProp constant `fmt6` renders (with `enetRmsHyper`), which is why it sits there.
+* The four Mathlib drops and the root files' implied imports (34 lines across `Tensor`, `LayerNorm`,
+  `StableHLO`, `Attention`) needed no downstream repair.
+* The `FloatBridge` split does have Lean users, against the table's "none": `Binary32Instance`
+  (instantiates `linear_e4m3_argmax_preserved`), `tests/AuditAxioms.lean`, the comparator tier
+  (`gen_comparator_tier.py` `MODULES`) and `formalization.yaml`'s file path. Four helpers the
+  moved proofs use lost `private` (`mulErr_nonneg`, `mulErr_mono`, `one_le_pow_one_add_u`,
+  `smRho_nonneg`); the `mnist_E{0,1}_*` helpers moved and stay private.
+* Certs is 185 roots reaching 235 proof modules (the two new files).
+* Gate: `lake build Certs LeanMlir Apps CertsHeavy Reference ProofsMinimal Proofs` (3613 jobs);
+  `ChapterArtifacts` re-ran its `#eval` writers during the build and `verified_mlir/` is
+  byte-identical; `AuditAxioms` (1607 prints, 1602 on the three standard axioms) and both tier
+  files elaborate; the same CI gates as Batch B, all green.
 
 ## 2. Batch A — leaf imports (cheap, no root file)
 

@@ -11,7 +11,7 @@ fp8 grid** before the matmul, accumulates in fp32 inside the verified kernel, an
 
 This is the runnable Lean side of the fp8 story whose structural faithfulness is proved
 by `Proofs/Float/E4M3Fold.lean` (§3b render-tie) and whose accuracy bound is
-`Proofs/Float/FloatBridge.lean` (§3c argmax-preservation). The E4M3 quantizer is pure Lean
+`Proofs/Float/MlpFloatBridge.lean` (§3c argmax-preservation). The E4M3 quantizer is pure Lean
 (`LeanMlir/E4M3Quant.lean`) — no fp8 hardware or fp8 StableHLO type; `q` runs host-side
 as operand byte-prep, exactly the §3b model. The numpy oracle
 (`scripts/demos/mnist_e4m3_demo.py` / `mnist_e4m3_train_demo.py`) uses the identical grid.

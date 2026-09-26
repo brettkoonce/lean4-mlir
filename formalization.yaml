@@ -209,7 +209,7 @@ status:
     #
     # --- Other float-tier results ---
     # fp8-E4M3 quantization argmax preservation
-    - {declaration: "Proofs.FloatModel.linear_e4m3_argmax_preserved", file: "LeanMlir/Proofs/Float/FloatBridge.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
+    - {declaration: "Proofs.FloatModel.linear_e4m3_argmax_preserved", file: "LeanMlir/Proofs/Float/MlpFloatBridge.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     # a binary32 SGD step provably decreases CE at TRAINED weights
     - {declaration: "Proofs.TrainedLinearDescent.trained_linear_sgd_strictly_descends", file: "LeanMlir/Proofs/Training/TrainedLinearDescent.lean", sorry_count: 0, axioms: *core, comparator_config: "tests/comparator/config-tier.json", literature_dependencies: []}
     #

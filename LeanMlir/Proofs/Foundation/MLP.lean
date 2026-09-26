@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Foundation.Tensor
-import Mathlib.Analysis.SpecialFunctions.ExpDeriv
 import Mathlib.Analysis.SpecialFunctions.Log.Basic
 
 /-!

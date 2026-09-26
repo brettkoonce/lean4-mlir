@@ -1,13 +1,5 @@
-import LeanMlir.Proofs.Foundation.Tensor
 import LeanMlir.Proofs.Architectures.BatchNorm
-import Mathlib.Analysis.SpecialFunctions.ExpDeriv
-import Mathlib.Analysis.SpecialFunctions.Trigonometric.Basic
 import Mathlib.Analysis.SpecialFunctions.Trigonometric.DerivHyp
-import Mathlib.Analysis.Complex.Trigonometric
-import Mathlib.Analysis.SpecialFunctions.Pow.Real
-import Mathlib.Analysis.Calculus.Deriv.Basic
-import Mathlib.Analysis.Calculus.Deriv.Inv
-import Mathlib.Analysis.Calculus.FDeriv.Prod
 import Mathlib.Analysis.SpecialFunctions.Sigmoid
 
 /-!

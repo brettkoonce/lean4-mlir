@@ -47,6 +47,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Float.FloatBridge
+import LeanMlir.Proofs.Float.MlpFloatBridge
 import LeanMlir.Proofs.Float.FloatSubnormalBridge
 import LeanMlir.Proofs.Training.SgdDescent
 import LeanMlir.Proofs.Training.SgdDescentLinear
@@ -767,7 +768,7 @@ open Proofs
 #print axioms StableHLO.convNextFwdGraphTCh_faithful
 -- §2n: the SCALAR-LN twin of this chain
 
--- ℝ→Float32 bridge, Tier 1 (FloatBridge.lean)
+-- ℝ→Float32 bridge, Tier 1 (FloatBridge.lean, MlpFloatBridge.lean)
 #print axioms FloatModel.dot_close
 -- P2 (TreeReduceBridge.lean, planning/archive/adjoint_chain.md)
 #print axioms FloatModel.dotMixed

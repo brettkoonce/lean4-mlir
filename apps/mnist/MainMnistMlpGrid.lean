@@ -1,4 +1,5 @@
 import LeanMlir.VerifiedNets
+import LeanMlir.Proofs.Codegen.ChapterGraphs
 import LeanMlir.Proofs.Codegen.MlpRender
 
 /-! # `mnist-mlp-grid` — the width-parametric MNIST MLP demo
