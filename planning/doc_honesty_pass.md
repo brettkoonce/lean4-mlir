@@ -26,6 +26,11 @@ the prose. This pass fixes them.
 
 ## ▶ Start here (state at 2026-09-26, origin/main `290187b1`)
 
+**Update 2026-09-26:** the Lean docstring half (§2, §3's docstring items, the docstring part of §4,
+and the landing-page items §1(a)(b)(c)(j)) landed on branch `api-docs-pass` as eight
+`docs(api):` commits with ledgers `doc_audit/ledger_{C..J}.md`. What it left — comments, emitted
+text, markdown, the book, the §5-deferred sites, correctness leads — is `api_docs_followups.md`.
+
 Nothing in this plan is landed. A first pass at §1 (54 hunks across the book, the API landing
 page, README, yaml, CHANGELOG and three small READMEs) was drafted, previewed, and **backed out
 whole** at the user's request: the review found a replacement sentence that was itself an
