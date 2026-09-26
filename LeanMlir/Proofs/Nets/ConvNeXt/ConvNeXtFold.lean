@@ -1,5 +1,3 @@
-import LeanMlir.Proofs.Architectures.ConvGrad
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 
 /-! # ConvNeXt-T fold — the per-channel layer-scale γ gradient cert (the one new proof)

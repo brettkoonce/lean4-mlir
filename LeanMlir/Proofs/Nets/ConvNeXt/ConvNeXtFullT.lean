@@ -1,4 +1,3 @@
-import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 
 /-! # The full ConvNeXt-T — `[3,3,9,3]`, forward + whole-net VJP + graph + faithfulness

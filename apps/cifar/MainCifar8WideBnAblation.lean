@@ -1,6 +1,5 @@
 import LeanMlir.Verified.NetsCore
 import LeanMlir.Verified.Train
-import LeanMlir.Proofs.Codegen.ChapterGraphs
 
 /-! # `cifar8w-bn-ablation` — wide-head (d1=512) cifar8 **+ per-channel BN**, all three optimizers
 

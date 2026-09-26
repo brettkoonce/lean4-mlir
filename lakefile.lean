@@ -280,7 +280,8 @@ lean_lib «Certs» where
     (PGD 93/93/92/88). ⚠ The full-input LipSDP files (`LipschitzCert/ScorecardSDPFull{,Uncon}`,
     93/100 = the PGD bound) are NOT roots here: their linarith PSD witnesses OOM the runners
     (planning/archive/certs_heavy_psd_memory.md), so no lib builds them and their audit lines
-    are commented out. -/
+    are commented out. Re-check them locally with `scripts/certs/check_sdpfull.sh` (~3 min and
+    ~15 GB each). -/
 lean_lib «CertsHeavy» where
   srcDir := "."
   roots := #[`LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFull,

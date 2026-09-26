@@ -1,5 +1,4 @@
 import LeanMlir.Proofs.Nets.ViT.ViTFoldG
-import LeanMlir.Proofs.Foundation.GradNodesB
 
 /-! # The gradient-node fold for ViT-Tiny at the batched index
 

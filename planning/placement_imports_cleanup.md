@@ -36,7 +36,9 @@ measured on that tree.
 | 204f6a5f | Batch B: §3.1–3.6 and two of the three re-derived statements. Deviations below |
 | 57630c41 | Batch C: §4 except `mnv2RmsHyper`. Deviations below |
 | 8915cc61 | Batch D: §5.1 and §5.2. Notes below |
-| (staged) | Batch E: §6 rows 1–11 (not the optional three). Notes below |
+| 9e84e41b | Batch E: §6 rows 1–11 (not the optional three). Notes below |
+| d2cc5267 | §7 measured and declined (below) |
+| (staged) | §9: `scripts/gates/import_audit.py` + a CI gate; five unused imports; SDPFull re-checked |
 
 Batch A deviations:
 
@@ -363,11 +365,10 @@ cross-file pairs, and none is a safe generator dedup.
 | `pzTF_*` = `pzITF_*` (16) | `ScorecardSDPFullUncon` / `ScorecardIBPUncon` | keep: per-file fallback images in two files with no shared import but the base; one of them is built by no lib (OOM), so a change there cannot be compiled by any gate |
 
 Reproducibility, checked in a scratch mirror with `data/` MNIST: `lipschitz_cert_scorecard_full.py`,
-`lipschitz_cert_scorecard_ibp.py` and `crown_ibp_scorecard.py` reproduce their nine committed files
-byte for byte (`lipschitz_cert_pair_sdp.py` was not run). `lipschitz_cert_pair_sdp_full.py` does NOT:
-`ScorecardSDPFullUncon` regenerates at 2,480 lines against 3,083 committed, and `ScorecardSDPFull`
-differs too. Both files are built by no lib, so nothing catches the drift. That is its own
-finding, open.
+`lipschitz_cert_scorecard_ibp.py`, `crown_ibp_scorecard.py` and `lipschitz_cert_pair_sdp_full.py`
+reproduce their eleven committed files byte for byte (`lipschitz_cert_pair_sdp.py` was not run).
+(`pair_sdp_full`'s own "wrote … 2,480 lines" message is not the file's line count; both SDPFull
+files are 3,083 / 2,947 lines either way.)
 
 Found in the check: Batch E's short-name pass wrote `` `Group/Rest` `` into four `scripts/certs/`
 generators while the Lean files they emit got `` `Group.Rest` ``; `lipschitz_cert_scorecard_ibp.py`
@@ -382,9 +383,42 @@ Generic lemmas in the right file under a net's name or namespace: `ResNet34PoCB.
 `LayerNorm`); `cifar_bn_*` (`PerChannelBNGrad`); `r34PoolLayer` / `R34PoolSmoothAt` (`HeadLayers`,
 shared by R34 and R50). §3's moved `mnv2_*` names join this list.
 
-## 9. Open
+## 9. The audit, kept
 
-* Keep the audit's .olean `#min_imports` pass as a script (and possibly a CI ratchet on unused and
-  implied imports), so the tables above do not regrow.
-* After each batch, re-run it: the tables were measured once, and §2 rows can interact (the
-  either-or pairs).
+`scripts/gates/import_audit.py` (with `scripts/gates/ImportAudit.lean`):
+
+* `implied` — exact, source-only (Mathlib's from `.lake/packages`). `LeanMlir/`, `apps/`, `demos/`
+  are at zero; `certs.yml` fails on any new one (after `lake build Apps`, nightly and on proof-path
+  pushes). `LeanMlir.lean` (the doc-gen umbrella) and `tests/` are not gated. Its first run caught
+  one: Batch D gave `demos/probes/MainMnistDdpmScore.lean` a `Verified.NetsCore` import its
+  `import LeanMlir` already reached.
+* `unused [--verify]` — local only. `ImportAudit.lean` reads each lib module's constants from the
+  `.olean`s (library modules in one environment, each app/demo alone since each defines `main`);
+  an import is a candidate when the file's required modules lie in its other imports' closures.
+  `--verify` compiles the file without it, then all confirmed ones together, marking an either-or
+  group when they cannot all go. Skips modules no lib builds, unreadable old-toolchain `.olean`s
+  (`IRPrint`), and files with a top-level `#eval` (named, not compiled). ~2 min; `--verify` ~1.5.
+* First run (2026-09-26): 19 candidates; 8 confirmed, 6 needed after all, 2 `#eval` writers.
+  Removed: `ConvNeXtFold` (`ConvGrad`, `ConvNeXt`), `ConvNeXtFullT` (`ConvNeXtChainClose`),
+  `ViTFoldGB` (`GradNodesB`, which `ViTStepTieGB` now imports itself), `MainCifar8WideBnAblation`
+  (`ChapterGraphs`). Left: `ScorecardIBPData`'s three imports are an either-or group in a generated
+  file (the "interchangeable" note in §7).
+
+The full-input LipSDP pair (`ScorecardSDPFull{,Uncon}`), which no lib builds, was re-checked
+2026-09-26 after the batches (it had not been since at least 714dd89b's option sweep): both build
+(2:54 and 3:03, 15.2 GB peak each), and all 445 theorems in them are on the standard axioms (429 on
+all three, the 16 `pzTF_*` kernel facts on `propext`). `scripts/certs/check_sdpfull.sh` repeats
+that; the lakefile and `tests/AuditAxiomsHeavy.lean` point at it.
+
+## 10. Open
+
+* **Stale path in six bf16 artifacts.** `ResNet34RenderB.lean` and `ResNet50RenderB.lean` emit an
+  MLIR comment `// peer, in LeanMlir/Proofs/Foundation/DataParallelSyncBf16.lean.)`; since §6 the
+  file is `Foundation/DataParallel/SyncBf16.lean`. The literal was left alone so that a directory
+  move did not change the bytes of the six committed artifacts that carry it
+  (`resnet34in_momdp64bf16`, `resnet50in160_lambaccdp4x128wxclipbcebf16`,
+  `resnet50in160_lambaccdp8x64wxclipbcebf16`, `resnet50in_emalambaccdp4x128wxclipdropbcebf16`,
+  `resnet50in_emalambaccdp4x128wxclipdropbcewd001bf16`, `resnet50in_momdp64bf16`, all
+  `_train_step.mlir`). Fix both literals and regenerate those six together, at the next
+  deliberate regeneration of the R34/R50 renders; the drift guard then pins the new bytes.
+* The naming pass (§8).

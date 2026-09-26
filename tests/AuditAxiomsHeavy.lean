@@ -2,7 +2,8 @@ import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardFull
 -- (LipschitzCertScorecardSDPFull{,Uncon} imports DISABLED with their lib
 -- membership — the linarith PSD witnesses OOM the free-tier runners; see
 -- planning/archive/certs_heavy_psd_memory.md. Their prints below are commented out
--- with them; re-enable both together.)
+-- with them; re-enable both together. Until then `scripts/certs/check_sdpfull.sh` builds both
+-- and audits every theorem in them, locally.)
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBP
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardIBPUncon
 import LeanMlir.Proofs.Certificates.LipschitzCert.ScorecardCrown

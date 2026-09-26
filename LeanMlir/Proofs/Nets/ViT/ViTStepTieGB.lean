@@ -1,6 +1,7 @@
 import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
+import LeanMlir.Proofs.Foundation.GradNodesB
 
 /-! # ViT-Tiny's step tie at the batched index, the un-fused gradient and the smoothed loss
 

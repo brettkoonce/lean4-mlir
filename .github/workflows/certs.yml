@@ -32,6 +32,7 @@ on:
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
       - 'scripts/gates/check_audit_coverage.py'
+      - 'scripts/gates/import_audit.py'
       - 'scripts/lib/lean_graph.py'
       - 'scripts/gates/check_render_coverage.py'
       - 'scripts/gates/render_guard_baseline.txt'
@@ -56,6 +57,7 @@ on:
       # and, until 2026-09-09, triggered nothing. check_render_coverage.py reads proofs.yml's
       # diff list as its data source, so that workflow file is an input to THIS one.
       - 'scripts/gates/check_audit_coverage.py'
+      - 'scripts/gates/import_audit.py'
       - 'scripts/lib/lean_graph.py'
       - 'scripts/gates/check_render_coverage.py'
       - 'scripts/gates/render_guard_baseline.txt'
@@ -255,6 +257,15 @@ jobs:
           set -e
           lake build Apps
           echo "✅ **All 111 apps/ + demos/ entry points elaborate** (\`lake build Apps\`)" >> $GITHUB_STEP_SUMMARY
+
+      - name: No implied imports (import_audit.py implied)
+        # An import another import of the same file already reaches: removing it changes no
+        # closure, so the check is exact and reads only sources (Mathlib's from .lake/packages,
+        # present after the build above). LeanMlir/, apps/ and demos/ are at zero since the
+        # 2026-09-26 placement/imports cleanup; this keeps them there. The constants-based
+        # UNUSED-import pass (`import_audit.py unused --verify`) is local-only: it needs a compile
+        # per candidate. planning/placement_imports_cleanup.md §9.
+        run: python3 scripts/gates/import_audit.py implied
 
       - name: Bestiary param-count drift guard
         # tests/test_bestiary_params.py pins NetSpec.totalParams for every

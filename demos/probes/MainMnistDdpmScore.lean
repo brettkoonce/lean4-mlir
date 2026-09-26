@@ -1,5 +1,4 @@
 import LeanMlir
-import LeanMlir.Verified.NetsCore
 
 /-! # `mnist-ddpm-score` — the image DDPM's first real number
 
