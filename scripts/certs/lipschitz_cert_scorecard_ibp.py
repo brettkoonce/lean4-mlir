@@ -203,10 +203,12 @@ def emit_net(tag, r, out_path):
     A("")
     A(f"Pixel-L∞ certificates by exact interval bound propagation over the SAME")
     A(f"first-{N_IMG} MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,")
-    A(f"4/255, 8/255 the box certificate proves")
+    A(f"4/255, 8/255 the box certificate certifies (measured by exact rational interval")
+    A("propagation)")
     cline = ", ".join(f"**{measured[en]}/{N_IMG}**" for _, en in EPS_GRID)
     A(f"{cline} predictions robust (PGD-L∞ bracket: "
       + ", ".join(str(pgd[en]) for _, en in EPS_GRID) + ").")
+    A("*Theorem vs. measurement* below says which of these carry Lean proofs.")
     A("For comparison, pushing the L2 Lipschitz certificate through")
     A(f"`‖δ‖₂ ≤ √784·ε∞` certifies only "
       + ", ".join(str(l2impl[en]) for _, en in EPS_GRID)

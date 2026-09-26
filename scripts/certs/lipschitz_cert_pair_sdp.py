@@ -233,7 +233,7 @@ def emit_net(tag, W1z, W2z, G1q, den, facts, w1name, w2name, g1name, g1eq,
     A("784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational")
     A("arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).")
     A("")
-    A(f"The tighter-Lipschitz-constant pass over the SAME first-{N_IMG} MNIST test")
+    A(f"A tighter Lipschitz constant over the SAME first-{N_IMG} MNIST test")
     A(f"subset and SAME ε = {EPS} as `LipschitzCertScorecard.lean`: replacing the")
     A("global `√2·∏‖Wᵢ‖` criterion by per-pair LipSDP certificates lifts the")
     A(f"count from **{base}/{N_IMG} to {measured}/{N_IMG}** — no retraining, no new data, just a")

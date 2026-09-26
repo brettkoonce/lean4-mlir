@@ -166,7 +166,8 @@ lemma stdNormalQuantile_anti {q : ℝ} (hq : q ∈ Set.Ioo (0:ℝ) 1) :
     the Stieltjes cdf gives `≥` (a value below `p` at the sup would push the sup further
     right); no-atoms gives `≤` (the cdf equals its left limit, and everything left of the
     sup is `< p`). The lemma that makes `stdNormalQuantile` an inverse, not just a
-    monotone-odd stand-in — G2's Neyman–Pearson bound enters through it. -/
+    monotone-odd stand-in; `smoothing_probit_lipschitz` applies it to feed the Neyman–Pearson
+    bound its threshold. -/
 lemma stdNormalCDF_quantile {p : ℝ} (hp : p ∈ Set.Ioo (0:ℝ) 1) :
     stdNormalCDF (stdNormalQuantile p) = p := by
   have : NullSingletonClass (gaussianReal 0 1) := nullSingletonClass_gaussianReal one_ne_zero

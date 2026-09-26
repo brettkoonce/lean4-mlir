@@ -5,18 +5,18 @@ import Mathlib.Probability.Moments.SubGaussian
 
 `smoothing_certified_radius_classifier` (SmoothingGaussian.lean) certifies the
 radius `σ·Φ⁻¹(p)` for the TRUE class probability `p = ∫ 1[C(x+σz)=y] dγ(z)`.
-The `*-smooth` drivers can only ESTIMATE `p` from `N` Gaussian samples — the
-honest gap flagged since the smoothing theorems landed.
+The `*-smooth` drivers can only ESTIMATE `p` from `N` Gaussian samples.
 
-This file closes it: a one-sided Hoeffding bound for `[0,1]`-valued
+This file ties the estimate to the theorem: a one-sided Hoeffding bound for `[0,1]`-valued
 Monte-Carlo means over the product measure (`mc_mean_lower_bound`, built on
 Mathlib's `HasSubgaussianMGF` machinery), so that with probability
 `≥ 1 − exp(−2Nt²)` over the samples, the true `p` is at least the empirical
 `p̂ − t` — and on that event the reported radius `σ·Φ⁻¹(p̂ − t)` is genuinely
 certified (`smoothing_mc_certified`, composed with the classifier theorem
-through the quantile's monotonicity). The guarantee has exactly the shape of
-Cohen et al.'s CERTIFY procedure: a confidence-qualified radius, now end to
-end a theorem. -/
+through the quantile's monotonicity). The guarantee has the shape of Cohen et
+al.'s CERTIFY procedure, a confidence-qualified radius, under the classifier
+theorem's hypotheses: `C` measurable and `hp` (every class's smoothed
+probability in `(0,1)` at every point). -/
 
 namespace Proofs
 
@@ -112,11 +112,12 @@ end MCBound
 /-- **The Monte-Carlo smoothing certificate.** Sample `N` iid standard
     Gaussians; report the radius `σ·Φ⁻¹(p̂ − t)` from the empirical class
     frequency `p̂`. With probability `≥ 1 − exp(−2Nt²)` over the samples, the
-    reported radius is GENUINELY certified: every `‖δ‖ < σ·Φ⁻¹(p̂ − t)` keeps
-    `y` the strict argmax of the smoothed classifier. This is the guarantee
-    shape of Cohen–Rosenfeld–Kolter's CERTIFY procedure, with the Neyman–
-    Pearson side (`smoothing_probit_lipschitz`), the radius algebra
-    (`smoothing_certified_radius_classifier`), and now the sampling
+    reported radius is certified: every `‖δ‖ < σ·Φ⁻¹(p̂ − t)` keeps `y` the
+    strict argmax of the smoothed classifier. Hypotheses: `C` measurable, and
+    `hp` — every class's smoothed probability lies in `(0,1)` at every point.
+    This is the guarantee shape of Cohen–Rosenfeld–Kolter's CERTIFY procedure,
+    with the Neyman–Pearson side (`smoothing_probit_lipschitz`), the radius
+    algebra (`smoothing_certified_radius_classifier`), and the sampling
     confidence (`mc_mean_lower_bound`, Hoeffding) all theorems. -/
 theorem smoothing_mc_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k} (hC : Measurable C)

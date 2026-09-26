@@ -5,8 +5,8 @@ import LeanMlir.Proofs.Certificates.DenseEuclid
 
 The smoothing chain up through `smoothing_cp_certified_solved` quantifies over
 an ABSTRACT measurable classifier `C` with an interiority hypothesis
-`hp : ∀ c x, p_c(x) ∈ (0,1)` — the last informality flagged in the scorecard
-headers. This file closes it:
+`hp : ∀ c x, p_c(x) ∈ (0,1)`. This file instantiates `C` as the argmax of a
+logit map and discharges both:
 
 * `argmaxNet` — the argmax classifier of a logit map (lowest index wins ties;
   the tie-break is irrelevant at strict-argmax points), with
@@ -14,10 +14,8 @@ headers. This file closes it:
   boolean combinations of `{f·j ≤ f·c}` sets);
 * `isOpen_strictRegion` — strict decision regions of continuous logits are
   open;
-* `stdGaussian` full support — `IsOpenPosMeasure` instances for
-  `gaussianReal 0 1` (from `gaussianReal_absolutelyContinuous'`) and for the multivariate
-  `stdGaussian E` (pushforward of the pi-Gaussian under the surjective
-  continuous basis sum; `pi.isOpenPosMeasure` does the product);
+* full support of `stdGaussian` (the `IsOpenPosMeasure` instances of
+  `GaussianQuantile.lean`) gives the witness regions positive mass;
 * `argmaxNet_smoothProb_mem_Ioo` — **the `hp` discharge**: ONE strict-argmax
   witness per class ⇒ every smoothed class probability at every point is in
   `(0,1)` (the witness's open region has positive Gaussian mass everywhere;

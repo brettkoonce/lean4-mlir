@@ -8,17 +8,23 @@ MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
 arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
-Closes the "certificate machinery, never instantiated" gap: a fixed-weight
-network whose Lipschitz constant is PROVED in Lean (Frobenius bound — no
-power iteration, no hypothesis), whose margin at a concrete input is
-computed in-kernel, and whose certified radius is provably positive.
+Fixed-weight networks whose Lipschitz constant is proved in Lean (no power iteration, no
+hypothesis), whose margin at a concrete input is computed in-kernel, and whose certified radius
+is provably positive.
 
-Two instances:
+Three instances:
 * `linear_demo_certified` — a 2×2 linear classifier, L = 5 (Frobenius),
   margin 3 at x = e₀, certified radius 3/(√2·5) > 0.
-* `mlp_demo_certified` — a dense → ReLU → dense MLP, L = the per-layer
+* `mlp_demo_certified` — a 2 → 2 → 2 dense → ReLU → dense MLP, L = the per-layer
   product 3·(1·2) = 6 via `LipschitzL2.comp` (the exact product bound the
   PGD demos estimate numerically), margin 2, radius 2/(√2·6) > 0.
+* `trained_demo_certified`, `trained_demo_certified_gram`, `trained_demo_certified_gram2` —
+  the trained 49→8→10 MLP `mlpT` at the pooled MNIST test image `xt`, with Frobenius
+  (`mlpT_lip`), Schatten-4 (`mlpT_lip_gram`) and Schatten-8 (`mlpT_lip_gram2`) product
+  constants. The certified lower bounds `W1t_lip_lower` / `W2t_lip_lower` bound each layer's
+  best Lipschitz constant from below. `mlpT`, its weights and `mlpT_logit_continuous` are what
+  `LipschitzCertScorecard.lean`, `SmoothingNetSemantics.lean` and `SmoothingNetWitness.lean`
+  build on.
 -/
 
 namespace Proofs

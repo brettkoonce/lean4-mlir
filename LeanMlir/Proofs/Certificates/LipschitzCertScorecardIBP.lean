@@ -4,8 +4,10 @@ import LeanMlir.Proofs.Certificates.LipschitzCertScorecardIBPData
 
 Pixel-L∞ certificates by exact interval bound propagation over the SAME
 first-100 MNIST test subset as the L2 scorecard: at ε = 1/255, 2/255,
-4/255, 8/255 the box certificate proves
+4/255, 8/255 the box certificate certifies (measured by exact rational interval
+propagation)
 **92/100**, **88/100**, **69/100**, **24/100** predictions robust (PGD-L∞ bracket: 93, 93, 92, 88).
+*Theorem vs. measurement* below says which of these carry Lean proofs.
 For comparison, pushing the L2 Lipschitz certificate through
 `‖δ‖₂ ≤ √784·ε∞` certifies only 92, 85, 49, 2 — at small L∞ radii the box beats the ball.
 

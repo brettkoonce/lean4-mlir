@@ -3,9 +3,8 @@ import Mathlib.Analysis.InnerProductSpace.PiL2
 
 /-! # Lipschitz-margin certified robustness radius (Tsuzuku–Sato–Sugiyama 2018)
 
-The verification payoff behind the `mnist-{linear,mlp,cnn}-pgd` demos
-(`planning/archive/robustness.md`, `planning/archive/robustness_ladder.md`): the *certificate* — the lower
-bound of the `cert ≤ TRUE ≤ PGD` sandwich — turned from a number into a **theorem**.
+The certificate behind the `mnist-{linear,mlp,cnn}-pgd` demos: the lower bound of the
+`cert ≤ TRUE ≤ PGD` sandwich, stated as a theorem.
 
 The classifier's logit map `f : ℝ^d → ℝ^k` is `L`-Lipschitz in L2. At an input `x`, the
 margin is `m = f(x)_{top} − f(x)_{runner-up}`. The theorem: **every perturbation `δ` with
@@ -14,7 +13,7 @@ margin is `m = f(x)_{top} − f(x)_{runner-up}`. The theorem: **every perturbati
 between two one-hot class directions: a pairwise logit gap is `(√2·L)`-Lipschitz.
 
 The `L` is supplied numerically by `specNormW` / `specNormConvTapSum`
-([`LeanMlir/VerifiedTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/VerifiedTrain.lean)); `LipschitzL2.comp` + `clm_lipschitzL2` show *why* the naive
+([`LeanMlir/VerifiedAttack.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/VerifiedAttack.lean)); `LipschitzL2.comp` + `clm_lipschitzL2` show *why* the naive
 per-layer **product** `L = ∏ᵢ ‖Wᵢ‖₂` is a sound (if loose) global constant — the looseness
 the demos make visual (linear tight → MLP/CNN vacuous).
 
@@ -199,15 +198,17 @@ theorem smoothed_margin_certified_radius {σ : ℝ} (hσ : 0 < σ)
   nlinarith [hi', hj', hmar, hfrac]
 
 /-- **Randomized-smoothing certified radius (Cohen–Rosenfeld–Kolter 2019), at an honest probit.**
-    The form the `*-smooth` drivers report: with `p c x = P[f(x+η)=c]` in `(0,1)` (`hp` —
-    Monte-Carlo/Clopper–Pearson estimates are never exactly 0 or 1), a probit `Φ⁻¹ = Phiinv`
-    that is increasing and odd about ½ ON `(0,1)` (`hmono`, `hanti`), per-class scores
-    `Φ⁻¹∘(p c)` each `(1/σ)`-Lipschitz (`hg`), and the runner-up bound `p_j(x) ≤ 1 − p_A(x)`,
-    every `‖δ‖₂ < σ·Φ⁻¹(p_A(x))` keeps class `i` the strict argmax of the noise-probabilities.
-    ⚠ The TRUE quantile is unbounded on `(0,1)`, so the monotonicity is only asked on `(0,1)`:
-    a GLOBAL `Monotone Phiinv` agreeing with it cannot exist. `SmoothingGaussian.lean`
-    discharges both conditions at the real `Φ⁻¹`, leaving only the Neyman–Pearson Lipschitz
-    core `hg` as a hypothesis. -/
+    The form the `*-smooth` drivers report: with every class probability `p c y` in `(0,1)` at
+    every point `y` (`hp`), a probit `Φ⁻¹ = Phiinv` that is increasing and odd about ½ on `(0,1)`
+    (`hmono`, `hanti`), per-class scores `Φ⁻¹∘(p c)` each `(1/σ)`-Lipschitz (`hg`), and the
+    runner-up bound `p_j(x) ≤ 1 − p_A(x)`, every `‖δ‖₂ < σ·Φ⁻¹(p_A(x))` keeps class `i` the
+    strict argmax of the noise-probabilities.
+    The true quantile is unbounded on `(0,1)`, so monotonicity is only asked on `(0,1)`: a
+    global `Monotone Phiinv` agreeing with it cannot exist. `SmoothingGaussian.lean` discharges
+    `hmono`/`hanti` at the real `Φ⁻¹` and proves `hg` for Gaussian-smoothed `[0,1]` scores
+    (`smoothing_probit_lipschitz`); `smoothing_certified_radius_classifier` is the resulting
+    form for a measurable classifier, whose hypotheses are `0 < σ`, measurability, `hp` and the
+    radius bound. -/
 theorem smoothing_certified_radius_probit {σ : ℝ} (hσ : 0 < σ)
     {Phiinv : ℝ → ℝ} (hmono : MonotoneOn Phiinv (Set.Ioo 0 1))
     (hanti : ∀ q ∈ Set.Ioo (0:ℝ) 1, Phiinv (1 - q) = -Phiinv q)

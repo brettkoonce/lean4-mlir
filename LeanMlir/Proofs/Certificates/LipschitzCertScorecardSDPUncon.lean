@@ -8,7 +8,7 @@ MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
 arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
-The tighter-Lipschitz-constant pass over the SAME first-100 MNIST test
+A tighter Lipschitz constant over the SAME first-100 MNIST test
 subset and SAME ε = 1/10 as `LipschitzCertScorecard.lean`: replacing the
 global `√2·∏‖Wᵢ‖` criterion by per-pair LipSDP certificates lifts the
 count from **1/100 to 63/100** — no retraining, no new data, just a

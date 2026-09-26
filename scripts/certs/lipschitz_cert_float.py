@@ -146,9 +146,9 @@ MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
 784→512→512→10 `mlpVerified`; chosen so every margin/norm/SOS check is exact rational
 arithmetic in-kernel. Canonical surface: [`Proofs/MlpCanonical.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/Small/MlpCanonical.lean).
 
-The 2026-07-02 audit's gap #1, closed: the scorecard's per-image Lipschitz-
-margin certificates (`LipschitzCertScorecard.lean`, exact-ℝ net) composed with
-the FloatBridge forward budgets, certifying the FLOAT-EVALUATED capped net.
+The scorecard's per-image Lipschitz-margin certificates (`LipschitzCertScorecard.lean`,
+exact-ℝ net) composed with the FloatBridge forward budgets, certifying the
+FLOAT-EVALUATED capped net.
 
 For each image below: for **every** L2 perturbation `‖δ‖ < ε = 1/10` and
 **every** rounded input `y` within `u32·(11/10)` of `img + δ` coordinatewise

@@ -3,8 +3,8 @@ import LeanMlir.Proofs.Certificates.LipschitzCertScorecardFullImgsB
 
 /-! # Full-input certified-accuracy scorecard (4/4): the certificates
 
-The pooled 49-dim scorecard, lifted to FULL 784-dim input (the 2026-07 audit's
-gap #3): pixel-L2 ε = 1/10 and 3/10, two 784→16→10 nets. Counts below are
+The pooled 49-dim scorecard, lifted to FULL 784-dim input: pixel-L2
+ε = 1/10 and 3/10, two 784→16→10 nets. Counts below are
 MEASURED over the first 100 MNIST test images by exact rational arithmetic:
 
 * **spectrally capped** (σ ≤ 2 projected SGD, q-acc 0.924, Schatten-8
@@ -15,9 +15,11 @@ MEASURED over the first 100 MNIST test images by exact rational arithmetic:
   (PGD: 94/100), collapsing to **2/100 at ε = 0.3** (PGD: 86/100) —
   at the larger radius the σ-projection is what keeps the certificate alive.
 
-ε here is FULL-pixel-space L2 (pixels in [0,1]), not the pooled-feature L2 of
-`LipschitzCertScorecard.lean` — a strictly stronger, directly comparable-to-
-the-literature perturbation model. Width 16 (vs the canonical 512) is the
+ε here is FULL-pixel-space L2 (pixels in [0,1]), the perturbation model the
+literature reports. It is not the pooled-feature L2 of `LipschitzCertScorecard.lean`:
+4×4 averaging maps a raw-pixel perturbation of L2 norm r to a pooled one of norm at
+most r/4, so a pooled-L2 radius ε covers raw-pixel radii up to 4ε, and the two
+tiers' ε are not directly comparable. Width 16 (vs the canonical 512) is the
 honest cost: 512-wide Gram certificates are ~10⁵× this kernel work.
 
 **Theorem vs. measurement — read this before quoting a number.** Soundness

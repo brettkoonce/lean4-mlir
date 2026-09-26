@@ -7,45 +7,32 @@ import Mathlib.Analysis.InnerProductSpace.Projection.Reflection
 
 /-! # The real Gaussian probit: Φ, Φ⁻¹, and the Cohen radius as a THEOREM
 
-The complete G1–G4 ladder of `planning/archive/smoothing_gaussian_lemma.md`. Endpoint:
-`smoothing_certified_radius_classifier` — for a measurable classifier under `N(0,σ²I)`
-smoothing, every `‖δ‖ < σ·Φ⁻¹(p_A(x))` provably cannot flip the smoothed argmax, with
-`Φ⁻¹` the genuine standard-normal quantile and NO smoothing-side hypotheses left: the
-Cohen–Rosenfeld–Kolter `(1/σ)`-Lipschitz probit (`hg` of the G1 radius theorem, the
-Neyman–Pearson hard half) is now `smoothing_probit_lipschitz`, a theorem.
+Endpoint: `smoothing_certified_radius_classifier` — for a measurable classifier under
+`N(0,σ²I)` smoothing, every `‖δ‖ < σ·Φ⁻¹(p_A(x))` provably cannot flip the smoothed argmax, with
+`Φ⁻¹` the genuine standard-normal quantile. The Cohen–Rosenfeld–Kolter `(1/σ)`-Lipschitz probit
+(`hg` of `smoothing_certified_radius_probit`, the Neyman–Pearson half) is a theorem here,
+`smoothing_probit_lipschitz`. The one remaining hypothesis on the smoothed classifier is `hp`:
+every class's smoothed probability lies in `(0,1)` at every point. `SmoothingNetSemantics.lean`
+discharges it for argmax nets.
 
-`stdNormalCDF` is Mathlib's `cdf (gaussianReal 0 1)` — the genuine `Φ`, no bespoke integral.
-This file proves the three facts Mathlib doesn't have:
+`Φ` (`stdNormalCDF`, Mathlib's `cdf (gaussianReal 0 1)`), `Φ⁻¹` (`stdNormalQuantile`) and their
+monotonicity, symmetry, two-sided inversion and continuity live in `GaussianQuantile.lean`. This
+file proves:
 
-* **strict monotonicity** (`stdNormalCDF_strictMono`) — the Gaussian pdf is everywhere
-  positive, so every interval carries positive mass;
-* **symmetry** `Φ(−t) = 1 − Φ(t)` (`stdNormalCDF_neg`) — the standard Gaussian is invariant
-  under negation (`gaussianReal_map_neg`);
-* the quantile `stdNormalQuantile p = sSup {t | Φ t < p}` is **monotone on `(0,1)`**
-  (`stdNormalQuantile_monotoneOn`) and **odd about ½** (`stdNormalQuantile_anti`,
-  `Φ⁻¹(1−q) = −Φ⁻¹(q)`), via the no-flat-step lemma `stdNormalCDF_sSup_lt_eq_sInf_gt`
-  (a flat step at level `q` would give two points with `Φ = q`, against strict mono).
+* the Neyman–Pearson bounds: `pi_gaussian_np_shift` — a `[0,1]` function with mean ≥ `Φ(t)`
+  under the iid product `stdGaussianPi n` keeps mean ≥ `Φ(t−d)` under a `d ≥ 0` shift along
+  coordinate 0, by the monotone-likelihood-ratio pointwise inequality
+  `(F − 1_{z₀≤t})·(LR − LR(t)) ≥ 0` (no layer-cake, no rearrangement machinery) — and its
+  rotation to an arbitrary shift on Euclidean space, `stdGaussian_np_shift`;
+* the `(1/σ)`-Lipschitz probit, `smoothing_probit_lipschitz`;
+* the Cohen radius at the real quantile: `smoothing_certified_radius_gaussian` (abstract scores,
+  `hg` still a hypothesis), `smoothing_certified_radius_cohen` (Gaussian-smoothed `[0,1]`
+  scores), `smoothing_certified_radius_classifier` (hard classifier), and
+  `smoothing_certified_of_le` (any lower bound on the top-class probability certifies).
 
-The two-sided inverse is fully packaged: `Φ(Φ⁻¹ p) = p` on `(0,1)`
-(`stdNormalCDF_quantile`), `Φ⁻¹(Φ s) = s` globally (`stdNormalQuantile_cdf`), and from
-those `Φ⁻¹` is **strictly** monotone on `(0,1)` (`stdNormalQuantile_strictMonoOn`), maps
-`(0,1)` onto ℝ (`stdNormalQuantile_surjOn`), and is continuous there
-(`stdNormalQuantile_continuousAt`/`_continuousOn` — strict mono + full image, no extra
-measure theory).
-
-G2 (the 1-D Neyman–Pearson core) also lives here: `stdNormalCDF_quantile` upgrades the
-quantile to a genuine inverse (`Φ(Φ⁻¹ p) = p` on `(0,1)`, right-continuity + no-atoms), and
-`pi_gaussian_np_shift` is the Cohen bound — a `[0,1]` function with standard-Gaussian mean ≥ `Φ(t)`
-keeps mean ≥ `Φ(t−d)` under a `d ≥ 0` shift along coordinate 0, by the monotone-likelihood-ratio
-pointwise inequality `(F − 1_{z₀≤t})·(LR − LR(t)) ≥ 0` (no layer-cake, no rearrangement
-machinery).
-
-Capstone: `smoothing_certified_radius_gaussian` — `smoothing_certified_radius_probit` with
-`Phiinv := stdNormalQuantile`, its `hmono`/`hanti` DISCHARGED. The quantile is total on ℝ
-(junk `sSup` outside `(0,1)`) but every use here is guarded by `hp : p c y ∈ Ioo 0 1` — the
-realistic regime, since Monte-Carlo/Clopper–Pearson class-probability estimates are never
-exactly 0 or 1. See `planning/archive/smoothing_gaussian_lemma.md` for why the ORIGINAL abstract
-theorem's global `Monotone Phiinv` can never be met by the true (unbounded) quantile.
+The quantile is total on ℝ (junk `sSup` outside `(0,1)`), and every use here is guarded by
+`hp`. `smoothing_certified_radius_probit` asks monotonicity of the probit only on `(0,1)`
+because no globally monotone function agrees with the true (unbounded) quantile there.
 
 All results are `propext / Classical.choice / Quot.sound`-clean ([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)). -/
 
@@ -85,10 +72,10 @@ lemma integral_indicator_Iic_gaussianReal (μ t : ℝ) :
 -- § Capstone: the Cohen radius at the REAL Gaussian quantile
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Randomized-smoothing certified radius at the true Gaussian probit.** With class
-    probabilities honestly inside `(0,1)` (`hp`), per-class probit scores
-    `Φ⁻¹ ∘ p c` each `(1/σ)`-Lipschitz (`hg` — the Neyman–Pearson core, the ONE remaining
-    smoothing-side hypothesis, G2–G4 of `planning/archive/smoothing_gaussian_lemma.md`), and the
+/-- **Randomized-smoothing certified radius at the true Gaussian probit.** With every class
+    probability `p c y` inside `(0,1)` at every point `y` (`hp`), per-class probit scores
+    `Φ⁻¹ ∘ p c` each `(1/σ)`-Lipschitz (`hg` — for Gaussian-smoothed `[0,1]` scores this is
+    `smoothing_probit_lipschitz`, applied in `smoothing_certified_radius_cohen`), and the
     runner-up bound, every `‖δ‖₂ < σ·Φ⁻¹(p_A(x))` keeps class `i` the strict argmax —
     where `Φ⁻¹` is now the genuine standard-normal quantile, not an abstract stand-in.
     Exactly the `σ·Φ⁻¹(p_A)` radius the `*-smooth` drivers report. -/
@@ -111,12 +98,11 @@ theorem smoothing_certified_radius_gaussian {σ : ℝ} (hσ : 0 < σ)
 on `EuclideanSpace ℝ (Fin (n+1))`. Structure: (i) a 1-D Cameron–Martin change of variables
 turns the shifted integral into a monotone-likelihood-ratio-weighted one; (ii) Fubini over
 `Measure.pi` (split at coordinate 0 via `piFinSuccAbove`) lifts it to the iid pi measure —
-only coordinate 0 carries the shift; (iii) the same pointwise MLR trick as G2, now with the
-weight `exp(d·z₀ − d²/2)` and the halfspace `{z₀ ≤ t}`, gives the pi-space NP theorem;
+only coordinate 0 carries the shift; (iii) the same pointwise MLR trick as the 1-D case, now
+with the weight `exp(d·z₀ − d²/2)` and the halfspace `{z₀ ≤ t}`, gives the pi-space NP theorem;
 (iv) an adapted orthonormal basis (a reflection carries `e₀` to `δ/‖δ‖`, and Mathlib's
 `stdGaussian_eq_map_pi_orthonormalBasis` says the standard Gaussian doesn't care) rotates
-the general shift onto coordinate 0. The plan's riskiest item — pi-Gaussian rotational
-invariance — turned out to ship with Mathlib. -/
+the general shift onto coordinate 0. -/
 
 /-- The iid standard-Gaussian product measure on `Fin (n+1) → ℝ`. -/
 noncomputable abbrev stdGaussianPi (n : ℕ) : Measure (Fin (n + 1) → ℝ) :=
@@ -361,18 +347,18 @@ theorem stdGaussian_np_shift {n : ℕ} {f : EuclideanSpace ℝ (Fin (n + 1)) →
 -- ════════════════════════════════════════════════════════════════
 
 /-! Assembly. `stdNormalQuantile_cdf` (the other inversion direction, `Φ⁻¹(Φ s) = s`, from
-strict monotonicity) plus `stdNormalCDF_mem_Ioo` let the G3 bound be pushed through `Φ⁻¹`:
-applying it in both directions gives `|Φ⁻¹(p(x)) − Φ⁻¹(p(y))| ≤ ‖x−y‖/σ` — the Cohen/Salman
-`(1/σ)`-Lipschitz probit, `smoothing_probit_lipschitz`. Instantiating the G1 radius theorem
-with it yields `smoothing_certified_radius_cohen` (soft scores) and
+strict monotonicity) plus `stdNormalCDF_mem_Ioo` let the n-D bound `stdGaussian_np_shift` be
+pushed through `Φ⁻¹`: applying it in both directions gives `|Φ⁻¹(p(x)) − Φ⁻¹(p(y))| ≤ ‖x−y‖/σ`
+— the Cohen/Salman `(1/σ)`-Lipschitz probit, `smoothing_probit_lipschitz`. Instantiating
+`smoothing_certified_radius_gaussian` with it yields `smoothing_certified_radius_cohen` (soft scores) and
 `smoothing_certified_radius_classifier` (hard classifier — the `[0,1]` bounds AND the
 runner-up bound come free from decision-region disjointness). The `σ`-smoothed mean is
 written `∫ f(x + σ•z) dγ(z)` with `γ` the STANDARD Gaussian — i.e. noise `N(0, σ²I)`,
 exactly what the `*-smooth` drivers sample. -/
 
-/-- **G4 core — the smoothed probit is (1/σ)-Lipschitz** (Cohen 2019 / Salman 2019
-    Lemma 2, now a THEOREM). For measurable `f : E → [0,1]` whose σ-smoothed mean
-    `p(x) = ∫ f(x + σz) dγ(z)` stays inside `(0,1)`, the probit score
+/-- **The smoothed probit is (1/σ)-Lipschitz** (Cohen 2019 / Salman 2019 Lemma 2). For
+    measurable `f : EuclideanSpace ℝ (Fin (n+1)) → [0,1]` whose σ-smoothed mean
+    `p(x) = ∫ f(x + σz) dγ(z)` lies inside `(0,1)` at every `x`, the probit score
     `x ↦ Φ⁻¹(p x)` is `(1/σ)`-Lipschitz in L2. -/
 theorem smoothing_probit_lipschitz {n : ℕ} {σ : ℝ} (hσ : 0 < σ)
     {f : EuclideanSpace ℝ (Fin (n + 1)) → ℝ}
@@ -452,10 +438,12 @@ theorem smoothing_certified_radius_cohen {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
 
 /-- **The classifier form.** For a measurable hard classifier `C`, class scores are the
     decision-region indicators, so `[0,1]`-boundedness AND the runner-up bound are both
-    automatic (regions are disjoint: `p_j + p_i ≤ 1`). Hypotheses: measurability of `C`,
-    non-degenerate class probabilities (`hp` — Φ⁻¹ needs `(0,1)`; Monte-Carlo estimates
-    always satisfy this), and the margin `‖δ‖ < σ·Φ⁻¹(p_i(x))`. This is the certificate
-    the `*-smooth` drivers report, end to end. -/
+    automatic (regions are disjoint: `p_j + p_i ≤ 1`). Hypotheses: measurability of `C`;
+    `hp` — every class's smoothed probability lies in `(0,1)` at every point, i.e. no decision
+    region is Gaussian-null or conull (`Φ⁻¹` is only meaningful on `(0,1)`); for an argmax net
+    it follows from one strict-argmax witness per class (`argmaxNet_smoothProb_mem_Ioo`); and
+    the margin `‖δ‖ < σ·Φ⁻¹(p_i(x))`. The radius has the form the `*-smooth` drivers report,
+    stated at the true class probability. -/
 theorem smoothing_certified_radius_classifier {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k} (hC : Measurable C)
     (hp : ∀ c x, (∫ z, (if C (x + σ • z) = c then (1:ℝ) else 0)

@@ -47,10 +47,10 @@ rationals, and — critically — so the slope may be **rounded**:
 
 That rounding is what keeps the coefficients small. Left unrounded, `u/(u−l)`
 carries the layer-1 denominators into every entry of `A` and reproduces the
-LipSDP tier's ~230-digit blow-up. Measured (`scripts/certs/crown_ibp_probe.py`,
-`planning/archive/crown_ibp.md` §5.5): at `k = 8` the rounding costs ZERO images on both
-trained nets at every radius, so the coefficients stay at the same `/256` scale
-as the weights themselves.
+LipSDP tier's ~230-digit blow-up. Measured (`scripts/certs/crown_ibp_probe.py`): at
+`k = 8` the rounding costs zero images on both trained nets at every radius, so the slope sits
+on the weights' `/256` grid, the coefficients at `/65536` and `A` at `/16777216`, instead of
+carrying the layer-1 denominators.
 
 Depth: this file does the single backward step a `dense ∘ relu ∘ dense` net
 needs, where `crownRow` IS the matrix-level back-substitution. A general

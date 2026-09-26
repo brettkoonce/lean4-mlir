@@ -1,6 +1,6 @@
 import LeanMlir.Proofs.Certificates.LipschitzCertInstance
 
-/-! # Certified-accuracy scorecard (post_audit_roadmap §1)
+/-! # Certified-accuracy scorecard
 
 **REDUCED CERTIFICATE MODEL** — this file's concrete net is the 4×4-pooled 49-dim
 MNIST family (width-8 hidden, /128–/256 rational weights), NOT the canonical
@@ -16,14 +16,14 @@ concentrated on one block, or spread L2-wise across blocks). Two nets:
 
 * **unconstrained** — the committed /128 net (`W1t`/`W2t`, q-acc 0.898),
   Schatten-8 product L = 63.79 (`mlpT_lip_gram2`):
-  **1/100 certified** at ε;
+  **1/100 certified** at ε (measured, see below);
 * **spectrally capped** — same recipe + projected SGD onto ‖Wᵢ‖₂ ≤ 4
   (host-side rescaling after every step, as `mnist-mlp-spectral`), 36 epochs,
   /256-rationalized (`W1s`/`W2s`, q-acc 0.870), Schatten-8 product
-  L = 19.76: **34/100 certified** at the same ε.
+  L = 19.76: **34/100 certified** at the same ε (measured).
 
 Same theorem, same ε — the training method decides whether the certificate
-bites (the roadmap's caps 1.5–2 cost too much clean accuracy at this scale:
+bites (tighter caps, 1.5–2, cost too much clean accuracy at this scale:
 σ ≤ 2 → 66% test acc; σ ≤ 4 keeps 87.0% vs 89.8% unconstrained).
 
 **Theorem vs. measurement — read this before quoting a number.** Soundness
@@ -641,14 +641,13 @@ theorem unconCerts_certified :
     ∀ p ∈ unconCerts, CertifiedAt mlpT ((1 : ℝ)/10) p.2.1 p.2.2 :=
   List.forall_iff_forall_mem.mp certifiedU82
 
-/-- **The scorecard, as a theorem**: at ε = 1/10 (pooled L2) the capped net
-    certifies 34/100 of the fixed test subset and the unconstrained net
-    1/100 — same certificate, same ε; training (σ-projection) decides
-    whether it bites. Those are MEASUREMENTS (the `certMargin*` table above);
-    the 8 and 1 witnesses BELOW are the ones carrying per-image
-    `CertifiedAt` proofs, tied to them via `cappedCerts_certified`/
-    `unconCerts_certified` rather than a bare list length. Lower bounds only:
-    an upper-bound L cannot prove an image uncertifiable. -/
+/-- **The proved core of the scorecard**: the 8 capped-net and 1
+    unconstrained-net witnesses in `cappedCerts`/`unconCerts` each carry a
+    `CertifiedAt … (1/10)` proof (pooled L2; `cappedCerts_certified`/
+    `unconCerts_certified`). The dataset counts (34/100 capped,
+    1/100 unconstrained) are exact-rational measurements recorded in the
+    `certMargin*` lines above, not theorems. Lower bounds only: an upper-bound L
+    cannot prove an image uncertifiable. -/
 theorem scorecard :
     (cappedCerts.length = 8 ∧
       ∀ p ∈ cappedCerts, CertifiedAt mlpS ((1 : ℝ)/10) p.2.1 p.2.2) ∧

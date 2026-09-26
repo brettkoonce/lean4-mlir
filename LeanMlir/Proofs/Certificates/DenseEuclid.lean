@@ -192,7 +192,7 @@ theorem sq_le_of_gram_quad {n k : ℕ} (W : Fin k → Fin n → ℝ) (G : Fin k 
 /-- **Gram (Schatten-4) bound, proved.** If `G = W·Wᵀ` (supplied as data, verified
     entrywise) and `‖G‖_F² ≤ B⁴`, then the dense layer is `B`-Lipschitz in L2.
     Since `‖G‖_F = (Σᵢσᵢ⁴)^½`, this is `‖W‖₂ ≤ (Σσᵢ⁴)^¼` — strictly tighter than
-    Frobenius `(Σσᵢ²)^½` whenever the spectrum has any spread. The Gram matrix is
+    Frobenius `(Σσᵢ²)^½` whenever `W` has rank ≥ 2. The Gram matrix is
     only `k×k` (output-side), so the kernel arithmetic stays small even for wide
     layers. -/
 theorem denseE_lipschitzL2_gram {n k : ℕ} (W : Fin k → Fin n → ℝ)

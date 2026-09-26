@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Certificates.SmoothingMC
 `smoothing_mc_certified` (SmoothingMC.lean) qualifies the reported radius with
 Hoeffding's `1 − exp(−2Nt²)` — a crude bound. Cohen–Rosenfeld–Kolter's CERTIFY
 actually deploys the EXACT binomial lower confidence limit (Clopper–Pearson,
-`proportion_confint` one-sided). This file closes that last arithmetic gap:
+`proportion_confint` one-sided). This file states the certificate with that bound:
 
 * `pi_hitCount_eq_binomial` — **the count of successes over `Measure.pi` is
   binomial** (the piece Mathlib doesn't have: `Bin(n,p)` exists as
@@ -22,8 +22,8 @@ actually deploys the EXACT binomial lower confidence limit (Clopper–Pearson,
 * `smoothing_cp_certified` — composed with
   `smoothing_certified_radius_classifier`: with probability `≥ 1 − α` over the
   `N` Gaussian samples, the radius `σ·Φ⁻¹(cpLower α N k)` reported from the
-  observed class count `k` is genuinely certified. Guarantee AND arithmetic
-  now match the deployed CERTIFY;
+  observed class count `k` is certified, under the classifier theorem's
+  hypotheses (`C` measurable, `hp`). Guarantee and arithmetic match CERTIFY;
 * the SOLVED form (the per-image scorecard shape): `binomTail_monotoneOn` —
   monotone in the success probability by COUPLING (uniform measure on `[0,1]`,
   nested `[0,q] ⊆ [0,p]`, tail events nest — the tail law again, no calculus)
@@ -365,9 +365,10 @@ lemma le_cpLower_of_tail_le {α q₀ : ℝ} (hα : α < 1) {N k : ℕ} (hk : k �
 /-- **The Clopper–Pearson smoothing certificate.** Sample `N` iid standard
     Gaussians; report the radius `σ·Φ⁻¹(cpLower α N k)` from the exact
     binomial lower confidence limit at the observed class count `k`. With
-    probability `≥ 1 − α` over the samples, the reported radius is GENUINELY
-    certified: every `‖δ‖ < σ·Φ⁻¹(cpLower α N k)` keeps `y` the strict argmax
-    of the smoothed classifier. Same guarantee shape as
+    probability `≥ 1 − α` over the samples, the reported radius is certified:
+    every `‖δ‖ < σ·Φ⁻¹(cpLower α N k)` keeps `y` the strict argmax of the
+    smoothed classifier. Hypotheses: `C` measurable, and `hp` — every class's
+    smoothed probability lies in `(0,1)` at every point. Same guarantee shape as
     `smoothing_mc_certified`, but the confidence bound is now the arithmetic
     Cohen's CERTIFY actually deploys. -/
 theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
@@ -421,9 +422,10 @@ theorem smoothing_cp_certified {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     driver's reported CP lower bound `q₀` (rationalized down), ONE in-kernel
     tail check `binomTail N k₀ q₀ ≤ α` certifies: with probability `≥ 1 − α`
     over the samples, IF the count comes out `k₀` THEN the radius
-    `σ·Φ⁻¹(q₀)` is genuinely certified. This is the per-image scorecard
-    theorem shape: instantiate at the driver's `(N, k₀, α, q₀)` and the
-    hypothesis is pure kernel rational arithmetic. -/
+    `σ·Φ⁻¹(q₀)` is certified. `C` must be measurable and satisfy `hp` (every
+    class's smoothed probability in `(0,1)` at every point). This is the per-image
+    scorecard theorem shape: instantiate at the driver's `(N, k₀, α, q₀)` and the
+    tail hypothesis is pure kernel rational arithmetic. -/
 theorem smoothing_cp_certified_solved {n k : ℕ} {σ : ℝ} (hσ : 0 < σ)
     {C : EuclideanSpace ℝ (Fin (n + 1)) → Fin k} (hC : Measurable C)
     (hp : ∀ c x, (∫ z, (if C (x + σ • z) = c then (1:ℝ) else 0)

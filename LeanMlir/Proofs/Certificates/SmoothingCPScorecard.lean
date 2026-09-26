@@ -10,12 +10,12 @@ integer arithmetic at generation AND re-proved here by `decide +kernel`
 (`binomTail_le_of_kernel_check`). Through `smoothing_cp_certified_solved`, each
 entry certifies the radius σ·Φ⁻¹(q₀) for its observed count, w.p. ≥ 1−α.
 
-Honest scope: this ties the driver's REPORTED (k, n, α) arithmetic to the
-theorem. The float Φ⁻¹ printout is closed corpus-wide by the decimal-radius
+Scope: this ties the driver's REPORTED (k, n, α) arithmetic to the theorem.
+The float Φ⁻¹ printout gets proved decimal lower bounds in the decimal-radius
 scorecard (SmoothingDecScorecard.lean); the net-semantics hypotheses (C = a
 net's argmax + `hp` interiority) are discharged for a concrete trained net in
 SmoothingNetWitness.lean — this scorecard's own 784-dim driver checkpoints
-remain untied (the same witness-generator pass at full width). -/
+are not tied to them. -/
 
 namespace Proofs
 

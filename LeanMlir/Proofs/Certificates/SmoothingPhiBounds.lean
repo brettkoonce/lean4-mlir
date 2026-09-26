@@ -4,8 +4,8 @@ import Mathlib.Analysis.Real.Pi.Bounds
 /-! # Certified decimal quantile bounds — `Φ⁻¹` leaves symbolic-land
 
 The scorecard's radii are `σ·Φ⁻¹(q₀)` with `Φ⁻¹` SYMBOLIC; the driver prints
-decimals via float Acklam. This file closes that gap with certified rational
-LOWER bounds on `Φ⁻¹`:
+decimals via float Acklam. This file supplies certified rational LOWER bounds
+on `Φ⁻¹`:
 
 * `stdNormalCDF_panel` — one upper-Riemann panel `Φ(b) ≤ Φ(a) + (b−a)·φ(a)`
   on `[0,∞)` (the density is antitone there), by bounding the Gaussian
@@ -21,7 +21,7 @@ LOWER bounds on `Φ⁻¹`:
 * `le_stdNormalQuantile_of_grid` — the workhorse: ONE `decide +kernel`
   rational check `phiGridUB h m ≤ q₀` certifies `m·h ≤ Φ⁻¹(q₀)`.
 
-For the whole corpus, the §prefix-scan section makes per-image checks cheap:
+For the whole corpus, the prefix-scan section makes per-image checks cheap:
 `phiScanRev` computes ALL grid values in one kernel pass (the head's two uses
 stay shared through the kernel's whnf cache), `phiScanRev_getD` indexes it,
 and `le_stdNormalQuantile_of_scan`/`smooth_radius_dec` turn one O(index)
@@ -86,7 +86,8 @@ lemma stdNormalCDF_panel {a b : ℝ} (h0 : 0 ≤ a) (hab : a ≤ b) :
 -- ════════ § rational exp lower bound + √(2π) lower bound ════════
 
 /-- Truncated Taylor sum — a computable rational lower bound for `exp` on
-    `[0,∞)` (32 terms: relative error < e⁻²⁴ at `x = 5.12`, our largest use). -/
+    `[0,∞)` (32 terms: relative error below e⁻³² at `x = 3.299²/2 ≈ 5.44`, the largest
+    argument the 3300-panel `h = 1/1000` grid of `SmoothingDecScorecard.lean` uses). -/
 def ratExpLB (x : ℚ) : ℚ := ∑ i ∈ Finset.range 32, x ^ i / i.factorial
 
 lemma ratExpLB_le {x : ℚ} (hx : 0 ≤ x) : (ratExpLB x : ℝ) ≤ Real.exp x := by
@@ -144,8 +145,8 @@ lemma gaussianPDFReal_le_ratPdfUB (a : ℚ) :
   norm_num
 
 /-- Round a rational UP to denominator `10⁹` — keeps the grid fold's
-    denominators from exploding (the exact `ratPdfUB` values have ~190-digit
-    numerators whose lcm across 640 grid points is astronomical). -/
+    denominators from exploding (the exact `ratPdfUB` values have up to ~230-digit
+    numerators whose lcm across the 3300 grid points is astronomical). -/
 def ratCeil9 (q : ℚ) : ℚ := (⌈q * 1000000000⌉ : ℤ) / 1000000000
 
 lemma le_ratCeil9 (q : ℚ) : q ≤ ratCeil9 q := by
