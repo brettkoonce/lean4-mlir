@@ -4,10 +4,10 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFullT
 import LeanMlir.Proofs.Architectures.DepthwiseBackCertifiedTie
 import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 
-/-! # §B: the ConvNeXt block-body backward chain IS the certified VJP
+/-! # The ConvNeXt block-body backward chain IS the certified VJP
 
 `cnxBlockBodyBack` (`ConvNeXtBackChains.lean`) is the hand-composed reverse of the ConvNeXt block
-body, written in the per-op backward maps of `BackwardMaps.lean`. This file closes §B for the net
+body, written in the per-op backward maps of `BackwardMaps.lean`. This file ties it for the net
 the repo ships, whose LayerNorm is the CHANNEL LN `chanLNTensor3`: the chain IS the certified
 input-gradient VJP, in the SAME non-batched vocabulary.
 
@@ -20,7 +20,7 @@ activations, fills the LN slot with the concrete `chanLNTensor3Back` (tied by
 `chanLNTensor3Back_eq_chanLN_vjp`), and ties the two 1×1 convs + the depthwise to their certified
 input-VJPs via the leaf gates (`convFlatBack_eq_vjp_backward`, `depthwiseFlatBack_eq_vjp_backward`).
 b1-free: the per-example body is the non-batched object the chain reverses, so there is no
-`batchMap` reconciliation. 3-axiom-clean.
+`batchMap` reconciliation.
 -/
 
 namespace Proofs
@@ -92,13 +92,13 @@ theorem rowLNVecFlatHasVJP_backward_eq {s c : Nat} (ε : ℝ) (hε : 0 < ε) (γ
   rw [layerNormVecHasVJP_backward_eq ε hε γ β]
   rfl
 
-/-- **THE §2n §B TIE: the channel-LN backward chain IS the certified VJP.** `chanLNTensor3Back` —
+/-- **The channel-LN backward tie: the chain is the certified VJP.** `chanLNTensor3Back` —
     the hand-composed reverse of `chanLNTensor3` — equals `(chanLNTensor3HasVJP …).backward` at
     every saved input and cotangent, so the chain is **the certified gradient**.
 
     Proof: the witness is a term-mode `vjpComp` chain, so its backward unfolds to the nested
     chain; rewrite its five factors (two reassoc collapses, two transposes by `rfl`, the row map
-    through `bnGradInput`). 3-axiom-clean. -/
+    through `bnGradInput`). -/
 theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (x : Vec (c * h * w)) :
     chanLNTensor3Back c h w ε γ x = (chanLNTensor3HasVJP c h w ε γ β hε).backward x := by
@@ -109,7 +109,7 @@ theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) 
       transposeFlatHasVJP_backward_eq, reassocFwdHasVJP_backward_eq]
   rfl
 
-/-- **The §B channel-LN BODY tie: the block-body backward chain = the certified VJP**, for the net
+/-- **The channel-LN body tie: the block-body backward chain = the certified VJP**, for the net
     the repo ships. `cnxBlockBodyBack` with
     its LayerNorm slot filled by the CONCRETE `chanLNTensor3Back` (at the saved post-depthwise
     activation) and its
@@ -119,8 +119,7 @@ theorem chanLNTensor3Back_eq_chanLN_vjp {c h w : Nat} (ε : ℝ) (hε : 0 < ε) 
     Note what fills the LN slot: not a certified object but the concrete five-factor chain, which
     has to go through `chanLNTensor3Back_eq_chanLN_vjp` to earn its place. The proof rewrites the
     two 1×1 conv leaves and the depthwise leaf through their gates, rewrites the LN chain through
-    its tie, and the rest matches definitionally.
-    3-axiom-clean. -/
+    its tie, and the rest matches definitionally. -/
 theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
     (Wdw : DepthwiseKernel c kHd kWd) (bdw : Vec c)
@@ -154,11 +153,11 @@ theorem cnxBodyWithChanLNBack_eq_vjp {c cExp h w kHd kWd : Nat}
       depthwiseFlatBack_eq_vjp_backward hkHd hkWd Wdw bdw v]
   rfl
 
-/-- **The §B channel-LN BLOCK tie (residual-wrapped).** `cnxBlockChW` is `residual` of the body, so
+/-- **The channel-LN block tie (residual-wrapped).** `cnxBlockChW` is `residual` of the body, so
     the block backward chain is `residual (cnxBlockBodyBack …)` and equals
     `(cnxBlockChWHasVJP …).backward` — the additive skip's backward being `dy`. Immediate from the
-    body tie. With this, the channel-LN net's §B coverage matches the scalar net's: body, block, and
-    (new, because the LN slot is no longer abstract) the LayerNorm op itself. -/
+    body tie. With `chanLNTensor3Back_eq_chanLN_vjp` and `cnxBodyWithChanLNBack_eq_vjp`, the
+    channel-LN net's body, block and LayerNorm backward are each tied. -/
 theorem cnxBlockChBack_eq_vjp {c cExp h w kHd kWd : Nat}
     (hkHd : 2 * ((kHd - 1) / 2) + 1 = kHd) (hkWd : 2 * ((kWd - 1) / 2) + 1 = kWd)
     (p : CnxBlockParamsCh c cExp h w kHd kWd) (hε : 0 < p.εn) (v : Vec (c * h * w)) :

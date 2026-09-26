@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 
 /-!
-# ViT scaling pass — depth-k (general-depth tower, distinct per-block params)
+# ViT depth-k (general-depth tower, distinct per-block params)
 
 The proven `transformerTowerHasVJPMat` shares ONE param tuple across blocks. This
 file builds the net with distinct per-block params at every depth, at the production form
@@ -21,8 +21,8 @@ file builds the net with distinct per-block params at every depth, at the produc
    `vitBlockGraphMHV_den_aux` + `vitBlockSpelledMHV_eq` per block (the
    per-block den_aux was designed for exactly this).
 
-Depth-12 ViT-Tiny shapes are now a config change away (the production capstone
-needs only the P=16/D=192/heads=3 instantiation of these).
+The ViT-Tiny instantiation (depth 12, P=16, D=192, heads=3) is
+`vitTinyHasVJP_correct`.
 -/
 
 namespace Proofs

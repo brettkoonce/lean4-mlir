@@ -231,8 +231,8 @@ noncomputable def vitCotXinV {Np1 D : Nat} (ε : ℝ) (γ1 : Vec D)
   fun i => cotH i + StableHLO.rowLNBackFlat Np1 D ε 1 xin
     (StableHLO.rowScaleFlat Np1 D γ1 (vitCotLn1 Wq Wk Wv dQ dK dV)) i
 
-/-- Cot at block 2's output, vector-LN form: the decomposed final-LN input-VJP
-    of the classifier-back row-0 scatter. -/
+/-- Cot at the last block's output (the final-LN input), vector-LN form: the
+    decomposed final-LN input-VJP of the classifier-back row-0 scatter. -/
 noncomputable def vitCotB2outV (N D nClasses : Nat) (ε : ℝ) (γF : Vec D)
     (Wcls : Mat D nClasses) (b2out : Vec ((N + 1) * D)) (dy : Vec nClasses) :
     Vec ((N + 1) * D) :=

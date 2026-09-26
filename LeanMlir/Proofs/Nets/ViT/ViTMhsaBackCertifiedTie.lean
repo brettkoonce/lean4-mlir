@@ -1,26 +1,28 @@
 import LeanMlir.Proofs.Nets.ViT.ViTBackChains
 import LeanMlir.Proofs.Nets.ViT.ViTBackB0
 
-/-! # §B: the ViT MHSA backward chain IS the certified VJP (the sdpa adjoint)
+/-! # The ViT MHSA backward chain IS the certified VJP (the sdpa adjoint)
 
-The substantive vit-specific §B leaf: the hand-composed multi-head self-attention backward `mhsaBackFlat`
+The ViT-specific backward leaf: the hand-composed multi-head self-attention backward `mhsaBackFlat`
 (`ViTBackChains.lean`) IS the certified MHSA input-gradient VJP `mhsaHasVJPMat` (`Attention.lean`),
 flattened — the attention analogue of the depthwise/conv adjoint gates.
 
 Unlike the CNN `convFlatBack` (a free reversed-kernel conv that needed a gate), the ViT sdpa cores are
-ALREADY certified-`sdpa_back`-grounded by construction (`coreQFlat = flatten ∘ mhsaSdpaBackQ ∘ unflatten`,
-`mhsaSdpaBackQ = sdpaBackQ` per `headSliceMat` head). What this file closes is the **assembly reconciliation**:
-`mhsaBackFlat` is a flat per-head fan-in with SEPARATE `dense Wᵀq/Wᵀk/Wᵀv` projection-backwards
-(`perRowFlat`), while the certified `mhsaHasVJPMat.backward` is a Mat-space VJP over the qkv-MERGED
-projection. ViTBackB0's `mhsa_backward_collapseMH` already collapses the certified Mat backward to the clean
-per-head merged sum `mhsaBackCollapsedMH = ∑ₕ (Σⱼ Wq c (h,j)·dQ + Σⱼ Wk·dK + Σⱼ Wv·dV)`; this file shows
-`mhsaBackFlat` (Q/K/V pinned to the actual projections `dense W· bq (X·)`) equals that, coordinatewise:
-`dense Wᵀ 0 = Mat.mulVec W`, the `Σ k` over `h·dh` reindexes to `Σₕ Σⱼ`, and the chain's separate projBack
-sums regroup into the certified `∑ₕ(Q+K+V)` by `Finset.sum_add_distrib`. So `mhsaBackFlat` IS the
-certified attention gradient — the genuinely-new (sdpa) half of the ViT block §B tie.
+ALREADY certified-`sdpaBack*`-grounded by construction
+(`coreQFlat = flatten ∘ mhsaSdpaBackQ ∘ unflatten`, `mhsaSdpaBackQ = sdpaBackQ` per `headSliceMat`
+head). What this file closes is the **assembly reconciliation**: `mhsaBackFlat` is a flat per-head
+fan-in with SEPARATE `dense Wᵀq/Wᵀk/Wᵀv` projection-backwards (`perRowFlat`), while the certified
+`mhsaHasVJPMat.backward` is a Mat-space VJP over the qkv-MERGED projection. ViTBackB0's
+`mhsa_backward_collapseMH` already collapses the certified Mat backward to the clean per-head merged
+sum `mhsaBackCollapsedMH = ∑ₕ (Σⱼ Wq c (h,j)·dQ + Σⱼ Wk·dK + Σⱼ Wv·dV)`; this file shows
+`mhsaBackFlat` (Q/K/V pinned to the actual projections `dense W· bq (X·)`) equals that,
+coordinatewise: `dense Wᵀ 0 = Mat.mulVec W`, the `Σ k` over `h·dh` reindexes to `Σₕ Σⱼ`, and the
+chain's separate projBack sums regroup into the certified `∑ₕ(Q+K+V)` by `Finset.sum_add_distrib`.
+So `mhsaBackFlat` IS the certified attention gradient — the genuinely-new (sdpa) half of the ViT
+block backward tie.
 
 The block tie that wraps this in the per-token LN/dense/gelu sublayer reconciliations and the residual
-fan-in is `vitBlockBackV_eq_transformerBlockV_vjp` (`ViTVecLNBackCertifiedTie.lean`). 3-axiom-clean.
+fan-in is `vitBlockBackV_eq_transformerBlockV_vjp` (`ViTVecLNBackCertifiedTie.lean`).
 -/
 
 namespace Proofs
@@ -52,7 +54,7 @@ theorem woback_unflatten (Wo : Mat (h * dh) (h * dh)) (dconcat : Vec (N * (h * d
   simp only [Equiv.symm_apply_apply, Proofs.dense, Mat.transpose, Mat.mulVec, Pi.zero_apply, add_zero]
   exact Finset.sum_congr rfl (fun k _ => mul_comm _ _)
 
-/-- **THE ViT MHSA BACKWARD §B TIE.** The MHSA backward chain `mhsaBackFlat`, with its saved Q/K/V
+/-- **The ViT MHSA backward tie.** The MHSA backward chain `mhsaBackFlat`, with its saved Q/K/V
     projections pinned to the actual `dense W· b· (X·)` projections at the saved block input `X`, IS the
     certified MHSA input-gradient VJP `(mhsaHasVJPMat …).backward X`, flattened. So the attention
     backward the ViT chain is spelled in IS the certified attention gradient, not a look-alike.

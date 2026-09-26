@@ -1,26 +1,24 @@
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPCEval
 
-/-! # The FULL EfficientNet-B0 at INFERENCE — all 16 MBConv blocks, eval forward + graph + faithfulness
+/-! # The full EfficientNet-B0 at inference — all 16 MBConv blocks, eval forward + graph +
+faithfulness
 
 The eval twin of `EfficientNetFullB0.lean`. That file states the sixteen-block `[t,c,n,s,k]` net at
 TRAINING BatchNorm (`bnBatchLA`), the world its VJP and its typed graph live in; this file states
 the same ladder at INFERENCE BatchNorm — frozen running statistics at all **49** sites, one shared
-`ε`, as the shipped `efficientnet_fwd_eval` does — and proves
-its typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, the graph of
-`efficientnet_fwd_eval.mlir` and its 1000-class twin. (Built 2026-09-05 so the whole-net float
-budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —
-`planning/archive/proofs_tier_to_paper_nets.md` 3.3(e).)
+`ε`, as the shipped `efficientnet_fwd_eval` does — and proves its typed `SHlo` graph denotes
+it: the graph of `efficientnet_fwd_eval.mlir` and its 1000-class twin.
 
 Pure enumeration and chaining of `EfficientNetRenderPCEval.lean`'s per-block machinery, at the
-batched index `N·(c·h·w)` and generic in the class count. The one genuinely new piece is the
-fourth block shape at inference — `mbExpFwdBEval` / `mbExpGraphBEval`: expand, stride 1, **no**
-residual (`ic ≠ oc`; the stage-5 and stage-7 first blocks `b9`/`b16`) — which the three-block
-representative has no instance of and `EfficientNetFullB0.lean` added at training BN as `mbExpFwdB`.
+batched index `N·(c·h·w)` and generic in the class count. The one block shape added here is
+the fourth at inference — `mbExpFwdBEval` / `mbExpGraphBEval`: expand, stride 1, no residual
+(`ic ≠ oc`; the stage-5 and stage-7 first blocks `b9`/`b16`) — the eval twin of
+`mbExpFwdB` (`EfficientNetChainClose.lean`).
 
 **What it is tied to.** `efficientnet_fwd_eval.mlir` is THIS net: `%x` plus 213 parameters (the
 render folds each conv bias into the BatchNorm that follows it, so `%sb`/`%b1db`/… have no slot)
 plus 98 statistic slots — 312 inputs at ten classes, and `efficientnetin_fwd_eval.mlir` its
-1000-class twin. ⚠ The typed graph below inherits the three-block eval graph's SSA names, and
+1000-class twin. Note: the typed graph below inherits the three-block eval graph's SSA names, and
 they differ from the artifact's in four ways, none of which enters `den` (names are
 pretty-printing metadata): the graph carries a bias slot per conv (`"%sb"`, `s!"%{p}db"`, …) that
 the render folds away; it names the statistic slots `%smu`/`%svar`, `%b{k}{e,d,p}mu`/`var`,
@@ -310,7 +308,7 @@ def efficientnetFwdGraphBFullEval (N : Nat) (epsStr : String) (ε : ℝ) (w : B0
                                     (stemGraphBEval epsStr (h := 112) (w := 112) w.sW w.sb ε w.sγ w.sβ w.sμ w.sv
                                       (.operand "%x" x))))))))))))))))))
 
-/-- ⭐ **Sixteen-block inference EfficientNet-B0 forward faithfulness.** The typed graph denotes
+/-- **Sixteen-block inference EfficientNet-B0 forward faithfulness.** The typed graph denotes
     `efficientnetForwardBFullEval`: one `rw` per block with the `*GraphEvalW_faithful` lemmas
     (outermost → innermost), then a structural `rfl` — the training twin's recipe. -/
 theorem efficientnetFwdGraphBFullEval_faithful (N : Nat) (epsStr : String) (ε : ℝ)

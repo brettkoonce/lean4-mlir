@@ -3,17 +3,17 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2Close
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXt
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 
-/-! # ConvNeXt-T §1 fold — the per-channel layer-scale γ gradient cert (the one new proof)
+/-! # ConvNeXt-T fold — the per-channel layer-scale γ gradient cert (the one new proof)
 
 The committed ConvNeXt SGD net trains **per-channel** layer-scale `γ : Vec c` (the `layerScaleChF`
 forward, which broadcasts `γ` over the `c·h·w` activation via `chanIdx`), NOT a per-element `Vec n`
-layer-scale. So the §1 fold needs the **per-channel** version: the γ-gradient w.r.t. the `Vec c` parameter is the per-channel reduce
-`dγ_c = Σ_{k : chanIdx k = c} x_k · dy_k` (the `lsGradCh` emit: `multiply x dy` → `reduce[0,2,3]`),
-and this is exactly the certified Jacobian of `layerScaleChF`'s forward (as a function of `γ : Vec c`)
-contracted with the cotangent.
+layer-scale. So the fold needs the **per-channel** version: the γ-gradient w.r.t. the `Vec c`
+parameter is the per-channel reduce `dγ_c = Σ_{k : chanIdx k = c} x_k · dy_k` (the `lsGradCh` emit:
+`multiply x dy` → `reduce[0,2,3]`), and this is exactly the certified Jacobian of `layerScaleChF`'s
+forward (as a function of `γ : Vec c`) contracted with the cotangent.
 
 This is the only genuinely-NEW proof obligation for the ConvNeXt tie (the depthwise-7×7, 1×1-conv,
-strided-stem/downsample and dense param grads are covered by the existing M2 / M3 certs, the
+strided-stem/downsample and dense param grads are covered by the existing conv and dense certs, the
 channel-LN γ/β by `ChannelLN`). It is linear in the parameter (`pdiv_of_linear`), with the
 `chanIdx` reindex (the per-channel broadcast) — `∂(γ'(chanIdx j)·x_j)/∂γ'_c = x_j·[chanIdx j = c]`.
 

@@ -1,55 +1,43 @@
 import LeanMlir.Proofs.Foundation.CertifiedChain
 import LeanMlir.Proofs.Nets.ViT.ViTBackB0
 
-/-! # ViT folded — the last net onto `CertLayer`, and the first one folded END TO END
+/-! # ViT on `CertLayer`, folded image → logits
 
 ViT's whole-net backward graph `vitNetBackGraph` (patchEmbed → tower → final vec-LN →
-classifier, at every depth) predates `CertifiedChain`; what it lacked was the **generic** fold —
-its tower was a bespoke induction no other net could reuse. This file derives it from the generic
-one: `vitTrunkV_graph` proves the `CertLayer` chain produces the hand-written
-`vitBodyBackGraphKMHV` **term for term**, and `vitTrunkV_fwd` proves its forward is the shipped
-`vitBodyKVFlat`. So the bespoke induction is not replaced and not trusted alongside the generic
-one — it is *derived* from it.
+classifier, at every depth) is derived here from the generic `CertifiedChain` fold:
+`vitTrunkV_graph` proves the `CertLayer` chain produces the hand-written `vitBodyBackGraphKMHV`
+term for term, and `vitTrunkV_fwd` proves its forward is the shipped `vitBodyKVFlat`. So the
+bespoke tower induction in `ViTBackB0.lean` is an instance of the generic one.
 
-## The one piece of per-net work, exactly as the recipe predicted
+## Pluggable blocks
 
-Making the blocks pluggable. ViT's capstones took the incoming cotangent as `dY : Vec n` and
-wrapped it internally as `.operand "%dz"` / `.operand "%dh"`, so a block could only ever be the
-LAST thing in a graph. `ViTBackB0.lean` now threads `ecot : SHlo n` through the vec-LN production
-chain (`transformerMlpBackGraph` → `mlpSublayerV*` → `attnSublayerV*` → `transformerBlockV*` →
-the tower), each faithfulness statement carrying `den ecot = Mat.flatten dz`. Strictly more
-general: every old statement is the new one at `ecot := .operand "%d…" (Mat.flatten dz)`.
+`ViTBackB0.lean` threads an incoming-cotangent subgraph `ecot : SHlo n` through the vec-LN
+production chain (`transformerMlpBackGraph` → `mlpSublayerV*` → `attnSublayerV*` →
+`transformerBlockV*` → the tower), each faithfulness statement carrying `den ecot = Mat.flatten dz`;
+every statement at a fixed `Vec` cotangent is the one at `ecot := .operand "%d…" (Mat.flatten dz)`.
+The two sublayers of a block compose as subgraphs, and so do successive blocks in the tower.
+Note: `attnSublayerVInnerBackGraphMH` still passes `den e` into `mhsaBackGraphMH`, because that
+MHSA graph takes a `Vec` cotangent. It is inside the attention arm, not between blocks, so it does
+not block composition.
 
-⭐ That also deleted a real seam **inside** the block: `transformerBlockVBackGraphMH` used to feed
-the attention sublayer `den (mlpSublayerVBackGraph …)` — the MLP arm's *value*, re-embedded as a
-constant. The two sublayers now compose as subgraphs, and so do successive blocks in the tower.
-⚠ One seam remains and is NOT this refactor's: `attnSublayerVInnerBackGraphMH` still passes
-`den e` into `mhsaBackGraphMH`, because that MHSA graph takes a `Vec` cotangent. It is inside the
-attention arm, not between blocks, so it does not block composition — but it is the next thing to
-generalize if the graphs are ever to be emitted rather than only denoted.
-
-## ⭐⭐ The fold runs image → logits
+## The fold runs image → logits
 
 ViT's stem is an affine patchify conv and its head is a CLS slice plus a dense — both linear, so
-both backward graphs are activation-independent. (ResNet-34/50 now fold image → logits too, as
-`r34NetLayer` / `r50NetLayer`, stem pool included; ViT was first.)
+both backward graphs are activation-independent. So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head`
+is one `CertLayer`, assembled by `comp` alone, and `vitNetBackGraph_faithful` (the whole-net
+capstone) follows from it — including that the fold's VJP is the shipped `vitForwardKVHasVJP`,
+not merely another VJP of the same map. That last step is `HasVJPAt.backward_unique_of_eq` along
+the forward equation `vitNetLayer_fwd`.
 
-So `vitNetLayer = stem ∘ trunk ∘ finalLN ∘ head` is one `CertLayer`, assembled by `comp` alone,
-and `vitNetBackGraph_faithful` (the whole-net capstone) follows from it —
-including that the fold's VJP **is** the shipped `vitForwardKVHasVJP`, not merely another VJP of
-the same map. That last step is `HasVJPAt.backward_unique_of_eq` along the forward equation
-`vitNetLayer_fwd`: the two witnesses are VJPs of propositionally equal maps, so both backwards are
-the same `pdiv` contraction.
+## `ok = True`
 
-## The tier: `ok = True`, and that is the STRONGER certificate
+GELU and LayerNorm are smooth everywhere, so a ViT block has a global `HasVJPMat`, lifted
+pointwise by `.toHasVJPAt`, and every layer's precondition is `True`. EfficientNet (swish) and
+ConvNeXt (GELU) are the same; ResNet-34/50 (ReLU), MobileNetV2 (ReLU6) and MobileNetV4 (ReLU)
+carry `_at` hypotheses because those activations have no derivative at their kinks.
 
-GELU and LayerNorm are smooth everywhere, so a ViT block has a **global** `HasVJPMat`, lifted
-pointwise by `.toHasVJPAt`. ViT joins enet (swish) and convnext (gelu) in the unconditional tier;
-r34/r50 (relu), mnv2 (relu6) and mnv4 (relu) carry `_at` hypotheses because those activations
-genuinely have no derivative at their kinks.
-
-⚠ **Not tied to the committed artifact.** Same status as every other net's fold: this is a
-certified composition, not a proof that `verified_mlir/vit_train_step.mlir` IS this graph.
+**Scope.** This is a certified composition of backward graphs; it is not a proof that
+`verified_mlir/vit_train_step.mlir` is this graph.
 -/
 
 open Proofs Proofs.StableHLO
@@ -67,7 +55,7 @@ namespace Proofs.StableHLO
     is *definitionally* `blockVFlat` — so the lift costs nothing. The backward graph is the
     committed `transformerBlockVBackGraphMHP` at the unflattened saved activation.
 
-    ⭐ `ok = True`: GELU and LayerNorm are smooth, so the graph denotes the VJP at **every**
+    `ok = True`: GELU and LayerNorm are smooth, so the graph denotes the VJP at **every**
     input, with no side condition to discharge. -/
 noncomputable def vitBlockVLayer {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε)
     (p : BlockParamsV ((hm1+1) * d) mlpDim) :
@@ -102,7 +90,7 @@ noncomputable def vitTrunkV {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
   | k + 1, ps =>
       (vitBlockVLayer (Np1 := Np1) ε hε (ps 0)).comp (vitTrunkV ε hε k (fun i => ps i.succ))
 
-/-- ⭐ **The trunk's forward IS the shipped depth-`k` body.** Without this the fold would be a
+/-- **The trunk's forward is the shipped depth-`k` body.** Without this the fold would be a
     chain of blocks that merely resembles ViT's; with it, `vitTrunkV` is `vitBodyKVFlat`. -/
 theorem vitTrunkV_fwd {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
@@ -116,7 +104,7 @@ theorem vitTrunkV_fwd {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
       exact vitTrunkV_fwd ε hε k (fun i => ps i.succ)
         (blockVFlat Np1 (hm1+1) d mlpDim ε (ps 0) v)
 
-/-- ⭐⭐ **THE PAYOFF: the generic fold reproduces the hand-written tower, term for term.**
+/-- **The generic fold reproduces the hand-written tower, term for term.**
 
     `vitBodyBackGraphKMHV` is `ViTBackB0`'s bespoke depth-`k` reverse fold, proven faithful there
     by an induction on `k` that re-does the chain-rule argument at every depth. This theorem says
@@ -146,12 +134,9 @@ theorem vitTrunkV_graph {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
           (blockV Np1 (hm1+1) d mlpDim ε (ps 0) A) e]
       rfl
 
-/-- ⭐ **A ViT trunk's `ok` is `True` at every depth** — the smooth tier's payoff. `CertLayer.comp`
-    conjoins preconditions, so for a relu net this would be a deepening stack of side conditions
-    (r50's is 3 clauses per block × 16 blocks); for ViT the conjunction collapses and the whole
-    depth-`k` trunk is certified unconditionally.
-
-    ⚠ Not a weaker statement than the `_at` nets' — a stronger one. -/
+/-- **A ViT trunk's `ok` is `True` at every depth.** `CertLayer.comp` conjoins preconditions, so
+    for a relu net this is a stack of side conditions growing with depth; for ViT the conjunction
+    collapses and the whole depth-`k` trunk is certified at every input. -/
 theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
     ∀ (k : Nat) (ps : Fin k → BlockParamsV ((hm1+1) * d) mlpDim)
       (v : Vec (Np1 * ((hm1+1) * d))), (vitTrunkV (Np1 := Np1) ε hε k ps).ok v
@@ -165,7 +150,7 @@ theorem vitTrunkV_ok {Np1 hm1 d mlpDim : Nat} (ε : ℝ) (hε : 0 < ε) :
 /-! ViT's stem is an affine patchify conv and its head is GAP-free (a CLS slice + dense), so both
 are linear and their backward graphs are activation-independent. -/
 
-/-- **The patch-embedding stem as a `CertLayer`.** ⭐ Its `graph` ignores the saved activation
+/-- **The patch-embedding stem as a `CertLayer`.** Its `graph` ignores the saved activation
     entirely — patchEmbed is affine, so the input-VJP is the same linear map everywhere. -/
 noncomputable def vitPatchEmbedLayer (ic H W patchSize N D : Nat)
     (Wc : Kernel4 D ic patchSize patchSize) (bc cls : Vec D) (pos : Mat (N + 1) D) :
@@ -205,9 +190,9 @@ noncomputable def vitClassifierLayer (N D nClasses : Nat)
   graph := fun _ e => classifierBackGraph N D nClasses Wcls e
   faithful := fun v _ e => classifierBackGraph_faithful N D nClasses Wcls bcls v e
 
-/-- ⭐⭐ **THE WHOLE NET AS ONE `CertLayer`** — stem, depth-`k` trunk, final LN, head, composed
+/-- **The whole net as one `CertLayer`** — stem, depth-`k` trunk, final LN, head, composed
     by `comp` alone. Image in, logits out, and the backward graph and its faithfulness come with
-    it. **The first net in the repo whose fold is the entire network.** -/
+    it. -/
 noncomputable def vitNetLayer (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
     (ε : ℝ) (hε : 0 < ε)
     (Wc : Kernel4 ((hm1+1) * d) ic patchSize patchSize) (bc cls : Vec ((hm1+1) * d))
@@ -241,7 +226,7 @@ theorem vitNetLayer_fwd (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
   rw [vitTrunkV_fwd ε hε k ps (patchEmbedFlat ic H W patchSize N ((hm1+1) * d) Wc bc cls pos x)]
   rfl
 
-/-- ⭐⭐ **The whole-net chain's backward graph IS `vitNetBackGraph`.** The stem/trunk/LN/head
+/-- **The whole-net chain's backward graph is `vitNetBackGraph`.** The stem/trunk/LN/head
     version of `vitTrunkV_graph`: `ViTBackB0`'s hand-composed whole-net graph is what
     `CertLayer.comp` produces, so `vitNetBackGraph_faithful` is a consequence of the shared
     combinator rather than a parallel result. The saved activations `comp` threads
@@ -298,11 +283,11 @@ theorem vitNetLayer_ok (ic H W patchSize N mlpDim hm1 d nClasses k : Nat)
       Wc bc cls pos ps γF βF Wcls bcls).ok x :=
   ⟨trivial, vitTrunkV_ok ε hε k ps _, trivial, trivial⟩
 
-/-- ⭐⭐⭐ **Whole-net backward-graph faithfulness.** The reverse-composed backward graph
+/-- **Whole-net backward-graph faithfulness.** The reverse-composed backward graph
     `vitNetBackGraph` denotes the proven whole-net VJP `vitForwardKVHasVJP.backward` at every
     input image and output cotangent, at every depth `k` (multi-head, vector-LN). It falls out of
     `CertLayer.faithful` at `vitNetLayer` plus `vitNetLayer_graph` — the composition argument is
-    `comp`'s, proven once for all seven nets, and the only ViT-specific input is the forward
+    `comp`'s, proven once in `CertifiedChain`, and the only ViT-specific input is the forward
     equality. -/
 theorem vitNetBackGraph_faithful
     (ic H W patchSize N mlpDim hm1 d nClasses k : Nat) (ε : ℝ) (hε : 0 < ε)

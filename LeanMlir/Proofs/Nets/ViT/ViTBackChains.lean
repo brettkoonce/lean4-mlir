@@ -9,7 +9,7 @@ The hand-composed reverse of the committed ViT-Tiny forward, as plain `def`s on 
 from the attention core outwards:
 
 * the multi-head sdpa backward (`headSliceMat` per head, `mhsaSdpaBackQ`/`K`/`V`): the certified single-head
-  `sdpa_back_{Q,K,V}` (`Attention.lean`) on each head slab, concatenated by the
+  `sdpaBack{Q,K,V}` (`Attention.lean`) on each head slab, concatenated by the
   `finProdFinEquiv` column layout, and its flattened forms `coreQFlat`/`coreKFlat`/`coreVFlat`;
 * the full MHSA input-gradient backward `mhsaBackFlat` — output-projection backward, the three
   cores, the three projection backwards fanning in at `X` (`mhsaBackFlat_eq_mhsa_vjp` ties it to
@@ -26,13 +26,13 @@ from the attention core outwards:
 distinct per-block parameters, `D = 192 = 3 heads × 64`, MLP dim 768, 197 tokens (196 patches +
 CLS), `16×16/s16` patchify (no `conv2d`, so no padding phase and none of the even-kernel question
 `EvenKernelConvBack.lean` found for ConvNeXt), vector-`[D]` LayerNorm at all 25 sites, GELU,
-`ε = 1e-5`. No BatchNorm anywhere. ⚠ `N` throughout is the TOKEN count, not a batch; the batch is
-`B`, the binder of `vitInputGradKB` below — the per-example chain lifted stage by stage over `B`
-examples, the way the batched T3 tie (`ViTStepTieGB`) lifts every activation and cotangent — tied
-by `vitInputGradKB_eq_batchMap_vitForwardKV_vjp` (`ViTWholeBackCertifiedTieB.lean`).
+`ε = 1e-5`. No BatchNorm anywhere. Note: `N` throughout is the token count, not a batch; the
+batch is `B`, the binder of `vitInputGradKB` below — the per-example chain lifted stage by stage
+over `B` examples, the way the batched step tie (`ViTStepTieGB`) lifts every activation and
+cotangent — tied by `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`
+(`ViTWholeBackCertifiedTieB.lean`).
 
-Moved here from the three float bridges that defined them beside their float twins on 2026-09-08
-(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
+No number is stated about any of these chains. -/
 
 namespace Proofs
 
@@ -87,7 +87,7 @@ noncomputable def coreKFlat (Q K V : Mat N (h * dh)) (v : Vec (N * (h * dh))) : 
     output-projection backward (`dense Woᵀ 0`, per token) → the three sdpa cores → Q/K/V projection
     backwards (`dense Wᵀ 0`, per token), fanning in at `X` (the three paths add). The certified
     MHSA backward at the input (`mhsaLayer`, `Attention.lean`) is
-    `dconcat = dY·Woᵀ`, `(dQ, dK, dV) = sdpa_back(dconcat)` per head,
+    `dconcat = dY·Woᵀ`, `(dQ, dK, dV) = sdpaBack{Q,K,V}(dconcat)` per head,
     `dX = dQ·Wqᵀ + dK·Wkᵀ + dV·Wvᵀ`; `mhsaBackFlat_eq_mhsa_vjp` says this chain is that. -/
 noncomputable def mhsaBackFlat (Wq Wk Wv Wo : Mat (h * dh) (h * dh)) (Q K V : Mat N (h * dh)) :
     Vec (N * (h * dh)) → Vec (N * (h * dh)) :=
@@ -161,7 +161,7 @@ noncomputable def vitBlockBackVAt (Np1 heads d_head mlpDim : Nat) (ε : ℝ)
 
 /-- **The depth-`k` encoder-tower backward at a saved tower input `v`.**
 
-    ⚠ **Head-first, like the forward it reverses.** `vitBodyKVFlat (k+1) ps =
+    **Head-first, like the forward it reverses.** `vitBodyKVFlat (k+1) ps =
     vitBodyKVFlat k (ps ∘ succ) ∘ blockVFlat (ps 0)` runs block `0` FIRST, so the backward applies
     block `0`'s reverse LAST, and the tail's saved input is block `0`'s forward OUTPUT.
     `cnxStageChKBack`'s recursion verbatim, one architecture over. Writing the fold as its own
@@ -254,15 +254,15 @@ noncomputable def vitSavedBodyB (B ic H W patchSize N mlpDim heads d_head k : Na
   StableHLO.batchMap B (vitBodyKVFlat (N + 1) heads d_head mlpDim ε k ps)
     (vitSavedPEB B ic H W patchSize N heads d_head W_conv b_conv cls_token pos_embed x)
 
-/-- **THE BATCHED WHOLE-NET ViT INPUT GRADIENT** — `vitInputGradK` at each of `B` examples, stage
+/-- **The batched whole-net ViT input gradient** — `vitInputGradK` at each of `B` examples, stage
     by stage, as the batched render computes it. The head backward and the CLS scatter are
     `StableHLO.batchMap B` of their per-example leaves (both input-independent); the final-LN and
     tower backwards are `StableHLO.batchMapAux B` of their per-example maps, each at the batched
     saved activation (`vitSavedBodyB`, `vitSavedPEB`); the patch-embed backward is `batchMap B` of
-    the linear formula. Every slot is a lift because no ViT op couples examples — the same
-    honesty argument `ViTStepTieGB` makes for the batched T3 tie. `B` is a variable: this chain
+    the linear formula. Every slot is a lift because no ViT op couples examples, as in the
+    batched step tie `ViTStepTieGB`. `B` is a variable: this chain
     carries no batch numeral. `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`
-    (`ViTWholeBackCertifiedTieB.lean`) says it IS the certified gradient of
+    (`ViTWholeBackCertifiedTieB.lean`) says it is the certified gradient of
     `batchMap B vitForwardKV`. -/
 noncomputable def vitInputGradKB (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize) (b_conv : Vec (heads * d_head))

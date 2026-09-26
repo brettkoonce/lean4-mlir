@@ -3,19 +3,19 @@ import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # EfficientNet-B0's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
-`EfficientNetFullB0.lean` (T2) says the typed batch-BN graph denotes `efficientnetForwardBFull N w`
+`EfficientNetFullB0.lean` says the typed batch-BN graph denotes `efficientnetForwardBFull N w`
 on one device. At `replicas > 1` the data-parallel render normalises every one of B0's 49
 BatchNorms with the GLOBAL batch's statistics — the sync-BN composition `bnFwdSite` emits: this
 replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed, then `bnSyncF`.
-This file is T2's data-parallel twin: that forward graph, stated as a family over the `R`
+This file is its data-parallel twin: that forward graph, stated as a family over the `R`
 replicas, denotes on replica `r` exactly `batchShard r` of the single-device forward at the global
 batch `R·N`.
 
     den (efficientnetFwdGraphSyncFull R hR N epsStr w e r)
       = batchShard R N 10 (efficientnetForwardBFull (R * N) w X) r
 
-given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
-move**: the right-hand side is the committed `efficientnetForwardBFull`, at `N := R·N`.
+given that each replica's input is its shard of one global batch `X`. **The spec does not move**:
+the right-hand side is the committed `efficientnetForwardBFull`, at `N := R·N`.
 
 ## How it is proved
 
@@ -35,10 +35,10 @@ which graph is stated, not what it denotes.
 
 ## What is NOT claimed here
 
-⚠ The backward and the parameter collectives are the T3 half (`EfficientNetSyncStepTieG.lean`).
-⚠ That the `R` replicas' inputs ARE the shards of one batch is the driver's. ⚠ The emitted
-artifact's stochastic-depth and classifier-dropout variants add per-example scalings T2 does not
-state. ⚠ The lowerer's `all_reduce` is trusted as every other op's lowering is.
+The backward and the parameter collectives are the step half (`EfficientNetSyncStepTieG.lean`).
+That the `R` replicas' inputs are the shards of one batch is the driver's. The emitted
+artifacts' stochastic-depth and classifier-dropout variants add per-example scalings this file
+does not state. The lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 
 namespace Proofs
@@ -274,10 +274,10 @@ theorem headGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Na
 -- § The whole net
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The sync-BN data-parallel EfficientNet-B0 forward graph, over the replica family.** T2's
-    `efficientnetFwdGraphBFull` with every one of the 49 BatchNorms a `bnSyncSiteLA` over all `R`
-    replicas, fed each replica's own input subgraph `e r`; block prefixes and collective tags are
-    `EfficientNetRender`'s. -/
+/-- **The sync-BN data-parallel EfficientNet-B0 forward graph, over the replica family.** The
+    single-device `efficientnetFwdGraphBFull` with every one of the 49 BatchNorms a `bnSyncSiteLA`
+    over all `R` replicas, fed each replica's own input subgraph `e r`; block prefixes and
+    collective tags are `EfficientNetRender`'s. -/
 def efficientnetFwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String)
     (w : B0Weights) (e : Fin R → SHlo (N * (3 * 224 * 224))) : Fin R → SHlo (N * 10) :=
   headGraphSync epsStr R hR N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
@@ -300,7 +300,7 @@ def efficientnetFwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : Stri
                                     (stemGraphSync epsStr R hR N 112 112 w.sW w.sb w.sε w.sγ w.sβ
                                       e)))))))))))))))))
 
-/-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
+/-- **The forward at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` images, the
     sync-BN graph on replica `r` denotes `batchShard r` of `efficientnetForwardBFull (R * N) w X`
     — the committed batch-BN forward, at the global batch. One block lemma per stage, the shard

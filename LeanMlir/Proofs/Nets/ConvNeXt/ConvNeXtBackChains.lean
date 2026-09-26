@@ -17,12 +17,12 @@ three downsample backwards enter as *supplied* maps; only the depthwise, the two
 are statements about a NAMED chain of the forward's shape. The channel-LN backward those ties fill
 the `lnB` slots with is `chanLNTensor3Back` (`ChannelLNBack.lean`).
 
-⚠ Padding is SYMMETRIC at the downsamples (`flatConvStride2Back`) and the stem is the stride-4
-patchify (`flatConvStride4Back`: two scatters, then the reversed-kernel conv); the 7×7 depthwise
-is odd, but `EvenKernelConvBack.lean` is where the 4×4 and 2×2 kernels' even-kernel ties live.
+Note: padding is symmetric at the downsamples (`flatConvStride2Back`) and the stem is the
+stride-4 patchify (`flatConvStride4Back`: two scatters, then the reversed-kernel conv); the 7×7
+depthwise is odd, and `EvenKernelConvBack.lean` is where the 4×4 and 2×2 kernels' even-kernel ties
+live (the ties pass the kernels through `padOdd`).
 
-Moved here from the float bridge that defined them beside their float twins on 2026-09-08
-(`planning/archive/float_second_pass.md`); no number is stated about any of these chains. -/
+No number is stated about any of these chains. -/
 
 namespace Proofs
 
@@ -30,15 +30,15 @@ namespace Proofs
 -- § The block body and the downsample backwards
 -- ════════════════════════════════════════════════════════════════
 
-/-- The ConvNeXt block body input-gradient VJP at a smooth point — the **reverse of
+/-- The ConvNeXt block body input-gradient VJP — the **reverse of
     `convNextBlockBody = layerScale ∘ project ∘ GELU ∘ expand ∘ LN ∘ depthwise`**:
 
       `depthwiseFlatBack Wdw ∘ lnB ∘ convFlatBack Wex ∘ geluB ∘ convFlatBack Wpr ∘ lsB`
 
     `lsB = diagBack γls` (the per-channel layer-scale backward); `convFlatBack Wpr` the project back;
     `geluB = diagBack (gelu'(saved))`; `convFlatBack Wex` the expand back; `lnB` the LayerNorm back
-    (= BN-back); `depthwiseFlatBack Wdw` the depthwise input-VJP. The full block is
-    `residual (body)`, so the block backward is `residual (cnxBlockBodyBack …)`;
+    (the ties fill it with `chanLNTensor3Back`); `depthwiseFlatBack Wdw` the depthwise input-VJP.
+    The full block is `residual (body)`, so the block backward is `residual (cnxBlockBodyBack …)`;
     `ConvNeXtBackCertifiedTie.cnxBodyWithChanLNBack_eq_vjp` fills the LN slot with the concrete
     channel-LN chain, pins the other slots to their certified backwards, and shows the chain IS
     the certified body VJP. -/
@@ -65,7 +65,7 @@ noncomputable def cnxDownBack {cin cout h w kH kW : Nat} (W : Kernel4 cout cin k
 -- § The per-example whole-net chain (the [3,3,9,3] fold at 224 px, `nC` classes)
 -- ════════════════════════════════════════════════════════════════
 
-/-- The whole ConvNeXt-T input-gradient VJP at a smooth point — the **exact reverse of
+/-- The whole ConvNeXt-T input-gradient VJP — the **exact reverse of
     `convNextForwardTCh`**: `dense ∘ LN ∘ GAP ∘ stage₄ ∘ down₃ ∘ stage₃ ∘ down₂ ∘ stage₂ ∘ down₁ ∘
     stage₁ ∘ LN ∘ stem` reversed. The stem (`flatConvStride4Back sW ∘ lnBstem`, the 4×4/s4 patchify
     backward), GAP and dense endpoints are concrete; the head-LN, stem-LN, 4 stage backwards and 3
@@ -95,7 +95,7 @@ noncomputable def convnextInputGrad {kH kW nC : Nat} (Wd : Mat 768 nC) (sW : Ker
 -- § The batched whole-net chain — a variable batch `B`, every slot lifted at its saved batch
 -- ════════════════════════════════════════════════════════════════
 
-/-- **THE BATCHED WHOLE-NET ConvNeXt-T INPUT GRADIENT** — `convnextInputGrad` at each of `B`
+/-- **The batched whole-net ConvNeXt-T input gradient** — `convnextInputGrad` at each of `B`
     examples, stage by stage, as the batched render computes it. The three input-independent
     leaves (the stem's reversed-kernel conv, GAP, the dense head) are `StableHLO.batchMap B` of
     the per-example leaf. Every saved-activation slot is `StableHLO.batchMapAux B` of a
@@ -104,10 +104,10 @@ noncomputable def convnextInputGrad {kH kW nC : Nat} (Wd : Mat 768 nC) (sW : Ker
     `a1 a3 a5 a7`, the three downsample backwards `d1B … d3B` at `a2 a4 a6`, and `lnBhead` at `a9`
     (the GAP output). Where the per-example chain fills a slot at ONE saved value, this one fills
     it at `B` of them, which is the only way a batch enters — LayerNorm is per-example and no
-    ConvNeXt op couples examples, the honesty argument `ConvNeXtStepTieGB` makes for the batched
-    T3 tie. `B` and `nC` are variables: this chain carries no batch numeral and no class count.
+    ConvNeXt op couples examples, as in the batched step tie `ConvNeXtStepTieGB`. `B` and `nC` are
+    variables: this chain carries no batch numeral and no class count.
     `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp` (`ConvNeXtWholeBackCertifiedTieB.lean`)
-    says it IS the certified gradient of `batchMap B convNextForwardTCh`. -/
+    says it is the certified gradient of `batchMap B convNextForwardTCh`. -/
 noncomputable def convnextInputGradB (B : Nat) {kH kW nC : Nat} (Wd : Mat 768 nC)
     (sW : Kernel4 96 3 kH kW)
     (lnBstem : Vec (96 * 56 * 56) → Vec (96 * 56 * 56) → Vec (96 * 56 * 56))

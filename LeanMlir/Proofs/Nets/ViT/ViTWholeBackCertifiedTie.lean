@@ -1,12 +1,14 @@
 import LeanMlir.Proofs.Nets.ViT.ViTVecLNBackCertifiedTie
 
-/-! # ⭐⭐ `vitInputGradK` IS the certified whole-net ViT-Tiny gradient
+/-! # `vitInputGradK` is the certified whole-net ViT gradient
 
-The ViT peer of `r34InputGrad_eq_resnet34_vjp`, `mnv2PaperInputGrad_eq_mobilenetv2Paper_vjp`,
-`convnextInputGrad_eq_convNextForwardTCh_vjp` and
-`efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp` — tier T6 of
-`planning/archive/proofs_tier_to_paper_nets.md`, at ViT-Tiny's shipped configuration: depth 12 with
-distinct per-block parameters, `D = 192 = 3 × 64`, 197 tokens, vector-`[D]` LayerNorm.
+The per-example whole-net backward tie for ViT, the peer of ConvNeXt-T's
+`convnextInputGrad_eq_convNextForwardTCh_vjp` and EfficientNet-B0's
+`efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp`; the batched ties of the other nets
+are `r34InputGradB_eq_r34B_full_vjp` and `mnv2InputGradB_eq_mobilenetv2B_full_vjp`, and ViT's own
+batched form is `ViTWholeBackCertifiedTieB.lean`. It is stated generically and instantiated at
+ViT-Tiny's configuration: depth 12 with distinct per-block parameters, `D = 192 = 3 × 64`,
+197 tokens, vector-`[D]` LayerNorm.
 
 Four things assemble it, and only the second is a proof rather than an enumeration:
 
@@ -16,20 +18,21 @@ Four things assemble it, and only the second is a proof rather than an enumerati
    final-LN witness IS `HasVJPMat.toHasVJP (layerNormVecPerTokenHasVJPMat …)`); and the
    patch embed's is `patchEmbedInputGradFormula`, which `patchEmbedFlatHasVJP` gives as its
    backward *definitionally* — so that endpoint is `rfl` and needs no lemma at all.
-2. ⭐ **The depth-`k` tower fold** (`vitTowerBackK_eq_vjp`), the one real proof. `vitBodyKVFlat`'s
+2. **The depth-`k` tower fold** (`vitTowerBackK_eq_vjp`), the one real proof. `vitBodyKVFlat`'s
    `HasVJP` is built head-first (block `0` runs first), so the backward composes the block
-   backwards in the OPPOSITE order, each at its own saved activation, and the tail's saved input
-   is block `0`'s forward OUTPUT. `cnxStageChKBack_eq_vjp`'s induction verbatim: one rewrite of
+   backwards in the opposite order, each at its own saved activation, and the tail's saved input
+   is block `0`'s forward output. `cnxStageChKBack_eq_vjp`'s induction verbatim: one rewrite of
    the block tie and one of the inductive hypothesis.
 3. **The apex witness.** `vitApexVJP` names the committed `vitForwardKVHasVJP`; its
    `.backward` reduces through the four `vjpComp` factors by `rfl`.
 4. **A shape check.** `vitForwardKV_eq_chain` says the four-factor composition the apex is stated
    at IS the committed `vitForwardKV`, by `rfl`.
 
-⭐ The result is UNCONDITIONAL except `0 < ε`, at EVERY input and every cotangent. ViT has no kink
-anywhere — softmax, GELU and LayerNorm are all smooth — so like ConvNeXt-T and unlike ResNet-34 /
-MobileNetV2 / EfficientNet-B0 this is a `HasVJP` and not a smooth-point `HasVJPAt`, and it carries
-no operating point, no batch size and no smoothness witness. 3-axiom-clean.
+The only hypothesis is `0 < ε`; the result holds at every input and every cotangent. ViT has no
+kink anywhere — softmax, GELU and LayerNorm are all smooth — so, like ConvNeXt-T and
+EfficientNet-B0 and unlike ResNet-34 / MobileNetV2, this is a global `HasVJP` and not a
+smooth-point `HasVJPAt`, with no smoothness witness. The forward `vitForwardKV` has no drop-path
+and is in exact arithmetic.
 -/
 
 namespace Proofs
@@ -64,7 +67,7 @@ theorem vitFinalLNBack_eq_vjp (n D : Nat) (ε : ℝ) (hε : 0 < ε) (γF βF : V
 -- § 2. ⭐ The depth-`k` tower fold — the one real proof
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **THE TOWER-FOLD TIE.** The hand-composed depth-`k` encoder-tower backward IS
+/-- **The tower-fold tie.** The hand-composed depth-`k` encoder-tower backward is
     `(vitBodyKVFlatHasVJP k ps).backward`. Induction on `k`: the base is `identityHasVJP`'s
     `fun _ dy => dy`, and the step is one rewrite of the inductive hypothesis at the shifted saved
     activation (`blockVFlat (ps 0) v`, block `0`'s OUTPUT) and one of the block tie at `v`. -/
@@ -103,8 +106,7 @@ noncomputable def vitApexVJP
   vitForwardKVHasVJP ic H W patchSize N mlpDim heads d_head nClasses k
     W_conv b_conv cls_token pos_embed ε hε ps γF βF Wcls bcls
 
-/-- The four-factor composition the apex is stated at IS the committed `vitForwardKV`. The shape
-    check the retired per-example ResNet-34 tie lacked and ConvNeXt wrote before anyone needed it. -/
+/-- The four-factor composition the apex is stated at is the committed `vitForwardKV`, by `rfl`. -/
 theorem vitForwardKV_eq_chain
     (ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
@@ -152,7 +154,7 @@ theorem vitInputGradK_eq_vitApexVJP
   simp only [dense_transpose_eq_mulVec]
   rfl
 
-/-- ⭐⭐ **THE APEX.** `vitInputGradK` — the whole-net ViT-Tiny input gradient, every slot pinned
+/-- **The apex.** `vitInputGradK` — the whole-net ViT-Tiny input gradient, every slot pinned
     to the certified per-op backward at its own saved activation — IS
     `(vitForwardKVHasVJP …).backward x`, the committed depth-12 witness — `vitApexVJP` by name. -/
 theorem vitInputGradK_eq_vitForwardKV_vjp
@@ -199,7 +201,7 @@ theorem vitInputGradK_correct
 -- § 4. The production capstone — ViT-Tiny at its real dimensions
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **ViT-Tiny's whole-net backward tie — tier T6 at the paper net.**
+/-- **ViT-Tiny's whole-net backward tie.**
     `vitInputGradK_eq_vitForwardKV_vjp` instantiated at the exact ViT-Tiny
     spec: a `3×224×224` image, `16×16` patches (196 patch tokens + CLS), `D = 192 = 3 heads × 64`,
     MLP dim 768, **12 transformer blocks with DISTINCT per-block parameters**, vector-`[D]`
@@ -207,7 +209,7 @@ theorem vitInputGradK_correct
 
     So the hand-written input-gradient chain IS the certified gradient of the committed depth-12
     forward, at every image.
-    The backward peer of `vitTinyHasVJP_correct`, and ViT's entry in the T6 column beside
+    The backward peer of `vitTinyHasVJP_correct`, beside
     `convnextInputGrad_eq_convNextForwardTCh_vjp` and
     `efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp`. -/
 theorem vitTinyInputGrad_eq_vitTiny_vjp

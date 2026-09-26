@@ -2,49 +2,50 @@ import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetStepTie
 
-/-! # EfficientNet-B0's T3 §1a TIE at the UN-FUSED gradient and the SMOOTHED loss
+/-! # EfficientNet-B0's step tie at the un-fused gradient and the smoothed loss
 
 `EfficientNetStepTie.lean` ties all 262 parameters of the SGD-inline `efficientnet_train_step.mlir`:
 each fused `theta - lr * g` op `den`s to the certified step at the cotangent the emitted backward
-chain delivers. This file is that statement re-pointed along the two axes 4b left open
-(`planning/archive/proofs_tier_to_paper_nets.md`, "What is NOT done, and is the honest boundary").
+chain delivers. This file is that statement re-pointed along two axes.
 
-⭐ **Axis 1 — the OPTIMIZER FORM.** Every conjunct is at the RAW gradient node (`*GradB`), which is
-what `efficientnet_adam_train_step.mlir` and every ImageNet artifact emit; the fused op appears only
-in the SGD-inline file. One statement therefore covers AdamW, RMSProp, EMA, the clipped and
-drop-path variants and their data-parallel and bf16 twins, because they all consume this node.
-4b.1's `GradNodesB` is the fold each conjunct delegates to.
+**Axis 1 — the gradient node.** Every conjunct is at the raw gradient node (`*GradB`), which is
+what `efficientnet_adam_train_step.mlir` and the f32 `efficientnetin_*` artifacts emit; the fused op
+appears only in the SGD-inline file. The optimizer update that consumes the node (Adam, RMSProp,
+EMA, clipping) is outside this statement. The threaded forward is `efficientnetForwardBFull`,
+without drop-path and without classifier dropout, so the `*drop*` / `*do*` artifacts are not
+covered; the bf16 artifacts emit `*GradBBf16` nodes and are not covered either. `GradNodesB` is
+the fold each conjunct delegates to.
 
-⭐ **Axis 2 — the LOSS.** The capstone's top-of-chain cotangent is
-[`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean)'s, at a GENERAL target: the six-op chain
+**Axis 2 — the loss.** The capstone's top-of-chain cotangent is `smoothedLossCotGraph`'s
+(Foundation/SmoothedLossCot.lean), at a general target: the six-op chain
 `softmaxRow → subB → scaleB → addVB → shiftB → divConstB` the batched renders emit, with the target
 arriving as the graph input `%onehot` — a soft vector under mixup or cutmix. The fused file pins it
-to `softmax − oneHot`, the gradient of plain cross-entropy at a hard label, which no ImageNet
-artifact computes. `unrowB` / `rowB` are ResNet-34's casts between the loss chain's one-row-per-
-example index and the dense ops' plain per-example width.
+to `softmax − oneHot`, the gradient of plain cross-entropy at a hard label. `unrowB` / `rowB` are
+ResNet-34's casts between the loss chain's one-row-per-example index and the dense ops' plain
+per-example width.
 
-## What is NOT new, and why the file is a transformation rather than a proof
+## Relation to the fused file
 
 Every cotangent chain, every forward activation and every Jacobian witness is
-`EfficientNetStepTie.lean`'s, unchanged. The fusion is `rfl` — `*SgdB_eq_grad` says the fused op IS
+`EfficientNetStepTie.lean`'s, unchanged. The fusion is `rfl` — `*SgdB_eq_grad` says the fused op is
 `theta - lr *` applied to the un-fused one — so each conjunct's proof is the fused file's with the
-wrapper peeling dropped, exactly as 4b's folds were. The `lr`, `wN`, `bN`, `gN` and `lrStr` binders
-disappear with the wrapper.
+wrapper peeling dropped. The `lr`, `wN`, `bN`, `gN` and `lrStr` binders disappear with the wrapper.
 
-⚠ **The head takes `g` as a PARAMETER here.** The fused `enetHeadTied` computes
+The head takes `g` as a parameter here. The fused `enetHeadTied` computes
 `g := rowSoftmax(logits) − onehot` internally, which is what pinned that file to the hard label.
-Making it a binder is the whole of axis 2: the per-block ties are `forall cot` statements and were
-already loss-agnostic, so only the head and the capstone had to move.
+The per-block ties are `forall cot` statements and were already loss-agnostic, so only the head and
+the capstone differ.
 
-⛔ **Conventions carried unchanged from the fused file**: batch BatchNorm (`bnBatchLA`), XLA-`SAME`
-at the 3x3/s2 stem and SYMMETRIC at the strided depthwises, swish (no kink, so no smoothness
-hypothesis anywhere), and the SE gate's fan-in folded into the block VJPs. ⛔ ONE REPLICA: in
-`efficientnetin_emarmsdp64dropdo` every gradient node feeds `allReduceMeanF` — the collective as an
-AST node since 4d piece 2 (2026-09-07), until then emitted text and a declared carve-out. Every
-statement here is at the per-replica node; `DataParallelNode.lean` composes it with the replica
-mean and the tail (`adamW_at_allReduceMeanF`). For the sync-BN data-parallel render (2026-09-21)
-`EfficientNetSyncStepTieG.lean` is the whole step: its `efficientnet_net_syncTiedG` says each
-all-reduced gradient IS this file's node at `N := R·N` (without drop-path and dropout).
+**Conventions carried unchanged from the fused file**: batch BatchNorm (`bnBatchLA`), XLA-`SAME`
+at the 3x3/s2 stem and symmetric at the strided depthwises, swish (no kink, so no smoothness
+hypothesis anywhere), and the SE gate's fan-in folded into the block VJPs.
+
+**One replica.** In a data-parallel artifact such as `efficientnetin_emarmsdp64` every
+gradient node feeds `allReduceMeanF`. Every statement here is at the per-replica node;
+`DataParallelNode.lean` composes it with the replica mean and the tail
+(`adamW_at_allReduceMeanF`). For the sync-BN data-parallel render, `EfficientNetSyncStepTieG.lean`
+states the whole step: its `efficientnet_net_syncTiedG` says each all-reduced gradient is this
+file's node at `N := R·N` (without drop-path and dropout).
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -146,8 +147,8 @@ theorem enet_exp_tiedG {N ic mid oc h w r kHd kWd : Nat}
 /-! ## Strided downsampling MBConv block — all 16 params tied (b2/b4/b6/b12)
 
 Same as the expand block EXCEPT the expand stage lives at the block-input grid `2h×2w` and the
-depthwise is strided (`depthwiseStridedWeightSgdB`, the expand-side cotangent `cotEr` upsamples `h→2h`
-via `dStridedInB`). No skip (spatial+channels change). -/
+depthwise is strided (`depthwiseStridedWeightGradB`, the expand-side cotangent `cotEr` upsamples
+`h→2h` via `dStridedInB`). No skip (spatial+channels change). -/
 
 /-- **Strided downsampling MBConv block, tied.** All 16 params at the real forward (expand at `2h×2w`,
     strided depthwise `2h→h`) + the chain cotangents driven by `dyOut`. -/
@@ -288,7 +289,7 @@ theorem enet_noexp_tiedG {N ic oc h w r kHd kWd : Nat}
 
 `swish(bn(convStride2Xla Ws bs x))`, 3→32 at 224→112, at the XLA-`SAME` phase the shipped stem
 uses. The cotangent block 1 delivers at the stem swish output (`dyStem`) lifts through swish-back
-+ true-BN-back to the conv-out cotangent (the `convStridedXlaWeightSgdB` consumes it; NO conv-back
++ true-BN-back to the conv-out cotangent (the `convStridedXlaWeightGradB` consumes it; NO conv-back
 past `%x`). 4 params. -/
 
 /-- **Stem, tied.** The 3×3/s2 conv (`Ws`/`bs`) + its true-BN (`γs`/`βs`) at the real stem forward +
@@ -316,13 +317,14 @@ theorem enet_stem_tiedG {N ic oc h w kHs kWs : Nat}
 
 /-! ## Head — the 1×1 conv-bn-swish (4 params) → GAP → dense (Wfc/bfc), + the loss cotangent
 
-`dense(GAP(swish(bn(conv Wh bh)))))` (320→1280 conv, GAP, 1280→nClasses dense), then the batched
-per-row softmax-CE gradient `g = rowSoftmax(logits) − onehot`. The head conv params tie at the chain
-cotangent (loss → dense-back → GAP-back → swish/BN-back); the dense Wfc/bfc tie at the loss cotangent
-`g` directly. -/
+`dense(GAP(swish(bn(conv Wh bh)))))` (320→1280 conv, GAP, 1280→nClasses dense). The loss
+cotangent `g` is a parameter here (the capstone supplies the smoothed-loss chain's). The head conv
+params tie at the chain cotangent (`g` → dense-back → GAP-back → swish/BN-back); the dense Wfc/bfc
+tie at `g` directly. -/
 
-/-- **Head, tied.** The 4 head conv-bn params + the 2 dense params (Wfc/bfc) denote the certified step
-    at the real head forward + the loss-driven cotangent `g = rowSoftmax(logits) − onehot`. -/
+/-- **Head, tied.** The gradient nodes of the 4 head conv-bn params and the 2 dense params
+    (Wfc/bfc) denote the certified gradient at the real head forward and a loss cotangent `g`
+    taken as a parameter. -/
 def enetHeadTiedG {N c oc h w nC : Nat}
     (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
     (Wh : Kernel4 oc c 1 1) (bh γh βh : Vec oc) (Wfc : Mat oc nC) (bfc : Vec nC)
@@ -331,7 +333,7 @@ def enetHeadTiedG {N c oc h w nC : Nat}
   let hn : Vec (N * (oc * h * w)) := bnBatchLA N oc h w εh γh βh hc
   let hr : Vec (N * (oc * h * w)) := swish (N * (oc * h * w)) hn
   let a_gap : Vec (N * oc) := batchMap N (globalAvgPoolFlat oc h w) hr
-  -- ⚠ the logits are no longer read here: `g` is a PARAMETER, which is axis 2.
+  -- the logits are not read here: `g` is a parameter (axis 2 in the module doc).
   let _logits : Vec (N * nC) := batchMap N (dense Wfc bfc) a_gap
   let cotGapIn : Vec (N * oc) := rowDenseBackFlat N oc nC Wfc g
   let cotHr : Vec (N * (oc * h * w)) := gapInB N oc h w cotGapIn
@@ -402,12 +404,15 @@ theorem enet_noexp_tiedGAt (xN vN epsStr cotN : String) {N ic oc r kh kw : Nat}
   exact enet_noexp_tiedG xN vN epsStr cotN p.dε hd p.pε hp
     p.dW p.db p.dγ p.dβ p.z1 p.zb1 p.z2 p.zb2 p.pW p.pb p.pγ p.pβ xin dyOut
 
-/-- **The whole 16-MBConv EfficientNet-B0 train step, tied at the GRADIENT nodes and the
-    SMOOTHED loss.** Threading the real batched (true-BN + SE) forward
-    `efficientnetForwardBFull` and the backward cotangent chain (swish masks, the SE
-    gate fan-in, true-BN backs, the residual fan-in folded into the block VJPs), the stem, all 16
-    MBConv blocks, the conv-bn-swish head, and the dense head all denote the certified batched Σ_n
-    loss-descent step. -/
+/-- **The whole 16-MBConv EfficientNet-B0 train step, tied at the gradient nodes and the
+    smoothed loss.** Threading the batched (batch-BN + SE) forward `efficientnetForwardBFull` —
+    without drop-path or classifier dropout — and the backward cotangent chain built from the block
+    witnesses' `.backward`s (swish masks, the SE gate fan-in, batch-BN backs, the residual fan-in
+    folded into the block VJPs), every gradient node of the stem, all 16 MBConv blocks, the
+    conv-bn-swish head and the dense head denotes the certified batched gradient `Σ_n Σ pdiv · cot`
+    at the cotangent that chain delivers, the chain's top being `smoothedLossCotGraph` at the
+    target `t`. The statement is at one replica's `*GradB` nodes; the optimizer update and the
+    bf16 `*GradBBf16` nodes are outside it. -/
 theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) (w : B0Weights)
     (hεw : w.EpsPos)
     (aStr negAK bStr logN ohN : String) (α B : ℝ)

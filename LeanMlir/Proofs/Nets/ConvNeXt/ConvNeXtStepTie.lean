@@ -6,15 +6,16 @@ import LeanMlir.Proofs.Nets.ViT.ViTFold
 import LeanMlir.Proofs.Architectures.ChannelLNBack
 import LeanMlir.Proofs.Foundation.SgdNodes
 
-/-! # PoC: the FULL [3,3,9,3] ConvNeXt-T §1a TIE — the whole net tied through the real forward
+/-! # The full [3,3,9,3] ConvNeXt-T step tie — the whole net tied through the real forward
 
-The Chapter-7 §1a tie: mnv2's whole-net thread (now `MobileNetV2TieB.mnv2_net_tiedB`; the
-per-example original was deleted 2026-09-08) for the
-ConvNeXt-T schedule. The §1 fold (`ConvNeXtFold` + M2/M3/ViT) already makes
-every rendered param op `den = certified ∀ cotangent`; this file feeds each consumer the **real
-forward activations** of the `convNextTrainStepFaithfulV` render and the **loss-driven
-backward-chain cotangent** that net delivers — so the whole 18-block train step is den-composed
-forward → loss → backward, no free activations, no symbolic cotangent.
+The whole-net thread for the ConvNeXt-T schedule (the batched MobileNetV2 peer is
+`MobileNetV2TieB.mnv2_net_tiedB`). The folds (`ConvNeXtFold` and the MobileNetV2 / ResNet-34 / ViT
+folds it imports) make every rendered param op `den = certified ∀ cotangent`; this file feeds each
+consumer the forward activations of the `convNextTrainStepFaithfulV` render and the loss-driven
+backward-chain cotangent that net delivers, so the 18-block train step is den-composed
+forward → loss → backward with no free activations and no symbolic cotangent. The statement is
+per example, at one image and a hard label; the artifact runs a batch of 32, and that batch and
+its mean lie outside this statement (the batched form is `ConvNeXtStepTieGB.lean`).
 
 ## The net this is about
 
@@ -25,49 +26,39 @@ forward → loss → backward, no free activations, no symbolic cotangent.
 | depth / widths | `[3,3,9,3]`, 96 → 192 → 384 → 768 | `ConvNeXtRender.cnxTiny` |
 | stem | 4×4/s4 patchify conv **then channel-LN** | `convNextFwdChain` |
 | normalisation | `chanLNTensor3` (per-channel `[c]` affine, `h·w` statistics per example) at all 22 spatial sites: 1 stem + 18 block + 3 downsample | `ConvNeXtRender.lnFwdSite` |
-| head | GAP → **vector-LN at one row** (`rowLNVecFlat 1 768`) → dense | `headLnFwdSite`, restored 2026-08-30 |
+| head | GAP → **vector-LN at one row** (`rowLNVecFlat 1 768`) → dense | `headLnFwdSite` |
 | activation | GELU (smooth — no kink mask anywhere) | `fwdBlock` |
 | layer scale | per-channel `Vec c`, broadcast by `chanIdx` | `layerScaleChF` |
 | padding | symmetric; ConvNeXt is a PyTorch-origin net and has no XLA-`SAME` site | — |
 | params | 182 | `allParams`, and the artifact's 184 func args (`%x` + 182 + `%onehot`) |
 
-> **Superseded scope note.** Until 2026-09-05 this file tied the **scalar-LN** ConvNeXt-T — the
-> retired whole-map `bnForward` spelling, with no stem LN and a scalar `Vec 1` head LN. §2m
-> flipped the renderer to the real per-channel `channel_layer_norm` and added the stem LN, §2n
-> deleted the flag that had selected the old spelling, and 2026-08-30 restored the head LN. Every
-> theorem in the old file was true and none of them was about the committed bytes. These are: the
-> 22 spatial LN sites are `chanLNTensor3` with `Vec c` γ/β, the head is ViT's vector-LN at
-> `N = 1`, and the stem LN is here.
-
-## What is new against the scalar-LN version
+## The channel-LN specifics
 
 * **channel-LN γ/β** (`Vec c`) at every spatial site, through `CnxPoC.chanLn{Gamma,Beta}Sgd_den`
   — the render re-emits the `[h·w, c]` transposes and runs ViT's `veclnGammaSgd` /
   `rowDenseBiasSgd` on that view, so the op operands here are `chanLNRows` of the saved LN input
   and of the chain cotangent, while the certified Jacobian is `chanLNTensor3`'s in the `c·h·w`
   activation layout (`ChannelLN`'s permutation argument bridges the two).
-* **the channel-LN input-VJP** in the cotangent chain: `chanLNTensor3Back` where the scalar
-  version had `bnGradInput`. It is the certified VJP —
-  `ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`.
-* **the stem LN**, which the scalar version did not have at all: `psng`/`psnbt` tie at the
-  stem-LN output cotangent, and the stem conv's own gradients now see the LN input-VJP of it.
+* **the channel-LN input-VJP** in the cotangent chain: `chanLNTensor3Back`. It is the certified
+  VJP — `chanLNTensor3Back_eq_chanLN_vjp`.
+* **the stem LN**: `psng`/`psnbt` tie at the stem-LN output cotangent, and the stem conv's own
+  gradients see the LN input-VJP of it.
 * **the head at the vector LN**: `hng`/`hnbt : Vec 768` through `ViTPoC.veclnGammaSgd_den` /
   `rowDenseBiasSgd_den_lnbeta` at `N = 1`. Stated at the literal 768 because `1 * m` does not
   reduce at a variable `m` — the render's own documented trap, in the proof this time.
-* **the four even-kernel weight grads are no longer a gap.** The three downsample 2×2/s2 weights
+* **the four even-kernel weight grads.** The three downsample 2×2/s2 weights
   are `convStridedWeightSgd` (`ResNet34PoC.convStridedW_den` is kernel-generic), and the stem
   4×4/s4 weight is `convStride4WeightGrad`, whose `den` is
   `flatConvStride4WeightGradHasVJP`.
 
-## Coverage / honest residual
+## Coverage
 
 All **182** parameters are tied. 181 of them at the full `θ − lr·(certified ∂Loss/∂θ)` step; the
 stem weight `psW` at its **gradient**, because the render emits `convStride4WeightGrad` and wraps
-it in the hand-written `sgd` text (a declared §5 carve-out — there is no fused
-`convStride4WeightSgd` op to be the `den` of). What remains outside: the block backward is
-rendered hand-written, so the cotangent SSA ↔ chain-cot correspondence is the per-op trust the
-whole suite carries; plus per-op `pretty` lexing; LN `0 < ε` smoothness; ℝ → Float32 — the
-boundary every prior fold carries.
+it in hand-written `sgd` text (there is no fused `convStride4WeightSgd` op to be the `den` of). What
+remains outside: the block backward is rendered hand-written, so the cotangent SSA ↔ chain-cot
+correspondence is the per-op trust the whole suite carries; plus per-op `pretty` lexing; LN `0 < ε`
+smoothness; ℝ → Float32 — the boundary every prior fold carries.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -84,9 +75,8 @@ Forward: `out = addV( layerScaleCh lg (conv₁ₓ₁ₚᵣ( gelu( conv₁ₓ₁�
 Backward from the block-output cotangent `dyOut` (the residual `addV` is the outermost op and there
 is no post-add activation, so it passes `dyOut` straight to the layer-scale output): layer-scale-back
 (`cnxCotP`) → project-conv-back → GELU mask (`cnxCotE`) → expand-conv-back (`cnxCotN`) → the
-channel-LN input-VJP (`chanLNTensor3Back`) → depthwise-back. Only that last-but-one step differs
-from the scalar-LN thread; `cnxCotP`/`cnxCotE`/`cnxCotN` are LN-form-agnostic and are reused
-verbatim from `ConvNeXtChainClose`. -/
+channel-LN input-VJP (`chanLNTensor3Back`) → depthwise-back. `cnxCotP`/`cnxCotE`/`cnxCotN` are
+LN-form-agnostic and are reused verbatim from `ConvNeXtChainClose`. -/
 
 /-- **ConvNeXt block, tied.** All 9 params (depthwise 7×7 `W`+`b`, channel-LN γ/β at `Vec c`,
     expand/project 1×1 conv `W`+`b`, per-channel layer-scale γ) denote the certified loss-descent
@@ -300,7 +290,7 @@ theorem cnxLossCot_den (nlogN ohN : String) (logits : Vec 10) (label : Fin 10) :
 
 /-! ## Forward aliases — thread block inputs through the real forward -/
 
-/-- The stem output: patchify conv **then** channel-LN (§2m — the pre-§2m render had no stem LN). -/
+/-- The stem output: patchify conv **then** channel-LN. -/
 noncomputable def cnxStemFwdO {c h w : Nat} (ε : ℝ)
     (Wst : Kernel4 c 3 4 4) (bst psng psnbt : Vec c)
     (x : Vec (3*(2*(2*h))*(2*(2*w)))) : Vec (c*h*w) :=
@@ -364,7 +354,7 @@ noncomputable def cnxHeadDyXheadCh {h w : Nat} (ε : ℝ)
 
 /-! ## Input-only `*TiedAt` wrappers — compute internals from a block's input
 
-⚠ Only `cnxStemChTiedAt` is `@[irreducible]`: without it the capstone's
+Note: only `cnxStemChTiedAt` is `@[irreducible]`: without it the capstone's
 `refine ⟨cnx_stem_ch_tiedAt …, ?_, …⟩` times out in `whnf`, and moving it to its own goal does not
 help. Every other definition in this section and the two above is a plain `def`. -/
 
@@ -557,7 +547,7 @@ from the loss `g = softmax(logits) − onehot` down through dense (`denseHasVJP`
 GAP (`globalAvgPoolFlatHasVJP`) + every block's backward, with the residual fan-in `+ dyOut` at
 each of the eighteen identity-skip merges, the channel-LN-back at each of the three downsamples,
 and the stem LN's own back before the patchify conv's gradients. Each stem / block / down / head
-tie then holds at its real input + threaded cotangent. The full §1a tie: the whole [3,3,9,3]
+tie then holds at its real input + threaded cotangent. The whole [3,3,9,3]
 182-parameter ConvNeXt-T train step is den-composed forward → loss → backward, no free
 activations, no symbolic cotangent. -/
 
@@ -566,7 +556,10 @@ activations, no symbolic cotangent. -/
     residual fan-in at every identity skip, the channel-LN-back at every downsample and at the
     stem), the 18 ConvNeXt blocks, the 3 downsamples, the 4×4/s4 stem with its LN, the
     GAP → LN → dense head, and the dense total-loss fold + loss-cotangent graph all denote the
-    certified loss-descent step. All 182 parameters; `psW` at its gradient (§5 carve-out). -/
+    certified loss-descent step. All 182 parameters; `psW` at its gradient (its SGD wrap is
+    hand-written text). The statement is per example, at one image `x` and a hard label `label`;
+    the artifact's batch of 32 and its mean lie outside it (the batched form is
+    `CnxTiePoCGB.cnx_net_tiedGB`). -/
 theorem cnx_net_tied_certified
     (xN wN bN gN epsStr lrStr cotN dN nlogN ohN : String) (ε : ℝ)
     (w : CnxTieWeights 10) (xstem : Tensor3 3 56 56)

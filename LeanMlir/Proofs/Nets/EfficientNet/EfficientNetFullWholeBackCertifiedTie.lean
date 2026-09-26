@@ -3,21 +3,20 @@ import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetWholeBackCertifiedTie
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackChains
 
-/-! # ⭐⭐ `efficientnetInputGradBFull` IS the certified whole-net PAPER EfficientNet-B0 gradient
+/-! # `efficientnetInputGradBFull` is the certified whole-net paper EfficientNet-B0 gradient
 
-`EfficientNetWholeBackCertifiedTie.lean` closed this for the three-block representative. This
-file closes it for the net `efficientnetForwardBFull` actually is: **all sixteen MBConv
-blocks**, the T6 row of `planning/archive/proofs_tier_to_paper_nets.md` §3.3(c) — and closes it one
-step further than the representative's, against the concrete `efficientnetForwardBFullHasVJP`
-and, through `efficientnetForwardBFullHasVJP_correct`, against the Jacobian of the committed
+The whole-net backward tie for `efficientnetForwardBFull`, all sixteen MBConv blocks, against
+the concrete `efficientnetForwardBFullHasVJP` and, through
+`efficientnetForwardBFullHasVJP_correct`, against the Jacobian of the committed
 nested-application forward itself.
 
-Nothing here is new mathematics. The two endpoint stage ties (`stemBBack_eq_vjp_backward`,
-`headFwdBBack_eq_vjp_backward`) are the representative's, reused verbatim at the paper widths
-(head 320→1280 at 7×7); the sixteen blocks stay **opaque** in the tie, entering as `HasVJP`
-witnesses whose `.backward` is what the reverse chain's block slots are pinned to, so the
-composition is checked between variables. As on B0's representative and unlike MobileNetV2's,
-there is no smooth point: swish and the SE sigmoid are differentiable everywhere.
+The stem and head endpoint ties (`stemBBack_eq_vjp_backward`, `headFwdBBack_eq_vjp_backward`)
+are `EfficientNetWholeBackCertifiedTie.lean`'s, used at the paper widths (head 320→1280 at 7×7);
+the sixteen blocks stay opaque in the tie, entering as `HasVJP` witnesses whose `.backward` is
+what the reverse chain's block slots are pinned to, so the composition is checked between
+variables. Unlike MobileNetV2's tie there is no smooth point: swish and the SE sigmoid are
+differentiable everywhere, and the only hypothesis is `w.EpsPos`. The forward has no drop-path and
+no classifier dropout, and is in exact arithmetic.
 
 ## The three pieces
 
@@ -31,15 +30,13 @@ there is no smooth point: swish and the SE sigmoid are differentiable everywhere
    sixteen concrete blocks (`mbNoExpW`, `mbStridedW`, `mbResidW`, `mbExpW` at `B0Weights`'s
    widths) and carried to `efficientnetForwardBFullHasVJP` by `HasVJP.backward_unique`: two
    witnesses for one map have one backward, so the tactic-built whole-net witness never has to
-   be unfolded. ⭐ That is what the representative's file could not do — it stopped at a
-   `▸`-transported `_committed` witness that the kernel could not reduce through — and the
-   difference is not depth but `HasVJP.backward_unique` (`Tensor.lean`).
+   be unfolded.
    `efficientnetInputGradBFull_correct` then reads the result through
    `efficientnetForwardBFullHasVJP_correct`, whose proof IS the shape check
    `efficientnetForwardBFull_eq_chain`: the hand-written chain is the `pdiv`-contracted
    Jacobian of `efficientnetForwardBFull` at every input, every cotangent and every pixel.
 
-⭐ **General `N`.** `bnBatchLAHasVJP` exists at every batch size, so the tie does.
+**General `N`.** `bnBatchLAHasVJP` exists at every batch size, so the tie does.
 -/
 
 namespace Proofs
@@ -100,7 +97,7 @@ noncomputable def efficientnetBFullHasVJP {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11
 -- § The tie — stem and head concrete, the sixteen blocks opaque
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **THE TIE — `efficientnetInputGradBFull` IS the certified whole-net paper-B0 gradient.**
+/-- **The tie — `efficientnetInputGradBFull` is the certified whole-net paper-B0 gradient.**
     The committed backward chain, with its stem/head BatchNorm and swish slots filled by the
     certified per-op backwards and its sixteen MBConv blocks left opaque, equals the backward
     of `efficientnetBFullHasVJP` at those eighteen stages. `unfold`, two `rw`s, `rfl`. -/
@@ -175,7 +172,7 @@ theorem efficientnetInputGradBFull_eq_efficientnetB_full_vjp
 -- § The tie at the CONCRETE blocks, against `efficientnetForwardBFullHasVJP`
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The chain, at the sixteen concrete MBConv blocks, IS `efficientnetForwardBFullHasVJP`'s
+/-- **The chain, at the sixteen concrete MBConv blocks, is `efficientnetForwardBFullHasVJP`'s
     backward.** The tie above instantiated at `mbNoExpW`/`mbStridedW`/`mbResidW`/`mbExpW` at
     `B0Weights`'s widths, then `HasVJP.backward_unique` between the generic apex and the
     tactic-built whole-net witness — both are VJPs of the same eighteen-stage composition, so
@@ -218,7 +215,7 @@ theorem efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp (N : Nat) (w
       (mbNoExpWHasVJP N 112 112 w.b1 hεw.b1.d hεw.b1.p) (mbStridedWHasVJP N 56 56 w.b2 hεw.b2.e hεw.b2.d hεw.b2.p) (mbResidWHasVJP N 56 56 w.b3 hεw.b3.e hεw.b3.d hεw.b3.p) (mbStridedWHasVJP N 28 28 w.b4 hεw.b4.e hεw.b4.d hεw.b4.p) (mbResidWHasVJP N 28 28 w.b5 hεw.b5.e hεw.b5.d hεw.b5.p) (mbStridedWHasVJP N 14 14 w.b6 hεw.b6.e hεw.b6.d hεw.b6.p) (mbResidWHasVJP N 14 14 w.b7 hεw.b7.e hεw.b7.d hεw.b7.p) (mbResidWHasVJP N 14 14 w.b8 hεw.b8.e hεw.b8.d hεw.b8.p) (mbExpWHasVJP N 14 14 w.b9 hεw.b9.e hεw.b9.d hεw.b9.p) (mbResidWHasVJP N 14 14 w.b10 hεw.b10.e hεw.b10.d hεw.b10.p) (mbResidWHasVJP N 14 14 w.b11 hεw.b11.e hεw.b11.d hεw.b11.p) (mbStridedWHasVJP N 7 7 w.b12 hεw.b12.e hεw.b12.d hεw.b12.p) (mbResidWHasVJP N 7 7 w.b13 hεw.b13.e hεw.b13.d hεw.b13.p) (mbResidWHasVJP N 7 7 w.b14 hεw.b14.e hεw.b14.d hεw.b14.p) (mbResidWHasVJP N 7 7 w.b15 hεw.b15.e hεw.b15.d hεw.b15.p) (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p) x).trans
     (funext fun dy => HasVJP.backward_unique _ _ x dy)
 
-/-- ⭐⭐ **The hand-written sixteen-block chain IS the Jacobian-transpose of the committed
+/-- **The hand-written sixteen-block chain is the Jacobian-transpose of the committed
     `efficientnetForwardBFull`** — at every input, every loss cotangent and every input pixel.
     The tie above read through `efficientnetForwardBFullHasVJP_correct`, whose proof is the
     shape check `efficientnetForwardBFull_eq_chain`: the nested-application forward the render

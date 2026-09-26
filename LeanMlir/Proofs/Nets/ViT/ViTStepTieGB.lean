@@ -2,55 +2,56 @@ import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 import LeanMlir.Proofs.Nets.ViT.ViTStepTie
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
-/-! # ViT-Tiny's T3 §1a TIE at the BATCHED index, the UN-FUSED gradient and the SMOOTHED loss
+/-! # ViT-Tiny's step tie at the batched index, the un-fused gradient and the smoothed loss
 
 `ViTStepTie.lean` ties all 200 parameters of the SGD-inline `vit_train_step.mlir`: each fused
 `θ − lr·g` op `den`s to the certified step at the cotangent the emitted backward chain delivers,
-per example, at a hard label. This file is that statement re-pointed along the THREE axes
-`ConvNeXtStepTieGB.lean` (§4b.6) moved for ConvNeXt, and it is that file's transformation applied
-to ViT's per-example capstone — the 4b capstone that closes the set at five of five.
+per example, at a hard label. This file is that statement re-pointed along the three axes
+`ConvNeXtStepTieGB.lean` moved for ConvNeXt, applied to ViT's per-example capstone.
 
-⭐ **Axis 1 — the OPTIMIZER FORM.** Every conjunct is at the RAW gradient node (`*GradB`), which is
-what `vit_adam_train_step.mlir` and every `vitin_*` artifact emit since 4c leg 4; the fused op
-appears only in the SGD-inline file. One statement covers AdamW, the `wx`/`clip` variants, EMA,
-the 4× accumulation and the data-parallel twins, because they all consume this node.
-`ViTFoldGB.lean` (§4c-ter) is the fold each conjunct delegates to.
+**Axis 1 — the gradient node.** Every conjunct is at the raw gradient node (`*GradB`), which is
+what `vit_adam_train_step.mlir` and every f32 `vitin_*` artifact emit; the fused op appears only
+in the SGD-inline file. The optimizer update that consumes the node (AdamW, the `wx`/`clip`
+variants, EMA) is outside this statement. The bf16 artifacts emit `*GradBBf16` nodes
+(Foundation/Bf16GradNodes.lean) and are not covered. `ViTFoldGB.lean` is the fold each conjunct
+delegates to.
 
-⭐ **Axis 2 — the LOSS.** `g` is a binder, instantiated at `smoothedLossCotGraphDiv` — the six-op
+**Axis 2 — the loss.** `g` is a binder, instantiated at `smoothedLossCotGraphDiv` — the six-op
 chain `expe → softmaxDiv → subB → scaleB → addVB → shiftB → divConstB` this render emits at the
 plain width `N·K`, at a GENERAL target arriving as `%onehot`. The fused file pins it to
 `softmax − oneHot`.
 
-⭐ **Axis 3 — the INDEX.** `N` is a binder. Every activation is `batchMap N` of the per-example
+**Axis 3 — the index.** `N` is a binder. Every activation is `batchMap N` of the per-example
 prefix the fused file threads (`patchEmbedFlat`, `vitBlockFwdOMHV`, the final LN, `clsSliceFlat`)
 and every cotangent is `batchMapAux N` of the per-example chain (`vitCotB2outV`,
-`vitBlockCotInAtMHV`, the `vitCot*` family). Honest for this net because no ViT op couples
-examples — LayerNorm, attention, GELU and the denses are all per-example, and the `*B`
+`vitBlockCotInAtMHV`, the `vitCot*` family). The lift is exact for this net because no ViT op
+couples examples — LayerNorm, attention, GELU and the denses are all per-example, and the `*B`
 constructors' `den` arms say so. `nC` is a binder too (10 on Imagenette, 1000 on ImageNet).
 
-⭐⭐ **The one conjunct the per-example capstone could not state is here.** The CLS token is one
+**The CLS-token conjunct.** The CLS token is one
 shared `[192]` vector; its gradient is the sum of every example's CLS-row cotangent. The fused
 file's `vit_cls_den` is at `denseBiasSgdB (N := 1)` — "sum one thing", correct there because
 `pretty B` performed the batch lift outside the AST. `vitEmbedTiedGB`'s third conjunct is
 `ViTPoCGB.clsGrad_denB` at the batched node, `denseBiasGradB (N := N)` on `batchMap N clsSliceFlat`
 of the embed cotangent, with the batch sum inside `den`.
 
-## What is NOT new
+## Relation to the per-example file
 
 Every save, every chain cotangent and every Jacobian witness is `ViTStepTie.lean`'s, lifted; every
 conjunct's proof is one `ViTPoCGB.*_den` lemma. The per-example saves and internal cotangents are
 repackaged as functions of the block INPUT (`blkSaves`, `cAtt` … `cM1`) so that `batchMapAux` has
 something to lift — the `let` chains of `vitBlockTiedAtMHV` and `vitBlockCotInAtMHV`, verbatim.
-⚠ ViT has no `*BackBatchedGraph_faithful` family and needs none here: the lift is the honesty
-argument, as it was for ConvNeXt.
+ViT has no `*BackBatchedGraph_faithful` family and needs none here: the `batchMap` lift is the
+batched statement, as it was for ConvNeXt.
 
-⛔ **Conventions carried unchanged from the fused file:** the VECTOR LayerNorm (`γ β : Vec D`) at
+**Conventions carried unchanged from the fused file:** the VECTOR LayerNorm (`γ β : Vec D`) at
 all 25 sites, 3 heads × d_head 64, depth 12, D 192, MLP 768, 16×16 patches, GELU (no kink — no
 smoothness hypothesis anywhere). Stated at ViT-Tiny's literal dims; S and B are other nets.
-⛔ ONE REPLICA: in `vitin_adamdp128x4*` every gradient node feeds `allReduceMeanF`, the collective
-as an AST node since 4d piece 2 (2026-09-07; `DataParallelNode.lean` composes the per-replica
-statement with the replica mean), and the 4× accumulation is `momVNextF` at its other reading on
-top. ⛔ Stated at the drop-free chain.
+
+**Scope.** One replica: in `vitin_adamdp128x4*` (four replicas of 128) every gradient node feeds
+`allReduceMeanF`, and `DataParallelNode.lean` composes the per-replica statement with the replica
+mean. The drop-free chain: the `*drop*` artifacts' cotangent chains carry `dropPathB` sites not
+stated here.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -283,7 +284,7 @@ theorem vit_head_tiedGB (N : Nat) {nC : Nat} (aN cotN : String)
   · intro i j; exact ViTPoCGB.headWGradB_den aN cotN hn Wcls bcls g i j
   · intro n i; exact ViTPoCGB.headBGradB_den cotN Wcls (batchSlice N 192 hn n) bcls g n i
 
-/-- **Patch embed wConv/bConv/cls/pos, tied at the batched embed-output cotangent.** ⭐ The third
+/-- **Patch embed wConv/bConv/cls/pos, tied at the batched embed-output cotangent.** The third
     conjunct is the CLS token's gradient with the batch sum INSIDE `den` — the statement the
     per-example capstone made only at `N = 1`. -/
 def vitEmbedTiedGB (N : Nat) (xN cotN : String)
@@ -356,21 +357,21 @@ theorem _root_.Proofs.BlockParamsV.tied_gb {Np1 heads d mlpDim : Nat}
     (xin dyOut : Vec (N * (Np1 * (heads * d)))) : p.TiedGB N xN epsStr cotN ε xin dyOut :=
   vit_block_tiedGB N xN epsStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ xin dyOut
 
-/-- ⭐⭐ **The whole depth-12 multi-head ViT-Tiny train step, tied at the BATCHED index, the
-    GRADIENT nodes and the SMOOTHED loss — all 200 parameters.** The real forward
+/-- **The whole depth-12 multi-head ViT-Tiny train step, tied at the batched index, the
+    gradient nodes and the smoothed loss — all 200 parameters.** The real forward
     `patchEmbed → 12 multi-head vector-LN blocks → final vector-LN → CLS-slice → dense head` as
     `batchMap N` of the per-example prefixes, the smoothed loss cotangent at a general target `t`,
     and the backward chain as `batchMapAux N` of the per-example one (the per-block multi-head
     fan-ins, `vitCotB2outV` at the top, the embed-output cotangent at the bottom): the twelve
     blocks' 192 params, the final-LN γ/β, the classifier and the patch-embed wConv/bConv/cls/pos
-    all denote the certified batched `Σ_n` gradient — at the nodes `vit_adam_train_step.mlir` and
-    every `vitin_*` artifact emit. ⭐ The CLS token's gradient sums over the batch INSIDE `den`,
+    all denote the certified batched `Σ_n` gradient — at the `*GradB` nodes
+    `vit_adam_train_step.mlir` and every f32 `vitin_*` artifact emit; the bf16 artifacts emit
+    `*GradBBf16` and are not covered. The CLS token's gradient sums over the batch inside `den`,
     which the per-example capstone could state only at `N = 1`.
 
-    ⭐ **`N` and `nC` are binders and there is no smoothness hypothesis** (GELU, no kink). The batch
-    enters only through `batchMap`/`batchMapAux`, honest because no ViT op couples examples.
-    ⛔ ONE REPLICA (4d); the 4× accumulation is `momVNextF`'s other reading on top; stated at the
-    drop-free chain and at ViT-Tiny's literal dims. -/
+    `N` and `nC` are binders and there is no smoothness hypothesis (GELU, no kink). The batch
+    enters only through `batchMap`/`batchMapAux`, because no ViT op couples examples. The
+    statement is at one replica, at the drop-free chain, and at ViT-Tiny's literal dims. -/
 theorem vit_net_tiedGB (N : Nat) {nC : Nat}
     (xN aN epsStr cotN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
     (w : ViTTieWeights nC)

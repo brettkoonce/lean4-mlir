@@ -8,21 +8,20 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 /-! # ConvNeXt whole-block backward-graph faithfulness (per-example / batch-1)
 
 The ConvNeXt analogue of `mbResidBlockBackBatchedGraph_faithful` (EfficientNet) and
-`r34*BackBatchedGraph_faithful` (ResNet-34): a *backward* StableHLO graph that
-denotes the proven whole-block VJP.
+`r34BasicBlockBackBatchedGraph_faithful` / `r34DownBlockBackBatchedGraph_faithful` (ResNet-34):
+a *backward* StableHLO graph that denotes the proven whole-block VJP.
 
-ConvNeXt's whole verified stack is **per-example / batch-1** — LayerNorm here is
-the per-example separable `layerNormForward` (= `bnForward` on the feature axis),
-so NONE of EfficientNet's `batchMap`/`bnBatchLA` batched machinery is needed
-(`ConvNeXtChainClose`'s header). So this file targets the per-example VJPs of the shipped
-CHANNEL-LN net directly, modeled on the per-example section of `EfficientNetBackB0.lean`
-(`residualBackGraph`, `convBnSwishBackGraph`).
+This file's graphs are per-example: ConvNeXt's channel LayerNorm (`chanLNTensor3`) is
+per-example separable, so no batch-coupled machinery (EfficientNet's `bnBatchLA`) is needed, and
+the batched ties (`ConvNeXtStepTieGB.lean`, `ConvNeXtWholeBackCertifiedTieB.lean`) are plain
+`batchMap`s of these per-example maps. The file is modelled on the per-example section of
+`EfficientNetBackB0.lean` (`residualBackGraph`, `convBnSwishBackGraph`).
 
 `chanLNBackGraph` and its faithfulness come first, then the block, residual-block and downsample
-capstones over it (§2o Part A, 2026-07-31). `chanLNBackGraph_faithful` is the backward peer of
-§2m's `chanLNGraph_faithful`, and `chanLNBackGraph_eq_vjp` chains it through §B
-(`ConvNeXtBackCertifiedTie.chanLNTensor3Back_eq_chanLN_vjp`), so every capstone lands on the
-CERTIFIED VJP rather than on a hand-composed reverse chain. The block is `residual (block body)`
+capstones over it. `chanLNBackGraph_faithful` is the backward peer of `chanLNGraph_faithful`, and
+`chanLNBackGraph_eq_vjp` chains it through `chanLNTensor3Back_eq_chanLN_vjp`
+(`ConvNeXtBackCertifiedTie.lean`), so every capstone lands on the certified VJP rather than on a
+hand-composed reverse chain. The block is `residual (block body)`
 with an identity skip, so the brick is `residualBackGraph (bodyBack …) dy`, closed via
 `residualBackGraph_faithful`.
 
@@ -43,8 +42,8 @@ namespace Proofs
     step earlier: the emitted `rowScaleF γ` applied to the COTANGENT is exactly the per-row
     `diagBack γ` that `rowLNVecFlatBack` folds in, and the LN input gradient then runs at `γ = 1`.
 
-    `β` does not appear on either side — the translation's adjoint is the identity, which is the
-    same β-freeness §B proved for the certified backward. -/
+    `β` does not appear on either side — the translation's adjoint is the identity, the same
+    β-freeness `chanLNTensor3Back_eq_chanLN_vjp` has for the certified backward. -/
 theorem rowLNBack_affine_eq (s c : Nat) (ε : ℝ) (γ : Vec c) (X dy : Vec (s * c)) :
     StableHLO.rowLNBackFlat s c ε 1 X (StableHLO.rowScaleFlat s c γ dy)
       = rowLNVecFlatBack s c ε γ X dy := by
@@ -67,7 +66,7 @@ namespace Proofs.StableHLO
     `▸` transports are the same `Nat`-associativity casts `chanLNGraph` uses.
 
     The saved LN input enters as a VALUE (`chanLNRows` — its `[h·w, c]` view) alongside its SSA
-    name, exactly as the scalar `bnBack` carries its own: `lnRowBack` recomputes x̂/istd from the
+    name, as `bnBack` carries its own: `lnRowBack` recomputes x̂/istd from the
     input rather than saving them. The backward peer of `ConvNeXtFullT.chanLNGraph`. -/
 noncomputable def chanLNBackGraph (gN xN epsStr : String) {c h w : Nat} (ε : ℝ) (γ : Vec c)
     (x : Vec (c * h * w)) (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
@@ -77,8 +76,8 @@ noncomputable def chanLNBackGraph (gN xN epsStr : String) {c h w : Nat} (ε : �
         (.rowScaleF (m := h * w) (n := c) gN γ
           (.transposeF (m := c) (n := h * w) ((Nat.mul_assoc c h w) ▸ e)))))
 
-/-- **Channel-LN backward-graph faithfulness** — the `den`-level peer of `chanLNGraph_faithful`,
-    and the keystone the §2n drop left uncovered. Same six-step shape as the forward: the two `▸`
+/-- **Channel-LN backward-graph faithfulness** — the `den`-level peer of `chanLNGraph_faithful`.
+    Same six-step shape as the forward: the two `▸`
     transports through `den_{un,re}assocS`, the three permutation/scale ops and the row backward
     through their `rfl` gates, and the graph's `rowScaleF`-then-`lnRowBack` pair collapsed onto
     `rowLNVecFlatBack` by `rowLNBack_affine_eq`. -/
@@ -91,11 +90,11 @@ theorem chanLNBackGraph_faithful (gN xN epsStr : String) {c h w : Nat} (ε : ℝ
   rfl
 
 /-- **The channel-LN backward graph denotes the CERTIFIED VJP.** `chanLNBackGraph_faithful` lands
-    on `chanLNTensor3Back`, the hand-composed reverse chain; §B's
+    on `chanLNTensor3Back`, the hand-composed reverse chain;
     `chanLNTensor3Back_eq_chanLN_vjp` carries it the last step onto
-    `(chanLNTensor3HasVJP …).backward`. This is the statement every capstone below is built on,
-    and the reason landing §B first was worth doing — without it these would tie the graph to
-    another hand-written chain rather than to the certified gradient. β-free on both sides. -/
+    `(chanLNTensor3HasVJP …).backward`. Every capstone below is built on this statement, so each
+    ties its graph to the certified gradient rather than to another hand-written chain. β-free on
+    both sides. -/
 theorem chanLNBackGraph_eq_vjp (gN xN epsStr : String) {c h w : Nat} (ε : ℝ) (hε : 0 < ε)
     (γ β : Vec c) (x : Vec (c * h * w)) (e : SHlo (c * h * w)) :
     den (chanLNBackGraph gN xN epsStr ε γ x e)
@@ -103,8 +102,7 @@ theorem chanLNBackGraph_eq_vjp (gN xN epsStr : String) {c h w : Nat} (ε : ℝ) 
   rw [chanLNBackGraph_faithful, chanLNTensor3Back_eq_chanLN_vjp (β := β) ε hε γ x]
 
 /-- The channel-LN block-body backward graph — the block body's reverse chain with
-    `chanLNBackGraph` for the LayerNorm and the LN affine at `Vec c`, which is exactly what §2m's
-    flip did to the forward. -/
+    `chanLNBackGraph` for the LayerNorm and the LN affine at `Vec c`. -/
 noncomputable def cnxBlockBodyChBackGraph {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (γn βn : Vec c)
@@ -124,9 +122,9 @@ noncomputable def cnxBlockBodyChBackGraph {c cExp h w kH kW : Nat}
             (.layerScaleF "%cnxGls" γls e)))))
 
 /-- **Channel-LN block-body backward-graph faithfulness.** The reverse-order graph denotes
-    `cnxBodyWithHasVJP`'s backward at the shipped LayerNorm, under `0 < εn`. Same proof as the
-    scalar peer with `chanLNBackGraph_eq_vjp` where `bnBack_faithful_fn` was — the LN is still the
-    one non-`rfl` op, it is just a whole subtree now instead of a token. -/
+    `cnxBodyWithHasVJP`'s backward at the shipped LayerNorm, under `0 < εn`. The LN is the one
+    non-`rfl` op (a whole subtree, closed by `chanLNBackGraph_eq_vjp`); the depthwise, 1×1 conv,
+    GELU and layer-scale backs are their `*_faithful` lemmas. -/
 theorem cnxBlockBodyChBackGraph_faithful {c cExp h w kH kW : Nat}
     (Wdw : DepthwiseKernel c kH kW) (bdw : Vec c)
     (εn : ℝ) (hεn : 0 < εn) (γn βn : Vec c)
@@ -151,8 +149,8 @@ noncomputable def cnxResidBlockChBackGraph {c cExp h w kH kW : Nat}
     (cnxBlockBodyChBackGraph p.Wdw p.bdw p.εn p.γn p.βn p.Wex p.bex p.Wpr p.bpr (cnxGlsCh p) x
       ecot) ecot
 
-/-- **The whole channel-LN ConvNeXt residual block: backward graph ↔ proven VJP** — the capstone
-    the shipped net was missing, at the block the shipped stages are built from. Assembles the
+/-- **The whole channel-LN ConvNeXt residual block: backward graph ↔ proven VJP**, at the block
+    the shipped stages are built from. Assembles the
     body backward graph + the identity skip into `cnxBlockChWHasVJP`'s backward via
     `residualBackGraph_faithful`, no hypotheses beyond `0 < p.εn`. -/
 theorem cnxResidBlockChBackGraph_faithful {c cExp h w kH kW : Nat}
@@ -182,9 +180,9 @@ noncomputable def cnxDownChBackGraph (h w : Nat) {cin cout : Nat}
     (.convStridedBack "%cnxdW" p.W p.b
       (chanLNTensor3 cin (2 * h) (2 * w) p.ε p.γ p.β x) e)
 
-/-- **The channel-LN downsample: backward graph ↔ proven VJP**, under `0 < p.ε`. The theorem §2n's
-    commit message named as the gap — restored at the LayerNorm the net actually uses.
-    `convStridedBack` is `rfl`-faithful; the LN goes through `chanLNBackGraph_eq_vjp`. -/
+/-- **The channel-LN downsample: backward graph ↔ proven VJP**, under `0 < p.ε`, at the
+    LayerNorm the net uses. `convStridedBack` is `rfl`-faithful; the LN goes through
+    `chanLNBackGraph_eq_vjp`. -/
 theorem cnxDownChBackGraph_faithful (h w : Nat) {cin cout : Nat}
     (p : CnxDownParamsCh cin cout) (hε : 0 < p.ε)
     (x : Vec (cin * (2 * h) * (2 * w))) (e : SHlo (cout * h * w)) :
@@ -194,10 +192,9 @@ theorem cnxDownChBackGraph_faithful (h w : Nat) {cin cout : Nat}
   simp only [cnxDownChWHasVJP]
   rfl
 
-/-- ⭐ The **channel-LN** ConvNeXt block as a `CertLayer` — the form the *shipped* net's stages are
-    actually built from (`cnxResidBlockChBackGraph_faithful` is described in `ConvNeXtBackB0` as
-    "the capstone the shipped net was missing"). This is the one to chain for a real ConvNeXt
-    stage. -/
+/-- The **channel-LN** ConvNeXt block as a `CertLayer` — the form the shipped net's stages are
+    built from, with `cnxResidBlockChBackGraph_faithful` as its `faithful` field. This is the one to
+    chain for a real ConvNeXt stage. -/
 noncomputable def cnxBlockChLayer {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (hε : 0 < p.εn) :
     CertLayer (c * h * w) (c * h * w) where

@@ -3,11 +3,8 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
 /-! # EfficientNet's MBConv1 and head backward graphs
 
-`planning/archive/mnv4_verified.md` §8e swept the repo for **certified batched forwards with no
-BACKWARD graph**. Four were EfficientNet's; two turned out to be naming artifacts and two were
-genuine (the table below). This file closes the two
-genuine holes against the named forwards: `mbNoExpBackBatchedGraph_faithful` (MBConv1,
-`projB ∘ seB ∘ dwbsB` — no expand stage, so nothing had composed it) and
+The backward graphs of the two EfficientNet stage forwards not covered in `EfficientNetBackB0.lean`:
+`mbNoExpBackBatchedGraph_faithful` (MBConv1, `projB ∘ seB ∘ dwbsB` — no expand stage) and
 `headBackBatchedGraph_faithful` (`dense ∘ GAP ∘ cbsB`).
 
 ## Every stage here is GLOBAL
@@ -23,22 +20,17 @@ namespace Proofs.StableHLO
 -- § ⭐⭐ CLOSING §8e's HOLES AGAINST THE *NAMED* FORWARDS
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⭐ Probing the named forwards found the real situation, which is **not** what §8e assumed:
+/-! Where each EfficientNet stage forward's backward graph lives:
 
-| forward | verdict |
+| forward | backward-graph theorem |
 |---|---|
-| `mbStridedFwdB` | ⭐ **never a hole** — `mbDownBodyBackBatchedGraph_faithful` certifies `mbStridedFwdBHasVJP` itself |
+| `mbStridedFwdB` | `mbDownBodyBackBatchedGraph_faithful` certifies `mbStridedFwdBHasVJP` itself |
 | `mbExpFwdB` | `mbBodyBackBatchedGraph_faithful` certifies `mbExpFwdBHasVJP` at `ic = oc` (the graph's type) |
-| `mbNoExpFwdB` | genuine — nothing composed `projB ∘ seB ∘ dwbsB` |
-| `headFwdB` | genuine — nothing composed `dense ∘ GAP ∘ cbsB` |
+| `mbNoExpFwdB` | `mbNoExpBackBatchedGraph_faithful` (below) |
+| `headFwdB` | `headBackBatchedGraph_faithful` (below) | -/
 
-▶ So §8e over-counted: a sweep keyed on *names* cannot see that two names denote one object. The
-lesson is the same one §4c(a) taught about the relu6 detector, in the opposite direction — there a
-detector could not fire, here one fires spuriously. **Both are measurement bugs, and only re-running
-the measurement after the fix catches either.** -/
-
-/-- **`mbNoExpFwdB`'s backward graph** — genuinely new: MBConv1 has no expand stage, so
-    `dwbsB⁻¹ ∘ seB⁻¹ ∘ projB⁻¹` had never been chained. -/
+/-- **`mbNoExpFwdB`'s backward graph** — MBConv1 has no expand stage, so the chain is
+    `dwbsB⁻¹ ∘ seB⁻¹ ∘ projB⁻¹`. -/
 noncomputable def mbNoExpBackBatchedGraph {N ic oc h w kHd kWd r : Nat}
     (Wd : DepthwiseKernel ic kHd kWd) (bd : Vec ic) (εd : ℝ) (γd βd : Vec ic)
     (Wz₁ : Mat ic r) (bz₁ : Vec r) (Wz₂ : Mat r ic) (bz₂ : Vec ic)
@@ -63,8 +55,8 @@ theorem mbNoExpBackBatchedGraph_faithful {N ic oc h w kHd kWd r : Nat}
   simp only [mbNoExpFwdBHasVJP, Function.comp_apply]
   rfl
 
-/-- **`headFwdB`'s backward graph** — genuinely new: `cbsB⁻¹ ∘ GAP⁻¹ ∘ dense⁻¹`. The EfficientNet
-    peer of MNv4's head, and the last stage-level hole in the repo. -/
+/-- **`headFwdB`'s backward graph** — `cbsB⁻¹ ∘ GAP⁻¹ ∘ dense⁻¹`. The EfficientNet peer of
+    MNv4's head. -/
 noncomputable def headBackBatchedGraph {N c oc h w nC : Nat}
     (Wh : Kernel4 oc c 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)
     (Wfc : Mat oc nC) (_bfc : Vec nC)

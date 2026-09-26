@@ -34,11 +34,11 @@ theorem posEmbedGrad_den {ic H W P N D : Nat} (cotN : String)
 
 /-- **CLS-token GRADIENT denotes the certified gradient.** The render slices row 0 of the embed
     cotangent (`clsSliceF`) and then reduces it as a `[1, D]` batch, so the op is
-    `denseBiasGradB` at `N = 1` and its `den` IS `clsTokenGrad`. ⚠ Stated at the committed
+    `denseBiasGradB` at `N = 1` and its `den` IS `clsTokenGrad`. Note: stated at the committed
     ViT-Tiny dims rather than generically, for the reason `ViTTiePoC.vit_cls_den` is: the operand's
     type is `Vec (1 * D)`, which reduces to `Vec D` only at a literal `D`.
 
-    ⭐ The fused peer's proof ends in `vit_render_cls_certified`, whose statement carries the
+    The fused peer's proof ends in `vit_render_cls_certified`, whose statement carries the
     `θ − lr·` wrapper and has no un-wrapped twin; instantiating it at `lr = 1` un-fuses it, which
     is the same content as a `*Sgd_eq_grad` `rfl` read backwards. -/
 theorem clsGrad_den (cotN : String)

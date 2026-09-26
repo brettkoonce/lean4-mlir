@@ -2,27 +2,26 @@ import LeanMlir.Proofs.Nets.ViT.ViTMhsaBackCertifiedTie
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 import LeanMlir.Proofs.Nets.ViT.ViTBackChains
 
-/-! # §B: the ViT encoder-block backward tie at the VECTOR LayerNorm the net runs
+/-! # The ViT encoder-block backward tie at the VECTOR LayerNorm the net runs
 
 The shipped depth-12 net is `vitForwardKV`, whose blocks are `transformerBlockV` at
 `γ β : Vec D`, the form `ViTRender.lean` emits. This file states the block backward tie there,
 so the whole-net fold in `ViTWholeBackCertifiedTie.lean` is about the blocks the artifact
-contains. It is package 3.1's move for ConvNeXt-T, one architecture over.
+contains. It is the same move as `ConvNeXtBackCertifiedTie.lean` makes for ConvNeXt-T.
 
-⭐ **There is no new analysis, and the reason is that ConvNeXt already built ViT's LayerNorm
-backward.** `rowLNVecFlatBack` (`ChannelLNBack.lean`) is `perRowFlatPR` of
-`bnGradInput c ε 1 (X r) ∘ diagBack γ` — the γ scale in front of the unit-γ input gradient at
-each row's own saved activation — and its own header says it is *"literally ViT's per-token LN
-with 'token' read as 'spatial position'"*. `rowLNVecFlatHasVJP_backward_eq` already pins it to
-`layerNormVecPerTokenHasVJPMat`. So the vector-LN seam (`rowLNVecFlatBack_eq_vecLN_vjp`) is
-that lemma read at a flat saved input, and everything else in the block — `mhsaBackFlat`, the
-`dense Wᵀ 0` input-VJPs, the `diagBack` GELU derivative, the `perRowFlatPR` residual seams — is
-LayerNorm-agnostic and is reused from `ViTMhsaBackCertifiedTie.lean` verbatim.
+**No new analysis: ConvNeXt's LayerNorm backward is ViT's.** `rowLNVecFlatBack`
+(`ChannelLNBack.lean`) is `perRowFlatPR` of `bnGradInput c ε 1 (X r) ∘ diagBack γ` — the γ scale in
+front of the unit-γ input gradient at each row's own saved activation — and its own header says it
+is *"literally ViT's per-token LN with 'token' read as 'spatial position'"*.
+`rowLNVecFlatHasVJP_backward_eq` already pins it to `layerNormVecPerTokenHasVJPMat`. So the
+vector-LN seam (`rowLNVecFlatBack_eq_vecLN_vjp`) is that lemma read at a flat saved input, and
+everything else in the block — `mhsaBackFlat`, the `dense Wᵀ 0` input-VJPs, the `diagBack` GELU
+derivative, the `perRowFlatPR` residual seams — is LayerNorm-agnostic and is reused from
+`ViTMhsaBackCertifiedTie.lean` verbatim.
 
-⚠ Both sublayer decompositions and the block unfold are `rfl` at the vector LN:
+Both sublayer decompositions and the block unfold are `rfl` at the vector LN:
 `transformerBlockVHasVJPMat` is a `vjpMatComp` / `biPathMatHasVJP` assembly, so the
 projections reduce.
-3-axiom-clean.
 -/
 
 namespace Proofs
@@ -132,7 +131,7 @@ theorem mlpSubFlat_tie_v (dff : Nat) (ε : ℝ) (hε : 0 < ε) (γ2 β2 : Vec (h
 -- § THE CAPSTONE — the vector-LN ViT block backward tie
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **THE VECTOR-LN ViT BLOCK §B TIE.** `vitBlockBackV`, with every saved activation pinned
+/-- **The vector-LN ViT block backward tie.** `vitBlockBackV`, with every saved activation pinned
     to the real forward (Q/K/V at `LNᵥ₁ A`; the LN₁ backward at the block's own input `A` and the
     LN₂ backward at the attention sublayer's output; the GELU derivative at
     `dense₁(LNᵥ₂(attn A))`), IS the certified `transformerBlockV` input-gradient VJP, flattened.

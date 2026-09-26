@@ -2,23 +2,16 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldG
 import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Nets.ViT.ViTFoldGB
 
-/-! # T3 §1 fold for ConvNeXt-T at the BATCHED index — the op set every ImageNet artifact renders
+/-! # The gradient-node fold for ConvNeXt-T at the batched index
 
-`ConvNeXtFoldG.lean` folds the fourteen gradient nodes of the PER-EXAMPLE traversal
-(`ConvNeXtRender.convNextBackAll` at `adam := true`). This is its batched peer, at
-`ConvNeXtRenderB.convNextBackAllB`'s constructors — and unlike ViT's (`ViTFoldGB.lean`), it
-was owed BEFORE any renderer swap: every `convnextin_*` train step, every `*drop*` variant and the
-ConvNeXt-S/B artifacts have rendered from the batched chain since they existed, so the artifact
-behind this net's quoted ImageNet accuracy (`convnextin_adamdpwxclipdrop`) had a fold at the
-per-example constructors that no committed byte of it is `pretty` of. 4b's "one lemma per op kind
-certifies every optimizer tail" was, for ConvNeXt, a statement about the Imagenette pair only.
+`ConvNeXtFoldG.lean` holds the three per-example lemmas specific to this net (layer-scale γ,
+channel-LN γ/β); the other node kinds are shared (`GradNodesB`). This file is the batched peer, at
+`ConvNeXtRenderB.convNextBackAllB`'s constructors, from which every ConvNeXt Adam artifact
+renders.
 
-⭐ **The bytes are the same on the forward and differ on 78 backward lines.** The batched
-`convBackBatched` emits the conv input-VJP's `transpose`/`reverse` in the other order from the
-per-example `convBack` — commuting ops on disjoint axes, one kernel — and [`tests/TestConvNeXtFwdBTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtFwdBTie.lean)
-allows exactly that pair and nothing else. 4c leg 3 moves the drop-free writers onto this chain;
-this file lands first, per leg 1's ordering rule, so that no committed artifact is ever `pretty` of
-an AST without a fold.
+Against the per-example chain, the batched `convBackBatched` emits the conv input-VJP's
+`transpose`/`reverse` in the other order from the per-example `convBack` — commuting ops on
+disjoint axes — and tests/TestConvNeXtFwdBTie.lean allows exactly that pair and nothing else.
 
 ## The op table of `convnext_adam_train_step.mlir` and every `convnextin_*` train step
 
@@ -34,7 +27,7 @@ an AST without a fold.
 | `weightGradB` / `biasGradB` (the classifier) | `ViTPoCGB.headWGradB_den` / `headBGradB_den` | — |
 | `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` (the bf16 artifacts) | `Bf16PoC.convWGradBBf16_den` and its siblings, [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) | none — a bf16 node is its own op kind |
 
-⭐ **No new mathematics.** Every proof is `Finset.sum_congr rfl` over the batch and then the
+**No new mathematics.** Every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n` — `ResNet34PoCB.denseWGradB_den`'s shape — because
 each batched `den` arm is literally the per-example one under a batch sum. The channel-LN sites
 add one step: the batched render hands the LN ops `batchMap N (chanLNRows c h w)` of the saved
@@ -42,28 +35,26 @@ input and of the cotangent (the `[h·w, c]` transposed views, lifted per example
 `batchSlice_batchMap` peels the lift so `ChannelLN`'s permutation argument applies at each
 slice.
 
-⭐ **The bf16 artifacts (`convnextin_adamwxclipdropbf16`, the S/B twins) emit `*GradBBf16`
+**The bf16 artifacts (`convnextin_adamwxclipdropbf16`, the S/B twins) emit `*GradBBf16`
 constructors, not these nodes**: their `den` rounds the operands and the result once, outside the
 batch sum. Those are their own op kinds, folded once for every net in
-[`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) (first stated in this file, 2026-09-07).
+[`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean).
 
-⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, the `wx`/`clip`
-variants, the EMA shadow, drop-path and the data-parallel twins all consume the same `*GradB`
-node, and `convnextin_adamdpwxclipdrop`, whose accuracy the book quotes, is one of them.
+**One lemma per f32 node kind.** Every lemma is `∀ cot`, so it holds at whichever cotangent
+the chain delivers: the f32 AdamW, `wx`/`clip`, EMA, drop-path and data-parallel artifacts all
+emit these `*GradB` kinds, and the optimizer update that consumes the node is outside these
+lemmas.
 
-## Honest residual
-* ⚠ **`biasGradB` is the IDENTITY on its operand** and the classifier bias's batch reduce is in
+## Scope
+* **`biasGradB` is the identity on its operand** and the classifier bias's batch reduce is in
   the emitted text, outside the AST — so `ViTPoCGB.headBGradB_den` is stated PER EXAMPLE at `batchSlice n`,
   the per-example `biasGrad` carve-out carried over unchanged (as in `ViTFoldGB`).
-* Every lemma is `∀ cot`. Pinning each to the emitted backward subgraph is the §1a tie; ConvNeXt's
-  capstone (`ConvNeXtStepTie.lean`, 182 params) is at the per-example SGD-inline
-  `convnext_train_step.mlir`, which stays on the per-example chain (the batched traversal has no
-  fused-SGD arm). Re-pointing it at these nodes with `SmoothedLossCot` is 4b's ConvNeXt capstone,
-  which this file is the prerequisite for.
+* Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
+  delivers and the smoothed loss, is `CnxTiePoCGB.cnx_net_tiedGB`.
 * `convnextin_adamdp*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
   gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
-  it averages (4d).
-* ⛔ SYMMETRIC padding at the three 2×2/s2 downsamples and the 4×4/s4 stem (`flatConvStride2`,
+  it averages.
+* Symmetric padding at the three 2×2/s2 downsamples and the 4×4/s4 stem (`flatConvStride2`,
   `flatConvStride4`); ConvNeXt is PyTorch-origin and has no XLA-`SAME` site.
 -/
 

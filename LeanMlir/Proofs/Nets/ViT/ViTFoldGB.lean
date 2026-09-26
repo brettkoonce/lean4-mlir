@@ -1,28 +1,24 @@
 import LeanMlir.Proofs.Nets.ViT.ViTFoldG
 
-/-! # T3 §1 fold for ViT-Tiny at the BATCHED index — the op set 4c leg 4 renders
+/-! # The gradient-node fold for ViT-Tiny at the batched index
 
-`ViTFoldG.lean` folds the ten gradient nodes of the PER-EXAMPLE traversal
-(`ViTRender.vitBackAll` at `adam := true`). This is its batched peer, at
-`ViTRenderB.vitBackAllB`'s constructors, and it exists because 4c leg 4 moves every committed ViT
-artifact onto that traversal.
+`ViTFoldG.lean` holds the two per-example lemmas specific to this net (`posEmbedGrad_den`,
+`clsGrad_den`); the other per-example peers are the fused `ViTPoC` lemmas. This file is the batched
+peer, at `ViTRenderB.vitBackAllB`'s constructors, from which the committed ViT artifacts render.
 
-⭐ **The bytes do not move and the denotation does.** Measured 2026-09-07: all nineteen drop-free
-ViT artifacts — `vit_fwd`, `vitin_fwd` and the seventeen AdamW/EMA train steps — re-render
-**byte-identically** off `vitBackAllB`, because every batched form was built to emit its
-per-example peer's text and [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) pins each one individually. So this
-file is not about different bytes; it is about the AST those bytes are `pretty` of.
+Every batched form emits its per-example peer's text, and tests/TestBatchedEmitTie.lean pins each
+one individually, so this file is not about different bytes; it is about the AST those bytes are
+`pretty` of.
 
-⭐⭐ **And on one parameter the AST is genuinely better, which is the whole point of the leg.**
+**The CLS token.**
 The CLS token is ONE shared `[192]` vector, so its gradient is the sum of every example's CLS-row
 cotangent. The per-example render emits `denseBiasGradB (N := 1)` — "sum one thing", correct there
 because `pretty B` performed the batch lift OUTSIDE the AST — where the batched one emits
-`denseBiasGradB (N := vbB)` and the sum is inside `den`. `ViTRenderB.lean` flags that line as
-*"THE ONE LINE WHERE `N := 1 → N := vbB` CHANGES THE FUNCTION"*, and `clsGrad_denB` below is the
+`denseBiasGradB (N := vbB)` and the sum is inside `den`. `clsGrad_denB` below is the
 statement the per-example `clsGrad_den` could not make. Same emitted text either way, which is
 why the byte tie cannot see it and `den_rowDenseBiasGradB_at_one` exists to argue the point.
 
-## The op table of every committed ViT train step, after leg 4
+## The op table of the committed f32 ViT train steps
 
 | emitted node | lemma | per-example peer (fused `ViTPoC` op unless noted) |
 |---|---|---|
@@ -35,34 +31,33 @@ why the byte tie cannot see it and `den_rowDenseBiasGradB_at_one` exists to argu
 | `denseBiasGradB` at `N = B` (the CLS token) | `clsGrad_denB` | `ViTPoCG.clsGrad_den` (un-fused), at `N = 1` |
 | `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` | `ViTPoC.headW_den` / `headB_den` |
 
-⭐ **No new mathematics: every proof is `Finset.sum_congr rfl` over the batch and then the
+**No new mathematics: every proof is `Finset.sum_congr rfl` over the batch and then the
 per-example bridge at `batchSlice n`.** That is `ResNet34PoCB.denseWGradB_den`'s shape, and
 it is available because each batched `den` arm is literally `∑_batch` of the per-example one — the
 constructors were written that way (`StableHLO.lean`'s own comment on `veclnGammaGradB`: *"TWO-LEVEL:
 the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example"*).
 
-⭐ **One lemma per op kind certifies every optimizer tail at once** — AdamW, the `wx`/`clip`
-variants, the EMA shadow and the 4× accumulation all consume the same `*GradB` node. The artifact
-whose accuracy the book quotes, `vitin_emadp128x4wxclipdropbf16`, is a bf16 one, so its weight
-gradients also go through the bf16 kinds in the residual below (planning/imagenet_parity.md VT-5).
+**One lemma per f32 node kind.** Every lemma is `∀ cot`: the f32 AdamW, `wx`/`clip` and EMA
+artifacts all emit these `*GradB` kinds, and the optimizer update that consumes the node is outside
+these lemmas. The artifact whose accuracy the book quotes, `vitin_emadp128x4wxclipdropbf16`, is a
+bf16 one, so its weight gradients go through the bf16 kinds listed below.
 
-⭐ **The LayerNorm form is the VECTOR one** (`γ β : Vec D`), which is what the shipped
-`vitForwardKV` runs; the scalar-affine spelling this cone was caught on three times is nowhere here.
+**The LayerNorm form is the vector one** (`γ β : Vec D`), which is what `vitForwardKV` runs.
 
-## Honest residual
-* ⚠ **`biasGradB` is the IDENTITY on its operand** and the classifier bias's batch reduce is in the
+## Scope
+* **`biasGradB` is the identity on its operand** and the classifier bias's batch reduce is in the
   emitted text, outside the AST — the constructor says so (*"the channel sum happens in the emitted
   reduce"*) and it is the per-example `biasGrad` carve-out carried over unchanged, not a new one.
   So `headBGradB_den` is stated PER EXAMPLE, at `batchSlice n`, which is the whole of what the node
   denotes.
-* Every lemma is `∀ cot`. Pinning each to the emitted backward subgraph is the §1a tie:
-  `ViTTiePoCGB.vit_net_tiedGB` at these nodes (4b.7); the per-example `ViTStepTie.lean` stays at
-  the SGD-inline `vit_train_step.mlir`.
+* Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
+  delivers, is `ViTTiePoCGB.vit_net_tiedGB`; the per-example `ViTStepTie.lean` stays at the
+  SGD-inline `vit_train_step.mlir`.
 * The `*bf16` artifacts emit `rowDenseWeightGradBBf16` / `patchEmbedWeightGradBBf16`, their own
   kinds; [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) folds them (the row-dense one keeps its f32 result).
 * `vitin_*dp128x4*` is four replicas: the all-reduce is its own `allReduceMeanF` node after each
   gradient node (`DataParallelNode.lean`), so these lemmas are about the per-replica gradient node
-  it averages (4d).
+  it averages.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -112,8 +107,8 @@ theorem rowDenseBiasGradB_den_lnbeta {N R D : Nat} (cotN : String)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched per-token dense weight GRADIENT denotes the certified `Σ_n Σ_tokens x⊗dy`.** All six
-    denses in each of the 12 blocks. ⚠ The emitted `dot_general` contracts batch AND token in ONE
-    op; the two sums here are that contraction read apart. -/
+    denses in each of the 12 blocks. Note: the emitted `dot_general` contracts batch AND token in
+    ONE op; the two sums here are that contraction read apart. -/
 theorem rowDenseWeightGradB_den {N tk a c : Nat} (xN cotN : String)
     (bb : Vec c) (x : Vec (N * (tk * a))) (W : Mat a c) (dy : Vec (N * (tk * c)))
     (i : Fin a) (j : Fin c) :
@@ -149,8 +144,8 @@ theorem rowDenseBiasGradB_den {N tk a c : Nat} (cotN : String)
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Batched patch-embed conv weight GRADIENT denotes the certified `Σ_n` patchify weight
-    gradient.** ⚠ The emitted `convolution` contracts the batch axis itself, so the outer sum here
-    is inside one op rather than across `N` of them. -/
+    gradient.** Note: the emitted `convolution` contracts the batch axis itself, so the outer sum
+    here is inside one op rather than across `N` of them. -/
 theorem patchEmbedWeightGradB_den {ic H W P tk D N : Nat} (xN cotN : String)
     (bc cls : Vec D) (pos : Mat (tk + 1) D) (img : Vec (N * (ic * H * W)))
     (Wp : Kernel4 D ic P P) (dy : Vec (N * ((tk + 1) * D)))
@@ -190,7 +185,7 @@ theorem patchEmbedBiasGradB_den {ic H W P tk D N : Nat} (cotN : String)
 
 /-- **Batched positional-embed GRADIENT denotes the certified `Σ_n` gradient** — the summed
     cotangent, since the positional table is added to every token and its Jacobian is the
-    identity. ⚠⚠ `den_patchEmbedBiasGradB`'s neighbour warns that this batch sum is INVISIBLE at
+    identity. Note: this batch sum is invisible at
     `N = 1`: a render that dropped it type-checks and emits the same bytes. -/
 theorem posEmbedGradB_den {ic H W P tk D N : Nat} (cotN : String)
     (Wc : Kernel4 D ic P P) (bc cls : Vec D) (pos : Mat (tk + 1) D)
@@ -213,12 +208,12 @@ theorem posEmbedGradB_den {ic H W P tk D N : Nat} (cotN : String)
     and reduces the result as an `[N, D]` batch, so the op is `denseBiasGradB` at `N = B` and its
     `den` sums over the batch — which is what a shared `[192]` parameter's gradient IS.
 
-    ⭐ `ViTPoCG.clsGrad_den` is the same theorem at `N = 1`, where the batch lift lived in
+    `ViTPoCG.clsGrad_den` is the same theorem at `N = 1`, where the batch lift lived in
     `pretty B` outside the AST. The bytes are identical (`biasGrad`'s emitted reduce takes the `B`
     axis either way) and the functions are not; `den_rowDenseBiasGradB_at_one` is the general form
     of the trap.
 
-    ⚠ Stated at the committed ViT-Tiny dims rather than generically, for `ViTPoCG.clsGrad_den`'s
+    Note: stated at the committed ViT-Tiny dims rather than generically, for `ViTPoCG.clsGrad_den`'s
     reason: the CLS operand's type is `Vec (N * (1 * D))`, which reduces to `Vec (N * D)` only at a
     literal `D`. -/
 theorem clsGrad_denB {N : Nat} (cotN : String)
@@ -266,7 +261,7 @@ theorem headWGradB_den {N D nC : Nat} (aN cotN : String)
 
 /-- **Batched classifier bias GRADIENT denotes the certified cotangent, PER EXAMPLE.**
 
-    ⚠ `biasGradB` is the identity on its operand — the reduce over the batch is in the emitted
+    Note: `biasGradB` is the identity on its operand — the reduce over the batch is in the emitted
     text, outside the AST — so the statement this node supports is the per-example one at every
     `batchSlice n`, and it is the per-example `biasGrad` carve-out carried over rather than a new
     one. `StableHLO.lean`'s constructor comment records the same thing on the emitter side. -/

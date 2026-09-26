@@ -10,7 +10,7 @@ backwards, its BatchNorm backwards and its swish backwards as *supplied* maps an
 endpoints, so that the certified tie (`EfficientNetFullWholeBackCertifiedTie`) is a statement
 about a NAMED chain of the forward's shape.
 
-⚠ The stem is XLA-`SAME` (`flatConvStride2XlaBack`, the odd-phase scatter), the TF-origin
+Note: the stem is XLA-`SAME` (`flatConvStride2XlaBack`, the odd-phase scatter), the TF-origin
 convention; the strided depthwises inside the blocks are symmetric and sit in the supplied block
 backwards. B0 has no stem pool, so every batched endpoint is `StableHLO.batchMap N` of a
 per-example leaf.

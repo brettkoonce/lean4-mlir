@@ -1,9 +1,9 @@
 import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 
-/-! # EfficientNet Item D — the batched backward (cotangent) math, step by step
+/-! # EfficientNet — the batched backward (cotangent) math, step by step
 
-The batched analogue of the per-example Item D closes. The forward graph (Item A,
-`EfficientNetRenderPC.lean`) lives at the batched index `N·(c·h·w)`; here we sort the **backward**
+The batched analogue of the per-example cotangent chains. The forward graph
+(`EfficientNetRenderPC.lean`) lives at the batched index `N·(c·h·w)`; here we sort the **backward**
 math at that same index — proving the per-block gradient (`HasVJP`) by composing the proven per-op
 VJPs, lifted to the batch.
 
@@ -16,8 +16,8 @@ each row) ∘ Mat.unflatten`, so `rowwiseHasVJPMat` + `HasVJPMat.toHasVJP` (Tens
 
 (The one batch-coupled op, true batch-norm, is handled separately by the proven `bnBatchTensor4HasVJP`
 — it is NOT a `batchMap`. swish/sigmoid are pointwise, so `swishHasVJP`/`sigmoidHasVJP` apply
-directly at the batched index. Step-by-step, per the plan: `batchMap` VJP first, then `bnBatchLA`, then
-the per-block chains.)
+directly at the batched index. The file proves the `batchMap` VJP first, then `bnBatchLA`, then the
+per-block chains.)
 -/
 
 namespace Proofs

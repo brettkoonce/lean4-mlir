@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFold
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackB0
 
-/-! # EfficientNet-B0 train-step tie (§1a, fused SGD) — `efficientnet_net_tied`
+/-! # EfficientNet-B0 train-step tie (fused SGD) — `efficientnet_net_tied`
 
 Every one of B0's 262 parameters' SGD ops, at the cotangent the rendered net's own backward chain
 hands it: the real forward (`efficientnetForwardBFull`) threaded through every parameter op, the
@@ -26,7 +26,7 @@ tie builds explicit chain-cotangent constructors rather than reading them off.
 
 ## Contents
 
-* Per block type, every parameter op at the chain cotangent — each a delegation to the §1-fold
+* Per block type, every parameter op at the chain cotangent — each a delegation to the fold
   generics `EnetPoC.*`:
   - `enet_exp_tied` (16 params) — the stride-1 expand block: the 9 residual blocks and the two
     widenings b9/b16 (the parameter ops are skip-agnostic; the fan-in lives in the thread);
@@ -445,7 +445,7 @@ The capstone: `efficientnetForwardBFull`'s prefixes are the block inputs (`a0..a
 16 MBConv blocks), and the per-block output cotangents (`dy0..dy16`) are composed TOP-DOWN by the
 proven block VJPs (`headFwdBHasVJP`, `mb{Exp,Resid,Strided,NoExp}WHasVJP`) from the loss cotangent
 `g = rowSoftmax(logits) − onehot`. Each block's tie then holds at its real input + threaded `dyOut`.
-The full §1a tie: the WHOLE 16-MBConv (262-param) EfficientNet-B0 train step is den-composed
+The whole-net tie: the WHOLE 16-MBConv (262-param) EfficientNet-B0 train step is den-composed
 forward→loss→backward, no free activations, no symbolic cotangent. The residual fan-in at the 9
 identity skips is folded into `mbResidW`'s own VJP (it includes the `+ x`), so it is automatic. -/
 

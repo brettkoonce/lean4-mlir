@@ -1,100 +1,72 @@
 import LeanMlir.Proofs.Architectures.EvenKernelConvBack
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtBackCertifiedTie
 
-/-! # ConvNeXt-T's whole-net backward tie — the stage fold, and ⛔ what the tie FOUND
+/-! # ConvNeXt-T's whole-net backward tie — the stage fold and the even-kernel repair
 
-⭐ **Read `EvenKernelConvBack.lean` first; the finding is the deliverable.** This file was started
-as the ConvNeXt peer of ResNet-34's whole-net tie (today `r34InputGradB_eq_r34B_full_vjp`) —
-`planning/archive/float_budget_numbers_log.md` §3.18, done BEFORE the number rather than after it, because
-§3.10's tie found r34 reversing the wrong pool and moved a committed number 4×. It paid out the
-same way at the first leaf it touched.
+The per-example whole-net backward tie for ConvNeXt-T: `convnextInputGrad`, with every slot
+pinned to the certified per-op backward at its own saved activation, is
+`(convNextForwardTChHasVJP …).backward x`. The batched form is
+`ConvNeXtWholeBackCertifiedTieB.lean`.
 
-⛔⛔ **WHAT THE TIE FOUND: `convFlatBack` IS NOT THE ADJOINT AT AN EVEN KERNEL, and ConvNeXt is
-the only net in the repo that has one.** `conv2d` pads by `pH = (kH-1)/2`, so the reversed-kernel
-forward conv is the adjoint only when `kH - 1 - pH = pH`, i.e. only for odd `kH`. ConvNeXt's
-4×4/s4 patchify stem and its three 2×2/s2 downsamples are the four sites where that fails; at
-`kH = 4` the hand-written backward is the adjoint of a conv shifted one pixel. Every other net is
-all-odd (R34 7×7/3×3/1×1, MobileNetV2 and EfficientNet-B0 1×1/3×3/5×5), and ViT's 16×16 patch
-embed never routes through `conv2d` at all.
+**Even kernels.** `conv2d` pads by `pH = (kH-1)/2`, so the reversed-kernel forward conv
+(`convFlatBack`) is the adjoint only when `kH - 1 - pH = pH`, i.e. only for odd `kH`. ConvNeXt's
+4×4/s4 patchify stem and its three 2×2/s2 downsamples are even-kernel sites; at `kH = 4` the
+symmetric-pad backward is the adjoint of a conv shifted one pixel. `StableHLO.lean`'s
+`.convStridedBack` / `.convStridedBackBatched` pad asymmetrically, `[[kH-1-pH, pH]]`, and their
+`den` is the certified VJP; `BackwardMaps.lean`'s `flatConvStride2Back` / `flatConvStride4Back`
+are `convFlatBack ∘ scatter` at the symmetric pad. The repair is `padOdd`
+(`EvenKernelConvBack.lean`): an even-kernel conv is an odd-kernel conv on the kernel zero-extended
+at `(+1,+1)`, which is the emitter's asymmetric pad written in the vocabulary `BackwardMaps.lean`
+already has, so the existing odd-kernel leaf tie applies.
 
-⚠ **Nothing trained is affected, and the codegen tier already knew.** `StableHLO.lean`'s
-`.convStridedBack` pads ASYMMETRICALLY, `[[kH-1-pH, pH]]`, in both the per-example (`.convStridedBack`) and the
-batched (`.convStridedBackBatched`) arms, and its `den` is the certified VJP; the batched comment names the same
-quantity — *"the symmetric `[[p,p],[p,p]]` … AGREES at every odd kernel and is WRONG at even ones
-(kH=2 ⇒ `[[0,0]]` where the VJP needs `[[1,0]]`)"*. The fix landed on TWO tiers and never reached
-the third: `BackwardMaps.lean`'s `flatConvStride2Back` / `flatConvStride4Back`, which are
-`convFlatBack ∘ scatter` at the SYMMETRIC pad. ⭐ That is the recurring twin-drift pattern in its
-*"a fix landed on one tier and its twin kept the old spelling"* form, for the third time (§3.10's
-pool and §3.16's head LayerNorm were the first two).
-
-**What is here.** The repair is `padOdd` (`EvenKernelConvBack.lean`): an even-kernel conv is an
-odd-kernel conv on the kernel zero-extended at `(+1,+1)`, which is the emitter's asymmetric pad
-written in the vocabulary `BackwardMaps.lean` already has, so the existing odd-kernel leaf tie does
-all the work and no new conv machinery is needed. On top of it:
+**What is here.**
 
 1. `cnxDownChBack_eq_vjp` — the stage-boundary downsample tie, `lnB ∘ flatConvStride2Back
-   (padOdd W)` against `(cnxDownChWHasVJP …).backward`. ⛔ `padOdd` is load-bearing: `p.W` is
-   `2×2`. Two existing ties composed.
-2. `cnxStageChKBack_eq_vjp` — ⭐ **the depth-`k` stage fold, §3.18's "one real proof".** `HasVJP`
-   for `convNextStageChK` is built head-first (block `0` runs first), so its backward composes the
-   block backwards in the OPPOSITE order, each at its own saved activation, and the tail's saved
-   input is block `0`'s forward OUTPUT. The induction step is one rewrite of the block tie
-   (`cnxBlockChBack_eq_vjp`) and one of the inductive hypothesis.
-3. `cnxSavedA0 … cnxSavedA10` — `convNextForwardTCh`'s eleven stage inputs, named as FUNCTIONS, so
-   that the same twelve constants are both the activations the backward's slots are saved at and
-   the `f` argument of each `vjpComp`.
-4. ⭐⭐ **`convnextInputGrad_eq_convNextForwardTCh_vjp` — THE APEX.** `convnextInputGrad`, with
-   every slot pinned to the certified per-op backward at its own saved activation, IS
-   `(convNextForwardTChHasVJP …).backward x`. The ConvNeXt peer of
-   `r34InputGradB_eq_r34B_full_vjp`, and **stronger**: `convNextForwardTChHasVJP` is `HasVJP` —
-   everywhere — not the smooth-point `HasVJPAt` that one is, because GELU, LayerNorm, convolution and the layer scale are all smooth and
-   ConvNeXt has no kink anywhere. Its only hypotheses are the 23 LayerNorm positivities, so unlike
-   every other whole-net backward tie in this repo it carries no smoothness side-condition.
-   ⭐⭐ And ConvNeXt has its shape check too
-   (`planning/archive/float_budget_numbers_log.md` §3.14): `convNextForwardTCh_eq_chain`, the `rfl` saying the
-   chain the apex instantiates IS the committed forward, written before anyone needed it.
-
-⭐⭐ **WHAT THE ASSEMBLY COST, AND IT IS ONE RULE:** *never hand the unifier two spellings of the
-same thing in an APPLIED position.* Every expensive step in this file was an instance, and each is
-free once the spelling is normalised at a definition:
-
-* `cnxDownChW h w p` is declared over `Vec (cin * (2 * h) * (2 * w))` where the chain spells
-  `Vec (96 * 56 * 56)`. Both are closed terms and equal, and the unifier still descends into the
-  semantics of both sides rather than reducing `2 * 28` — the diagnostics reach
-  `conv2dInputGradFormula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`. Measured one link at a
-  time, the three downsamples cost 3 s, 15 s and then do not finish, while every stage, LayerNorm,
-  GAP and dense link is free. `cnxDn1`/`cnxDn2`/`cnxDn3` below are the whole fix: a one-line `def`
-  with the type ascribed in the chain's spelling, plus `Differentiable`/`HasVJP` peers ascribed the
-  same way. Same for `cnxLNh` at `Vec 768` against `rowLNVecFlat 1 768`'s `Vec (1 * 768)`.
-* A leaf tie goes the OTHER way — state it in the LEMMA's spelling, not the chain's
-  (`cnxLNhBack_eq_vjp` takes `v : Vec (1 * 768)`); at `Vec 768` the same statement does not finish.
-* The saved activations are functions, so each `cnxTk` is a one-step iota with syntactically
-  identical sides. Stated the other way — the chain's own `f x` against an applied
-  `cnxSavedA k w x` — identifying the two costs 2 s at depth one and does not finish at depth two.
-* The closing step is `rw [cnxV0]` and `rw [Function.comp_apply]`, not `rfl`: after the eleven peels
-  the two sides differ only by `Function.comp` and `cnxV0`, and `rfl` will not take that route.
-  ⛔ Nor `simp only [Function.comp_apply, cnxV0]`, which elaborates just as fast: both lemmas are
-  definitional, so simp records no step and the KERNEL re-derives the whole chain by unfolding —
-  17 s and 6 GB for this module on Lean 4.32.2, 6 min and 48 GB on 4.34.0. The `rw`s hand it
-  syntactic rewrites instead: 3 s and 3 GB on 4.34.0.
-
-⚠ `planning/archive/float_budget_numbers_log.md` §3.7(d) records this trap in its other guise, where the
-computed dimension meets a metavariable (`2 * ?h = 112`) and the unification is higher-order; there
-the fix is to pin the implicit. Here `h` is given explicitly and it still costs — two CLOSED
-spellings of one numeral are enough. ⛔ And it is invisible in an unapplied position:
-`convNextForwardTChVjpChain`'s ascription compares the whole twelve-factor composition against
-the committed one and is free, because no `x` is in sight to evaluate.
-
-⛔ **The other half of the shape is the term-mode chain, and it is not a preference.**
-`convNextForwardTChHasVJP` is a tactic proof, so its eleven `have`s are `letFun` and its
-`.backward` does not reduce; the whole-net `rfl` against it returned no result at
-`maxHeartbeats 8000000`, twice, ~8 min each. `HasVJP.backward_unique` transfers through `.correct`
-instead, which costs nothing, and the term-mode peer must be top-level `def`s rather than a `let`
-chain — a `let` used twice per level zeta-expands to `2^11` copies of the prefix.
-
-⚠ ResNet-34's shape check is `resnet34ForwardBFull_eq_slots` (`ResNet34BackCertifiedTieB.lean`),
-and it is the net the hole first bit.
+   (padOdd W)` against `(cnxDownChWHasVJP …).backward`. `padOdd` is required: `p.W` is `2×2`.
+2. `cnxStageChKBack_eq_vjp` — the depth-`k` stage fold. `HasVJP` for `convNextStageChK` is built
+   head-first (block `0` runs first), so its backward composes the block backwards in the opposite
+   order, each at its own saved activation, and the tail's saved input is block `0`'s forward
+   output. The induction step is one rewrite of the block tie (`cnxBlockChBack_eq_vjp`) and one of
+   the inductive hypothesis.
+3. `cnxSavedA0 … cnxSavedA10` — `convNextForwardTCh`'s eleven stage inputs, named as functions, so
+   that the same constants are both the activations the backward's slots are saved at and the `f`
+   argument of each `vjpComp`.
+4. `convnextInputGrad_eq_convNextForwardTCh_vjp` — the apex. `convNextForwardTChHasVJP` is a
+   global `HasVJP`, because GELU, LayerNorm, convolution and the layer scale are all smooth. Its
+   only hypotheses are the 23 LayerNorm positivities, so, like ViT's
+   (`vitInputGradK_eq_vitForwardKV_vjp`) and EfficientNet-B0's
+   (`efficientnetInputGradBFull_eq_efficientnetForwardB_full_vjp`), and unlike the ReLU nets'
+   (ResNet-34/50, MobileNetV2, MobileNetV4), it carries no smoothness side-condition.
+   `convNextForwardTCh_eq_chain` (proved by `rw`) says the chain the apex instantiates is the
+   committed forward.
 -/
+
+-- Proof-shape notes. One rule: never hand the unifier two spellings of the same thing in an
+-- applied position. Every expensive step in this file was an instance, and each is free once the
+-- spelling is normalised at a definition:
+-- * `cnxDownChW h w p` is declared over `Vec (cin * (2 * h) * (2 * w))` where the chain spells
+--   `Vec (96 * 56 * 56)`. Both are closed terms and equal, and the unifier still descends into
+--   the semantics of both sides rather than reducing `2 * 28` (`conv2dInputGradFormula`,
+--   `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`). Measured one link at a time, the three
+--   downsamples cost 3 s, 15 s and then do not finish. `cnxDn1`/`cnxDn2`/`cnxDn3` are the fix: a
+--   one-line `def` with the type ascribed in the chain's spelling, plus `Differentiable`/`HasVJP`
+--   peers ascribed the same way. Same for `cnxLNh` at `Vec 768` against `Vec (1 * 768)`.
+-- * A leaf tie goes the other way — state it in the lemma's spelling, not the chain's
+--   (`cnxLNhBack_eq_vjp` takes `v : Vec (1 * 768)`); at `Vec 768` it does not finish.
+-- * The saved activations `cnxSavedA k` are functions, so each identification is a one-step iota
+--   with syntactically identical sides. Stated the other way — the chain's own `f x` against an
+--   applied `cnxSavedA k w x` — it costs 2 s at depth one and does not finish at depth two.
+-- * The closing step is `rw [cnxV0]` and `rw [Function.comp_apply]`, not `rfl` and not
+--   `simp only [Function.comp_apply, cnxV0]`: both lemmas are definitional, so simp records no
+--   step and the kernel re-derives the whole chain by unfolding (17 s / 6 GB on Lean 4.32.2,
+--   6 min / 48 GB on 4.34.0). The `rw`s hand it syntactic rewrites: 3 s / 3 GB on 4.34.0.
+-- * The trap is invisible in an unapplied position: `convNextForwardTChVjpChain`'s ascription
+--   compares the whole twelve-factor composition against the committed one and is free.
+-- * `convNextForwardTChHasVJP` is a tactic proof, so its `have`s are `letFun` and its `.backward`
+--   does not reduce; a whole-net `rfl` against it did not finish at `maxHeartbeats 8000000`.
+--   `HasVJP.backward_unique` transfers through `.correct` instead, and the term-mode peer must be
+--   top-level `def`s rather than a `let` chain (a `let` used twice per level zeta-expands to
+--   `2^11` copies of the prefix).
 
 namespace Proofs
 
@@ -107,9 +79,9 @@ namespace Proofs
     the ZERO-EXTENDED kernel, then the channel-LN back at the input resolution — is
     `(cnxDownChWHasVJP h w p hε).backward v`.
 
-    ⛔ `padOdd` is load-bearing and not cosmetic: `p.W` is `2×2`, so `cnxDownBack p.W` reverses a
-    conv shifted one pixel (`EvenKernelConvBack.lean`). This is one of the four sites the
-    whole-net tie found. -/
+    `padOdd` is required: `p.W` is `2×2`, so `cnxDownBack p.W` reverses a conv shifted one pixel
+    (`EvenKernelConvBack.lean`). The downsamples are three of ConvNeXt-T's four even-kernel sites;
+    the stem is the fourth. -/
 theorem cnxDownChBack_eq_vjp {cin cout h w : Nat} (p : CnxDownParamsCh cin cout)
     (hε : 0 < p.ε) (v : Vec (cin * (2 * h) * (2 * w))) :
     cnxDownBack (h := h) (w := w) (padOdd p.W)
@@ -144,13 +116,11 @@ noncomputable def cnxBlockChBackAt {c cExp h w kHd kWd : Nat}
 
 /-- **The depth-`k` stage backward**, at a saved stage input `v`.
 
-    ⚠ **Head-first, like the forward it reverses.** `convNextStageChK (k+1) ps =
+    **Head-first, like the forward it reverses.** `convNextStageChK (k+1) ps =
     convNextStageChK k (ps ∘ succ) ∘ cnxBlockChW (ps 0)` applies block `0` FIRST, so the backward
     applies block `0`'s reverse LAST — `cnxBlockChBackAt (ps 0) v ∘ (the rest)`. And the saved
     activation threads forward through the recursion: the tail's saved input is
-    `cnxBlockChW (ps 0) v`, block `0`'s OUTPUT. Getting either of those backwards is the
-    §3.3-lesson-2 trap (the stage fold once associated the other way), and it is the
-    DEFINITION that decides, never the analogy. -/
+    `cnxBlockChW (ps 0) v`, block `0`'s output. -/
 noncomputable def cnxStageChKBack {c cExp h w kH kW : Nat} :
     (k : Nat) → (ps : Fin k → CnxBlockParamsCh c cExp h w kH kW) → Vec (c * h * w) →
       (Vec (c * h * w) → Vec (c * h * w))
@@ -159,7 +129,7 @@ noncomputable def cnxStageChKBack {c cExp h w kH kW : Nat} :
       cnxBlockChBackAt (ps 0) v ∘
         cnxStageChKBack k (fun i => ps i.succ) (cnxBlockChW (ps 0) v)
 
-/-- ⭐⭐ **THE STAGE-FOLD TIE.** The hand-composed depth-`k` stage backward IS
+/-- **The stage-fold tie.** The hand-composed depth-`k` stage backward is
     `(convNextStageChKHasVJP k ps hε).backward`. Induction on `k`: the base case is
     `identityHasVJP`'s `fun _ dy => dy`, and the step is one rewrite of the block tie
     (`cnxBlockChBack_eq_vjp`) and one of the inductive hypothesis at the shifted saved
@@ -193,28 +163,15 @@ theorem rowLNVecFlatHasVJP_backward_eq_fun {s c : Nat} (ε : ℝ) (hε : 0 < ε)
 -- § ⭐⭐ THE VJP CHAIN, at normalised dimension spellings
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⭐⭐ **Every stage whose declared type carries a COMPUTED dimension gets a wrapper here, and
-that is the whole reason this section closes in seconds.** `cnxDownChW h w p` is declared over
-`Vec (cin * (2 * h) * (2 * w))`; the chain spells the same type `Vec (96 * 56 * 56)`. Both are
-closed terms and they are equal, but in an APPLIED position the unifier does not reduce `2 * 28`
-to `56` — it descends into the semantics of both sides instead, and the diagnostics name what it
-reaches: `conv2dInputGradFormula`, `Finset.sum`, `Mat.unflatten`, `cnxBlockChW`. Measured, one
-tie at a time: the three downsample links cost 3 s, 15 s and then do not finish, while every
-stage, LayerNorm, GAP and dense link is free. With the wrappers below — a one-line `def` per
-offending stage, its type ascribed in the chain's spelling, and its `Differentiable`/`HasVJP`
-peers ascribed the same way — the twelve chain defs and all eleven links together cost
-**2.9 s**, of which the links are ~0.3 s.
+/-! Every stage whose declared type carries a computed dimension (`cnxDownChW`'s
+`Vec (cin * (2 * h) * (2 * w))`, the head LayerNorm's `Vec (1 * 768)`) gets a wrapper here, its
+type ascribed in the chain's spelling, with `Differentiable`/`HasVJP` peers ascribed the same way
+(see the proof-shape notes after the module docstring). -/
 
-⚠ `planning/archive/float_budget_numbers_log.md` §3.7(d) records this trap in its other guise, where the
-computed dimension meets a metavariable (`2 * ?h = 112`) and the unification is higher-order.
-There the fix is to pin the implicit. Here `h` is already given explicitly and it still costs:
-two CLOSED spellings of one numeral are enough. ⛔ And it is invisible in an unapplied position —
-`convNextForwardTChVjpChain`'s ascription below compares the whole twelve-factor composition
-against the committed one and is free, because no `x` is in sight to evaluate. -/
-
-/-! ⭐ The wrappers, their `Differentiable`/`HasVJP` peers, the stem's `cnxSavedA0_differentiable`/`cnxV0` and the four
-normalised leaf ties below are PUBLIC: `ConvNeXtWholeBackCertifiedTieB.lean` lifts the same
-twelve stages over a batch and needs them at exactly these spellings. -/
+/-! The wrappers, their `Differentiable`/`HasVJP` peers, the stem's
+`cnxSavedA0_differentiable`/`cnxV0` and the four normalised leaf ties below are public:
+`ConvNeXtWholeBackCertifiedTieB.lean` lifts the same twelve stages over a batch and needs them at
+exactly these spellings. -/
 
 /-- Downsample 1 at the chain's dimension spelling. -/
 noncomputable def cnxDn1 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (96 * 56 * 56) → Vec (192 * 28 * 28) :=
@@ -252,12 +209,9 @@ noncomputable def cnxLNhVjp {nC : Nat} (w : CnxTWeightsCh nC) (hhε : 0 < w.hε)
 
 -- ── the forward prefixes: `cnxSavedA k w x` is stage `k`'s saved input ──
 
-/-! ⭐ `convNextForwardTCh`'s eleven stage inputs, named — and named as FUNCTIONS, so that the
-same twelve constants are both the saved activations the backward's slots are indexed by and the
-`f` argument of each `vjpComp`. That is what makes every link below a one-step iota with
-syntactically identical sides: the alternative — an applied `cnxSavedA k w x` on one side and the
-chain's own `f x` on the other — is defeq, and identifying the two costs 2 s at depth one and
-does not finish at depth two. -/
+/-! `convNextForwardTCh`'s eleven stage inputs, named as functions, so that the same constants
+are both the saved activations the backward's slots are indexed by and the `f` argument of each
+`vjpComp`; every link below is then a one-step iota with syntactically identical sides. -/
 
 /-- The stem conv's output — the stem LayerNorm's saved input. -/
 noncomputable def cnxSavedA0 {nC : Nat} (w : CnxTWeightsCh nC) : Vec (3 * 224 * 224) → Vec (96 * 56 * 56) :=
@@ -538,7 +492,9 @@ noncomputable def convNextForwardTChVjpChain {nC : Nat} (w : CnxTWeightsCh nC)
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) :=
   cnxV11 w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε
 
-/-- ⭐⭐ **`convnextInputGrad` IS the certified whole-net ConvNeXt-T gradient.** -/
+/-- **`convnextInputGrad` is the certified whole-net ConvNeXt-T gradient**, at one image `x`,
+    every `nC`, under the 23 LayerNorm positivities; the forward is the drop-free
+    `convNextForwardTCh`. -/
 theorem convnextInputGrad_eq_convNextForwardTCh_vjp {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)

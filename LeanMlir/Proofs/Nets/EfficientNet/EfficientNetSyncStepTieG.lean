@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetSyncB
 
 /-! # EfficientNet-B0's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
 
-`EfficientNetStepTieG.lean` (T3) threads the label-smoothed loss cotangent down the batch-BN
+`EfficientNetStepTieG.lean` threads the label-smoothed loss cotangent down the batch-BN
 backward chain on ONE device and ties every parameter gradient node to the certified gradient.
 This is its data-parallel twin, for the render `EfficientNetRender` emits at `replicas > 1`: `R`
 replicas at batch `N`, every one of the 49 BatchNorms synchronised (`bnFwdSite` / `bnBackSite` /
@@ -16,29 +16,30 @@ replicas at batch `N`, every one of the 49 BatchNorms synchronised (`bnFwdSite` 
       = the single-device gradient node at the global batch R·N, loss divided by R·B
 
 — the gradient node `EnetTiePoCG.efficientnet_net_tiedG` at `N := R·N` ties to the certified
-gradient. The spec it is stated against has not moved: the right-hand side is T3's chain at
-`N := R·N` — its forward prefixes, loss cotangent and block `.backward`s verbatim, and its
-in-block cotangents as named definitions (`xCotEc`, `tCotDn`, …) that unfold to `enetExpTiedG`'s
-`let`s, so each right-hand node is T3's node by `rfl`.
+gradient. The spec it is stated against has not moved: the right-hand side is the single-device
+tie's chain at `N := R·N` — its forward prefixes, loss cotangent and block `.backward`s verbatim,
+and its in-block cotangents as named definitions (`xCotEc`, `tCotDn`, …) that unfold to
+`enetExpTiedG`'s `let`s, so each right-hand node is the single-device tie's node by `rfl`.
 
 ## Five steps
 
-ResNet-34's four (`ResNet34SyncStepTieB.lean`), and one B0 needs because of how its T3 is written.
+ResNet-34's four (`ResNet34SyncStepTieB.lean`), and one B0 needs because of how its single-device
+tie is written.
 
-0. **The block VJP is the chain** (§ 0). T3 threads each block's input cotangent as a certified
-   VJP's `.backward`; a replica computes its own by the explicit chain, and only the explicit
-   chain can be sharded. `xCotIn_eq_vjp` and its four peers say the two agree — the
+0. **The block VJP is the chain** (§ 0). The single-device tie threads each block's input cotangent
+   as a certified VJP's `.backward`; a replica computes its own by the explicit chain, and only the
+   explicit chain can be sharded. `xCotIn_eq_vjp` and its four peers say the two agree — the
    `BatchedBackLinks` stage graphs, read at an `.operand` leaf, with `bnBatchLABack_faithful`
    turning the one non-`rfl` link into `bnBackB`.
 1. **Sharding** (§§ 2, 5). Every non-BN link is per-example — conv, depthwise and strided
    depthwise input-VJPs, swish and sigmoid masks, and the squeeze-excite backward: the gate
    cotangent `gateCotB` (`seReduceB`'s `den`) and the fused input-VJP `seInB` (`seBackBatched`'s)
    both read one example at a time, so they shard like ResNet-34's pool backward. The BN link is
-   `bnSyncInB`, P2 on the graph, read through `bnInB_eq_bnBackB` onto T3's `bnBackB`.
+   `bnSyncInB`, P2 on the graph, read through `bnInB_eq_bnBackB` onto the single-device tie's
+   `bnBackB`.
 2. **The collectives.** ResNet-34's conv, dense and BatchNorm ones, plus the depthwise,
    strided-depthwise and XLA-`SAME` stem conv weights from `DataParallelSyncKit`, which also
-   holds the depthwise, GAP and dense links of steps 1 and 3 that MobileNetV2 shares (§ 3 moved
-   there).
+   holds the depthwise, GAP and dense links of steps 1 and 3 that MobileNetV2 shares.
 3. **Homogeneity** (§§ 1, 4). Every link is linear in its cotangent; most are a certified VJP's
    `.backward`, so `HasVJP.backward_smul` is the whole proof.
 4. **The divisor.** Replica `r`'s loss cotangent is `R ×` its shard of the global one
@@ -47,18 +48,19 @@ ResNet-34's four (`ResNet34SyncStepTieB.lean`), and one B0 needs because of how 
 ## What is covered, and what is NOT claimed
 
 The DP render runs `convBias := false`, so it emits **213** parameter collectives — stem 3, b1 10,
-fifteen MBConv6 blocks × 13, head 5 — and all 213 are tied. T3 carries 49 more conjuncts, one per
-conv bias (a `bnBetaGradB` at the conv-output cotangent), for the `convBias := true` census; the
-DP artifacts do not emit them and they are not tied here.
+fifteen MBConv6 blocks × 13, head 5 — and all 213 are tied. The single-device tie carries 49 more
+conjuncts, one per conv bias (a `bnBetaGradB` at the conv-output cotangent), for the
+`convBias := true` census; the DP artifacts do not emit them and they are not tied here.
 
-⚠ The replicas' saved forward activations enter as the shards of the single-device forward's;
+Note: the replicas' saved forward activations enter as the shards of the single-device forward's;
 that the sync forward graph computes exactly those is `EfficientNetSyncB`'s
-`efficientnetFwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are the
-shards of one batch is the driver's. ⚠ T3 states the chain without stochastic depth or classifier
-dropout, so this does too: the `drop` / `dropdo` DP variants add a `dropPathB` on each residual
-branch and a `dropoutB` before the classifier — per-example diagonal scalings, which shard and are
-linear, but whose chain neither tier states. The `bf16` DP variants emit different gradient nodes
-and are not covered. ⚠ The lowerer's `all_reduce` is trusted as every other op's lowering is.
+`efficientnetFwdGraphSyncFull_shard`, the forward half. Note: that the replicas' inputs are the
+shards of one batch is the driver's. Note: the single-device tie states the chain without stochastic
+depth or classifier dropout, so this does too: the `drop` / `dropdo` DP variants add a `dropPathB`
+on each residual branch and a `dropoutB` before the classifier — per-example diagonal scalings,
+which shard and are linear, but whose chain neither file states. The `bf16` DP variants emit
+different gradient nodes and are not covered. Note: the lowerer's `all_reduce` is trusted as every
+other op's lowering is.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -394,10 +396,11 @@ theorem projB_back_eq (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW
 
 /-! ### Each block's input cotangent IS its certified VJP
 
-T3 threads the block-output cotangents by the block VJPs' `.backward`; the replicas compute theirs
-by the explicit chain. These say the two agree, so the sharding argument (which needs the explicit
-chain) lands on T3's own `.backward` terms. `HasVJP.backward_unique` swaps the bundle-level witness
-for the unfolded one, which is then the stage composition by `rfl`. -/
+The single-device tie threads the block-output cotangents by the block VJPs' `.backward`; the
+replicas compute theirs by the explicit chain. These say the two agree, so the sharding argument
+(which needs the explicit chain) lands on the single-device tie's own `.backward` terms.
+`HasVJP.backward_unique` swaps the bundle-level witness for the unfolded one, which is then the
+stage composition by `rfl`. -/
 
 theorem xCotIn_eq_vjp (N h w : Nat) {ic mid oc rd kh kw : Nat} (p : MBW ic mid oc rd kh kw)
     (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε) (xin : Vec (N * (ic * h * w)))
@@ -536,7 +539,7 @@ theorem sigBackB_shard {R N n : Nat} (X DY : Vec ((R * N) * n)) (r : Fin R) :
 noncomputable def gateEx (c h w : Nat) (xs ds : Vec (c * h * w)) : Vec c :=
   fun k => ∑ q : Fin (c * h * w), if flatChannel c h w q = k then xs q * ds q else 0
 
-/-- ⭐ **The SE gate cotangent reads one example at a time** — `seReduceB` is `batchMapAux` of
+/-- **The SE gate cotangent reads one example at a time** — `seReduceB` is `batchMapAux` of
     `gateEx` — so it shards like ResNet-34's pool backward. -/
 theorem gateCotB_shard {R N : Nat} (c h w : Nat) (X DY : Vec ((R * N) * (c * h * w))) (r : Fin R) :
     gateCotB N c h w (batchShard R N (c * h * w) X r) (batchShard R N (c * h * w) DY r)
@@ -560,9 +563,9 @@ theorem seInB_shard {R N : Nat} {c h w rd : Nat} (W₁ : Mat c rd) (b₁ : Vec r
   rw [seInB_eq_batchMapAux, seInB_eq_batchMapAux]
   exact (batchShard_batchMapAux _ X DY r).symm
 
-/-- ⭐⭐ **The sync-BN backward on replica `r` is shard `r` of the certified global BN backward** —
+/-- **The sync-BN backward on replica `r` is shard `r` of the certified global BN backward** —
     `bnSyncInB_shard` (P2 at the network index) read through `bnInB_eq_bnBackB`, so the right-hand
-    side is `bnBackB`, T3's own BN link. -/
+    side is `bnBackB`, the single-device tie's own BN link. -/
 theorem bnSyncInB_shard_bnBackB (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0)
     (ε : ℝ) (hε : 0 < ε) (γ β : Vec oc)
     (xs dys : Fin R → Vec (N * (oc * h * w))) (X DY : Vec ((R * N) * (oc * h * w)))
@@ -1117,8 +1120,8 @@ theorem hdsCotIn_shard {c oc nC : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
 /-! ### The scaled-shard invariant across each block
 
 Replicas at `R ×` the shards of the single-device block-output cotangent `DY` hand the next block
-up `R ×` the shards of T3's own `.backward` — sharding, then the explicit chain IS the VJP (§ 0),
-then `HasVJP.backward_smul`. -/
+up `R ×` the shards of the single-device tie's own `.backward` — sharding, then the explicit chain
+IS the VJP (§ 0), then `HasVJP.backward_smul`. -/
 
 theorem xsCotIn_scaled {ic mid oc rd kh kw : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w)
     (p : MBW ic mid oc rd kh kw) (he : 0 < p.eε) (hd : 0 < p.dε) (hp : 0 < p.pε)
@@ -1186,7 +1189,8 @@ end
 
 /-- **The tail, DP-tied** — nine collectives: the depthwise BatchNorm's γ and β, the SE reduce and
     excite dense layers' weight and bias, the project conv weight, the project BatchNorm's γ and β.
-    Each equals the single-device gradient node at the global batch, at T3's chain cotangents. -/
+    Each equals the single-device gradient node at the global batch, at the single-device tie's
+    chain cotangents. -/
 def tailSyncTiedG (R : Nat) (hR : 0 < R) (N h w : Nat) {mid oc rd : Nat}
     (pfx xN cotN vN epsStr : String) (t : EnTail mid oc rd) (hp : 0 < t.pε)
     (DC : Vec ((R * N) * (mid * h * w))) (dys : Fin R → Vec (N * (oc * h * w)))
@@ -1463,22 +1467,23 @@ def enetNetSyncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (xN vN epsStr cotN dN : St
   ∧ expSyncTiedG R hR N 7 7 "b16" xN cotN vN epsStr w.b16 hεw.b16.e hεw.b16.d hεw.b16.p a15 e16 dy16
   ∧ headSyncTiedG R hR N 7 7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16 gs g
 
-/-- ⭐⭐⭐ **The synchronised-BN data-parallel EfficientNet-B0 step IS the single-device step at the
+/-- **The synchronised-BN data-parallel EfficientNet-B0 step IS the single-device step at the
     global batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from
     its own cotangent `gs r`, with `gs r` the `R`-scaled shard of a global cotangent `g`; every
     parameter's all-reduced mean gradient — stem 3, b1 10, fifteen MBConv6 blocks × 13, head 5: the
     213 the render emits at `convBias := false` — equals the single-device batch-BN gradient node at
-    batch `R·N`, at the cotangent T3's chain delivers there from `g`.
+    batch `R·N`, at the cotangent the single-device tie's chain delivers there from `g`.
 
     The right-hand chain is `EnetTiePoCG.efficientnet_net_tiedG`'s at `N := R·N`: verbatim for the
     forward prefixes `a0 … a16` and the block-output cotangents `dy16 … dy0` threaded by the
     certified block VJPs' `.backward`; by `rfl` for the in-block cotangents, which are this file's
     named chain. That capstone ties those nodes to the certified gradient, so the two together say
     the DP step's update is the certified gradient of the global-batch step. It takes `hεw`
-    (`w.EpsPos`), because T3's single-device chain does. `efficientnet_net_syncTiedG_smoothedCE`
-    discharges the hypothesis for the label-smoothed chain the artifacts emit.
+    (`w.EpsPos`), because the single-device chain does.
+    `efficientnet_net_syncTiedG_smoothedCE` discharges the hypothesis for the label-smoothed chain
+    the artifacts emit.
 
-    ⭐ The left-hand chain is the replicas' own: sync-BN backward at every one of the 49
+    The left-hand chain is the replicas' own: sync-BN backward at every one of the 49
     BatchNorms (`bnSyncInB`, a collective each), per-example conv / depthwise / squeeze-excite /
     swish / head links. -/
 theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
@@ -1537,7 +1542,7 @@ theorem efficientnet_net_syncTiedG (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N)
     head_syncTiedG R hR N 7 7 hN h7 h7 xN cotN vN epsStr dN w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW a16
       gs g hgs⟩
 
-/-- ⭐⭐ **…and at the loss the artifacts emit.** `efficientnet_net_syncTiedG` with its cotangent
+/-- **…and at the loss the artifacts emit.** `efficientnet_net_syncTiedG` with its cotangent
     hypothesis discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
     (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
     single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced

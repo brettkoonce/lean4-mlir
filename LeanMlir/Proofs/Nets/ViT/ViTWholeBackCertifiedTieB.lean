@@ -1,22 +1,19 @@
 import LeanMlir.Proofs.Nets.ViT.ViTWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 
-/-! # ⭐⭐ `vitInputGradKB` IS the certified whole-net ViT-Tiny gradient AT A BATCH
+/-! # `vitInputGradKB` is the certified whole-net ViT gradient at a batch
 
-`ViTWholeBackCertifiedTie.lean` closed T6 for ONE image: `vitInputGradK`, the reverse of
-`vitForwardKV` over that image's `N + 1` tokens, IS the certified gradient. Every shipped ViT
-artifact runs a batch — `vit_adam_train_step` and the `vitin_*` family at 128 or 512 per
-device — and its batched T3 tie (`ViTStepTieGB.lean`) states every activation as
-`StableHLO.batchMap B` of the per-example prefix and every cotangent as `batchMapAux B` of the
-per-example chain, because no ViT op couples examples. This file closes T6 at that index: the
-five-stage batched chain `vitInputGradKB` (`ViTBackChains.lean`) IS the certified gradient of
-`batchMap B vitForwardKV` at every batch `x`, for every `B`. ViT was the one net without a
-batched whole-net tie; with this the `*InputGradB_eq_*_vjp` family covers all seven nets.
+`ViTWholeBackCertifiedTie.lean` proves for one image that `vitInputGradK`, the reverse of
+`vitForwardKV` over that image's `N + 1` tokens, is the certified gradient. The batched step tie
+(`ViTStepTieGB.lean`) states every activation as `StableHLO.batchMap B` of the per-example prefix
+and every cotangent as `batchMapAux B` of the per-example chain, because no ViT op couples
+examples. This file proves the same at that index: the five-stage batched chain `vitInputGradKB`
+(`ViTBackChains.lean`) is the certified gradient of `batchMap B vitForwardKV` at every batch `x`,
+for every `B`. The forward `vitForwardKV` has no drop-path and is in exact arithmetic.
 
-Nothing here is new mathematics, and it is lighter than ResNet-34's batched tie because ViT is
-smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
-`batchMapHasVJPAt` (4.1c's field-by-field lift, `BatchMapVJPAt.lean`) over
-`HasVJP.toHasVJPAt` at each row — no smooth-point hypothesis anywhere, only `0 < ε`.
+ViT is smooth everywhere: every stage has a global `HasVJP`, so its batched witness is
+`batchMapHasVJPAt` (the field-by-field lift, `BatchMapVJPAt.lean`) over `HasVJP.toHasVJPAt` at
+each row. The only hypothesis is `0 < ε`; there is no smooth-point condition.
 
 1. `batchMap_comp` (`BatchMapVJPAt.lean`, shared with ConvNeXt's batched tie) — `batchMap B
    (g ∘ f) = batchMap B g ∘ batchMap B f`, the lemma the shape check needs and the reason the
@@ -32,8 +29,7 @@ smooth everywhere: every stage has a GLOBAL `HasVJP`, so its batched witness is
    `batchMap B vitForwardKV`, by `vitForwardKV_eq_chain` and three `batchMap_comp`s — and
    `vitInputGradKB_eq_batchMap_vitForwardKV_vjp`, the tie carried to the committed GLOBAL
    witness `batchMapHasVJP (vitForwardKV …)` through `HasVJPAt.backward_unique_of_eq`
-   (`BatchMapVJPAt.lean`; `batchMapHasVJP` is `▸`-transported, so its `.backward` does not
-   reduce; uniqueness is the escape every whole-net tie in this repo takes), plus the `∑ pdiv`
+   (`batchMapHasVJP` is `▸`-transported, so its `.backward` does not reduce), plus the `∑ pdiv`
    reading.
 5. `vitTinyInputGradB_eq_vitTiny_vjp` — the capstone at ViT-Tiny's literal dims, `B` a binder.
 -/
@@ -160,9 +156,10 @@ noncomputable def vitKVBHasVJPAt (B ic H W patchSize N mlpDim heads d_head nClas
      batchMap_differentiableAt _ _ (fun _ => (classifierFlat_differentiable N (heads * d_head) nClasses
        Wcls bcls).differentiableAt)⟩).fst
 
-/-- ⭐⭐ **THE BATCHED TIE.** `vitInputGradKB` — the five-stage batched chain, every slot a lift of
-    the per-example backward at the batched saved activation — IS the batched apex's backward.
-    Three leaf rewrites (tower, final LN, head), then `rfl`: the patch-embed leaf is definitional. -/
+/-- **The batched tie.** `vitInputGradKB` — the five-stage batched chain, every slot a lift of
+    the per-example backward at the batched saved activation — is the backward of
+    `vitKVBHasVJPAt`. Three leaf rewrites (tower, final LN, head), then `rfl`: the patch-embed leaf
+    is definitional. -/
 theorem vitInputGradKB_eq_vitKVB_vjp (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
     (b_conv : Vec (heads * d_head)) (cls_token : Vec (heads * d_head))
@@ -224,10 +221,10 @@ theorem vitForwardKV_differentiable (ic H W patchSize N mlpDim heads d_head nCla
         (patchEmbedFlat_differentiable ic H W patchSize N (heads * d_head)
           W_conv b_conv cls_token pos_embed)))
 
-/-- ⭐⭐ **THE APEX, at the committed batched witness.** `vitInputGradKB` IS
-    `(batchMapHasVJP (vitForwardKV …) …).backward x` — the certified gradient of the per-example
-    net lifted whole over `B` examples. Carried from the chain-shaped apex by
-    `HasVJPAt.backward_unique_of_eq` along the shape check. -/
+/-- **The batched apex at the global witness.** `vitInputGradKB` is
+    `(batchMapHasVJP (vitForwardKV …) …).backward x` — the certified gradient of the drop-free
+    per-example forward lifted over `B` examples, under `0 < ε`. Carried from the chain-shaped apex
+    by `HasVJPAt.backward_unique_of_eq` along the shape check. -/
 theorem vitInputGradKB_eq_batchMap_vitForwardKV_vjp
     (B ic H W patchSize N mlpDim heads d_head nClasses k : Nat)
     (W_conv : Kernel4 (heads * d_head) ic patchSize patchSize)
@@ -287,12 +284,14 @@ theorem vitInputGradKB_correct (B ic H W patchSize N mlpDim heads d_head nClasse
 -- § The production capstone — ViT-Tiny at its real dimensions, `B` a binder
 -- ═════════════════════════════════════════════════
 
-/-- ⭐⭐ **ViT-Tiny's BATCHED whole-net backward tie — tier T6 at the paper net and the shipped
-    index.** `vitInputGradKB_eq_batchMap_vitForwardKV_vjp` at the exact `vitTiny` spec
+/-- **ViT-Tiny's batched whole-net backward tie.**
+    `vitInputGradKB_eq_batchMap_vitForwardKV_vjp` at the exact `vitTiny` spec
     (`3×224×224`, `16×16` patches, 196 + CLS tokens, `D = 192 = 3 × 64`, MLP 768, 12 distinct
-    blocks, vector-`[D]` LayerNorm, 10 classes), at a variable batch `B` — 128 or 512 per device
-    in the shipped `vitin_*` artifacts, and neither number appears here. ViT's entry in the batched
-    T6 column beside `r34InputGradB_eq_r34B_full_vjp` and `mnv2InputGradB_eq_mobilenetv2B_full_vjp`. -/
+    blocks, vector-`[D]` LayerNorm, 10 classes), at a variable batch `B` (the `vitin_*` artifacts
+    run 32, 128 or 256 per device; 512 is the global batch of the `128x4` runs). The forward is the
+    drop-free `vitForwardKV` in exact arithmetic; the `*drop*` artifacts compute another function.
+    The batched peers of the other nets include `r34InputGradB_eq_r34B_full_vjp` and
+    `mnv2InputGradB_eq_mobilenetv2B_full_vjp`. -/
 theorem vitTinyInputGradB_eq_vitTiny_vjp (B : Nat)
     (W_conv : Kernel4 (3 * 64) 3 16 16) (b_conv : Vec (3 * 64)) (cls_token : Vec (3 * 64))
     (pos_embed : Mat (196 + 1) (3 * 64)) (ε : ℝ) (hε : 0 < ε)

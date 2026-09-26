@@ -4,15 +4,16 @@ import LeanMlir.Proofs.Nets.ViT.ViTChainClose
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHeadChain
 import LeanMlir.Proofs.Nets.ViT.ViTDepthK
 
-/-! # ViT-Tiny §1a tie — the SGD-inline train step, all 200 parameters at the real backward chain
+/-! # ViT-Tiny step tie — the SGD-inline train step, all 200 parameters at the real backward chain
 
-**What this file is.** The T3 §1a tie of `verified_mlir/vit_train_step.mlir` — the per-example
-SGD-inline step `ViTRender.lean` still writes — at the fused `θ − lr·g` ops:
-`vit_net_tied_certified` (the last theorem) threads all 200 ViT-Tiny parameters through the
-committed multi-head (3 heads, d_head 64), depth-12, vector-LayerNorm forward and the loss-driven
-backward cotangent chain. Its batched peer at the un-fused gradient node, the smoothed loss and a
-batch binder — the chain every `vitin_*` accuracy comes from — is `ViTTiePoCGB.vit_net_tiedGB`,
-built from this file's block ties by `batchMap` / `batchMapAux`.
+**What this file is.** The tie of `verified_mlir/vit_train_step.mlir` — the SGD-inline step
+`ViTRender.lean` writes — at the fused `θ − lr·g` ops: `vit_net_tied_certified` (the last theorem)
+threads all 200 ViT-Tiny parameters through the committed multi-head (3 heads, d_head 64),
+depth-12, vector-LayerNorm forward and the loss-driven backward cotangent chain. The statement is
+per example, at one image and a hard label; the artifact runs a batch of 32, and that batch and
+its mean lie outside this statement. Its batched peer at the un-fused gradient node, the smoothed
+loss and a batch binder — the chain of the drop-free f32 `vitin_*` artifacts — is
+`ViTTiePoCGB.vit_net_tiedGB`, built from this file's block ties by `batchMap` / `batchMapAux`.
 
 The file has two layers:
 * `vit_block_tiedMHV` / `vit_block_tiedAtMHV` — one multi-head (3 heads, d_head 64) vector-LN
@@ -40,7 +41,7 @@ runs per head (`vitCotD{Q,K,V}mh`, `ViTMultiHeadChain`), so the Q/K/V dense cota
 multi-head `…mh` ones rather than the single-head `vitCotD{Q,K,V}`; everything else (the out-proj
 `Wo`, LN₂, the MLP) is head-agnostic. `vitBlockTiedMHV` states the block's 16 parameter ties with
 those cotangents (no separate `ss`/`p` saves — the per-head scores/weights are recomputed inside the
-`…mh` cots from the saved Q/K); every conjunct delegates to a head-agnostic §1-fold generic
+`…mh` cots from the saved Q/K); every conjunct delegates to a head-agnostic fold generic
 `ViTPoC.*_den`. -/
 
 def vitBlockTiedMHV {Np1 heads d mlpDim : Nat}
@@ -173,11 +174,11 @@ theorem vit_block_tiedAtMHV {Np1 heads d mlpDim : Nat}
   exact vit_block_tiedMHV xN wN bN gN epsStr lrStr cotN ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo
     Wfc1 bfc1 Wfc2 bfc2 xin _ _ _ _ _ _ _ _ _ dyOut lr
 
-/-! ## Task 3 — the non-block param bundle + the all-200-params capstone (committed ViT-Tiny config)
+/-! ## The non-block param bundle + the all-200-params capstone (committed ViT-Tiny config)
 
 `vitFinalLNTied`/`vitHeadTied`/`vitEmbedTied` bundle the final vector-LN γ/β, the classifier Wcls/bcls,
 and the patch-embed wConv/bConv/cls/pos as `den = certified` at their chain cotangents — each a direct
-delegation to the §1-fold generics (`ViTPoC.*_den`), with the cls op (`denseBiasSgdB` N=1) folded by
+delegation to the fold generics (`ViTPoC.*_den`), with the cls op (`denseBiasSgdB` N=1) folded by
 `vit_cls_den` (its row-0 batch slice IS `clsTokenGrad`, closed by `vit_render_cls_certified`). Then
 `vit_net_tied_certified` threads the REAL forward + loss-driven backward and bundles all 200 params. -/
 
@@ -323,15 +324,16 @@ theorem _root_.Proofs.BlockParamsV.tied_at {Np1 heads d mlpDim : Nat}
     p.TiedAt xN wN bN gN epsStr lrStr cotN ε xin dyOut lr :=
   vit_block_tiedAtMHV xN wN bN gN epsStr lrStr cotN ε _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ xin dyOut lr
 
-/-- **The whole depth-12 MULTI-HEAD ViT-Tiny train step, tied — ALL 200 params** (the vit peer of
+/-- **The whole depth-12 multi-head ViT-Tiny train step, tied — all 200 params** (the vit peer of
     convnext's `cnx_net_tied_certified`, at the committed config: 3 heads, d_head=64, D=192, N=196,
     mlpDim=768, 10 classes, 16×16 patches). The real forward `patchEmbed → 12 multi-head vector-LN
     blocks → final vector-LN → CLS-slice → dense head` and the loss-driven backward cotangent chain
     (the per-block multi-head fan-ins, the final-LN-back `vitCotB2outV`, the classifier-back `vitCotFl`,
     the embed-output cot = block-1's `vitBlockCotInAtMHV` output) are threaded, and EVERY param op
     `den`otes the certified loss-descent step: the 12 blocks' 192 params (`vitBlockTiedAtMHV`), the
-    final-LN γ/β, the classifier Wcls/bcls, and the patch-embed wConv/bConv/cls/pos — 200/200, the
-    FIRST net with zero param gaps (vit has the patch-weight cert). 3-axiom clean. -/
+    final-LN γ/β, the classifier Wcls/bcls, and the patch-embed wConv/bConv/cls/pos — 200/200.
+    The statement is per example, at one image `img` and a hard label `label`; the artifact's
+    batch of 32 and its mean lie outside it (the batched form is `ViTTiePoCGB.vit_net_tiedGB`). -/
 theorem vit_net_tied_certified
     (xN wN bN gN aN clsN pN epsStr lrStr cotN : String) (ε : ℝ)
     (w : ViTTieWeights 10)

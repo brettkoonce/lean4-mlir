@@ -24,7 +24,7 @@ both fan-ins are spelled with forward elementwise combinators: `addV` for the re
 * batched capstones: `mbBodyBackBatchedGraph` (stride-1 body), `mbDownBodyBackBatchedGraph`
   (strided depthwise, no residual) and `mbResidBlockBackBatchedGraph` (body + skip).
 
-Each `…_faithful` states `den (graph) = ` the certified backward, 3-axiom clean. -/
+Each `…_faithful` states `den (graph) = ` the certified backward. -/
 
 open Proofs Proofs.StableHLO
 

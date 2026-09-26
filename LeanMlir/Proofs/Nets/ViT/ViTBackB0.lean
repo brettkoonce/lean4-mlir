@@ -27,7 +27,7 @@ The pieces, bottom-up:
   * **MLP** — `transformerMlpBackGraph` ↔ `transformerMlpHasVJPMat`
     (`denseRowBack(Wfc1) ∘ geluBack ∘ denseRowBack(Wfc2)` at the saved activations).
   * **MHSA** — a clean witness `mhsaClean` tied to `mhsaHasVJPMat`, its multi-head
-    collapse `mhsa_backward_collapseMH` (a sum over heads of per-head `sdpa_back_{Q,K,V}`),
+    collapse `mhsa_backward_collapseMH` (a sum over heads of per-head `sdpaBack{Q,K,V}`),
     and the MHSA backward graph `mhsaBackGraphMH` over `sdpaBack{Q,K,V}Graph`.
   * **Vector-LN block, tower, whole net** — `transformerBlockVBackGraphMH`,
     `vitBodyBackGraphKMHV` (by induction on `k`) and `vitNetBackGraph`.
@@ -106,10 +106,9 @@ noncomputable def transformerMlpBackGraph {Np1 D mlpDim : Nat}
     proven `transformerMlpHasVJPMat.backward` at the saved MLP input `Y`. The
     two dense backs ignore the activation; GELU's reads `dense1 Y`.
 
-    ⭐ Stated over an arbitrary incoming-cotangent SUBGRAPH `ecot` (any graph whose
-    den is the flattened cotangent), not over a bare `Vec` wrapped internally as
-    `.operand "%dz"`. That is what lets this arm sit downstream of another graph;
-    the old statement is this one at `ecot := .operand "%dz" (Mat.flatten dz)`. -/
+    Stated over an arbitrary incoming-cotangent subgraph `ecot` (any graph whose
+    den is the flattened cotangent), so this arm can sit downstream of another graph;
+    at a fixed `Vec` cotangent it is `ecot := .operand "%dz" (Mat.flatten dz)`. -/
 theorem transformerMlpBackGraph_faithful {Np1 D mlpDim : Nat}
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim)
     (Wfc2 : Mat mlpDim D) (bfc2 : Vec D)
@@ -206,7 +205,7 @@ theorem mhsaClean_backward_eq (N heads d_head : Nat)
 -- ════════════════════════════════════════════════════════════════
 
 /-! The colSlab-lifted MHSA backward collapses to a SUM over heads: each head `h` slices the dense Q/K/V projections
-and the `Wo`-back cotangent to head `h`'s columns, runs `sdpa_back_{Q,K,V}` at
+and the `Wo`-back cotangent to head `h`'s columns, runs `sdpaBack{Q,K,V}` at
 `d_head`, and the qkv-stack dense-back contracts head `h`'s SDPA backward against
 the `finProdFinEquiv (h, ·)` columns of `Wq/Wk/Wv`. -/
 
@@ -246,7 +245,7 @@ private lemma qkv_back_fanin_MH (N heads d : Nat)
 
 /-- The collapsed general-`heads` MHSA backward: for each head `h`, slice the
     dense Q/K/V projections and the `Wo`-back cotangent to head `h`'s columns,
-    run `sdpa_back_{Q,K,V}` at `d`, then contract per-head against the
+    run `sdpaBack{Q,K,V}` at `d`, then contract per-head against the
     `finProdFinEquiv (h, ·)` columns of `Wq/Wk/Wv`, summed over heads. -/
 noncomputable def mhsaBackCollapsedMH (N heads d : Nat)
     (Wq Wk Wv Wo : Mat (heads * d) (heads * d)) (bq bk bv _bo : Vec (heads * d))
@@ -656,10 +655,10 @@ theorem mlpSublayerVInnerBackGraph_faithful {Np1 D mlpDim : Nat}
 
 /-- The whole vec-LN MLP-sublayer backward graph (inner arm + identity skip).
 
-    ⭐ The incoming cotangent is a SUBGRAPH `ecot`, so this sublayer can sit
+    The incoming cotangent is a subgraph `ecot`, so this sublayer can sit
     downstream of another backward graph — which is what the attention sublayer
-    below does with it, and what `CertLayer` composition needs. The old
-    `dz : Vec` statement is this one at `ecot := .operand "%dz" dz`. -/
+    below does with it, and what `CertLayer` composition needs. At a fixed
+    `dz : Vec` it is `ecot := .operand "%dz" dz`. -/
 noncomputable def mlpSublayerVBackGraph {Np1 D mlpDim : Nat}
     (ε : ℝ) (γ2v : Vec D)
     (Wfc1 : Mat D mlpDim) (bfc1 : Vec mlpDim) (Wfc2 : Mat mlpDim D)
@@ -782,7 +781,7 @@ theorem attnSublayerVBackGraphMH_faithful {Np1 hm1 d : Nat} (ε : ℝ)
     mlpSublayerV ∘ attnSublayerV`, so `block.backward A dY = attn.backward A
     (mlp.backward (attn A) dY)`. Saved: `A` (block input), `h = attnSublayerV A`.
 
-    ⭐ The MLP sublayer's graph is now fed to the attention sublayer **as a subgraph**,
+    The MLP sublayer's graph is fed to the attention sublayer as a subgraph,
     not as `den (…)` re-wrapped as an operand: the two sublayers compose symbolically,
     and the block itself takes a cotangent subgraph so it can sit downstream of the
     next block. This is what makes the depth-`k` tower a real composite term. -/
@@ -890,10 +889,8 @@ noncomputable def classifierBackGraph (N D nClasses : Nat)
     `classifierFlatHasVJP.backward` at any input `v` (dense + CLS-slice are
     both linear, so the saved activation is irrelevant).
 
-    ⭐ Over a cotangent SUBGRAPH, like `patchEmbedBackGraph_faithful` at the other end of the
-    net — the head is the LAST layer of the forward and therefore the FIRST of the backward, so
-    this is the one place where a `Vec` cotangent was genuinely natural. Generalizing it anyway
-    is what lets the head be a `CertLayer` and the whole net be one `comp` chain. -/
+    Over a cotangent subgraph, like `patchEmbedBackGraph_faithful` at the other end of the
+    net, so the head can be a `CertLayer` and the whole net one `comp` chain. -/
 theorem classifierBackGraph_faithful (N D nClasses : Nat)
     (Wcls : Mat D nClasses) (bcls : Vec nClasses)
     (v : Vec ((N + 1) * D)) (ecot : SHlo nClasses) :
@@ -918,11 +915,8 @@ theorem classifierBackGraph_faithful (N D nClasses : Nat)
     vec-LN LN-back fragment (`lnRowBack(γ=1) ∘ rowScaleF γF`). The bias backward (identity)
     drops out; `X` is the saved pre-LN input (the body output).
 
-    ⚠ **This used to bundle the classifier back inside it** — it took `dy : Vec nClasses` and
-    called `classifierBackGraph` itself, so the final LN and the head were one indivisible
-    thing. They are now separate graphs composed at the call site, which is what lets each be
-    its own `CertLayer`. Bundling two stages into one node is the same mistake as wrapping a
-    cotangent as an operand: it works exactly until something needs to sit between them. -/
+    The classifier back is a separate graph (`classifierBackGraph`), composed at the call site,
+    so the final LN and the head are each their own `CertLayer`. -/
 noncomputable def finalLNBackGraph (N D : Nat) (ε : ℝ) (γF : Vec D)
     (X : Vec ((N+1)*D)) (ecot : SHlo ((N+1)*D)) : SHlo ((N+1)*D) :=
   .lnRowBack "%gF" "%XF" "ε" ε 1 X (.rowScaleF "%gFv" γF ecot)

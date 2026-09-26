@@ -1,15 +1,16 @@
 import LeanMlir.Proofs.Architectures.TokenParamGrad
 import LeanMlir.Proofs.Nets.ViT.ViTFwdGraph
 
-/-! # ViT Item D — the attention-block cotangent chain
+/-! # ViT — the attention-block cotangent chain
 
 `TokenParamGrad.lean` certifies each ViT param output for *any* cotangent `dy` at that
 site's output. This file defines the cotangent the **actual backward chain delivers** at each
-site — the ViT analogue of `ConvNeXtChainClose` (`planning/archive/vit_close.md` Item D) — and
-the step ties (`ViTStepTie`, `ViTStepTieGB`) feed those cotangents to Item C's bridges at the real
-forward. Pure-Lean, batch-1 — everything in a ViT is per-example separable.
+site — the ViT analogue of `ConvNeXtChainClose` — and the step ties (`ViTStepTie`,
+`ViTStepTieGB`) feed those cotangents to those bridges at the real forward. The definitions are
+per example; everything in a ViT is per-example separable, so the batched tie lifts them with
+`batchMapAux`.
 
-The chain composes the *rendered* backward denotations — exactly the Item B render's
+The chain composes the *rendered* backward denotations — exactly the render's
 backward tokens: per-token dense input-VJP (`denseRowBack`'s denotation
 `rowDenseBackFlat` = rowwise `dX = W·dy`), the GELU mask (`dy ⊙ geluScalarDeriv` at the
 saved pre-GELU), the rowwise scalar-LN input-VJP (`lnRowBack`'s denotation
@@ -26,12 +27,12 @@ input's is `cotH + LN₁-back(…)`). The new wrinkle vs all prior nets is the *
 fan-in at LN₁'s output** — the Q/K/V dense-backs all read from `LN₁ x`, so their three
 cotangents SUM (`vitCotLn1`), the `biPath` fan-in at width 3.
 
-**The substantive new ties** (`vitCotD{Q,K,V}_eq_sdpa_back_{Q,K,V}`): at the pinned saved
+**The substantive new ties** (`vitCotD{Q,K,V}_eq_sdpaBack{Q,K,V}`): at the pinned saved
 activations (pre-softmax scores = the scaled `Q·Kᵀ`, post-softmax weights =
 `sdpaWeights`), the matmul-spelled chain segments ARE the proven closed forms
-`sdpa_back_{Q,K,V}` (Attention.lean) — `dP = dO·Vᵀ → softmax-back → ·1/√d → dQ = dS·K /
+`sdpaBack{Q,K,V}` (Attention.lean) — `dP = dO·Vᵀ → softmax-back → ·1/√d → dQ = dS·K /
 dK = dSᵀ·Q / dV = Pᵀ·dO`, flattened. So the rendered attention backward is pinned to the
-audited SDPA backward suite. 3-axiom clean.
+audited SDPA backward suite.
 -/
 
 namespace Proofs

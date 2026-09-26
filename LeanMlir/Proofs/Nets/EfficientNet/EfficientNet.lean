@@ -21,10 +21,12 @@ own composed VJP — plus its differentiability.
 * `mbconvBody` / `mbconvBodyHasVJP` — one MBConv block body
   `project(1×1 conv-bn) ∘ SE ∘ depthwise(bn-swish) ∘ expand(1×1 conv-bn-swish)`,
   smooth everywhere (global `HasVJP`).
-* `efficientnetHasVJPAt` / `_correct` — a representative end-to-end
+* `efficientnetHasVJP` / `efficientnetHasVJP_correct` — a two-block end-to-end
   EfficientNet (stem → MBConv-with-SE-and-residual → MBConv-with-SE →
-  globalAvgPool → dense head), built by `vjpCompAt`, exposing the
-  `pdiv`-contracted Jacobian.  Spatial dims held constant (stride-1; the
+  globalAvgPool → dense head), a global `HasVJP` built by `vjpComp`, exposing the
+  `pdiv`-contracted Jacobian; `efficientnetHasVJPAt` / `efficientnetHasVJPAt_correct`
+  restrict it to a point by `.toHasVJPAt`. The full sixteen-block B0 is
+  `efficientnetForwardBFull` (`EfficientNetFullB0.lean`).  Spatial dims held constant (stride-1; the
   separable striding/pooling plumbing is already in `CNN.lean`).  Only the
   `0 < ε` batch-norm hypotheses are required — swish and sigmoid are
   smooth, so there are no relu-style kink hypotheses anywhere in the block.
@@ -38,7 +40,7 @@ open Finset BigOperators
 -- § conv → bn → swish  (smooth expand stage; swish has no kink)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **conv → bn → swish block — everywhere VJP.** Like `convBnRelu` but
+/-- **conv → bn → swish block — everywhere VJP.** Like `convBnReluHasVJPAt` but
     with swish (smooth) instead of relu, so no smoothness hypothesis is
     needed; this is a global `HasVJP`.  `Vec (ic*h*w) → Vec (oc*h*w)`. -/
 noncomputable def convBnSwishHasVJP {ic oc h w kH kW : Nat}
@@ -237,7 +239,7 @@ noncomputable def efficientnetForward
     everywhere (swish + sigmoid SE gate + convs + BN, no ReLU/maxpool), so
     the only hypotheses are the `0 < ε` batch-norm conditions and the VJP
     holds at *every* input — putting EfficientNet alongside
-    `vitFullHasVJP` and `convnextHasVJP` as an unconditional
+    `vitFullHasVJP` (the weight-tied ViT) and `convnextHasVJP` as an unconditional
     whole-network VJP. Chained through the global `vjpComp`. -/
 noncomputable def efficientnetHasVJP
     {ic c cmid₁ cout cmid₂ h w kHs kWs kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁

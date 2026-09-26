@@ -6,8 +6,8 @@ import LeanMlir.Proofs.Nets.ViT.ViTVecLN
 The MATH is general in `heads` (`mhsaHasVJPMat`, `transformerBlockVHasVJPMat`); this file
 supplies the RENDERING + faithfulness at heads > 1:
 
-1. **`mhsaLayer_spelled`** — the load-bearing tie, the general-`heads`
-   tie: `mhsaLayer N heads d` IS, per head,
+1. **`mhsaLayer_spelled`** — the general-`heads` tie, on which the rest of
+   the file builds: `mhsaLayer N heads d` IS, per head,
    slice → matmul-spelled SDPA → pad-scatter, summed over heads. The concat
    is spelled as `Σ_h headPadMat h ∘ (per-head SDPA)` — every output column
    receives exactly one head's value, and the sum stays at the single index

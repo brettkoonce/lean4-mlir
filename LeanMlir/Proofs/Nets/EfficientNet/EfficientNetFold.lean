@@ -1,8 +1,8 @@
 import LeanMlir.Proofs.Foundation.GradNodesB
 
-/-! # PoC: the full-16 (262-param) EfficientNet-B0 train step, proof-tied (the §1 fold, den)
+/-! # The full-16 (262-param) EfficientNet-B0 train step, proof-tied (the fold, den)
 
-The §1 fold for the batched 262-param EfficientNet-B0
+The fold for the batched 262-param EfficientNet-B0
 train step `efficientnetTrainStepFaithfulV` (`EfficientNetRender.lean`). Every emitted param-SGD op
 `den`otes the certified loss-descent step — `θ − lr·(certified Jacobian · cotangent)`.
 

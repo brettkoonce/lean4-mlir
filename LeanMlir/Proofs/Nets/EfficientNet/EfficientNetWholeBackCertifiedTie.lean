@@ -10,12 +10,12 @@ stands on: `stemBBack_eq_vjp_backward` (at the XLA-`SAME` phase every shipped B0
 batched stage's VJP is `vjpComp`-built, so its backward already reduces to the composition of the
 stage backwards, and `batchMap`'s VJP reduces to the leaf backward applied row-wise.
 
-⭐ **`batchMapHasVJP`'s transport does not block the reduction, and the planning note that
-said it would is withdrawn.** It is built as `(batchMap_eq_rowwiseFlat f).symm ▸
-HasVJPMat.toHasVJP (rowwiseHasVJPMat …)`, and §5's standing trap is that an `Eq.mpr` blocks
-`.backward` from reducing. It does not here: the transported equation holds by `funext … ; rfl`,
-and proof irrelevance is definitional in Lean, so `.backward` reduces straight through the `▸`
-to the leaf backward applied row-wise — checked as a bare `rfl`, and every tie below relies on it.
+**`batchMapHasVJP`'s transport does not block the reduction.** It is built as
+`(batchMap_eq_rowwiseFlat f).symm ▸ HasVJPMat.toHasVJP (rowwiseHasVJPMat …)`, and an `Eq.mpr`
+can block `.backward` from reducing. It does not here: the transported equation holds by
+`funext … ; rfl`, and proof irrelevance is definitional in Lean, so `.backward` reduces straight
+through the `▸` to the leaf backward applied row-wise — checked as a bare `rfl`, and every tie below
+relies on it.
 -/
 
 namespace Proofs

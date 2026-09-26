@@ -3,7 +3,7 @@ import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 /-! # ViT multi-head backward — the per-head SDPA cotangents the real chain delivers
 
 The single-head representative (`ViTChainClose`) pins the rendered attention backward to the
-audited `sdpa_back_{Q,K,V}` suite at `d = D` (one head). The committed `vitTrainStepRenderV`
+audited `sdpaBack{Q,K,V}` suite at `d = D` (one head). The committed `vitTrainStepRenderV`
 render is **multi-head** (`D = heads · d`, the committed ViT-Tiny: `heads = 3`, `d = 64`): the
 Q/K/V denses produce all heads' projections at once (`[N, heads·d]`), then `headSliceF h` slices
 head `h`'s `[N, d]` block, per-head SDPA runs at `sdpaScale d` (d_head, NOT D), and `headPadF h`
@@ -21,11 +21,11 @@ backward `dAtt → dQ/dK/dV`:
     sum over heads (`Σ_h headPadFlat h …` — the slice's VJP).
 
 The **composition theorems** (`vitCotD{Q,K,V}mh_eq`) are the substantive content: the rendered
-slice → per-head SDPA backward → pad chain IS `Mat.flatten (Σ_h headPadMat h (sdpa_back_{Q,K,V}))`
+slice → per-head SDPA backward → pad chain IS `Mat.flatten (Σ_h headPadMat h (sdpaBack{Q,K,V}))`
 — the concat of the proven per-head SDPA backwards. Each reuses the single-head pin
-(`vitCotD{Q,K,V}_eq_sdpa_back_{Q,K,V}`) at `d_head` head-by-head, plus the `headSliceFlat`/
+(`vitCotD{Q,K,V}_eq_sdpaBack{Q,K,V}`) at `d_head` head-by-head, plus the `headSliceFlat`/
 `headPadFlat`/`Mat.flatten`-sum commutation bridges (`ViTMultiHead`). The downstream LN₁ fan-in is
-unchanged in shape (`vitCotLn1MH = vitCotLn1` at the multi-head Q/K/V cots); the §1-fold param-SGD
+unchanged in shape (`vitCotLn1MH = vitCotLn1` at the multi-head Q/K/V cots); the fold param-SGD
 `den` lemmas (`rowDenseWeightSgd_den`, …) are head-agnostic (generic in the cotangent), so only the
 COTANGENT changes from the single-head `vitCotD{Q,K,V}` to `vitCotD{Q,K,V}mh`. -/
 

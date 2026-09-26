@@ -1,58 +1,58 @@
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtWholeBackCertifiedTie
 import LeanMlir.Proofs.Foundation.BatchMapVJPAt
 
-/-! # ⭐⭐ `convnextInputGradB` IS the certified whole-net ConvNeXt-T gradient AT A BATCH
+/-! # `convnextInputGradB` is the certified whole-net ConvNeXt-T gradient at a batch
 
-`ConvNeXtWholeBackCertifiedTie.lean` closed T6 for ONE image: `convnextInputGrad`, the reverse of
-`convNextForwardTCh`, IS the certified gradient at that image. Every shipped ConvNeXt artifact
-runs a batch — `convnext_adam_train_step` and the `convnextin_*` / `convnextsin_*` /
-`convnextbin_*` families — and its batched T3 tie (`ConvNeXtStepTieGB.lean`) states every
-activation as `StableHLO.batchMap B` of the per-example prefix and every cotangent as
-`batchMapAux B` of the per-example chain, because LayerNorm is per-example and no ConvNeXt op
-couples examples. This file closes T6 at that index: the twelve-stage batched chain
-`convnextInputGradB` (`ConvNeXtBackChains.lean`), every slot the per-example slot lifted at the
-batched saved activation, IS the certified gradient of `batchMap B convNextForwardTCh` at every
-batch `x`, for every `B` and every class count `nC`. ConvNeXt was the last net without a batched
-whole-net tie (`planning/archive/renderer_convergence.md` leg 3: its ImageNet artifacts never had
-a batched fold); with this the `*InputGradB_eq_*_vjp` family covers all seven nets.
+`ConvNeXtWholeBackCertifiedTie.lean` proves for one image that `convnextInputGrad`, the reverse of
+`convNextForwardTCh`, is the certified gradient at that image. The batched step tie
+(`ConvNeXtStepTieGB.lean`) states every activation as `StableHLO.batchMap B` of the per-example
+prefix and every cotangent as `batchMapAux B` of the per-example chain, because channel LayerNorm
+is per-example and no ConvNeXt op couples examples. This file proves the same at that index: the
+twelve-stage batched chain `convnextInputGradB` (`ConvNeXtBackChains.lean`), every slot the
+per-example slot lifted at the batched saved activation, is the certified gradient of
+`batchMap B convNextForwardTCh` at every batch `x`, for every `B` and every class count `nC`.
 
-Nothing here is new mathematics, and it is ViT's batched tie (`ViTWholeBackCertifiedTieB.lean`)
-one architecture over: ConvNeXt is smooth everywhere, so every stage has a GLOBAL `HasVJP` and its
-batched witness is `batchMapHasVJPAt` over `HasVJP.toHasVJPAt` at each row — no smooth-point
-hypothesis anywhere, only the 23 LayerNorm positivities the per-example tie already carries.
+The forward is `convNextForwardTCh`: ConvNeXt-T (`[3,3,9,3]` at `96→192→384→768`), without
+drop-path, in exact real arithmetic. ConvNeXt is smooth everywhere, so every stage has a global
+`HasVJP` and its batched witness is `batchMapHasVJPAt` over `HasVJP.toHasVJPAt` at each row. The
+hypotheses are the 23 LayerNorm positivities the per-example tie carries and no smooth-point
+condition.
 
 1. `cnxSavedB0 … cnxSavedB10` — the eleven batched stage inputs, as reducible functions of the
-   batch saved STAGE BY STAGE (`batchMap B stage ∘ cnxSavedB_{k-1} B w`), not as `batchMap B` of
+   batch saved stage by stage (`batchMap B stage ∘ cnxSavedB_{k-1} B w`), not as `batchMap B` of
    the composed per-example prefix: the two agree only up to `batchMap_comp`, not `rfl`, and the
    apex's `vjpCompDiffAt` produces the former. Each is also its apex level's inner map, so the
-   stage witness above it sits at `cnxSavedB_k B w x` on the nose (item 4).
-2. The twelve batched stage witnesses `cnx*B_at`, each `batchMapHasVJPAt` over the per-example
-   `HasVJP` at each row — at the dimension spellings the per-example tie normalised (`cnxDn1`,
-   `cnxLNh`, `cnxSavedA0`: `ConvNeXtWholeBackCertifiedTie.lean`'s "two spellings of one numeral"
-   rule holds one batch index over).
+   stage witness above it sits at `cnxSavedB_k B w x` on the nose.
+2. The twelve batched stage witnesses `cnx*BAt`, each `batchMapHasVJPAt` over the per-example
+   `HasVJP` at each row, at the dimension spellings the per-example tie normalised (`cnxDn1`,
+   `cnxLNh`, `cnxSavedA0`).
 3. The batched leaf ties. GAP's is `rfl` (its per-example tie is); the others are
    `batchMapAux_eq_batchMapHasVJPAt` (or its `batchMap` form for the linear leaves) over the
-   per-example leaf tie at each row. ⚠ The channel-LN and downsample leaves are proven at VARIABLE
-   dims (`cnxChanLNBackB_eq_vjp`, `cnxDownBackB_eq_vjp`) and instantiated by term: when these
-   closed by `rfl`, the literal `96 56 56` recursed past `maxRecDepth 100000` on the numerals, the
-   batched form of the per-example tie's "two spellings of one numeral" rule.
+   per-example leaf tie at each row. The channel-LN and downsample leaves are proved at variable
+   dims (`cnxChanLNBackB_eq_vjp`, `cnxDownBackB_eq_vjp`) and instantiated by term.
 4. `convNextForwardTChBHasVJPAt` — the twelve-stage apex, eleven `vjpCompDiffAt`s over the
    batched stage witnesses, level `k`'s inner map named `cnxSavedB_k B w` — and
    `convnextInputGradB_eq_convNextForwardTChB_vjp`, the tie: twelve leaf rewrites, then the eleven
-   levels peeled by `rw [vjpCompDiffAt_fst_backward]`. ⛔ Neither may leave the kernel a
-   definitional step across the chain. A witness point spelled as the composed chain applied to
-   `x` (what `_` elaborates to), or a peel by `simp only` (the peel lemma is `rfl`, so simp records
-   no step), makes the kernel unfold saved activations against the chain underneath the witnesses'
-   `.backward`s. Spelled that way this module took ~18 min on Lean 4.32.2 and does not check at all
-   on 4.34.0 (kernel timeout; tens of GB with the budget raised). As written it checks in seconds.
-5. `convNextForwardTChB_eq_chain` — the shape check: `batchMap B` of the per-example twelve-factor
-   chain IS the twelve batched stages, by `batchMap_comp` eleven times — and
-   `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp`, the tie carried to the committed GLOBAL
-   witness `batchMapHasVJP _ (convNextForwardTChHasVJP …)` through
-   `HasVJPAt.backward_unique_of_eq`, plus the `∑ pdiv` reading on `convNextForwardTCh` itself.
-6. `convnextImagenetInputGradB_eq_vjp` — the same statement at `nC = 1000`, the class count of
-   every `convnextin_*` artifact, `B` a binder.
+   levels peeled by `rw [vjpCompDiffAt_fst_backward]`.
+5. `convNextForwardTChB_eq_chain` — `batchMap B` of the per-example twelve-factor chain is the
+   twelve batched stages, by `batchMap_comp` — and
+   `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp`, the tie carried to the global witness
+   `batchMapHasVJP _ (convNextForwardTChHasVJP …)` through `HasVJPAt.backward_unique_of_eq`, plus
+   the `∑ pdiv` reading on `convNextForwardTCh` itself (`convnextInputGradB_correct`).
+6. `convnextImagenetInputGradB_eq_vjp` — the same statement at `nC = 1000`, `B` a binder.
 -/
+
+-- Proof-shape notes:
+-- * Channel-LN and downsample leaves are proved at variable dims and instantiated by term: when
+--   they closed by `rfl`, the literal `96 56 56` recursed past `maxRecDepth 100000` on the
+--   numerals (the batched form of `ConvNeXtWholeBackCertifiedTie.lean`'s "two spellings of one
+--   numeral" rule).
+-- * Neither the apex nor the tie may leave the kernel a definitional step across the chain. A
+--   witness point spelled as the composed chain applied to `x` (what `_` elaborates to), or a peel
+--   by `simp only` (the peel lemma is `rfl`, so simp records no step), makes the kernel unfold
+--   saved activations against the chain underneath the witnesses' `.backward`s. Spelled that way
+--   this module took ~18 min on Lean 4.32.2 and did not check on 4.34.0 (kernel timeout). As
+--   written it checks in seconds.
 
 namespace Proofs
 
@@ -195,7 +195,7 @@ noncomputable def cnxDenseBAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : V
 
 /-- **The batched stem tie.** `batchMap B` of the reversed-kernel conv at the zero-extended 4×4
     kernel IS the lift's backward: `flatConvStride4Back_padOdd_eq_vjp_backward` at one example's
-    row. ⛔ `padOdd` is load-bearing here exactly as in the per-example tie: `w.sW` is 4×4. -/
+    row. `padOdd` is required here as in the per-example tie: `w.sW` is 4×4. -/
 theorem cnxStemBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (B * (3 * 224 * 224))) :
     StableHLO.batchMap B (flatConvStride4Back (h := 56) (w := 56) (padOdd w.sW))
@@ -205,9 +205,9 @@ theorem cnxStemBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
       w.sW w.sb _
 
 /-- **The batched channel-LayerNorm tie**, at any `c h w` — `chanLNTensor3Back_eq_chanLN_vjp` at
-    each row. ⚠ Generic on purpose: when it closed by `rfl`, the literal `96 56 56` recursed past
-    `maxRecDepth 100000` on the numerals; at variables it is ViT's `vitLNBackB_eq_vjp`. The stem
-    instance below is a term. -/
+    each row. Note: stated at variable dims because an `rfl` proof at the literal `96 56 56`
+    recursed past `maxRecDepth 100000` on the numerals; at variables it is ViT's
+    `vitLNBackB_eq_vjp`. The stem instance below is a term. -/
 theorem cnxChanLNBackB_eq_vjp (B c h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
     (v : Vec (B * (c * h * w))) :
     StableHLO.batchMapAux B (chanLNTensor3Back c h w ε γ) v
@@ -233,8 +233,8 @@ theorem cnxStageBackB_eq_vjp (B : Nat) {c cExp h w kHd kWd : Nat}
 /-- **The batched downsample tie**, at any resolution — `cnxDownChBack_eq_vjp` at one example's
     row. Generic for the same reason as `cnxChanLNBackB_eq_vjp`; the three instances below are
     terms at the chain's dimension spellings (`cnxDn1 … cnxDn3`), which is the per-example tie's
-    `cnxDn1Back_eq_vjp … cnxDn3Back_eq_vjp` one batch index over. ⛔ `padOdd` is load-bearing:
-    `p.W` is 2×2. -/
+    `cnxDn1Back_eq_vjp … cnxDn3Back_eq_vjp` one batch index over. `padOdd` is required: `p.W` is
+    2×2. -/
 theorem cnxDownBackB_eq_vjp (B h w : Nat) {cin cout : Nat} (p : CnxDownParamsCh cin cout)
     (hε : 0 < p.ε) (v : Vec (B * (cin * (2 * h) * (2 * w)))) :
     StableHLO.batchMapAux B (fun u => cnxDownBack (h := h) (w := w) (padOdd p.W)
@@ -292,7 +292,7 @@ theorem cnxDenseBackB_eq_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC) (v : Ve
 /-- **The batched whole-net witness**, twelve batched stages composed by `vjpCompDiffAt`, each
     at the batched saved activation the chain uses (`cnxSavedB0 … cnxSavedB10`). Level `k`'s inner
     map is named `cnxSavedB_k B w` rather than left to the unifier, which would fill it with the
-    composed chain and put every witness at the chain applied to `x` (see the module note, item 4). -/
+    composed chain and put every witness at the chain applied to `x`. -/
 noncomputable def convNextForwardTChBHasVJPAt (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
@@ -358,10 +358,9 @@ noncomputable def convNextForwardTChBHasVJPAt (B : Nat) {nC : Nat} (w : CnxTWeig
     ⟨cnxDenseBAt B w (cnxSavedB10 B w x),
      batchMap_differentiableAt _ _ (fun _ => (dense_differentiable w.Wd w.bd).differentiableAt)⟩).fst
 
-/-- ⭐⭐ **THE BATCHED TIE.** `convnextInputGradB` with every slot the per-example slot at the
-    batched saved activation IS the batched apex's backward. Twelve leaf rewrites, the chain's
-    eleven `∘`s applied, then the eleven composition levels peeled by
-    `vjpCompDiffAt_fst_backward` — every step a `rw`, so the kernel replays rewrites. -/
+/-- **The batched tie.** `convnextInputGradB` with every slot the per-example slot at the
+    batched saved activation is the backward of `convNextForwardTChBHasVJPAt`, at every `B`, `nC`
+    and batch `x`, under the 23 LayerNorm positivities. -/
 theorem convnextInputGradB_eq_convNextForwardTChB_vjp (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
@@ -383,6 +382,8 @@ theorem convnextInputGradB_eq_convNextForwardTChB_vjp (B : Nat) {nC : Nat} (w : 
           (chanLNTensor3Back 384 14 14 w.d3.ε w.d3.γ u)) (cnxSavedB6 B w x)
         (cnxStageChKBack 3 w.s4) (cnxSavedB7 B w x)
       = (convNextForwardTChBHasVJPAt B w hsε h1 hd1 h2 hd2 h3 hd3 h4 hhε x).backward := by
+  -- Twelve leaf rewrites, the chain's eleven `∘`s applied, then the eleven composition levels
+  -- peeled by `vjpCompDiffAt_fst_backward`; every step a `rw`, so the kernel replays rewrites.
   unfold convnextInputGradB
   rw [cnxStemBackB_eq_vjp B w x,
       cnxStemLNBackB_eq_vjp B w hsε (cnxSavedB0 B w x),
@@ -434,11 +435,11 @@ theorem convNextForwardTChB_eq_chain (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
   simp only [batchMap_comp]
   rfl
 
-/-- ⭐⭐ **THE APEX, at the committed batched witness.** `convnextInputGradB` IS
+/-- **The batched apex at the global witness.** `convnextInputGradB` is
     `(batchMapHasVJP _ (convNextForwardTChHasVJP …) …).backward x` — the certified gradient of
-    the per-example net lifted whole over `B` examples, for every `B`, every `nC` and every batch
-    `x`. Carried from the chain-shaped apex by `HasVJPAt.backward_unique_of_eq` along the shape
-    check. Only the 23 LayerNorm positivities. -/
+    the drop-free per-example ConvNeXt-T forward lifted over `B` examples, for every `B`, every
+    `nC` and every batch `x`. The hypotheses are the 23 LayerNorm positivities. Carried from the
+    chain-shaped apex by `HasVJPAt.backward_unique_of_eq` along `convNextForwardTChB_eq_chain`. -/
 theorem convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp (B : Nat) {nC : Nat}
     (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
@@ -520,13 +521,13 @@ theorem convnextInputGradB_correct (B : Nat) {nC : Nat} (w : CnxTWeightsCh nC)
 -- § The production capstone — the ImageNet class count, `B` a binder
 -- ═════════════════════════════════════════════════
 
-/-- ⭐⭐ **ConvNeXt-T's BATCHED whole-net backward tie at the ImageNet head — tier T6 at the paper
-    net and the shipped index.** `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp` at
-    `nC = 1000`, the class count of every `convnextin_*` / `convnextsin_*` / `convnextbin_*`
-    artifact, at a variable batch `B` — 64 or 128 per device in those runs, and neither number
-    appears here. The dims are the paper's (`3×224²`, `[3,3,9,3]` at `96→192→384→768`), so this
-    is the whole statement at the artifact and not an instance of it. ConvNeXt's entry in the
-    batched T6 column beside `r34InputGradB_eq_r34B_full_vjp`,
+/-- **ConvNeXt-T's batched whole-net backward tie at the ImageNet head.**
+    `convnextInputGradB_eq_batchMap_convNextForwardTCh_vjp` at `nC = 1000`, the class count of the
+    `convnextin_*` (ConvNeXt-T) artifacts, at a variable batch `B` (64 per device in those
+    artifacts). The dims are ConvNeXt-T's (`3×224²`, `[3,3,9,3]` at `96→192→384→768`). The forward
+    is the drop-free `convNextForwardTCh` in exact arithmetic: the drop-path (`*drop*`) artifacts
+    and ConvNeXt-S/B (`convnextsin_*`, `convnextbin_*`) compute other functions and are not
+    covered. The batched peers of the other nets are `r34InputGradB_eq_r34B_full_vjp`,
     `mnv2InputGradB_eq_mobilenetv2B_full_vjp` and `vitTinyInputGradB_eq_vitTiny_vjp`. -/
 theorem convnextImagenetInputGradB_eq_vjp (B : Nat) (w : CnxTWeightsCh 1000)
     (hsε : 0 < w.sε)

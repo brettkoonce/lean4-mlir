@@ -2,29 +2,29 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtFoldGB
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtStepTie
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
-/-! # ConvNeXt-T's T3 §1a TIE at the BATCHED index, the UN-FUSED gradient and the SMOOTHED loss
+/-! # ConvNeXt-T's step tie at the batched index, the un-fused gradient and the smoothed loss
 
 `ConvNeXtStepTie.lean` ties all 182 parameters of the SGD-inline `convnext_train_step.mlir`: each
 fused `θ − lr·g` op `den`s to the certified step at the cotangent the emitted backward chain
-delivers, per example, at a hard label. This file is that statement re-pointed along the THREE
-axes 4b and 4c left open (`planning/archive/proofs_tier_to_paper_nets.md` §4b, §4c-quater) — and unlike
-EfficientNet-B0's (`EfficientNetStepTieG.lean`, two axes), ConvNeXt's per-example capstone was at
-a single image with the batch outside the AST, so the index is the third.
+delivers, per example, at a hard label. This file is that statement re-pointed along three axes;
+unlike EfficientNet-B0's (`EfficientNetStepTieG.lean`, two axes), ConvNeXt's per-example capstone
+was at a single image with the batch outside the AST, so the index is the third.
 
-⭐ **Axis 1 — the OPTIMIZER FORM.** Every conjunct is at the RAW gradient node (`*GradB`), which is
-what `convnext_adam_train_step.mlir` and every `convnextin_*` artifact emit; the fused op appears
-only in the SGD-inline file. One statement covers AdamW, the `wx`/`clip` variants, EMA and the
-data-parallel twins, because they all consume this node. `ConvNeXtFoldGB.lean` (§4c-quater)
-is the fold each conjunct delegates to.
+**Axis 1 — the gradient node.** Every conjunct is at the raw gradient node (`*GradB`), which is
+what `convnext_adam_train_step.mlir` and every f32 `convnextin_*` artifact emit; the fused op
+appears only in the SGD-inline file. The optimizer update that consumes the node (AdamW, the
+`wx`/`clip` variants, EMA) is outside this statement. The bf16 artifacts emit `*GradBBf16` nodes
+(Foundation/Bf16GradNodes.lean) and are not covered. `ConvNeXtFoldGB.lean` is the fold each
+conjunct delegates to.
 
-⭐ **Axis 2 — the LOSS.** The capstone's top-of-chain cotangent is `smoothedLossCotGraphDiv`'s, at
+**Axis 2 — the loss.** The capstone's top-of-chain cotangent is `smoothedLossCotGraphDiv`'s, at
 a GENERAL target: the six-op chain `expe → softmaxDiv → subB → scaleB → addVB → shiftB →
 divConstB` this render emits, with the target arriving as the graph input `%onehot` — a soft
 vector under mixup or cutmix. The fused file pins it to `softmax − oneHot`, the gradient of plain
-cross-entropy at a hard label, which no ImageNet artifact computes. ⚠ ConvNeXt's chain runs at the
+cross-entropy at a hard label, which no ImageNet artifact computes. ConvNeXt's chain runs at the
 plain width `N·K` (no `1·` row index), so there is no `rowB`/`unrowB` cast anywhere here.
 
-⭐ **Axis 3 — the INDEX.** `N` is a binder. Every forward activation is `batchMap N` of the
+**Axis 3 — the index.** `N` is a binder. Every forward activation is `batchMap N` of the
 per-example prefix the fused file threads (`cnxStemFwdO`, `cnxBlockFwdChO`, `cnxDownFwdChO`),
 and every cotangent is `batchMapAux N` of the per-example chain (`cnxBlockCotInChAt`,
 `cnxDownCotInChAt`, `ConvNeXtChainClose`'s `cnxCotP/E/N`, `chanLNTensor3Back`). That lift is
@@ -33,23 +33,25 @@ the residual add are all batch-separable, so the batched op IS the per-example o
 `batchMap` — which is what the `*B` constructors' `den` arms say. `nC` is a binder too: the
 Imagenette artifact is `nC = 10`, the ImageNet ones `nC = 1000`.
 
-## What is NOT new, and why the file is a transformation rather than a proof
+## Relation to the fused file
 
 Every activation, every Jacobian witness and every chain cotangent is `ConvNeXtStepTie.lean`'s,
 lifted; every conjunct's proof is one `CnxPoCGB.*_den` lemma. The `wN`, `bN`, `gN`, `lrStr` and
-`lr` binders disappear with the fused wrapper, exactly as they did for B0. ⚠ **The head takes `g`
-as a PARAMETER** where the fused `cnxHeadChTied` computed it from a label — that is the whole of
-axis 2 at the block level; the per-block ties were already loss-agnostic.
+`lr` binders disappear with the fused wrapper, as they did for B0. The head takes `g` as a
+parameter where the fused `cnxHeadChTied` computed it from a label; the per-block ties were
+already loss-agnostic.
 
-⛔ **Conventions carried unchanged from the fused file:** channel LayerNorm (`chanLNTensor3`, a
+**Conventions carried unchanged from the fused file:** channel LayerNorm (`chanLNTensor3`, a
 `Vec c` affine, `h·w` statistics per example) at all 22 spatial sites, the head at ViT's vector LN
 on one row, per-channel layer scale, GELU (no kink — no smoothness hypothesis anywhere),
 SYMMETRIC padding at the 4×4/s4 stem and the three 2×2/s2 downsamples. Stated at the literal
-widths of ConvNeXt-T; S and B are other nets. ⛔ ONE REPLICA: in `convnextin_adamdp*` every
-gradient node feeds `allReduceMeanF`, the collective as an AST node since 4d piece 2 (2026-09-07);
-`DataParallelNode.lean` composes the per-replica statement with the replica mean.
-⛔ The `%dgi…%dgapf` GAP backward is hand-written text on both chains (a declared carve-out); its
-value here is `globalAvgPoolFlatHasVJP.backward`, as in the fused file.
+widths of ConvNeXt-T; S and B are other nets.
+
+**Scope.** One replica: in `convnextin_adamdp*` every gradient node feeds `allReduceMeanF`;
+`DataParallelNode.lean` composes the per-replica statement with the replica mean. The drop-free
+chain: the `*drop*` artifacts' cotangent chains carry `dropPathB` sites not stated here. Note:
+the `%dgi…%dgapf` GAP backward is hand-written text on both chains; its value here is
+`globalAvgPoolFlatHasVJP.backward`, as in the fused file.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -347,25 +349,25 @@ theorem _root_.Proofs.CnxTiePoC.CnxTieDown.tied_gb {ci co h w : Nat} (p : CnxTie
     (dyOut : Vec (N * (co*h*w))) : p.TiedGB N xN epsStr cotN ε xin dyOut :=
   cnx_down_ch_tiedGB N xN epsStr cotN ε _ _ _ _ xin dyOut
 
-/-- ⭐⭐ **The whole [3,3,9,3] ConvNeXt-T train step, tied at the BATCHED index, the GRADIENT
-    nodes and the SMOOTHED loss.** Threading the real channel-LN / per-channel layer-scale forward
+/-- **The whole [3,3,9,3] ConvNeXt-T train step, tied at the batched index, the gradient
+    nodes and the smoothed loss.** Threading the real channel-LN / per-channel layer-scale forward
     as `batchMap N` of the per-example prefixes, and the label-smoothed loss cotangent
     (`smoothedLossCotGraphDiv`, at a general target `t`) down through the head and every block's
     certified cotangent chain as `batchMapAux N` of the per-example chain — GELU masks, the residual
     fan-in at every identity skip, the channel-LN-back at every downsample and at the stem — the
     18 ConvNeXt blocks, the 3 downsamples, the 4×4/s4 stem with its LN and the GAP → LN → dense
-    head all denote the certified batched `Σ_n` gradient. All 182 parameters, at the nodes
-    `convnext_adam_train_step.mlir` and every `convnextin_*` train step emit.
+    head all denote the certified batched `Σ_n` gradient. All 182 parameters, at the `*GradB`
+    nodes `convnext_adam_train_step.mlir` and every f32 `convnextin_*` train step emit; the bf16
+    artifacts emit `*GradBBf16` and are not covered.
 
-    ⭐ **`N` and `nC` are binders and there is no smoothness hypothesis**: the folds are `∀ cot`
+    `N` and `nC` are binders and there is no smoothness hypothesis: the folds are `∀ cot`
     statements instantiated at explicitly constructed cotangents, and ConvNeXt has no kink. The
-    batch enters only through `batchMap`/`batchMapAux`, which is honest because no ConvNeXt op
-    couples examples. ⛔ ONE REPLICA: in `convnextin_adamdp*` every gradient node feeds
-    `allReduceMeanF` (an AST node since 4d piece 2; `DataParallelNode.lean` composes the
-    per-replica statement with the replica mean). ⛔ Stated at the drop-free chain;
-    the `*drop*` artifacts' parameter nodes are the same `*GradB` constructors (the folds are
-    `∀ cot`) but their cotangent chain carries the `dropPathB` sites, which this thread does not
-    name. -/
+    batch enters only through `batchMap`/`batchMapAux`, because no ConvNeXt op couples examples.
+    The statement is at one replica: in `convnextin_adamdp*` every gradient node feeds
+    `allReduceMeanF`, and `DataParallelNode.lean` composes the per-replica statement with the
+    replica mean. It is stated at the drop-free chain: the `*drop*` artifacts' parameter nodes are
+    the same `*GradB` constructors (the folds are `∀ cot`) but their cotangent chain carries the
+    `dropPathB` sites, which this thread does not name. -/
 theorem cnx_net_tiedGB (N : Nat) {nC : Nat}
     (xN epsStr cotN dN aStr negAK bStr logN ohN : String) (ε α B : ℝ)
     (w : CnxTieWeights nC) (xstem : Vec (N * (3*56*56)))

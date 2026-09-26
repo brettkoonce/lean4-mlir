@@ -4,8 +4,10 @@ import LeanMlir.Proofs.Architectures.LayerNorm
 /-!
 # ConvNeXt
 
-A representative ConvNeXt block and a small end-to-end ConvNeXt VJP in
-flattened `Vec` space — the ConvNeXt analogue of `cnnHasVJPAt`.
+A ConvNeXt block and a two-block end-to-end ConvNeXt VJP with scalar-`γ, β` LayerNorm, in
+flattened `Vec` space — the ConvNeXt analogue of `cnnHasVJPAt`. The comparator checks this net;
+the full ConvNeXt-T at the channel LayerNorm it ships with is `convNextForwardTCh`
+(`ConvNeXtFullT.lean`).
 
 ConvNeXt is the "ResNet, modernized" architecture: it keeps the residual
 skeleton but swaps in the ViT-era ingredients — a large-kernel (7×7)
@@ -23,22 +25,23 @@ This file contributes three genuinely new pieces:
     linear map; `Differentiable` + a `HasVJP` (`back i = γ i · dy i`),
     its Jacobian read off the basis vector by `pdiv_of_linear`.
   * the **ConvNeXt block body** `layerScale ∘ project ∘ gelu ∘ expand ∘
-    LayerNorm ∘ depthwise`, everywhere-differentiable, with a pointwise
-    VJP built by chaining the piece VJPs through `vjpCompAt`; and the
+    LayerNorm ∘ depthwise`, everywhere-differentiable, with a global
+    VJP built by chaining the piece VJPs through `vjpComp`; and the
     full block `residual (block body)` (identity skip, no post-add act).
-  * `convnextHasVJPAt` / `convnextHasVJPAt_correct` — a fixed-depth
+  * `convnextHasVJP` / `convnextHasVJP_correct` (and the pointwise
+    `convnextHasVJPAt` / `convnextHasVJPAt_correct`) — a fixed-depth
     (two-block) end-to-end network: stem-patchify → stem-LN → block₁ →
     block₂ → global-avg-pool → head-LN → dense.
 
-## LayerNorm representation caveat
+## LayerNorm representation
 
-The `layerNormForward` reused here is the proof's Vec→Vec LayerNorm with
-*scalar* `γ, β` that normalizes over the *whole* flattened vector,
-whereas true ConvNeXt LayerNorm is per-spatial-position over the channel
-axis (LayerNorm over NCHW's C). This is the same representation
-simplification the audit flagged for the LN family; a faithful
-channel-LN-over-NCHW lift is a follow-up. Every other piece (depthwise
-7×7, 1×1 convs, GELU, layer scale, GAP, dense) is exact.
+The `layerNormForward` used here is the Vec→Vec LayerNorm with *scalar*
+`γ, β` that normalizes over the *whole* flattened vector. ConvNeXt's
+LayerNorm is per spatial position over the channel axis; that is
+`chanLNTensor3` (`ChannelLN.lean`), and the full ConvNeXt-T at it is
+`convNextForwardTCh`. The stem here is a 1×1 conv. Every other piece
+(depthwise 7×7, 1×1 convs, GELU, layer scale, GAP, dense) is the same
+map as in ConvNeXt-T.
 -/
 
 namespace Proofs
@@ -59,13 +62,10 @@ open Finset BigOperators
     expanded activation, the project conv brings `cExp → c` back, and the
     per-channel layer scale closes the block.
 
-    **LN representation caveat.** The `layerNormForward` used here is the
-    proof's Vec→Vec LayerNorm with *scalar* `γ_n, β_n` that normalizes
-    over the *whole* flattened `c·h·w` vector, whereas true ConvNeXt LN is
-    per-spatial-position over the channel axis (LayerNorm over NCHW's C).
-    This is the same representation simplification the audit flagged for
-    the LN family; a faithful channel-LN-over-NCHW is a follow-up. Every
-    other piece is exact. Because gelu is smooth everywhere, LN is smooth
+    The `layerNormForward` used here normalizes over the whole flattened
+    `c·h·w` vector with scalar `γ_n, β_n`. The per-position channel
+    LayerNorm ConvNeXt-T ships with is `chanLNTensor3`, and this body at
+    it is `cnxBodyWith` (`ConvNeXtFullT.lean`). Because gelu is smooth everywhere, LN is smooth
     given `ε>0`, and conv/layerScale are linear, the whole body is
     differentiable everywhere — no ReLU-style kink hypotheses needed. -/
 noncomputable def convNextBlockBody {c cExp h w kH kW : Nat}
@@ -178,15 +178,15 @@ noncomputable def convNextBlockHasVJP {c cExp h w kH kW : Nat}
 -- § End-to-end ConvNeXt
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Forward ConvNeXt** (representative, fixed block count = 2):
+/-- **Forward ConvNeXt** (two blocks, scalar-`γ, β` LayerNorm):
 
       stem-patchify(1×1 conv) → stem-LN → block₁ → block₂
       → globalAvgPool → head-LN → dense
 
     Generic channel/spatial dims; `ic`→`c` patchify, two identity-skip
     ConvNeXt blocks at `c`, GAP to `Vec c`, a final LN over the pooled
-    `Vec c`, and a `Mat c nClasses` linear head. Same LN representation
-    caveat as `convNextBlockBody` applies to the stem-LN and head-LN. -/
+    `Vec c`, and a `Mat c nClasses` linear head. The stem-LN and head-LN
+    are the scalar-`γ, β` `layerNormForward`, as in `convNextBlockBody`. -/
 noncomputable def convNextForward
     {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ)
@@ -212,7 +212,8 @@ noncomputable def convNextForward
     (`0 < εst, εn₁, εn₂, εhd`) — no ReLU/maxpool kink conditions, unlike
     `cnnHasVJPAt`. Chained entirely through the global `vjpComp`, so the
     VJP holds at *every* input, not just a fixed point — putting ConvNeXt
-    alongside `vitFullHasVJP` as an unconditional whole-network VJP. -/
+    alongside `vitFullHasVJP` (the weight-tied ViT) as an unconditional
+    whole-network VJP. -/
 noncomputable def convnextHasVJP
     {ic c cExp h w kH kW nClasses : Nat}
     (Wst : Kernel4 c ic 1 1) (bst : Vec c) (εst γst βst : ℝ) (hεst : 0 < εst)

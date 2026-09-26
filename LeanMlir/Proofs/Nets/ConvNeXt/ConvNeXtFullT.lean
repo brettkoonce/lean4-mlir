@@ -2,38 +2,33 @@ import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChainClose
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtChannelLN
 import LeanMlir.Proofs.Codegen.StableHLO
 
-/-! # The FULL ConvNeXt-T — `[3,3,9,3]`, forward + whole-net VJP + graph + faithfulness
+/-! # The full ConvNeXt-T — `[3,3,9,3]`, forward + whole-net VJP + graph + faithfulness
 
-Scales the ch9 representative (1×1 stem + 2 blocks at one scale) to the real ConvNeXt-T
-spec, closing the "full-architecture" gap in `planning/archive/convnext_close.md`:
+The real ConvNeXt-T spec, beside the two-block scalar-LN net of `ConvNeXt.lean`:
 
   4×4/s4 patchify stem (3→96, 224→56) → stem-LN → stage1 (3 blocks @96/56²) →
   downsample (LN + 2×2/s2 conv 96→192) → stage2 (3 @192/28²) → ds (192→384) →
-  stage3 (9 @384/14²) → ds (384→768) → stage4 (3 @768/7²) → GAP → dense.
+  stage3 (9 @384/14²) → ds (384→768) → stage4 (3 @768/7²) → GAP → head LN → dense.
 
-Per the handoff recipe (`planning/archive/convnext_close.md` §"Scaling handoff"):
 1. **Depth-k within a stage** — `CnxBlockParamsCh` bundles the block 10-tuple;
    `convNextStageChK (k) (ps : Fin k → CnxBlockParamsCh …)` folds blocks head-first with
    VJP by induction — the ViT depth-k recipe, simpler here (same-shape blocks within a stage).
 2. **Downsample boundaries** — `cnxDownChW` = `flatConvStride2(2×2) ∘ channel-LN`; both VJPs existed.
 3. **4×4/s4 patchify stem** — `flatConvStride4` (= decimate ∘ decimateOdd ∘ stride-1
    SAME conv, `StridedConv.lean`: the left-aligned window `x[4i..4i+3]` of the paper's
-   pad-0 `Conv2d(4, s=4)`) + the `flatConvStride4F` token.
+   pad-0 `Conv2d(4, s=4)`) + the `.flatConvStride4F` graph node.
 
-GELU/LN/conv are smooth, so the whole-net VJP is GLOBAL (unconditional except the 22 LN
-positivities) — ConvNeXt-T joins `efficientnetForwardBFullHasVJP` and `vitForwardKV`.
-The `ConvNeXtFold`/`ConvNeXtChainClose` param bridges are dim-generic and cover all 18 blocks
-verbatim; the downsample conv W/b reuse the proven stride-2 bridges.
-
-⚠ **§2n (2026-07-31): the scalar-LN twin of this chain is GONE.** Until then every definition
-here had a `layerNormForward` peer — one mean and one variance over the whole `c·h·w` map with
-scalar γ/β — which is what the repo shipped before §2m flipped ConvNeXt to its real channel
-LayerNorm. `CnxBlockParams`, `cnxBlockW`, `convNextStageK`, `CnxDownParams`, `cnxDownW`,
-`CnxTWeights`, `convNextForwardT`/`TC` and their graph section were deleted once the float
-bridges (their last live consumers) had `…Ch` peers. If you are chasing a dangling reference to
-one of those names, it was retired, not moved. `planning/archive/xla_pjrt_handoff.md` §2n has the
-checklist and what the drop did and did not touch.
+GELU/LN/conv are smooth, so the whole-net VJP `convNextForwardTChHasVJP` is global, under the 23
+LN positivities (1 stem + 18 block + 3 downsample + head) and no other hypothesis — as are
+`efficientnetForwardBFullHasVJP` and `vitForwardKVHasVJP`. The `ConvNeXtFold`/`ConvNeXtChainClose`
+param bridges are dim-generic and cover all 18 blocks verbatim; the downsample conv W/b reuse the
+proven stride-2 bridges.
 -/
+
+-- Maintainer note: the scalar-LN twin of this chain (one mean and variance over the whole
+-- `c·h·w` map, scalar γ/β) was deleted. `CnxBlockParams`, `cnxBlockW`, `convNextStageK`,
+-- `CnxDownParams`, `cnxDownW`, `CnxTWeights`, `convNextForwardT`/`TC` and their graph section
+-- were retired, not moved.
 
 namespace Proofs
 
@@ -47,19 +42,9 @@ open scoped BigOperators
 channels at one spatial position, per-channel `[c]` affine. See `ChannelLN.lean` for the
 primitive and for why Route A needs no new op and no new VJP.
 
-§2m built this as a PARALLEL chain beside the scalar-LN one it superseded, so that flipping the
-net could not change what the then-committed `convNextForwardTC` denoted (`MobileNetV2RenderB`'s
-reason, §2f). **§2n then DROPPED that scalar chain** — once its last live consumers (the float
-bridges) had channel-LN peers, a retired chain that still elaborates is one more thing to drift
-(§2a's lesson). What is here is what ships. ⛔ The [`Nets/ConvNeXt/ConvNeXt.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXt.lean) ch9
-representative (`convNextForward`, `convNextBlock`, `convNextBlockBody`) is a different thing and
-SURVIVED the drop: it backs the Diderot comparator and a book chapter.
-
-Two deviations §2m found by the parameter count NOT matching, both invisible to a VJP argument:
-the reference's 22 LN sites are **1 stem + 18 block + 3 downsample**, where the pre-§2m net had
-**18 + 3 + 1 head**. So this forward has a stem LN and no head LN. They nearly cancel
-(+2·768 − 2·96 = +1,344 of 28.6M), which is exactly why a matching parameter count is a
-decomposition test and not an architecture check. -/
+The two-block scalar-LN net in `ConvNeXt.lean` (`convNextForward`, `convNextBlock`,
+`convNextBlockBody`) is a different net: it backs the comparator and a book chapter. The LN
+sites here are 1 stem + 18 block + 3 downsample (all channel-LN) + the head LN after GAP. -/
 
 -- ── the block body, abstracted over its normalisation ──
 
@@ -118,8 +103,8 @@ noncomputable def cnxBodyWithHasVJP {c cExp h w kH kW : Nat}
 
 -- ── per-block params + the stage fold, at the channel LN ──
 
-/-- One channel-LN ConvNeXt block's 10 parameters. `γn`/`βn` are `Vec c` — 2c floats per LN site,
-    where the retired scalar-LN spelling had 2 (§2n deleted it). -/
+/-- One channel-LN ConvNeXt block's 10 parameters. `γn`/`βn` are `Vec c` — 2c floats per LN
+    site. -/
 structure CnxBlockParamsCh (c cExp h w kH kW : Nat) where
   Wdw : DepthwiseKernel c kH kW
   bdw : Vec c
@@ -223,21 +208,16 @@ noncomputable def cnxDownChWHasVJP (h w : Nat) {cin cout : Nat} (p : CnxDownPara
 
 /-- All ConvNeXt-T parameters. Every LN affine is a `Vec`, and BOTH the stem LN (`sγ`/`sβ :
     Vec 96`) and the **head LN** (`hγ`/`hβ : Vec 768`) are present — the paper's `forward` is
-    `patchify → channel_layer_norm → stages → GAP → LN → dense`.
-
-    ⚠⚠ **THE HEAD LN CAME BACK 2026-08-30, and the history is the point.** The pre-§2m net had
-    scalar affines, no stem LN and a head LN. §2m/§2n added the stem LN and DELETED the head one,
-    to match [`jax/MainConvNeXtImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainConvNeXtImagenet.lean) — which was itself missing it. Both references have
-    both: `facebookresearch/ConvNeXt` does `self.norm(x.mean([-2,-1]))` with
+    `patchify → channel_layer_norm → stages → GAP → LN → dense`. The official implementation and
+    timm both have the stem and head LNs:
+    `facebookresearch/ConvNeXt` does `self.norm(x.mean([-2,-1]))` with
     `nn.LayerNorm(dims[-1], eps=1e-6)`, and timm's `convnext_tiny` head is
-    `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`.
-    ▶ The parameter count is the tell and it was sitting in the blurb: ours was **28,587,592** at
-    K=1000 against `timm.create_model('convnext_tiny')`'s **28,589,128** — short by exactly
-    **1,536 = 2×768**, the head LN's γ and β. The old note *"the two nearly cancel in the parameter
-    count … which is why the count alone never caught it"* was right that they nearly cancel and
-    wrong that the count could not catch it: the residue IS the missing layer, exactly.
-    ⚠ The lesson is §7.2's one net over — we converged on the JAX reference, and the reference was
-    the thing that was wrong. `planning/archive/next_session_execution_and_parity.md` §7.1. -/
+    `NormMlpClassifierHead(global_pool → LayerNorm2d(768) → flatten → fc)`. -/
+-- History (maintainer note): the head LN was once deleted to match
+-- jax/MainConvNeXtImagenet.lean, which was itself missing it. The parameter count caught it:
+-- 28,587,592 at K=1000 against timm `convnext_tiny`'s 28,589,128, short by 1,536 = 2×768, the
+-- head LN's γ and β. A parameter count that matches a reference is a decomposition test; the
+-- reference can be wrong.
 structure CnxTWeightsCh (nC : Nat) where
   sW : Kernel4 96 3 4 4
   sb : Vec 96
@@ -252,21 +232,21 @@ structure CnxTWeightsCh (nC : Nat) where
   d3 : CnxDownParamsCh 384 768
   s4 : Fin 3 → CnxBlockParamsCh 768 3072 7 7 7 7
   /-- Head LayerNorm, between GAP and the classifier: ε, then the `Vec 768` affine.
-      ⚠ Plain `layerNormVec`, NOT `chanLNTensor3`: after GAP the tensor is `[768]`, one row, so
+      Plain `layerNormVec`, not `chanLNTensor3`: after GAP the tensor is `[768]`, one row, so
       the channel LN and the vector LN are the same function and this is the cheaper spelling —
-      it is also `rowLNVecFlat 1 768`, i.e. ViT's per-token LN at ONE row, whose `_diff` and
-      `HasVJP` are already proven and whose graph mirror is `rowLN_affine_eq` — so the head LN
-      needed no new mathematics at all, only a link in the chain. -/
+      it is also `rowLNVecFlat 1 768`, i.e. ViT's per-token LN at one row, whose
+      `rowLNVecFlat_differentiable` and `HasVJP` are already proven and whose graph mirror is
+      `rowLN_affine_eq`. -/
   hε : ℝ
   hγ : Vec 768
   hβ : Vec 768
   Wd : Mat 768 nC
   bd : Vec nC
 
-/-- **The channel-LN ConvNeXt-T forward** (3×224² → `nC`). Nested-application form, as the scalar
-    peers, so the graph faithfulness closes by a structural `rfl`. `nC` is a binder: the Imagenette
-    artifacts run it at 10 and the `convnextin_*` ImageNet artifacts at 1000, and every theorem
-    about this forward covers both. -/
+/-- **The channel-LN ConvNeXt-T forward** (3×224² → `nC`). Nested-application form, so the graph
+    faithfulness `convNextFwdGraphTCh_faithful` closes stage by stage. `nC` is a binder: the
+    Imagenette artifacts run it at 10 and the `convnextin_*` ImageNet artifacts at 1000. It has no
+    drop-path; the `*drop*` artifacts compute another function. -/
 noncomputable def convNextForwardTCh {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
     Vec nC :=
   dense w.Wd w.bd
@@ -285,12 +265,7 @@ noncomputable def convNextForwardTCh {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec 
 /-- **The channel-LN ConvNeXt-T has a (correct) VJP — at every input.** 23 LayerNorm
     positivities: stem + 18 blocks (via the per-stage `∀ i`) + 3 downsamples + **the head LN**,
     which this statement composes as `rowLNVecFlat 1 768 w.hε w.hγ w.hβ` and takes `hhε` for.
-    Chain-stated to keep the blocks opaque.
-
-    ⚠ The count read `22 … no head LN` until 2026-09-04 — the pre-2026-08-30 net — and it was
-    the third place that stale number had been copied to, each copy citing the last as its
-    justification. ⛔ `docstring-checkrefs` cannot catch this: it
-    resolves cited identifiers, and a stale COUNT cites nothing. -/
+    Chain-stated to keep the blocks opaque. -/
 noncomputable def convNextForwardTChHasVJP {nC : Nat} (w : CnxTWeightsCh nC)
     (hsε : 0 < w.sε)
     (h1 : ∀ i, 0 < (w.s1 i).εn) (hd1 : 0 < w.d1.ε)
@@ -384,8 +359,8 @@ theorem convNextForwardTCh_differentiable {nC : Nat} (w : CnxTWeightsCh nC)
                       ((chanLNTensor3_differentiable 96 56 56 w.sε w.sγ w.sβ hsε).comp
                         (flatConvStride4_differentiable (h := 56) (w := 56) w.sW w.sb)))))))))))
 
-/-- The nested↔chain bridge (see `convNextForwardTCh_eq_chain` for why the proof shape matters —
-    a `simp`/`rfl` proof of this statement dies in the kernel on the recursive stage folds). -/
+/-- The nested↔chain bridge: `convNextForwardTCh w x` equals the twelve-factor `∘` chain
+    `convNextForwardTChHasVJP` is stated on. -/
 theorem convNextForwardTCh_eq_chain {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (3 * 224 * 224)) :
     convNextForwardTCh w x =
       (dense w.Wd w.bd ∘
@@ -400,6 +375,7 @@ theorem convNextForwardTCh_eq_chain {nC : Nat} (w : CnxTWeightsCh nC) (x : Vec (
         convNextStageChK 3 w.s1 ∘
         chanLNTensor3 96 56 56 w.sε w.sγ w.sβ ∘
         flatConvStride4 (h := 56) (w := 56) w.sW w.sb) x := by
+  -- `rw`, not `simp`/`rfl`: those die in the kernel on the recursive stage folds.
   rw [convNextForwardTCh]
   rw [Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
       Function.comp_apply, Function.comp_apply, Function.comp_apply, Function.comp_apply,
@@ -461,15 +437,15 @@ theorem chanLNGraph_faithful (gN btN epsStr : String) {c h w : Nat} (ε : ℝ) (
       lnRowF_faithful, transposeF_faithful, den_reassocS, rowLN_affine_eq]
   rfl
 
-/-- **The HEAD LN forward site** — the paper's `norm(x.mean([-2,-1]))`, restored 2026-08-30.
+/-- **The head LN forward site** — the paper's `norm(x.mean([-2,-1]))`.
 
-    ⭐ It is `chanLNGraph` with the transposes deleted, and that is not a shortcut: after GAP the
+    It is `chanLNGraph` with the transposes deleted, and that is not a shortcut: after GAP the
     tensor is a single `[768]` row, so "normalise each spatial row over its channels" and
     "normalise the feature vector" are the same function — `m = 1`. The render emits exactly these
     three ops, which is what makes `ConvNeXtRender.headLnFwdSite` a mirror rather than a peer.
-    ⚠ Indexed `SHlo (1 * c)`; `c` is the LITERAL 768 at every call site, so `1 * c` reduces and no
-    transport is needed. Do NOT generalise `c` to a variable without adding one — that is the trap
-    `convNextBackAll`'s `Vec (1 * nClasses)` annotations already record. -/
+    Note: indexed `SHlo (1 * c)`; `c` is the literal 768 at every call site, so `1 * c` reduces
+    and no transport is needed. Do not generalise `c` to a variable without adding one — that is the
+    trap `convNextBackAll`'s `Vec (1 * nClasses)` annotations already record. -/
 def headLNGraph (gN btN epsStr : String) {c : Nat} (ε : ℝ) (γ β : Vec c)
     (e : SHlo (1 * c)) : SHlo (1 * c) :=
   .rowBiasF (m := 1) (n := c) btN β
@@ -482,8 +458,8 @@ theorem headLNGraph_faithful (gN btN epsStr : String) {c : Nat} (ε : ℝ) (γ �
   unfold headLNGraph
   rw [rowBiasF_faithful, rowScaleF_faithful, lnRowF_faithful, rowLN_affine_eq]
 
-/-- The ConvNeXt block graph — the `[3,3,9,3]` block segment, with `chanLNGraph` at its LN site
-    (the retired scalar spelling put a `.bnF` there). -/
+/-- The ConvNeXt block graph — the `[3,3,9,3]` block segment, with `chanLNGraph` at its LN
+    site. -/
 def cnxBlockChGraphW (pfx epsStr : String) {c cExp h w kH kW : Nat}
     (p : CnxBlockParamsCh c cExp h w kH kW) (e : SHlo (c * h * w)) : SHlo (c * h * w) :=
   .addV
@@ -540,9 +516,7 @@ theorem cnxDownChGraphW_faithful (pfx epsStr : String) (h w : Nat) {cin cout : N
 
 /-- The **channel-LN ConvNeXt-T forward graph** (3×224² → `nC`): patchify stem → **stem
     channel-LN** → the `[3,3,9,3]` stages with 3 channel-LN + 2×2/s2 downsample boundaries →
-    GAP → **head LN** → dense. ⚠ 23 LN sites, not 22: 1 stem + 18 block + 3 downsample + the head
-    one restored 2026-08-30 (the retired scalar graph had a head LN and no stem LN; §2m/§2n swapped
-    which one was missing rather than fixing it — the paper has both). -/
+    GAP → **head LN** → dense. 23 LN sites: 1 stem + 18 block + 3 downsample + head. -/
 def convNextFwdGraphTCh (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (3 * 224 * 224)) : SHlo nC :=
   denseF "%Wd" "%bd" w.Wd w.bd
@@ -560,8 +534,9 @@ def convNextFwdGraphTCh (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
                         (.operand "%x" x))))))))))))
 
 /-- **Channel-LN forward faithfulness** — the `[3,3,9,3]` channel-LN graph denotes
-    `convNextForwardTCh`. Same `rw` chain as the scalar apex, with `chanLNGraph_faithful` where
-    the `bnF`s were. The full-architecture apex for the net §2m makes ConvNeXt actually be. -/
+    `convNextForwardTCh`. One `rw` per stage: `cnxStageChGraphK_den` / `cnxDownChGraphW_faithful`
+    at the stages and downsamples, `chanLNGraph_faithful` at the stem LN and `headLNGraph_faithful`
+    at the head. -/
 theorem convNextFwdGraphTCh_faithful (epsStr : String) {nC : Nat} (w : CnxTWeightsCh nC)
     (x : Vec (3 * 224 * 224)) :
     den (convNextFwdGraphTCh epsStr w x) = convNextForwardTCh w x := by
