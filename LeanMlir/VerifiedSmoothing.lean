@@ -3,9 +3,11 @@ import LeanMlir.VerifiedTrain
 /-! ## Randomized-smoothing statistics (Cohen–Rosenfeld–Kolter 2019)
 
 The pieces the smoothing certificate needs, in pure `Float` (no kernel, no Mathlib): the
-probit `Φ⁻¹` for the radius `σ·Φ⁻¹(p_A)`, and a **sound** Clopper–Pearson lower confidence
-bound on `p_A` (a genuine 1−α lower bound, not an approximation — a certificate must under-
-estimate). CP is built bottom-up from the regularized incomplete beta `Iₓ(a,b)`. -/
+probit `Φ⁻¹` for the radius `σ·Φ⁻¹(p_A)`, and the Clopper–Pearson lower confidence bound on
+`p_A` (the exact binomial bound, not a normal approximation). CP is built bottom-up from the
+regularized incomplete beta `Iₓ(a,b)` (Lanczos `lgamma`, Lentz continued fraction) and solved
+by 60-step bisection. None of this is proved, and the bisection returns the midpoint of its
+final bracket rather than rounding toward the conservative end. -/
 
 /-- Inverse standard-normal CDF `Φ⁻¹` (probit), Peter Acklam's rational approximation
     (relative error < 1.15e-9 over `(0,1)`). `p_A` here lives in `(0.5, ~0.99)`, far from
@@ -94,9 +96,10 @@ private def betaiF (a b x : Float) : Float :=
 
 /-- Clopper–Pearson **exact** lower confidence bound for a Binomial proportion: the largest
     `p` with `P[Bin(n,p) ≥ k] ≤ α`, i.e. the `α`-quantile of `Beta(k, n−k+1)` — the `p` solving
-    `I_p(k, n−k+1) = α`, found by bisection (`Iₓ` is monotone). The SOUND `1−α` lower bound on
-    `p_A` that the certified radius `σ·Φ⁻¹(p_A)` rests on (Cohen 2019 uses the same CP bound).
-    `k=0 ⇒ 0`. -/
+    `I_p(k, n−k+1) = α`, found by 60-step bisection (`Iₓ` is monotone), returning the midpoint of
+    the final bracket. This is the `1−α` lower bound on `p_A` that the certified radius
+    `σ·Φ⁻¹(p_A)` rests on (Cohen 2019 uses the same CP bound), evaluated in `Float` without a
+    proof or a conservative rounding direction. `k=0 ⇒ 0`. -/
 private def clopperPearsonLower (k n : Nat) (alpha : Float) : Float := Id.run do
   if k == 0 then return 0.0
   let a := k.toFloat
@@ -108,8 +111,8 @@ private def clopperPearsonLower (k n : Nat) (alpha : Float) : Float := Id.run do
     if betaiF a b mid < alpha then lo := mid else hi := mid
   return 0.5 * (lo + hi)
 
-/-- **Randomized-smoothing certificate** (Cohen–Rosenfeld–Kolter 2019, `planning/archive/robustness_ladder.md`
-    §3) — the depth-INDEPENDENT cert, and the answer where the Lipschitz product is hopeless.
+/-- **Randomized-smoothing certificate** (Cohen–Rosenfeld–Kolter 2019) — a depth-independent
+    certificate, for nets where the Lipschitz product is too loose to certify anything.
     The smoothed classifier `ĝ(x) = argmax_c P[f(x+η)=c]`, `η ~ N(0,σ²I)`, is certified robust at
     L2 radius `σ·Φ⁻¹(p_A)` where `p_A` is a lower bound on the top class's noise probability. It's
     **forward-only**: no new kernel, no input-VJP — just sample `n` noisy copies, run the existing
@@ -121,8 +124,8 @@ private def clopperPearsonLower (k n : Nat) (alpha : Float) : Float := Id.run do
     `VerifiedNet` (fwd + train-step only).
 
     `n` (`SMOOTH_N`, default 10000 — Cohen's large-`n` regime) is the estimation budget and the only
-    honest tightening lever: the per-point radius is capped at `σ·Φ⁻¹(α^(1/n))` (a unanimous vote
-    still only certifies `p_A ≤ α^(1/n)`), so larger `n` lifts the ceiling and tightens the CP bound
+    tightening lever: the per-point radius is capped at `σ·Φ⁻¹(α^(1/n))` (a unanimous vote
+    certifies only `p_A ≥ α^(1/n)`), so larger `n` lifts the ceiling and tightens the CP bound
     toward the true noise-probability — bigger certified radii at the same `1−α` guarantee. -/
 def VerifiedNet.smoothCertify (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (sigmas : List Float) : IO Unit := do

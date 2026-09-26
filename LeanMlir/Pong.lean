@@ -1,6 +1,6 @@
 import LeanMlir.FloatFmt
 
-/-! Pong in Lean (`planning/pong_dqn_demo.md`): the game, the renderer, the
+/-! Pong in Lean: the game, the renderer, the
     frame-skip wrapper and the scripted policies. Pure Lean, no FFI. Shared by the
     `pong-env` and `pong-dqn` demos. -/
 

@@ -2,11 +2,14 @@ import LeanMlir.Types
 
 /-! # VJP-oracle nets — one definition, trained by both sides
 
-The oracle trains each net one step through the verified path (Lean → MLIR → IREE,
-`tests/vjp_oracle/phase3/`) and through the JAX reference (Lean → JAX → XLA,
-`jax/tests/vjp_oracle/phase2/`) from the same init, and diffs the step-2 loss. That diff is
-evidence only if both sides train the same `NetSpec` under the same config, so both import them
-from here rather than each carrying a copy. -/
+The oracle trains each net one step through the Lean reference codegen (`NetSpec.train`, which
+lowers the `NetSpec` to MLIR at run time through `MlirCodegen`; entry points in
+tests/vjp_oracle/phase3/) and through the JAX reference (Lean → JAX → XLA,
+jax/tests/vjp_oracle/phase2/) from the same init, and diffs the step-2 loss. Both backwards are
+hand-written: the oracle checks them against each other, not against the verified_mlir/
+artifacts or a theorem. The declarations the docstrings below name are the proof-side
+statements of the same math. The diff is evidence only if both sides train the same `NetSpec`
+under the same config, so both import them from here rather than each carrying a copy. -/
 
 namespace VjpOracle
 
@@ -23,7 +26,7 @@ def cfg : TrainConfig where
   augment      := false
 
 /-- **`dense_only`** — the minimal net: one dense layer 784→10, no activation, so the only
-    gradient math that runs is `denseHasVJP`. Step 2 is the first step whose loss depends on
+    backward that runs is the dense one (math side: `Proofs.denseHasVJP`). Step 2 is the first step whose loss depends on
     the backward pass; a small cross-backend Δ there means the hand-derived VJP matches JAX's
     `value_and_grad` at f32. -/
 def denseOnly : NetSpec where
@@ -34,7 +37,8 @@ def denseOnly : NetSpec where
     .dense 784 10 .identity
   ]
 
-/-- **`dense_relu`** — tests `reluHasVJP` + `vjpComp`. -/
+/-- **`dense_relu`** — dense and ReLU backwards composed (math side: `Proofs.reluHasVJP`,
+    `Proofs.vjpComp`). -/
 def denseRelu : NetSpec where
   name   := "vjp-oracle-dense-relu"
   imageH := 28
@@ -44,7 +48,7 @@ def denseRelu : NetSpec where
     .dense 64 10 .identity
   ]
 
-/-- **`conv`** — tests `conv2dHasVJP3` + `flattenHasVJP`. -/
+/-- **`conv`** — the conv backward and the flatten reshape (math side: `Proofs.conv2dHasVJP3`). -/
 def convOnly : NetSpec where
   name   := "vjp-oracle-conv"
   imageH := 28
@@ -55,7 +59,7 @@ def convOnly : NetSpec where
     .dense 3136 10 .identity
   ]
 
-/-- **`convbn`** — tests `convBnHasVJP` (conv + BN + ReLU). -/
+/-- **`convbn`** — conv + BN + ReLU backward (math side: `Proofs.convBnHasVJP`). -/
 def convBnOnly : NetSpec where
   name   := "vjp-oracle-convbn"
   imageH := 28
@@ -66,7 +70,7 @@ def convBnOnly : NetSpec where
     .dense 3136 10 .identity
   ]
 
-/-- **`conv_pool`** — tests `maxPoolHasVJP` in a realistic context. -/
+/-- **`conv_pool`** — the 2×2 max-pool backward after a conv (math side: `Proofs.maxPool2HasVJP3`). -/
 def convPool : NetSpec where
   name   := "vjp-oracle-conv-pool"
   imageH := 28
@@ -78,7 +82,7 @@ def convPool : NetSpec where
     .dense 784 10 .identity
   ]
 
-/-- **`residual`** — tests `biPathHasVJP` (additive fan-in VJP) via
+/-- **`residual`** — the additive fan-in backward (math side: `Proofs.biPathHasVJP`) via
     a single residualBlock with no projection. Stem is `.convBn` so both
     phases reshape NCHW correctly. -/
 def residualNet : NetSpec where
@@ -92,7 +96,7 @@ def residualNet : NetSpec where
     .dense 3136 10 .identity
   ]
 
-/-- **`depthwise`** — tests the depthwise-conv VJP via one
+/-- **`depthwise`** — the depthwise-conv backward via one
     `.invertedResidual` block (expand + depthwise + project). The depthwise
     middle step has weight shape (mid, 1, 3, 3) with feature_group_count
     = mid — unusual layout that's easy to get wrong between phases. -/
@@ -107,8 +111,8 @@ def depthwiseNet : NetSpec where
     .dense 3136 10 .identity
   ]
 
-/-- **`attention`** — smallest ViT-shaped net exercising
-    `transformerBlockHasVJPMat` (which bundles LN, MHA with
+/-- **`attention`** — smallest ViT-shaped net, exercising the transformer-block backward
+    (math side: `Proofs.transformerBlockHasVJPMat`, which bundles LN, MHA with
     scaled-dot-product attention, residuals, and the MLP sublayer).
     MNIST 28×28 → 7×7 patches → 1 block → classifier. -/
 def attentionNet : NetSpec where
@@ -121,10 +125,9 @@ def attentionNet : NetSpec where
     .dense 16 10 .identity                  -- classifier off CLS token
   ]
 
-/-- **`mbConv`** — tests `elemwiseProductHasVJP` (SE gate) plus
-    the MBConv composition (expand + depthwise + SE + project with Swish).
-    This is the one axiom family not already covered by the other oracle
-    cases. -/
+/-- **`mbConv`** — the SE gate's elementwise-product backward (math side:
+    `Proofs.elemwiseProductHasVJP`) inside the MBConv composition (expand + depthwise + SE +
+    project with Swish). -/
 def mbConvNet : NetSpec where
   name   := "vjp-oracle-mbconv"
   imageH := 28
@@ -136,7 +139,7 @@ def mbConvNet : NetSpec where
     .dense 3136 10 .identity
   ]
 
-/-- **`globalAvgPool`** — tests spatial-mean VJP in isolation. -/
+/-- **`globalAvgPool`** — the spatial-mean backward in isolation. -/
 def gapNet : NetSpec where
   name   := "vjp-oracle-global-avg-pool"
   imageH := 28
@@ -148,7 +151,7 @@ def gapNet : NetSpec where
   ]
 
 /-- **`bottleneckBlock`** — ResNet-50 building block.
-    1×1 reduce + 3×3 + 1×1 expand + skip. Tests the same biPath VJP
+    1×1 reduce + 3×3 + 1×1 expand + skip. The same additive fan-in
     as residual but through a 3-conv composition. -/
 def bneckNet : NetSpec where
   name   := "vjp-oracle-bottleneck"
@@ -176,8 +179,8 @@ def mbConvV3Net : NetSpec where
   ]
 
 /-- **`fusedMbConv`** — EfficientNet V2 block. k×k regular conv
-    replaces (1×1 expand + k×k depthwise) of MBConv. Same axiom family,
-    different composition — tests the path where the fused conv is an
+    replaces (1×1 expand + k×k depthwise) of MBConv. Same op kinds,
+    different composition — the path where the fused conv is an
     expanding convBn rather than a factored expand+DW pair. -/
 def fusedMbNet : NetSpec where
   name   := "vjp-oracle-fused-mbconv"

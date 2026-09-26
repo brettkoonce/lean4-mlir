@@ -8,7 +8,7 @@ the verified linear train-step kernel. It implements the *same* E4M3 (1-4-3, bia
 round-to-nearest grid as the numpy oracle (`scripts/demos/mnist_e4m3_demo.py:to_e4m3`):
 subnormals on the `e = −6` grid (step `2⁻⁹`), saturating at ±448.
 
-This is the host-side "operand byte preparation" half of the §3b render-tie
+This is the host-side "operand byte preparation" half of the fp8 render tie
 ([`LeanMlir/Proofs/Float/E4M3Fold.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Float/E4M3Fold.lean)): fp8 = fp32 arithmetic on operands
 projected onto the E4M3 grid, with fp32 accumulate inside the kernel. No fp8
 hardware or fp8 StableHLO type is needed — `q` runs here, in Lean, before the
@@ -51,7 +51,7 @@ def quantPerTensor (ba : ByteArray) : ByteArray := Id.run do
   return out
 
 /-- **Per-output-column E4M3 quant** for a row-major `[d0 × d1]` matrix (the
-    "block scale" `sWⱼ` of §3b: each output column scaled independently). -/
+    "block scale" `sWⱼ` of the fp8 render tie: each output column scaled independently). -/
 def quantPerColumn (ba : ByteArray) (d0 d1 : Nat) : ByteArray := Id.run do
   let mut scales : Array Float := #[]
   for j in [0:d1] do

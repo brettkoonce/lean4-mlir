@@ -1,20 +1,23 @@
 import LeanMlir.Proofs.Codegen.StableHLOPretty
 
-/-! # ch10 ViT — verified-faithful StableHLO render fragments (shared library)
+/-! # ViT — hand-written StableHLO fragments
 
-Hand-rendered batched StableHLO string fragments for the Vision Transformer
-(ch7/ch8/ch9 style), each line what the proven-faithful emitter produces — the
-matmuls are `dot_general` (proven `dense`), the row-softmax is the V1 op pattern
-(`softmaxRowF`/`softmaxRowBack`, plain exp/sum), GELU is the ch9 `geluF` tanh
-approximation, LayerNorm is `layerNormForward` (per-token over D, γ=1/β=0) ∘ a
-per-channel `[D]` affine (ConvNeXt `layerScale` + a `[D]` bias). NOT a single
-`den(trainStep)` theorem — faithful PER-OP, validated by the Lean gradchecks
-(TestSDPA/TestMHSA/TestViTBlock) and by training.
+Hand-rendered batched StableHLO string fragments for the Vision Transformer (chapter 9). This is
+a String emitter written by hand, not `pretty` of a proven graph, and no theorem ties its text;
+the ViT train steps in verified_mlir/ are rendered by the proof-side
+LeanMlir/Proofs/Codegen/ViTRender.lean instead. Outside the API-docs root, only tests import this
+file (tests/TestAdamOpTie.lean, TestMHSA, TestViTBlock, TestViTFwd, TestViTTrain, TestViTTiny,
+TestCifar8AdamTrain, TestMobilenetV2TrainPC, RenderAdamSmoke), which use it as a numeric
+reference. Each fragment spells an op the proof side also has: the matmuls are `dot_general`,
+the row-softmax is the op pattern of `Proofs.StableHLO.SHlo.softmaxRowF` /
+`Proofs.StableHLO.SHlo.softmaxRowBack` (plain exp/sum), GELU is the tanh approximation of
+`Proofs.StableHLO.SHlo.geluF`, and LayerNorm is `Proofs.layerNormForward` (per-token over D,
+γ=1/β=0) followed by a per-channel `[D]` affine (`Proofs.layerScale` + a `[D]` bias).
 
 Every fragment is prefix-parameterized (`p`) so it can be instantiated many times
 (e.g. 12 distinct blocks) without SSA collisions. A forward fragment KEEPS the
 intermediate SSA values its backward needs; the matching backward fragment reuses
-them (after a forward recompute), exactly like ch8's `seFwd`/`seBack`. All
+them (after a forward recompute), as EfficientNet's `seFwd`/`seBack` do. All
 fragments assume a `%sc` (f32 0) constant is in scope (the reduce init). -/
 
 namespace ViTRender
@@ -558,18 +561,16 @@ def emitAdamV (θ g m v : String) (ds : List Nat) (t : String) : String × Strin
     every replica applies an identical update and the parameter copies stay in
     lockstep with no host round trip.
 
-    ⭐ Since 4d piece 2 (2026-09-07) every `Proofs/Codegen` render calls
-    `Proofs.StableHLO.prettyAllReduceMean` instead — `pretty` of the `allReduceMeanF` AST
-    node, whose token emit (`allReduceMeanText`) is this body verbatim, so the artifacts did
-    not move and the collective is inside the faithfulness theorems. This function stays for
-    the hand-written `emitAdamV` path below.
+    The proof-side renders call `Proofs.StableHLO.prettyAllReduceMean` instead — `pretty` of
+    the `allReduceMeanF` AST node, whose token emit (`allReduceMeanText`) is this body
+    verbatim. This function serves the hand-written `emitAdamV` path below.
 
     At `replicas = 1` this emits **nothing** and returns the gradient unchanged, so
     single-device renders stay byte-identical.
 
     Syntax validated end to end by `ffi/test_pjrt_allreduce.c`. Note the absence of
     `use_global_device_ids`: setting it requires a positive `channel_id`, and for a
-    plain cross-replica reduce it is not wanted (planning/archive/xla_pjrt_ladder.md §11). -/
+    plain cross-replica reduce it is not wanted. -/
 def emitGradAllReduce (g : String) (ds : List Nat) (t : String) (replicas : Nat) : String × String :=
   if replicas ≤ 1 then ("", g) else
   let T := ty ds
@@ -591,7 +592,7 @@ def emitGradAllReduce (g : String) (ds : List Nat) (t : String) (replicas : Nat)
 
     The proofs are untouched: each replica evaluates the *same* tied graph at the
     batch size it was rendered for, and the collective averages gradients of that
-    function over disjoint equal batches (planning/archive/xla_pjrt_ladder.md §10.4).
+    function over disjoint equal batches.
     Prefer SCALING the global batch over splitting it — that keeps BatchNorm's
     group size, and therefore the tie, unchanged. -/
 def emitAdamVDP (θ g m v : String) (ds : List Nat) (t : String)
@@ -694,7 +695,7 @@ def vitTrainStepModuleAdamPacked (cfg : ViTConfig) (blocks : List BlockParams)
   upd ++
   s!"    return {retVals} : {retTy}\n" ++ "  }\n}\n"
 
-/-- **Scheduled AdamW train step** (Phase 2): like `…AdamPacked`, but `lr`/`bc₁`/`bc₂`
+/-- **Scheduled AdamW train step**: like `…AdamPacked`, but `lr`/`bc₁`/`bc₂`
     arrive as runtime rank-0 scalar *params* (smuggled in the packed blob's tail —
     the FFI takes no scalar slot) so the host can drive cosine+warmup and the
     per-step bias correction `1−βᵗ`. They are returned UNCHANGED (passthrough) so

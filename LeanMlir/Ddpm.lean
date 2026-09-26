@@ -84,8 +84,7 @@ opaque stepInputs (x0 : @& ByteArray) (alphaBar : @& ByteArray)
     (B : USize) (npixels : USize) (seed : USize)
     : IO (ByteArray × ByteArray × ByteArray)
 
-/-- Flow matching's per-step inputs on the LINEAR interpolant
-    ([planning/boltzmann_generator_demo.md](https://github.com/brettkoonce/lean4-mlir/blob/main/planning/boltzmann_generator_demo.md) §4).
+/-- Flow matching's per-step inputs on the linear interpolant.
     The one thing that changes from `stepInputs`: per row `t ~ U(0, 1)`,
     `x_t = (1-t)·x0 + t·ε` and the target is the velocity `v = ε - x0` instead
     of `ε`. Returns `(x_t, v, t_idx)` with `t_idx = round(t · Tmax)` as the int32
@@ -111,7 +110,7 @@ def flowSamplerNfe : List (String × Nat) :=
     `cosineSchedule` tabulates ᾱ at the integers `t = 0 … T-1`. Score-SDE
     (Song et al. 2021) treats the same schedule as a function of continuous
     `t ∈ [0,1]`, which is what lets an ODE or SDE solver choose its own steps.
-    ⭐ **No retraining is needed to get there.** Under the VP SDE the score is
+    No retraining is needed to get there: under the VP SDE the score is
     `∇ log p_t(x) = -ε̂(x,t)/σ_t`, so an ε-predicting network *is* a score model
     up to that factor. Everything here is sampler-side arithmetic, shared by the
     2-D and MNIST drivers so the two cannot drift.
@@ -137,7 +136,7 @@ def sigC (t : Float) : Float := Float.sqrt (max (1.0 - abarC t) 0.0)
 
 /-- β(t) = -d/dt log ᾱ(t) = π·tan θ(t)/(1+s), differentiated in closed form
     rather than differenced — the schedule is analytic, so approximating its
-    derivative would be inventing error. ⚠ β diverges as t → 1. That stiffness
+    derivative would be inventing error. β diverges as t → 1. That stiffness
     is why an explicit solver in `x`-space struggles here and why DDIM, which
     integrates the linear part exactly, does not. -/
 def betaC (t : Float) : Float :=
@@ -151,7 +150,7 @@ def tOfAbar (ab : Float) : Float :=
   Float.acos arg * 2.0 * (1.0 + sBias) / piF - sBias
 
 /-- The samplers the drivers can run, and what one step of each costs in network
-    evaluations. ⚠ Comparisons are made at matched **NFE**, not matched steps:
+    evaluations. Comparisons are made at matched NFE, not matched steps:
     Heun is second-order and pays two evaluations per step, so on a fixed budget
     it takes half as many. Reporting steps instead would flatter it. -/
 def samplerNfe : List (String × Nat) :=

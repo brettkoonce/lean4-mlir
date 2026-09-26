@@ -5,21 +5,17 @@ import LeanMlir.IreeRuntime
 import LeanMlir.MlirCodegen
 import LeanMlir.SpecHelpers
 
-/-! Unified training loop for any spec that uses the Adam codegen path.
+/-! The reference path's training loop, for any `NetSpec` `MlirCodegen` lowers.
 
-Each Main*Train.lean used to inline ~250 lines of identical
-code: generate MLIR → compile vmfbs → init params → for-each-epoch
-{ shuffle, for-each-batch { trainStepAdamF32, EMA, log }, val eval } →
-save. The body was the same for ResNet/MobileNet/EfficientNet/ViT/VGG
-modulo a handful of name strings.
-
-`NetSpec.train` is the extracted function. A trainer is now:
+`NetSpec.train` generates the forward, eval-forward and train-step MLIR (`compileVmfbs`), opens
+a runtime session, and runs `runTraining`: init params → for each epoch { shuffle, for each batch
+{ train step, EMA, log }, val eval } → save. A trainer is one call:
 
     def main (args : List String) : IO Unit :=
       resnet34.train resnet34Config (args.head?.getD "data/imagenette")
 
-The 250 lines collapse to one call. Adding a new architecture means
-defining the spec + a `TrainConfig` value — no copy-paste plumbing. -/
+Adding an architecture means defining the spec and a `TrainConfig` value. The per-dataset
+loading and augmentation live in the per-dataset records below. -/
 
 namespace NetSpec
 
@@ -61,14 +57,9 @@ private def runIree (mlirPath outPath : String) : IO Bool := do
   return true
 
 /-- Path of the runnable artifact for one emitted graph, on whichever backend is
-    ACTIVE AT RUN TIME (`planning/archive/detector_pjrt_port.md`).
-
-    ⚠ This said "whichever backend this binary was linked against" until 2026-08-25, and as of
-    that date nothing is linked against a backend at all: `ireeLink`/`xlaLink` are retired and
-    every executable is on `lowererLink`, with `ffi/lowerer.c` dlopening the shim
-    `$LEAN_MLIR_LOWERER` names. The dispatch below was always the real mechanism — it reads
-    `LowererSession.backendName`, not the link line — so the behaviour is unchanged; only the
-    sentence was wrong.
+    active at run time (`LowererSession.backendName`). No executable is linked against a
+    backend: every one links `lowererLink`, and ffi/lowerer.c dlopens the shim
+    `$LEAN_MLIR_LOWERER` names.
 
     * **IREE** — `iree-compile` turns `{pfx}_{suffix}.mlir` into a `.vmfb`, and
       that `.vmfb` is what `LowererSession.create` loads.
@@ -107,12 +98,12 @@ private def runIreeCached (mlirPath outPath mlir : String) : IO (Bool × Bool) :
     IO.FS.writeFile hashPath key
   return (true, ok)
 
-/-- Generate forward / eval-forward / train-step MLIR for `spec`,
-    write them to `.lake/build/<sanitized>_*.mlir`, and compile each
-    to a `.vmfb`. Cached on the MLIR content + IREE backend so a
-    second run with no codegen changes skips iree-compile entirely
-    (saves ~10-15 min for ResNet-sized models). Returns the path to
-    the train-step vmfb.
+/-- Generate forward / eval-forward / train-step MLIR for `spec` and
+    write them to `.lake/build/<sanitized>_*.mlir`. On IREE, also compile
+    each to a `.vmfb`, cached on the MLIR content + IREE backend so a
+    second run with no codegen changes skips iree-compile; on XLA there is
+    no compile step. Returns the train-step artifact `graphArtifact`
+    resolves (`.mlir` on XLA, `.vmfb` on IREE).
 
     `useSeg = true` switches the train-step codegen to per-pixel
     softmax CE (segmentation), where labels are an int32 `[B, H, W]`
@@ -281,8 +272,7 @@ private structure DatasetIO where
 
       BraTS is the exception this exists for: the literature scores nested
       unions (WT/TC/ET), not the raw labels, and because the unions are
-      nested they cannot be recovered from per-class IoU after the fact.
-      See planning/archive/brats_demo.md Workstream F. -/
+      nested they cannot be recovered from per-class IoU after the fact. -/
   segRegions : List (String × List Nat) := []
   loadTrain : String → IO (ByteArray × ByteArray × Nat)
   loadVal   : String → IO (ByteArray × ByteArray × Nat)
@@ -308,16 +298,14 @@ private structure DatasetIO where
   /-- Stochastic augmentation for **test-time augmentation**, i.e. the eval
       loop's `cfg.useTTA` path.
 
-      This exists because `augmentBatch` cannot be reused there. `augmentBatch`
-      receives records at the dataset's *stored training* size, and TTA hands it
-      records at the *validation* size. For Imagenette those differ — 256 train,
-      224 val — so calling `augmentBatch` on a val batch strides a 256-pixel
-      crop across a 224-pixel buffer: every record after the first is read at a
-      46,080-float drift, and the tail of the batch reads clean off the end of
-      the allocation. The image at slot `i` then no longer belongs to the label
-      at slot `i`, which is invisible to everything downstream — it just lowers
-      the reported accuracy. The comment on `imagenetteIO.augmentBatch` warned
-      about precisely this; the TTA path did it anyway.
+      `augmentBatch` cannot be reused there: it receives records at the dataset's
+      stored training size, and TTA hands it records at the validation size. For
+      Imagenette those differ — 256 train, 224 val — so calling `augmentBatch` on a
+      val batch strides a 256-pixel crop across a 224-pixel buffer: every record
+      after the first is read at a 46,080-float drift, and the tail of the batch
+      reads off the end of the allocation. The image at slot `i` then no longer
+      belongs to the label at slot `i`, which is invisible to everything downstream
+      — it just lowers the reported accuracy.
 
       Defaults to `valPreprocessBatch`, which makes TTA a no-op (M identical
       passes) rather than a corruption. Override per dataset with transforms
@@ -437,7 +425,7 @@ private def bratsIO : DatasetIO where
     7×7 float32 per-cell objectness mask (6076 bytes per record). The
     `runTraining` dispatch splits this into target + mask before calling
     `trainStepAdamF32Yolov1`. See `scripts/datasets/preprocess_visdrone.py` for the on-disk
-    format and `planning/archive/yolo_final.md` for the recipe. -/
+    format. -/
 private def detectionIO : DatasetIO where
   trainPixels := 3 * 224 * 224
   valPixels   := 3 * 224 * 224
@@ -477,7 +465,7 @@ private def datasetIO : DatasetKind → DatasetIO
     -- through tfds. Until phase 3 streams, this kind is JAX-only.
     panic! "DatasetKind.imagenet not supported by phase 3; use phase 2 (jax/) for now"
 
-/-- Adam + cosine-LR + running-BN-stats training loop, generic over
+/-- Adam or SGD+momentum (`TrainConfig.useAdam`), cosine LR, running-BN-stats training loop, generic over
     `DatasetKind`. The dataset specifies how to load the train/val
     data and what augmentation to apply per batch; everything else
     (init, optimizer, BN EMA, val eval, save) is identical across
@@ -1291,14 +1279,14 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   IO.eprintln s!"EVAL ONLY  {spec.name}: {correct}/{total} = {acc}%"
 
 /-- End-to-end: compile all three vmfbs, load the train-step session,
-    and run the training loop on the chosen dataset. The high-level
-    entry point that every Main*Train.lean now calls.
+    and run the training loop on the chosen dataset. The entry point
+    the reference trainers call.
 
     `LEAN_MLIR_EVAL_ONLY=1` short-circuits to `evalOnly` — skips
     training, loads the saved checkpoint, runs eval. Used for re-eval
     after a fixed eval pipeline.
 
-    Defaults to Imagenette so existing trainers don't have to change. -/
+    Defaults to Imagenette. -/
 def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
     (ds : DatasetKind := .imagenette) : IO Unit := do
   IO.eprintln s!"{spec.name}: {spec.totalParams} params"

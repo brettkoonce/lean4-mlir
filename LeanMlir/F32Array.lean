@@ -44,7 +44,7 @@ opaque perturbUnit (base : @& ByteArray) (off d0 : USize) (r : Float) (seed : US
 /-- Write three consecutive f32 values starting at float index `idx`, **in place**
     when the array is unshared (it copies otherwise, so the result never depends
     on a refcount). Used to patch the `lr`/`bc₁`/`bc₂` slots of the Adam step
-    buffer without rebuilding it — see `planning/archive/xla_pjrt_ladder.md` §8. -/
+    buffer without rebuilding it. -/
 @[extern "lean_f32_write3"]
 opaque write3 (ba : ByteArray) (idx : USize) (a b c : Float) : IO ByteArray
 
@@ -52,9 +52,8 @@ opaque write3 (ba : ByteArray) (idx : USize) (a b c : Float) : IO ByteArray
     the hot loop of `F32.dropoutMask`, and nothing else. The guards (`keep ≥ 1`, `n = 0`,
     `n < 3`) stay with the caller; entering here always means a real draw.
 
-    ⚠ It is `@[extern]` for the reason this file's header gives — "avoids millions of
-    Lean-level push calls" — and that reason turned out to be quantitative rather than
-    stylistic: see `dropoutMask` below and `ffi/f32_helpers.c`. -/
+    It is `@[extern]` for the reason this file's header gives — it avoids millions of
+    Lean-level push calls; see `dropoutMask` below. -/
 @[extern "lean_f32_dropout_fill"]
 opaque dropoutFill (keep : Float) (n : USize) (seed : USize) : IO ByteArray
 
@@ -92,7 +91,7 @@ opaque axpySlice (dst : ByteArray) (dstOff : USize) (src : @& ByteArray)
 
 /-- `Σ_{i<count} a[aOff+i] · b[bOff+i]`, accumulated in **f64**.
 
-    ⚠ The wide accumulator is the point. This computes the predicted directional derivative
+    The wide accumulator is the point. This computes the predicted directional derivative
     `⟨g, δ⟩` over as many as 4.7M same-sign terms; an f32 running sum would lose ~log₂ n bits to
     the accumulation and report it as disagreement between the gradient and the finite
     difference — i.e. as a failure of the thing under test. Returns `NaN` on an out-of-range
@@ -105,7 +104,7 @@ opaque dotSlice (a : @& ByteArray) (aOff : USize) (b : @& ByteArray)
     `keeps.size` drop sites × `bs` examples, laid out site-major to match the render's
     `%dp<i>: tensor<Bxf32>` inputs in signature order. Returns `keeps.size * bs` float32.
 
-    **Pure Lean on purpose, in two ways.**
+    Pure Lean on purpose, in two ways.
 
     *Not in the graph.* `stablehlo.rng` is disqualified: every numeric gate in this repo is a
     bit-exactness or known-answer argument over a DETERMINISTIC graph — the tie harnesses' A-vs-A
@@ -118,8 +117,8 @@ opaque dotSlice (a : @& ByteArray) (aOff : USize) (b : @& ByteArray)
     draw in Lean keeps the one piece of genuine randomness in the training loop readable and seeded
     where it can be audited. `heInit` is extern because it fills millions of values; this does not.
 
-    ⚠ **`seed` must be derived from the GLOBAL STEP**, like `augSeed`, or no run is reproducible and
-    every gate that replays a step breaks. ⚠ `1/keep` is folded in HERE rather than baked into the
+    `seed` must be derived from the global step, like `augSeed`, or no run is reproducible and
+    every gate that replays a step breaks. `1/keep` is folded in here rather than baked into the
     graph — see `VerifiedNet.dropKeeps`. At `keep = 1` the scale is exactly `1.0` for every example,
     so a site with `keep = 1` is the identity in IEEE, not merely close. -/
 def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray := do
@@ -149,55 +148,37 @@ def dropScales (keeps : Array Float) (bs : Nat) (seed : USize) : IO ByteArray :=
     out ← write3 out (j - 2).toUSize buf[j-2]! buf[j-1]! buf[j]!
   pure out
 
-/-- ▶ **The classifier-dropout mask** (`recipe_gaps.md` gap C) — `n` INDEPENDENT Bernoulli draws at
-    keep probability `keep`, each survivor scaled by `1/keep`. Fills one `%do: tensor<B×w×f32>`
-    graph input, so `n = B * w`.
+/-- The classifier-dropout mask — `n` independent Bernoulli draws at keep probability `keep`,
+    each survivor scaled by `1/keep`. Fills one `%do: tensor<B×w×f32>` graph input, so `n = B * w`.
 
-    ⚠⚠ **`n` DRAWS, NOT `B` — this is `dropScales`' per-example loop replaced by a per-ELEMENT one,
-    and that single difference is the whole distinction between the two regularisers.** The
-    reference draws `bernoulli(key, keep, x.shape)` for the classifier
-    (`emitForward`'s classifier dropout in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)) against `(branch.shape[0],) + (1,)*(ndim-1)` for stochastic depth
-    (`:1037`). A mask built by drawing `B` values and repeating each `w` times type-checks, fills
-    the same buffer, trains and descends — it is stochastic depth on the classifier. Nothing
-    downstream can tell: the shapes agree, the emitted graph is identical, and only the
-    DISTRIBUTION differs. `Proofs.dropPath_scales_uniformly` is the statement of what would be
-    wrong; on this side it is the loop bound, and there is no gate but reading it.
+    `n` draws, not `B`: this is `dropScales`' per-example loop replaced by a per-element one, and
+    that difference is the whole distinction between the two regularisers. The reference draws
+    `bernoulli(key, keep, x.shape)` for the classifier (the classifier dropout in the JAX emitter,
+    jax/Jax/Codegen.lean) against `(branch.shape[0],) + (1,)*(ndim-1)` for stochastic depth. A mask
+    built by drawing `B` values and repeating each `w` times type-checks, fills the same buffer,
+    trains and descends — it is stochastic depth on the classifier. The shapes agree and the
+    emitted graph is identical; only the distribution differs. `Proofs.dropPath_scales_uniformly`
+    states what would be wrong; on this side it is the loop bound, and no gate checks it.
 
-    ⚠ **Seed it from a stream DISJOINT from `dropScales`'.** The reference offsets by `999983`
-    (`fold_in(drop_key, 999983)` against `fold_in(drop_key, block_index)`) exactly so a net running
-    both regularisers does not correlate them; the caller adds that offset. Sharing a seed here
-    would make the classifier mask a function of block 0's drop decisions, every step.
+    Seed it from a stream disjoint from `dropScales`'. The reference offsets by `999983`
+    (`fold_in(drop_key, 999983)` against `fold_in(drop_key, block_index)`) so a net running both
+    regularisers does not correlate them; the caller adds that offset. Sharing a seed would make
+    the classifier mask a function of block 0's drop decisions, every step.
 
-    ⚠ Same `1/keep` folding as `dropScales`, for the same reason: the graph bakes no constant, so a
-    ones mask (`keep ≥ 1`, or eval) is the EXACT identity rather than a rescale.
+    Same `1/keep` folding as `dropScales`, for the same reason: the graph bakes no constant, so a
+    ones mask (`keep ≥ 1`, or eval) is the exact identity rather than a rescale.
 
-    Drawn on the HOST, not in the graph, for `dropScales`' reasons — `stablehlo.rng` would make
+    Drawn on the host, not in the graph, for `dropScales`' reasons — `stablehlo.rng` would make
     every bit-exactness gate in the repo contingent on seeding an XLA RNG identically across two
-    lowerers. That stays true and is not what changed here.
-
-    ⛔⛔ **WHAT CHANGED, AND WHAT THE OLD NOTE GOT WRONG.** This used to push `n` boxed Floats into
-    an `Array Float` and tile them out through `n/3` `write3` calls, under the note *"it is bigger
-    than `dropScales` (40,960 floats at B=32×1280, against 288) but still ~2 ULP of a ~310 ms
-    step"*. Both halves were wrong at the shape that matters. EfficientNet-B0's ImageNet job runs
-    **global batch 256**, so `n = 256 × 1280 = 327,680` — 8× the shape that estimate was written
-    for — and measured against the compiled objects it cost **150.07 ms PER STEP**:
-
-    | per step, measured 2026-08-30 | ms |
-    |---|---|
-    | this function, enet job shape (256×1280) | **150.07** |
-    | this function at 32×1280, the costed shape | 18.74 |
-    | `dropScales` (9 sites × 256) | 1.83 |
-    | `F32.const`, same 327,680 floats, `@[extern]` C | **0.073** |
-
-    It was **62% of B0's 281 ms step** — more than twice its 71.6 ms graph — and B0 is the only
-    net that pays it (`dropoutKeep` is set on the two EfficientNet specs and nowhere else), which
-    is exactly why that net read as 2.63× its JAX reference when the others sit near parity.
-    ▶ The loop now lives in `dropoutFill`/`ffi/f32_helpers.c`, byte-identical; the guards and the
-    seeding argument stay here, where they can be audited.
-
-    ⭐ The transferable lesson: the estimate was not merely stale, it was **taken at a shape no
-    production job runs**. A host-side cost is a function of the batch, so cost it at the batch. -/
+    lowerers. The draw loop itself is `dropoutFill` (C, `ffi/f32_helpers.c`): at a global batch of
+    256 and width 1280, `n = 327,680` per step, and a Lean-side loop at that size costs a large
+    share of the step. The guards and the seeding argument stay here. -/
 def dropoutMask (keep : Float) (n : Nat) (seed : USize) : IO ByteArray := do
+  -- Host cost history: this loop used to push `n` boxed Floats and tile them out through
+  -- `write3`, costed at B = 32 × 1280 as negligible. At EfficientNet-B0's ImageNet job shape
+  -- (256 × 1280) it measured 150.07 ms of a 281 ms step (32×1280: 18.74 ms; `dropScales` at
+  -- 9 sites × 256: 1.83 ms; `F32.const` on the same 327,680 floats: 0.073 ms). A host-side
+  -- cost is a function of the batch, so cost it at the batch the job runs.
   if keep ≥ 1.0 || n == 0 then
     return ← const n.toUSize 1.0
   -- ⚠ REFUSE below 3 rather than return the all-ones buffer. ▶ The MECHANICAL reason is gone —
@@ -234,12 +215,9 @@ def dropLoss (out : ByteArray) (nParams : Nat) : ByteArray :=
 
 /-- Decode the little-endian **int32** label at record `i` of a packed label buffer.
 
-    ⚠ Replaces `lbl.get! (4 * i)`, which returned a `UInt8` — **byte 0 only**, i.e. `label % 256`.
-    Every net this repo GATES is 10-class (Imagenette / CIFAR / MNIST), so byte 0 *is* the label
-    there and the truncation was invisible; on 1000-class ImageNet it silently discarded the high
-    byte, and since a correct prediction can then only match on classes 0..255, it capped every
-    reported top-1 at roughly a quarter of the truth. Measured off the val wire 2026-08-05: the
-    first batch carries labels 1..988 with **193 of 256 (75.4%) above 255**. -/
+    Reads all four bytes. Reading byte 0 alone (`lbl.get! (4 * i)`) is `label % 256`: invisible
+    on the 10-class datasets, but on 1000-class ImageNet most labels exceed 255, and a correct
+    prediction could then match only on classes 0..255. -/
 def readLabel (lbl : ByteArray) (i : Nat) : Nat :=
   (lbl.get! (4 * i)).toNat
     ||| ((lbl.get! (4 * i + 1)).toNat <<< 8)
@@ -248,11 +226,9 @@ def readLabel (lbl : ByteArray) (i : Nat) : Nat :=
 
 /-- Argmax over `n` float32 values starting at element offset `off`.
 
-    ⚠ Replaced `argmax10`, which took no `n` and scanned a literal 10 entries. Every net this
-    repo GATES is 10-class (Imagenette / CIFAR / MNIST), so the constant was right everywhere it
-    was ever checked and wrong on exactly the un-gated tier — the 1000-class ImageNet trainers,
-    where it confined every prediction to labels 0..9. Pass the net's own class count at the call
-    site; it is already the multiplier in the `off` expression, so the two cannot disagree. -/
+    Pass the net's own class count at the call site; it is already the multiplier in the `off`
+    expression, so the two cannot disagree. A literal 10 would be right on the 10-class datasets
+    and would confine every 1000-class prediction to labels 0..9. -/
 @[extern "lean_f32_argmax_n"]
 opaque argmaxN (ba : @& ByteArray) (off : USize) (n : USize) : USize
 
@@ -338,11 +314,8 @@ opaque loadBrats (path : @& String) (imgSize : USize) : IO (ByteArray × ByteArr
 /-- YOLOv1 detection-bin loader (target+mask format, 224 input / 7×7 grid). Returns `(images_f32_normalized,
     yLabels_concat, count)` where `yLabels_concat` carries **7200** bytes
     per image: 30×7×7 float32 target (5880), then 7×7 float32 mask (196),
-    then numBoxes (4), then raw_boxes 56×20 (1120) — the Phase 3b format,
-    matching `detectionIO.labelBytesPerRecord`. (This docstring said 6076,
-    the pre-Phase-3b target+mask size, long after the record grew the bbox
-    tail; a stale stride in the docs is what this whole bug class feeds on.)
-    The Lean dispatcher (`runTraining`) splits this into target + mask before
+    then numBoxes (4), then raw_boxes 56×20 (1120), matching the detection
+    dataset's `labelBytesPerRecord` in `Train`. The Lean dispatcher (`runTraining`) splits this into target + mask before
     calling `trainStepAdamF32Yolov1`. See `scripts/datasets/preprocess_visdrone.py` for the
     on-disk format. -/
 @[extern "lean_f32_load_voc"]
@@ -356,7 +329,7 @@ opaque loadDetBin (path : @& String) : IO (ByteArray × ByteArray × Nat)
 opaque loadDetBinDims (path : @& String) (imgSize gridH gridW : USize)
     : IO (ByteArray × ByteArray × Nat)
 
-/-- Anchor-format detection loader (brick #2). Returns `(images_f32_normalized,
+/-- Anchor-format detection loader. Returns `(images_f32_normalized,
     target_only_concat, count)` with `numAnchors·15·gridH·gridW` f32 target per
     image — the anchor loss derives its per-anchor mask from the target's
     objectness channels, so the on-disk mask/numBoxes/raw_boxes are skipped. -/
@@ -364,7 +337,7 @@ opaque loadDetBinDims (path : @& String) (imgSize gridH gridW : USize)
 opaque loadDetBinAnchor (path : @& String) (imgSize gridH gridW numAnchors : USize)
     : IO (ByteArray × ByteArray × Nat)
 
-/-- FPN multi-scale detection loader (brick #3). Returns `(images_f32_normalized,
+/-- FPN multi-scale detection loader. Returns `(images_f32_normalized,
     target_only_concat, count)` with `ntot` f32 target per image — the flat
     `[P3|P4|P5]` block (`ntot = Σ_s numAnchorsₛ·15·g_s²`). Like the anchor loader,
     the loss derives per-anchor masks from the target's objectness channels, so
@@ -382,12 +355,11 @@ opaque loadDetBinFpn (path : @& String) (imgSize ntot : USize)
     Returns `(target_concat, mask_concat)` sized `batch * perCell*gH*gW*4` and
     `batch * gH*gW*4`.
 
-    **Pass the caller's real grid.** This used to hardcode the 224/7×7 record
-    (7200 bytes/record) while the caller sliced at `dio.labelBytesPerRecord` —
-    25428 at VisDrone-448/14×14. Reading at the wrong stride pairs each image
-    with a target lifted out of a different record, which nothing downstream can
-    see because the output shape is still correct. The FFI now rejects a stride
-    that disagrees with the buffer. -/
+    Pass the caller's real grid: the stride is derived from it (7200 bytes/record
+    at 224/7×7, 25428 at VisDrone-448/14×14). Reading at the wrong stride pairs
+    each image with a target lifted out of a different record, which nothing
+    downstream can see because the output shape is still correct; the FFI rejects
+    a stride that disagrees with the buffer. -/
 @[extern "lean_voc_split_batch"]
 opaque detSplitBatch (interleaved : @& ByteArray) (batch : USize)
     (gridH gridW perCell : USize)
@@ -398,9 +370,8 @@ opaque detSplitBatch (interleaved : @& ByteArray) (batch : USize)
     along W, target along gridW, mask along gridW, and replaces the
     x_cell channel with `1 - x_cell` on cells where mask=1 (since the
     cell itself mirrors). Returns the augmented (images, target, mask)
-    triple as fresh ByteArrays; inputs are not modified.
-    See `planning/archive/yolo_final.md` Phase 3. LEGACY — superseded by
-    `yoloAugment` (Phase 3b) which operates on raw bboxes. -/
+    triple as fresh ByteArrays; inputs are not modified. `yoloAugment`, which
+    works from the raw bboxes, supersedes it. -/
 @[extern "lean_f32_yolo_hflip"]
 opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& ByteArray)
     (batch : USize) (channels : USize) (imgH : USize) (imgW : USize)
@@ -410,8 +381,7 @@ opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& Byte
 /-- Unified bbox-aware augmentation for YOLOv1: per-image hflip + random
     crop, with target+mask re-encoded from the transformed raw bboxes
     so the geometric correspondence is exact. Replaces `yoloHflip` for
-    Phase 3b once preprocessor stores raw bboxes alongside the
-    pre-encoded target.
+    records that store the raw bboxes alongside the pre-encoded target.
 
     * `images`: f32 image batch `[B, C, H, W]`
     * `boxes`: per-record YOLOv1 label block (target 5880 + mask 196 +
@@ -422,8 +392,7 @@ opaque yoloHflip (images : @& ByteArray) (target : @& ByteArray) (mask : @& Byte
       (paper's ±20% jitter → 0.8).
     * `seed`: xorshift seed.
 
-    Returns `(new_image, new_target, new_mask)` as fresh ByteArrays.
-    See `planning/archive/yolo_final.md` Phase 3. -/
+    Returns `(new_image, new_target, new_mask)` as fresh ByteArrays. -/
 @[extern "lean_f32_yolo_augment"]
 opaque yoloAugment (images : @& ByteArray) (boxes : @& ByteArray)
     (batch : USize) (channels : USize) (imgH : USize) (imgW : USize)
@@ -466,7 +435,7 @@ opaque fpnHflip (images target : @& ByteArray)
     `encode_targets_fpn` uses. Boxes already lost to a same-slot collision on
     disk stay lost, which is correct: they are absent from the training target too.
 
-    ⚠ The scale range is the load-bearing knob on this dataset. VisDrone objects
+    The scale range is the knob that matters most on this dataset. VisDrone objects
     are 2–5 px after the 448 resize, so scaling down pushes them below P3's
     stride-8 resolution; `whThrPx` and `areaThr` drop what the transform has
     destroyed rather than encoding a degenerate target for it. Empty regions take
@@ -499,7 +468,7 @@ opaque segHflipPair (img mask : @& ByteArray)
 /-- Per-batch segmentation confusion matrix. `logits` is f32 `[B,NC,H,W]`,
     `masks` is u8 `[B,H,W]` (per-pixel class). Returns int64 LE `[NC*NC]`
     counts `conf[true*NC + pred]` (argmax over channels), for mIoU
-    accumulation across batches. planning/archive/unet_demo_v2.md Workstream A. -/
+    accumulation across batches. -/
 @[extern "lean_f32_seg_confusion"]
 opaque segConfusion (logits masks : @& ByteArray)
     (B NC H W : USize) : IO ByteArray
@@ -516,10 +485,9 @@ opaque idsToFloats (ids : @& ByteArray) : IO ByteArray
 
     `labelBytes` is the label's bytes per record — 4 for a classification
     scalar, but a whole tensor for detection/segmentation (the FPN detector's
-    is 185220 floats = 740880 bytes). It used to be hardcoded to 4 in the FFI,
-    which permuted the images while leaving multi-float targets in place and so
-    destroyed the image/target pairing every epoch on every detector and
-    segmentation trainer. Pass `dio.labelBytesPerRecord`; never a literal. -/
+    is 185220 floats = 740880 bytes). A literal 4 would permute the images while
+    leaving multi-float targets in place, destroying the image/target pairing
+    every epoch. Pass `dio.labelBytesPerRecord`, never a literal. -/
 @[extern "lean_f32_shuffle"]
 opaque shuffle (images : ByteArray) (labels : ByteArray)
     (n : USize) (pixelsPerImage : USize) (labelBytes : USize) (seed : USize)
@@ -536,8 +504,7 @@ opaque scaleShift (ba : @& ByteArray) (scale : Float) (shift : Float) : IO ByteA
 opaque ema (running : @& ByteArray) (batch : @& ByteArray) (momentum : Float) : IO ByteArray
 
 /-- Per-image horizontal flip of an NCHW f32 batch (independent p=0.5
-    coin per image). Plain image aug for unconditional DDPM —
-    planning/archive/ddpm_demo_v2.md Workstream B3. -/
+    coin per image). Plain image aug for unconditional DDPM. -/
 @[extern "lean_f32_hflip_nchw"]
 opaque hflipNCHW (images : @& ByteArray) (batch : USize) (channels : USize)
     (H : USize) (W : USize) (seed : USize) : IO ByteArray

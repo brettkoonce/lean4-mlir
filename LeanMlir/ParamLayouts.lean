@@ -71,11 +71,11 @@ namespace ResNet34Layout
     resolution): **7×7 stride-2 stem** {W=`[64,3,7,7]`,γ,β} (224→112), then the
     16 basic blocks (3 strided downsample {W,γ,β}×2 + proj{W,γ,β}; 13 identity
     {W,γ,β}×2) at channels 64/128/256/512 (spatial 56/28/14/7), then dense {W,b}.
-    Per-channel BN ⇒ γ/β are **rank-1 `[c]`** (not rank-0 scalars). **110 params** (§2l step B: no conv biases). The
-    `(dims, initKind)` order MUST match `@resnet34_train_step`'s signature (and
-    `@resnet34_fwd`'s) — both rendered from the same `Blk` list (tests/TestResnet34*.lean
-    `allParams`). `initKind`: 0 = He(fan-in) (stem fan-in = 3·7·7 = 147), 1 = ones (γ),
-    2 = zeros (β / bias). -/
+    Per-channel BN ⇒ γ/β are **rank-1 `[c]`** (not rank-0 scalars). **110 params** (no conv
+    biases: every conv is BN-followed). The `(dims, initKind)` order MUST match the
+    `@resnet34_<variant>_train_step` and `@resnet34_fwd` signatures, rendered by
+    Proofs/Codegen/ResNet34RenderB.lean. `initKind`: 0 = random weight (`mkParam`: conv He
+    fan-out, dense Glorot), 1 = ones (γ), 2 = zeros (β / bias). -/
 -- §2l step B (2026-07-30): the conv BIASES are gone — `{W, γ, β}` per conv, not `{W, b, γ, β}`.
 -- Every conv here is BN-followed and BN removes the bias, so it was 8,512 parameters that could
 -- not affect the output; He et al.'s `.convBn` has none, and carrying them put this layout
@@ -112,20 +112,13 @@ namespace MobileNetV2Layout
     {W,γ,β} (320→1280, the MNv2 "features" layer: conv→BN→relu6 before GAP, so the
     pooled tensor isn't the constant β of an instance-normed BN) and dense {W,b}.
 
-    **158 params** (§2m: no conv biases). Every conv here is BN-followed and BN removes a bias,
-    so the 52 this layout used to carry were parameters that could not affect the output — and
-    they were the whole of the +17,056 gap to the JAX reference (3,521,928 vs 3,504,872 at
-    K = 1000). Measured before the change, not argued: `conv-bias-zero --tie` puts every
-    forward-only output of the AdamW step BIT-EXACT (`%loss` 3/3, all 34,112 BN running stats)
-    with differences confined to the backward at 2.5e-7, and `--fwd`/`--fwd --eval` tie both
-    forward artifacts BIT-EXACT on all 320 logits.
+    **158 params** (no conv biases: every conv here is BN-followed and BN removes a bias). At
+    K = 1000 the count is 3,504,872, the JAX reference's.
     Per-channel BN ⇒ γ/β are **rank-1 `[c]`**. Spatial
-    224→112(stem)→56→28→14→7 — the real MobileNetV2 /32
-    flow. The `(dims, initKind)` order MUST match `@mobilenetv2_adam_train_step`'s signature
-    (and `@mobilenetv2_fwd`'s) — both rendered from the same `mnv2FwdChainB` traversal since
-    2026-09-06 (4c leg 2; the per-example `@mobilenetv2_train_step` this line named is retired). Strides live only in the renderers (no param-shape
-    effect). `initKind`: 0 = He(fan-in) (depthwise fan-in = 1·3·3 = 9), 1 = ones (γ),
-    2 = zeros. -/
+    224→112(stem)→56→28→14→7 — the MobileNetV2 /32 flow. The `(dims, initKind)` order MUST match
+    `@mobilenetv2_adam_train_step`'s signature (and `@mobilenetv2_fwd`'s) — both rendered from the
+    same `Proofs.StableHLO.mnv2FwdChainB` traversal. Strides live only in the renderers (no
+    param-shape effect). `initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot), 1 = ones (γ), 2 = zeros. -/
 private def irBlk (ic mid oc : Nat) : Array (Array Nat × Nat) :=
   (if mid != ic then #[(#[mid,ic,1,1],0),(#[mid],1),(#[mid],2)] else #[]) ++  -- expand 1×1 (skip if t=1, mid=ic)
   #[(#[mid,1,3,3],0),(#[mid],1),(#[mid],2),                -- depthwise 3×3 (stride 1 or 2)
@@ -153,21 +146,20 @@ def xShape (batch : Nat) : ByteArray := packXShape #[batch, 3 * 224 * 224]   -- 
 end MobileNetV2Layout
 
 namespace EfficientNetLayout
-/-- Chapter-7 **EfficientNet-B0** params (CIFAR 3×32×32, E6 — faithful `[t,c,n,s,k]`
-    config, all-swish + BATCH norm): stem {W,γ,β} (3×3 stride-1 conv 3→32, CIFAR
-    adaptation), then 16 MBConv layers across 7 stages (channels [16,24,40,80,112,192,320],
+/-- Chapter-7 **EfficientNet-B0** params (Imagenette 3×224×224 — the `[t,c,n,s,k]`
+    config, all-swish + batch norm): stem {W,γ,β} (3×3 stride-2 conv 3→32), then 16 MBConv
+    layers across 7 stages (channels [16,24,40,80,112,192,320],
     kernels [3,3,5,3,5,5,3], expand [1,6,6,6,6,6,6] — the MBConv1 stage-1 blocks have NO
     expand conv) — each (when expanded) expand 1×1 {W,γ,β}, depthwise k×k {W,γ,β}
     (`[mid,1,k,k]`, feature_group_count = mid), **squeeze-excite** {Ws₁`[mid,r]`,bs₁`[r]`,
     Ws₂`[r,mid]`,bs₂`[mid]`} (r = ic/4), project 1×1 {W,γ,β} — then head 1×1 conv {W,γ,β}
-    (320→1280) and dense {W,b}. Batch-norm γ/β rank-1 `[c]`. **213 params** (§2m: the 49
+    (320→1280) and dense {W,b}. Batch-norm γ/β rank-1 `[c]`. **213 params** (the 49
     BN-followed convs carry no bias; at K = 1000 this is 5,288,548 — the JAX reference's own
-    count). ⚠ **SE's two biases STAY**: those 1×1 convs are followed by the sigmoid gate, not by
+    count). SE's two biases stay: those 1×1 convs are followed by the sigmoid gate, not by
     BN, so nothing absorbs them and the reference carries them. Spatial
-    32→16→8→4→2 (4 strided stages, stem stride 1). The `(dims, initKind)` order MUST match
-    `@efficientnet_train_step`'s signature — both rendered from the same `stages`/`blocks`
-    generator (tests/TestEfficientNet*.lean). `initKind`: 0 = He(fan-in) (depthwise fan-in
-    = k², SE dense = mid/r), 1 = ones (γ), 2 = zeros (β / bias). -/
+    224→112→56→28→14→7 (stride-2 stem, 4 strided stages). The `(dims, initKind)` order MUST match
+    `@efficientnet_train_step`'s signature, rendered by Proofs/Codegen/EfficientNetRender.lean.
+    `initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot), 1 = ones (γ), 2 = zeros (β / bias). -/
 private def stages : Array (Nat × Nat × Nat × Nat × Nat) :=
   #[(1,16,1,1,3),(6,24,2,2,3),(6,40,2,2,5),(6,80,3,2,3),(6,112,3,1,5),(6,192,4,2,5),(6,320,1,1,3)]
 private def mbBlk (ic mid oc r k : Nat) : Array (Array Nat × Nat) :=
@@ -198,14 +190,15 @@ namespace ConvNeXtLayout
 /-- Chapter-8 **ConvNeXt-T** params (IMAGENETTE 3×224×224 — paper-native resolution):
     4×4/s4 patchify stem {W=`[96,3,4,4]`,b} (224→56), then [3,3,9,3] blocks @ [96,192,
     384,768] (spatial 56/28/14/7) with 3 between-stage LN+2×2/s2 downsamples, then head
-    GAP → LN(768) → dense {W,b}. ConvNeXt block (9 params): depthwise 7×7 {W=`[c,1,7,7]`,b}
-    → **LN** (global per-example scalar γ/β, rank-0 `#[]`) → 1×1 expand {W=`[4c,c,1,1]`,b}
+    GAP → LN(768) → dense {W,b}. The patchify stem carries a channel LN {γ,β} `[96]`.
+    ConvNeXt block (9 params): depthwise 7×7 {W=`[c,1,7,7]`,b}
+    → **channel LN** (per-channel γ/β `[c]`) → 1×1 expand {W=`[4c,c,1,1]`,b}
     → GELU → 1×1 project {W=`[c,4c,1,1]`,b} → **layerScale** (per-channel γ=`[c]`). Each
-    downsample (4 params): LN scalar {γ,β} + 2×2 conv {W=`[2c,c,2,2]`,b}. 182 params. The
-    `(dims, initKind)` order MUST match `@convnext_train_step`'s signature — both from the
-    same [3,3,9,3] generator (tests/TestConvNeXt*.lean). `initKind`: 0 = He(fan-in)
-    (depthwise 49, expand c, project 4c, patchify 48, downsample 4c, dense 768), 1 = ones
-    (LN γ), 2 = zeros (LN β / bias), 3 = 1e-6 (layerScale γ, the paper's init). -/
+    downsample (4 params): channel LN {γ,β} `[c]` + 2×2 conv {W=`[2c,c,2,2]`,b}. 182 params. The
+    `(dims, initKind)` order MUST match `@convnext_train_step`'s signature, rendered by
+    Proofs/Codegen/ConvNeXtRender.lean. `initKind`: 0 = random weight (`mkParam`; σ = 0.02
+    under its ConvNeXt flag), 1 = ones (LN γ), 2 = zeros (LN β / bias), 3 = 1e-6 (layerScale γ,
+    the paper's init). -/
 private def depths : Array Nat := #[3, 3, 9, 3]
 private def dims   : Array Nat := #[96, 192, 384, 768]
 private def blockSpec (c e : Nat) : Array (Array Nat × Nat) :=
@@ -217,18 +210,11 @@ private def downSpec (ci co : Nat) : Array (Array Nat × Nat) :=
   #[(#[ci],1),(#[ci],2),(#[co,ci,2,2],0),(#[co],2)]  -- LN γ,β at the PRE-conv width ; conv W,b
 /-- `(dims, initKind)` for every param, in func-arg order.
 
-    ⚠ §2m moved three things at once: every LN affine went rank-0 `#[]` → per-channel `#[c]`,
-    the **stem LN** appeared, and the **head LN** went away. The first two were right; the third
-    was not, and the note that used to sit here — *"the last two nearly cancel … so a matching
-    parameter count is a decomposition test, not an architecture check"* — was the correct
-    warning drawn at the wrong conclusion. The residue is not noise, it IS the missing layer:
-    28,587,592 against `timm.create_model('convnext_tiny')`'s **28,589,128** is short by exactly
-    `2×768 = 1,536`.
-
-    ⭐ **The head LN is back (2026-08-30, §7.1)**, so the head is `GAP → LN(768) → dense` as in
-    both the paper (`self.norm(x.mean([-2,-1]))`, `nn.LayerNorm(dims[-1], eps=1e-6)`) and timm
-    (`NormMlpClassifierHead`). **182 param tensors**; the floats are 27,827,818 at K = 10,
-    i.e. **28,589,128 at K = 1000** — timm's count exactly. -/
+    The head is `GAP → LN(768) → dense`, as in both the paper (`self.norm(x.mean([-2,-1]))`,
+    `nn.LayerNorm(dims[-1], eps=1e-6)`) and timm (`NormMlpClassifierHead`). **182 param
+    tensors**; the floats are 27,827,818 at K = 10, i.e. **28,589,128 at K = 1000** — timm's
+    count. Without the head LN the count would be short by exactly `2×768 = 1,536`, so a
+    near-matching count is not evidence of the right architecture. -/
 def specs : Array (Array Nat × Nat) := Id.run do
   let mut a : Array (Array Nat × Nat) :=
     #[(#[96,3,4,4],0),(#[96],2),(#[96],1),(#[96],2)]   -- patchify stem + stem LN γ,β
@@ -252,14 +238,14 @@ namespace ViTLayout
     patch embed {W=`[192,3,16,16]`,b} (224→14×14=196 patches), a learned CLS token
     `[192]` (1D, matching the proof-tied render) + positional embed `[197,192]`, then 12 pre-norm transformer blocks
     (dim 192, 3 heads, MLP 768), final LayerNorm γ/β, CLS-slice dense head {W=`[192,10]`,b}.
-    LayerNorm γ/β are **per-channel `[192]`** (the non-scalar form — beyond the scalar
-    proof witness `vitFull`, faithful per-op: normalize ∘ per-channel affine). Each block
+    LayerNorm γ/β are **per-channel `[192]`** (normalize ∘ per-channel affine, as in
+    `Proofs.vitForwardKV`). Each block
     (16 params): LN1 γ/β, Wq/bq/Wk/bk/Wv/bv/Wo/bo `[192,192]`/`[192]`, LN2 γ/β, MLP
     Wfc1`[192,768]`/bfc1/Wfc2`[768,192]`/bfc2. 4+12·16+4 = 200 params. The `(dims,initKind)`
-    order MUST match `@vit_train_step`/`@vit_fwd` (tests/TestViT{Train,Fwd}.lean, from the
-    same `ViTRender.vitParam*` generator). `initKind`: 0 = He(fan-in) (patch 3·16·16=768,
-    QKV/out/head fan-in=192, fc1=192, fc2=768), 1 = ones (LN γ), 2 = zeros (LN β / bias /
-    CLS / pos). -/
+    order MUST match `@vit_train_step`/`@vit_fwd`, whose parameter list is
+    `Proofs.StableHLO.vitParamSig` (Proofs/Codegen/ViTRender.lean). `initKind`: 0 = random
+    weight (`mkParam`: conv He fan-out, dense Glorot, or timm's σ = 0.02 under its ViT flag),
+    1 = ones (LN γ), 2 = zeros (LN β / bias / CLS / pos). -/
 private def D : Nat := 192
 private def M : Nat := 768
 private def S : Nat := 16

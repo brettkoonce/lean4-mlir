@@ -1,13 +1,13 @@
 import LeanMlir.VerifiedNets
 
-/-! # The sync-BN gate, parameterised by net — `R×b` IS `1×Rb`
+/-! # The sync-BN gate, parameterised by net — `R×b` against `1×Rb`
 
 The runner behind `mobilenetv2-syncbn-check`, `efficientnet-syncbn-check` and
 `imagenet-syncbn-check`: `resnet34-syncbn-check`'s columns and verdict (its entry file under tests/,
 TestR34SyncBnCheck, carries the full account of what each column measures), with the net, its
 batch, its replica count, its committed artifacts and its run-time renders handed in. Each net's
 entry file is a `SyncBnCheck.Cfg` and `main := SyncBnCheck.run cfg`. With `x₀ … x_{R-1}` the R
-shards (different pixels AND different labels):
+shards (different pixels and different labels):
 
     TEST         DP_sync([x₀|…]) at R×b       ==  single_Rb([x₀|…])
     COLLECTIVE   DP_sync([x₀|…])              vs  the one-replica SYNC graph at Rb
@@ -21,7 +21,7 @@ The verdict is on the handed-back BN statistics (sharp) and on the collective (D
 gradient columns are printed against SENSITIVITY, because at a random-init operating point no
 two f32 implementations agree on `m'` better than the forward's conditioning allows.
 
-⚠ Only the DP step (and, where one exists, the per-replica `b` single-device step) is a
+Only the DP step (and, where one exists, the per-replica `b` single-device step) is a
 committed artifact here; the `Rb` single-device step and both one-replica sync graphs are rendered
 to `.lake/build/` at run time from the same functions — and so is the DP step when `dpPath := ""`
 (ResNet-50, gated below its committed batch). Needs `R` GPUs and the XLA backend.

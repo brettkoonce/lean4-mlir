@@ -7,8 +7,13 @@ set_option maxRecDepth 2000
     at run time. Unverified — the verified path renders `verified_mlir/` from the proof side
     (`LeanMlir/Proofs/Codegen/`) instead.
 
-    Covers every `Layer` constructor (dense, conv, BN, depthwise, MBConv/SE, UIB, attention,
-    …). Walks layers tracking the current activation shape; for a flat input it emits a reshape
+    Emits 28 of `Layer`'s 50 constructors (dense, conv, BN, depthwise, MBConv/SE, UIB,
+    attention, UNet, ConvNeXt, detection and token-model layers). The other 22 — `separableConv`,
+    `fireModule`, `mambaBlock`, `swinStage`, `patchMerging`, `transformerDecoder`, `detrHeads`,
+    `shuffleBlock`, `shuffleV2Block`, `evoformerBlock`, `structureModule`, `mobileVitBlock`,
+    `waveNetBlock`, `positionalEncoding`, `nerfMLP`, `darknetBlock`, `cspBlock`,
+    `inceptionModule`, `asppModule`, `fpnModule`, `denseBlock`, `transitionLayer` — have no
+    emitter here; the forward walk writes an `UNSUPPORTED LAYER` comment for them. Walks layers tracking the current activation shape; for a flat input it emits a reshape
     to (batch, ic, imageH, imageW) at the head.
 
     Layout: NCHW tensors, OIHW kernels (matches the JAX codegen convention).
@@ -41,8 +46,7 @@ private def tensorTy (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString) ++ "xf32>"
 
 /-- Sanitize a string for use as an MLIR identifier. Public so trainers
-    can derive eval-call names from `spec.name` instead of hardcoding
-    them (and getting them wrong — see e.g. the EffNetV2 eval-name bug). -/
+    can derive eval-call names from `spec.name` instead of hardcoding them. -/
 def sanitize (s : String) : String :=
   s.toLower.map (fun c => if c.isAlphanum then c else '_')
 
@@ -1142,7 +1146,7 @@ private def emitDense3D (tag : String) (xSSA : String) (shape : List Nat)
     returns `(code, oSSA [b,h,n,dh], lseSSA [b,h,n])`. `lse = m + log(l)` is the
     per-row logsumexp the backward needs. Requires `n % bk == 0`. Validated
     end-to-end against dense attention (jax/demos/flash_attention_ref.py +
-    an IREE compile+run probe, ~1e-7 fp32). See planning/archive/flash_attention.md. -/
+    an IREE compile+run probe, ~1e-7 fp32). -/
 private def emitFlashAttnSdpa (tag : String) (qSSA kSSA vSSA : String)
     (b heads n dh bk : Nat) (causal : Bool) : String × String × String := Id.run do
   let hTy := tensorTy [b, heads, n, dh]
@@ -1970,8 +1974,7 @@ private def emitTowerConvBwd (pfx dOutSSA xSSA preActSSA wSSA : String)
 
 /-- RetinaNet head tower for ONE pyramid level: `depth` × (3×3 conv → +bias →
     ReLU), channel-preserving. Towers are **per-scale, not shared** across
-    P3/P4/P5 — that is what `planning/archive/yolo_fpn.md` bite 4 specified, and it
-    sidesteps the shared-weight gradient accumulation (and, if norm is ever
+    P3/P4/P5, which sidesteps the shared-weight gradient accumulation (and, if norm is ever
     added, the per-level-statistics problem) that sharing would introduce.
 
     No normalization: plain conv + bias + ReLU, as in the original RetinaNet
@@ -2053,9 +2056,8 @@ private def fpnNumParams (depth : Nat) : Nat := 9 + 6 * depth
 
     The bias is what carries the RetinaNet prior init (`applyDetPriorBias`). A
     biasless 1×1 conv has to manufacture the constant background offset out of
-    its weights, which is measurably what it spends them on: every objectness
-    logit in the e12 val set sits in [−2.7, −1.2] (planning/archive/yolo_fpn.md, the T1a
-    refutation). Zero-init biases reproduce the biasless net exactly. -/
+    its weights, which is measurably what it spends them on: on a biasless run's validation set
+    every objectness logit sits in [−2.7, −1.2]. Zero-init biases reproduce the biasless net exactly. -/
 private def emitFpnDetectForward
     (c3SSA c4SSA c5SSA wn3 wn4 wn5 wh3 wh4 wh5 bh3 bh4 bh5 : String)
     (towerW towerB : List (List String)) (depth : Nat)
@@ -4300,9 +4302,8 @@ private def emitSegLossBlock (B NC H W : Nat) (logitsSSA labelSSA : String)
     s := s ++ s!"    %d_logits_seg = stablehlo.add %dlog_ce, %dlog_dc : {bnhwfTy}\n"
     s
 
-/-- DIoU box-loss FORWARD block (brick #1, planning/archive/yolo_drone.md WS-D — the
-    IoU-family replacement for the fragile √-MSE box regression). `pred`/`tgt`
-    are `[B,4,gH,gW]`: pred channels are the raw head outputs (tx,ty,tw,th), tgt
+/-- DIoU box-loss FORWARD block (the IoU-family replacement for the fragile √-MSE box
+    regression). `pred`/`tgt` are `[B,4,gH,gW]`: pred channels are the raw head outputs (tx,ty,tw,th), tgt
     channels are the YOLOv1 target layout (cell-offset x,y then w_rel,h_rel).
     `mask` is `[B,gH,gW]` (1 on object cells). Positive box parameterization by
     construction — `cx=(j+σ(tx))/gW`, `cy=(i+σ(ty))/gH`, `w=exp(tw)`, `h=exp(th)`
@@ -8146,9 +8147,9 @@ def anchorLossProbeModule (B gH gW A : Nat) : String := Id.run do
 
 /-- Standalone FPN-neck probe: `@main(C3,C4,C5, W3,W4,W5, dP3,dP4,dP5) ->
     (P3,P4,P5, dC3,dC4,dC5, dW3,dW4,dW5)`. Compiled + run on CPU by
-    `scripts/probes/fpn_neck_probe_check.py`, which checks the emitted forward against
+    scripts/probes/fpn_neck_probe_check.py, which checks the emitted forward against
     the numpy `fpn_forward` and the emitted backward against the f64-FD-verified
-    `fpn_grad` oracle (brick #3). Cotangents are explicit inputs — no scalar-loss
+    `fpn_grad` oracle. Cotangents are explicit inputs — no scalar-loss
     reduce — so the probe mirrors the real train-step wiring (head backwards feed
     dPn tensors straight into the neck VJP). -/
 def fpnNeckProbeModule (B oc c3 c4 c5 g5 : Nat) : String := Id.run do
@@ -8178,9 +8179,9 @@ def fpnNeckProbeModule (B oc c3 c4 c5 g5 : Nat) : String := Id.run do
 
 /-- Standalone FPN multi-scale-loss probe: `@main(logits [B,Ntot], T0,T1,...) ->
     (loss, grad [B,Ntot])`, one target block per scale. Exercises the concat split
-    + per-scale anchor loss + grad re-concat (bites 4+6) in isolation — conv-free,
-    so it CPU-compiles for FD checking (the conv heads feeding this are verified
-    convBn, validated separately on ROCm). Deterministic per-scale anchors
+    + per-scale anchor loss + grad re-concat in isolation — conv-free,
+    so it CPU-compiles for FD checking (the conv layers that feed it in the train step are not
+    part of this probe). Deterministic per-scale anchors
     (w=0.02+0.03·i, h=0.03+0.04·i), matching scripts/probes/fpn_loss_probe_check.py. -/
 def fpnLossProbeModule (B : Nat) (scaleGrids : List Nat) (A : Nat)
     (clsWeights : List Float := []) (clsFocalGamma : Float := 0.0) : String := Id.run do
@@ -8275,8 +8276,7 @@ def fpnDetectProbeModule (B oc c3 c4 c5 g5 A : Nat) (tower : Nat := 0) : String 
 
 /-- Standalone FlashAttention forward module — exercises `emitFlashAttnSdpa` in
     isolation for validation against dense attention: `@main(Q,K,V : [b,h,n,dh])
-    -> O`. Compiled + run in the flash-attn probe (planning/archive/flash_attention.md
-    rung 2-3). -/
+    -> O`. Compiled + run in the flash-attn probe. -/
 def flashProbeModule (b heads n dh bk : Nat) (causal : Bool) : String := Id.run do
   let hTy := tensorTy [b, heads, n, dh]
   let (code, oSSA, _) := emitFlashAttnSdpa "p" "%Q" "%K" "%V" b heads n dh bk causal

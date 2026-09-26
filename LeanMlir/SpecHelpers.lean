@@ -4,15 +4,12 @@ import LeanMlir.IreeRuntime
 import LeanMlir.MlirCodegen
 import LeanMlir.F32Array
 
-/-! Spec → tensor-shape / packed-bytes / parameter-init helpers.
+/-! Spec → tensor-shape / packed-bytes / parameter-init helpers for the reference trainers.
 
-These were copy-pasted into every `Main*Train.lean` file. Centralizing
-them here means each trainer just imports `LeanMlir` and asks for
-`spec.paramShapes`, `spec.bnShapesBA`, etc.
-
-Anything new added here should be a pure function of `NetSpec` — no IO,
-no architecture-specific specialization. Adding a new layer type means
-adding a case here once and every trainer picks it up. -/
+Each helper is a function of the `NetSpec` (and, for the init and pretrained-patch helpers, the
+parameter buffer), with no architecture-specific specialization: `NetSpec.paramShapes`,
+`NetSpec.bnShapesBA`, `NetSpec.heInitParams`, the prior-bias inits, and the pretrained-backbone
+patches. A trainer imports `LeanMlir` and asks the spec. -/
 
 namespace NetSpec
 
@@ -117,7 +114,7 @@ def heInitParams (spec : NetSpec) : IO ByteArray := do
     at a uniform softmax: every class at `1/NC`, background included. The net's
     first job is therefore to discover the class prior, and on BraTS it does
     that by walking straight into the trivial predictor — the collapse is
-    decided in the first ~100 steps (`planning/archive/brats_demo.md` Workstream A). A
+    decided in the first ~100 steps. A
     `log π_c` bias hands it the prior at step 0 instead, so the first gradient
     step is spent on the actual task.
 
@@ -132,7 +129,7 @@ def heInitParams (spec : NetSpec) : IO ByteArray := do
     | `z0 = 0` (uniform) | 5.09e-03 | 2.84e-02 | 9.96e-01 | **5.15e-03** |
     | `z0 = 5.27` (this) | 2.60e-01 | 1.12e-01 | 5.08e+01 | **9.90e+01** |
 
-    **One bias vector is worth ~19,000× to focal, at step 0** — and flips it
+    One bias vector is worth ~19,000× to focal, at step 0 — and flips it
     from the worst arm (tied with CE, a literal no-op) to the best (~2× wce).
     That is the whole content of "focal needs confidence to suppress": this
     manufactures the confidence up front instead of waiting for training to
@@ -168,20 +165,18 @@ def applyHeadPriorBias (spec : NetSpec) (params : ByteArray)
     biasParts := biasParts.push (← F32.const (1 : USize) (Float.log pi))
   return (params.extract 0 ((total - nc) * 4)).append (F32.concat biasParts)
 
-/-- RetinaNet prior-bias init for the **FPN detector head** (planning/archive/yolo_fpn.md
-    Tier 2). Sets every objectness logit's bias to `−log((1−π)/π)` so the head
+/-- RetinaNet prior-bias init for the FPN detector head. Sets every objectness logit's bias to `−log((1−π)/π)` so the head
     starts predicting `sigmoid = π` (π ≈ 0.01) on every cell; box and class biases
     stay at zero.
 
     This is the classifier trick of `applyHeadPriorBias` transposed to a
     sigmoid/one-vs-all head, and it is aimed at a measured failure rather than a
-    guess. On the e12 run every objectness logit sat in ≈[−2.7, −1.2] (p5..p95)
+    guess. On a 12-epoch run every objectness logit sat in ≈[−2.7, −1.2] (p5..p95)
     with pos/neg means −1.549/−1.803: the head had real signal (AUC 0.742) but
     almost no dynamic range, because a bias-free 1×1 conv has to synthesize the
     constant background offset out of weights that also have to discriminate. The
     bias hands it that constant for free, which is the whole point — and per-class
-    mAP is bounded by objectness *ranking*, so this is the lever that can move it
-    (both Tier-1 levers were measured out; see the T1a/T1b write-ups).
+    mAP is bounded by objectness *ranking*, so this is the lever that can move it.
 
     Assumes the `.fpnDetect` layer is last, so its 3 `[A·15]` biases are the final
     `3·A·15` floats of the buffer — the same tail-splice `applyHeadPriorBias` does.

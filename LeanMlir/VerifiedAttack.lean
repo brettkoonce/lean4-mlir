@@ -169,10 +169,11 @@ private def projectSpectral (theta : ByteArray) (specs : Array (Array Nat × Nat
     off := off + len
   return F32.concat parts
 
-/-- **Phase-3 PGD attack on the verified MNIST MLP** (`planning/archive/robustness.md`). Trains the
-    784→512→512→10 ReLU MLP on the proof-rendered SGD step, then attacks through IREE with the
-    proven `mlpInputGrad` VJP kernel. The Lipschitz certificate is the **product** of the three
-    layers' spectral norms — where the bound (and so the cert) goes loose. -/
+/-- **PGD attack on the verified MNIST MLP.** Trains the 784→512→512→10 ReLU MLP on the
+    proof-rendered SGD step, then runs PGD through IREE with `genMlpPgdStep`, a hand-typed
+    StableHLO kernel that follows the formula of `Proofs.mlpInputGrad` (no theorem ties the
+    kernel's text). The Lipschitz certificate is the product of the three layers' spectral
+    norms, which is where the bound, and so the certificate, goes loose. -/
 def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
   let bs := cfg.batchSize
   let d0 := net.d0
@@ -275,16 +276,16 @@ def VerifiedNet.attackPgdMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
   runSweep false [0.5, 1.0, 1.5]
   IO.println "done (phase-3 MLP PGD: input gradient = the proven mlpInputGrad VJP via IREE)."
 
-/-- **Spectral-norm-constrained training of the verified MNIST MLP** (`planning/archive/robustness_ladder.md`,
-    the research lever). Trains the 784→512→512→10 net with **projected SGD onto the spectral ball**
+/-- **Spectral-norm-constrained training of the verified MNIST MLP.** Trains the 784→512→512→10 net with **projected SGD onto the spectral ball**
     — after every `K` proof-rendered steps (and once at the end) each weight `Wᵢ` is rescaled to
     `‖Wᵢ‖₂ ≤ c` (`projectSpectral`) — then runs the *same* `cert ≤ TRUE ≤ PGD` sandwich. Sweeps a
     few caps `c` (plus an unconstrained baseline) so the table shows the trade: shrinking `c` pulls
     the global `L = ∏‖Wᵢ‖₂` down (`L ≤ c³`), turning the **vacuous** product certificate
     **non-vacuous** — at the cost of clean accuracy. The empirical face of
     `lipschitz_margin_certified_radius` ([`LeanMlir/Proofs/Certificates/LipschitzCert.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Certificates/LipschitzCert.lean)): smaller `L` ⇒ larger
-    certified radius `m/(√2·L)`. The verified CE gradient stays in the proven kernel; the projection
-    is host-side weight rescaling only. -/
+    certified radius `m/(√2·L)`. The training gradient comes from the proof-rendered train step;
+    the projection is host-side weight rescaling, and the PGD kernel is the hand-typed
+    `genMlpPgdStep`. -/
 def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
     (caps : List Float) : IO Unit := do
   let bs := cfg.batchSize
@@ -393,11 +394,12 @@ def VerifiedNet.attackPgdSpectralMlp (net : VerifiedNet) (cfg : VerifiedConfig) 
   IO.println "\ndone (spectral-norm-constrained training: smaller c ⇒ smaller L ⇒ the product cert"
   IO.println "      goes non-vacuous, at the cost of clean accuracy — the gap-shrinking lever)."
 
-/-- **Generic conv-net PGD attack** (`planning/archive/robustness_ladder.md`). Trains any packed conv
-    net on its proof-rendered SGD step, then attacks through IREE with `genKernel` — the full
-    proven backward (conv input-VJPs + maxpool `select_and_scatter`-backs, mirroring the net's
-    `<slug>_train_step.mlir`) run to `dx`. Certificate = the conv-aware spectral-norm **product**
-    (`specNormConvTapSum` for convs × `specNormW` for denses; ReLU/maxpool are 1-Lipschitz) —
+/-- **Generic conv-net PGD attack.** Trains any packed conv net on its proof-rendered SGD step,
+    then runs PGD through IREE with `genKernel`: a hand-typed StableHLO kernel that computes the
+    input gradient `dx` (conv input-VJPs and maxpool `select_and_scatter` backs, following the
+    backward ops of the net's `<slug>_train_step.mlir`); no theorem ties the kernel's text.
+    Certificate = the conv-aware spectral-norm **product** (`specNormConvTapSum` for convs ×
+    `specNormW` for denses; ReLU/maxpool are 1-Lipschitz) —
     astronomically loose, the depth-cliff. `genKernel` and `net.slug` select the architecture
     (`genCnnPgdStep`/MNIST-CNN, `genCifarPgdStep`/CIFAR-CNN). -/
 def VerifiedNet.attackPgdConvNet (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String)
@@ -530,8 +532,7 @@ def VerifiedNet.attackPgdCnn (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir
 def VerifiedNet.attackPgdCifar (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   net.attackPgdConvNet cfg dataDir genCifarPgdStep
 
-/-- **Spectral-norm-constrained training of the verified MNIST CNN** (`planning/archive/robustness_ladder.md`,
-    the gap-shrinking lever applied to the conv net). The CNN sibling of `attackPgdSpectralMlp`:
+/-- **Spectral-norm-constrained training of the verified MNIST CNN.** The CNN sibling of `attackPgdSpectralMlp`:
     projected SGD onto the spectral ball — every `K` proof-rendered steps (and once at the end)
     `projectSpectral` caps **both** the dense `‖Wᵢ‖₂` and the conv tap-sum bound at `c` — then the
     `cert ≤ TRUE ≤ PGD` sandwich (PGD via `genKernel`, cert = the conv-aware product). Harder than
@@ -673,11 +674,10 @@ def VerifiedNet.attackPgdSpectralCifar (net : VerifiedNet) (cfg : VerifiedConfig
     (caps : List Float) : IO Unit :=
   net.attackPgdSpectralConvNet cfg dataDir caps genCifarPgdStep
 
-/-- **Phase-3 PGD adversarial attack** on the verified linear classifier
-    (`planning/archive/robustness.md`). Trains via the proof-rendered train step, then attacks
-    through the real IREE pipeline: each PGD step's input gradient is computed by the
-    `genLinearPgdStep` StableHLO kernel (the proven `dx = (softmax−onehot)·Wᵀ` VJP) on the
-    GPU. Reports clean vs L∞-PGD adversarial accuracy over an eps sweep. -/
+/-- **PGD adversarial attack** on the verified linear classifier. Trains via the proof-rendered
+    train step, then runs PGD through IREE: each PGD step's input gradient is computed on the GPU
+    by `genLinearPgdStep`, a hand-typed StableHLO kernel that follows the formula
+    `dx = (softmax−onehot)·Wᵀ` (no theorem ties the kernel's text). Reports clean vs L∞-PGD adversarial accuracy over an eps sweep. -/
 def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : String) : IO Unit := do
   let bs := cfg.batchSize
   let d0 := net.d0
@@ -787,15 +787,15 @@ def VerifiedNet.attackPgd (net : VerifiedNet) (cfg : VerifiedConfig) (dataDir : 
 
 namespace VerifiedNetSpec
 
-/-- Phase-3 PGD adversarial attack (Chapter 1 linear); see `VerifiedNet.attackPgd`. -/
+/-- PGD adversarial attack (Chapter 1 linear); see `VerifiedNet.attackPgd`. -/
 def attackPgd (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.attackPgd cfg dataDir
 
-/-- Phase-3 PGD attack on the MLP (Chapter 2); see `VerifiedNet.attackPgdMlp`. -/
+/-- PGD attack on the MLP (Chapter 2); see `VerifiedNet.attackPgdMlp`. -/
 def attackPgdMlp (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.attackPgdMlp cfg dataDir
 
-/-- Phase-3 PGD attack on the CNN (Chapter 3, the conv rung); see `VerifiedNet.attackPgdCnn`. -/
+/-- PGD attack on the CNN (Chapter 3); see `VerifiedNet.attackPgdCnn`. -/
 def attackPgdCnn (s : VerifiedNetSpec) (cfg : VerifiedConfig) (dataDir : String) : IO Unit :=
   s.toNet.attackPgdCnn cfg dataDir
 

@@ -77,15 +77,25 @@ above finds any declaration by name.
 
 ## Start here
 
-Two things are proved for every net, and the linear classifier shows both in about 650 lines:
+The linear classifier shows the two kinds of result in about 650 lines:
 
 1. **Faithfulness** — the *emitted* StableHLO train step denotes the *certified* forward,
    gradient and SGD math. [`LinearTrainStep`](LeanMlir/Proofs/Nets/Small/LinearTrainStep.html)
    is the spec and its ops; the capstone
    [`poc_train_step_tail_certified`](find/#doc/Proofs.LinPoC.poc_train_step_tail_certified) in
    [`LinearFold`](LeanMlir/Proofs/Nets/Small/LinearFold.html) is emitted step = certified math.
-2. **Descent** — that step provably decreases the loss: `Proofs.linear_sgd_descends` in
-   `LeanMlir.Proofs.Training.SgdDescentLinear`.
+2. **Descent** — one inexact SGD step on the weight matrix decreases one example's cross-entropy
+   by at least `lr·‖∇L‖²/2`, given a step-size hypothesis and two dominance hypotheses:
+   `Proofs.linear_sgd_descends` in `LeanMlir.Proofs.Training.SgdDescentLinear`.
+
+Faithfulness extends, as a train-step tie with the scope stated under "The chapter nets", to
+each of the seven nets listed there. Descent extends to one parameter tensor at a time of the
+MLP (`Proofs.mlp_hidden_sgd_descends`, `Proofs.mlp_input_sgd_descends`) and the CNN
+(`Proofs.cnn_conv1_sgd_descends`, `Proofs.cnn_conv2_sgd_descends` and their bias forms), and to
+CIFAR-8's last convolution (`Proofs.cifar8_lastConv_sgd_descends`), each with margin hypotheses
+that hold every ReLU mask (and, in the CNNs, every max-pool selection) fixed along the step.
+ResNet-34, ResNet-50, MobileNetV2, MobileNetV4, EfficientNet-B0, ConvNeXt-T and ViT-Tiny have
+no descent theorem.
 
 `lake build ProofsMinimal` builds exactly this slice, about a minute after `lake exe cache get`.
 
@@ -105,21 +115,39 @@ attention up to the ViT body in `LeanMlir.Proofs.Architectures.Attention`. The e
 denotation every tie below is stated about. Zero project axioms: every theorem closes under
 `propext`, `Classical.choice` and `Quot.sound` alone, and
 [`tests/comparator`](https://github.com/brettkoonce/lean4-mlir/tree/main/tests/comparator)
-re-runs Lean's kernel over 73 of the headline theorems independently of the elaborator.
+re-runs Lean's kernel over 87 of the headline theorems independently of the elaborator.
 
 ## The chapter nets
 
-Whole-network VJPs — [`resnet34ForwardBFullHasVJPAt`](find/#doc/Proofs.resnet34ForwardBFullHasVJPAt),
-`Proofs.mobilenetv2HasVJPAt`, `Proofs.efficientnetHasVJP`, `Proofs.convnextHasVJP`,
-`Proofs.vitFullHasVJP` — and, for every net the tiers train, the tie of the committed
-train-step render (the verified_mlir/ files the trainers load) to the certified chain, at the
-batch BatchNorm and the ImageNet head its artifacts run: each emitted parameter-update node
-denotes the certified descent step.
+Whole-network VJPs at full depth:
+[`resnet34ForwardBFullHasVJPAt`](find/#doc/Proofs.resnet34ForwardBFullHasVJPAt),
+`Proofs.resnet50ForwardBFullHasVJPAt`, `Proofs.mobilenetv2ForwardBFullHasVJPAt` and
+`Proofs.StableHLO.mobilenetv4ForwardBFullHasVJPAt` (batched, at a point where every ReLU or
+ReLU6 input is off its kink and, in the two ResNets, the stem max-pool has no tie);
+`Proofs.efficientnetForwardBFullHasVJP` (batched); `Proofs.convNextForwardTChHasVJP` and
+`Proofs.vitForwardKVHasVJP` (one example; the ViT at depth `k` with its own parameters in each
+block). The last three take only `0 < ε` hypotheses.
+
+For each net below, a capstone ties the committed train-step render (the verified_mlir/ files
+the trainers load) to the certified chain, at the batch BatchNorm and the ImageNet head its
+artifacts run: with a loss cotangent threaded down through the certified block backwards, every
+emitted parameter-gradient node denotes the certified batched gradient `Σ_n` at the cotangent
+that chain delivers. The optimizer ops that consume those nodes are tied per op, by
+`Proofs.StableHLO.sgdParamF_faithful`, `Proofs.StableHLO.mom_pair_faithful`,
+`Proofs.StableHLO.adamW_triple_faithful` and `Proofs.StableHLO.lamb_triple_faithful`. The
+capstones are stated at one replica, in f32, on the chain without drop-path. A bf16 render emits
+its own `*GradBBf16` gradient nodes, tied per op kind in
+`LeanMlir.Proofs.Foundation.Bf16GradNodes`. The data-parallel renders of ResNet-34, ResNet-50,
+MobileNetV2, MobileNetV4 and EfficientNet-B0 synchronise BatchNorm, and each net's
+`*SyncStepTie*` file proves that the replica mean of its gradient nodes equals the one-replica
+node at the global batch `R·N`. The `*drop*` renders' cotangent chains carry drop-path sites the
+capstones do not name.
 
 * ResNet-34 (chapter 5) — [`r34_net_tiedB`](find/#doc/Proofs.ResNet34TieB.r34_net_tiedB);
   non-degeneracy on the full-width batched net,
   [`ResNet34FullBSeal`](LeanMlir/Proofs/Nets/ResNet/ResNet34FullBSeal.html); the data-parallel
-  render is synchronised BatchNorm and its step IS the single-device step at the global batch,
+  step at synchronised BatchNorm, whose all-reduced gradient nodes are the single-device nodes
+  at the global batch,
   [`ResNet34SyncStepTieB`](LeanMlir/Proofs/Nets/ResNet/ResNet34SyncStepTieB.html)
 * ResNet-50 — [`r50_net_tiedB`](find/#doc/Proofs.ResNet50TieB.r50_net_tiedB);
   [`ResNet50FullBSeal`](LeanMlir/Proofs/Nets/ResNet/ResNet50FullBSeal.html)
@@ -132,20 +160,24 @@ denotes the certified descent step.
 * ConvNeXt-T (chapter 8) — [`cnx_net_tiedGB`](find/#doc/Proofs.CnxTiePoCGB.cnx_net_tiedGB)
 * ViT-Tiny (chapter 9) — [`vit_net_tiedGB`](find/#doc/Proofs.ViTTiePoCGB.vit_net_tiedGB)
 
-The per-net trees under `LeanMlir.Proofs.Nets` repeat the linear pattern. The four conv nets share
-one file chain — `*BackB0` (block backward graphs) → `*FullB` (forward + T2 graph) → `*FullBVJP`
-(T1 VJP) → `*FullBSeal` (non-degeneracy) → `*StepTieB` (T3 train-step tie) →
-`*WholeBackCertifiedTieB` (T6 whole-net backward; ResNet-34's is `ResNet34BackCertifiedTieB`) →
-`*SyncB` / `*SyncStepTieB` (data-parallel). EfficientNet, ConvNeXt and ViT spell the same tiers
+The per-net trees under `LeanMlir.Proofs.Nets` repeat the linear pattern. ResNet-34, ResNet-50,
+MobileNetV2 and MobileNetV4 share one file chain — `*BackB0` (block backward graphs) → `*FullB`
+(forward and its graph) → `*FullBVJP` (whole-net VJP) → `*FullBSeal` (non-degeneracy) →
+`*StepTieB` (train-step tie) → `*WholeBackCertifiedTieB` (whole-net backward; ResNet-34's is
+`ResNet34BackCertifiedTieB`) → `*SyncB` / `*SyncStepTieB` (data-parallel). EfficientNet,
+ConvNeXt and ViT spell the same steps
 with other suffixes; the table and the suffix legend are in the
 [proofs README](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/README.md).
 
 ## Around the ties
 
-* **Descent over ℝ** — `LeanMlir.Proofs.Training.SgdDescent`, with the linear, MLP and CNN
-  capstones beside it: the SGD step decreases the loss, the float budget as its inexactness.
-* **The float model** — `LeanMlir.Proofs.Float.FloatBridge`: standard-model rounding bounds and
-  `FloatClose` for the toy nets; past them the ℝ→Float32 gap stays trusted.
+* **Descent over ℝ** — `LeanMlir.Proofs.Training.SgdDescent`, with the linear, MLP, CNN and
+  CIFAR-8 last-convolution capstones beside it: the SGD step decreases the loss, the float budget
+  as its inexactness.
+* **The float model** — `LeanMlir.Proofs.Float.FloatBridge`: standard-model rounding bounds for
+  dense and ReLU layers, with per-layer bridges for BatchNorm, convolution and depthwise
+  convolution and `FloatClose` to compose them; where no bound is stated, the ℝ→Float32 gap
+  stays trusted.
 * **Data parallelism** — the all-reduce as an AST node and which function a data-parallel run
   minimises, [`DataParallel`](LeanMlir/Proofs/Foundation/DataParallel.html); the sync-BatchNorm
   kit in [`DataParallelSync`](LeanMlir/Proofs/Foundation/DataParallelSync.html).

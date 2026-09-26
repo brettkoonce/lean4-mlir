@@ -9,7 +9,10 @@ where `Φ(s) := ⟨f(inputs + s·v), dOut⟩`. One backward run + two forward ru
 validate ALL input gradients at once — catching transpose/axis bugs that
 `iree-compile` (type-checking only) cannot.
 
-Used by the ch10 ViT de-risk tests (TestSDPA/TestMHSA/TestViTBlock). All Lean4. -/
+Used by the ViT gradcheck tests (tests/TestSDPA.lean, TestMHSA, TestViTBlock, TestViTTiny).
+The float-token parser (`ViTGradcheck.parseFloat?`, `ViTGradcheck.parseFloat`) is also used by
+TestSgdRenderTie and by three demos (MainAraslSigns, MainPlantLeaf, MainSegLossProbe) to read
+float arguments. All Lean4. -/
 
 namespace ViTGradcheck
 

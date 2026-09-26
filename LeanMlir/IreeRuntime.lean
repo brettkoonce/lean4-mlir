@@ -2,10 +2,10 @@ import LeanMlir.ParamLayouts
 /-! Lean FFI bindings for the lowerer runtime — PJRT/XLA by default, IREE optionally
     (`LowererSession` is lowerer-agnostic).
 
-    Links through the Lean shim in `ffi/`. Also holds the verified nets' parameter-layout
-    tables (`*Layout`), which the trainers and `VerifiedSpec` read. -/
+    Links through the Lean shim in ffi/. Imports `ParamLayouts` (the verified nets'
+    parameter-layout tables, `*Layout`), so importers of this module see them too. -/
 
-/-- Opaque handle to an IREE runtime session (module + device). -/
+/-- Opaque handle to a lowerer session (PJRT/XLA or IREE): a loaded module on a device. -/
 private opaque LowererSessionPointed : NonemptyType
 def LowererSession : Type := LowererSessionPointed.type
 instance : Nonempty LowererSession := LowererSessionPointed.property
@@ -16,7 +16,7 @@ namespace LowererSession
 
     On the **XLA backend** (`libpjrt_ffi.so`) the argument is instead the
     `.mlir` source — XLA compiles the StableHLO in-process, so there is no
-    separate `iree-compile` step. Use `VerifiedNet.mkSession` rather than
+    separate `iree-compile` step. Use `mkSession` (`VerifiedTrain`) rather than
     calling this directly; it picks the right path per `backendName`. -/
 @[extern "lean_iree_session_create"]
 opaque create (path : @& String) : IO LowererSession
@@ -27,17 +27,17 @@ opaque create (path : @& String) : IO LowererSession
     count instead. That graph computes the same function on every device, so data-parallel
     inference needs no new render.
 
-    It REFUSES any graph with a cross-replica op: the train step's read-back takes replica 0
+    It refuses any graph with a cross-replica op: the train step's read-back takes replica 0
     only (correct there, because the `all_reduce` makes every replica's result identical), and
     the two contracts must not meet in one session. It is also a loud error, never a fall back
-    to one device, when the loaded shim predates it or is IREE's. Use `VerifiedNet.mkSessionDp`
+    to one device, when the loaded shim predates it or is IREE's. Use `mkSessionDp`
     rather than calling this directly. -/
 @[extern "lean_iree_session_create_dp"]
 opaque createDp (path : @& String) (replicas : USize) : IO LowererSession
 
 /-- `"iree"` or `"xla"` — which shim this binary was linked against. Detected by
     probing for a symbol only `libpjrt_ffi.so` defines, so it cannot disagree
-    with the linked library. See `planning/archive/xla_pjrt_ladder.md`. -/
+    with the linked library. -/
 @[extern "lean_iree_backend_name"]
 opaque backendName : IO String
 
@@ -138,7 +138,7 @@ opaque trainStepAdamF32Ddpm
   (bnShapes : @& ByteArray)
   (batch : USize) (outC : USize) (outH : USize) (outW : USize) : IO ByteArray
 
-/-- `trainStepAdamF32Ddpm` with device residency (§2d.3): `nResident` = the number of
+/-- `trainStepAdamF32Ddpm` with device residency: `nResident` = the number of
     param tensors in `[θ|m|v]` (all of them — the graph's params-in / params-out
     correspondence is index for index). With `PJRT_FFI_RESIDENT=1` on the XLA backend
     they stay on the device after the first call, the result's param region is left
@@ -159,8 +159,7 @@ opaque trainStepAdamF32DdpmR
     target tensor (NCHW); `mYolo` is a `[batch, gridH, gridW]` f32
     per-cell objectness mask (1.0 where a GT box's center falls in
     the cell, 0.0 otherwise). Routes to the codegen produced with
-    `useYolov1 := true`. Loss is the 5-term masked MSE described in
-    `planning/archive/yolo_demo_v2.md` Phase 1.
+    `useYolov1 := true`. Loss is the 5-term masked MSE (`LossKind.yolov1Masked`).
 
     `perCell = numBoxes * 5 + numClasses`. For VOC this is
     `2*5 + 20 = 30`; `gridH = gridW = 7`. -/
@@ -178,15 +177,15 @@ opaque trainStepAdamF32Yolov1
 /-- Zero-copy f32 forward pass. Pushes x then param tensors, returns logits.
     For inference/eval — no y, lr, or velocity inputs.
 
-    `nResident` / `gen` — device residency in **HOLD** mode (§2d.3), and it is a
+    `nResident` / `gen` — device residency in hold mode, and it is a
     different mechanism from the train step's. This graph returns *logits*, not
     parameters, so there is nothing to retain from the output; instead the whole
     parameter set is seeded once and reused across every eval batch, rather than
     pushed 79-123 times per epoch. Measured on the MNIST MLP, **73% of an eval
     step was the parameter push** (0.6 ms of 0.8 — compute is 0.1).
 
-    ⚠ **`gen` is what makes holding safe, and it must change whenever `params`
-    does.** Pass the epoch number. A held set that went stale would score the
+    `gen` is what makes holding safe, and it must change whenever `params`
+    does: pass the epoch number. A held set that went stale would score the
     previous epoch's weights *silently*, which reads as a training plateau rather
     than as an error — a nastier failure than anything the update mode has. The
     shim re-seeds the moment the token differs.
@@ -240,26 +239,26 @@ opaque linearTrainStepV
     `mlpTrainStepV`, but `batch` is the GLOBAL batch and the XLA shim splits x and
     the labels across `replicas` devices while replicating the parameters. The
     emitted graph all-reduces every gradient before the optimizer consumes it
-    (`ViTRender.emitAdamVDP`), so all replicas produce identical parameters and
-    the result is read back from replica 0.
+    (`Proofs.StableHLO.SHlo.allReduceMeanF` in the committed data-parallel renders), so all
+    replicas produce identical parameters and the result is read back from replica 0.
 
     Only the XLA shim exports the underlying entry point; on the IREE build this
     raises rather than silently running single-device.
 
     `nResident`: see `mlpTrainStepV`. Each replica keeps its own retained set on
-    its own device, which is where the bigger half of the win is — today the full
-    `[θ|m|v]` is pushed to *every* replica every step, an O(N−1) cost against
-    O(1) compute (§2d.3a: 4 GPUs currently buy 1.46×).
+    its own device, which is where the bigger half of the win is — without it the full
+    `[θ|m|v]` is pushed to every replica every step, an O(N−1) cost against
+    O(1) compute.
 
     `nShardTail`: how many TRAILING entries of the param list are PER-EXAMPLE and must be sharded
-    like `x` rather than replicated like the parameters. Today that is exactly the stochastic-depth
-    drop masks. ⚠ It is a COUNT supplied by the driver rather than something the shim infers: an
+    like `x` rather than replicated like the parameters: the stochastic-depth
+    drop masks. It is a count supplied by the driver rather than something the shim infers: an
     index would be per-net and a shape test ("outer dim == batch") would sweep up any parameter
-    that happens to be batch-sized. Default 0, so every existing call site is unchanged.
+    that happens to be batch-sized. Default 0.
 
-    ⚠ The extern is `_dp2`, not `_dp`, because this ADDED AN ARGUMENT — §4's rule for
-    `pjrt_ffi_invoke_f32_resident_v2`: a stale `.so` against a new binary shifts every argument,
-    which is garbage rather than a link error. A rename makes it a link error. -/
+    The extern is `_dp2`, not `_dp`, because it takes an extra argument: a stale `.so` against a
+    new binary would shift every argument, which is garbage rather than a link error, and the
+    rename makes it a link error. -/
 @[extern "lean_iree_mlp_train_step_v_dp2"]
 opaque mlpTrainStepVDP
   (sess : @& LowererSession) (fnName : @& String)
@@ -274,16 +273,15 @@ opaque mlpTrainStepVDP
     `d₃` classes). Returns the updated params, packed in the same layout.
 
     `nResident` — how many LEADING param tensors may stay on the device between
-    steps (handoff §2d.3). The driver is the only place that knows the packed
+    steps. The driver is the only place that knows the packed
     layout is `[θ|m|v | lr,bc₁,bc₂ | bn stats]`, and hence that the first `3×P`
     tensors are exactly the ones the host writes once and thereafter only feeds
     straight back; so it states the count and the shim checks that input `i+1`
     and output `i` really are the same tensor before retaining anything.
 
-    **It is a request, not a mode.** The transport is chosen in C — residency
+    It is a request, not a mode. The transport is chosen in C — residency
     engages only under `$PJRT_FFI_RESIDENT=1` on the XLA build, and is inert
-    everywhere else — precisely so that this driver keeps no backend branch to
-    drift (§2d.3, "the design decision that protects every existing gate").
+    everywhere else — so that this driver keeps no backend branch to drift.
     Default `0` = the copying path, which is what every tie and DP-check harness
     wants: those read the whole returned blob, and a retained prefix would leave
     it unwritten. -/

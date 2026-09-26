@@ -1,5 +1,6 @@
 import LeanMlir.Types
-/-! Spec helpers: param counting, feature queries, arch display, validation. -/
+/-! Spec helpers: parameter layouts and counts (`Layer.paramSlots`, `NetSpec.totalParams`), feature
+    queries the codegen gates helper emission on, architecture display, and validation. -/
 
 /-- Param shapes owned by a `.fpnDetect` layer, in the ONE canonical order that
     `emitTrainStepSig`, the optimizer, the grad-clip list, the backward's
@@ -656,13 +657,13 @@ inductive ParamUnit where
   | millions | thousands | bare
   deriving Repr, DecidableEq
 
-/-- **The shared Bestiary summary block.** Every [`Bestiary/*.lean`](https://github.com/brettkoonce/lean4-mlir/tree/main/Bestiary) entry printed its own
-    `private def summarize`; all 41 were the same ten lines varying only in the first line's
-    label, the `params` abbreviation and an optional parenthetical on the `validate : OK` line.
+/-- **The shared Bestiary summary block**, printed by every [`Bestiary/*.lean`](https://github.com/brettkoonce/lean4-mlir/tree/main/Bestiary) entry.
+    The first line's label, the `params` abbreviation (`unit`) and an optional parenthetical on
+    the `validate : OK` line (`okNote`) are the parts that vary.
 
-    ⚠ The `── {name} ──` and `params<pad>: {n}` lines are **load-bearing**, not decoration:
+    The `── {name} ──` and `params<pad>: {n}` lines are parsed, not decoration:
     `tests/test_bestiary_params.py` parses exactly those two shapes out of each binary's stdout
-    to pin all 189 variants against `tests/bestiary_params.yml` (the CI drift guard in
+    to pin every variant against `tests/bestiary_params.yml` (the CI drift guard in
     `.github/workflows/certs.yml`). Keep both shapes if you touch this. -/
 def NetSpec.summarize (s : NetSpec) (size : SummarySize := .image)
     (unit : ParamUnit := .millions) (okNote : String := "") : IO Unit := do

@@ -3,8 +3,7 @@ import LeanMlir.FloatFmt
 /-! Blackjack under Gymnasium Blackjack-v1 `sab=True` rules (Sutton & Barto
     Example 5.1): the environment, the exact DP instrument, the comparison arms,
     Monte Carlo scoring and tabular Q-learning. Pure Lean, no FFI. Shared by the
-    `blackjack-env` and `blackjack-dqn` demos; the plan is
-    `planning/blackjack_dqn_demo.md`. -/
+    `blackjack-env` and `blackjack-dqn` demos. -/
 
 namespace BJ
 

@@ -1,4 +1,4 @@
-/-! # NetSpec-style layer DSL for the verified trainers (Tier-2)
+/-! # NetSpec-style layer DSL for the verified trainers
 
 A verified trainer should read like a `NetSpec` trainer — a layer
 list + config + `train` — with the *only* difference being the formalization underneath.
@@ -13,12 +13,13 @@ This file provides that surface:
                          with `#guard spec.toSpecs == XLayout.specs` — see `VerifiedNetsCore.lean`'s
                          `#guard resnet34Verified.toSpecs == ResNet34Layout.specs`.)
 
-The architecture's *faithfulness* is the audited `<net>HasVJP` theorem, which is itself a
-hand-unrolled `foldl` of the generic `vjpComp` chain-rule combinator ([`Proofs/Tensor.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Tensor.lean))
-over these same layers — so the spec and the proof describe the same fold. Generating the
-verified StableHLO from `layers` (folding the proven op-emitters) and folding the proof via
-a `netVjp` term are the remaining Tier-2 / Tier-3 steps; for now the slug names the committed,
-audited render of this architecture.
+`SpecVJP` ties nine of the specs — `linearVerified`, `mlpVerified`, `cnnVerified`,
+`cifarVerified`, `resnet34Verified`, `mobilenetv2Verified`, `efficientnetVerified`,
+`convnextVerified`, `vitVerified` — to their net functions (`<net>Verified*_denote_eq`, by `rfl`
+on the literal layer list, so a spec edit breaks it) and to the rendered forward graph
+(`<net>Verified*_fwd_faithful`). The emitted train step's faithfulness is the per-net `*StepTie*`
+capstone, stated about the render, not about `layers`: the slug names the committed render
+under `verified_mlir/`, which is not derived from `layers`.
 -/
 
 /-- Which dataset a verified trainer runs on. Picks the loader, the eval-split name,
@@ -31,7 +32,7 @@ inductive VerifiedData where
   /-- Imagenette under `dataDir/imagenette` — train stored at 256² (center-cropped
       to 224² per batch), val at 224². -/
   | imagenette
-  /-- **Full 1000-class ImageNet, streamed from the generated tfds shim** (handoff §2k).
+  /-- **Full 1000-class ImageNet, streamed from the generated tfds shim.**
       1,281,167 train / 50,000 val at 224².
 
       Unlike every case above, this one is NOT preloaded: at f32 the train split is ~938 GiB of host
@@ -41,10 +42,8 @@ inductive VerifiedData where
       augmentation at all** for this dataset, which is the point: there is exactly one definition of
       the transform and it is the one the JAX reference trainer uses.
 
-      ⚠ *Per net*, and that is the part that was wrong until 2026-08-02: the script was hardcoded to
-      ResNet-34's, so every net got RRC+hflip regardless of what its reference asked for. The
-      transform is still single-definition — it is generated from the same `TrainConfig` the
-      reference trainer runs — but WHICH definition is now a property of the net.
+      The shim is per net: each is generated from the `TrainConfig` that net's reference trainer
+      runs, so the transform has one definition per net and the net selects it.
 
       The VAL split is streamed per pass too (`spawnValStream`); 49,920 images after tfds
       `drop_remainder`, the same count the reference run reported. -/
@@ -58,8 +57,8 @@ inductive VLayer where
   | convBn (ic oc k stride : Nat)
   /-- conv → per-channel BN → relu with **no conv bias** — `{W, γ, β}`. BN removes a conv bias
       (`(x+b) − mean(x+b) = x − mean(x)`), so a BN-followed conv carries none in He et al.'s
-      `.convBn`; ResNet-34 uses this and the nets that genuinely ship a bias use `convBn`
-      (§2l step B, measured in [`tests/TestConvBiasZero.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvBiasZero.lean)). -/
+      `.convBn`; ResNet-34 uses this and the nets that ship a bias use `convBn`
+      ([`tests/TestConvBiasZero.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvBiasZero.lean) measures that the BN-followed conv biases get zero gradient). -/
   | convBnNB (ic oc k stride : Nat)
   /-- max pool `k×k` / `stride`. No params. -/
   | maxPool (k stride : Nat)
@@ -72,14 +71,14 @@ inductive VLayer where
       dispatch `residualStage` uses, and for R50 that fires on **all four** stages, because
       stage 1 changes 64→256 at stride 1 where R34's stage 1 is `ic = oc`.
 
-      ⚠ **This is ResNet v1.5, not He et al.'s v1**: the stride sits on the **3×3** (and on the
-      projection), with the leading 1×1 at stride 1. Measured off the reference
-      ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `bottleneck_block_down`), not assumed — putting it on the first
-      1×1 compiles, trains, descends and is a different net (§2k's heavy-ball trap one layer up).
+      This is ResNet v1.5, not He et al.'s v1: the stride sits on the **3×3** (and on the
+      projection), with the leading 1×1 at stride 1, as in the reference
+      ([`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)'s `bottleneck_block_down`). Putting it on the first
+      1×1 compiles, trains, descends and is a different net.
 
       **No conv biases** — every conv here is BN-followed, so a bias cannot reach the output
       (`convBnNB`'s argument, four convs at a time). torchvision's R50 carries none either, which
-      is why the derived count lands on the reference's 25,557,032 with no adjustment (§2m). -/
+      is why the derived count lands on the reference's 25,557,032 with no adjustment. -/
   | bottleneckStage (ic oc nBlocks stride : Nat)
   /-- global average pool. No params. -/
   | globalAvgPool
@@ -104,10 +103,9 @@ inductive VLayer where
   | invertedResidual (ic mid oc stride : Nat)
   /-- MobileNetV2 inverted-residual block with **no conv biases** — `{W,γ,β}` ×3. Every conv in the
       block is BN-followed, so a bias cannot reach the output (the `convBnNB` argument, three convs
-      at a time); the torchvision/JAX reference carries none, and ours carried 52 across the net
-      (§2m: the +17,056-param gap to the reference, closed exactly). Kept beside
-      `invertedResidual` rather than replacing it for `convBnNB`'s reason — a net whose blocks
-      genuinely ship biases should still be able to say so. -/
+      at a time); the torchvision/JAX reference carries none, and with this constructor the
+      derived count matches the reference's. Kept beside `invertedResidual` for `convBnNB`'s
+      reason — a net whose blocks ship biases can still say so. -/
   | invertedResidualNB (ic mid oc stride : Nat)
   /-- EfficientNet MBConv block (`ic→mid=t·ic→oc`, depthwise `k×k`, SE ratio `r`): expand 1×1
       (skipped when `mid=ic`, i.e. t=1) → BN → swish, depthwise k×k → BN → swish, squeeze-excite
@@ -115,27 +113,26 @@ inductive VLayer where
       (expand{W,b,γ,β} if t≠1) ++ depthwise{W,b,γ,β} ++ SE{Ws₁,bs₁,Ws₂,bs₂} ++ project{W,b,γ,β}. -/
   | mbConvSE (ic mid oc r k : Nat)
   /-- EfficientNet MBConv with **no conv biases on the BN-followed convs** — expand/depthwise/
-      project become `{W,γ,β}`. ⚠ **The squeeze-excite biases STAY.** SE's two 1×1 convs are
-      followed by an ACTIVATION (sigmoid gate), not BN, so nothing absorbs them and the reference
-      carries them; only a BN-followed conv can drop its bias. That distinction is what made the
-      +21,008 gap close exactly (§2m) — the audit's rule was "a rank-1 kind-2 param immediately
-      after a **rank-4** kernel", and SE's params are rank-2. -/
+      project become `{W,γ,β}`. The squeeze-excite biases stay: SE's two 1×1 convs are followed
+      by an activation (the sigmoid gate), not BN, so nothing absorbs them and the reference
+      carries them; only a BN-followed conv can drop its bias. With both rules the derived count
+      matches the reference's 5,288,548 at 1000 classes. -/
   | mbConvSENB (ic mid oc r k : Nat)
-  /-- **MobileNetV4 Universal Inverted Bottleneck** (`planning/archive/mnv4_verified.md`):
+  /-- **MobileNetV4 Universal Inverted Bottleneck**:
       `optional pre-DW (preDWk) → 1×1 expand ic→mid → optional post-DW (postDWk) → 1×1 project
       mid→oc`, every conv BN-followed and therefore **bias-free** (`convBnNB`'s argument, and what
-      `Spec.lean`'s baseline count already assumes). `mid = ic * expand`.
+      `Spec.lean`'s baseline count assumes). `mid = ic * expand`.
 
-      ⭐ `k = 0` means "omit that depthwise", which is how ONE constructor expresses all four of
+      `k = 0` means "omit that depthwise", which is how one constructor expresses all four of
       MNv4's block families — ExtraDW (both DWs), IB/MBConv (post only), ConvNeXt-like (pre only),
-      FFN (neither). That is the architecture's whole "stop adding new block types" claim, and it
-      is why this is one `VLayer` case rather than four.
+      FFN (neither).
 
-      ⚠⚠ **A wrong pre/post dispatch is INVISIBLE to this function.** A pre-DW and a post-DW at the
-      same `k` and the same channel count contribute *identical* parameter shapes, so emitting one
-      where the table says the other yields a net that type-checks, trains, descends, and is not
-      MobileNetV4. Same class as R50's stride-on-the-3×3 and the 2×2 stem pool. The gate is a
-      forward tie against the reference on shared weights — **not** a param count, and not this. -/
+      A wrong pre/post dispatch is invisible to this function: a pre-DW and a post-DW at the same
+      `k` and the same channel count contribute identical parameter shapes, so emitting one where
+      the table says the other yields a net that type-checks, trains, descends, and is not
+      MobileNetV4. R50's stride-on-the-3×3 and the 2×2 stem pool are invisible in the same way.
+      The check is a forward tie against the reference on shared weights, not a parameter
+      count. -/
   | uib (ic oc expand stride preDWk postDWk : Nat)
   /-- **Fused inverted bottleneck**, single block, no squeeze-excite — EfficientNetV2's early-stage
       block, and MobileNetV4's stage 0. `k×k regular conv ic→mid (stride) → BN → swish →
@@ -143,19 +140,18 @@ inductive VLayer where
       "Fused" = the MBConv expand-1×1 and depthwise collapse into ONE regular `k×k` conv, which is
       why nothing here is depthwise. `mid = ic * expand`. Bias-free — both convs are BN-followed.
 
-      ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium` (swish until 2026-09-24, inherited
-      from the JAX block being shared with EfficientNetV2; `planning/mnv4_timm_parity.md`).
+      ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium`.
 
-      ⚠ Deliberately narrower than the baseline `Layer.fusedMbConv`, which also carries `nBlocks`
-      and `useSE`. MNv4 uses `n = 1, useSE = false`, and a layout whose render does not exist is a
-      trap — so the constructor cannot express what this file cannot emit. -/
+      Narrower than the baseline `Layer.fusedMbConv`, which also carries `nBlocks` and `useSE`.
+      MNv4 uses `n = 1, useSE = false`, and no render exists for the other settings, so the
+      constructor cannot express them. -/
   | fusedMbConvNB (ic oc expand k stride : Nat)
   /-- ConvNeXt block @ `c` channels (expand ratio 4): depthwise 7×7 → scalar-LN → 1×1 expand
       c→4c → GELU → 1×1 project 4c→c → layerScale (per-channel γ). Params: depthwise{W,b};
       LN{γ,β scalar}; expand{W,b}; project{W,b}; layerScale{γ:[c]}. -/
   | convNextBlock (c : Nat)
-  /-- ConvNeXt block with the **real channel LayerNorm** — `γ,β : [c]` instead of two rank-0
-      scalars (§2m). The normalisation axis changes with it (over `c` per spatial position, not
+  /-- ConvNeXt block with the **channel LayerNorm** — `γ,β : [c]` instead of two rank-0
+      scalars. The normalisation axis changes with it (over `c` per spatial position, not
       over the whole `c·h·w` map), but that is invisible to the LAYOUT; what the layout sees is the
       affine going from 2 floats to 2c. Kept beside `convNextBlock` for `convBnNB`'s reason. -/
   | convNextBlockCh (c : Nat)
@@ -183,7 +179,7 @@ private def convBnNBSpec (ic oc k : Nat) : Array (Array Nat × Nat) :=
 private def idBlk (c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,c,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2)]
 /-- downsampling basic block `cin→c`: two conv→BN→relu + the **1×1** option-B projection
-    shortcut (He et al. §3.3). It was 3×3 here until 2026-07-30 — §2k/§2l. -/
+    shortcut (He et al. §3.3). -/
 private def downBlk (cin c : Nat) : Array (Array Nat × Nat) :=
   #[(#[c,cin,3,3],0),(#[c],1),(#[c],2), (#[c,c,3,3],0),(#[c],1),(#[c],2),
     (#[c,cin,1,1],0),(#[c],1),(#[c],2)]   -- §2l step A: option-B 1×1 projection
@@ -215,9 +211,9 @@ private def bottleneckStageSpec (ic oc count stride : Nat) : Array (Array Nat ×
   return a
 
 /-- The `(dims, initKind)` params this layer contributes, in func-arg order
-    (`initKind`: 0 = He(fan-in), 1 = ones (γ), 2 = zeros (β / bias), 3 = 1e-6 (layer scale γ,
-    the ConvNeXt paper's value and the JAX reference's `emitLayerScaleInit`; it was kind 1 until
-    2026-09-13, so the two paths trained ConvNeXt from different inits)). -/
+    (`initKind`: 0 = random weight (`mkParam`: conv He fan-out, dense Glorot, with the ConvNeXt
+    and ViT overrides), 1 = ones (γ), 2 = zeros (β / bias), 3 = 1e-6 (layer scale γ, the ConvNeXt
+    paper's value and the JAX reference's `emitLayerScaleInit`)). -/
 def toSpecs : VLayer → Array (Array Nat × Nat)
   | convBn ic oc k _        => convBnSpec ic oc k
   | convBnNB ic oc k _      => convBnNBSpec ic oc k
@@ -291,22 +287,20 @@ structure VerifiedNetSpec where
   /-- Per-BN-layer channel counts in forward order (empty = LayerNorm / no-BN). Drives running-stats
       BN threading in `trainAdamSched` — see `VerifiedNet.bnChannels`. -/
   bnChannels : Array Nat := #[]
-  /-- **Stochastic-depth keep probabilities**, one per drop site, in the render's signature order
-      (`planning/archive/stochastic_depth.md`). Empty on every net without a `*sd` render.
+  /-- **Stochastic-depth keep probabilities**, one per drop site, in the render's signature order.
+      Empty = no drop sites. Read only by `*drop*` variants (`VerifiedVariant.sdOn`).
 
-      ⚠ A SECOND hand-list against the renderer's `enetDropIdxs`/`enetDropTotal` — the same
-      two-lists shape as `toSpecs == XLayout.specs`, and for the same structural reason: this file
-      sits DOWNSTREAM of `VerifiedTrain`, so the renderer cannot share the definition by import
-      without inverting the dependency. [`tests/TestDropPathRamp.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestDropPathRamp.lean) is the `#guard` that pins
-      them, and it is what stops the ramp drifting the way §2k's `α/K` did. -/
+      A second hand-list beside the renderers' own site tables (e.g.
+      `Proofs.StableHLO.enetDropIdxs` / `Proofs.StableHLO.enetDropTotal`): the spec modules do not
+      import `Proofs/Codegen`, so the two cannot share a definition.
+      [`tests/TestDropPathRamp.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestDropPathRamp.lean) is the `#guard` that pins them together. -/
   dropKeeps : Array Float := #[]
   /-- Which directory this net's artifacts live in — see `VerifiedNet.mlirDir`. Default
       `verified_mlir/` (the certified, pinned corpus); the width/batch SWEEP specs set
       `.lake/build` because they render from argv at run time and their output is a build product. -/
   mlirDir : String := "verified_mlir"
-  /-- ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C) — `(keep_prob, per-example width)`, `none` when
-      the net has none. See `VerifiedNet.dropoutKeep` for why the WIDTH is carried: this mask is
-      per-ELEMENT where `dropKeeps` above is per-example, and every downstream difference (blob
+  /-- Classifier dropout — `(keep_prob, per-example width)`, `none` when the net has none. See
+      `VerifiedNet.dropoutKeep` for why the WIDTH is carried: this mask is per-ELEMENT where `dropKeeps` above is per-example, and every downstream difference (blob
       shape, draw count, DP shard split) falls out of that one number. -/
   dropoutKeep : Option (Float × Nat) := none
   /-- The generated ImageNet batch shim this net streams — see `VerifiedNet.shimScript` for why

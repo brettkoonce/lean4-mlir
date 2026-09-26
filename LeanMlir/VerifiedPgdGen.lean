@@ -2,13 +2,13 @@
 
 `genLinearPgdStep`, `genMlpPgdStep`, `genCnnPgdStep`, `genCifarPgdStep`: one PGD step (forward,
 the softmax-CE input gradient, an L∞ or L2 step, projection onto the ε-ball, clip to `[0,1]`) as
-StableHLO text, for `VerifiedAttack`'s attacks. ⚠ These are NOT rendered from a proven graph and
+StableHLO text, for `VerifiedAttack`'s attacks. These are not rendered from a proven graph and
 no tie pins them: each follows the proven input-VJP's formula by hand (the formula is cited in its
 docstring), so they are unverified program code, like the reference `MlirCodegen`. -/
 
-/-- Phase-3 PGD-step kernel for the linear classifier (`planning/archive/robustness.md`).
-    `forward → softmax-CE input gradient dx = (softmax(xW+b) − onehot)·Wᵀ` (the proven
-    linear input-VJP, `Proofs.mlpInputGrad`'s 1-layer case) → L∞ sign-step → project to the
+/-- PGD-step kernel for the linear classifier.
+    `forward → softmax-CE input gradient dx = (softmax(xW+b) − onehot)·Wᵀ` (the formula of the
+    linear input-VJP, written by hand) → L∞ sign-step → project to the
     `eps`-ball around `x0` → clip to [0,1]. Returns the advanced adversarial input `x_adv`.
     `eps`/`alpha` baked as constants (recompiled per sweep point). Invoked via the generic
     `forwardF32` FFI with `onehot`+`x0` in the params blob and `nClasses := d0` (output size) —
@@ -83,9 +83,10 @@ def genLinearPgdStep (bs d0 d1 : Nat) (eps alpha : Float) (linf : Bool) : String
   s!"    return %c4 : {bxd0}\n" ++
   "  }\n}\n"
 
-/-- Phase-3 PGD-step kernel for the 2-hidden-layer MLP (`d0→h→h→d1`, ReLU). Forward
-    (saving the pre-activations `z0,z1`) → the proven `mlpInputGrad` VJP
-    `dx = ((g·W₂ᵀ ⊙ relu'(z₁))·W₁ᵀ ⊙ relu'(z₀))·W₀ᵀ` (ReLU masks via `compare GT`/`select`,
+/-- PGD-step kernel for the 2-hidden-layer MLP (`d0→h→h→d1`, ReLU). Forward
+    (saving the pre-activations `z0,z1`) → the input gradient
+    `dx = ((g·W₂ᵀ ⊙ relu'(z₁))·W₁ᵀ ⊙ relu'(z₀))·W₀ᵀ`, the formula of `Proofs.mlpInputGrad`
+    written by hand (ReLU masks via `compare GT`/`select`,
     the codegen's idiom) → L∞/L2 step + projection. Returns `x_adv`. -/
 def genMlpPgdStep (bs d0 h d1 : Nat) (eps alpha : Float) (linf : Bool) : String :=
   let bxd0 := s!"tensor<{bs}x{d0}xf32>"
@@ -178,7 +179,7 @@ def genMlpPgdStep (bs d0 h d1 : Nat) (eps alpha : Float) (linf : Bool) : String 
   s!"    return %clB : {bxd0}\n" ++
   "  }\n}\n"
 
-/-- **Phase-3 PGD-step kernel for the verified MNIST CNN** (`conv 1→32 → relu → conv 32→32 →
+/-- **PGD-step kernel for the verified MNIST CNN** (`conv 1→32 → relu → conv 32→32 →
     relu → maxpool 28→14 → flatten → dense 6272→512 → relu → 512→512 → relu → 512→10`).
     Forward (saving every pre-activation + the maxpool input) → softmax-CE seed → the full
     input-VJP `dx`, mirroring `verified_mlir/cnn_train_step.mlir`'s backward ops:
@@ -323,7 +324,7 @@ def genCnnPgdStep (bs : Nat) (eps alpha : Float) (linf : Bool) : String :=
   s!"    return %clB : {bxd0}\n" ++
   "  }\n}\n"
 
-/-- **Phase-3 PGD-step kernel for the verified CIFAR-10 CNN** — the deeper sibling of
+/-- **PGD-step kernel for the verified CIFAR-10 CNN** — the deeper sibling of
     `genCnnPgdStep` (`conv 3→32 → relu → conv 32→32 → relu → maxpool → conv 32→64 → relu →
     conv 64→64 → relu → maxpool → flatten(4096) → 512 → 512 → 10`). Same recipe — forward
     (saving every pre-activation + both maxpool inputs) → softmax-CE seed → the full input-VJP
