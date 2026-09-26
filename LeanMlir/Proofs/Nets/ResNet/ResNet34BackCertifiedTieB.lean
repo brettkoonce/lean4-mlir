@@ -36,7 +36,7 @@ checks with no budget raised.
 ## Scope
 
 A smooth-point statement: the tie assumes the stem relu clause (`h_stem : R34StemSmoothAt …`),
-the stem pool's per-example no-tie (`h_pool : R34PoolSmoothAt …`) and `0 < εs`, and takes each of
+the stem pool's per-example no-tie (`h_pool : StemPoolSmoothAt …`) and `0 < εs`, and takes each of
 the sixteen blocks as an opaque `HasVJPDiffAt` witness at its running activation (a basic block's
 two relu clauses are the caller's, inside that witness). One device: the data-parallel step,
 collectives included, is `ResNet34SyncStepTieB`'s. It is about the INPUT gradient; the parameter
@@ -87,7 +87,7 @@ theorem r34StemBHasVJPAt_backward (N h w : Nat) {ic oc : Nat}
     (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hrelu : R34StemSmoothAt N h w Ws bs εs γs βs x)
-    (hpool : R34PoolSmoothAt N h w
+    (hpool : StemPoolSmoothAt N h w
       (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x))
     (v : Vec (N * (oc * h * w))) :
     (r34StemBHasVJPAt N h w Ws bs εs hεs γs βs hc hh hw x hrelu hpool).backward v
@@ -278,7 +278,7 @@ theorem r34InputGradB_eq_r34B_full_vjp (N : Nat) {nCls : Nat}
     (b16 : Vec (N * (512 * 7 * 7)) → Vec (N * (512 * 7 * 7)))
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
     (h_stem : R34StemSmoothAt N 56 56 Ws bs εs γs βs x)
-    (h_pool : R34PoolSmoothAt N 56 56
+    (h_pool : StemPoolSmoothAt N 56 56
       (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) Ws bs εs γs βs x))
     (hb1 : HasVJPDiffAt b1 (opaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x))
     (hb2 : HasVJPDiffAt b2 (opaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x))
@@ -363,7 +363,7 @@ theorem r34InputGradB_correct (N : Nat) {nCls : Nat}
     (b16 : Vec (N * (512 * 7 * 7)) → Vec (N * (512 * 7 * 7)))
     (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56)))))
     (h_stem : R34StemSmoothAt N 56 56 Ws bs εs γs βs x)
-    (h_pool : R34PoolSmoothAt N 56 56
+    (h_pool : StemPoolSmoothAt N 56 56
       (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) Ws bs εs γs βs x))
     (hb1 : HasVJPDiffAt b1 (opaqueA0 (r34StemB N 56 56 Ws bs εs γs βs) x))
     (hb2 : HasVJPDiffAt b2 (opaqueA1 (r34StemB N 56 56 Ws bs εs γs βs) b1 x))

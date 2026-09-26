@@ -17,13 +17,13 @@ certificate at rounded slices.
 
 | kind | f32 peer | emitted by |
 |---|---|---|
-| `convWeightGradBBf16` | `ResNet34PoCB.convWGradB_den` | every net |
-| `convStridedWeightGradBBf16` (symmetric) | `ResNet34PoCB.convStridedWGradB_den` | ResNet-34/50, MobileNetV4's fused stage, ConvNeXt's downsamples |
-| `convStridedXlaWeightGradBBf16` (XLA-`SAME`) | `EnetPoCG.convStridedXlaWGradB_den` | EfficientNet-B0's, MobileNetV2's and MobileNetV4's stems |
-| `convStride4WeightGradBBf16` | `CnxPoCGB.psWGradB_den` | ConvNeXt's patchify stem |
-| `depthwiseWeightGradBBf16` | `EnetPoCG.depthwiseWGradB_den` | B0, MobileNetV2, MobileNetV4, ConvNeXt |
-| `depthwiseStridedWeightGradBBf16` (symmetric) | `EnetPoCG.depthwiseStridedWGradB_den` | B0, MobileNetV4 |
-| `depthwiseStridedXlaWeightGradBBf16` (XLA-`SAME`) | `Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den` | MobileNetV2 |
+| `convWeightGradBBf16` | `GradNodeB.convWGradB_den` | every net |
+| `convStridedWeightGradBBf16` (symmetric) | `GradNodeB.convStridedWGradB_den` | ResNet-34/50, MobileNetV4's fused stage, ConvNeXt's downsamples |
+| `convStridedXlaWeightGradBBf16` (XLA-`SAME`) | `GradNodeB.convStridedXlaWGradB_den` | EfficientNet-B0's, MobileNetV2's and MobileNetV4's stems |
+| `convStride4WeightGradBBf16` | `GradNodeB.psWGradB_den` | ConvNeXt's patchify stem |
+| `depthwiseWeightGradBBf16` | `GradNodeB.depthwiseWGradB_den` | B0, MobileNetV2, MobileNetV4, ConvNeXt |
+| `depthwiseStridedWeightGradBBf16` (symmetric) | `GradNodeB.depthwiseStridedWGradB_den` | B0, MobileNetV4 |
+| `depthwiseStridedXlaWeightGradBBf16` (XLA-`SAME`) | `GradNodeB.depthwiseStridedXlaWGradB_den` | MobileNetV2 |
 | `rowDenseWeightGradBBf16` | `ViTPoCGB.rowDenseWeightGradB_den` | ViT's Q/K/V/O and MLP denses |
 | `patchEmbedWeightGradBBf16` | `ViTPoCGB.patchEmbedWeightGradB_den` | ViT's patch embed |
 
@@ -180,7 +180,7 @@ theorem rowDenseWGradBBf16_den {N tk a c : Nat} (rnd : ℝ → ℝ) (xN cotN : S
   simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
-  exact vit_rowDenseW_grad_bridge bb
+  exact rowDense_weight_grad_bridge bb
     (fun r k => rnd (Mat.unflatten (batchSlice N (tk * a) x n) r k)) W
     (fun o => rnd (batchSlice N (tk * c) dy n o)) i j
 
@@ -203,7 +203,7 @@ theorem patchEmbedWGradBBf16_den {ic H W P tk D N : Nat} (rnd : ℝ → ℝ) (xN
             * rnd (batchSlice N ((tk + 1) * D) dy n o)) := by
   simp only [denStep, denStepApp, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
   refine congrArg rnd (Finset.sum_congr rfl fun n _ => ?_)
-  exact vit_patchW_grad_bridge Wp bc cls pos
+  exact patchEmbed_weight_grad_bridge Wp bc cls pos
     (fun j => rnd (batchSlice N (ic * H * W) img n j))
     (fun j => rnd (batchSlice N ((tk + 1) * D) dy n j)) d c kh kw
 

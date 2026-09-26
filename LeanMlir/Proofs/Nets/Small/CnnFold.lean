@@ -34,8 +34,8 @@ and false-fail the check.)
   (`convWeightSgd`/`convBiasSgd`), fed the chain cotangent `c`, denote
   `θ − lr·(certified ∂conv/∂θ · c)`.
 * `dW5_den` — the output-layer **dense-head** op (`weightSgd`) denotes
-  `W₅ − lr·(certified ∂dense/∂W₅ · dy)`; the other five head ops are `Cifar8PoC.denseW_den` /
-  `Cifar8PoC.denseB_den` at their layer.
+  `W₅ − lr·(certified ∂dense/∂W₅ · dy)`; the other five head ops are `SgdNode.denseW_den` /
+  `SgdNode.denseB_den` at their layer.
 * `cnn_W5_tied_totalloss` — at the emitted loss cotangent, the `W₅` op denotes
   `W₅ − lr·∂(crossEntropy ∘ forward)/∂W₅`.
 * `cnn_conv_tied_certified` — the four conv ops at the real forward activations and the chain
@@ -125,8 +125,8 @@ theorem cb1_den {ic c h w kH kW : Nat}
 
 The pool-output `pool : Vec (c·h·w)` flows through `W₃→relu→W₄→relu→W₅`; the
 per-layer cotangents are exactly the IR `mlpCotOut0/1` (with `(W₅,W₄,W₃)` playing
-the MLP's `(W₂,W₁,W₀)`). Every head op's `den` = certified is `Cifar8PoC.denseW_den` /
-`Cifar8PoC.denseB_den` at that layer; only the output-layer weight op is stated here, as
+the MLP's `(W₂,W₁,W₀)`). Every head op's `den` = certified is `SgdNode.denseW_den` /
+`SgdNode.denseB_den` at that layer; only the output-layer weight op is stated here, as
 the tie reads it. -/
 
 /-- Output-layer weight op `W₅` = certified step (cotangent = the loss cotangent `dy`). -/
@@ -140,7 +140,7 @@ theorem dW5_den {c h w d1 nClasses : Nat}
           pdiv (fun v : Vec (d1 * nClasses) =>
                   dense (Mat.unflatten v) b₅ (relu d1 (dense W₄ b₄ (relu d1 (dense W₃ b₃ pool)))))
                (Mat.flatten W₅) (finProdFinEquiv (i, j)) k * dy k :=
-  Cifar8PoC.denseW_den aN "%W5" lrStr dyN _ W₅ b₅ _ lr i j
+  SgdNode.denseW_den aN "%W5" lrStr dyN _ W₅ b₅ _ lr i j
 
 /-! ## Tie (dense head) — the top loss cotangent is the composed softmax-CE of the CONV forward
 

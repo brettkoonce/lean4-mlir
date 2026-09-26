@@ -34,8 +34,8 @@ output is two `addV`s.
 Only the no-SHlo-constructor pieces are hand-emitted, each certified in
 `TokenParamGrad.lean`: per-token dense `dW = Σ_{b,tokens} x⊗dy` / `db = Σ dy`
 (`vit_render_rowdense{W,b}_certified`), rowwise scalar-LN `dγ = Σ dy·x̂` / `dβ = Σ dy`
-(`vit_render_rowln{gamma,beta}_certified`), `dPos = Σ_b dy` (`vit_render_pos_certified`),
-`dCls = row-0 slice` (`vit_render_cls_certified`), the patchSize-1 patch-projection
+(`vit_render_rowln{gamma,beta}_certified`), `dPos = Σ_b dy` (`posEmbed_sgd_certified`),
+`dCls = row-0 slice` (`clsToken_sgd_certified`), the patchSize-1 patch-projection
 `dWp`/`dbp` over the patch rows (`vit_render_patch{W,b}_certified`), and the head
 `dWcls = clsᵀ·dy` / `dbcls = Σ dy` (M2).
 
@@ -80,12 +80,12 @@ private def rs3 (o flatN : String) (t f : Nat) : String :=
   s!"    {o} = stablehlo.reshape {flatN} : ({ty [BS, t*f]}) -> {ty [BS,t,f]}\n"
 
 /-- per-token dense weight grad `dW = Σ_(b,tokens) x ⊗ dy` — one `dot_general`
-    contracting batch+token axes (`vit_render_rowdenseW_certified`). -/
+    contracting batch+token axes (`rowDense_weight_sgd_certified`). -/
 private def rowDenseWGrad (o xFlat dyFlat : String) (a c : Nat) : String :=
   rs3 s!"{o}xi" xFlat NT a ++ rs3 s!"{o}di" dyFlat NT c ++
   s!"    {o} = stablehlo.dot_general {o}xi, {o}di, contracting_dims = [0, 1] x [0, 1], precision = [DEFAULT, DEFAULT] : ({ty [BS,NT,a]}, {ty [BS,NT,c]}) -> {ty [a,c]}\n"
 
-/-- per-token dense bias grad `db = Σ_(b,tokens) dy` (`vit_render_rowdenseb_certified`). -/
+/-- per-token dense bias grad `db = Σ_(b,tokens) dy` (`rowDense_bias_sgd_certified`). -/
 private def rowDenseBGrad (o dyFlat : String) (c : Nat) : String :=
   rs3 s!"{o}i" dyFlat NT c ++
   s!"    {o} = stablehlo.reduce({o}i init: %sc) applies stablehlo.add across dimensions = [0, 1] : ({ty [BS,NT,c]}, tensor<f32>) -> {ty [c]}\n"

@@ -94,7 +94,7 @@ theorem den_allReduceMeanF_convWeightGradB {N ic oc h w kH kW : Nat} (R : Nat) (
   congr 1
   apply Finset.sum_congr rfl
   intro r _
-  exact ResNet34PoCB.convWGradB_den xN cotN b (x r) W (cot r) idx
+  exact GradNodeB.convWGradB_den xN cotN b (x r) W (cot r) idx
 
 /-- **The optimizer tail at the all-reduced node**:
     `den (tail (allReduceMeanF R g))` is `adamWStep` at `dpMean` of the per-replica gradient

@@ -16,17 +16,17 @@ disjoint axes — and tests/TestConvNeXtFwdBTie.lean allows exactly that pair an
 | emitted node | lemma | per-example peer it batches |
 |---|---|---|
 | `layerScaleChGammaGradB` (18 block γ) | `layerScaleChGammaGradB_den` | `CnxPoCG.layerScaleChGammaGrad_den` |
-| `convWeightGradB` / `convBiasGradB` (18 expand + 18 project 1×1, + the stem bias) | `ResNet34PoCB.convWGradB_den` / `convBGradB_den` (`GradNodesB`) | — |
-| `depthwiseWeightGradB` / `depthwiseBiasGradB` (18 × 7×7) | `EnetPoCG.depthwiseWGradB_den` / `Mnv2PaperPoCG.depthwiseBGradB_den` (`GradNodesB`) | — |
-| `convStridedWeightGradB` / `convStridedBiasGradB` (3 × 2×2/s2 downsample) | `ResNet34PoCB.convStridedWGradB_den` / `convStridedBGradB_den` (`GradNodesB`) | — |
-| `convStride4WeightGradB` (patchify stem) | `CnxPoCGB.psWGradB_den` (`GradNodesB`) | `flatConvStride4WeightGradHasVJP`, per example |
+| `convWeightGradB` / `convBiasGradB` (18 expand + 18 project 1×1, + the stem bias) | `GradNodeB.convWGradB_den` / `convBGradB_den` (`GradNodesB`) | — |
+| `depthwiseWeightGradB` / `depthwiseBiasGradB` (18 × 7×7) | `GradNodeB.depthwiseWGradB_den` / `GradNodeB.depthwiseBGradB_den` (`GradNodesB`) | — |
+| `convStridedWeightGradB` / `convStridedBiasGradB` (3 × 2×2/s2 downsample) | `GradNodeB.convStridedWGradB_den` / `convStridedBGradB_den` (`GradNodesB`) | — |
+| `convStride4WeightGradB` (patchify stem) | `GradNodeB.psWGradB_den` (`GradNodesB`) | `flatConvStride4WeightGradHasVJP`, per example |
 | `veclnGammaGradB` / `rowDenseBiasGradB` at `R = h·w` (22 spatial LN sites) | `chanLnGammaGradB_den` / `chanLnBetaGradB_den` | `CnxPoCG.chanLnGammaGrad_den` / `chanLnBetaGrad_den` |
-| `veclnGammaGradB` / `rowDenseBiasGradB` at `R = 1` (the head LN, after GAP) | `ViTPoCGB.veclnGammaGradB_den` / `rowDenseBiasGradB_den_lnbeta` | — |
-| `weightGradB` / `biasGradB` (the classifier) | `ViTPoCGB.headWGradB_den` / `headBGradB_den` | — |
+| `veclnGammaGradB` / `rowDenseBiasGradB` at `R = 1` (the head LN, after GAP) | `GradNodeB.veclnGammaGradB_den` / `rowDenseBiasGradB_den_lnbeta` | — |
+| `weightGradB` / `biasGradB` (the classifier) | `GradNodeB.headWGradB_den` / `headBGradB_den` | — |
 | `convWeightGradBBf16` / `depthwiseWeightGradBBf16` / `convStridedWeightGradBBf16` / `convStride4WeightGradBBf16` (the bf16 artifacts) | `Bf16PoC.convWGradBBf16_den` and its siblings, [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean) | none — a bf16 node is its own op kind |
 
 **No new mathematics.** Every proof is `Finset.sum_congr rfl` over the batch and then the
-per-example bridge at `batchSlice n` — `ResNet34PoCB.denseWGradB_den`'s shape — because
+per-example bridge at `batchSlice n` — `GradNodeB.denseWGradB_den`'s shape — because
 each batched `den` arm is literally the per-example one under a batch sum. The channel-LN sites
 add one step: the batched render hands the LN ops `batchMap N (chanLNRows c h w)` of the saved
 input and of the cotangent (the `[h·w, c]` transposed views, lifted per example), and
@@ -45,7 +45,7 @@ lemmas.
 
 ## Scope
 * **`biasGradB` is the identity on its operand** and the classifier bias's batch reduce is in
-  the emitted text, outside the AST — so `ViTPoCGB.headBGradB_den` is stated PER EXAMPLE at `batchSlice n`,
+  the emitted text, outside the AST — so `GradNodeB.headBGradB_den` is stated PER EXAMPLE at `batchSlice n`,
   the per-example `biasGrad` carve-out carried over unchanged (as in `ViTFoldGB`).
 * Every lemma is `∀ cot`. The tie at these nodes, with the cotangents the emitted backward chain
   delivers and the smoothed loss, is `CnxTiePoCGB.cnx_net_tiedGB`.

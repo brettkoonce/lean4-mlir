@@ -26,7 +26,7 @@ theorem cnx_render_chlngamma_certified {c h w : Nat} (ε : ℝ) (β γ : Vec c)
           pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j := by
   rw [chanLN_gamma_contract ε β γ x cot k]
   exact congrArg (fun t => γ k - lr * t)
-    (vit_veclnGamma_grad_bridge ε β γ (Mat.unflatten (chanLNRows c h w x))
+    (layerNormVec_gamma_grad_bridge ε β γ (Mat.unflatten (chanLNRows c h w x))
       (chanLNRows c h w cot) k)
 
 /-- **Channel-LN β output, certified.** The β grad is the plain reduce `Σ_rows dy`, so the same
@@ -38,7 +38,7 @@ theorem cnx_render_chlnbeta_certified {c h w : Nat} (ε : ℝ) (γ β : Vec c)
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j := by
   rw [chanLN_beta_contract ε γ β x cot k]
   exact congrArg (fun t => β k - lr * t)
-    (vit_veclnBeta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
+    (layerNormVec_beta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
       (chanLNRows c h w cot) k)
 
 end Proofs

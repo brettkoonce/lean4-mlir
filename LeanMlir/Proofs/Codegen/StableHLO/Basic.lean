@@ -423,7 +423,7 @@ inductive SHlo : Nat → Type where
   -- the fused conv kernel/bias update ops — the conv analogue of `weightSgd`/`biasSgd`.
   -- `convWeightSgd`: `W − lr·(conv2dWeightGrad(b,x)·dy)` via the transpose-trick conv
   -- (transpose→transpose→convolution→transpose, then const→multiply→subtract), `den`
-  -- = `cnn_render_convW_certified`. `convBiasSgd`: `b − lr·(conv2dBiasGrad(W,x)·dy)`
+  -- = `conv_weight_sgd_certified`. `convBiasSgd`: `b − lr·(conv2dBiasGrad(W,x)·dy)`
   -- (reduce over batch+spatial [0,2,3], then SGD). `xName`/`wName`/`bName` are the saved
   -- activation/kernel/bias SSA names; `W,x,b,lr` carry the den. CnnFold proves
   -- both `den`s = the certified loss-descent step (via the conv VJP bridges).
@@ -436,7 +436,7 @@ inductive SHlo : Nat → Type where
   -- Chapter 4 (per-channel BatchNorm) param-SGD tail (the BN train step, folded into
   -- the AST): the fused per-channel γ/β update ops. `bnGammaSgd`: `γ − lr·dγ`,
   -- `dγ_c = Σ_{b,h,w} dy·x̂` (x̂ recomputed from the saved BN input `v` = conv output,
-  -- `den` = `cifar_bn_render_gamma_certified` via `reassocFwd`); `bnBetaSgd`: `β − lr·dβ`,
+  -- `den` = `bnPerChannel_gamma_sgd_certified` via `reassocFwd`); `bnBetaSgd`: `β − lr·dβ`,
   -- `dβ_c = Σ_{b,h,w} dy`. `gName`/`bName`/`vName` are the γ/β/conv-output SSA names;
   -- `epsStr` the ε literal. `SgdNodes` proves both `den`s = the certified step.
   | bnGammaSgd {oc h w : Nat} (gName vName epsStr lrStr : String) (ε : ℝ) (γ : Vec oc)
@@ -511,7 +511,7 @@ inductive SHlo : Nat → Type where
   -- the depthwise analogues of `convWeightSgd`/`convBiasSgd`. `depthwiseWeightSgd` (stride-1,
   -- blocks b2/b4): `W − lr·(depthwise_weight_grad(b,x)·dy)` via the per-channel transpose-trick
   -- conv (`batch_group_count = c`, output [1,c,kH,kW]→[c,1,kH,kW]); `den` =
-  -- `Mnv2PoC.depthwiseW_den`. `depthwiseStridedWeightSgd` (stride-2, blocks b1/b3/b5/b6):
+  -- `SgdNode.depthwiseW_den`. `depthwiseStridedWeightSgd` (stride-2, blocks b1/b3/b5/b6):
   -- zero-upsample dy (interior=1 → 2h×2w) then the SAME per-channel weight-grad on the 2h×2w grid;
   -- `den` = `W − lr·` `depthwiseStride2WeightGradHasVJP`'s backward. The depthwise bias grad is stride-INDEPENDENT
   -- (`Σ_{batch,spatial} dy`), so both bias ops emit the SAME `reduce` text as `convBiasSgd` (their
@@ -557,7 +557,7 @@ inductive SHlo : Nat → Type where
   -- `D` feature axis (x̂ = `layerNormForward D ε 1 0`), then per-channel affine `γ⊙x̂+β`; the γ grad
   -- `dγ_k = Σ_rows dy·x̂` reduces over the N=tokens row axis but KEEPS `D` (output `SHlo D` ≅
   -- `tensor<Dxf32>`, vs `lnGammaSgd`'s scalar `SHlo 1`). `den` = the per-channel certified grad
-  -- (`vit_render_veclngamma_certified`). The rowwise dense W/b + vecln β reuse the enet batched
+  -- (`layerNormVec_gamma_sgd_certified`). The rowwise dense W/b + vecln β reuse the enet batched
   -- `denseWeightSgdB`/`denseBiasSgdB` (their N-axis sum = vit's `rowDense_*_grad`).
   | veclnGammaSgd {N D : Nat} (gName xName epsStr lrStr : String) (ε : ℝ) (x : Vec (N*D)) (γ : Vec D) (lr : ℝ)
                                                            : SHlo (N*D) → SHlo D
@@ -565,7 +565,7 @@ inductive SHlo : Nat → Type where
   -- WEIGHT update. The embed-output cotangent `SHlo ((N+1)*D)` (CLS token at row 0, excluded) drives
   -- the strided patchifyWGrad (dilate the patch-token grad interior P-1, valid conv with the saved
   -- image) → `dW : Kernel4 D ic P P`. `den` = the certified patch-weight grad
-  -- (`vit_render_patchW_certified`, via the local `patchEmbedWeightGradFlat`). Output `SHlo (D*ic*P*P)`.
+  -- (`patchEmbed_weight_sgd_certified`, via the local `patchEmbedWeightGradFlat`). Output `SHlo (D*ic*P*P)`.
   -- The ViT analogue of ConvNeXt's stem 4×4/s4 weight — but here a VJP-cert EXISTS, so it is tied
   -- (vit has no even-kernel weight gap). Patch bias + cls + pos reuse the batched `denseBiasSgdB`.
   | patchEmbedWeightSgd {ic H W P N D : Nat} (wName xName lrStr : String)
@@ -577,7 +577,7 @@ inductive SHlo : Nat → Type where
   -- batch), so its Jacobian is the identity ⇒ `dPos = dy` (the embed cotangent, KEEPING all N+1
   -- tokens; only the emit batch is summed). Unlike `patchEmbedBiasSgd`/`denseBiasSgdB` (which reduce
   -- to `[c]`), pos KEEPS the `(N+1)` token axis, so its update is the 2D `tensor<(N+1)xDxf32>` — a
-  -- flat `denseBiasSgd` would mismatch the `%pos: tensor<197x192xf32>` arg. `den` = `vit_render_pos_certified`.
+  -- flat `denseBiasSgd` would mismatch the `%pos: tensor<197x192xf32>` arg. `den` = `posEmbed_sgd_certified`.
   | posEmbedSgd {N D : Nat} (pName lrStr : String) (pos : Mat (N+1) D) (lr : ℝ)
                                                            : SHlo ((N+1)*D) → SHlo ((N+1)*D)
   -- Chapter 8 scaling pass (full ConvNeXt-T): stride-4 SAME conv forward — the
@@ -1538,7 +1538,7 @@ noncomputable abbrev patchEmbedBackFlat := @patchEmbedInputGradFormula
 
 /-- **ViT patch-embedding weight-grad (flattened)** — `TokenParamGrad`'s `patchEmbedWeightGrad`,
     flattened (that file is downstream of this one; the tie is
-    `vit_render_patchW_certified`). The non-overlapping 16×16/s16 patchify conv's weight-VJP:
+    `patchEmbed_weight_sgd_certified`). The non-overlapping 16×16/s16 patchify conv's weight-VJP:
     `dW_(d,c,kh,kw) = Σ_patches (patch pixel read)·dy_(patch.succ, d)` — token 0 is the CLS row
     (excluded); the pixel read mirrors `patchEmbedFlat`'s, and `dy (finProdFinEquiv (p.succ, d))`
     mirrors `patchEmbedBackFlat`. -/

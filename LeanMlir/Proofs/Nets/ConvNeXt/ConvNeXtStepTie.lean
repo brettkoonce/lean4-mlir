@@ -41,11 +41,11 @@ its mean lie outside this statement (the batched form is `ConvNeXtStepTieGB.lean
   VJP — `chanLNTensor3Back_eq_chanLN_vjp`.
 * **the stem LN**: `psng`/`psnbt` tie at the stem-LN output cotangent, and the stem conv's own
   gradients see the LN input-VJP of it.
-* **the head at the vector LN**: `hng`/`hnbt : Vec 768` through `ViTPoC.veclnGammaSgd_den` /
+* **the head at the vector LN**: `hng`/`hnbt : Vec 768` through `SgdNode.veclnGammaSgd_den` /
   `rowDenseBiasSgd_den_lnbeta` at `N = 1`. Stated at the literal 768 because `1 * m` does not
   reduce at a variable `m` — the render's own documented trap, in the proof this time.
 * **the four even-kernel weight grads.** The three downsample 2×2/s2 weights
-  are `convStridedWeightSgd` (`ResNet34PoC.convStridedW_den` is kernel-generic), and the stem
+  are `convStridedWeightSgd` (`SgdNode.convStridedW_den` is kernel-generic), and the stem
   4×4/s4 weight is `convStride4WeightGrad`, whose `den` is
   `flatConvStride4WeightGradHasVJP`.
 
@@ -64,7 +64,7 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.CnxTiePoC
 
 open scoped BigOperators
-open Proofs.ViTPoC (vecLNGammaSgdTied_holds)
+open Proofs.SgdNode (vecLNGammaSgdTied_holds)
 open Proofs.CnxPoC (chanLNBetaSgdTied_holds chanLNGammaSgdTied_holds)
 
 /-! ## ConvNeXt block — all 9 params tied (depthwise → channel-LN → expand → GELU → project → layer-scale → +skip)
@@ -142,8 +142,8 @@ theorem cnx_block_ch_tied {c cExp h w : Nat}
   unfold cnxBlockChTied
   intro γlsB cotP cotE cotN' cotD
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
-  · intro idx; exact Mnv2PoC.depthwiseW_den xN wN lrStr cotN bdw (Tensor3.unflatten xin) Wdw cotD lr idx
-  · intro o;   exact Mnv2PoC.depthwiseB_den bN lrStr cotN Wdw (Tensor3.unflatten xin) bdw cotD lr o
+  · intro idx; exact SgdNode.depthwiseW_den xN wN lrStr cotN bdw (Tensor3.unflatten xin) Wdw cotD lr idx
+  · intro o;   exact SgdNode.depthwiseB_den bN lrStr cotN Wdw (Tensor3.unflatten xin) bdw cotD lr o
   · exact chanLNGammaSgdTied_holds
   · exact chanLNBetaSgdTied_holds
   · exact convWSgdTied_holds
@@ -157,7 +157,7 @@ theorem cnx_block_ch_tied {c cExp h w : Nat}
 Forward: `o = convˢ²(chanLN(xin))` (LN over the block-input grid `2h×2w` with a `Vec ci` affine,
 then a 2×2/s2 conv `ci → co`). No skip. Backward from `dyOut`: strided-conv-back (`cotN'`) →
 channel-LN-back. The strided **weight** is no longer a gap: `convStridedWeightSgd` is emitted at
-2×2 since `sWGradGeom` split the odd/even padding cases, and `ResNet34PoC.convStridedW_den` is
+2×2 since `sWGradGeom` split the odd/even padding cases, and `SgdNode.convStridedW_den` is
 kernel-generic. -/
 
 /-- **Downsample, tied.** Channel-LN γ/β at the `ci·(2h)·(2w)` input grid, plus the strided conv's
@@ -189,8 +189,8 @@ theorem cnx_down_ch_tied {ci co h w : Nat}
   refine ⟨?_, ?_, ?_, ?_⟩
   · exact chanLNGammaSgdTied_holds
   · exact chanLNBetaSgdTied_holds
-  · intro idx; exact ResNet34PoC.convStridedW_den xN wN lrStr cotN bd n Wd dyOut lr idx
-  · intro o; exact ResNet34PoC.convStridedB_den bN lrStr cotN Wd n bd dyOut lr o
+  · intro idx; exact SgdNode.convStridedW_den xN wN lrStr cotN bd n Wd dyOut lr idx
+  · intro o; exact SgdNode.convStridedB_den bN lrStr cotN Wd n bd dyOut lr o
 
 /-! ## Stem — 4×4/s4 patchify conv → channel-LN (all 4 params)
 
@@ -247,8 +247,8 @@ def cnxHeadChTied (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 10) (bfc : Vec 10)
     (gap : Vec (1*768)) (hn : Vec 768) (g : Vec 10) (lr : ℝ) : Prop :=
     let cotHn : Vec (1*768) := (denseHasVJP Wfc bfc).backward hn g
-    ViTPoC.VecLNGammaSgdTied 1 gN xN epsStr lrStr cotN ε hnbt gap hng cotHn lr
-  ∧ ViTPoC.VecLNBetaSgdTied 1 bN lrStr cotN ε hng gap hnbt cotHn lr
+    SgdNode.VecLNGammaSgdTied 1 gN xN epsStr lrStr cotN ε hnbt gap hng cotHn lr
+  ∧ SgdNode.VecLNBetaSgdTied 1 bN lrStr cotN ε hng gap hnbt cotHn lr
   ∧ (∀ i : Fin 10,
         den (SHlo.biasSgd bdN lrStr bfc lr (.operand dyN g)) i
           = bfc i - lr * ∑ j : Fin 10, pdiv (fun b' : Vec 10 => dense Wfc b' hn) bfc i j * g j)
@@ -262,8 +262,8 @@ theorem cnx_head_ch_tied (gN xN bN bdN epsStr lrStr cotN dyN : String) (ε : ℝ
   refine ⟨?_, ?_, ?_⟩
   · exact vecLNGammaSgdTied_holds
   · intro k;
-    exact ViTPoC.rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε hng (Mat.unflatten gap) hnbt cotHn lr k
-  · intro i; exact Cifar8PoC.denseB_den bdN lrStr dyN Wfc hn bfc g lr i
+    exact SgdNode.rowDenseBiasSgd_den_lnbeta bN lrStr cotN ε hng (Mat.unflatten gap) hnbt cotHn lr k
+  · intro i; exact SgdNode.denseB_den bdN lrStr dyN Wfc hn bfc g lr i
 
 /-- **Dense head weight `Wd`, tied to the WHOLE softmax-CE loss** — `Wd − lr·∂(CE ∘ dense)/∂Wd`. -/
 theorem cnx_dense_tied_totalloss {m : Nat} (aN wN lrStr dyN : String)
@@ -275,7 +275,7 @@ theorem cnx_dense_tied_totalloss {m : Nat} (aN wN lrStr dyN : String)
       = Wd i j - lr * pdiv (fun v : Vec (m * 10) => fun _ : Fin 1 =>
             crossEntropy 10 (dense (Mat.unflatten v) bd a) label)
           (Mat.flatten Wd) (finProdFinEquiv (i, j)) 0 := by
-  rw [Cifar8PoC.denseW_den aN wN lrStr dyN a Wd bd
+  rw [SgdNode.denseW_den aN wN lrStr dyN a Wd bd
         (fun k => softmax 10 (mnistLinear Wd bd a) k - oneHot 10 label k) lr i j,
       StableHLO.lossWeightGrad_eq_sum Wd bd a label i j]
 

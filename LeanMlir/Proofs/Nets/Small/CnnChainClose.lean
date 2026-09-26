@@ -91,7 +91,7 @@ theorem cnnChainCotW2_eq {c h w d1 nClasses : Nat}
 
 /-- **Conv-2 weight output, chain-certified.** `W₂ⁿ = W₂ − lr·(transpose-trick kernel grad)`
     denotes `W₂ − lr·(certified ∂conv2/∂W₂ · the cotangent the chain delivers at conv2)` — the
-    generic `cnn_render_convW_certified` instantiated at `cnnChainCotW2`. -/
+    generic `conv_weight_sgd_certified` instantiated at `cnnChainCotW2`. -/
 theorem cnn_render_convW2_chain_certified {c h w d1 nClasses kH kW : Nat}
     (b₂ : Vec c) (ac1 : Tensor3 c (2 * h) (2 * w))
     (W₃ : Mat (c * h * w) d1) (W₄ : Mat d1 d1) (W₅ : Mat d1 nClasses) (h3 h4 : Vec d1)
@@ -103,7 +103,7 @@ theorem cnn_render_convW2_chain_certified {c h w d1 nClasses kH kW : Nat}
           pdiv (fun v' : Vec (c * c * kH * kW) =>
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b₂ ac1))
                v idx j * cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy j :=
-  cnn_render_convW_certified b₂ ac1 v (cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy) lr idx
+  conv_weight_sgd_certified b₂ ac1 v (cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy) lr idx
 
 /-- **Conv-2 bias output, chain-certified.** -/
 theorem cnn_render_convb2_chain_certified {c h w d1 nClasses kH kW : Nat}
@@ -116,7 +116,7 @@ theorem cnn_render_convb2_chain_certified {c h w d1 nClasses kH kW : Nat}
       = b₂ o - lr * ∑ j : Fin (c * (2 * h) * (2 * w)),
           pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₂ b' ac1)) b₂ o j
             * cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy j :=
-  cnn_render_convb_certified W₂ ac1 b₂ (cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy) lr o
+  conv_bias_sgd_certified W₂ ac1 b₂ (cnnChainCotW2 W₃ W₄ W₅ h3 h4 ac2 hc2 dy) lr o
 
 /-- **Conv-1 weight output, chain-certified.** `W₁ⁿ` denotes `W₁ − lr·(certified ∂conv1/∂W₁ ·
     the deepest chain cotangent)` — the generic bridge at `cnnChainCotW1` (which crosses one
@@ -131,7 +131,7 @@ theorem cnn_render_convW1_chain_certified {ic c h w kH kW : Nat}
           pdiv (fun v' : Vec (c * ic * kH * kW) =>
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b₁ x))
                v idx j * cnnChainCotW1 W₂ hc1 cotW2 j :=
-  cnn_render_convW_certified b₁ x v (cnnChainCotW1 W₂ hc1 cotW2) lr idx
+  conv_weight_sgd_certified b₁ x v (cnnChainCotW1 W₂ hc1 cotW2) lr idx
 
 /-- **Conv-1 bias output, chain-certified.** -/
 theorem cnn_render_convb1_chain_certified {ic c h w kH kW : Nat}
@@ -142,6 +142,6 @@ theorem cnn_render_convb1_chain_certified {ic c h w kH kW : Nat}
       = b₁ o - lr * ∑ j : Fin (c * (2 * h) * (2 * w)),
           pdiv (fun b' : Vec c => Tensor3.flatten (conv2d W₁ b' x)) b₁ o j
             * cnnChainCotW1 W₂ hc1 cotW2 j :=
-  cnn_render_convb_certified W₁ x b₁ (cnnChainCotW1 W₂ hc1 cotW2) lr o
+  conv_bias_sgd_certified W₁ x b₁ (cnnChainCotW1 W₂ hc1 cotW2) lr o
 
 end Proofs

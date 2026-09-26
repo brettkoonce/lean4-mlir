@@ -115,7 +115,7 @@ noncomputable def r34StemBHasVJPAt (N h w : Nat) {ic oc : Nat}
     (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hrelu : R34StemSmoothAt N h w Ws bs εs γs βs x)
-    (hpool : R34PoolSmoothAt N h w
+    (hpool : StemPoolSmoothAt N h w
       (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) :
     HasVJPAt (r34StemB N h w Ws bs εs γs βs) x :=
   vjpCompAt _ (StableHLO.batchMap N (maxPool3s2Flat oc h w)) x
@@ -132,7 +132,7 @@ theorem r34StemB_differentiableAt (N h w : Nat) {ic oc : Nat}
     (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))))
     (hrelu : R34StemSmoothAt N h w Ws bs εs γs βs x)
-    (hpool : R34PoolSmoothAt N h w
+    (hpool : StemPoolSmoothAt N h w
       (StableHLO.cbReluStridedB N (h := 2 * h) (w := 2 * w) Ws bs εs γs βs x)) :
     DifferentiableAt ℝ (r34StemB N h w Ws bs εs γs βs) x :=
   (batchMap_differentiableAt _ _
@@ -178,12 +178,12 @@ theorem r34DownLayer_fwd (N h w : Nat) {ic oc : Nat} (p : R34DownW ic oc) (hq : 
 
 
 /-- The stem, 7×7/s2 conv-bn-relu then the 3×3/s2 pool, as a `CertLayer`. Its `ok` is exactly
-    `R34StemSmoothAt ∧ R34PoolSmoothAt` at the conv's output. -/
+    `R34StemSmoothAt ∧ StemPoolSmoothAt` at the conv's output. -/
 noncomputable def r34StemLayer (N h w : Nat) {ic oc : Nat} (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) :
     StableHLO.CertLayer (N * (ic * (2 * (2 * h)) * (2 * (2 * w)))) (N * (oc * h * w)) :=
   (StableHLO.cbReluStridedLayer N (h := 2 * h) (w := 2 * w) Ws bs εs hεs γs βs).comp
-    (r34PoolLayer N hc hh hw)
+    (stemPoolLayer N hc hh hw)
 
 theorem r34StemLayer_fwd (N h w : Nat) {ic oc : Nat} (hc : 0 < oc) (hh : 0 < h) (hw : 0 < w)
     (Ws : Kernel4 oc ic 7 7) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc) :
@@ -286,7 +286,7 @@ structure R34PosB {nCls : Nat} (w : R34BWeights nCls) : Prop where
     head has none (GAP and dense are smooth). -/
 structure R34SmoothAtB (N : Nat) {nCls : Nat} (w : R34BWeights nCls) (x : Vec (N * (3 * (2 * (2 * 56)) * (2 * (2 * 56))))) : Prop where
   stem : R34StemSmoothAt N 56 56 w.sW w.sb w.sε w.sγ w.sβ x
-  pool : R34PoolSmoothAt N 56 56
+  pool : StemPoolSmoothAt N 56 56
     (StableHLO.cbReluStridedB N (h := 2 * 56) (w := 2 * 56) w.sW w.sb w.sε w.sγ w.sβ x)
   a0 : R34IdSmoothAt N 56 56 w.a0 (r34Pre0 N w x)
   a1 : R34IdSmoothAt N 56 56 w.a1 (r34Pre1 N w x)

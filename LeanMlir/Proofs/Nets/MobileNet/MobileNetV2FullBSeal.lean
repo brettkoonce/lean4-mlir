@@ -60,7 +60,7 @@ namespace Mnv2FullBSeal
 
 open scoped BigOperators
 open Finset Filter Topology
-open Proofs BatchSeal R34FullBSeal
+open Proofs BatchSeal Proofs.BatchSeal
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. The structural weights

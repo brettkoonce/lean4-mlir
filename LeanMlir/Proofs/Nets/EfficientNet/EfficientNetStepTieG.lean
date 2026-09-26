@@ -54,9 +54,9 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.EnetTiePoCG
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
+open Proofs.BackLinks (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
   gateCotB)
-open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedXlaWTiedB_holds convWTiedB_holds
+open Proofs.GradNodeB (bnPairTiedB_holds convStridedXlaWTiedB_holds convWTiedB_holds
   denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
 
 /-- **A conv or depthwise bias, tied.** A bias gradient is the channel sum of the conv-output
@@ -73,7 +73,7 @@ def ConvBBetaTiedB (N h w : Nat) {oc : Nat} (cotN : String) (ε : ℝ) (b : Vec 
 
 theorem convBBetaTiedB_holds {N h w oc : Nat} {cotN : String} {ε : ℝ} {b : Vec oc}
     {cot : Vec (N * (oc * h * w))} : ConvBBetaTiedB N h w cotN ε b cot := fun o =>
-  ResNet34PoCB.bnBetaGradB_den cotN ε (fun _ => 0) b (fun _ => 0) (reassocB N oc h w cot) o
+  GradNodeB.bnBetaGradB_den cotN ε (fun _ => 0) b (fun _ => 0) (reassocB N oc h w cot) o
 
 def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
     (xN vN epsStr cotN : String)
@@ -110,24 +110,24 @@ def enetExpTiedG {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * h * w)) := swBackB (N * (mid * h * w)) en cotEr
   let cotEc : Vec (N * (mid * h * w)) := bnBackB N mid h w εe hεe γe βe ec cotEn
   -- expand 1×1 conv (c → mid), cot = cotEc
-  ResNet34PoCB.ConvWTiedB N h w xN cotN be xin We cotEc
+  GradNodeB.ConvWTiedB N h w xN cotN be xin We cotEc
   ∧ ConvBBetaTiedB N h w cotN εe be cotEc
-  ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εe γe βe (reassocB N mid h w ec)
+  ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εe γe βe (reassocB N mid h w ec)
         (reassocB N mid h w cotEn)
   -- depthwise (stride-1, kHd×kWd), cot = cotDc
-  ∧ ResNet34PoCB.DepthwiseWTiedB N h w xN cotN bd er Wd cotDc
+  ∧ GradNodeB.DepthwiseWTiedB N h w xN cotN bd er Wd cotDc
   ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
-  ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
+  ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
   -- SE reduce dense W₁/b₁ (mid → r), cot = cotE1; excite dense W₂/b₂ (r → mid), cot = cotE2
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN s Wz1 bz1 cotE1
-  ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
-  ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
+  ∧ GradNodeB.DenseWTiedB N xN cotN s Wz1 bz1 cotE1
+  ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1
+  ∧ GradNodeB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
+  ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
   ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
 theorem enet_exp_tiedG {N ic mid oc h w r kHd kWd : Nat}
@@ -188,24 +188,24 @@ def enetStridedTiedG {N ic mid oc h w r kHd kWd : Nat}
   let cotEn : Vec (N * (mid * (2 * h) * (2 * w))) := swBackB (N * (mid * (2 * h) * (2 * w))) en cotEr
   let cotEc : Vec (N * (mid * (2 * h) * (2 * w))) := bnBackB N mid (2 * h) (2 * w) εe hεe γe βe ec cotEn
   -- expand 1×1 conv (ic → mid, at 2h×2w), cot = cotEc
-  ResNet34PoCB.ConvWTiedB N (2 * h) (2 * w) xN cotN be xin We cotEc
+  GradNodeB.ConvWTiedB N (2 * h) (2 * w) xN cotN be xin We cotEc
   ∧ ConvBBetaTiedB N (2 * h) (2 * w) cotN εe be cotEc
-  ∧ ResNet34PoCB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN εe γe βe
+  ∧ GradNodeB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN εe γe βe
         (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn)
   -- strided depthwise (kHd×kWd, 2h→h), cot = cotDc
-  ∧ ResNet34PoCB.DepthwiseStridedWTiedB N h w xN cotN bd er Wd cotDc
+  ∧ GradNodeB.DepthwiseStridedWTiedB N h w xN cotN bd er Wd cotDc
   ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
-  ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
+  ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εd γd βd (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
   -- SE reduce/excite dense (mid → r → mid)
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN s Wz1 bz1 cotE1
-  ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
-  ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
+  ∧ GradNodeB.DenseWTiedB N xN cotN s Wz1 bz1 cotE1
+  ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1
+  ∧ GradNodeB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
+  ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat mid mid) (0 : Vec mid) bz2 cotE2
   -- project 1×1 conv (mid → oc), cot = cotPbn
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
   ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
 theorem enet_strided_tiedG {N ic mid oc h w r kHd kWd : Nat}
@@ -257,19 +257,19 @@ def enetNoExpTiedG {N ic oc h w r kHd kWd : Nat}
   let cotDn : Vec (N * (ic * h * w)) := swBackB (N * (ic * h * w)) dn cotDxSe
   let cotDc : Vec (N * (ic * h * w)) := bnBackB N ic h w εd hεd γd βd dc cotDn
   -- depthwise (stride-1, kHd×kWd, on ic), cot = cotDc
-  ResNet34PoCB.DepthwiseWTiedB N h w xN cotN bd xin Wd cotDc
+  GradNodeB.DepthwiseWTiedB N h w xN cotN bd xin Wd cotDc
   ∧ ConvBBetaTiedB N h w cotN εd bd cotDc
-  ∧ ResNet34PoCB.BnPairTiedB N ic h w vN epsStr cotN εd γd βd (reassocB N ic h w dc)
+  ∧ GradNodeB.BnPairTiedB N ic h w vN epsStr cotN εd γd βd (reassocB N ic h w dc)
         (reassocB N ic h w cotDn)
   -- SE reduce/excite dense (ic → r → ic)
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN s Wz1 bz1 cotE1
-  ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
-  ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2
+  ∧ GradNodeB.DenseWTiedB N xN cotN s Wz1 bz1 cotE1
+  ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat r r) (0 : Vec r) bz1 cotE1
+  ∧ GradNodeB.DenseWTiedB N xN cotN z Wz2 bz2 cotE2
+  ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat ic ic) (0 : Vec ic) bz2 cotE2
   -- project 1×1 conv (ic → oc), cot = cotPbn
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN bp se Wp cotPbn
   ∧ ConvBBetaTiedB N h w cotN εp bp cotPbn
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
 theorem enet_noexp_tiedG {N ic oc h w r kHd kWd : Nat}
@@ -303,9 +303,9 @@ def enetStemTiedG {N ic oc h w kHs kWs : Nat}
   let stn : Vec (N * (oc * h * w)) := bnBatchLA N oc h w εs γs βs stc
   let cotBnS : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) stn dyStem
   let cotStc : Vec (N * (oc * h * w)) := bnBackB N oc h w εs hεs γs βs stc cotBnS
-  ResNet34PoCB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotStc
+  GradNodeB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotStc
   ∧ ConvBBetaTiedB N h w cotN εs bs cotStc
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w stc)
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w stc)
         (reassocB N oc h w cotBnS)
 
 theorem enet_stem_tiedG {N ic oc h w kHs kWs : Nat}
@@ -341,13 +341,13 @@ def enetHeadTiedG {N c oc h w nC : Nat}
   let cotHsw : Vec (N * (oc * h * w)) := swBackB (N * (oc * h * w)) hn cotHr
   let cotHbn : Vec (N * (oc * h * w)) := bnBackB N oc h w εh hεh γh βh hc cotHsw
   -- head 1×1 conv (c → oc), cot = cotHbn
-  ResNet34PoCB.ConvWTiedB N h w xN cotN bh xhead Wh cotHbn
+  GradNodeB.ConvWTiedB N h w xN cotN bh xhead Wh cotHbn
   ∧ ConvBBetaTiedB N h w cotN εh bh cotHbn
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εh γh βh (reassocB N oc h w hc)
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εh γh βh (reassocB N oc h w hc)
         (reassocB N oc h w cotHsw)
   -- dense classifier (oc → nC), cot = g (the batched softmax-CE gradient)
-  ∧ ResNet34PoCB.DenseWTiedB N dN cotN a_gap Wfc bfc g
-  ∧ ResNet34PoCB.DenseBTiedB N cotN (0 : Mat nC nC) (0 : Vec nC) bfc g
+  ∧ GradNodeB.DenseWTiedB N dN cotN a_gap Wfc bfc g
+  ∧ GradNodeB.DenseBTiedB N cotN (0 : Mat nC nC) (0 : Vec nC) bfc g
 
 theorem enet_head_tiedG {N c oc h w nC : Nat}
     (xN vN epsStr cotN dN : String) (εh : ℝ) (hεh : 0 < εh)
@@ -438,8 +438,8 @@ theorem efficientnet_net_tiedG (xN vN epsStr cotN dN : String) (N : Nat) (w : B0
     let a16 : Vec (N * (320 * 7 * 7))    := mbExpW N 7 7 w.b16 a15
     -- loss cotangent + backward block-output cotangents (composed top-down by the block VJPs)
     let g    : Vec (N * 10) :=
-      Proofs.ResNet34TieB.unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
-        (Proofs.ResNet34TieB.rowB N 10
+      Proofs.BackLinks.unrowB N 10 (den (smoothedLossCotGraph N 10 α B aStr negAK bStr logN ohN
+        (Proofs.BackLinks.rowB N 10
           (headFwdB N (h := 7) (w := 7) w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb a16)) t))
     let dy16 : Vec (N * (320 * 7 * 7))   := (headFwdBHasVJP N (h := 7) (w := 7) w.hW w.hb w.hε hεw.h w.hγ w.hβ w.fcW w.fcb).backward a16 g
     let dy15 : Vec (N * (192 * 7 * 7))   := (mbExpWHasVJP N 7 7 w.b16 hεw.b16.e hεw.b16.d hεw.b16.p).backward a15 dy16

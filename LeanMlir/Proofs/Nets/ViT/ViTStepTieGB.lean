@@ -61,8 +61,8 @@ namespace Proofs.ViTTiePoCGB
 
 open scoped BigOperators
 open Proofs.ViTTiePoC (vitBlockFwdOMHV vitBlockCotInAtMHV ViTTieWeights)
-open Proofs.ViTPoCGB (rowDenseBTiedB_holds rowDenseWTiedB_holds vecLNBetaTiedB_holds
-  vecLNGammaTiedB_holds)
+open Proofs.ViTPoCGB (rowDenseBTiedB_holds rowDenseWTiedB_holds)
+open Proofs.GradNodeB (vecLNBetaTiedB_holds vecLNGammaTiedB_holds)
 
 /-! ## Per-example saves and internal cotangents as functions of a block's INPUT
 
@@ -202,8 +202,8 @@ def vitBlockTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String
   let cotLn2B : Vec (N * (Np1 * (heads * d))) := batchMapAux N (cLn2 ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
   let cotM1B  : Vec (N * (Np1 * mlpDim))      := batchMapAux N (cM1 ε γ1 β1 γ2 β2 Wq Wk Wv Wo bq bk bv bo Wfc1 bfc1 Wfc2) xin dyOut
   -- LN₁ γ/β  (cot = cotLn1B, LN input = xin)
-  ViTPoCGB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β1 xin γ1 cotLn1B
-  ∧ViTPoCGB.VecLNBetaTiedB N Np1 cotN ε γ1 xin β1 cotLn1B
+  GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β1 xin γ1 cotLn1B
+  ∧GradNodeB.VecLNBetaTiedB N Np1 cotN ε γ1 xin β1 cotLn1B
   -- Q dense W/b  (cot = dQB, dense input = ln1B)
   ∧ViTPoCGB.RowDenseWTiedB N Np1 xN cotN bq ln1B Wq dQB
   ∧ViTPoCGB.RowDenseBTiedB N Np1 cotN Wq ln1B bq dQB
@@ -217,8 +217,8 @@ def vitBlockTiedGB (N : Nat) {Np1 heads d mlpDim : Nat} (xN epsStr cotN : String
   ∧ViTPoCGB.RowDenseWTiedB N Np1 xN cotN bo attB Wo cotHB
   ∧ViTPoCGB.RowDenseBTiedB N Np1 cotN Wo attB bo cotHB
   -- LN₂ γ/β  (cot = cotLn2B, LN input = hB)
-  ∧ViTPoCGB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β2 hB γ2 cotLn2B
-  ∧ViTPoCGB.VecLNBetaTiedB N Np1 cotN ε γ2 hB β2 cotLn2B
+  ∧GradNodeB.VecLNGammaTiedB N Np1 xN epsStr cotN ε β2 hB γ2 cotLn2B
+  ∧GradNodeB.VecLNBetaTiedB N Np1 cotN ε γ2 hB β2 cotLn2B
   -- fc1 dense W/b  (cot = cotM1B, dense input = ln2B)
   ∧ViTPoCGB.RowDenseWTiedB N Np1 xN cotN bfc1 ln2B Wfc1 cotM1B
   ∧ViTPoCGB.RowDenseBTiedB N Np1 cotN Wfc1 ln2B bfc1 cotM1B
@@ -246,8 +246,8 @@ def vitFinalLNTiedGB (N : Nat) {nC : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (γF βF : Vec 192) (Wcls : Mat 192 nC) (b12out : Vec (N * (197 * 192))) (g : Vec (N * nC)) :
     Prop :=
   let cotFlB : Vec (N * (197 * 192)) := batchMap N (vitCotFl 196 192 nC Wcls) g
-  ViTPoCGB.VecLNGammaTiedB N 197 xN epsStr cotN ε βF b12out γF cotFlB
-  ∧ ViTPoCGB.VecLNBetaTiedB N 197 cotN ε γF b12out βF cotFlB
+  GradNodeB.VecLNGammaTiedB N 197 xN epsStr cotN ε βF b12out γF cotFlB
+  ∧ GradNodeB.VecLNBetaTiedB N 197 cotN ε γF b12out βF cotFlB
 
 theorem vit_finalLN_tiedGB (N : Nat) {nC : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (γF βF : Vec 192) (Wcls : Mat 192 nC) (b12out : Vec (N * (197 * 192))) (g : Vec (N * nC)) :
@@ -257,12 +257,12 @@ theorem vit_finalLN_tiedGB (N : Nat) {nC : Nat} (xN epsStr cotN : String) (ε : 
   refine ⟨?_, ?_⟩
   · exact vecLNGammaTiedB_holds
   · intro i
-    exact ViTPoCGB.rowDenseBiasGradB_den_lnbeta cotN ε γF
+    exact GradNodeB.rowDenseBiasGradB_den_lnbeta cotN ε γF
       (fun n => Mat.unflatten (batchSlice N (197 * 192) b12out n)) βF cotFlB i
 
 /-- **Classifier Wcls/bcls, tied at the loss cotangent `g`** — the weight at the batched CLS row,
     the bias PER EXAMPLE (`biasGradB` is the identity on its operand; the batch reduce is emitted
-    text — `ViTPoCGB.headBGradB_den`). -/
+    text — `GradNodeB.headBGradB_den`). -/
 def vitHeadTiedGB (N : Nat) {nC : Nat} (aN cotN : String)
     (hn : Vec (N * 192)) (Wcls : Mat 192 nC) (bcls : Vec nC) (g : Vec (N * nC)) : Prop :=
   (∀ (i : Fin 192) (j : Fin nC),
@@ -282,8 +282,8 @@ theorem vit_head_tiedGB (N : Nat) {nC : Nat} (aN cotN : String)
     vitHeadTiedGB N aN cotN hn Wcls bcls g := by
   unfold vitHeadTiedGB
   refine ⟨?_, ?_⟩
-  · intro i j; exact ViTPoCGB.headWGradB_den aN cotN hn Wcls bcls g i j
-  · intro n i; exact ViTPoCGB.headBGradB_den cotN Wcls (batchSlice N 192 hn n) bcls g n i
+  · intro i j; exact GradNodeB.headWGradB_den aN cotN hn Wcls bcls g i j
+  · intro n i; exact GradNodeB.headBGradB_den cotN Wcls (batchSlice N 192 hn n) bcls g n i
 
 /-- **Patch embed wConv/bConv/cls/pos, tied at the batched embed-output cotangent.** The third
     conjunct is the CLS token's gradient with the batch sum INSIDE `den` — the statement the

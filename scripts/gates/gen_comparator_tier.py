@@ -41,7 +41,7 @@ DECLS = [
     "Proofs.StableHLO.mnv4FwdGraphBFull_faithful",
     "Proofs.Mnv2FullBSeal.sealX_nonconstant",
     "Proofs.Mnv4FullBSeal.sealX_backward_nontrivial",
-    "Proofs.ResNet34PoCB.convStridedWGradB_den",
+    "Proofs.GradNodeB.convStridedWGradB_den",
     "Proofs.smoothedCE_grad",
     "Proofs.ResNet50TieB.r50_net_tiedB",
     "Proofs.ViTTiePoC.vit_net_tied_certified",

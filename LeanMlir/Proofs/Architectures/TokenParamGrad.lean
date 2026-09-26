@@ -13,8 +13,8 @@ everything in a ViT is per-example separable (the EfficientNet contrast).
 | Wq/Wk/Wv/Wo, Wfc1/Wfc2 + biases      | per-token dense (rowwise)  | `vit_render_rowdense{W,b}_certified` (**new family**): `dW = Σ_tokens xᵣ ⊗ dyᵣ`, `db = Σ_tokens dyᵣ` — the dense outer-product bridge `IR.weight_grad_bridge` row-lifted |
 | classifier `Wcls`/`bcls`             | dense on the CLS row       | `IR.weight_grad_bridge` / `IR.bias_grad_bridge` (**reuse** — single-vector dense) |
 | LN γ/β (vector, per-token)           | rowwise vector LayerNorm   | `vit_vecln{Gamma,Beta}_grad_bridge` (`LayerNorm`) |
-| `pos_embed`                          | additive (`patchEmbedFlat`) | `vit_render_pos_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
-| `cls_token`                          | row-0 scatter (`patchEmbedFlat`) | `vit_render_cls_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
+| `pos_embed`                          | additive (`patchEmbedFlat`) | `posEmbed_sgd_certified`: the pos-Jacobian is the identity ⇒ `dPos = dy` |
+| `cls_token`                          | row-0 scatter (`patchEmbedFlat`) | `clsToken_sgd_certified`: masked-gather Jacobian ⇒ `dCls = dy` row-0 slice |
 | patch conv `Wp`/`bp`                 | stride-P conv (`patchEmbedFlat`) | `vit_render_patch{W,b}_certified`: kernel-linear w/ constant guarded reads ⇒ `dWp = Σ_p read·dy_(p+1)`, `dbp = Σ_p dy_(p+1)` (CLS row excluded) |
 | attention internals (softmax, scale) | —                          | no parameters |
 
@@ -81,7 +81,7 @@ noncomputable def rowDenseBiasGrad {N c : Nat} (dY : Mat N c) : Vec c :=
 /-- **Per-token dense W-gradient bridge.** The rendered token-contracted outer
     product equals the certified Jacobian of the rowwise dense (as a function of
     the flattened shared `W`) contracted with the cotangent. -/
-theorem vit_rowDenseW_grad_bridge {N a c : Nat} (bb : Vec c) (X : Mat N a)
+theorem rowDense_weight_grad_bridge {N a c : Nat} (bb : Vec c) (X : Mat N a)
     (W : Mat a c) (dy : Vec (N * c)) (i : Fin a) (j : Fin c) :
     rowDenseWeightGrad X (Mat.unflatten dy) i j
       = ∑ o : Fin (N * c),
@@ -94,7 +94,7 @@ theorem vit_rowDenseW_grad_bridge {N a c : Nat} (bb : Vec c) (X : Mat N a)
 
 /-- **Per-token dense b-gradient bridge.** The rendered token-axis reduce equals
     the certified rowwise-dense ∂/∂b contraction. -/
-theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
+theorem rowDense_bias_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
     (bb : Vec c) (dy : Vec (N * c)) (i : Fin c) :
     rowDenseBiasGrad (Mat.unflatten dy) i
       = ∑ o : Fin (N * c),
@@ -119,24 +119,24 @@ theorem vit_rowDenseb_grad_bridge {N a c : Nat} (W : Mat a c) (X : Mat N a)
 /-- **Per-token dense W output, certified.** `Wⁿ = W − lr·(Σ_tokens xᵣ ⊗ dyᵣ)` denotes
     `W − lr·(certified ∂(rowwise dense)/∂W · cotangent)`. Covers Wq/Wk/Wv/Wo and
     Wfc1/Wfc2 at every block of the representative ViT (each at its own `[a,c]`). -/
-theorem vit_render_rowdenseW_certified {N a c : Nat} (bb : Vec c) (X : Mat N a)
+theorem rowDense_weight_sgd_certified {N a c : Nat} (bb : Vec c) (X : Mat N a)
     (W : Mat a c) (dy : Vec (N * c)) (lr : ℝ) (i : Fin a) (j : Fin c) :
     W i j - lr * rowDenseWeightGrad X (Mat.unflatten dy) i j
       = W i j - lr * ∑ o : Fin (N * c),
           pdiv (fun v : Vec (a * c) =>
                   Mat.flatten (fun r => dense (Mat.unflatten v) bb (X r)))
                (Mat.flatten W) (finProdFinEquiv (i, j)) o * dy o := by
-  rw [vit_rowDenseW_grad_bridge]
+  rw [rowDense_weight_grad_bridge]
 
 /-- **Per-token dense b output, certified.** `bⁿ = b − lr·(Σ_tokens dyᵣ)` denotes the
     certified rowwise-dense ∂/∂b contraction. Covers all six per-block biases. -/
-theorem vit_render_rowdenseb_certified {N a c : Nat} (W : Mat a c) (X : Mat N a)
+theorem rowDense_bias_sgd_certified {N a c : Nat} (W : Mat a c) (X : Mat N a)
     (bb : Vec c) (dy : Vec (N * c)) (lr : ℝ) (i : Fin c) :
     bb i - lr * rowDenseBiasGrad (Mat.unflatten dy) i
       = bb i - lr * ∑ o : Fin (N * c),
           pdiv (fun b' : Vec c => Mat.flatten (fun r => dense W b' (X r)))
                bb i o * dy o := by
-  rw [vit_rowDenseb_grad_bridge W X bb dy i]
+  rw [rowDense_bias_grad_bridge W X bb dy i]
 
 -- ════════════════════════════════════════════════════════════════
 -- § C. pos_embed + cls_token — the two embed-parameter reindex closes
@@ -168,7 +168,7 @@ theorem pdiv_patchEmbed_pos {ic H W P N D : Nat}
 /-- **pos-embed output, certified.** The pos Jacobian is the identity, so the
     rendered `dPos = dy` (the cotangent itself, batch-summed by the batched
     render) is the certified contraction. -/
-theorem vit_render_pos_certified {ic H W P N D : Nat}
+theorem posEmbed_sgd_certified {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ) (i : Fin ((N + 1) * D)) :
     Mat.flatten pos i - lr * dy i
@@ -209,7 +209,7 @@ theorem pdiv_patchEmbed_cls {ic H W P N D : Nat}
 
 /-- **CLS-token output, certified.** `clsⁿ = cls − lr·(row-0 slice of the embed
     cotangent)` denotes the certified ∂(patchEmbed)/∂cls contraction. -/
-theorem vit_render_cls_certified {ic H W P N D : Nat}
+theorem clsToken_sgd_certified {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ) (i : Fin D) :
     cls i - lr * clsTokenGrad dy i
@@ -301,7 +301,7 @@ noncomputable def patchEmbedBiasGrad (N D : Nat) (dy : Vec ((N + 1) * D)) : Vec 
 
 /-- **Patch-kernel gradient bridge.** The rendered patch-grid reduce equals the
     certified ∂(patchEmbed)/∂W contraction. -/
-theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
+theorem patchEmbed_weight_grad_bridge {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D))
     (d : Fin D) (c : Fin ic) (kh kw : Fin P) :
@@ -318,7 +318,7 @@ theorem vit_patchW_grad_bridge {ic H W P N D : Nat}
 
 /-- **Patch-kernel output, certified.** `Wpⁿ = Wp − lr·(patch-grid reduce)`
     denotes the certified ∂(patchEmbed)/∂Wp contraction. -/
-theorem vit_render_patchW_certified {ic H W P N D : Nat}
+theorem patchEmbed_weight_sgd_certified {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ)
     (d : Fin D) (c : Fin ic) (kh kw : Fin P) :
@@ -329,7 +329,7 @@ theorem vit_render_patchW_certified {ic H W P N D : Nat}
             (Kernel4.flatten Wc)
             (finProdFinEquiv (finProdFinEquiv (finProdFinEquiv (d, c), kh), kw)) o
             * dy o := by
-  rw [vit_patchW_grad_bridge Wc bc cls pos img dy d c kh kw]
+  rw [patchEmbed_weight_grad_bridge Wc bc cls pos img dy d c kh kw]
 
 /-- **Jacobian of `patchEmbedFlat` w.r.t. the patch bias** — the row-masked
     gather `∂y_(n,k)/∂bc_i = [n ≠ 0]·δ_(i,k)` (token 0 is the CLS row). -/
@@ -357,7 +357,7 @@ theorem pdiv_patchEmbed_b {ic H W P N D : Nat}
 
 /-- **Patch bias gradient bridge.** The rendered CLS-row-excluded reduce equals
     the certified ∂(patchEmbed)/∂bc contraction. -/
-theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
+theorem patchEmbed_bias_grad_bridge {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (i : Fin D) :
     patchEmbedBiasGrad N D dy i
@@ -369,14 +369,14 @@ theorem vit_patchb_grad_bridge {ic H W P N D : Nat}
   simp [patchEmbedBiasGrad, Fin.sum_univ_succ]
 
 /-- **Patch bias output, certified.** -/
-theorem vit_render_patchb_certified {ic H W P N D : Nat}
+theorem patchEmbed_bias_sgd_certified {ic H W P N D : Nat}
     (Wc : Kernel4 D ic P P) (bc : Vec D) (cls : Vec D) (pos : Mat (N + 1) D)
     (img : Vec (ic * H * W)) (dy : Vec ((N + 1) * D)) (lr : ℝ) (i : Fin D) :
     bc i - lr * patchEmbedBiasGrad N D dy i
       = bc i - lr * ∑ o : Fin ((N + 1) * D),
           pdiv (fun b' : Vec D =>
                   patchEmbedFlat ic H W P N D Wc b' cls pos img) bc i o * dy o := by
-  rw [vit_patchb_grad_bridge Wc bc cls pos img dy i]
+  rw [patchEmbed_bias_grad_bridge Wc bc cls pos img dy i]
 
 -- The classifier head (`dense Wcls bcls` on the CLS vector) is covered VERBATIM by the
 -- existing M2 `weight_grad_bridge`/`bias_grad_bridge` (`denseWeightGrad_correct`/

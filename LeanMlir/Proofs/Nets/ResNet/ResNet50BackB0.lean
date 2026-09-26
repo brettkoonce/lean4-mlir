@@ -9,10 +9,10 @@ use, generic in `{ic oc h w kH kW}`, so the file is composition — no new stage
 
 | stage | what R50 uses it for | from |
 |---|---|---|
-| `cbReluB` | the 1×1 reduce and the 3×3 (stride-1 blocks) | `Foundation/BatchedStageLayers` |
-| `cbReluStridedB` | the 3×3 of a downsample block | `Foundation/BatchedStageLayers` |
-| `projB` | the 1×1 expand (no activation) and the stride-1 skip | `Foundation/BatchedStages` |
-| `projStridedB` | the strided projection skip | `Foundation/BatchedStageLayers` |
+| `cbReluB` | the 1×1 reduce and the 3×3 (stride-1 blocks) | `Foundation/Batched/StageLayers` |
+| `cbReluStridedB` | the 3×3 of a downsample block | `Foundation/Batched/StageLayers` |
+| `projB` | the 1×1 expand (no activation) and the stride-1 skip | `Foundation/Batched/Stages` |
+| `projStridedB` | the strided projection skip | `Foundation/Batched/StageLayers` |
 
 ## The three forms
 

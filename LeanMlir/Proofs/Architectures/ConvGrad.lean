@@ -73,7 +73,7 @@ theorem conv_bias_grad_bridge {ic oc h w kH kW : Nat}
     kernel `v`, `v − lr·(conv2dWeightGradHasVJP backward at c)` equals
     `v − lr·(certified ∂conv/∂kernel · c)`. A rewrite by the bridge; no rendered text
     appears in the statement. -/
-theorem cnn_render_convW_certified {ic oc h w kH kW : Nat}
+theorem conv_weight_sgd_certified {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Tensor3 ic h w)
     (v : Vec (oc * ic * kH * kW)) (c : Vec (oc * h * w)) (lr : ℝ)
     (idx : Fin (oc * ic * kH * kW)) :
@@ -87,7 +87,7 @@ theorem cnn_render_convW_certified {ic oc h w kH kW : Nat}
 /-- **Conv bias SGD step — SGD form of `conv_bias_grad_bridge`.** Likewise
     `b − lr·(conv2dBiasGradHasVJP backward at c)` equals
     `b − lr·(certified ∂conv/∂bias · c)`. -/
-theorem cnn_render_convb_certified {ic oc h w kH kW : Nat}
+theorem conv_bias_sgd_certified {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Tensor3 ic h w)
     (b : Vec oc) (c : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :
     b o - lr * (conv2dBiasGradHasVJP W x).backward b c o
@@ -102,14 +102,14 @@ theorem cnn_render_convb_certified {ic oc h w kH kW : Nat}
 -- (`depthwiseBiasGradHasVJP`, `Depthwise.lean`, the spatial reduce `db[c] = Σ dy`) and the
 -- stride-2 conv kernel and bias (`flatConvStride2WeightGradHasVJP` /
 -- `flatConvStride2BiasGradHasVJP`, `StridedConv.lean`). `SgdNodes` builds the stride-1
--- depthwise op nodes on the bias bridge (`Mnv2PoC.depthwiseB_den`) and the strided conv nodes on the
+-- depthwise op nodes on the bias bridge (`SgdNode.depthwiseB_den`) and the strided conv nodes on the
 -- two conv bridges (`ResNet34PoC.convStrided{W,B}_den`). The cotangent is a binder here too.
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Depthwise bias-gradient bridge.** Likewise the per-channel depthwise bias gradient
     (`db[c] = Σ_spatial dy`) is the certified Jacobian of `depthwiseConv2d` wrt the bias, contracted
     with `dy` — the `.correct` field of `depthwiseBiasGradHasVJP`. -/
-theorem mnv2_depthwise_bias_grad_bridge {c h w kH kW : Nat}
+theorem depthwise_bias_grad_bridge {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w)
     (b : Vec c) (dy : Vec (c * h * w)) (cc : Fin c) :
     (depthwiseBiasGradHasVJP W x).backward b dy cc
@@ -119,18 +119,18 @@ theorem mnv2_depthwise_bias_grad_bridge {c h w kH kW : Nat}
 
 /-- **Depthwise bias output, certified.** Likewise `bⁿ = b − lr·(spatial reduce)` denotes
     `b − lr·(certified ∂(depthwiseConv2d)/∂b · cotangent)`. -/
-theorem mnv2_render_depthwiseb_certified {c h w kH kW : Nat}
+theorem depthwise_bias_sgd_certified {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (x : Tensor3 c h w)
     (b : Vec c) (dy : Vec (c * h * w)) (lr : ℝ) (cc : Fin c) :
     b cc - lr * (depthwiseBiasGradHasVJP W x).backward b dy cc
       = b cc - lr * ∑ j : Fin (c * h * w),
           pdiv (fun b' : Vec c => Tensor3.flatten (depthwiseConv2d W b' x)) b cc j * dy j := by
-  rw [mnv2_depthwise_bias_grad_bridge]
+  rw [depthwise_bias_grad_bridge]
 
 /-- **Stem conv weight output, certified.** `sWⁿ = sW − lr·(strided transpose-trick grad)` denotes
     `sW − lr·(certified ∂(flatConvStride2)/∂sW · cotangent)`, via `flatConvStride2WeightGradHasVJP`
     (the ch6 strided conv weight VJP). -/
-theorem mnv2_render_stem_convW_certified {ic oc h w kH kW : Nat}
+theorem convStride2_weight_sgd_certified {ic oc h w kH kW : Nat}
     (b : Vec oc) (x : Vec (ic * (2 * h) * (2 * w)))
     (v : Vec (oc * ic * kH * kW)) (dy : Vec (oc * h * w)) (lr : ℝ)
     (i : Fin (oc * ic * kH * kW)) :
@@ -142,7 +142,7 @@ theorem mnv2_render_stem_convW_certified {ic oc h w kH kW : Nat}
 
 /-- **Stem conv bias output, certified.** `sbⁿ = sb − lr·(spatial reduce)` denotes
     `sb − lr·(certified ∂(flatConvStride2)/∂sb · cotangent)`. -/
-theorem mnv2_render_stem_convb_certified {ic oc h w kH kW : Nat}
+theorem convStride2_bias_sgd_certified {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) (x : Vec (ic * (2 * h) * (2 * w)))
     (b : Vec oc) (dy : Vec (oc * h * w)) (lr : ℝ) (o : Fin oc) :
     b o - lr * (flatConvStride2BiasGradHasVJP W x).backward b dy o

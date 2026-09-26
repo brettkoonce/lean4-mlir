@@ -30,12 +30,12 @@ composes certified VJPs; it does not re-prove them.
 
 | op kind | sites | certificate |
 |---|---|---|
-| `bnGammaGradB` / `bnBetaGradB` | 77 BN layers | `ResNet34PoCB.bnGammaGradB_den` / `bnBetaGradB_den` |
-| `convWeightGradB` | expands, projects, both head convs, the fused project | `ResNet34PoCB.convWGradB_den` |
-| `convStridedWeightGradB` (SYMMETRIC) | the stem's and the fused stage's 3×3/s2 | `ResNet34PoCB.convStridedWGradB_den` |
-| `depthwiseWeightGradB` | every stride-1 depthwise | `EnetPoCG.depthwiseWGradB_den` |
-| `depthwiseStridedWeightGradB` | rows 1, 3, 11's post-DW (timm's `dw_mid`) | `EnetPoCG.depthwiseStridedWGradB_den` |
-| `denseWeightGradB` / `denseBiasGradB` | the classifier | `ResNet34PoCB.denseWGradB_den` / `denseBGradB_den` |
+| `bnGammaGradB` / `bnBetaGradB` | 77 BN layers | `GradNodeB.bnGammaGradB_den` / `bnBetaGradB_den` |
+| `convWeightGradB` | expands, projects, both head convs, the fused project | `GradNodeB.convWGradB_den` |
+| `convStridedWeightGradB` (SYMMETRIC) | the stem's and the fused stage's 3×3/s2 | `GradNodeB.convStridedWGradB_den` |
+| `depthwiseWeightGradB` | every stride-1 depthwise | `GradNodeB.depthwiseWGradB_den` |
+| `depthwiseStridedWeightGradB` | rows 1, 3, 11's post-DW (timm's `dw_mid`) | `GradNodeB.depthwiseStridedWGradB_den` |
+| `denseWeightGradB` / `denseBiasGradB` | the classifier | `GradNodeB.denseWGradB_den` / `denseBGradB_den` |
 
 Every strided site pads symmetrically (timm), so the stem and the fused stage share one
 certificate.
@@ -79,12 +79,12 @@ statement is `MobileNetV4SyncTieB.mnv4_net_syncTiedB`, whose right-hand side is 
 node at the global batch.
 -/
 
-open Proofs Proofs.StableHLO Proofs.IR Proofs.ResNet34TieB Proofs.EnetTiePoC
+open Proofs Proofs.StableHLO Proofs.IR Proofs.BackLinks
 
 namespace Proofs.Mnv4TieB
 
 open scoped BigOperators
-open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_holds
+open Proofs.GradNodeB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_holds
   denseBTiedB_holds denseWTiedB_holds depthwiseStridedWTiedB_holds depthwiseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
@@ -316,24 +316,24 @@ def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   let cotDn := mnv4CotDn N s p xin dyOut
   let cotDc := mnv4CotDc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
+  GradNodeB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
+  GradNodeB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
   ∧
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
-  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
+  GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
+  GradNodeB.DepthwiseWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
   ∧
-  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
+  GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
       (reassocB N (s.ic * s.expand) s.h s.h dc) (reassocB N (s.ic * s.expand) s.h s.h cotDn)
   ∧
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
+  GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
 /-- **And it holds** — twelve instantiations of the shared `∀ cot` leaf folds with
@@ -359,19 +359,19 @@ def mnv4ConvNeXtTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : 
   let cotEn := mnv4CotEn N s p xin dyOut
   let cotEc := mnv4CotEc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  ResNet34PoCB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
+  GradNodeB.DepthwiseWTiedB N s.h s.h xN cotN p.bq xin p.Wq cotQc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
+  GradNodeB.BnPairTiedB N s.ic s.h s.h vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic s.h s.h qc) (reassocB N s.ic s.h s.h cotQn)
   ∧
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
-  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
+  GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
+  GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
 /-- **And it holds** — nine instantiations of the shared `∀ cot` leaf folds at the chain's cotangents. -/
@@ -393,14 +393,14 @@ def mnv4FfnTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibPa
   let cotEn := mnv4CotEn N s p xin dyOut
   let cotEc := mnv4CotEc N s p xin dyOut
   let cotPc := mnv4CotPc N s p xin dyOut
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.be qr p.We cotEc
   ∧
-  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
+  GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) s.h s.h ec) (reassocB N (s.ic * s.expand) s.h s.h cotEn)
   ∧
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
+  GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
 /-- **And it holds** — six instantiations of the shared `∀ cot` leaf folds at the chain's cotangents. -/
@@ -440,25 +440,25 @@ def mnv4StridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   let cotDn := mnv4SCotDn N s p xin dyOut
   let cotDc := mnv4SCotDc N s p xin dyOut
   let cotPc := mnv4SCotPc N s p xin dyOut
-  ResNet34PoCB.DepthwiseWTiedB N (2 * s.h) (2 * s.h) xN cotN p.bq xin p.Wq cotQc
+  GradNodeB.DepthwiseWTiedB N (2 * s.h) (2 * s.h) xN cotN p.bq xin p.Wq cotQc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.ic (2 * s.h) (2 * s.h) vN epsStr cotN p.eq_ p.gq p.bq2
+  GradNodeB.BnPairTiedB N s.ic (2 * s.h) (2 * s.h) vN epsStr cotN p.eq_ p.gq p.bq2
       (reassocB N s.ic (2 * s.h) (2 * s.h) qc) (reassocB N s.ic (2 * s.h) (2 * s.h) cotQn)
   ∧
-  ResNet34PoCB.ConvWTiedB N (2 * s.h) (2 * s.h) xN cotN p.be qr p.We cotEc
+  GradNodeB.ConvWTiedB N (2 * s.h) (2 * s.h) xN cotN p.be qr p.We cotEc
   ∧
-  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) (2 * s.h) (2 * s.h) vN epsStr cotN p.ee p.ge p.be2
+  GradNodeB.BnPairTiedB N (s.ic * s.expand) (2 * s.h) (2 * s.h) vN epsStr cotN p.ee p.ge p.be2
       (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) ec)
       (reassocB N (s.ic * s.expand) (2 * s.h) (2 * s.h) cotEn)
   ∧
-  ResNet34PoCB.DepthwiseStridedWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
+  GradNodeB.DepthwiseStridedWTiedB N s.h s.h xN cotN p.bd er p.Wd cotDc
   ∧
-  ResNet34PoCB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
+  GradNodeB.BnPairTiedB N (s.ic * s.expand) s.h s.h vN epsStr cotN p.ed p.gd p.bd2
       (reassocB N (s.ic * s.expand) s.h s.h dc) (reassocB N (s.ic * s.expand) s.h s.h cotDn)
   ∧
-  ResNet34PoCB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
+  GradNodeB.ConvWTiedB N s.h s.h xN cotN p.bz dr p.Wz cotPc
   ∧
-  ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
+  GradNodeB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
 /-- **And it holds** — twelve instantiations (one at the strided post-DW) of the shared
@@ -505,9 +505,9 @@ def mnv4StemTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : String)
   let sc := batchMap N (flatConvStride2 Ws bs) x
   let cotN' := mnv4StemCotN N h w Ws bs εs γs βs x dyStem
   let cotC := mnv4StemCotC N h w Ws bs εs γs βs x dyStem
-  ResNet34PoCB.ConvStridedWTiedB N h w xN cotN bs x Ws cotC
+  GradNodeB.ConvStridedWTiedB N h w xN cotN bs x Ws cotC
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w sc)
+  GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w sc)
       (reassocB N oc h w cotN')
 
 theorem mnv4_stem_tiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : String)
@@ -567,14 +567,14 @@ def mnv4FusedTiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH
   let cotN' := mnv4FusedCotN N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotC := mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
   let cotPc := mnv4FusedCotPc N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
-  ResNet34PoCB.ConvStridedWTiedB N h w xN cotN bc xin Wc cotC
+  GradNodeB.ConvStridedWTiedB N h w xN cotN bc xin Wc cotC
   ∧
-  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN εc γc βc (reassocB N mid h w fc)
+  GradNodeB.BnPairTiedB N mid h w vN epsStr cotN εc γc βc (reassocB N mid h w fc)
       (reassocB N mid h w cotN')
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN bp sw Wp cotPc
+  GradNodeB.ConvWTiedB N h w xN cotN bp sw Wp cotPc
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
+  GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εp γp βp (reassocB N oc h w pc)
       (reassocB N oc h w dyF)
 
 theorem mnv4_fused_tiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
@@ -679,17 +679,17 @@ def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
   let cotH1c := mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHn := mnv4HeadCotHn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
   let cotHc := mnv4HeadCotHc N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
-  ResNet34PoCB.ConvWTiedB N h w xN cotN b1 xin W1 cotH1c
+  GradNodeB.ConvWTiedB N h w xN cotN b1 xin W1 cotH1c
   ∧
-  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN ε1 γ1 β1 (reassocB N mid h w c1)
+  GradNodeB.BnPairTiedB N mid h w vN epsStr cotN ε1 γ1 β1 (reassocB N mid h w c1)
       (reassocB N mid h w cotH1n)
   ∧
-  ResNet34PoCB.ConvWTiedB N 1 1 xN cotN b2 pool W2 cotHc
+  GradNodeB.ConvWTiedB N 1 1 xN cotN b2 pool W2 cotHc
   ∧
-  ResNet34PoCB.BnPairTiedB N oc 1 1 vN epsStr cotN ε2 γ2 β2 (reassocB N oc 1 1 c2)
+  GradNodeB.BnPairTiedB N oc 1 1 vN epsStr cotN ε2 γ2 β2 (reassocB N oc 1 1 c2)
       (reassocB N oc 1 1 cotHn)
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN feat Wd bd g
-  ∧ ResNet34PoCB.DenseBTiedB N cotN Wd (fun _ => 0) bd g
+  ∧ GradNodeB.DenseWTiedB N xN cotN feat Wd bd g
+  ∧ GradNodeB.DenseBTiedB N cotN Wd (fun _ => 0) bd g
 
 theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)

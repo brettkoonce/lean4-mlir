@@ -72,9 +72,9 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.MobileNetV2TieB
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB bnBackB cInB dInB gapInB)
-open Proofs.ResNet34TieB (bnInB bnInB_eq_bnBackB unrowB rowB)
-open Proofs.ResNet34PoCB (bnPairTiedB_holds convBTiedB_holds convStridedXlaWTiedB_holds
+open Proofs.BackLinks (reassocB bnBackB cInB dInB gapInB)
+open Proofs.BackLinks (bnInB bnInB_eq_bnBackB unrowB rowB)
+open Proofs.GradNodeB (bnPairTiedB_holds convBTiedB_holds convStridedXlaWTiedB_holds
   convWTiedB_holds denseBTiedB_holds denseWTiedB_holds depthwiseBTiedB_holds depthwiseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
@@ -89,7 +89,7 @@ noncomputable def relu6MaskB (n : Nat) (pre dy : Vec n) : Vec n :=
   fun i => if 0 < pre i ∧ pre i < 6 then dy i else 0
 
 /-- **Batched XLA-`SAME` STRIDED depthwise input-VJP** (= `den depthwiseStridedXlaBackBatched`;
-    upsamples `h → 2h`). Not `EnetTiePoC.dStridedInB`, which is the SYMMETRIC
+    upsamples `h → 2h`). Not `BackLinks.dStridedInB`, which is the SYMMETRIC
     `depthwiseStride2Flat` — B0's strided depthwise and MobileNetV2's have identical types and
     different certificates, and this is the one place that distinction is recorded on the backward
     side. -/
@@ -458,14 +458,14 @@ def mnv2StemTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
   let sc := batchMap N (flatConvStride2Xla Ws bs) x
   let cotN' := mnv2StemCotN N h w Ws bs εs γs βs x cotStem
   let cotC := mnv2StemCotC N h w Ws bs εs γs βs x cotStem
-  ResNet34PoCB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotC
+  GradNodeB.ConvStridedXlaWTiedB N h w xN cotN bs x Ws cotC
   ∧ (∀ o : Fin oc,
       den (SHlo.convStridedXlaBiasGradB (h := h) (w := w) Ws x bs (.operand cotN cotC)) o
         = ∑ n : Fin N, ∑ j : Fin (oc * h * w),
             pdiv (fun b' : Vec oc =>
                     flatConvStride2Xla Ws b' (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                  bs o j * batchSlice N (oc * h * w) cotC n j)
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w sc)
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εs γs βs (reassocB N oc h w sc)
         (reassocB N oc h w cotN')
 
 theorem mnv2_stem_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
@@ -476,7 +476,7 @@ theorem mnv2_stem_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
   intro sc cotN' cotC
   refine ⟨?_, ?_, ?_⟩
   · exact convStridedXlaWTiedB_holds
-  · intro o;   exact Mnv2PaperPoCG.convStridedXlaBGradB_den cotN Ws x bs cotC o
+  · intro o;   exact GradNodeB.convStridedXlaBGradB_den cotN Ws x bs cotC o
   · exact bnPairTiedB_holds
 
 /-- **`t = 1` block (b1), tied.** All eight parameter nodes — the stride-1 depthwise's weight and
@@ -491,13 +491,13 @@ def mnv2NoExpTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String) (p :
   let cotPc := mnv2NoExpCotPc N h w p xin dyOut
   let cotDn := mnv2NoExpCotDn N h w p xin dyOut
   let cotDc := mnv2NoExpCotDc N h w p xin dyOut
-  ResNet34PoCB.DepthwiseWTiedB N h w xN cotN p.db xin p.dW cotDc
-  ∧ ResNet34PoCB.DepthwiseBTiedB N h w cotN p.dW xin p.db cotDc
-  ∧ ResNet34PoCB.BnPairTiedB N ic h w vN epsStr cotN p.dε p.dγ p.dβ (reassocB N ic h w dc)
+  GradNodeB.DepthwiseWTiedB N h w xN cotN p.db xin p.dW cotDc
+  ∧ GradNodeB.DepthwiseBTiedB N h w cotN p.dW xin p.db cotDc
+  ∧ GradNodeB.BnPairTiedB N ic h w vN epsStr cotN p.dε p.dγ p.dβ (reassocB N ic h w dc)
         (reassocB N ic h w cotDn)
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN p.pb dr p.pW cotPc
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN p.pW dr p.pb cotPc
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.pε p.pγ p.pβ (reassocB N oc h w pc)
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN p.pb dr p.pW cotPc
+  ∧ GradNodeB.ConvBTiedB N h w cotN p.pW dr p.pb cotPc
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.pε p.pγ p.pβ (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
 theorem mnv2_noexp_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
@@ -525,19 +525,19 @@ def mnv2Stride1TiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String
   let cotEn := mnv2CotEn N h w p xin dyOut
   let cotEc := mnv2CotEc N h w p xin dyOut
   -- expand 1x1 (ic → mid), cot = cotEc
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.eb xin p.eW cotEc
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN p.eW xin p.eb cotEc
-  ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.eε p.eγ p.eβ (reassocB N mid h w ec)
+  GradNodeB.ConvWTiedB N h w xN cotN p.eb xin p.eW cotEc
+  ∧ GradNodeB.ConvBTiedB N h w cotN p.eW xin p.eb cotEc
+  ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.eε p.eγ p.eβ (reassocB N mid h w ec)
         (reassocB N mid h w cotEn)
   -- depthwise 3x3 stride-1 (mid), cot = cotDc
-  ∧ ResNet34PoCB.DepthwiseWTiedB N h w xN cotN p.db er p.dW cotDc
-  ∧ ResNet34PoCB.DepthwiseBTiedB N h w cotN p.dW er p.db cotDc
-  ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.dε p.dγ p.dβ (reassocB N mid h w dc)
+  ∧ GradNodeB.DepthwiseWTiedB N h w xN cotN p.db er p.dW cotDc
+  ∧ GradNodeB.DepthwiseBTiedB N h w cotN p.dW er p.db cotDc
+  ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.dε p.dγ p.dβ (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
   -- project 1x1 (mid → oc), cot = cotPc; its BN reads dyOut itself (no activation after project)
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN p.pb dr p.pW cotPc
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN p.pW dr p.pb cotPc
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.pε p.pγ p.pβ (reassocB N oc h w pc)
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN p.pb dr p.pW cotPc
+  ∧ GradNodeB.ConvBTiedB N h w cotN p.pW dr p.pb cotPc
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.pε p.pγ p.pβ (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
 theorem mnv2_stride1_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String)
@@ -567,9 +567,9 @@ def mnv2Stride2TiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String
   let cotEn := mnv2SCotEn N h w p xin dyOut
   let cotEc := mnv2SCotEc N h w p xin dyOut
   -- expand 1x1 (ic → mid) at the pre-downsample grid, cot = cotEc
-  ResNet34PoCB.ConvWTiedB N (2 * h) (2 * w) xN cotN p.eb xin p.eW cotEc
-  ∧ ResNet34PoCB.ConvBTiedB N (2 * h) (2 * w) cotN p.eW xin p.eb cotEc
-  ∧ ResNet34PoCB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN p.eε p.eγ p.eβ
+  GradNodeB.ConvWTiedB N (2 * h) (2 * w) xN cotN p.eb xin p.eW cotEc
+  ∧ GradNodeB.ConvBTiedB N (2 * h) (2 * w) cotN p.eW xin p.eb cotEc
+  ∧ GradNodeB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN p.eε p.eγ p.eβ
         (reassocB N mid (2 * h) (2 * w) ec) (reassocB N mid (2 * h) (2 * w) cotEn)
   -- XLA-SAME strided depthwise 3x3/s2 (mid), cot = cotDc
   ∧ (∀ idx : Fin (mid * 3 * 3),
@@ -587,12 +587,12 @@ def mnv2Stride2TiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String
                     depthwiseStride2FlatXla p.dW b'
                       (batchSlice N (mid * (2 * h) * (2 * w)) er n))
                  p.db o j * batchSlice N (mid * h * w) cotDc n j)
-  ∧ ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.dε p.dγ p.dβ (reassocB N mid h w dc)
+  ∧ GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.dε p.dγ p.dβ (reassocB N mid h w dc)
         (reassocB N mid h w cotDn)
   -- project 1x1 (mid → oc), cot = cotPc; its BN reads dyOut itself
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN p.pb dr p.pW cotPc
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN p.pW dr p.pb cotPc
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.pε p.pγ p.pβ (reassocB N oc h w pc)
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN p.pb dr p.pW cotPc
+  ∧ GradNodeB.ConvBTiedB N h w cotN p.pW dr p.pb cotPc
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.pε p.pγ p.pβ (reassocB N oc h w pc)
         (reassocB N oc h w dyOut)
 
 theorem mnv2_stride2_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String)
@@ -605,8 +605,8 @@ theorem mnv2_stride2_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : 
   · exact convWTiedB_holds
   · exact convBTiedB_holds
   · exact bnPairTiedB_holds
-  · intro idx; exact Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den xN cotN p.db er p.dW cotDc idx
-  · intro o;   exact Mnv2PaperPoCG.depthwiseStridedXlaBGradB_den cotN p.dW er p.db cotDc o
+  · intro idx; exact GradNodeB.depthwiseStridedXlaWGradB_den xN cotN p.db er p.dW cotDc idx
+  · intro o;   exact GradNodeB.depthwiseStridedXlaBGradB_den cotN p.dW er p.db cotDc o
   · exact bnPairTiedB_holds
   · exact convWTiedB_holds
   · exact convBTiedB_holds
@@ -625,12 +625,12 @@ def mnv2HeadTiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : String)
   let a := batchMap N (globalAvgPoolFlat oc h w) hr
   let cotHn := mnv2HeadCotHn N h w Wh bh εh γh βh Wd xin g
   let cotHc := mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin g
-  ResNet34PoCB.ConvWTiedB N h w xN cotN bh xin Wh cotHc
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN Wh xin bh cotHc
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN εh γh βh (reassocB N oc h w hc)
+  GradNodeB.ConvWTiedB N h w xN cotN bh xin Wh cotHc
+  ∧ GradNodeB.ConvBTiedB N h w cotN Wh xin bh cotHc
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN εh γh βh (reassocB N oc h w hc)
         (reassocB N oc h w cotHn)
-  ∧ ResNet34PoCB.DenseWTiedB N xN cotN a Wd bd g
-  ∧ ResNet34PoCB.DenseBTiedB N cotN Wd (fun _ => 0) bd g
+  ∧ GradNodeB.DenseWTiedB N xN cotN a Wd bd g
+  ∧ GradNodeB.DenseBTiedB N cotN Wd (fun _ => 0) bd g
 
 theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : String)
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc)

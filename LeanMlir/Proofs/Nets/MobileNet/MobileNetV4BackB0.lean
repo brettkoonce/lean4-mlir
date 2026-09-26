@@ -32,7 +32,7 @@ timm's `mobilenetv4_conv_medium` (the pinned spec, checked by `scripts/parity/mn
 (`dw_start`) is depthwise → BN with **no activation** (`dwbB`, globally certified); the post-DW
 (`dw_mid`) is depthwise → BN → **relu** (`dwbReluB`, and its strided peer `dwbReluBstrided`).
 Relu, not relu6 — MobileNetV2 uses relu6 one file over. The relu stage is
-`bnReluStageHasVJPAt` (`Foundation/BatchedStageLayers`, generic in the op) at `depthwiseFlat`;
+`bnReluStageHasVJPAt` (`Foundation/Batched/StageLayers`, generic in the op) at `depthwiseFlat`;
 its backward graph masks with `.selectPos`, relu's one-sided mask.
 
 ## Contents
@@ -219,7 +219,7 @@ noncomputable def mnv4DWReluLayer (N : Nat) {c h w kH kW : Nat}
   faithful := fun x hx e => dwbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
 
 -- The UIB **expand** (1×1 conv → bn → relu) and **project** (1×1 conv → bn) stages are
--- `Foundation/BatchedStageLayers`'s `cbReluLayer` and `projLayer`. The project stage has no activation and so no
+-- `Foundation/Batched/StageLayers`'s `cbReluLayer` and `projLayer`. The project stage has no activation and so no
 -- kink, which is why a UIB block has three smoothness families and not four.
 
 -- ════════════════════════════════════════════════════════════════

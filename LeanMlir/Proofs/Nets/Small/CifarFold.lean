@@ -37,12 +37,13 @@ only new content is the per-net `den = certified` capstones below.
 open Proofs Proofs.StableHLO Proofs.IR
 
 namespace Proofs.CifarPoC
+open Proofs.SgdNode
 
 /-! ## Dense classifier head (W₅/W₆/W₇) — `weightSgd`/`biasSgd`, mirrors `CnnPoC`
 
 The head `pool2 → W₅→relu→W₆→relu→W₇` is a 3-layer MLP; per-layer cotangents are the
 IR `mlpCotOut0/1` (with `(W₇,W₆,W₅)` playing the MLP's `(W₂,W₁,W₀)`). Every head op's
-`den` = certified is `Cifar8PoC.denseW_den` / `Cifar8PoC.denseB_den` at that layer; only
+`den` = certified is `SgdNode.denseW_den` / `SgdNode.denseB_den` at that layer; only
 the output-layer weight op is stated here, as the tie reads it. -/
 
 /-- Output-layer weight op `W₇` = certified step (cotangent = the loss cotangent `dy`). -/
@@ -56,7 +57,7 @@ theorem dW7_den {c2 h w d1 nClasses : Nat}
           pdiv (fun v : Vec (d1 * nClasses) =>
                   dense (Mat.unflatten v) b₇ (relu d1 (dense W₆ b₆ (relu d1 (dense W₅ b₅ pool)))))
                (Mat.flatten W₇) (finProdFinEquiv (i, j)) k * dy k :=
-  Cifar8PoC.denseW_den aN "%W7" lrStr dyN _ W₇ b₇ _ lr i j
+  SgdNode.denseW_den aN "%W7" lrStr dyN _ W₇ b₇ _ lr i j
 
 /-! ## The tie — the conv layers/dense head, tied through the REAL cifar forward
 
@@ -171,7 +172,7 @@ theorem cifar_W7_tied_totalloss {ic c1 c2 h w d1 nClasses kH kW : Nat}
     backward chain delivers: `cnnChainCotW2` for conv₄ (relu mask on
     pool₂-back of the dense head), `cnnChainCotW1` for conv₃/conv₁ (relu mask on the next conv's
     input-VJP), and `cifarChainCotW2` for conv₂ (relu mask on pool₁-back of conv₃'s input-VJP). Together
-    with the dense head (`cifar_W7_tied_totalloss` + `Cifar8PoC.denseW_den`/`denseB_den` at `g`) the WHOLE
+    with the dense head (`cifar_W7_tied_totalloss` + `SgdNode.denseW_den`/`denseB_den` at `g`) the WHOLE
     cifar train step is den-composed forward→loss→backward — no free activations, no symbolic cotangent.
     (Residual: the conv backward is rendered hand-written, so the cotangent SSA ↔ chain-cot
     correspondence is the per-op trust the whole suite carries — the cnn `cnn_conv_tied_certified`

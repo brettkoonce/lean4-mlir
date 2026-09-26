@@ -47,6 +47,7 @@ Not done: the dense head's total-loss fold (`Wfc → ∂CE/∂Wfc`, the batched 
 open Proofs Proofs.StableHLO
 
 namespace Proofs.EnetTiePoC
+open Proofs.BackLinks
 
 open scoped BigOperators
 open Proofs.EnetPoC (bnSgdPairTiedB_holds convWSgdTiedB_holds denseBSgdTiedB_holds

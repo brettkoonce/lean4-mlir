@@ -28,7 +28,7 @@ pool's no-tie condition — bundled per block into `R50IdSmoothAt` / `R50ProjSmo
 `R50DownSmoothAt`, and those 18 bundles into one `R50SmoothAtB` (the positivity bundles into
 `R50PosB`), so the apex binds two hypotheses beside `0 < q`, as MobileNetV2's does.
 
-The pool's condition is **per example** (`R34PoolSmoothAt`, reused): a tie is a property of one
+The pool's condition is **per example** (`StemPoolSmoothAt`, reused): a tie is a property of one
 image's 3×3 window, not of the batch.
 
 **`0 < q` is a real hypothesis here, where ResNet-34 needed none.** r34's ladder is at literals,
@@ -252,7 +252,7 @@ structure R50PosB {nCls : Nat} (w : R50BWeights nCls) : Prop where
     head has none (GAP and dense are smooth). -/
 structure R50SmoothAtB (N q : Nat) {nCls : Nat} (w : R50BWeights nCls) (x : Vec (N * (3 * (2 * (2 * (2 * (2 * (2 * q))))) * (2 * (2 * (2 * (2 * (2 * q)))))))) : Prop where
   stem : R34StemSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.sW w.sb w.sε w.sγ w.sβ x
-  pool : R34PoolSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
+  pool : StemPoolSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
     (StableHLO.cbReluStridedB N (h := 2 * (2 * (2 * (2 * q)))) (w := 2 * (2 * (2 * (2 * q)))) w.sW w.sb w.sε w.sγ w.sβ x)
   s1b0 : R50ProjSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b0 (r50Pre0 N q w x)
   s1b1 : R50IdSmoothAt N (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) w.s1b1 (r50Pre1 N q w x)

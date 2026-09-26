@@ -8,12 +8,12 @@ repeated: within each stage the second conv is the maxpool-back layer (`cnnChain
 last, then `cifarChainCotW2`'s cross-pool move) and the first conv is the conv-back layer
 (`cnnChainCotW1`). **Every chain cotangent reuses an existing constructor** (`cnnChainCotW2` /
 `cnnChainCotW1` / `cifarChainCotW2`) at the 4-stage dims — no new constructor, no new ops, no new
-bridges. The conv ties are `CifarPoC.convW_den`/`convB_den` (generic in the cotangent); the dense head
+bridges. The conv ties are `SgdNode.convW_den`/`convB_den` (generic in the cotangent); the dense head
 + loss-cot mirror cifar.
 
 **No per-net fold file.** cifar8 needs zero new core ops and zero new fold lemmas: every conv
-layer is the generic `CifarPoC.convW_den`/`convB_den` (dim- and cotangent-generic, so they certify
-W₁…W₈ by instantiation), and the three dense layers are the generic `Cifar8PoC.denseW_den`/
+layer is the generic `SgdNode.convW_den`/`convB_den` (dim- and cotangent-generic, so they certify
+W₁…W₈ by instantiation), and the three dense layers are the generic `SgdNode.denseW_den`/
 `denseB_den` (Foundation/SgdNodes.lean, free in activation, weight, bias and cotangent).
 
 Spatial bookkeeping (the 2-stage `(h,w)` convention nested two levels deeper): final pooled `(h,w)`;
@@ -30,6 +30,7 @@ stage 4 (conv₇/conv₈) at `(2h,2w)`; stage 3 (conv₅/conv₆) at `(2(2h),2(2
 open Proofs Proofs.StableHLO Proofs.IR
 
 namespace Proofs.Cifar8PoC
+open Proofs.SgdNode
 
 /-- **The emitted loss-cotangent graph denotes the softmax-CE gradient of the cifar8 forward.** -/
 theorem cifar8LossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}

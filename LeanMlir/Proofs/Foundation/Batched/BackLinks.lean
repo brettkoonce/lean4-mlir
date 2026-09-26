@@ -12,10 +12,10 @@ batched index `N·(c·h·w)`. Each graph or cotangent here denotes the `.backwar
 | residual fan-in backward graph | `residualBackGraph` / `_faithful` | `StableHLO` |
 | batched op backwards: true BN, conv, strided conv, depthwise (stride 1 / symmetric / XLA-`SAME` stride 2), SE | `bnBatchBack_faithful`, `bnBatchLABack_faithful`, `convBackBatched_faithful`, … `seBackBatched_faithful` | `StableHLO` |
 | stage backward graphs | `cbsBackBatchedGraph`, `dwbsBackBatchedGraph`, `dwbsSBackBatchedGraph`, `projBackBatchedGraph` (+ `_faithful`) | `StableHLO` |
-| cotangent steps: BN, swish, sigmoid, conv / depthwise input-VJPs, GAP, SE, SE gate; the `c·h·w ↔ c·(h·w)` reindex | `bnBackB`, `swBackB`, `sigBackB`, `cInB`, `dInB`, `dStridedInB`, `gapInB`, `seInB`, `gateCotB`, `reassocB` | `EnetTiePoC` |
-| cotangent steps: relu mask, strided conv input-VJP, BN as emitted, 3×3/s2 max-pool; the one-row head casts | `reluMaskB`, `cStridedInB`, `bnInB`, `mpInB`, `rowB` / `unrowB` | `ResNet34TieB` |
+| cotangent steps: BN, swish, sigmoid, conv / depthwise input-VJPs, GAP, SE, SE gate; the `c·h·w ↔ c·(h·w)` reindex | `bnBackB`, `swBackB`, `sigBackB`, `cInB`, `dInB`, `dStridedInB`, `gapInB`, `seInB`, `gateCotB`, `reassocB` | `BackLinks` |
+| cotangent steps: relu mask, strided conv input-VJP, BN as emitted, 3×3/s2 max-pool; the one-row head casts | `reluMaskB`, `cStridedInB`, `bnInB`, `mpInB`, `rowB` / `unrowB` | `BackLinks` |
 
-Namespaces are the net that first needed each piece; the names are cited by every conv net's tie.
+Every conv net's tie cites these names.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -313,7 +313,7 @@ theorem projBackBatchedGraph_faithful {N ic oc h w kH kW : Nat}
 
 end Proofs.StableHLO
 
-namespace Proofs.EnetTiePoC
+namespace Proofs.BackLinks
 
 open scoped BigOperators
 
@@ -341,7 +341,7 @@ noncomputable def bnBackB (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Ve
 
 /-- **The tie's BN node and the emitted BN node denote one map.** Every batched render emits
     `.bnBatchBack`, typed at `N·(oc·(h·w))`; the ties state the BN input cotangent at
-    `.bnBatchLABack`, its network-layout `N·(oc·h·w)` twin (`ResNet34TieB.bnInB`). The two print
+    `.bnBatchLABack`, its network-layout `N·(oc·h·w)` twin (`BackLinks.bnInB`). The two print
     the same text, and their `den`s differ only by the associativity relabelling `reassocB`: the
     two scatters inside `bnBatchLABack`'s `den` collapse because `Fin.cast` is a bijection. -/
 theorem den_bnBatchLABack_eq_bnBatchBack {N oc h w : Nat} (gN xN es : String) (ε : ℝ) (γ : Vec oc)
@@ -425,12 +425,11 @@ noncomputable def gateCotB (N c h w : Nat) (x dy : Vec (N * (c * h * w))) : Vec 
         * batchSlice N (c * h * w) dy (finProdFinEquiv.symm idx).1 q
     else 0
 
-end Proofs.EnetTiePoC
+end Proofs.BackLinks
 
-namespace Proofs.ResNet34TieB
+namespace Proofs.BackLinks
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB bnBackB cInB gapInB)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Cotangent steps first needed by ResNet-34: the relu mask, the strided conv input-VJP,
@@ -471,14 +470,14 @@ theorem bnInB_eq_bnBackB (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Vec
   bnBatchLABack_faithful "" "" "" ε γ β hε x (.operand "" dy)
 
 /-- **…and it IS the `den` of the node the render emits**, `.bnBatchBack` at the `N·(oc·(h·w))`
-    index, read back through `reassocB` (`EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack`). -/
+    index, read back through `reassocB` (`BackLinks.den_bnBatchLABack_eq_bnBatchBack`). -/
 theorem bnInB_eq_den_bnBatchBack (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
     (x dy : Vec (N * (oc * h * w))) :
     bnInB N oc h w ε γ x dy
       = fun i => den (SHlo.bnBatchBack "" "" "" ε γ (reassocB N oc h w x)
           (.operand "" (reassocB N oc h w dy)))
           (Fin.cast (congrArg (N * ·) (Nat.mul_assoc oc h w)) i) :=
-  EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack "" "" "" ε γ x (.operand "" dy)
+  BackLinks.den_bnBatchLABack_eq_bnBatchBack "" "" "" ε γ x (.operand "" dy)
 
 /-- **Batched 3×3/s2 max-pool backward** (= `den maxPool3s2BackB`): the `select_and_scatter`
     denotation, per example on that example's own saved activation — which is why it is
@@ -500,4 +499,4 @@ noncomputable def unrowB (N K : Nat) (v : Vec (N * (1 * K))) : Vec (N * K) :=
 noncomputable def rowB (N K : Nat) (v : Vec (N * K)) : Vec (N * (1 * K)) :=
   fun i => v (Fin.cast (congrArg (N * ·) (Nat.one_mul K)) i)
 
-end Proofs.ResNet34TieB
+end Proofs.BackLinks

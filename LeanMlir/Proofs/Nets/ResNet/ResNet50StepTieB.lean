@@ -67,12 +67,12 @@ conditions enter ONLY in the three `*CotIn_eq_vjp` lemmas, which say those cotan
 certified whole-net backward. `N` and `q` are both binders.
 -/
 
-open Proofs Proofs.StableHLO Proofs.IR Proofs.EnetTiePoC Proofs.ResNet34TieB
+open Proofs Proofs.StableHLO Proofs.IR Proofs.BackLinks Proofs.ResNet34TieB
 
 namespace Proofs.ResNet50TieB
 
 open scoped BigOperators
-open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_holds)
+open Proofs.GradNodeB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
 -- § The identity bottleneck — the render's cotangent chain
@@ -328,7 +328,7 @@ theorem r50DownCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : R50ProjW ic mid
 -- § The per-block-type tie bundles — every parameter node at its chain cotangent
 -- ════════════════════════════════════════════════════════════════
 
-/-! Each conjunct is a `ResNet34PoCB` op-kind fold instantiated at the cotangent the
+/-! Each conjunct is a `GradNodeB` op-kind fold instantiated at the cotangent the
 render's chain delivers, so nothing here is a new proof: the bundles are `GradNodesB`'s folds with the
 freedom removed. `reassocB` bridges the conv/relu index `N·(c·h·w)` to the BatchNorm parameter
 ops' `N·(c·(h·w))`. There are NO conv-bias conjuncts: `ResNet50RenderB` has no `convBias` flag,
@@ -352,19 +352,19 @@ def r50IdTiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : String) (p : R5
   let cotC2 := r50IdCotC2 N h w p xin dyOut
   let cotN1 := r50IdCotN1 N h w p xin dyOut
   let cotC1 := r50IdCotC1 N h w p xin dyOut
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
   ∧
-  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
+  GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
       (reassocB N mid h w cotN1)
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
   ∧
-  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+  GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
       (reassocB N mid h w cotN2)
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₃ r2 p.W₃ cotC3
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₃ r2 p.W₃ cotC3
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+  GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
       (reassocB N oc h w cotA)
 
 theorem r50_idblock_tiedB (N h w : Nat) {mid oc : Nat} (xN cotN vN epsStr : String) (p : R50IdW mid oc)
@@ -394,24 +394,24 @@ def r50ProjTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
   let cotN1 := r50ProjCotN1 N h w p xin dyOut
   let cotC1 := r50ProjCotC1 N h w p xin dyOut
   let cotCp := r50ProjCotCp N h w p xin dyOut
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
   ∧
-  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
+  GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N mid h w c1)
       (reassocB N mid h w cotN1)
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
   ∧
-  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+  GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
       (reassocB N mid h w cotN2)
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₃ r2 p.W₃ cotC3
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₃ r2 p.W₃ cotC3
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+  GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
       (reassocB N oc h w cotA)
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.bp xin p.Wp cotCp
+  GradNodeB.ConvWTiedB N h w xN cotN p.bp xin p.Wp cotCp
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
+  GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
       (reassocB N oc h w cotA)
 
 theorem r50_projblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p : R50ProjW ic mid oc)
@@ -441,24 +441,24 @@ def r50DownTiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p
   let cotN1 := r50DownCotN1 N h w p xin dyOut
   let cotC1 := r50DownCotC1 N h w p xin dyOut
   let cotCp := r50DownCotCp N h w p xin dyOut
-  ResNet34PoCB.ConvWTiedB N (2 * h) (2 * w) xN cotN p.b₁ xin p.W₁ cotC1
+  GradNodeB.ConvWTiedB N (2 * h) (2 * w) xN cotN p.b₁ xin p.W₁ cotC1
   ∧
-  ResNet34PoCB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN p.ε₁ p.γ₁ p.β₁
+  GradNodeB.BnPairTiedB N mid (2 * h) (2 * w) vN epsStr cotN p.ε₁ p.γ₁ p.β₁
       (reassocB N mid (2 * h) (2 * w) c1) (reassocB N mid (2 * h) (2 * w) cotN1)
   ∧
-  ResNet34PoCB.ConvStridedWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
+  GradNodeB.ConvStridedWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
   ∧
-  ResNet34PoCB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
+  GradNodeB.BnPairTiedB N mid h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N mid h w c2)
       (reassocB N mid h w cotN2)
   ∧
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₃ r2 p.W₃ cotC3
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₃ r2 p.W₃ cotC3
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
+  GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.ε₃ p.γ₃ p.β₃ (reassocB N oc h w c3)
       (reassocB N oc h w cotA)
   ∧
-  ResNet34PoCB.ConvStridedWTiedB N h w xN cotN p.bp xin p.Wp cotCp
+  GradNodeB.ConvStridedWTiedB N h w xN cotN p.bp xin p.Wp cotCp
   ∧
-  ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
+  GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
       (reassocB N oc h w cotA)
 
 theorem r50_downblock_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String) (p : R50ProjW ic mid oc)

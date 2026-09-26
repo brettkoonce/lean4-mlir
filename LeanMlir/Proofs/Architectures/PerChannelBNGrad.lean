@@ -123,8 +123,8 @@ theorem bnPerChannelGradBeta_correct (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
 
 /-- **BN γ output certified.** `γ_c − lr·(rendered dγ_c)` denotes
     `γ_c − lr·(certified ∂(per-channel BN)/∂γ_c · cotangent)`. The γ peer of
-    `cnn_render_convb_certified`. -/
-theorem cifar_bn_render_gamma_certified (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
+    `conv_bias_sgd_certified`. -/
+theorem bnPerChannel_gamma_sgd_certified (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
     (v dy : Vec (oc * m)) (lr : ℝ) (idx : Fin oc) :
     γ idx - lr * bnPerChannelGradGamma oc m ε v dy idx
       = γ idx - lr * ∑ j : Fin (oc * m),
@@ -133,7 +133,7 @@ theorem cifar_bn_render_gamma_certified (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
 
 /-- **BN β output certified.** `β_c − lr·(rendered dβ_c)` denotes the certified BN
     `∂/∂β` contraction. The β peer. -/
-theorem cifar_bn_render_beta_certified (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
+theorem bnPerChannel_beta_sgd_certified (oc m : Nat) (ε : ℝ) (γ β : Vec oc)
     (v dy : Vec (oc * m)) (lr : ℝ) (idx : Fin oc) :
     β idx - lr * bnPerChannelGradBeta oc m dy idx
       = β idx - lr * ∑ j : Fin (oc * m),

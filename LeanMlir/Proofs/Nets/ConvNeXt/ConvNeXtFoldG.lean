@@ -48,7 +48,7 @@ theorem chanLnGammaGrad_den {c h w : Nat} (xN epsStr cotN : String)
           pdiv (fun γ' : Vec c => chanLNTensor3 c h w ε γ' β x) γ k j * cot j := by
   simp only [denStep, denStepApp]
   rw [chanLN_gamma_contract ε β γ x cot k]
-  exact vit_veclnGamma_grad_bridge ε β γ (Mat.unflatten (chanLNRows c h w x))
+  exact layerNormVec_gamma_grad_bridge ε β γ (Mat.unflatten (chanLNRows c h w x))
     (chanLNRows c h w cot) k
 
 /-- **Channel-LN β GRADIENT denotes the certified β gradient.** The β gradient is the plain row
@@ -61,7 +61,7 @@ theorem chanLnBetaGrad_den {c h w : Nat} (cotN : String)
           pdiv (fun β' : Vec c => chanLNTensor3 c h w ε γ β' x) β k j * cot j := by
   simp only [denStep, denStepApp]
   rw [chanLN_beta_contract ε γ β x cot k]
-  exact vit_veclnBeta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
+  exact layerNormVec_beta_grad_bridge ε γ β (Mat.unflatten (chanLNRows c h w x))
     (chanLNRows c h w cot) k
 
 end Proofs.CnxPoCG

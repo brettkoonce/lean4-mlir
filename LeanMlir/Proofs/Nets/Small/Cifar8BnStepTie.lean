@@ -7,8 +7,8 @@ chain alternates **BN-output cotangent** `dyBnᵢ` (relu-masked — fed to the �
 cotangent** `cotCᵢ` (`bnPerChannelTensor3GradInput` of `dyBnᵢ` — fed to the conv W/b ops), repeated
 over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-back.
 
-**Zero new ops/bridges/constructors.** Conv ties reuse `CifarPoC.convW_den`/`convB_den`; BN ties reuse
-`CifarBnPoC.bnGamma_den`/`bnBeta_den`; dense head + loss-cot reuse `Cifar8PoC`/cifar. All 38 params
+**Zero new ops/bridges/constructors.** Conv ties reuse `SgdNode.convW_den`/`convB_den`; BN ties reuse
+`SgdNode.bnGamma_den`/`bnBeta_den`; the dense head reuses `SgdNode.denseW_den`/`denseB_den`, the loss cotangent cifar8's. All 38 params
 (8 conv W/b + 8 BN γ/β + 3 dense) fold with the generics — the cifar8-bn lesson applied to the tie.
 
 ## Scope (same as the rest of the suite)
@@ -20,7 +20,7 @@ over 4 conv→conv→pool stages, crossing each pool as conv-back then maxpool-b
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
-open Proofs.CifarBnPoC (bnSgdPairTied_holds)
+open Proofs.SgdNode (bnSgdPairTied_holds)
 
 namespace Proofs.Cifar8BnPoC
 
@@ -53,7 +53,7 @@ theorem cifar8BnLossCot_den {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     the composed softmax-CE cotangent `g`. The conv ops are fed the BN-back cotangents `cotC1–8`; the
     BN ops the relu-masked cotangents `dyBn1–8`; both are the rendered cifar8-bn backward chain
     (cifar8's chain + a BN-back at every conv). That they equal the loss gradient at each layer output
-    is not stated. Dense head + loss-cot reuse `Cifar8PoC`/cifar. -/
+    is not stated. The dense head reuses `SgdNode.denseW_den`/`denseB_den`, the loss cotangent cifar8's. -/
 theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat}
     (xN wN bN gN vN epsStr lrStr cotN : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (ε₁ : ℝ) (γ₁ β₁ : Vec c1)
@@ -149,35 +149,35 @@ theorem cifar8Bn_convbn_tied_certified {ic c1 c2 c3 c4 h w d1 nClasses kH kW : N
     -- conv₁ + bn₁
     ConvWSgdTied xN wN lrStr cotN b₁ x W₁ cotC1 lr
   ∧ ConvBSgdTied bN lrStr cotN W₁ x b₁ cotC1 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₁ γ₁ β₁ cc1 dyBn1 lr
   -- conv₂ + bn₂
   ∧ ConvWSgdTied xN wN lrStr cotN b₂ r1t W₂ cotC2 lr
   ∧ ConvBSgdTied bN lrStr cotN W₂ r1t b₂ cotC2 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₂ γ₂ β₂ cc2 dyBn2 lr
   -- conv₃ + bn₃
   ∧ ConvWSgdTied xN wN lrStr cotN b₃ zp1t W₃ cotC3 lr
   ∧ ConvBSgdTied bN lrStr cotN W₃ zp1t b₃ cotC3 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₃ γ₃ β₃ cc3 dyBn3 lr
   -- conv₄ + bn₄
   ∧ ConvWSgdTied xN wN lrStr cotN b₄ r3t W₄ cotC4 lr
   ∧ ConvBSgdTied bN lrStr cotN W₄ r3t b₄ cotC4 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₄ γ₄ β₄ cc4 dyBn4 lr
   -- conv₅ + bn₅
   ∧ ConvWSgdTied xN wN lrStr cotN b₅ zp2t W₅ cotC5 lr
   ∧ ConvBSgdTied bN lrStr cotN W₅ zp2t b₅ cotC5 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₅ γ₅ β₅ cc5 dyBn5 lr
   -- conv₆ + bn₆
   ∧ ConvWSgdTied xN wN lrStr cotN b₆ r5t W₆ cotC6 lr
   ∧ ConvBSgdTied bN lrStr cotN W₆ r5t b₆ cotC6 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₆ γ₆ β₆ cc6 dyBn6 lr
   -- conv₇ + bn₇
   ∧ ConvWSgdTied xN wN lrStr cotN b₇ zp3t W₇ cotC7 lr
   ∧ ConvBSgdTied bN lrStr cotN W₇ zp3t b₇ cotC7 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₇ γ₇ β₇ cc7 dyBn7 lr
   -- conv₈ + bn₈
   ∧ ConvWSgdTied xN wN lrStr cotN b₈ r7t W₈ cotC8 lr
   ∧ ConvBSgdTied bN lrStr cotN W₈ r7t b₈ cotC8 lr
-  ∧ CifarBnPoC.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr := by
+  ∧ SgdNode.BnSgdPairTied gN vN bN epsStr lrStr cotN ε₈ γ₈ β₈ cc8 dyBn8 lr := by
   exact ⟨convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds,
     convBSgdTied_holds, bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds,
     bnSgdPairTied_holds, convWSgdTied_holds, convBSgdTied_holds, bnSgdPairTied_holds,

@@ -39,7 +39,7 @@ theorem posEmbedGrad_den {ic H W P N D : Nat} (cotN : String)
     ViT-Tiny dims rather than generically, for the reason `ViTTiePoC.vit_cls_den` is: the operand's
     type is `Vec (1 * D)`, which reduces to `Vec D` only at a literal `D`.
 
-    The fused peer's proof ends in `vit_render_cls_certified`, whose statement carries the
+    The fused peer's proof ends in `clsToken_sgd_certified`, whose statement carries the
     `θ − lr·` wrapper and has no un-wrapped twin; instantiating it at `lr = 1` un-fuses it, which
     is the same content as a `*Sgd_eq_grad` `rfl` read backwards. -/
 theorem clsGrad_den (cotN : String)
@@ -54,7 +54,7 @@ theorem clsGrad_den (cotN : String)
             (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i = clsTokenGrad dyEmbed i := by
     simp only [denStepApp, batchSlice, clsTokenGrad]; rw [Fin.sum_univ_one]; rfl
   rw [hstep]
-  have h := vit_render_cls_certified Wc bc cls pos img dyEmbed 1 i
+  have h := clsToken_sgd_certified Wc bc cls pos img dyEmbed 1 i
   linarith
 
 end Proofs.ViTPoCG

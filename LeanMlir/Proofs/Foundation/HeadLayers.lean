@@ -6,8 +6,8 @@ import LeanMlir.Proofs.Foundation.BackwardMaps
 
 Every conv net in the suite ends in global average pooling and a dense classifier, and both are
 globally certified (GAP is linear, dense is affine), so `ok := True`. Written once here and shared
-by MobileNetV4, ResNet-34 and ResNet-50. The ResNets' 3×3/s2 stem pool (`r34PoolLayer`) is here
-too; it is certified where no example's window ties (`R34PoolSmoothAt`).
+by MobileNetV4, ResNet-34 and ResNet-50. The ResNets' 3×3/s2 stem pool (`stemPoolLayer`) is here
+too; it is certified where no example's window ties (`StemPoolSmoothAt`).
 
 **Both backward graphs tie by `rfl`.** `den` of `.gapBackBatched` is definitionally the row-wise
 GAP VJP, and `den` of `.denseRowBack` is `rowDenseBackFlat`, which is what `batchMapHasVJP`
@@ -58,17 +58,17 @@ namespace Proofs
 /-- The stem pool has no argmax tie, **per example**: a tie is a property of one image's 3×3
     window, so the condition is stated on each row of the batched activation. This is the shape
     `batchMapHasVJPAt` consumes. -/
-def R34PoolSmoothAt (N h w : Nat) {oc : Nat} (v : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
+def StemPoolSmoothAt (N h w : Nat) {oc : Nat} (v : Vec (N * (oc * (2 * h) * (2 * w)))) : Prop :=
   ∀ r : Fin N,
     MaxPool3s2Smooth (Tensor3.unflatten (Mat.unflatten v r) : Tensor3 oc (2 * h) (2 * w))
 
 /-- The batched 3×3/s2 stem pool as a `CertLayer`, certified where no example's window ties. Its
     backward graph is the render's `maxPool3s2BackB`, and it denotes `batchMapHasVJPAt`'s
     backward definitionally once the two spellings of the scatter are identified. -/
-noncomputable def r34PoolLayer (N : Nat) {c h w : Nat} (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
+noncomputable def stemPoolLayer (N : Nat) {c h w : Nat} (hc : 0 < c) (hh : 0 < h) (hw : 0 < w) :
     StableHLO.CertLayer (N * (c * (2 * h) * (2 * w))) (N * (c * h * w)) where
   fwd := StableHLO.batchMap N (maxPool3s2Flat c h w)
-  ok := R34PoolSmoothAt N h w
+  ok := StemPoolSmoothAt N h w
   diff := fun v hv => batchMap_differentiableAt _ _
     (fun r => maxPool3s2Flat_differentiableAt_vec _ (hv r) hc hh hw)
   vjp := fun v hv => batchMapHasVJPAt _ _ (fun r => maxPool3s2FlatHasVJPAtVec _ (hv r))

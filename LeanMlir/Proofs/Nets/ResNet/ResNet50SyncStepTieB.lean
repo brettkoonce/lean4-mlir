@@ -24,7 +24,7 @@ capstone takes the scaled-shard relation between the replicas' cotangents and th
 its hypothesis, and two corollaries discharge it, one per loss:
 
 * `r50_net_syncTiedB_smoothedCE` — the label-smoothed chain, replicas dividing by `B` and the
-  global step by `R·B` (`ResNet34SyncTieB.replicaLossCot_eq`);
+  global step by `R·B` (`SyncKit.replicaLossCot_eq`);
 * `r50_net_syncTiedB_bce` — BCE-with-logits at the COMMITTED divisors, `N·K` on a replica and
   `(R·N)·K` on the global step (`replicaBceLossCot_eq`, the BCE peer, proved here).
 
@@ -67,8 +67,8 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.ResNet50SyncTieB
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (cInB)
-open Proofs.ResNet34TieB Proofs.ResNet34SyncTieB Proofs.ResNet50TieB
+open Proofs.BackLinks (cInB)
+open Proofs.ResNet34TieB Proofs.ResNet34SyncTieB Proofs.ResNet50TieB Proofs.SyncKit Proofs.BackLinks
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. Homogeneity — the single-device bottleneck chains are linear in their cotangent
@@ -578,7 +578,7 @@ end DownBlockShard
 
 -- ════════════════════════════════════════════════════════════════
 -- § 3. The per-block DP ties
---   Each conjunct is one of `ResNet34SyncTieB`'s collectives (`ConvWSync`, `ConvStridedWSync`,
+--   Each conjunct is one of `SyncKit`'s collectives (`ConvWSync`, `ConvStridedWSync`,
 --   `BnSync`), generic in the kernel size, so the 1×1 convs and the strided 1×1 skip need no new
 --   collective lemma. Tags are the render's: a gradient collective is named for its parameter
 --   (`{p}W1`, `{p}g1`, `{p}bt1`, …), the γ node reads the forward's `{p}g1mu` / `{p}g1var`.
@@ -970,7 +970,7 @@ theorem r50_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (q : Nat
 -- § 5. The two losses — the divisor step, discharged once per loss
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The BCE divisor step** — `ResNet34SyncTieB.replicaLossCot_eq`'s peer for BCE-with-logits.
+/-- **The BCE divisor step** — `SyncKit.replicaLossCot_eq`'s peer for BCE-with-logits.
     Replica `r`'s three-op chain divides by `bk`, the single-device one at the global batch by
     `R·bk`; at the replica's shard of the logits and targets, the replica's cotangent is `R ×` its
     shard of the global one. `σ(z) − t` is per example, so only the divisor differs. -/

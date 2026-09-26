@@ -415,19 +415,19 @@ open Proofs
 -- mnist-cnn CONV fold
 #print axioms CnnPoC.cnn_conv_tied_certified
 -- ch5-CIFAR fully folded (no-BN, 2-scale)
-#print axioms CifarPoC.convW_den
-#print axioms CifarPoC.convB_den
+#print axioms SgdNode.convW_den
+#print axioms SgdNode.convB_den
 #print axioms CifarPoC.dW7_den
 -- ch5-CIFAR §1a TIE
 #print axioms CifarPoC.cifarLossCot_den
 #print axioms CifarPoC.cifar_W7_tied_totalloss
 #print axioms CifarPoC.cifar_conv_tied_certified
 -- ch5-CIFAR-BN fully folded
-#print axioms CifarBnPoC.bnGamma_den
-#print axioms CifarBnPoC.bnBeta_den
+#print axioms SgdNode.bnGamma_den
+#print axioms SgdNode.bnBeta_den
 -- deeper 8-conv cifar8 fully folded
-#print axioms Cifar8PoC.denseW_den
-#print axioms Cifar8PoC.denseB_den
+#print axioms SgdNode.denseW_den
+#print axioms SgdNode.denseB_den
 -- ch5-cifar8 §1a TIE
 #print axioms Cifar8PoC.cifar8LossCot_den
 #print axioms Cifar8PoC.cifar8_Wb_tied_totalloss
@@ -436,11 +436,11 @@ open Proofs
 #print axioms Cifar8BnPoC.cifar8BnLossCot_den
 #print axioms Cifar8BnPoC.cifar8Bn_convbn_tied_certified
 -- ch6-ResNet-34 fully folded (full [3,4,6,3], 146 params)
-#print axioms ResNet34PoC.convStridedW_den
-#print axioms ResNet34PoC.convStridedB_den
+#print axioms SgdNode.convStridedW_den
+#print axioms SgdNode.convStridedB_den
 -- ch7-MobileNetV2 §1 fold (depthwise half)
-#print axioms Mnv2PoC.depthwiseW_den
-#print axioms Mnv2PoC.depthwiseB_den
+#print axioms SgdNode.depthwiseW_den
+#print axioms SgdNode.depthwiseB_den
 -- ch8-EfficientNet-B0 §1 fold (den)
 #print axioms EnetPoC.convWB_den
 #print axioms EnetPoC.convStridedWB_den
@@ -466,8 +466,8 @@ open Proofs
 #print axioms conv_weight_grad_bridge
 #print axioms conv_bias_grad_bridge
 -- CNN render close: the rendered conv weight/bias SGD outputs denote θ − lr·certified.
-#print axioms cnn_render_convW_certified
-#print axioms cnn_render_convb_certified
+#print axioms conv_weight_sgd_certified
+#print axioms conv_bias_sgd_certified
 -- Chain: the composed cotangent subgraphs reduce to the explicit relu'⊙Wᵀ·… backprop
 #print axioms IR.mlpCotOut1_denote
 #print axioms IR.mlpCotOut0_denote
@@ -644,18 +644,18 @@ open Proofs
 -- CIFAR-BN render CLOSE
 #print axioms bnPerChannelGradGamma_correct
 #print axioms bnPerChannelGradBeta_correct
-#print axioms cifar_bn_render_gamma_certified
-#print axioms cifar_bn_render_beta_certified
+#print axioms bnPerChannel_gamma_sgd_certified
+#print axioms bnPerChannel_beta_sgd_certified
 -- CNN conv-close UPGRADE
 #print axioms cnn_render_convW2_chain_certified
 #print axioms cnn_render_convb2_chain_certified
 #print axioms cnn_render_convW1_chain_certified
 #print axioms cnn_render_convb1_chain_certified
 -- MobileNetV2 CLOSE (planning/archive/mobilenetv2_close.md Item C)
-#print axioms mnv2_depthwise_bias_grad_bridge
-#print axioms mnv2_render_depthwiseb_certified
-#print axioms mnv2_render_stem_convW_certified
-#print axioms mnv2_render_stem_convb_certified
+#print axioms depthwise_bias_grad_bridge
+#print axioms depthwise_bias_sgd_certified
+#print axioms convStride2_weight_sgd_certified
+#print axioms convStride2_bias_sgd_certified
 -- ResNet-34 cotangent-chain CLOSE (Item D)
 #print axioms StableHLO.stemGraphB_faithful
 #print axioms StableHLO.mbNoExpGraphB_faithful
@@ -704,20 +704,20 @@ open Proofs
 #print axioms Proofs.CnxTiePoC.cnx_net_tied_certified
 -- ViT CLOSE (planning/archive/vit_close.md Item C)
 #print axioms pdiv_rowDense_W
-#print axioms vit_rowDenseW_grad_bridge
-#print axioms vit_rowDenseb_grad_bridge
-#print axioms vit_render_rowdenseW_certified
-#print axioms vit_render_rowdenseb_certified
+#print axioms rowDense_weight_grad_bridge
+#print axioms rowDense_bias_grad_bridge
+#print axioms rowDense_weight_sgd_certified
+#print axioms rowDense_bias_sgd_certified
 #print axioms pdiv_patchEmbed_pos
-#print axioms vit_render_pos_certified
+#print axioms posEmbed_sgd_certified
 #print axioms pdiv_patchEmbed_cls
-#print axioms vit_render_cls_certified
+#print axioms clsToken_sgd_certified
 #print axioms pdiv_patchEmbed_W
-#print axioms vit_patchW_grad_bridge
-#print axioms vit_render_patchW_certified
+#print axioms patchEmbed_weight_grad_bridge
+#print axioms patchEmbed_weight_sgd_certified
 #print axioms pdiv_patchEmbed_b
-#print axioms vit_patchb_grad_bridge
-#print axioms vit_render_patchb_certified
+#print axioms patchEmbed_bias_grad_bridge
+#print axioms patchEmbed_bias_sgd_certified
 -- ViT cotangent-chain CLOSE (planning/archive/vit_close.md Item D)
 #print axioms vitCotDP_eq_sdpaDWeights
 #print axioms vitCotDS_eq_sdpaDScaled
@@ -729,10 +729,10 @@ open Proofs
 #print axioms transformerBlockVHasVJPMat
 #print axioms pdiv_vecLN_gamma
 #print axioms pdiv_vecLN_beta
-#print axioms vit_veclnGamma_grad_bridge
-#print axioms vit_veclnBeta_grad_bridge
-#print axioms vit_render_veclngamma_certified
-#print axioms vit_render_veclnbeta_certified
+#print axioms layerNormVec_gamma_grad_bridge
+#print axioms layerNormVec_beta_grad_bridge
+#print axioms layerNormVec_gamma_sgd_certified
+#print axioms layerNormVec_beta_sgd_certified
 
 -- ViT scaling pass: multi-head (ViTMultiHead.lean)
 #print axioms sum_headPadMat_apply
@@ -1253,8 +1253,8 @@ open Proofs
 #print axioms StableHLO.bnBatchLA_back_conj
 #print axioms StableHLO.bnBatchLABack_faithful
 -- the render's `.bnBatchBack` node and the ties' `.bnBatchLABack` node denote one map (up to reassocB)
-#print axioms EnetTiePoC.den_bnBatchLABack_eq_bnBatchBack
-#print axioms EnetTiePoC.bnBackB_eq_den_bnBatchBack
+#print axioms BackLinks.den_bnBatchLABack_eq_bnBatchBack
+#print axioms BackLinks.bnBackB_eq_den_bnBatchBack
 #print axioms StableHLO.seBackBatched_faithful
 -- Batched MBConv stage backward graphs (the bn wrapper lets these compose).
 #print axioms StableHLO.cbsBackBatchedGraph_faithful
@@ -1383,10 +1383,10 @@ open Proofs
 #print axioms StableHLO.mbNoExpBackBatchedGraph_faithful
 #print axioms StableHLO.headBackBatchedGraph_faithful
 -- ViT-Tiny §1 FOLD (ViTFold)
-#print axioms Proofs.ViTPoC.veclnGammaSgd_den
+#print axioms Proofs.SgdNode.veclnGammaSgd_den
 #print axioms Proofs.ViTPoC.rowDenseWeightSgd_den
 #print axioms Proofs.ViTPoC.rowDenseBiasSgd_den
-#print axioms Proofs.ViTPoC.rowDenseBiasSgd_den_lnbeta
+#print axioms Proofs.SgdNode.rowDenseBiasSgd_den_lnbeta
 #print axioms Proofs.ViTPoC.patchEmbedWeightSgd_den
 #print axioms Proofs.ViTPoC.patchEmbedBiasSgd_den
 #print axioms Proofs.ViTPoC.posEmbedSgd_den
@@ -1797,7 +1797,7 @@ open Proofs
 #print axioms Proofs.r34IdBHasVJPAt
 #print axioms Proofs.r34DownBHasVJPAt
 #print axioms Proofs.r34StemBHasVJPAt
-#print axioms Proofs.r34PoolLayer
+#print axioms Proofs.stemPoolLayer
 #print axioms Proofs.r34StemLayer
 #print axioms Proofs.r34HeadLayer
 #print axioms Proofs.r34HeadBHasVJP
@@ -1810,20 +1810,20 @@ open Proofs
 #print axioms Proofs.resnet34ForwardBFull_differentiableAt
 
 -- RESNET-34 AT TRUE BATCH BN — T3's §1 fold, UN-FUSED (Foundation/GradNodesB.lean)
-#print axioms Proofs.ResNet34PoCB.convWGradB_den
-#print axioms Proofs.ResNet34PoCB.convBGradB_den
-#print axioms Proofs.ResNet34PoCB.convStridedWGradB_den
-#print axioms Proofs.ResNet34PoCB.convStridedBGradB_den
-#print axioms Proofs.ResNet34PoCB.bnGammaGradB_den
-#print axioms Proofs.ResNet34PoCB.bnBetaGradB_den
-#print axioms Proofs.ResNet34PoCB.denseWGradB_den
-#print axioms Proofs.ResNet34PoCB.denseBGradB_den
+#print axioms Proofs.GradNodeB.convWGradB_den
+#print axioms Proofs.GradNodeB.convBGradB_den
+#print axioms Proofs.GradNodeB.convStridedWGradB_den
+#print axioms Proofs.GradNodeB.convStridedBGradB_den
+#print axioms Proofs.GradNodeB.bnGammaGradB_den
+#print axioms Proofs.GradNodeB.bnBetaGradB_den
+#print axioms Proofs.GradNodeB.denseWGradB_den
+#print axioms Proofs.GradNodeB.denseBGradB_den
 
 -- 4b.1 EfficientNet-B0
-#print axioms Proofs.EnetPoCG.denseBGradB_den
-#print axioms Proofs.EnetPoCG.convStridedXlaWGradB_den
-#print axioms Proofs.EnetPoCG.depthwiseWGradB_den
-#print axioms Proofs.EnetPoCG.depthwiseStridedWGradB_den
+#print axioms Proofs.GradNodeB.denseBGradB_den
+#print axioms Proofs.GradNodeB.convStridedXlaWGradB_den
+#print axioms Proofs.GradNodeB.depthwiseWGradB_den
+#print axioms Proofs.GradNodeB.depthwiseStridedWGradB_den
 
 -- 4b.2 ConvNeXt-T
 #print axioms Proofs.CnxPoCG.layerScaleChGammaGrad_den
@@ -1835,20 +1835,20 @@ open Proofs
 #print axioms Proofs.ViTPoCG.clsGrad_den
 
 -- 4c leg 4 ViT-Tiny
-#print axioms Proofs.ViTPoCGB.veclnGammaGradB_den
-#print axioms Proofs.ViTPoCGB.rowDenseBiasGradB_den_lnbeta
+#print axioms Proofs.GradNodeB.veclnGammaGradB_den
+#print axioms Proofs.GradNodeB.rowDenseBiasGradB_den_lnbeta
 #print axioms Proofs.ViTPoCGB.rowDenseWeightGradB_den
 #print axioms Proofs.ViTPoCGB.rowDenseBiasGradB_den
 #print axioms Proofs.ViTPoCGB.patchEmbedWeightGradB_den
 #print axioms Proofs.ViTPoCGB.patchEmbedBiasGradB_den
 #print axioms Proofs.ViTPoCGB.posEmbedGradB_den
 #print axioms Proofs.ViTPoCGB.clsGrad_denB
-#print axioms Proofs.ViTPoCGB.headWGradB_den
-#print axioms Proofs.ViTPoCGB.headBGradB_den
+#print axioms Proofs.GradNodeB.headWGradB_den
+#print axioms Proofs.GradNodeB.headBGradB_den
 
 -- 4c leg 3 ConvNeXt-T
 #print axioms Proofs.CnxPoCGB.layerScaleChGammaGradB_den
-#print axioms Proofs.CnxPoCGB.psWGradB_den
+#print axioms Proofs.GradNodeB.psWGradB_den
 #print axioms Proofs.CnxPoCGB.chanLnGammaGradB_den
 #print axioms Proofs.CnxPoCGB.chanLnBetaGradB_den
 -- The bf16 gradient nodes, folded ONCE for every net (Bf16GradNodes.lean)
@@ -1863,10 +1863,10 @@ open Proofs
 #print axioms Proofs.Bf16PoC.patchEmbedWGradBBf16_den
 
 -- 4b.4 MobileNetV2 at 17 blocks
-#print axioms Proofs.Mnv2PaperPoCG.convStridedXlaBGradB_den
-#print axioms Proofs.Mnv2PaperPoCG.depthwiseBGradB_den
-#print axioms Proofs.Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den
-#print axioms Proofs.Mnv2PaperPoCG.depthwiseStridedXlaBGradB_den
+#print axioms Proofs.GradNodeB.convStridedXlaBGradB_den
+#print axioms Proofs.GradNodeB.depthwiseBGradB_den
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaWGradB_den
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaBGradB_den
 
 -- 4.2a: THE LABEL-SMOOTHED LOSS COTANGENT, AT A GENERAL TARGET (SmoothedLossCot.lean, 2026-09-06)
 #print axioms Proofs.softCE_oneHot
@@ -1877,8 +1877,8 @@ open Proofs
 #print axioms Proofs.smoothedLossCotGraph_row
 
 -- 4.2a: RESNET-34'S T3 §1a TIE AT BATCH BN, UN-FUSED (ResNet34StepTieB.lean, 2026-09-06)
-#print axioms Proofs.ResNet34TieB.bnInB_eq_bnBackB
-#print axioms Proofs.ResNet34TieB.bnInB_eq_den_bnBatchBack
+#print axioms Proofs.BackLinks.bnInB_eq_bnBackB
+#print axioms Proofs.BackLinks.bnInB_eq_den_bnBatchBack
 #print axioms Proofs.ResNet34TieB.r34IdCotIn_eq_vjp
 #print axioms Proofs.ResNet34TieB.r34DownCotIn_eq_vjp
 #print axioms Proofs.ResNet34TieB.r34_idblock_tiedB
@@ -1926,20 +1926,20 @@ open Proofs
 
 -- 4b's CAPSTONE RE-POINTING, EFFICIENTNET-B0 (EfficientNetStepTieG.lean, 2026-09-06)
 #print axioms Proofs.EnetTiePoCG.convBBetaTiedB_holds
-#print axioms Proofs.ResNet34PoCB.convWTiedB_holds
-#print axioms Proofs.ResNet34PoCB.convBTiedB_holds
-#print axioms Proofs.ResNet34PoCB.convStridedWTiedB_holds
-#print axioms Proofs.ResNet34PoCB.convStridedBTiedB_holds
-#print axioms Proofs.ResNet34PoCB.convStridedXlaWTiedB_holds
-#print axioms Proofs.ResNet34PoCB.depthwiseWTiedB_holds
-#print axioms Proofs.ResNet34PoCB.depthwiseBTiedB_holds
-#print axioms Proofs.ResNet34PoCB.depthwiseStridedWTiedB_holds
-#print axioms Proofs.ResNet34PoCB.denseWTiedB_holds
-#print axioms Proofs.ResNet34PoCB.denseBTiedB_holds
+#print axioms Proofs.GradNodeB.convWTiedB_holds
+#print axioms Proofs.GradNodeB.convBTiedB_holds
+#print axioms Proofs.GradNodeB.convStridedWTiedB_holds
+#print axioms Proofs.GradNodeB.convStridedBTiedB_holds
+#print axioms Proofs.GradNodeB.convStridedXlaWTiedB_holds
+#print axioms Proofs.GradNodeB.depthwiseWTiedB_holds
+#print axioms Proofs.GradNodeB.depthwiseBTiedB_holds
+#print axioms Proofs.GradNodeB.depthwiseStridedWTiedB_holds
+#print axioms Proofs.GradNodeB.denseWTiedB_holds
+#print axioms Proofs.GradNodeB.denseBTiedB_holds
 #print axioms Proofs.ViTPoCGB.rowDenseWTiedB_holds
 #print axioms Proofs.ViTPoCGB.rowDenseBTiedB_holds
-#print axioms Proofs.ViTPoCGB.vecLNGammaTiedB_holds
-#print axioms Proofs.ViTPoCGB.vecLNBetaTiedB_holds
+#print axioms Proofs.GradNodeB.vecLNGammaTiedB_holds
+#print axioms Proofs.GradNodeB.vecLNBetaTiedB_holds
 #print axioms Proofs.CnxPoCGB.chanLNGammaTiedB_holds
 #print axioms Proofs.CnxPoCGB.chanLNBetaTiedB_holds
 #print axioms Proofs.EnetPoC.convWSgdTiedB_holds
@@ -1948,8 +1948,8 @@ open Proofs
 #print axioms Proofs.EnetPoC.denseBSgdTiedB_holds
 #print axioms Proofs.ViTPoC.rowDenseWSgdTied_holds
 #print axioms Proofs.ViTPoC.rowDenseBSgdTied_holds
-#print axioms Proofs.ViTPoC.vecLNGammaSgdTied_holds
-#print axioms Proofs.ViTPoC.vecLNBetaSgdTied_holds
+#print axioms Proofs.SgdNode.vecLNGammaSgdTied_holds
+#print axioms Proofs.SgdNode.vecLNBetaSgdTied_holds
 #print axioms Proofs.CnxPoC.chanLNGammaSgdTied_holds
 #print axioms Proofs.CnxPoC.chanLNBetaSgdTied_holds
 #print axioms Proofs.convWSgdTied_holds
@@ -2069,40 +2069,40 @@ open Proofs
 #print axioms Proofs.StableHLO.r34StemGraphSync_shard
 #print axioms Proofs.StableHLO.resnet34FwdGraphSyncFull_shard
 -- T3 twin: the single-device chain is homogeneous in its cotangent
-#print axioms Proofs.ResNet34SyncTieB.bnGradInput_smul
-#print axioms Proofs.ResNet34SyncTieB.bnInB_smul
-#print axioms Proofs.ResNet34SyncTieB.maxPool3s2BackFlat_smul
+#print axioms Proofs.SyncKit.bnGradInput_smul
+#print axioms Proofs.SyncKit.bnInB_smul
+#print axioms Proofs.SyncKit.maxPool3s2BackFlat_smul
 #print axioms Proofs.ResNet34SyncTieB.r34IdCotIn_smul
 #print axioms Proofs.ResNet34SyncTieB.r34DownCotIn_smul
 -- ...each replica's sync-BN backward chain is the shard of the single-device one
-#print axioms Proofs.ResNet34SyncTieB.bnSyncInB_shard
+#print axioms Proofs.SyncKit.bnSyncInB_shard
 #print axioms Proofs.ResNet34SyncTieB.r34IdSyncCotIn_shard
 #print axioms Proofs.ResNet34SyncTieB.r34DownSyncCotIn_shard
 #print axioms Proofs.ResNet34SyncTieB.r34StemSyncCotC_shard
 #print axioms Proofs.ResNet34SyncTieB.r34HeadCotBlk_shard
 -- ...the strided-conv and dense collectives, and the divisor
-#print axioms Proofs.ResNet34SyncTieB.den_allReduceMeanF_convStridedWeightGradB_shard
-#print axioms Proofs.ResNet34SyncTieB.den_allReduceMeanF_denseWeightGradB_shard
-#print axioms Proofs.ResNet34SyncTieB.den_allReduceMeanF_denseBiasGradB_shard
-#print axioms Proofs.ResNet34SyncTieB.replicaLossCot_eq
+#print axioms Proofs.SyncKit.den_allReduceMeanF_convStridedWeightGradB_shard
+#print axioms Proofs.SyncKit.den_allReduceMeanF_denseWeightGradB_shard
+#print axioms Proofs.SyncKit.den_allReduceMeanF_denseBiasGradB_shard
+#print axioms Proofs.SyncKit.replicaLossCot_eq
 -- the capstone: every all-reduced parameter gradient IS the single-device node at R·N
 #print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB
 #print axioms Proofs.ResNet34SyncTieB.r34_net_syncTiedB_smoothedCE
 
 -- 4d PIECE 3, THE MBCONV PIECES MOBILENETV2 AND EFFICIENTNET-B0 SHARE
 -- (MBConvSyncTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)
-#print axioms Proofs.MBConvSyncTieB.hasVJP3_backward_smul
-#print axioms Proofs.MBConvSyncTieB.depthwiseWeightGradB_smul
-#print axioms Proofs.MBConvSyncTieB.depthwiseStridedWeightGradB_smul
-#print axioms Proofs.MBConvSyncTieB.convStridedXlaWeightGradB_smul
-#print axioms Proofs.MBConvSyncTieB.rowDenseBackFlat_smul
-#print axioms Proofs.MBConvSyncTieB.rowDenseBackFlat_shard
-#print axioms Proofs.MBConvSyncTieB.den_allReduceMeanF_depthwiseWeightGradB_shard
-#print axioms Proofs.MBConvSyncTieB.den_allReduceMeanF_depthwiseStridedWeightGradB_shard
-#print axioms Proofs.MBConvSyncTieB.den_allReduceMeanF_convStridedXlaWeightGradB_shard
-#print axioms Proofs.MBConvSyncTieB.depthwiseWSync_of_scaled
-#print axioms Proofs.MBConvSyncTieB.depthwiseStridedWSync_of_scaled
-#print axioms Proofs.MBConvSyncTieB.convStridedXlaWSync_of_scaled
+#print axioms Proofs.SyncKit.hasVJP3_backward_smul
+#print axioms Proofs.SyncKit.depthwiseWeightGradB_smul
+#print axioms Proofs.SyncKit.depthwiseStridedWeightGradB_smul
+#print axioms Proofs.SyncKit.convStridedXlaWeightGradB_smul
+#print axioms Proofs.SyncKit.rowDenseBackFlat_smul
+#print axioms Proofs.SyncKit.rowDenseBackFlat_shard
+#print axioms Proofs.SyncKit.den_allReduceMeanF_depthwiseWeightGradB_shard
+#print axioms Proofs.SyncKit.den_allReduceMeanF_depthwiseStridedWeightGradB_shard
+#print axioms Proofs.SyncKit.den_allReduceMeanF_convStridedXlaWeightGradB_shard
+#print axioms Proofs.SyncKit.depthwiseWSync_of_scaled
+#print axioms Proofs.SyncKit.depthwiseStridedWSync_of_scaled
+#print axioms Proofs.SyncKit.convStridedXlaWSync_of_scaled
 
 -- 4d PIECE 3 AT MOBILENETV2: THE SYNC-BN DP RENDER IS THE SINGLE-DEVICE NET AT R·N
 -- (MobileNetV2SyncB.lean + MobileNetV2SyncStepTieB.lean, planning/global_bn_verified.md §3.3, 2026-09-21)

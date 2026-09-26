@@ -66,11 +66,11 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.EnetSyncTieG
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
+open Proofs.BackLinks (reassocB bnBackB swBackB sigBackB cInB dInB dStridedInB gapInB seInB
   gateCotB)
-open Proofs.ResNet34TieB (bnInB bnInB_eq_bnBackB rowB unrowB)
-open Proofs.ResNet34SyncTieB
-open Proofs.MBConvSyncTieB
+open Proofs.BackLinks (bnInB bnInB_eq_bnBackB rowB unrowB)
+open Proofs.SyncKit
+open Proofs.SyncKit
 
 -- ════════════════════════════════════════════════════════════════
 -- § 0. The single-device chain, named — and each block's input cotangent IS its VJP

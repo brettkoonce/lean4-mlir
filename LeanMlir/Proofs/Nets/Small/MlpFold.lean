@@ -11,8 +11,8 @@ cotangent, the backward chain (`dotOut`/`selectPos`), and the six parameter SGD 
 a hand-written, report-only `%loss` block that reads the logits and `%onehot` and feeds no
 parameter. This file proves that the output weight's `den` is `W₂ − lr·∂(crossEntropy ∘ forward)/∂W₂` at the
 emitted loss cotangent (`mlp_W2_tied_totalloss`), and that each of the other five is
-`θ − lr·(certified per-layer Jacobian · the rendered chain cotangent)` — `Cifar8PoC.denseW_den` /
-`Cifar8PoC.denseB_den` at the chain cotangents `mlpCotOut1`/`mlpCotOut0`, whose emitted
+`θ − lr·(certified per-layer Jacobian · the rendered chain cotangent)` — `SgdNode.denseW_den` /
+`SgdNode.denseB_den` at the chain cotangents `mlpCotOut1`/`mlpCotOut0`, whose emitted
 `selectPos`/`dotOut` subgraphs `cot1_den`/`cot0_den` pin.
 
 No new core `SHlo` ops are needed: the backward chain uses the existing
@@ -62,7 +62,7 @@ theorem cot0_den (p₀name c1name : String) :
 Each `weightSgd`/`biasSgd` op, fed the right activation (`x` field) and the
 cotangent the chain delivers (the `.operand` value), denotes `θ − lr·(certified
 per-layer Jacobian · cotangent)` — via the op `den` = `emitWeightGrad`/`emitBiasGrad`
-(outer / reduce) and `Cifar8PoC.denseW_den` / `Cifar8PoC.denseB_den`. -/
+(outer / reduce) and `SgdNode.denseW_den` / `SgdNode.denseB_den`. -/
 
 /-- Output-layer weight op `weightSgd a1 W₂ (cot = dy)` = certified `W₂` step. -/
 theorem W2_den_certified (aN lrStr dyN : String) (i : Fin d₂) (j : Fin d₃) :
@@ -72,7 +72,7 @@ theorem W2_den_certified (aN lrStr dyN : String) (i : Fin d₂) (j : Fin d₃) :
           pdiv (fun v : Vec (d₂ * d₃) =>
                   dense (Mat.unflatten v) b₂ (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))))
                (Mat.flatten W₂) (finProdFinEquiv (i, j)) k * g k :=
-  Cifar8PoC.denseW_den aN "%W2" lrStr dyN _ W₂ b₂ _ lr i j
+  SgdNode.denseW_den aN "%W2" lrStr dyN _ W₂ b₂ _ lr i j
 
 /-- Hidden-layer weight op `weightSgd a0 W₁ (cot = mlpCotOut1)` = certified `W₁` step. -/
 theorem W1_den_certified (aN lrStr cN : String) (i : Fin d₁) (j : Fin d₂) :
@@ -83,7 +83,7 @@ theorem W1_den_certified (aN lrStr cN : String) (i : Fin d₁) (j : Fin d₂) :
           pdiv (fun v : Vec (d₁ * d₂) => dense (Mat.unflatten v) b₁ (relu d₁ (dense W₀ b₀ x)))
                (Mat.flatten W₁) (finProdFinEquiv (i, j)) k
             * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k :=
-  Cifar8PoC.denseW_den aN "%W1" lrStr cN _ W₁ b₁ _ lr i j
+  SgdNode.denseW_den aN "%W1" lrStr cN _ W₁ b₁ _ lr i j
 
 /-- Input-layer weight op `weightSgd x W₀ (cot = mlpCotOut0)` = certified `W₀` step. -/
 theorem W0_den_certified (lrStr cN : String) (i : Fin d₀) (j : Fin d₁) :
@@ -94,7 +94,7 @@ theorem W0_den_certified (lrStr cN : String) (i : Fin d₀) (j : Fin d₁) :
           pdiv (fun v : Vec (d₀ * d₁) => dense (Mat.unflatten v) b₀ x)
                (Mat.flatten W₀) (finProdFinEquiv (i, j)) k
             * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g k :=
-  Cifar8PoC.denseW_den "%x" "%W0" lrStr cN _ W₀ b₀ _ lr i j
+  SgdNode.denseW_den "%x" "%W0" lrStr cN _ W₀ b₀ _ lr i j
 
 /-- Output-layer bias op = certified `b₂` step. -/
 theorem b2_den_certified (lrStr dyN : String) (i : Fin d₃) :
@@ -102,7 +102,7 @@ theorem b2_den_certified (lrStr dyN : String) (i : Fin d₃) :
       = b₂ i - lr * ∑ j : Fin d₃,
           pdiv (fun b' : Vec d₃ => dense W₂ b' (relu d₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x))))) b₂ i j
             * g j :=
-  Cifar8PoC.denseB_den "%b2" lrStr dyN W₂ _ b₂ _ lr i
+  SgdNode.denseB_den "%b2" lrStr dyN W₂ _ b₂ _ lr i
 
 /-- Hidden-layer bias op = certified `b₁` step. -/
 theorem b1_den_certified (lrStr cN : String) (i : Fin d₂) :
@@ -111,7 +111,7 @@ theorem b1_den_certified (lrStr cN : String) (i : Fin d₂) :
       = b₁ i - lr * ∑ j : Fin d₂,
           pdiv (fun b' : Vec d₂ => dense W₁ b' (relu d₁ (dense W₀ b₀ x))) b₁ i j
             * (mlpCotOut1 W₂ (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j :=
-  Cifar8PoC.denseB_den "%b1" lrStr cN W₁ _ b₁ _ lr i
+  SgdNode.denseB_den "%b1" lrStr cN W₁ _ b₁ _ lr i
 
 /-- Input-layer bias op = certified `b₀` step. -/
 theorem b0_den_certified (lrStr cN : String) (i : Fin d₁) :
@@ -120,7 +120,7 @@ theorem b0_den_certified (lrStr cN : String) (i : Fin d₁) :
       = b₀ i - lr * ∑ j : Fin d₁,
           pdiv (fun b' : Vec d₁ => dense W₀ b' x) b₀ i j
             * (mlpCotOut0 W₁ W₂ (dense W₀ b₀ x) (dense W₁ b₁ (relu d₁ (dense W₀ b₀ x)))).denote g j :=
-  Cifar8PoC.denseB_den "%b0" lrStr cN W₀ _ b₀ _ lr i
+  SgdNode.denseB_den "%b0" lrStr cN W₀ _ b₀ _ lr i
 
 /-! ## Fully tied — the top loss cotangent is the composed softmax-CE of the forward
 

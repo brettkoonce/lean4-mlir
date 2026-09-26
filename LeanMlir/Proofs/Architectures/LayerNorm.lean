@@ -44,11 +44,11 @@ multiply. One more `pdiv_*` theorem, one more `HasVJP` instance.
 - Vector-`[D]` LayerNorm (per-feature affine): `layerNormVec`, `layerNormVecHasVJP`,
   and its per-token lift `layerNormVecPerTokenHasVJPMat`.
 - Its γ/β parameter gradients: `vecLNGradGamma`, `vecLNGradBeta`, the bridges
-  `vit_veclnGamma_grad_bridge` / `vit_veclnBeta_grad_bridge`, and their SGD forms
-  `vit_render_veclngamma_certified` / `vit_render_veclnbeta_certified`.
+  `layerNormVec_gamma_grad_bridge` / `layerNormVec_beta_grad_bridge`, and their SGD forms
+  `layerNormVec_gamma_sgd_certified` / `layerNormVec_beta_sgd_certified`.
 
-Imported directly by Foundation/IR, Codegen/StableHLO, Spec, ChannelLN, TokenParamGrad,
-SE, Attention, DropPath, Nets/ConvNeXt/ConvNeXt and Nets/EfficientNet/EfficientNet.
+Imported directly by SE, Attention, DropPath and Nets/ConvNeXt/ConvNeXt; the rest of the corpus
+reaches it through them.
 -/
 
 open Finset BigOperators
@@ -521,7 +521,7 @@ noncomputable def vecLNGradBeta (N D : Nat) (dY : Mat N D) : Vec D :=
   fun i => ∑ r : Fin N, dY r i
 
 /-- **Vector-LN γ-gradient bridge.** -/
-theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Vec D)
+theorem layerNormVec_gamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Vec D)
     (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
     vecLNGradGamma N D ε X (Mat.unflatten dy) i
       = ∑ o : Fin (N * D),
@@ -533,7 +533,7 @@ theorem vit_veclnGamma_grad_bridge {N D : Nat} (ε : ℝ) (βv : Vec D) (γ : Ve
   simp [vecLNGradGamma, Mat.unflatten, mul_comm]
 
 /-- **Vector-LN β-gradient bridge.** -/
-theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec D)
+theorem layerNormVec_beta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec D)
     (X : Mat N D) (dy : Vec (N * D)) (i : Fin D) :
     vecLNGradBeta N D (Mat.unflatten dy) i
       = ∑ o : Fin (N * D),
@@ -546,24 +546,24 @@ theorem vit_veclnBeta_grad_bridge {N D : Nat} (ε : ℝ) (γv : Vec D) (β : Vec
 
 /-- **Vector-LN γ output, certified.** `γvⁿ_k = γv_k − lr·(Σ_tokens dy·x̂)_k` denotes
     the certified rowwise vector-LN ∂/∂γv contraction: a rewrite by
-    `vit_veclnGamma_grad_bridge`, stated at one LN site with generic `N`, `D`. -/
-theorem vit_render_veclngamma_certified {N D : Nat} (ε : ℝ) (βv : Vec D)
+    `layerNormVec_gamma_grad_bridge`, stated at one LN site with generic `N`, `D`. -/
+theorem layerNormVec_gamma_sgd_certified {N D : Nat} (ε : ℝ) (βv : Vec D)
     (γ : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
     γ i - lr * vecLNGradGamma N D ε X (Mat.unflatten dy) i
       = γ i - lr * ∑ o : Fin (N * D),
           pdiv (fun gv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε gv βv (X r))) γ i o
             * dy o := by
-  rw [vit_veclnGamma_grad_bridge ε βv γ X dy i]
+  rw [layerNormVec_gamma_grad_bridge ε βv γ X dy i]
 
 /-- **Vector-LN β output, certified.** -/
-theorem vit_render_veclnbeta_certified {N D : Nat} (ε : ℝ) (γv : Vec D)
+theorem layerNormVec_beta_sgd_certified {N D : Nat} (ε : ℝ) (γv : Vec D)
     (β : Vec D) (X : Mat N D) (dy : Vec (N * D)) (lr : ℝ) (i : Fin D) :
     β i - lr * vecLNGradBeta N D (Mat.unflatten dy) i
       = β i - lr * ∑ o : Fin (N * D),
           pdiv (fun bv : Vec D =>
                   Mat.flatten (fun r => layerNormVec D ε γv bv (X r))) β i o
             * dy o := by
-  rw [vit_veclnBeta_grad_bridge ε γv β X dy i]
+  rw [layerNormVec_beta_grad_bridge ε γv β X dy i]
 
 end Proofs

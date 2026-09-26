@@ -68,7 +68,7 @@ views `chanLNRows` of the saved LN input and of the chain cotangent — the valu
 denote. The certified Jacobian on the right is `chanLNTensor3`'s, in the `c·h·w` activation
 layout the rest of the block lives in; `ChannelLN`'s permutation argument is what lets
 one op serve both layouts. They cover every one of the net's 22 spatial LN sites (1 stem + 18 block + 3 downsample); the 23rd, the
-head, runs after GAP and is ViT's vector-LN at `N = 1` (`ViTPoC.veclnGammaSgd_den`). -/
+head, runs after GAP and is ViT's vector-LN at `N = 1` (`SgdNode.veclnGammaSgd_den`). -/
 
 /-- **Channel-LN γ op denotes the certified step.** One-line delegation to
     `cnx_render_chlngamma_certified`. The free `β` is the site's LN β (the γ grad is β-free). -/

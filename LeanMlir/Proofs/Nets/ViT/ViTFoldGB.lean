@@ -25,8 +25,8 @@ this namespace, because ConvNeXt's batched tier uses them too.
 
 | emitted node | lemma | per-example peer (fused `ViTPoC` op unless noted) |
 |---|---|---|
-| `veclnGammaGradB` (25 LN γ: LN1/LN2 × 12 + final) | `veclnGammaGradB_den` (`GradNodesB`) | `ViTPoC.veclnGammaSgd_den` |
-| `rowDenseBiasGradB` (25 LN β) | `rowDenseBiasGradB_den_lnbeta` (`GradNodesB`) | `ViTPoC.rowDenseBiasSgd_den_lnbeta` |
+| `veclnGammaGradB` (25 LN γ: LN1/LN2 × 12 + final) | `veclnGammaGradB_den` (`GradNodesB`) | `SgdNode.veclnGammaSgd_den` |
+| `rowDenseBiasGradB` (25 LN β) | `rowDenseBiasGradB_den_lnbeta` (`GradNodesB`) | `SgdNode.rowDenseBiasSgd_den_lnbeta` |
 | `rowDenseWeightGradB` (Wq/Wk/Wv/Wo/Wfc1/Wfc2 × 12) | `rowDenseWeightGradB_den` | `ViTPoC.rowDenseWeightSgd_den` |
 | `rowDenseBiasGradB` (bq/bk/bv/bo/bfc1/bfc2 × 12) | `rowDenseBiasGradB_den` | `ViTPoC.rowDenseBiasSgd_den` |
 | `patchEmbedWeightGradB` / `patchEmbedBiasGradB` | `patchEmbedWeightGradB_den` / `patchEmbedBiasGradB_den` | `ViTPoC.patchEmbedWeightSgd_den` / `patchEmbedBiasSgd_den` |
@@ -35,7 +35,7 @@ this namespace, because ConvNeXt's batched tier uses them too.
 | `weightGradB` / `biasGradB` (the classifier) | `headWGradB_den` / `headBGradB_den` (`GradNodesB`) | `ViTPoC.headW_den` / `headB_den` |
 
 **No new mathematics: every proof is `Finset.sum_congr rfl` over the batch and then the
-per-example bridge at `batchSlice n`.** That is `ResNet34PoCB.denseWGradB_den`'s shape, and
+per-example bridge at `batchSlice n`.** That is `GradNodeB.denseWGradB_den`'s shape, and
 it is available because each batched `den` arm is literally `∑_batch` of the per-example one — the
 constructors were written that way (`StableHLO.Basic`'s own comment on `veclnGammaGradB`: *"TWO-LEVEL:
 the outer `Σ_n` is the batch, the inner `Σ_r` the rows within one example"*).
@@ -90,7 +90,7 @@ theorem rowDenseWeightGradB_den {N tk a c : Nat} (xN cotN : String)
   simp only [denStep, denStepApp, Mat.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
-  exact vit_rowDenseW_grad_bridge bb
+  exact rowDense_weight_grad_bridge bb
     (Mat.unflatten (batchSlice N (tk * a) x n)) W (batchSlice N (tk * c) dy n) i j
 
 /-- **Batched per-token dense bias GRADIENT denotes the certified `Σ_n Σ_tokens dy`.**
@@ -104,7 +104,7 @@ theorem rowDenseBiasGradB_den {N tk a c : Nat} (cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact vit_rowDenseb_grad_bridge W (X n) b (batchSlice N (tk * c) dy n) i
+  exact rowDense_bias_grad_bridge W (X n) b (batchSlice N (tk * c) dy n) i
 
 -- ════════════════════════════════════════════════════════════════
 -- § The patch embedding — conv weight/bias, the CLS token, the positional table
@@ -130,7 +130,7 @@ theorem patchEmbedWeightGradB_den {ic H W P tk D N : Nat} (xN cotN : String)
   simp only [denStep, denStepApp, patchEmbedWeightGradFlat, Kernel4.flatten, Equiv.symm_apply_apply]
   apply Finset.sum_congr rfl
   intro n _
-  exact vit_patchW_grad_bridge Wp bc cls pos
+  exact patchEmbed_weight_grad_bridge Wp bc cls pos
     (batchSlice N (ic * H * W) img n) (batchSlice N ((tk + 1) * D) dy n) d c kh kw
 
 /-- **Batched patch-embed conv bias GRADIENT denotes the certified `Σ_n` bias gradient**
@@ -147,7 +147,7 @@ theorem patchEmbedBiasGradB_den {ic H W P tk D N : Nat} (cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact vit_patchb_grad_bridge Wc bc cls pos
+  exact patchEmbed_bias_grad_bridge Wc bc cls pos
     (batchSlice N (ic * H * W) img n) (batchSlice N ((tk + 1) * D) dy n) i
 
 /-- **Batched positional-embed GRADIENT denotes the certified `Σ_n` gradient** — the summed

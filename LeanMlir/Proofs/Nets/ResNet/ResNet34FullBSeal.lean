@@ -27,7 +27,7 @@ millions of floats):
   constant is not constant at the border, but the centre tap is in range at every cell. And a
   *broadcast*, not a diagonal on channel 0: a kernel feeding only output channel 0 leaves
   the stem's other 63 channels constant, and a constant channel ties every 3×3 window of the pool
-  — `R34PoolSmoothAt` quantifies over channels, so the tap has to reach all of them;
+  — `StemPoolSmoothAt` quantifies over channels, so the tap has to reach all of them;
 * `γ = 1`, `β = 160` at the stem and the projections, `ε = 1` everywhere. `√(N·h·w) ≤ √25088 < 160`
   at every one of those four BN widths, so `BatchSeal.bnBatchLA_pos` puts **every** relu strictly
   off its kink at **every** input — the net needs no eventually-argument for its relus, and the
@@ -54,6 +54,7 @@ is ever taken.
 
 namespace Proofs
 namespace R34FullBSeal
+open Proofs.BatchSeal
 
 open scoped BigOperators
 open Finset Filter Topology
@@ -333,7 +334,7 @@ theorem Zs_bn_pos (t : ℝ) (k : Fin (2 * (64 * (2 * 56) * (2 * 56)))) :
 /-- The stem pool has no tie at the witness — the ramp is positionally injective and BN is
     injective within a channel. -/
 theorem seal_pool_smooth (t : ℝ) :
-    R34PoolSmoothAt 2 56 56
+    StemPoolSmoothAt 2 56 56
       (StableHLO.bnBatchLA 2 64 (2 * 56) (2 * 56) 1 (kv 64 1) (kv 64 160) (Zs t)) := by
   rw [Zs]
   exact ctConv_pool_smooth 64 7 7 56 56 (by norm_num) (by norm_num) t
@@ -514,7 +515,7 @@ theorem stem_relu_off (nCls : Nat) (t : ℝ) :
   cbReluStridedB_eq _ _ _ _ _ (sealX t) (fun k => Zs_bn_pos t k)
 
 theorem seal_pool_clause (nCls : Nat) (t : ℝ) :
-    R34PoolSmoothAt 2 56 56 (StableHLO.cbReluStridedB 2 (h := 2 * 56) (w := 2 * 56)
+    StemPoolSmoothAt 2 56 56 (StableHLO.cbReluStridedB 2 (h := 2 * 56) (w := 2 * 56)
       (sealW nCls).sW (sealW nCls).sb (sealW nCls).sε (sealW nCls).sγ (sealW nCls).sβ
         (sealX t)) := by
   rw [stem_relu_off]

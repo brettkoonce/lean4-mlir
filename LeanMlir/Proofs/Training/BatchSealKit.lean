@@ -968,7 +968,7 @@ theorem eDiff_of_bUnif {c h w : Nat} (a : Fin 2 → Fin c → ℝ) (δ : Fin c �
   ring
 
 end BatchSeal
-namespace R34FullBSeal
+namespace BatchSeal
 
 /-! ### Stage facts first needed by ResNet-34's seal, shared by every conv-net seal
 
@@ -978,7 +978,6 @@ The zero-kernel collapse, the relu-free strided stage, the centre-tap projection
 citation keeps its name. -/
 
 open scoped BigOperators
-open BatchSeal
 
 /-- **A zeroed final conv makes a body the constant `β₂`** — `projB` at a zero kernel is
     `bnBatchLA` of the constant `0`, which is `β₂` (variance 0). Used for both block kinds. -/
@@ -1018,6 +1017,6 @@ theorem sealProj_apply (N h w ic oc : Nat) (v : Vec (N * (ic * (2 * h) * (2 * w)
       = StableHLO.bnBatchLA N oc h w 1 (kv oc 1) (kv oc 160)
           (StableHLO.batchMap N (flatConvStride2 (ctK oc ic 1 1 1) (kv oc 0)) v) := rfl
 
-end R34FullBSeal
+end BatchSeal
 
 end Proofs

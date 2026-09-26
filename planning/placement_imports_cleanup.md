@@ -376,12 +376,40 @@ therefore no longer reproduced `ScorecardIBPData`. Fixed: the generators emit th
 
 ## 8. Handed to the naming pass
 
-Generic lemmas in the right file under a net's name or namespace: `ResNet34PoCB.*`,
-`Mnv2PaperPoCG.*`, `CnxPoCGB.*` (`GradNodesB`); `ResNet34SyncTieB.*`, `MBConvSyncTieB.*`
-(`DataParallelSyncKit`); `ResNet34TieB.*` (`BatchedBackLinks`); `Cifar8PoC.*`, `CifarPoC.*`,
-`CifarBnPoC.*` (`SgdNodes`); `R34FullBSeal.*` (`BatchSealKit`); `vit_*` (`TokenParamGrad`,
-`LayerNorm`); `cifar_bn_*` (`PerChannelBNGrad`); `r34PoolLayer` / `R34PoolSmoothAt` (`HeadLayers`,
-shared by R34 and R50). §3's moved `mnv2_*` names join this list.
+Generic lemmas in the right file under a net's name or namespace (file names as of §6). Several
+namespaces are split: the shared half lives in the kit file, the net's own half in its net file,
+and only the shared half is in scope.
+
+| namespace or prefix | shared file (the half in scope) | net-file half, out of scope |
+|---|---|---|
+| `ResNet34PoCB.*`, `EnetPoCG.*`, `Mnv2PaperPoCG.*`, `CnxPoCGB.*`, `ViTPoCGB.*` | `Foundation/GradNodesB` | `CnxPoCGB` (`ConvNeXtFoldGB`), `ViTPoCGB` (`ViTFoldGB`) |
+| `Cifar8PoC.*`, `CifarPoC.*`, `CifarBnPoC.*`, `Mnv2PoC.*`, `ResNet34PoC.*`, `ViTPoC.*` | `Foundation/SgdNodes` | `Cifar8PoC` (`Cifar8StepTie`), `CifarPoC` (`CifarFold`), `ViTPoC` (`ViTFold`) |
+| `ResNet34SyncTieB.*`, `MBConvSyncTieB.*` | `Foundation/DataParallel/SyncKit` | `ResNet34SyncTieB` (`ResNet34SyncStepTieB`) |
+| `ResNet34TieB.*` | `Foundation/Batched/BackLinks` | `ResNet34TieB` (`ResNet34StepTieB`) |
+| `R34FullBSeal.*` | `Training/BatchSealKit` (which already has a neutral `BatchSeal`) | `R34FullBSeal` (`ResNet34FullBSeal`) |
+| `vit_*` | `Architectures/TokenParamGrad`, `Architectures/LayerNorm` | — |
+| `cifar_bn_*` | `Architectures/PerChannelBNGrad` | — |
+| `mnv2_*` (the §3.3 bridges) | `Architectures/ConvGrad` | — |
+| `r34PoolLayer`, `R34PoolSmoothAt` | `Foundation/HeadLayers` (shared by R34 and R50) | — |
+
+Measured 2026-09-26: the fifteen namespaces carry ~560 qualified references in ~120 files, 30
+`open`s, 116 `#print axioms` lines, 12 book citations (`blueprint/src/content.tex`), 2
+`formalization.yaml` rows and 2 comparator-tier entries. Merging `GradNodesB`'s five namespaces
+into one collides on a single name (`denseBGradB_den`, in both `ResNet34PoCB` and `EnetPoCG`);
+`SgdNodes`' six merge cleanly.
+
+**Done 2026-09-26.** Each kit's net-named namespaces moved to one named for its file: `GradNodeB`
+(`GradNodesB`), `SgdNode` (`SgdNodes`), `SyncKit` (`DataParallel/SyncKit`), `BackLinks`
+(`Batched/BackLinks`, which also held `EnetTiePoC`), and `R34FullBSeal`'s shared half into the
+existing `BatchSeal`. The net-file halves keep their net namespaces and `open` the kit's. The
+`denseBGradB_den` collision resolved by deleting the square `ResNet34PoCB` one: the `EnetPoCG` one is
+the same lemma at a rectangular `Mat a c` (its docstring says so), and the square callers instantiate
+it. The 24 prefixed names (`vit_*`, `cifar_bn_*`, the `mnv2_*` bridges, `cnn_render_conv{W,b}_certified`,
+`R34PoolSmoothAt`, `r34PoolLayer`) became `<op>_<param>_grad_bridge` / `<op>_<param>_sgd_certified`
+(following `conv_weight_grad_bridge`), `StemPoolSmoothAt` and `stemPoolLayer`. No compatibility
+aliases; every citation (audit, comparator tier, `formalization.yaml`, the book) was updated. The kit
+docstrings' "named for the net that first needed it" sentences and namespace columns are gone, and
+`Proofs/README.md`'s namespace paragraph is rewritten.
 
 ## 9. The audit, kept
 

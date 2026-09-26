@@ -8,7 +8,7 @@ types for the same tensor. `castIdx h e` is the same graph typed at the other in
 text does not change (`skel` erases indices), and `den_castIdx` says the denotation is read
 through `Fin.cast`. `la_assoc` is the batched seam `N·(c·h·w) = N·(c·(h·w))`.
 
-The same reshuffle on plain vectors is `EnetTiePoC.reassocB` (batched, `Batched.BackLinks`) and
+The same reshuffle on plain vectors is `BackLinks.reassocB` (batched, `Batched.BackLinks`) and
 `reassocFwd` / `reassocBack` (per example, `PerChannelBN`); `den_reassocS` / `den_unassocS`
 (`ConvNeXtChannelLN`) identify the graph cast with those.
 -/

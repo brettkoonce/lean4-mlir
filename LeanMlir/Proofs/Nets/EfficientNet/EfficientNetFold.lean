@@ -15,8 +15,8 @@ inside `Σ_n`" — the **batch-sum bridge**. For the linear families (conv/dense
 per-channel reduction count `m = N·(h·w)`, so it is the cert's exact LHS (delegation).
 
 Each fused op is `θ − lr·` its un-fused gradient node by `rfl` (`StableHLO.Basic`'s `*SgdB_eq_grad`),
-so every lemma here is the un-fused fold — `ResNet34PoCB` (conv, dense weight, BN) or `EnetPoCG`
-(the XLA-`SAME` stem, depthwise, the rectangular dense bias) — under that wrapper. -/
+so every lemma here is the un-fused fold — `GradNodeB`'s (conv, dense weight, BN, the XLA-`SAME`
+stem, depthwise, the rectangular dense bias) — under that wrapper. -/
 
 open Proofs Proofs.StableHLO
 
@@ -40,7 +40,7 @@ theorem convWB_den {N ic oc h w kH kW : Nat}
                   Tensor3.flatten (conv2d (Kernel4.unflatten v') b
                     (Tensor3.unflatten (batchSlice N (ic * h * w) x n))))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j := by
-  rw [convWeightSgdB_eq_grad, ResNet34PoCB.convWGradB_den]
+  rw [convWeightSgdB_eq_grad, GradNodeB.convWGradB_den]
 
 /-- **Batched strided-stem 3×3 conv weight op denotes the certified Σ_n batched weight gradient.**
     `Σ_n` of `flatConvStride2XlaWeightGradHasVJP.correct`. The op is the XLA-`SAME`
@@ -56,7 +56,7 @@ theorem convStridedWB_den {N ic oc h w kH kW : Nat}
                   flatConvStride2Xla (Kernel4.unflatten v') b (batchSlice N (ic * (2*h) * (2*w)) x n))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j :=
   congrArg (Kernel4.flatten W idx - lr * ·)
-    (EnetPoCG.convStridedXlaWGradB_den xN cotN b x W cot idx)
+    (GradNodeB.convStridedXlaWGradB_den xN cotN b x W cot idx)
 
 -- ════════════════════════════════════════════════════════════════
 -- § Dense weight / bias (SE squeeze+excite, head classifier) — Σ_n of the per-example dense VJP
@@ -72,7 +72,7 @@ theorem denseWB_den {N a c : Nat}
       = W i j - lr * ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun v : Vec (a * c) => dense (Mat.unflatten v) b (batchSlice N a x n))
                (Mat.flatten W) (finProdFinEquiv (i, j)) k * batchSlice N c cot n k := by
-  rw [denseWeightSgdB_eq_grad, ResNet34PoCB.denseWGradB_den xN cotN x W b cot i j]
+  rw [denseWeightSgdB_eq_grad, GradNodeB.denseWGradB_den xN cotN x W b cot i j]
   simp only [Mat.flatten, Equiv.symm_apply_apply]
 
 /-- **Batched dense bias op denotes the certified Σ_n batched bias gradient** (`Σ_{n} cotₙ` per
@@ -83,7 +83,7 @@ theorem denseBB_den {N c : Nat}
     den (SHlo.denseBiasSgdB bN lrStr b lr (.operand cotN cot)) j
       = b j - lr * ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k := by
-  rw [denseBiasSgdB_eq_grad, EnetPoCG.denseBGradB_den cotN W x b cot j]
+  rw [denseBiasSgdB_eq_grad, GradNodeB.denseBGradB_den cotN W x b cot j]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Batch-norm γ / β — the `den` folds N into the per-channel reduction `m = N·(h·w)` (delegation)
@@ -92,7 +92,7 @@ theorem denseBB_den {N c : Nat}
 /-- **Batched BN γ op denotes the certified per-channel γ gradient over the merged batch+spatial
     axis `m = N·(h·w)`.** True batch-norm's γ grad is per-channel BN's γ grad at `m = N·h·w`
     (γ enters affinely — no batch coupling in the *param* grad), so this is a direct delegation to
-    the generic `cifar_bn_render_gamma_certified` at `m = N·(h·w)` (the den's exact reduction count,
+    the generic `bnPerChannel_gamma_sgd_certified` at `m = N·(h·w)` (the den's exact reduction count,
     via the network→oc-major reindex `bnchwFwd`). Generic in the free `β`. -/
 theorem bnGammaB_den {N oc h w : Nat}
     (gN vN epsStr lrStr cotN : String) (ε : ℝ) (γ β : Vec oc)
@@ -102,11 +102,11 @@ theorem bnGammaB_den {N oc h w : Nat}
           pdiv (fun γ' : Vec oc =>
                   bnPerChannelFlat oc (N * (h * w)) ε γ' β (bnchwFwd N oc h w v))
                γ idx j * bnchwFwd N oc h w cot j := by
-  rw [bnGammaSgdB_eq_grad, ResNet34PoCB.bnGammaGradB_den]
+  rw [bnGammaSgdB_eq_grad, GradNodeB.bnGammaGradB_den]
 
 /-- **Batched BN β op denotes the certified per-channel β gradient `Σ_{batch,spatial} cot`** at
     `m = N·(h·w)`. Used for every BN β AND (as the channel-sum) every conv/depthwise bias. Direct
-    delegation to `cifar_bn_render_beta_certified`. The pdiv form carries a free `v`/`γ` (β's grad
+    delegation to `bnPerChannel_beta_sgd_certified`. The pdiv form carries a free `v`/`γ` (β's grad
     is the channel-sum, independent of them). -/
 theorem bnBetaB_den {N oc h w : Nat}
     (bN lrStr cotN : String) (ε : ℝ) (γ β : Vec oc)
@@ -115,9 +115,9 @@ theorem bnBetaB_den {N oc h w : Nat}
       = β idx - lr * ∑ j : Fin (oc * (N * (h * w))),
           pdiv (fun β' : Vec oc => bnPerChannelFlat oc (N * (h * w)) ε γ β' v)
                β idx j * bnchwFwd N oc h w cot j := by
-  rw [bnBetaSgdB_eq_grad, ResNet34PoCB.bnBetaGradB_den cotN ε γ β v cot idx]
+  rw [bnBetaSgdB_eq_grad, GradNodeB.bnBetaGradB_den cotN ε γ β v cot idx]
 
-/-- **One batched BN layer's fused γ and β SGD nodes, tied** — `ResNet34PoCB.BnPairTiedB` under
+/-- **One batched BN layer's fused γ and β SGD nodes, tied** — `GradNodeB.BnPairTiedB` under
     `θ − lr·`: the emitted `bnGammaSgdB` / `bnBetaSgdB` denote the certified per-channel γ and β
     steps at the layer's pre-BN activation `v` and output cotangent `cot`. -/
 def BnSgdPairTiedB (N oc h w : Nat) (gN vN epsStr bN lrStr cotN : String) (ε : ℝ) (γ β : Vec oc)
@@ -155,7 +155,7 @@ theorem depthwiseWB_den {N c h w kH kW : Nat}
                   Tensor3.flatten (depthwiseConv2d (Tensor3.unflatten v') b
                     (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
-  rw [depthwiseWeightSgdB_eq_grad, EnetPoCG.depthwiseWGradB_den]
+  rw [depthwiseWeightSgdB_eq_grad, GradNodeB.depthwiseWGradB_den]
 
 /-- **Batched strided depthwise weight op denotes the certified Σ_n batched weight gradient.** The
     strided VJP is already flat, so `Σ_n` of `depthwiseStride2WeightGradHasVJP.correct`. -/
@@ -167,7 +167,7 @@ theorem depthwiseStridedWB_den {N c h w kH kW : Nat}
           pdiv (fun v' : Vec (c * kH * kW) =>
                   depthwiseStride2Flat (Tensor3.unflatten v') b (batchSlice N (c * (2*h) * (2*w)) x n))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j := by
-  rw [depthwiseStridedWeightSgdB_eq_grad, EnetPoCG.depthwiseStridedWGradB_den]
+  rw [depthwiseStridedWeightSgdB_eq_grad, GradNodeB.depthwiseStridedWGradB_den]
 
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one fused SGD node each (the `ResNet34PoCB.*TiedB` clauses under `θ − lr·`)

@@ -61,9 +61,9 @@ namespace Proofs.CnxTiePoCGB
 open scoped BigOperators
 open Proofs.CnxTiePoC (cnxStemFwdO cnxBlockFwdChO cnxDownFwdChO cnxBlockCotInChAt cnxDownCotInChAt
   CnxTieWeights)
-open Proofs.ResNet34PoCB (convBTiedB_holds convStridedBTiedB_holds convStridedWTiedB_holds
+open Proofs.GradNodeB (convBTiedB_holds convStridedBTiedB_holds convStridedWTiedB_holds
   convWTiedB_holds depthwiseBTiedB_holds depthwiseWTiedB_holds)
-open Proofs.ViTPoCGB (vecLNGammaTiedB_holds)
+open Proofs.GradNodeB (vecLNGammaTiedB_holds)
 open Proofs.CnxPoCGB (chanLNBetaTiedB_holds chanLNGammaTiedB_holds)
 
 /-! ## Per-example internal cotangents as functions of a block's INPUT
@@ -154,17 +154,17 @@ def cnxBlockChTiedGB (N : Nat) {c cExp h w : Nat} (xN epsStr cotN : String) (ε 
   let cotDB : Vec (N * (c*h*w))    :=
     batchMapAux N (blkCotD ε Wdw bdw ng nbt Wex bex Wpr bpr lg) xin dyOut
   -- depthwise 7×7 W/b  (cot = cotDB, input = xin)
-  ResNet34PoCB.DepthwiseWTiedB N h w xN cotN bdw xin Wdw cotDB
-  ∧ ResNet34PoCB.DepthwiseBTiedB N h w cotN Wdw xin bdw cotDB
+  GradNodeB.DepthwiseWTiedB N h w xN cotN bdw xin Wdw cotDB
+  ∧ GradNodeB.DepthwiseBTiedB N h w cotN Wdw xin bdw cotDB
   -- channel-LN γ/β  (cot = cotNB, LN input = dB; the ops see both as their batched [h·w, c] views)
   ∧ CnxPoCGB.ChanLNGammaTiedB N h w xN epsStr cotN ε nbt dB ng cotNB
   ∧ CnxPoCGB.ChanLNBetaTiedB N h w cotN ε ng dB nbt cotNB
   -- expand 1×1 conv (c → cExp) W/b  (cot = cotEB, conv input = nlB)
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bex nlB Wex cotEB
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN Wex nlB bex cotEB
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN bex nlB Wex cotEB
+  ∧ GradNodeB.ConvBTiedB N h w cotN Wex nlB bex cotEB
   -- project 1×1 conv (cExp → c) W/b  (cot = cotPB, conv input = gB)
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN bpr gB Wpr cotPB
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN Wpr gB bpr cotPB
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN bpr gB Wpr cotPB
+  ∧ GradNodeB.ConvBTiedB N h w cotN Wpr gB bpr cotPB
   -- per-channel layer-scale γ  (cot = dyOut directly, layer input = pB)
   ∧ (∀ cc : Fin c,
       den (SHlo.layerScaleChGammaGradB (N := N) (c := c) (h := h) (w := w) xN pB
@@ -203,8 +203,8 @@ def cnxDownChTiedGB (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String) (ε : 
   let cotNB : Vec (N * (ci*(2*h)*(2*w))) := batchMapAux N (dnCotN ε dng dnbt Wd bd) xin dyOut
   CnxPoCGB.ChanLNGammaTiedB N (2 * h) (2 * w) xN epsStr cotN ε dnbt xin dng cotNB
   ∧ CnxPoCGB.ChanLNBetaTiedB N (2 * h) (2 * w) cotN ε dng xin dnbt cotNB
-  ∧ ResNet34PoCB.ConvStridedWTiedB N h w xN cotN bd nB Wd dyOut
-  ∧ ResNet34PoCB.ConvStridedBTiedB N h w cotN Wd nB bd dyOut
+  ∧ GradNodeB.ConvStridedWTiedB N h w xN cotN bd nB Wd dyOut
+  ∧ GradNodeB.ConvStridedBTiedB N h w cotN Wd nB bd dyOut
 
 theorem cnx_down_ch_tiedGB (N : Nat) {ci co h w : Nat} (xN epsStr cotN : String) (ε : ℝ)
     (dng dnbt : Vec ci) (Wd : Kernel4 co ci 2 2) (bd : Vec co)
@@ -256,7 +256,7 @@ theorem cnx_stem_ch_tiedGB (N : Nat) {c h w : Nat} (xN epsStr cotN : String) (ε
   · exact chanLNGammaTiedB_holds
   · exact chanLNBetaTiedB_holds
   · exact convBTiedB_holds
-  · intro idx; exact CnxPoCGB.psWGradB_den xN cotN psb x Wst cotPatchB idx
+  · intro idx; exact GradNodeB.psWGradB_den xN cotN psb x Wst cotPatchB idx
 
 /-! ## Head — GAP → vector-LN at one row → dense, all 4 gradient nodes, batched
 
@@ -265,15 +265,15 @@ Stated at the LITERAL 768 for the fused file's reason: `1 * m` does not reduce a
 
 /-- **Head, tied at the batched gradient nodes.** The head-LN γ/β at the pooled row, the
     classifier weight at the LN output, the classifier bias PER EXAMPLE (`biasGradB` is the
-    identity on its operand; the batch reduce is emitted text — `ViTPoCGB.headBGradB_den`). -/
+    identity on its operand; the batch reduce is emitted text — `GradNodeB.headBGradB_den`). -/
 def cnxHeadChTiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String) (ε : ℝ)
     (hng hnbt : Vec 768) (Wfc : Mat 768 nC) (bfc : Vec nC)
     (xhead : Vec (N * (768*h*w))) (g : Vec (N * nC)) : Prop :=
   let gapB   : Vec (N * (1*768)) := batchMap N (globalAvgPoolFlat 768 h w) xhead
   let hnB    : Vec (N * 768)     := batchMap N (rowLNVecFlat 1 768 ε hng hnbt) gapB
   let cotHnB : Vec (N * (1*768)) := batchMapAux N (headCotHn Wfc bfc) hnB g
-  ViTPoCGB.VecLNGammaTiedB N 1 xN epsStr cotN ε hnbt gapB hng cotHnB
-  ∧ ViTPoCGB.VecLNBetaTiedB N 1 cotN ε hng gapB hnbt cotHnB
+  GradNodeB.VecLNGammaTiedB N 1 xN epsStr cotN ε hnbt gapB hng cotHnB
+  ∧ GradNodeB.VecLNBetaTiedB N 1 cotN ε hng gapB hnbt cotHnB
   ∧ (∀ (i : Fin 768) (j : Fin nC),
       den (SHlo.weightGradB (N := N) (m := 768) (n := nC) dN hnB (.operand cotN g))
           (finProdFinEquiv (i, j))
@@ -295,10 +295,10 @@ theorem cnx_head_ch_tiedGB (N : Nat) {h w nC : Nat} (xN epsStr cotN dN : String)
   refine ⟨?_, ?_, ?_, ?_⟩
   · exact vecLNGammaTiedB_holds
   · intro k;
-    exact ViTPoCGB.rowDenseBiasGradB_den_lnbeta cotN ε hng
+    exact GradNodeB.rowDenseBiasGradB_den_lnbeta cotN ε hng
       (fun n => Mat.unflatten (batchSlice N (1*768) gapB n)) hnbt cotHnB k
-  · intro i j; exact ViTPoCGB.headWGradB_den dN cotN hnB Wfc bfc g i j
-  · intro n i; exact ViTPoCGB.headBGradB_den cotN Wfc (batchSlice N 768 hnB n) bfc g n i
+  · intro i j; exact GradNodeB.headWGradB_den dN cotN hnB Wfc bfc g i j
+  · intro n i; exact GradNodeB.headBGradB_den cotN Wfc (batchSlice N 768 hnB n) bfc g n i
 
 /-! ## The stem wrapper — `@[irreducible]`
 

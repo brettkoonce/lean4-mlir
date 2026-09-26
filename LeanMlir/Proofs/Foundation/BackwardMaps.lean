@@ -281,7 +281,7 @@ noncomputable def mlpInputGrad {d₀ d₁ d₂ d₃ : Nat}
     example 0's argmax pattern to every example (`StableHLO.batchMapAux`'s own header records the
     same trap on the emitter side). This IS `den (.maxPool3s2BackB …)`:
     `den_maxPool3s2BackB_eq_flatBackB` below equates the two spellings of the scatter
-    (`ResNet34TieB.mpInB` is the `maxPool3s2BackFlat` one). -/
+    (`BackLinks.mpInB` is the `maxPool3s2BackFlat` one). -/
 noncomputable def maxPool3s2FlatBackB (N c h w : Nat) (v : Vec (N * (c * (2*h) * (2*w)))) :
     Vec (N * (c * h * w)) → Vec (N * (c * (2*h) * (2*w))) :=
   StableHLO.batchMapAux N

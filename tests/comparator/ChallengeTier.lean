@@ -129,7 +129,7 @@ theorem chk_sealX_backward_nontrivial :
         ∃ (j₀ : Fin ((2 : ℕ) * nCls)) (i₀ : Fin ((2 : ℕ) * ((3 : ℕ) * ((2 : ℕ) * (112 : ℕ)) * ((2 : ℕ) * (112 : ℕ))))),
           (Proofs.Mnv4FullBSeal.sealVJP nCls (0 : ℝ)).backward (Proofs.basisVec j₀) i₀ ≠ (0 : ℝ) := by sorry
 
-/-- `Proofs.ResNet34PoCB.convStridedWGradB_den` -/
+/-- `Proofs.GradNodeB.convStridedWGradB_den` -/
 theorem chk_convStridedWGradB_den :
     ∀ {N ic oc h w kH kW : ℕ} (xN cotN : String) (b : Proofs.Vec oc)
       (x : Proofs.Vec (N * (ic * ((2 : ℕ) * h) * ((2 : ℕ) * w)))) (W : Proofs.Kernel4 oc ic kH kW)
@@ -912,7 +912,7 @@ theorem chk_r34InputGradB_eq_r34B_full_vjp :
       (b15 b16 : Proofs.Vec (N * ((512 : ℕ) * (7 : ℕ) * (7 : ℕ))) → Proofs.Vec (N * ((512 : ℕ) * (7 : ℕ) * (7 : ℕ))))
       (x : Proofs.Vec (N * ((3 : ℕ) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))) * ((2 : ℕ) * ((2 : ℕ) * (56 : ℕ))))))
       (h_stem : Proofs.R34StemSmoothAt N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs x)
-      (h_pool : Proofs.R34PoolSmoothAt N (56 : ℕ) (56 : ℕ) (Proofs.StableHLO.cbReluStridedB N Ws bs εs γs βs x))
+      (h_pool : Proofs.StemPoolSmoothAt N (56 : ℕ) (56 : ℕ) (Proofs.StableHLO.cbReluStridedB N Ws bs εs γs βs x))
       (hb1 : Proofs.HasVJPDiffAt b1 (Proofs.opaqueA0 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) x))
       (hb2 : Proofs.HasVJPDiffAt b2 (Proofs.opaqueA1 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 x))
       (hb3 : Proofs.HasVJPDiffAt b3 (Proofs.opaqueA2 (Proofs.r34StemB N (56 : ℕ) (56 : ℕ) Ws bs εs γs βs) b1 b2 x))

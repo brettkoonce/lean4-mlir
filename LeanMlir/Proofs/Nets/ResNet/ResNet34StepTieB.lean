@@ -59,10 +59,11 @@ ops the committed artifacts do not emit. Nothing about this weakens a theorem: e
 open Proofs Proofs.StableHLO Proofs.IR
 
 namespace Proofs.ResNet34TieB
+open Proofs.BackLinks
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB bnBackB cInB gapInB)
-open Proofs.ResNet34PoCB (bnPairTiedB_holds convBTiedB_holds convStridedBTiedB_holds
+open Proofs.BackLinks (reassocB bnBackB cInB gapInB)
+open Proofs.GradNodeB (bnPairTiedB_holds convBTiedB_holds convStridedBTiedB_holds
   convStridedWTiedB_holds convWTiedB_holds denseBTiedB_holds denseWTiedB_holds)
 
 -- ════════════════════════════════════════════════════════════════
@@ -280,16 +281,16 @@ def r34IdTiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (p : R34IdW 
   let cotN1 := r34IdCotN1 N h w p xin dyOut
   let cotC1 := r34IdCotC1 N h w p xin dyOut
   -- conv₁ (stride-1, c → c), cot = cotC1
-  ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN p.W₁ xin p.b₁ cotC1
+  GradNodeB.ConvWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
+  ∧ GradNodeB.ConvBTiedB N h w cotN p.W₁ xin p.b₁ cotC1
   -- bn₁ γ/β, cot = cotN1
-  ∧ ResNet34PoCB.BnPairTiedB N c h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N c h w c1)
+  ∧ GradNodeB.BnPairTiedB N c h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N c h w c1)
         (reassocB N c h w cotN1)
   -- conv₂ (stride-1, c → c), cot = cotC2
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN p.W₂ r1 p.b₂ cotC2
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
+  ∧ GradNodeB.ConvBTiedB N h w cotN p.W₂ r1 p.b₂ cotC2
   -- bn₂ γ/β, cot = cotA (the outer relu's mask — the same node the identity skip carries)
-  ∧ ResNet34PoCB.BnPairTiedB N c h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N c h w c2)
+  ∧ GradNodeB.BnPairTiedB N c h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N c h w c2)
         (reassocB N c h w cotA)
 
 theorem r34_idblock_tiedB (N h w : Nat) {c : Nat} (xN cotN vN epsStr : String) (p : R34IdW c)
@@ -316,19 +317,19 @@ def r34DownTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String) (p : R
   let cotC1 := r34DownCotC1 N h w p xin dyOut
   let cotCp := r34DownCotCp N h w p xin dyOut
   -- STRIDED conv₁ (ic → oc), cot = cotC1
-  ResNet34PoCB.ConvStridedWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
-  ∧ ResNet34PoCB.ConvStridedBTiedB N h w cotN p.W₁ xin p.b₁ cotC1
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N oc h w c1)
+  GradNodeB.ConvStridedWTiedB N h w xN cotN p.b₁ xin p.W₁ cotC1
+  ∧ GradNodeB.ConvStridedBTiedB N h w cotN p.W₁ xin p.b₁ cotC1
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.ε₁ p.γ₁ p.β₁ (reassocB N oc h w c1)
         (reassocB N oc h w cotN1)
   -- conv₂ (stride-1, oc → oc), cot = cotC2
-  ∧ ResNet34PoCB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
-  ∧ ResNet34PoCB.ConvBTiedB N h w cotN p.W₂ r1 p.b₂ cotC2
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N oc h w c2)
+  ∧ GradNodeB.ConvWTiedB N h w xN cotN p.b₂ r1 p.W₂ cotC2
+  ∧ GradNodeB.ConvBTiedB N h w cotN p.W₂ r1 p.b₂ cotC2
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.ε₂ p.γ₂ p.β₂ (reassocB N oc h w c2)
         (reassocB N oc h w cotA)
   -- 1×1/s2 projection (ic → oc), cot = cotCp; its BN reads the SHARED cotA
-  ∧ ResNet34PoCB.ConvStridedWTiedB N h w xN cotN p.bp xin p.Wp cotCp
-  ∧ ResNet34PoCB.ConvStridedBTiedB N h w cotN p.Wp xin p.bp cotCp
-  ∧ ResNet34PoCB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
+  ∧ GradNodeB.ConvStridedWTiedB N h w xN cotN p.bp xin p.Wp cotCp
+  ∧ GradNodeB.ConvStridedBTiedB N h w cotN p.Wp xin p.bp cotCp
+  ∧ GradNodeB.BnPairTiedB N oc h w vN epsStr cotN p.εp p.γp p.βp (reassocB N oc h w cp)
         (reassocB N oc h w cotA)
 
 theorem r34_downblock_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
@@ -349,9 +350,9 @@ def r34StemTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
   let sc := batchMap N (flatConvStride2 Ws bs) x
   let cotN' := r34StemCotN N h w Ws bs εs γs βs x cotPool
   let cotC := r34StemCotC N h w Ws bs εs γs βs x cotPool
-  ResNet34PoCB.ConvStridedWTiedB N (2 * h) (2 * w) xN cotN bs x Ws cotC
-  ∧ ResNet34PoCB.ConvStridedBTiedB N (2 * h) (2 * w) cotN Ws x bs cotC
-  ∧ ResNet34PoCB.BnPairTiedB N oc (2 * h) (2 * w) vN epsStr cotN εs γs βs
+  GradNodeB.ConvStridedWTiedB N (2 * h) (2 * w) xN cotN bs x Ws cotC
+  ∧ GradNodeB.ConvStridedBTiedB N (2 * h) (2 * w) cotN Ws x bs cotC
+  ∧ GradNodeB.BnPairTiedB N oc (2 * h) (2 * w) vN epsStr cotN εs γs βs
         (reassocB N oc (2 * h) (2 * w) sc) (reassocB N oc (2 * h) (2 * w) cotN')
 
 theorem r34_stem_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
@@ -384,8 +385,8 @@ noncomputable def r34HeadCotBlk (N h w : Nat) {c nCls : Nat} (Wd : Mat c nCls) (
 def r34HeadTiedB (N h w : Nat) {c nCls : Nat} (xN cotN : String) (Wd : Mat c nCls) (bd : Vec nCls)
     (xin : Vec (N * (c * h * w))) (dy : Vec (N * nCls)) : Prop :=
   let a := batchMap N (globalAvgPoolFlat c h w) xin
-  ResNet34PoCB.DenseWTiedB N xN cotN a Wd bd dy
-  ∧ ResNet34PoCB.DenseBTiedB N cotN Wd (fun _ => 0) bd dy
+  GradNodeB.DenseWTiedB N xN cotN a Wd bd dy
+  ∧ GradNodeB.DenseBTiedB N cotN Wd (fun _ => 0) bd dy
 
 theorem r34_head_tiedB (N h w : Nat) {c nCls : Nat} (xN cotN : String) (Wd : Mat c nCls)
     (bd : Vec nCls) (xin : Vec (N * (c * h * w))) (dy : Vec (N * nCls)) :

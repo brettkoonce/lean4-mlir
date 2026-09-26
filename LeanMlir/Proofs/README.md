@@ -110,14 +110,16 @@ Declaration suffixes: `_faithful` / `_den` / `_eq_vjp` all say "this graph denot
 graph, gradient-node and backward-chain granularity; `_certified` / `_tied*` are ties to a
 certified step; `…Tied*` are the per-node clause `Prop`s a tie is a conjunction of.
 
-**Namespaces do not follow file names**, for history: `GradNodesB` holds `ResNet34PoCB`,
-`EnetPoCG`, `Mnv2PaperPoCG` and `CnxPoCGB` (the batched f32 gradient-node lemmas, named for the net
-that first needed each op), `ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTiePoCGB`, `ViTStepTieGB` →
-`ViTTiePoCGB`, `EfficientNetStepTieG` → `EnetTiePoCG`, `MobileNetV4StepTieB` → `Mnv4TieB`. The
+**Namespaces.** A shared kit's namespace is named for its file: the batched gradient nodes are
+`GradNodeB` (`Foundation/GradNodesB`), the per-example fused-SGD nodes `SgdNode`
+(`Foundation/SgdNodes`), the batched backward graphs and cotangent steps (`reassocB`, `cInB`,
+`reluMaskB`, …) `BackLinks` (`Foundation/Batched/BackLinks`), the sync-BN twin kit `SyncKit`
+(`Foundation/DataParallel/SyncKit`), and the batch-seal kit `BatchSeal` (`Training/BatchSealKit`).
+A net's own ties keep a namespace named for the net, which does not follow the file name, for
+history: `ResNet34StepTieB` → `ResNet34TieB`, `ConvNeXtStepTieGB` → `CnxTiePoCGB`, `ViTStepTieGB` →
+`ViTTiePoCGB`, `EfficientNetStepTieG` → `EnetTiePoCG`, `MobileNetV4StepTieB` → `Mnv4TieB`; the
 `PoC*` namespaces are the production tier. The batched stages and their VJPs are in
-`Foundation/BatchedStages`, the batched backward graphs and cotangent steps (`reassocB`, `cInB`,
-`reluMaskB`, …, in namespaces `EnetTiePoC` / `ResNet34TieB`) in `Foundation/BatchedBackLinks`, and the
-sync-BN twin kit (namespaces `ResNet34SyncTieB` / `MBConvSyncTieB`) in `Foundation/DataParallelSyncKit`.
+`Foundation/Batched/Stages`.
 
 **Don't start with the big files:** `SgdDescent/Cnn.lean` (~6.8k), `Attention.lean` (~2.3k), the
 `StableHLO/Basic.lean` denotation internals, or the per-net `*Render*` files (1–2k lines each of

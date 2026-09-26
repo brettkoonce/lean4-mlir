@@ -29,8 +29,8 @@ namespace Proofs.ViTTiePoC
 
 open scoped BigOperators
 open Proofs Proofs.StableHLO
-open Proofs.ViTPoC (rowDenseBSgdTied_holds rowDenseWSgdTied_holds vecLNBetaSgdTied_holds
-  vecLNGammaSgdTied_holds)
+open Proofs.ViTPoC (rowDenseBSgdTied_holds rowDenseWSgdTied_holds)
+open Proofs.SgdNode (vecLNBetaSgdTied_holds vecLNGammaSgdTied_holds)
 
 /-! ## Multi-head promotion (3 heads, d_head=64) — the committed-render block tie
 
@@ -58,8 +58,8 @@ def vitBlockTiedMHV {Np1 heads d mlpDim : Nat}
     let cotLn2 : Vec (Np1 * (heads * d))      := vitCotLn2 Wfc1 Wfc2 m1 dyOut
     let cotM1  : Vec (Np1 * mlpDim) := vitCotM1 Wfc2 m1 dyOut
     -- LN₁ γ/β  (cot = cotLn1, LN input = xin)
-    ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β1 xin γ1 cotLn1 lr
-  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ1 xin β1 cotLn1 lr
+    SgdNode.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β1 xin γ1 cotLn1 lr
+  ∧ SgdNode.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ1 xin β1 cotLn1 lr
     -- Q dense W/b  (cot = dQ, dense input = ln1)
   ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bq ln1 Wq dQ lr
   ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wq ln1 bq dQ lr
@@ -73,8 +73,8 @@ def vitBlockTiedMHV {Np1 heads d mlpDim : Nat}
   ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bo att Wo cotH lr
   ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wo att bo cotH lr
     -- LN₂ γ/β  (cot = cotLn2, LN input = h)
-  ∧ ViTPoC.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β2 h γ2 cotLn2 lr
-  ∧ ViTPoC.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ2 h β2 cotLn2 lr
+  ∧ SgdNode.VecLNGammaSgdTied Np1 gN xN epsStr lrStr cotN ε β2 h γ2 cotLn2 lr
+  ∧ SgdNode.VecLNBetaSgdTied Np1 bN lrStr cotN ε γ2 h β2 cotLn2 lr
     -- fc1 dense W/b  (cot = cotM1, dense input = ln2)
   ∧ ViTPoC.RowDenseWSgdTied Np1 xN wN lrStr cotN bfc1 ln2 Wfc1 cotM1 lr
   ∧ ViTPoC.RowDenseBSgdTied Np1 bN lrStr cotN Wfc1 ln2 bfc1 cotM1 lr
@@ -177,7 +177,7 @@ theorem vit_block_tiedAtMHV {Np1 heads d mlpDim : Nat}
 `vitFinalLNTied`/`vitHeadTied`/`vitEmbedTied` bundle the final vector-LN γ/β, the classifier Wcls/bcls,
 and the patch-embed wConv/bConv/cls/pos as `den = certified` at their chain cotangents — each a direct
 delegation to the fold generics (`ViTPoC.*_den`), with the cls op (`denseBiasSgdB` N=1) folded by
-`vit_cls_den` (its row-0 batch slice IS `clsTokenGrad`, closed by `vit_render_cls_certified`). Then
+`vit_cls_den` (its row-0 batch slice IS `clsTokenGrad`, closed by `clsToken_sgd_certified`). Then
 `vit_net_tied_certified` threads the REAL forward + loss-driven backward and bundles all 200 params. -/
 
 -- cls-param op den at the committed ViT-Tiny dims
@@ -193,7 +193,7 @@ theorem vit_cls_den (clsN lrStr cotN : String)
             (.operand cotN (clsSliceFlat 196 192 dyEmbed))) i
       = cls i - lr * clsTokenGrad dyEmbed i := by
     simp only [denStepApp, batchSlice, clsSliceFlat, clsTokenGrad]; rw [Fin.sum_univ_one]; rfl
-  rw [hstep, vit_render_cls_certified Wc bc cls pos img dyEmbed lr i]
+  rw [hstep, clsToken_sgd_certified Wc bc cls pos img dyEmbed lr i]
 
 /-- Final vector-LN γF/βF tied at the classifier-back cot `vitCotFl`. -/
 def vitFinalLNTied (gN xN bN epsStr lrStr cotN : String) (ε : ℝ)
@@ -227,8 +227,8 @@ theorem vit_head_tied (aN wN bN lrStr cotN : String)
     (hn : Vec 192) (Wcls : Mat 192 10) (bcls : Vec 10) (g : Vec 10) (lr : ℝ) :
     vitHeadTied aN wN bN lrStr cotN hn Wcls bcls g lr := by
   refine ⟨?_, ?_⟩
-  · intro i j; exact Cifar8PoC.denseW_den aN wN lrStr cotN hn Wcls bcls g lr i j
-  · intro i;   exact Cifar8PoC.denseB_den bN lrStr cotN Wcls hn bcls g lr i
+  · intro i j; exact SgdNode.denseW_den aN wN lrStr cotN hn Wcls bcls g lr i j
+  · intro i;   exact SgdNode.denseB_den bN lrStr cotN Wcls hn bcls g lr i
 
 /-- Patch embed wConv/bConv/cls/pos tied at the embed-output cot `dyEmbed`. -/
 def vitEmbedTied (wN xN bN clsN pN lrStr cotN : String)

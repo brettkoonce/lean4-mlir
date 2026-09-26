@@ -13,7 +13,7 @@ Jacobian with it, on `resnet50ForwardBFull` itself.
 
 Almost everything is [`Training/BatchSealKit.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/BatchSealKit.lean)'s or ResNet-34's. The carrier (`EDiff` and its
 per-op steps), the ray, the centre-tap kernel and the 7×7/s2 stem's no-tie are the kit's; the
-strided projection (`R34FullBSeal.sealProj`), the zeroed-body collapse (`projB_zero_const`), the
+strided projection (`BatchSeal.sealProj`), the zeroed-body collapse (`projB_zero_const`), the
 relu-removal (`cbReluStridedB_eq`) and the stem's own collapse (`r34StemB_eq`) are ResNet-34's,
 stated at variable shapes and instantiated here — the same reuse `ResNet50FullB.lean` already makes
 of `r34StemB` and `r34HeadB` themselves.
@@ -153,7 +153,7 @@ theorem seal_id_body (N h w mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N * (
           (sealIdW mid oc).ε₂ (sealIdW mid oc).γ₂ (sealIdW mid oc).β₂ ∘
         StableHLO.cbReluB N (h := h) (w := w) (sealIdW mid oc).W₁ (sealIdW mid oc).b₁
           (sealIdW mid oc).ε₁ (sealIdW mid oc).γ₁ (sealIdW mid oc).β₁) v = fun _ => (1 : ℝ) :=
-  R34FullBSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
+  BatchSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
     (fun _ => rfl) _
 
 /-- The stride-1 projection block's body is the constant `1`. -/
@@ -165,7 +165,7 @@ theorem seal_pr_body (N h w ic mid oc : Nat) (hn : 0 < N * (h * w)) (v : Vec (N 
         StableHLO.cbReluB N (h := h) (w := w) (sealPrW ic mid oc).W₁ (sealPrW ic mid oc).b₁
           (sealPrW ic mid oc).ε₁ (sealPrW ic mid oc).γ₁ (sealPrW ic mid oc).β₁) v
       = fun _ => (1 : ℝ) :=
-  R34FullBSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
+  BatchSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
     (fun _ => rfl) _
 
 /-- The strided projection block's body is the constant `1`. v1.5: its middle stage is the
@@ -179,7 +179,7 @@ theorem seal_dn_body (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
         StableHLO.cbReluB N (h := 2 * h) (w := 2 * w) (sealPrW ic mid oc).W₁
           (sealPrW ic mid oc).b₁ (sealPrW ic mid oc).ε₁ (sealPrW ic mid oc).γ₁
           (sealPrW ic mid oc).β₁) v = fun _ => (1 : ℝ) :=
-  R34FullBSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
+  BatchSeal.projB_zero_const hn _ _ (fun _ _ _ _ => rfl) (fun _ => rfl) _ _ _ 1
     (fun _ => rfl) _
 
 /-- **The structural bottleneck is the shift `a ↦ a + 1`** on a nonnegative activation. -/
@@ -245,7 +245,7 @@ theorem sealDnB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
     (hm : |(1 : ℝ)| * Real.sqrt ((N * (h * w) : ℕ) : ℝ) < 160)
     (v : Vec (N * (ic * (2 * h) * (2 * w)))) :
     r50DownB N h w (sealPrW ic mid oc) v
-      = fun k => R34FullBSeal.sealProj N h w ic oc v k + 1 := by
+      = fun k => BatchSeal.sealProj N h w ic oc v k + 1 := by
   have hbody := seal_dn_body N h w ic mid oc hn v
   have hres : ∀ k, residualProj
       (StableHLO.projStridedB N (h := h) (w := w) (sealPrW ic mid oc).Wp (sealPrW ic mid oc).bp
@@ -258,15 +258,15 @@ theorem sealDnB_eq (N h w ic mid oc : Nat) (hn : 0 < N * (h * w))
           StableHLO.cbReluB N (h := 2 * h) (w := 2 * w) (sealPrW ic mid oc).W₁
             (sealPrW ic mid oc).b₁ (sealPrW ic mid oc).ε₁ (sealPrW ic mid oc).γ₁
             (sealPrW ic mid oc).β₁) v k
-      = R34FullBSeal.sealProj N h w ic oc v k + 1 := by
+      = BatchSeal.sealProj N h w ic oc v k + 1 := by
     intro k
-    show R34FullBSeal.sealProj N h w ic oc v k + _ = _
+    show BatchSeal.sealProj N h w ic oc v k + _ = _
     rw [hbody]
   funext k
   show relu (N * (oc * h * w)) (residualProj _ _ v) k
-    = R34FullBSeal.sealProj N h w ic oc v k + 1
+    = BatchSeal.sealProj N h w ic oc v k + 1
   rw [relu_id_of_pos (fun i => by
-    rw [hres i]; linarith [R34FullBSeal.sealProj_pos N h w ic oc hm v i]), hres k]
+    rw [hres i]; linarith [BatchSeal.sealProj_pos N h w ic oc hm v i]), hres k]
 
 -- ════════════════════════════════════════════════════════════════
 -- § 4. Every running activation is nonnegative, and the clause bundles
@@ -361,10 +361,10 @@ theorem seal_dn_smooth (N h w ic mid oc : Nat) (hn2 : 0 < N * ((2 * h) * (2 * w)
     norm_num
   hout := by
     intro k
-    show R34FullBSeal.sealProj N h w ic oc v k + _ ≠ 0
+    show BatchSeal.sealProj N h w ic oc v k + _ ≠ 0
     rw [congrFun (seal_dn_body N h w ic mid oc hn v) k]
     intro hc
-    linarith [R34FullBSeal.sealProj_pos N h w ic oc hm v k]
+    linarith [BatchSeal.sealProj_pos N h w ic oc hm v k]
 
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The witness input, the ray and the stem — all of it `BatchSeal`'s at this net's spelling
@@ -433,7 +433,7 @@ theorem stem_relu_off (q : Nat) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     StableHLO.cbReluStridedB 2 (h := (2 * (2 * (2 * (2 * q))))) (w := (2 * (2 * (2 * (2 * q)))))
       (sealW nCls).sW (sealW nCls).sb (sealW nCls).sε (sealW nCls).sγ (sealW nCls).sβ (sealX q t)
       = StableHLO.bnBatchLA 2 64 (2 * (2 * (2 * (2 * q)))) (2 * (2 * (2 * (2 * q)))) 1 (kv 64 1) (kv 64 160) (Zs q t) :=
-  R34FullBSeal.cbReluStridedB_eq _ _ _ _ _ (sealX q t) (fun k => Zs_bn_pos q hq t k)
+  BatchSeal.cbReluStridedB_eq _ _ _ _ _ (sealX q t) (fun k => Zs_bn_pos q hq t k)
 
 theorem seal_stem_clause (q : Nat) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     R34StemSmoothAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
@@ -441,7 +441,7 @@ theorem seal_stem_clause (q : Nat) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
   R34FullBSeal.seal_stem_smooth 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q))) 3 64 _ _ (margin_stem q hq) (sealX q t)
 
 theorem seal_pool_clause (q : Nat) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
-    R34PoolSmoothAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
+    StemPoolSmoothAt 2 (2 * (2 * (2 * q))) (2 * (2 * (2 * q)))
       (StableHLO.cbReluStridedB 2 (h := (2 * (2 * (2 * (2 * q))))) (w := (2 * (2 * (2 * (2 * q)))))
 
         (sealW nCls).sW (sealW nCls).sb (sealW nCls).sε (sealW nCls).sγ (sealW nCls).sβ (sealX q t)) := by
@@ -539,7 +539,7 @@ theorem pc3 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
 
 theorem pc4 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     r50Pre4 2 q (sealW nCls) (sealX q t)
-      = fun k => R34FullBSeal.sealProj 2 (2 * (2 * q)) (2 * (2 * q)) 256 512 (r50Pre3 2 q (sealW nCls) (sealX q t)) k + 1 := by
+      = fun k => BatchSeal.sealProj 2 (2 * (2 * q)) (2 * (2 * q)) 256 512 (r50Pre3 2 q (sealW nCls) (sealX q t)) k + 1 := by
   rw [r50Pre4_apply]
   exact sealDnB_eq 2 (2 * (2 * q)) (2 * (2 * q)) 256 128 512 (two_sq_pos (2 * (2 * q)) (by omega)) (margin_p2 q hq) _
 
@@ -560,7 +560,7 @@ theorem pc7 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
 
 theorem pc8 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     r50Pre8 2 q (sealW nCls) (sealX q t)
-      = fun k => R34FullBSeal.sealProj 2 (2 * q) (2 * q) 512 1024 (r50Pre7 2 q (sealW nCls) (sealX q t)) k + 1 := by
+      = fun k => BatchSeal.sealProj 2 (2 * q) (2 * q) 512 1024 (r50Pre7 2 q (sealW nCls) (sealX q t)) k + 1 := by
   rw [r50Pre8_apply]
   exact sealDnB_eq 2 (2 * q) (2 * q) 512 256 1024 (two_sq_pos (2 * q) (by omega)) (margin_p3 q hq) _
 
@@ -591,7 +591,7 @@ theorem pc13 (q : Nat) (hq0 : 0 < q) (nCls : Nat) (t : ℝ) :
 
 theorem pc14 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     r50Pre14 2 q (sealW nCls) (sealX q t)
-      = fun k => R34FullBSeal.sealProj 2 q q 1024 2048 (r50Pre13 2 q (sealW nCls) (sealX q t)) k + 1 := by
+      = fun k => BatchSeal.sealProj 2 q q 1024 2048 (r50Pre13 2 q (sealW nCls) (sealX q t)) k + 1 := by
   rw [r50Pre14_apply]
   exact sealDnB_eq 2 q q 1024 512 2048 (two_sq_pos q (by omega)) (margin_p4 q hq) _
 
@@ -800,7 +800,7 @@ theorem ed4 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     EDiff (dP2 q nCls t) (r50Pre4 2 q (sealW nCls) (sealX q t)) := by
   rw [pc4 q hq0 hq nCls t]
   refine eDiff_shift _ _ 1 ?_
-  rw [R34FullBSeal.sealProj_apply]
+  rw [BatchSeal.sealProj_apply]
   exact eDiff_convS2Bn (h := (2 * (2 * q))) (w := (2 * (2 * q))) (kH := 1) (kW := 1) (0 : Fin 256)
     rfl (by norm_num) (by norm_num) 1 160 (Zp2 q nCls t) (ed3 q hq0 hq nCls t) rfl
     (fun ci => by simp only [dP2]; ring)
@@ -824,7 +824,7 @@ theorem ed8 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     EDiff (dP3 q nCls t) (r50Pre8 2 q (sealW nCls) (sealX q t)) := by
   rw [pc8 q hq0 hq nCls t]
   refine eDiff_shift _ _ 1 ?_
-  rw [R34FullBSeal.sealProj_apply]
+  rw [BatchSeal.sealProj_apply]
   exact eDiff_convS2Bn (h := (2 * q)) (w := (2 * q)) (0 : Fin 512) rfl (by norm_num) (by norm_num) 1
     160 (Zp3 q nCls t) (ed7 q hq0 hq nCls t) rfl (fun ci => by simp only [dP3]; ring)
 
@@ -857,7 +857,7 @@ theorem ed14 (q : Nat) (hq0 : 0 < q) (hq : q ≤ 7) (nCls : Nat) (t : ℝ) :
     EDiff (dP4 q nCls t) (r50Pre14 2 q (sealW nCls) (sealX q t)) := by
   rw [pc14 q hq0 hq nCls t]
   refine eDiff_shift _ _ 1 ?_
-  rw [R34FullBSeal.sealProj_apply]
+  rw [BatchSeal.sealProj_apply]
   exact eDiff_convS2Bn (h := q) (w := q) (kH := 1) (kW := 1) (0 : Fin 1024) rfl (by norm_num)
     (by norm_num) 1 160 (Zp4 q nCls t) (ed13 q hq0 hq nCls t) rfl
     (fun ci => by simp only [dP4]; ring)

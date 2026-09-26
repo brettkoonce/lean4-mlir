@@ -12,15 +12,15 @@ per-example VJP at `batchSlice n`. The bf16 kinds (`*GradBBf16`) are a different
 are folded in `Bf16GradNodes`; the fused `*SgdB` ops are these through
 `StableHLO.Basic`'s `*SgdB_eq_grad` family (`rfl`).
 
-Namespaces are the net that first needed the op (kept so that every citation keeps its name):
+Every lemma is in namespace `GradNodeB`:
 
-| op kinds | namespace | emitted by |
-|---|---|---|
-| conv / strided-conv (symmetric) W and b, BN γ/β, dense W/b, the `*TiedB` clause Props | `ResNet34PoCB` | every conv net |
-| XLA-`SAME` strided conv W, depthwise W, symmetric strided depthwise W, rectangular dense b | `EnetPoCG` | EfficientNet-B0, MobileNetV2/V4, ConvNeXt |
-| XLA-`SAME` strided conv b, depthwise b, XLA-`SAME` strided depthwise W and b | `Mnv2PaperPoCG` | MobileNetV2, ConvNeXt |
-| stride-4 patchify conv W | `CnxPoCGB` | ConvNeXt |
-| vector-LN γ / β and their `*TiedB` clauses, the classifier head W and b | `ViTPoCGB` | ViT, ConvNeXt |
+| op kinds | emitted by |
+|---|---|
+| conv / strided-conv (symmetric) W and b, BN γ/β, dense W and b (the bias at a rectangular `Mat a c`, which the SE squeeze needs), the `*TiedB` clause Props | every conv net |
+| XLA-`SAME` strided conv W, depthwise W, symmetric strided depthwise W | EfficientNet-B0, MobileNetV2/V4, ConvNeXt |
+| XLA-`SAME` strided conv b, depthwise b, XLA-`SAME` strided depthwise W and b | MobileNetV2, ConvNeXt |
+| stride-4 patchify conv W | ConvNeXt |
+| vector-LN γ / β and their `*TiedB` clauses, the classifier head W and b | ViT, ConvNeXt |
 
 The other ViT nodes (per-token dense, patch embed, position, CLS) live in `ViTFoldGB`;
 ConvNeXt's channel-LN and layer-scale nodes in `ConvNeXtFoldGB`.
@@ -34,7 +34,7 @@ Every lemma is `∀ cot`; pinning each cotangent to the emitted backward subgrap
 
 open Proofs Proofs.StableHLO Proofs.IR
 
-namespace Proofs.ResNet34PoCB
+namespace Proofs.GradNodeB
 
 open scoped BigOperators
 
@@ -186,17 +186,6 @@ theorem denseWGradB_den {N a c : Nat}
   intro n _
   exact denseWeightGrad_correct W b (batchSlice N a x n) (batchSlice N c cot n) i j
 
-/-- **Batched dense bias GRADIENT denotes the certified `Σ_n` cotangent sum.** -/
-theorem denseBGradB_den {N c : Nat}
-    (cotN : String) (W : Mat c c) (x : Vec c) (b : Vec c) (cot : Vec (N * c)) (j : Fin c) :
-    den (SHlo.denseBiasGradB (N := N) (.operand cotN cot)) j
-      = ∑ n : Fin N, ∑ k : Fin c,
-          pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k := by
-  simp only [denStep, denStepApp]
-  apply Finset.sum_congr rfl
-  intro n _
-  exact denseBiasGrad_correct W b x (batchSlice N c cot n) j
-
 -- ════════════════════════════════════════════════════════════════
 -- § Tie clauses — one gradient node each
 --   What a step tie states per conv / depthwise / dense parameter: the emitted `*GradB` node
@@ -250,7 +239,7 @@ def ConvStridedBTiedB (N h w : Nat) {ic oc kH kW : Nat} (cotN : String) (W : Ker
                   flatConvStride2 W b' (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                b o j * batchSlice N (oc * h * w) cot n j
 
-/-- A stride-2 XLA-`SAME` conv weight gradient node, tied (`EnetPoCG.convStridedXlaWGradB_den`). -/
+/-- A stride-2 XLA-`SAME` conv weight gradient node, tied (`GradNodeB.convStridedXlaWGradB_den`). -/
 def ConvStridedXlaWTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN : String) (b : Vec oc)
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
     (cot : Vec (N * (oc * h * w))) : Prop :=
@@ -262,7 +251,7 @@ def ConvStridedXlaWTiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN : String) (b
                     (batchSlice N (ic * (2 * h) * (2 * w)) x n))
                (Kernel4.flatten W) idx j * batchSlice N (oc * h * w) cot n j
 
-/-- A stride-1 depthwise weight gradient node, tied (`EnetPoCG.depthwiseWGradB_den`). -/
+/-- A stride-1 depthwise weight gradient node, tied (`GradNodeB.depthwiseWGradB_den`). -/
 def DepthwiseWTiedB (N h w : Nat) {c kH kW : Nat} (xN cotN : String) (b : Vec c)
     (x : Vec (N * (c * h * w))) (W : DepthwiseKernel c kH kW) (cot : Vec (N * (c * h * w))) :
     Prop :=
@@ -274,7 +263,7 @@ def DepthwiseWTiedB (N h w : Nat) {c kH kW : Nat} (xN cotN : String) (b : Vec c)
                     (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
                (Tensor3.flatten W) idx j * batchSlice N (c * h * w) cot n j
 
-/-- A stride-1 depthwise bias gradient node, tied (`Mnv2PaperPoCG.depthwiseBGradB_den`). -/
+/-- A stride-1 depthwise bias gradient node, tied (`GradNodeB.depthwiseBGradB_den`). -/
 def DepthwiseBTiedB (N h w : Nat) {c kH kW : Nat} (cotN : String) (W : DepthwiseKernel c kH kW)
     (x : Vec (N * (c * h * w))) (b : Vec c) (cot : Vec (N * (c * h * w))) : Prop :=
   ∀ o : Fin c,
@@ -285,7 +274,7 @@ def DepthwiseBTiedB (N h w : Nat) {c kH kW : Nat} (cotN : String) (W : Depthwise
                     (Tensor3.unflatten (batchSlice N (c * h * w) x n))))
                b o j * batchSlice N (c * h * w) cot n j
 
-/-- A stride-2 depthwise weight gradient node, tied (`EnetPoCG.depthwiseStridedWGradB_den`). -/
+/-- A stride-2 depthwise weight gradient node, tied (`GradNodeB.depthwiseStridedWGradB_den`). -/
 def DepthwiseStridedWTiedB (N h w : Nat) {c kH kW : Nat} (xN cotN : String) (b : Vec c)
     (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
     (cot : Vec (N * (c * h * w))) : Prop :=
@@ -314,9 +303,9 @@ def DenseBTiedB (N : Nat) {a c : Nat} (cotN : String) (W : Mat a c) (x : Vec a) 
       = ∑ n : Fin N, ∑ k : Fin c,
           pdiv (fun b' : Vec c => dense W b' x) b j k * batchSlice N c cot n k
 
-end Proofs.ResNet34PoCB
+end Proofs.GradNodeB
 
-namespace Proofs.EnetPoCG
+namespace Proofs.GradNodeB
 
 open scoped BigOperators
 
@@ -402,9 +391,9 @@ theorem depthwiseStridedWGradB_den {N c h w kH kW : Nat}
     (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct
     (Tensor3.flatten W) (batchSlice N (c * h * w) cot n) idx
 
-end Proofs.EnetPoCG
+end Proofs.GradNodeB
 
-namespace Proofs.Mnv2PaperPoCG
+namespace Proofs.GradNodeB
 
 open scoped BigOperators
 
@@ -487,9 +476,9 @@ theorem depthwiseStridedXlaBGradB_den {N c h w kH kW : Nat} (cotN : String)
     (batchSlice N (c * (2 * h) * (2 * w)) x n)).correct b
     (batchSlice N (c * h * w) cot n) o
 
-end Proofs.Mnv2PaperPoCG
+end Proofs.GradNodeB
 
-namespace Proofs.CnxPoCGB
+namespace Proofs.GradNodeB
 
 open scoped BigOperators
 
@@ -512,9 +501,9 @@ theorem psWGradB_den {N ic oc h w kH kW : Nat} (xN cotN : String)
     (batchSlice N (ic * (2 * (2 * h)) * (2 * (2 * w))) x n)).correct
     (Kernel4.flatten W) (batchSlice N (oc * h * w) cot n) idx
 
-end Proofs.CnxPoCGB
+end Proofs.GradNodeB
 
-namespace Proofs.ResNet34PoCB
+namespace Proofs.GradNodeB
 
 /-! ## Each tie clause holds
 
@@ -542,22 +531,22 @@ theorem convStridedBTiedB_holds {N h w ic oc kH kW : Nat} {cotN : String}
 theorem convStridedXlaWTiedB_holds {N h w ic oc kH kW : Nat} {xN cotN : String} {b : Vec oc}
     {x : Vec (N * (ic * (2 * h) * (2 * w)))} {W : Kernel4 oc ic kH kW}
     {cot : Vec (N * (oc * h * w))} : ConvStridedXlaWTiedB N h w xN cotN b x W cot :=
-  fun idx => EnetPoCG.convStridedXlaWGradB_den xN cotN b x W cot idx
+  fun idx => GradNodeB.convStridedXlaWGradB_den xN cotN b x W cot idx
 
 theorem depthwiseWTiedB_holds {N h w c kH kW : Nat} {xN cotN : String} {b : Vec c}
     {x : Vec (N * (c * h * w))} {W : DepthwiseKernel c kH kW} {cot : Vec (N * (c * h * w))} :
     DepthwiseWTiedB N h w xN cotN b x W cot :=
-  fun idx => EnetPoCG.depthwiseWGradB_den xN cotN b x W cot idx
+  fun idx => GradNodeB.depthwiseWGradB_den xN cotN b x W cot idx
 
 theorem depthwiseBTiedB_holds {N h w c kH kW : Nat} {cotN : String} {W : DepthwiseKernel c kH kW}
     {x : Vec (N * (c * h * w))} {b : Vec c} {cot : Vec (N * (c * h * w))} :
     DepthwiseBTiedB N h w cotN W x b cot :=
-  fun o => Mnv2PaperPoCG.depthwiseBGradB_den cotN W x b cot o
+  fun o => GradNodeB.depthwiseBGradB_den cotN W x b cot o
 
 theorem depthwiseStridedWTiedB_holds {N h w c kH kW : Nat} {xN cotN : String} {b : Vec c}
     {x : Vec (N * (c * (2 * h) * (2 * w)))} {W : DepthwiseKernel c kH kW}
     {cot : Vec (N * (c * h * w))} : DepthwiseStridedWTiedB N h w xN cotN b x W cot :=
-  fun idx => EnetPoCG.depthwiseStridedWGradB_den xN cotN b x W cot idx
+  fun idx => GradNodeB.depthwiseStridedWGradB_den xN cotN b x W cot idx
 
 theorem denseWTiedB_holds {N a c : Nat} {xN cotN : String} {x : Vec (N * a)} {W : Mat a c}
     {b : Vec c} {cot : Vec (N * c)} : DenseWTiedB N xN cotN x W b cot :=
@@ -565,11 +554,11 @@ theorem denseWTiedB_holds {N a c : Nat} {xN cotN : String} {x : Vec (N * a)} {W 
 
 theorem denseBTiedB_holds {N a c : Nat} {cotN : String} {W : Mat a c} {x : Vec a} {b : Vec c}
     {cot : Vec (N * c)} : DenseBTiedB N cotN W x b cot :=
-  fun j => EnetPoCG.denseBGradB_den cotN W x b cot j
+  fun j => GradNodeB.denseBGradB_den cotN W x b cot j
 
-end Proofs.ResNet34PoCB
+end Proofs.GradNodeB
 
-namespace Proofs.ViTPoCGB
+namespace Proofs.GradNodeB
 
 open scoped BigOperators
 
@@ -591,7 +580,7 @@ theorem veclnGammaGradB_den {N R D : Nat} (xN epsStr cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact vit_veclnGamma_grad_bridge ε βv γ
+  exact layerNormVec_gamma_grad_bridge ε βv γ
     (Mat.unflatten (batchSlice N (R * D) x n)) (batchSlice N (R * D) dy n) k
 
 /-- **The SAME row-reduce op, certified against the vector-LN β forward.** An LN β gradient and a
@@ -607,7 +596,7 @@ theorem rowDenseBiasGradB_den_lnbeta {N R D : Nat} (cotN : String)
   simp only [denStep, denStepApp]
   apply Finset.sum_congr rfl
   intro n _
-  exact vit_veclnBeta_grad_bridge ε γv β (X n) (batchSlice N (R * D) dy n) i
+  exact layerNormVec_beta_grad_bridge ε γv β (X n) (batchSlice N (R * D) dy n) i
 
 /-- **Batched classifier weight GRADIENT denotes the certified `Σ_n` outer product.** -/
 theorem headWGradB_den {N D nC : Nat} (aN cotN : String)
@@ -668,5 +657,5 @@ theorem vecLNBetaTiedB_holds {N R D : Nat} {cotN : String} {ε : ℝ} {γv : Vec
     VecLNBetaTiedB N R cotN ε γv x β dy := fun i =>
   rowDenseBiasGradB_den_lnbeta cotN ε γv (fun n => Mat.unflatten (batchSlice N (R * D) x n)) β dy i
 
-end Proofs.ViTPoCGB
+end Proofs.GradNodeB
 

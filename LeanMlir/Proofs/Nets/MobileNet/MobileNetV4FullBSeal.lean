@@ -49,7 +49,7 @@ namespace Mnv4FullBSeal
 
 open scoped BigOperators
 open Finset Filter Topology
-open Proofs BatchSeal StableHLO R34FullBSeal
+open Proofs BatchSeal StableHLO Proofs.BatchSeal
 
 -- ⭐ **The clause count, read off `mnv4Blocks` rather than asserted.** One relu per expand conv
 -- and per present post-DW in each of the 21 UIB rows, plus the stem's, the fused stage's and the

@@ -52,10 +52,11 @@ The lowerer's `all_reduce` is trusted as every other op's lowering is.
 open Proofs Proofs.StableHLO Proofs.IR
 
 namespace Proofs.ResNet34SyncTieB
+open Proofs.SyncKit
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB cInB)
-open Proofs.ResNet34TieB
+open Proofs.BackLinks (reassocB cInB)
+open Proofs.ResNet34TieB Proofs.BackLinks
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. Homogeneity — the ResNet-34 block cotangents are linear in their cotangent

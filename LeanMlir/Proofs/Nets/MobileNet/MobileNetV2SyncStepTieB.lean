@@ -61,10 +61,10 @@ open Proofs Proofs.StableHLO Proofs.IR
 namespace Proofs.MobileNetV2SyncTieB
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB cInB dInB gapInB)
-open Proofs.ResNet34TieB (bnInB unrowB rowB)
-open Proofs.ResNet34SyncTieB
-open Proofs.MBConvSyncTieB
+open Proofs.BackLinks (reassocB cInB dInB gapInB)
+open Proofs.BackLinks (bnInB unrowB rowB)
+open Proofs.SyncKit
+open Proofs.SyncKit
 open Proofs.MobileNetV2TieB
 
 -- ════════════════════════════════════════════════════════════════

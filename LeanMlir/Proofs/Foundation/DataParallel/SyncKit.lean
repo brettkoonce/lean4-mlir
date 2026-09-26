@@ -12,13 +12,13 @@ The per-op facts that argument is assembled from are stated here once:
 | what | names | namespace |
 |---|---|---|
 | the `c·h·w ↔ c·(h·w)` index cast and sharding through it; non-BN nodes commute with the batch cut; the BN sync site | `castIdx`, `la_assoc`, `batchShard_castIdx`, `den_batchOp_shard`, `den_relu_shard`, `den_addVB_shard`, `bnSyncSiteLA` | `StableHLO` |
-| homogeneity — each cotangent step and gradient node is linear in its cotangent | `*_smul` | `ResNet34SyncTieB`, `MBConvSyncTieB` |
-| sharding — each input-VJP is per example, so it commutes with the batch cut; sync-BN's backward is the shard of the global one | `*_shard`, `bnSyncInB_shard` | `ResNet34SyncTieB`, `MBConvSyncTieB` |
-| P4 — the replica mean of a weight-gradient node is `1/R` of the global node | `den_allReduceMeanF_*_shard` | both (and `DataParallel.Sync` for conv W / BN β) |
-| per-parameter DP ties at `R ×` the shards of a global cotangent | `*Sync`, `*Sync_of_scaled` | both |
-| the divisor: a replica's loss cotangent is `R ×` its shard of the global one | `replicaLossCot_eq` | `ResNet34SyncTieB` |
+| homogeneity — each cotangent step and gradient node is linear in its cotangent | `*_smul` | `SyncKit` |
+| sharding — each input-VJP is per example, so it commutes with the batch cut; sync-BN's backward is the shard of the global one | `*_shard`, `bnSyncInB_shard` | `SyncKit` |
+| P4 — the replica mean of a weight-gradient node is `1/R` of the global node | `den_allReduceMeanF_*_shard` | `SyncKit` (and `DataParallel.Sync` for conv W / BN β) |
+| per-parameter DP ties at `R ×` the shards of a global cotangent | `*Sync`, `*Sync_of_scaled` | `SyncKit` |
+| the divisor: a replica's loss cotangent is `R ×` its shard of the global one | `replicaLossCot_eq` | `SyncKit` |
 
-The namespaces are the nets that first needed each piece; the names are cited by every twin.
+Every twin cites these names.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -92,11 +92,11 @@ theorem nhw_ne_zero {N h w : Nat} (hN : 0 < N) (hh : 0 < h) (hw : 0 < w) : N * (
 
 end Proofs.StableHLO
 
-namespace Proofs.ResNet34SyncTieB
+namespace Proofs.SyncKit
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (reassocB cInB)
-open Proofs.ResNet34TieB
+open Proofs.BackLinks (reassocB cInB)
+open Proofs.BackLinks
 
 theorem reluMaskB_smul (n : Nat) (pre : Vec n) : IsHomog (reluMaskB n pre) := by
   intro s dy
@@ -233,7 +233,7 @@ theorem mpInB_shard {R N : Nat} (c h w : Nat) (X : Vec ((R * N) * (c * (2 * h) *
 /-- **Replica `r`'s sync-BN input cotangent**, as `bnBackSite`'s `replicas > 1` branch computes it,
     in the network layout: this replica's `[μ ‖ σ² ‖ mean(γ·dy) ‖ mean(x̂·γ·dy)]`
     (`bnSyncDyStatsB`, reading the forward's `syncStats`) all-reduced, then `bnSyncBack`. The
-    replica peer of `ResNet34TieB.bnInB`, and like it written as the `den` of the emitted nodes
+    replica peer of `BackLinks.bnInB`, and like it written as the `den` of the emitted nodes
     over `.operand` leaves. -/
 noncomputable def bnSyncInB (R : Nat) (hR : 0 < R) (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
     (xs dys : Fin R → Vec (N * (oc * h * w))) (r : Fin R) : Vec (N * (oc * h * w)) :=
@@ -469,13 +469,12 @@ theorem replicaLossCot_eq (R N nCls : Nat) (hR : 0 < R) (α B : ℝ)
   rw [rowB_shard, hden, unrowB_shard]
   rfl
 
-end Proofs.ResNet34SyncTieB
+end Proofs.SyncKit
 
-namespace Proofs.MBConvSyncTieB
+namespace Proofs.SyncKit
 
 open scoped BigOperators
-open Proofs.EnetTiePoC (dInB dStridedInB gapInB)
-open Proofs.ResNet34SyncTieB
+open Proofs.BackLinks (dInB dStridedInB gapInB)
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. Homogeneity — linear in the cotangent
@@ -687,4 +686,4 @@ theorem convStridedXlaWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic o
       (fun i => (R : ℝ) * COT i) (fun r => .operand cotN (cots r)) (fun r => hc r) idx,
     convStridedXlaWeightGradB_smul, inv_mul_R R hR]
 
-end Proofs.MBConvSyncTieB
+end Proofs.SyncKit
