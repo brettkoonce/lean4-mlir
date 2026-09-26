@@ -38,7 +38,8 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 | 433b433a | §2 root batch: 2.1–2.4, 2.6, 2.7 as tabled, 2.5 in part. Deviations below |
 | 502c0232 | §3: 3.2 as a guard (3.1 not needed), 3.3 minimal form. Deviations below |
 | 4fa1bbce | §4.1 + §4.2 as tabled; §4.3 not started. Notes below |
-| (staged) | §5.2–5.4, §5.5 in part (5.1 next). Notes below |
+| ec6ad9cb | §5.2–5.4, §5.5 in part. Notes below |
+| (staged) | §5.1 `UibParams` slots typed by kernel extent. Notes below |
 
 §2 deviations:
 
@@ -129,6 +130,23 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
   warmup. `RmsSchedule` is read only by the `rms`-named descent-check variants (not a recipe), which
   share that `3`; the ImageNet apps pass `if rms then sched.warmup else 5`. Mirroring that in the
   two Imagenette apps would only move the `rms` variants (3 → 5), no published number. Open, low.
+
+§5.1 notes:
+
+* `UibParams` holds `pre : DWSlot s.ic s.preDWk` and `post : DWSlot (s.ic * s.expand) s.postDWk`;
+  `DWSlot c 0 = PUnit`, `DWSlot c (k+1) = DWBnParams c (k+1)` (kernel, bias, ε, positivity, γ, β).
+  The twelve old field names are derived accessors (`p.Wq := p.pre.params.W`, …; `hq`/`hd` are
+  theorems) through `DWSlot.params`, which answers a fixed placeholder at `k = 0` — the `id'` slot
+  reads none of it. So the record is extensional, and the 21,420 unread reals are gone.
+* The accessors kept every consumer compiling unchanged (StepTieB, SyncB, SyncStepTieB, FullB,
+  FullBVJP). Only the seal needed edits: `sealP` stores through `DWSlot.ofParams`, two read-back
+  lemmas (`sealP_pre_params`, `sealP_post_params`, from `DWSlot.params_ofParams`) serve the generic
+  proofs, and `sealCTStrided_eq` / `sealUibStrided_ok` now take `postDWk ≠ 0` (true of every
+  strided row; the table `#guard` already says so).
+* `mnv4PreDWSlot_of_eq_zero` / `_of_ne_zero` and the post-DW pair added. The eleven unfold sites
+  were left: each is a `by_cases` that the lemmas would not shorten.
+* Checks: corpus + all exes, `verified_mlir/` regen empty, `mnv4-fwd-smoke`, comparator tier and
+  both tier files, AuditAxioms 1602/1602, blueprint `\uses`, name lint, import audit, docstring refs.
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

@@ -167,9 +167,9 @@ def mnv2NoExpW0 (ic oc : Nat) : IVWNoExp ic oc :=
 
 /-- Zero weights for one table row; the BN ε's are `1` so the record's positivity fields hold. -/
 def mnv4UibW0 (s : UibSpec) : UibParams s :=
-  ⟨fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0,
+  ⟨DWSlot.ofParams ⟨fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩,
    fun _ _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0,
-   fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0,
+   DWSlot.ofParams ⟨fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩,
    fun _ _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩
 
 /-- `pretty` of the typed graph for one table row, dispatched as `mnv4FwdGraphBFull` builds it: a

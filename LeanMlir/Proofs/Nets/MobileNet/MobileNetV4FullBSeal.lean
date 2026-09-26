@@ -71,30 +71,39 @@ noncomputable def sealP (s : UibSpec)
     (We : Kernel4 (s.ic * s.expand) s.ic 1 1)
     (Wd : DepthwiseKernel (s.ic * s.expand) s.postDWk s.postDWk)
     (Wz : Kernel4 s.oc (s.ic * s.expand) 1 1) : UibParams s where
-  Wq := Wq
-  bq := kv s.ic 0
-  eq_ := 1
-  hq := one_pos
-  gq := kv s.ic 1
-  bq2 := kv s.ic 160
+  pre := DWSlot.ofParams ⟨Wq, kv s.ic 0, 1, one_pos, kv s.ic 1, kv s.ic 160⟩
   We := We
   be := kv (s.ic * s.expand) 0
   ee := 1
   he := one_pos
   ge := kv (s.ic * s.expand) 1
   be2 := kv (s.ic * s.expand) 160
-  Wd := Wd
-  bd := kv (s.ic * s.expand) 0
-  ed := 1
-  hd := one_pos
-  gd := kv (s.ic * s.expand) 1
-  bd2 := kv (s.ic * s.expand) 160
+  post := DWSlot.ofParams ⟨Wd, kv (s.ic * s.expand) 0, 1, one_pos, kv (s.ic * s.expand) 1,
+    kv (s.ic * s.expand) 160⟩
   Wz := Wz
   bz := kv s.oc 0
   ez := 1
   hz := one_pos
   gz := kv s.oc 1
   bz2 := kv s.oc 0
+
+/-- `sealP`'s pre-DW parameters, read back at a row with a pre-DW. -/
+theorem sealP_pre_params (s : UibSpec) (Wq : DepthwiseKernel s.ic s.preDWk s.preDWk)
+    (We : Kernel4 (s.ic * s.expand) s.ic 1 1)
+    (Wd : DepthwiseKernel (s.ic * s.expand) s.postDWk s.postDWk)
+    (Wz : Kernel4 s.oc (s.ic * s.expand) 1 1) (hk : s.preDWk ≠ 0) :
+    (sealP s Wq We Wd Wz).pre.params = ⟨Wq, kv s.ic 0, 1, one_pos, kv s.ic 1, kv s.ic 160⟩ :=
+  DWSlot.params_ofParams hk _
+
+/-- `sealP`'s post-DW parameters, read back at a row with a post-DW. -/
+theorem sealP_post_params (s : UibSpec) (Wq : DepthwiseKernel s.ic s.preDWk s.preDWk)
+    (We : Kernel4 (s.ic * s.expand) s.ic 1 1)
+    (Wd : DepthwiseKernel (s.ic * s.expand) s.postDWk s.postDWk)
+    (Wz : Kernel4 s.oc (s.ic * s.expand) 1 1) (hk : s.postDWk ≠ 0) :
+    (sealP s Wq We Wd Wz).post.params
+      = ⟨Wd, kv (s.ic * s.expand) 0, 1, one_pos, kv (s.ic * s.expand) 1,
+          kv (s.ic * s.expand) 160⟩ :=
+  DWSlot.params_ofParams hk _
 
 /-- a carrier row: every kernel a centre tap. -/
 noncomputable def sealCT (s : UibSpec) : UibParams s :=
@@ -229,7 +238,7 @@ theorem resid_id {n : Nat} (L : CertLayer n n) (v : Vec n) (hL : L.fwd v = fun _
 
 /-- **A carrier row (all three are strided ExtraDW) collapses to four BatchNorms**: the BN-only
     pre-DW and the expand at `2h`, the strided post-DW, the project. -/
-theorem sealCTStrided_eq (N : Nat) (s : UibSpec) (hq : s.preDWk ≠ 0)
+theorem sealCTStrided_eq (N : Nat) (s : UibSpec) (hq : s.preDWk ≠ 0) (hd : s.postDWk ≠ 0)
     (hmd : Mg N s.h s.h) (hme : Mg N (2 * s.h) (2 * s.h))
     (v : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) :
     (mnv4StridedBodyOfRow N s (sealCT s)).fwd v
@@ -251,7 +260,9 @@ theorem sealCTStrided_eq (N : Nat) (s : UibSpec) (hq : s.preDWk ≠ 0)
               (depthwiseFlat (h := 2 * s.h) (w := 2 * s.h) (ctDW s.ic s.preDWk s.preDWk 1)
                 (kv s.ic 0)) v))))))) := by
   simp only [mnv4StridedBodyOfRow, mnv4UibStridedBody, CertLayer.comp_fwd_apply,
-    mnv4PreDWSlot, hq, ↓reduceIte]
+    mnv4PreDWSlot, hq, ↓reduceIte, sealCT, UibParams.Wq, UibParams.bq, UibParams.eq_,
+    UibParams.gq, UibParams.bq2, UibParams.Wd, UibParams.bd, UibParams.ed, UibParams.gd,
+    UibParams.bd2, sealP_pre_params _ _ _ _ _ hq, sealP_post_params _ _ _ _ _ hd]
   show projB N (h := s.h) (w := s.h) (ctK s.oc (s.ic * s.expand) 1 1 1) (kv s.oc 0) 1
         (kv s.oc 1) (kv s.oc 0)
       (StableHLO.dwbReluBstrided N (h := s.h) (w := s.h)
@@ -287,24 +298,30 @@ theorem sealUib_ok (N : Nat) (s : UibSpec) (hm : Mg N s.h s.h)
     unfold mnv4PostDWSlot
     by_cases hk : s.postDWk = 0
     · simp only [hk, ↓reduceIte]; trivial
-    · simp only [hk, ↓reduceIte]; exact bne N (s.ic * s.expand) s.h s.h hm _
+    · simp only [hk, ↓reduceIte, UibParams.Wd, UibParams.bd, UibParams.ed, UibParams.gd,
+        UibParams.bd2, sealP_post_params _ _ _ _ _ hk]
+      exact bne N (s.ic * s.expand) s.h s.h hm _
 
 /-- the strided peer: the pre-DW slot and the expand at `2h`, the post-DW carrying the stride. -/
 theorem sealUibStrided_ok (N : Nat) (s : UibSpec) (hm : Mg N s.h s.h)
-    (hme : Mg N (2 * s.h) (2 * s.h))
+    (hme : Mg N (2 * s.h) (2 * s.h)) (hd : s.postDWk ≠ 0)
     (Wq : DepthwiseKernel s.ic s.preDWk s.preDWk)
     (We : Kernel4 (s.ic * s.expand) s.ic 1 1)
     (Wd : DepthwiseKernel (s.ic * s.expand) s.postDWk s.postDWk)
     (Wz : Kernel4 s.oc (s.ic * s.expand) 1 1)
     (x : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) :
     (mnv4StridedBodyOfRow N s (sealP s Wq We Wd Wz)).ok x := by
-  refine ⟨?_, ?_, bne N (s.ic * s.expand) s.h s.h hm _, trivial⟩
+  refine ⟨?_, ?_, ?_, trivial⟩
   · show (mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk _ _ _ _ _ _).ok _
     unfold mnv4PreDWSlot
     by_cases hk : s.preDWk = 0
     · simp only [hk, ↓reduceIte]; trivial
     · simp only [hk, ↓reduceIte]; trivial
   · exact bne N (s.ic * s.expand) (2 * s.h) (2 * s.h) hme _
+  · show (mnv4DWReluStridedLayer N (sealP s Wq We Wd Wz).Wd _ _ _ _ _).ok _
+    simp only [UibParams.Wd, UibParams.bd, UibParams.ed, UibParams.gd, UibParams.bd2,
+      sealP_post_params _ _ _ _ _ hd]
+    exact bne N (s.ic * s.expand) s.h s.h hm _
 
 -- ════════════════════════════════════════════════════════════════
 -- § 6. The ray — a grid-constant base
@@ -346,12 +363,12 @@ theorem sc_fused (nCls : Nat) (t : ℝ) :
 
 theorem sc28 (nCls : Nat) (t : ℝ) :
     (mnv4Res28Layer 2 (sealW nCls)).ok (mnv4Pre1 2 (sealW nCls) (sealX t)) :=
-  ⟨sealUibStrided_ok 2 mnv4Row1 (by norm_num) (by norm_num) _ _ _ _ _,
+  ⟨sealUibStrided_ok 2 mnv4Row1 (by norm_num) (by norm_num) (by norm_num) _ _ _ _ _,
    sealUib_ok 2 mnv4Row2 (by norm_num) _ _ _ _ _⟩
 
 theorem sc14a (nCls : Nat) (t : ℝ) :
     (mnv4Res14aLayer 2 (sealW nCls)).ok (mnv4Pre2 2 (sealW nCls) (sealX t)) :=
-  ⟨sealUibStrided_ok 2 mnv4Row3 (by norm_num) (by norm_num) _ _ _ _ _,
+  ⟨sealUibStrided_ok 2 mnv4Row3 (by norm_num) (by norm_num) (by norm_num) _ _ _ _ _,
    sealUib_ok 2 mnv4Row4 (by norm_num) _ _ _ _ _,
    sealUib_ok 2 mnv4Row5 (by norm_num) _ _ _ _ _,
    sealUib_ok 2 mnv4Row6 (by norm_num) _ _ _ _ _⟩
@@ -365,7 +382,7 @@ theorem sc14b (nCls : Nat) (t : ℝ) :
 
 theorem sc7a (nCls : Nat) (t : ℝ) :
     (mnv4Res7aLayer 2 (sealW nCls)).ok (mnv4Pre4 2 (sealW nCls) (sealX t)) :=
-  ⟨sealUibStrided_ok 2 mnv4Row11 (by norm_num) (by norm_num) _ _ _ _ _,
+  ⟨sealUibStrided_ok 2 mnv4Row11 (by norm_num) (by norm_num) (by norm_num) _ _ _ _ _,
    sealUib_ok 2 mnv4Row12 (by norm_num) _ _ _ _ _,
    sealUib_ok 2 mnv4Row13 (by norm_num) _ _ _ _ _,
    sealUib_ok 2 mnv4Row14 (by norm_num) _ _ _ _ _,
@@ -805,7 +822,7 @@ theorem pc1 (nCls : Nat) (t : ℝ) : mnv4Pre1 2 (sealW nCls) (sealX t) = A1p t :
 
 theorem pc2 (nCls : Nat) (t : ℝ) : mnv4Pre2 2 (sealW nCls) (sealX t) = Aaz t := by
   have hs : (mnv4StridedBodyOfRow 2 mnv4Row1 (sealW nCls).b1).fwd (A1p t) = Aaz t :=
-    sealCTStrided_eq 2 mnv4Row1 (by norm_num) (by norm_num) (by norm_num) (A1p t)
+    sealCTStrided_eq 2 mnv4Row1 (by norm_num) (by norm_num) (by norm_num) (by norm_num) (A1p t)
   have e2 : (CertLayer.residual (mnv4BodyOfRow 2 mnv4Row2 (sealW nCls).b2)).fwd (Aaz t)
       = Aaz t := resid_id _ _ (sealZBody_eq 2 mnv4Row2 (by norm_num) _)
   show (mnv4Res28Layer 2 (sealW nCls)).fwd (mnv4Pre1 2 (sealW nCls) (sealX t)) = _
@@ -813,7 +830,7 @@ theorem pc2 (nCls : Nat) (t : ℝ) : mnv4Pre2 2 (sealW nCls) (sealX t) = Aaz t :
 
 theorem pc3 (nCls : Nat) (t : ℝ) : mnv4Pre3 2 (sealW nCls) (sealX t) = Abz t := by
   have hs : (mnv4StridedBodyOfRow 2 mnv4Row3 (sealW nCls).b3).fwd (Aaz t) = Abz t :=
-    sealCTStrided_eq 2 mnv4Row3 (by norm_num) (by norm_num) (by norm_num) (Aaz t)
+    sealCTStrided_eq 2 mnv4Row3 (by norm_num) (by norm_num) (by norm_num) (by norm_num) (Aaz t)
   have e4 : (CertLayer.residual (mnv4BodyOfRow 2 mnv4Row4 (sealW nCls).b4)).fwd (Abz t)
       = Abz t := resid_id _ _ (sealZBody_eq 2 mnv4Row4 (by norm_num) _)
   have e5 : (CertLayer.residual (mnv4BodyOfRow 2 mnv4Row5 (sealW nCls).b5)).fwd (Abz t)
@@ -837,7 +854,7 @@ theorem pc4 (nCls : Nat) (t : ℝ) : mnv4Pre4 2 (sealW nCls) (sealX t) = Abz t :
 
 theorem pc5 (nCls : Nat) (t : ℝ) : mnv4Pre5 2 (sealW nCls) (sealX t) = Acz t := by
   have hs : (mnv4StridedBodyOfRow 2 mnv4Row11 (sealW nCls).b11).fwd (Abz t) = Acz t :=
-    sealCTStrided_eq 2 mnv4Row11 (by norm_num) (by norm_num) (by norm_num) (Abz t)
+    sealCTStrided_eq 2 mnv4Row11 (by norm_num) (by norm_num) (by norm_num) (by norm_num) (Abz t)
   have e12 : (CertLayer.residual (mnv4BodyOfRow 2 mnv4Row12 (sealW nCls).b12)).fwd (Acz t)
       = Acz t := resid_id _ _ (sealZBody_eq 2 mnv4Row12 (by norm_num) _)
   have e13 : (CertLayer.residual (mnv4BodyOfRow 2 mnv4Row13 (sealW nCls).b13)).fwd (Acz t)

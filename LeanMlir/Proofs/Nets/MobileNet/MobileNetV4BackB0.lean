@@ -380,6 +380,23 @@ noncomputable def mnv4PostDWSlot (N : Nat) {c h w kH kW : Nat} (postDWk : Nat)
     CertLayer (N * (c * h * w)) (N * (c * h * w)) :=
   if postDWk = 0 then CertLayer.id' _ else mnv4DWReluLayer N W b ε hε γ β
 
+theorem mnv4PreDWSlot_of_eq_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k = 0)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PreDWSlot (h := h) (w := w) N k W b ε hε γ β = CertLayer.id' _ := if_pos hk
+
+theorem mnv4PreDWSlot_of_ne_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k ≠ 0)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PreDWSlot (h := h) (w := w) N k W b ε hε γ β = mnv4DWBnLayer N W b ε hε γ β := if_neg hk
+
+theorem mnv4PostDWSlot_of_eq_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k = 0)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PostDWSlot (h := h) (w := w) N k W b ε hε γ β = CertLayer.id' _ := if_pos hk
+
+theorem mnv4PostDWSlot_of_ne_zero (N : Nat) {c h w kH kW : Nat} {k : Nat} (hk : k ≠ 0)
+    (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
+    mnv4PostDWSlot (h := h) (w := w) N k W b ε hε γ β = mnv4DWReluLayer N W b ε hε γ β :=
+  if_neg hk
+
 /-- The four families, named — read off the two kernel slots by **exactly** the rule the slots
     dispatch on and the render emits. -/
 inductive UibFamily where
@@ -465,17 +482,47 @@ swapping two such blocks' weights typechecks. Typing pins **shape**
 are shape-identical. Closing that needs the weights to come from one indexed array — a renderer
 concern, since the render already folds `mnv4Blocks` in order. -/
 
+/-- A depthwise-BN stage's parameters at kernel extent `k`: kernel, conv bias, the BN ε with its
+    positivity, and the BN affine. -/
+structure DWBnParams (c k : Nat) where
+  W : DepthwiseKernel c k k
+  b : Vec c
+  ε : ℝ
+  hε : 0 < ε
+  γ : Vec c
+  β : Vec c
+
+/-- **A depthwise slot's parameters, typed by its kernel extent.** None at `k = 0`, where the slot
+    is `id'` and nothing reads a weight; a `DWBnParams` at `k > 0`. Two records that agree on
+    every weight the net reads are therefore equal. -/
+def DWSlot (c : Nat) : Nat → Type
+  | 0 => PUnit
+  | k + 1 => DWBnParams c (k + 1)
+
+/-- The slot's parameters as a `DWBnParams` at any `k`: the stored ones at `k > 0`; at `k = 0`, a
+    fixed placeholder (zero kernel, `ε = 1`) that the `id'` slot never reads. -/
+def DWSlot.params {c : Nat} : {k : Nat} → DWSlot c k → DWBnParams c k
+  | 0, _ => ⟨fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩
+  | _ + 1, p => p
+
+/-- Store a `DWBnParams` in a slot (dropped at `k = 0`). -/
+def DWSlot.ofParams {c : Nat} : {k : Nat} → DWBnParams c k → DWSlot c k
+  | 0, _ => PUnit.unit
+  | _ + 1, p => p
+
+theorem DWSlot.params_ofParams {c k : Nat} (hk : k ≠ 0) (p : DWBnParams c k) :
+    (DWSlot.ofParams p).params = p := by
+  cases k with
+  | zero => exact absurd rfl hk
+  | succ k => rfl
+
 /-- **One UIB block's parameters, typed by its table row.** Every width is a projection of `s`, so
-    a record whose widths disagree with the row is not constructible. Bias-free convs still carry a
-    `b` because the stage vocabulary takes one; the render binds it to `%zb{c}`. -/
+    a record whose widths disagree with the row is not constructible, and the two depthwise slots
+    carry parameters only when the row's kernel is nonzero (`DWSlot`). Bias-free convs still carry
+    a `b` because the stage vocabulary takes one; the render binds it to `%zb{c}`. -/
 structure UibParams (s : UibSpec) where
-  /-- pre-depthwise, at `s.ic` channels and `s.preDWk` extent (degenerate when `k = 0`). -/
-  Wq : DepthwiseKernel s.ic s.preDWk s.preDWk
-  bq : Vec s.ic
-  eq_ : ℝ
-  hq : 0 < eq_
-  gq : Vec s.ic
-  bq2 : Vec s.ic
+  /-- pre-depthwise, at `s.ic` channels and `s.preDWk` extent. -/
+  pre : DWSlot s.ic s.preDWk
   /-- expand `1x1`, `s.ic -> s.ic * s.expand`. -/
   We : Kernel4 (s.ic * s.expand) s.ic 1 1
   be : Vec (s.ic * s.expand)
@@ -484,12 +531,7 @@ structure UibParams (s : UibSpec) where
   ge : Vec (s.ic * s.expand)
   be2 : Vec (s.ic * s.expand)
   /-- post-depthwise, at the EXPANDED width and `s.postDWk` extent. -/
-  Wd : DepthwiseKernel (s.ic * s.expand) s.postDWk s.postDWk
-  bd : Vec (s.ic * s.expand)
-  ed : ℝ
-  hd : 0 < ed
-  gd : Vec (s.ic * s.expand)
-  bd2 : Vec (s.ic * s.expand)
+  post : DWSlot (s.ic * s.expand) s.postDWk
   /-- project `1x1`, `s.ic * s.expand -> s.oc`. -/
   Wz : Kernel4 s.oc (s.ic * s.expand) 1 1
   bz : Vec s.oc
@@ -497,6 +539,25 @@ structure UibParams (s : UibSpec) where
   hz : 0 < ez
   gz : Vec s.oc
   bz2 : Vec s.oc
+
+namespace UibParams
+variable {s : UibSpec} (p : UibParams s)
+
+/-! The slot parameters by name, read through `DWSlot.params` (placeholders at `k = 0`). -/
+def Wq : DepthwiseKernel s.ic s.preDWk s.preDWk := p.pre.params.W
+def bq : Vec s.ic := p.pre.params.b
+def eq_ : ℝ := p.pre.params.ε
+theorem hq : 0 < p.eq_ := p.pre.params.hε
+def gq : Vec s.ic := p.pre.params.γ
+def bq2 : Vec s.ic := p.pre.params.β
+def Wd : DepthwiseKernel (s.ic * s.expand) s.postDWk s.postDWk := p.post.params.W
+def bd : Vec (s.ic * s.expand) := p.post.params.b
+def ed : ℝ := p.post.params.ε
+theorem hd : 0 < p.ed := p.post.params.hε
+def gd : Vec (s.ic * s.expand) := p.post.params.γ
+def bd2 : Vec (s.ic * s.expand) := p.post.params.β
+
+end UibParams
 
 /-- **A UIB body built entirely from its table row.** Dispatch from `s.preDWk`/`s.postDWk`,
     widths and resolution from `s`, weights from a record that cannot disagree with `s`. Nothing
