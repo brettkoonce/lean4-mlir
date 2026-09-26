@@ -9971,7 +9971,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   learningRate      := 2.5e-4       -- 4e-3 @ batch 4096, linearly scaled to 256
   batchSize         := 256
   epochs            := 80           -- validation tier of an 80->300 ladder
-  useAdam           := true         -- AdamW (decoupled weight decay)
+  optimizer         := .adam        -- AdamW (decoupled weight decay)
   weightDecay       := 0.05
   wdExcludeNormBias := true         -- timm no_weight_decay: skip norm g/b, bias, LayerScale
   cnxInit           := true         -- ConvNeXt _init_weights: trunc_normal(0.02) on every conv
@@ -12006,7 +12006,7 @@ def vitTinyImagenetConfig : TrainConfig where
   learningRate      := 5e-4          -- proper DeiT batch-512 LR
   batchSize         := 512
   epochs            := 300           -- full DeiT-Ti schedule
-  useAdam           := true          -- AdamW (decoupled weight decay)
+  optimizer         := .adam         -- AdamW (decoupled weight decay)
   weightDecay       := 0.05
   wdExcludeNormBias := true          -- no_weight_decay: skip norm/bias/pos-embed/CLS
   cosineDecay       := true

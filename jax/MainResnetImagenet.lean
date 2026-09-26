@@ -35,7 +35,7 @@ def resnet34ImagenetConfig : TrainConfig where
   batchSize      := 256
   epochs         := 90      -- full paper recipe (4-GPU bf16 run, ~18 hr clean)
 
-  useAdam        := false
+  optimizer      := .sgd
   momentum       := 0.9
   weightDecay    := 1e-4
   cosineDecay    := true

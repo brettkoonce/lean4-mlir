@@ -63,7 +63,7 @@ def convNeXtTinyImagenetConfig : TrainConfig where
   learningRate   := 2.5e-4  -- 4e-3@bs4096 official LR linearly scaled to bs256
   batchSize      := 256
   epochs         := 80
-  useAdam        := true
+  optimizer      := .adam
   weightDecay    := 0.05
   wdExcludeNormBias := true  -- timm no_weight_decay: skip norm γ/β, biases, LayerScale γ (1-D params)
   cnxInit        := true    -- ConvNeXt `_init_weights`: trunc_normal(0.02) on every conv AND the

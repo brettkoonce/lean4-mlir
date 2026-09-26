@@ -34,7 +34,7 @@ def bigramConfig : TrainConfig where
   learningRate := 0.05
   batchSize    := 512
   epochs       := 30
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := true
   warmupEpochs := 1

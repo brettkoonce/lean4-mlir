@@ -18,7 +18,7 @@ def vitConfig : TrainConfig where
   learningRate := 0.0003
   batchSize    := 192
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.01
   cosineDecay  := true
   warmupEpochs := 5

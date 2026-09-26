@@ -343,12 +343,9 @@ deriving Repr
     `useFocal`, `labelSmoothing`, and the aug flags (`useMixup` etc.)
     layer on top — `LossKind` only captures the primary loss shape.
 
-    Used by `compileVmfbs` for a single-match mutex check and to drive
-    the codegen flag set. Defaults to `.classCE` for back-compat with
-    every existing trainer; if left at the default, `compileVmfbs`
-    derives the effective kind from the older booleans
-    (`useYolov1`, `useSeg`, `useMixup`/`useCutmix`/`useKnnMixup`) so
-    callers don't have to update. -/
+    Resolved once per run by `TrainConfig.lossKindFor` (an explicit `TrainConfig.lossKind`, else
+    derived from the dataset and the soft-label augs); `compileVmfbs` validates the modifiers
+    against it and drives the codegen flag set from it. -/
 inductive LossKind where
   /-- Default: int32 `[B]` class label, softmax cross-entropy. Compatible
       with `useFocal` (focal modifier) and `labelSmoothing`. -/
@@ -468,9 +465,8 @@ deriving Repr, BEq, Inhabited
 /-- Does this loss run on the segmentation path? Every per-pixel kind shares
     the int32 `[B,H,W]` label ABI and the seg train-step dispatch.
 
-    Single source of truth: `compileVmfbs`, `NetSpec.train`, and `runTraining`
-    each need this answer, and deriving it three times independently is how
-    they drift apart. -/
+    `compileVmfbs`, `NetSpec.train` and `runTraining` all ask it of the one resolved kind
+    (`TrainConfig.lossKindFor`). -/
 def LossKind.isSeg : LossKind → Bool
   | .perPixelCE | .perPixelDice | .perPixelDiceCE
   | .perPixelWeightedCE _ | .perPixelFocalCE _ => true
@@ -485,10 +481,8 @@ def LossKind.segLoss : LossKind → SegLoss
   | .perPixelFocalCE g     => .focalCE g
   | _                      => .ce
 
-/-- Optimizer selector for the training loop. Added additively over the legacy
-    `TrainConfig.useAdam` bool (à la `LossKind` over the older loss booleans):
-    the JAX backend derives the effective optimizer from `useAdam` when this is
-    left at the `.sgd` default, so no existing config needs to change. -/
+/-- Optimizer selector for the training loop (`TrainConfig.optimizer`). Both backends read it;
+    the reference (MLIR) path emits `.sgd` and `.adam` and rejects the other two. -/
 inductive OptimizerKind where
   /-- Plain SGD, or SGD + heavy-ball momentum when `TrainConfig.momentum > 0`. -/
   | sgd
@@ -510,8 +504,7 @@ inductive OptimizerKind where
 deriving Repr, BEq, DecidableEq
 
 /-- One reference-path training recipe: learning rate, batch size and epochs, the optimizer
-    (`useAdam` / `optimizer`), the schedule, the loss (`lossKind` and the older booleans it
-    subsumes), augmentation, weight averaging, precision and the detector knobs. Read by
+    (`optimizer`), the schedule, the loss (`lossKind`), augmentation, weight averaging, precision and the detector knobs. Read by
     `NetSpec.train` / `NetSpec.runTraining` and by the JAX emitter; each field's docstring says
     which side reads it where only one does. Defaults leave a knob off. -/
 structure TrainConfig where
@@ -520,11 +513,7 @@ structure TrainConfig where
   epochs       : Nat
   seed         : Nat := 314159
   momentum     : Float := 0.0
-  useAdam      : Bool := false
-  /-- Optimizer selector (additive over `useAdam`). Left at the `.sgd` default,
-      the JAX backend derives the effective optimizer from `useAdam` (true →
-      Adam) for back-compat; set explicitly to `.rmsprop` (or `.adam`) to
-      override. The IREE/MLIR backend still reads `useAdam`. -/
+  /-- The optimizer. `.rmsprop` and `.lamb` are JAX-only: `compileVmfbs` rejects them. -/
   optimizer    : OptimizerKind := .sgd
   /-- RMSprop running-mean-square decay ρ (only used when `optimizer = .rmsprop`). -/
   rmspropDecay : Float := 0.9
@@ -769,15 +758,10 @@ structure TrainConfig where
       cost, M× eval cost. -/
   useTTA         : Bool  := false
   ttaSamples     : Nat   := 5
-  /-- YOLOv1 5-term masked-MSE loss. Equivalent to `lossKind := .yolov1Masked`; the bool form predates
-      LossKind and is retained for back-compat. -/
-  useYolov1      : Bool  := false
-  /-- Explicit loss-kind selector. If left at the default `.classCE`,
-      `compileVmfbs` derives the effective kind from the older booleans
-      (`useYolov1`, `useSeg`, soft-label augs). Set explicitly to skip
-      the derivation path or to disambiguate borderline cases.
-      See `LossKind`. -/
-  lossKind       : LossKind := LossKind.classCE
+  /-- The loss, when set. Left at `none`, `TrainConfig.lossKindFor` derives it from the dataset
+      (detection → `.yolov1Masked`, a per-pixel label record → `.perPixelCE`) and the soft-label
+      augs (`.softLabelCE`), else `.classCE`. See `LossKind`. -/
+  lossKind       : Option LossKind := none
   /-- Bootstrap from a pretrained backbone checkpoint. When set to
       `some (paramsPath, prefixFloats)`, `runTraining` overwrites the
       first `prefixFloats * 4` bytes of the He-init with bytes read
@@ -994,6 +978,22 @@ inductive DatasetKind where
       pure background. Used by [`demos/MainUnetBratsR34.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/demos/MainUnetBratsR34.lean). -/
   | brats224
 deriving Repr, BEq
+
+/-- Does this dataset carry a per-pixel label record (a segmentation mask) rather than an int32
+    class? Pinned against `datasetIO`'s label sizes by a `#guard` beside it. -/
+def DatasetKind.pixelLabels : DatasetKind → Bool
+  | .brats | .brats224 => true
+  | _ => false
+
+/-- The loss a run trains with: `cfg.lossKind` when set, else derived from the dataset (detection →
+    `.yolov1Masked`, per-pixel labels → `.perPixelCE`) and the soft-label augs (`.softLabelCE`),
+    else `.classCE`. `compileVmfbs`, `NetSpec.runTraining` and `NetSpec.train` all resolve it here. -/
+def TrainConfig.lossKindFor (cfg : TrainConfig) (ds : DatasetKind) : LossKind :=
+  cfg.lossKind.getD <|
+    if ds == .detection then .yolov1Masked
+    else if ds.pixelLabels then .perPixelCE
+    else if cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup then .softLabelCE
+    else .classCE
 
 /-- IREE compile flags from environment. Defaults to CUDA (sm_86).
     Set `IREE_BACKEND=rocm` and `IREE_CHIP=gfx1100` for AMD GPUs.

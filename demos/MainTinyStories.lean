@@ -16,7 +16,7 @@ import LeanMlir
     ever built (O(T·D) not O(T·V) memory). Validated bit-identical to the
     one-hot path on nano (`tinygpt-shakespeare nano-ids` vs `nano-gather`),
     and params are layout-identical so old checkpoints resume unchanged.
-    Same per-token CE (`useSeg`) loss ride; vocab-agnostic.
+    Same per-token CE (`.perPixelCE`) loss ride; vocab-agnostic.
 
     Reuses the Shakespeare data path verbatim: F32.loadTokenStream +
     F32.sampleChunks read the int32 stream `historical/preprocess_tinystories.py`
@@ -75,12 +75,13 @@ def trainConfig : TrainConfig where
   learningRate := 0.003
   batchSize    := 32
   epochs       := 1
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := false
   warmupEpochs := 0
   augment      := false
   labelSmoothing := 0.0
+  lossKind     := some .perPixelCE  -- per-token CE: the [B, V, T, 1] logits ride the per-pixel path
 
 def ln2 : Float := 0.6931471805599453
 
@@ -122,7 +123,7 @@ def runTrain (c : StoriesCfg) (steps batch : Nat) (lrMax : Float) : IO (ByteArra
   let T := c.seqLen
   let cfg : TrainConfig := { trainConfig with batchSize := batch, learningRate := lrMax }
   IO.eprintln s!"compiling train step (B={batch}, T={T}, V={vocabSize}, params={spec.totalParams}) ..."
-  let _ ← spec.compileVmfbs cfg (useSeg := true)
+  let _ ← spec.compileVmfbs cfg
   let pfx := spec.buildPrefix
   let trainSess ← LowererSession.create (← NetSpec.graphArtifact pfx "train_step")
 
@@ -217,7 +218,7 @@ def runSample (c : StoriesCfg) (nToks : Nat) (temperature : Float) (topK : Nat)
   let spec := mkStoriesSpec c
   let T := c.seqLen
   let evalCfg : TrainConfig := { trainConfig with batchSize := 1 }
-  let _ ← spec.compileVmfbs evalCfg (useSeg := true)
+  let _ ← spec.compileVmfbs evalCfg
   let pfx := spec.buildPrefix
   let sess ← LowererSession.create (← NetSpec.graphArtifact pfx "fwd_eval")
   let params ← IO.FS.readBinFile s!"{pfx}_params.bin"

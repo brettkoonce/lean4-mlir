@@ -101,27 +101,23 @@ private def runIreeCached (mlirPath outPath mlir : String) : IO (Bool × Bool) :
     no compile step. Returns the train-step artifact `graphArtifact`
     resolves (`.mlir` on XLA, `.vmfb` on IREE).
 
-    `useSeg = true` switches the train-step codegen to per-pixel
-    softmax CE (segmentation), where labels are an int32 `[B, H, W]`
-    tensor instead of a `[B]` class index. Mutually exclusive with
-    soft-label / focal / label-smoothing flows. -/
+    The loss is `cfg.lossKindFor ds`; a per-pixel kind switches the train-step codegen to the
+    segmentation path, where labels are an int32 `[B, H, W]` tensor instead of a `[B]` class
+    index. -/
 def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
-    (useSeg : Bool := false) : IO String := do
+    (ds : DatasetKind := .imagenette) : IO String := do
   IO.FS.createDirAll ".lake/build"
   let pfx := spec.buildPrefix
 
   IO.eprintln "Generating train step MLIR..."
   -- Mixup / CutMix / KNN-Mixup produce fractional labels; switch to the soft-label codegen.
   let useSoftLabels := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
-  -- ── Resolve effective LossKind (planning/archive/yolo_final.md R1) ──
-  -- If `cfg.lossKind` is at its default `.classCE`, derive from the
-  -- legacy booleans for back-compat with every existing trainer.
-  let lossKind : LossKind :=
-    if cfg.lossKind != .classCE then cfg.lossKind
-    else if cfg.useYolov1 then .yolov1Masked
-    else if useSeg then .perPixelCE
-    else if useSoftLabels then .softLabelCE
-    else .classCE
+  let lossKind := cfg.lossKindFor ds
+  let useSeg := lossKind.isSeg
+  match cfg.optimizer with
+  | .sgd | .adam => pure ()
+  | .rmsprop | .lamb =>
+    throw <| IO.userError "optimizer .rmsprop / .lamb is JAX-only — the IREE/MLIR backend emits SGD and Adam; run it via runJax"
   -- ── Single-match mutex validation (replaces the prior chain of throws) ──
   -- Modifiers (useFocal, labelSmoothing, useMixup/Cutmix/KnnMixup) only
   -- apply to specific kinds. Reject the rest at compile time so misuse
@@ -139,7 +135,7 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     if useSoftLabels then
       throw <| IO.userError "perPixelCE (segmentation) is incompatible with mixup/cutmix/knnMixup — per-pixel labels can't be mixed batch-wise"
     if cfg.useFocal then
-      throw <| IO.userError "perPixelCE + focal not yet supported on this path — use lossKind := .perPixelFocalCE γ, which is the segmentation focal emitter"
+      throw <| IO.userError "perPixelCE + focal not yet supported on this path — use lossKind := some (.perPixelFocalCE γ), which is the segmentation focal emitter"
     -- Label smoothing IS accepted, as of the FD check at ls=0.1
     -- (`seg_loss_probe_check.py`, grad vs central differences 1.07e-07). The
     -- emitter has had it since Phase 0 (`emitPerPixelCEBlock`'s
@@ -194,19 +190,19 @@ def compileVmfbs (spec : NetSpec) (cfg : TrainConfig)
     -- useFocal IS allowed here: for YOLOv1 it selects the sigmoid focal-BCE
     -- objectness path (T3/T4/T5) instead of raw-MSE — the fg/bg imbalance fix
     -- (planning/archive/yolo_final.md §3). The class term (T6) stays softmax-CE either way.
-    if useSeg then
-      throw <| IO.userError "yolov1Masked is incompatible with segmentation — different target shape ([B,30,7,7] float vs [B,H,W] int32)"
     if cfg.labelSmoothing != 0.0 then
       throw <| IO.userError "yolov1Masked is incompatible with labelSmoothing — smoothing applies to one-hot CE, not box-regression MSE"
   | .bce =>
     -- BCE-with-logits (RSB-A2) is implemented on the JAX backend only; the
     -- IREE/MLIR train-step codegen (this path) has no sigmoid-BCE emitter.
     throw <| IO.userError "lossKind = .bce is JAX-only (RSB-A2) — the IREE/MLIR backend does not implement BCE-with-logits; run it via runJax"
-  let useYolov1Codegen := lossKind == .yolov1Masked
+  -- The FPN detector routes on `fpnScales` and emits its own loss; the single-grid YOLOv1 flag
+  -- is for the non-FPN detector only (as in `runTraining`).
+  let useYolov1Codegen := lossKind == .yolov1Masked && cfg.fpnScales.isEmpty
   let trainMlir := MlirCodegen.generateTrainStep spec cfg.batchSize ("jit_" ++ spec.sanitizedName ++ "_train_step")
     (labelSmoothing := cfg.labelSmoothing)
     (weightDecay := cfg.weightDecay)
-    (useAdam := cfg.useAdam)
+    (useAdam := cfg.optimizer == .adam)
     (useSoftLabels := useSoftLabels)
     (useFocal := cfg.useFocal)
     (focalGamma := cfg.focalGamma)
@@ -461,7 +457,12 @@ private def datasetIO : DatasetKind → DatasetIO
     -- through tfds. Until phase 3 streams, this kind is JAX-only.
     panic! "DatasetKind.imagenet not supported by phase 3; use phase 2 (jax/) for now"
 
-/-- Adam or SGD+momentum (`TrainConfig.useAdam`), cosine LR, running-BN-stats training loop, generic over
+-- `DatasetKind.pixelLabels` (which `TrainConfig.lossKindFor` reads) names exactly the datasets whose
+-- label record is not a 4-byte class, detection aside (it resolves first; `.imagenet` panics here).
+#guard [DatasetKind.mnist, .cifar10, .imagenette, .brats, .brats224].all fun ds =>
+  ds.pixelLabels == ((datasetIO ds).labelBytesPerRecord != 4)
+
+/-- Adam or SGD+momentum (`TrainConfig.optimizer`), cosine LR, running-BN-stats training loop, generic over
     `DatasetKind`. The dataset specifies how to load the train/val
     data and what augmentation to apply per batch; everything else
     (init, optimizer, BN EMA, val eval, save) is identical across
@@ -523,20 +524,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
         loadTrain := fun d => F32.loadDetBinDims (d ++ "/train.bin") imgSz gHu gWu
         loadVal   := fun d => F32.loadDetBinDims (d ++ "/val.bin") imgSz gHu gWu }
     else dio0
-  -- Derive effective LossKind (planning/archive/yolo_final.md R1). Existing
-  -- callers leave cfg.lossKind at the default .classCE and we infer from
-  -- the older booleans + the dataset kind:
-  --   * detection + useYolov1 → yolov1Masked (target+mask f32 batch dispatch)
-  --   * label record != 4 bytes → perPixelCE  (segmentation)
-  --   * mixup/cutmix/knnMixup   → softLabelCE
-  --   * else                    → classCE (with optional useFocal modifier)
-  let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
-  let lossKind : LossKind :=
-    if cfg.lossKind != .classCE then cfg.lossKind
-    else if cfg.useYolov1 || ds matches .detection then .yolov1Masked
-    else if dio.labelBytesPerRecord != 4 then .perPixelCE
-    else if useSoftLabelsTop then .softLabelCE
-    else .classCE
+  let lossKind := cfg.lossKindFor ds
   let useSeg := lossKind.isSeg
   let useFpnRun := !cfg.fpnScales.isEmpty
   let useYolov1Run := lossKind == .yolov1Masked && !useFpnRun
@@ -657,7 +645,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
   let bnShapes := spec.bnShapesBA
   let nBnStats := spec.nBnStats
 
-  let optName := if cfg.useAdam then "Adam" else "SGD+momentum"
+  let optName := if cfg.optimizer == .adam then "Adam" else "SGD+momentum"
   IO.eprintln s!"training: {bpE} batches/epoch, batch={batchN}, {optName}, lr={baseLR}, cosine warmup={warmup}, label_smooth={cfg.labelSmoothing}, wd={cfg.weightDecay}"
   IO.eprintln s!"  BN layers: {spec.bnLayers.size}, BN stat floats: {nBnStats}"
 
@@ -684,7 +672,7 @@ def runTraining (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
             s!"\"lr\":{baseLR}" ++
             s!",\"batch_size\":{batchN}" ++
             s!",\"epochs\":{epochs}" ++
-            s!",\"use_adam\":{jsBool cfg.useAdam}" ++
+            s!",\"use_adam\":{jsBool (cfg.optimizer == .adam)}" ++
             s!",\"weight_decay\":{cfg.weightDecay}" ++
             s!",\"cosine\":{jsBool cfg.cosineDecay}" ++
             s!",\"warmup_epochs\":{warmup}" ++
@@ -1286,25 +1274,13 @@ def evalOnly (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind)
 def train (spec : NetSpec) (cfg : TrainConfig) (dataDir : String)
     (ds : DatasetKind := .imagenette) : IO Unit := do
   IO.eprintln s!"{spec.name}: {spec.totalParams} params"
-  -- Match runTraining's lossKind derivation so the codegen flag aligns
-  -- with the dispatch path. The per-pixel kinds (CE / Dice / DiceCE) all set
-  -- `useSeg` — see `LossKind.isSeg`. YOLOv1 has a non-4-byte label record too
-  -- but routes through the yolov1 codegen path, not the seg one.
-  let useSoftLabelsTop := cfg.useMixup || cfg.useCutmix || cfg.useKnnMixup
-  let lossKind : LossKind :=
-    if cfg.lossKind != .classCE then cfg.lossKind
-    else if cfg.useYolov1 || ds matches .detection then .yolov1Masked
-    else if (datasetIO ds).labelBytesPerRecord != 4 then .perPixelCE
-    else if useSoftLabelsTop then .softLabelCE
-    else .classCE
-  let useSeg := lossKind.isSeg
   match (← IO.getEnv "LEAN_MLIR_EVAL_ONLY") with
   | some _ =>
     -- compileVmfbs is cheap when cached and produces the eval vmfb we need.
-    let _ ← spec.compileVmfbs cfg useSeg
+    let _ ← spec.compileVmfbs cfg ds
     spec.evalOnly cfg ds dataDir
   | none => do
-    let trainVmfb ← spec.compileVmfbs cfg useSeg
+    let trainVmfb ← spec.compileVmfbs cfg ds
     let sess ← LowererSession.create trainVmfb
     IO.eprintln "  session loaded"
     spec.runTraining cfg ds dataDir sess

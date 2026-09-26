@@ -192,7 +192,7 @@ def r34UnetBratsConfig : TrainConfig where
   batchSize    := 16             -- matches the from-scratch unetBrats arms, so
                                  -- the LR and schedule carry over unreinterpreted
   epochs       := 10
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true           -- the from-scratch BraTS arms oscillated hard
                                  -- at a flat LR (see MainUnetBratsTrain)
@@ -200,7 +200,7 @@ def r34UnetBratsConfig : TrainConfig where
                                  -- full-LR step before the fresh stem and
                                  -- decoder have any signal at all
   augment      := false
-  lossKind     := .perPixelCE    -- plain CE. The weighted-CE/focal chapter was
+  lossKind     := some .perPixelCE    -- plain CE. The weighted-CE/focal chapter was
                                  -- closed by the shuffle-bug fix — post-fix,
                                  -- plain CE segments. Do not reopen it here.
   evalEveryNEpochs := 1          -- epochs-to-target IS the transfer claim
@@ -269,7 +269,7 @@ def main (args : List String) : IO Unit := do
   let cfg := { r34UnetBratsConfig with
                  epochs, learningRate := baseLr, bootstrapBackboneRange := bootstrap }
   let cfg := if !fdProbe then cfg else
-    { cfg with useAdam := false, cosineDecay := false, warmupEpochs := 0
+    { cfg with optimizer := .sgd, cosineDecay := false, warmupEpochs := 0
              , weightDecay := 0.0, gradClipNorm := 0.0, augment := false
              , evalEveryNEpochs := 0, checkpointEveryNEpochs := 0 }
   (spec.withBuildTag fullTag).train cfg (args.head?.getD "data/brats224") .brats224

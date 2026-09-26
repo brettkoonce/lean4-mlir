@@ -11,7 +11,7 @@ Two model rungs (planning/archive/tinygpt_demo_v2.md Part I):
                       → transformerEncoder (D=128, h=4, mlp=512, blocks=6, causal)
                       → lmHead
 
-Training rides the existing `useSeg` path (per-pixel CE) by treating
+Training rides the per-pixel CE path (`lossKind := some .perPixelCE`) by treating
 the LM head's [B, V, T, 1] output as NCHW segmentation logits with
 T positions × 1 width. Labels are `[B, T, 1]` int32 from the
 random-chunk sampler.
@@ -134,12 +134,13 @@ def trainConfig : TrainConfig where
   learningRate := 0.003
   batchSize    := 32
   epochs       := 1
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := false
   warmupEpochs := 0
   augment      := false
   labelSmoothing := 0.0
+  lossKind     := some .perPixelCE  -- per-token CE: the [B, V, T, 1] logits ride the per-pixel path
 
 def ln2 : Float := 0.6931471805599453
 
@@ -257,7 +258,7 @@ def runXeval (g : GptCfg) (evalT : Nat) : IO Float := do
   let spec := mkSpec { g with seqLen := evalT }
   let cfg : TrainConfig := { trainConfig with batchSize := 32, learningRate := 0.0 }
   IO.eprintln s!"compiling eval @ T={evalT} (model={g.key}, params={spec.totalParams}) ..."
-  let _ ← spec.compileVmfbs cfg (useSeg := true)
+  let _ ← spec.compileVmfbs cfg
   let sess ← LowererSession.create (← NetSpec.graphArtifact spec.buildPrefix "train_step")
   let ckptPath := s!"{(mkSpec g).buildPrefix}_params.bin"
   let params ← IO.FS.readBinFile ckptPath
@@ -281,7 +282,7 @@ def runTinyGptTrain (g : GptCfg) (steps : Nat) (batch : Nat) (lrMax : Float)
   let T := g.seqLen
   let cfg : TrainConfig := { trainConfig with batchSize := batch, learningRate := lrMax }
   IO.eprintln s!"compiling train step (model={g.key}, B={batch}, T={T}, V={vocabSize}, params={spec.totalParams}) ..."
-  let _ ← spec.compileVmfbs cfg (useSeg := true)
+  let _ ← spec.compileVmfbs cfg
   let pfx := spec.buildPrefix
   let trainVmfb ← NetSpec.graphArtifact pfx "train_step"
   let trainSess ← LowererSession.create trainVmfb
@@ -363,7 +364,7 @@ def runTinyGptSample (g : GptCfg) (paramsPath : String) (nChars : Nat)
   let T := g.seqLen
   -- Compile eval forward at batch=1.
   let evalCfg : TrainConfig := { trainConfig with batchSize := 1 }
-  let _ ← spec.compileVmfbs evalCfg (useSeg := true)
+  let _ ← spec.compileVmfbs evalCfg
   let pfx := spec.buildPrefix
   let evalVmfb ← NetSpec.graphArtifact pfx "fwd_eval"
   let sess ← LowererSession.create evalVmfb

@@ -30,7 +30,7 @@ def squeezenetConfig : TrainConfig where
   learningRate := 0.001
   batchSize    := 192
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.001
   cosineDecay  := true
   warmupEpochs := 5

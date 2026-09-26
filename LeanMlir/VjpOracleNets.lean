@@ -19,7 +19,7 @@ def cfg : TrainConfig where
   learningRate := 0.001
   batchSize    := 4
   epochs       := 1
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0

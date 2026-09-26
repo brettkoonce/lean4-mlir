@@ -169,7 +169,7 @@ def fullRecipe (lr : Float := 0.001) (epochs : Nat := 15) (batch : Nat := 128) :
   learningRate := lr
   batchSize    := batch
   epochs       := epochs
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 1
@@ -181,7 +181,7 @@ def s4tfBaseline (epochs : Nat := 12) : TrainConfig where
   learningRate := 0.1
   batchSize    := 128
   epochs       := epochs
-  useAdam      := false
+  optimizer    := .sgd
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0
@@ -193,7 +193,7 @@ def sgdLowLr (epochs : Nat := 15) : TrainConfig where
   learningRate := 0.01
   batchSize    := 128
   epochs       := epochs
-  useAdam      := false
+  optimizer    := .sgd
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0
@@ -205,7 +205,7 @@ def sgdLowLr2 (epochs : Nat := 15) : TrainConfig where
   learningRate := 0.002
   batchSize    := 128
   epochs       := epochs
-  useAdam      := false
+  optimizer    := .sgd
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0
@@ -217,7 +217,7 @@ def adamOnly (epochs : Nat := 15) : TrainConfig where
   learningRate := 0.001
   batchSize    := 128
   epochs       := epochs
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0
@@ -229,7 +229,7 @@ def adamCosine (epochs : Nat := 15) : TrainConfig where
   learningRate := 0.001
   batchSize    := 128
   epochs       := epochs
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := true
   warmupEpochs := 1
@@ -241,7 +241,7 @@ def adamCosineAug (epochs : Nat := 30) : TrainConfig where
   learningRate := 0.001
   batchSize    := 128
   epochs       := epochs
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := true
   warmupEpochs := 2
@@ -261,7 +261,7 @@ def cifarBnFull : TrainConfig := fullRecipe 0.001 30 128
 -- the comparison fair — at Adam's 0.001 SGD undershoots structurally.
 def cifarBnNoAdam : TrainConfig :=
   { fullRecipe 0.001 30 128 with
-      learningRate := 0.01, useAdam := false, momentum := 0.9 }
+      learningRate := 0.01, optimizer := .sgd, momentum := 0.9 }
 
 def cifarBnNoCosine : TrainConfig :=
   { fullRecipe 0.001 30 128 with cosineDecay := false }
@@ -283,7 +283,7 @@ def cifarBnBare : TrainConfig where
   learningRate := 0.01
   batchSize    := 128
   epochs       := 30
-  useAdam      := false
+  optimizer    := .sgd
   momentum     := 0.9
   weightDecay  := 0.0
   cosineDecay  := false
@@ -308,7 +308,7 @@ def r34Full : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 3
@@ -323,7 +323,7 @@ def r34NoAdam : TrainConfig where
   learningRate := 0.01   -- see comment above
   batchSize    := 32
   epochs       := 80
-  useAdam      := false
+  optimizer    := .sgd
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 3
@@ -334,7 +334,7 @@ def r34NoCosine : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := false
   warmupEpochs := 3
@@ -345,7 +345,7 @@ def r34NoWarmup : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 0
@@ -356,7 +356,7 @@ def r34NoWd : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := true
   warmupEpochs := 3
@@ -367,7 +367,7 @@ def r34NoSmooth : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 3
@@ -378,7 +378,7 @@ def r34NoAug : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 3
@@ -392,7 +392,7 @@ def r34Bare : TrainConfig where
   learningRate := 0.01
   batchSize    := 32
   epochs       := 80
-  useAdam      := false
+  optimizer    := .sgd
   momentum     := 0.9
   weightDecay  := 0.0
   cosineDecay  := false
@@ -452,7 +452,7 @@ def enetB0Config : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 3
@@ -484,7 +484,7 @@ def vitTinyBareConfig : TrainConfig where
   learningRate := 0.0003
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 5
@@ -624,7 +624,7 @@ def convNextTinyConfig : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 80
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 3
@@ -745,7 +745,7 @@ def convNextMiniConfig : TrainConfig where
   learningRate := 0.001
   batchSize    := 32
   epochs       := 30
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := true
   warmupEpochs := 2
@@ -892,7 +892,7 @@ def main (args : List String) : IO Unit := do
     -- Override the spec name to include the ablation suffix for unique vmfb paths
     let spec := { run.spec with name := run.spec.name ++ "-" ++ name }
     IO.eprintln s!"Ablation: {name}"
-    IO.eprintln s!"  spec: {run.spec.name}, optimizer: {if run.config.useAdam then "Adam" else "SGD"}"
+    IO.eprintln s!"  spec: {run.spec.name}, optimizer: {if run.config.optimizer == .adam then "Adam" else "SGD"}"
     IO.eprintln s!"  lr: {run.config.learningRate}, cosine: {run.config.cosineDecay}, wd: {run.config.weightDecay}"
     IO.eprintln s!"  aug: {run.config.augment}, label_smooth: {run.config.labelSmoothing}"
     spec.train run.config dataDir run.dataset

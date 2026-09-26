@@ -157,8 +157,8 @@ opaque trainStepAdamF32DdpmR
 /-- YOLOv1 variant. `yYolo` is a `[batch, perCell, gridH, gridW]` f32
     target tensor (NCHW); `mYolo` is a `[batch, gridH, gridW]` f32
     per-cell objectness mask (1.0 where a GT box's center falls in
-    the cell, 0.0 otherwise). Routes to the codegen produced with
-    `useYolov1 := true`. Loss is the 5-term masked MSE (`LossKind.yolov1Masked`).
+    the cell, 0.0 otherwise). Routes to the codegen produced for `LossKind.yolov1Masked`, the
+    5-term masked MSE.
 
     `perCell = numBoxes * 5 + numClasses`. For VOC this is
     `2*5 + 20 = 30`; `gridH = gridW = 7`. -/

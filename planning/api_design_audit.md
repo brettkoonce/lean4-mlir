@@ -36,7 +36,8 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
 | commit | change |
 |---|---|
 | 433b433a | §2 root batch: 2.1–2.4, 2.6, 2.7 as tabled, 2.5 in part. Deviations below |
-| (staged) | §3: 3.2 as a guard (3.1 not needed), 3.3 minimal form. Deviations below |
+| 502c0232 | §3: 3.2 as a guard (3.1 not needed), 3.3 minimal form. Deviations below |
+| (staged) | §4.1 + §4.2 as tabled; §4.3 not started. Notes below |
 
 §2 deviations:
 
@@ -85,6 +86,25 @@ Counts at 373059db: 118 hand-written structures, no `@[ext]` anywhere (grep hits
   from `den_dropPathB_ones` / `den_dropoutB_ones` (never fired). Making `reluF_faithful` /
   `relu6F_faithful` the simp normal form was not done: the proc fires on `.reluF` too, so the
   named form would compete with it. `max_zero_eq` → `max_def_lt'`; `patchEmbedBackFlat` deleted.
+
+§4 notes:
+
+* One resolution, `TrainConfig.lossKindFor cfg ds`, beside `DatasetKind` in Types.lean; it reads
+  `DatasetKind.pixelLabels`, which a `#guard` beside `datasetIO` pins to the label-record sizes.
+  `lossKind : Option LossKind := none`; `useYolov1` is gone. `compileVmfbs` takes the dataset
+  (`ds := .imagenette`) instead of `useSeg`; the LM demos (TinyGPT, TinyStories) set
+  `lossKind := some .perPixelCE` in their configs instead of passing `useSeg := true`.
+* The FPN detectors now resolve to `.yolov1Masked` at `compileVmfbs` too (they got `.classCE` there
+  before), so the YOLOv1 modifier checks apply to them. The codegen flag is
+  `.yolov1Masked && fpnScales.isEmpty`, the rule `runTraining` already used, so their emitted train
+  step is byte-identical (checked: passing the flag through changes only the header comment, to a
+  wrong single-grid description). `test-yolov1-mutex` gained C7 for the derived case.
+* `useAdam` is gone: 57 `:= true` writers are `optimizer := .adam`, the `:= false` overrides are
+  `optimizer := .sgd` (they sit in `{ base with … }` updates, so deleting them would change the
+  optimizer). No config set both fields. `effOpt` is gone; `compileVmfbs` rejects `.rmsprop` /
+  `.lamb`. `generateTrainStep`'s own `useAdam` parameter is codegen API and stays.
+* Checks: `jax/generated/` drift guard (74 artifacts re-emitted, identical), `verified_mlir/` full
+  regen (empty diff), `test-yolov1-mutex` C1–C7, every touched exe built, the full gate.
 
 ## 2. Root batch: Foundation/Tensor.lean + Foundation/MLP.lean
 

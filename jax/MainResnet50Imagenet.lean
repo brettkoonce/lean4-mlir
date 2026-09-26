@@ -57,7 +57,7 @@ def resnet50ImagenetConfig : TrainConfig where
   warmupEpochs   := 5
   augment        := true     -- random-resized-crop + hflip (the base aug under RA)
   labelSmoothing := 0.0      -- BCE over mixup/cutmix soft labels subsumes it (RSB)
-  lossKind       := .bce     -- BCE-with-logits, multi-hot (timm --bce-loss)
+  lossKind       := some .bce     -- BCE-with-logits, multi-hot (timm --bce-loss)
   useMixup       := true     -- RSB aug pack: Mixup α0.1...
   mixupAlpha     := 0.1
   useCutmix      := true     -- ...+ CutMix α1.0 (alternates per step)...
@@ -173,7 +173,7 @@ def resnet50ImagenetConfig2018 : TrainConfig :=
       -- recipe is SGD+momentum. torchvision's 2018 reference clips nothing, so inheriting the clip
       -- would make the A3-vs-2018 comparison a two-variable one.
       gradClipNorm   := 0.0
-      lossKind       := .classCE -- softmax cross-entropy, not BCE
+      lossKind       := some .classCE -- softmax cross-entropy, not BCE
       labelSmoothing := 0.1
       useMixup       := false
       useCutmix      := false

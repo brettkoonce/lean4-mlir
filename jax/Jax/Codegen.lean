@@ -2503,14 +2503,6 @@ private def emitForward (spec : NetSpec) (cfg : TrainConfig) : String := Id.run 
   code := code ++ (if cfg.runningBN then "    return x, bn_out\n\n" else "    return x\n\n")
   code
 
-/-- Effective optimizer for the JAX backend: `cfg.optimizer` when set away from
-    the `.sgd` default, else derived from the legacy `useAdam` bool. Mirrors how
-    the effective `LossKind` is derived from the older loss booleans. -/
-private def effOpt (cfg : TrainConfig) : OptimizerKind :=
-  match cfg.optimizer with
-  | .sgd => if cfg.useAdam then .adam else .sgd
-  | k    => k
-
 private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let nClasses := spec.numClasses
   let lr := toString cfg.learningRate
@@ -2518,7 +2510,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
   let hasCosine := cfg.cosineDecay
   (if cfg.runningBN then "def loss_fn(params, bn, x, y, drop_key=None):\n" else "def loss_fn(params, x, y, drop_key=None):\n") ++
   (if cfg.runningBN then "    logits, _new_bn = forward(params, x, bn, True, drop_key)\n" else "    logits = forward(params, x, drop_key)\n") ++
-  (let isBCE := match cfg.lossKind with | .bce => true | _ => false
+  (let isBCE := cfg.lossKind == some .bce
    if isBCE then
     -- BCE-with-logits over multi-hot [B,NC] targets (RSB-A2). Hard labels ->
     -- (smoothed) one-hot; soft labels (mixup/cutmix) consumed directly. softplus
@@ -2577,7 +2569,7 @@ private def emitLossAndTraining (spec : NetSpec) (cfg : TrainConfig) : String :=
     "    x = x[:, :, top:top+" ++ toString trH ++ ", left:left+" ++ toString trW ++ "]\n" ++
     "    return x.reshape(x.shape[0], -1)\n\n"
   else "") ++
-  let opt := effOpt cfg
+  let opt := cfg.optimizer
   let optName := match opt with
     | .adam => "Adam"
     | .rmsprop => "RMSprop"
@@ -3005,7 +2997,7 @@ private def emitMainImagenet (spec : NetSpec) (cfg : TrainConfig) (dataDir : Str
   let hasMomentum := cfg.momentum > 0.0
   let warmup := toString cfg.warmupEpochs
   let hasCosine := cfg.cosineDecay
-  let opt := effOpt cfg
+  let opt := cfg.optimizer
   -- Suspend/resume state tuple: the python variables that fully describe the
   -- training trajectory (weights + optimizer moments + EMA shadow). Saved/
   -- restored together, so a segmented run continues the same optimizer trajectory. The DATA
@@ -3379,7 +3371,7 @@ private def emitMain (spec : NetSpec) (cfg : TrainConfig) (ds : DatasetKind) (da
   "        params = init_params(random.PRNGKey(" ++ seed ++ "))\n" ++
   "    params = jax.device_put(params, replicated_sharding)\n" ++
   "    rng = np.random.RandomState(42)\n" ++
-  let opt := effOpt cfg
+  let opt := cfg.optimizer
   (match opt with
    | .adam | .lamb =>
     "    opt_m = jax.tree.map(jnp.zeros_like, params)\n" ++

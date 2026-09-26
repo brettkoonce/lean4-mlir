@@ -88,7 +88,7 @@ def diff2dConfig : TrainConfig where
   learningRate := 0.001
   batchSize    := 256
   epochs       := 1
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0
@@ -304,7 +304,7 @@ of the velocity field)"
   IO.eprintln "Generating train step MLIR..."
   let trainMlir := MlirCodegen.generateTrainStep spec B
     ("jit_" ++ spec.sanitizedName ++ "_train_step")
-    (weightDecay := cfg.weightDecay) (useAdam := cfg.useAdam)
+    (weightDecay := cfg.weightDecay) (useAdam := cfg.optimizer == .adam)
     (useDdpm := true) (ddpmOutShape := outShape)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"

@@ -39,7 +39,7 @@ def convNeXtTinyConfig : TrainConfig where
   learningRate   := 0.001
   batchSize      := 32
   epochs         := 80
-  useAdam        := true
+  optimizer      := .adam
   weightDecay    := 0.0001
   cosineDecay    := true
   warmupEpochs   := 3

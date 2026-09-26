@@ -45,7 +45,7 @@ def convNeXtSImagenetConfig : TrainConfig where
   learningRate   := 2.5e-4
   batchSize      := 256
   epochs         := 300
-  useAdam        := true
+  optimizer      := .adam
   weightDecay    := 0.05
   wdExcludeNormBias := true
   cosineDecay    := true

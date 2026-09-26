@@ -1,12 +1,11 @@
 import LeanMlir
 
-/-! T7 from planning/archive/yolo_demo_v2.md Phase 1 — useYolov1 mutex checks.
+/-! T7 from planning/archive/yolo_demo_v2.md Phase 1 — `.yolov1Masked` mutex checks.
 
     Verifies that compileVmfbs throws `IO.userError` for every forbidden
-    combination of `useYolov1` with other loss-path flags. Also verifies
-    the catch-all throw that documents Phase-1-smoke-test-only scope.
-
-    Decision D8: inline mutex checks (no helper refactor yet). -/
+    combination of the YOLOv1 loss with other loss-path flags, that the loss compiles on its
+    own, and that a detection run with no explicit `lossKind` resolves to it
+    (`TrainConfig.lossKindFor`), so the same checks apply. -/
 
 def tinyYoloSpec : NetSpec where
   name := "tiny-yolo-mutex-test"
@@ -21,46 +20,46 @@ def baseConfig : TrainConfig := {
   learningRate := 0.001
   batchSize    := 1
   epochs       := 1
-  useAdam      := true
-  useYolov1    := true
+  optimizer    := .adam
+  lossKind     := some .yolov1Masked
 }
 
 /-- Run `act`, expect it to throw `IO.userError` mentioning yolov1.
     Returns `none` on success (it threw the right error), `some msg` on
-    failure. Accepts either `useYolov1` (back-compat) or `yolov1Masked`
-    (post-R1) as evidence the throw is from the YOLOv1 mutex path. -/
+    failure. The message must name `yolov1Masked`, as evidence the throw is from the YOLOv1
+    mutex path. -/
 private def expectThrow (label : String) (act : IO Unit) : IO (Option String) := do
   try
     act
     return some s!"FAIL [{label}]: expected throw, none happened"
   catch e =>
     let msg := toString e
-    if !(msg.contains "useYolov1" || msg.contains "yolov1Masked") then
-      return some s!"FAIL [{label}]: threw, but message didn't mention 'useYolov1'/'yolov1Masked': {msg}"
+    if !msg.contains "yolov1Masked" then
+      return some s!"FAIL [{label}]: threw, but message didn't mention 'yolov1Masked': {msg}"
     return none
 
 def main : IO Unit := do
   let mut failures : Array String := #[]
 
-  -- C1: useYolov1 + useMixup → throw
+  -- C1: yolov1Masked + useMixup → throw
   let c1 := { baseConfig with useMixup := true }
-  match (← expectThrow "useYolov1 + useMixup" (do let _ ← tinyYoloSpec.compileVmfbs c1; pure ())) with
+  match (← expectThrow "yolov1Masked + useMixup" (do let _ ← tinyYoloSpec.compileVmfbs c1; pure ())) with
   | some f => failures := failures.push f
-  | none => IO.println "OK [C1]: useYolov1 + useMixup → throws"
+  | none => IO.println "OK [C1]: yolov1Masked + useMixup → throws"
 
-  -- C2: useYolov1 + useCutmix → throw
+  -- C2: yolov1Masked + useCutmix → throw
   let c2 := { baseConfig with useCutmix := true }
-  match (← expectThrow "useYolov1 + useCutmix" (do let _ ← tinyYoloSpec.compileVmfbs c2; pure ())) with
+  match (← expectThrow "yolov1Masked + useCutmix" (do let _ ← tinyYoloSpec.compileVmfbs c2; pure ())) with
   | some f => failures := failures.push f
-  | none => IO.println "OK [C2]: useYolov1 + useCutmix → throws"
+  | none => IO.println "OK [C2]: yolov1Masked + useCutmix → throws"
 
-  -- C3: useYolov1 + useKnnMixup → throw
+  -- C3: yolov1Masked + useKnnMixup → throw
   let c3 := { baseConfig with useKnnMixup := true }
-  match (← expectThrow "useYolov1 + useKnnMixup" (do let _ ← tinyYoloSpec.compileVmfbs c3; pure ())) with
+  match (← expectThrow "yolov1Masked + useKnnMixup" (do let _ ← tinyYoloSpec.compileVmfbs c3; pure ())) with
   | some f => failures := failures.push f
-  | none => IO.println "OK [C3]: useYolov1 + useKnnMixup → throws"
+  | none => IO.println "OK [C3]: yolov1Masked + useKnnMixup → throws"
 
-  -- C4: useYolov1 + useFocal → COMPILES. Focal now selects the sigmoid
+  -- C4: yolov1Masked + useFocal → COMPILES. Focal now selects the sigmoid
   -- focal-BCE objectness path (planning/archive/yolo_final.md), so this combo is
   -- valid and the train step should compile cleanly (was: forbidden → throw).
   let c4 := { baseConfig with useFocal := true, focalGamma := 2.0 }
@@ -68,20 +67,20 @@ def main : IO Unit := do
     let _ ← tinyYoloSpec.compileVmfbs c4
     pure true
   catch e =>
-    IO.eprintln s!"FAIL [C4]: useYolov1 + useFocal should compile (focal objectness), but threw: {e}"
+    IO.eprintln s!"FAIL [C4]: yolov1Masked + useFocal should compile (focal objectness), but threw: {e}"
     pure false
   if c4_ok then
-    IO.println "OK [C4]: useYolov1 + useFocal → focal-objectness train step compiles"
+    IO.println "OK [C4]: yolov1Masked + useFocal → focal-objectness train step compiles"
   else
     failures := failures.push "C4 failed"
 
-  -- C5: useYolov1 + labelSmoothing != 0 → throw
+  -- C5: yolov1Masked + labelSmoothing != 0 → throw
   let c5 := { baseConfig with labelSmoothing := 0.1 }
-  match (← expectThrow "useYolov1 + labelSmoothing" (do let _ ← tinyYoloSpec.compileVmfbs c5; pure ())) with
+  match (← expectThrow "yolov1Masked + labelSmoothing" (do let _ ← tinyYoloSpec.compileVmfbs c5; pure ())) with
   | some f => failures := failures.push f
-  | none => IO.println "OK [C5]: useYolov1 + labelSmoothing → throws"
+  | none => IO.println "OK [C5]: yolov1Masked + labelSmoothing → throws"
 
-  -- C6: useYolov1 alone (no other forbidden combo) — after R1
+  -- C6: yolov1Masked alone (no other forbidden combo) — after R1
   -- (the YOLOv1 integration pass), compileVmfbs DOES integrate YOLOv1 and
   -- should return a vmfb path without throwing. Pre-R1 this was a
   -- catch-all throw (the "smoke-test-only" sentinel); post-R1 the
@@ -90,12 +89,19 @@ def main : IO Unit := do
     let _ ← tinyYoloSpec.compileVmfbs baseConfig
     pure true
   catch e =>
-    IO.eprintln s!"FAIL [C6]: useYolov1 alone should compile after R1, but threw: {e}"
+    IO.eprintln s!"FAIL [C6]: yolov1Masked alone should compile, but threw: {e}"
     pure false
   if c6_ok then
-    IO.println "OK [C6]: useYolov1 alone (post-R1) → compileVmfbs succeeds"
+    IO.println "OK [C6]: yolov1Masked alone → compileVmfbs succeeds"
   else
     failures := failures.push "C6 failed"
+
+  -- C7: detection with no explicit lossKind resolves to yolov1Masked, so its mutex applies.
+  let c7 : TrainConfig := { baseConfig with lossKind := none, useMixup := true }
+  match (← expectThrow "detection (derived) + useMixup"
+      (do let _ ← tinyYoloSpec.compileVmfbs c7 .detection; pure ())) with
+  | some f => failures := failures.push f
+  | none => IO.println "OK [C7]: detection derives yolov1Masked + useMixup → throws"
 
   if failures.isEmpty then
     IO.println "T7 PASS: 4 mutex throws + 2 integration successes (incl. focal objectness)"

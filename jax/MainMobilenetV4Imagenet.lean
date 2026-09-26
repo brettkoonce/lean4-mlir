@@ -74,7 +74,7 @@ def mobilenetV4ConvMImagenetConfig : TrainConfig where
   batchSize            := 512
   gradAccumSteps       := 8        -- effective batch 4096 (paper) at one micro-batch's activation cost
   epochs               := 100
-  useAdam              := true     -- AdamW (decoupled wd)
+  optimizer            := .adam     -- AdamW (decoupled wd)
   weightDecay          := 0.05     -- reduced from paper 0.1 for the short schedule
   wdExcludeNormBias    := true     -- timm excludes norm γ/β + biases from decay
   cosineDecay          := true

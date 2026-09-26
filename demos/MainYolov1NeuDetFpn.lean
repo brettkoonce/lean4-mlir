@@ -123,7 +123,7 @@ def neuFpnDetConfig : TrainConfig where
   learningRate := 4.0e-4
   batchSize    := 8
   epochs       := 30
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0005
   cosineDecay  := true
   warmupEpochs := 3

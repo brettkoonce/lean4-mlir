@@ -138,7 +138,7 @@ def unetBratsConfig : TrainConfig where
   learningRate := 0.001
   batchSize    := 16
   epochs       := 3
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0001
   cosineDecay  := false
   warmupEpochs := 0

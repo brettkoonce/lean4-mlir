@@ -40,7 +40,7 @@ def tinyDdpmConfig : TrainConfig where
   learningRate := 0.0005
   batchSize    := 32
   epochs       := 3
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0
@@ -73,7 +73,7 @@ def main (args : List String) : IO Unit := do
   let trainMlir := MlirCodegen.generateTrainStep spec cfg.batchSize
     ("jit_" ++ spec.sanitizedName ++ "_train_step")
     (weightDecay := cfg.weightDecay)
-    (useAdam := cfg.useAdam)
+    (useAdam := cfg.optimizer == .adam)
     (useDdpm := true) (ddpmOutShape := outShape)
   IO.FS.writeFile s!"{pfx}_train_step.mlir" trainMlir
   IO.eprintln s!"  {trainMlir.length} chars"

@@ -173,7 +173,7 @@ def r34FpnDetConfig : TrainConfig where
                                         -- loss sums ~10× the cells ⇒ larger grads
   batchSize    := 8                     -- larger graph than the anchor arm
   epochs       := 12
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0005
   cosineDecay  := true
   warmupEpochs := 3

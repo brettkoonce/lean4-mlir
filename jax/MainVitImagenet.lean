@@ -34,7 +34,7 @@ def vitTinyImagenetConfig : TrainConfig where
   learningRate   := 0.0005          -- proper DeiT batch-512 LR (was crippled at 1e-4)
   batchSize      := 512
   epochs         := 300             -- full DeiT-Ti schedule (was 80; closes ~65→72%)
-  useAdam        := true
+  optimizer      := .adam
   weightDecay    := 0.05            -- now applied as AdamW decoupled decay (was toxic coupled-L2)
   wdExcludeNormBias := true          -- timm no_weight_decay: skip norm/bias/pos-embed/CLS (DeiT-faithful)
   valEveryEpochs := 5                 -- ImageNet val is data-loading-bound (~75s/ep); every-5 saves ~5h over 300ep

@@ -35,7 +35,7 @@ def vitBImagenetConfig : TrainConfig where
   learningRate   := 0.0005          -- DeiT batch-512 peak LR
   batchSize      := 512
   epochs         := 300
-  useAdam        := true
+  optimizer      := .adam
   weightDecay    := 0.05
   wdExcludeNormBias := true
   valEveryEpochs := 5

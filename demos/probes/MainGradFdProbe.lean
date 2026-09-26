@@ -147,7 +147,7 @@ def fdProbeConfig : TrainConfig where
   -- Everything that would bend the update away from θ − η·g is off, so the
   -- gradient is exactly recoverable from the parameter delta. Momentum is fine
   -- because its velocity starts at zero: step 1 is plain SGD either way.
-  useAdam      := false
+  optimizer    := .sgd
   weightDecay  := 0.0
   cosineDecay  := false
   warmupEpochs := 0

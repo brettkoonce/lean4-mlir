@@ -54,7 +54,7 @@ def r34Yolov1_448NeuDetConfig : TrainConfig where
   learningRate := 7.0e-4
   batchSize    := 16
   epochs       := 12
-  useAdam      := true
+  optimizer    := .adam
   weightDecay  := 0.0
   cosineDecay  := true
   warmupEpochs := 3
@@ -62,7 +62,7 @@ def r34Yolov1_448NeuDetConfig : TrainConfig where
   headLrMult   := 1.0
   checkpointEveryNEpochs := 2
   augment      := true
-  lossKind     := LossKind.yolov1Masked
+  lossKind     := some .yolov1Masked
   useFocal     := true
   focalGamma   := 2.0
   bootstrapBackbone := some (".lake/build/jax_r34_imagenet.bin", 21284672)
