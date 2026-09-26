@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `convnext-verified` — train ConvNeXt-T on the VERIFIED-rendered codegen
 
@@ -9,7 +10,7 @@ resolution, patchify /4 then /2 between stages, 224→56→28→14→7):
   (depthwise 7×7 → scalar-LN → 1×1 expand c→4c → GELU → 1×1 project 4c→c → layerScale)
   with 3 between-stage (LN + 2×2-s2) downsamples → GAP → LN(768) → dense 768→10 + softmax-CE.
 
-The model is `convnextVerified` (in `LeanMlir.VerifiedNets`); its derived 180-param layout is
+The model is `convnextVerified` (in `LeanMlir.VerifiedNetsCore`); its derived 180-param layout is
 kernel-`#guard`ed against the audited `ConvNeXtLayout`. Trains on
 `verified_mlir/convnext_{train_step,fwd}.mlir` (rendered by tests/TestConvNeXt*) through the
 packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, global-scalar LN, He-init). Each op

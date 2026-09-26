@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 import LeanMlir.Proofs.Codegen.EfficientNetRender
 
 /-! # Classifier dropout — the two gates its own identity checks cannot make

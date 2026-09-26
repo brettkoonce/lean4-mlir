@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # cifar8 optimizer-render tie — six variants, one harness (handoff §2i)
 

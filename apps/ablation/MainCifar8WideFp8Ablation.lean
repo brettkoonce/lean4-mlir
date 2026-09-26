@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `cifar8w-fp8-ablation` — wide head, fp8 (E4M3, emulated)
 

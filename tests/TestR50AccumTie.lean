@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # Gradient accumulation, numerically certified — k micro-steps ARE one step
 
@@ -92,7 +93,7 @@ private def cmp (a b : ByteArray) (offA offB n : Nat) : Float × Float × Nat :=
 def main : IO Unit := do
   -- ▶ The RESOLUTION selects the net, hence the slug and `d0` — the 160 artifacts are a different
   -- family (`resnet50in160_*`), not a suffix. Identical parameter layout by construction, so θ/m/v
-  -- below are unchanged; only `x`'s width moves. (`VerifiedNets.lean` `#guard`s `toSpecs` equal.)
+  -- below are unchanged; only `x`'s width moves. (`VerifiedNetsCore.lean` `#guard`s `toSpecs` equal.)
   let net ← match (← IO.getEnv "R50_ACC_RES").getD "224" with
     | "224" => pure resnet50ImagenetVerified.toNet
     | "160" => pure resnet50Imagenet160Verified.toNet

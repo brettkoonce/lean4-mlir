@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `resnet50-verified-adam` — ResNet-50 on Imagenette, via XLA/PJRT
 

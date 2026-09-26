@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 import LeanMlir.Proofs.Codegen.EfficientNetRender
 import LeanMlir.Proofs.Codegen.ConvNeXtRenderB
 import LeanMlir.Proofs.Codegen.ViTRenderB

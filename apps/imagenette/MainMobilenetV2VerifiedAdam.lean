@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `mobilenetv2-verified-adam` — train MobileNetV2 with the VERIFIED-rendered **AdamW** step
 

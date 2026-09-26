@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `mnist-linear-e4m3-verified` — fp8 (E4M3) training on the VERIFIED codegen
 

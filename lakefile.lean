@@ -303,7 +303,7 @@ lean_lib «ProofsMinimal» where
 
 /-- **`lake build Reference`** — the REFERENCE path's codegen + spec core, no proofs:
     `MlirCodegen` (NetSpec → MLIR at run time, unverified) and the modules around it. It does
-    not build the verified path (`VerifiedSpec`/`VerifiedNets`/`VerifiedTrain`, which load
+    not build the verified path (`VerifiedSpec`/`VerifiedNetsCore`/`VerifiedTrain`, which load
     `verified_mlir/`) or anything in `LeanMlir/Proofs/Codegen/`, and no CI job uses it. -/
 lean_lib «Reference» where
   srcDir := "."

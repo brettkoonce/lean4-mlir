@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedAttack
 
 /-! # `mnist-mlp-spectral` — spectral-norm-constrained training (the gap-shrinking lever)
 

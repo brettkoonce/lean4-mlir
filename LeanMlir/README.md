@@ -8,7 +8,7 @@ end to end in about 650 lines.
 |---|---|
 | [`Proofs/`](Proofs/) | every theorem: per-layer VJPs, whole-net backward passes, and the ties from each committed render to the certified math |
 | `Types`, `Spec`, `SpecHelpers` | the `NetSpec` DSL: layers, specs, `TrainConfig`, parameter counting |
-| `VerifiedSpec`, `VerifiedNetsCore`, `VerifiedNets`, `VerifiedTrain`, `ParamLayouts`, `ViTRender` | the verified path: the nets the proofs are about, and the driver that trains them on the committed renders in [`verified_mlir/`](../verified_mlir/) |
+| `VerifiedSpec`, `VerifiedNetsCore`, `VerifiedTrain`, `ParamLayouts`, `ViTRender` | the verified path: the nets the proofs are about, and the driver that trains them on the committed renders in [`verified_mlir/`](../verified_mlir/) |
 | `MlirCodegen`, `Train`, `ReferenceNets` | the reference path: `NetSpec` → StableHLO at run time, unverified; the BraTS UNet and the ablations run on it |
 | `IreeRuntime`, `F32Array`, `LEBytes` | the runtime: bindings to [`ffi/`](../ffi/) (XLA/PJRT by default, IREE optionally) and host-side buffers |
 | `SyncBnCheck`, `GradcheckHelpers`, `VjpOracleNets` | support for the gates in [`tests/`](../tests/) |

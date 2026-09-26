@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `mnist-linear-verified` — train MNIST on the VERIFIED-rendered codegen
 
@@ -21,7 +22,7 @@ not a different program, which is exactly what the G2 gate asserts.
 The model is expressed as a `VerifiedNetSpec` (a single dense layer) — the same
 readable layer list whose **math VJP is proven** in
 `LeanMlir/Proofs/SpecVJP.lean` (`linearVerifiedHasVJP`). The spec
-itself lives in `LeanMlir.VerifiedNets` rather than here, deliberately: the
+itself lives in `LeanMlir.VerifiedNetsCore` rather than here, deliberately: the
 trainer and the theorem must name the *same* object, or the proof would be about
 a different network than the one that runs.
 

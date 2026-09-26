@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `efficientnet-verified-adam` — train EfficientNet-B0 with the VERIFIED-rendered **AdamW** step
 

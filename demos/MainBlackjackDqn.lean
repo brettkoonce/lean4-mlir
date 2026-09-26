@@ -18,6 +18,8 @@ import LeanMlir.Blackjack
     `tag=<name>` suffixes every file the run writes under `.lake/build/`.
     Writes `<prefix>_curve.csv` and `<prefix>_policy.csv` next to the graphs. -/
 
+open FloatFmt
+
 open BJ
 
 namespace DQN

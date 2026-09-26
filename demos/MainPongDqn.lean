@@ -31,6 +31,8 @@ import LeanMlir.Pong
     (`scripts/det_shim.sh`); on the shipping shim the two differ in the last bits
     from update 2 on, as autotuned kernels do across buffer origins. -/
 
+open FloatFmt
+
 open PongEnv
 
 namespace PongDqn

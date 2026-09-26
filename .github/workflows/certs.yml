@@ -23,7 +23,6 @@ on:
       # SpecVJP's rfl ties break when a spec's layer list drifts — the exact
       # failure the corpus must catch on the push that causes it, not nightly
       # (mnv2 6→17-block promotion rotted the orphaned SpecVJP for weeks).
-      - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedNetsCore.lean'
       - 'LeanMlir/VerifiedSpec.lean'
       # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`
@@ -48,7 +47,6 @@ on:
       - 'lean-toolchain'
       - 'lake-manifest.json'
       - '.github/workflows/certs.yml'
-      - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedNetsCore.lean'
       - 'LeanMlir/VerifiedSpec.lean'
       # Every apps/ and demos/ entry point calls into VerifiedTrain, and `lake build Apps`

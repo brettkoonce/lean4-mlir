@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `mnist-mlp-verified` — train the MNIST MLP on the VERIFIED-rendered codegen
 
@@ -9,11 +10,11 @@ proven faithful to the Mathlib `fderiv` math (`mlpFwdGraph_faithful`,
 `mlpBackGraph_faithful`, `reluF_faithful`, `selectPos_faithful`,
 `wGrad/bGrad_is*Jacobian`, `lossCotGraph_isCEgrad`) — audited 3-axiom-clean.
 
-The model is the `mlpVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`) — the same
+The model is the `mlpVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNetsCore`) — the same
 readable layer list whose **math VJP is proven** in `LeanMlir/Proofs/SpecVJP.lean`
 (`mlpVerifiedHasVJP` / `mlpVerifiedHasVJPAt`, the latter folded from `vjpCompAt`).
 It trains through the packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, He-init).
-The spec stays in `VerifiedNets` on purpose: the trainer and the theorem must name
+The spec stays in `VerifiedNetsCore` on purpose: the trainer and the theorem must name
 the *same* object, or the proof would be about a different network than the one
 that runs.
 

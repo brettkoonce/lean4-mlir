@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 import LeanMlir.GradcheckHelpers
 
 /-! # SGD `@<slug>_train_step` render tie — the `tests/` emitter vs `pretty(provenGraph)`

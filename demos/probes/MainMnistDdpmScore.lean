@@ -1,5 +1,5 @@
 import LeanMlir
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
 
 /-! # `mnist-ddpm-score` — the image DDPM's first real number
 
@@ -8,7 +8,7 @@ import LeanMlir.VerifiedNets
     report cell recall and an energy distance instead of "does that look right
     to you". On MNIST the ground truth is a **classifier that already knows what
     a digit looks like** — and this repo has one whose math VJP is proven:
-    Chapter 3's `cnnVerified` (`LeanMlir/VerifiedNets.lean`), 98.75 % at ten
+    Chapter 3's `cnnVerified` (`LeanMlir/VerifiedNetsCore.lean`), 98.75 % at ten
     epochs, running from the committed `verified_mlir/cnn_fwd.mlir`.
 
     Push the generated samples through it and every metric of §4 comes back:

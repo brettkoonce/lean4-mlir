@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedAttack
 
 /-! # `mnist-cnn-pgd` — phase-3 PGD attack on the verified MNIST CNN
 

@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `@convnext_adam_train_step` render tie — hand-written vs `pretty(provenGraph)`
 

@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedAttack
 
 /-! # `cifar-spectral` — spectral-norm-constrained CIFAR-10 CNN training
 

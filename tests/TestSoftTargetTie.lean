@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # Soft-target gate — the committed renders are AFFINE in the target, so mixup needs no new render
 

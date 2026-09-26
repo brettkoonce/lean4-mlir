@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedAttack
 
 /-! # `mnist-cnn-spectral` — spectral-norm-constrained CNN training (the lever, conv net)
 

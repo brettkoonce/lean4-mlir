@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # ConvNeXt-T data-parallel gate — the collective's semantics, on a duplicated batch
 

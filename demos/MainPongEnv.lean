@@ -4,6 +4,8 @@ import LeanMlir.Pong
     (random, tracker, self-play) and a rendered frame strip over the game in
     `LeanMlir/Pong.lean`. No stack, no GPU: `lake exe pong-env [games=100]`. -/
 
+open FloatFmt
+
 open PongEnv
 
 def main (args : List String) : IO Unit := do

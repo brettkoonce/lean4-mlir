@@ -33,7 +33,6 @@ on:
       # The shim-wiring gate reads the VERIFIED side too — which net names which generated shim.
       # Without these, the most likely regression (a sixth .imagenet net added with no
       # `shimScript`) touches nothing this workflow watches. See handoff §0.9.
-      - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedNetsCore.lean'
       - 'LeanMlir/VerifiedSpec.lean'
       - 'scripts/gen_shims.sh'
@@ -73,7 +72,6 @@ on:
       # The shim-wiring gate reads the VERIFIED side too — which net names which generated shim.
       # Without these, the most likely regression (a sixth .imagenet net added with no
       # `shimScript`) touches nothing this workflow watches. See handoff §0.9.
-      - 'LeanMlir/VerifiedNets.lean'
       - 'LeanMlir/VerifiedNetsCore.lean'
       - 'LeanMlir/VerifiedSpec.lean'
       - 'scripts/gen_shims.sh'

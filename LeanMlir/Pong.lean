@@ -6,7 +6,7 @@ import LeanMlir.FloatFmt
 
 namespace PongEnv
 
-export FloatFmt (fmt)
+open FloatFmt
 
 structure Pong where
   ballX : Float

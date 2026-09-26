@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `cifar-verified` — train the CIFAR-10 CNN on the VERIFIED-rendered codegen
 
@@ -9,7 +10,7 @@ dense 4096→512 → relu → dense 512→512 → relu → dense 512→10` + sof
 are each proven faithful to the Mathlib `fderiv` math; the whole-network VJP is
 `cifarCnnHasVJPAt` — audited 3-axiom-clean.
 
-The model is the `cifarVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNets`), the same
+The model is the `cifarVerified` `VerifiedNetSpec` (in `LeanMlir.VerifiedNetsCore`), the same
 layer list whose math VJP is tied in `LeanMlir/Proofs/SpecVJP.lean`. Trains through the
 packed-params `VerifiedNet.train` driver (`mlpTrainStepV`, He-init, CIFAR `.bin` loader).
 

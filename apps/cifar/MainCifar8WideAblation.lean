@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `cifar8w-ablation` — wide-head (d1=512) cifar8, no-BN, all three optimizers
 

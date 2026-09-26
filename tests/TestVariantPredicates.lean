@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedTrain
 
 /-! # The variant-string predicates, run rather than reasoned about
 

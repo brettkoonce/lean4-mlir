@@ -1,4 +1,4 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedTrain
 
 /-! # E6 — EfficientNet-B0 artifact smoke (iree-compile over the COMMITTED bytes)
 
@@ -49,7 +49,7 @@ bit-exact A-vs-A determinism floor. Recover it from
 side A) is `git show c96bd36:verified_mlir/efficientnet_adam_train_step.mlir`.
 
 The `bnChannels` layout this file used to print lives in `efficientnetVerified.bnChannels`
-(49 layers, `LeanMlir/VerifiedNets.lean`), and the certified AdamW render now derives its 49 stat
+(49 layers, `LeanMlir/VerifiedNetsCore.lean`), and the certified AdamW render now derives its 49 stat
 slots from the same forward traversal that computes them.
 
 Run (needs iree-compile on PATH): lake env lean tests/TestEfficientNetTrain.lean

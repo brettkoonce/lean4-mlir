@@ -25,7 +25,8 @@ as a `NetSpec` trainer.
 
 This is the training driver alone (plus its fp8 E4M3 variants). The PGD attacks and spectral-norm
 studies are `VerifiedAttack` (on `VerifiedPgdGen`'s kernels), the smoothing certificate is
-`VerifiedSmoothing`, and `VerifiedNets` imports all of them.
+`VerifiedSmoothing`. An entry point imports `VerifiedNetsCore` (the specs) and whichever of
+these three it runs.
 
 NB `VerifiedConfig.lr` is for the banner only. The SGD-inline train steps bake the learning rate
 into the rendered MLIR (re-render to change it); the Adam-family steps take it as a runtime operand,

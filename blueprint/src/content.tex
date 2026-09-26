@@ -1714,7 +1714,8 @@ The trainer is 54 lines including its docstring, so here it is entire,
 with the comments stripped:
 
 \begin{verbatim}
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 def linearConfig : VerifiedConfig where
   epochs    := 12
@@ -2546,7 +2547,8 @@ Again the VJP is proved for the denotation of the spec's own
 its graph. The whole program is short enough to print:
 
 \begin{verbatim}
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 def mlpConfig : VerifiedConfig where
   epochs    := 12
@@ -3363,7 +3365,8 @@ This is the spec \S\ref{sec:cnn_runit} actually ran.
 
 \begin{verbatim}
 -- 1
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 -- 2
 def cnnVerified : VerifiedNetSpec where

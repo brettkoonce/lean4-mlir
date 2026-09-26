@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `vit-verified` — train ViT-Tiny on the VERIFIED-rendered codegen
 
@@ -8,7 +9,7 @@ Chapter 10: the Vision Transformer (Dosovitskiy et al. 2021) on IMAGENETTE 224×
   (197 tokens) → 12× pre-norm transformer block (dim 192, 3 heads, MLP 768) → final LayerNorm
   → CLS token (row 0) → dense 192→10 + softmax-CE.
 
-The model is `vitVerified` (in `LeanMlir.VerifiedNets`); its derived 200-param layout is
+The model is `vitVerified` (in `LeanMlir.VerifiedNetsCore`); its derived 200-param layout is
 kernel-`#guard`ed against the audited `ViTLayout`. Trains on `verified_mlir/vit_{train_step,
 fwd}.mlir` (rendered by tests/TestViT*) through the packed-params `VerifiedNet.train` driver
 (`mlpTrainStepV`, per-channel LayerNorm, He-init). Each op fragment is a proven-faithful

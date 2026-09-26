@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedAttack
 
 /-! # `cifar-pgd` — phase-3 PGD attack on the verified CIFAR-10 CNN
 

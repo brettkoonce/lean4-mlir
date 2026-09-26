@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `convnext-imagenet-verified` — ConvNeXt-T on full ImageNet-1k, verified renderer → XLA
 

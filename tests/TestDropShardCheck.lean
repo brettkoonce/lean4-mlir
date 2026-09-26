@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 import LeanMlir.Proofs.Codegen.EfficientNetRender
 
 /-! # The stochastic-depth mask is SHARDED, not replicated — `stochastic_depth.md` §5b

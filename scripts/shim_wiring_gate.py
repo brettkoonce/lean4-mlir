@@ -99,8 +99,7 @@ def check(ok, label, detail=""):
 # ──────────────────────────────────────────────────────────────────────────────────────────────
 
 def read_shim_scripts():
-    """slug -> shimScript, straight out of LeanMlir/VerifiedNetsCore.lean (the spec table; `VerifiedNets`
-    re-exports it).
+    """slug -> shimScript, straight out of LeanMlir/VerifiedNetsCore.lean (the spec table).
 
     Reads the ACTUAL wiring the driver compiles against. A gate restating the map here would pass
     while the driver spawned something else — the shape of defect this whole thread is about."""

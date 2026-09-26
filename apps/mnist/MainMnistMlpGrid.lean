@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 import LeanMlir.Proofs.Codegen.ChapterGraphs
 import LeanMlir.Proofs.Codegen.MlpRender
 
@@ -10,7 +11,7 @@ from the **faithful** renderers (`mlpTrainStepFaithfulV` — every line is `pret
 den-certified verified AST node — and `mlpFwdModuleV`, the forward AST), then trains on
 that render through the shared `VerifiedNet.train` driver (Lean → IREE FFI → GPU).
 
-The architecture is `mlpG d₁ d₂` (in `LeanMlir.VerifiedNets`); its math VJP is the
+The architecture is `mlpG d₁ d₂` (in `LeanMlir.VerifiedNetsCore`); its math VJP is the
 polymorphic `mlpHasVJP {d₀ d₁ d₂ d₃}` (SpecVJP/MLP.lean) instantiated at these dims —
 so every grid point is one theorem, not a new proof. The canonical Chapter-2 demo is
 exactly `mnist-mlp-grid 512 512`.

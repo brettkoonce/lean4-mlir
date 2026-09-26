@@ -575,8 +575,8 @@ def main : IO Unit := do
   -- while transients landed there.
   --
   -- ⚠ **This IS a second spelling of `cifar8BnG.mlirDir`, and it is deliberate.** This file imports
-  -- only the renderers (`StableHLO`, `ViTRender`, `Types`); pulling in `LeanMlir.VerifiedNets` —
-  -- and with it the whole `VerifiedSpec` → `VerifiedTrain` chain — to read one string would be a
+  -- only the renderers (`StableHLO`, `ViTRender`, `Types`); pulling in `LeanMlir.VerifiedNetsCore` —
+  -- and with it `VerifiedSpec` — to read one string would be a
   -- heavy dependency for a render test. The two spellings are pinned not by an import but by
   -- `scripts/regen_verified_mlir.sh check`, which FAILS if any file appears in `verified_mlir/`
   -- without a literal `Proofs/Codegen` writer — so a drift back to `verified_mlir/` here goes red

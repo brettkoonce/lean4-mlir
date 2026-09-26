@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `vit-b-imagenet-verified` — ViT-**Base** (DeiT-B) on full ImageNet-1k, verified → XLA
 

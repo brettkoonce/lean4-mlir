@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `convnext-verified-adam` — train ConvNeXt-T with the VERIFIED-rendered **AdamW** step
 

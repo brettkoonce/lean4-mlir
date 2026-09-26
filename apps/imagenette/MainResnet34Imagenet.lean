@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `resnet34-imagenet-verified` — ResNet-34 on full ImageNet-1k, verified renderer → XLA/PJRT
 

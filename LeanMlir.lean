@@ -14,7 +14,6 @@ import LeanMlir.VerifiedSmoothing
 import LeanMlir.VerifiedSpec
 import LeanMlir.ParamLayouts
 import LeanMlir.VerifiedNetsCore
-import LeanMlir.VerifiedNets
 import LeanMlir.Ddpm
 import LeanMlir.Cam
 -- VJP proofs (Attention pulls in Tensor/MLP/Residual/SE/LayerNorm/BatchNorm

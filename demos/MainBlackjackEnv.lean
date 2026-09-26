@@ -11,6 +11,8 @@ import LeanMlir.Blackjack
     `lake exe blackjack-env curve [qHands] [every]` is tabular Q's exact-value
     curve. The environment itself is `LeanMlir/Blackjack.lean`. -/
 
+open FloatFmt
+
 def cardStr (c : Nat) : String := if c == 1 then "A" else toString c
 
 open BJ in

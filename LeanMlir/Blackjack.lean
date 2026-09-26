@@ -7,7 +7,7 @@ import LeanMlir.FloatFmt
 
 namespace BJ
 
-export FloatFmt (fmt)
+open FloatFmt
 
 /-- Cards 1..10, ten with probability 4/13 (infinite deck). -/
 def draw (g : StdGen) : Nat × StdGen :=

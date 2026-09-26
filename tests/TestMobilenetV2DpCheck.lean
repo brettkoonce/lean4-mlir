@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # MobileNetV2 data-parallel gate — the collective's semantics, on a duplicated batch
 

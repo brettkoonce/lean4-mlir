@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `cifar8-bn-verified-adam` — the 8-conv CIFAR-10 CNN **+ per-channel BN** with **AdamW**
 

@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `mobilenetv4-verified-adam` — the MobileNetV4-Conv-S AdamW trainer on XLA/PJRT
 

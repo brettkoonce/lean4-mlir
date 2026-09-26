@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `vit-verified-adam` — train ViT-Tiny with the VERIFIED-rendered **AdamW** step
 

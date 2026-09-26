@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `@resnet34_adam_train_step` step-time bench — hand-written vs `pretty(provenGraph)`
 

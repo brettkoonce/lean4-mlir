@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # EfficientNet-B0 data-parallel step-time bench — 1 GPU vs 2 GPUs on XLA/PJRT
 

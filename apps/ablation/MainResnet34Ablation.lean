@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `resnet34-ablation` — §5.6's leave-one-out recipe ablation, one arm per invocation
 

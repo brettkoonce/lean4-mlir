@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `efficientnet-imagenet-verified` — EfficientNet-B0 on full ImageNet-1k, verified → XLA
 

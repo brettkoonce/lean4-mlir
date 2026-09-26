@@ -1,4 +1,5 @@
-import LeanMlir.VerifiedNets
+import LeanMlir.VerifiedNetsCore
+import LeanMlir.VerifiedTrain
 
 /-! # `r34-dp-shard` — do R34/ImageNet's four replicas actually SEE DIFFERENT DATA?
 

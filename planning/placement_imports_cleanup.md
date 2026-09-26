@@ -34,7 +34,8 @@ measured on that tree.
 | 70d623be | `LeanMlir/MnistData.lean` (no build target reached it; MNIST loads through `F32.loadIdxImages` / `loadIdxLabels` in `ffi/f32_helpers.c`) and its three `historical/` importers deleted; README row fixed |
 | 94c16b30 | Batch A: §2.1 and §2.2 as tabled, §2.3 on the leaf files (113 imports, 68 files). Deviations below |
 | 204f6a5f | Batch B: §3.1–3.6 and two of the three re-derived statements. Deviations below |
-| (staged) | Batch C: §4 except `mnv2RmsHyper`. Deviations below |
+| 57630c41 | Batch C: §4 except `mnv2RmsHyper`. Deviations below |
+| (staged) | Batch D: §5.1 and §5.2. Notes below |
 
 Batch A deviations:
 
@@ -105,6 +106,23 @@ Batch C deviations:
   `ChapterArtifacts` re-ran its `#eval` writers during the build and `verified_mlir/` is
   byte-identical; `AuditAxioms` (1607 prints, 1602 on the three standard axioms) and both tier
   files elaborate; the same CI gates as Batch B, all green.
+
+Batch D notes:
+
+* §5.1: each of the 94 importers got the smallest set that elaborates, found by trying the
+  candidate sets in order on a scratch copy (the two `#eval main` tests with that line stripped):
+  77 `VerifiedNetsCore` + `VerifiedTrain`, 7 `Core` + `VerifiedAttack`, 4 `Core` +
+  `VerifiedSmoothing`, 3 `VerifiedTrain` alone (`TestVariantPredicates`, `TestEfficientNetTrain`,
+  `TestConvNeXtTrain`), 3 `Core` alone. `LeanMlir.lean` already imported all four. Repointed by
+  name: the three book listings in `blueprint/src/content.tex` (chapters 1–3, now
+  `VerifiedNetsCore` + `VerifiedTrain`, as the apps they print), the `jax.yml` / `certs.yml` path
+  filters, `LeanMlir/README.md`, `VerifiedTrain`'s docstring, the lakefile's `Reference`
+  docstring, `shim_wiring_gate.py`, and "the spec lives in `VerifiedNets`" prose in apps and tests
+  (the specs are `VerifiedNetsCore`'s). Left as history: the anecdote in
+  `tests/DocstringCheckRefs.lean` / `scripts/audit_census/AllRefs.lean` and
+  `jax/MainMobilenetV4.lean`'s note.
+* §5.2: `Blackjack` and `Pong` `open FloatFmt`; the four demos `open FloatFmt` after their module
+  docstrings.
 
 ## 2. Batch A — leaf imports (cheap, no root file)
 
