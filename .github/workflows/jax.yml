@@ -266,11 +266,10 @@ jobs:
     #
     # What this does NOT do: validate the hand-derived VJPs. The real oracle
     # diffs phase 3 (Lean -> MLIR -> IREE, hand-derived gradients) against
-    # phase 2 (Lean -> JAX autodiff); phase 3 needs IREE and a GPU, so it
-    # cannot run here. Phase 2 alone has no Lean-derived gradient in the loop
-    # — it exercises the EMITTER. Green here means the emitted graph builds,
-    # runs and produces a finite loss for every layer family, not that the
-    # VJPs agree. That claim still needs tests/vjp_oracle/run.sh on a GPU box.
+    # phase 2 (Lean -> JAX autodiff); it runs in iree.yml's vjp-oracle job.
+    # Phase 2 alone has no Lean-derived gradient in the loop — it exercises the
+    # EMITTER. Green here means the emitted graph builds, runs and produces a
+    # finite loss for every layer family, not that the VJPs agree.
     needs: build
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -314,7 +313,7 @@ jobs:
             echo ""
             echo "## VJP oracle smoke"
             echo ""
-            echo "Emitter-level only — phase 2 (JAX autodiff), no phase 3/IREE, so this does **not** check the hand-derived VJPs."
+            echo "Emitter-level only — phase 2 (JAX autodiff), no phase 3/IREE, so this does **not** check the hand-derived VJPs (iree.yml's VJP oracle job does)."
             echo ""
             echo '```'
             grep -E '^(RUN|EMIT|FAIL)' /tmp/oracle.log || true

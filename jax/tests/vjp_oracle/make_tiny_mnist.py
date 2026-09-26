@@ -2,10 +2,10 @@
 """Synthesize a tiny MNIST-format dataset for CI smoke runs.
 
 The real VJP oracle (tests/vjp_oracle/run.sh) diffs phase 3 (Lean -> MLIR ->
-IREE, hand-derived VJPs) against phase 2 (Lean -> JAX, autodiff). Phase 3
-needs IREE and a GPU, so it cannot run on a stock CI runner. What CAN run
-there is phase 2 alone, which exercises the whole Lean -> JAX emitter: shapes,
-layer wiring, optimizer, loss. This writes just enough data for that.
+IREE, hand-derived VJPs) against phase 2 (Lean -> JAX, autodiff), and reads
+only steps 1-2. Both consumers run on this set: jax.yml's phase-2 smoke
+(ci_smoke.sh) and iree.yml's whole oracle (run.sh with VJP_ORACLE_DATA set,
+phase 3 on a CPU build of libiree_ffi.so).
 
 Format is plain IDX, matching what Jax/Codegen.lean's load_mnist_* emits:
   images: >4I header (magic 2051, n, rows, cols) then n*rows*cols uint8

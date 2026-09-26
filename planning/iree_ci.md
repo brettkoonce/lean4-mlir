@@ -34,6 +34,12 @@ is the loop: IREE 3.11.0 from PyPI, `IREE_BACKEND=llvm-cpu` on `local-task`, no 
   ViT-Tiny, the twelve cifar8 optimizer variants), 2 min, 2.9 GB peak. Negative checks: no compiler
   → rc 1; `IREE_EXTRA_FLAGS=--no-such-flag` → all nine red. In `iree.yml` after the gradchecks,
   plus `git diff --exit-code verified_mlir/` (TestCifar8AdamTrain re-renders its artifacts).
+* VJP oracle, whole (step 5): `libiree_ffi.so` built on the runner from the IREE v3.11.0 runtime
+  (runtime submodules only, four archives — 3.11 moved printf into `libprintf_printf.a` — and
+  `-DUSE_CPU`), cached on the version + wrapper hash; `tests/vjp_oracle/run.sh` on
+  `make_tiny_mnist.py`'s set via `$VJP_ORACLE_DATA`. 14/14 pass at the no-GPU tolerances, worst
+  step-2 Δ 2.0e-6 (uib); the same numbers locally with the box's CUDA-build FFI on local-task.
+  Control: dense's phase-3 trace against dense-relu's phase-2 trace fails the differ.
 
 ## Next, one at a time (each measured on llvm-cpu before it joins the job)
 
@@ -44,5 +50,4 @@ is the loop: IREE 3.11.0 from PyPI, `IREE_BACKEND=llvm-cpu` on `local-task`, no 
 4. ~~Move jax.yml's "Forward ties through IREE" step here~~ — `iree.yml` job `forward-ties`
    (MNv4 at batch 32, MNv2 ImageNet + its BN-ε control); jax.yml's `timm-parity` no longer
    installs IREE.
-5. VJP oracle phase 3 (needs a CPU-mode `libiree_ffi.so` source build, cached): last, only if
-   the build fits a runner.
+5. ~~VJP oracle phase 3~~ — `iree.yml` job `vjp-oracle`, see above.

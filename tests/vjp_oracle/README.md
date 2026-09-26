@@ -33,7 +33,18 @@ lake build vjp-oracle-dense
 ```
 
 Phase 2 runs on whatever JAX targets by default (CUDA here); phase 3 on
-`$IREE_BACKEND` (default cuda). The earlier `JAX_PLATFORMS=cpu` requirement on
+`$IREE_BACKEND` (default cuda). `$VJP_ORACLE_DATA` points at the MNIST directory (default `data/`).
+
+On CPU, as `iree.yml`'s `vjp-oracle` job runs it (its summary has the per-case Δs):
+
+```bash
+.venv/bin/python3 jax/tests/vjp_oracle/make_tiny_mnist.py /tmp/tiny 64 512
+LEAN_MLIR_LOWERER=iree IREE_BACKEND=llvm-cpu IREE_DEVICE=local-task JAX_PLATFORMS=cpu \
+  VJP_ORACLE_DATA=/tmp/tiny ./tests/vjp_oracle/run.sh
+```
+
+`IREE_DEVICE=local-task` picks the CPU device out of a CUDA build of `libiree_ffi.so` (it always
+registers local-task); CI builds a CPU-only one (`-DUSE_CPU`), whose default is local-task. The earlier `JAX_PLATFORMS=cpu` requirement on
 mars (ROCm/MIOpen#3955) is fixed in jax 0.10.0+; the runner no longer
 auto-pins JAX to CPU. If you need to force CPU for any reason, pass
 `JAX_PLATFORMS=cpu` in your environment.

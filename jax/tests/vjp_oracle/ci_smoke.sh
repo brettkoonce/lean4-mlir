@@ -3,10 +3,10 @@
 #
 # The full oracle (tests/vjp_oracle/run.sh, at the repo root) diffs phase 3
 # (Lean -> MLIR -> IREE, the hand-derived VJPs) against phase 2 (Lean -> JAX,
-# autodiff) and is the thing that actually validates the VJPs. It needs IREE
-# and a GPU, so it cannot run on a stock GitHub runner.
+# autodiff) and is the thing that actually validates the VJPs. It runs in
+# iree.yml's vjp-oracle job, which builds a CPU libiree_ffi.so.
 #
-# This runs the half that can. Two tiers, both over all 14 layer families:
+# This runs phase 2 alone. Two tiers, both over all 14 layer families:
 #
 #   EMIT  (always)      each phase-2 oracle exe emits its JAX script, and that
 #                       script must parse. Catches emitter breakage — e.g. the
@@ -18,7 +18,7 @@
 # RUN does NOT check the hand-derived VJPs — phase 2 gets its gradients from
 # JAX's own autodiff, so there is no Lean-derived gradient in the loop. It
 # checks the emitter. Do not let a green run here be read as "the VJPs agree";
-# that claim needs the GPU oracle.
+# that claim is iree.yml's vjp-oracle job.
 #
 # Usage: jax/tests/vjp_oracle/ci_smoke.sh [case ...]
 set -uo pipefail
