@@ -75,16 +75,34 @@ jobs:
         run: |
           set -o pipefail
           export IREE_BACKEND=llvm-cpu
+          {
+            echo "## IREE gradchecks"
+            echo ""
+            echo "Hand-written StableHLO fragments (tests/ViTRender.lean), compiled by IREE and run on the CPU."
+            echo "Each backward is checked against finite differences of its own forward:"
+            echo "⟨back(dOut), v⟩ ≈ (Φ(+ε) − Φ(−ε)) / 2ε, over every input it checks at once. Passes at rel err < 1e-2."
+            echo ""
+            echo "| | check | what it covers | rel err |"
+            echo "|---|---|---|---|"
+          } >> $GITHUB_STEP_SUMMARY
           rc=0
-          for t in TestMHSA TestViTBlock TestViTTiny; do
+          for row in "TestMHSA|multi-head self-attention (Q/K/V/O projections, softmax, head split/merge)" \
+                     "TestViTBlock|one pre-norm transformer block (LayerNorm, MHSA, GELU MLP, two residuals)" \
+                     "TestViTTiny|a whole tiny ViT, every parameter: patch embed, CLS + position, two blocks, final LN, head"; do
+            t=${row%%|*}; what=${row#*|}
             lake env lean tests/$t.lean 2>&1 | tee /tmp/$t.log
             # The tests print their verdict and exit 0 either way, so the verdict line is the gate.
+            err=$(grep -m1 -oP 'rel err = \K[0-9.e+-]+' /tmp/$t.log || echo "—")
             if grep -q "✅ PASS" /tmp/$t.log; then
-              echo "- ✅ $t: $(grep -m1 'rel err' /tmp/$t.log)" >> $GITHUB_STEP_SUMMARY
+              echo "| ✅ | \`$t\` | $what | $err |" >> $GITHUB_STEP_SUMMARY
             else
-              echo "::error::$t did not PASS"; echo "- ❌ $t" >> $GITHUB_STEP_SUMMARY; rc=1
+              echo "::error::$t did not PASS"
+              echo "| ❌ | \`$t\` | $what | $err |" >> $GITHUB_STEP_SUMMARY
+              rc=1
             fi
           done
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "IREE $(pip show iree-base-compiler 2>/dev/null | sed -n 's/^Version: //p') from PyPI · \`IREE_BACKEND=llvm-cpu\` on \`local-task\` · no GPU" >> $GITHUB_STEP_SUMMARY
           exit $rc
 
       - name: Control (a device the runner lacks must go red)
@@ -93,6 +111,12 @@ jobs:
           # no PASS line can appear. If it does, the gate above is not reading the tests' verdict.
           IREE_BACKEND=rocm lake env lean tests/TestMHSA.lean > /tmp/control.log 2>&1 || true
           if grep -q "✅ PASS" /tmp/control.log; then
-            echo "::error::control came out GREEN — the PASS gate cannot fail"; exit 1
+            echo "::error::control came out GREEN — the PASS gate cannot fail"
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "❌ **Control came out green** — the gate above cannot fail." >> $GITHUB_STEP_SUMMARY
+            exit 1
           fi
-          echo "- control (IREE_BACKEND=rocm on a CPU runner): red, as it must be" >> $GITHUB_STEP_SUMMARY
+          {
+            echo ""
+            echo "✅ **Control is red, as it must be:** TestMHSA pointed at \`hip\`, a device this runner doesn't have, produced no PASS line. So a green row above is the test's own verdict."
+          } >> $GITHUB_STEP_SUMMARY
