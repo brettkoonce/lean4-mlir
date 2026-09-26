@@ -1,34 +1,36 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPCEval
 
-/-! # The PAPER-SPEC MobileNetV2 at INFERENCE — all 17 bottlenecks, forward + graph + faithfulness
+/-! # The paper-spec MobileNetV2 at inference — all 17 bottlenecks, forward + graph + faithfulness
 
-The eval twin of `MobileNetV2FullPaper.lean`. That file states the seventeen-block `[t,c,n,s]` net
-at TRAINING BatchNorm, the world its VJP and its typed graph live in; this file states the same
-ladder at INFERENCE BatchNorm — frozen running statistics at all **52** sites, one shared `ε`, as
-the shipped `mobilenetv2_fwd_eval` does — and proves its
-typed `SHlo` graph denotes it — T2 at inference BatchNorm for the paper net, the graph of
-`mobilenetv2_fwd_eval.mlir` and its 1000-class twin. (Built 2026-09-05 so the whole-net float
-budget could end at a graph; the budget was deleted 2026-09-08 and the graph statement stays —
-`planning/archive/proofs_tier_to_paper_nets.md` 3.2(e).)
+The inference twin of `MobileNetV2FullB.lean`, the batch-BatchNorm training forward. This file
+states the same seventeen-block `[t,c,n,s]` ladder at inference BatchNorm — frozen running
+statistics at all 52 sites, one shared `ε`, as `mobilenetv2_fwd_eval` does
+(`mobilenetv2ForwardPaperEval`) — and proves its typed `SHlo` graph denotes it
+(`mobilenetv2FwdGraphPaperEval_faithful`). Both are stated for one example
+(`x : Vec (3 * 224 * 224)`); frozen-statistics BatchNorm does not couple examples. The block
+weight records are `IVWEval` / `IVWNoExpEval` below; the training records `IVW` / `IVWNoExp` are
+`MobileNetV2FullPaper.lean`'s.
 
 Pure enumeration and chaining of `MobileNetV2StagesPCEval.lean`'s four inference stage
 abbreviations (`ivExpandPCEval` / `ivDepthwisePCEval` / `ivDepthwiseStridedPCEval` /
 `ivProjectPCEval`) and its two bodies, generic in the class count. No new mathematics and no new
 tokens: every BatchNorm node's `den` is `bnPerChannelEvalTensor3`, proved once.
 
-⭐ **The SSA names are the committed ones, and that is the point of this file's graph.** The
-seventeen-block TRAINING graph names its parameters `%b17gp`/`%b17btp`, where the render emits `%gp17`/`%btp17`. This
-file's graph carries `bnEvalSite`'s names verbatim: `%stnmu`/`%stnvar` for the stem, `%b{k}enmu`,
+**The SSA names are the eval render's.** The training graph (`MobileNetV2FullB`) names its
+parameters `%b{k}{e,d,p}{W,g,bt}`, as the train-step render does. The eval render uses other
+names, and this file's graph carries them verbatim: `bnEvalSite`'s `%stnmu`/`%stnvar` for the
+stem, `%b{k}enmu`,
 `%b{k}dnmu`, `%b{k}pnmu` and their `nvar` peers per block, `%hnmu`/`%hnvar` for the head, around
 `irSig`/`irSigNoExp`'s `%We{k}`/`%ge{k}`/`%bte{k}`/`%Wd{k}`/`%gd{k}`/`%btd{k}`/`%Wp{k}`/`%gp{k}`/
 `%btp{k}`. Names are pretty-printing metadata and do not enter `den`; matching them is what lets a
 reader diff the typed graph against the committed text line for line.
 
-**What it is tied to.** `mobilenetv2_fwd_eval.mlir` is THIS net: 263 inputs — `%x`, 158 parameter
+**What it is tied to.** `mobilenetv2_fwd_eval.mlir` runs this net (batched): 263 inputs — `%x`, 158 parameter
 tensors (`paperSig` at `convBias := false`, which is why the graph's bias slots `%bs`/`%bd{k}`/…
 have no argument: the render folds each conv bias into the BatchNorm that follows it) and 104
-statistic slots (52 sites × μ, var) — with `mobilenetv2in_fwd_eval.mlir` its 1000-class twin. The
-classifier here is generic in `nCls`, so one theorem covers both.
+statistic slots (52 sites × μ, var) — with `mobilenetv2in_fwd_eval.mlir` and
+`mobilenetv2in_fwd_eval_eps0001.mlir` its 1000-class twins. The classifier here is generic in
+`nCls` and `ε` is a binder, so one theorem covers all three.
 
 Paper `[t,c,n,s]` spec (stem 3×3-s2 3→32 at the XLA-`SAME` phase; head 1×1 320→1280 → GAP → dense):
   (1, 16,1,1) (6, 24,2,2) (6, 32,3,2) (6, 64,4,2) (6, 96,3,1) (6,160,3,2) (6,320,1,1)
@@ -40,7 +42,7 @@ namespace Proofs
 -- § Per-block weight bundles at inference (γ, β and the two frozen statistics per BN site)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Weights and running statistics of one MobileNetV2 bottleneck at inference. ⚠ No per-site `ε`:
+/-- Weights and running statistics of one MobileNetV2 bottleneck at inference. No per-site `ε`:
     the eval forward takes ONE shared `ε`, as the
     render emits (a single `eps` constant), where the training bundle `IVW` carries one per site. -/
 structure IVWEval (ic mid oc : Nat) where
@@ -298,13 +300,12 @@ def mobilenetv2FwdGraphPaperEval (epsStr : String) (ε : ℝ) (w : MNV2PaperWeig
                                             (.flatConvStridedXlaF (h := 112) (w := 112) "%Ws" "%bs" w.sW w.sb
                                               (.operand "%x" x)))))))))))))))))))))))))
 
-/-- ⭐ **Seventeen-block inference MobileNetV2 forward faithfulness.** The typed graph denotes
-    `mobilenetv2ForwardPaperEval` — chained from the per-block-kind `*GraphEvalW_faithful` lemmas
-    and then a structural `rfl`, the training twin's recipe with `bnPerChannelEvalF_faithful` in
-    place of `bnPerChannelF_faithful`. -/
+/-- **Seventeen-block inference MobileNetV2 forward faithfulness.** The typed graph denotes
+    `mobilenetv2ForwardPaperEval`, for every shared `ε`, weight record and input example. -/
 theorem mobilenetv2FwdGraphPaperEval_faithful (epsStr : String) (ε : ℝ)
     (w : MNV2PaperWeightsEval nCls) (x : Vec (3 * 224 * 224)) :
     den (mobilenetv2FwdGraphPaperEval epsStr ε w x) = mobilenetv2ForwardPaperEval ε w x := by
+  -- Chained from the per-block-kind `*GraphEvalW_faithful` lemmas, then a structural `rfl`.
   simp only [mobilenetv2FwdGraphPaperEval, denseF_faithful, gapF_faithful, relu6F_faithful,
              bnPerChannelEvalF_faithful, flatConvF_faithful, flatConvStridedXlaF_faithful,
              ivExpOnlyGraphEvalW_faithful, ivResidGraphEvalW_faithful,

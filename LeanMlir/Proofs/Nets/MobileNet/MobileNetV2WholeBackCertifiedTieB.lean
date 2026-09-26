@@ -3,18 +3,15 @@ import LeanMlir.Proofs.Architectures.ConvBackCertifiedTie
 import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 
-/-! # ⭐⭐ `mnv2InputGradB` IS the certified whole-net MobileNetV2 gradient AT BATCH BATCH-NORM
+/-! # `mnv2InputGradB` and the certified whole-net MobileNetV2 input VJP at batch BatchNorm
 
-The per-example seventeen-bottleneck tie (retired 2026-09-19 with `MobileNetV2PaperWholeBackCertifiedTie.lean`)
-closed this for the forward the retired `MobileNetV2Render.lean` emitted. This file closes it for
-the net the shipped trainers run: `mobilenetv2ForwardBFull`, the same `[t,c,n,s]` ladder at
-**`bnBatchLA`**, at a variable batch `N`. It is tier **T6** of
-`planning/archive/proofs_tier_to_paper_nets.md` §4.2, alongside `ResNet34BackCertifiedTieB.lean`.
+Ties the batched input-gradient chain `mnv2InputGradB` to a certified VJP for
+`mobilenetv2ForwardBFull`, the `[t,c,n,s]` ladder at `bnBatchLA`, at a variable batch `N`: the
+MobileNetV2 peer of `ResNet34BackCertifiedTieB.lean`.
 
-## ⭐⭐ One apex, every stage opaque
+## One apex, every stage opaque
 
-`mobilenetv2PaperPCHasVJPAt` (below; it moved here from the retired per-example tie, whose apex
-it was) is a twenty-one-stage chain generic in every dimension and in every stage, so the batched
+`mobilenetv2PaperPCHasVJPAt` (below) is a twenty-one-stage chain generic in every dimension and in every stage, so the batched
 net instantiates it directly: `stem` at `mnv2StemB`, the seventeen bottlenecks at the batched
 block maps, and the head's three stages at `cbrB` / `batchMap gap` / `batchMap dense`.
 `opaqueA0 … A17` are `OpaquePrefix.lean`'s. So this file defines **no prefix defs** —
@@ -24,32 +21,31 @@ its head into one stage.
 ## The three pieces
 
 1. `mnv2StemBBack_eq_vjp_backward` and `cbrBBack_eq_vjp_backward` — the two concrete
-   conv-BN-relu6 endpoints, one `rw` of a conv leaf tie and then `rfl` each. ⚠ The stem's is the
+   conv-BN-relu6 endpoints, one `rw` of a conv leaf tie and then `rfl` each. The stem's is the
    XLA-`SAME` leaf (`flatConvStride2XlaBack`) and the head's the plain one; that is the one
    convention this net and ResNet-34 do not share.
 2. `mnv2InputGradB_eq_mobilenetv2B_full_vjp` and `mnv2InputGradB_correct` — the tie, and its
-   reading as `∑ pdiv … * dy`: the chain IS the Jacobian-transpose of the twenty-one-stage
-   composition, at every batch size.
+   reading as `∑ pdiv … * dy`: with its seventeen block slots filled by certified block VJPs,
+   the chain is the Jacobian-transpose of the twenty-one-stage composition, at every batch size.
 3. `mobilenetv2ForwardBFull_eq_slots` — the shape check: those twenty-one stages ARE
-   `mobilenetv2ForwardBFull`, the forward `mobilenetv2FwdGraphBFull_faithful` (4.2b) says the
+   `mobilenetv2ForwardBFull`, the forward `mobilenetv2FwdGraphBFull_faithful` says the
    typed graph denotes. Without it the tie would be a statement about variables.
 
-⛔ **Why the blocks stay opaque, measured on ResNet-34's peer.** Instantiating a tie of this shape
+**Why the blocks stay opaque.** Instantiating a tie of this shape
 at the concrete blocks is a *kernel* deterministic timeout: the block witnesses are `HasVJPAt` at
 `opaqueA{k-1} … x` and a caller's are at `mnv2PreB{k-1} N w x`, which is seventeen defeq
 checks between seventeen-deep nested applications spelled through different definition chains.
 B0's file takes that step only because swish has no kink, so its witnesses are GLOBAL `HasVJP`
-and carry no point at all. The shape check is what replaces it, and it is the same answer the
-per-example file gave.
+and carry no point at all. The shape check is what replaces it.
 
-⚠ It stays a SMOOTH-POINT statement: relu6 is kinked on BOTH sides, so each of the 35 sites
-carries `≠ 0 ∧ ≠ 6`. ⛔ MobileNetV2's two clauses per block are the expand relu6 and the
-depthwise relu6, both INSIDE the body — not ResNet-34's mid-relu and post-residual outer relu.
-Those are 4.2b's bundles, reused verbatim; this file adds no hypothesis of its own.
+It is a smooth-point statement: relu6 is kinked on both sides, so each of the 35 sites carries
+`≠ 0 ∧ ≠ 6`. MobileNetV2's two clauses per block are the expand relu6 and the depthwise relu6,
+both inside the body — not ResNet-34's mid-relu and post-residual outer relu. Those are
+`MobileNetV2FullBVJP`'s bundles; this file adds no hypothesis of its own.
 
-⛔ **What this does NOT reach.** Every gradient node in `mobilenetv2in_rmsdp64` feeds an
-`allReduceMeanF` node, and this is at the per-replica gradient before it (§4d). And it
-is about the INPUT gradient; the parameter gradients are `MobileNetV2StepTieB.lean`'s tie (§4.2c).
+**Scope.** One device's batch `N`: the data-parallel artifacts normalise over the global batch, so
+this describes them only at `N := R·N`. It is about the input gradient; the parameter gradients
+are `MobileNetV2StepTieB.lean`'s tie.
 -/
 
 namespace Proofs
@@ -58,7 +54,7 @@ namespace Proofs
 -- § The apex — a straight 21-stage chain, every stage opaque (generic in every dimension)
 -- ═══════════════════════════════════════════════════════════════
 
-/-- **The whole-network MobileNetV2 VJP at opaque stages** (moved here 2026-09-19 from the retired per-example tie, whose apex it was). `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`. Twenty `vjpCompDiffAt`s and nothing else:
+/-- **The whole-network MobileNetV2 VJP at opaque stages.** `dns ∘ gap ∘ head ∘ b17 ∘ … ∘ b1 ∘ stem`. Twenty `vjpCompDiffAt`s and nothing else:
     MobileNetV2's skips live INSIDE the block maps and its strides inside the strided bodies, so
     there is no list of blocks and no separate downsample slot at any depth. Dimension-generic
     and parametric in every component. -/
@@ -205,7 +201,7 @@ open scoped BigOperators
 -- § The two concrete conv-BN-relu6 endpoint ties
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The STEM tie.** `batchMap (flatConvStride2XlaBack) ∘ bnBack ∘ reluMaskBack` IS `mnv2StemB`'s
+/-- **The STEM tie.** `batchMap (flatConvStride2XlaBack) ∘ bnBack ∘ reluMaskBack` is `mnv2StemB`'s
     certified backward at a smooth point. One `rw` of the odd-kernel XLA-`SAME` strided leaf tie,
     then `rfl` — the stage's VJP is `vjpCompAt`-built so its backward is already the
     composition, and a convolution's backward ignores its primal argument, so the row-wise
@@ -229,7 +225,7 @@ theorem mnv2StemBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
 
 /-- **The HEAD's conv-BN-relu6 tie.** `batchMap (convFlatBack) ∘ bnBack ∘ reluMaskBack` IS
     `cbrB`'s certified backward at a smooth point — the stride-1 peer of the stem's, at the plain
-    (non-XLA) convolution leaf. ⚠ MobileNetV2's head is NOT hypothesis-free, unlike ResNet-34's:
+    (non-XLA) convolution leaf. MobileNetV2's head is not hypothesis-free, unlike ResNet-34's:
     it puts this relu6 in front of the pool, so the net's 35th kink site is here. -/
 theorem cbrBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
@@ -255,10 +251,12 @@ theorem cbrBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
 -- § ⭐⭐ THE TIE — stem and head concrete, the seventeen bottlenecks opaque
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **`mnv2InputGradB` IS the certified whole-net batch-BN MobileNetV2 gradient.** The
-    committed backward chain, with its two BatchNorm and two relu6-mask slots filled by the
-    certified per-op backwards and its seventeen bottlenecks left OPAQUE, equals the backward of
-    `mobilenetv2PaperPCHasVJPAt` at those twenty-one stages. `unfold`, three `rw`s, `rfl`. -/
+/-- **`mnv2InputGradB` is the backward of the whole-net VJP at opaque blocks.** The committed
+    backward chain, with its two BatchNorm and two relu6-mask slots filled by the certified per-op
+    backwards and its seventeen block slots filled by the supplied block witnesses' backwards
+    (`hb1 … hb17`, blocks `b1 … b17` left opaque), equals the backward of
+    `mobilenetv2PaperPCHasVJPAt` at those twenty-one stages, at an input where the stem and head
+    relu6 clauses (`h_stem`, `h_head`) hold. -/
 theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 32)
     (Wh : Kernel4 1280 320 1 1) (bh : Vec 1280) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec 1280)
@@ -353,10 +351,13 @@ theorem mnv2InputGradB_eq_mobilenetv2B_full_vjp (N : Nat) {nCls : Nat}
   repeat rw [Function.comp_apply]
   rfl
 
-/-- ⭐⭐ **The batched chain IS the `pdiv`-contracted Jacobian of the twenty-one-stage net** — at
-    every batch size, every input, every loss cotangent and every input pixel. The tie above read
-    through the apex's own `.correct`; `mobilenetv2ForwardBFull_eq_slots` below is what says
-    those twenty-one stages are the committed forward. -/
+/-- **The batched chain is the `pdiv`-contracted Jacobian of the twenty-one-stage composition** —
+    at every batch size and loss cotangent, and at every input where the stem and head relu6
+    clauses hold (`h_stem`, `h_head`): the chain, with its seventeen block slots filled by the
+    supplied certified block VJPs at the running activations (`hb1 … hb17`), is the
+    Jacobian-transpose of `dense ∘ gap ∘ cbrB ∘ b17 ∘ … ∘ b1 ∘ mnv2StemB`. The blocks are
+    variables here; `mobilenetv2ForwardBFull_eq_slots` identifies the stages with the committed
+    forward. -/
 theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 32)
     (Wh : Kernel4 1280 320 1 1) (bh : Vec 1280) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec 1280)
@@ -439,28 +440,25 @@ theorem mnv2InputGradB_correct (N : Nat) {nCls : Nat}
   exact HasVJPAt.correct_of_backward_eq _ (mnv2InputGradB_eq_mobilenetv2B_full_vjp N Ws bs εs hεs γs βs Wh bh εh hεh γh βh
     Wfc bfc b1 b2 b3 b4 b5 b6 b7 b8 b9 b10 b11 b12 b13 b14 b15 b16 b17 x h_stem hb1 hb2 hb3 hb4 hb5 hb6 hb7 hb8 hb9 hb10 hb11 hb12 hb13 hb14 hb15 hb16 hb17 h_head) dy i
 
-/-- ⭐⭐ **The head group re-associated, proved once where the terms are VARIABLES.**
+/-- **The head group re-associated, proved once where the terms are variables.**
     `mnv2HeadB` is three stages and the apex takes them as three slots, so the shape check below
     meets `(dns ∘ gap ∘ head) ∘ trunk` on one side and `dns ∘ gap ∘ head ∘ trunk` on the other.
-    They are definitionally equal — and ⛔ letting the kernel discover that on the CONCRETE
+    They are definitionally equal. Note: letting the kernel discover that on the concrete
     twenty-one-stage net is a deterministic timeout, because whnf unfolds the `@[reducible]`
-    block abbreviations to get there. Between variables it is `rfl` and costs nothing.
-    The per-example r34 tie's `chainComp₂_comp` (retired) was the same trick: prove the reduction
-    where the terms are variables, then REWRITE. -/
+    block abbreviations to get there; between variables it is `rfl`. -/
 private theorem comp3_assoc {m a b c n : Nat} (f : Vec c → Vec n) (g : Vec b → Vec c)
     (h : Vec a → Vec b) (k : Vec m → Vec a) : (f ∘ g ∘ h) ∘ k = f ∘ g ∘ h ∘ k := rfl
 
-/-- ⭐⭐ **THE SHAPE CHECK — the twenty-one slots the tie is about ARE the committed forward.**
+/-- **The shape check — the twenty-one slots the tie is about are the committed forward.**
     `mobilenetv2ForwardBFull`, regrouped into exactly the twenty-one arguments
     `mobilenetv2PaperPCHasVJPAt` takes: the XLA-`SAME` stem, `b1` the `t = 1` bottleneck,
     `b3/b5/b6/b8/b9/b10/b12/b13/b15/b16` the bodies under the identity skip, `b2/b4/b7/b14` the
     stride-2 downsamplers, `b11/b17` the stride-1 bodies whose channels change, and the head's
     three stages.
 
-    ⛔ **This is the theorem that would have caught ResNet-34's wrong pool** (§3.10) — the tie
-    keeps its blocks opaque, so its subject is a chain of VARIABLES and nothing in it says which
-    net they are. It goes through `mobilenetv2ForwardBFull_eq_chain` (4.2b) for the depth-17 half
-    and then unfolds the named prefixes and the head. -/
+    The tie keeps its blocks opaque, so its subject is a chain of variables and nothing in it
+    says which net they are; this theorem does. It goes through `mobilenetv2ForwardBFull_eq_chain`
+    for the depth-17 half and then unfolds the named prefixes and the head. -/
 theorem mobilenetv2ForwardBFull_eq_slots (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
     mobilenetv2ForwardBFull N w x

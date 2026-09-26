@@ -2,10 +2,11 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StepTieB
 import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2SyncB
 
-/-! # MobileNetV2's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
+/-! # MobileNetV2's data-parallel step at synchronised BatchNorm is the single-device step at `R·N`
 
-`MobileNetV2StepTieB.lean` (T3) threads the label-smoothed loss cotangent down the batch-BN
-backward chain on ONE device and ties every parameter gradient node to the certified gradient.
+`MobileNetV2StepTieB.lean` threads the label-smoothed loss cotangent down the batch-BN
+backward chain on one device and ties every parameter gradient node to the certified gradient at
+that chain's cotangent.
 This is its data-parallel twin, for the render `MobileNetV2RenderB` emits at `replicas > 1`: `R`
 replicas at batch `N`, every one of the 52 BatchNorms synchronised, every parameter gradient
 all-reduced by its mean. The capstone `mnv2_net_syncTiedB` says that, for every parameter the
@@ -43,16 +44,16 @@ XLA-`SAME` stem weight collectives — come from `DataParallelSyncKit`.
 
 At the committed `convBias := false`, `MobileNetV2RenderB` emits 158 parameter gradients — stem 3
 (`sW`, `sg`, `sbt`), `b1` 6, sixteen blocks × 9 (`eW eg ebt dW dg dbt pW pg pbt`), head 3 (`hW`,
-`hg`, `hbt`), dense 2 (`Wd`, `bd`) — and the capstone ties all 158. ⚠ The 52 conv, depthwise and
+`hg`, `hbt`), dense 2 (`Wd`, `bd`) — and the capstone ties all 158. The 52 conv, depthwise and
 project BIAS nodes the single-device tie also states are not emitted at `convBias := false` and
 are not tied here (`mnv2_net_tiedB` keeps them for the flag).
 
 ## What is NOT claimed
 
-⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
+The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (mnv2PreB{k} (R*N) w X)`); that the sync forward graph computes exactly those is
-`StableHLO.mobilenetv2FwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are
-the shards of one batch is the driver's. ⚠ The lowerer's `all_reduce` is trusted as every other
+`StableHLO.mobilenetv2FwdGraphSyncFull_shard`, the forward half. That the replicas' inputs are
+the shards of one batch is the driver's. The lowerer's `all_reduce` is trusted as every other
 op's lowering is.
 -/
 
@@ -730,7 +731,7 @@ theorem mnv2_noexp_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc : Nat} 
   · exact bnSync_of_scaled R hR N oc h w hm _ _ _ _ _ _ _ _ _ hdys
 
 /-- **Stride-1 inverted-residual block, DP-tied — its nine emitted collectives** (`eW eg ebt dW dg
-    dbt pW pg pbt`). ⭐ One statement for all twelve stride-1 blocks, skip or widening, exactly as
+    dbt pW pg pbt`). One statement for all twelve stride-1 blocks, skip or widening, exactly as
     `mnv2Stride1TiedB` is: the identity skip changes only the cotangent handed to the previous
     block, never a parameter's. -/
 def mnv2Stride1SyncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic mid oc : Nat}
@@ -899,7 +900,7 @@ theorem mnv2_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc nCls : N
     corollary (cotangents instantiated) state exactly one thing. The first 18 `let`s are
     `mnv2_net_tiedB`'s chain at `N := R·N`, driven by the global cotangent `G`; the next 18 are the
     replicas' sync-BN chain, driven by the family `gs`; the 19 conjuncts are one per stage, every
-    emitted parameter collective against T3's node at the global batch. -/
+    emitted parameter collective against `mnv2_net_tiedB`'s node at the global batch. -/
 def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls)) : Prop :=
@@ -971,23 +972,23 @@ def mnv2NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
   ∧ mnv2HeadSyncTiedB R hR N 7 7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW
       (mnv2PreB17 (R * N) w X) gs G
 
-/-- ⭐⭐⭐ **The synchronised-BN data-parallel MobileNetV2 step IS the single-device step at the
+/-- **The synchronised-BN data-parallel MobileNetV2 step is the single-device step at the
     global batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain from
     its own cotangent `gs r`, with `gs r` the `R`-scaled shard of a global cotangent `G`; every
     parameter's all-reduced mean gradient — stem 3, `b1` 6, sixteen blocks × 9, head 3, dense 2:
     the 158 the render emits — equals the single-device batch-BN gradient node at batch `R·N`, at
-    the cotangent T3's chain delivers there from `G`.
+    the cotangent `mnv2_net_tiedB`'s chain delivers there from `G`.
 
-    ⭐ The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per
+    The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per
     BN layer), per-example conv / depthwise / relu6 / GAP / dense links. The right-hand chain is
     `mnv2_net_tiedB`'s at `N := R·N` with `g := G`, whose nodes that capstone ties to the certified
-    gradient — so this and it together say the DP step's update is the certified gradient of the
-    global-batch step. `mnv2_net_syncTiedB_smoothedCE` discharges the hypothesis for the
+    gradient at its chain cotangent — so this and it together say every all-reduced gradient the
+    DP render emits is the global-batch step's gradient node. The optimizer update that follows
+    (RMSProp/AdamW) is not stated here. `mnv2_net_syncTiedB_smoothedCE` discharges the hypothesis for the
     label-smoothed chain the artifacts emit.
 
-    ⛔ Before the render's sync-BN swap the DP render normalised per replica and this statement
-    was false: `DataParallel.dpMeanGrad_ne_globalBatchGrad` is the witness, and stays as the
-    statement of what those runs did. -/
+    With per-replica BatchNorm the corresponding statement is false in general;
+    `DataParallel.dpMeanGrad_ne_globalBatchGrad` is a two-replica counterexample. -/
 theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (w : MNV2BWeights nCls)
     (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112)))) (G : Vec ((R * N) * nCls))
@@ -1078,11 +1079,11 @@ theorem mnv2_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
     mnv2_head_syncTiedB R hR N 7 7 hN h7 h7 xN cotN vN epsStr w.hW w.hb w.hε w.hγ w.hβ w.fcW
       (mnv2PreB17 (R * N) w X) gs G hgs⟩
 
-/-- ⭐⭐ **…and at the loss the artifacts emit.** `mnv2_net_syncTiedB` with its cotangent hypothesis
+/-- **…and at the loss the artifacts emit.** `mnv2_net_syncTiedB` with its cotangent hypothesis
     discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
     (`smoothedLossCotGraph`) on its shard of the logits and targets with divisor `B`; the
     single-device step runs it on the whole `R·N` batch with divisor `R·B`. Then every all-reduced
-    gradient the DP render emits IS the single-device node at batch `R·N`, loss divided by `R·B`. -/
+    gradient the DP render emits is the single-device node at batch `R·N`, loss divided by `R·B`. -/
 theorem mnv2_net_syncTiedB_smoothedCE (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (aStr negAK bStr logN ohN : String) (α B : ℝ)
     (w : MNV2BWeights nCls) (X : Vec ((R * N) * (3 * (2 * 112) * (2 * 112))))

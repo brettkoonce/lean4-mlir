@@ -1,16 +1,16 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
 
-/-! # MobileNetV4-Conv-M's whole-net input-VJP at TRUE BATCH-NORM (T1, the VJP half)
+/-! # MobileNetV4-Conv-M's whole-net input-VJP at batch BatchNorm
 
 `MobileNetV4FullB.lean` states the batch-BN forward at the 21-row Conv-M table and gives it a
-typed graph (T2). This file gives that forward a certified `HasVJPAt` — the other half of T1, and
-with it MobileNetV4 has its first net-level tier.
+typed graph. This file gives that forward a certified `HasVJPAt`
+(`mobilenetv4ForwardBFullHasVJPAt`).
 
-⚠⚠ **No accuracy is quoted for this net.** Conv-M has no Imagenette run and no verified ImageNet
-run; what pins the artifact to the reference's function is the pair of ties re-run 2026-09-07
-(forward `max |Δ| = 3.770e-06`, gradient inside the reference's own fp32 floor).
+No accuracy is quoted for this net. The statements are about timm's `mobilenetv4_conv_medium`;
+the artifacts are pinned to it by `scripts/parity/mnv4_timm_parity.py`,
+`scripts/parity/mnv4_forward_tie.py` and `scripts/parity/grad_tie.py --net mnv4`.
 
-## ⭐⭐ Eight fields, not thirty-five
+## Eight fields, not thirty-five
 
 ResNet-50's apex (`resnet50ForwardBFullHasVJPAt`) takes two structures, `R50PosB` and
 `R50SmoothAtB`, whose 35 hand-written fields are a positivity bundle and a smoothness bundle per
@@ -20,32 +20,33 @@ difference is `CertLayer`:
 
 * `0 < ε` at all 77 BatchNorm sites is already INSIDE the weights — `UibParams` carries `hq he hd
   hz` and `Mnv4BWeights` carries the stem's, the fused stage's and the head's — so **no positivity
-  hypothesis appears at this tier at all**, where `R50PosB` has seventeen fields.
+  hypothesis appears here at all**, where `R50PosB` has seventeen fields.
 * every relu clause is some group's `.ok`, which `CertLayer.comp` built by conjoining each
   stage's condition **at that stage's own input** as the group was assembled. Writing them out
-  would be roughly sixty clauses, each at a deeply nested activation. None is written down here.
+  would be 38 clauses (the relu count `MobileNetV4FullBSeal`'s `#guard` checks), each at a deeply
+  nested activation. None is written down here.
 
-⛔ It would be seven fewer still if the whole trunk were one `CertLayer` — and it cannot be. That
+It would be seven fewer still if the whole trunk were one `CertLayer` — and it cannot be. That
 composition elaborates, but every later use has to peel `CertLayer.comp` to reach `.fwd`, and at
-MNv4's literal resolutions that peel costs ten minutes and then a kernel timeout.
-`MobileNetV4FullB.lean` records the measurement; the seven prefixes are the price, and they are
-ResNet-50's own shape at seven stages rather than eighteen.
+MNv4's literal resolutions that peel ends in a kernel timeout (`MobileNetV4FullB.lean`); the
+seven prefixes are the price, and they are ResNet-50's own shape at seven stages rather than
+eighteen.
 
 ## The stem is the only thing composed by hand, and it has to be
 
-⚠⚠ `CertLayer` demands a backward graph and **no render emits a gradient into `%x`**: the
+`CertLayer` demands a backward graph and **no render emits a gradient into `%x`**: the
 artifact's backward ends at the stem conv's WEIGHT gradient. That is EfficientNet-B0's situation
 exactly, so MNv4's stem stays a plain function and the apex is one `vjpCompAt`.
 
-⭐ **No new `Foundation` lemma was needed.** The stem is ResNet's symmetric strided conv-bn-relu
+**No new `Foundation` lemma is needed.** The stem is the symmetric strided conv-bn-relu
 (`cbReluStridedB`), so its VJP is `cbReluStridedBHasVJPAt` — itself `bnReluStageHasVJPAt` at
 `flatConvStride2`.
 
-⚠ Pointwise (`HasVJPAt`), not global, and necessarily: relu is kinked, at every stage including
-stage 0 (timm's `EdgeResidual` is relu).
+Pointwise (`HasVJPAt`), not global: relu is kinked, at every stage including stage 0 (timm's
+`EdgeResidual` is relu).
 
-⭐ `N` is a binder, so this covers every batch size, and the artifacts' `N` is the PER-REPLICA
-batch (`DataParallel.lean`, §4d).
+`N` is a binder, so this covers every batch size. On the data-parallel (sync-BN) artifacts,
+instantiate at the global batch `R·N` (see `MobileNetV4SyncB`).
 -/
 
 namespace Proofs
@@ -65,7 +66,7 @@ def Mnv4StemSmoothAtB (N h w : Nat) {ic oc kH kW : Nat}
     (x : Vec (N * (ic * (2 * h) * (2 * w)))) : Prop :=
   ∀ k, bnBatchLA N oc h w εs γs βs (batchMap N (flatConvStride2 Ws bs) x) k ≠ 0
 
-/-- ⭐ The stem's VJP: `cbReluStridedBHasVJPAt`, the symmetric strided conv-bn-relu — zero new
+/-- The stem's VJP: `cbReluStridedBHasVJPAt`, the symmetric strided conv-bn-relu — zero new
     analytic content. -/
 noncomputable def mnv4StemBHasVJPAt (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
@@ -85,13 +86,15 @@ theorem mnv4StemB_differentiableAt (N h w : Nat) {ic oc kH kW : Nat}
 -- § The whole hypothesis budget, in one structure
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **Everything MobileNetV4-Conv-M's whole-net VJP needs: the stem's one kink clause, and
+/-- **Everything MobileNetV4-Conv-M's whole-net VJP needs: the stem's one kink clause, and
     each group's `.ok` at the activation that group actually sees.**
 
     Each group field is a conjunction `CertLayer.comp` assembled from its blocks' conditions —
     each relu's condition stated at the activation THAT stage sees, in execution order. The
     eighteen skips contribute their bodies' conditions unchanged (an identity skip adds no kink),
-    and the BN-only pre-DWs, the projects, GAP, the head casts and dense contribute nothing. Roughly sixty clauses in total, none of which had to be written down. -/
+    and the BN-only pre-DWs, the projects, GAP, the head casts and dense contribute nothing. 38
+    relu clauses in total (the stem's plus 37 across the seven `.ok` fields), none of which had
+    to be written down. -/
 structure Mnv4SmoothAt (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Prop where
   /-- the stem's relu is away from its kink at the image. -/
@@ -144,16 +147,15 @@ private noncomputable def mnv4ChainB (N : Nat) {nCls : Nat} (w : Mnv4BWeights nC
   vjpCompDiffAt _ _ x p6
     ⟨(mnv4HeadStack N w).vjp _ hx.head, (mnv4HeadStack N w).diff _ hx.head⟩
 
-/-- ⭐⭐ **MobileNetV4-Conv-M at TRUE BATCH-NORM has a certified input-VJP at a smooth point — the
-    fused stage, all 21 UIB blocks and the two-conv head.** T1's VJP half, and the first net-level
-    tier this net has ever had.
+/-- **MobileNetV4-Conv-M at batch BatchNorm has a certified input-VJP at a smooth point — the
+    fused stage, all 21 UIB blocks and the two-conv head.**
 
     A bottom-up chain of seven `vjpCompDiffAt`s: the stem, the fused stage, the five resolution
     groups, the head. Every step below the stem is a group's `.vjp` — `CertLayer.comp`'s
     composition theorem already applied within it, which is `CertifiedChain.lean`'s whole reason
     for existing; only the seven joins are made here.
 
-    ⚠ Pointwise, and necessarily: relu is kinked. ⭐ `N` and `nCls` are both binders, so this
+    Pointwise, because relu is kinked (`hx : Mnv4SmoothAt N w x`). `N` and `nCls` are both binders, so this
     covers the 10-class Imagenette artifacts and the 1000-class `mnv4in` ones at every batch size,
     and no `0 < ε` hypothesis appears — those live in the weight records. -/
 noncomputable def mobilenetv4ForwardBFullHasVJPAt (N : Nat) {nCls : Nat}
@@ -161,16 +163,16 @@ noncomputable def mobilenetv4ForwardBFullHasVJPAt (N : Nat) {nCls : Nat}
     HasVJPAt (mobilenetv4ForwardBFull N w) x :=
   (mnv4ChainB N w x hx).fst
 
-/-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`. What the
+/-- The committed forward is differentiable at every smooth point — the chain's `.snd`. What the
     seal's `seal_differentiableAt` needs. -/
 theorem mobilenetv4ForwardBFull_differentiableAt (N : Nat) {nCls : Nat}
     (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x) :
     DifferentiableAt ℝ (mobilenetv4ForwardBFull N w) x :=
   (mnv4ChainB N w x hx).snd
 
-/-- ⭐ And it IS the `pdiv`-contracted Jacobian of the whole net, at every batch size and both
-    shipped class counts. The reading that says the object above is the gradient rather than
-    merely a function of the right type. -/
+/-- The `.correct` field of `mobilenetv4ForwardBFullHasVJPAt`, restated: at a point satisfying
+    `Mnv4SmoothAt`, its backward is the `pdiv`-contracted Jacobian of `mobilenetv4ForwardBFull`,
+    at every batch size and class count. -/
 theorem mobilenetv4ForwardBFullHasVJPAt_correct (N : Nat) {nCls : Nat}
     (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (hx : Mnv4SmoothAt N w x)
     (dy : Vec (N * nCls)) (i : Fin (N * (3 * 224 * 224))) :

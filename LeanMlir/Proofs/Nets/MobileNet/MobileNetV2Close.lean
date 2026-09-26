@@ -3,44 +3,23 @@ import LeanMlir.Proofs.Architectures.StridedConv
 import LeanMlir.Proofs.Architectures.ConvGrad
 import LeanMlir.Proofs.Architectures.PerChannelBNGrad
 
-/-! # Closing the MobileNetV2 render — the depthwise / strided parameter-gradient bridges
+/-! # Depthwise-bias and stride-2 conv SGD bridges
 
-`planning/archive/mobilenetv2_close.md` Item C — the "free close" (generic in the cotangent the
-backward chain delivers at each layer's output, the CIFAR-non-BN-style close): every
-MobileNetV2 train-step parameter output denotes `θ − lr·(certified Jacobian · cotangent)`.
+Three SGD bridges, each saying that `θ − lr·(backward of the parameter's VJP)` equals
+`θ − lr·(certified ∂/∂θ · c)` for a free cotangent `c`:
 
-The MobileNetV2 train step (`TestMobilenetV2Train.lean` (retired 2026-09-20)) has these parameter families,
-and each is now certified by the bridge in the right column:
+* `mnv2_render_depthwiseb_certified` — the stride-1 depthwise bias (`depthwiseBiasGradHasVJP`,
+  the spatial reduce `db[c] = Σ dy`), through `mnv2_depthwise_bias_grad_bridge`.
+* `mnv2_render_stem_convW_certified` — the stride-2 conv weight (`flatConvStride2WeightGradHasVJP`).
+* `mnv2_render_stem_convb_certified` — the stride-2 conv bias (`flatConvStride2BiasGradHasVJP`).
 
-| family (render SSA)                         | forward fn          | certified by                                  |
-|---------------------------------------------|---------------------|-----------------------------------------------|
-| 1×1 conv W (expand `eW` / project `pW` / head `hW`) | `conv2d` (stride 1) | `cnn_render_convW_certified` (M3, **reuse**)  |
-| 1×1 conv b (`eb` / `pb` / `hb`)             | `conv2d`            | `cnn_render_convb_certified` (M3, **reuse**)  |
-| BN γ (`eg`/`dg`/`pg`/`hg`/`sg`)             | `bnPerChannelFlat`  | `cifar_bn_render_gamma_certified` (**reuse**) |
-| BN β (`ebt`/`dbt`/`pbt`/`hbt`/`sbt`)        | `bnPerChannelFlat`  | `cifar_bn_render_beta_certified` (**reuse**)  |
-| dense `Wd` / `bd`                           | matmul / +bias      | `weight_grad_bridge` / `bias_grad_bridge` (M2, **reuse**) |
-| stem 3×3 conv W (`sW`, stride 2)            | `flatConvStride2`   | `mnv2_render_stem_convW_certified` (**new wrapper**) |
-| stem 3×3 conv b (`sb`, stride 2)            | `flatConvStride2`   | `mnv2_render_stem_convb_certified` (**new**)  |
-| depthwise W stride 1 (`dW`, blocks b2,b4)   | `depthwiseConv2d`   | `Mnv2PoC.depthwiseW_den` (`MobileNetV2Fold.lean`; this file's own wrapper retired 2026-09-20) |
-| depthwise b stride 1 (`db`, blocks b2,b4)   | `depthwiseConv2d`   | `mnv2_render_depthwiseb_certified` (**new**)  |
-
-The reuse families need no new theorem — the generic M2/M3/CIFAR-BN bridges apply verbatim at
-the MobileNetV2 shapes. This file supplies the genuinely-new pieces:
-
-* **Depthwise (stride-1) b** — the `.correct` field of the proven `depthwiseBiasGradHasVJP`
-  (`Depthwise.lean`), SGD-wrapped (the W twin, superseded by `Mnv2PoC.depthwiseW_den`, was retired). The "one genuinely-new bridge
-  family" of the plan — instantiation, the VJP itself is already proven 3-axiom-clean.
-* **Stem strided conv W/b** — wrappers of `flatConvStride2WeightGradHasVJP` (ch6) and a new
-  strided-conv *bias* VJP.
-
-The shipped MobileNetV2 is batched, with XLA-`SAME` stride-2 layers. `mnv2_net_tiedB` certifies its
-stride-2 depthwise and stem parameters through `Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den` /
-`Mnv2PaperPoCG.depthwiseStridedXlaBGradB_den`, `EnetPoCG.convStridedXlaWGradB_den` and
-`Mnv2PaperPoCG.convStridedXlaBGradB_den`.
-
-All bridges are generic in the cotangent `c`/`dy` the backward chain delivers at the layer output
-(pinning that cotangent to the actual inverted-residual chain is the optional Item D). The SGD
-wrapping `θ − lr·∇` is identical to the linear/MLP/CNN cases.
+The cotangent is a binder; nothing here ties it to a net's backward chain. `MobileNetV2Fold.lean`
+builds the stride-1 depthwise op ties on the bias bridge (`ConvNeXtStepTie` uses them), and
+`ResNet34Fold.lean` builds its strided-stem ties on the two conv bridges. The batched MobileNetV2
+train step's strided parameters are tied in `mnv2_net_tiedB` through
+`Mnv2PaperPoCG.depthwiseStridedXlaWGradB_den`, `Mnv2PaperPoCG.depthwiseStridedXlaBGradB_den`,
+`EnetPoCG.convStridedXlaWGradB_den` and `Mnv2PaperPoCG.convStridedXlaBGradB_den`, not through this
+file.
 -/
 
 namespace Proofs

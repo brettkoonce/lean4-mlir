@@ -3,18 +3,18 @@ import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
 /-! # MobileNetV2's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
 
-`MobileNetV2FullB.lean` (T2) says the typed batch-BN graph denotes `mobilenetv2ForwardBFull N w`
+`MobileNetV2FullB.lean` says the typed batch-BN graph denotes `mobilenetv2ForwardBFull N w`
 on one device. `MobileNetV2RenderB`'s data-parallel step normalises with the GLOBAL batch's
 statistics at `replicas > 1`: every one of the 52 BatchNorm sites is the sync-BN composition —
 this replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed, then
-`bnSyncF`. This file is T2's data-parallel twin: that forward graph, stated as a family over the
+`bnSyncF`. This file is the data-parallel twin of `mobilenetv2FwdGraphBFull_faithful`: that forward graph, stated as a family over the
 `R` replicas, denotes on replica `r` exactly `batchShard r` of the single-device forward at the
 global batch `R·N`.
 
     den (mobilenetv2FwdGraphSyncFull R hR N epsStr w e r)
       = batchShard R N nCls (mobilenetv2ForwardBFull (R * N) w X) r
 
-given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
+given that each replica's input is its shard of one global batch `X`. **The spec does not
 move**: the right-hand side is the committed `mobilenetv2ForwardBFull`, at `N := R·N`.
 
 ## How it is proved
@@ -26,8 +26,8 @@ the shard hypothesis `∀ r, den (e r) = batchShard R N _ X r` carried from bloc
   is the XLA-`SAME` strided conv and depthwise — the padding lives inside the per-example map;
 * relu6 is pointwise, so it commutes with sharding (`den_relu6_shard`, the peer of
   `den_relu_shard`); the identity skip is `den_addVB_shard`;
-* every BatchNorm site is `bnSyncSiteLA`, whose shard lemma `den_bnSyncSiteLA` is P1 on the graph
-  read at the network index.
+* every BatchNorm site is `bnSyncSiteLA`, whose shard lemma `den_bnSyncSiteLA` is the sync-BN
+  shard identity on the graph, read at the network index.
 
 The graph reuses `ResNet34SyncB`'s site verbatim — it is net-agnostic — so the only new lemma is
 the relu6 one; the rest of this file is MobileNetV2's six block shapes and their chain.
@@ -41,9 +41,9 @@ statistics as `%arsum` / `%armean` of `b{k}dgmu` and `b{k}dgvar`, each over a `[
 
 ## What is NOT claimed here
 
-⚠ The backward and the parameter collectives are the T3 half (`MobileNetV2SyncStepTieB.lean`).
-⚠ That the `R` replicas' inputs ARE the shards of one batch is the driver's, as in
-`DataParallelSync.lean`. ⚠ The lowerer's `all_reduce` is trusted as every other op's lowering is.
+The backward and the parameter collectives are `MobileNetV2SyncStepTieB.lean`'s. That the `R`
+replicas' inputs are the shards of one batch is the driver's, as in `DataParallelSync.lean`. The
+lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 
 namespace Proofs
@@ -260,7 +260,7 @@ theorem mnv2HeadGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N h w 
 -- § The whole net
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The sync-BN data-parallel MobileNetV2 forward graph, over the replica family.** T2's
+/-- **The sync-BN data-parallel MobileNetV2 forward graph, over the replica family.**
     `mobilenetv2FwdGraphBFull` with every BatchNorm a `bnSyncSiteLA` over all `R` replicas; block
     prefixes, parameter names and collective tags are the render's. -/
 def mobilenetv2FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
@@ -287,7 +287,7 @@ def mobilenetv2FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : Strin
                                       (mnv2StemGraphSync epsStr R hR N 112 112
                                         w.sW w.sb w.sε w.sγ w.sβ e))))))))))))))))))
 
-/-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
+/-- **At synchronised BatchNorm, replica `r`'s forward is shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` examples,
     the sync-BN graph on replica `r` denotes `batchShard r` of `mobilenetv2ForwardBFull (R * N)
     w X` — the committed batch-BN forward, at the global batch. One block lemma per stage, the

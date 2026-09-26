@@ -3,13 +3,13 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34SyncStepTieB
 import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4SyncB
 
-/-! # MobileNetV4-Conv-M's data-parallel step at SYNCHRONISED BatchNorm IS the single-device step at `R·N`
+/-! # MobileNetV4-Conv-M's data-parallel step at synchronised BatchNorm is the single-device step at `R·N`
 
-`MobileNetV4StepTieB.lean` (T3) threads a loss cotangent `g` down the batch-BN backward chain on
-ONE device and ties every parameter gradient node to the certified gradient. This is its
-data-parallel twin, for the render `MobileNetV4RenderB` emits at `replicas > 1`: `R` replicas at
-batch `N`, every one of the 77 BatchNorms synchronised, every parameter gradient all-reduced by
-its mean. The capstone `mnv4_net_syncTiedB` says that, for every parameter the render emits,
+`MobileNetV4StepTieB.lean` threads a loss cotangent `g` down the batch-BN backward chain on
+one device and ties every parameter gradient node to the certified gradient at that chain's
+cotangent. This is its data-parallel twin, for the render `MobileNetV4RenderB` emits at
+`replicas > 1`: `R` replicas at batch `N`, every one of the 77 BatchNorms synchronised, every
+parameter gradient all-reduced by its mean. The capstone `mnv4_net_syncTiedB` says that, for every parameter the render emits,
 
     mean over the R replicas of replica r's gradient node, replica cotangent gs r
       = the single-device gradient node at the global batch R·N, global cotangent G
@@ -18,7 +18,7 @@ whenever each replica's loss cotangent is `R ×` its shard of the global one —
 `mnv4_net_tiedB` at `N := R·N` ties to the certified gradient. The right-hand side is the existing
 single-device chain at `N := R·N`, so the spec has not moved.
 
-## ⚠ T3 binds the loss cotangent, so this twin does too
+## The single-device tie binds the loss cotangent, so this twin does too
 
 `mnv4_net_tiedB` takes the logits' cotangent `g` as a binder (`mnv4_lossCot_is_smoothedCE_grad`
 instantiates it). The twin therefore takes the global cotangent `G` and the replica family `gs` as
@@ -50,35 +50,36 @@ the batch cut (`mnv4To11_shard`, `mnv4From11_shard`) and with scaling.
 4. **The divisor** — the hypothesis on `gs`; its `R` cancels the collective's `1/R` at every
    parameter.
 
-⭐ Everything is GENERIC IN THE ROW (`s : UibSpec`), as T3 is, so widths stay variables; the
-capstone instantiates at the 21 concrete rows. MNv4's activation is **relu** everywhere (timm), so
-the masks are `reluMaskB` — MobileNetV2's `relu6MaskB` does not appear; the BN-only pre-DW has no
-mask at all.
+Everything is generic in the row (`s : UibSpec`), as `MobileNetV4StepTieB` is, so widths stay
+variables; the capstone instantiates at the 21 concrete rows. MNv4's activation is **relu**
+everywhere (timm), so the masks are `reluMaskB` — MobileNetV2's `relu6MaskB` does not appear; the
+BN-only pre-DW has no mask at all.
 
 ## The index seam
 
-ℝ-level, as T3 is: the replica BN link `bnSyncInB` is the `den` of the emitted nodes
-(`bnSyncDyStatsB` → all-reduce → `bnSyncBack`) over `.operand` leaves at `reassocB`, and
-`bnSyncInB_shard` carries P2 across the `N·(c·h·w)` / `N·(c·(h·w))` seam; `BnSync`'s γ and β
-collectives read `reassocB` of the pre-BN activation and of the cotangent, exactly as T3's
-`BnPairTiedB` nodes do.
+ℝ-level, as `MobileNetV4StepTieB` is: the replica BN link `bnSyncInB` is the `den` of the
+emitted nodes (`bnSyncDyStatsB` → all-reduce → `bnSyncBack`) over `.operand` leaves at
+`reassocB`, and `bnSyncInB_shard` carries `DataParallelSync`'s P2 (the sync-BN input-VJP shard
+identity) across the `N·(c·h·w)` / `N·(c·(h·w))` seam; `BnSync`'s γ and β collectives read
+`reassocB` of the pre-BN activation and of the cotangent, exactly as the `BnPairTiedB` nodes
+`MobileNetV4StepTieB` uses do.
 
 ## What the DP render emits, and what is tied
 
 `MobileNetV4RenderB` emits 233 parameter gradients — stem 3 (`sW`, `sg`, `sbt`), fused 6
 (`f0cW f0cg f0cbt f0pW f0pg f0pbt`), thirteen ExtraDW blocks × 12 (ten stride-1 rows and the three
 strided rows 1, 3, 11: `u{p}{q,e,d,p}{W,g,bt}`), four ConvNeXt-like × 9 (no `d`), four FFN × 6 (no
-`q`, no `d`), head 8 (`h1W h1g h1bt hW hg hbt Wd bd`) — and the capstone ties all 233. ⚠ There are
+`q`, no `d`), head 8 (`h1W h1g h1bt hW hg hbt Wd bd`) — and the capstone ties all 233. There are
 no conv-bias gradients to exclude: the render has no `convBias` flag, binds every bias slot to
 `%zb{c}`, and emits none.
 
-## What is NOT claimed
+## What is not claimed
 
-⚠ The replicas' saved forward activations enter as the shards of the single-device forward's
+The replicas' saved forward activations enter as the shards of the single-device forward's
 (`batchShard r (mnv4Blk{k} (R*N) w X)`); that the sync forward graph computes exactly those is
-`StableHLO.mnv4FwdGraphSyncFull_shard`, the forward half. ⚠ That the replicas' inputs are the
-shards of one batch is the driver's. ⚠ The statement is at the f32 nodes: the `*bf16` artifact's
-bf16 conv twins are outside it, as for every other net. ⚠ The lowerer's `all_reduce` is trusted as
+`StableHLO.mnv4FwdGraphSyncFull_shard`, the forward half. That the replicas' inputs are the
+shards of one batch is the driver's. The statement is at the f32 nodes: the `*bf16` artifact's
+bf16 conv twins are outside it, as for every other net. The lowerer's `all_reduce` is trusted as
 every other op's lowering is.
 -/
 
@@ -113,7 +114,7 @@ theorem mnv4From11_shard {R N : Nat} (c : Nat) (DY : Vec ((R * N) * (c * 1 * 1))
 -- ════════════════════════════════════════════════════════════════
 
 /-! The stride-1 body (ExtraDW / ConvNeXt-like / FFN), each one line from the previous link's. The
-two `if`s are T3's table dispatch; they split on both sides at once. -/
+two `if`s are `MobileNetV4StepTieB`'s table dispatch; they split on both sides at once. -/
 
 theorem mnv4CotPc_smul (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) : IsHomog (mnv4CotPc N s p xin) :=
@@ -324,7 +325,7 @@ noncomputable def mnv4SyncCotDc (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * 
     (mnv4SyncCotDn R hR N s p XIN dys) r
 
 /-- Stride-1 body, replica `r`: the expand BN's output cotangent — dispatching on the row exactly
-    as T3's `mnv4CotEn` does. Feeds `u{p}eg`/`u{p}ebt`. -/
+    as `mnv4CotEn` does. Feeds `u{p}eg`/`u{p}ebt`. -/
 noncomputable def mnv4SyncCotEn (r : Fin R) : Vec (N * (s.ic * s.expand * s.h * s.h)) :=
   reluMaskB (N * (s.ic * s.expand * s.h * s.h))
     (batchShard R N (s.ic * s.expand * s.h * s.h)
@@ -806,9 +807,9 @@ theorem mnv4BodySyncCotIn_scaled (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) (
       = batchShard R N (s.ic * s.h * s.h) (fun i => (R : ℝ) * mnv4BodyCotIn (R * N) s p XIN DY i) r := by
   rw [mnv4BodySyncCotIn_shard R hR N hN s hh p XIN dys _ hdys, mnv4BodyCotIn_smul]
 
-/-- ⭐ **The skip fan-in carries the invariant** — `body dx + dyOut`, each at `R ×` its shard, is
+/-- **The skip fan-in carries the invariant** — `body dx + dyOut`, each at `R ×` its shard, is
     `R ×` the shard of the sum. Generic in the width, so it applies at the concrete rows where
-    `s.oc = s.ic` is definitional, as T3's `mnv4SkipCotIn` is. -/
+    `s.oc = s.ic` is definitional, as `mnv4SkipCotIn` is. -/
 theorem mnv4SkipSyncCotIn_scaled {R N n : Nat} (a b : Fin R → Vec (N * n)) (A B : Vec ((R * N) * n))
     (ha : ∀ r, a r = batchShard R N n (fun i => (R : ℝ) * A i) r)
     (hb : ∀ r, b r = batchShard R N n (fun i => (R : ℝ) * B i) r) (r : Fin R) :
@@ -861,8 +862,9 @@ theorem mnv4HeadSyncCotIn_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc 
 -- ════════════════════════════════════════════════════════════════
 
 /-- **ExtraDW-profile stride-1 block, DP-tied — its twelve emitted collectives** (`u{p}qW qg qbt
-    eW eg ebt dW dg dbt pW pg pbt`), each the single-device node at the global batch, at T3's chain
-    cotangents there. The skip changes only the cotangent handed down, never a parameter's. -/
+    eW eg ebt dW dg dbt pW pg pbt`), each the single-device node at the global batch, at
+    `mnv4_net_tiedB`'s chain cotangents there. The skip changes only the cotangent handed down,
+    never a parameter's. -/
 def mnv4ExtraDWSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec)
     (xN cotN vN epsStr : String) (p : UibParams s) (XIN : Vec ((R * N) * (s.ic * s.h * s.h)))
     (dys : Fin R → Vec (N * (s.oc * s.h * s.h))) (DY : Vec ((R * N) * (s.oc * s.h * s.h))) : Prop :=
@@ -1182,7 +1184,7 @@ theorem mnv4_head_syncTiedB (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls 
     corollary (cotangents instantiated) state exactly one thing. The first 23 `let`s are
     `mnv4_net_tiedB`'s chain at `N := R·N`, driven by the global cotangent `G`; the next 23 are the
     replicas' sync-BN chain, driven by the family `gs`; the 24 conjuncts are one per stage, every
-    emitted parameter collective against T3's node at the global batch. -/
+    emitted parameter collective against `mnv4_net_tiedB`'s node at the global batch. -/
 def mnv4NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : Mnv4BWeights nCls) (X : Vec ((R * N) * (3 * 224 * 224))) (G : Vec ((R * N) * nCls))
     (gs : Fin R → Vec (N * nCls)) : Prop :=
@@ -1284,24 +1286,26 @@ def mnv4NetSyncTiedB (R : Nat) (hR : 0 < R) (N : Nat) {nCls : Nat} (xN cotN vN e
   ∧ mnv4HeadSyncTiedB R hR N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
       w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 (R * N) w X) gs G
 
-/-- ⭐⭐⭐ **The synchronised-BN data-parallel MobileNetV4-Conv-M step IS the single-device step at the
+/-- **The synchronised-BN data-parallel MobileNetV4-Conv-M step is the single-device step at the
     global batch.** `R` replicas at batch `N`, each running the render's sync-BN backward chain
     from its own loss cotangent `gs r`; when each `gs r` is `R ×` its shard of a global cotangent
     `G` — the replicas' loss divisor is `R ×` smaller than the global step's — every parameter's
     all-reduced mean gradient — stem 3, fused 6, thirteen ExtraDW blocks × 12, four
     ConvNeXt-like × 9, four FFN × 6, head 8: the 233 the render emits — equals the single-device
-    batch-BN gradient node at batch `R·N`, at the cotangent T3's chain delivers there from `G`.
+    batch-BN gradient node at batch `R·N`, at the cotangent `mnv4_net_tiedB`'s chain delivers
+    there from `G`.
 
-    ⭐ The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per BN
+    The left-hand chain is the replicas' own: sync-BN backward (`bnSyncInB`, a collective per BN
     layer), per-example conv / depthwise / strided / relu / GAP / relabel / dense links. The
     right-hand chain is `mnv4_net_tiedB`'s at `N := R·N` with `g := G`, whose nodes that capstone
-    ties to the certified gradient — so this and it together say the DP step's update is the
-    certified gradient of the global-batch step. `mnv4_net_syncTiedB_smoothedCE` discharges the
+    ties to the certified gradient at its chain cotangent — so this and it together say every
+    all-reduced gradient the DP render emits is the global-batch step's gradient node. The AdamW
+    update that follows (and, in `mnv4in_emaaccdp8x128wxdowd005bf16`, the EMA and gradient
+    accumulation) is not stated here. `mnv4_net_syncTiedB_smoothedCE` discharges the
     hypothesis for the label-smoothed chain the artifacts emit.
 
-    ⛔ Before the render's sync-BN swap the DP render normalised per replica and this statement was
-    false: `DataParallel.dpMeanGrad_ne_globalBatchGrad` is the witness, and stays as the statement
-    of what those runs did. -/
+    With per-replica BatchNorm the corresponding statement is false in general;
+    `DataParallel.dpMeanGrad_ne_globalBatchGrad` is a two-replica counterexample. -/
 theorem mnv4_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls : Nat}
     (xN cotN vN epsStr : String) (w : Mnv4BWeights nCls) (X : Vec ((R * N) * (3 * 224 * 224)))
     (G : Vec ((R * N) * nCls)) (gs : Fin R → Vec (N * nCls))
@@ -1428,7 +1432,7 @@ theorem mnv4_net_syncTiedB (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 < N) {nCls :
     mnv4_head_syncTiedB R hR N 7 7 hN h7 h7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg
       w.hbt w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 (R * N) w X) gs G hgs⟩
 
-/-- ⭐⭐ **…and at the loss the artifacts emit.** `mnv4_net_syncTiedB` with its cotangent hypothesis
+/-- **…and at the loss the artifacts emit.** `mnv4_net_syncTiedB` with its cotangent hypothesis
     discharged by `replicaLossCot_eq`: each replica runs the label-smoothed softmax chain
     (`smoothedLossCotGraph`, the `rowB`/`unrowB` spelling `mnv4_lossCot_is_smoothedCE_grad` reads
     off the render) on its shard of the logits and targets with divisor `B`; the single-device step

@@ -11,15 +11,15 @@ chain keeps its block backwards and its BatchNorm backwards as *supplied* maps a
 endpoints, so that the certified tie (`MobileNetV2WholeBackCertifiedTieB`,
 `MobileNetV4WholeBackCertifiedTieB`) is a statement about a NAMED chain of the forward's shape.
 
-⚠ Padding: MobileNetV2 is XLA-`SAME` at its stem (`flatConvStride2XlaBack`, the odd-phase
+Padding: MobileNetV2 is XLA-`SAME` at its stem (`flatConvStride2XlaBack`, the odd-phase
 scatter `decimateOddBack`) and its strided depthwises (`depthwiseStride2FlatXlaBack`), the
 TF-origin convention. MobileNetV4 follows timm's `mobilenetv4_conv_medium` and is SYMMETRIC at
 every strided site — its stem is ResNet's `flatConvStride2Back`.
 
-⭐ Neither net has a stem pool, so every batched endpoint is `StableHLO.batchMap N` of a
+Neither net has a stem pool, so every batched endpoint is `StableHLO.batchMap N` of a
 per-example leaf; none of ResNet's row-indexed `batchMapAux` lift is needed here.
 
-⚠⚠ `mnv4InputGradB` is stated TO THE IMAGE, one step past the artifact: MobileNetV4's committed
+Note: `mnv4InputGradB` is stated to the image, one step past the artifact: MobileNetV4's committed
 backward stops at the stem conv's WEIGHT gradient (no render emits a gradient into `%x`), so this
 chain runs one `flatConvStride2Back` past that point, as EfficientNet-B0's does at its stem.
 
@@ -35,8 +35,8 @@ namespace Proofs
     the exact reverse of `mobilenetv2ForwardBFull = head ∘ b17 ∘ … ∘ b1 ∘ stem`: dense-back →
     GAP-back → the head's relu6 mask, BatchNorm back and 1×1 conv back → the seventeen bottleneck
     backwards → the stem's relu6 mask, BatchNorm back and XLA-`SAME` 3×3/s2 conv back. The block
-    backwards and the two BatchNorm backs are supplied; the conv, GAP and dense leaves are
-    concrete and lifted over the `N` examples. -/
+    backwards, the two BatchNorm backs and the two relu6 masks' predicates are supplied; the
+    conv, GAP and dense leaves are concrete and lifted over the `N` examples. -/
 noncomputable def mnv2InputGradB (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) (Wh : Kernel4 1280 320 1 1) (Wfc : Mat 1280 nCls)
     (bnBs : Vec (N * (32 * 112 * 112)) → Vec (N * (32 * 112 * 112)))
@@ -77,7 +77,7 @@ noncomputable def mnv2InputGradB (N : Nat) {nCls : Nat}
     mask, BatchNorm back and symmetric 3×3/s2 conv back.
 
     The fused stage's and the twenty-one blocks' backwards are supplied, as are the three
-    BatchNorm backs; the conv, GAP, relabel and dense leaves are concrete and lifted over the `N`
+    BatchNorm backs and the three relu masks' predicates; the conv, GAP, relabel and dense leaves are concrete and lifted over the `N`
     examples. The two relabellings are the head's `[N, c] ↔ [N, c, 1, 1]` (`castIdx` in the
     graph, no text in the render). -/
 noncomputable def mnv4InputGradB (N : Nat) {nCls : Nat}

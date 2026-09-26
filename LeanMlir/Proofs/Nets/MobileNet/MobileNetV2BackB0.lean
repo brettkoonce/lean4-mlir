@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Foundation.BatchedStageLayers
 import LeanMlir.Proofs.Foundation.CertifiedChain
 
-/-! # Backward-graph faithfulness for the VERIFIED MobileNetV2 inverted-residual block
+/-! # Backward-graph faithfulness for the batched MobileNetV2 inverted-residual block
 
 The MobileNetV2 peer of `EfficientNetBackB0.lean`: a *backward* StableHLO graph
 that denotes the proven VJP of the batched MobileNetV2 inverted-residual block —
@@ -9,8 +9,11 @@ that denotes the proven VJP of the batched MobileNetV2 inverted-residual block �
 
 The block is the EfficientNet MBConv body **minus the squeeze-excite stage**, with
 **relu6 in place of swish** and the **same** linear-bottleneck `projB` (1×1 conv →
-bn, no activation). The project stage and the residual fan-in are reused VERBATIM
-from the EfficientNet file (they are global/clean — no smoothness wrinkle).
+bn, no activation). The stages come from `BatchedStageLayers` (`cbrB`, `dwbrB`,
+`dwbrBstrided` and their `CertLayer`s `cbrLayer`, `dwbrLayer`, `dwbrStridedLayer`, `projLayer`)
+and `BatchedStages` (`projB`); the residual fan-in's backward graph is
+`residualBackGraph` (`BatchedBackLinks`). The project stage and the fan-in need no
+smoothness hypothesis.
 
 ## The relu6 wrinkle
 
@@ -29,21 +32,14 @@ through; the bn/conv/depthwise pieces stay activation-independent (linear) or gl
 
 ## Structure
 
-* `cbrB` / `dwbrB` — batched conv/depthwise → bn → **relu6** stages (`cbsB`/`dwbsB`
-  with `relu6` for `swish`), with `_at` differentiability + VJP and backward-graph
-  faithfulness (`cbrBackBatchedGraph` + `…_faithful`).
-* `cbrLayer` / `dwbrLayer` / `dwbrStridedLayer` / `projLayer` — the four stages as
-  `CertLayer`s. `mnv2BodyLayer` / `mnv2DownBodyLayer` compose them with `CertLayer.comp`,
-  and each body VJP, differentiability lemma and graph `_faithful` is that layer's
-  `vjp` / `diff` / `faithful`.
+* `mnv2BodyLayer` / `mnv2DownBodyLayer` — the stride-1 and stride-2 bodies as `CertLayer`s,
+  composed from the stage layers with `CertLayer.comp`; each body VJP, differentiability lemma
+  and graph `_faithful` below is that layer's `vjp` / `diff` / `faithful`.
 * `mnv2BodyBHasVJPAt` — the SE-less body `projB ∘ dwbrB ∘ cbrB` at the relu6
   smoothness families, with its backward graph `mnv2BodyBackBatchedGraph` + `…_faithful`.
-  ⚠ This family takes `ic` and `oc` SEPARATELY (2026-09-06). It was written for the residual block and pinned them
-  equal, which is right there but wrong one level up: the paper ladder's `b11`
-  (64 → 96) and `b17` (160 → 320) are stride-1 bodies with `ic ≠ oc`, and
-  `MobileNetV2FullB.lean`'s `mnv2ExpOnlyB` is exactly that shape. Generalising
-  changed no proof — the downsample body (`mnv2DownBodyBHasVJPAt`) already had this shape.
-* `mnv2ResidBlockBackBatchedGraph_faithful` — the **CAPSTONE**: the whole batched
+  It takes `ic` and `oc` separately, so it also covers the stride-1 bodies with `ic ≠ oc`
+  (`b11`, 64 → 96, and `b17`, 160 → 320; `MobileNetV2FullB.lean`'s `mnv2ExpOnlyB`).
+* `mnv2ResidBlockBackBatchedGraph_faithful` — the whole batched
   MobileNetV2 inverted-residual block backward graph (body + identity skip) denotes
   the proven `residualHasVJPAt` of the SE-less body. Mirrors the EfficientNet
   `mbResidBlockBackBatchedGraph_faithful` without the `seB` factor, threaded through

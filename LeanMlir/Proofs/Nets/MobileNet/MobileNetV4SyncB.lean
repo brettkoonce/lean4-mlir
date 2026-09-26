@@ -1,20 +1,20 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
 import LeanMlir.Proofs.Foundation.DataParallelSyncKit
 
-/-! # MobileNetV4-Conv-M's data-parallel forward at SYNCHRONISED BatchNorm — replica `r` IS shard `r`
+/-! # MobileNetV4-Conv-M's data-parallel forward at synchronised BatchNorm — replica `r` is shard `r`
 
-`MobileNetV4FullB.lean` (T2) says the typed batch-BN graph denotes `mobilenetv4ForwardBFull N w`
+`MobileNetV4FullB.lean` says the typed batch-BN graph denotes `mobilenetv4ForwardBFull N w`
 on one device. `MobileNetV4RenderB`'s data-parallel step normalises with the GLOBAL batch's
 statistics at `replicas > 1`: every one of the 77 BatchNorm sites is the sync-BN composition —
 this replica's mean all-reduced, then Chan's `σ²_r + (μ_r − μ)²` all-reduced, packed, then
-`bnSyncF`. This file is T2's data-parallel twin: that forward graph, stated as a family over the
-`R` replicas, denotes on replica `r` exactly `batchShard r` of the single-device forward at the
-global batch `R·N`.
+`bnSyncF`. This file is the data-parallel twin of `mnv4FwdGraphBFull_faithful`: that forward
+graph, stated as a family over the `R` replicas, denotes on replica `r` exactly `batchShard r` of
+the single-device forward at the global batch `R·N`.
 
     den (mnv4FwdGraphSyncFull R hR N epsStr w e r)
       = batchShard R N nCls (mobilenetv4ForwardBFull (R * N) w X) r
 
-given that each replica's input is its shard of one global batch `X`. ⭐ **The spec does not
+given that each replica's input is its shard of one global batch `X`. **The spec does not
 move**: the right-hand side is the committed `mobilenetv4ForwardBFull`, at `N := R·N`.
 
 ## How it is proved
@@ -26,18 +26,19 @@ shard hypothesis `∀ r, den (e r) = batchShard R N _ X r` carried from block to
   per-example lift (`den_batchOp_shard`) — the padding lives inside the per-example map;
 * relu is pointwise (`den_relu_shard`); the identity skip is `den_addVB_shard`; the head's two
   `1×1` relabellings are `den_castIdx_shard` (sharding commutes with a per-example relabel);
-* every BatchNorm site is `bnSyncSiteLA`, whose shard lemma `den_bnSyncSiteLA` is P1 on the graph
-  read at the network index.
+* every BatchNorm site is `bnSyncSiteLA`, whose shard lemma `den_bnSyncSiteLA` is
+  `DataParallelSync`'s P1 (the sync-BN forward shard identity) on the graph, read at the network
+  index.
 
-⭐ **Same shape as T2, and for T2's reasons.** The block lemmas are GENERIC IN THE ROW (`s :
-UibSpec`), so every width is a projection of a variable and nothing evaluates; each one closes on
-the row-typed `mnv4BodyOfRow (R * N) s p` / `mnv4StridedBodyOfRow` by the dispatch hypotheses
-T2 uses (`s.preDWk ≠ 0`, `s.postDWk = 0`, …), discharged by `decide` at the concrete rows. The
-skip is one generic combinator (`mnv4SkipGraphSync`, the peer of `mnv4SkipGraphB`), which keeps
-the whole-net term linear in the depth. The five resolution groups are proved against
-`mnv4Res*Layer (R * N) w` through T2's `_fwd_apply` peels, and the whole net is a `have`-chain of
-eight stage lemmas over `mobilenetv4ForwardBFull`'s own prefixes — no `CertLayer.comp` is ever
-peeled at a literal width.
+**Same shape as `MobileNetV4FullB`, and for its reasons.** The block lemmas are generic in the
+row (`s : UibSpec`), so every width is a projection of a variable and nothing evaluates; each one
+closes on the row-typed `mnv4BodyOfRow (R * N) s p` / `mnv4StridedBodyOfRow` by the dispatch
+hypotheses `MobileNetV4FullB` uses (`s.preDWk ≠ 0`, `s.postDWk = 0`, …), discharged by `decide`
+at the concrete rows. The skip is one generic combinator (`mnv4SkipGraphSync`, the peer of
+`mnv4SkipGraphB`), which keeps the whole-net term linear in the depth. The five resolution groups are proved against
+`mnv4Res*Layer (R * N) w` through `MobileNetV4FullB`'s `_fwd_apply` peels, and the whole net is a
+`have`-chain of eight stage lemmas over `mobilenetv4ForwardBFull`'s own prefixes — no
+`CertLayer.comp` is ever peeled at a literal width.
 
 ## The index seam
 
@@ -54,15 +55,15 @@ Parameter names are `MobileNetV4FullB`'s, read off the row (`%u{p}{q,e,d,p}{W,g,
 γ `%u{p}qg` gathers its statistics as `%arsum` / `%armean` of `u{p}qgmu` and `u{p}qgvar`, each over
 a `[c]` vector — the γ name without `%`, then `mu` / `var`, the tag `bnFwdSite` is handed.
 
-## What is NOT claimed here
+## What is not claimed here
 
-⚠ The backward and the parameter collectives are the T3 half (`MobileNetV4SyncStepTieB.lean`).
-⚠ Every conv here is bias-free by construction: `MobileNetV4RenderB` has no `convBias` flag and
+The backward and the parameter collectives are `MobileNetV4SyncStepTieB.lean`'s.
+Every conv here is bias-free by construction: `MobileNetV4RenderB` has no `convBias` flag and
 binds each bias slot to the zero `%zb{c}`, so no bias is trained and no bias gradient is emitted
-(the statement is `∀ w`, and zero biases are one instance). ⚠ The
-statement is at the f32 nodes; the `*bf16` artifact's bf16 conv twins are outside it. ⚠ That the
-`R` replicas' inputs ARE the shards of one batch is the driver's, as in `DataParallelSync.lean`.
-⚠ The lowerer's `all_reduce` is trusted as every other op's lowering is.
+(the statement is `∀ w`, and zero biases are one instance). The
+statement is at the f32 nodes; the `*bf16` artifact's bf16 conv twins are outside it. That the
+`R` replicas' inputs are the shards of one batch is the driver's, as in `DataParallelSync.lean`.
+The lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 
 namespace Proofs
@@ -180,8 +181,8 @@ def mnv4ExtraDWBodyGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) 
           r)))
     r
 
-/-- ⭐ The ExtraDW body at sync-BN is shard `r` of the row-typed body at `R·N` — generic in the
-    row, the dispatch hypotheses T2's `mnv4ExtraDWBodyGraphB_faithful` takes. -/
+/-- The ExtraDW body at sync-BN is shard `r` of the row-typed body at `R·N` — generic in the
+    row, the dispatch hypotheses `mnv4ExtraDWBodyGraphB_faithful` takes. -/
 theorem mnv4ExtraDWBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat)
     (hN : 0 < N) (s : UibSpec) (hh : 0 < s.h) (p : UibParams s) (hq : s.preDWk ≠ 0)
     (hd : s.postDWk ≠ 0) (e : Fin R → SHlo (N * (s.ic * s.h * s.h)))
@@ -216,7 +217,7 @@ theorem mnv4ExtraDWBodyGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) 
     projB, cbReluB, dwbB, dwbReluB, denOp, Function.comp_apply]
 
 /-- **ConvNeXt-like body at sync-BN** — pre-DW only (`postDWk = 0`): the absent depthwise emits no
-    tokens, exactly as in T2. Three sync sites. -/
+    tokens, exactly as in `MobileNetV4FullB`. Three sync sites. -/
 def mnv4ConvNeXtBodyGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N : Nat) (s : UibSpec)
     (p : UibParams s) (e : Fin R → SHlo (N * (s.ic * s.h * s.h))) :
     Fin R → SHlo (N * (s.oc * s.h * s.h)) :=
@@ -373,7 +374,7 @@ theorem mnv4StridedGraphSync_shard (epsStr : String) (R : Nat) (hR : 0 < R) (N :
     mnv4DWBnLayer, mnv4DWReluStridedLayer, cbReluLayer, projLayer, CertLayer.comp_fwd, projB,
     cbReluB, dwbB, dwbReluBstrided, denOp, Function.comp_apply]
 
-/-- ⭐ **One skip row at sync-BN: its body's family, plus the identity skip, replica by replica** —
+/-- **One skip row at sync-BN: its body's family, plus the identity skip, replica by replica** —
     the peer of `mnv4SkipGraphB`, and a named combinator for the same reason: the add needs the
     block's input family twice, and kept folded the whole-net term stays linear in the depth. -/
 def mnv4SkipGraphSync {R N n : Nat} (body : (Fin R → SHlo (N * n)) → Fin R → SHlo (N * n))
@@ -393,7 +394,8 @@ theorem mnv4SkipGraphSync_shard {R N n : Nat}
 
 /-- Head at sync-BN, over the replica family, timm's order: 1×1 conv → sync-BN → relu, GAP,
     `conv_head` 1×1 conv → sync-BN → relu on the pooled features (that BN's statistics over the
-    GLOBAL batch alone), dense — with the two `castIdx` relabellings T2's head carries. -/
+    GLOBAL batch alone), dense — with the two `castIdx` relabellings `MobileNetV4FullB`'s head
+    graph carries. -/
 def mnv4HeadGraphSync (epsStr : String) (R : Nat) (hR : 0 < R) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
@@ -645,7 +647,7 @@ theorem mnv4HeadStack_graphSync_shard (R : Nat) (hR : 0 < R) (N : Nat) (hN : 0 <
 -- § The whole net
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The sync-BN data-parallel MobileNetV4-Conv-M forward graph, over the replica family.** T2's
+/-- **The sync-BN data-parallel MobileNetV4-Conv-M forward graph, over the replica family.**
     `mnv4FwdGraphBFull` with every one of its 77 BatchNorms a `bnSyncSiteLA` over all `R` replicas;
     parameter names are read off the rows and collective tags are the render's. -/
 def mnv4FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCls : Nat}
@@ -661,7 +663,7 @@ def mnv4FwdGraphSyncFull (R : Nat) (hR : 0 < R) (N : Nat) (epsStr : String) {nCl
                 w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt
                 (mnv4StemGraphSync epsStr R hR N 112 112 w.sW w.sb w.sE w.sg w.sbt e)))))))
 
-/-- ⭐⭐ **T2 at synchronised BatchNorm: replica `r`'s forward IS shard `r` of the global-batch
+/-- **At synchronised BatchNorm, replica `r`'s forward is shard `r` of the global-batch
     forward.** Given that the replicas' inputs are the shards of one batch `X` of `R·N` images,
     the sync-BN graph on replica `r` denotes `batchShard r` of `mobilenetv4ForwardBFull (R * N)
     w X` — the committed batch-BN forward, at the global batch. Eight stage lemmas — the stem, the

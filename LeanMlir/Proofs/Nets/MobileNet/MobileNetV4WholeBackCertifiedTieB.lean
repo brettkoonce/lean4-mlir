@@ -3,15 +3,12 @@ import LeanMlir.Proofs.Foundation.OpaquePrefix
 import LeanMlir.Proofs.Nets.ResNet.ResNet34BackCertifiedTieB
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetBackChains
 
-/-! # ⭐⭐ `mnv4InputGradB` IS the certified whole-net MobileNetV4-Conv-M gradient
+/-! # `mnv4InputGradB` and the certified whole-net MobileNetV4-Conv-M input VJP
 
-Tier **T6** of `planning/archive/mnv4_proofs_tier.md` §Session 3 — the last tier this net can have, and
-with it MobileNetV4-Conv-M is certified from its ℝ forward (T1) through its typed graph (T2), its
-233-parameter train-step tie (T3) and now its whole-net input gradient. T4 and T5 are float
-budgets and `planning/archive/float_budget_numbers.md` closed that thread by user decision on 2026-09-05.
+Ties the batched input-gradient chain `mnv4InputGradB` to a certified VJP for
+`mobilenetv4ForwardBFull`: the MobileNetV4 peer of `MobileNetV2WholeBackCertifiedTieB.lean`.
 
-⚠⚠ **No accuracy is quoted for this net.** The statements are about timm's
-`mobilenetv4_conv_medium` (`planning/mnv4_timm_parity.md`).
+No accuracy is quoted for this net. The statements are about timm's `mobilenetv4_conv_medium`.
 
 ## The four pieces
 
@@ -25,10 +22,11 @@ budgets and `planning/archive/float_budget_numbers.md` closed that thread by use
    `hc1` (conv-bn-relu at 7×7), `hc2` (GAP, relabel to `[N, 960, 1, 1]`, `conv_head`-bn-relu) and
    `cls` (relabel to `[N, 1280]`, dense).
 3. `mnv4InputGradB_eq_mnv4B_full_vjp` and `mnv4InputGradB_correct` — the tie, and its reading as
-   `∑ pdiv … * dy`: the chain IS the Jacobian-transpose of the twenty-six-stage composition, at
-   every batch size and both shipped class counts.
+   `∑ pdiv … * dy`: with its fused-stage and block slots filled by certified VJPs, the chain is
+   the Jacobian-transpose of the twenty-six-stage composition, at every batch size and class
+   count.
 4. `mobilenetv4ForwardBFull_eq_slots` — the shape check: those twenty-six stages ARE
-   `mobilenetv4ForwardBFull`, the forward `mnv4FwdGraphBFull_faithful` (T2) says the typed graph
+   `mobilenetv4ForwardBFull`, the forward `mnv4FwdGraphBFull_faithful` says the typed graph
    denotes. Without it the tie would be a statement about variables.
 
 ## What is MobileNetV4's own, and what is borrowed
@@ -38,35 +36,34 @@ The stem is ResNet's symmetric strided conv-bn-relu, so its tie is ResNet's; the
 `Fin.cast` relabel, whose certified backward along a bijection is the plain relabel,
 `reindex_cast_backward`) and the relabel in front of the classifier.
 
-## ⛔⛔ The apex is composed at BLOCK granularity, not at `MobileNetV4FullB.lean`'s groups
+## The apex is composed at block granularity, not at `MobileNetV4FullB.lean`'s groups
 
-`mobilenetv4ForwardBFullHasVJPAt` (T1) is a chain of seven `vjpCompAt`s over the five
-resolution-group `CertLayer`s, because `Mnv4SmoothAt` wants one `.ok` per group. T6 wants the
-finer chain — a tie whose opaque slots are groups would say nothing about which block is which —
+`mobilenetv4ForwardBFullHasVJPAt` is a chain of seven `vjpCompAt`s over the five
+resolution-group `CertLayer`s, because `Mnv4SmoothAt` wants one `.ok` per group. This tie wants
+the finer chain — a tie whose opaque slots are groups would say nothing about which block is which —
 so the stages here are the twenty-one blocks themselves, `mnv4Blk0 … mnv4Blk21`'s
-(`MobileNetV4StepTieB.lean`) stage functions. ⭐ Peeling `CertLayer.comp` to reach `.fwd` INSIDE a
-group is cheap (`comp_fwd` is a generic `rfl` lemma and T2's five group-faithfulness proofs each
-do it); what is not payable at MobileNetV4's literal resolutions is composing the compositions,
+(`MobileNetV4StepTieB.lean`) stage functions. Peeling `CertLayer.comp` to reach `.fwd` inside a
+group is cheap (`comp_fwd` is a generic `rfl` lemma and `MobileNetV4FullB`'s five
+group-faithfulness proofs each do it); what is not payable at MobileNetV4's literal resolutions is composing the compositions,
 which is why there is no `mnv4NetLayer` and why the shape check below stops at the block.
 
-⚠⚠ **Everything generic in its widths, instantiated only in the capstone.** Both stage ties bind
+**Everything generic in its widths, instantiated only in the capstone.** Both stage ties bind
 `{N ic oc h w kH kW}` and the apex binds `{s0 … s26}`; MobileNetV4's 224/112/56/28/14/7 are
-literals, and stating a `den`- or width-indexed `rfl` at them lets it RUN — six blow-ups across
-sessions 1–2 trace to that one cause. Instantiating a proven lemma is free.
+literals, and stating a `den`- or width-indexed `rfl` at them lets it run into kernel timeouts.
+Instantiating a proven lemma is cheap.
 
-⛔ **The blocks stay opaque and there is no `backward_unique` step**, for §4.2d's measured reason:
-instantiating a tie of this shape at the concrete blocks is a KERNEL deterministic timeout when
+**The blocks stay opaque and there is no `backward_unique` step**, because instantiating a tie of this shape at the concrete blocks is a KERNEL deterministic timeout when
 the witnesses are `HasVJPAt` carrying a saved activation. B0 takes that step only because swish
 has no kink. The shape check is what replaces it.
 
-⚠ It stays a SMOOTH-POINT statement, and MobileNetV4's kink budget is **relu, not relu6**: one
+It is a smooth-point statement, and MobileNetV4's kink budget is **relu, not relu6**: one
 clause per site, where MobileNetV2's `.selectMid` carries two. The stem's and the two head convs'
 are bound here (`conv_head`'s at the pooled `1×1`); the ones inside the fused stage and the blocks
 are `CertLayer.comp`'s and are never written down.
 
-⛔ **What this does NOT reach.** Under `mnv4in_adamdp64*` every gradient is all-reduced by
-`allReduceMeanF` (`DataParallelNode.lean`, §4d), so this is at the per-replica gradient. And it is
-about the INPUT gradient; the 233 parameter gradients are `MobileNetV4StepTieB.lean`'s tie (T3).
+**Scope.** One device's batch `N`: the data-parallel artifacts (`mnv4in_adamdp64*`) normalise
+over the global batch, so this describes them only at `N := R·N`. It is about the input gradient;
+the 233 parameter gradients are `MobileNetV4StepTieB.lean`'s tie.
 -/
 
 open Proofs.StableHLO
@@ -83,12 +80,12 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The STEM tie.** `batchMap (flatConvStride2Back) ∘ bnBack ∘ reluMaskBack` IS `mnv4StemB`'s
-    certified backward at a smooth point — ResNet's symmetric strided conv-bn-relu tie, since
+    certified backward at a smooth point — the symmetric strided conv-bn-relu tie, since
     `mnv4StemB` is `cbReluStridedB` at the stem's widths.
 
-    ⛔⛔ **And this is one step past the artifact.** No render emits a gradient into `%x`, so
-    MobileNetV4's committed backward ends at the stem conv's WEIGHT gradient, whose operand is the
-    stem-BN cotangent `mnv4StemCotN` ties (T3). This lemma names the map that carries that
+    **This is one step past the artifact.** No render emits a gradient into `%x`, so
+    MobileNetV4's committed backward ends at the stem conv's weight gradient, whose operand is the
+    stem-BN cotangent `mnv4StemCotN` (`MobileNetV4StepTieB`). This lemma names the map that carries that
     cotangent the rest of the way to the image. -/
 theorem mnv4StemBBack_eq_vjp_backward {N ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
@@ -223,7 +220,7 @@ theorem mnv4ClsBBack_eq_vjp_backward {N oc nCls : Nat} (Wd : Mat oc nCls) (bd : 
     `head ∘ hc2 ∘ hc1 ∘ b21 ∘ … ∘ b1 ∘ fused ∘ stem` — twenty-five `vjpCompDiffAt`s and
     nothing else, dimension-generic and parametric in every component.
 
-    ⚠ Pointwise (`HasVJPAt`), and necessarily: relu is kinked, so each stage's witness carries the
+    Pointwise (`HasVJPAt`): relu is kinked, so each stage's witness carries the
     activation it sees. `r34BFullHasVJPAt` is the same construction at eighteen stages;
     MobileNetV4 needs its own because Conv-M's ladder is longer, not because anything differs. -/
 noncomputable def mnv4BFullHasVJPAt {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s16 s17 s18 s19 s20 s21 s22 s23 s24 s25 s26 : Nat}
@@ -400,14 +397,16 @@ theorem mnv4BFullHasVJPAt_backward
 -- § ⭐⭐ THE TIE — stem and head concrete, the fused stage and 21 blocks opaque
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **`mnv4InputGradB` IS the certified whole-net MobileNetV4-Conv-M gradient.** The committed
+/-- **`mnv4InputGradB` is the backward of the whole-net VJP at opaque blocks.** The committed
     backward chain, with its three BatchNorm and three relu-mask slots filled by the certified
-    per-op backwards and its fused stage and twenty-one UIB blocks left OPAQUE, equals the
-    backward of `mnv4BFullHasVJPAt` at those twenty-six stages. `unfold`, three `rw`s, `rfl`.
+    per-op backwards and its fused-stage and twenty-one block slots filled by the supplied
+    witnesses' backwards (`hfused`, `hb1 … hb21`; the stages themselves left opaque), equals the
+    backward of `mnv4BFullHasVJPAt` at those twenty-six stages, at an input where the stem and
+    both head relu clauses (`h_stem`, `h_h1`, `h_h2`) hold.
 
-    ⭐ `N` and `nCls` are both binders, so this covers the 10-class Imagenette artifacts and the
-    1000-class `mnv4in` ones at every batch size — and the artifacts' `N` is the PER-REPLICA batch
-    (`DataParallel.lean`, §4d). -/
+    `N` and `nCls` are both binders, so this covers the 10-class Imagenette artifacts and the
+    1000-class `mnv4in` ones at every batch size. On the data-parallel (sync-BN) artifacts,
+    instantiate at the global batch `R·N` (see `MobileNetV4SyncB`). -/
 theorem mnv4InputGradB_eq_mnv4B_full_vjp (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 32)
     (Wh1 : Kernel4 960 256 1 1) (bh1 : Vec 960) (εh1 : ℝ) (hεh1 : 0 < εh1) (γh1 βh1 : Vec 960)
@@ -527,10 +526,13 @@ theorem mnv4InputGradB_eq_mnv4B_full_vjp (N : Nat) {nCls : Nat}
   repeat rw [Function.comp_apply]
   rfl
 
-/-- ⭐⭐ **The chain IS the `pdiv`-contracted Jacobian of the twenty-six-stage net** — at every
-    batch size, every class count, every input, every loss cotangent and every input pixel. The
-    tie above read through the apex's own `.correct`; `mobilenetv4ForwardBFull_eq_slots` below is
-    what says those twenty-six stages are the committed forward. -/
+/-- **The chain is the `pdiv`-contracted Jacobian of the twenty-six-stage composition** — at
+    every batch size, class count and loss cotangent, and at every input where the stem and both
+    head relu clauses hold (`h_stem`, `h_h1`, `h_h2`): the chain, with its fused-stage and
+    twenty-one block slots filled by the supplied certified VJPs at the running activations
+    (`hfused`, `hb1 … hb21`), is the Jacobian-transpose of the composition of those stages. The
+    stages are variables here; `mobilenetv4ForwardBFull_eq_slots` identifies them with the
+    committed forward. -/
 theorem mnv4InputGradB_correct (N : Nat) {nCls : Nat}
     (Ws : Kernel4 32 3 3 3) (bs : Vec 32) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec 32)
     (Wh1 : Kernel4 960 256 1 1) (bh1 : Vec 960) (εh1 : ℝ) (hεh1 : 0 < εh1) (γh1 βh1 : Vec 960)
@@ -706,21 +708,17 @@ theorem mnv4Chain_apply {s0 s1 s2 s3 s4 s5 s6 s7 s8 s9 s10 s11 s12 s13 s14 s15 s
 -- § ⭐⭐ THE SHAPE CHECK — the twenty-six slots ARE the committed forward
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The twenty-six slots the tie is about ARE `mobilenetv4ForwardBFull`.** The committed
+/-- **The twenty-six slots the tie is about are `mobilenetv4ForwardBFull`.** The committed
     forward, regrouped into exactly the twenty-six arguments `mnv4BFullHasVJPAt` takes: the
     symmetric stem, the fused stage, the three strided rows (1, 3, 11) as `mnv4StridedBodyOfRow`,
     the eighteen skip rows as `CertLayer.residual` of `mnv4BodyOfRow` at their own table rows, and
     the head's three stages (`cn_960`, the pool with `conv_head`, the relabelled classifier).
 
-    ⛔ **This is the theorem that would have caught ResNet-34's wrong pool** (§3.10) — the tie
-    keeps its blocks opaque, so its subject is a chain of VARIABLES and nothing in it says which
-    net they are. ⭐ And it is what carries the block table into T6: every slot names its row, so
-    rows 4/5/10, 12/18 and 15/19/20 — shape-identical, hence interchangeable to every type and
-    `#guard` — are pinned here by the row constant, as T2's SSA names pin them in the graph.
-
-    ⭐ Seven rewrites of lemmas proved above, and every one of them was proved either at group
-    granularity (where nothing is peeled) or between variables. Nothing in this proof discharges
-    a `CertLayer` peel at a literal resolution, which is why it takes two seconds. -/
+    The tie keeps its blocks opaque, so its subject is a chain of variables and nothing in it
+    says which net they are; this theorem does. It also carries the block table into the tie:
+    every slot names its row, so rows 4/5/7, 8/10, 12/18, 13/14 and 15/19/20 — shape-identical,
+    hence interchangeable to every type and `#guard` — are pinned here by the row constant, as
+    `mnv4FwdGraphBFull`'s SSA names pin them in the graph. -/
 theorem mobilenetv4ForwardBFull_eq_slots (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) :
     mobilenetv4ForwardBFull N w x
@@ -750,6 +748,8 @@ theorem mobilenetv4ForwardBFull_eq_slots (N : Nat) {nCls : Nat} (w : Mnv4BWeight
           ∘ (mnv4StridedBodyOfRow N mnv4Row1 w.b1).fwd
           ∘ (mnv4FusedStack N w).fwd
           ∘ mnv4StemB N 112 112 w.sW w.sb w.sE w.sg w.sbt) x := by
+  -- Seven rewrites of lemmas proved above, each proved at group granularity (nothing peeled) or
+  -- between variables: no `CertLayer` peel is discharged at a literal resolution here.
   rw [mnv4Chain_apply, mnv4_fwd_eq_groups, mnv4HeadStack_fwd_apply, mnv4Res7bLayer_fwd_apply,
     mnv4Res7aLayer_fwd_apply, mnv4Res14bLayer_fwd_apply, mnv4Res14aLayer_fwd_apply,
     mnv4Res28Layer_fwd_apply]

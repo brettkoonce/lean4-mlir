@@ -3,41 +3,45 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullBVJP
 import LeanMlir.Proofs.Foundation.SmoothedLossCot
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 
-/-! # MobileNetV2's T3 §1a TIE at TRUE BATCH-NORM — the un-fused, batched whole-net thread
+/-! # MobileNetV2's train-step tie at batch BatchNorm — the un-fused, batched whole-net thread
 
-`GradNodesB` (4b.4) makes every parameter GRADIENT node of the batched
-MobileNetV2 train step `den`-faithful for an arbitrary cotangent. This file removes the
-"arbitrary": each cotangent is pinned to the one the emitted backward chain delivers, so the whole
-train step is `den`-composed forward → loss → backward with no free activation and no symbolic
-cotangent. With 4.2b it completes MobileNetV2's T3, and it is `ResNet34StepTieB.lean`'s peer.
+`GradNodesB` makes every parameter gradient node of the batched MobileNetV2 train step
+`den`-faithful for an arbitrary cotangent. This file removes the "arbitrary": each cotangent is
+pinned to the one the emitted backward chain delivers, so the whole train step is `den`-composed
+forward → loss → backward with no free activation and no symbolic cotangent. It is
+`ResNet34StepTieB.lean`'s peer.
 
-⭐⭐ **The block cotangents are NOT derived here.** 4.2b's `mnv2{ExpOnly,Resid,Strided,NoExp}BHasVJPAt`
-ARE the certified block backwards, and `mnv2{Body,DownBody,ResidBlock}BackBatchedGraph_faithful`
-(`MobileNetV2BackB0.lean`) already prove the emitted backward subgraphs denote exactly them. The
-four `*CotIn_eq_vjp` lemmas below are those statements in this file's vocabulary, and they are what
-make the cross-block thread a composition of certified VJPs rather than a re-derivation.
+**The block cotangents are not derived here.** `MobileNetV2FullBVJP`'s
+`mnv2{ExpOnly,Resid,Strided,NoExp}BHasVJPAt` are the certified block backwards, and
+`mnv2{Body,DownBody,ResidBlock}BackBatchedGraph_faithful` (`MobileNetV2BackB0.lean`) prove the
+emitted backward subgraphs denote them. The four `*CotIn_eq_vjp` lemmas below
+(`mnv2NoExpCotIn_eq_vjp`, `mnv2ExpOnlyCotIn_eq_vjp`, `mnv2ResidCotIn_eq_vjp`,
+`mnv2StridedCotIn_eq_vjp`) are those statements in this file's vocabulary: each says one block
+kind's constructed input cotangent is its certified block VJP's backward, under that block's
+positivity and smoothness hypotheses. The head segment (`mnv2HeadCotBlk`) and the stem segment
+(`mnv2StemCotN`, `mnv2StemCotC`) of the chain are not tied to a VJP.
 
-⭐ **One parameter-tie bundle covers twelve of the seventeen blocks.** A skip block and a stride-1
+**One parameter-tie bundle covers twelve of the seventeen blocks.** A skip block and a stride-1
 widening have the SAME parameter cotangents — the identity skip changes only the `dx` handed to the
 previous block, which is why `MobileNetV2RenderB`'s `irBackStride1GradB` is one function with a
 `skip` flag rather than two near-copies. So `mnv2Stride1TiedB` is stated once and instantiated at
-`b3`, `b5`, `b6`, `b8`–`b13`, `b15`, `b16` (skip) and `b11`, `b17` (no skip).
+`b3`, `b5`, `b6`, `b8`, `b9`, `b10`, `b12`, `b13`, `b15`, `b16` (skip) and `b11`, `b17` (no skip).
 
-⭐ **The loss cotangent is the LABEL-SMOOTHED one, at a general target**, shared with ResNet-34:
+**The loss cotangent is the label-smoothed one, at a general target**, shared with ResNet-34:
 [`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean). `MobileNetV2RenderB` composes it from the same six kit ops
 (`softmaxRow → subB → scaleB → addVB → shiftB → divConstB`) with α at 0.1 and the target arriving
 as the graph input `%onehot` — a soft vector under mixup or cutmix.
 
-⭐ **`N` is a binder.** The artifacts at 32 (`mobilenetv2_adam_train_step`) or 64
-(`mobilenetv2in_rmsdp64`) are instances. T3 carries no numerals.
+**`N` is a binder.** The single-device artifacts at 32 (`mobilenetv2_adam_train_step`) or 64
+(`mobilenetv2in_adam64_train_step`) are instances.
 
-⛔ **The all-reduce, since 4d piece 2 (2026-09-07).** In `mobilenetv2in_rmsdp64` each `*GradB`
-node feeds `allReduceMeanF` — the collective as an AST node whose `den` is the replica MEAN of the
-per-replica gradient nodes; until then `emitGradAllReduce`, emitted text and a declared carve-out
-outside the `SHlo` AST. Every statement below is at the PER-REPLICA gradient node;
-`DataParallelNode.lean` composes it with the mean and the tail.
+**Data parallel.** In the `dp` artifacts (e.g. `mobilenetv2in_rmsdp64`) each gradient node feeds
+`allReduceMeanF` and BatchNorm is synchronised across replicas, so a replica's gradient node is not
+this file's node at its own `N`. This file describes a data-parallel artifact only at
+`N := R·N`: the per-replica statement is `MobileNetV2SyncTieB.mnv2_net_syncTiedB`, whose right-hand
+side is `mnv2_net_tiedB`'s node at the global batch.
 
-⚠ **`bnInB` and `bnInB_eq_bnBackB` are ResNet-34's, imported rather than copied.** They are the
+**`bnInB` and `bnInB_eq_bnBackB` are ResNet-34's, imported rather than copied.** They are the
 batched BatchNorm input-cotangent written as the `den` of the emitted backward op, and its identity
 with the certified `bnBatchLA` VJP — both net-agnostic, and they happen to live in the file that
 first needed them. What MobileNetV2 adds is the TWO-SIDED relu6 mask (`relu6MaskB`, where r34
@@ -86,7 +90,7 @@ noncomputable def relu6MaskB (n : Nat) (pre dy : Vec n) : Vec n :=
   fun i => if 0 < pre i ∧ pre i < 6 then dy i else 0
 
 /-- **Batched XLA-`SAME` STRIDED depthwise input-VJP** (= `den depthwiseStridedXlaBackBatched`;
-    upsamples `h → 2h`). ⚠ NOT `EnetTiePoC.dStridedInB`, which is the SYMMETRIC
+    upsamples `h → 2h`). Not `EnetTiePoC.dStridedInB`, which is the SYMMETRIC
     `depthwiseStride2Flat` — B0's strided depthwise and MobileNetV2's have identical types and
     different certificates, and this is the one place that distinction is recorded on the backward
     side. -/
@@ -139,8 +143,8 @@ noncomputable def mnv2NoExpCotIn (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc
   dInB N p.dW p.db (mnv2NoExpCotDc N h w p xin dyOut)
 
 /-- The `t = 1` block's backward graph: the two stage graphs chained at their forward activations,
-    `dwbrLayer ; projLayer`'s graph. ⚠ It lives here rather than in `MobileNetV2BackB0.lean` because
-    `mnv2NoExpB` is a wrapper of `MobileNetV2FullB.lean`'s, one tier above that file's vocabulary. -/
+    `dwbrLayer ; projLayer`'s graph. It lives here rather than in `MobileNetV2BackB0.lean` because
+    `mnv2NoExpB` is defined in `MobileNetV2FullB.lean`, which imports that file. -/
 noncomputable def mnv2NoExpBackGraph {N ic oc h w : Nat} (p : IVWNoExp ic oc)
     (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) : SHlo (N * (ic * h * w)) :=
   dwbrBackBatchedGraph p.dW p.db p.dε p.dγ p.dβ x
@@ -154,7 +158,8 @@ theorem mnv2NoExpBackGraph_faithful {N ic oc h w : Nat} (p : IVWNoExp ic oc) (hq
   ((dwbrLayer N (h := h) (w := w) p.dW p.db p.dε hq.hd p.dγ p.dβ).comp
     (projLayer N p.pW p.pb p.pε hq.hp p.pγ p.pβ)).faithful x ⟨hs.hd, trivial⟩ e
 
-/-- ⭐⭐ **The emitted `t = 1` chain IS the certified block VJP's backward.** -/
+/-- **The emitted `t = 1` chain is the certified block VJP's backward**, at a block input with
+    `IVNoExpSmoothAtB`. -/
 theorem mnv2NoExpCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
     (hq : IVNoExpPos p) (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
     (hs : IVNoExpSmoothAtB N h w p xin) :
@@ -180,7 +185,7 @@ theorem mnv2NoExpCotIn_eq_vjp (N h w : Nat) {ic oc : Nat} (p : IVWNoExp ic oc)
 ```
 
 with `eW,eb ← %den`, `eg,ebt ← %dem`, `dW,db ← %ddn`, `dg,dbt ← %ddm`, `pW,pb ← %dpc`,
-`pg,pbt ← %dy`. ⭐ The `skip` flag touches ONLY `%dx`, so all twelve parameter cotangents below are
+`pg,pbt ← %dy`. The `skip` flag touches only `%dx`, so all twelve parameter cotangents below are
 shared between the skip blocks and the two stage-first widenings (`b11`, `b17`). -/
 
 /-- The expand stage's output — the depthwise's input. -/
@@ -237,8 +242,8 @@ noncomputable def mnv2CotInBody (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid 
     Vec (N * (ic * h * w)) :=
   cInB N p.eW p.eb (mnv2CotEc N h w p xin dyOut)
 
-/-- ⭐⭐ **The emitted stride-1 chain IS the certified body VJP's backward** — the widening blocks'
-    `_eq_vjp`, straight from `mnv2BodyBackBatchedGraph_faithful`. -/
+/-- **The emitted stride-1 chain is the certified body VJP's backward** — the widening blocks'
+    `_eq_vjp`, from `mnv2BodyBackBatchedGraph_faithful`. -/
 theorem mnv2ExpOnlyCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc) (hq : IVPos p)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w)))
     (hs : IVSmoothAtB N h w p xin) :
@@ -258,8 +263,8 @@ noncomputable def mnv2ResidCotIn (N h w : Nat) {c mid : Nat} (p : IVW c mid c)
     (xin dyOut : Vec (N * (c * h * w))) : Vec (N * (c * h * w)) :=
   fun i => mnv2CotInBody N h w p xin dyOut i + dyOut i
 
-/-- ⭐⭐ **The emitted residual fan-in IS the certified skip-block VJP's backward**, from
-    `mnv2ResidBlockBackBatchedGraph_faithful`. ⭐ No `add_comm` is needed here, unlike ResNet-34's
+/-- **The emitted residual fan-in is the certified skip-block VJP's backward**, from
+    `mnv2ResidBlockBackBatchedGraph_faithful`. No `add_comm` is needed here, unlike ResNet-34's
     downsample block: the render emits `addVB(body, %dy)` and `residualBackGraph` builds the fan-in
     in the same order. -/
 theorem mnv2ResidCotIn_eq_vjp (N h w : Nat) {c mid : Nat} (p : IVW c mid c) (hq : IVPos p)
@@ -339,7 +344,7 @@ noncomputable def mnv2StridedCotIn (N h w : Nat) {ic mid oc : Nat} (p : IVW ic m
     Vec (N * (ic * (2 * h) * (2 * w))) :=
   cInB N p.eW p.eb (mnv2SCotEc N h w p xin dyOut)
 
-/-- ⭐⭐ **The emitted stride-2 chain IS the certified downsample-body VJP's backward.** -/
+/-- **The emitted stride-2 chain is the certified downsample-body VJP's backward.** -/
 theorem mnv2StridedCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid oc) (hq : IVPos p)
     (xin : Vec (N * (ic * (2 * h) * (2 * w)))) (dyOut : Vec (N * (oc * h * w)))
     (hs : IVStridedSmoothAtB N h w p xin) :
@@ -364,7 +369,7 @@ theorem mnv2StridedCotIn_eq_vjp (N h w : Nat) {ic mid oc : Nat} (p : IVW ic mid 
 %dsm = selectMidB(stn)   %dsn = bnBatchBack(sg, stc)
 ```
 
-with `sW,sb ← %dsn` and `sg,sbt ← %dsm`. ⭐ There is NO conv-back past `%x`, and no pool: the stem
+with `sW,sb ← %dsn` and `sg,sbt ← %dsm`. There is no conv-back past `%x`, and no pool: the stem
 is one XLA-`SAME` strided conv, its BatchNorm and one relu6. -/
 
 /-- Cotangent at the stem BN's output — the stem relu6's mask. Feeds `sg`/`sbt`. -/
@@ -395,7 +400,7 @@ noncomputable def mnv2StemCotC (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 o
 ```
 
 with `Wd,bd ← %dy`, `hW,hb ← %dhn`, `hg,hbt ← %dhm`, and `%dhx` the cotangent handed to `b17`.
-⚠ Unlike ResNet-34's, this head is NOT `batchMap` of a smooth per-example map — MobileNetV2 puts a
+Unlike ResNet-34's, this head is not `batchMap` of a smooth per-example map — MobileNetV2 puts a
 1x1 conv-BN-relu6 in front of the pool — so the chain is spelled here as `den`s, exactly as
 `EfficientNetStepTie.enetHeadTied` spells B0's identically-shaped head. -/
 
@@ -436,17 +441,17 @@ noncomputable def mnv2HeadCotBlk (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 
 -- ════════════════════════════════════════════════════════════════
 
 /-! Each conjunct is `GradNodesB`'s `∀ cot` fold instantiated at the cotangent the
-render's chain delivers, so nothing here is a new proof: the bundles are the §1 fold with the
-freedom removed. `reassocB` bridges the conv/relu6 index `N·(c·h·w)` to the BatchNorm parameter
+render's chain delivers, so nothing here is a new proof: the bundles are the `GradNodesB` folds
+with the freedom removed. `reassocB` bridges the conv/relu6 index `N·(c·h·w)` to the BatchNorm parameter
 ops' `N·(c·(h·w))`.
 
-⚠ The BIAS conjuncts are about `conv{,StridedXla}BiasGradB` and `depthwise{,StridedXla}BiasGradB`,
+The bias conjuncts are about `conv{,StridedXla}BiasGradB` and `depthwise{,StridedXla}BiasGradB`,
 which the committed artifacts do NOT emit — `MobileNetV2RenderB` runs `convBias := false` and binds
 every bias operand to `zeroBiasPrelude`'s zero constant. They are kept because they cost one
 delegation each and they cover the flag. -/
 
 /-- **Stem, tied.** The 3x3/s2 XLA-`SAME` conv's weight and bias and its BatchNorm's γ/β, at the
-    cotangent that reaches the stem through block 1's input fan-in. ⚠ `convStridedXla*`, not r34's
+    cotangent that reaches the stem through block 1's input fan-in. `convStridedXla*`, not r34's
     symmetric `convStrided*`: identical types, identical emitted shapes, different certificates. -/
 def mnv2StemTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
     (Ws : Kernel4 oc ic 3 3) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc)
@@ -477,7 +482,7 @@ theorem mnv2_stem_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String)
 
 /-- **`t = 1` block (b1), tied.** All eight parameter nodes — the stride-1 depthwise's weight and
     bias and its BatchNorm's γ/β, then the project 1x1's weight and bias and its BatchNorm's γ/β.
-    ⭐ The project BatchNorm's γ/β read `dyOut` itself: the linear bottleneck has no activation
+    The project BatchNorm's γ/β read `dyOut` itself: the linear bottleneck has no activation
     after `project`, so the block-output cotangent IS that BatchNorm's output cotangent. -/
 def mnv2NoExpTiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String) (p : IVWNoExp ic oc)
     (xin : Vec (N * (ic * h * w))) (dyOut : Vec (N * (oc * h * w))) : Prop :=
@@ -504,7 +509,7 @@ theorem mnv2_noexp_tiedB (N h w : Nat) {ic oc : Nat} (xN cotN vN epsStr : String
     convBTiedB_holds, bnPairTiedB_holds⟩
 
 
-/-- **Stride-1 inverted-residual block, tied — all twelve parameter nodes.** ⭐ ONE statement for
+/-- **Stride-1 inverted-residual block, tied — all twelve parameter nodes.** One statement for
     twelve of the seventeen blocks: the ten identity-skip ones and the two stage-first widenings
     (`b11`, `b17`). A skip changes only the `dx` handed to the previous block, never a parameter
     cotangent, which is why `MobileNetV2RenderB.irBackStride1GradB` is one function with a flag. -/
@@ -546,7 +551,7 @@ theorem mnv2_stride1_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : 
 
 /-- **Stride-2 downsampling block, tied — all twelve parameter nodes** (`b2`, `b4`, `b7`, `b14`).
     Identical to the stride-1 profile except that the expand half runs at the `2h x 2w` input grid
-    and the depthwise is the XLA-`SAME` strided one. ⚠ `depthwiseStridedXla*GradB`, NOT B0's
+    and the depthwise is the XLA-`SAME` strided one. `depthwiseStridedXla*GradB`, not B0's
     symmetric `depthwiseStrided*GradB`: the two have identical types and identical emitted shapes,
     and only the certificate says which correlation the weight gradient runs. -/
 def mnv2Stride2TiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : String)
@@ -609,7 +614,7 @@ theorem mnv2_stride2_tiedB (N h w : Nat) {ic mid oc : Nat} (xN cotN vN epsStr : 
   · exact bnPairTiedB_holds
 
 /-- **Head, tied.** The 1x1 conv's weight and bias, its BatchNorm's γ/β, and the classifier's
-    weight and bias, at the loss cotangent `g` and the chain it drives. ⚠ The dense-bias conjunct's
+    weight and bias, at the loss cotangent `g` and the chain it drives. The dense-bias conjunct's
     Jacobian witness carries a zero activation: `dense`'s derivative in `b` is the identity whatever
     `x` is, so the statement is `x`-free (the shape `EfficientNetStepTie`'s bias conjuncts take). -/
 def mnv2HeadTiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : String)
@@ -642,30 +647,30 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
 -- § The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The whole batch-BN MobileNetV2 train step, tied.** Threading
+/-- **The whole batch-BN MobileNetV2 train step, tied.** Threading
     `mobilenetv2ForwardBFull`'s own prefixes as the block inputs and an arbitrary loss cotangent
-    `g` down through the head chain and the seventeen certified block backwards, every parameter
-    GRADIENT node of the net — stem 4, `b1` 8, sixteen blocks x 12, head 4, dense 2 — denotes the
-    certified batched `Σ_n` gradient. No free activation and no symbolic cotangent below the loss.
-    With 4.2b this is MobileNetV2's T3 complete at batch BatchNorm.
+    `g` down through the constructed head chain and the seventeen constructed block backwards, every
+    parameter gradient node of the net — stem 4, `b1` 8, sixteen blocks x 12, head 4, dense 2 —
+    denotes the certified batched `Σ_n` gradient at that chain's cotangent. No free activation and
+    no symbolic cotangent below the loss. One device, f32.
 
-    ⭐⭐ **`g` IS A BINDER.** The loss chain is not part of this statement;
+    **`g` is a binder.** The loss chain is not part of this statement;
     `mnv2_lossCot_is_smoothedCE_grad` instantiates it at the label-smoothed softmax cotangent the
     artifacts actually emit.
 
-    ⭐ **`N` is a binder and there is no smoothness hypothesis.** The folds are `∀ cot` statements
+    **`N` is a binder and there is no smoothness hypothesis.** The folds are `∀ cot` statements
     instantiated at explicitly-constructed cotangents, so the capstone needs neither `0 < ε` nor a
-    relu6-kink condition. Those enter only in the four `*CotIn_eq_vjp` lemmas, which say the
-    constructed chain IS the certified whole-net backward — the two halves of the tie, kept apart
-    because they have different hypotheses.
+    relu6-kink condition. Those enter only in the four block-level `*CotIn_eq_vjp` lemmas, which
+    say each block's constructed backward is its certified block VJP's backward. The head and stem
+    segments of the chain are not separately tied to a VJP.
 
-    ⚠ Of the 210 conjunct slots, the committed artifacts exercise **158**: `MobileNetV2RenderB`
+    Of the 210 conjunct slots, the committed artifacts exercise **158**: `MobileNetV2RenderB`
     runs `convBias := false`, so the 52 bias nodes are not emitted (each bias is folded into the
     BatchNorm after it and bound to `zeroBiasPrelude`'s zero constant).
 
-    ⛔ One replica. In `mobilenetv2in_rmsdp64` every gradient node feeds `allReduceMeanF`, an AST
-    node since 4d piece 2; `MobileNetV2SyncTieB.mnv2_net_syncTiedB` is the data-parallel step, and
-    its right-hand sides are this theorem's nodes at `N := R·N`. -/
+    On the data-parallel (sync-BN) artifacts this theorem applies at `N := R·N`: the per-replica
+    statement is `MobileNetV2SyncTieB.mnv2_net_syncTiedB`, whose right-hand sides are this theorem's
+    nodes at the global batch. -/
 theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : MNV2BWeights nCls) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (g : Vec (N * nCls)) :
     -- the backward chain: the head's own four nodes, then the seventeen certified block backwards
@@ -730,13 +735,13 @@ theorem mnv2_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
       (mnv2PreB17 N w x) g⟩
 
 
-/-- ⭐ **And the cotangent the artifacts feed the capstone is the smoothed loss's gradient.** Row by
+/-- **And the cotangent the artifacts feed the capstone is the smoothed loss's gradient.** Row by
     row: `g := unrowB (den (smoothedLossCotGraph …))` at the real logits is, at example `n` and
     class `j`, `(1/B)·∂/∂logits` of soft-target cross-entropy against the SMOOTHED target
     `(1−α)·t + α/K`, at that example's real logits. The only hypothesis
     is that the example's target sums to 1 — a one-hot, or mixup's convex combination of two.
-    Together with the capstone this closes the top of the chain: every parameter node denotes the
-    certified gradient at the cotangent of the loss the trainer actually minimises. Shared with
+    Together with the capstone: every parameter node denotes the certified batched gradient at the
+    chain cotangent that starts from the gradient of the loss the trainer minimises. Shared with
     ResNet-34 through [`Foundation/SmoothedLossCot.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/SmoothedLossCot.lean), at a general target. -/
 theorem mnv2_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : MNV2BWeights nCls)

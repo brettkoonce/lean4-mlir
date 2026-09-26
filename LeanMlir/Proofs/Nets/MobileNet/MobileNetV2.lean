@@ -1,13 +1,19 @@
 import LeanMlir.Proofs.Architectures.Depthwise
 
 /-!
-# MobileNetV2 — end-to-end inverted-residual VJP (flattened Vec space)
+# A two-block inverted-residual net — end-to-end VJP (flattened Vec space)
 
-Builds a representative MobileNetV2 forward and proves its end-to-end
-vector–Jacobian product correct, analogous to `cnnHasVJPAt` for the
-ResNet basic block. Everything lives in flattened `Vec` space and reuses
-the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
-`MLP.lean`, and `Residual.lean` through `vjpCompAt` chaining.
+Defines `mobilenetv2Forward` — stem conv → bn → relu6, one inverted-residual block with a skip,
+one without (channel change), global average pool, dense head — and proves its vector–Jacobian
+product correct at a smooth point (`mobilenetv2HasVJPAt`, `mobilenetv2HasVJPAt_correct`), as
+`cnnHasVJPAt` does for the two-residual-block CNN. Every "bn" in this file is `bnForward`: one
+normalisation over the whole flattened tensor with scalar `γ β : ℝ`, not per-channel BatchNorm.
+Every conv is stride 1. The seventeen-block, batch-BatchNorm net the MobileNetV2 artifacts
+train is `mobilenetv2ForwardBFull` (`MobileNetV2FullB`).
+
+Everything lives in flattened `Vec` space and reuses the foundation rules from `CNN.lean`,
+`Depthwise.lean`, `BatchNorm.lean`, `MLP.lean`, and `Residual.lean` through `vjpCompAt`
+chaining.
 
 ## What's new here
 
@@ -25,9 +31,9 @@ the foundation rules from `CNN.lean`, `Depthwise.lean`, `BatchNorm.lean`,
   With a stride-1 / `ic = oc` skip it becomes `residual body` (no final
   activation — MobileNetV2's linear-bottleneck design).
 
-* **End-to-end** — stem (3×3 conv-bn-relu6) → skip inverted-residual →
+* **End-to-end** — stem (conv-bn-relu6) → skip inverted-residual →
   no-skip inverted-residual (channel change) → global average pool →
-  dense head. Fixed block counts; generic channel/kernel dims; spatial
+  dense head. Two blocks; channel counts and kernel sizes are binders; spatial
   `h w` preserved throughout (SAME convs).
 
 ## Padding convention
@@ -365,9 +371,11 @@ noncomputable def mobilenetv2HasVJPAt
     ((denseHasVJP Wh bh).toHasVJPAt _)
 
 /-- **Public correctness theorem for `mobilenetv2HasVJPAt`** — exposes
-    the witness's `.correct` field: the full MobileNetV2 backward equals
-    the `pdiv`-contracted Jacobian (Jacobian-transpose applied to the
-    cotangent). MobileNetV2 analogue of `cnnHasVJPAt_correct`. -/
+    the witness's `.correct` field: at a point where all five relu6 sites (stem, and the
+    expand and depthwise stages of both blocks: `h_stem`, `h_b1e`, `h_b1d`, `h_b2e`, `h_b2d`)
+    are away from 0 and 6, the backward of the two-block `mobilenetv2Forward` equals the
+    `pdiv`-contracted Jacobian (Jacobian-transpose applied to the cotangent). Analogue of
+    `cnnHasVJPAt_correct`. -/
 theorem mobilenetv2HasVJPAt_correct
     {ic c mid₁ oc mid₂ h w kHs kWs
      kHe₁ kWe₁ kHd₁ kWd₁ kHp₁ kWp₁

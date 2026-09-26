@@ -5,9 +5,10 @@ import LeanMlir.Proofs.Foundation.IndexCast
 
 /-! # MobileNetV4 — the batched UIB backward, and the four families as one chain
 
-The block- and stage-level backward of MobileNetV4-Conv-M at the batched index: the depthwise-relu
-stages, the UIB body, the skip block, the stride-2 form, the fused stage and the head, each a
-`CertLayer` whose backward graph is faithful to its certified VJP.
+The block- and stage-level backward of MobileNetV4-Conv-M at the batched index: the depthwise
+stages, the UIB body, the stride-2 body, the fused stage and the head, each a `CertLayer` whose
+backward graph is faithful to its certified VJP. The identity skip is `CertLayer.residual`, applied
+by the caller.
 
 ## The four families are one chain
 
@@ -28,7 +29,7 @@ the forward's (`mnv4BodyOfRow` reads the slots off the `UibSpec` row).
 
 ## The two depthwise stages, and where the activation is
 
-timm's `mobilenetv4_conv_medium` (the pinned spec, `planning/mnv4_timm_parity.md`): the pre-DW
+timm's `mobilenetv4_conv_medium` (the pinned spec, checked by `scripts/parity/mnv4_timm_parity.py`): the pre-DW
 (`dw_start`) is depthwise → BN with **no activation** (`dwbB`, globally certified); the post-DW
 (`dw_mid`) is depthwise → BN → **relu** (`dwbReluB`, and its strided peer `dwbReluBstrided`).
 Relu, not relu6 — MobileNetV2 uses relu6 one file over. The relu stage is
@@ -39,16 +40,17 @@ its backward graph masks with `.selectPos`, relu's one-sided mask.
 
 * the depthwise stages — BN-only (`mnv4DWBnLayer`, the pre-DW) and BN-relu, stride-1 and strided
   (`mnv4DWReluLayer`, `mnv4DWReluStridedLayer`, the post-DW) — with backward graphs;
-* the family-collapsing body `mnv4UibBody`, the skip block, and the stride-2 form
-  `mnv4UibStridedBody` (the post-DW carries the stride, timm's `dw_mid` rule);
+* the family-collapsing body `mnv4UibBody` and the stride-2 form `mnv4UibStridedBody` (the
+  post-DW carries the stride, timm's `dw_mid` rule);
 * the fused stage (`mnv4FusedStage`, stage 0): `cbReluStridedLayer` then `projLayer`;
 * the head `mnv4Head`: conv-bn-relu, GAP, `conv_head`-bn-relu on the pooled features, dense;
 * `UibParams`, the row-typed weight record, and the table-driven `k = 0` dispatch.
 
-The net level consumes these block by block: T1 and T2 are `MobileNetV4FullB` /
-`MobileNetV4FullBVJP`, T3 is `MobileNetV4StepTieB`, T6 is `MobileNetV4WholeBackCertifiedTieB`.
+The net level consumes these block by block: the whole-net forward, graph and VJP are
+`MobileNetV4FullB` / `MobileNetV4FullBVJP`, the train-step tie is `MobileNetV4StepTieB`, and the
+input-gradient tie is `MobileNetV4WholeBackCertifiedTieB`.
 
-⚠ The stem is not here and is not a `CertLayer`: no render emits a gradient into `%x`, so there is
+The stem is not here and is not a `CertLayer`: no render emits a gradient into `%x`, so there is
 no backward graph for it, and a net-level forward composes the stem's VJP by `vjpCompAt` rather
 than `CertLayer.comp`.
 -/
@@ -109,7 +111,7 @@ noncomputable def mnv4DWBnLayer (N : Nat) {c h w kH kW : Nat}
 -- § The post-DW stage: depthwise → bn → RELU (timm's `dw_mid`)
 -- ════════════════════════════════════════════════════════════════
 
-/-- Batched **depthwise → bn → relu** stage. ⚠ Plain `relu`, not relu6: MNv4's UIB blocks use
+/-- Batched **depthwise → bn → relu** stage. Plain `relu`, not relu6: MNv4's UIB blocks use
     relu where MobileNetV2's use relu6, and `dwbrB` (one file over) is the relu6 one. -/
 @[reducible] noncomputable def dwbReluB (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (γ β : Vec c) :
@@ -123,7 +125,7 @@ noncomputable def mnv4DWBnLayer (N : Nat) {c h w kH kW : Nat}
     Vec (N * (c * (2 * h) * (2 * w))) → Vec (N * (c * h * w)) :=
   relu (N * (c * h * w)) ∘ bnBatchLA N c h w ε γ β ∘ batchMap N (depthwiseStride2Flat W b)
 
-/-- `dwbReluB`'s `_at` VJP — ⭐ one instantiation of `bnReluStageHasVJPAt` at `depthwiseFlat`.
+/-- `dwbReluB`'s `_at` VJP — one instantiation of `bnReluStageHasVJPAt` at `depthwiseFlat`.
     The same lemma `cbReluBHasVJPAt` uses at `flatConv`; nothing analytic is new. -/
 noncomputable def dwbReluBHasVJPAt (N : Nat) {c h w kH kW : Nat}
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
@@ -157,7 +159,7 @@ theorem dwbReluBstrided_differentiableAt (N : Nat) {c h w kH kW : Nat}
   bnReluStage_differentiableAt N (depthwiseStride2Flat W b)
     (depthwiseStride2Flat_differentiable W b) ε hε γ β x h_smooth
 
-/-- `dwbReluB`'s backward graph. ⚠ `.selectPos` (relu's ONE-sided mask) where `dwbrBackBatchedGraph`
+/-- `dwbReluB`'s backward graph. `.selectPos` (relu's ONE-sided mask) where `dwbrBackBatchedGraph`
     uses `.selectMid` (relu6's two-sided one) — that token is the whole relu-vs-relu6 difference at
     the backward, and swapping them is well-typed. -/
 noncomputable def dwbReluBackBatchedGraph {N c h w kH kW : Nat}
@@ -218,14 +220,14 @@ noncomputable def mnv4DWReluLayer (N : Nat) {c h w kH kW : Nat}
   faithful := fun x hx e => dwbReluBackBatchedGraph_faithful W b ε hε γ β x e hx
 
 -- The UIB **expand** (1×1 conv → bn → relu) and **project** (1×1 conv → bn) stages are
--- `ResNet34BackB0`'s `cbReluLayer` and `projLayer`. The project stage has no activation and so no
+-- `Foundation/BatchedStageLayers`'s `cbReluLayer` and `projLayer`. The project stage has no activation and so no
 -- kink, which is why a UIB block has three smoothness families and not four.
 
 -- ════════════════════════════════════════════════════════════════
 -- § ⭐⭐ THE FAMILY COLLAPSE — one body, four families, `id'` in the empty slots
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The UIB body, for ALL FOUR families at once.**
+/-- **The UIB body, for all four families at once.**
 
     `preDW` and `postDW` are `CertLayer` *arguments*, so the caller passes `mnv4DWReluLayer` where
     the block table has `k > 0` and `CertLayer.id'` where it has `k = 0`. ExtraDW, IB, ConvNeXt-like
@@ -249,18 +251,17 @@ noncomputable def mnv4UibBody (N : Nat) {ic mid oc h w : Nat}
 -- § THE STRIDE-2 BLOCKS — and why `id'` CANNOT collapse these
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠⚠ **The stride-1 collapse does not extend here, and the reason is the TYPE.**
+/-! **The stride-1 collapse does not extend here, and the reason is the type.**
 
 At stride 1 an absent depthwise is `id'` because the slot is shape-preserving. At stride 2 the
 depthwise that carries the stride maps `(2h, 2w) ↦ (h, w)` — a *different type* — so it cannot be
 replaced by an identity. timm puts the stride on `dw_mid` whenever a block has one, so in all three
 Conv-M downsamples (rows 1, 3, 11, all ExtraDW) the optional pre-DW and the expand run at the INPUT
 resolution `2h` and the strided post-DW takes it to `h`. The pre-DW is still a slot (at `2h`).
+Putting the stride on the pre-DW instead (expand at `h`) is a different function with the same
+parameter shapes.
 
-⚠ Until 2026-09-24 these rows were PRE-strided — the pre-DW carried the stride and the expand ran
-at `h` — which is a different function with the same parameter shapes.
-
-⚠ All three stride-2 blocks change channels (`ic ≠ oc`), so **none has a skip**: the block IS the
+All three stride-2 blocks change channels (`ic ≠ oc`), so **none has a skip**: the block IS the
 body, with no `CertLayer.residual` wrapper. Adding one would not typecheck, which is the good case.
 -/
 
@@ -293,10 +294,9 @@ noncomputable def mnv4UibStridedBody (N : Nat) {ic mid oc h w : Nat}
 /-! MNv4's stage 0 is `.fusedMbConv 32 48 4 3 2 1 false .relu` (timm's `EdgeResidual`): a regular
 k×k conv (not a depthwise) doing expansion and downsampling at once, then a 1×1 project.
 `32 → mid = 32·4 = 128 → 48`, stride 2, symmetric padding, **relu** — so the strided conv-bn-relu
-stage is ResNet's `cbReluStridedLayer` and the project is `projLayer`. Until 2026-09-24 this stage
-was swish (inherited from the JAX block being shared with EfficientNetV2). -/
+stage is `cbReluStridedLayer` and the project is `projLayer` (both `BatchedStageLayers`). -/
 
-/-- ⭐ **MNv4's fused stage (stage 0)** — the strided k×k conv-bn-relu, then the 1×1 project.
+/-- **MNv4's fused stage (stage 0)** — the strided k×k conv-bn-relu, then the 1×1 project.
     No skip: `ic = 32 ≠ 48 = oc` and stride 2, so the stage IS the body. -/
 noncomputable def mnv4FusedStage (N : Nat) {ic mid oc h w : Nat}
     (fusedConv : CertLayer (N * (ic * (2 * h) * (2 * w))) (N * (mid * h * w)))
@@ -311,8 +311,8 @@ noncomputable def mnv4FusedStage (N : Nat) {ic mid oc h w : Nat}
 /-! timm's head: Conv-M's `cn_r1_k1_s1_c960` (1×1 256 → 960, BN, relu) at 7×7, then **global
 pool**, then `conv_head` (1×1 960 → 1280) → `norm_head` (BN) → relu on the POOLED `[N, 960, 1, 1]`,
 then the classifier. The second conv-bn-relu is `cbReluLayer` at `h = w = 1`, so its BatchNorm
-normalises over the batch alone. Until 2026-09-24 `conv_head` ran at 7×7 before the pool, which
-batch BN and relu do not commute with. -/
+normalises over the batch alone. Running `conv_head` at 7×7 before the pool would be a different
+function: batch BN and relu do not commute with the pool. -/
 
 /-- **An index relabelling as a `CertLayer`**: the same vector read at `m` instead of `n` along a
     proved `n = m`. The forward is the `Fin.cast` gather, the VJP `reindexHasVJP`, and the graph
@@ -341,7 +341,7 @@ theorem castLayer_fwd_apply {n m : Nat} (h : n = m) (v : Vec n) :
 /-- The pooled `[N, c]` read as `[N, c, 1, 1]`. -/
 theorem mnv4_pool11 (N c : Nat) : N * c = N * (c * 1 * 1) := by rw [Nat.mul_one, Nat.mul_one]
 
-/-- ⭐ **MNv4's head**: conv-bn-relu, GAP, `conv_head`-bn-relu on the pooled features, classifier,
+/-- **MNv4's head**: conv-bn-relu, GAP, `conv_head`-bn-relu on the pooled features, classifier,
     with the two `1×1` relabellings between. Only the two conv stages carry a smoothness condition
     (their relus); GAP, the casts and dense are global. -/
 noncomputable def mnv4Head (N : Nat) {c mid oc nC h w : Nat}
@@ -357,19 +357,18 @@ noncomputable def mnv4Head (N : Nat) {c mid oc nC h w : Nat}
 -- § ⭐⭐ THE DISPATCH READS THE TABLE — `mnv4Blocks`, not the caller
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⛔ **What this section fixes.** Above, `mnv4UibBody` takes its depthwise slots as *arguments*,
+/-! **What this section fixes.** Above, `mnv4UibBody` takes its depthwise slots as *arguments*,
 so passing `id'` where block 4's real pre-DW belongs is **well-typed and still certified** — graph
 and VJP both move with the caller's arguments, so the theorem stays true *about the wrong net*.
 Types catch the stride split (resolution is in the type); they catch nothing about `k = 0` vs
 `k > 0`, because that slot is shape-preserving — the very property that made the collapse possible.
-That is §3's trap, one level up from the render.
 
-⭐ The fix is to make the slot a **function of the block table's `k`**, so the proof side runs the
+The fix is to make the slot a **function of the block table's `k`**, so the proof side runs the
 same `k = 0` dispatch the render does, off the same `mnv4Blocks` list — one table, not two
 readings. `mnv4-fwd-smoke` already pins the render against that table; these `#guard`s pin the
 table's own shape, so a bad edit fails at `lake env lean` rather than becoming a silent net. -/
 
-/-- The pre-depthwise **slot**, dispatched on the table's `preDWk`. ⭐ `k = 0` ⇒ `id'` — the same
+/-- The pre-depthwise **slot**, dispatched on the table's `preDWk`. `k = 0` ⇒ `id'` — the same
     rule `uibFwdSkipB` emits, computed rather than chosen. `k > 0` ⇒ the BN-only `mnv4DWBnLayer`. -/
 noncomputable def mnv4PreDWSlot (N : Nat) {c h w kH kW : Nat} (preDWk : Nat)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (ε : ℝ) (hε : 0 < ε) (γ β : Vec c) :
@@ -451,18 +450,18 @@ def UibSpec.family (s : UibSpec) : UibFamily :=
 -- § ⭐⭐ WEIGHT WIRING — the parameters are TYPED BY THEIR TABLE ROW
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⛔ **The gap this closes.** A block builder that reads the *dispatch* from the table but takes
+/-! **The gap this closes.** A block builder that reads the *dispatch* from the table but takes
 its weights as separate arguments lets a caller pair row 4's `k`s with row 7's widths. The dispatch
 was table-driven; the wiring was not.
 
-⭐ **Fix: index the parameter record by the row.** Every width in `UibParams s` is a *projection of
+**Fix: index the parameter record by the row.** Every width in `UibParams s` is a *projection of
 `s`* — `s.ic`, `s.oc`, `s.ic * s.expand`, `s.preDWk`, `s.postDWk`. A record with widths that
 disagree with its row **cannot be constructed**, so the block builder needs no side conditions and
 no `#guard`: it is impossible by typing rather than checked after the fact.
 
-⚠ **What this still does not pin**, stated precisely so the next reader does not overclaim: rows
-4, 5 and 10 are all `160 → 160, expand 4`, and 4/10 share `k = 3,3`. Their records are therefore
-the *same type*, so swapping those two blocks' weights typechecks. Typing pins **shape**
+**What this still does not pin.** Rows with the same `(ic, oc, expand, preDWk, postDWk, h)` —
+{4, 5, 7}, {8, 10}, {12, 18}, {13, 14} and {15, 19, 20} — have records of the *same type*, so
+swapping two such blocks' weights typechecks. Typing pins **shape**
 (channels, expand ratio, kernel extents, resolution); it cannot pin **identity** between rows that
 are shape-identical. Closing that needs the weights to come from one indexed array — a renderer
 concern, since the render already folds `mnv4Blocks` in order. -/
@@ -500,11 +499,11 @@ structure UibParams (s : UibSpec) where
   gz : Vec s.oc
   bz2 : Vec s.oc
 
-/-- ⭐⭐ **A UIB body built ENTIRELY from its table row.** Dispatch from `s.preDWk`/`s.postDWk`,
+/-- **A UIB body built entirely from its table row.** Dispatch from `s.preDWk`/`s.postDWk`,
     widths and resolution from `s`, weights from a record that cannot disagree with `s`. Nothing
     here is a free argument: given `s`, the only freedom left is the numeric values.
 
-    ⚠ This is the BODY (`ic -> oc`). The identity skip is `CertLayer.residual` on top and needs
+    This is the body (`ic -> oc`). The identity skip is `CertLayer.residual` on top and needs
     `oc = ic`, which holds for exactly the eighteen non-`stride2` rows (guarded below) — applied by
     the caller at a concrete row, where it is `rfl` and needs no transport. -/
 noncomputable def mnv4BodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
@@ -518,7 +517,7 @@ noncomputable def mnv4BodyOfRow (N : Nat) (s : UibSpec) (p : UibParams s) :
 -- Every non-`stride2` row has `oc = ic`, so `CertLayer.residual` applies to all eighteen of them.
 #guard (mnv4Blocks.filter (fun s => !s.stride2)).all (fun s => s.oc == s.ic)
 
-/-- ⭐ **A STRIDED body built entirely from its table row** — `mnv4BodyOfRow`'s sibling for the
+/-- **A strided body built entirely from its table row** — `mnv4BodyOfRow`'s sibling for the
     three stride-2 rows (1, 3, 11). The pre-DW is a slot at the input resolution `2h`, dispatched
     on `s.preDWk`; the post-DW carries the stride and so is NOT a slot (it cannot be `id'`, which is
     why every strided row must have one — guarded above). -/

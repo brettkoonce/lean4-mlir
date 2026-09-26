@@ -4,7 +4,7 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 /-!
 # MobileNetV4-Conv-M's non-degeneracy seal, on the full-width batched net (levels 2 and 3)
 
-`planning/full_width_seals.md` §4.4. `MobileNetV4FullBVJP.lean` proves
+`MobileNetV4FullBVJP.lean` proves
 `mobilenetv4ForwardBFullHasVJPAt`: the whole-net VJP at any `(w, x)` satisfying **eight clause
 bundles** — the stem's relu, the fused stage's, one per resolution group and the head's, **38**
 relu sites in all (the `#guard` below counts them off the block table). That statement is
@@ -14,11 +14,11 @@ the Jacobian nonzero — hence, through
 [`Training/JacobianSeal.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Training/JacobianSeal.lean),
 the proven backward is not the zero map at that point.
 
-The net is timm's `mobilenetv4_conv_medium` (`planning/mnv4_timm_parity.md`): relu throughout,
+The net is timm's `mobilenetv4_conv_medium`: relu throughout,
 BN-only pre-DWs, the stride on each downsample's post-DW, and a head that pools before
 `conv_head`, whose BatchNorm therefore normalises the pooled features over the batch alone.
 
-## ⭐⭐ All 38 clauses are weight-only — and generic in the table row
+## All 38 clauses are weight-only — and generic in the table row
 
 Every kink in this net is a relu sitting directly on a `bnBatchLA` output (`Mnv4StemSmoothAtB`,
 `cbReluLayer.ok`, `cbReluStridedLayer.ok`, `mnv4DWReluLayer.ok`, `mnv4DWReluStridedLayer.ok`);
@@ -39,9 +39,8 @@ of `conv_head` keeps the carrier (a per-channel shift survives an average), and 
 are index bijections. The readout along the ray is therefore `t · Rr t`, with `Rr` the product of
 the seventeen `istd`s: continuous and positive, and no BatchNorm variance derivative is taken.
 
-⚠⚠ Every collapse, every clause bundle and every block lemma here is proved at **variable** shapes
-and instantiated at the witness's numerals afterwards, never proved at them
-(`planning/full_width_seals.md` §3.5).
+Note: every collapse, every clause bundle and every block lemma here is proved at variable shapes
+and instantiated at the witness's numerals afterwards, never proved at them.
 -/
 
 namespace Proofs
@@ -60,8 +59,8 @@ open Proofs BatchSeal StableHLO R34FullBSeal
 
 -- ════════════════════════════════════════════════════════════════
 -- § 1. The structural weights
---   ⭐ One `γ = 1`, one `ε = 1` and `β = 160` at every BatchNorm a relu follows; `β = 0` at the
---   projections, which none follows, so a zeroed body is the constant `0` and its block is the
+--   ⭐ One `γ = 1`, one `ε = 1`, and `β = 160` at every BatchNorm except the projections'
+--   (`β = 0`, no relu follows them), so a zeroed body is the constant `0` and its block is the
 --   exact identity. ⭐⭐ ONE record, `sealP`, with the four kernels as arguments: the carrier's
 --   rows pass centre taps, the eighteen skipped rows pass zeros, and every lemma below is proved
 --   once over `sealP`.
@@ -211,7 +210,7 @@ theorem mnv4StemB_eq {N h w ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW) (bs : 
 -- ════════════════════════════════════════════════════════════════
 -- § 4. The block collapses — one lemma per FORM, generic in the table row
 -- ════════════════════════════════════════════════════════════════
-/-- ⭐ **A zeroed UIB body is the constant `0`, whatever its slots are.** The project conv's kernel
+/-- **A zeroed UIB body is the constant `0`, whatever its slots are.** The project conv's kernel
     is zero, so `projB_zero_const` closes the block without any stage inside it being analysed. -/
 theorem sealZBody_eq (N : Nat) (s : UibSpec) (hn : 0 < N * (s.h * s.h))
     (v : Vec (N * (s.ic * s.h * s.h))) :
@@ -227,7 +226,7 @@ theorem resid_id {n : Nat} (L : CertLayer n n) (v : Vec n) (hL : L.fwd v = fun _
   rw [hL]
   ring
 
-/-- ⭐ **A carrier row (all three are strided ExtraDW) collapses to four BatchNorms**: the BN-only
+/-- **A carrier row (all three are strided ExtraDW) collapses to four BatchNorms**: the BN-only
     pre-DW and the expand at `2h`, the strided post-DW, the project. -/
 theorem sealCTStrided_eq (N : Nat) (s : UibSpec) (hq : s.preDWk ≠ 0)
     (hmd : Mg N s.h s.h) (hme : Mg N (2 * s.h) (2 * s.h))
@@ -267,7 +266,7 @@ theorem sealCTStrided_eq (N : Nat) (s : UibSpec) (hq : s.preDWk ≠ 0)
 -- ════════════════════════════════════════════════════════════════
 -- § 5. The clause bundle — ⭐⭐ weight-only, and proved GENERICALLY IN THE ROW
 -- ════════════════════════════════════════════════════════════════
-/-- ⭐ **Every clause of a stride-1 UIB body, at every input.** The pre-DW slot contributes `True`
+/-- **Every clause of a stride-1 UIB body, at every input.** The pre-DW slot contributes `True`
     either way (`id'` or the BN-only depthwise); the expand's and the post-DW's relus sit on
     BatchNorm outputs, so the discharge never looks at the activation. -/
 theorem sealUib_ok (N : Nat) (s : UibSpec) (hm : Mg N s.h s.h)
@@ -316,7 +315,7 @@ noncomputable def sealX (t : ℝ) : Vec (2 * (3 * (2 * 112) * (2 * 112))) := t �
 theorem sealX_zero_add (t : ℝ) : sealX 0 + t • sealV = sealX t := by
   rw [sealX, sealX, zero_smul, zero_add]
 
-/-- ⭐ the witness input is per-(example, channel) CONSTANT: `t` on example 0's channel 0, zero
+/-- the witness input is per-(example, channel) CONSTANT: `t` on example 0's channel 0, zero
     everywhere else. -/
 theorem bUnif_sealX (t : ℝ) :
     BUnif (h := 2 * 112) (w := 2 * 112)
@@ -392,7 +391,7 @@ theorem seal_smooth (nCls : Nat) (t : ℝ) : Mnv4SmoothAt 2 (sealW nCls) (sealX 
   ⟨sc_stem nCls t, sc_fused nCls t, sc28 nCls t, sc14a nCls t, sc14b nCls t, sc7a nCls t,
     sc7b nCls t, sc_head nCls t⟩
 
-/-- ⭐⭐ **The whole-net VJP at the witness** — all eight bundles discharged. -/
+/-- **The whole-net VJP at the witness** — all eight bundles discharged. -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
     HasVJPAt (mobilenetv4ForwardBFull 2 (sealW nCls)) (sealX t) :=
   mobilenetv4ForwardBFullHasVJPAt 2 (sealW nCls) (sealX t) (seal_smooth nCls t)
@@ -423,7 +422,7 @@ theorem unflatten_from11 {N c : Nat} (v : Vec (N * (c * 1 * 1))) (n : Fin N) (ci
 theorem globalAvgPoolFlat_continuous (c h w : Nat) : Continuous (globalAvgPoolFlat c h w) :=
   (globalAvgPoolFlat_differentiable c h w).continuous
 
-/-- ⭐ **GAP, then the relabel to `[N, c, 1, 1]`, keeps the carrier**: a per-channel shift of every
+/-- **GAP, then the relabel to `[N, c, 1, 1]`, keeps the carrier**: a per-channel shift of every
     cell shifts the average by the same amount. -/
 theorem eDiff_gapTo11 {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (δ : Fin c → ℝ)
     (v : Vec (2 * (c * h * w))) (hv : EDiff δ v) :
@@ -434,7 +433,7 @@ theorem eDiff_gapTo11 {c h w : Nat} (hh : 0 < h) (hw : 0 < w) (δ : Fin c → �
   rw [bcell_to11, bcell_to11, row_batchMap, row_batchMap]
   exact globalAvgPool_shift hh hw _ _ (δ ci) ci (fun i j => hv ci i j)
 
-/-- ⭐ **The relabelled classifier reads the carrier off channel `c₀`.** -/
+/-- **The relabelled classifier reads the carrier off channel `c₀`.** -/
 theorem cls_diff {c nCls : Nat} (c₀ : Fin c) (hc₀ : c₀.val = 0) (j : Fin nCls)
     (Wd : Mat c nCls) (bd : Vec nCls)
     (hWd : ∀ ci, Wd ci j = if ci.val = 0 then (1 : ℝ) else 0) (hbd : bd j = 0)
@@ -873,7 +872,7 @@ theorem sealW_Wd (nCls : Nat) :
       if i.val = 0 ∧ j.val = 0 then (1 : ℝ) else 0 := rfl
 
 /-- the head, peeled: `cn_960` conv-bn-relu, GAP and its relabel, `conv_head` conv-bn-relu at
-    `1×1`, the relabel back, the classifier. ⚠ Proved at variables and applied at the net's
+    `1×1`, the relabel back, the classifier. Proved at variables and applied at the net's
     literals. -/
 theorem headStack_apply (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (v : Vec (N * (256 * 7 * 7))) :
@@ -905,7 +904,7 @@ theorem head_eq_dense (nCls : Nat) (t : ℝ) :
     cbReluB_eq (ctK 1280 960 1 1 1) (kv 1280 0) (by norm_num) _]
   rfl
 
-/-- ⭐⭐ **The class-0 difference between the two examples, along the ray**: `t` times the
+/-- **The class-0 difference between the two examples, along the ray**: `t` times the
     seventeen BatchNorm factors on the carrier's path. -/
 theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
     mobilenetv4ForwardBFull 2 (sealW nCls) (sealX t)
@@ -929,22 +928,23 @@ theorem seal_differentiableAt (nCls : Nat) (t : ℝ) :
     DifferentiableAt ℝ (mobilenetv4ForwardBFull 2 (sealW nCls)) (sealX t) :=
   mobilenetv4ForwardBFull_differentiableAt 2 (sealW nCls) (sealX t) (seal_smooth nCls t)
 
-/-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV4-Conv-M at
+/-- **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV4-Conv-M at
     the structural weights is NOT constant in its input. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
     mobilenetv4ForwardBFull 2 (sealW nCls) (sealX 1)
       ≠ mobilenetv4ForwardBFull 2 (sealW nCls) (sealX 0) :=
   ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos 1).ne')
 
-/-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
+/-- **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
     fderiv ℝ (mobilenetv4ForwardBFull 2 (sealW nCls)) (sealX 0) ≠ 0 :=
   fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
     (seal_differentiableAt nCls 0) (Rr_pos 0).ne' hasDerivAt_gd
 
-/-- ⭐⭐ **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
-    21-block, 224×224 MobileNetV4-Conv-M — `mobilenetv4ForwardBFull`, the forward every
-    MobileNetV4 artifact runs — is **not the zero map** at the witness. -/
+/-- **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
+    21-block, 224×224 MobileNetV4-Conv-M — `mobilenetv4ForwardBFull`, the training-BatchNorm
+    forward of the MobileNetV4 train steps (the `mnv4in_emaacc*` ones add classifier dropout),
+    here at `N = 2` — is **not the zero map** at the witness. -/
 theorem sealX_backward_nontrivial (nCls : Nat) (hn : 0 < nCls) :
     ∃ (j₀ : Fin (2 * nCls)) (i₀ : Fin (2 * (3 * (2 * 112) * (2 * 112)))),
       (sealVJP nCls 0).backward (basisVec j₀) i₀ ≠ 0 :=

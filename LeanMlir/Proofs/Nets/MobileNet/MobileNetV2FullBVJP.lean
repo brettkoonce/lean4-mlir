@@ -1,53 +1,51 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullB
 
-/-! # MobileNetV2's whole-net input-VJP at TRUE BATCH-NORM (T1, the VJP half)
+/-! # MobileNetV2's whole-net input-VJP at batch BatchNorm
 
 `MobileNetV2FullB.lean` states the batch-BN forward and its typed graph. This file gives that
 forward a certified `HasVJPAt` at the paper depth — the MobileNetV2 peer of
-`ResNet34FullBVJP.lean`, and the second piece of `formalization.yaml` 4e's port.
+`ResNet34FullBVJP.lean`.
 
-## No new mathematics, and no new lemma one tier down either
+## Built from the block VJPs
 
 Every block VJP is already proven at `bnBatchLA`: `mnv2BodyBHasVJPAt` and
 `mnv2DownBodyBHasVJPAt` (`MobileNetV2BackB0.lean`) are exactly the two body shapes
 `mnv2ExpOnlyB` / `mnv2StridedB` unfold to, and `residualHasVJPAt` wraps the first for the ten
 skip blocks. The bundle lemmas below are delegations in the `EfficientNetFullB0` style.
 
-⭐ **Where r34 needed a new `Foundation` lemma, this net needs none.** ResNet-34's stem ends in
-`batchMap N (maxPool3s2Flat …)` and a max-pool has no derivative at a tie, so 4.1c had to write
+**No pointwise `batchMap` lemma is needed.** ResNet-34's stem ends in
+`batchMap N (maxPool3s2Flat …)` and a max-pool has no derivative at a tie, so it needs
 `batchMapHasVJPAt`. MobileNetV2 has NO stem pool — the stem is conv-BN-relu6 and downsamples
 once — and its head's GAP and dense are smooth, so `batchMapHasVJP` (the global one) covers
 every `batchMap` in the net.
 
-⭐ Three shapes are `bnRelu6StageHasVJPAt` at a different inner op, and that lemma is already
+Three shapes are `bnRelu6StageHasVJPAt` at a different inner op, and that lemma is already
 generic in it: the stem is that stage at `flatConvStride2Xla`, the head's first stage is `cbrB`,
 and the expand/depthwise stages are `cbrB` / `dwbrB` / `dwbrBstrided`. The `t = 1` block
 `projB ∘ dwbrB` (b1) has no `mnv2*BodyB` peer; it is `dwbrLayer ; projLayer`.
 
 ## The hypothesis budget
 
-⚠ **Pointwise (`HasVJPAt`), not global, and necessarily.** relu6 is kinked on BOTH sides, so each
-site carries `≠ 0 ∧ ≠ 6` and a global `HasVJP` through it is false. That is the repo standard for
-the relu-family nets.
+**Pointwise (`HasVJPAt`), not global.** relu6 is kinked on both sides, so each site carries
+`≠ 0 ∧ ≠ 6` and a global `HasVJP` through it is false.
 
-⛔ **Two kink clauses per bottleneck, and the second is not r34's.** ResNet-34's blocks carry the
+**Two kink clauses per bottleneck, and the second is not r34's.** ResNet-34's blocks carry the
 body's mid-relu AND a post-residual OUTER relu. MobileNetV2's carry the EXPAND relu6 and the
 DEPTHWISE relu6, both inside the body — the linear bottleneck has no activation after `project`,
 so the residual add IS the block output and contributes nothing. Sixteen expand-bearing blocks give
 32 clauses, plus b1's single depthwise clause, plus the stem's and the head's: 35 relu6 sites,
 bundled into 19 binders.
 
-⭐ **The positivity bundles are REUSED**, not re-declared: `IVPos` / `IVNoExpPos`
-(`MobileNetV2FullPaper.lean`) say `0 < ε` at each BatchNorm site and know nothing about which world
-reduces it. Only the smoothness bundles need batched peers, because a kink condition names the
-activation and `bnBatchLA` is a different activation from `bnPerChannelTensor3`.
+**The positivity bundles are `IVPos` / `IVNoExpPos`** (`MobileNetV2FullPaper.lean`): `0 < ε` at
+each BatchNorm site. The smoothness bundles are declared here, because a kink condition names the
+activation, which is `bnBatchLA`'s output.
 
 The running activations are named `mnv2PreB0 … mnv2PreB17` so each bundle can be STATED at the
 activation entering its block without a seventeen-deep nested application inline; `mnv2PreB17`
 doubles as the trunk, and `mobilenetv2ForwardBFull_eq_chain` bridges it back to the committed
 nested-application forward.
 
-⭐ `N` is a variable throughout: this tier carries no numerals.
+`N` is a variable throughout.
 -/
 
 namespace Proofs
@@ -196,7 +194,7 @@ theorem mnv2StridedB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p : IVW i
 
 /-- Head VJP: the 1x1 conv-bn-relu6 stage (`cbrB`, pointwise), then GAP and dense — both smooth,
     both `batchMap` of a per-example op, so both lift with the GLOBAL `batchMapHasVJP`.
-    ⚠ Unlike r34's, this head is NOT hypothesis-free: MobileNetV2 puts a relu6 in front of the
+    Unlike r34's, this head is not hypothesis-free: MobileNetV2 puts a relu6 in front of the
     pool, so the head carries the net's 35th kink site. -/
 noncomputable def mnv2HeadBHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
@@ -315,7 +313,7 @@ structure MNV2PosB {nCls : Nat} (w : MNV2BWeights nCls) : Prop where
   b16 : IVPos w.b16
   b17 : IVPos w.b17
 
-/-- ⭐ **Every relu6 is away from its kinks, each at the activation its block actually sees**: the
+/-- **Every relu6 is away from its kinks, each at the activation its block actually sees**: the
     stem's clauses at the image, block `k`'s at `mnv2PreB(k-1)`, the head's at the trunk's output. -/
 structure MNV2SmoothAtB (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) : Prop where
@@ -406,22 +404,19 @@ private noncomputable def mnv2ChainB (N : Nat) {nCls : Nat} (w : MNV2BWeights nC
     ⟨mnv2HeadBHasVJPAt N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head,
       mnv2HeadB_differentiableAt N 7 7 w.hW w.hb w.hε hq.h w.hγ w.hβ w.fcW w.fcb _ hx.head⟩
 
-/-- ⭐⭐ **MobileNetV2 at TRUE BATCH-NORM has a certified input-VJP at a smooth point — all
+/-- **MobileNetV2 at batch BatchNorm has a certified input-VJP at a smooth point — all
     seventeen bottlenecks.** Chains stem → the `[t,c,n,s]` ladder → head with `vjpCompDiffAt`
     under two hypotheses: `MNV2PosB` (every `ε > 0`) and `MNV2SmoothAtB` (every relu6 clause, each
-    at its block's own input). T1's VJP half for
-    `formalization.yaml` 4e's port (the per-example fold it was the batched peer of was retired
-    2026-09-19).
+    at its block's own input).
 
-    ⚠ Pointwise, and necessarily: relu6 is kinked on both sides. ⛔ Each expand-bearing block
-    contributes TWO clauses — the expand relu6 and the depthwise relu6, both INSIDE the body —
+    Pointwise, because relu6 is kinked on both sides. Each expand-bearing block
+    contributes two clauses — the expand relu6 and the depthwise relu6, both INSIDE the body —
     where ResNet-34's basic block contributes a mid-relu and a post-residual OUTER relu. The
     linear bottleneck has no activation after `project`, so MobileNetV2's residual add is the
     block output and adds nothing.
 
-    ⚠ Unlike r34's, the head is NOT hypothesis-free: its 1x1 conv-BN is followed by a relu6.
-
-    ⭐ `N` is a variable: this tier carries no numerals. -/
+    Unlike r34's, the head is not hypothesis-free: its 1x1 conv-BN is followed by a relu6.
+    `N` is a variable. -/
 noncomputable def mobilenetv2ForwardBFullHasVJPAt (N : Nat) {nCls : Nat}
     (w : MNV2BWeights nCls) (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112))))
     (hx : MNV2SmoothAtB N w x) :
@@ -508,9 +503,8 @@ theorem mnv2PreB17_apply (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     mnv2PreB17 N w x = mnv2ExpOnlyB N 7 7 w.b17 (mnv2PreB16 N w x) := by
   rw [mnv2PreB17, Function.comp_apply]
 
-/-- ⭐ **The committed nested-application forward IS the layered chain the VJP is stated on** —
-    the batched peer of the retired per-example shape check, and what lets the VJP be about
-    `mobilenetv2ForwardBFull` rather than about a re-spelling of it. -/
+/-- **The committed nested-application forward is the layered chain the VJP is stated on** —
+    what lets the VJP be about `mobilenetv2ForwardBFull` rather than about a re-spelling of it. -/
 theorem mobilenetv2ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) :
     mobilenetv2ForwardBFull N w x
@@ -518,8 +512,9 @@ theorem mobilenetv2ForwardBFull_eq_chain (N : Nat) {nCls : Nat} (w : MNV2BWeight
   rw [mobilenetv2ForwardBFull, Function.comp_apply, mnv2PreB17_apply, mnv2PreB16_apply, mnv2PreB15_apply, mnv2PreB14_apply, mnv2PreB13_apply, mnv2PreB12_apply, mnv2PreB11_apply, mnv2PreB10_apply, mnv2PreB9_apply, mnv2PreB8_apply, mnv2PreB7_apply, mnv2PreB6_apply, mnv2PreB5_apply, mnv2PreB4_apply, mnv2PreB3_apply, mnv2PreB2_apply, mnv2PreB1_apply, mnv2PreB0_apply]
 
 
-/-- ⭐⭐ **Public correctness theorem**: the seventeen-bottleneck batch-BN backward equals the
-    `pdiv`-contracted Jacobian of `mobilenetv2ForwardBFull` ITSELF — the committed
+/-- **Public correctness theorem**: for weights with `MNV2PosB` and an input with
+    `MNV2SmoothAtB`, the seventeen-bottleneck batch-BN backward equals the
+    `pdiv`-contracted Jacobian of `mobilenetv2ForwardBFull` itself — the committed
     nested-application forward `MobileNetV2FullB.lean` defines and
     `mobilenetv2FwdGraphBFull_faithful` proves the typed graph denotes — not of the layered chain
     the VJP is assembled on. Tied back through `mobilenetv2ForwardBFull_eq_chain`. -/
@@ -533,7 +528,7 @@ theorem mobilenetv2ForwardBFullHasVJPAt_correct (N : Nat) {nCls : Nat}
       = mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb ∘ mnv2PreB17 N w
     from funext (mobilenetv2ForwardBFull_eq_chain N w)]
 
-/-- ⭐ The committed forward is differentiable at every smooth point — the chain's `.snd`, read
+/-- The committed forward is differentiable at every smooth point — the chain's `.snd`, read
     back through `mobilenetv2ForwardBFull_eq_chain`. What the seal's `seal_differentiableAt` needs. -/
 theorem mobilenetv2ForwardBFull_differentiableAt (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (hq : MNV2PosB w) (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) (hx : MNV2SmoothAtB N w x) :

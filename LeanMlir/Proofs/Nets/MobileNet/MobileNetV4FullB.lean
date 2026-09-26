@@ -1,66 +1,43 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4BackB0
 
-/-! # MobileNetV4-Conv-M at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
+/-! # MobileNetV4-Conv-M at batch BatchNorm — the whole net's forward and graph
 
-MobileNetV4 was the last net in `planning/archive/proofs_tier_to_paper_nets.md` §2's table with nothing at
-the net level. `MobileNetV4BackB0.lean` is complete at the BLOCK and STAGE level — every UIB
-family, both stride-2 forms, the fused stage, the head, the table-driven `k = 0` dispatch and the
-row-typed `UibParams` — and this file is the tier above: a net-level ℝ forward at the 21-row
-Conv-M table, and the typed StableHLO graph over it at `mnv4FwdChainB`'s own tokens.
-`planning/archive/mnv4_proofs_tier.md` is the plan; ResNet-50 closed the same two tiers on 2026-09-06 and
-`ResNet50FullB.lean` is the file this one mirrors.
+`MobileNetV4BackB0.lean` is the block and stage level — every UIB family, the stride-2 form, the
+fused stage, the head, the table-driven `k = 0` dispatch and the row-typed `UibParams`. This file is
+the net level: a net-level ℝ forward at the 21-row Conv-M table (`mobilenetv4ForwardBFull`), the
+typed StableHLO graph over it at `mnv4FwdChainB`'s own tokens (`mnv4FwdGraphBFull`), and their
+faithfulness (`mnv4FwdGraphBFull_faithful`). `ResNet50FullB.lean` is the file this one mirrors.
 
-⭐ **This is timm's `mobilenetv4_conv_medium`** (1.0.28, the pinned spec) since 2026-09-24
-(`planning/mnv4_timm_parity.md`): the post-DW carries each downsample's stride, the pre-DW is BN
-only, stage 0 is relu, the head pools before `conv_head`, the stem pads symmetrically. The
-artifacts under this tier are pinned to that function by three gates: `scripts/parity/mnv4_timm_parity.py`
-(the JAX reference = timm on shared weights), `scripts/parity/mnv4_forward_tie.py` (the render = the JAX
-reference) and `scripts/parity/grad_tie.py --net mnv4` (the render's backward = `jax.grad` of it).
+**This is timm's `mobilenetv4_conv_medium`** (1.0.28, the pinned spec): the post-DW carries each
+downsample's stride, the pre-DW is BN only, stage 0 is relu, the head pools before `conv_head`,
+the stem pads symmetrically. The artifacts are pinned to that function by three gates:
+`scripts/parity/mnv4_timm_parity.py` (the JAX reference = timm on shared weights),
+`scripts/parity/mnv4_forward_tie.py` (the render = the JAX reference) and
+`scripts/parity/grad_tie.py --net mnv4` (the render's backward = `jax.grad` of it).
 
-⚠⚠ **NO ACCURACY IS QUOTED FOR THIS NET.** The 100-epoch JAX reference run (75.51%) trained the
-pre-2026-09-24 variant; the rerun on timm's net is queued.
+No accuracy is quoted for this net.
 
-## ⭐⭐ The trunk is FIVE `CertLayer` groups — and the reason it is not ONE is the finding here
+## The trunk is five `CertLayer` groups
 
-ResNet-50's T1 needed sixteen `r50Pre_k` prefix definitions and a hand-written bottom-up `have`
-chain for its apex, because its `CertLayer` trunk predated the tie files' needs. MNv4 has no such
-legacy, so each resolution group — the fused stage, rows 1–2, 3–6, 7–10, 11–15, 16–21, the head —
-is assembled with `CertLayer.comp` and `CertLayer.residual` directly, and inside a group:
+Each resolution group — rows 1–2, 3–6, 7–10, 11–15, 16–21 — is assembled with `CertLayer.comp`
+and `CertLayer.residual` directly, as are the fused stage and the head, and inside a group:
 
 * `.fwd` **is** that group's forward — no second definition to keep in step;
 * `.ok` **is** its smoothness hypothesis, conjoined at exactly the right activations by `comp`
-  rather than written out (~60 relu clauses across the net, none of them written here);
-* `.vjp` **is** its `HasVJPAt` (`MobileNetV4FullBVJP.lean` chains seven of them); and
-* `.faithful` **is** its BACKWARD-graph faithfulness, for free.
+  rather than written out (the net has 38 relu clauses, counted by `MobileNetV4FullBSeal`'s
+  `#guard`; none of them is written here);
+* `.vjp` **is** its `HasVJPAt` (`MobileNetV4FullBVJP.lean` chains them); and
+* `.faithful` **is** its backward-graph faithfulness.
 
-⛔⛔ **But composing the groups into ONE `CertLayer` does not work, and this cost a day to
-establish, so it is recorded rather than re-discovered.** `fused.comp (res28.comp (… .comp head))`
-elaborates fine and reads beautifully. Every later statement then has to peel `CertLayer.comp` to
-reach `.fwd`, and at MNv4's LITERAL resolutions that peel is fatal: `(L₁.comp L₂).fwd =
-L₂.fwd ∘ L₁.fwd` is `rfl`, and discharging it at these instances — by `rfl`, by
-`simp only [CertLayer.comp_fwd]`, inside the T2 capstone or in a standalone lemma — costs ten
-minutes of elaboration and then a `(kernel) deterministic timeout`. Every one of those four
-spellings was measured. ⚠ The groups' own five-stage `comp` chains are completely fine; it is
-composing the compositions, under something that can start unfolding `den`, that is not.
+The groups are composed by a prefix chain (`mnv4Pre0` … `mnv4Pre6`), not by one more
+`CertLayer.comp`; the section before `mnv4Pre0` says why. `Mnv4SmoothAt` therefore binds one
+`.ok` per group plus the stem's clause (eight fields), and no `0 < ε` hypothesis, because those
+live inside the weight records.
 
-⭐ So the top level is seven named prefixes (`mnv4Pre0` … `mnv4Pre6`) and the forward is their
-nest. What it costs is the hypothesis bundle: `Mnv4SmoothAt` binds one `.ok` per group, eight
-fields rather than two. What it keeps is everything that mattered — R50's two apex bundles carry 35
-hand-written fields, and MNv4 binds no `0 < ε` hypothesis at all, because those live inside the
-weight records.
-
-▶ **The general lesson, and it is not MNv4-specific:** a net whose resolutions are LITERALS cannot
-afford the proof idioms a net with a resolution BINDER can. ResNet-50's `q` keeps `den` stuck;
-MNv4's 224/112/56/28/14/7 let it run. Three separate blow-ups in this file trace to exactly that —
-this one, the graph builders that had to be made generic in their widths, and the whole-net
-capstone that had to become `rw` instead of `simp only`.
-
-⚠⚠ **The stem sits OUTSIDE the chain, and this is EfficientNet-B0's situation exactly.**
-`CertLayer` demands a backward graph, and **no render emits a gradient into `%x`**: the
-artifact's backward ends at the stem conv's WEIGHT gradient. B0's stem sits outside its chain for
-the same reason. So `mnv4StemB` is a plain function here (ResNet's `cbReluStridedB` at the stem's
-widths), its VJP is `cbReluStridedBHasVJPAt`, and the net-level VJP composes the two with
-`vjpCompAt`.
+**The stem sits outside the chain**, as EfficientNet-B0's does. `CertLayer` demands a backward
+graph, and no render emits a gradient into `%x`: the artifact's backward ends at the stem conv's
+weight gradient. So `mnv4StemB` is a plain function here (`cbReluStridedB` at the stem's widths),
+its VJP is `cbReluStridedBHasVJPAt`, and the net-level VJP composes the two with `vjpCompAt`.
 
 ## Conventions this net runs at
 
@@ -75,20 +52,21 @@ widths), its VJP is `cbReluStridedBHasVJPAt`, and the net-level VJP composes the
 | stride | the three stride-2 rows (1, 3, 11) stride their POST-DW (timm's `dw_mid`); the pre-DW and the expand run at the input resolution |
 | head | 1×1 256 → 960 conv-bn-relu at 7×7, GAP, then `conv_head` 960 → 1280 conv-bn-relu on the pooled `[N, 960, 1, 1]` (its BN over the batch alone), then dense |
 | census | **233** parameter slots at `nCls = 10` (8,447,322 scalars; 9,715,512 at 1000), bias-free by construction |
-| artifacts | `mnv4_fwd`, `mnv4_fwd_eval`, `mnv4_adam_train_step`, and the five `mnv4in*` ImageNet twins |
+| artifacts | `mnv4_fwd`, `mnv4in_fwd`, and the f32 224×224 train steps (`mnv4_adam_train_step`, `mnv4in_adam64`, `mnv4in_adamdp64`). Not this graph: the `bf16` train steps, the frozen-statistics evals (`mnv4{,in}_fwd_eval`), the 256×256 eval `mnv4in_fwd_eval_s256`, and the classifier-dropout variants `mnv4in_emaacc{,dp}8x128wxdowd005bf16` (a `%do` operand) |
 
-⚠ `N` stays a binder throughout, as at r34/R50: this tier carries no batch numeral. On the
-data-parallel artifacts the render's `N` is the PER-REPLICA batch; since 2026-09-21 their
-BatchNorm is synchronised, and `MobileNetV4SyncB.lean` is this file's twin for them: replica `r`'s
-forward graph denotes shard `r` of `mobilenetv4ForwardBFull (R * N)`, this file's forward at the
-global batch. Unlike R50 there is no `q` binder — MNv4 ships one resolution.
+`N` stays a binder throughout, as at r34/R50. On the data-parallel artifacts the render's `N` is
+the per-replica batch and BatchNorm is synchronised across replicas; `MobileNetV4SyncB.lean` is
+this file's twin for them: replica `r`'s forward graph denotes shard `r` of
+`mobilenetv4ForwardBFull (R * N)`, this file's forward at the global batch. Unlike R50 there is
+no resolution binder `q`: the statements are at 224×224.
 
-⚠ **Rows 4/5/10, 12/18 and 15/19/20 are shape-identical**, so their `UibParams` records have the
-same TYPE and swapping their weights typechecks. Typing pins shape, not identity; what pins
-identity is the SSA NAMES the T2 graph writes (`%u4qW` vs `%u10qW`), which is why the graph reads
+**Rows 4/5/7, 8/10, 12/18, 13/14 and 15/19/20 are shape-identical** (same `ic, oc, expand,
+preDWk, postDWk, h`), so their `UibParams` records have the same type and swapping their weights
+typechecks. Typing pins shape, not identity; what pins identity is the SSA names the forward graph
+writes (`%u4qW` vs `%u10qW`), which is why the graph reads
 its names from `s.p` off the table rather than taking them as arguments.
 
-✅ Checked against the committed bytes: `verified_mlir/mnv4_fwd.mlir`'s signature is **234
+Checked against the committed bytes: `verified_mlir/mnv4_fwd.mlir`'s signature is **234
 arguments = `%x` + 233 parameters**, and every name this file writes appears there.
 -/
 
@@ -102,12 +80,12 @@ namespace StableHLO
 -- § The block table, one row per constant
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠ These are `abbrev`s, and the rows are NAMED rather than indexed. `UibParams (mnv4Blocks[3]!)`
+/-! These are `abbrev`s, and the rows are named rather than indexed. `UibParams (mnv4Blocks[3]!)`
 in a type would force `whnf` through `List.get!` at every use; a named reducible constant reduces
 to its projections directly, which is what lets `CertLayer.comp` line up `2 * 28` with `56` across
 a stride join without a single transport.
 
-⭐ The `#guard` below is the whole safety of that move: these 21 constants are pinned to
+The `#guard` below is the whole safety of that move: these 21 constants are pinned to
 `mnv4Blocks` — the ONE table `mnv4FwdChainB`, the backward, the parameter signature and the BN stat
 list all fold over — so a typo here is a build failure rather than a proof about a different net. -/
 
@@ -156,17 +134,17 @@ abbrev mnv4Row21 : UibSpec := ⟨"21", 256, 256, 2, 5, 0,  7, false⟩  -- ConvN
 /-- **Every MobileNetV4-Conv-M parameter**, generic in the class count so one statement covers the
     10-class Imagenette artifacts and the 1000-class `mnv4in` ones.
 
-    ⭐ The 21 block fields are `UibParams mnv4Row{k}` — a record whose every width is a *projection
+    The 21 block fields are `UibParams mnv4Row{k}` — a record whose every width is a *projection
     of its row*, so a record that disagrees with its row **cannot be constructed** and the forward
     below needs no side conditions on widths. That is strictly stronger than ResNet-50's
-    `R50IdW`/`R50ProjW`, which are typed by loose `{mid oc}` binders. ⚠ It still does not pin
-    IDENTITY between shape-identical rows (4/5/10, 12/18, 15/19/20) — see the header.
+    `R50IdW`/`R50ProjW`, which are typed by loose `{mid oc}` binders. It still does not pin
+    identity between shape-identical rows (4/5/7, 8/10, 12/18, 13/14, 15/19/20) — see the header.
 
-    ⭐ The `0 < ε` obligations live INSIDE the records (`UibParams`'s `hq he hd hz`), so the stem,
+    The `0 < ε` obligations live INSIDE the records (`UibParams`'s `hq he hd hz`), so the stem,
     the fused stage and the head carry theirs as fields too. R50 keeps a separate `R50IdPos`
     bundle; matching `UibParams` here means the whole-net VJP binds no epsilon hypotheses at all.
 
-    ⚠ Every conv is bias-free — both renders bake `convBias := false` and bind each bias to the
+    Every conv is bias-free — both renders bake `convBias := false` and bind each bias to the
     `%zb{c}` zero the prelude declares — but the records still carry a `b` slot because the stage
     vocabulary takes one. Those fields are `∀`-quantified over; `bias = 0` is one instance. Field
     names are the render's own SSA prefixes, so a reader can match a parameter to its emitted name
@@ -258,8 +236,8 @@ structure Mnv4BWeights (nCls : Nat) where
 -- ════════════════════════════════════════════════════════════════
 
 /-- MNv4's stem forward: 3×3/s2 conv, SYMMETRIC padding (timm's `conv_stem`) → batch BN → relu.
-    ⚠ Until 2026-09-24 this was the XLA-`SAME` phase (`flatConvStride2Xla`, pads (0,1) at 224);
-    both give 112×112, so only a forward on shared weights sees the difference. -/
+    The XLA-`SAME` phase (`flatConvStride2Xla`, pads (0,1) at 224) also gives 112×112, so only a
+    forward on shared weights tells the two apart. -/
 @[reducible] noncomputable def mnv4StemB (N h w : Nat) {ic oc kH kW : Nat}
     (Ws : Kernel4 oc ic kH kW) (bs : Vec oc) (εs : ℝ) (γs βs : Vec oc) :
     Vec (N * (ic * (2 * h) * (2 * w))) → Vec (N * (oc * h * w)) :=
@@ -287,12 +265,11 @@ noncomputable def mnv4HeadStack (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) :
     (cbReluLayer (h := 1) (w := 1) N w.hW w.hb w.hE w.hhE w.hg w.hbt)
     (denseLayer N w.Wd w.bd)
 
-/-! ⚠⚠ **The trunk is built in GROUPS, and that is a proof-engineering requirement.** One 24-stage
-`CertLayer` elaborates fine — it is the T2 faithfulness proof over it that does not: the whole-net
-rewrite chain produces a term whose KERNEL check exceeds any reasonable budget (measured: the
-elaboration succeeds after ~9 minutes and the kernel then reports a deterministic timeout). Split
+/-! **The trunk is built in groups, and that is a proof-engineering requirement.** One 24-stage
+`CertLayer` elaborates fine — it is the graph faithfulness proof over it that does not: the
+whole-net rewrite chain produces a term whose kernel check ends in a deterministic timeout. Split
 at the net's own resolution boundaries, each group's proof is small, and the whole-net theorem is
-six rewrites over them. ⭐ The grouping is the ladder a reader already knows — 56, 28, 14, 7 — so
+six rewrites over them. The grouping is the ladder a reader already knows — 56, 28, 14, 7 — so
 it costs nothing in readability and buys a bounded proof. -/
 
 /-- Trunk group **Res28** — rows 1–2: the 56→28 reduction and the block that follows it. -/
@@ -336,23 +313,27 @@ noncomputable def mnv4Res7bLayer (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) 
       ((CertLayer.residual (mnv4BodyOfRow N mnv4Row20 w.b20)).comp
       (CertLayer.residual (mnv4BodyOfRow N mnv4Row21 w.b21))))))
 
-/-! ⛔⛔ **The seven groups are composed by a PREFIX CHAIN, not by one more `CertLayer.comp`, and
-this is the single hardest thing this file learned.**
+/-! **The seven groups are composed by a prefix chain, not by one more `CertLayer.comp`.**
 
 A `mnv4NetLayer := fused.comp (res28.comp (… .comp head))` elaborates fine and reads beautifully.
 But every downstream statement then has to peel `CertLayer.comp` to get at `.fwd`, and at MNv4's
 LITERAL resolutions that peel is fatal: `(L₁.comp L₂).fwd = L₂.fwd ∘ L₁.fwd` is `rfl`, yet
-discharging it at these instances — by `rfl`, by `simp only [CertLayer.comp_fwd]`, inside the T2
-capstone or in a standalone lemma — costs ten minutes of elaboration and then a `(kernel)
-deterministic timeout`. ⚠ The groups' OWN five-stage `comp` chains are fine; it is composing the
+discharging it at these instances — by `rfl`, by `simp only [CertLayer.comp_fwd]`, inside the
+graph-faithfulness capstone or in a standalone lemma — ends in a `(kernel) deterministic timeout`.
+The groups' own five-stage `comp` chains are fine; it is composing the
 compositions, under something that can start unfolding, that is not.
 
-⭐ So the top level is seven named prefixes and the forward is their nest — ResNet-50's shape at
+So the top level is seven named prefixes and the forward is their nest — ResNet-50's shape at
 seven stages instead of eighteen. What that costs is the hypothesis bundle: `Mnv4SmoothAt` binds
-one `.ok` per group (seven) rather than one for the whole trunk. What it keeps is everything that
-mattered — each group's `.ok` is still the conjunction `CertLayer.comp` assembled from its blocks'
-conditions at their own activations, so ~60 relu clauses are still never written down, and no
-`0 < ε` hypothesis appears at all. R50's two apex bundles carry 35 fields. -/
+one `.ok` per group plus the stem's clause (eight fields) rather than one for the whole trunk.
+Each group's `.ok` is still the conjunction `CertLayer.comp` assembled from its blocks'
+conditions at their own activations, so the 38 relu clauses are never written down one by one,
+and no `0 < ε` hypothesis appears at all. R50's two apex bundles carry 35 fields.
+
+More generally, a net whose resolutions are literals cannot afford the proof idioms a net with a
+resolution binder can: ResNet-50's `q` keeps `den` stuck, MNv4's 224/112/56/28/14/7 let it run.
+The stem graph builder's genericity, the prefix chain and the capstone's `rw` in place of
+`simp only` all trace to that. -/
 
 /-- Prefix 0: the stem's output. -/
 @[reducible] noncomputable def mnv4Pre0 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
@@ -389,7 +370,7 @@ conditions at their own activations, so ~60 relu clauses are still never written
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (256 * 7 * 7)) :=
   (mnv4Res7bLayer N w).fwd (mnv4Pre5 N w x)
 
-/-- **T1's forward half: the full batch-BN MobileNetV4-Conv-M**, `N*(3*224*224) → N*nCls`.
+/-- **The full batch-BN MobileNetV4-Conv-M**, `N*(3*224*224) → N*nCls`.
 
     The stem, the fused stage, the five resolution groups, the head. Every block inside those
     groups is `mnv4BodyOfRow` at its own row, so the `k = 0` dispatch is READ from `mnv4Blocks`
@@ -430,7 +411,7 @@ example (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 
 
 /-- Stem graph: 3×3/s2 symmetric conv → batch BN → relu.
 
-    ⚠⚠ **GENERIC in the widths, and that is a correctness-of-elaboration requirement, not style.**
+    **Generic in the widths, and that is an elaboration requirement, not style.**
     Pinning `ic := 3, oc := 32, h := 112` here makes the conv's `den_batchOp` `rfl` a claim
     about concrete 150528- and 401408-element tensors, and the KERNEL tries to reduce it: the
     lemma takes over a minute and then fails with `(kernel) deterministic timeout`. Proven at
@@ -454,7 +435,7 @@ theorem mnv4StemGraphB_faithful (epsStr : String) (N h w : Nat) {ic oc kH kW : N
     den_bnBatchF, Function.comp_apply]
 
 /-- Fused stage graph: 3×3/s2 symmetric conv → BN → relu → 1×1 project → BN. No skip.
-    ⚠ Generic in the widths, for the reason `mnv4StemGraphB` records. -/
+    Generic in the widths, for the reason `mnv4StemGraphB` records. -/
 def mnv4FusedGraphB (epsStr : String) (N h w : Nat) {ic mid oc kH kW : Nat}
     (Wc : Kernel4 mid ic kH kW) (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid)
     (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ) (γp βp : Vec oc)
@@ -500,7 +481,7 @@ def mnv4ExtraDWBodyGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibPara
                         s!"%u{s.p}qW" s!"%zb{s.ic}" p.Wq p.bq)
                       e)))))))))
 
-/-- ⭐ The ExtraDW body graph denotes the row-typed body's forward — **generic in the row**, so one
+/-- The ExtraDW body graph denotes the row-typed body's forward — **generic in the row**, so one
     theorem serves all thirteen. The two hypotheses are exactly the dispatch conditions
     `mnv4PreDWSlot`/`mnv4PostDWSlot` branch on, discharged by `decide` at each concrete row. -/
 theorem mnv4ExtraDWBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
@@ -513,7 +494,7 @@ theorem mnv4ExtraDWBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     den_bnBatchF, Function.comp_apply]
 
 /-- **ConvNeXt-like body graph** — pre-DW only, `postDWk = 0`, four of Conv-M's rows (8, 10, 16,
-    21). ⛔ The absent depthwise emits NO tokens, exactly as `mnv4PostDWSlot` inserts `id'`: the
+    21). The absent depthwise emits no tokens, exactly as `mnv4PostDWSlot` inserts `id'`: the
     `UibParams` record still carries a degenerate `DepthwiseKernel _ 0 0` in that slot and this
     graph simply does not read it. A token stated for an absent depthwise would be a `den` of a
     node the artifact does not have. -/
@@ -564,7 +545,7 @@ theorem mnv4FfnBodyGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
 
 /-- **Strided block graph** — rows 1, 3 and 11, all ExtraDW. timm strides `dw_mid`: the BN-only
     pre-DW and the expand run at the input resolution `2h`, the post-DW (`.depthwiseStrided`,
-    symmetric) takes it to `h`, the project runs at `h`. ⚠ No skip: `ic ≠ oc` at all three, so the
+    symmetric) takes it to `h`, the project runs at `h`. No skip: `ic ≠ oc` at all three, so the
     block IS the body and there is no `.addVB`. -/
 def mnv4StridedGraphB (epsStr : String) (N : Nat) (s : UibSpec) (p : UibParams s)
     (e : SHlo (N * (s.ic * (2 * s.h) * (2 * s.h)))) : SHlo (N * (s.oc * s.h * s.h)) :=
@@ -595,17 +576,16 @@ theorem mnv4StridedGraphB_faithful (epsStr : String) (N : Nat) (s : UibSpec)
     reluF_faithful, den_batchOp, denOp,
     den_bnBatchF, Function.comp_apply]
 
-/-- ⭐⭐ **One skip row's graph: its body's, plus the identity skip.** Trivial as a definition and
-    load-bearing as a barrier.
+/-- **One skip row's graph: its body's, plus the identity skip.** Trivial as a definition; it
+    exists as a barrier to unfolding.
 
-    ⚠⚠ **This is why it is a named combinator and not an inline `.addVB`.** The residual add needs
-    the block's input subtree TWICE, and MNv4 has eighteen of them. Written inline — or hidden
-    behind a `let` in the whole-net graph, which is what this file did first — the term doubles at
-    every skip the moment anything unfolds it, and `simp only [mnv4FwdGraphBFull]` ZETA-EXPANDS
-    lets, so the `let` form bought nothing at all: the whole-net faithfulness proof elaborated and
-    then died in the KERNEL with a deterministic timeout.
+    **Why it is a named combinator and not an inline `.addVB`.** The residual add needs the
+    block's input subtree twice, and MNv4 has eighteen of them. Written inline — or behind a `let`
+    in the whole-net graph, which `simp only [mnv4FwdGraphBFull]` zeta-expands — the term doubles at
+    every skip the moment anything unfolds it, and the whole-net faithfulness proof ends in a
+    kernel deterministic timeout.
 
-    ⭐ Kept folded, with `mnv4SkipGraphB_faithful` rewriting `den (mnv4SkipGraphB body e)` in ONE
+    Kept folded, with `mnv4SkipGraphB_faithful` rewriting `den (mnv4SkipGraphB body e)` in ONE
     step, `den e` occurs once and the whole-net term stays linear in the depth. R50 never met this:
     its `r50IdGraphB` takes `e` as a binder and duplicates it inside the builder, which has the
     same effect for the same reason. -/
@@ -613,7 +593,7 @@ def mnv4SkipGraphB {N n : Nat} (body : SHlo (N * n) → SHlo (N * n)) (e : SHlo 
     SHlo (N * n) :=
   .addVB (body e) e
 
-/-- ⭐ A skip row denotes `residual` of whatever its body denotes — generic in both, so one
+/-- A skip row denotes `residual` of whatever its body denotes — generic in both, so one
     theorem covers all eighteen and the body's own faithfulness lemma is the only input. -/
 theorem mnv4SkipGraphB_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n))
     (f : Vec (N * n) → Vec (N * n))
@@ -623,7 +603,7 @@ theorem mnv4SkipGraphB_faithful {N n : Nat} (body : SHlo (N * n) → SHlo (N * n
 
 /-- **Head graph**, timm's order: 1×1 conv-BN-relu, GAP, `conv_head` 1×1 conv-BN-relu on the
     pooled features, dense — with the two `castIdx` relabellings `mnv4Head` carries, which emit no
-    text. ⚠ Generic in the widths, for the reason `mnv4StemGraphB` records. -/
+    text. Generic in the widths, for the reason `mnv4StemGraphB` records. -/
 def mnv4HeadGraphB (epsStr : String) (N h w : Nat) {c mid oc nCls : Nat}
     (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (γ1 β1 : Vec mid)
     (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (γ2 β2 : Vec oc)
@@ -775,7 +755,7 @@ theorem mnv4Res7bGraphB_faithful (N : Nat) (epsStr : String) {nCls : Nat}
 
 /-- The fused stage's graph faithfulness, restated at `mnv4FusedStack` itself.
 
-    ⚠ This corollary exists so the whole-net proof never has to UNFOLD `mnv4FusedStack`. It looks
+    This corollary exists so the whole-net proof never has to unfold `mnv4FusedStack`. It looks
     redundant and is not: at MNv4's literal resolutions, letting anything unfold far enough for
     `den` to start recursing turns the kernel's check into an evaluation of the whole graph, which
     is the failure the group split above already had to work around once. Seven rewrites all of
@@ -804,12 +784,13 @@ theorem mnv4StemB_graph_faithful (N : Nat) (epsStr : String) {nCls : Nat}
       = mnv4StemB N 112 112 w.sW w.sb w.sE w.sg w.sbt (den e) :=
   mnv4StemGraphB_faithful epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e
 
-/-- ⭐⭐ **The full batch-BN MobileNetV4-Conv-M forward graph**, at `mnv4FwdChainB`'s own tokens
-    and its own SSA names, so the typed graph diffs against `mnv4_fwd.mlir` and its five ImageNet
-    twins name for name. ✅ Checked against the committed bytes: all 247 names this writes appear
-    in that file, and between them they cover all 233 of its declared parameters.
+/-- **The full batch-BN MobileNetV4-Conv-M forward graph**, at `mnv4FwdChainB`'s own tokens
+    and its own SSA names, so the typed graph diffs against `mnv4_fwd.mlir` and `mnv4in_fwd.mlir`
+    name for name (the artifacts it covers are listed in the module's conventions table). Checked
+    against the committed bytes: all 247 names this writes appear in `mnv4_fwd.mlir`, and between
+    them they cover all 233 of its declared parameters.
 
-    ⚠ The eighteen skip rows go through `mnv4SkipGraphB`, which is what keeps this term LINEAR in
+    The eighteen skip rows go through `mnv4SkipGraphB`, which is what keeps this term LINEAR in
     the depth — see that combinator's docstring for the failure mode it exists to prevent. -/
 def mnv4FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights nCls)
     (e : SHlo (N * (3 * 224 * 224))) : SHlo (N * nCls) :=
@@ -824,12 +805,11 @@ def mnv4FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : Mnv4BWeights
                 w.f0pW w.f0pb w.f0pE w.f0pg w.f0pbt
                 (mnv4StemGraphB epsStr N 112 112 w.sW w.sb w.sE w.sg w.sbt e)))))))
 
-/-- ⭐⭐ **T2 for MobileNetV4-Conv-M at batch BatchNorm**: the typed graph denotes the whole-net
-    forward. Seven rewrites — the stem, the fused stage, the five resolution groups and the head —
-    each of which was itself proved one block at a time. The first graph-level tier this net has
-    ever had.
+/-- **The MobileNetV4-Conv-M forward graph at batch BatchNorm denotes the whole-net forward.**
+    Seven rewrites — the stem, the fused stage, the five resolution groups and the head — each of
+    which was itself proved one block at a time.
 
-    ⚠ Each group's proof discharges its blocks' dispatch hypotheses by `decide` at the concrete
+    Each group's proof discharges its blocks' dispatch hypotheses by `decide` at the concrete
     row, so what selects ExtraDW / ConvNeXt / FFN is the TABLE, not this file. A row wired to the
     wrong builder fails to elaborate rather than proving something about a different net. -/
 theorem mnv4FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}

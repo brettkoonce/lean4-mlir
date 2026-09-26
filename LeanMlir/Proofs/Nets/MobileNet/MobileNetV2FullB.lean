@@ -1,49 +1,32 @@
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2BackB0
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2FullPaper
 
-/-! # MobileNetV2 at TRUE BATCH-NORM — the whole net's forward and graph (T1-forward, T2)
+/-! # MobileNetV2 at batch BatchNorm — the whole net's forward and graph
 
-The MobileNetV2 peer of `ResNet34FullB.lean`, and the first half of
-`planning/archive/proofs_tier_to_paper_nets.md` section 4.2's MobileNetV2 column.
+The MobileNetV2 peer of `ResNet34FullB.lean`. `mobilenetv2ForwardBFull` is the seventeen-bottleneck
+net at batch BatchNorm (`bnBatchLA`, the proven `bnBatchTensor4` at the network's left-assoc index;
+reduce `[0,2,3]`: one mean/variance per channel across the batch, the one op that couples
+examples), which is the forward `MobileNetV2RenderB` emits for `mobilenetv2_fwd`,
+`mobilenetv2in_fwd` and the f32 train steps. `mobilenetv2FwdGraphBFull` is its typed graph and `mobilenetv2FwdGraphBFull_faithful` ties
+the two.
 
-`MobileNetV2FullPaper.lean` states this net's whole-net ℝ forward and typed graph at **per-example**
-BatchNorm (`bnPerChannelTensor3`, reduce `[2,3]`). That was the world of `mobilenetv2_fwd.mlir` and
-the Imagenette SGD trainer `mobilenetv2_train_step.mlir`, and every tier built on it is true and was
-correctly paired with those bytes. It is NOT the world of `mobilenetv2_adam_train_step.mlir`,
-`mobilenetv2_rms_train_step.mlir` or any ImageNet artifact — including `mobilenetv2in_rmsdp64`,
-whose accuracy the book quotes — all of which reduce `[0,2,3]`: one mu/var per channel across the
-batch, the one op that couples examples.
+## What this file adds
 
-⛔ **MobileNetV2's two renderers did not overlap**, so this was not a flag away.
-`MobileNetV2Render.lean` was SGD-inline and per-example only; `MobileNetV2RenderB` is AdamW/RMSProp-only,
-at the batched index and at batch BatchNorm. This file re-states the ladder at `bnBatchLA` (= the
-proven `bnBatchTensor4` at the network's left-assoc index), which is that renderer's world. ⭐ Since
-4c leg 2 (2026-09-06) it is the ONLY renderer: the per-example one and its train step are retired
-and `mobilenetv2_fwd.mlir` comes from the batched chain too, so this file's world is now the whole
-net's.
+The batched relu6 stages (`cbrB`, `dwbrB`, `dwbrBstrided` in `BatchedStageLayers`, `projB` in
+`BatchedStages`), their `_at` VJPs and their backward-graph faithfulness are one level down, all at
+`bnBatchLA`; `MobileNetV2BackB0.lean` composes them into block bodies. This file adds the
+net-level ℝ forward, the net-level forward graph, and the faithfulness tying them.
 
-## What is new here, and what is not
+The block weight records `IVW` / `IVWNoExp` come from `MobileNetV2FullPaper.lean`; only the
+top-level bundle `MNV2BWeights` is declared here, generic in the class count.
 
-⭐⭐ **Nothing about the blocks is new.** `MobileNetV2BackB0.lean` already carries the batched
-relu6 stages (`cbrB`, `dwbrB`, `dwbrBstrided`, and `projB` from `BatchedStages`), their
-`_at` VJPs and their backward-graph faithfulness, all at `bnBatchLA`. What was missing is the level
-above: a net-level ℝ forward, a net-level forward graph, and the faithfulness tying them. This file
-is that enumeration.
-
-⭐ **The weight bundles are reused, not re-declared.** `IVW` / `IVWNoExp`
-(`MobileNetV2FullPaper.lean`) hold kernels, epsilons, gammas and betas — nothing that knows which
-BatchNorm world reduces them — so the batched net binds the same records the per-example one does.
-Only the top-level bundle is new, because it is generic in the class count where the retired
-per-example record was pinned at 10.
-
-⚠ **Padding is XLA-`SAME` at all five stride-2 sites** — the stem 3x3/s2 conv and the four stride-2
+**Padding is XLA-`SAME` at all five stride-2 sites** — the stem 3x3/s2 conv and the four stride-2
 depthwises (`b2`, `b4`, `b7`, `b14`). These are `flatConvStride2Xla` / `depthwiseStride2FlatXla`,
-NOT r34's symmetric `flatConvStride2` peers; the two families have identical types and identical
+not r34's symmetric `flatConvStride2` peers; the two families have identical types and identical
 emitted shapes, so only the certificate distinguishes them, and MobileNetV2 is the TF-origin net.
-`scripts/gates/convention_audit.py` sees this at the artifact tier and nothing sees it here, so it is
-stated.
+`scripts/gates/convention_audit.py` checks this at the artifact level.
 
-⚠ **There is no max-pool.** MobileNetV2's stem is conv-BN-relu6 and downsamples once; r34's stem is
+**There is no max-pool.** MobileNetV2's stem is conv-BN-relu6 and downsamples once; r34's stem is
 conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMapHasVJPAt`.
 
 ## Conventions this net runs at
@@ -56,19 +39,17 @@ conv-BN-relu, then a 3x3/s2 pool. That is why this net needs no `batchMapHasVJPA
 | stride-2 padding | XLA-`SAME` at all five sites |
 | stem | 3x3/s2 conv-bn-relu6, 3 to 32, 224 to 112 (NO pool) |
 | head | 1x1 conv-bn-relu6 320 to 1280, then GAP and dense, generic in the class count |
-| artifacts | `mobilenetv2_fwd` and every train step — this net now has ONE chain (4c leg 2) |
+| artifacts | `mobilenetv2_fwd`, `mobilenetv2in_fwd` and the f32 train steps. Not this graph: the `bf16` train steps, the frozen-statistics evals (`mobilenetv2{,in}_fwd_eval*`, stated in `MobileNetV2FullPaperEval`) and the classifier-dropout variants `mobilenetv2in_rmsdp64wxdols0*` (a `%do` operand) |
 
-⭐ The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
+The head is generic in `nCls`, so one statement covers the 10-class Imagenette artifacts and the
 1000-class `mobilenetv2in` ones.
 
-⚠ `N` stays a variable throughout. T1 and T2 carry no numerals, so the batch size does not need
-pinning here; it is pinned only where a `Maps` envelope turns a width into a rational (T4/T5).
-On the data-parallel artifacts the render's `N` is the PER-REPLICA batch (64); since 2026-09-21
-their BatchNorm is synchronised, and `MobileNetV2SyncB.lean` is this file's twin for them: replica
-`r`'s forward graph denotes shard `r` of `mobilenetv2ForwardBFull (R * N)`, this file's forward at
-the global batch.
+`N` stays a variable throughout. On the data-parallel artifacts the render's `N` is the
+per-replica batch and BatchNorm is synchronised across replicas; `MobileNetV2SyncB.lean` is this
+file's twin for them: replica `r`'s forward graph denotes shard `r` of
+`mobilenetv2ForwardBFull (R * N)`, this file's forward at the global batch.
 
-⚠ **The bias operand names are the render's DEFAULT `convBias := false` ones** — `%zb{c}`, the
+**The bias operand names are the render's default `convBias := false` ones** — `%zb{c}`, the
 shared zero constant each conv, depthwise and project bias is bound to once its real bias has been
 folded into the BatchNorm that follows it. That is what makes the shipped parameter census 158 and
 not 210. Every graph below is `∀`-quantified over the bias VALUE, so it covers the
@@ -84,10 +65,9 @@ open scoped BigOperators
 -- ════════════════════════════════════════════════════════════════
 
 /-- Every paper-spec MobileNetV2 parameter: stem (3x3/s2, 3 to 32) + the 17 bottlenecks of the
-    `[t,c,n,s]` table + the 1x1 head (320 to 1280) + the dense classifier. Generic in `nCls` —
-    the retired per-example record was pinned at 10, and the lesson
-    `MobileNetV2FullPaperEval.lean` and B0's eval twin both paid for is that the head's envelope
-    depends on the fan-in and never on the output count. -/
+    `[t,c,n,s]` table + the 1x1 head (320 to 1280) + the dense classifier. Generic in `nCls`, so
+    one record covers the 10-class (`mobilenetv2_*`) and 1000-class (`mobilenetv2in_*`)
+    artifacts. -/
 structure MNV2BWeights (nCls : Nat) where
   sW : Kernel4 32 3 3 3
   sb : Vec 32
@@ -145,8 +125,8 @@ structure MNV2BWeights (nCls : Nat) where
     StableHLO.dwbrB N (h := h) (w := w) p.dW p.db p.dε p.dγ p.dβ ∘
       StableHLO.cbrB N (h := h) (w := w) p.eW p.eb p.eε p.eγ p.eβ
 
-/-- Batched stride-1 inverted residual WITH the identity skip (`s = 1 ∧ ic = oc`). ⭐ The residual
-    add IS the block output — unlike ResNet, there is no relu after it, which is why a MobileNetV2
+/-- Batched stride-1 inverted residual WITH the identity skip (`s = 1 ∧ ic = oc`). The residual
+    add is the block output — unlike ResNet, there is no relu after it, which is why a MobileNetV2
     block carries two kink clauses and not three. -/
 @[reducible] noncomputable def mnv2ResidB (N h w : Nat) {c mid : Nat} (p : IVW c mid c) :
     Vec (N * (c * h * w)) → Vec (N * (c * h * w)) :=
@@ -173,9 +153,9 @@ structure MNV2BWeights (nCls : Nat) where
 --   -> b7(28->14) -> b8..b13@14 -> b14(14->7) -> b15,b16,b17@7 -> head -> GAP -> dense
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The full batch-BN MobileNetV2 forward**, `N*(3*224*224) -> N*nCls`. The batched peer of the
-    retired per-example forward; nested-application form, as `resnet34ForwardBFull` and
-    `efficientnetForwardBFull` both are, so a T6 tie can peel it one block at a time. -/
+/-- **The full batch-BN MobileNetV2 forward**, `N*(3*224*224) -> N*nCls`, in
+    nested-application form, as `resnet34ForwardBFull` and `efficientnetForwardBFull` both are,
+    so the whole-net tie (`MobileNetV2WholeBackCertifiedTieB`) can peel it one block at a time. -/
 noncomputable def mobilenetv2ForwardBFull (N : Nat) {nCls : Nat} (w : MNV2BWeights nCls)
     (x : Vec (N * (3 * (2 * 112) * (2 * 112)))) : Vec (N * nCls) :=
   mnv2HeadB N 7 7 w.hW w.hb w.hε w.hγ w.hβ w.fcW w.fcb
@@ -348,7 +328,7 @@ def mobilenetv2FwdGraphBFull (N : Nat) (epsStr : String) {nCls : Nat} (w : MNV2B
                                       (mnv2StemGraphB epsStr N 112 112 w.sW w.sb w.sε w.sγ w.sβ
                                         e))))))))))))))))))
 
-/-- ⭐ **T2 for MobileNetV2 at batch BN**: the typed graph denotes the whole-net forward. One `rw`
+/-- **The MobileNetV2 forward graph at batch BN denotes the whole-net forward.** One `rw`
     per block over the six per-kind faithfulness lemmas. -/
 theorem mobilenetv2FwdGraphBFull_faithful (N : Nat) (epsStr : String) {nCls : Nat}
     (w : MNV2BWeights nCls) (e : SHlo (N * (3 * (2 * 112) * (2 * 112)))) :

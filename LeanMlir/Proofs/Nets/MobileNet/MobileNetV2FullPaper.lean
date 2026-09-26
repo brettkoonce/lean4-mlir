@@ -5,9 +5,8 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2StagesPC
 `IVW` (expand `ic→mid` 1×1, depthwise 3×3, project `mid→oc` 1×1, per-channel BN after each) and
 `IVWNoExp` (the t=1 first bottleneck: no expand conv). They hold kernels, epsilons, gammas and
 betas — nothing that knows which BatchNorm world reduces them — so the batch-BN net
-(`MobileNetV2FullB.lean`, `MNV2BWeights`) and its step tie bind the same records the per-example
-net did. `IVPos` / `IVNoExpPos` are their BN-epsilon positivity bundles: an epsilon's positivity
-does not know which axis the norm reduces either.
+(`MobileNetV2FullB.lean`, `MNV2BWeights`) and its step tie bind them. `IVPos` / `IVNoExpPos`
+are their BN-epsilon positivity bundles.
 
 Paper `[t,c,n,s]` spec (stem 3×3-s2 3→32; head 1×1 320→1280 → GAP → dense):
   (1, 16,1,1) (6, 24,2,2) (6, 32,3,2) (6, 64,4,2) (6, 96,3,1) (6,160,3,2) (6,320,1,1)
@@ -21,10 +20,7 @@ Per-block (ic→oc, mid=t·ic, spatial, kind):
   b7  32→64   mid192 28→14 strided       b16 160→160 mid960 @7   resid
   b8  64→64   mid384 @14  resid          b17 160→320 mid960 @7   exp(no-resid, s=1)
   b9  64→64   mid384 @14  resid
-
-This file used to hold the per-example paper-spec forward, its typed graph and their
-faithfulness (the forward of the retired SGD artifact); that tier was retired on 2026-09-20 and
-its batch-BN successor is `MobileNetV2FullB.lean`. -/
+-/
 
 namespace Proofs
 

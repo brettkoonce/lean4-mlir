@@ -4,21 +4,20 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34FullBSeal
 /-!
 # MobileNetV2's non-degeneracy seal, on the full-width batched net (levels 2 and 3)
 
-`planning/full_width_seals.md` §4.3. `MobileNetV2FullBVJP.lean` proves
+`MobileNetV2FullBVJP.lean` proves
 `mobilenetv2ForwardBFullHasVJPAt`: the whole-net VJP at any `(w, x)` satisfying **19 clause
 bundles** — the stem's relu6, one per bottleneck, and the head's — covering 35 relu6 sites, each a
 two-sided window `≠ 0 ∧ ≠ 6`. A conditional theorem of that shape says nothing unless its
-hypotheses are jointly satisfiable at a point with a nonzero Jacobian, and until now that was
-exhibited only on a per-example, two-block, 2-channel proxy, deleted when this file landed.
-This file exhibits it on `mobilenetv2ForwardBFull` itself: the seventeen bottlenecks of the
+hypotheses are jointly satisfiable at a point with a nonzero Jacobian. This file exhibits such a
+point on `mobilenetv2ForwardBFull` itself: the seventeen bottlenecks of the
 `[t,c,n,s]` table, 32→1280 channels, XLA-`SAME` stride-2 padding, **batch** BatchNorm, at 224×224.
 
 ## The witness
 
-Weights are *structural*, not trained (`planning/full_width_seals.md` §7):
+Weights are *structural*, not trained:
 
 * `ε = 1` and `γ = 1/64` at all 52 BatchNorms; `β = 3` wherever a relu6 follows, `β = 0` at the
-  eleven linear-bottleneck projections, which no activation follows;
+  seventeen linear-bottleneck projections, which no activation follows;
 * the ten **residual** bottlenecks have all three kernels zeroed. A zero kernel gives a constant
   channel, batch BN of a constant channel is `β`, and the block's last `β` is `0` — so a residual
   block is the **exact identity** (`sealResB_eq`), simpler than ResNet's `a ↦ a + 1`;
@@ -29,7 +28,7 @@ Weights are *structural*, not trained (`planning/full_width_seals.md` §7):
 
 `N = 2`, and the input is the shared ray `sealX t = rayX … t`.
 
-## ⭐⭐ Every one of the 35 clauses is weight-only
+## Every one of the 35 clauses is weight-only
 
 Better than ResNet-34, whose post-residual relu still needed `0 ≤ activation`. Two facts compose:
 every relu6 in this net sits **directly on a BatchNorm output**, and `BatchSeal.bnBatchLA_window`
@@ -39,20 +38,20 @@ margin holds at every site because the widest is `2·112² = 25 088` and `√25 
 (`BatchSeal.margin192`). Consequence: no nonnegativity layer, no positional injectivity, and — with
 no max-pool anywhere in this net — no no-tie argument.
 
-## ⭐ The carrier threads twenty-two BatchNorms
+## The carrier threads twenty-two BatchNorms
 
 MobileNetV2's channel-changing blocks have **no skip** — the body *is* the block — so unlike
 ResNet's carrier, which saw only the projection of each downsample, this one crosses every BN
 inside them: `1 (stem) + 2 (b1) + 3 × 6 + 1 (head)`. The ten residual blocks pass it through
 untouched. `BatchSeal.EDiff` is the invariant, `BatchSeal.bnBatchLA_exdiff` the step that survives
-per-channel batch BN, and ⭐ `BatchSeal.eDiff_dw` is the one genuinely new shape: a depthwise
+per-channel batch BN, and `BatchSeal.eDiff_dw` is the one new shape: a depthwise
 cannot broadcast, so where a centre-tap conv collapses the carrier to `fun _ => s · δ 0` at every
 output channel, a centre-tap depthwise scales the whole function `δ` channel by channel. The
 class-0 output difference between the two examples is `t · Rr t` with `Rr` a 22-fold product of
 `1/64 · istd`, continuous and positive, so `g'(0) = Rr 0 ≠ 0`.
 
-⚠⚠ Every collapse below is stated at **variable** `N, h, w, ic, mid, oc` and instantiated at the
-witness's numerals afterwards, never proved at them (`planning/full_width_seals.md` §3.5).
+Note: every collapse below is stated at variable `N, h, w, ic, mid, oc` and instantiated at the
+witness's numerals afterwards, never proved at them.
 -/
 
 namespace Proofs
@@ -65,7 +64,7 @@ open Proofs BatchSeal R34FullBSeal
 -- ════════════════════════════════════════════════════════════════
 -- § 1. The structural weights
 --   ⭐ One `γ = 1/64` and one `ε = 1` at all 52 BatchNorms. `β = 3` at every site a relu6
---   follows and `β = 0` at the eleven projections, which none follows — so a zeroed residual
+--   follows and `β = 0` at the seventeen projections, which none follows — so a zeroed residual
 --   body is the constant `0` and its block is the exact identity.
 -- ════════════════════════════════════════════════════════════════
 
@@ -272,7 +271,7 @@ theorem sealNoExpB_eq (N h w ic oc : Nat) (hm : Mg N h w) (v : Vec (N * (ic * h 
 -- ════════════════════════════════════════════════════════════════
 
 /-- The witness input: the shared ray at 224×224, `N = 2`. Both examples carry the same ramp in
-    channel 0, and `sealV` adds `t` to all of example 0's channel 0. ⭐ Every clause of this net is
+    channel 0, and `sealV` adds `t` to all of example 0's channel 0. Every clause of this net is
     weight-only, so the ramp is doing no work beyond keeping one witness shape across the four
     sealed nets. -/
 noncomputable def sealX (t : ℝ) : Vec (2 * (3 * (2 * 112) * (2 * 112))) :=
@@ -431,7 +430,7 @@ theorem seal_smooth (nCls : Nat) (t : ℝ) : MNV2SmoothAtB 2 (sealW nCls) (sealX
     sc7 nCls t, sc8 nCls t, sc9 nCls t, sc10 nCls t, sc11 nCls t, sc12 nCls t, sc13 nCls t,
     sc14 nCls t, sc15 nCls t, sc16 nCls t, sc17 nCls t, sc_head nCls t⟩
 
-/-- ⭐⭐ **The whole-net VJP at the witness** — all 19 bundles discharged, on
+/-- **The whole-net VJP at the witness** — all 19 bundles discharged, on
     `mobilenetv2ForwardBFull` itself (through `mobilenetv2ForwardBFull_eq_chain`). -/
 noncomputable def sealVJP (nCls : Nat) (t : ℝ) :
     HasVJPAt (mobilenetv2ForwardBFull 2 (sealW nCls)) (sealX t) := by
@@ -897,9 +896,9 @@ theorem eDiff_dH (nCls : Nat) (t : ℝ) : EDiff (dH nCls t) (Ah nCls t) :=
 -- ════════════════════════════════════════════════════════════════
 -- § 15. The nonlinear factor `Rr`
 -- ════════════════════════════════════════════════════════════════
-/-- ⭐⭐ **The positive, continuous nonlinear factor.** MobileNetV2's channel-changing blocks have
+/-- **The positive, continuous nonlinear factor.** MobileNetV2's channel-changing blocks have
     no skip, so the carrier threads every BatchNorm inside them: the stem, both of `b1`'s, three
-    each in `b2`, `b4`, `b7`, `b11`, `b14`, `b17`, and the head's. ⚠ No BatchNorm *variance*
+    each in `b2`, `b4`, `b7`, `b11`, `b14`, `b17`, and the head's. No BatchNorm *variance*
     derivative is ever taken — `Rr` enters only through `t * Rr t`, whose derivative at `0` is
     `Rr 0` for any `Rr` continuous there. -/
 noncomputable def Rr (nCls : Nat) (t : ℝ) : ℝ :=
@@ -1003,7 +1002,7 @@ theorem head_diff (nCls : Nat) (hn : 0 < nCls) (v : Vec (2 * (1280 * 7 * 7)))
   head_diff_ct (by norm_num) (by norm_num) (0 : Fin 1280) rfl ⟨0, hn⟩ _ _
     (fun ci => by rw [sealW_fcW]; simp) rfl v δ hv
 
-/-- ⭐⭐ **The class-0 difference between the two examples, along the ray, is `t · Rr t`.** -/
+/-- **The class-0 difference between the two examples, along the ray, is `t · Rr t`.** -/
 theorem gd_ray (nCls : Nat) (hn : 0 < nCls) (t : ℝ) :
     mobilenetv2ForwardBFull 2 (sealW nCls) (sealX t)
         (finProdFinEquiv ((0 : Fin 2), (⟨0, hn⟩ : Fin nCls)))
@@ -1023,23 +1022,24 @@ theorem seal_differentiableAt (nCls : Nat) (t : ℝ) :
   mobilenetv2ForwardBFull_differentiableAt 2 (sealW nCls) (seal_pos nCls) (sealX t)
     (seal_smooth nCls t)
 
-/-- ⭐⭐ **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV2 at the
+/-- **Level 2 — the witness is non-degenerate**: the full-width batch-BN MobileNetV2 at the
     structural weights is NOT constant in its input. -/
 theorem sealX_nonconstant (nCls : Nat) (hn : 0 < nCls) :
     mobilenetv2ForwardBFull 2 (sealW nCls) (sealX 1)
       ≠ mobilenetv2ForwardBFull 2 (sealW nCls) (sealX 0) :=
   ne_of_ray_readout _ sealX _ _ (gd_ray nCls hn) (by simpa using (Rr_pos nCls 1).ne')
 
-/-- ⭐⭐ **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
+/-- **Level 3 — the whole-net Jacobian is nonzero at the witness.** -/
 theorem sealX_jacobian_nonzero (nCls : Nat) (hn : 0 < nCls) :
     fderiv ℝ (mobilenetv2ForwardBFull 2 (sealW nCls)) (sealX 0) ≠ 0 :=
   fderiv_ne_zero_of_ray_readout _ sealX sealV sealX_zero_add _ _ (gd_ray nCls hn)
     (seal_differentiableAt nCls 0) (Rr_pos nCls 0).ne'
     (hasDerivAt_mul_self_zero (Rr_continuous nCls).continuousAt)
 
-/-- ⭐⭐ **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
-    seventeen-bottleneck, 224×224 MobileNetV2 — `mobilenetv2ForwardBFull`, the forward every
-    MobileNetV2 artifact runs — is **not the zero map** at the witness. -/
+/-- **The seal**: the proven whole-network backward of the full-width, batch-BatchNorm,
+    seventeen-bottleneck, 224×224 MobileNetV2 — `mobilenetv2ForwardBFull`, the training-BatchNorm
+    forward the MobileNetV2 train steps run, here at `N = 2` — is **not the zero map** at the
+    witness. -/
 theorem sealX_backward_nontrivial (nCls : Nat) (hn : 0 < nCls) :
     ∃ (j₀ : Fin (2 * nCls)) (i₀ : Fin (2 * (3 * (2 * 112) * (2 * 112)))),
       (sealVJP nCls 0).backward (basisVec j₀) i₀ ≠ 0 :=

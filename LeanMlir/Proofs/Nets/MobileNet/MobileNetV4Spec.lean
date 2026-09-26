@@ -11,7 +11,7 @@ namespace Proofs.StableHLO
 /-- **One row of the MobileNetV4-Conv-M block table.** `h` is the block's OUTPUT spatial size, so
     a `stride2` block reads its input at `2h`. -/
 structure UibSpec where
-  /-- parameter-name prefix: `"1"` … `"21"` (Conv-M; Conv-S ran to `"14"`). -/
+  /-- parameter-name prefix: `"1"` … `"21"`. -/
   p : String
   ic : Nat
   oc : Nat
@@ -26,18 +26,15 @@ deriving Inhabited, DecidableEq
 
 /-- **THE BLOCK TABLE — transcribed once, from [`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean).**
 
-    ⭐⭐ Everything downstream folds over this list: the parameter signature, the BN stat slots, the
-    forward chain, the backward chain and the running-statistic recomputes. Before it existed the
-    same rows were hand-written FOUR times, and §3/§7.2's whole point is that a divergence
-    between two such readings is invisible — same ops, same channel counts, same types, different
-    net. One table means a dispatch error is a typo in one place rather than a mismatch nothing
-    checks.
+    Everything downstream folds over this list: the parameter signature, the BN stat slots, the
+    forward chain, the backward chain and the running-statistic recomputes. Two readings of the
+    layout that diverged would type-check alike (same ops, same channel counts, same types), so
+    the rows are written once.
 
     Families in order (Conv-**M**): ExtraDW ×7, ConvNeXt, FFN, ConvNeXt, ExtraDW ×4, FFN, ConvNeXt,
-    ExtraDW ×2, FFN ×2, ConvNeXt — 13 ExtraDW / 4 ConvNeXt / 4 FFN, and **no IB at all**, where
-    Conv-S used three. Spatial ladder 56 → 28 → 14 → 7.
+    ExtraDW ×2, FFN ×2, ConvNeXt — 13 ExtraDW / 4 ConvNeXt / 4 FFN, and no IB row. Spatial ladder 56 → 28 → 14 → 7.
 
-    ⚠ Verified against **timm 1.0.28** (`mobilenetv4_conv_medium`, walking `model.blocks[1:4]`):
+    Checked against timm 1.0.28 (`mobilenetv4_conv_medium`, walking `model.blocks[1:4]`):
     all 21 rows agree on `(ic, oc, expand, preDWk, postDWk, h, stride2)`. The `#guard`s in
     [`Proofs/Nets/MobileNet/MobileNetV4BackB0.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/MobileNet/MobileNetV4BackB0.lean) pin that reading; they are derived from timm rather
     than re-read off this table, or they would gate nothing. What the table cannot say — which

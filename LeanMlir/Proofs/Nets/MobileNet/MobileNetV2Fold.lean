@@ -6,9 +6,8 @@ import LeanMlir.Proofs.Foundation.SgdNodes
 
 The two stride-1 `depthwise{Weight,Bias}Sgd` ops (`StableHLO.lean`) each denote the certified
 loss-descent step `θ − lr·(certified ∂/∂θ · c)`, generic in the cotangent `c` the backward chain
-delivers — the depthwise peers of `CifarPoC.convW_den`/`convB_den`, delegating to the
-`mnv2_render_depthwise*_certified` bridges (`MobileNetV2Close.lean`). Written for MobileNetV2's
-per-example fold; ConvNeXt-T's 7×7 depthwise ties (`ConvNeXtStepTie`) are what use them now.
+delivers — the depthwise peers of `CifarPoC.convW_den`/`convB_den`. `ConvNeXtStepTie` uses them
+for ConvNeXt-T's depthwise weight and bias nodes.
 
 `depthwiseB_den` delegates to `mnv2_render_depthwiseb_certified`. The **weight** is the one needing a
 bridge: the stride-1 depthwise weight VJP is 3-index (`depthwiseWeightGradHasVJP3`), and the
@@ -17,9 +16,8 @@ emitted op's `den` carries it flat (`Tensor3.flatten (… .backward W (unflatten
 pdiv-Jacobian form via `HasVJP3.toHasVJP.correct`, modulo the `unflatten ∘ flatten = id`
 round-trip on `W`.
 
-## Honest residual
-* The cotangents `c` are free (∀ c); pinning each to the actual backward chain is the §1a tie.
-  Per-op `pretty` lexing + ℝ → Float32.
+Scope: the cotangent `c` is a binder (the theorems hold for every `c`); nothing here ties it to a
+net's backward chain. Statements are over ℝ.
 -/
 
 open Proofs Proofs.StableHLO

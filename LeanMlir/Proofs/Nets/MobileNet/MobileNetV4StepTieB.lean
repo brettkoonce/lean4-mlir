@@ -3,18 +3,18 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullBVJP
 import LeanMlir.Proofs.Nets.ResNet.ResNet34StepTieB
 import LeanMlir.Proofs.Foundation.BatchedBackLinks
 
-/-! # T3 §1a tie for MobileNetV4-Conv-M — every gradient node at its CHAIN cotangent
+/-! # The train-step tie for MobileNetV4-Conv-M — every gradient node at its chain cotangent
 
 Every parameter gradient node MNv4's batched train step emits denotes the certified gradient
 **for an arbitrary cotangent**, by a leaf lemma it shares with ResNet-34 or EfficientNet-B0 (the
 table below). This file removes that freedom: each node is stated at the cotangent the render's own
 backward chain delivers, driven by a loss cotangent `g` at the logits.
 
-⚠⚠ **No accuracy is quoted for this net.** The statements are about timm's
-`mobilenetv4_conv_medium` (`planning/mnv4_timm_parity.md`); the gates that pin the artifacts to it
-are `scripts/parity/mnv4_timm_parity.py`, `scripts/parity/mnv4_forward_tie.py` and `scripts/parity/grad_tie.py`.
+No accuracy is quoted for this net. The statements are about timm's `mobilenetv4_conv_medium`;
+the gates that pin the artifacts to it are `scripts/parity/mnv4_timm_parity.py`,
+`scripts/parity/mnv4_forward_tie.py` and `scripts/parity/grad_tie.py --net mnv4`.
 
-## ⭐ The UIB bottleneck is LINEAR, and that makes MNv4's chain shorter than ResNet's
+## The UIB bottleneck is linear, and that makes MNv4's chain shorter than ResNet's
 
 `uibFwdSkipB` emits `addVB (project-BN out) (block input)` with **no activation after the add** and
 none after the project's BatchNorm. So the block-output cotangent `dyOut` reaches the project BN's
@@ -27,7 +27,7 @@ UIB bodies are `CertLayer`s, so `den (graph x e) = vjp.backward (den e)` is alre
 tier down — the very fact 4.2a/4.2c/§3.5c re-derive per block for r34, mnv2 and R50. This file
 composes certified VJPs; it does not re-prove them.
 
-## ⭐⭐ Zero new fp32 op-kind lemmas — MNv4's nine kinds are three other nets', verbatim
+## No new fp32 op-kind lemmas — MNv4's nine kinds are ResNet-34's and EfficientNet-B0's
 
 | op kind | sites | certificate |
 |---|---|---|
@@ -38,22 +38,22 @@ composes certified VJPs; it does not re-prove them.
 | `depthwiseStridedWeightGradB` | rows 1, 3, 11's post-DW (timm's `dw_mid`) | `EnetPoCG.depthwiseStridedWGradB_den` |
 | `denseWeightGradB` / `denseBiasGradB` | the classifier | `ResNet34PoCB.denseWGradB_den` / `denseBGradB_den` |
 
-⭐ Every strided site pads symmetrically (timm), so the stem and the fused stage share one
-certificate. Until 2026-09-24 the stem was XLA-`SAME` and took `convStridedXlaWGradB_den`.
+Every strided site pads symmetrically (timm), so the stem and the fused stage share one
+certificate.
 
-⛔ **MNv4 emits no conv BIAS gradient at all.** `MobileNetV4RenderB` has no `convBias` flag — every
+**MNv4 emits no conv bias gradient at all.** `MobileNetV4RenderB` has no `convBias` flag — every
 bias is folded into its BatchNorm and bound to `%zb{c}` — so `convBiasGradB` and its strided peers
 are never emitted and there is nothing to state. Same situation as ResNet-50. The five
 `*GradBBf16` kinds the bf16 artifacts emit are folded in
 [`Foundation/Bf16GradNodes.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/Bf16GradNodes.lean).
 
-## ⚠⚠ Everything here is GENERIC IN THE ROW, and that is load-bearing
+## Everything here is generic in the row
 
 Every definition and theorem below takes a `UibSpec` binder `s` and reads its widths off it, so
-`s.ic`, `s.h` and `s.ic * s.expand` are VARIABLES. That is not a convenience: MNv4's resolutions
-are literals, and `MobileNetV4FullB.lean` records four separate kernel blow-ups caused by letting
-`den` and width-indexed `rfl`s actually RUN at 224/112/56/28/14/7. Stated at a row binder they stay
-stuck; the capstone then instantiates at the 21 concrete rows, which is application and is free.
+`s.ic`, `s.h` and `s.ic * s.expand` are variables. That is not a convenience: MNv4's resolutions
+are literals, and letting `den` and width-indexed `rfl`s run at 224/112/56/28/14/7 ends in kernel
+timeouts (`MobileNetV4FullB.lean`). Stated at a row binder they stay stuck; the capstone then
+instantiates at the 21 concrete rows.
 
 ## The chain, node for node from `uibBackSkipGradB`
 
@@ -69,12 +69,15 @@ stuck; the capstone then instantiates at the 21 concrete rows, which is applicat
 | `CotQc` | pre-DW conv's output | `%u{p}qW` |
 | `CotIn` | the block input — `addVB (depthwiseBackBatched dQc) dyOut` | the previous block |
 
-⛔ A cotangent one step off is a silently wrong gradient, not a type error: `%u{p}eg` reads the
+A cotangent one step off is a silently wrong gradient, not a type error: `%u{p}eg` reads the
 cotangent at the expand BN's OUTPUT and `%u{p}eW` the one at the expand CONV's output, and both
 have the same type.
 
-⛔ **One replica.** Under `mnv4in_adamdp64*` every node named here feeds `allReduceMeanF`
-(`DataParallelNode.lean`, §4d); this is the per-replica gradient.
+**Data parallel.** In `mnv4in_adamdp64*` every node named here feeds `allReduceMeanF` and
+BatchNorm is synchronised across replicas, so a replica's gradient node is not this file's node at
+its own `N`. This file describes a data-parallel artifact only at `N := R·N`: the per-replica
+statement is `MobileNetV4SyncTieB.mnv4_net_syncTiedB`, whose right-hand side is `mnv4_net_tiedB`'s
+node at the global batch.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR Proofs.ResNet34TieB Proofs.EnetTiePoC
@@ -90,7 +93,7 @@ open Proofs.ResNet34PoCB (bnPairTiedB_holds convStridedWTiedB_holds convWTiedB_h
 -- ════════════════════════════════════════════════════════════════
 
 /-- Cotangent at the project CONV's output — `dyOut` through the project BN's backward.
-    ⭐ `dyOut` itself is the cotangent at the project BN's output: the bottleneck is linear, so
+    `dyOut` itself is the cotangent at the project BN's output: the bottleneck is linear, so
     nothing masks it. Feeds `%u{p}pW`. -/
 noncomputable def mnv4CotPc (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
@@ -129,7 +132,7 @@ noncomputable def mnv4CotDc (N : Nat) (s : UibSpec) (p : UibParams s)
 
 /-- Cotangent at the expand BN's output — masked by the expand relu. Feeds `%u{p}eg`/`%u{p}ebt`.
 
-    ⭐⭐ **This is where the chain DISPATCHES on the table**, exactly as `mnv4PostDWSlot` does and
+    **This is where the chain dispatches on the table**, exactly as `mnv4PostDWSlot` does and
     off the same row: with a post-depthwise the incoming cotangent is that depthwise's input-VJP;
     without one (`postDWk = 0`, the ConvNeXt-like and FFN rows) the project conv's input-VJP
     arrives here directly, because the render emits no post-DW nodes at all. One chain, three
@@ -175,14 +178,14 @@ noncomputable def mnv4CotQc (N : Nat) (s : UibSpec) (p : UibParams s)
 -- § The STRIDED block's chain — rows 1, 3 and 11, and no skip
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠⚠ **A near-copy of the stride-1 chain, and it has to be.** The post-DW carries the stride
+/-! **A near-copy of the stride-1 chain, and it has to be.** The post-DW carries the stride
 (timm's `dw_mid`), so the block input, the BN-only pre-DW and the expand sit at `2h` and the post-DW
 and the project at `h` — a change that runs through every type in the chain.
 
-⛔ **And there is no skip**: all three stride-2 rows change channels (`ic ≠ oc`), so the block IS
+**And there is no skip**: all three stride-2 rows change channels (`ic ≠ oc`), so the block IS
 the body and there is no `addVB` fan-in. -/
 
-/-- Cotangent at the project CONV's output. ⭐ `dyOut` itself is the cotangent at the project BN's
+/-- Cotangent at the project CONV's output. `dyOut` itself is the cotangent at the project BN's
     output: the bottleneck is linear. Feeds `%u{p}pW`. -/
 noncomputable def mnv4SCotPc (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
@@ -266,7 +269,7 @@ noncomputable def mnv4SBodyCotIn (N : Nat) (s : UibSpec) (p : UibParams s)
 
 /-- **The BODY's input cotangent** — what the render's `dx` carries before the skip fan-in.
 
-    ⭐ Dispatches on `s.preDWk` the way `mnv4PreDWSlot` does: with a pre-depthwise the body's `dx`
+    Dispatches on `s.preDWk` the way `mnv4PreDWSlot` does: with a pre-depthwise the body's `dx`
     is that depthwise's input-VJP, without one it is the expand conv's. -/
 noncomputable def mnv4BodyCotIn (N : Nat) (s : UibSpec) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
@@ -276,7 +279,7 @@ noncomputable def mnv4BodyCotIn (N : Nat) (s : UibSpec) (p : UibParams s)
 
 /-- The skip fan-in itself: `body dx + dyOut`, at the block-input shape.
 
-    ⚠ Split from `mnv4BodyCotIn` for the same reason `mnv4SkipGraphB` is split from the body graph
+    Split from `mnv4BodyCotIn` for the same reason `mnv4SkipGraphB` is split from the body graph
     builders: the add needs `s.oc` and `s.ic` to be the SAME type, which they are at every stride-1
     row and are not at a row binder. The body's cotangent is row-generic; the add is applied at the
     concrete row, where `s.oc = s.ic` is `rfl`. -/
@@ -287,16 +290,16 @@ noncomputable def mnv4SkipCotIn {N n : Nat} (bodyDx dyOut : Vec (N * n)) : Vec (
 -- § The ExtraDW block, tied — all TWELVE parameter nodes
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **ExtraDW block, tied.** All twelve parameter nodes — four conv/depthwise weights and four
+/-- **ExtraDW block, tied.** All twelve parameter nodes — four conv/depthwise weights and four
     BatchNorm γ/β pairs — denote the certified batched `Σ_n` gradient at the real forward
     activations and the real backward-chain cotangent driven by `dyOut`.
 
-    ⚠ Each BatchNorm's γ/β reads the cotangent at THAT BatchNorm's output (`CotQn`, `CotEn`,
+    Each BatchNorm's γ/β reads the cotangent at THAT BatchNorm's output (`CotQn`, `CotEn`,
     `CotDn`, and `dyOut` itself for the project) while its conv reads the one at the conv's output
     (`CotQc`, `CotEc`, `CotDc`, `CotPc`). Off by one and the gradient is silently wrong — the two
-    have the same type. ⭐ The project BN's pair reads `dyOut` UNMASKED: the bottleneck is linear.
+    have the same type. The project BN's pair reads `dyOut` unmasked: the bottleneck is linear.
 
-    ⛔ There are no conv-bias conjuncts: `MobileNetV4RenderB` has no `convBias` flag, so those ops
+    There are no conv-bias conjuncts: `MobileNetV4RenderB` has no `convBias` flag, so those ops
     are never emitted and every slot here is exercised by the artifact. -/
 def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
@@ -334,9 +337,8 @@ def mnv4ExtraDWTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
-/-- ⭐⭐ **And it holds** — twelve instantiations of the shared `∀ cot` leaf folds with
-    the freedom removed. Nothing here is new mathematics; what is new is that the cotangents are
-    the chain's, not free. -/
+/-- **And it holds** — twelve instantiations of the shared `∀ cot` leaf folds with
+    the freedom removed: the cotangents are the chain's, not free. -/
 theorem mnv4_extradw_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     mnv4ExtraDWTiedB N s xN cotN vN epsStr p xin dyOut := by
@@ -373,7 +375,7 @@ def mnv4ConvNeXtTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : 
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
-/-- ⭐⭐ **And it holds** — nine instantiations of the §1 fold at the chain's cotangents. -/
+/-- **And it holds** — nine instantiations of the shared `∀ cot` leaf folds at the chain's cotangents. -/
 theorem mnv4_convnext_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     mnv4ConvNeXtTiedB N s xN cotN vN epsStr p xin dyOut := by
@@ -402,7 +404,7 @@ def mnv4FfnTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibPa
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
-/-- ⭐⭐ **And it holds** — six instantiations of the §1 fold at the chain's cotangents. -/
+/-- **And it holds** — six instantiations of the shared `∀ cot` leaf folds at the chain's cotangents. -/
 theorem mnv4_ffn_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
     mnv4FfnTiedB N s xN cotN vN epsStr p xin dyOut := by
@@ -414,15 +416,15 @@ theorem mnv4_ffn_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p :
 -- § The STRIDED block, tied — rows 1, 3 and 11
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐ **Strided block, tied** — rows 1, 3 and 11. All twelve parameter nodes denote the certified
+/-- **Strided block, tied** — rows 1, 3 and 11. All twelve parameter nodes denote the certified
     batched `Σ_n` gradient at the real forward activations and the backward-chain cotangent driven
     by `dyOut`.
 
-    ⚠⚠ The strided node is the POST-DW's `depthwiseStridedWeightGradB` (timm's `dw_mid`,
+    The strided node is the post-DW's `depthwiseStridedWeightGradB` (timm's `dw_mid`,
     symmetric), reading its input at `2h`; the pre-DW and the expand nodes read theirs at `2h`, the
     project's at `h`.
 
-    ⛔ No skip and no `addVB`: `ic ≠ oc` at all three rows, so the block IS its body. -/
+    No skip and no `addVB`: `ic ≠ oc` at all three rows, so the block IS its body. -/
 def mnv4StridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) : Prop :=
   let qr := (mnv4PreDWSlot (h := 2 * s.h) (w := 2 * s.h) N s.preDWk p.Wq p.bq p.eq_ p.hq p.gq p.bq2).fwd xin
@@ -460,7 +462,7 @@ def mnv4StridedTiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : U
   ResNet34PoCB.BnPairTiedB N s.oc s.h s.h vN epsStr cotN p.ez p.gz p.bz2
       (reassocB N s.oc s.h s.h pc) (reassocB N s.oc s.h s.h dyOut)
 
-/-- ⭐⭐ **And it holds** — twelve instantiations (one at the STRIDED post-DW) of the shared
+/-- **And it holds** — twelve instantiations (one at the strided post-DW) of the shared
     `∀ cot` leaf folds with the freedom removed. -/
 theorem mnv4_strided_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) (p : UibParams s)
     (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h))) :
@@ -473,8 +475,8 @@ theorem mnv4_strided_tiedB (N : Nat) (s : UibSpec) (xN cotN vN epsStr : String) 
 -- § The stem, the fused stage and the head — the three non-UIB stages
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠ All three are GENERIC IN THEIR WIDTHS, for the reason `MobileNetV4FullB.lean`'s stem-graph
-docstring records at length: pinning MNv4's literal resolutions here lets `den` and the
+/-! All three are generic in their widths, for the reason `MobileNetV4FullB.lean`'s stem-graph
+docstring records: pinning MNv4's literal resolutions here lets `den` and the
 width-indexed `rfl`s actually run, and the kernel gives up. The capstone instantiates. -/
 
 /-- Cotangent at the stem BN's output — the fused stage's `dx`, masked by the stem relu.
@@ -494,7 +496,7 @@ noncomputable def mnv4StemCotC (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 o
 
 /-- **Stem, tied.** Its three nodes at the chain's cotangents.
 
-    ⛔⛔ **And the chain STOPS here.** No render emits a gradient into `%x`, so the artifact's
+    **And the chain stops here.** No render emits a gradient into `%x`, so the artifact's
     backward ends at this weight gradient. That is why the
     stem sits outside `MobileNetV4FullB.lean`'s `CertLayer` trunk, and it is B0's situation
     exactly. -/
@@ -516,7 +518,7 @@ theorem mnv4_stem_tiedB (N h w : Nat) {ic oc kH kW : Nat} (xN cotN vN epsStr : S
   unfold mnv4StemTiedB
   exact ⟨convStridedWTiedB_holds, bnPairTiedB_holds⟩
 
-/-- Cotangent at the fused stage's project CONV output. ⭐ `dyF` reaches the project BN's γ/β
+/-- Cotangent at the fused stage's project CONV output. `dyF` reaches the project BN's γ/β
     unmasked — the fused stage ends in a BatchNorm with no activation. Feeds `%f0pW`. -/
 noncomputable def mnv4FusedCotPc (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
@@ -554,7 +556,7 @@ noncomputable def mnv4FusedCotIn (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Ker
   cStridedInB N Wc bc (mnv4FusedCotC N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF)
 
 
-/-- ⭐ **Fused stage, tied** — its six parameter nodes. `%f0cW` is `convStridedWeightGradB`,
+/-- **Fused stage, tied** — its six parameter nodes. `%f0cW` is `convStridedWeightGradB`,
     symmetric padding, like the stem's. -/
 def mnv4FusedTiedB (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
     (bc : Vec mid) (εc : ℝ) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc) (εp : ℝ)
@@ -662,7 +664,7 @@ noncomputable def mnv4HeadCotIn (N h w : Nat) {c mid oc nCls : Nat}
     (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls)) : Vec (N * (c * h * w)) :=
   cInB N W1 b1 (mnv4HeadCotH1c N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g)
 
-/-- ⭐ **Head, tied** — all EIGHT nodes: two conv weights, two BatchNorm γ/β pairs, and the
+/-- **Head, tied** — all EIGHT nodes: two conv weights, two BatchNorm γ/β pairs, and the
     classifier's weight and bias. `conv_head`'s nodes (`%hW`, `%hg`, `%hbt`) read the POOLED
     features at `h = w = 1`; the classifier reads `conv_head`'s relu output. -/
 def mnv4HeadTiedB (N h w : Nat) {c mid oc nCls : Nat}
@@ -708,8 +710,8 @@ theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
 /-- The per-BLOCK forward prefixes: `mnv4Blk0` is the fused stage's output — block 1's input —
     and `mnv4Blk{k}` is the activation entering block `k+1`.
 
-    ⚠ `MobileNetV4FullB.lean`'s `mnv4Pre0 … mnv4Pre6` are the RESOLUTION-GROUP prefixes, which is
-    the granularity T1 and T2 need; the tie needs one per BLOCK, so these 22 name the finer chain.
+    `MobileNetV4FullB.lean`'s `mnv4Pre0 … mnv4Pre6` are the resolution-group prefixes, which is
+    the granularity the whole-net forward, graph and VJP need; the tie needs one per BLOCK, so these 22 name the finer chain.
     `mnv4Blk0` is definitionally `mnv4Pre1`. -/
 noncomputable def mnv4Blk0 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (48 * 56 * 56)) := mnv4Pre1 N w x
@@ -798,7 +800,7 @@ noncomputable def mnv4Blk21 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     (x : Vec (N * (3 * 224 * 224))) : Vec (N * (256 * 7 * 7)) :=
   (CertLayer.residual (mnv4BodyOfRow N mnv4Row21 w.b21)).fwd (mnv4Blk20 N w x)
 
-/-- ⭐⭐ **The whole batch-BN MobileNetV4-Conv-M train step, tied.** Threading the net's own forward
+/-- **The whole batch-BN MobileNetV4-Conv-M train step, tied.** Threading the net's own forward
     prefixes as the block inputs and an arbitrary loss cotangent `g` down through the certified
     head backward, the 21 certified UIB block backwards and the fused stage, every parameter
     GRADIENT node of the net — stem 3, fused 6, thirteen ExtraDW blocks × 12, four
@@ -806,16 +808,17 @@ noncomputable def mnv4Blk21 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
     **233**, the render's own census and `mnv4_fwd.mlir`'s signature minus `%x`. No free activation
     and no symbolic cotangent below the loss.
 
-    ⭐⭐ **`g` IS A BINDER.** The loss chain is not part of this statement; `mnv4_lossCot_is_smoothedCE_grad`
+    **`g` is a binder.** The loss chain is not part of this statement; `mnv4_lossCot_is_smoothedCE_grad`
     instantiates it at the label-smoothed softmax cotangent the artifacts actually emit.
 
-    ⭐ **No smoothness hypothesis and no `0 < ε`**, and `N` and `nCls` are both binders. The folds
+    **No smoothness hypothesis and no `0 < ε`**, and `N` and `nCls` are both binders. The folds
     are `∀ cot` statements at explicitly constructed cotangents; the kink and positivity conditions
-    live one tier down, in the `CertLayer`s whose `.ok` `MobileNetV4FullBVJP.lean` binds. ⚠ MNv4
-    ships a single resolution, so unlike ResNet-50 there is no `q`.
+    live in the `CertLayer`s whose `.ok` `MobileNetV4FullBVJP.lean` binds. The statement is at
+    224×224; unlike ResNet-50 there is no resolution binder `q`. One device, f32.
 
-    ⛔ **One replica.** Under `mnv4in_adamdp64*` every node named here feeds `allReduceMeanF`
-    (`DataParallelNode.lean`, §4d), and the AdamW tail sits downstream of all of them. -/
+    On the data-parallel (sync-BN) artifacts this theorem applies at `N := R·N`: the per-replica
+    statement is `MobileNetV4SyncTieB.mnv4_net_syncTiedB`, whose right-hand sides are this
+    theorem's nodes at the global batch. The AdamW update that follows is not stated here. -/
 theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
     (w : Mnv4BWeights nCls) (x : Vec (N * (3 * 224 * 224))) (g : Vec (N * nCls)) :
   let dy21 := mnv4HeadCotIn N 7 7 w.h1W w.h1b w.h1E w.h1g w.h1bt w.hW w.hb w.hE w.hg w.hbt
@@ -899,17 +902,17 @@ theorem mnv4_net_tiedB (N : Nat) {nCls : Nat} (xN cotN vN epsStr : String)
       w.Wd w.bd xN cotN vN epsStr (mnv4Blk21 N w x) g⟩
 
 
-/-- ⭐ **And the loss cotangent `g` is instantiated: MNv4's is the label-smoothed softmax chain.**
+/-- **And the loss cotangent `g` is instantiated: MNv4's is the label-smoothed softmax chain.**
     Row by row, the six-op chain `MobileNetV4RenderB` emits (`softmaxRow → subB → scaleB → addVB →
     shiftB → divConstB`, α = 0.1) is `(1/B)·∂/∂logits` of soft-target cross-entropy against the
     SMOOTHED target, at that example's real logits.
 
-    ⚠ `softmaxRow` at `m := 1` — the `rowB`/`unrowB` spelling ResNet-34 and ResNet-50 use, NOT
+    `softmaxRow` at `m := 1` — the `rowB`/`unrowB` spelling ResNet-34 and ResNet-50 use, NOT
     ConvNeXt's and ViT's `expe → softmaxDiv` at the plain `N·K` width. Read off the render's own
     lines rather than assumed: those two take different lemmas (`smoothedLossCotGraph` here,
     `smoothedLossCotGraphDiv` there) and nothing in the types tells them apart.
 
-    ⭐ MNv4 ships ONE loss — there is no BCE twin to state, where ResNet-50 needed both. The only
+    MNv4 ships one loss — there is no BCE twin to state, where ResNet-50 needed both. The only
     hypothesis is that the example's target sums to 1: a one-hot, or mixup's convex combination. -/
 theorem mnv4_lossCot_is_smoothedCE_grad (N : Nat) {nCls : Nat} (hK : 0 < nCls)
     (aStr negAK bStr logN ohN : String) (α B : ℝ) (w : Mnv4BWeights nCls)
