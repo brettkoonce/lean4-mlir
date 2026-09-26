@@ -3,27 +3,32 @@ import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # MLP render half — the train-step text as `pretty` of proven graphs
 
-`mlpTrainStepFaithfulV` renders the MLP train step (`verified_mlir/mlp_train_step.mlir`)
-entirely from denoted `SHlo` nodes: the forward (`denseF`/`reluF`, `lossCotGraph`), the
-backward chain (`dotOut`/`selectPos`) and the six SGD updates (`weightSgd`/`biasSgd`). The
-step is a DAG with shared intermediates — the backward `select`s read the forward
-pre-activations, the parameter gradients read the activations and per-layer cotangents — so
-the renderer threads names: each piece is rendered once via `pretty`, capturing its fresh
-result SSA, and later pieces reference the captured names. `MlpFold` proves each output's
-`den` is the certified loss-descent step. The artifact's `#eval` writer is `MlpArtifacts.lean`.
+`mlpTrainStepFaithfulV` renders the MLP train step (`verified_mlir/mlp_train_step.mlir`).
+Every line that feeds a returned parameter is `pretty` of a denoted `SHlo` node: the forward
+(`denseF`/`reluF`), the loss cotangent (`sub (softmaxDiv (expe …)) onehot`), the backward chain
+(`dotOut`/`selectPos`) and the six SGD updates (`weightSgd`/`biasSgd`). The appended report-only
+`%loss` block is hand-written and feeds nothing; the signature is hand-written too. The step is a
+DAG with shared intermediates — the backward `select`s read the forward pre-activations, the
+parameter gradients read the activations and per-layer cotangents — so the renderer threads
+names: each piece is rendered once via `pretty`, capturing its fresh result SSA, and later pieces
+reference the captured names. `MlpFold` proves the output weight's node denotes
+`W₂ − lr·∂CE/∂W₂` (`mlp_W2_tied_totalloss`) and each of the other five denotes
+`θ − lr·(certified layer Jacobian · the rendered chain cotangent)`
+(`mlp_train_step_tied_certified`). The artifact's `#eval` writer is MlpArtifacts.lean.
 -/
 
 namespace Proofs.StableHLO
 
 open Proofs
 
-/-- **MLP train step rendered ENTIRELY from the verified AST.** The forward, the backward
-    chain (`dotOut`/`selectPos`) and the six parameter SGD updates (`weightSgd`/`biasSgd`)
-    are all `pretty` of denoted `SHlo` nodes — so every emitted line is
-    `pretty(provenNode)`, and `MlpFold` proves each output's `den` = the
-    certified loss-descent step. Cotangents `%dy`/`nc1`/`nc0` are rendered once and
-    shared (operand leaves); operand/`lr`/weight VALUES are `skel`-erased, so these
-    placeholders print identically to the live graphs the `den` theorems use. -/
+/-- **MLP train step rendered from the verified AST.** The forward, the backward chain
+    (`dotOut`/`selectPos`) and the six parameter SGD updates (`weightSgd`/`biasSgd`) are all
+    `pretty` of denoted `SHlo` nodes, so every line that feeds a returned parameter is `pretty`
+    of a denoted node; the appended report-only `%loss` block is hand-written and feeds nothing.
+    What `MlpFold` proves of the six update nodes: see the module docstring. The cotangents
+    (`ndy`/`nc1`/`nc0`) are rendered once and shared (operand leaves); operand/`lr`/weight
+    VALUES are `skel`-erased, so these placeholders print identically to the live graphs the
+    `den` theorems use. -/
 def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁) (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
     (W₂ : Mat d₂ d₃) (b₂ : Vec d₃) (x : Vec d₀) : String :=

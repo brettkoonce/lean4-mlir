@@ -30,15 +30,20 @@ import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-! # StableHLO — the emitted-graph AST and its ℝ semantics
 
-Every verified artifact in `verified_mlir/` is `pretty` of a term of one typed AST, `SHlo`. This
-file holds that AST and its semantic reading; the syntactic one, `pretty`, is in
+The verified renderers build the computation in each `verified_mlir/` artifact from `pretty` of
+terms of one typed AST, `SHlo`, and add hand-written text around it: the function signature and
+constants, the report-only `%loss` block, the `%bc1`/`%bc2` passthroughs of the AdamW steps, and
+the carve-outs each renderer's docstring names (for ConvNeXt: the GAP-backward block, the `%dy`
+divide, and in the SGD step the stem weight's update). This file holds that AST and its semantic
+reading; the syntactic one, `pretty`, is in
 [`StableHLOPretty`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Codegen/StableHLOPretty.lean).
 
 * **Semantic** — `den : SHlo n → Vec n`, the ℝ denotation in StableHLO-spec terms (explicit
   contraction / reduce / divide). The `*_faithful` / `*_den` theorems say `den (graph) = <proven
   math>`; every train-step tie in `Nets/` is stated about `den`.
 * **Syntactic** (`StableHLOPretty`) — `pretty` renders the same term to StableHLO text. SSA names
-  are annotations `den` ignores, so the rendered program and the denoted one are one object.
+  are annotations `den` ignores. `pretty` is trusted: the proofs are about the term `den` reads,
+  not about the text.
 
 Layout, in file order:
 
@@ -73,11 +78,9 @@ namespace StableHLO
     length. The descriptor carried by `SHlo.batchOp`; its `denOp` is the proven
     per-example forward, lifted by `batchMap`.
 
-    **On the pointwise ops.** An earlier note here said swish/sigmoid/relu/addV
-    "need no descriptor — the existing tokens already denote them block-diagonally
-    at the batched index `N·(c·h·w)`". The *denotation* half of that is true and the
-    *emit* half is false, and the difference is what pinned the batched renderers at
-    `N := 1`. `SHlo.swishF`'s token carries only the SHlo index `n` and emits
+    **On the pointwise ops.** The descriptor-less swish/sigmoid/relu/addV tokens do
+    denote block-diagonally at the batched index `N·(c·h·w)`, but they do not EMIT
+    correctly there. `SHlo.swishF`'s token carries only the SHlo index `n` and emits
     `tensor<B×n>`, i.e. it reads the index as a PER-EXAMPLE width; a descriptor-less
     pointwise node at the batched index `N·s` therefore emits `tensor<B×(N·s)>`,
     which does not even typecheck against its own operand. Giving the pointwise ops
@@ -1261,7 +1264,7 @@ inductive SHlo : Nat → Type where
   -- Every `*Sgd` op above computes a gradient and immediately spends it on `θ − lr·g`. That
   -- fusion is why the optimizer could never leave the trusted string emitter: Adam needs the
   -- gradient itself, three times over (θ', m', v'). These are the same gradients with the SGD
-  -- tail cut off — `den (xSgd …) = θ − lr · den (xGrad …)` is `rfl`, see the `_sgd_eq` theorems.
+  -- tail cut off — `den (xSgd …) = θ − lr · den (xGrad …)` is `rfl`, see the `*Sgd_eq_grad` theorems.
   -- Output is PARAM-shaped (unbatched), like the `*Sgd` ops: the batch sum lives in the emitter.
   | weightGrad {m n : Nat} (xName : String) (x : Vec m)         : SHlo n → SHlo (m*n)
   | biasGrad   {n : Nat}                                        : SHlo n → SHlo n
@@ -1464,7 +1467,7 @@ noncomputable def maxPoolBackFlat (c h w : Nat)
     pool, matching `maxPool3s2HasVJPAt3.backward` lifted through `HasVJPAt3.toHasVJPAt`. Total
     in the saved input `xv` (the no-ties proof lives only in `.correct`).
 
-    ⚠⚠ **This is a SUM where the 2×2 peer is a lookup, and that is the whole difference between the
+    **This is a SUM where the 2×2 peer is a lookup, and that is the whole difference between the
     two pools.** `maxPool2`'s windows tile, so each input is the argmax of at most one output and
     the backward can name it directly. 3×3/s2 windows OVERLAP, so an input can be the argmax of up
     to four outputs (`win3Row_mem_le_two` squared) and the cotangent must ACCUMULATE. Nothing in
@@ -1541,7 +1544,7 @@ noncomputable def rowDenseBackFlat (N a c : Nat) (W : Mat a c) (dy : Vec (N*c)) 
 noncomputable abbrev patchEmbedBackFlat := @patchEmbedInputGradFormula
 
 /-- **ViT patch-embedding weight-grad (flattened)** — `TokenParamGrad`'s `patchEmbedWeightGrad`,
-    flattened (that file is downstream of this one; the tie is the §1-fold
+    flattened (that file is downstream of this one; the tie is
     `vit_render_patchW_certified`). The non-overlapping 16×16/s16 patchify conv's weight-VJP:
     `dW_(d,c,kh,kw) = Σ_patches (patch pixel read)·dy_(patch.succ, d)` — token 0 is the CLS row
     (excluded); the pixel read mirrors `patchEmbedFlat`'s, and `dy (finProdFinEquiv (p.succ, d))`
@@ -1565,20 +1568,19 @@ noncomputable def patchEmbedWeightGradFlat
 /-- **ViT patch embedding at bf16 operands (flattened)** — `patchEmbedFlat`'s body with the three
     roundings the emit actually performs, and nothing else.
 
-    ⚠⚠ **The placement of each `rnd` is the whole content of this definition**, so read it against
+    **The placement of each `rnd` is the whole content of this definition**, so read it against
     the emitted text rather than against the f32 peer:
 
     * `rnd (W_conv …)` and `rnd (img …)` are the two **operand casts** — the `stablehlo.convert`s
       that make the convolution's inputs `bf16`.
     * the **outer** `rnd` on the patch sum is the **bf16 STORE**: the convolution is emitted with a
       `bf16`-TYPED result, so the hardware accumulates the MAC in f32 and rounds on the way out.
-      Dropping it would claim more precision than the hardware delivers — the unsound direction,
-      and the trap `planning/archive/bf16_renderer.md` §9.2 exists to name.
+      Dropping it would claim more precision than the hardware delivers — the unsound direction.
     * `b_conv`, `cls_token` and `pos_embed` are added **outside** every rounding, because the emit
       adds them after the convert-back, in f32. They are f32 parameters that never reach a tensor
       core.
 
-    ▶ The CLS row (`n = 0`) carries no convolution at all, so no rounding touches it — which is why
+    The CLS row (`n = 0`) carries no convolution at all, so no rounding touches it — which is why
     the `if` is INSIDE the roundings' scope rather than outside it. -/
 noncomputable def patchEmbedFlatBf16
     (rnd : ℝ → ℝ)
@@ -1767,11 +1769,10 @@ noncomputable def denOp : {a b : Nat} → BatchableOp a b → (Vec a → Vec b)
 /-- Which BatchNorm a batched forward chain emits, for the renders whose one traversal produces
     both the training forward and its frozen-stats eval partner (EfficientNet, MobileNetV4).
 
-    The distinction is not cosmetic and the §2a bug is what it exists to prevent: a `.train` chain
-    reduces its statistics out of the activation (`bnBatchF`, which couples the batch), a `.eval`
-    chain consumes frozen per-channel running stats as graph inputs (the `bnEval` descriptor, which
-    does not). A net trained on one and *scored* with the other is evaluating a different function
-    — which is exactly what `resnet34_fwd` did until 2026-07-27, at rel 1.13 on real logits. -/
+    The distinction is not cosmetic: a `.train` chain reduces its statistics out of the activation
+    (`bnBatchF`, which couples the batch), a `.eval` chain consumes frozen per-channel running stats
+    as graph inputs (the `bnEval` descriptor, which does not). A net trained on one and *scored*
+    with the other is evaluating a different function. -/
 inductive BnMode where
   /-- **Training**: batch statistics reduced out of the activation (`bnBatchF`, reduce `[0,2,3]`,
       n = B·H·W). What the train step differentiates. -/
@@ -1781,9 +1782,11 @@ inductive BnMode where
   | eval
 deriving DecidableEq, Repr
 
-/-- **AST denotation `⟦·⟧ₐ`** — our reading of each StableHLO op's spec, over
-    `ℝ`, per-example, in primitive terms — independent of `dense`/`Mat.mulVec`.
-    SSA names are ignored. -/
+/-- **AST denotation `⟦·⟧ₐ`** — our reading of each StableHLO op's spec, over `ℝ`, in primitive
+    terms — independent of `dense`/`Mat.mulVec`. The per-example constructors denote one example;
+    `batchOp` and the `*B`/`*GradB`/`bnBatchF` constructors denote at the batched index `N·n`
+    (the batch-statistic and gradient-sum arms couple the batch); `allReduceMeanF` denotes the
+    mean over its `R` replica children. SSA names are ignored. -/
 noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .operand _ v    => v
   | _, .dotIn _ W e    => fun j => ∑ i, den e i * W i j
@@ -1826,11 +1829,10 @@ noncomputable def den : {n : Nat} → SHlo n → Vec n
   | _, .momParamF _ _ _ _ _ μ lr θ v e => momParam μ lr θ v (den e)
   -- RMSProp: the proven ℝ optimizer (RmsPropStep.lean) on the child's gradient.
   | _, .rmsBufNextF _ _ _ _ _ _ _ ρ μ ε sq buf e => rmsBufNext ρ μ ε sq buf (den e)
-  -- Global-norm gradient clipping (GradClip.lean). `gradSumSqF` collapses one parameter's gradient
-  -- to its ∑g² as a rank-0 scalar (`SHlo 1`, the `lnBetaGrad` reading); `addScalarF` folds those
-  -- across parameters; `gradClipFacF` roots the total and forms `min(1, c/(√s+ε))`; `clipScaleF`
-  -- multiplies a gradient by that factor, which it takes as its FIRST CHILD — so `den` is exactly
-  -- `factor · g` and there is no ℝ field here whose agreement with the norm has to be assumed.
+  -- Global-norm gradient clipping (GradClip.lean). `gradSumSqAccF acc g` adds one parameter's
+  -- ∑g² to the running rank-0 total `acc` (`SHlo 1`, the `lnBetaGrad` reading); `clipScaleF s g`
+  -- forms `min(1, c/(√s+ε))` from the total `s`, which it takes as its FIRST CHILD, and scales `g`
+  -- by it — so there is no ℝ field here whose agreement with the norm has to be assumed.
   -- ⚠ `scalarOf` rather than `den acc 0`: `den` must never APPLY a recursive call to an index —
   -- every other arm of this match passes `den e` along whole. See `Proofs.scalarOf`.
   | _, .gradSumSqAccF _ acc e      => fun _ => scalarOf (den acc) + gradSumSq (den e)
@@ -2414,7 +2416,7 @@ theorem den_batchOp_swish_eq_swishF {N n : Nat} (e : SHlo (N * n)) :
 /-- **The softmax denominator is PER EXAMPLE — the property this descriptor exists for.** Example
     `k`'s output divides by example `k`'s own sum, not by the sum over the whole batch.
 
-    ⚠ This is the half the emit tie structurally cannot see. `.softmaxDiv`'s emitted MLIR was
+    This is the half the emit tie structurally cannot see. `.softmaxDiv`'s emitted MLIR was
     *already* per-example (it reduces over `dimensions = [1]` of `tensor<B,n>`), so the batched and
     per-example forms render byte-for-byte identically and always would — while the descriptor-less
     `den` at index `N·n` reads `v j / ∑ k, v k` over ALL `N·n` coordinates, i.e. it divides by the
@@ -2425,7 +2427,7 @@ theorem den_batchOp_softmaxDiv_per_example {N n : Nat} (e : SHlo (N * n))
       = batchSlice N n (den e) k j / ∑ i, batchSlice N n (den e) k i := by
   simp only [den_batchOp, batchMap, denOp, Equiv.symm_apply_apply, batchSlice]
 
-/-- ⭐ **THE CLS SLICE IS THE ONE PLACE THE BATCH AND THE TOKEN AXIS COULD SWAP SILENTLY.**
+/-- **THE CLS SLICE IS THE ONE PLACE THE BATCH AND THE TOKEN AXIS COULD SWAP SILENTLY.**
     `clsSlice` takes `(tk+1)*D` to `D` — it CONTRACTS — and `batchMap N` of it takes `N*((tk+1)*D)`
     to `N*D`. A render that read the batch as the token axis would take `(N+1)*D` to `D`, i.e. drop
     every example but one and still type-check at `N = tk`. Stated so the two indices are pinned
@@ -2530,7 +2532,7 @@ theorem den_syncStats_R1 {N oc h w : Nat} (t t' : String) (ds ds' : List Nat)
   · simp only [den_bnPackB, Fin.append_right, den_allReduceMeanF_one, den_bnBatchVarAtB,
                den_bnBatchMeanB, sub_self, mul_zero, add_zero]
 
-/-- ⭐⭐ **THE DROP-IN, on actual graph nodes: at `R = 1` the sync-BN subgraph denotes
+/-- **THE DROP-IN, on actual graph nodes: at `R = 1` the sync-BN subgraph denotes
     `bnBatchTensor4`.**
 
     The Foundation anchors say the sync forward at its own statistics is the batch forward; this
@@ -2541,7 +2543,7 @@ theorem den_syncStats_R1 {N oc h w : Nat} (t t' : String) (ds ds' : List Nat)
     So a single-device sync render computes exactly what today's `bnBatchF` render computes, and
     the `R = 1` artifacts need not move. The `R > 1` case is then purely a question about how
     shard statistics compose (`bnMean_shard` / `bnVar_shard_chan`), with BatchNorm itself already
-    accounted for here. `planning/global_bn_verified.md` §2b/§2c. -/
+    accounted for here. -/
 theorem den_bnSyncF_allReduce_R1 {N oc h w : Nat} (gN bN es t t' : String) (ds ds' : List Nat)
     (ε : ℝ) (γ β : Vec oc) (hm : N * (h * w) ≠ 0) (x : SHlo (N * (oc * (h * w)))) :
     den (.bnSyncF gN bN es ε γ β x
@@ -2554,7 +2556,7 @@ theorem den_bnSyncF_allReduce_R1 {N oc h w : Nat} (gN bN es t t' : String) (ds d
     bnVar_add_mean_mul_mean _ hm]
   exact bnSyncTensor4_at_own_stats N oc h w hm ε γ β (den x)
 
-/-- ⭐⭐ **THE DROP-IN, backward half: at `R = 1` the sync-BN backward subgraph denotes
+/-- **THE DROP-IN, backward half: at `R = 1` the sync-BN backward subgraph denotes
     `bnBatchTensor4GradInput`.**
 
     The peer of `den_bnSyncF_allReduce_R1`. The graph is the one a sync render emits — an outer
@@ -2580,7 +2582,7 @@ theorem den_bnSyncBack_allReduce_R1 {N oc h w : Nat} (gN xN es t t' t'' : String
              bnVar_add_mean_mul_mean _ hm, bnSyncXhat_at_own_stats _ hm]
   exact bnSyncTensor4GradInput_at_own_stats N oc h w hm ε γ _ (den dy)
 
-/-- ⭐⭐ **THE DROP-IN, γ half: at `R = 1` the sync γ-gradient node denotes `bnGammaGradB`.**
+/-- **THE DROP-IN, γ half: at `R = 1` the sync γ-gradient node denotes `bnGammaGradB`.**
     The third anchor beside `den_bnSyncF_allReduce_R1` / `den_bnSyncBack_allReduce_R1`: fed the
     collapsed collectives, the sync γ node reads the batch's own statistics and is the committed
     γ gradient. -/
@@ -2688,11 +2690,11 @@ theorem den_lnRowBackB_per_example {N m n : Nat} (gN xN es : String) (ε γ : �
 @[simp] theorem den_matmulFB {N m k n : Nat} (a : SHlo (N*(m*k))) (b : SHlo (N*(k*n))) :
     den (.matmulFB a b) = batchMapAux N (matMulFlat m k n) (den a) (den b) := rfl
 
-/-- ⭐ **ATTENTION'S MATMUL IS PER-EXAMPLE IN *BOTH* OPERANDS**, which is the property the whole
+/-- **ATTENTION'S MATMUL IS PER-EXAMPLE IN *BOTH* OPERANDS**, which is the property the whole
     `matmulF` scoping worry was about. Example `k`'s output is `Qₖ·Kₖᵀ` — its own `Q` against its
     own `K` — never `Q₀` against `Kₖ`, and never the whole batch flattened into one big matrix.
 
-    ⚠ **All three of those type-check.** At the batched index `N*(m*k)`, a `den` that read the
+    **All three of those type-check.** At the batched index `N*(m*k)`, a `den` that read the
     index as one matrix would compute `matMulFlat` at the wrong `m` and still be a `Vec`; a
     descriptor would hand every example operand 0's left factor. What separates them is this
     statement, and the emit tie cannot make it — the emitted `dot_general` carries
@@ -2727,7 +2729,7 @@ theorem den_softmaxRowBackB_per_example {N m n : Nat} (xN : String) (preAct : Ve
       = fun i => ∑ b : Fin N, ∑ p : Fin tk,
           batchSlice (tk+1) c (batchSlice N ((tk+1)*c) (den e) b) p.succ i := rfl
 
-/-- ⚠⚠ **THE BATCH SUM IS INVISIBLE AT `N = 1`.** At one example the outer `∑ b` has a single term,
+/-- **THE BATCH SUM IS INVISIBLE AT `N = 1`.** At one example the outer `∑ b` has a single term,
     so a render that dropped it type-checks, emits the same bytes and agrees exactly — which is why
     any gate on these four must run at `N > 1`. `den_rowDenseBiasGradB_at_one` says the same thing
     for ConvNeXt's bias gradient; this is ViT's positional embedding, where the shared parameter is
@@ -2912,7 +2914,7 @@ theorem selectMid_faithful {k : Nat} (s : String) (x : Vec k)
     (h_smooth : ∀ i, x i ≠ 0 ∧ x i ≠ 6) (e : SHlo k) :
     den (.selectMid s x e) = (relu6HasVJPAt k x h_smooth).backward (den e) := rfl
 
-/-- **Batched ReLU6 forward faithfulness (§2f).** The `relu6` descriptor at the batched index
+/-- **Batched ReLU6 forward faithfulness.** The `relu6` descriptor at the batched index
     denotes exactly `relu6F`'s per-example clamp applied across the batch — the MobileNetV2 peer
     of `den_batchOp_relu_eq_reluF`. This is the statement that keeps the emit width off the SHlo
     index: at `N := B` the descriptor emits `tensor<B×n>`, not `tensor<B×(N·n)>`. -/
@@ -2936,7 +2938,7 @@ theorem selectMidB_faithful {N n : Nat} (s : String) (x : Vec (N*n))
 theorem dropPathB_faithful {N n : Nat} (mN : String) (s : Vec N) (e : SHlo (N*n)) :
     den (.dropPathB mN s e) = Proofs.dropPath N n s (den e) := rfl
 
-/-- ⭐ **Stochastic-depth BACKWARD faithfulness — and it is the SAME constructor.** A diagonal
+/-- **Stochastic-depth BACKWARD faithfulness — and it is the SAME constructor.** A diagonal
     linear map is its own transpose, so the renderer emits `dropPathB` on the cotangent at the same
     scale, and that IS the certified VJP. No `*Grad` peer exists to drift out of step with this one,
     which is the whole reason this feature costs one op rather than two. -/
@@ -2954,22 +2956,22 @@ theorem dropPathB_back_faithful {N n : Nat} (mN : String) (s : Vec N)
 theorem dropoutB_faithful {N n : Nat} (mN : String) (mask : Vec (N*n)) (e : SHlo (N*n)) :
     den (.dropoutB mN mask e) = Proofs.dropout N n mask (den e) := rfl
 
-/-- ⭐ **Classifier-dropout BACKWARD faithfulness — the SAME constructor**, `dropPathB_back_faithful`
-    one mask rank up. ⚠ This covers the cotangent flowing THROUGH the site and nothing else; see
+/-- **Classifier-dropout BACKWARD faithfulness — the SAME constructor**, `dropPathB_back_faithful`
+    one mask rank up. This covers the cotangent flowing THROUGH the site and nothing else; see
     `Proofs.dropout_vjp_is_self` on the classifier weight gradient, which reads the dense's input
     and must therefore read the DROPPED activation. -/
 theorem dropoutB_back_faithful {N n : Nat} (mN : String) (mask : Vec (N*n))
     (x : Vec (N*n)) (e : SHlo (N*n)) :
     den (.dropoutB mN mask e) = (Proofs.dropoutHasVJP N n mask).backward x (den e) := rfl
 
-/-- ⭐ **The ones-mask identity on the AST**, which is what licenses emitting the dropout site in
+/-- **The ones-mask identity on the AST**, which is what licenses emitting the dropout site in
     the FORWARD artifact: `@efficientnet_do_fwd` and `@efficientnet_adamdo_train_step` are then one
     graph differing only in the mask the driver supplies, and the prefix audit survives. -/
 @[simp] theorem den_dropoutB_ones {N n : Nat} (mN : String) (e : SHlo (N*n)) :
     den (.dropoutB mN (fun _ => 1) e) = den e := by
   simp only [den_dropoutB, dropout_ones_id]
 
-/-- ⭐⭐ **THE TWO OPS AGREE EXACTLY WHEN THE MASK IS LIFTED, AND THE AST SAYS SO.**
+/-- **THE TWO OPS AGREE EXACTLY WHEN THE MASK IS LIFTED, AND THE AST SAYS SO.**
     `Proofs.dropout_of_dropScale` at the node level: a `dropoutB` carrying `dropScale N n s` denotes
     what the `dropPathB` at `s` denotes. This is the substitution that would be a silent regulariser
     swap if it were made in the *other* direction on an unlifted mask, and it is stated here so that
@@ -3041,7 +3043,7 @@ theorem flatConvF_faithful {ic oc h w kH kW : Nat} (wN bN : String)
     proven `flatConv` on ROUNDED operands, with the accumulated sum rounded and the bias
     added afterwards in f32 — i.e. exactly what the emitted graph computes.
 
-    ⚠ Contrast `flatConvF_faithful`, which has no rounding, and `dotInBf16`, which rounds
+    Contrast `flatConvF_faithful`, which has no rounding, and `dotInBf16`, which rounds
     the operands but NOT the result. The outer `rnd` here is not decoration: the emit gives
     the convolution a bf16-typed result, so the hardware stores the accumulator rounded. -/
 theorem flatConvFBf16_faithful {ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (wN bN : String)
@@ -3068,9 +3070,8 @@ theorem flatConvFBf16_id {ic oc h w kH kW : Nat} (wN bN : String)
 theorem maxPoolF_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
     den (.maxPoolF e) = maxPoolFlat c h w (den e) := rfl
 
-/-- ⭐ **3×3/s2 max-pool forward faithfulness.** The (flattened) `reduce_window(max)` op at window
-    3, stride 2, symmetric padding 1 denotes the proven `maxPool3s2Flat` — He et al.'s stem pool.
-    `planning/archive/rsb_a3_r50_verified.md` §4b. -/
+/-- **3×3/s2 max-pool forward faithfulness.** The (flattened) `reduce_window(max)` op at window
+    3, stride 2, symmetric padding 1 denotes the proven `maxPool3s2Flat` — He et al.'s stem pool. -/
 theorem maxPool3s2F_faithful {c h w : Nat} (e : SHlo (c*(2*h)*(2*w))) :
     den (.maxPool3s2F e) = maxPool3s2Flat c h w (den e) := rfl
 
@@ -3095,11 +3096,11 @@ theorem maxPoolBack_faithful {c h w : Nat} (xN : String) (x : Vec (c*(2*h)*(2*w)
   simp only [denStepApp, maxPoolBackFlat, maxPoolFlatHasVJPAt, HasVJPAt3.toHasVJPAt,
              maxPool2HasVJPAt3]
 
-/-- ⭐ **3×3/s2 max-pool backward faithfulness (smooth point).** The emitted `select_and_scatter`
+/-- **3×3/s2 max-pool backward faithfulness (smooth point).** The emitted `select_and_scatter`
     graph at window 3 / stride 2 / symmetric padding 1 denotes the proven
     `maxPool3s2FlatHasVJPAt` backward, under `MaxPool3s2Smooth`.
 
-    ⚠ The hypothesis is stated over **positions**, not window offsets, and that is not a stylistic
+    The hypothesis is stated over **positions**, not window offsets, and that is not a stylistic
     difference from `maxPoolBack_faithful`: with overlapping windows two offsets can name one input
     cell (the clamped duplicate at the first window), where the values are equal by construction
     and smoothness must say nothing. `maxPool2` has no analogue because there distinct offsets
@@ -3136,7 +3137,7 @@ theorem addV_faithful {n : Nat} (a b : SHlo n) :
 @[simp] theorem flatConvStridedF_faithful {ic oc h w kH kW : Nat} (wN bN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*(2*h)*(2*w))) :
     den (.flatConvStridedF wN bN W b e) = flatConvStride2 W b (den e) := rfl
-/-- The XLA-`SAME` peer's faithfulness. ⚠ `flatConvStride2Xla`, NOT `flatConvStride2` — identical
+/-- The XLA-`SAME` peer's faithfulness. `flatConvStride2Xla`, NOT `flatConvStride2` — identical
     types, so this `rfl` is the only place the distinction is recorded. -/
 @[simp] theorem flatConvStridedXlaF_faithful {ic oc h w kH kW : Nat} (wN bN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) (e : SHlo (ic*(2*h)*(2*w))) :
@@ -3172,8 +3173,7 @@ theorem bnBack_faithful {n : Nat} (gN xN es : String) (ε γ β : ℝ) (hε : 0 
 
 /-- **Per-channel BN forward faithfulness.** The 4-D reshape + per-channel
     reduce/normalize (μ/var over the spatial axes `[2,3]`, rank-1 γ/β `dims=[1]`)
-    denotes the proven `bnPerChannelTensor3` (PerChannelBN.lean). (`rfl`, so kept
-    out of the axiom audit — `roundtrip` covers it structurally.) -/
+    denotes the proven `bnPerChannelTensor3` (PerChannelBN.lean). (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem bnPerChannelF_faithful {oc h w : Nat} (gN bN es : String) (ε : ℝ)
     (γ β : Vec oc) (e : SHlo (oc*h*w)) :
     den (.bnPerChannelF gN bN es ε γ β e) = bnPerChannelTensor3 oc h w ε γ β (den e) := rfl
@@ -3207,8 +3207,8 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
     den (.weightSgd xN wN lrS x W lr e) idx
       = Mat.flatten W idx - lr * den (.weightGrad xN x e) idx := rfl
 
-/-! The TRANSFORMER peers of the same statement — the ViT family §2a left fused, which is why
-`vit_adam_train_step` had no certified render until these existed. Same `rfl` discipline. -/
+/-! The TRANSFORMER peers of the same statement — the ViT family's un-fused gradients, which the
+certified `vit_adam_train_step` render uses. Same `rfl` discipline. -/
 
 @[simp] theorem rowDenseWeightSgd_eq_grad {N a c : Nat} (xN wN lrS : String) (x : Vec (N*a))
     (W : Mat a c) (lr : ℝ) (e : SHlo (N*c)) (idx : Fin (a*c)) :
@@ -3248,7 +3248,7 @@ quietly change the gradient, and anything already proven about a `*Sgd` output t
     den (.depthwiseStridedWeightSgdB xN wN lrS b x W lr e) idx
       = Tensor3.flatten W idx - lr * den (.depthwiseStridedWeightGradB xN b x W e) idx := rfl
 
-/-! ### The depthwise BIAS gradients (§2f, MobileNetV2)
+/-! ### The depthwise BIAS gradients (MobileNetV2)
 
 `MobileNetV2RenderB` is AdamW-only, like `ResNet34RenderB` — mnv2's SGD render stays at the
 per-example index, so there is deliberately no fused `depthwise{,Strided}BiasSgdB` peer and hence
@@ -3273,11 +3273,11 @@ shared-parameter batch sum of the proven per-example depthwise bias VJP, which i
           (depthwiseStride2BiasGradHasVJP W (batchSlice N (c*(2*h)*(2*w)) x n)).backward b
             (batchSlice N (c*h*w) (den e) n) o := rfl
 
-/-! ## The ConvNeXt five — same statement, the last `*Sgd`/`*Grad` pairs the kit was missing (§2f)
+/-! ## The ConvNeXt five — same statement, the last `*Sgd`/`*Grad` pairs the kit was missing
 
 `den (xSgd …) = θ − lr · den (xGrad …)`, all `rfl`. Together with the emit-side byte-PREFIX checks
 in [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) this is what lets `convnext_adam_train_step` hand its gradients
-to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, never Adam (§2a). -/
+to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, never Adam. -/
 
 @[simp] theorem depthwiseWeightSgd_eq_grad {c h w kH kW : Nat} (xN wN lrS : String)
     (b : Vec c) (x : Tensor3 c h w) (W : DepthwiseKernel c kH kW) (lr : ℝ)
@@ -3361,10 +3361,10 @@ to `adamWParamF` instead of to the SGD tail — the fusion was the blocker, neve
 
 /-! ## `den (xSgdB …) = θ − lr · den (xGradB …)` — the BATCHED peers of the `*Sgd_eq_grad` set
 
-All `rfl`, and all carrying the same content as §2a's per-example eight: the fused `*SgdB` op IS
-`θ − lr·` applied to the un-fused gradient, so handing the gradient to AdamW instead of to the SGD
-tail changes nothing about what is computed. This is what unblocks a batched `resnet34_adam_train_step`
-rendered from `Proofs/` — the blocker was the fusion, never Adam. -/
+All `rfl`, and all carrying the same content as the per-example `*Sgd_eq_grad` set: the fused
+`*SgdB` op IS `θ − lr·` applied to the un-fused gradient, so handing the gradient to AdamW instead
+of to the SGD tail changes nothing about what is computed. The batched AdamW renders
+(`resnet34_adam_train_step`, …) rely on this. -/
 
 @[simp] theorem convWeightSgdB_eq_grad {N ic oc h w kH kW : Nat} (xN wN lrS : String)
     (b : Vec oc) (x : Vec (N*(ic*h*w))) (W : Kernel4 oc ic kH kW) (lr : ℝ)
@@ -3420,10 +3420,9 @@ rendered from `Proofs/` — the blocker was the fusion, never Adam. -/
     (β₂ : ℝ) (v : Vec n) (e : SHlo n) :
     den (.adamVNextF vN b2N ob2N ds β₂ v e) = adamVNext β₂ v (den e) := rfl
 
-/-- **AdamW parameter-step faithfulness.** The emitted 26-op block denotes exactly
-    `Proofs.adamWParam` of the child's gradient — the theorem that moves the optimizer from a
-    trusted hand-written emitter (`ViTRender.emitAdamV`, which only *claimed* to be op-for-op
-    `adamWParam`) into the proven kit. Well-definedness of the `√v̂ + ε` denominator is
+/-- **AdamW parameter-step faithfulness.** The node's denotation is `Proofs.adamWParam` of the
+    child's gradient (by definition of `den`), so ties stated over `den` can use it; the 26-op
+    text `emitTok` prints for it is trusted, like every op's. Well-definedness of the `√v̂ + ε` denominator is
     `Proofs.adam_denom_pos`; there is deliberately no descent claim, because Adam is not a
     monotone descent method (AMSGrad counterexample). -/
 @[simp] theorem adamWParamF_faithful {n : Nat}
@@ -3488,9 +3487,9 @@ theorem momParamF_mu_zero {n : Nat} (θN vN muN lrN : String) (ds : List Nat)
     `adamW_triple_faithful` / `mom_pair_faithful`: `(θ', b', s')` as the three ops the render
     actually emits, denoted together.
 
-    ▶ **Read the composition off this statement** — it is the whole "one new op" claim, checked:
+    **Read the composition off this statement** — it is the whole "one new op" claim, checked:
     the parameter slot is `sgdParamF` applied to *this op's SSA output* (`.operand`, so the buffer
-    is emitted once and threaded, per §4's no-CSE rule), and the mean-square slot is the EXISTING
+    is emitted once and threaded, since `pretty` has no CSE), and the mean-square slot is the EXISTING
     `adamVNextF` at `β₂ := ρ`. Only `rmsBufNextF` is new. -/
 theorem rmsProp_triple_faithful {n : Nat} (θN sqN bufN rhoN orhoN muN epsN lrN : String)
     (ds : List Nat) (ρ μ ε lr : ℝ) (θ sq buf : Vec n) (e : SHlo n) (b' : Vec n)
@@ -3525,7 +3524,7 @@ theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
     reduced to a rank-0 scalar. `SHlo 1` denoting a rank-0 `tensor<f32>` is `lnBetaGrad`'s
     established reading, not a new convention.
 
-    ▶ **This op is what makes the global reduction an ordinary `SHlo` TREE.** The norm reads like a
+    **This op is what makes the global reduction an ordinary `SHlo` TREE.** The norm reads like a
     shared DAG node — one scalar consumed by 200 sites — and `SHlo` is a tree; the resolution is
     that `SHlo` is single-OUTPUT, not single-INPUT, so folding 200 subtrees into one scalar is just
     a left-nested chain of this constructor, seeded at `%zero`. Nothing is recomputed, because every
@@ -3541,7 +3540,7 @@ theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
     den (.lambDirF θN mN vN b1N ob1N b2N ob2N bc1N bc2N epsN wdN ds β₁ β₂ ε wd bc₁ bc₂ θ m v e)
       = lambDir β₁ β₂ ε wd bc₁ bc₂ θ m v (den e) := rfl
 
-/-- **`lambScaleF` denotes `Proofs.lambScale`.** ⚠ The trust ratio is computed from THIS tensor's
+/-- **`lambScaleF` denotes `Proofs.lambScale`.** The trust ratio is computed from THIS tensor's
     own norm, which is what makes it layer-wise; `clipScaleF`'s factor is shared across every
     parameter. The two ops look alike and differ in exactly that quantifier. -/
 @[simp] theorem lambScaleF_faithful {n : Nat} (ds : List Nat) (s : SHlo 1) (e : SHlo n) :
@@ -3550,18 +3549,18 @@ theorem rmsBufNextF_mu_zero {n : Nat} (sqN bufN rhoN orhoN muN epsN : String)
 /-- **The rescale is `Proofs.clipScale` at `Proofs.clipFactor` of the summed total** — the
     reference's `g * jnp.minimum(1.0, CLIP / (gn + 1e-6))` with `gn = sqrt(total)`.
 
-    ⚠ The factor is derived from the op's FIRST CHILD, the already-summed global total, so this
+    The factor is derived from the op's FIRST CHILD, the already-summed global total, so this
     constructor cannot express a per-parameter clip: it never receives enough to compute one. The
     `c`/`ε` ℝ fields pair with `clipStr`/`epsStr` exactly as `bnF`'s `ε`/`epsStr` do.
-    ⚠ The factor is recomputed at every site rather than emitted once and threaded, for
+    The factor is recomputed at every site rather than emitted once and threaded, for
     `adamWParamF`'s reason — `SHlo` is single-result, so each output is its own node, and XLA's CSE
-    folds the duplicates (§2b-bis measured that on R34's 108 → 36 rsqrt at no run-time cost). -/
+    folds the duplicates. -/
 @[simp] theorem clipScaleF_faithful {n : Nat} (clipS epsS : String) (c ε : ℝ) (ds : List Nat)
     (s : SHlo 1) (e : SHlo n) :
     den (.clipScaleF clipS epsS c ε ds s e)
       = clipScale (clipFactor c ε (scalarOf (den s))) (den e) := rfl
 
-/-- ▶ **THE WHOLE CLIP, END TO END, FOR TWO PARAMETERS — this is the transcription check.**
+/-- **THE WHOLE CLIP, END TO END, FOR TWO PARAMETERS — this is the transcription check.**
 
     Read the reference's two lines off the right-hand side: `gn = √(Σ_leaves Σ g²)` folded from
     `%zero`, then `g * min(1, CLIP/(gn + 1e-6))`. Stated at TWO parameters because one cannot
@@ -3572,13 +3571,13 @@ theorem clipGrad_faithful {n m : Nat} (dsN dsM : List Nat) (clipS epsS : String)
           (.gradSumSqAccF dsM (.gradSumSqAccF dsN (.operand "%zero" (fun _ => 0)) gN) gM) gN)
       = clipGrad c ε (0 + gradSumSq (den gN) + gradSumSq (den gM)) (den gN) := rfl
 
-/-- ▶⚠ **THE FACTOR IS SHARED ACROSS PARAMETERS — the statement the numeric gate drives.**
+/-- **THE FACTOR IS SHARED ACROSS PARAMETERS — the statement the numeric gate drives.**
 
     Two parameters clipped off the SAME total (and the same `c`/`ε`) satisfy
     `g'₁ᵢ · g₂ⱼ = g'₂ⱼ · g₁ᵢ`, i.e. the ratio `g'/g` is one constant across every coordinate of
     every parameter.
 
-    ⚠ **This is the ONLY property that separates the reference from a per-parameter clip.** A
+    **This is the ONLY property that separates the reference from a per-parameter clip.** A
     per-parameter clip scales, never amplifies, and is the identity below the threshold — it
     satisfies everything else in `GradClip.lean`. It differs here and nowhere else, which is why
     `clip-tie` measures the ratio's CONSTANCY across all 200/180 parameters instead of checking
@@ -3593,7 +3592,7 @@ theorem clipShared_faithful {n m : Nat} (dsN dsM : List Nat) (clipS epsS : Strin
 /-- **Below the threshold the rendered clip is the EXACT identity**, so a clip-on render at a large
     `c` must agree with the clip-off render on every byte (`x * 1.0` is exact in binary32). The
     emit-side reading of `Proofs.clipGrad_id_below`, and the licence for `clip-tie`'s gate 3.
-    ⚠ It is also why gate 3 alone is not evidence: at factor 1 a per-parameter clip and a global one
+    It is also why gate 3 alone is not evidence: at factor 1 a per-parameter clip and a global one
     are the SAME FUNCTION, so an identity gate cannot see which was rendered. -/
 theorem clipScaleF_id_below {n : Nat} (clipS epsS : String) (c ε : ℝ) (ds : List Nat)
     (s : SHlo 1) (e : SHlo n) (hε : 0 < ε)
@@ -3630,8 +3629,7 @@ theorem bnPerChannelBack_faithful {oc h w : Nat} (gN xN es : String) (ε : ℝ) 
 /-- **Depthwise-conv forward faithfulness.** The `feature_group_count = c`
     `stablehlo.convolution` (with a `[c,1,kH,kW]` kernel, one filter per channel)
     denotes the proven `depthwiseFlat` (= flatten ∘ depthwiseConv2d ∘ unflatten,
-    Depthwise.lean). (`rfl`, so kept out of the axiom audit — `roundtrip` covers it
-    structurally.) -/
+    Depthwise.lean). (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem depthwiseF_faithful {c h w kH kW : Nat} (wN bN : String)
     (W : DepthwiseKernel c kH kW) (b : Vec c) (e : SHlo (c*h*w)) :
     den (.depthwiseF wN bN W b e) = depthwiseFlat W b (den e) := rfl
@@ -3664,8 +3662,7 @@ theorem depthwiseStridedBack_faithful {c h w kH kW : Nat} (wN : String)
 
 /-- **Swish forward faithfulness.** The `multiply(x, logistic(x))` graph denotes
     the proven `swish` (= `x · σ(x)`, LayerNorm.lean). Smooth everywhere; no kink,
-    no smoothness hypothesis. (`rfl`, so kept out of the axiom audit — `roundtrip`
-    covers it structurally.) -/
+    no smoothness hypothesis. (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem swishF_faithful {n : Nat} (e : SHlo n) :
     den (.swishF e) = swish n (den e) := rfl
 
@@ -3678,7 +3675,7 @@ theorem swishBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 
 /-- **Sigmoid forward faithfulness.** The `stablehlo.logistic(x)` graph denotes the
     proven `sigmoid` (= σ(x), SE.lean) — the SE gate's output nonlinearity.
-    Smooth everywhere. (`rfl`, so kept out of the axiom audit — `roundtrip` covers it.) -/
+    Smooth everywhere. (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem sigmoidF_faithful {n : Nat} (e : SHlo n) :
     den (.sigmoidF e) = sigmoid n (den e) := rfl
 
@@ -3692,7 +3689,7 @@ theorem sigmoidBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 /-- **GELU forward faithfulness.** The tanh-approximation graph
     `0.5·x·(1 + tanh(√(2/π)·(x + 0.044715·x³)))` denotes the proven `gelu`
     (LayerNorm.lean). Smooth everywhere; no kink, no smoothness hypothesis.
-    (`rfl`, so kept out of the axiom audit — `roundtrip` covers it structurally.) -/
+    (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem geluF_faithful {n : Nat} (e : SHlo n) :
     den (.geluF e) = gelu n (den e) := rfl
 
@@ -3717,7 +3714,7 @@ theorem geluBack_faithful {n : Nat} (xN : String) (x : Vec n) (e : SHlo n) :
 /-- **Row-softmax forward faithfulness.** The per-row `exp / reduce[last] / divide`
     graph denotes `rowSoftmaxFlat` (= flattened `rowSoftmax`, Attention.lean). Plain
     exp/sum, no max-shift (matches the proven `softmax`). Smooth everywhere.
-    (`rfl`, so kept out of the axiom audit — `roundtrip` covers it structurally.) -/
+    (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem softmaxRowF_faithful {m n : Nat} (e : SHlo (m*n)) :
     den (.softmaxRowF e) = rowSoftmaxFlat m n (den e) := rfl
 
@@ -3731,8 +3728,7 @@ theorem softmaxRowBack_faithful {m n : Nat} (xN : String) (preAct : Vec (m*n)) (
 /-- **Matrix-multiply faithfulness.** The reshape + batching-dim-0 `dot_general`
     (contracting `[2] x [1]`) + reshape graph denotes `matMulFlat` (= the flattened
     `Mat.mul`). Bilinear; the attention backwards reuse this token (`dA = dC·Bᵀ`,
-    `dB = Aᵀ·dC`). (`rfl`, so kept out of the axiom audit — `roundtrip` covers it
-    structurally.) -/
+    `dB = Aᵀ·dC`). (`rfl`: `den`'s arm is this function by definition.) -/
 @[simp] theorem matmulF_faithful {m k n : Nat} (a : SHlo (m*k)) (b : SHlo (k*n)) :
     den (.matmulF a b) = matMulFlat m k n (den a) (den b) := rfl
 
@@ -3929,7 +3925,7 @@ def cifar8BnFwdGraph {ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat} (epsStr : Stri
 /-- Whole MNIST-CNN **backward** (input-VJP) graph, reversing `cnnFwdGraph`:
     `convBack W₁ ∘ select(a₁) ∘ convBack W₂ ∘ select(a₂) ∘ maxPoolBack ∘
      dotOut W₃ ∘ select(a₃) ∘ dotOut W₄ ∘ select(a₄) ∘ dotOut W₅`, with `aᵢ` the
-    ReLU pre-activations and the conv/maxpool saved inputs threaded as in §4. -/
+    ReLU pre-activations and the conv/maxpool saved inputs threaded by name. -/
 noncomputable def cnnBackGraph
     {ic c h w d1 nClasses kH kW : Nat}
     (W₁ : Kernel4 c ic kH kW) (b₁ : Vec c)
@@ -3954,22 +3950,23 @@ noncomputable def cnnBackGraph
                   (.selectPos "%a4" (dense W₄ b₄ zd4)
                     (.dotOut "%W5" W₅ (.operand "%dy" dy))))))))))
 
-/-- **The conv-bias SSA name** — §2l step B. Every conv in ResNet-34 is immediately followed by
+/-- **The conv-bias SSA name.** Every conv in ResNet-34 is immediately followed by
     BatchNorm, and BN subtracts the batch mean, so in ℝ a conv bias cannot reach the BN output and
     its gradient is identically zero. He et al.'s `.convBn` therefore carries no conv bias, and
-    this repo's render did — 8,512 parameters the reference does not have (§2k).
+    this repo's render did — 8,512 parameters the reference does not have.
 
     With `convBias := false` the bias operand becomes a zero CONSTANT rather than a function
     argument: the op is the same proven `flatConvF`/`flatConvStridedF` at `bias = 0`, so `den` and
     every faithfulness theorem are untouched, and `x + 0.0` is exact in IEEE, so the forward is
     **bit-identical** to the biased render fed zeros. What changes is the signature.
 
-    ⚠ MEASURED, and it corrects §2l's stated reason: in f32 the gradient is NOT exactly zero — the
-    BN mean is a rounded sum, leaving a residue ~1e-6 of the conv-weight gradient — and under
-    AdamW's scale-free update that residue still moves θ by ~lr per step. In the 80-epoch run all
-    8,512 biases drifted to |θ|max 0.041. They are safe to drop because the FORWARD does not depend
-    on them (zeroing all of them moves the trained logits by rel 1e-6, against 0.79 for the same
-    ablation on BN β), not because they stay zero. See [`tests/TestConvBiasZero.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvBiasZero.lean). -/
+    In f32 the gradient is NOT exactly zero — the BN mean is a rounded sum, leaving a residue of
+    the conv-weight gradient — and under AdamW's scale-free update that residue still moves θ. The
+    biases are safe to drop because the FORWARD does not depend on them, not because they stay
+    zero. See [`tests/TestConvBiasZero.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvBiasZero.lean). -/
+-- Measured: the residue is ~1e-6 of the conv-weight gradient and moves θ by ~lr per step; in an
+-- 80-epoch run all 8,512 biases drifted to |θ|max 0.041, and zeroing all of them moved the trained
+-- logits by rel 1e-6, against 0.79 for the same ablation on BN β.
 def biasName (convBias : Bool) (nm : String) (c : Nat) : String :=
   if convBias then nm else s!"%zb{c}"
 

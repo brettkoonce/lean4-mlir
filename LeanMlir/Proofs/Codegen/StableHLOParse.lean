@@ -1,33 +1,24 @@
 import LeanMlir.Proofs.Codegen.StableHLOPretty
 
-/-! # R4 — the syntactic half (4a), structural core
+/-! # StableHLOParse — the token skeleton of an `SHlo` term round-trips
 
-`StableHLO.lean` closes the **semantic** half of R4: `den (emit g) = fderiv`.
-The **syntactic** half asks that the emitted text be a *faithful, recoverable*
-encoding of the graph — `parse (pretty a) = a` (the doc's "4a"). A verified
-lexer/parser of the literal SSA StableHLO text (with multi-instruction op
-expansion + name resolution) is a large separate build; this file lands its
-**structural core**, which is the load-bearing part:
+`StableHLO.lean` states what each `SHlo` graph denotes: its `*_faithful` theorems equate `den` of a node or
+graph with a named ℝ function (`fwdGraph_faithful : den (fwdGraph W b x) = mnistLinear W b x`, …).
+This file is about the other side, the encoding the printer works from:
 
-* `Raw` — the renderable **skeleton** of an `SHlo` graph (opcodes + shapes +
-  leaf SSA names, with the `ℝ` operand values and the shape index erased: the
-  text never carries the runtime values, only the op structure).
+* `Raw` — the skeleton of an `SHlo` graph (opcodes, shapes, leaf SSA names; the `ℝ` operand
+  values and the shape index erased).
 * `skel : SHlo n → Raw` — extract that skeleton.
-* `toToks : Raw → List Tok` — a postorder token serialization (the order
-  `pretty` already emits in: children before parent).
+* `toToks : Raw → List Tok` — the postorder token serialization `pretty` prints from
+  (children before parent).
 * `parse : List Tok → Option Raw` — a stack reconstructor.
-* **`parse_skel` / `roundtrip`** — `parse (toToks (skel a)) = some (skel a)`:
-  the op-graph is recovered exactly from its serialization. Proven by
-  structural induction (no string reasoning, no SSA-freshness bookkeeping).
+* `parse_toToks` / `roundtrip` — `parse (toToks (skel a)) = some (skel a)`, by structural
+  induction.
 
-What this buys: the *structure* of the emitted graph (which op, which operands,
-which shapes) is now **proven** recoverable — it leaves the trusted surface.
-What remains audited (the thin lexical boundary): the per-op `Tok ↔ StableHLO
-text` map — i.e. that `stablehlo.dot_general … contracting_dims = [1] x [0]`
-*is* the string for a `dotIn` token. That, plus per-op spec conformance, IREE
-lowering, and `float32 ≈ ℝ`, is the residue (validated by `iree-compile` + the
-GPU runs). Closes under `[propext, Classical.choice, Quot.sound]`.
--/
+Scope: the round trip is a statement about `toToks`, not about the text. Which operands each op's
+emitted line reads, in what order, with what types, is decided by `emitTok` (in
+StableHLOPretty.lean) and is trusted, together with the per-op lexical syntax, the per-op
+StableHLO semantics, the lowering, and `float32 ≈ ℝ`. -/
 
 namespace Proofs
 namespace StableHLO
@@ -213,10 +204,11 @@ theorem parse_toToks (r : Raw) : parse (toToks r) = some r := by
     exact this
   rw [h]
 
-/-- **R4 syntactic core.** The emitted op-graph (skeleton) of any `SHlo` is a
-    faithful, recoverable serialization: `parse (toToks (skel a)) = some (skel a)`.
-    The op structure / shapes / SSA names leave the trusted surface; only the
-    per-op `Tok ↔ StableHLO-text` lexing stays audited. -/
+/-- **Skeleton round trip.** The postorder token encoding of the skeleton of any `SHlo`
+    term is invertible: `parse (toToks (skel a)) = some (skel a)`. It is a statement about
+    `toToks`, not about the text: which operands each op's emitted line reads, in what order,
+    and with what types is decided by `emitTok` and remains trusted along with the lexical
+    syntax. -/
 theorem roundtrip {k : Nat} (a : SHlo k) : parse (toToks (skel a)) = some (skel a) :=
   parse_toToks (skel a)
 

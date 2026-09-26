@@ -2,15 +2,15 @@ import LeanMlir.Proofs.Codegen.StableHLOPretty
 
 /-! # The three BatchNorm emit sites every batch-BN renderer shares — batch BN or SYNCHRONISED BN
 
-Lifted out of `ResNet34RenderB.lean` (2026-09-21, `planning/global_bn_verified.md` §3.3) so the
-MobileNetV2 and EfficientNet-B0 renderers emit the same sync-BN composition ResNet-34 does. Each
-site is one BatchNorm node at `replicas ≤ 1` — byte-for-byte what the renderers emitted before —
-and at `replicas > 1` the sync-BN subgraph whose `den`
+Used by `ResNet34RenderB`, `ResNet50RenderB` (through `ResNet34RenderB`), `MobileNetV2RenderB`,
+`MobileNetV4RenderB` and `EfficientNetRender`, so every batch-BN renderer emits the same sync-BN
+composition. Each
+site is one BatchNorm node at `replicas ≤ 1` and at `replicas > 1` the sync-BN subgraph whose `den`
 [`Foundation/DataParallelSync.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/DataParallelSync.lean) states
 (the forward's two collectives, the backward's one, the γ gradient reading the forward's
 statistics).
 
-⚠ **Tags.** A site's `tag` is its γ parameter's name without `%`; the collectives it emits are
+**Tags.** A site's `tag` is its γ parameter's name without `%`; the collectives it emits are
 named from it (`{tag}mu`, `{tag}var`, and the backward's `{tag}dst`), so tags must be unique per
 site and must not collide with any parameter's name.
 -/
@@ -20,7 +20,7 @@ open Proofs.StableHLO
 namespace Proofs.StableHLO
 
 /-- **One BatchNorm FORWARD site.** At `replicas ≤ 1` the batch-BN node `bnBatchF`. At
-    `replicas > 1` the sync-BN composition of `planning/global_bn_verified.md` §2b, in TWO rounds
+    `replicas > 1` the sync-BN composition, in TWO rounds
     (Chan's parallel variance): this replica's μ_r (`bnBatchMeanB`) all-reduced to the global μ;
     then `σ²_r + (μ_r − μ)²` (`bnBatchVarAtB`) all-reduced to the global σ² — each by
     `prettyAllReduceMean`, the SAME collective node the parameter gradients ride; packed
@@ -29,7 +29,7 @@ namespace Proofs.StableHLO
     gradient and the handed-back running stats all read it, which is what makes the four agree
     on ONE `x̂`.
 
-    ⚠ `tag` names the collectives' SSA values (`%arsum{tag}mu` / `%armean{tag}var` …), so it must
+    `tag` names the collectives' SSA values (`%arsum{tag}mu` / `%armean{tag}var` …), so it must
     be unique per site and disjoint from every parameter's (`{p}g1` is a parameter; `{p}g1mu`
     is this). -/
 def bnFwdSite (B oc hh ww : Nat) (sync : Bool) (replicas : Nat)
@@ -72,7 +72,7 @@ def bnBackSite (B oc hh ww : Nat) (sync : Bool) (replicas : Nat)
 
 /-- **One BatchNorm γ-GRADIENT site.** `bnGammaGradB` rebuilds `x̂` from ITS OWN batch, which under
     sync-BN is not the `x̂` the forward used — so at `replicas > 1` it is `bnSyncGammaGradB`,
-    reading the forward's packed global statistics (§2b's fifth op). β's gradient is `Σ dy`, reads
+    reading the forward's packed global statistics. β's gradient is `Σ dy`, reads
     no statistic, and stays `bnBetaGradB` at every replica count. -/
 def bnGammaSite (B oc hh ww : Nat) (sync : Bool) (epsStr xN dyIn st : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do

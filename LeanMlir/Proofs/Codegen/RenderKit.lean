@@ -54,11 +54,11 @@ def adamOne (B : Nat) (replicas : Nat) (g : PGrad) (wdName : String := "%wd") :
     | `buf = MOMENTUM*b + g/sqrt(sq+EPS)` | `rmsBufNextF` — the new op, ε INSIDE the root |
     | `params = p - lr*buf` | `sgdParamF` on the buffer's SSA |
 
-    ⚠ **The weight decay is COUPLED and goes FIRST**, so the accumulator sees the decayed gradient.
+    **The weight decay is COUPLED and goes FIRST**, so the accumulator sees the decayed gradient.
     Reversing that order — decaying after the accumulator, AdamW-style — is a different optimizer
     and would not show up as an arity or type error anywhere.
 
-    ⚠ **EfficientNet's ε is 1e-3, where MobileNetV2's is 1.0** — the placement's sensitive end: at a
+    **EfficientNet's ε is 1e-3, where MobileNetV2's is 1.0** — the placement's sensitive end: at a
     collapsed mean-square the textbook spelling takes a step **31.6×** larger
     (`Proofs.rmsBufNext_eps_placement_at_zero`). A green MobileNetV2 tie does not license the
     EfficientNet render; `rms-tie efficientnet` is its own gate.
@@ -94,18 +94,17 @@ def rmsOne (B : Nat) (replicas : Nat) (g : PGrad) (wdName : String := "%wd") :
       not emitted a second time. Under data parallelism the clip must come AFTER the `all_reduce`
       (the reference clips the combined gradient; clipping per replica clips PARTIAL gradients — a
       different function that still trains and descends), and the clip needs every gradient at
-      once while this step is per parameter, so at `clip := true` the caller hoists both
-      (`planning/archive/grad_clip.md` §4).
+      once while this step is per parameter, so at `clip := true` the caller hoists both.
     * `ema` — the shadow `e' = d·e + (1−d)·θ'` is `adamMNextF` at `(β₁ := d, m := e, g := θ')`:
       `Proofs.adamMNext` IS the reference's `ema_update` (`ema_update` in [`jax/Jax/Codegen.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/Jax/Codegen.lean)), so it needs
-      no new op and `adamMNextF_faithful` closes the `den` side by `rfl`. ⚠ It reads `nT`, the
-      UPDATED parameter — the shadow averages weights after the optimizer moves them. ⚠
+      no new op and `adamMNextF_faithful` closes the `den` side by `rfl`. It reads `nT`, the
+      UPDATED parameter — the shadow averages weights after the optimizer moves them.
       `%emad`/`%oemad` are function ARGS, not constants: the reference's decay is warmup-corrected,
-      `d = min(decay, (1+t)/(10+t))` (`planning/archive/ema.md` §2 — without it a shadow held 12.8%
-      of the random init and scored 0.00%). At `ema := false` no `pretty` call happens, so the
+      `d = min(decay, (1+t)/(10+t))`; without the warmup a shadow still holds a large share of the
+      random init early in training. At `ema := false` no `pretty` call happens, so the
       fresh-name counter does not move and the non-EMA renders are unchanged by the flag.
 
-    ⚠ The shadow's SSA name is `%{nm}e` here; `ResNet34RenderB.optOne` uses `%{nm}ema` because at
+    The shadow's SSA name is `%{nm}e` here; `ResNet34RenderB.optOne` uses `%{nm}ema` because at
     suffix `e` the stem BN gamma `%sg` collides with `select_and_scatter`'s block-local `%sge`.
     ViT and ConvNeXt have no max-pool, so `e` is safe for them. -/
 def adamOneEma (B : Nat) (replicas : Nat) (g : PGrad)
@@ -127,17 +126,16 @@ def adamOneEma (B : Nat) (replicas : Nat) (g : PGrad)
 
 /-- **Does this parameter get weight decay?** timm's `no_weight_decay` rule, and it is the PLAIN
     RANK TEST with no name carve-out — every 1-D parameter is excluded: BN γ, BN β and every bias.
+    The `wx` renders bind the excluded parameters' decay operand to `%wdz` (`r34WdName`).
 
-    ⚠ Identical to `cnxWdDecays` by construction rather than by coincidence: the rule is timm's,
+    Identical to `cnxWdDecays` by construction rather than by coincidence: the rule is timm's,
     not the net's, and ConvNeXt's own docstring records that its ViT-style `nm != "pos"` carve-out
-    does not apply to a net with no positional parameter. ResNet has none either.
-
-    ⚠⚠ **This is `a3_paper_fidelity.md` §2.1, open since the A3 run.** The live A3 artifact has
-    ZERO `%wdz` occurrences against ConvNeXt's 123 — so the 77.43% run decayed BN γ/β and every
-    bias at wd = 0.02 where its reference (`resnet50ImagenetConfigRSBFaithful`, which sets
-    `wdExcludeNormBias := true`) did not. Decay on pre-BN conv weights is renormalised away by BN
-    and acts only as an effective-LR control; decay on γ/β is not, because γ directly scales the
-    layer's output. The effect concentrates at low LR — i.e. in the cosine endgame. -/
+    does not apply to a net with no positional parameter. ResNet has none either. -/
+-- Why it matters: decay on pre-BN conv weights is renormalised away by BN and acts only as an
+-- effective-LR control; decay on γ/β is not, because γ directly scales the layer's output. The
+-- effect concentrates at low LR, i.e. in the cosine endgame. The first RSB-A3 R50 run (77.43%)
+-- used a non-`wx` artifact, so it decayed BN γ/β and every bias at wd = 0.02 where its reference
+-- (`resnet50ImagenetConfigRSBFaithful`, `wdExcludeNormBias := true`) did not.
 def r34WdDecays (_nm : String) (ds : List Nat) : Bool := ds.length ≥ 2
 
 /-- The decay operand for one parameter: the real `%wd`, or the zero constant when excluded. -/
@@ -158,7 +156,7 @@ def bnEpsMarker (epsStr : String) : String :=
 def fwdEvalEntry (slug epsStr : String) : String :=
   match bnEpsMarker epsStr with | "" => s!"{slug}_fwd_eval" | m => s!"{slug}_fwd_eval_{m}"
 
-/-- The `%wdz` declaration an excluding render needs. ⚠ Emitted only when the flag is on, so at
+/-- The `%wdz` declaration an excluding render needs. Emitted only when the flag is on, so at
     `wdExclude := false` not one byte moves and every committed artifact is untouched. -/
 def wdzConst (wdExclude : Bool) : String :=
   if wdExclude then
@@ -176,8 +174,8 @@ def wdzConst (wdExclude : Bool) : String :=
     runtime scalars `%lr, %bc1, %bc2`, `%aup, %akeep` (accumulation) and `%emad, %oemad` (EMA).
     `ps` is `(%name, type)` per parameter, in signature order.
 
-    ⚠ `G` precedes `E` and never follows it: `[θ|m|v|G|E]` is the order that leaves both single-axis
-    layouts at the index they already occupy. ⚠ `emaSuf` is `"e"` except on the ResNet family, whose
+    `G` precedes `E` and never follows it: `[θ|m|v|G|E]` is the order that leaves both single-axis
+    layouts at the index they already occupy. `emaSuf` is `"e"` except on the ResNet family, whose
     stem BN gamma `%sg` + `e` would be `%sge` — `select_and_scatter`'s block-local name in the
     max-pool backward — so there it is `"ema"` (`ResNet34RenderB.optOne`). -/
 def packedTrainSig (ps : List (String × String)) (acc : Bool := false) (ema : Bool := false)
@@ -210,11 +208,10 @@ def dropMaskSig (B : Nat) (sd : Bool) (idxs : List Nat) : String :=
 -- § Precision-switched constructors: `XAt bf16 rnd …` is `XBf16 rnd …` or `X …`
 -- ════════════════════════════════════════════════════════════════
 
-/-! Every bf16 op is its f32 peer with one extra leading argument, the rounding `rnd`, and every
-renderer used to spell the choice out
-(`if bf16 then .convBf16 (h := h) zrnd … else .conv (h := h) …`, 248 times). `XAt bf16 rnd …`
-is that `if`, once per constructor. `pretty` evaluates it, so the emitted text is exactly the
-chosen branch's — every artifact renders byte-identically. -/
+/-! Every bf16 op is its f32 peer with one extra leading argument, the rounding `rnd`. `XAt bf16
+rnd …` is the `if bf16 then .convBf16 (h := h) zrnd … else .conv (h := h) …` choice, written once
+per constructor instead of at every call site. `pretty` evaluates it, so the emitted text is
+exactly the chosen branch's. -/
 
 /-- `conv`, or its bf16 peer at rounding `rnd` when `bf16`. -/
 @[reducible] def BatchableOp.convAt (bf16 : Bool) {ic oc h w kH kW : Nat}

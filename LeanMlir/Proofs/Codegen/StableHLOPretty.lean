@@ -18,8 +18,10 @@ graph's shape and names only.
 | `*ModuleV`, `linTrainStepFaithfulV` | the chapter 1–3 renderers |
 
 A module that states `den` facts imports `StableHLO` alone; one that renders text imports this.
-**Trusted residue:** the text's lexical conformance to the StableHLO spec is checked by execution
-(`iree-compile` / PJRT) and by the `StableHLOParse` round-trip, not proved. -/
+Trusted: the text `emitTok` prints for each token (operand order and arity, types, the lexical
+syntax) is not proved. scripts/gates/parse_verified_mlir.py parses every committed
+`verified_mlir/*.mlir` as StableHLO, and the trainers execute the artifacts they load under PJRT;
+`StableHLOParse.roundtrip` covers only the token encoding `toToks`, not the text. -/
 
 open Finset BigOperators
 
@@ -34,22 +36,21 @@ def ty (dims : List Nat) : String :=
 def tyI1 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["i1"]) ++ ">"
 
-/-- bf16 tensor-type string, for the `convertF` round node (planning/archive/bf16_renderer.md).
-    Only the round trip uses it today; when a bf16-operand `dot_general` lands (rung 2+)
-    this is the type its operands carry. -/
+/-- bf16 tensor-type string: the `convertF` round node and the operands and results of the
+    bf16 ops (`dotInBf16`, the `…Bf16` convolutions). -/
 def tyBf16 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["bf16"]) ++ ">"
 
-/-- fp8 peer of `tyBf16`. **E4M3 only** — `planning/archive/cifar_lowprec_stability.md` §2.3 measured
-    that `f8E5M2` compiles, lowers to a plain `__cublas$lt$matmul`, and leaves ZERO `f8e5m2`
-    values in the optimized HLO: the type is silently widened away. Only E4M3 reaches the fp8
-    units on sm_89, so there is deliberately no E5M2 spelling here. -/
+/-- fp8 peer of `tyBf16`. **E4M3 only** — `f8E5M2` compiles, lowers to a plain
+    `__cublas$lt$matmul`, and leaves ZERO `f8e5m2` values in the optimized HLO: the type is
+    silently widened away. Only E4M3 reaches the fp8 units on sm_89, so there is deliberately no
+    E5M2 spelling here. -/
 def tyF8 (dims : List Nat) : String :=
   "tensor<" ++ String.intercalate "x" (dims.map toString ++ ["f8E4M3FN"]) ++ ">"
 
 /-- SSA name ↦ the `[c,h,w]` the value bound to that name really carries. See `liftPointwise`.
 
-    ⚠⚠ **Keyed by NAME, not by flat width — and that is not a refinement, it is the whole
+    **Keyed by NAME, not by flat width — and that is not a refinement, it is the whole
     correctness of the table.** A width table collides whenever two layers have the same element
     count, and on the real nets they do: ConvNeXt-T's stage-2 MLP is `1536·14·14 = 301056` and its
     stage-0 block is `96·56·56 = 301056`; stage 3's `3072·7·7` equals stage 1's `192·28·28`. First
@@ -61,7 +62,7 @@ def tyF8 (dims : List Nat) : String :=
     Newest entry first, and no dedup: `fresh` never reuses a name, so a lookup for a value the
     previous token produced hits the head of the list.
 
-    ⚠⚠ The `Bool` is the value's LAYOUT: `true` means this is the map's **row view** `[h·w, c]`
+    The `Bool` is the value's LAYOUT: `true` means this is the map's **row view** `[h·w, c]`
     rather than the map `[c, h, w]`. It is not bookkeeping — it is what makes ConvNeXt's channel-LN
     transparent. That chain is `transpose → lnRow → rowScale → rowBias → transpose`, a layout ROUND
     TRIP whose two ends are the same `[c,h,w]` map; without the flag the closing transpose's result
@@ -74,7 +75,7 @@ abbrev ShapeTbl := List (String × Nat × Nat × Nat × Bool)
 
 /-- Emitter state: the fresh-name counter, plus the name ↦ `[c,h,w]` table.
 
-    ⚠ The table lives in the STATE rather than in a `pretty` argument because a net renderer
+    The table lives in the STATE rather than in a `pretty` argument because a net renderer
     calls `pretty` once per graph FRAGMENT — a conv and the activation that consumes it land in
     different calls — and only the state is threaded across them. -/
 abbrev EmitS := Nat × ShapeTbl
@@ -85,7 +86,7 @@ def fresh : StateM EmitS String := do
 
 /-- **The 3×3/s2 pool's emitted forward text**, given already-freshened names.
 
-    ⚠⚠ It is a shared helper rather than two copies for the reason `sWGradGeom` is (§2f-bis): the
+    It is a shared helper rather than two copies for the reason `sWGradGeom` is: the
     per-example `.maxPool3s2F` and the batched `BatchableOp.maxPool3s2` are two `emitTok` arms
     emitting **one** program, and a window or padding that drifted between them would be a pair of
     renders that agree on every structural check and compute different functions — which is the
@@ -94,7 +95,7 @@ def fresh : StateM EmitS String := do
 
     `window_dimensions = 3, window_strides = 2, padding = [[1,1],[1,1]]` on the spatial axes: He
     et al./torchvision `MaxPool2d(3, stride=2, padding=1)`, window `i` = input `[2i−1, 2i+1]`.
-    ⚠ NOT XLA `'SAME'`, which pads `(0,1)` and slides the grid one input position — the two are
+    NOT XLA `'SAME'`, which pads `(0,1)` and slides the grid one input position — the two are
     different functions everywhere. -/
 def maxPool3s2FwdText (B c h w : Nat) (r xn ninf p o : String) : String :=
   s!"    {xn} = stablehlo.reshape {r} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
@@ -111,12 +112,12 @@ def maxPool3s2FwdText (B c h w : Nat) (r xn ninf p o : String) : String :=
 /-- **The 3×3/s2 pool's emitted backward text**, given already-freshened names. Shared by the
     per-example and batched arms, for `maxPool3s2FwdText`'s reason.
 
-    ⭐ Only the window attributes differ from `maxPoolBack`'s emit — **nothing else** — because
+    Only the window attributes differ from `maxPoolBack`'s emit — **nothing else** — because
     `select_and_scatter`'s scatter region already reduces with `add`, which is exactly the
     accumulation overlapping windows need. The emitter was general enough before the op existed.
 
-    ⚠ `%sa`/`%sb`/`%sc`/`%sd` are hardcoded region block arguments and are therefore RESERVED SSA
-    names (§4): a top-level value of the same name is a redefinition error that surfaces only at
+    `%sa`/`%sb`/`%sc`/`%sd` are hardcoded region block arguments and are therefore RESERVED SSA
+    names: a top-level value of the same name is a redefinition error that surfaces only at
     XLA compile time. -/
 def maxPool3s2BackText (B c h w : Nat) (xN r xr dr z scn o : String) : String :=
   s!"    {xr} = stablehlo.reshape {xN} : ({ty [B, c*(2*h)*(2*w)]}) -> {ty [B,c,2*h,2*w]}\n" ++
@@ -138,7 +139,7 @@ def maxPool3s2BackText (B c h w : Nat) (xN r xr dr z scn o : String) : String :=
 /-- **The stochastic-depth mask input name for ramp index `i`** — the `mName` a `dropPathB` carries,
     and the `tensor<Bxf32>` the signature declares for it.
 
-    ⚠ It lives HERE, beside the emitter, rather than in one net's renderer, because the spelling is
+    It lives HERE, beside the emitter, rather than in one net's renderer, because the spelling is
     load-bearing in three places that must agree and only one of them is Lean: `dropPathP`'s emit
     reads it as an operand, every SD render's signature declares it, and
     **`scripts/probes/misplace_drop_sites.py` matches `%dp\d+` textually** to build the placement control.
@@ -150,12 +151,12 @@ def dpName (i : Nat) : String := s!"%dp{i}"
 /-- **The classifier-dropout mask input name** — the `mName` a `dropoutB` carries, and the
     `tensor<B×n×f32>` the signature declares for it.
 
-    ⚠⚠ **IT IS DELIBERATELY NOT `%dp{i}`-SHAPED, and that is not cosmetic.**
+    **IT IS DELIBERATELY NOT `%dp{i}`-SHAPED, and that is not cosmetic.**
     `scripts/probes/misplace_drop_sites.py` builds the stochastic-depth placement control by matching
     `%dp\d+` textually; a dropout input spelled `%dp9` would be swept into that rewrite, silently
-    changing a control's meaning on a render it was never written for. Handoff §0.11 records the
-    other half of this hazard on ViT — a control that quietly does nothing reads exactly like a
-    control that ran — and the cheap defence is a name the SD tooling cannot match.
+    changing a control's meaning on a render it was never written for. A control that quietly
+    does nothing reads exactly like a control that ran, and the cheap defence is a name the SD
+    tooling cannot match.
     `grep -c '%do' verified_mlir/*.mlir` is 0 across every committed artifact. -/
 def doName : String := "%do"
 
@@ -227,8 +228,8 @@ inductive Raw where
   | momVNextF (v mu : String) (ds : List Nat) : Raw → Raw
   | momParamF (θ v mu lr : String) (ds : List Nat) : Raw → Raw
   | rmsBufNextF (sq buf rho orho mu eps : String) (ds : List Nat) : Raw → Raw
-  -- Global-norm grad clip. `gradClipFacF` keeps only its two literal strings (the ℝs are
-  -- denotation-only, as everywhere in `Raw`); `clipScaleF`/`addScalarF` are BINARY.
+  -- Global-norm grad clip. `clipScaleF` keeps only its two literal strings (the ℝs are
+  -- denotation-only, as everywhere in `Raw`); `gradSumSqAccF`/`clipScaleF`/`lambScaleF` are BINARY.
   | gradSumSqAccF (ds : List Nat)                            : Raw → Raw → Raw
   | clipScaleF    (clipStr epsStr : String) (ds : List Nat)  : Raw → Raw → Raw
   | lambDirF (θ m v b1 ob1 b2 ob2 bc1 bc2 eps wd : String) (ds : List Nat) : Raw → Raw
@@ -1056,7 +1057,7 @@ def lookupShape (tbl : ShapeTbl) (nm : String) : Option (Nat × Nat × Nat) :=
 /-- The `[c,h,w]` an op's INPUT and OUTPUT activations carry, when it has them. Strided and
     pooled tags carry their **output** spatial dims, so the input side is `2h × 2w`.
 
-    ⚠⚠ Each batched tag and its per-example peer MUST answer IDENTICALLY. The two renders are tied
+    Each batched tag and its per-example peer MUST answer IDENTICALLY. The two renders are tied
     byte for byte ([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean), `convnext-fwd-b-tie`), so a shape one path
     knows and the other does not is a `liftPointwise` that fires on one side only — a tie failure
     with no wrong answer anywhere to point at. Add tags in pairs. -/
@@ -1184,7 +1185,7 @@ private def transposeMN (t : Tok) : Option (Nat × Nat) :=
     after it was emitted. Called from `serializeToks`, so no `emitTok` arm has to know about the
     table — which is what keeps the 94 arms free of it.
 
-    ⭐ Three cases, and the first two exist only for the channel-LN round trip: a transpose FLIPS
+    Three cases, and the first two exist only for the channel-LN round trip: a transpose FLIPS
     the layout flag when its `(m,n)` match the operand's `[c,h,w]` (and records nothing when they
     do not, e.g. ViT's attention transposes, which are not maps at all), and the row ops carry it
     through unchanged. Everything else reads its shapes off the tag. -/
@@ -1217,12 +1218,12 @@ def noteTokShapes (t : Tok) (before after : List String) : StateM EmitS Unit := 
     `k` receives the (possibly unflattened) input name and the dims to type its ops with, and
     returns `(text, result name)`.
 
-    ⚠ The `c*h*w == n` guard is what keeps a mismatched entry from emitting an ill-typed reshape
+    The `c*h*w == n` guard is what keeps a mismatched entry from emitting an ill-typed reshape
     rather than merely a suboptimal one. It cannot fire today — an entry is written by the token
     that produced the name — and it is the difference between a missed optimisation and a render
     that does not parse, so it stays.
 
-    ⭐ The block's own RESULT is recorded too, which is what lets a pointwise CHAIN stay 4-D: the
+    The block's own RESULT is recorded too, which is what lets a pointwise CHAIN stay 4-D: the
     value crossing the token boundary keeps its flat type, so without this the second op in a
     swish→multiply→add chain would find nothing for its operand and drop back to flat. -/
 def liftPointwise (B n : Nat) (r : String)
@@ -1361,9 +1362,10 @@ def seBlockSavedNames (k0 : Nat) : String × String × String × String :=
 -- trips 400000); 5× leaves room for new arms. Nothing else in the file needs a bump.
 set_option maxHeartbeats 1000000 in
 /-- Render one token: pop its operands' result-names off the stack, emit its
-    StableHLO line(s), push its fresh result name. The per-op StableHLO *syntax*
-    here is the audited lexical boundary (validated by `iree-compile` + GPU run);
-    the *structure* it consumes is the proven-faithful token stream. -/
+    StableHLO line(s), push its fresh result name. The text each arm prints (operand order
+    and arity, types, syntax) is trusted, checked by parsing and running the committed
+    artifacts; the token stream it consumes is `toToks (skel g)`, whose encoding round-trips
+    (`StableHLOParse.roundtrip`). -/
 def emitTok (B : Nat) : Tok → List String → StateM EmitS (String × List String)
   | .operand nm _, st => pure ("", nm :: st)
   | .dotIn w m n, r :: st => do
@@ -4514,7 +4516,7 @@ def serializeToks (B : Nat) : List Tok → (String × List String) → StateM Em
     `convBias := false` no bias SGD op is emitted, so the slot must LEAVE the list rather than carry
     the empty string the `if convBias then … else pure ("", "")` idiom hands back.
 
-    ⚠ This exists because leaving it in is **silent twice over**. An empty name renders
+    This exists because leaving it in is **silent twice over**. An empty name renders
     `return %a, , %b` — malformed text, but only the lowerer ever sees it; and the name list keeps
     its FULL length, so an arity `#guard` on the signature still passes. Measured on the first swap
     attempt: `mobilenetv2_train_step` at `convBias := false` returned 210 names (52 of them empty)
@@ -4544,11 +4546,11 @@ def fmt6 (x : Float) : String :=
 
 /-- Fixed-12-decimal float literal, for constants `fmt6` would destroy.
 
-    ⚠ It exists because `fmt6` is not a formatting preference, it is a PRECISION CEILING, and small
+    It exists because `fmt6` is not a formatting preference, it is a PRECISION CEILING, and small
     derived constants fall straight through it. Gradient accumulation's second-moment coefficient is
     `(1−β₂)/K²`; at K = 4 that is `6.25e-5`, which `fmt6` emits as `0.000063` — **0.8% wrong**, in a
-    baked literal, in the optimizer, where nothing downstream would question it. Same class as §2k's
-    hardcoded `0.010000` label-smoothing mass. `fmt6` stays the default so every committed artifact
+    baked literal, in the optimizer, where nothing downstream would question it. Same class as a
+    hardcoded `0.010000` label-smoothing mass (see `alphaOverK`). `fmt6` stays the default so every committed artifact
     re-renders byte-identically; this is for constants that need the room. -/
 def fmt12 (x : Float) : String :=
   let neg := x < 0.0
@@ -4560,14 +4562,11 @@ def fmt12 (x : Float) : String :=
 
 /-- **The label-smoothing mass per class, α/K.** α = 0.1 throughout; K is `nClasses`.
 
-    ⚠ **This was hardcoded `0.010000` — correct at K = 10 and WRONG at every other K**, and it sat
-    in the COTANGENT, not just in the report-only `%loss`. At `nClasses = 1000` it made the smoothing
-    term 100× too large: it removes 10.0 of probability mass instead of 0.1, i.e. a different
-    objective, silently. Caught 2026-07-30 by the first ImageNet smoke run reporting loss ≈ 87 where
-    1000-class CE at init must be ≈ ln(1000) = 6.9 — the number was implausible, and that is the only
-    reason it surfaced. Nothing in the repo's proofs covers it: `α` is a *literal in emitted text*,
-    which is exactly the carve-out class §5 says needs its own numeric check, and §2b's `%loss` bug
-    is the standing precedent for it going wrong unnoticed. -/
+    Derived from `nClasses`, not written as a literal: a hardcoded `0.010000` is correct at K = 10
+    and wrong at every other K, and it sits in the COTANGENT, not just in the report-only `%loss`.
+    At `nClasses = 1000` it would make the smoothing term 100× too large — a different objective,
+    silently. Nothing in the repo's proofs covers it: `α` is a *literal in emitted text*, so it
+    needs its own numeric check. -/
 def alphaOverK (nClasses : Nat) (alpha : Float := 0.1) : String :=
   fmt6 (alpha / nClasses.toFloat)
 
@@ -4576,21 +4575,19 @@ def alphaOverK (nClasses : Nat) (alpha : Float := 0.1) : String :=
 def oneMinusAlpha (alpha : Float := 0.1) : String := fmt6 (1.0 - alpha)
 
 /-- **`1 − ρ`, the RMSProp mean-square mixing weight.** Derived from ρ, never written as a second
-    literal beside it — the `oneMinusAlpha` precedent, and the K-constant lesson (§2k): *any
+    literal beside it — the `oneMinusAlpha` precedent, and the K-constant lesson: *any
     emitted constant that depends on a hyperparameter must be DERIVED*, because the copy is what
-    gets left behind when the original moves. Five copies of one label-smoothing constant were
-    found across four nets in a single session for exactly this reason. -/
+    gets left behind when the original moves. -/
 def oneMinusRho (rho : Float) : String := fmt6 (1.0 - rho)
 
 /-- Which optimizer tail a whole-net render emits. `.adamw` is every net's committed default and
     reproduces the existing artifacts byte-identically; `.rmsprop` is what the MobileNetV2 and
-    EfficientNet ImageNet references actually use (`planning/archive/recipe_gaps.md` v1.2).
+    EfficientNet ImageNet references actually use.
 
     Lives here rather than in either renderer because **both** need it: a per-net copy of a
     two-constructor choice is the double-writer disease one level down, in code — the same argument
-    `vitBackAll`/`enetBackAll` exist for (§2a-quater). Each renderer threads it through ONE
-    traversal, so gate 1 applies for free: at `.adamw` every committed artifact must re-render
-    byte-identical. -/
+    `vitBackAll`/`enetBackAll` exist for. Each renderer threads it through ONE
+    traversal. -/
 inductive OptKind where
   | adamw
   | rmsprop
@@ -4604,7 +4601,7 @@ structure RmsHyper where
   rho : Float := 0.9
   /-- `momentum` — μ for the buffer on the normalised gradient. -/
   mu  : Float := 0.9
-  /-- `rmspropEps` — ⚠ emitted INSIDE the square root (TensorFlow), not added to the root. -/
+  /-- `rmspropEps` — emitted INSIDE the square root (TensorFlow), not added to the root. -/
   eps : Float
   /-- COUPLED L2 (folded into the gradient), not AdamW's decoupled decay. -/
   wd  : Float
@@ -4643,11 +4640,11 @@ def enetRmsHyper : RmsHyper := { eps := 1.0e-3, wd := 1.0e-5 }
 #guard oneMinusRho 0.9 == "0.100000"
 #guard fmt6 (0.9 : Float) == "0.900000"
 
-/-- **`pretty`** — render an `SHlo` graph to StableHLO, now defined as
-    `serialize ∘ toToks ∘ skel`: tokenize the graph (postorder), then print the
-    tokens. The emitter shares ONE structured form with the parser, so the
-    round-trip `parse (toToks (skel a)) = skel a` (StableHLOParse.lean) is about
-    the very tokens this prints — the printer can't structurally drift. -/
+/-- **`pretty`** — render an `SHlo` graph to StableHLO as `serializeToks ∘ toToks ∘ skel`:
+    tokenize the graph (postorder), then print the tokens. The tokens it prints are exactly
+    `toToks (skel g)`, whose encoding `StableHLOParse.roundtrip` shows is invertible; how each
+    token becomes text (`emitTok`) is trusted. A stack that does not end with one name returns
+    `"%MALFORMED"` as the result name. -/
 def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM EmitS (String × String) := do
   let toks := toToks (skel g)
   let (code, st) ← serializeToks B toks ("", [])
@@ -4678,10 +4675,9 @@ def pretty (B : Nat) {k : Nat} (g : SHlo k) : StateM EmitS (String × String) :=
     concrete rounding here would be claiming the emitter knows about it, which it does not. -/
 abbrev zrnd : ℝ → ℝ := fun r => r
 
-/-- **The cross-replica gradient mean as `pretty` of the `allReduceMeanF` node** — the drop-in
-    for `ViTRender.emitGradAllReduce` in every batched render (4d piece 2, 2026-09-07), measured
-    byte-identical on every committed `*dp*` artifact. At `replicas ≤ 1` it emits nothing and
-    threads the gradient's name, exactly as the text function did. The `R` operand graphs are
+/-- **The cross-replica gradient mean as `pretty` of the `allReduceMeanF` node**, used by every
+    batched data-parallel render. At `replicas ≤ 1` it emits nothing and threads the gradient's
+    name. The `R` operand graphs are
     all `.operand grad` at a zero placeholder, because a render is value-independent — `skel`
     erases values — while the family is what `den` sums over in the tie. -/
 def prettyAllReduceMean (grad : String) (ds : List Nat) (t : String) (replicas : Nat) :
@@ -4694,7 +4690,7 @@ def prettyAllReduceMean (grad : String) (ds : List Nat) (t : String) (replicas :
     and the decoupled-decay `adamWParamF` on the gradient `grad`, reading the graph constants
     `adamWConsts` binds, the step's `%bc1`/`%bc2`/`%lr`, and the decay operand `wdName` (`"%wdz"` for
     a timm no-decay parameter). Returns `(code, θ', m', v')`; every batched renderer's AdamW tail is
-    this. ⚠ `wdName` and `den`'s `wd` must move together: both are 0 here only because every ℝ slot
+    this. `wdName` and `den`'s `wd` must move together: both are 0 here only because every ℝ slot
     is a placeholder the emit ignores; if that changes, a no-decay site must pass `wd := 0` as well
     as `%wdz`, or the artifact and the denotation describe different optimizers. -/
 def prettyAdamW (B : Nat) (nm : String) (ds : List Nat) (grad : String) (wdName : String := "%wd") :

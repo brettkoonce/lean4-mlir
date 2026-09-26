@@ -28,19 +28,17 @@ namespace Proofs.StableHLO
 
 /-! ## The batched index: why every `N` below is `B`, not 1
 
-This renderer used to build the graph at the **batch-unit** index `N = 1` and let `pretty B` supply
-the real batch. That was a disclosed convention, and it was sound for the ops where the batch is a
-*parallel* index — `batchOp`'s `den` is `batchMap N (denOp op)`, which at `N = 1` is the per-example
-op, exactly what the emit applies across the batch. It was **not** sound for the ops where the batch
-is a *reduction* axis, and there are ten of those in this graph: `bnBatchF` and `bnBatchBack` reduce
-μ/var over `[0,2,3]`, and the whole `*SgdB` param family (`bnGammaSgdB`, `bnBetaSgdB`,
-`dense{Weight,Bias}SgdB`, `conv{,Strided}WeightSgdB`, `depthwise{,Strided}WeightSgdB`) sums the
-per-example gradient over `Fin N`. At `N = 1` each of those `den`s describes a ONE-EXAMPLE function
-while the emitted text reduces over all `B` — the node and its render were different functions, the
-op-level form of the two-writers bug.
+Building the graph at the **batch-unit** index `N = 1` and letting `pretty B` supply the real
+batch would be sound for the ops where the batch is a *parallel* index — `batchOp`'s `den` is
+`batchMap N (denOp op)`, which at `N = 1` is the per-example op, exactly what the emit applies
+across the batch. It is **not** sound for the ops where the batch is a *reduction* axis:
+`bnBatchF` and `bnBatchBack` reduce μ/var over `[0,2,3]`, and the whole `*SgdB` param family
+(`bnGammaSgdB`, `bnBetaSgdB`, `dense{Weight,Bias}SgdB`, `conv{,Strided}WeightSgdB`, `depthwise{,Strided}WeightSgdB`) sums the
+per-example gradient over `Fin N`. At `N = 1` each of those `den`s would describe a ONE-EXAMPLE
+function while the emitted text reduces over all `B`.
 
-The fix is to put the whole graph at `N := B`, where those `den`s are honest. What blocked that was
-not the batch-coupled ops (their emitters discard `N` and use `B`, so they render identically at any
+So the whole graph sits at `N := B`, where those `den`s are honest. The obstacle there is not the
+batch-coupled ops (their emitters discard `N` and use `B`, so they render identically at any
 `N`) but the *pointwise* ones: `swishF`/`swishBack`/`sigmoidBack`/`addV`/`sub` carry only the SHlo
 index and emit `tensor<B×n>` from it, so at the batched index `N·s` they emit `tensor<B×(N·s)>` —
 which does not even typecheck against its own operand. Hence the batched forms, which all separate
@@ -58,10 +56,9 @@ the batch `N` from the per-example emit width `n`:
 `softmaxRow`'s `m` and `denseRowBack`'s `rows` are NOT the batch — they are rows per example (ViT
 uses `m := 197` tokens; a classifier head has one logit row), and they stay 1 here.
 
-The artifact is byte-identical across this change, which is what proves the EMIT side
-behaviour-preserving. It cannot witness the `den` side — the render is value-independent, so a
-descriptor holding the wrong saved activation would render exactly the same bytes. That half is
-carried by the `rfl` faithfulness theorems in `StableHLO.lean`. -/
+The emitted text does not depend on `N`, and it cannot witness the `den` side — the render is
+value-independent, so a descriptor holding the wrong saved activation would render exactly the
+same bytes. That half is carried by the `rfl` faithfulness theorems in `StableHLO.lean`. -/
 
 /-- Saved forward SSA names a block's backward + SGD passes reference. -/
 structure EFwd where
@@ -120,8 +117,7 @@ a byte-PREFIX of its `*SgdB` peer's, the tail being exactly the const-lr / multi
 
 These six helpers are what let ONE backward traversal serve both renders. The alternative — a second
 copy of the 16-MBConv backward for AdamW — is the double-writer disease one level down, in code
-rather than in artifacts, and it is how `efficientnet_train_step` ended up with two emitters
-computing different functions in the first place (§2a-quinquies).
+rather than in artifacts: two emitters for one step that can compute different functions.
 
 `lrStr` is threaded but unused in `adam` mode: the AdamW render's learning rate is the runtime
 `%lr` argument, not a baked literal. The placeholder values are irrelevant either way — `skel`
@@ -224,8 +220,8 @@ private def dnB (adam : Bool) (B c : Nat) (bName lrStr dy : String) : StateM Pro
 /-- **SE forward** on `c` channels at `hh×ww`, reduce dim `r`: one fused `seBlock`, whose text
     computes the squeeze (GAP), reduce dense (`W₁`), swish and excite dense (`W₂`) on the way to the
     gate. Their SSA names (`seBlockSavedNames`) are the activations the SE backward reads, so the
-    forward computes the SE once — it is `pretty` of the T2 graph's `seBlock` node — rather than a
-    second, un-fused copy beside it (the render did that until 2026-09-24).
+    forward computes the SE once — it is `pretty` of the typed graph's `seBlock` node — rather than
+    a second, un-fused copy beside it.
     Returns `(code, s, e1, z, e2, seOut)`. -/
 def seFwd (B c hh r : Nat) (p drName : String) :
     StateM Proofs.StableHLO.EmitS (String × String × String × String × String × String) := do
@@ -295,7 +291,7 @@ def enetDropTotal : Nat := 16
     `i` at each `eFwd` call site, and the driver reads it to know how many scales to supply and at
     which ramp index. The two routes fail LOUDLY if they disagree — an entry with no call site
     leaves an unused input (arity mismatch at the driver), and a call site with no entry emits an
-    undeclared `%dp<i>` (rejected by the lowerer). Neither is silent, which is the §2m property. -/
+    undeclared `%dp<i>` (rejected by the lowerer). Neither is silent. -/
 def enetDropIdxs : List Nat := [2, 4, 6, 7, 9, 10, 12, 13, 14]
 
 /-- The number of per-example drop-path scale inputs a stochastic-depth render takes. -/
@@ -313,7 +309,7 @@ def enetDropSites : Nat := enetDropIdxs.length
 -- namespace, so every use below is unchanged and no artifact byte moved.
 
 /-- The `%dp<i>: tensor<Bxf32>` inputs, appended to a render's signature when stochastic depth is
-    on. Empty when off, which is what keeps gate 1 byte-identical. -/
+    on. Empty when off. -/
 def enetDropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd enetDropIdxs
 
 -- ── ▶ CLASSIFIER DROPOUT (`recipe_gaps.md` gap C) ─────────────────────────────────────────────
@@ -339,9 +335,9 @@ def enetHeadWidth : Nat := 1280
 /-- The `%do: tensor<B×1280xf32>` input, appended when classifier dropout is on. Empty when off,
     which is what keeps the inertness gate byte-identical.
 
-    ⚠ It goes **after** `enetDropSig`, i.e. dead last in every signature. Two independent reasons,
+    It goes **after** `enetDropSig`, i.e. dead last in every signature. Two independent reasons,
     and the second is the one that bites: a parameter inserted mid-list captures an existing
-    positional slot (the mnv2 `convBias` failure, §2m) and the driver walks these signatures
+    positional slot and the driver walks these signatures
     positionally; and the drop-mask tail is what the DP shim shards by COUNT from the end
     (`n_shard_tail`), so a per-example input placed before them would be counted as one of them. -/
 def enetDropoutSig (B : Nat) (cd : Bool) : String :=
@@ -355,8 +351,8 @@ def enetDropoutSig (B : Nat) (cd : Bool) : String :=
     reduced out of `xin` and `statP` names the slot the train step hands them back in.
 
     This is the ONLY place the two BN worlds are chosen between, which is the point: `@efficientnet_fwd`
-    and `@efficientnet_fwd_eval` come from one traversal, so they cannot be the same net with
-    different normalisation the way `resnet34_fwd` and `resnet34_train_step` were (§2a). -/
+    and `@efficientnet_fwd_eval` come from one traversal, so they cannot differ in anything but
+    the BN mode. -/
 private def bnSiteB (B oc hh ww : Nat) (mode : BnMode) (epsStr gName btName statP xin : String)
     (replicas : Nat := 1) (sync : Bool := false) :
     StateM Proofs.StableHLO.EmitS (String × String × String) := do
@@ -597,7 +593,8 @@ private def eBackStrided (adam : Bool) (B ic mid oc hh kd r : Nat) (epsStr lrStr
          dx := nExb, names := names }
 
 /-- **No-expand MBConv backward** (b1): project back → SE back → depthwise back → dx (block input).
-    8 params (Wd bd gd btd zW1 zb1 zW2 zb2 ... wait, 4 dw + 4 SE + 4 proj = 12). -/
+    12 params at `convBias := true`: depthwise W b γ β, SE W₁ b₁ W₂ b₂, project W b γ β; the two
+    conv biases drop out at `convBias := false` (10). -/
 private def eBackNoExp (adam : Bool) (B ic oc hh kd r : Nat) (epsStr lrStr p xName : String)
     (f : EFwd) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) : StateM Proofs.StableHLO.EmitS EBack := do
@@ -637,9 +634,8 @@ private def eBackNoExp (adam : Bool) (B ic oc hh kd r : Nat) (epsStr lrStr p xNa
 
 /-! Names are stored WITHOUT the leading `%` and shapes as `List Nat` rather than a rendered
 `tensor<…>` string, because the AdamW render needs both forms: `%{nm}`/`%{nm}m`/`%{nm}v` for the
-moment slots, and the raw dimensions for the emitted Adam ops (`adamMNextF`'s `ds`). The SGD
-render's emitted text is unchanged — `ty ds` reproduces exactly the strings that used to be
-stored. -/
+moment slots, and the raw dimensions for the emitted Adam ops (`adamMNextF`'s `ds`); `ty ds`
+renders the type string. -/
 
 private def eSig (p : String) (ic mid oc r kd : Nat) (convBias : Bool) : List (String × List Nat) :=
   -- ⚠ `zb1`/`zb2` are the SQUEEZE-EXCITE biases and STAY: those convs are followed by an
@@ -676,11 +672,10 @@ def enetSig (nClasses : Nat) (convBias : Bool) : List (String × List Nat) :=
     `oc` off the `[t,c,n,s,k]` table, head 1280. One list feeding all four `zeroBiasPrelude` calls,
     so a `convBias := false` render cannot declare the constants in one artifact and not another.
 
-    ⚠ **NOT the SE widths.** SE's two 1×1 convs are followed by an ACTIVATION, not BN, so nothing
-    absorbs their biases and the reference carries them (§2m); they stay real parameters and are
-    never bound to a zero constant. The audit's rule — a rank-1 kind-2 param after a **rank-4**
-    kernel — excludes them because SE's params are rank-2, which is why enet's +21,008 gap closed
-    exactly on the first attempt. -/
+    **NOT the SE widths.** SE's two 1×1 convs are followed by an ACTIVATION, not BN, so nothing
+    absorbs their biases and the reference carries them; they stay real parameters and are
+    never bound to a zero constant. The rule for which biases fold — a rank-1 parameter after a
+    **rank-4** kernel — excludes them because SE's params are rank-2. -/
 def enetBiasWidths : List Nat :=
   [16, 24, 32, 40, 80, 96, 112, 144, 192, 240, 320, 480, 672, 1152, 1280]
 
@@ -701,19 +696,18 @@ structure ENetFwd where
   hn     : String            -- head BN out (= head swish pre-act)
   hr     : String            -- head swish out (= GAP input)
   gap    : String            -- global-average-pool out
-  /-- ⭐⭐ **THE CLASSIFIER'S ACTUAL INPUT** — `gap` with classifier dropout OFF, the `dropoutB`
+  /-- **THE CLASSIFIER'S ACTUAL INPUT** — `gap` with classifier dropout OFF, the `dropoutB`
       output with it ON. It exists as its own field, rather than every consumer reading `gap`,
       because there are TWO consumers and one of them is easy to miss:
 
       * the dense forward, which obviously reads it; and
-      * ⚠⚠ **the dense WEIGHT gradient**, `∂L/∂W = Σ_b dy_b ⊗ (input_b)` — which reads the dense's
+      * **the dense WEIGHT gradient**, `∂L/∂W = Σ_b dy_b ⊗ (input_b)` — which reads the dense's
         input, i.e. the DROPPED activation, not the pooled one.
 
       Feeding `dnW` the undropped `gap` type-checks, trains, descends, and is wrong on the one
       parameter dropout acts through. It is invisible to every ones-mask gate this feature has,
-      because at `mask ≡ 1` the two values are equal. That is handoff §0.10's LayerScale-γ defect
-      in the same shape, and the reason it is a named field is the carry-forward that record asks
-      for: *when an op is spliced into a chain, list every consumer of the value it displaced.* -/
+      because at `mask ≡ 1` the two values are equal. It is a named field so that every consumer
+      of the value dropout displaces reads it by name. -/
   cin    : String            -- dense input (= gap, or the dropout output when cd is on)
   logits : String            -- dense out
   /-- The 49 BN layers as `(BN-input SSA, stat prefix, channels, spatial side)`, stem → blocks in
@@ -908,8 +902,8 @@ def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias 
 
     One traversal, two tails, for the reason `ViTRender.vitBackAll` has the same shape: duplicating
     the 16-MBConv backward for AdamW would be the double-writer disease one level down, in code
-    rather than in artifacts — and two emitters for `efficientnet_train_step` computing *different*
-    functions is exactly what §2a-quinquies found.
+    rather than in artifacts, with two emitters for `efficientnet_train_step` free to compute
+    *different* functions.
 
     The gate on that claim is cheap and exact: `efficientnet_train_step.mlir` must come back
     **byte-identical**. It does, because `pretty`'s fresh-name counter only advances on nodes that
@@ -923,7 +917,7 @@ def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias 
 
     The forward half is `enetFwdChain` at `.train`, which `@efficientnet_fwd` also renders — so the
     forward this differentiates and the forward the driver evals with are one graph by
-    construction, not by inspection (§2a). -/
+    construction, not by inspection. -/
 private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
     (smooth : Option (String × String × String) := none) (convBias : Bool := false)
     (sd : Bool := false) (cd : Bool := false) (bf16 : Bool := false)
@@ -1059,8 +1053,9 @@ private def enetBackAll (B nClasses : Nat) (epsStr lrStr : String) (adam : Bool)
 
     The cotangent is plain `softmax − onehot` with the batch mean folded into `lrStr` — so the
     committed `lrStr = 0.05` is an effective **1.6** on the mean loss. That is a tuned value, not a
-    slip (`runs/efficientnet_verified_crop_gpu1.log`: 40.6% → 87.81% over 80 epochs, matching
-    README's 87.58%); the AdamW render below spells the mean explicitly instead. -/
+    slip; the AdamW render below spells the mean explicitly instead. -/
+-- Evidence for the tuned lr: runs/efficientnet_verified_crop_gpu1.log, val accuracy 40.63% after
+-- epoch 1, 87.65% after epoch 80, peak 87.81% at epoch 79.
 def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     (funcName : String := "efficientnet_train_step") (convBias : Bool := false) : String :=
   let go : StateM Proofs.StableHLO.EmitS String := do
@@ -1090,8 +1085,7 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     `@efficientnet_<variant>_train_step`, and `LEAN_MLIR_VARIANT` selects it.
 
     All three must agree, or the shim refuses the call outright ("entry mismatch") rather than
-    running the wrong graph — which is exactly what it did the first time R34's DP render kept the
-    single-device name (§2b-quater). Deriving the name here is what stops it drifting from the
+    running the wrong graph. Deriving the name here is what stops it drifting from the
     `#eval` paths below; the `#guard`s at the bottom pin those literal paths against this function.
 
     `B = 32` is deliberately unsuffixed, so the two existing artifacts keep their names and bytes.

@@ -1,18 +1,18 @@
 import LeanMlir.Proofs.Nets.ViT.ViTMultiHead
 import LeanMlir.Proofs.Codegen.RenderKit
 
-/-! # ViT-Tiny train step rendered from the verified AST (the §1 render) — FORWARD portion
+/-! # ViT per-example render: forward, backward traversal, SGD step, AdamW tail
 
-The ViT peer of `ConvNeXtRender`: the full depth-12 ViT-Tiny forward rendered as
-`pretty` of the verified multi-head vector-LN graph (`vitBlockGraphMHV` × 12 + patch embed + final
-vector-LN + CLS-slice dense head). The committed [`LeanMlir/ViTRender.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/ViTRender.lean) is a hand-written String
-emitter (faithful per-op, NOT `pretty(provenGraph)`); this renders the SAME forward as `pretty` of the
-proven `SHlo` graph, so `den(graph) = vitForward` (via `vitFwdGraphKMHV_faithful`, at depth 12).
+The ViT peer of `ConvNeXtRender`. It holds the per-example ViT-Tiny forward chain rendered as
+`pretty` of the multi-head vector-LN graph (patch embed, `vDEPTH` = 12 `vitBlockGraphMHV` blocks,
+final vector-LN, CLS-slice dense head; `vitFwdRenderV`), whose graph denotes `vitForwardKV` at
+depth 12 (`vitFwdGraphKMHV_faithful`, stated for every depth); the shared backward traversal `vitBackAll`; the SGD-inline
+step `vitTrainStepRenderV`; the AdamW tail `vitAdamTrainStepFaithful`, which `ViTRenderB` reuses;
+and the parameter list `vitParamSig`. It writes one artifact, `verified_mlir/vit_train_step.mlir`,
+the step `ViTStepTie` is stated at; every other ViT artifact is written by `ViTRenderB`.
 
 Render is value-independent (`skel` erases the `ℝ`/`Mat`/`Vec` fields), so placeholders (`0`, zero
-mats/vecs) are passed; the emitted `epsStr`/`sStr` literals carry the real ε / SDPA-scale. This file
-is the FORWARD half of the §1 train-step render; the backward-cotangent chain (via the `*Back` ops)
-+ the param-SGD tail (`veclnGammaSgd`/`patchEmbedWeightSgd`/`denseWeightSgdB`/`denseBiasSgdB`) follow.
+mats/vecs) are passed; the emitted `epsStr`/`sStr` literals carry the real ε / SDPA-scale.
 
 ViT-Tiny: ic=3, 224², patch 16×16/s16 (N=196 patches, 197 tokens), D=192 = 3 heads × 64, MLP 768,
 12 blocks, `nClasses` classes (10 as committed), BS=32, ε=1e-5, SDPA scale = 1/√64 = 0.125. -/
@@ -32,7 +32,7 @@ def vDEPTH : Nat := 12
 /-- **The width knobs of a ViT.** Was six `private def` constants pinned at ViT-Tiny; a record
     so one renderer serves Ti/S/B instead of one size per file.
 
-    ⭐ `d` and `tok` are DERIVED, not stored, and that is what keeps the bodies unchanged.
+    `d` and `tok` are DERIVED, not stored, and that is what keeps the bodies unchanged.
     `d = heads * hd` definitionally, so the places the old code wrote `vbD` and the places it
     wrote `vbH * vbHd` (the head-slice operand types) are still the same type with no rewriting
     and no `Nat` lemma. Stored as a field with a `heads * hd = d` proof they would only be
@@ -109,7 +109,7 @@ def vitDropSites : Nat := 2 * vitDropTotal
 
 /-- **The mask-input ordinal of block `i`'s branch `br`** (`br = 0` attention, `1` MLP). The single
     source for the numbering: the forward walks blocks upward, the backward downward, and both call
-    this. ⚠ Distinct from the RAMP index, which is `i` for BOTH branches. -/
+    this. Distinct from the RAMP index, which is `i` for BOTH branches. -/
 def vitSiteIdx (i br : Nat) : Nat := 2 * i + br
 
 /-- The ramp index of a site ordinal — the inverse direction, used by the driver's keep table. -/
@@ -243,8 +243,8 @@ def blkArgSig (i : Nat) (V : VitDims := vitTiDims) : String :=
      s!"%b{i}_Wfc2: {ty [m,d]}", s!"%b{i}_bfc2: {ty [d]}"]
 
 /-- **ViT-Tiny depth-12 forward rendered ENTIRELY from the verified AST.** Every line is `pretty` of a
-    verified `SHlo` node; `den(graph) = vitForward` by `vitFwdGraphKMHV_faithful` (at depth 12). The
-    output is the `[BS,10]` logits. (FORWARD half of the §1 train-step render.) -/
+    verified `SHlo` node; `den(graph) = vitForwardKV` by `vitFwdGraphKMHV_faithful` (at depth 12).
+    The output is the `[BS,10]` logits. -/
 def vitFwdRenderV (funcName : String := "vit_fwd") (bs : Nat := 32)
     (nClasses : Nat := 10) : String :=
   let (body, sv) := (vitFwd12 bs nClasses).run' (0, [])
@@ -482,11 +482,10 @@ def vitBackAll (bs : Nat) (nClasses : Nat) (lrStr : String) (adam : Bool)
 /-- The 200 parameter `(name, shape)` pairs in func-arg order — the single source for the argument
     signature, the return types, and (in the AdamW render) the `%<nm>m`/`%<nm>v` moment slots.
 
-    `nClasses` is a real parameter as of 2026-07-31: it was the literal 10 here and in ~28 other
-    places, which pinned the whole render to Imagenette and blocked the matched pair with
-    [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean) (a 1000-class ViT-Tiny that already exists).
+    `nClasses` is a parameter here, which the matched pair with
+    [`jax/MainVitImagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainVitImagenet.lean) (a 1000-class ViT-Tiny) needs.
 
-    ⚠ `V` is TRAILING and defaulted to ViT-Tiny, for the same reason `vbB` is: every existing
+    `V` is TRAILING and defaulted to ViT-Tiny, for the same reason `vbB` is: every existing
     call site is untouched and every committed artifact re-renders byte-identically. -/
 def vitParamSig (nClasses : Nat := 10) (V : VitDims := vitTiDims) : List (String × List Nat) :=
   let d := V.d; let m := V.m; let tok := V.tok
@@ -521,16 +520,16 @@ def vitParamSig (nClasses : Nat := 10) (V : VitDims := vitTiDims) : List (String
 
 /-- **Does this parameter get weight decay?** The renderer's half of the timm rule.
 
-    ⚠ It keys the positional embedding by NAME where the reference keys it by SHAPE
+    It keys the positional embedding by NAME where the reference keys it by SHAPE
     (`p.shape == _WD_POS_SHAPE`), and that is deliberate rather than a transcription slip: the
     reference walks an unnamed pytree and has nothing else to key on, while a shape test here
     would also exclude any *other* param that happened to be 197×192. The name is the more precise
     identifier when you have one. `#guard`s below pin the resulting counts against the reference's
     own, which is what stops the two readings drifting.
 
-    ⚠ The rule reads the RANK, and rank is the one thing that survives the layout difference
+    The rule reads the RANK, and rank is the one thing that survives the layout difference
     between the two sides — the render carries `Wfc1` as `[192,768]` where the reference has
-    `(768,192)`. Both are 2-D, so both decay. Measured, not assumed (§4's one-layout rule). -/
+    `(768,192)`. Both are 2-D, so both decay. -/
 def vitWdDecays (nm : String) (ds : List Nat) : Bool := ds.length ≥ 2 && nm != "pos"
 
 /-- The decayed / excluded split, as the renderer computes it. -/
@@ -552,7 +551,7 @@ def vitWdCounts (nClasses : Nat := 10) : Nat × Nat :=
 #guard vitWdDecays "wConv" [192,3,16,16] == true -- patch embed, 4-D
 #guard vitWdDecays "Wq" [192,192] == true
 
-/-- **ViT-Tiny depth-12 train step rendered ENTIRELY from the verified AST** — the §1 backward render.
+/-- **ViT-Tiny depth-12 SGD train step rendered ENTIRELY from the verified AST.**
     Forward (`vitFwd12`) → softmax-CE cotangent (`softmax(logits) − onehot`, the `lossCotGraph` form) →
     head-dense back (`dotOut` + `weightSgd`/`biasSgd`) → `clsPadF` → final-LN back (`vlnBack`) → 12×
     `vBlockBack` (reversed, cotangent threaded) → patch-embed back (`patchEmbedWeightSgd`/`patchEmbedBiasSgd`
@@ -599,12 +598,12 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     So the `#guard`s at the bottom of this file are what tie the literals to this function; the
     contract is checked at `lake build` rather than merely described.
 
-    ⚠ ViT's spelling breaks the "the number is the per-device batch" convention at 4 replicas
+    ViT's spelling breaks the "the number is the per-device batch" convention at 4 replicas
     (`adamdp32x4`, `adamdp128x4`) and that is deliberate — `vit_adamdp_train_step.mlir` is a
     COMMITTED 2-replica artifact at bs32, so a 4-replica render reusing `adamdp` would give one path
     two writers computing different graphs. Encoded here so the exception cannot be forgotten.
 
-    ⚠ **The `ema` marker LEADS.** `trainAdamSched` keys its 4-region `[θ|m|v|ema]` blob off
+    **The `ema` marker LEADS.** `trainAdamSched` keys its 4-region `[θ|m|v|ema]` blob off
     `variant.startsWith "ema"`, so a trailing marker would silently select the 3-region layout for a
     4-region graph — every parameter misaligned. And note what that cost on EfficientNet: its
     RMSProp+EMA variant is `emarms`, which does **not** start with `"rms"`, so the mean-square would
@@ -644,16 +643,16 @@ def vitAdamVariant (bs : Nat := 32) (replicas : Nat := 1) (ema : Bool := false)
 
 /-- β₁/β₂/ε/wd as graph constants — the ViT-Tiny AdamW recipe (`vitTinyConfig`: lr 3e-4, wd 1e-4).
 
-    ⚠ **`wdStr` is a parameter because the two ViT configs DISAGREE ON IT BY 500×**, and that was
+    **`wdStr` is a parameter because the two ViT configs DISAGREE ON IT BY 500×**, and that was
     found while gating `wdExcludeNormBias` rather than by reading the configs: `vitTinyConfig`
     (Imagenette) sets `weightDecay := 1e-4`, which is the literal this file baked for every ViT
     render — but **`vitTinyImagenetConfig` sets 0.05**, the DeiT value. So an ImageNet render at
     the baked default trains at 1/500th of its reference's decay. It is the RenderCifar8Sgd02 /
-    EfficientNet-16× shape (§2a-quater): a silently wrong hyperparameter in a committed artifact,
+    EfficientNet-16× shape: a silently wrong hyperparameter in a committed artifact,
     which compiles, runs and descends. The default is unchanged, so every existing artifact keeps
     its bytes; only the ImageNet `wx` render passes 0.05.
 
-    ⚠ **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4** and are not touched here —
+    **`vitin_adam128` and `vitin_adamdp128x4` are STILL at 1e-4** and are not touched here —
     changing them is a separate call with its own blast radius (the DP peer, the residency-gate
     row). Recorded as owed in `recipe_gaps.md` rather than fixed in passing. -/
 private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001") : String :=
@@ -675,14 +674,14 @@ private def vitAdamConsts (wdExclude : Bool := false) (wdStr : String := "0.0001
     smoothing, so the two are different functions and this parameter is not optional.
 
     Interface: 605 in (`%x`, 200 θ, 200 m, 200 v, `%lr`/`%bc1`/`%bc2`, `%onehot`) / 603 out
-    (200 θ', 200 m', 200 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
-    render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged.
+    (200 θ', 200 m', 200 v', `%loss`/`%bc1`/`%bc2`), the packed `[θ|m|v]` layout the AdamW trainer
+    reads. Hand-written text besides the signature and constants: the report-only `%loss` and the
+    `%bc1`/`%bc2` passthroughs.
 
-    At `ema := true` (`planning/archive/ema.md`) the blob gains a **fourth region** and the scalar tail goes
+    At `ema := true` the blob gains a **fourth region** and the scalar tail goes
     3 → 5, so the interface becomes **807 in / 805 out** = 605/603 + 200 (the shadow) + 2
-    (`%emad`/`%oemad`). ⚠ `ema` is LAST in this signature on purpose: inserted mid-list it would
-    capture an existing positional argument at every call site, which is the mnv2/enet `convBias`
-    lesson (§2m). -/
+    (`%emad`/`%oemad`). `ema` is LAST in this signature on purpose: inserted mid-list it would
+    capture an existing positional argument at every call site. -/
 def vitAdamTrainStepFaithful (funcName : String := "vit_adam_train_step")
     (bStr : String := "32.0") (replicas : Nat := 1) (bs : Nat := 32)
     (nClasses : Nat := 10) (alpha : Float := 0.1) (ema : Bool := false)

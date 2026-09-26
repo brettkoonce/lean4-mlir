@@ -1,26 +1,27 @@
-/-! # Phase 0 of `planning/archive/verified_codegen.md` — `Back → StableHLO` printer
+/-! # IRPrint — hand-written StableHLO printers that mirror `IR`'s graphs
 
-A small **computable** codegen AST (`Hlo`) + printer that renders a backward
-graph to StableHLO text, in the exact form `MlirCodegen.lean` emits
-(`dot_general … contracting_dims = [1] x [1]`, ReLU-back = `compare GT` +
-`select`).
+Legacy printers from `Hlo`/`HloF` terms and plain `String` builders to StableHLO text, one module
+per layer family: linear, MLP and CNN backward passes and train steps, BN/LN, softmax, SDPA, the
+pointwise activations, residual + SE, a ViT block, a ResNet train step, an MBConv block, the
+MobileNetV2 inverted residual and a ConvNeXt block. The text is trusted. The verified renderers
+are `StableHLOPretty` and the `*Render*` files; nothing imports this file. The `#eval`s at the bottom write scratch modules
+to `/tmp`.
 
-Why a separate AST and not `Back` directly: `Back` (in `IR.lean`) carries
-abstract `Vec`/`Mat` (`Fin n → ℝ`, noncomputable), so its operand *values*
-can't be printed and it can't be `#eval`'d. `Hlo` is the renderable mirror:
-SSA names + shapes instead of values, **same structure** as `Back` (D1 in
-the spec). The correspondence, per node:
+Why a separate AST and not `Back` directly: `Back` (in `IR.lean`) carries abstract `Vec`/`Mat`
+(`Fin n → ℝ`, noncomputable), so its operand *values* can't be printed and it can't be `#eval`'d.
+`Hlo` is the renderable mirror: SSA names + shapes instead of values, same structure as `Back`.
+The correspondence, per node:
 
     Hlo                Back                bridge (⟦Back⟧ = proven VJP)
     ───────            ──────────────      ─────────────────────────────
     .dot W m n         .dotGeneral W       dense_at_bridge      (= Mat.mulVec W)
-    .reluBack p n      .selectPos p        relu_at_bridge       (= if p>0 then · else 0)
+    .reluBack p n      .selectPos p        relu_at_bridge       (= if p>0 then · else 0; needs p ≠ 0)
     .input "%dy"       .cotangent          —
 
-So `mlpHlo` below mirrors `IR.emitMlpBack`, whose denotation is proven
-equal to `mlpHasVJPAt.backward` (`IR.mlp_whole_bridge`). The printed text
-is therefore the rendering of a proof-backed computation — up to the printer
-(this file, trusted), IREE, and float. (Phase 1: feed the output to IREE.)
+So `mlpHlo` below mirrors `IR.emitMlpBack`, whose denotation is proven equal to
+`mlpHasVJPAt.backward` at a point where both hidden pre-activations are nonzero everywhere
+(`IR.mlp_whole_bridge`). The printed text is the rendering of that computation up to this
+printer (trusted), the compiler, and float.
 -/
 
 namespace Proofs.IRPrint
@@ -417,7 +418,10 @@ def convFwdModule (B ic oc H Wd kH kW : Nat) : String :=
 
 /-- Conv input-gradient backward `IR.convBackDenote W` as `@conv_back`:
     `transpose` (swap channels) + `reverse` (flip spatial) + `convolution`.
-    Denotes the proven conv input-VJP (`conv_back_bridge_1to2`). -/
+    For odd `kH`, `kW` its op sequence is the conv input-VJP formula
+    (`IR.convBackDenote_eq_input_grad_formula`, which takes the two oddness hypotheses;
+    `conv_back_bridge_1to2` is its instance at `Kernel4 2 1 3 3` on a 4×4 map). The printed text
+    is trusted. -/
 def convBackModule (B ic oc H Wd kH kW : Nat) : String :=
   let pH := (kH - 1) / 2; let pW := (kW - 1) / 2
   "module @m {\n" ++

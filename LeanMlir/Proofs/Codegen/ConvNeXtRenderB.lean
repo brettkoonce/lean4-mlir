@@ -1,36 +1,34 @@
 import LeanMlir.Proofs.Codegen.ConvNeXtRender
 
-/-! # ConvNeXt-T at the BATCHED index `N := B` — the forward (handoff §0.2 ▶2)
+/-! # ConvNeXt at the BATCHED index `N := B` — forward, backward and AdamW renders
 
 The ConvNeXt peer of `ResNet34RenderB` / `MobileNetV2RenderB`, and the reason it exists is
-`planning/archive/stochastic_depth.md`: **the drop mask is per-EXAMPLE**, and in the per-example-indexed
-render (`ConvNeXtRender.lean`) a node denotes ONE example — `pretty B` lifts it across the batch, so
-the node cannot see `j`. `dropPathB` needs its operand at index `B·n`, which is what this file's
-chain produces.
+stochastic depth: **the drop mask is per-EXAMPLE**, and in the per-example-indexed render
+(`ConvNeXtRender`) a node denotes ONE example — `pretty B` lifts it across the batch, so the node
+cannot see `j`. `dropPathB` needs its operand at index `B·n`, which is what this file's chain
+produces.
 
-⚠⚠ **The trap this closes is that the wrong thing TYPECHECKS.** `pretty B` already emits
+**The trap this closes is that the wrong thing TYPECHECKS.** `pretty B` already emits
 `tensor<B×n>`, so a `broadcast_in_dim %mask, dims = [0]` + multiply against a per-example node
 compiles, trains and descends — with no faithful `den` behind it. Every node below is instead a
 `batchOp`/`*B` form whose `den` is `batchMap N (…)` or `batchMapAux N (…)`, i.e. honest about which
 index is the batch.
 
-**What this file writes — every ConvNeXt artifact but one (4c leg 3, 2026-09-07).** The forward,
-the backward, the AdamW/EMA tail and, since leg 3, the seventeen drop-free writers that used to sit
-in `ConvNeXtRender.lean`, beside the stochastic-depth, ImageNet, S/B and bf16 ones that were always
-here. Only the SGD-inline `convnext_train_step.mlir` is still written there: this traversal has no
-fused-SGD arm, and `ConvNeXtStepTie.lean`'s 182-parameter tie is stated at those bytes. The Proofs
-tier for this chain is [`Nets/ConvNeXt/ConvNeXtFoldGB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtFoldGB.lean), which landed before the writers
-moved (leg 1's ordering rule).
+**What this file writes — every ConvNeXt artifact but one.** The forwards (drop-free and
+stochastic-depth), and the AdamW/EMA train steps through `ConvNeXtRender.convNextAdamTrainStepFaithful`
+with this file's traversal, at ConvNeXt-T/S/B, Imagenette and ImageNet, f32 and bf16. Only the
+SGD-inline `convnext_train_step.mlir` is written by `ConvNeXtRender`: this traversal has no
+fused-SGD arm, and `ConvNeXtStepTie`'s 182-parameter tie is stated at those bytes. The Proofs tier
+for this chain is [`Nets/ConvNeXt/ConvNeXtFoldGB.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Nets/ConvNeXt/ConvNeXtFoldGB.lean).
 
 **The gate** (`lake build convnext-fwd-b-tie`): the per-example chain and this one must emit
 **byte-identical** forwards, and train steps that differ on the conv-VJP `transpose`/`reverse` pair
-and nothing else (78 lines — commuting ops on disjoint axes). That is a much stronger claim than the
-numeric ties elsewhere in this thread, and it is available *because* every batched form was built to
-emit its per-example peer's text byte-for-byte ([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean), 31 forms). So the
-whole-net statement is the per-form statement composed — and if it ever fails, the tie file
-localises which form did it in one run. ⚠ Since leg 3 the committed bytes are THIS chain's, so the
-gate renders the per-example chain and compares it against them — the same statement read from the
-other side.
+and nothing else (commuting ops on disjoint axes). That is available *because* every batched form
+was built to emit its per-example peer's text byte-for-byte
+([`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) checks each form). So the whole-net statement is the
+per-form statement composed — and if it ever fails, the tie file localises which form did it in
+one run. The committed bytes are this chain's, so the gate renders the per-example chain and
+compares it against them.
 -/
 
 open Proofs Proofs.StableHLO
@@ -39,7 +37,7 @@ namespace Proofs.StableHLO
 
 /-! ## The batched shape helpers
 
-⚠ `reassoc`/`unassoc` in the per-example renderer cast `SHlo (c*h*h) ↔ SHlo (c*(h*h))`. At the
+`reassoc`/`unassoc` in the per-example renderer cast `SHlo (c*h*h) ↔ SHlo (c*(h*h))`. At the
 batched index the same cast has to happen UNDER `N * ·`, which is `bnBatchLA`'s existing move
 (`congrArg (N * ·) (Nat.mul_assoc …)`). It is a reindex, not a function change — the emitted text
 is unaffected, since `skel` never sees the index. -/
@@ -77,34 +75,31 @@ private def zMB {a b : Nat} : Mat a b := fun _ _ => 0
    the wrapper declares `tensor<B₁×3×224×224>` over a body computing at `N := B₂` and the lowerer
    rejects the module — but loud at the lowerer is still later than loud at the type checker. -/
 /-- **ConvNeXt-T / ImageNet's per-replica batch, spelled ONCE for the whole `convnextin_*`
-    family** (2026-09-17).
+    family.**
 
     **64, not the 32 every other ConvNeXt render uses**, and the reason is a PAIRING fact rather
     than a throughput one. This net's JAX reference trains at **global 256 = 4 × 64** (its own
-    banner: `batch 256 (4x64) · SPE 5004`). The verified job ran 4 × 32 = **global 128 with
-    10,009 steps/epoch** and a `baseLR` that is the bs-256 value — half the batch, twice the
-    updates, and an LR off the linear-scaling rule. That is a RECIPE difference, not a lowering
-    difference, and it forfeits the only thing this pair is in the book for: ConvNeXt has **no
+    banner: `batch 256 (4x64) · SPE 5004`). At 4 × 32 the verified job would run half the batch,
+    twice the updates, and an LR off the linear-scaling rule: a RECIPE difference, not a lowering
+    difference, and it would forfeit the only thing this pair is in the book for: ConvNeXt has **no
     BatchNorm**, so a tie here says the LOWERER is clean and an offset here implicates the lowerer
     or the feed fleet-wide. Neither reading survives if the batch does not match.
 
-    ⚠ Spelled once because it has to reach thirteen `#eval`s AND both halves of every train step
-    (body at `N := bB`, wrapper via `cBS`). Thirteen literals is the shape of defect this file's
-    own thread keeps finding.
+    Spelled once because it has to reach every `convnextin_*` `#eval` AND both halves of every
+    train step (body at `N := bB`, wrapper via `cBS`).
 
-    ⚠ **`convnextsin_*` and `convnextbin_*` (ConvNeXt-S and -B at ImageNet) stay at the 32
-    default, deliberately.** Neither has ever been trained or paired with a reference, so moving
-    them would churn nine committed artifacts and nine gate runs for nothing. If either is ever
+    **`convnextsin_*` and `convnextbin_*` (ConvNeXt-S and -B at ImageNet) stay at the 32
+    default, deliberately.** Neither has been trained or paired with a reference. If either is ever
     launched, its job's `LEAN_MLIR_BATCH` must be checked against its render — the `PRECHECK` in
     `scripts/jobs/cnx-default-4gpu.conf` greps the artifact for its own baked batch and is the
     template for that. -/
 def cnxInBS : Nat := 64
 
 /-- Eps and the stage table — read from the per-example renderer's own constants where they
-    are public, restated where they are `private`. ⚠ Restated, not re-derived: if these drift the
+    are public, restated where they are `private`. Restated, not re-derived: if these drift the
     byte tie fails loudly, which is the point of tying against the committed artifact rather than
-    against a second copy of the shapes. ⚠ **The BATCH was named in this docstring until
-    2026-09-17**, when it stopped being a constant — see the note above. -/
+    against a second copy of the shapes. The batch is a parameter, not one of these constants —
+    see the note above. -/
 private def bEPS : String := "1.0e-6"
 private def bSpats  : Array Nat := #[56, 28, 14, 7]
 
@@ -131,7 +126,7 @@ private def bBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 
     over its channels at the scalar identities `%one`/`%zero`, apply the real `[c]` affine,
     transpose back. Five `batchOp`s where the per-example peer has five bare nodes.
 
-    ⚠ `m := h*h` is the SPATIAL row count PER EXAMPLE and `N := bB` is the batch. Collapsing those
+    `m := h*h` is the SPATIAL row count PER EXAMPLE and `N := bB` is the batch. Collapsing those
     two into one index is exactly the defect this file exists to remove, and it is why the
     descriptors carry `(m, n)` internally instead of reading the SHlo index. -/
 private def lnFwdSiteB (bB : Nat) (gN btN xin : String) (c h : Nat) :
@@ -149,11 +144,10 @@ private def lnFwdSiteB (bB : Nat) (gN btN xin : String) (c h : Nat) :
                                   (.operand bi (zVB : Vec (bB*(h*h*c)))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
-/-- **The HEAD LN, batched-index peer** (2026-08-30, §7.1) — `lnFwdSiteB` with the transposes
-    deleted, at `m = 1`: after GAP the tensor is one `[d]` row per example. Must stay op-for-op
-    with `ConvNeXtRender.headLnFwdSite`, because `convnext-fwd-b-tie` asserts the two renderers
-    emit the same bytes — the gate that went red for three commits when `f4e4172` lifted only the
-    batched pointwise arms. -/
+/-- **The HEAD LN, batched-index peer** — `lnFwdSiteB` with the transposes deleted, at `m = 1`:
+    after GAP the tensor is one `[d]` row per example. Must stay op-for-op with
+    `ConvNeXtRender.headLnFwdSite`, because `convnext-fwd-b-tie` asserts the two renderers emit the
+    same bytes. -/
 private def headLnFwdSiteB (bB : Nat) (gN btN xin : String) (d : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, n)  ← pretty bB (.batchOp (N := bB)
@@ -194,14 +188,14 @@ private def headLnBetaTailB (bB : Nat) (cot : String) (d : Nat) :
     form.
 
     `drop = some i` puts the stochastic-depth site at ramp index `i` **on the residual branch**, i.e.
-    between `layerScaleCh` and the `addVB`. ⚠⚠ **That placement is the whole correctness question and
+    between `layerScaleCh` and the `addVB`. **That placement is the whole correctness question and
     the obvious gate is blind to it** — at an all-ones mask `1 ⊙ (branch + x) = branch + x` exactly,
     so a site on the block OUTPUT is the same function bit-for-bit and every endpoint gate passes on
-    it (`stochastic_depth.md` §7b, measured on EfficientNet). `scripts/probes/misplace_drop_sites.py` builds
+    it (measured on EfficientNet). `scripts/probes/misplace_drop_sites.py` builds
     exactly that render — same SSA names, order, types and line count — and it is the control that
     licenses believing any green run here.
 
-    ⚠ At `drop = none` **no `pretty` call happens**, so the fresh-name counter does not move and the
+    At `drop = none` **no `pretty` call happens**, so the fresh-name counter does not move and the
     drop-free chain re-renders byte-identically. That is what keeps `convnext-fwd-b-tie` and the
     committed artifacts free of this feature. -/
 private def fwdBlockB (bB : Nat) (pfx xin : String) (c e h : Nat) (drop : Option Nat := none)
@@ -251,13 +245,12 @@ private def fwdDownB (bB : Nat) (pfx xin : String) (ci co h2 : Nat) (bf16 : Bool
     `convNextFwdChain` emits — 4×4/s4 patchify stem (3→96, 224→56) → stem channel-LN → 4 stages at
     56/28/14/7 with 2×2/s2 downsamples between → GAP(7×7) → dense(768→nClasses).
 
-    ⚠ Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := bB` and
+    Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := bB` and
     the batch is an index of the AST rather than a number only `pretty` knows. That is the entire
     content of the move; the emitted text is unchanged, which the tie checks.
 
     `sd := true` adds the 18 stochastic-depth sites, one per block, at ramp index `cnxBlockIdx si j`
-    — and the sites are emitted in the FORWARD as well as the train step deliberately
-    (`stochastic_depth.md` §3): at eval the driver supplies an all-ones mask, so they are the exact
+    — and the sites are emitted in the FORWARD as well as the train step deliberately: at eval the driver supplies an all-ones mask, so they are the exact
     identity, and the `forward ⊂ train-step` prefix audit keeps a partner for the SD render instead
     of quietly not covering it. -/
 def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
@@ -308,11 +301,10 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
   pure { code := fwd ++ cG ++ cHn ++ cLog, blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
 
-/-- **`@convnext_fwd_b`** — the batched-index peer of `convNextFwdFaithfulV`, same 180-parameter
-    signature and same `%x`. ⭐ Since 4c leg 3 (2026-09-07) this WRITES `convnext_fwd`,
-    `convnextin_fwd`, `convnextsin_fwd` and `convnextbin_fwd` (the `#eval`s at the bottom of this
-    file), all four measured byte-identical to the per-example render before the writers moved;
-    `convnext-fwd-b-tie` now runs the other way, per-example against these bytes. -/
+/-- **`@convnext_fwd_b`** — the batched-index peer of `convNextFwdFaithfulV`, same signature
+    (182 parameters at ConvNeXt-T) and same `%x`. This WRITES `convnext_fwd`, `convnextin_fwd`,
+    `convnextsin_fwd` and `convnextbin_fwd` (the `#eval`s at the bottom of this file);
+    `convnext-fwd-b-tie` renders the per-example chain against these bytes. -/
 def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat := 10)
     (banner : String :=
       "    // ── ConvNeXt-T forward at the BATCHED index N := B: every line is pretty(batchOp …) ──\n")
@@ -346,7 +338,7 @@ def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat :
 
 /-! ## The backward
 
-Every site below is the per-example site with its node swapped for the batched form. ⚠ Two of them
+Every site below is the per-example site with its node swapped for the batched form. Two of them
 are where increments 2 and 3's constructors earn their keep, and both are cases the emit tie alone
 cannot judge:
 
@@ -396,17 +388,17 @@ private def lnBetaTailB (bB : Nat) (cot : String) (c h : Nat) : StateM Proofs.St
     per-example renderer factors it the same way, which is what makes ConvNeXt the cheapest of the
     five to thread).
 
-    ▶ **THE DROP'S BACKWARD IS THE SAME OP AT THE SAME MASK** (`Proofs.dropPath_vjp_is_self`): a
+    **THE DROP'S BACKWARD IS THE SAME OP AT THE SAME MASK** (`Proofs.dropPath_vjp_is_self`): a
     diagonal linear map is its own transpose, so there is no `*Grad` peer to keep in step and no
     second emitter to drift.
 
-    ⚠ **IT APPLIES TO THE BRANCH ONLY, and that mirrors the forward's placement exactly.** The
+    **IT APPLIES TO THE BRANCH ONLY, and that mirrors the forward's placement exactly.** The
     dropped cotangent `cotD` feeds the whole branch — LayerScale, project, GELU, expand, LN,
     depthwise — including every parameter gradient computed off it. The skip's fan-in at the bottom
     keeps the RAW `dy`. Dropping there too would attenuate the identity path, which is
     `s ⊙ (branch + x)` arriving by the other door.
 
-    ⚠⚠ **AND `dyd` IS RETURNED BECAUSE ONE PARAMETER GRADIENT READS IT DIRECTLY.** LayerScale's γ
+    **AND `dyd` IS RETURNED BECAUSE ONE PARAMETER GRADIENT READS IT DIRECTLY.** LayerScale's γ
     gradient is `Σ (cot ⊙ p)` at the cotangent of the LayerScale OUTPUT — which is `s ⊙ dy` once a
     drop site sits between LayerScale and the add, not `dy`. Every other block gradient descends
     from `cot_p` and inherits the scale for free; `%…lg` is the one that would silently be computed
@@ -451,9 +443,8 @@ private def bwdDownB (bB : Nat) (pfx dy xin : String) (ci co h2 : Nat) (bf16 : B
 
 /-- The **parameter gradients of one block** — every one a `*GradB`, i.e. `Σ_n` over the batch of
     the per-example gradient on `batchSlice n`. AdamW only: the SGD-inline tail stays in the
-    per-example renderer (it did not move with 4c leg 3 either), since `%lr` is a runtime operand on
-    the AdamW path and a baked literal on the SGD one (§2a-quater's silent-hyperparameter hazard) —
-    and `ConvNeXtStepTie.lean` is stated at those bytes. -/
+    per-example renderer, since `%lr` is a runtime operand on the AdamW path and a baked literal
+    on the SGD one — and `ConvNeXtStepTie.lean` is stated at those bytes. -/
 private def blockParamGradB (bB : Nat) (pfx : String) (b : FNames)
     (cot_p cot_e cot_n cot_d dy : String) (c e h : Nat)
     -- ⚠ `bf16` reaches the WEIGHT grads only. Every BIAS grad below stays f32 in every net:
@@ -514,14 +505,14 @@ private def downParamGradB (bB : Nat) (pfx downLn downIn cot_n dy : String) (ci 
     batched peer of `convNextBackAll true (some …)`. Returns `(code, gradMap, softmaxSSA)` with the
     same shape, so the AdamW tail in `ConvNeXtRender.lean` can consume either.
 
-    ⚠ **AdamW only, deliberately.** The per-example traversal serves both renders off one `adam`
+    **AdamW only, deliberately.** The per-example traversal serves both renders off one `adam`
     flag; this one does not, because the SGD path bakes `lr` as a literal where AdamW takes it as a
     runtime `%lr` operand, and an SGD render at the batched index is not something any config asks
-    for yet. Adding the flag later is cheap; adding an artifact nobody loads is §2a-quater's
-    silent-hyperparameter hazard.
+    for yet. Adding the flag later is cheap; an artifact nobody loads is a silent-hyperparameter
+    hazard.
 
-    ⚠ The `%dgi`/`%dgb`/`%dgn`/`%dgd`/`%dgapf` GAP-backward block is **hand-written text on both
-    sides**, carried over verbatim. It is one of §5's declared non-AST carve-outs, so the batched
+    The `%dgi`/`%dgb`/`%dgn`/`%dgd`/`%dgapf` GAP-backward block is **hand-written text on both
+    sides**, carried over verbatim. It is one of the declared non-AST carve-outs, so the batched
     move neither improves nor degrades it — but note it is parameterised by `bB` and therefore
     already batch-correct, which is why it needs no peer. -/
 def convNextBackAllB (smooth : Option (String × String × String) := none) (nClasses : Nat := 10)
@@ -634,7 +625,7 @@ def convNextBackAllB (smooth : Option (String × String × String) := none) (nCl
     updMap := updMap ++ [("psW", nPsW), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
 
-/-- **The ConvNeXt-T AdamW train step at the batched index.** ⚠ It is the SAME renderer the
+/-- **The ConvNeXt-T AdamW train step at the batched index.** It is the SAME renderer the
     per-example path uses — `convNextAdamTrainStepFaithful` with `traversal` pointed at
     `convNextBackAllB` — not a copy.
 
@@ -685,18 +676,17 @@ def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
 
 /-- The drop-free forward's banner — the line `ConvNeXtRender.convNextFwdFaithfulV` emits, restated
     here so the byte tie can demand **byte-identity** rather than "identical apart from a comment".
-    ⚠ Worth the parameter: a tie that compares modulo one line is a tie with a hole in it, and the
+    Worth the parameter: a tie that compares modulo one line is a tie with a hole in it, and the
     hole is exactly where a renderer's own description of what it did would live. Measured first,
-    then removed — the two chains differed in this line and nothing else. ⭐ Since 4c leg 3
-    (2026-09-07) this is the banner the committed `convnext_fwd` / `convnextin_fwd` /
+    then removed — the two chains differed in this line and nothing else. This is the banner the
+    committed `convnext_fwd` / `convnextin_fwd` /
     `convnextsin_fwd` / `convnextbin_fwd` carry, which is why it takes the size: the model name
     is derived from the stage table, exactly as the per-example line derives it. -/
 def cnxFwdBanner (V : CnxDims := bTiny) : String :=
   s!"    // ── {cnxModelName V} forward: every line is pretty(verified AST node) ──\n"
 
 /-- The SD forward's banner. Its own, and not `cnxFwdBanner`, because these bytes ARE a
-    different render and a banner claiming otherwise is the `VerifiedNetsCore` docstring defect (§0.9
-    finding 3) in the artifact itself. -/
+    different render and a banner claiming otherwise would misdescribe the artifact it heads. -/
 def cnxDropFwdBanner (V : CnxDims := bTiny) : String :=
   -- ⚠ Both the SIZE and the SITE COUNT are derived from `D`. They were literals ("ConvNeXt-T",
   -- "18") until ConvNeXt-S landed, and a literal here is precisely the thing this docstring warns

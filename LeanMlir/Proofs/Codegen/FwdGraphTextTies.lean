@@ -9,12 +9,12 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4FullB
 import LeanMlir.Proofs.Codegen.EfficientNetRender
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetFullB0
 
-/-! # FwdGraphTextTies — the rendered forward blocks are `pretty` of the T2 block graphs
+/-! # FwdGraphTextTies — the rendered forward blocks are `pretty` of the typed block graphs
 
-A net's T2 theorem (`resnet34FwdGraphBFull_faithful`, …) says a typed graph denotes the proven
-forward. The artifact in `verified_mlir/` is written by the renderer's forward chain
+A net's graph-faithfulness theorem (`resnet34FwdGraphBFull_faithful`, …) says a typed graph
+denotes the proven forward. The artifact in `verified_mlir/` is written by the renderer's forward chain
 (`r34FwdChainB`, …), a separate definition that emits one block at a time. This module ties the
-two by TEXT: for every block kind, the renderer's block emitter and `pretty` of the T2 block graph —
+two by TEXT: for every block kind, the renderer's block emitter and `pretty` of the typed block graph —
 the block input an `.operand` leaf named as the emitter's input, every weight zero (`pretty` reads
 names and shapes only) — print the same bytes from the same `EmitS` start state.
 
@@ -22,14 +22,16 @@ names and shapes only) — print the same bytes from the same `EmitS` start stat
 and a residual graph repeats its block-input subtree in both `addVB` operands, so the prefix is
 re-emitted at every skip (≈2¹⁶ copies of the stem for ResNet-34). Per block the input is a leaf, so
 repeating it emits nothing — exactly what the chain does when it names the input twice. What stays
-outside the guards is the chain's glue: it calls these emitters in the T2 graph's nesting order,
-with the T2 graph's prefixes and shapes, each block reading the previous block's output name.
+outside the guards is the chain's glue: it calls these emitters in the typed graph's nesting
+order, with the typed graph's prefixes and shapes, each block reading the previous block's output name.
 
-**Scope.** f32, `convBias := false`, one replica (`sync := false`) — the configuration the T2
+**Scope.** f32, `convBias := false`, one replica (`sync := false`) — the configuration the typed
 graphs describe. The bf16 renders swap in `…Bf16` constructors (`Bf16Fold`, `Bf16GradNodes`);
 sync-BN renders swap the BN site (`SyncBnSites`, the `*SyncB` twins). Covered: ResNet-34,
-ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head.
-Not covered: ConvNeXt-T and ViT, whose T2 graphs are per-example, with their own constructors.
+ResNet-50, MobileNetV2, MobileNetV4-Conv-M and EfficientNet-B0 — every block kind, stem and head,
+each checked by `#guard` at batch 2 on one concrete shape (for MobileNetV4, every row of the
+21-row table). Not covered: ConvNeXt-T and ViT, whose typed graphs are per-example, with their
+own constructors.
 
 A `#guard` failing here means the emitted text and the proven graph drifted: the graph's operand
 order, a name, a constructor or a shape differs from what the renderer writes. Fix the side that is
@@ -172,11 +174,11 @@ def mnv4UibW0 (s : UibSpec) : UibParams s :=
    fun _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0,
    fun _ _ _ _ => 0, fun _ => 0, 1, one_pos, fun _ => 0, fun _ => 0⟩
 
-/-- `pretty` of the T2 graph for one table row, dispatched as `mnv4FwdGraphBFull` builds it: a
+/-- `pretty` of the typed graph for one table row, dispatched as `mnv4FwdGraphBFull` builds it: a
     stride-2 row is `mnv4StridedGraphB` (the post-DW carries the stride; all three of Conv-M's have
     a pre-DW); a stride-1 row is its family's body plus the identity skip (`mnv4SkipGraphB`, spelled
     out here because the leaf is width-polymorphic and a skip row has `ic = oc` only numerically).
-    A row with no T2 graph — an IB block, or a strided row without a pre-DW — prints `""`, so a
+    A row with no typed graph — an IB block, or a strided row without a pre-DW — prints `""`, so a
     table that grew one fails. -/
 def mnv4RowGraphText (B : Nat) (s : UibSpec) : String :=
   if s.stride2 then

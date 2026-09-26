@@ -2,11 +2,10 @@ import LeanMlir.Proofs.Foundation.BatchedStages
 
 /-! # The BATCHED EfficientNet-B0 block forwards and graphs (true batch-norm, matches the render)
 
-The EfficientNet peer of `MobileNetV2StagesPC.lean` / the retired `ResNet34RenderPC.lean` — but EfficientNet's
-render (`EfficientNetRender`) emits **true batch-norm** (reduce μ/var over the
-batch+spatial axes `[0,2,3]` per channel — `bnBatchTensor4`), which **couples the batch**. MNV2/r34
-get away with a batch-1 `den` because their per-channel BN reduces `[2,3]` (per-example, separable);
-EfficientNet's does not. So the forward graph here genuinely lives at the **batched index**
+The EfficientNet peer of `MobileNetV2StagesPC`. EfficientNet's render (`EfficientNetRender`) emits
+**true batch-norm** (reduce μ/var over the batch+spatial axes `[0,2,3]` per channel —
+`bnBatchTensor4`), which **couples the batch**. So the forward graph here lives at the **batched
+index**
 `N·(c·h·w)` (`StableHLO.batchOp`/`StableHLO.bnBatchF`, `StableHLO.lean`):
 
 * every batch-separable op (conv / strided conv / depthwise / strided depthwise / dense / GAP / the
@@ -18,14 +17,17 @@ EfficientNet's does not. So the forward graph here genuinely lives at the **batc
 * the one batch-coupled op, true batch-norm, is `SHlo.bnBatchF`, denoting `bnBatchLA` (= the proven
   `bnBatchTensor4`, reindexed to the network's left-assoc `N·(oc·h·w)` flat layout).
 
-We prove the FORWARD half — `den (graph) = forward` — for every block form B0 has: the stride-2
-stem conv-bn-swish, an MBConv1 (`t=1`, **no expand**) SE block, an MBConv6 expand SE block with a
-**stride-2** downsample, an MBConv6 expand SE block with an **identity residual** skip, and the 1×1
-conv-bn-swish head, GAP and the dense classifier — all with **true batch-norm** and the
-squeeze-excite gate (`seBlockFull`, entering as `BatchableOp.seBlock` = `batchMap N seBlockFull`).
+This file proves the FORWARD half — `den (graph) = forward` — for the stride-2 stem
+conv-bn-swish (`stemGraphB_faithful`), an MBConv1 (`t=1`, **no expand**) SE block
+(`mbNoExpGraphB_faithful`), an MBConv6 expand SE block with a **stride-2** downsample
+(`mbStridedGraphB_faithful`), an MBConv6 expand SE block with an **identity residual** skip
+(`mbResidGraphB_faithful`), and the 1×1 conv-bn-swish head, GAP and the dense classifier
+(`headGraphB_faithful`) — all with **true batch-norm** and the squeeze-excite gate (`seBlockFull`,
+entering as `BatchableOp.seBlock` = `batchMap N seBlockFull`). B0's fifth block form, the
+stride-1 expand block with no skip, is `mbExpGraphB_faithful` in `EfficientNetFullB0`.
 Faithfulness is **per-block** (`*GraphB_faithful`: `den (block graph) = block forward (den input)`),
 so `EfficientNetFullB0` chains the sixteen-block net without the kernel reducing it at once.
-3-axiom clean.
+All five theorems are in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)'s `#print axioms` list.
 -/
 
 namespace Proofs

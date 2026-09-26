@@ -1,46 +1,40 @@
 import LeanMlir.Proofs.Codegen.ViTRender
 
-/-! # ViT-Tiny at the BATCHED index `N := B` — the forward (handoff §0.2 ▶3)
+/-! # ViT at the BATCHED index `N := B` — forward, backward and AdamW renders
 
 The ViT peer of `ConvNeXtRenderB` / `ResNet34RenderB` / `MobileNetV2RenderB`, and the reason it
 exists is the same one: **stochastic depth's mask is per-EXAMPLE**, and in the per-example-indexed
 render (`ViTRender.lean`) a node denotes ONE example — `pretty B` lifts it across the batch, so the
-node cannot see `j`. ViT is the last net without that move, and `vitTinyImagenetConfig` sets
-`dropPath 0.1` (24 sites, two per block).
+node cannot see `j`. `vitTinyImagenetConfig` sets `dropPath 0.1` (24 sites, two per block).
 
-⚠⚠ **ON ViT THE INDEX COLLISION IS IN THE SOURCE TEXT, NOT ONLY IN THE SEMANTICS.** The per-example
+**ON ViT THE INDEX COLLISION IS IN THE SOURCE TEXT, NOT ONLY IN THE SEMANTICS.** The per-example
 renderer names its TOKEN axis `N` — `denseRowF {N a c}`, `clsSliceF {N D}`, `headSliceF {N heads d}`
 — and a batched constructor names the BATCH `N`. Both are `Nat`, both appear multiplied, and the
 swap type-checks in either direction. Every batched call below therefore passes the token count as
 an EXPLICIT named argument (`(N := 197)`, `(tk := 196)`) and never positionally; the batch is `vbB`
 and appears only as `pretty`'s argument and as `(N := vbB)` on the `*B` constructors.
 
-⚠ The sharpest instance is `clsSlice`, which CONTRACTS `(tk+1)*D → D`. A render reading the batch as
+The sharpest instance is `clsSlice`, which CONTRACTS `(tk+1)*D → D`. A render reading the batch as
 the token axis takes `(N+1)*D → D` — it keeps ONE example and drops the rest — and at `N = tk` it
 type-checks *and agrees*. `den_batchOp_clsSlice_per_example` is what pins those apart.
 
-**What this file is, as of 4c leg 4 (2026-09-07): the sole writer of every ViT artifact but one.**
-It began as the forward only — the backward, the optimizer tail and the `#eval` writers stayed in
-`ViTRender.lean` until this chain was tied, §2b's order, which ConvNeXt followed and which produced
-a byte tie before anything swapped. The tie held: all NINETEEN drop-free artifacts re-render
-byte-identically off `vitBackAllB`, measured whole-net before a writer moved, so they now render
-from here and `git diff verified_mlir/` after the move is empty.
+**What this file is: the writer of every ViT artifact but one.** The forward, the backward
+traversal `vitBackAllB` and, through `ViTRender.vitAdamTrainStepFaithful`, the AdamW/EMA train
+steps.
 
-⛔ **The one exception is `vit_train_step.mlir`**, the SGD-inline step, which stays in
-`ViTRender.lean`: `vitBackAllB` has no fused-SGD arm (it emits the raw gradient only), and ViT's
-T3 §1a tie — `ViTStepTie.lean`, all 200 parameters — is stated at exactly those bytes. Retiring it
-before that tie has a batched peer is the ordering mistake `planning/archive/renderer_convergence.md`
-leg 1 wrote down.
+**The one exception is `vit_train_step.mlir`**, the SGD-inline step, which `ViTRender` writes:
+`vitBackAllB` has no fused-SGD arm (it emits the raw gradient only), and `ViTStepTie`'s
+200-parameter tie is stated at exactly those bytes.
 
-⭐⭐ **The bytes did not move and one denotation did.** See the CLS-token emission below: this
-chain's `denseBiasGradB (N := vbB)` sums the batch inside `den` where the per-example one wrote
-`(N := 1)` and let `pretty B` lift outside the AST. `Proofs.ViTPoCGB.clsGrad_denB` is the theorem
-that becomes available, and `ViTFoldGB.lean` carries the other nine nodes with it.
+**The denotation differs from the per-example chain at the same bytes.** See the CLS-token
+emission below: this chain's `denseBiasGradB (N := vbB)` sums the batch inside `den` where the
+per-example one writes `(N := 1)` and lets `pretty B` lift outside the AST.
+`Proofs.ViTPoCGB.clsGrad_denB` (in `ViTFoldGB`) is the theorem stated at it.
 
 **The gate** (`lake build vit-fwd-b-tie`): this chain and the committed `verified_mlir/vit_fwd.mlir`
 must emit **byte-identical** text. That is available *because* every batched form was built to emit
-its per-example peer's text byte-for-byte and [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) pins all 47
-individually — so the whole-net claim is the per-form claim composed, and when it fails that file
+its per-example peer's text byte-for-byte and [`tests/TestBatchedEmitTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestBatchedEmitTie.lean) pins each
+batched form individually — so the whole-net claim is the per-form claim composed, and when it fails that file
 localises which form did it in one run.
 -/
 
@@ -50,7 +44,7 @@ namespace Proofs.StableHLO
 
 /-! ## The batched shapes
 
-⚠ Restated, not re-derived — `ViTRender`'s own `vEPS`/`vSCALE`/`vDEPTH` are shared (they stopped
+Restated, not re-derived — `ViTRender`'s own `vEPS`/`vSCALE`/`vDEPTH` are shared (they stopped
 being `private` for this file), but the shape numbers are spelled here so that a drift between the
 two renderers fails the BYTE tie loudly rather than propagating silently. That is the same choice
 `ConvNeXtRenderB` made and for the same reason.
@@ -84,7 +78,7 @@ private def zKb {o i kh kw : Nat} : Kernel4 o i kh kw := fun _ _ _ _ => 0
 /-- One **vector-LN** site, batched: `lnRow(1,0) → rowScale γ → rowBias β` on the `[197,192]` token
     matrix. Three `batchOp`s where the per-example peer has three bare nodes.
 
-    ⚠ `m := vbTok` is the TOKEN count PER EXAMPLE and `N := vbB` is the batch. Collapsing those two
+    `m := vbTok` is the TOKEN count PER EXAMPLE and `N := vbB` is the batch. Collapsing those two
     into one index is exactly the defect this file exists to remove. -/
 private def vlnFwdB (V : VitDims) (vbB : Nat) (gName btName xin : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
@@ -105,7 +99,7 @@ private def vlnFwdB (V : VitDims) (vbB : Nat) (gName btName xin : String) :
     (slice → QKᵀ → scale → softmax → ·V → pad, summed) → out dense → +res → LN2 → fc1 → GELU →
     fc2 → +res.
 
-    ⚠⚠ **THE TWO `matmulFB`s ARE THE POINT OF THE WHOLE INCREMENT.** `QKᵀ` and `·V` have BOTH
+    **THE TWO `matmulFB`s ARE THE POINT OF THE WHOLE INCREMENT.** `QKᵀ` and `·V` have BOTH
     operands per-example, where every other batched binary in the kit (`addVB`, `subB`) is
     pointwise-same-shape. `den_matmulFB_per_example` states what that means: example `k`'s output is
     `Qₖ·Kₖᵀ` — its own `Q` against its own `K`. A descriptor would hand every example operand 0's
@@ -214,7 +208,7 @@ private def vBlockFwdB (V : VitDims) (vbB : Nat) (pfx xin : String) (drop : Opti
     `vitFwd12` emits — patch embed (16×16/s16, 196 patches + CLS + pos) → 12 blocks → final
     vector-LN → CLS slice → dense head.
 
-    ⚠ Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := vbB` and
+    Every node is a `batchOp`/`*B` form, so `den` is a `batchMap`/`batchMapAux` at `N := vbB` and
     the batch is an index of the AST rather than a number only `pretty` knows. That is the entire
     content of the move; the emitted text is unchanged, which the tie checks. -/
 def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
@@ -259,10 +253,11 @@ def vitFwd12B (V : VitDims) (vbB : Nat) (nClasses : Nat) (sd : Bool := false)
       (.operand sl (zVb : Vec (vbB*vbD))))
   pure (code ++ cf ++ cs ++ cl, { embed, blocks, flnIn := cur, fln := fl, clsTok := sl, logits })
 
-/-- **`@vit_fwd_b`** — the batched-index peer of `vitFwdRenderV`, same 200-parameter signature and
-    same `%x`. Not written to `verified_mlir/`: it exists to be TIED against the committed
-    per-example artifact, and an artifact nothing loads is a silent-hyperparameter hazard waiting to
-    happen (§2a-quater). The writer lands with the swap, not before. -/
+/-- **`@vit_fwd` from the batched chain** — the batched-index peer of `vitFwdRenderV`, same
+    signature (200 parameters at ViT-Tiny) and same `%x`. It writes every committed ViT forward:
+    `vit_fwd.mlir`, `vit_drop_fwd.mlir`, `vitin_fwd.mlir`, `vitin_drop_fwd.mlir`, `vitsin_fwd.mlir`,
+    `vitsin_drop_fwd.mlir` and `vitbin_fwd.mlir`. `vit-fwd-b-tie` re-renders `@vit_fwd` with this
+    function and compares it with the committed `vit_fwd.mlir` byte for byte. -/
 def vitFwdRenderB (funcName : String := "vit_fwd_b") (nClasses : Nat := 10)
     -- ⚠ TRAILING, per §2m.
     (sd : Bool := false)
@@ -334,7 +329,7 @@ private def vlnBackB (V : VitDims) (vbB : Nat) (gName _btName xin dyOut : String
 /-- One **transformer block backward**, batched. Returns `(code, dxin, the 16 gradient SSAs in
     `blkArgSig` order)`.
 
-    ⚠ The per-head SDPA backward is where `matmulFB` earns the increment: `dsm = dpv·vsᵀ`,
+    The per-head SDPA backward is where `matmulFB` earns the increment: `dsm = dpv·vsᵀ`,
     `dvs = smᵀ·dpv`, `dqs = dqk·ks`, `dkt = qsᵀ·dqk` — four matmuls, every one with BOTH operands
     per-example. A descriptor would pair example `k`'s cotangent with example 0's saved activation:
     it type-checks, it emits the identical `dot_general`, and it trains. -/
@@ -584,7 +579,7 @@ end Proofs.StableHLO
 
 namespace Proofs.StableHLO
 
-/-- **The ViT-Tiny AdamW train step at the batched index.** ⚠ It is the SAME renderer the
+/-- **The ViT-Tiny AdamW train step at the batched index.** It is the SAME renderer the
     per-example path uses — `vitAdamTrainStepFaithful` with `traversal` pointed at `vitBackAllB` —
     not a copy.
 
@@ -629,7 +624,7 @@ def vitAdamTrainStepFaithfulB (funcName : String := "vit_adam_train_step_b")
 end Proofs.StableHLO
 
 /-- The SD forward's banner. Its own, because these bytes ARE a different render and a banner
-    claiming otherwise is §0.9 finding 3 in the artifact itself. -/
+    claiming otherwise would misdescribe the artifact it heads. -/
 def vitDropFwdBanner : String :=
   "    // ── ViT-Tiny forward at the BATCHED index N := B, with STOCHASTIC DEPTH ──\n"
 

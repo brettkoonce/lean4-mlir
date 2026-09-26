@@ -4,31 +4,29 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4Spec
 import LeanMlir.Proofs.Codegen.RenderKit
 import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
-/-! # MobileNetV4 — the Universal Inverted Bottleneck render (`planning/archive/mnv4_verified.md` phase 3)
+/-! # MobileNetV4 — the Universal Inverted Bottleneck render
 
 The UIB block, batch-BN, at `N := B`:
 
 ```
-  optional pre-DW (k×k)  → BN → relu      -- takes the block's stride
+  optional pre-DW (k×k)  → BN             -- stride 1, no activation (timm dw_start)
   expand 1×1 (ic → mid)  → BN → relu
-  optional post-DW (k×k) → BN → relu      -- at stride 1 if a pre-DW already consumed it
+  optional post-DW (k×k) → BN → relu      -- carries the block's stride (timm dw_mid)
   project 1×1 (mid → oc) → BN             -- NO activation
   + skip                                  -- iff stride = 1 ∧ ic = oc; NO post-add activation
 ```
 
 `mid = ic * expand`, every conv BN-followed and therefore **bias-free** — `VLayer.toSpecs` and
 the baseline's `Layer.nParams` both assume that, and `uib-layout-tie` pins them to each other.
-⚠ **8,447,322 scalars in 233 slots at `nClasses = 10`** (9,715,512 at 1000) over Conv-**M**'s
-21-row table — counted off `mnv4_fwd.mlir`'s own signature, not off a docstring. The
-`3,737,088 / 14-block` figure this line carried until 2026-09-07 was Conv-**S**'s, left behind by
-`ed5a797`'s table swap.
+8,447,322 scalars in 233 slots at `nClasses = 10` (9,715,512 at 1000) over Conv-M's 21-row
+table, counted off the signatures of `mnv4_fwd.mlir` and `mnv4in_fwd.mlir`.
 
-⭐ **`k = 0` omits that depthwise**, which is how one block expresses MNv4's four families:
+**`k = 0` omits that depthwise**, which is how one block expresses MNv4's four families:
 ExtraDW (both), IB/MBConv (post only), ConvNeXt-like (pre only), FFN (neither). Those are `if`s
 here, not separate functions, because omitting a shape-preserving op does not change any type.
 
-**Phase 0 found this needs no new op and no new position** (`planning/archive/mnv4_verified.md` §2): the
-depthwise VJP is kernel-general (`cnx_render_dw7*_certified`; the descriptor carries `kH kW`), and
+The block needs no new op and no new position: the depthwise VJP is kernel-general
+(`depthwiseFlatHasVJP`, `depthwiseBack_faithful`; the descriptor carries `kH kW`), and
 a leading depthwise already exists — `MobileNetV2RenderB.irFwdNoExpB`, the `t = 1` inverted residual,
 emits `.depthwise (c := ic)` straight onto the block input. What is new is the **composition**:
 ExtraDW puts a depthwise on *both* sides of the pointwise expand.
@@ -47,22 +45,21 @@ expand run at the input resolution. Read off the Conv-M table
 | **18** blocks | 1 | `ic = oc` | `uibFwdSkipB` |
 | **3** blocks (1, 3, 11) | 2 | `ic ≠ oc`, pre- and post-DW present | `uibFwdStridedB` |
 
-Until 2026-09-24 the three strided rows were PRE-strided (the pre-DW carried the stride, and the
-expand ran at `h`); timm strides `dw_mid`. That, a relu after every pre-DW (timm's `dw_start` is BN
-only), a swish stage 0, a 7×7 `conv_head` and an XLA-`SAME` stem were five departures from
-`mobilenetv4_conv_medium` that no count could see (`planning/mnv4_timm_parity.md`).
+Note: the stride position (post-DW, not pre-DW), the BN-only pre-DW, the relu fused stage, the
+1×1 head conv and the symmetric-pad stem follow timm's `mobilenetv4_conv_medium`; parameter counts
+alone cannot distinguish any of these from the alternatives.
 
-⚠⚠ **ACTIVATION IS PLAIN `relu`, NOT `relu6`**, after the expand and the post-DW; the pre-DW and
+**Activation is plain `relu`, not `relu6`**, after the expand and the post-DW; the pre-DW and
 the project are BN only. MobileNetV2's blocks use relu6 and this file sits next to that renderer,
 so the wrong one is one keystroke away.
 
-⚠ **A pre/post-DW swap is invisible to every count.** Same `k`, same channels ⇒ same parameter
+**A pre/post-DW swap is invisible to every count.** Same `k`, same channels ⇒ same parameter
 shapes, so `uib-layout-tie` passes on a renderer that swaps them, and so does any arity or op-count
 audit. At stride 1 it is invisible to the TYPES too, since both positions are shape-preserving —
 which is why the four families are `if`s that the compiler cannot check. Only a forward tie against
 the reference on shared weights pins the order. Same class as R50's stride-on-the-3×3.
 
-⚠ The baseline drops the stride entirely for a stride-2 FFN block (no depthwise to carry it,
+Note: the baseline drops the stride entirely for a stride-2 FFN block (no depthwise to carry it,
 `MlirCodegen.emitTrainStepBody`'s `.uib` case). No such block exists in the table; this file has no function for that
 shape, so the case is absent rather than silently wrong.
 -/
@@ -76,7 +73,7 @@ namespace Proofs.StableHLO
     order is exactly what `toSpecs` lays out — those two facts are what make the signature and the
     driver's parameter blob describe the same thing.
 
-    ⚠ A depthwise kernel is `[c, 1, k, k]`, not `[c, c, k, k]`. That is the whole difference between
+    A depthwise kernel is `[c, 1, k, k]`, not `[c, c, k, k]`. That is the whole difference between
     a depthwise and a regular conv at this layer, and it is 3 orders of magnitude of parameters. -/
 private def uibSig (p : String) (ic oc expand preDWk postDWk : Nat) : List (String × List Nat) :=
   let mid := ic * expand
@@ -98,7 +95,7 @@ private def fusedSig (p : String) (ic oc expand k : Nat) : List (String × List 
     21 UIB blocks, the TWO head convs, the classifier. Single source for the signature and the return
     order, the same role `r50ShapeList` plays for R50.
 
-    ⚠ This list and `VLayer.toSpecs` are TWO HAND-WRITTEN READINGS of the same layout — the
+    This list and `VLayer.toSpecs` are TWO HAND-WRITTEN READINGS of the same layout — the
     renderer cannot import the spec without inverting the dependency, which is the same two-lists
     shape as `toSpecs == XLayout.specs` elsewhere. `mnv4-fwd-smoke` is the gate that pins them. -/
 def mnv4ShapeList (nClasses : Nat) : List (String × List Nat) :=
@@ -136,7 +133,7 @@ private def fusedStatSig (p : String) (ic oc expand : Nat) : List (String × Lis
 /-- **The 154 BN running-statistic slots** = 77 BN layers × (μ, var), in forward-traversal order:
     stem, the fused stage's two, each UIB block's (2–4 depending on family), the head.
 
-    ⚠ A misaligned stat slot is **SILENT**: the arities still match and the wrong layer's statistics
+    A misaligned stat slot is **SILENT**: the arities still match and the wrong layer's statistics
     simply flow into the wrong `@mnv4_fwd_eval` slot. That is why the order here and the order the
     train step returns them in are both derived from the same block table, and why the eval forward
     reads them through `mnv4Bn`'s `statP` rather than an independently-numbered list. -/
@@ -158,13 +155,11 @@ def mnv4StatSigList : List (String × String) :=
     `pretty` exactly once, so the fresh-name counter advances identically and `@mnv4_fwd`
     re-renders byte-identical after this threading — the cheap self-check that it is inert.
 
-    ⚠⚠ **This exists so `@mnv4_fwd` and `@mnv4_fwd_eval` cannot be different nets.** That is not a
-    hypothetical: `planning/archive/mnv4_verified.md` §3d(b) measured `mobilenetv2_fwd` in a *different BN
-    world* from the Adam train step that trains it, and `regen_verified_mlir.sh check` went green
-    anyway because it only ever pairs a forward with the SGD step. One traversal, one switch, per
-    the `ResNet50RenderB` rule — the divergence has nowhere to live.
+    **This exists so `@mnv4_fwd` and `@mnv4_fwd_eval` cannot be different nets:** a forward and
+    the train step that trains it can otherwise sit in different BN worlds with every byte-pairing
+    check green. One traversal, one switch, as in `ResNet50RenderB`.
 
-    ⭐ SYNC-BN (`planning/global_bn_verified.md` §3.4): `.train` is `bnFwdSite`, which at `sync`
+    SYNC-BN: `.train` is `bnFwdSite`, which at `sync`
     emits the all-reduced composition and returns the packed `[μ ‖ σ²]` as the third component
     (`""` otherwise, and always at `.eval`). The collectives are tagged with the γ parameter's name
     without `%`. -/
@@ -321,9 +316,9 @@ private def uibFwdStridedB (B ic oc expand preDWk postDWk h : Nat) (mode : BnMod
     "Fused" means the MBConv expand-1×1 and its depthwise collapse into ONE regular `k×k` conv, so
     despite living in a mobile net there is nothing depthwise here. No skip: `ic ≠ oc` and stride 2.
 
-    ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium` (`scripts/parity/mnv4_timm_parity.py`). Until
-    2026-09-24 this site was swish, inherited from the JAX `fused_mbconv_block` being shared with
-    EfficientNetV2; the JAX block now takes the activation as an argument. -/
+    ReLU, as timm's `EdgeResidual` in `mobilenetv4_conv_medium` (`scripts/parity/mnv4_timm_parity.py`).
+    The JAX `fused_mbconv_block` is shared with EfficientNetV2 (swish) and takes the activation as
+    an argument. -/
 def fusedMbConvFwdStridedB (B ic oc expand k h : Nat) (mode : BnMode)
     (epsStr p xName : String)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
@@ -401,10 +396,10 @@ structure Mnv4StemFwdB where
   o : String
 
 /-- Stem forward: 3×3/s2 conv (3→32), 224→112 → batch BN → relu, on `%x`.
-    Symmetric `(1,1)` padding (`.convStridedAt`), as timm's `conv_stem`. Until 2026-09-24 this was
-    `.convStridedXlaAt` to match a reference that passed `padding='SAME'` (XLA pads a 3×3/s2 at 224
-    by (0,1)); both give 112×112, so only a forward on shared weights sees the difference
-    (`scripts/parity/mnv4_timm_parity.py`, `scripts/parity/mnv4_forward_tie.py`). -/
+    Symmetric `(1,1)` padding (`.convStridedAt`), as timm's `conv_stem`. XLA-`SAME` padding
+    (`.convStridedXlaAt`, (0,1) for a 3×3/s2 at 224) also gives 112×112, so only a forward on shared
+    weights sees the difference (`scripts/parity/mnv4_timm_parity.py`,
+    `scripts/parity/mnv4_forward_tie.py`). -/
 def mnv4StemFwdB (B : Nat) (epsStr : String) (mode : BnMode := .train) (bf16 : Bool := false)
     (replicas : Nat := 1) (sync : Bool := false)
     -- ▶ `f`, the FINAL feature side (`mnv4FwdChainB`'s): the input is `32·f`, the stem out `16·f`.
@@ -438,8 +433,8 @@ structure Mnv4HeadFwdB where
 /-- Head forward, timm's order: 1×1 (256→960) → BN → relu at 7×7 (Conv-M's `cn_r1_k1_s1_c960`),
     GAP(7×7), then `conv_head` 1×1 (960→1280) → `norm_head` BN → relu on the POOLED `[B, 960, 1, 1]`,
     then dense. The second BN therefore normalises over the batch alone (`N·1·1` cells per
-    channel). Until 2026-09-24 `conv_head` ran at 7×7 before the pool; batch BN and relu do not
-    commute with pooling, so that was a different function with the same parameter count. -/
+    channel). Running `conv_head` at 7×7 before the pool would be a different function with the
+    same parameter count: batch BN and relu do not commute with pooling. -/
 def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .train)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false)
     -- ▶ CLASSIFIER DROPOUT (`%do`, the driver's inverted per-element mask) between the head relu
@@ -479,21 +474,20 @@ def mnv4HeadFwdB (B nClasses : Nat) (epsStr xName : String) (mode : BnMode := .t
          h1c := nH1c, h1n := nH1n, h1st := h1st, h1r := nH1r,
          hc := nHc, hn := nHn, hst := hst, hr := nHr, gap := nGap, cin := nCin, log := nLog }
 
-/-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → 10 classes.
+/-- **The MobileNetV4-Conv-M forward chain**, batch BN, at `N := B`, 224² → `nClasses`.
 
-    Transcribed 1:1 from [`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean), which is the faithful Conv-M table as of
-    2026-08-14 (`historical/RESULTS.md`'s **84.58%** belongs to the SUPERSEDED Conv-S table). Spatial ladder:
+    Transcribed 1:1 from the Conv-M table in [`jax/MainMobilenetV4.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainMobilenetV4.lean). Spatial ladder:
 
     ```
       224 --stem s2--> 112 --fused s2--> 56 --uib s2--> 28 --uib s2--> 14 --uib s2--> 7 --GAP--> 1
     ```
 
-    Block dispatch is forced by the table and checked by the types: the three stride-2 blocks
-    (1, 3, 11) are `ic ≠ oc` and strided at the post-DW (timm's `dw_mid`); the eighteen stride-1
-    blocks are all `ic = oc`, hence all skip.
+    Block dispatch follows the table: the three stride-2 blocks (1, 3, 11) are `ic ≠ oc` and
+    strided at the post-DW (timm's `dw_mid`); the eighteen stride-1 blocks are all `ic = oc`,
+    hence all skip. The stride/skip split is checked by the types; which depthwise positions a
+    block has (its family) is an `if` the types do not check.
     Families in order after the fused stage: ExtraDW ×7, ConvNeXt, FFN, ConvNeXt, ExtraDW ×4, FFN,
     ConvNeXt, ExtraDW ×2, FFN ×2, ConvNeXt — 13 / 4 / 4 and **no IB at all**.
-    ⚠ This paragraph listed Conv-S's fourteen families until 2026-09-07.
 
     **Activations**, as timm's `mobilenetv4_conv_medium`:
     * stem and head `.convBn` → **relu** (`MlirCodegen.emitConvBnTrain … useRelu := true`)
@@ -557,9 +551,9 @@ def mnv4ZbWidths : List Nat :=
 
     `%x` plus `mnv4SigList`'s parameters in `VLayer.toSpecs` order, logits `[B, nClasses]`. Every
     conv is bias-free, so the proven conv ops' bias operands bind to the `%zb{c}` zero constants the
-    prelude declares — same op, `bias = 0`, and `x + 0.0` is exact (§2l step B).
+    prelude declares — same op, `bias = 0`, and `x + 0.0` is exact.
 
-    ⚠ `zeroBiasPrelude` must cover every width the chain references or the module has an unbound
+    `zeroBiasPrelude` must cover every width the chain references or the module has an unbound
     SSA name. That is a link error at parse time rather than a wrong number, which is the good
     direction, but `mnv4-fwd-smoke` checks it anyway so the failure arrives at `lake build` and not
     at `iree-compile`. -/
@@ -580,7 +574,7 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
     `%x` + 233 params + 154 stat inputs = **388 inputs** (counted off `mnv4_fwd_eval.mlir`). This
     is what the driver scores through.
 
-    ⭐ It is `mnv4FwdChainB` at `.eval` — the SAME traversal `@mnv4_fwd` and the train step use, so
+    It is `mnv4FwdChainB` at `.eval` — the SAME traversal `@mnv4_fwd` and the train step use, so
     its BN order matches `mnv4StatSigList` by construction rather than by a second reading. -/
 def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
     (slug : String := "mnv4") (vSuffix : String := "")
@@ -613,7 +607,7 @@ private structure UibBackB where
 /-- Pair a block's `uibSig`/`fusedSig` slice with the gradient SSA names its backward produced, in
     the same order.
 
-    ⭐ **ONE source for the names AND the shapes.** The peers hand-write the parameter list twice —
+    **ONE source for the names AND the shapes.** The peers hand-write the parameter list twice —
     once in the signature, once in the backward's `ps` — and rely on eyes to keep them in step. Here
     the list the func header is built from is literally the list the AdamW tail folds over, so a
     parameter cannot be one shape in the signature and another in the optimizer. The `k = 0`
@@ -626,10 +620,10 @@ private def zipPs (sig : List (String × List Nat)) (grads : List String) : List
 /-- **STRIDE-1 UIB backward + its 6/9/12 un-fused gradients** — all four families, `ic = oc = c`.
     The skip is linear, so `dy` reaches the project BN unchanged AND fans back in at the block dx.
 
-    The two `if`s are the same `k = 0` dispatch the forward used. ⚠ A backward that omits the
+    The two `if`s are the same `k = 0` dispatch the forward used. A backward that omits the
     *other* depthwise from the one the forward emitted still type-checks (both positions are
     shape-preserving at stride 1) and still descends — it computes the gradient of a different net.
-    That is §3's trap arriving in the backward, so the forward record `f` is read for which
+    So the forward record `f` is read for which
     positions exist (`f.qn`/`f.dn` are `""` when absent) rather than re-deriving it. -/
 private def uibBackSkipGradB (B c expand preDWk postDWk h : Nat)
     (epsStr p xName : String) (f : UibFwdB) (dyName : String)
@@ -821,7 +815,7 @@ private def fusedMbConvBackStridedGradB (B ic oc expand k h : Nat)
 
 /-- **Backward dispatch — the SAME `if`s as `uibFwdDispatch`, on the SAME row.**
 
-    ⚠⚠ That the two dispatchers read one `UibSpec` is the point. Differentiating a block as a
+    That the two dispatchers read one `UibSpec` is the point. Differentiating a block as a
     different family than the forward emitted it type-checks at stride 1 (both depthwise positions
     are shape-preserving), produces the right shapes, trains and descends — and computes the
     gradient of a net nobody built. With one table and one row per call there is no second place
@@ -851,8 +845,7 @@ def mnv4AdamVariant (B replicas : Nat)
   (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B) ++
   (if bf16 then "bf16" else "")
 
-/-- **The variant slug of a recipe render** — the JAX reference's tier-2 recipe
-    (planning/archive/mnv4_half_pair.md). `opt = none` is `mnv4AdamVariant`, so every committed spelling
+/-- **The variant slug of a recipe render** — the JAX reference's recipe renders. `opt = none` is `mnv4AdamVariant`, so every committed spelling
     is unchanged. Markers in the order the driver's predicates read them (`VerifiedVariant`):
     `ema` first (`emaOn` is a PREFIX test), then the optimizer with its `k` (`accK` parses it back
     out after `acc[dp]`), the per-replica batch, `wx`, `do`, the decay mark, `bf16`. -/
@@ -876,12 +869,11 @@ def mnv4RecipeVariant (B replicas : Nat) (bf16 : Bool) (opt : Option R34Opt) (em
 
     **858 inputs** (`%x`, 233 θ, 233 m, 233 v, `%lr`/`%bc1`/`%bc2`, 154 running-stat slots,
     `%onehot`) and **856 outputs** (233 θ', 233 m', 233 v', `%loss`/`%bc1`/`%bc2`, 154 batch
-    stats) — counted off `mnv4_adam_train_step.mlir`, which is the only reading that cannot go
-    stale (this line said 583 / 581 at Conv-S's 158 slots until 2026-09-07). Parameter
+    stats) — counted off `mnv4_adam_train_step.mlir`. Parameter
     order comes from `mnv4ShapeList` — through `zipPs`, which builds each block's gradient list from
     the very same `uibSig` slice the signature does — and stat order from `mnv4StatShapeList`.
 
-    Forward, timm `mobilenetv4_conv_medium` since 90e4af7e: symmetric stem 3×3/s2 (3→32,
+    Forward, as timm's `mobilenetv4_conv_medium`: symmetric stem 3×3/s2 (3→32,
     224→112) → fused MBConv (32→48, 112→56, ReLU) → the 21 UIB blocks (stride on the post-DW,
     BN-only pre-DW; ExtraDW, ConvNeXt and FFN — no IB) → 1×1 conv-BN-relu (256→960) → GAP → 1×1
     `conv_head` (960→1280, BN over the batch at 1×1) → dense.

@@ -1,46 +1,37 @@
 import LeanMlir.Proofs.Foundation.IndexCast
 import LeanMlir.Proofs.Codegen.RenderKit
 
-/-! # ConvNeXt-T train step rendered ENTIRELY from the verified AST (the §1 render)
+/-! # ConvNeXt-T train step rendered from the verified AST, with declared carve-outs
 
-⭐ **Since 4c leg 3 (2026-09-07) this file writes ONE artifact: the SGD-inline
-`verified_mlir/convnext_train_step.mlir`.** The thirteen AdamW/EMA train steps and the four
-drop-free forwards render from the batched chain in `ConvNeXtRenderB.lean`
-(`planning/archive/renderer_convergence.md`, leg 3), whose Proofs tier is `ConvNeXtFoldGB.lean`.
-This chain stays for two reasons: the batched traversal has no fused-SGD arm, and
-`ConvNeXtStepTie.lean`'s 182-parameter tie is stated at exactly these bytes.
-[`tests/TestConvNeXtFwdBTie.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtFwdBTie.lean) pins the two chains against each other — identical forwards,
-backwards differing on the conv-VJP `transpose`/`reverse` pair (78 lines) and nothing else.
+The per-example ConvNeXt render. It writes one artifact, the SGD-inline
+`verified_mlir/convnext_train_step.mlir` (`convNextTrainStepFaithfulV`), and holds what
+`ConvNeXtRenderB` reuses: the stage tables (`CnxDims`, `cnxTiny`/`cnxSmall`/`cnxBase`), the
+parameter list (`cnxAllParams`), the forward render `convNextFwdFaithfulV`, the shared traversal
+`convNextBackAll`, and the AdamW tail `convNextAdamTrainStepFaithful`. Every other ConvNeXt
+artifact is written by the batched chain in `ConvNeXtRenderB`, whose Proofs tier is
+`ConvNeXtFoldGB`. This chain stays because the batched traversal has no fused-SGD arm and
+`ConvNeXtStepTie` is stated at this file's bytes. `TestConvNeXtFwdBTie` checks the two chains
+against each other.
 
-The ConvNeXt peer of `EfficientNetRender`: the FULL [3,3,9,3] ConvNeXt-T train
-step (BS=32, 3×224²→10) rendered as `pretty` of verified `SHlo` nodes — forward, backward-cotangent
-chain, AND the param-SGD tail (the new `ConvNeXtFold` ops + the existing conv/depthwise/dense
-ops). Adapted from the committed emitter [`tests/TestConvNeXtTTrainPC.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtTTrainPC.lean): its forward + backward
-cotangent chain were already `pretty(SHlo)`; here the hand-written param-GRAD strings are replaced by
-the SHlo param-SGD ops, which BUNDLE the gradient + SGD wrap into one op (producing the updated param).
+The train step is the full `[3,3,9,3]` ConvNeXt-T (BS=32, 3×224²→10): forward, backward
+cotangent chain, and the parameter updates. All 182 parameter gradients are `SHlo` nodes. The stem
+4×4/s4 weight gradient is `.convStride4WeightGrad`, whose `den` is
+`flatConvStride4WeightGradHasVJP`; the three 2×2/s2 downsample weight gradients are
+`.convStridedWeightGrad`, whose `den` is the kernel-generic `flatConvStride2WeightGradHasVJP`
+(the emitter splits odd/even kernels in `StableHLO.sWGradGeom`).
 
-**The two weight-gradient residuals are CLOSED (2026-07-28); all 180 params are now SHlo ops.**
-They were never the same kind of gap:
-* the **stem 4×4/s4 weight** (`psW`) needed a genuinely missing cert. `flatConvStride4` (forward)
-  and `flatConvStride4HasVJP` (input) already existed; `flatConvStride4WeightGradHasVJP` is
-  new — two `vjpComp` steps over the stride-1 weight-VJP and the two decimations, mirroring the
-  stride-2 sibling. It backs the new `.convStride4WeightGrad` op.
-* the **2×2/s2 downsample** (`d{i}W`) needed NO new cert.
-  `flatConvStride2WeightGradHasVJP` is kernel-generic and `.convStridedWeightGrad` already
-  existed; the blocker was purely emit-side — `(kH−1)/2` symmetric SAME padding floors to 0 at
-  `kH = 2` and emitted a 1×1 convolution against a declared 2×2 result, i.e. type-invalid MLIR.
-  `StableHLO.sWGradGeom` splits odd/even (odd byte-for-byte unchanged) and the site is now certified.
+Hand-written text in the rendered module, outside any `SHlo` term:
+* the function signature, the `%sc`/`%bsc` constants and `chLnPrelude`;
+* the cotangent's `÷B` (`%dy = divide …, %bsc`) in the SGD render;
+* the GAP-backward block (`%dgi` … `%dgapf`), in both the SGD and AdamW renders;
+* the stem weight's update in the SGD render: `psW − lr·g` is `sgdOf`, a hand-written
+  `multiply`/`subtract` around the certified gradient;
+* the AdamW render's report-only `%loss`.
 
-*(A note here used to claim the **scalar-LN γ/β** params render as `tensor<1xf32>` against a
-committed `tensor<f32>` signature. Checked 2026-07-29 and **retired: neither is true of any committed
-artifact.** `ty [] = "tensor<f32>"`, and `grep -c 'tensor<1xf32>'` is **0** in both
-`convnext_train_step.mlir` and `convnext_adam_train_step.mlir` — the scalar params are `tensor<f32>`
-on both sides. Handoff §0b repeats the stale claim.)*
-
-Every other param (depthwise-7×7 W/b, 1×1 expand/project W/b, per-channel layer-scale γ,
-channel-LN γ/β, downsample 2×2 W/b, dense W/b) denotes the certified loss-descent step
-(`ConvNeXtFold` + M2/M3). Render is value-independent (`skel` erases values), so placeholders + `lr:=0`
-are passed; the emitted `lrStr`/`epsStr` literals carry the real values. -/
+In the SGD render every other parameter is updated by a fused `SHlo` SGD op (gradient and
+`θ − lr·g` in one node), which denotes the certified loss-descent step (`ConvNeXtFold`). Render is
+value-independent (`skel` erases values), so placeholders + `lr:=0` are passed; the emitted
+`lrStr`/`epsStr` literals carry the real values. -/
 
 open Proofs Proofs.StableHLO
 
@@ -80,7 +71,7 @@ private def cSpats  : Array Nat := #[56, 28, 14, 7]
 
 /-- **The ConvNeXt size — depths and channel dims TOGETHER, in one record.**
 
-    ⚠⚠ **They are bundled deliberately, and this is the lesson ConvNeXt-B taught that ConvNeXt-S
+    **They are bundled deliberately, and this is the lesson ConvNeXt-B taught that ConvNeXt-S
     did not.** S is pure depth, so it was served by a bare `Array Nat` of depths — and that shape
     admits `(depths := S, dims := T)`, which is not a ConvNeXt of any size but type-checks, renders
     and trains. B moves BOTH, so a second bare array would have made the mismatch reachable in the
@@ -88,7 +79,7 @@ private def cSpats  : Array Nat := #[56, 28, 14, 7]
     not exist. Same reasoning as `VitDims`, arrived at from the opposite direction: ViT bundled to
     keep `d = heads * hd` definitional, this bundles to keep two tables from drifting.
 
-    ⚠ `deriving DecidableEq` is load-bearing: `ConvNeXtRenderB` restates these and `#guard`s the
+    `deriving DecidableEq` is load-bearing: `ConvNeXtRenderB` restates these and `#guard`s the
     restatement against them, and `cnxModelName` matches on the whole record rather than on the
     block count — which is what stops B (36 blocks, like S) from introducing itself as an S. -/
 structure CnxDims where
@@ -102,7 +93,7 @@ def cnxTiny  : CnxDims := { depths := #[3, 3,  9, 3], dims := #[ 96, 192, 384,  
 /-- ConvNeXt-**S**: T deepened — stage 3 goes 9 → 27, dims UNCHANGED. 50.2 M at K=1000. -/
 def cnxSmall : CnxDims := { depths := #[3, 3, 27, 3], dims := #[ 96, 192, 384,  768] }
 /-- ConvNeXt-**B**: S's depth AND a wider net — `[128,256,512,1024]`. 88.6 M at K=1000.
-    ⚠ B is the size that made the dims a parameter: it shares S's depth table exactly, so anything
+    B is the size that made the dims a parameter: it shares S's depth table exactly, so anything
     keying on block count alone cannot tell them apart. -/
 def cnxBase  : CnxDims := { depths := #[3, 3, 27, 3], dims := #[128, 256, 512, 1024] }
 
@@ -202,13 +193,12 @@ def cnxDropSites (V : CnxDims := cnxTiny) : Nat := cnxDropTotal V
 
 /-- **The model name a render's banner claims, DERIVED from the stage table it was rendered at.**
 
-    ⚠ A banner is a render's own description of what it did, and the one thing worse than not
+    A banner is a render's own description of what it did, and the one thing worse than not
     having one is having one that lies — `cnxDropFwdBanner`'s own note says exactly that about
     reusing a drop-free banner on an SD artifact. Passing the name as a second parameter beside `D`
-    would be two writers for one fact, the shape (§2k's `α/K`, the `wx` variant marker) that has
-    shipped a real defect in this net three times. So it is read off `D`.
+    would be two writers for one fact. So it is read off `D`.
 
-    ⚠⚠ **It matches on the WHOLE RECORD, not on the block count, and that is not fussiness.**
+    **It matches on the WHOLE RECORD, not on the block count, and that is not fussiness.**
     This function keyed on `cnxDropTotal` while ConvNeXt-S was the only new size, and B broke it:
     B is `[3,3,27,3]` too, so 36 blocks names S and B alike and every B artifact would have opened
     by calling itself a ConvNeXt-S. Caught by the guards below, which is why they enumerate all
@@ -254,23 +244,21 @@ private def sgdOf (gradN nm t : String) : String :=
 -- § CHANNEL LayerNorm (§2m) — the real one, assembled from ViT's proven row-LN family
 -- ════════════════════════════════════════════════════════════════
 
-/-! **What was wrong.** Every LN site here normalises with `.bnF` ⇒ `bnForward n ε γ β`, which takes
-ONE mean and ONE variance over the whole `c·h·w` map per example and applies a **scalar** γ/β.
-ConvNeXt's `channel_layer_norm` takes `h·w` statistics per example, each over the `c` channels at
-one spatial position, with a **per-channel `[c]`** affine — a different function, on 21 of the 22
-sites. (The 22nd, the head, runs after GAP where there is no spatial extent left, so its axis is
-already right; only its affine is wrong.) §2m first recorded the axis as correct by matching the
-literal `across dimensions = [1]` against the reference's `axis=1`, but the artifact's tensor is
-rank-2 `[B, c·h·w]` and the reference's is rank-4 NCHW — §4's one-tensor-layout rule.
+/-! **The channel LayerNorm.** ConvNeXt's `channel_layer_norm` takes `h·w` statistics per
+example, each over the `c` channels at one spatial position, with a **per-channel `[c]`** affine.
+That is a different function from `.bnF` (`bnForward n ε γ β`: one mean and one variance over the
+whole `c·h·w` map, scalar γ/β). Matching a reduction's literal `across dimensions = [1]` against
+the reference's `axis=1` does not check this: the artifact's tensor is rank-2 `[B, c·h·w]` and the
+reference's is rank-4 NCHW.
 
-**Route A: no new `SHlo` op.** ConvNeXt's channel-LN IS ViT's row-LN under a transpose — view an
+**No new `SHlo` op.** ConvNeXt's channel-LN IS ViT's row-LN under a transpose — view an
 example as `[c, s]` with `s = h·w`, transpose to `[s, c]`, and each row is one spatial position
-holding its `c` channels, which is exactly what `rowLNFlat` normalises. Settled on device before
-any of this was written (`lake build channel-ln`): forward and all three backward pieces tie the
-closed form at rel 0, the incumbent `.bnF` control fires at rel 0.82, and the transposes measure
+holding its `c` channels, which is exactly what `rowLNFlat` normalises. Checked on device
+(`lake build channel-ln`): forward and all three backward pieces tie the closed form at rel 0, the
+`.bnF` control fires at rel 0.82, and the transposes measure
 **free** (Δ 0.00 ms on 16.1 ms of whole-net LN — XLA folds a transpose into the consumer's layout).
 
-⚠ **`Nat` multiplication is not definitionally associative**, and the ambient index here is
+**`Nat` multiplication is not definitionally associative**, and the ambient index here is
 `c*h*h = (c*h)*h` while the transpose needs `c*(h*h)`. `reassoc`/`unassoc` are `castIdx` along
 `Nat.mul_assoc`; they are casts on the index, not on the value, so `pretty` walks the same tree. -/
 
@@ -281,24 +269,19 @@ private def unassoc {c h : Nat} (e : SHlo (c*(h*h))) : SHlo (c*h*h) := castIdx (
     the real per-channel affine is `rowScaleF`/`rowBiasF` downstream, exactly as ViT does it.
     Emitted once per module body.
 
-    ⚠ This is the enet `zeroBiasPrelude` defect one net over (§2m): wire the operand and forget the
+    This is the enet `zeroBiasPrelude` defect one net over: wire the operand and forget the
     prelude, and the artifact uses an SSA name nothing defines — `iree-compile`/XLA say "use of
     undeclared SSA value name" and nothing before them says anything. It happened HERE too, on the
-    first flag-on render, and `regen_verified_mlir.sh check`'s prelude audit is what generalises. -/
+    first flag-on render, and `regen_verified_mlir.sh check`'s prelude audit is what catches it. -/
 def chLnPrelude : String :=
     "    // §2m: the channel-LN chain normalises with lnRowF at γ=1/β=0 and applies the REAL\n" ++
     "    // per-channel affine with rowScaleF/rowBiasF, so these two are its scalar identities.\n" ++
     "    %one = stablehlo.constant dense<1.0> : tensor<f32>\n" ++
     "    %zero = stablehlo.constant dense<0.0> : tensor<f32>\n"
 
-/-- One **LayerNorm forward** site — ConvNeXt's real channel-LN (§2m): transpose to `[h·w, c]`,
+/-- One **LayerNorm forward** site — ConvNeXt's real channel-LN: transpose to `[h·w, c]`,
     normalise each spatial row over its channels at the scalar identities `%one`/`%zero`, apply
-    the real `[c]` affine, transpose back.
-
-    §2n deleted the `chLN : Bool` flag this used to carry. Its `false` branch emitted the RETIRED
-    scalar-global `.bnF` with rank-0 γ/β, and it had no caller: both `#eval` writers took the
-    default, and `ConvNeXtStepTie` — which ties that spelling — does not import this file, it works
-    over its own math mirrors. It corresponded to the ch9 §1a tie; it was never used by it. -/
+    the real `[c]` affine, transpose back. -/
 private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, t)  ← pretty cBS (.transposeF (m := c) (n := h*h)
@@ -312,14 +295,14 @@ private def lnFwdSite (cBS : Nat) (gN btN xin : String) (c h : Nat) :
     let (k5, o)  ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand bi (zV : Vec (h*h*c))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
-/-- **The HEAD LN forward site** — the paper's `norm(x.mean([-2,-1]))`, restored 2026-08-30.
+/-- **The HEAD LN forward site** — the paper's `norm(x.mean([-2,-1]))`.
 
-    ⭐ It is `lnFwdSite` with the two transposes DELETED, and that is the whole difference: after
+    It is `lnFwdSite` with the two transposes DELETED, and that is the whole difference: after
     GAP the tensor is a single `[d]` row, so "normalise each spatial row over its channels" and
     "normalise the feature vector" are the same function at `m = 1`. Mirrors
-    `Proofs.StableHLO.headLNGraph` op for op — that is what makes rung E close.
+    `Proofs.StableHLO.headLNGraph` op for op.
 
-    ⚠ Every operand is annotated `Vec (1 * d)`, never `Vec d`. `1 * d` does NOT reduce for a
+    Every operand is annotated `Vec (1 * d)`, never `Vec d`. `1 * d` does NOT reduce for a
     VARIABLE `d` (`Nat.mul` recurses on its second argument), and `d` here is `V.dims[3]!`, which
     moves with the ConvNeXt size. It is the same annotation `convNextBackAll`'s smoothing chain
     already carries, for the same reason, and it bites the moment the render stops being pinned. -/
@@ -376,9 +359,9 @@ private def lnBackSite (cBS : Nat) (gN xName cot : String) (c h : Nat) :
     let (k5, o)   ← pretty cBS (.transposeF (m := h*h) (n := c) (.operand dxT (zV : Vec (h*h*c))))
     pure (k1 ++ k2 ++ k3 ++ k4 ++ k5, o)
 
-/-- The **γ tail** for one LN site — the per-channel `veclnGamma{Grad,Sgd}`. ⚠ The transposes of `xName`/`cot` are re-emitted here rather
-    than threaded from `lnBackSite`: `pretty` has no CSE (§4), but XLA does, and §2b-bis measured
-    that it collapses exactly this kind of duplicated subtree. -/
+/-- The **γ tail** for one LN site — the per-channel `veclnGamma{Grad,Sgd}`. The transposes of `xName`/`cot` are re-emitted here rather
+    than threaded from `lnBackSite`: `pretty` has no CSE, but XLA does, and XLA collapses
+    exactly this kind of duplicated subtree. -/
 private def lnGammaTail (cBS : Nat) (adam : Bool) (gN xName cot : String) (c h : Nat) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
     let (k1, xT) ← pretty cBS (.transposeF (m := c) (n := h*h)
@@ -520,14 +503,11 @@ private def downParamSgd (cBS : Nat) (adam : Bool) (pfx downLn downIn cot_n dy :
 -- ── full param signature (committed forward order), name + SHAPE ──
 /-! Shapes are `List Nat` rather than rendered `tensor<…>` strings because the AdamW render needs
 both forms: `%{nm}`/`%{nm}m`/`%{nm}v` for the moment slots and the raw dimensions for the emitted
-Adam ops. The scalar-LN γ/β are **rank 0**, i.e. `[]` — and `ty [] = "tensor<f32>"`, exactly the
-string that used to be hardcoded, so the SGD render's emitted text is unchanged. -/
+Adam ops. -/
 
-/-- ⚠ The LN γ/β are `[c]` — the real channel-LN's per-channel affine (the retired scalar-global
-    spelling had them rank-0 `[]`). This list is the func signature AND the return types, so
-    getting it wrong is not silent — the body uses `%…ng` at `tensor<{c}xf32>` and the compiler rejects a signature
-    that disagrees with itself (the §2l-A lesson: no gate found that one either, the type checker
-    did). -/
+/-- The LN γ/β are `[c]` — the real channel-LN's per-channel affine. This list is the func
+    signature AND the return types, so getting it wrong is not silent — the body uses `%…ng` at
+    `tensor<{c}xf32>` and the compiler rejects a signature that disagrees with itself. -/
 private def blkParams (pfx : String) (c e : Nat) : List (String × List Nat) :=
   let lnSh : List Nat := [c]
   [(s!"{pfx}dW", [c,1,7,7]), (s!"{pfx}db", [c]),
@@ -566,7 +546,7 @@ private def allParams (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
 
 /-- **Does this parameter get weight decay?** ConvNeXt's half of the timm rule.
 
-    ⚠ **It is the PLAIN RANK TEST, with no name carve-out, and that is the difference from ViT.**
+    **It is the PLAIN RANK TEST, with no name carve-out, and that is the difference from ViT.**
     The reference's `_wd_mask` also excludes anything matching `_WD_POS_SHAPE`, but ConvNeXt has no
     patch-embedding *positional* parameter, so its generated reference sets `_WD_POS_SHAPE = None`
     and that branch can never fire. Checked in the generated file rather than assumed — carrying
@@ -671,15 +651,15 @@ private def convNextFwdChain (cBS : Nat) (nClasses : Nat := 10) (V : CnxDims := 
          blksAll := blksAll, downLn := downLn, downIn := downIn,
          gap := gap, stemC := stemC, hn := hn, logits := logits }
 
-/-- **`@convnext_fwd` rendered ENTIRELY from the verified AST** — the peer of the train-step
-    render, sharing its forward chain and its 180-parameter signature. Takes `%x` plus the 180
-    params in `allParams` (= func-arg) order (181 inputs) and returns logits `[32, 10]`.
+/-- **`@convnext_fwd` from the per-example chain** — `convNextFwdChain`, the forward both train
+    steps in this file emit, followed by `return logits`. Takes `%x` plus the 182 params of
+    `allParams` in func-arg order (183 inputs) and returns logits `[cBS, nClasses]`. Around the
+    chain the text is the signature, a banner comment and `chLnPrelude`.
 
-    This replaces the independent hand-written string emitter in [`tests/TestConvNeXtFwd.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtFwd.lean): the
-    forward the driver evals is now the same graph the train step differentiates, **by construction
-    rather than by inspection**. Because it shares the chain, the emitted body is a byte-identical
-    PREFIX of `convnext_train_step.mlir`'s, ending exactly where the loss begins — which is what
-    `scripts/regen_verified_mlir.sh check` audits. -/
+    The committed `verified_mlir/convnext_fwd.mlir` is written by `ConvNeXtRenderB`
+    (`convNextFwdRenderB`); `TestConvNeXtFwdBTie` checks this render against it byte for byte, and
+    `scripts/regen_verified_mlir.sh check` checks that its body is a prefix of
+    `convnext_train_step.mlir`'s. -/
 def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat := 10)
     (V : CnxDims := cnxTiny)
     -- ⚠ TRAILING + DEFAULTED, see the note at the top of this file.
@@ -809,14 +789,17 @@ def convNextBackAll (adam : Bool) (smooth : Option (String × String × String) 
     updMap := updMap ++ [("psW", if adam then nPsW else "%psWn"), ("psb", nPsb)]
     pure (fwd ++ bwd, updMap, nSm)
 
-/-- **ConvNeXt-T (full [3,3,9,3]) SGD train step rendered from the verified AST** (except the two
-    documented weight-grad gaps — the stem 4×4/s4 patchify and the even-kernel 2×2/s2 downsample,
-    neither of which has a VJP-cert `SHlo` op). Every other line is `pretty` of a verified node:
-    forward + backward cotangent chain + the param-SGD ops, whose output IS the updated param.
+/-- **ConvNeXt-T (full [3,3,9,3]) SGD train step rendered from the verified AST**, the writer of
+    `verified_mlir/convnext_train_step.mlir`: `%x`, the 182 params and `%onehot` in (184 inputs),
+    the 182 updated params out. All 182 parameter gradients are `SHlo` nodes, and every parameter
+    but the stem weight `psW` is updated by a fused `SHlo` SGD op whose output is the updated
+    parameter. Hand-written text: the signature, the `%sc`/`%bsc` constants, `chLnPrelude`, the
+    `%dy` divide, the GAP-backward block, and `psW`'s update (`sgdOf` around the certified
+    `.convStride4WeightGrad`).
 
     The cotangent is plain CE with an **explicit** ÷B — unlike ViT/R34, which fold the batch mean
     into `lr` — so the committed `cLR = 0.1` is an effective 0.1, the house convention spelled
-    differently (§2a-quinquies). -/
+    differently. -/
 def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     (nClasses : Nat := 10) (V : CnxDims := cnxTiny)
     -- ⚠ TRAILING + DEFAULTED, see the note at the top of this file.
@@ -844,13 +827,12 @@ def convNextTrainStepFaithfulV (funcName : String := "convnext_train_step")
     the shim checks the entry name and refuses a mismatch outright ("entry mismatch") rather than
     running the wrong graph. The `#guard`s at the bottom pin the literal `#eval` paths against this.
 
-    ConvNeXt has only one batch (32), so unlike `mnv2AdamVariant`/`r34AdamVariant` there is no
-    batch suffix — rendering another batch would need `cBS` to stop being a private constant.
+    Unlike `mnv2AdamVariant`/`r34AdamVariant` there is no batch suffix.
 
-    ⚠ The EMA renders get their OWN slugs (`ema`/`emadp`), for the reason the RMSProp ones do: a
+    The EMA renders get their OWN slugs (`ema`/`emadp`), for the reason the RMSProp ones do: a
     render carrying a fourth `[θ|m|v|ema]` region must never be able to overwrite the artifact the
-    AdamW trainer runs, whose blob has three. That is §2a's last-writer-wins race, and here it would
-    also be an arity mismatch the driver could not survive. -/
+    AdamW trainer runs, whose blob has three: two writers for one path, where the last one wins,
+    and here it would also be an arity mismatch the driver could not survive. -/
 def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := false)
     (clip : Bool := false) (sd : Bool := false)
     -- ▶ `bf16` LAST — the newest axis, so appending leaves every committed spelling untouched.
@@ -895,7 +877,7 @@ def cnxAdamVariant (replicas : Nat) (ema : Bool := false) (wdExclude : Bool := f
 
 /-- β₁/β₂/ε/wd as graph constants — the committed ConvNeXt-T AdamW recipe.
 
-    ⚠ **`wdStr` is a parameter for the reason `ViTRender.vitAdamConsts`' is**: the Imagenette and
+    **`wdStr` is a parameter for the reason `ViTRender.vitAdamConsts`' is**: the Imagenette and
     ImageNet configs disagree on it by **500×**. `convnextVerified`'s recipe is the baked 1e-4;
     `convnextTinyImagenetConfig.weightDecay := 0.05`. The default is unchanged, so every committed
     artifact keeps its bytes; only the ImageNet `wx` render passes 0.05. -/
@@ -906,31 +888,31 @@ private def convnextAdamConsts (wdExclude : Bool := false) (wdStr : String := "0
    else "") ++
   adamWConsts wdStr
 
-/-- **ConvNeXt-T AdamW train step rendered from the verified AST.** The certified peer of the
-    hand-written render in [`tests/TestConvNeXtTrain.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/TestConvNeXtTrain.lean) that `convnext-verified-adam` trains on.
+/-- **ConvNeXt AdamW train step rendered from the verified AST** — the wrapper `ConvNeXtRenderB`
+    calls (with `traversal` set to its batched chain) to write `convnext_adam_train_step.mlir` and
+    the other ConvNeXt AdamW/EMA artifacts.
 
     Same backward as `convnext_train_step` (`convNextBackAll`, one traversal) but taking the
     **un-fused gradients**, each fed to the proven AdamW triple. The cotangent adds label smoothing
-    (α = 0.1, K = 10); ConvNeXt already spelled the ÷B explicitly, so that is the only difference.
+    (α = 0.1, K = `nClasses`); ConvNeXt already spelled the ÷B explicitly, so that is the only
+    difference.
 
-    Interface: 545 in (`%x`, 180 θ, 180 m, 180 v, `%lr`/`%bc1`/`%bc2`, `%onehot`) / 543 out
-    (180 θ', 180 m', 180 v', `%loss`/`%bc1`/`%bc2`) — positionally identical to the hand-written
-    render, so `trainAdamSched`'s packed `[θ|m|v]` protocol is unchanged.
+    Interface at ConvNeXt-T, `ema := false`, no drop-path: 551 in (`%x`, 182 θ, 182 m, 182 v,
+    `%lr`/`%bc1`/`%bc2`, `%onehot`) / 549 out (182 θ', 182 m', 182 v', `%loss`/`%bc1`/`%bc2`), the
+    packed `[θ|m|v]` layout the AdamW trainer reads.
 
-    **What this certifies.** As of 2026-07-28 **all 180 params are `pretty(AST)` end to end** —
-    the two weight-grad gaps this render used to carry (the stem 4×4/s4 patchify and the even-kernel
-    2×2/s2 downsample) are closed, by a new cert (`flatConvStride4WeightGradHasVJP`) and an
-    emit-side odd/even padding split (`StableHLO.sWGradGeom`) respectively. Licensed by
-    `convnext-adam-tie` against the previously committed hand-written render: **bit-exact on all
-    83,434,629 returned floats**, spread 0/180, against a bit-exact A-vs-A floor.
+    All 182 parameter gradients are `SHlo` nodes, and each update is the proven AdamW triple.
+    Hand-written text: the signature and constants, the GAP-backward block (in `convNextBackAll`),
+    the `%bc1`/`%bc2` passthroughs, and the report-only `%loss` (on no gradient path).
 
-    Still outside the AST here, and unchanged: `%loss` (report-only, no gradient path).
-
-    **`replicas > 1` renders the DATA-PARALLEL variant** (handoff §2h-quater) to its own entry name
-    and artifact path via `cnxAdamVariant`, so producing it can never clobber the one the trainer
-    runs. The only difference is one `all_reduce(add)/N` per parameter gradient, between the
-    certified gradient and the certified AdamW triple: *certified gradient → trusted collective →
-    certified AdamW*. See `adamOneEma` for the carve-out. -/
+    **`replicas > 1` renders the DATA-PARALLEL variant** to its own entry name and artifact path
+    via `cnxAdamVariant`, so producing it can never clobber the one the trainer runs. The only
+    difference is one `all_reduce(add)/N` per parameter gradient, between the certified gradient
+    and the certified AdamW triple: *certified gradient → trusted collective → certified AdamW*.
+    See `adamOneEma` for the carve-out. -/
+-- This render replaced a hand-written AdamW emitter after a numeric tie against it
+-- (`convnext-adam-tie`, tests/TestConvNeXtAdamTie.lean), run at the 180-parameter net before the
+-- head LN was restored.
 def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
     (replicas : Nat := 1) (nClasses : Nat := 10) (slug : String := "convnext")
     (ema : Bool := false)

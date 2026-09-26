@@ -2,8 +2,7 @@ import LeanMlir.Proofs.Codegen.ResNet34RenderB
 
 /-! # ResNet-50 train step rendered from the verified AST, at the BATCHED index
 
-R50 phase 2 (`planning/archive/next_session_pipeline_then_r50.md` §3.2). The bottleneck peer of
-`ResNet34RenderB.lean`, block for block: batch BN (`bnBatchF`, reduced over `[0,2,3]`), the whole
+The bottleneck peer of `ResNet34RenderB`, block for block: batch BN (`bnBatchF`, reduced over `[0,2,3]`), the whole
 graph at `N := B`, the un-fused `*GradB` parameter gradients, and the proven AdamW /
 heavy-ball tail — `optOne`/`optConstsB` are **imported, not copied**, so the optimizer has one
 definition across both nets.
@@ -15,35 +14,42 @@ definition across both nets.
 | renderer | block | where |
 |---|---|---|
 | `bnkIdFwdB` / `bnkIdBackGradB` | identity, `oc → mid → mid → oc` | 12 blocks |
-| `bnkProjFwdB` / `bnkProjBackGradB` | ⭐ **stride-1** projection | **stage 1 block 0 only** |
+| `bnkProjFwdB` / `bnkProjBackGradB` | **stride-1** projection | **stage 1 block 0 only** |
 | `bnkStridedFwdB` / `bnkStridedBackGradB` | strided projection | stages 2/3/4 block 0 |
 
-⚠ **The stride is on the 3×3 (`W2`), not the leading 1×1** — v1.5 / torchvision, which is what
+**The stride is on the 3×3 (`W2`), not the leading 1×1** — v1.5 / torchvision, which is what
 [`jax/MainResnet50Imagenet.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/jax/MainResnet50Imagenet.lean) trains. So in the strided block `conv1`, `bn1` and `relu1` all run
 at the **input** resolution `2hh`, and only `conv2` decimates. That asymmetry is why the strided
 renderer carries two sets of zero-vectors (`zIn`/`zMidIn` at `2hh`, `zMid`/`zOut` at `hh`) where
 the other two carry one.
 
-⚠ **`mid = oc / 4`**, so an identity block's `mid` is a QUARTER of its channel count, not a
+**`mid = oc / 4`**, so an identity block's `mid` is a QUARTER of its channel count, not a
 multiple. `VerifiedSpec.bottleneckStageSpec` already computes it that way and already selects the
 projecting form when `stride != 1 || ic != oc` — which is exactly how stage 1 (64→256 at stride 1)
 gets a projection. This file's block sequence must agree with that spec's ORDER, because the
 driver packs `[θ|m|v]` off `net.specs`; `r50SigList` below is the render's side of that contract
 and `#guard`s pin the counts.
 
-## ⚠ No conv biases
+## No conv biases
 
 Every conv here is bias-free (`convBnNB` in the spec — 9 tensors per identity block, 12 per
 projection block), matching R34's ImageNet render. The `convBias` plumbing R34's renderer carries
 for its CIFAR-era artifacts is deliberately absent rather than threaded and passed `false`.
 
-## ⚠⚠ There is no incumbent hand-written R50 render to tie against
+## Proofs tier, and no hand-written render to tie against
 
-§3.2. Every other net's swap onto the verified renderer was licensed by a bit-exact numeric tie
-against the hand-written artifact it replaced. R50 has no such artifact, so that license does not
-exist here and **must not be implied**. The substitutes are the layer-level VJP oracle
-(`tests/vjp_oracle/run.sh`) and a keep-1 known-answer check, and whichever one is used has to be
-named in the commit that ships a number off this render.
+The Proofs-tier files for this net are `ResNet50FullB` (the batched ℝ forward and its typed graph),
+`ResNet50StepTieB` (every parameter-gradient node pinned to the cotangent the emitted backward
+chain delivers) and `ResNet50SyncStepTieB` (the data-parallel sync-BN twin). `FwdGraphTextTies`
+checks by `#guard` that this file's stem, block and head emitters print the same bytes as `pretty`
+of the matching typed graphs (`r50StemGraphB`, `r50IdGraphB`, `r50ProjGraphB`, `r50DownGraphB`,
+`r34HeadGraphB`), at batch 2 and one shape each.
+
+Every other net's swap onto the verified renderer was also checked by a bit-exact numeric tie
+against the hand-written artifact it replaced. R50 has no such artifact, so no such tie exists for
+it. The substitutes are the layer-level VJP oracle (`tests/vjp_oracle/run.sh`) and a keep-1
+known-answer check, and whichever one is used has to be named in the commit that ships a number
+off this render.
 -/
 
 open Proofs.StableHLO
@@ -61,7 +67,7 @@ private def zb (c : Nat) : String := biasName false "" c
 -- ════════════════════════════════════════════════════════════════
 
 /-- One bottleneck block's parameters, in `bneckIdBlk` order: `W1 g1 bt1 W2 g2 bt2 W3 g3 bt3`,
-    plus `Wp gp btp` LAST when it projects. ⚠ The projection going last is not cosmetic — it is
+    plus `Wp gp btp` LAST when it projects. The projection going last is not cosmetic — it is
     `bneckDownBlk`'s order and therefore the order the driver's `[θ|m|v]` walk assumes. -/
 private def bnkSig (p : String) (cin mid oc : Nat) (proj : Bool) : List (String × List Nat) :=
   [(s!"%{p}W1", [mid,cin,1,1]), (s!"%{p}g1", [mid]), (s!"%{p}bt1", [mid]),
@@ -147,7 +153,7 @@ deriving Inhabited
 
 /-- **R50's stochastic-depth site count** — one per bottleneck block, `[3,4,6,3] = 16`.
 
-    ⚠ It is the count the RAMP's denominator is read against (`totalDrop − 1 = 15`), so it is a
+    It is the count the RAMP's denominator is read against (`totalDrop − 1 = 15`), so it is a
     definition rather than a literal 16 sprinkled at three sites. -/
 def r50DropTotal : Nat := 16
 
@@ -156,10 +162,10 @@ def r50DropTotal : Nat := 16
 def r50DropSig (B : Nat) (sd : Bool) : String := dropMaskSig B sd (List.range r50DropTotal)
 
 /-- `some i` under `sd`, `none` otherwise — the per-block ramp index handed to the six block
-    emitters. ⚠ **The index is the BLOCK index and the two coincide here**, because every R50
+    emitters. **The index is the BLOCK index and the two coincide here**, because every R50
     bottleneck drops; EfficientNet's do not (its reference advances the ramp counter inside a skip
     guard), which is why `efficientnetVerified.dropKeeps` is a literal array and this is a range.
-    ⚠ At `sd := false` this is `none` at every site and NOT ONE `pretty` call happens, so every
+    At `sd := false` this is `none` at every site and NOT ONE `pretty` call happens, so every
     committed R50 artifact re-renders byte-identically. -/
 def dpAt (sd : Bool) (i : Nat) : Option Nat := if sd then some i else none
 
@@ -197,7 +203,7 @@ def bnkIdFwdB (B mid oc hh : Nat) (epsStr p xName : String)
          c1 := nC1, n1 := nN1, r1 := nR1, c2 := nC2, n2 := nN2, r2 := nR2, c3 := nC3, cp := "",
          st1 := st1, st2 := st2, st3 := st3 }
 
-/-- ⭐ **Stride-1 projection bottleneck forward** — R50 stage 1 block 0, and nowhere else.
+/-- **Stride-1 projection bottleneck forward** — R50 stage 1 block 0, and nowhere else.
     `cin → mid → mid → oc` with the resolution unchanged, so the projection is a plain `1×1`
     conv → BN, NOT the strided one `bnkStridedFwdB` uses. -/
 def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
@@ -241,7 +247,7 @@ def bnkProjFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
 /-- **Strided projection bottleneck forward** — stages 2/3/4 block 0. `cin → mid → mid → oc`,
     `2hh → hh`.
 
-    ⚠ `conv1`/`bn1`/`relu1` run at the **input** resolution `2hh`; only `conv2` (the 3×3) is
+    `conv1`/`bn1`/`relu1` run at the **input** resolution `2hh`; only `conv2` (the 3×3) is
     strided. v1.5. -/
 def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
     (bf16 : Bool := false) (drop : Option Nat := none)
@@ -290,7 +296,7 @@ def bnkStridedFwdB (B cin mid oc hh : Nat) (epsStr p xName : String)
 
     Cotangent chain: `da` (output relu) → `bn3` → `conv3` → `relu2` → `bn2` → `conv2` → `relu1`
     → `bn1` → `conv1`, then `dx = dc1 + da` (the identity skip carries `da` unchanged).
-    ⚠ Each BN's γ/β gradient reads the cotangent at that BN's OUTPUT: `da` for bn3, `dr2` for
+    Each BN's γ/β gradient reads the cotangent at that BN's OUTPUT: `da` for bn3, `dr2` for
     bn2, `dr1` for bn1 — off by one and the gradient is silently wrong. -/
 private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (dyName : String)
     (bf16 : Bool := false) (drop : Option Nat := none)
@@ -349,7 +355,7 @@ private def bnkIdBackGradB (B mid oc hh : Nat) (epsStr p : String) (f : BNFwd) (
                 ⟨s!"{p}W2", nW2, [mid,mid,3,3]⟩, ⟨s!"{p}g2", ng2, [mid]⟩, ⟨s!"{p}bt2", nt2, [mid]⟩,
                 ⟨s!"{p}W3", nW3, [oc,mid,1,1]⟩, ⟨s!"{p}g3", ng3, [oc]⟩, ⟨s!"{p}bt3", nt3, [oc]⟩] }
 
-/-- ⭐ **Stride-1 projection bottleneck backward** + its 12 parameter gradients — stage 1 block 0.
+/-- **Stride-1 projection bottleneck backward** + its 12 parameter gradients — stage 1 block 0.
     Identical to the identity backward except the skip branch carries its own `bn→conv` backward
     (`dnp`/`dcp`) and `dx = dc1 + dcp`. -/
 private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
@@ -419,7 +425,7 @@ private def bnkProjBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BN
 
 /-- **Strided projection bottleneck backward** + its 12 parameter gradients — stages 2/3/4 block 0.
 
-    ⚠ `dc2` is the STRIDED conv backward, so it takes the cotangent from `hh` back up to `2hh`;
+    `dc2` is the STRIDED conv backward, so it takes the cotangent from `hh` back up to `2hh`;
     everything upstream of it (`dr1`, `dn1`, `dc1`, `W1`'s grad) lives at `2hh`. -/
 private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f : BNFwd)
     (dyName : String) (bf16 : Bool := false) (drop : Option Nat := none)
@@ -496,16 +502,15 @@ private def bnkStridedBackGradB (B cin mid oc hh : Nat) (epsStr p : String) (f :
 /-- Everything the whole-net render needs out of ONE forward traversal of ResNet-50: the emitted
     code, the logits, and every saved activation the backward reads.
 
-    ⭐⭐ **This exists so `@resnet50_fwd` and `@resnet50_adam_train_step` cannot be different nets:**
+    **This exists so `@resnet50_fwd` and `@resnet50_adam_train_step` cannot be different nets:**
     both are rendered from this one traversal, batch BN throughout (reduce `[0,2,3]`, divisor
     `B·H·W`), and `scripts/regen_verified_mlir.sh check` holds the forward as a byte prefix of the
-    train step (`planning/archive/mnv4_verified.md` §3d(b) records the per-example forward this
-    replaced).
+    train step.
 
-    ⚠ The eval forward is deliberately NOT moved onto this chain. `bnEval` reads frozen per-channel
+    The eval forward is deliberately not moved onto this chain. `bnEval` reads frozen per-channel
     statistics as graph inputs, so it is the same arithmetic in either vocabulary and has no
-    BN-world to disagree about — and it is the artifact that actually scores, so leaving its bytes
-    untouched keeps 89.86% (`runs/r50_imagenette_adam_80ep.log`) exactly where it is. -/
+    BN-world to disagree about, and it is the artifact that scores, so its bytes stay as they
+    are. -/
 structure R50FwdRecB where
   code : String
   logits : String
@@ -520,7 +525,7 @@ deriving Inhabited
 
 /-- Stem forward at ladder base `q` (input `32q`): 7×7/s2 conv → batch BN → relu → He et al.'s
     3×3/s2 max-pool on `%x`, output at `8q`. ResNet-34's stem at another resolution (same record).
-    ⚠ `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
+    `2*q1` rather than a name, because `convStrided (h := q1)` demands its operand at exactly
     `Vec (B*(3*(2*q1)*(2*q1)))` and any other spelling of the same number is a different TERM. -/
 def r50StemFwdB (B q : Nat) (epsStr : String) (bf16 : Bool := false) (replicas : Nat := 1)
     (sync : Bool := false) : StateM Proofs.StableHLO.EmitS R34StemFwdB := do
@@ -607,7 +612,7 @@ def r50FwdChainB (B nClasses : Nat) (epsStr : String) (q : Nat := 7)
     arity/order contract cannot drift within this file — and it is written to agree with
     `VerifiedSpec.bottleneckStageSpec`, which is what the DRIVER walks.
 
-    ⚠ The block sequence is `[3,4,6,3]` with block 0 of every stage projecting. Stage 1's projects
+    The block sequence is `[3,4,6,3]` with block 0 of every stage projecting. Stage 1's projects
     at **stride 1** (`bnkProjFwdB`); stages 2/3/4 project strided. -/
 def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
     (replicas : Nat := 1) (opt : R34Opt := .adamw) (slug : String := "resnet50in")
@@ -1047,7 +1052,7 @@ namespace Proofs.StableHLO
 -- § The forward chain — `@resnet50in_fwd` and `@resnet50in_fwd_eval`
 -- ════════════════════════════════════════════════════════════════
 
-/-! ⚠ These live here rather than in a `ResNet50Render.lean` peer of R34's split. That split is
+/-! These live here rather than in a `ResNet50Render.lean` peer of R34's split. That split is
 historical — R34 has a per-example-BN net AND a batch-BN net, and they are different functions, so
 they get different files. R50 has only the batch-BN net, so one file keeps `r50SigList` and every
 consumer of it together.
@@ -1079,7 +1084,7 @@ private def bnkIdFwdV (B mid oc hh : Nat) (epsStr p xName : String) :
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
   pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cA ++ cO, nO)
 
-/-- ⭐ Stride-1 projection bottleneck forward — stage 1 block 0. The projection is `.flatConvF`,
+/-- Stride-1 projection bottleneck forward — stage 1 block 0. The projection is `.flatConvF`,
     NOT `.flatConvStridedF`. -/
 private def bnkProjFwdV (B cin mid oc hh : Nat) (epsStr p xName : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
@@ -1107,7 +1112,7 @@ private def bnkProjFwdV (B cin mid oc hh : Nat) (epsStr p xName : String) :
   let (cO,  nO)  ← pretty B (.reluF (.operand nA zOut))
   pure (cC1 ++ cN1 ++ cR1 ++ cC2 ++ cN2 ++ cR2 ++ cC3 ++ cN3 ++ cCp ++ cNp ++ cA ++ cO, nO)
 
-/-- Strided projection bottleneck forward. ⚠ `conv1`/`bn1`/`relu1` at `2hh`; only `conv2` strides. -/
+/-- Strided projection bottleneck forward. `conv1`/`bn1`/`relu1` at `2hh`; only `conv2` strides. -/
 private def bnkStridedFwdV (B cin mid oc hh : Nat) (epsStr p xName : String) :
     StateM Proofs.StableHLO.EmitS (String × String) := do
   let ww := hh
@@ -1181,7 +1186,7 @@ private def r50FwdChain (B nClasses : Nat) (epsStr : String)
     BN: rendered from `r50FwdChainB`, the traversal the train step differentiates, so
     `check_adam_prefix` holds it as a byte prefix of the train step.
 
-    ⚠ `r50FwdChain`'s `.train` branch is now UNUSED by R50 and must stay that way; it survives only
+    `r50FwdChain`'s `.train` branch is now UNUSED by R50 and must stay that way; it survives only
     because `.eval` shares the function. Rendering a forward from it reopens the split. -/
 def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
     (slug : String := "resnet50in") (q : Nat := 7) (vSuffix : String := "") : String :=

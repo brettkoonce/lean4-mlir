@@ -4,32 +4,17 @@ import LeanMlir.Proofs.Codegen.RenderKit
 
 /-! # MobileNetV2 rendered from the verified AST, at the BATCHED index — the SOLE renderer
 
-⭐⭐ **This file writes every MobileNetV2 artifact** as of 2026-09-06, when leg 2 of
-`planning/archive/renderer_convergence.md` retired `MobileNetV2Render.lean`. Before that the net had two
-renderers and they were two different functions:
-
-* **`MobileNetV2Render.lean` rendered PER-EXAMPLE BN** (`bnPerChannelF`, reduce `[2,3]`) and wrote
-  the SGD-inline `mobilenetv2_train_step.mlir` and both train forwards, while every artifact in
-  this file — including `mobilenetv2in_rmsdp64`, whose accuracy the book quotes — is **BATCH BN**
-  (reduce `[0,2,3]`). `scripts/regen_verified_mlir.sh`'s `check_adam_prefix` carried the split as
-  its LAST `KNOWN_SPLIT` entry.
-* That renderer's train step was reachable only from `mobilenetv2-verified`, whose own header
-  measured its accuracy at chance (387/3925, byte identical every epoch — running-statistic
-  threading lives only in `trainAdamSched`) and said not to quote it. Both are retired.
-
-**What the convergence changed, and what it did not.** `@mobilenetv2_fwd` and `@mobilenetv2in_fwd`
-now come from `mnv2FwdChainB`, the ONE traversal every train step below differentiates, so the net
-that scores and the net that trains are one graph by construction. ⚠ Their BatchNorm world and
-their parameter names both change; the driver binds positionally, so the rename reaches nothing.
-⚠ The EVAL forwards did NOT move: `bnPerChannelEvalF` reads frozen statistics and reduces nothing,
-so they are BatchNorm-world-agnostic and re-render byte-identically from the per-example chain,
-which came here with them. See that section's banner for the second reason not to move them.
+**This file writes every MobileNetV2 artifact.** `@mobilenetv2_fwd` and `@mobilenetv2in_fwd` come
+from `mnv2FwdChainB`, the ONE traversal every train step below differentiates, so the net that
+scores and the net that trains are one graph by construction. The EVAL forwards are rendered from
+the per-example chain: `bnPerChannelEvalF` reads frozen statistics and reduces nothing, so they are
+BatchNorm-world-agnostic.
 
 **The whole graph sits at `N := B`**, so every batch-coupled `den` is honest: `bnBatchF`,
 `bnBatchBack` and the whole `*GradB` family reduce over the batch, and at `N = 1` each would
-describe a one-example function while the emitted text reduces over all `B` (§2b).
+describe a one-example function while the emitted text reduces over all `B`.
 
-**The ops this net needed that no other did** (§2f): `BatchableOp.relu6` — mnv2 is the only ReLU6 net
+**The ops this net needed that no other did**: `BatchableOp.relu6` — mnv2 is the only ReLU6 net
 in the kit, EfficientNet being all-swish — and `selectMidB`, its two-sided backward mask, which
 reads the saved per-example pre-activation and therefore CANNOT be a `BatchableOp` descriptor. Plus
 `depthwise{,Strided}BiasGradB`: enet's depthwise convs are followed by BN so their bias is folded
@@ -37,15 +22,12 @@ into it, mnv2's are not.
 
 The optimizer is the proven `adamMNextF`/`adamVNextF`/`adamWParamF` triple applied to the un-fused
 `*GradB` gradients. The cotangent is composed from kit ops (`softmaxRow → subB → scaleB → addVB →
-shiftB → divConstB`, α = 0.1, K = nClasses), so this render does NOT match the hand-written artifact
-op-for-op and the tie against it must be numeric. `%loss` is report-only and stays outside the AST,
-exactly as `resnet34`/`cifar8`'s does (§5).
+shiftB → divConstB`, α = 0.1, K = nClasses). `%loss` is report-only and stays outside the AST,
+exactly as `resnet34`/`cifar8`'s does.
 
-⭐ **The Proofs tier this file's train steps are tied at** is the batch-BN one:
-`MobileNetV2FullB.lean` (T1 forward, T2), `MobileNetV2FullBVJP.lean` (T1's VJP),
-`GradNodesB` (T3 §1 fold, un-fused) and `MobileNetV2StepTieB.lean` (T3 §1a
-tie) — §4.2 of `planning/archive/proofs_tier_to_paper_nets.md`, all 2026-09-06. The per-example
-fold and tie were retired (2026-09-08 and 2026-09-19), since no committed bytes exercised them.
+**The Proofs tier this file's train steps are tied at** is the batch-BN one:
+`MobileNetV2FullB` (the batched forward and its typed graph), `MobileNetV2FullBVJP` (its VJP),
+`GradNodesB` (the un-fused gradient-node folds) and `MobileNetV2StepTieB` (the whole-net tie).
 
 Render is value-independent (`skel` erases values), so placeholder zeros and `ε := 0` are passed;
 the emitted literals carry the real values.
@@ -283,7 +265,7 @@ private def irBackStridedGradB (B ic mid oc hh : Nat) (epsStr p xName : String)
 /-- **STRIDE-1 backward + 12 un-fused gradients**, shared by the skip (`skip := true`) and
     no-skip block kinds — the ONLY difference is the skip's `addVB` fan-in on the dx, which is why
     they are one function with a flag rather than two near-copies (the double-writer disease one
-    level down, §2a-quater). `ic = oc` whenever `skip` is true. -/
+    level down). `ic = oc` whenever `skip` is true. -/
 private def irBackStride1GradB (B ic mid oc hh : Nat) (skip : Bool) (epsStr p xName : String)
     (f : MBFwdB) (dyName : String) (convBias : Bool)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) :
@@ -585,22 +567,17 @@ def mnv2HeadFwdB (B nClasses : Nat) (epsStr xName : String) (convBias : Bool)
 /-- **The MobileNetV2 forward chain at the BATCHED index** — one traversal, consumed by both
     `@mobilenetv2_fwd` and every train step that differentiates it.
 
-    ⭐⭐ **This exists so `@mobilenetv2_fwd` and the batch-BN train steps cannot be different nets.**
-    They were: the retired `MobileNetV2Render.lean` built its forward from the PER-EXAMPLE chain —
-    `bnPerChannelF`, reduce `[2,3]`, divisor `H·W` — while every train step in this file is batch
-    BN, reduce `[0,2,3]`, divisor `B·H·W`. `scripts/regen_verified_mlir.sh`'s `check_adam_prefix`
-    carried the divergence as the LAST `KNOWN_SPLIT` entry for as long as both existed. This is
-    `ResNet34RenderB.r34FwdChainB`'s shape, for `ResNet50RenderB.r50FwdChainB`'s reason
-    (`planning/archive/renderer_convergence.md`, leg 2).
+    **This exists so `@mobilenetv2_fwd` and the batch-BN train steps cannot be different nets**:
+    a forward built from a PER-EXAMPLE chain (`bnPerChannelF`, reduce `[2,3]`, divisor `H·W`) next
+    to batch-BN train steps (reduce `[0,2,3]`, divisor `B·H·W`) is a different function. This is
+    `ResNet34RenderB.r34FwdChainB`'s shape, for `ResNet50RenderB.r50FwdChainB`'s reason.
 
-    ⚠ The EVAL forward is deliberately NOT moved onto this chain, exactly as ResNet-34's and
+    The EVAL forward is deliberately NOT moved onto this chain, exactly as ResNet-34's and
     ResNet-50's are not: `bnPerChannelEvalF` reads frozen per-channel statistics and reduces
     nothing, so `mobilenetv2_fwd_eval.mlir` is BatchNorm-world-agnostic and correct against both
-    chains. (Until 2026-09-08 there was a second reason: a whole-net float budget's provenance
-    claim named that artifact's SSA names line for line; the budget is deleted, and the eval
-    forward stays where it is only because moving it buys nothing.)
+    chains; moving it buys nothing.
 
-    ⭐ Extracting the traversal is byte-neutral for the train step: `pretty`'s SSA counter follows
+    Extracting the traversal is byte-neutral for the train step: `pretty`'s SSA counter follows
     the call SEQUENCE, and the sequence is unchanged. -/
 def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false)
     (bf16 : Bool := false) (replicas : Nat := 1) (sync : Bool := false) (cd : Bool := false) :
@@ -640,16 +617,13 @@ def mnv2FwdChainB (B nClasses : Nat) (epsStr : String) (convBias : Bool := false
 
 /-- **`@mobilenetv2_fwd` rendered from the BATCHED chain** — the same traversal every batch-BN
     train step in this file differentiates, so the net that scores and the net that trains are one
-    graph by construction. Replaces the retired `MobileNetV2Render.lean` as the writer of
-    `verified_mlir/mobilenetv2_fwd.mlir` (2026-09-06, `planning/archive/renderer_convergence.md` leg 2).
+    graph by construction. The writer of `verified_mlir/mobilenetv2_fwd.mlir`.
     Takes `%x` plus the parameters in `mnv2SigList` order — 159 inputs at the shipped
     `convBias := false` — and returns logits `[B, nClasses]`.
 
-    ⚠ **This CHANGES what `@mobilenetv2_fwd` computes, and that is the point.** The retired render
-    normalised PER EXAMPLE while the AdamW and RMSProp steps whose accuracies the book quotes
-    normalise over the BATCH. ⚠ It also renames every parameter — `%sW`/`%b2eW`/`%Wd` where the
-    retired one said `%Ws`/`%We2`/`%Wfc` — because the names now come from `mnv2SigList`, this
-    file's single source. The driver binds positionally, so nothing downstream sees the rename. -/
+    It normalises over the BATCH, as the AdamW and RMSProp steps whose accuracies the book quotes
+    do. Parameter names come from `mnv2SigList`, this file's single source; the driver binds
+    positionally. -/
 def mobilenetv2FwdFaithfulB (B nClasses : Nat) (epsStr : String)
     (slug : String := "mobilenetv2") (convBias : Bool := false) (bf16 : Bool := false) : String :=
   let sigList := mnv2SigList nClasses convBias
@@ -1008,7 +982,7 @@ structure MBFwd where
       list). Order is expand-BN → depthwise-BN → project-BN, with the expand entry ABSENT for the
       no-expand block b1 — the layout `mobilenetv2Verified.bnChannels` is listed in, which is how
       the driver packs `runningBnStats`. A misaligned slot is SILENT: the arities still match and
-      the wrong layer's statistics simply flow into the wrong site (§2e). -/
+      the wrong layer's statistics simply flow into the wrong site. -/
   bns : List (String × Nat × Nat)
   deriving Inhabited
 
@@ -1249,7 +1223,7 @@ private def mnv2FwdChain (B nClasses : Nat) (epsStr : String) (convBias : Bool) 
               f16.bns ++ f17.bns ++ [("hn", 1280, 7)]) }
 
 /-- The `@mobilenetv2_fwd_eval` argument signature. The 104 stat slots come off
-    the SAME `bns` the traversal built — never a parallel 52-entry table (§2e). -/
+    the SAME `bns` the traversal built — never a parallel 52-entry table. -/
 private def mnv2FwdSig (B nClasses : Nat) (epsStr : String) (convBias : Bool) : String :=
   let F : MNV2Fwd := (mnv2FwdChain B nClasses epsStr convBias).run' (0, [])
   let params := (paperSig nClasses convBias).map (fun (nm, t) => s!"{nm}: {t}")

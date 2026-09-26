@@ -6,10 +6,12 @@ import LeanMlir.Proofs.Codegen.RenderKit
 The conv-net peers of `MlpRender.lean`: `cnnTrainStepFaithfulV` (Chapter-3 MNIST CNN),
 `cifarTrainStepFaithfulV` (Chapter-4 CIFAR CNN), the 8-conv `cifar8*` family (SGD /
 Nesterov / AdamW tails, the batched `…FaithfulB` peers, bf16 / fp8) and `cifar8Bn*`. Every
-emitted line is `pretty` of a denoted `SHlo` node, names threaded as in the MLP render. The
-forward is rendered flat: each `.flatConvF`/`.maxPoolF` token reshapes flat→NCHW internally
-and back at its boundary (`emitTok`, `StableHLO.lean`), so the names `pretty` exposes are
-flat. `CnnFold` / `CifarFold` / `Cifar8StepTie` prove each output's `den` is the certified
+line that feeds a returned parameter is `pretty` of a denoted `SHlo` node, names threaded as in
+the MLP render. Hand-written text: the signatures and constants, the report-only `%loss` block
+appended by `cnnTrainStepFaithfulV` and by the packed-optimizer (`[θ|m|v]`) renders, and the
+packed renders' `%bc1`/`%bc2` passthroughs; none of it feeds a parameter. The forward is rendered
+flat: each `.flatConvF`/`.maxPoolF` token reshapes flat→NCHW internally and back at its boundary
+(`emitTok`, in StableHLOPretty.lean), so the names `pretty` exposes are flat. `CnnFold` / `CifarFold` / `Cifar8StepTie` prove each output's `den` is the certified
 update. The `#eval` writers that produce the `verified_mlir/cnn_*` / `cifar*` artifacts are in
 `CnnArtifacts.lean`, which nothing imports.
 -/
@@ -18,13 +20,14 @@ namespace Proofs.StableHLO
 
 open Proofs
 
-/-- **MNIST-CNN train step rendered ENTIRELY from the verified AST.** The peer of
+/-- **MNIST-CNN train step rendered from the verified AST.** The peer of
     `mlpTrainStepFaithfulV` for the conv net: the forward, the backward chain
     (`dotOut`/`selectPos`/`maxPoolBack`/`convBack`) and ALL ten parameter SGD updates are
     `pretty` of denoted `SHlo` nodes —
-    the dense head via `weightSgd`/`biasSgd`, the conv layers via the new
-    `convWeightSgd`/`convBiasSgd` ops. So every emitted line is `pretty(provenNode)`,
-    and `CnnFold` proves each output's `den` = the certified loss-descent step.
+    the dense head via `weightSgd`/`biasSgd`, the conv layers via the
+    `convWeightSgd`/`convBiasSgd` ops. So every line that feeds a returned parameter is
+    `pretty` of a denoted node; the appended report-only `%loss` block is hand-written and feeds
+    nothing. `CnnFold` proves each output's `den` = the certified loss-descent step.
     Cotangents (`%dy`/`dy4`/`dy3`/`dac2`/`dhc2`/`dac1`/`dhc1`) are rendered once and
     shared as operand leaves; operand/`lr`/weight VALUES are `skel`-erased, so these
     placeholders print identically to the live graphs the `den` theorems use. Dims: `h,w`
@@ -332,7 +335,7 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
 -- § cifar8 AdamW — the same forward/backward, optimizer swapped for the proven Adam ops
 -- ════════════════════════════════════════════════════════════════
 
-/-- Which optimizer tail the cifar8 render emits (handoff §2i). All three share ONE forward,
+/-- Which optimizer tail the cifar8 render emits. All three share ONE forward,
     backward and un-fused-gradient body, and one packed `[θ|m|v]` signature — 71 in / 69 out for
     every variant — so the ablation section's "SGD several ways" is genuinely the same net with the
     optimizer swapped, and a reader can diff the artifacts to see only the tail move. -/
@@ -355,7 +358,7 @@ deriving DecidableEq, Repr
     * `.nesterov` — `momParamF` + `momVNextF`, together denoting `Proofs.momStep`
       (`mom_pair_faithful`). Velocity occupies the `v` slot; `m` passes through.
 
-    `%mu` is a baked constant and `%lr` a runtime arg, matching the retired emitter exactly. -/
+    `%mu` is a baked constant and `%lr` a runtime arg. -/
 private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds : List Nat)
     (gradSSA : String) : StateM Proofs.StableHLO.EmitS (String × String × String × String) := do
   let z : Vec n := fun _ => 0
@@ -390,8 +393,7 @@ private def optTail (opt : CifarOpt) (B replicas n : Nat) (pName : String) (ds :
     pure (arS ++ cT ++ cV, nT, s!"{pName}m", nV)
 
 set_option maxRecDepth 8000 in
-/-- **cifar8 AdamW train step rendered ENTIRELY from the verified AST** — the optimizer half of
-    `planning/archive/xla_pjrt_handoff.md` §2a. Identical forward/backward to
+/-- **cifar8 AdamW train step rendered from the verified AST.** Identical forward/backward to
     `cifar8TrainStepFaithfulV`; the 22 fused SGD ops are replaced by 22 un-fused param
     gradients (`convWeightGrad`/`convBiasGrad`/`weightGrad`/`biasGrad`) each feeding the three
     proven AdamW ops (`adamWParamF`/`adamMNextF`/`adamVNextF`, denoting `Proofs.adamWStep`).
@@ -623,26 +625,27 @@ set_option maxRecDepth 8000 in
     broadcasting. Naming follows the ImageNet renderers, where `…RenderB` is exactly this
     migration done once per net (`ResNet34RenderB`, `MobileNetV2RenderB`, …).
 
-    ⭐⭐ **Why it exists: bf16, and rehearsal.** The 27 bf16 ops were built for ImageNet, which is
+    **Why it exists: bf16, and rehearsal.** The bf16 ops were built for ImageNet, which is
     entirely on the batched family — so bf16 twins exist for `convBackBatched`/`denseRowBack` and
     do NOT exist for the per-example `convBack`/`dotOut` that `…V` uses. Rather than write two
     CIFAR-only bf16 ops (twins of `convBack` and `dotOut`) that ImageNet would never run, this moves CIFAR
     onto the ops ImageNet already uses. bf16 then drops in for the whole step, forward AND
     backward, with **zero new verified ops** — and CIFAR becomes a real rehearsal for ImageNet
-    instead of a parallel dialect. See planning/archive/cifar_lowprec_stability.md §4.1.
+    instead of a parallel dialect.
 
-    ⭐ **The migration is semantically free, not a re-derivation.** Both families denote the SAME
-    proven VJP — `StableHLO.lean` l.2016 vs l.2200 are `(conv2dHasVJP3 W b).backward v …` and
-    `batchMap N (… (conv2dHasVJP3 W b)).backward (fun _ => 0) …`. The only difference is the
-    primal argument, and l.2990 records why it is free: *conv is linear, so this is a global VJP*
-    — the input-VJP ignores the primal. That is why `.convBack`'s primal argument is simply
-    dropped below rather than threaded.
+    **The migration is semantically free, not a re-derivation.** Both families denote the same
+    proven VJP — `den`'s `.convBack` arm is `(conv2dHasVJP3 W b).backward v …` and its
+    `.convBackBatched` arm is `batchMap N (… (conv2dHasVJP3 W b)).backward (fun _ => 0) …`. The
+    only difference is the primal argument, and `convBack_faithful` records why it is free: *conv
+    is linear, so this is a global VJP* — the input-VJP ignores the primal. That is why
+    `.convBack`'s primal argument is simply dropped below rather than threaded.
 
-    ⚠ Faithful by CONSTRUCTION, like every render here: the AST is built only from verified
+    Faithful by CONSTRUCTION, like every render here: the AST is built only from verified
     constructors, so `pretty(provenGraph)` needs no new proof. Nothing in this function is
-    hand-written MLIR except the report-only `%loss`, exactly as in the `…V` peer.
+    hand-written MLIR except the report-only `%loss` and the `%bc1`/`%bc2` passthroughs, as in
+    the `…V` peer.
 
-    ⚠ Parameters are NOT batched — only activations are. The optimizer tail (`optTail`) is
+    Parameters are NOT batched — only activations are. The optimizer tail (`optTail`) is
     therefore untouched and shared verbatim with `…V`. -/
 def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (invBStr b1Str ob1Str b2Str ob2Str epsStr wdStr : String)
@@ -877,7 +880,7 @@ set_option maxRecDepth 8000 in
     instantiated per layer. Forward + BN-back proof-rendered via `bnPerChannelF`/
     `bnPerChannelBack`. `h,w` final pooled; stage spatials `s4=2h…s1=16h`.
 
-    **`opt` selects the optimizer tail (handoff §2i), and it changes the INTERFACE**, unlike the
+    **`opt` selects the optimizer tail, and it changes the INTERFACE**, unlike the
     no-BN `cifar8AdamTrainStepFaithfulV` where all three variants share one packed signature:
 
     | `opt` | entry | interface | tail |
@@ -885,14 +888,12 @@ set_option maxRecDepth 8000 in
     | `none` | `@cifar8_bn_train_step` | **40 in / 38 out** | the 38 fused `*Sgd` ops, `lr` a baked literal |
     | `some o` | `@cifar8_bn_{adam,mom,sgd}_train_step` | **119 in / 117 out** | un-fused `*Grad` + `optTail o`, packed `[θ|m|v]`, `%lr` runtime |
 
-    Three things branch, not just the tail — this is why §2i scoped it as more than a tail swap:
+    Three things branch, not just the tail:
     the **cotangent** (fused folds the batch mean into `lrStr`; packed cannot, `lr` is a runtime
     arg, so it emits an explicit `scaleF invB` plus a report-only `%loss`), the **conv bias names**
-    (`%b1..%b8` fused, but AdamW bakes β₁/β₂ as `%b1`/`%b2`, so packed renames to `%cb1..%cb8` —
-    the same collision-free naming the retired hand-written emitter used), and the
-    **signature/return**. Everything else — the whole forward, the whole backward, all 38
-    gradients — is shared verbatim, and at `none` the render is byte-identical to the incumbent
-    (gate 1), which is what proves the threading inert. -/
+    (`%b1..%b8` fused, but AdamW bakes β₁/β₂ as `%b1`/`%b2`, so packed renames to `%cb1..%cb8`),
+    and the **signature/return**. Everything else — the whole forward, the whole backward, all 38
+    gradients — is shared verbatim. -/
 def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (epsStr lrStr : String)
     (W₁ : Kernel4 c1 ic kH kW) (b₁ : Vec c1) (W₂ : Kernel4 c1 c1 kH kW) (b₂ : Vec c1)
     (W₃ : Kernel4 c2 c1 kH kW) (b₃ : Vec c2) (W₄ : Kernel4 c2 c2 kH kW) (b₄ : Vec c2)
@@ -1262,14 +1263,14 @@ set_option maxRecDepth 8000 in
     per-example with `pretty B` broadcasting. It is `cifar8AdamTrainStepFaithfulB` with BatchNorm
     spliced in, and it exists for one reason: **bf16 on the NORMALIZED net.**
 
-    ⭐⭐ **Why the migration is what unlocks bf16.** The 27 bf16 ops were built for ImageNet, which
+    **Why the migration is what unlocks bf16.** The 27 bf16 ops were built for ImageNet, which
     is entirely batched, so bf16 twins exist for `convBackBatched`/`convWeightGradB` and do NOT
     exist for the per-example `convBack`/`dotOut` the `…V` render uses. Chapter 4's precision lever
     could therefore only measure bf16 on the *un-normalized* net — the one that NaNs under AdamW at
     fp32 — which is the hardest case and the wrong one for licensing Chapter 5. This render puts
     bf16 on the net that actually has BatchNorm, with **zero new verified ops**.
 
-    ⭐ **BatchNorm stays PER-EXAMPLE, and that is deliberate.** `bnPerChannelF`/`bnPerChannelBack`
+    **BatchNorm stays PER-EXAMPLE, and that is deliberate.** `bnPerChannelF`/`bnPerChannelBack`
     reduce over `[2,3]`, not `[0,2,3]`: each example is normalized by its own statistics. Three
     consequences, all of them the point:
 
@@ -1286,17 +1287,17 @@ set_option maxRecDepth 8000 in
       `bf16`, the `bnBatchBack` above it does not). A bf16 BatchNorm would measure a recipe
       Chapter 5 does not use.
 
-    ⚠ The BN nodes are per-example `SHlo` trees inside a `pretty B` render, exactly as the head's
+    The BN nodes are per-example `SHlo` trees inside a `pretty B` render, exactly as the head's
     `rows := 1` ops are in `cifar8AdamTrainStepFaithfulB`: each `pretty` node is an independent
     tree, linked to the next only by the SSA name, so a per-example BN node and a batched conv
     node compose in the emitted text without composing in the Lean types. The emitted BN fragment
     is byte-identical to the one `…V` emits.
 
-    ⚠ Faithful by CONSTRUCTION, like every render here: the AST is built only from verified
+    Faithful by CONSTRUCTION, like every render here: the AST is built only from verified
     constructors, so `pretty(provenGraph)` needs no new proof. Nothing is hand-written MLIR except
     the report-only `%loss` and the `%bc1`/`%bc2` passthroughs, exactly as in both peers.
 
-    ⚠ Parameters are NOT batched — only activations are — so the optimizer tail (`optTail`) is
+    Parameters are NOT batched — only activations are — so the optimizer tail (`optTail`) is
     untouched and shared verbatim with both peers. Conv biases are `%cb1…%cb8`: `%b1` is β₁. -/
 def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     (bnEpsStr invBStr b1Str ob1Str b2Str ob2Str aEpsStr wdStr : String)
@@ -1577,7 +1578,7 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
   s!"  func.func @{fname}(%x: {ty [B,ic*(2*(2*(2*(2*h))))*(2*(2*(2*(2*w))))]}, {argSig}) -> ({retTy}) " ++ "{\n" ++
   inner ++
   "  }\n}\n"
-/-- The §2i **plain-SGD** cifar8 render: `cifar8AdamTrainStepFaithfulV` with `opt := .sgd`, so the
+/-- The **plain-SGD** cifar8 render: `cifar8AdamTrainStepFaithfulV` with `opt := .sgd`, so the
     forward, backward and all 22 un-fused gradients are shared verbatim with the AdamW render and
     only the tail differs. Entry `@cifar8_sgd_train_step`, 71 in / 69 out. -/
 def cifar8SgdTrainStepFaithful : String :=
@@ -1591,7 +1592,7 @@ def cifar8SgdTrainStepFaithful : String :=
     (fun _ => 0) 1 .sgd
     |>.replace "@cifar8_adam_train_step" "@cifar8_sgd_train_step"
 
-/-- The §2i **Nesterov** cifar8 render (`opt := .nesterov`), μ baked at 0.9.
+/-- The **Nesterov** cifar8 render (`opt := .nesterov`), μ baked at 0.9.
     Entry `@cifar8_mom_train_step`, 71 in / 69 out. -/
 def cifar8MomTrainStepFaithful : String :=
   cifar8AdamTrainStepFaithfulV 128 3 16 16 32 32 2 2 64 10 3 3

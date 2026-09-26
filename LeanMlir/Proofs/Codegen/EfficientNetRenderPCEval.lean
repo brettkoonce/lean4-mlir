@@ -4,14 +4,15 @@ import LeanMlir.Proofs.Codegen.EfficientNetRenderPC
 
 The eval twin of `EfficientNetRenderPC.lean`: the batched stage abbreviations at frozen statistics
 (`cbsBEval` / `stemBEval` / `dwbsBEval` / `dwbsSBEval` / `projBEval` — `seB` is unchanged, it has
-no BN) and the five block graphs with their faithfulness (`*GraphBEval_faithful`).
-`EfficientNetFullB0Eval` chains them into the shipped sixteen-block eval forward.
+no BN) and five graphs with their faithfulness (`*GraphBEval_faithful`): stem, MBConv1, strided
+MBConv6, residual MBConv6, head. The stride-1 no-skip expand block is `mbExpGraphBEval_faithful`
+in `EfficientNetFullB0Eval`, which chains them all into the shipped sixteen-block eval forward.
 
-⭐ At inference the batch decouples: frozen statistics are constants, so the eval BN *is*
+At inference the batch decouples: frozen statistics are constants, so the eval BN *is*
 per-example — `batchMap N (bnPerChannelEvalTensor3 oc h w ε γ β μ v)`, `denOp`'s `bnEval` arm, read
 off by `den_batchOp` — and every stage is `batchMap N` of a per-example op or a pointwise map.
 
-⚠ One ε for the whole net, as the render emits, where the training def carries a separate `ε` per
+One ε for the whole net, as the render emits, where the training def carries a separate `ε` per
 site. The SSA names extend the training graph's (`%sg`/`%sbt` → `%smu`/`%svar`, `%b1dg`/`%b1dbt` →
 `%b1dmu`/`%b1dvar`, …); names are pretty-printing metadata and do not enter `den`. 3-axiom clean.
 -/
