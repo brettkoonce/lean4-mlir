@@ -5,33 +5,35 @@ import LeanMlir.Proofs.Foundation.Tensor
 Every `*dp*` artifact in `verified_mlir/` is ONE program run on `R` replicas. Per parameter,
 after the gradient node and before the optimizer tail, the render emits
 `stablehlo.all_reduce(add)` over `replica_groups = [[0..R-1]]` followed by a divide by `R` — the
-`SHlo.allReduceMeanF` node (`DataParallelNode.lean`, piece 2; until 2026-09-07 it was emitted text
-outside the AST). The train-step ties — `r34_net_tiedB`, `mnv2_net_tiedB`,
-`efficientnet_net_tiedG` — are stated at the PER-REPLICA gradient node that collective averages.
-This file is the ℝ-level half: what the average is a gradient OF (piece 1 of
-`planning/archive/proofs_tier_to_paper_nets.md` §4d).
+`SHlo.allReduceMeanF` node (`DataParallelNode.lean`). The train-step ties — `r34_net_tiedB`,
+`mnv2_net_tiedB`, `efficientnet_net_tiedG` — are stated at the per-replica gradient node that
+collective averages. This file is the ℝ-level half: what the average is a gradient of.
 
 ## What is proved
 
 * `lossGrad_meanLoss` — the gradient of a mean of losses is the mean of their gradients.
   Linearity of `pdiv`, and the only analysis in the file.
-* ⭐ `dpMeanGrad_eq_grad_meanLoss` — the all-reduced mean gradient `(1/R) Σ_r g_r` IS
+* `dpMeanGrad_eq_grad_meanLoss` — the all-reduced mean gradient `(1/R) Σ_r g_r` IS
   `∇((1/R) Σ_r L_r)`. **This is what the collective computes, named as a gradient of
   something.** It holds for any per-replica losses whatever, batch-coupled or not.
-* ⭐⭐ `meanLoss_shard` / `dpMeanGrad_eq_globalBatchGrad_of_perExample` — when the replica loss
+* `meanLoss_shard` / `dpMeanGrad_eq_globalBatchGrad_of_perExample` — when the replica loss
   is the MEAN OVER ITS SLICE of a per-example loss (no batch coupling: ConvNeXt, ViT, every
   inference-BN forward), the mean of the `R` replica losses is literally the mean over the
   global batch of `R·N` examples, so the DP step is the single-device step at batch `R·N`.
   Stated at an arbitrary shard `e : Fin R × Fin N ≃ Fin (R*N)` — WHICH examples land on which
   replica does not enter, only that together they are the batch. The contiguous shard the DP
   shim cuts is the `finProdFinEquiv` instance.
-* ⛔ `dpMeanGrad_ne_globalBatchGrad` — and for a batch-coupled loss that is FALSE, at an
+* `dpMeanGrad_ne_globalBatchGrad` — and for a batch-coupled loss that is FALSE, at an
   explicit two-replica witness. A training-mode BatchNorm reads a nonlinear function of its
   own slice's statistics; `bnToyLoss` is the smallest thing with that shape. So a batch-BN net
   trained data-parallel did NOT minimise the batch-`R·N` loss, and `dpMeanGrad_eq_grad_meanLoss`
   is the honest statement of what it did minimise. `dpToyShard_eq_batch` is the lemma that
   makes it a witness rather than a comparison of two unrelated datasets.
-* ⭐⭐ `dpIterate_lockstep` / `dpIterate_eq_meanLossTrain` — the lockstep induction. Identical
+* `dpSyncGrad_eq_globalBatchGrad` — the positive twin of `dpMeanGrad_ne_globalBatchGrad`: when
+  the replicas' statistics are synchronised (each replica's gradient is its slice's share of a
+  global-batch sum), the replica mean of the shard gradients is the global-batch gradient.
+  `DataParallelSync.lean` shows the sync-BN ops have that form.
+* `dpIterate_lockstep` / `dpIterate_eq_meanLossTrain` — the lockstep induction. Identical
   initial parameters and an identical (all-reduced) update keep the `R` state copies equal at
   every step, so `n` steps of the `R`-replica system are `n` steps of ORDINARY single-device
   training on the mean loss. That is the property `VerifiedTrain.lean` relies on when it
@@ -39,26 +41,27 @@ This file is the ℝ-level half: what the average is a gradient OF (piece 1 of
 
 ## What is NOT claimed
 
-⚠ **Nothing here is about the emitted `all_reduce`.** `den (allReduceMeanF R g) = (1/R) Σ_r den (g r)`
-is §4d piece 2, an `SHlo` constructor with a `den`, a `pretty` and a parser case, and it waits on
-4c's batched chains. Until it lands a tie composes with these lemmas only through the reader.
+**Nothing here is about the emitted `all_reduce`.** The `SHlo` collective and its `den`
+(`den (allReduceMeanF R g) = (1/R) Σ_r den (g r)`) are `DataParallelNode.lean`.
 
-⚠ **BatchNorm statistics are per replica.** Nothing all-reduces μ/var, which is why `N` in the
-batch-BN tiers is the PER-CARD batch and why `dpMeanGrad_ne_globalBatchGrad` is not a curiosity.
+**Under per-replica BatchNorm** (the non-sync renders) nothing all-reduces μ/var, which is why `N`
+in those batch-BN ties is the per-card batch and why `dpMeanGrad_ne_globalBatchGrad` applies.
+The sync-BN renders all-reduce the statistics (`DataParallelSync.lean`), and
+`dpSyncGrad_eq_globalBatchGrad` applies.
 
-⚠ **That every replica starts from the same parameters, that the checkpoint is read from one
+Note: **That every replica starts from the same parameters, that the checkpoint is read from one
 replica, and that `replica_groups` names all `R` devices are the DRIVER's** (`VerifiedTrain.lean`,
 `ffi/pjrt_ffi.c`, `PJRT_REPLICAS`), not theorems here. `dpIterate_lockstep` takes the shared start
 as a HYPOTHESIS — it says what follows from it, not that the driver establishes it. The
 `*-dp-check` gates are the empirical evidence for that half.
 
-⭐ **WHICH examples land where is the one piece of that which does become a theorem, and only for
+**WHICH examples land where is the one piece of that which does become a theorem, and only for
 half the nets.** `dpMeanGrad_eq_globalBatchGrad_of_perExample` binds the shard, so for a net with
 no batch coupling the partition is provably irrelevant and all the driver has to get right is that
-the slices cover the batch. ⛔ For a batch-BN net the partition changes the function, and nothing
+the slices cover the batch. Note: For a batch-BN net the partition changes the function, and nothing
 here recovers it.
 
-`pdiv_const_smul`, the scalar-multiple rule this file needed, is `Tensor.lean`'s (moved 2026-09-08).
+`pdiv_const_smul`, the scalar-multiple rule this file needs, is in `Tensor.lean`.
 -/
 
 open Finset BigOperators
@@ -88,7 +91,7 @@ noncomputable def dpMean {R P : Nat} (g : Fin R → Vec P) : Vec P :=
 /-- **A mean of losses.** Used at two different index meanings and deliberately ONE definition:
     over replicas it is the function data parallelism minimises, and over examples it is the
     batch mean a single device minimises. That those coincide under no batch coupling is
-    `meanLoss_shard`, and it is the content of §4d piece 1. -/
+    `meanLoss_shard`. -/
 noncomputable def meanLoss {M P : Nat} (L : Fin M → Vec P → ℝ) : Vec P → ℝ :=
   fun θ => (1 / (M : ℝ)) * ∑ m, L m θ
 
@@ -99,7 +102,7 @@ theorem meanLoss_differentiableAt {M P : Nat} (L : Fin M → Vec P → ℝ) (θ 
   differentiableAt_pi.2 fun _ =>
     (DifferentiableAt.fun_sum fun m _ => differentiableAt_pi.1 (hdiff m) 0).const_mul _
 
-/-- ⭐ **The gradient of a mean is the mean of the gradients.** Linearity of `pdiv`, and the
+/-- **The gradient of a mean is the mean of the gradients.** Linearity of `pdiv`, and the
     only analysis in this file: `pdiv_const_smul` pulls the `1/M` out and `pdiv_finset_sum`
     splits the sum. Everything downstream is this lemma read at two index meanings. -/
 theorem lossGrad_meanLoss {M P : Nat} (L : Fin M → Vec P → ℝ) (θ : Vec P)
@@ -115,7 +118,7 @@ theorem lossGrad_meanLoss {M P : Nat} (L : Fin M → Vec P → ℝ) (θ : Vec P)
   exact pdiv_finset_sum Finset.univ (fun m => fun θ' : Vec P => fun _ : Fin 1 => L m θ') θ
     (fun m _ => hdiff m) i 0
 
-/-- ⭐⭐ **What the collective computes, named as a gradient.** The all-reduced mean of the `R`
+/-- **What the collective computes, named as a gradient.** The all-reduced mean of the `R`
     per-replica gradients IS the gradient of the mean of the `R` per-replica losses.
 
     No hypothesis on the losses beyond differentiability — in particular this holds for a
@@ -131,7 +134,7 @@ theorem dpMeanGrad_eq_grad_meanLoss {R P : Nat} (L : Fin R → Vec P → ℝ) (�
 -- § No batch coupling: the DP step IS the global-batch step
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **Sharding a per-example loss is invisible to the mean.** If replica `r`'s loss is the
+/-- **Sharding a per-example loss is invisible to the mean.** If replica `r`'s loss is the
     mean over its own `N` examples, then the mean of the `R` replica losses is the mean over
     all `R·N` examples — as FUNCTIONS, before any derivative is taken.
 
@@ -147,7 +150,7 @@ theorem meanLoss_shard {R N P : Nat} (e : Fin R × Fin N ≃ Fin (R * N))
   rw [← Finset.mul_sum, ← mul_assoc, div_mul_div_comm, one_mul, Nat.cast_mul,
       ← Equiv.sum_comp e (fun k => ℓ k θ), Fintype.sum_prod_type]
 
-/-- ⭐⭐ **For a net with no batch coupling the data-parallel step IS the single-device step at
+/-- **For a net with no batch coupling the data-parallel step IS the single-device step at
     the global batch `R·N`.** `meanLoss_shard` under `lossGrad`.
 
     "No batch coupling" is the hypothesis's shape, not a side condition: it is spelled by
@@ -191,7 +194,7 @@ def dpToyShard : Fin 2 → Fin 1 → ℝ := fun r _ => 2 * (r.val : ℝ)
 /-- The global batch those two slices make: `{0, 2}`, whose mean is `1`. -/
 def dpToyBatch : Fin 2 → ℝ := fun k => 2 * (k.val : ℝ)
 
-/-- ⚠ **The two shards ARE the global batch**, under the contiguous split — replica `r` owns
+/-- Note: **The two shards ARE the global batch**, under the contiguous split — replica `r` owns
     example `r`. Without this the witness below would be comparing two unrelated datasets and
     would prove nothing; a comparison against a re-derivation tests the re-derivation. -/
 theorem dpToyShard_eq_batch (r : Fin 2) (n : Fin 1) :
@@ -218,7 +221,7 @@ theorem lossGrad_bnToyLoss {N : Nat} (xs : Fin N → ℝ) (θ : Vec 1) (i : Fin 
   rw [show bnToyLoss xs = (fun θ' : Vec 1 => (sliceMean xs) ^ 2 * θ' 0) from rfl,
       lossGrad_smul_coord, ite_eq_left (Subsingleton.elim i 0)]
 
-/-- ⛔⛔ **With batch coupling the previous section is FALSE, and here is the witness.**
+/-- Note: **With batch coupling the previous section is FALSE, and here is the witness.**
     Two replicas, one example each — slices `{0}` and `{2}`, global batch `{0, 2}`. The
     data-parallel mean gradient is `(0² + 2²)/2 = 2`; the gradient of the global-batch loss is
     `1² = 1`.
@@ -226,7 +229,7 @@ theorem lossGrad_bnToyLoss {N : Nat} (xs : Fin N → ℝ) (θ : Vec 1) (i : Fin 
     So a training-BN net trained data-parallel did NOT take a step on the batch-`R·N` loss, at
     any learning rate and however small the gradients. What it took a step on is the mean of
     the `R` per-replica batch-BN losses, which is `dpMeanGrad_eq_grad_meanLoss` — a different
-    function, and the only honest answer to "what trained". ⚠ The witness needs no BatchNorm:
+    function, and the only honest answer to "what trained". Note: The witness needs no BatchNorm:
     ANY nonlinear read of a per-slice statistic separates the two, which is why the split is
     structural rather than a property of the normalisation's formula. -/
 theorem dpMeanGrad_ne_globalBatchGrad (θ : Vec 1) :
@@ -259,7 +262,7 @@ theorem dpMean_shardSum {R N P : Nat} (e : Fin R × Fin N ≃ Fin (R * N))
   simp only [Finset.sum_apply]
   rw [← Equiv.sum_comp e (fun m => c m i), Fintype.sum_prod_type]
 
-/-- ⭐⭐ **The positive twin of `dpMeanGrad_ne_globalBatchGrad`: with SYNCHRONISED statistics
+/-- **The positive twin of `dpMeanGrad_ne_globalBatchGrad`: with SYNCHRONISED statistics
     the data-parallel step IS the single-device step at the global batch `R·N`.**
 
     Write the global-batch gradient as a mean of per-example terms, `(1/(R·N)) Σ_m c m` — the
@@ -273,7 +276,7 @@ theorem dpMean_shardSum {R N P : Nat} (e : Fin R × Fin N ≃ Fin (R * N))
     collective's mean over `R` of those is the global mean: `meanLoss_shard`'s arithmetic, for
     vectors.
 
-    ⛔ Per-replica BatchNorm fails exactly here: replica `r`'s cotangents are then NOT the
+    Note: Per-replica BatchNorm fails exactly here: replica `r`'s cotangents are then NOT the
     shard-`r` block of any global backward, and the witness above is the two-example case. -/
 theorem dpSyncGrad_eq_globalBatchGrad {R N P : Nat} (e : Fin R × Fin N ≃ Fin (R * N))
     (c : Fin (R * N) → Vec P) :
@@ -321,13 +324,13 @@ noncomputable def dpSingleStep (grad : Fin R → S → Vec P) (tail : S → Vec 
 theorem dpStep_const (grad : Fin R → S → Vec P) (tail : S → Vec P → S) (st : S) :
     dpStep grad tail (fun _ => st) = fun _ => dpSingleStep grad tail st := rfl
 
-/-- ⭐⭐ **The lockstep induction.** Identical initial states and an identical (all-reduced)
+/-- **The lockstep induction.** Identical initial states and an identical (all-reduced)
     update keep the `R` copies equal at every step, so `n` steps of the `R`-replica system are
     `n` steps of the single-device one. This is the property `VerifiedTrain.lean` relies on
     when it checkpoints from replica 0 — the checkpoint is not "replica 0's answer", it is
     every replica's.
 
-    ⚠ The shared start is a HYPOTHESIS (the `fun _ => st` on the left). That the driver
+    Note: The shared start is a HYPOTHESIS (the `fun _ => st` on the left). That the driver
     broadcasts it, and that `replica_groups` names all `R` devices, is calling logic and the
     `*-dp-check` gates are its evidence. -/
 theorem dpIterate_lockstep (grad : Fin R → S → Vec P) (tail : S → Vec P → S) :
@@ -342,7 +345,7 @@ theorem dpIterate_lockstep (grad : Fin R → S → Vec P) (tail : S → Vec P �
 
 end Lockstep
 
-/-- ⭐⭐ **What function trained, in one statement.** When each replica's gradient is the
+/-- **What function trained, in one statement.** When each replica's gradient is the
     certified gradient of its own loss, one data-parallel step is one ordinary step on the
     MEAN of the `R` per-replica losses. -/
 theorem dpSingleStep_eq_meanLoss_step {R P : Nat} (L : Fin R → Vec P → ℝ)
@@ -352,11 +355,10 @@ theorem dpSingleStep_eq_meanLoss_step {R P : Nat} (L : Fin R → Vec P → ℝ)
   show tail θ (dpMean (fun r => lossGrad (L r) θ)) = _
   rw [dpMeanGrad_eq_grad_meanLoss L θ hdiff]
 
-/-- ⭐⭐ **`n` steps of `R` replicas ARE `n` steps of single-device training on the mean loss.**
-    The lockstep induction and the gradient mean, composed — the closing statement of §4d
-    piece 1, and the one that answers the disclaimer every tie in the repo carries.
+/-- **`n` steps of `R` replicas ARE `n` steps of single-device training on the mean loss.**
+    The lockstep induction and the gradient mean, composed.
 
-    ⚠ Differentiability is asked for at EVERY point, not just at `θ`, because the trajectory
+    Note: Differentiability is asked for at EVERY point, not just at `θ`, because the trajectory
     passes through states the statement cannot name. For a relu net that is the one place this
     file is stronger than it needs to be: the honest weakening is differentiability along the
     trajectory, and it costs a mutual induction the payoff does not justify. -/

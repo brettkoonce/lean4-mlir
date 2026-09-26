@@ -2,11 +2,11 @@ import LeanMlir.Proofs.Architectures.Depthwise
 import LeanMlir.Proofs.Float.FloatComposeBridge
 
 /-!
-# ℝ→Float32 bridge: depthwise convolution (the one new conv lemma for EfficientNet)
+# ℝ→Float32 bridge: depthwise convolution
 
-EfficientNet's MBConv depthwise stage is the only forward op in the enet line whose
-float bound isn't already a wrap of an existing closeness. Structurally it is *easier*
-than a full conv: per output `(ch, hi, wi)` it is
+The float forward-error bound for the depthwise convolution of the MBConv blocks
+(MobileNet, EfficientNet). Structurally it is easier than a full conv: per output
+`(ch, hi, wi)` it is
 
   `depthwiseConv2d W b x ch hi wi = b ch + Σ_{kh,kw} W ch kh kw · pad(x ch …)`
 
@@ -169,8 +169,8 @@ theorem depthwiseFlat_abs_le {c h w kH kW : Nat} {W : DepthwiseKernel c kH kW}
 /-- **Depthwise convolution is `FloatClose`** with modulus the depthwise-fan-in
     `layerBudget` (fan-in `kH·kW`, no channel sum — the depthwise efficiency carries
     into the budget). Real output ≤ `layerAct`; float output ≤ that + the fresh-input
-    rounding `layerBudget(e=0)`. The depthwise peer of `floatClose_flatConv`; the
-    MBConv depthwise stage folds through `.comp` like any other conv. -/
+    rounding `layerBudget(e=0)`. The depthwise peer of `floatClose_flatConv`; it composes
+    by `FloatClose.comp` like the other instances. Nothing in the repo instantiates it. -/
 theorem floatClose_depthwise {c h w kH kW : Nat} (M : FloatModel)
     (W : DepthwiseKernel c kH kW) (b : Vec c) {w' β A : ℝ}
     (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < c * h * w)

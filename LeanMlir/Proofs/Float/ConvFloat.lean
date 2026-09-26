@@ -5,8 +5,8 @@ import LeanMlir.Proofs.Float.FloatBridge
 
 The 2D conv read as a dense layer over the zero-padded window (`convPad`, `k4Idx`, `w3Idx`,
 `convWindow`), the kernel drift that makes it Lipschitz in the weights, and the float conv:
-`convF` / `flatConvF` and the `flatConvF_close` budget every float conv-net bridge composes
-(ResNet-34's strided convs through `ResNet34FloatBridge`).
+`convF` / `flatConvF` and the `flatConvF_close` budget (used by `floatClose_flatConv` and
+`SgdDescentCnn`).
 The whole MNIST-CNN forward budget built from them is in `SgdDescentCnn`.
 -/
 

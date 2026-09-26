@@ -20,13 +20,11 @@ proving each emitted graph denotes the proven `HasVJP.backward`:
   graph is proved against.
 
 This is the IR the small nets' ties are stated in. ResNet onward states its ties about
-`StableHLO`'s `SHlo`, which grew out of this file (`planning/archive/typed_ir.md`).
+`StableHLO`'s `SHlo`, which grew out of this file.
 
-Design notes (see `planning/archive/typed_ir.md`): the backward is modelled as an
-expression tree rooted at the cotangent — SSA/sharing is a
-semantics-preserving printer concern (D2), so the correctness proof never
-touches it. The spike uses `Vec`/`Mat` directly (D1 shortcut) rather than
-the general flat-tensor type.
+Design notes: the backward is modelled as an expression tree rooted at the cotangent —
+SSA/sharing is a semantics-preserving printer concern, so the correctness proof never
+touches it. The IR uses `Vec`/`Mat` directly rather than a general flat-tensor type.
 
 Everything closes under `[propext, Classical.choice, Quot.sound]` (audited
 in [`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)); no `native_decide`.
@@ -72,9 +70,9 @@ noncomputable def Back.denote {inp out : Nat} (e : Back inp out) (dy : Vec inp) 
   | .scaleConst c e' => fun i => c * e'.denote dy i
   | .add e1 e2       => fun i => e1.denote dy i + e2.denote dy i
 
-/-- **Composition lemma** (the Phase-3 mechanism in miniature): a
+/-- **Composition lemma**: a
     `dotGeneral` node denotes post-composition with `Mat.mulVec`.
-    Whole-network bridges will chain lemmas of this shape, mirroring how
+    Whole-network bridges chain lemmas of this shape, mirroring how
     `vjpComp` builds whole-net VJPs from per-layer ones. -/
 theorem denote_dotGeneral {inp m n : Nat} (A : Mat m n) (e : Back inp n) (dy : Vec inp) :
     (Back.dotGeneral A e).denote dy = Mat.mulVec A (e.denote dy) := rfl
@@ -179,7 +177,7 @@ noncomputable def reverseSwap {ic oc kH kW : Nat} (W : Kernel4 oc ic kH kW) :
 
 /-- **Denotation of the emitted conv input-gradient graph.** The codegen
     emits `convolution(dy, reverse(transpose(W)))`; under `⟦conv⟧ := conv2d`
-    (D3) that denotes a forward `conv2d` of the reversed-swapped kernel. -/
+    that denotes a forward `conv2d` of the reversed-swapped kernel. -/
 noncomputable def convBackDenote {ic oc h w kH kW : Nat}
     (W : Kernel4 oc ic kH kW) : Tensor3 oc h w → Tensor3 ic h w :=
   conv2d (reverseSwap W) (fun _ => 0)
@@ -268,15 +266,10 @@ theorem reverseSlab_eq_gradSlab {h w kH kW : Nat}
 /-- **The general conv-adjoint identity (odd kernels), all dims.** The emitted
     reversed-kernel forward conv `conv2d (reverseSwap W) 0` equals the certified
     conv input-gradient `conv2dInputGradFormula W`, for ARBITRARY
-    `ic oc h w kH kW` with odd `kH`, `kW` (`2·⌊(kH-1)/2⌋+1 = kH`). This is the
-    reversed-kernel ⇒ correlation-adjoint reindex that `conv_back_bridge_{1to2,2to2}`
-    previously asserted only at two toy 4×4 shapes by exhaustive `fin_cases`.
-
-    Proof: per output coordinate, both sides sum over the input channel `co`, and each
-    channel's summand is `reverseSlab_eq_gradSlab` at the slabs `W co ci`, `dy co`.
-
-    The single load-bearing leaf for the §B certified-VJP tie: every conv-heavy
-    net's backward (`convFlatBack`) routes its conv input-grad through this. -/
+    `ic oc h w kH kW` with odd `kH`, `kW` (`2·⌊(kH-1)/2⌋+1 = kH`). `convFlatBack_eq_vjp_backward`, which ties
+    `convFlatBack` to the certified conv input-VJP, routes through this. -/
+-- Proof: per output coordinate, both sides sum over the output channel `co`, and each
+-- channel's summand is `reverseSlab_eq_gradSlab` at the slabs `W co ci`, `dy co`.
 theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
     (hkH : 2 * ((kH - 1) / 2) + 1 = kH) (hkW : 2 * ((kW - 1) / 2) + 1 = kW)
     (W : Kernel4 oc ic kH kW) (dy : Tensor3 oc h w) :
@@ -288,8 +281,7 @@ theorem convBackDenote_eq_input_grad_formula {ic oc h w kH kW : Nat}
 /-- **Conv backward bridge, 1→2 channels (the Spatial instance's first
     conv: `Kernel4 2 1 3 3` at 4×4).** The emitted transposed-convolution
     graph denotes the proven conv input-VJP `(conv2dHasVJP3 W b).backward`.
-    Now a one-line instance of the general `convBackDenote_eq_input_grad_formula`
-    (3×3 is odd) — no longer the brute-force `fin_cases` expansion. -/
+    An instance of the general `convBackDenote_eq_input_grad_formula` (3×3 is odd). -/
 theorem conv_back_bridge_1to2 (W : Kernel4 2 1 3 3) (b : Vec 2)
     (x : Tensor3 1 (2*2) (2*2)) (dy : Tensor3 2 (2*2) (2*2)) :
     convBackDenote W dy = (conv2dHasVJP3 W b).backward x dy := by
@@ -727,7 +719,7 @@ theorem bias_grad_bridge {inp m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m)
 def mlpCotOut1 {d₂ d₃ : Nat} (W₂ : Mat d₂ d₃) (p₁ : Vec d₂) : Back d₃ d₂ :=
   (emitReluBack p₁).subst (emitDenseBack W₂)
 
-/-- **MLP hidden-layer parameter-gradient bridge (representative).** At the
+/-- **MLP hidden-layer parameter-gradient bridge (layer 1).** At the
     interesting layer — layer 1, whose output cotangent is a genuine
     backward subgraph `mlpCotOut1`, not just the top cotangent — the emitted
     weight and bias gradients equal the certified Jacobians of that dense
@@ -824,12 +816,9 @@ theorem mlp_fwd_preact1 {d₀ d₁ d₂ : Nat} (W₀ : Mat d₀ d₁) (b₀ : Ve
 noncomputable def emitLossCot (c : Nat) (logits : Vec c) (label : Fin c) : Vec c :=
   fun j => softmax c logits j - oneHot c label j
 
-/-- **Loss-cotangent bridge.** The emitted softmax−onehot graph denotes the
-    proven cross-entropy gradient `∂(crossEntropy)/∂logits` (`softmaxCE_grad`).
-    So the cotangent fed to the backward is itself proof-backed, not supplied:
-    the whole train step `forward → loss → backward → grads` is proof-backed
-    end to end, and only the SGD arithmetic (and printer/IREE/float) stays
-    trusted. -/
+/-- **Loss-cotangent bridge.** The emitted softmax−onehot vector `emitLossCot`
+    equals `∂(crossEntropy)/∂logits` (`softmaxCE_grad`), so the backward's
+    cotangent leaf is proof-backed rather than supplied. -/
 theorem lossCot_bridge (c : Nat) (logits : Vec c) (label : Fin c) (j : Fin c) :
     emitLossCot c logits label j
       = pdiv (fun (z : Vec c) (_ : Fin 1) => crossEntropy c z label) logits j 0 :=

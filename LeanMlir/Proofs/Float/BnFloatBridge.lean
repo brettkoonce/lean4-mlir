@@ -4,9 +4,8 @@ import LeanMlir.Proofs.Float.FloatBridge
 /-!
 # ℝ→Float32 bridge for BatchNorm: the inverse-stddev keystone
 
-The no-BN CIFAR bridge (`CifarFloatBridge.lean`) reuses the existing relative-error
-model over sums/products/exact-max. BatchNorm adds the one genuinely new numerical
-op: the **inverse standard deviation** `istd = 1/√(σ²+ε)`. The relative-error model
+Over `FloatBridge`'s relative-error model (sums, products, exact max), BatchNorm adds
+one new numerical op: the **inverse standard deviation** `istd = 1/√(σ²+ε)`. The relative-error model
 `|rnd x − x| ≤ u·|x|` does not cover `rsqrt` (a GPU `rsqrt`, like `exp`, has no IEEE
 spec), so — exactly as the softmax bridge models `exp` by a supplied `fexp` with an
 `eexp` accuracy hypothesis — we model the float inverse-stddev by a supplied
@@ -18,9 +17,9 @@ The keystone is that `t ↦ 1/√t` is Lipschitz on `[ε, ∞)` with constant `1
 accuracy with this Lipschitz bound gives `bnIstd_close`: the float `istd` is within
 `ers/√ε + e_var/(2ε√ε)` of the certified `bnIstd`, where `e_var` is whatever budget
 the (standard, Higham) variance rounding supplies. This is the BN analog of the
-`exp` accuracy handoff — the piece that the full per-example `bnForward` rounding
-budget composes from (mean/var rounding + the normalize-stage products remain the
-mechanical tail).
+`exp` accuracy handoff. The per-example `bnForward` rounding budget composes it with
+the Higham mean/variance budgets (`FloatModel.bnMean_close`, `FloatModel.bnVar_close`)
+and the normalize chain (`FloatModel.bnForward_close_of`), all in this file.
 -/
 
 namespace Proofs
@@ -72,7 +71,9 @@ theorem rsqrt_lipschitz {a b ε : ℝ} (hε : 0 < ε) (ha : ε ≤ a) (hb : ε �
     floor-agnostic, so the bound becomes `ers/√V + evar/(2V√V)` — and since the
     measured `σ²` is `O(1)` (never near 0), `V ≈ σ²+ε ≫ ε` makes this ~`(σ²/ε)^{3/2}`
     tighter than the `ε`-floor `bnIstd_close` (empirically ~10⁷× on the CIFAR-BN
-    probe, `scripts/certs/cifar_bn_margin_probe.py`). The non-vacuous BN certificate. -/
+    probe, `scripts/certs/cifar_bn_margin_probe.py`). A conditional bound under
+    `hVfv`, `hVbn`, `hrs`, `hclose`; apart from `bnIstd_close` (its `V = ε` case) nothing
+    in the repo applies it. -/
 theorem bnIstd_close_at {n : ℕ} {ε ers evar fvarε V : ℝ} (x : Vec n)
     (fistd : ℝ → ℝ) (hV0 : 0 < V) (hers : 0 ≤ ers)
     (hVfv : V ≤ fvarε) (hVbn : V ≤ bnVar n x + ε)
@@ -187,17 +188,16 @@ theorem FloatModel.bnForward_close_of {n : Nat} (M : FloatModel)
 -- § The mean reduction (the easy Higham budget)
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The mean reduction's budget, parameterised by the REDUCTION'S OWN SPEC.**
+/-- **The mean reduction's budget, parameterised by the REDUCTION'S OWN SPEC.**
     `bnMean_close` below is this at `fsum := M.sum`, the concrete LEFT FOLD — and a GPU does not
     reduce left to right, so a number stated through that instance is about a program we do not
-    ship. This form takes any `fsum` whose forward error meets a fan-in `γn`, which is what every
-    summation order satisfies: sequential summation is the worst of them at
-    `γ = (1+u)^{n+1} − 1`, and a tree's is `(1+u)^{⌈log₂n⌉+1} − 1`, strictly smaller, so the
-    bound holds a fortiori. **The resulting mean accuracy is DERIVED for the kernel actually
-    shipped rather than supplied by analogy** (`planning/archive/float_budget_numbers_log.md` §3.31 route 3);
-    it is `bnMean_close`'s proof with one hypothesis substituted.
+    ship. This form takes any `fsum` whose forward error meets a fan-in `γn` (hypothesis `hsc`).
+    Classically every summation order satisfies such a bound: sequential summation is the worst
+    of them at `γ = (1+u)^{n+1} − 1`, and a tree's is `(1+u)^{⌈log₂n⌉+1} − 1`. That the shipped
+    kernel's reduction meets `hsc` is the hypothesis, not proved here; given it, the proof is
+    `bnMean_close`'s with one hypothesis substituted.
 
-    ⚠ Only the SUM is parameterised. The division by the exact width is `M.div`, one rounding,
+    Note: Only the SUM is parameterised. The division by the exact width is `M.div`, one rounding,
     and there is nothing to model about it. -/
 theorem FloatModel.bnMean_close_of {n : ℕ} (M : FloatModel) {fsum : Vec n → ℝ} {γn A : ℝ}
     (x : Vec n) (hn : 0 < n) (hγn0 : 0 ≤ γn)
@@ -231,7 +231,7 @@ theorem FloatModel.bnMean_close_of {n : ℕ} (M : FloatModel) {fsum : Vec n → 
 /-- **BN mean rounding budget.** The float mean `fl((Σx)/n)` (rounded sum, then a
     rounded division by the exact `n`) is within
     `u·(1+u)^{n+1}·A + ((1+u)^{n+1}−1)·A` of the real `bnMean`, under `|xᵢ| ≤ A`.
-    Standard: `sum_close`'s fan-in `γ` plus one division rounding. ⚠ Stated at the concrete
+    Standard: `sum_close`'s fan-in `γ` plus one division rounding. Note: Stated at the concrete
     left fold `M.sum`; `bnMean_close_of` above is the form that covers the kernels we ship. -/
 theorem FloatModel.bnMean_close {n : ℕ} (M : FloatModel) (x : Vec n) {A : ℝ}
     (hn : 0 < n) (hA : ∀ i, |x i| ≤ A) :
@@ -313,8 +313,9 @@ theorem FloatModel.bnVar_close {n : ℕ} (M : FloatModel) (x : Vec n) {fμ emean
     `bnNormBudget` of the certified `bnForward`, with the mean error discharged by
     `bnMean_close`, the inverse-stddev error by the `bnIstd_close` keystone (the
     `rsqrt` accuracy + `rsqrt_lipschitz`), and the normalize chain by
-    `bnForward_close_of`. The only supplied input is `fvarε`'s closeness to `σ²+ε`
-    (`hvar`) — the variance Higham reduction, the one remaining mechanical piece. -/
+    `bnForward_close_of`. `fvarε`'s closeness to `σ²+ε` (`hvar`) is taken as a
+    hypothesis; `FloatModel.bnVar_close` supplies a variance budget in the rounded-sum
+    form. -/
 theorem FloatModel.bnForward_close {n : Nat} (M : FloatModel)
     {ε γ β evar D S G Bbnd ers fvarε A : ℝ} (x : Vec n) (i : Fin n) (fistd : ℝ → ℝ)
     (hn : 0 < n) (hε : 0 < ε) (hers : 0 ≤ ers) (hfv : ε ≤ fvarε)

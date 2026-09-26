@@ -31,7 +31,7 @@ def rowDotQ {m n : Nat} (W : Fin m → Fin n → ℚ) (a b : Fin m) : ℚ :=
 def gramCheck {m n : Nat} (G : Fin m → Fin m → ℚ) (W : Fin m → Fin n → ℚ) : Bool :=
   (List.finRange m).all fun a => (List.finRange m).all fun b => decide (G a b = rowDotQ W a b)
 
-/-- ⭐ **A passing `gramCheck` is the Gram identity over `ℝ`.** -/
+/-- **A passing `gramCheck` is the Gram identity over `ℝ`.** -/
 theorem gram_eq_of_check {m n : Nat} (G : Fin m → Fin m → ℚ) (W : Fin m → Fin n → ℚ)
     (h : gramCheck G W = true) :
     ∀ a b, castM G a b = ∑ j, castM W a j * castM W b j := by
@@ -44,7 +44,7 @@ theorem gram_eq_of_check {m n : Nat} (G : Fin m → Fin m → ℚ) (W : Fin m �
 def absLeCheck {m n : Nat} (A : Fin m → Fin n → ℚ) (c : ℚ) : Bool :=
   (List.finRange m).all fun i => (List.finRange n).all fun j => decide (|A i j| ≤ c)
 
-/-- ⭐ **A passing `absLeCheck` bounds every entry over `ℝ`.** -/
+/-- **A passing `absLeCheck` bounds every entry over `ℝ`.** -/
 theorem abs_le_of_check {m n : Nat} (A : Fin m → Fin n → ℚ) (c : ℚ)
     (h : absLeCheck A c = true) : ∀ i j, |castM A i j| ≤ (c : ℝ) := by
   intro i j

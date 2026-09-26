@@ -7,10 +7,11 @@ all still VARIABLES. Every whole-net certified backward tie states its apex over
 keeps its blocks opaque, and a `*_eq_slots` shape check says the concrete stages ARE the committed
 forward. They are plain `def`s so the closing `rfl` of a tie can unfold them.
 
-⭐ Net-agnostic and generic in every dimension. Until 2026-09-08 ResNet-34, EfficientNet-B0,
-MobileNetV2 and MobileNetV4 each carried a private copy of this construction — seventeen, seventeen,
-eighteen and twenty-five slots, under four names — and ResNet-50 reused ResNet-34's. One copy, to
-the deepest ladder in the suite. -/
+Net-agnostic and generic in every dimension, with enough slots for the deepest chain in the
+suite. -/
+-- History: ResNet-34, EfficientNet-B0, MobileNetV2 and MobileNetV4 each used to carry a private
+-- copy of this construction (seventeen, seventeen, eighteen and twenty-five slots, under four
+-- names; ResNet-50 reused ResNet-34's).
 
 namespace Proofs
 

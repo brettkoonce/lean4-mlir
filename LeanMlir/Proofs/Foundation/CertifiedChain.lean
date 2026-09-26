@@ -3,12 +3,15 @@ import LeanMlir.Proofs.Codegen.StableHLO
 /-! # `CertLayer` — composing certified backward graphs, so a NET is one object
 
 A `CertLayer` is a layer that carries its own proof that its backward graph denotes its VJP, and
-`CertLayer.comp` composes two of them into a third. Every net's whole backward is built this way
-now: `r34NetLayer` / `r50NetLayer` (stem pool to logits), the MobileNet and EfficientNet chains,
-and ViT's tower (`ViTBackNet`, which proves the generic chain reproduces ViT's earlier bespoke
-induction term for term). The head layers shared across nets are in `HeadLayers`.
+`CertLayer.comp` composes two of them into a third. Users: `r34NetLayer` / `r50NetLayer`
+(ResNet-34/50, stem pool to logits), the MobileNetV2 bodies (`mnv2BodyLayer`,
+`mnv2DownBodyLayer`), MobileNetV4's layer groups (its trunk is several `CertLayer`s, not one),
+the ConvNeXt channel-LN block (`cnxBlockChLayer`), and ViT's tower (`ViTBackNet`, which proves
+the generic chain reproduces ViT's bespoke induction term for term). EfficientNet-B0's backward
+chain does not use `CertLayer`; it is composed directly (`EfficientNetChainClose`). The head
+layers shared across nets are in `HeadLayers`.
 
-⭐ **The obstacle was never the mathematics; it was that the chaining was open-coded.** Look at any
+**Why.** Without it the chaining is open-coded. Look at any
 `<body>BackBatchedGraph_faithful`: it builds `G₁ x (G₂ (f₁ x) e)`, rewrites with the two component
 faithfulness lemmas, and closes by `rfl` on `vjpCompAt`'s definitional
 `backward dy = f₁.backward (f₂.backward dy)`. That argument is **identical every time** and is
@@ -26,7 +29,7 @@ of two layers is certified exactly where the first is certified **and** the seco
 the first's output. That is `ok x := L₁.ok x ∧ L₂.ok (L₁.fwd x)`, and it threads the deepening
 hypothesis stack automatically instead of by hand.
 
-⚠ **This is not a new trust assumption.** `CertLayer.comp` proves faithfulness of the composite
+**This is not a new trust assumption.** `CertLayer.comp` proves faithfulness of the composite
 from the components' faithfulness; it introduces no axiom and no `sorry`. A chain built from
 certified blocks is certified, and the fold is where that stops being a sentence and becomes a
 theorem.
@@ -37,7 +40,7 @@ theorem.
 execution order, which is how a block table reads. The backward graph nests the other way
 automatically — `L₁.graph x (L₂.graph _ (L₃.graph _ e))` — because that is what the chain rule
 says, and getting it backwards is a silent wrong-gradient rather than a type error whenever the
-widths happen to agree (the §3 trap, one level up).
+widths happen to agree.
 -/
 
 namespace Proofs.StableHLO
@@ -59,7 +62,7 @@ structure CertLayer (m n : Nat) where
   vjp : ∀ x, ok x → HasVJPAt fwd x
   /-- The backward graph, as a function of the forward activation and the incoming cotangent. -/
   graph : Vec m → SHlo n → SHlo m
-  /-- ⭐ The theorem that makes it a *certified* layer: the graph denotes the VJP. -/
+  /-- The theorem that makes it a *certified* layer: the graph denotes the VJP. -/
   faithful : ∀ (x : Vec m) (hx : ok x) (e : SHlo n),
     den (graph x e) = (vjp x hx).backward (den e)
 
@@ -75,7 +78,7 @@ noncomputable def id' (n : Nat) : CertLayer n n where
   graph := fun _ e => e
   faithful := by intro _ _ _; rfl
 
-/-- ⭐⭐ **THE COMPOSITION THEOREM — the whole point of this file.**
+/-- **THE COMPOSITION THEOREM — the whole point of this file.**
 
     Two certified layers compose into a certified layer. The backward graph nests (`L₁`'s graph
     fed `L₂`'s graph at `L₁`'s output), the smoothness preconditions conjoin, and faithfulness
@@ -95,7 +98,7 @@ noncomputable def comp {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n 
     rw [L₁.faithful x hx.1, L₂.faithful (L₁.fwd x) hx.2]
     rfl
 
-/-- ⭐ **Wrap a layer in an identity skip** — `x ↦ L.fwd x + x`. The backward graph is the additive
+/-- **Wrap a layer in an identity skip** — `x ↦ L.fwd x + x`. The backward graph is the additive
     fan-in `addV (L.graph …) ecot`: the body's input-cotangent plus the skip's verbatim cotangent.
 
     Certified exactly where the body is (`ok := L.ok`), because an identity skip is smooth
@@ -114,7 +117,7 @@ noncomputable def residual {n : Nat} (L : CertLayer n n) : CertLayer n n where
     rw [hsum, L.faithful x hx e]
     rfl
 
-/-- ⭐ **A projected residual** — `x ↦ P.fwd x + F.fwd x`, both paths nontrivial. The backward
+/-- **A projected residual** — `x ↦ P.fwd x + F.fwd x`, both paths nontrivial. The backward
     graph is the fan-in `addV (P.graph …) (F.graph …)`, certified where both paths are. The
     downsample-block peer of `residual`: a projection skip changes the width, so the layer is
     `m → n`. -/
@@ -133,7 +136,7 @@ noncomputable def residualProj {m n : Nat} (P F : CertLayer m n) : CertLayer m n
     rw [hsum, P.faithful x hx.1 e, F.faithful x hx.2 e]
     rfl
 
-/-- ⭐ **The post-residual relu** of a ResNet block, as a layer: certified where its input misses the
+/-- **The post-residual relu** of a ResNet block, as a layer: certified where its input misses the
     kink, with the `%outR` mask as its backward. `(residual F).comp (reluOut _)` is a whole identity
     block, so its capstone is `.faithful` of that composite. -/
 noncomputable def reluOut (n : Nat) : CertLayer n n where
@@ -162,7 +165,7 @@ theorem chain_fwd {n : Nat} (Ls : List (CertLayer n n)) (x : Vec n) :
   | nil => rfl
   | cons L Ls ih => simpa [chain, comp, Function.comp] using ih (L.fwd x)
 
-/-- ⭐ **The net-level statement, in one line.** Whatever the chain's length, its backward graph
+/-- **The net-level statement, in one line.** Whatever the chain's length, its backward graph
     denotes its VJP — so a stage, a trunk, or a whole net assembled from certified blocks is
     certified, with no per-length proof. This is just `CertLayer.faithful` at `chain Ls`; it is
     restated here because it is the theorem the fold exists to provide. -/
@@ -171,11 +174,11 @@ theorem chain_faithful {n : Nat} (Ls : List (CertLayer n n))
     den ((chain Ls).graph x e) = ((chain Ls).vjp x hx).backward (den e) :=
   (chain Ls).faithful x hx e
 
-/-! ⚠⚠ **Projecting `.fwd` out of a composed `CertLayer` — the four lemmas below, and why they exist.**
+/-! **Projecting `.fwd` out of a composed `CertLayer` — the four lemmas below, and why they exist.**
 `simp only [CertLayer.comp]` rewrites `L₁.comp L₂` to the full structure literal — `fwd`, `ok`,
 `diff`, `vjp`, `graph` AND `faithful` — and only then projects `.fwd` out of it; over a 24-stage
-chain that builds an enormous intermediate term whose bulk is PROOFS the goal never mentions
-(MobileNetV4's T2 took three minutes without these, seconds with them). And at LITERAL widths the
+chain that builds an enormous intermediate term whose bulk is proofs the goal never mentions
+(on MobileNetV4's chain: minutes without these, seconds with them). And at literal widths the
 peel itself is a kernel deterministic timeout by `rfl` / `Function.comp_apply` / `Function.comp_assoc`
 — proved once here between variables, `comp_fwd_apply` is applied there in 2 s. -/
 
@@ -195,7 +198,7 @@ theorem comp_fwd_apply {m n p : Nat} (L₁ : CertLayer m n) (L₂ : CertLayer n 
     stated at named prefixes proves its `.ok` one `refine` per block through this, so the goal
     stays at the prefix; one anonymous constructor for the whole chain instead makes every
     prefix a defeq check against the nested layer forwards, and that exceeds `maxRecDepth` by the
-    fifth block. ⚠ Discharge `hy` by `rw` at literal widths, not `rfl` (`r34SmoothAtB_ok`). -/
+    fifth block. Note: Discharge `hy` by `rw` at literal widths, not `rfl` (`r34SmoothAtB_ok`). -/
 theorem comp_ok_of {m n k : Nat} {L₁ : CertLayer m n}
     {L₂ : CertLayer n k} {x : Vec m} (h₁ : L₁.ok x) (y : Vec n) (hy : L₁.fwd x = y)
     (h₂ : L₂.ok y) : (L₁.comp L₂).ok x :=

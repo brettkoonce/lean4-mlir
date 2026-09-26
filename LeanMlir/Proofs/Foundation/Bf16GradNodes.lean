@@ -8,8 +8,7 @@ whose `den` rounds the operands going in and — for every kind but one — roun
 outside the batch sum: the emitted convolution contracts the batch inside a single op and stores
 its bf16 result once, so a rounding per summand would claim a coarser computation than the
 hardware performs. That is a different real number from the f32 node's, and it needs its own
-certificate. "The bf16 twins consume the same node" was written in three fold headers and is
-false.
+certificate: the bf16 twins do not consume the f32 node.
 
 This file is the whole bf16 op table, stated per op kind: each lemma says the node denotes the
 certified `Σ_n` gradient at the ROUNDED operands, rounded. The proofs are the f32 fold's — `congrArg rnd`
@@ -28,14 +27,14 @@ certificate at rounded slices.
 | `rowDenseWeightGradBBf16` | `ViTPoCGB.rowDenseWeightGradB_den` | ViT's Q/K/V/O and MLP denses |
 | `patchEmbedWeightGradBBf16` | `ViTPoCGB.patchEmbedWeightGradB_den` | ViT's patch embed |
 
-⚠ **`rowDenseWeightGradBBf16` has NO outer rounding**, and that is the measurement rather than
+Note: **`rowDenseWeightGradBBf16` has NO outer rounding**, and that is the measurement rather than
 an omission: its `dot_general` contracts batch and token in one op and keeps its f32-typed result
 deliberately (`StableHLO.lean`'s constructor says why), so only the two leaf reads round.
 
-⚠ Padding rides along invisibly, as in the f32 folds: the symmetric and XLA-`SAME` strided kinds
+Note: Padding rides along invisibly, as in the f32 folds: the symmetric and XLA-`SAME` strided kinds
 have identical types and identical emitted shapes, and only the certificate tells them apart.
 
-⛔ BatchNorm, LayerNorm and the dense head have no bf16 twin here or anywhere: every bf16 net in the
+Note: BatchNorm, LayerNorm and the dense head have no bf16 twin here or anywhere: every bf16 net in the
 suite keeps them in f32, so their γ/β and weight nodes are the f32 folds' in both worlds. -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -79,7 +78,7 @@ theorem convStridedWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) 
     (Kernel4.flatten W) (fun j => rnd (batchSlice N (oc * h * w) cot n j)) idx
 
 /-- **bf16 XLA-`SAME` strided conv weight GRADIENT**, rounded once. The TF-origin stems
-    (EfficientNet-B0, MobileNetV2, MobileNetV4). ⚠ `flatConvStride2Xla`, not `flatConvStride2`. -/
+    (EfficientNet-B0, MobileNetV2, MobileNetV4). Note: `flatConvStride2Xla`, not `flatConvStride2`. -/
 theorem convStridedXlaWGradBBf16_den {N ic oc h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
     (b : Vec oc) (x : Vec (N * (ic * (2 * h) * (2 * w)))) (W : Kernel4 oc ic kH kW)
     (cot : Vec (N * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
@@ -146,7 +145,7 @@ theorem depthwiseStridedWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ)
     (Tensor3.flatten W) (fun j => rnd (batchSlice N (c * h * w) cot n j)) idx
 
 /-- **bf16 XLA-`SAME` strided depthwise weight GRADIENT**, rounded once. MobileNetV2's four
-    stride-2 depthwises, and no other net's. ⚠ `depthwiseStride2FlatXla`. -/
+    stride-2 depthwises, and no other net's. Note: `depthwiseStride2FlatXla`. -/
 theorem depthwiseStridedXlaWGradBBf16_den {N c h w kH kW : Nat} (rnd : ℝ → ℝ) (xN cotN : String)
     (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
     (cot : Vec (N * (c * h * w))) (idx : Fin (c * kH * kW)) :

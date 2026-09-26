@@ -274,6 +274,11 @@ theorem pdiv_of_linear {m n : Nat} (f : Vec m → Vec n)
 -- § VJP Framework
 -- ════════════════════════════════════════════════════════════════
 
+/-- A vector–Jacobian product for `f`: a backward map with the proof that at every `x` it
+    contracts `f`'s Jacobian (`pdiv`) against the cotangent. `correct` is the whole content.
+    `HasVJP.canonical` inhabits it for every `f` (its `backward` is the contraction itself), so
+    a witness says something only when its `backward` is a formula proved equal to that
+    contraction. -/
 structure HasVJP {m n : Nat} (f : Vec m → Vec n) where
   backward : Vec m → Vec n → Vec m
   correct : ∀ (x : Vec m) (dy : Vec n) (i : Fin m),
@@ -397,6 +402,9 @@ Smooth operators (`dense`, `add`, `mul`, `softmax`, `batchNorm`, …)
 keep their global `HasVJP` instances; we trivially lift to `HasVJPAt`
 at any point via `HasVJP.toHasVJPAt` when composing. -/
 
+/-- A vector–Jacobian product for `f` at one point `x`: a backward map with the proof that it
+    contracts `f`'s Jacobian (`pdiv f x`) against the cotangent. The pointwise form of `HasVJP`,
+    for operators that are differentiable only away from their kinks. -/
 structure HasVJPAt {m n : Nat} (f : Vec m → Vec n) (x : Vec m) where
   backward : Vec n → Vec m
   correct : ∀ (dy : Vec n) (i : Fin m),
@@ -459,7 +467,7 @@ noncomputable def vjpComp {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec
     (vjpCompAt f g x (hf_diff x) (hg_diff (f x)) (hf.toHasVJPAt x) (hg.toHasVJPAt (f x))).correct
 
 /-- `vjpCompAt`'s backward: `g`'s, then `f`'s. Definitional; stated so a chain peels by `rw`.
-    ⛔ Not by `simp only` in a whole-net tie: simp uses an `rfl` lemma as a `dsimp` step and the
+    Note: Not by `simp only` in a whole-net tie: simp uses an `rfl` lemma as a `dsimp` step and the
     kernel re-derives the unfolding. -/
 theorem vjpCompAt_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p) (x : Vec m)
     (hf_diff : DifferentiableAt ℝ f x) (hg_diff : DifferentiableAt ℝ g (f x))
@@ -486,7 +494,7 @@ noncomputable def vjpCompDiffAt {m n p : Nat} (f : Vec m → Vec n) (g : Vec n �
 
 /-- One `vjpCompDiffAt` level's backward, unfolded: the composite runs `g`'s backward, then
     `f`'s. Definitional, stated so that a chain of levels peels by `rw` rather than by a
-    `rfl` that has to find the same unfolding through concrete witnesses. ⛔ Not by
+    `rfl` that has to find the same unfolding through concrete witnesses. Note: Not by
     `simp only`: simp would use it as a `dsimp` step and record nothing for the kernel to replay. -/
 theorem vjpCompDiffAt_fst_backward {m n p : Nat} (f : Vec m → Vec n) (g : Vec n → Vec p)
     (x : Vec m) (hf : HasVJPDiffAt f x) (hg : HasVJPDiffAt g (f x)) (dy : Vec p) :
@@ -555,14 +563,14 @@ end Mat
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Matrix partial derivative**, defined in terms of `pdiv` on the
-    row-major flattened `Vec` form. No longer an axiom — the rank-2
-    structural rules (chain/sum/id) now follow as theorems. -/
+    row-major flattened `Vec` form. The rank-2 structural rules
+    (chain/sum/id) follow as theorems. -/
 noncomputable def pdivMat {a b c d : Nat} (f : Mat a b → Mat c d) (A : Mat a b)
     (i : Fin a) (j : Fin b) (k : Fin c) (l : Fin d) : ℝ :=
   pdiv (fun v : Vec (a * b) => Mat.flatten (f (Mat.unflatten v)))
     (Mat.flatten A) (finProdFinEquiv (i, j)) (finProdFinEquiv (k, l))
 
-/-- **Chain rule for `pdivMat`** — now a theorem, derived from `pdiv_comp`
+/-- **Chain rule for `pdivMat`** — derived from `pdiv_comp`
     via the row-major flatten bijection. -/
 theorem pdivMat_comp {a b c d e f : Nat}
     (F : Mat a b → Mat c d) (G : Mat c d → Mat e f)
@@ -815,7 +823,7 @@ theorem pdivMat_rowIndep_perRow_at {m n p : Nat} (g : Fin m → (Vec n → Vec p
     ContinuousLinearMap.proj_apply, Equiv.symm_apply_apply, hb]
   split_ifs <;> simp [pdiv]
 
-/-- **Row-wise Jacobian decomposition** — proved (planning/archive/VJP.md follow-up D).
+/-- **Row-wise Jacobian decomposition.**
 
     For a row-independent function `M ↦ (r ↦ g (M r))`, the (i,j,k,l)
     Jacobian entry is `pdiv g (A i) j l` when `i = k` and `0` otherwise:
@@ -833,7 +841,7 @@ theorem pdivMat_rowIndep {m n p : Nat} (g : Vec n → Vec p)
   rw [pdivMat_rowIndep_perRow_at (fun _ => g) A (fun _ => h_g_diff.differentiableAt)]
   split_ifs with h <;> simp [h]
 
-/-- **Row-wise lifting of a `HasVJP`** (Phase 8, Tensor-level).
+/-- **Row-wise lifting of a `HasVJP`** (Tensor-level).
 
     Given any `g : Vec n → Vec p` with a proved `HasVJP`, applying `g`
     independently to each row of a matrix `A : Mat m n` gives a

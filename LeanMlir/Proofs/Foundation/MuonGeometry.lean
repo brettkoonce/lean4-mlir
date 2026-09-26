@@ -7,7 +7,7 @@ import Mathlib.Analysis.Matrix.Order
 
 /-! # Muon geometry: the optimizer as steepest descent under a norm
 
-The geometric motivation for Muon (`planning/archive/muon_geometry.md`), in the unifying frame **every
+The geometric motivation for Muon, in the unifying frame **every
 optimizer is steepest descent under a choice of norm**: the update direction is the dual-norm
 maximizer `d⋆ = argmax_{‖d‖≤1} ⟨g,d⟩`, with optimal value the dual norm `‖g‖_*`.
 
@@ -18,38 +18,40 @@ maximizer `d⋆ = argmax_{‖d‖≤1} ⟨g,d⟩`, with optimal value the dual n
 | **Muon** | operator norm | **polar factor `UVᵀ`**, value nuclear `Σσᵢ` | `muon_polar_steepest` |
 | Shampoo (1-step) | Kronecker-factored | `(GGᵀ)^{-1/4}G(GᵀG)^{-1/4} = UVᵀ` = Muon | `shampoo_eq_muon` |
 
-The SGD and sign rungs are the framework, proven outright. The Muon rung is now proved **both ways**:
+The SGD and sign rows are proved outright. The Muon row is proved both ways:
 the polar factor `UVᵀ` of `G = UΣVᵀ` *attains* the nuclear norm `Σσᵢ` (`muon_polar_achieves_nuclear`,
 trace algebra) **and** is the *maximum* — von Neumann's trace inequality, `⟨G,D⟩_F ≤ Σσᵢ` for every
 contraction `D` (`muon_polar_is_max`, per-singular-vector Cauchy–Schwarz). `muon_polar_steepest`
-packages them: `UVᵀ` is feasible (an isometry), attains, and is unbeatable — Muon's update IS the
-operator-norm steepest-ascent direction, the same `bound`+`attained` shape as the SGD/sign rungs.
+packages them: given an SVD, `UVᵀ` is feasible (an isometry), attains, and is unbeatable — the
+operator-norm steepest-ascent direction, the same `bound`+`attained` shape as the SGD/sign rows.
+That `UVᵀ` is what Muon's update computes is a separate question: `MuonNewtonSchulz` proves a
+Newton–Schulz iteration converges to it for the classic cubic and Higham's quintic, and that Muon's
+tuned quintic only lands in a band around it.
 
-**L4 (this layer): the SVD is now constructed, not hypothesized** — for an invertible (full-rank) `G`,
+**The SVD, constructed for invertible `G`.** For an invertible (full-rank) `G`,
 `svd_of_isUnit` builds `U, V` orthogonal and `s ≥ 0` with `G = U (diagonal s) Vᵀ` out of Mathlib's
 spectral theorem of `GᵀG`: `V` = eigenvector basis, `sᵢ = √λᵢ` the singular values, `U = G V Σ⁻¹`.
 No matrix square root is needed — only the spectral decomposition, scalar `√`, and diagonal inverses
 (invertibility makes every `λᵢ > 0`, so `Σ⁻¹` exists). Composing with the achievability half gives
-`muon_polar_achieves_nuclear_of_isUnit`: for any invertible `G`, the polar factor `UVᵀ` (Muon's
-update direction) pairs with `G` to the nuclear norm `Σσᵢ` — the SVD hypothesis fully discharged.
+`muon_polar_achieves_nuclear_of_isUnit`: for any invertible `G`, the constructed polar factor `UVᵀ`
+pairs with `G` to the nuclear norm `Σσᵢ`.
 
-**L5 (this layer): the Shampoo = Muon jewel.** Single-step Shampoo preconditions the gradient by the
+**Shampoo = Muon.** Single-step Shampoo preconditions the gradient by the
 inverse fourth-roots of its Gram matrices, `G ↦ (GGᵀ)^{-1/4} G (GᵀG)^{-1/4}`, and `shampoo_eq_muon`
-proves this *equals* Muon's polar factor `UVᵀ` — two optimizers, one geometry. Reusing the L4 SVD
+proves this *equals* Muon's polar factor `UVᵀ` — two optimizers, one geometry. Reusing the SVD
 pieces `V, Σ`: the fourth-roots are spectral (`(GᵀG)^{-1/4} = V (diagonal s^{-1/2}) Vᵀ`), the helper
 `conj_diag_pow` turns the matrix fourth-power into pointwise scalar powers, and the whole thing
 collapses by `s^{-1/2}·s·s^{-1/2} = 1`. `shampoo_eq_muon_of_isUnit` makes it unconditional for any
 invertible `G`.
 
-**L6 (manifold view): the polar factor lands on `O(n)`, and is the *nearest* orthogonal matrix to
+**Manifold view: the polar factor lands on `O(n)`, and is the *nearest* orthogonal matrix to
 `G`.** `muon_polar_orthogonal` — `UVᵀ` is orthogonal (a point of the Stiefel manifold);
 `muon_polar_nearest_orthogonal` — `‖G − UVᵀ‖_F ≤ ‖G − Q‖_F` for every orthogonal `Q`, the projection
 of the gradient onto `O(n)`. The latter reuses the von Neumann bound: minimizing Frobenius distance
 to `O(n)` *is* maximizing `⟨G,·⟩_F` over it, so "steepest" and "nearest orthogonal" are the same fact.
 
-The only remaining layer is the singular `G` case (the orthonormal completion of `U`, which would
-drop the invertibility hypothesis from the `_of_isUnit` capstones). All
-`propext / Classical.choice / Quot.sound`-clean. -/
+Scope: the `_of_isUnit` forms need `G` invertible; the singular case (which needs the orthonormal
+completion of `U`) is not proved. All `propext / Classical.choice / Quot.sound`-clean. -/
 
 namespace Proofs.MuonGeometry
 
@@ -113,11 +115,11 @@ theorem steepest_linf_attained (g : Fin n → ℝ) :
     `⟨∇L, D⟩` is taken in. -/
 def fInner (A B : Matrix (Fin n) (Fin n) ℝ) : ℝ := (Aᵀ * B).trace
 
-/-- **Muon's update is the steepest ascent in operator-norm geometry — the achievability half.**
-    Given an SVD `G = U Σ Vᵀ` (`U,V` orthogonal, `Σ = diagonal s`, `s ≥ 0`), the **polar factor**
-    `U Vᵀ` — exactly Muon's update direction — pairs with `G` to give the **nuclear norm** `Σσᵢ`:
-    `⟨G, UVᵀ⟩_F = Σ sᵢ`. (`UVᵀ` is on the operator-norm sphere, and by von Neumann's trace
-    inequality `Σσᵢ` is the *max* of `⟨G,·⟩` over that ball — the upper half, next layer.) -/
+/-- **The polar factor attains the nuclear norm — the achievability half.**
+    Given an SVD `G = U Σ Vᵀ` (`U,V` orthogonal, `Σ = diagonal s`), the **polar factor**
+    `U Vᵀ` pairs with `G` to give the **nuclear norm** `Σσᵢ`:
+    `⟨G, UVᵀ⟩_F = Σ sᵢ`. (The upper half — `Σσᵢ` is the max of `⟨G,·⟩` over the operator-norm
+    ball, von Neumann's trace inequality — is `muon_polar_is_max`.) -/
 theorem muon_polar_achieves_nuclear
     (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
     (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) :
@@ -142,7 +144,7 @@ theorem muon_polar_achieves_nuclear
     Proof: with `G = U Σ Vᵀ`, cyclic trace gives `⟨G,D⟩_F = Σᵢ sᵢ Mᵢᵢ` for `M = Uᵀ D V`, and each
     diagonal entry `Mᵢᵢ = uᵢ · (D vᵢ)` is bounded by `1` — Cauchy–Schwarz (`‖uᵢ‖ = 1`) then the
     contraction (`‖D vᵢ‖ ≤ ‖vᵢ‖ = 1`), i.e. `Mᵢᵢ² ≤ (uᵢ·uᵢ)((Dvᵢ)·(Dvᵢ)) ≤ 1`. Since `sᵢ ≥ 0`,
-    `Σ sᵢ Mᵢᵢ ≤ Σ sᵢ`. This is L1's per-singular-vector Cauchy–Schwarz, summed against `Σ`. -/
+    `Σ sᵢ Mᵢᵢ ≤ Σ sᵢ`: a per-singular-vector Cauchy–Schwarz, summed against `Σ`. -/
 theorem muon_polar_is_max (U V D : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
     (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hs : ∀ i, 0 ≤ s i)
     (hD : ∀ x : Fin n → ℝ, (D *ᵥ x) ⬝ᵥ (D *ᵥ x) ≤ x ⬝ᵥ x) :
@@ -196,15 +198,17 @@ theorem muon_polar_is_max (U V D : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → �
   have hMle : (Uᵀ * D * V) i i ≤ 1 := by nlinarith [hMsq]
   exact mul_le_of_le_one_right (hs i) hMle
 
-/-- **Muon's update `UVᵀ` IS the steepest-ascent direction under the operator norm** — the L3 claim,
-    both halves now proved. For an SVD `G = U Σ Vᵀ`, the polar factor `UVᵀ` is the `argmax` of
+/-- **The polar factor `UVᵀ` is the steepest-ascent direction under the operator norm.**
+    For an SVD `G = U Σ Vᵀ` (`s ≥ 0`), the polar factor `UVᵀ` is the `argmax` of
     `⟨G,·⟩_F` over the operator-norm unit ball, with optimal value the dual (nuclear) norm `Σσᵢ`:
     * **feasible** — `UVᵀ` is an isometry (`‖UVᵀ x‖ = ‖x‖`), hence a contraction, so it lies in the
       ball;
     * **attains** — `⟨G, UVᵀ⟩_F = Σσᵢ` (`muon_polar_achieves_nuclear`);
     * **unbeatable** — every contraction `D` has `⟨G,D⟩_F ≤ Σσᵢ` (`muon_polar_is_max`).
-    Compare the SGD/sign rungs (`steepest_l2_*`, `steepest_linf_*`): same `bound`+`attained` shape,
-    one norm up. This is *why* Muon's `den = UVᵀ` Newton–Schulz update is steepest descent. -/
+    Compare the SGD/sign rows (`steepest_l2_*`, `steepest_linf_*`): same `bound`+`attained` shape,
+    one norm up. A Newton–Schulz iteration with convergent coefficients computes `UVᵀ` in the
+    limit (`MuonNewtonSchulz.nsStep_iterate_tendsto_polar`); Muon's tuned quintic approximates it
+    to a band (`MuonNewtonSchulz.qScalar_iterate_band_half`). -/
 theorem muon_polar_steepest (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ)
     (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hs : ∀ i, 0 ≤ s i) :
     (∀ x : Fin n → ℝ, ((U * Vᵀ) *ᵥ x) ⬝ᵥ ((U * Vᵀ) *ᵥ x) ≤ x ⬝ᵥ x) ∧
@@ -233,7 +237,7 @@ theorem muon_polar_steepest (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → �
     `UᵀU = Σ⁻¹ (Vᵀ A V) Σ⁻¹ = Σ⁻¹ (diagonal λ) Σ⁻¹ = 1` and `U Σ Vᵀ = G V Vᵀ = G`. **No matrix
     square root is needed** — only the spectral decomposition, the scalar `√`, and diagonal
     inverses. This discharges the SVD hypothesis of `muon_polar_achieves_nuclear` for full-rank `G`
-    (the singular case needs the orthonormal completion of `U`, the remaining layer). -/
+    (the singular case, which needs the orthonormal completion of `U`, is not proved). -/
 theorem svd_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit G) :
     ∃ (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ),
       Uᵀ * U = 1 ∧ Vᵀ * V = 1 ∧ (∀ i, 0 ≤ s i) ∧ G = U * Matrix.diagonal s * Vᵀ := by
@@ -297,13 +301,11 @@ theorem svd_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit G) :
       _ = G * V * Vᵀ := by rw [hDs, Matrix.mul_one]
       _ = G := by rw [Matrix.mul_assoc, hVVt, Matrix.mul_one]
 
-/-- **Muon's update is the steepest ascent in operator-norm geometry — unconditionally, for any
-    invertible `G`.** Combining the constructed SVD (`svd_of_isUnit`) with the achievability half
+/-- **For invertible `G`, the constructed SVD's polar factor attains the nuclear norm.**
+    Combining the constructed SVD (`svd_of_isUnit`) with the achievability half
     (`muon_polar_achieves_nuclear`): for invertible `G` there exist orthogonal `U, V` and singular
-    values `s ≥ 0` with `G = U (diagonal s) Vᵀ`, whose **polar factor `U Vᵀ`** — exactly Muon's
-    update direction — pairs with `G` to the **nuclear norm** `⟨G, UVᵀ⟩_F = Σ sᵢ`. The SVD is no
-    longer a hypothesis: it is built from the spectral theorem. (Von Neumann's trace inequality —
-    that `Σσᵢ` is the *max* over the operator-norm ball, not merely achieved — is the next layer.) -/
+    values `s ≥ 0` with `G = U (diagonal s) Vᵀ` and `⟨G, UVᵀ⟩_F = Σ sᵢ`. This is achievability
+    only; with `muon_polar_is_max` it makes `UVᵀ` the operator-norm steepest-ascent direction. -/
 theorem muon_polar_achieves_nuclear_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit G) :
     ∃ (U V : Matrix (Fin n) (Fin n) ℝ) (s : Fin n → ℝ),
       Uᵀ * U = 1 ∧ Vᵀ * V = 1 ∧ (∀ i, 0 ≤ s i) ∧
@@ -445,8 +447,10 @@ theorem shampoo_eq_muon_of_isUnit (G : Matrix (Fin n) (Fin n) ℝ) (hG : IsUnit 
 /-- **Muon's update lands on the orthogonal group.** The polar factor `UVᵀ` is orthogonal —
     `(UVᵀ)ᵀ(UVᵀ) = (UVᵀ)(UVᵀ)ᵀ = 1` — i.e. a point of `O(n)` (the Stiefel manifold of orthonormal
     frames). This is the geometric content of "Muon orthogonalizes the gradient": the update is not
-    a vector in flat weight space but a point on the manifold of orthogonal maps, and the
-    implementation's Newton–Schulz iteration is the retraction that computes this projection. -/
+    a vector in flat weight space but a point on the manifold of orthogonal maps. A Newton–Schulz
+    iteration with convergent coefficients reaches it in the limit
+    (`MuonNewtonSchulz.nsStep_iterate_tendsto_polar`); Muon's tuned quintic approximates it to a
+    band. -/
 theorem muon_polar_orthogonal (U V : Matrix (Fin n) (Fin n) ℝ)
     (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) :
     (U * Vᵀ)ᵀ * (U * Vᵀ) = 1 ∧ (U * Vᵀ) * (U * Vᵀ)ᵀ = 1 := by
@@ -461,7 +465,7 @@ theorem muon_polar_orthogonal (U V : Matrix (Fin n) (Fin n) ℝ)
 /-- **Muon's update is the nearest orthogonal matrix to `G`** — the projection of the raw gradient
     onto `O(n)` in Frobenius distance: `‖G − UVᵀ‖_F ≤ ‖G − Q‖_F` for every orthogonal `Q` (stated in
     squared `fInner` form to avoid `√`). This is *why* the polar factor is "the orthogonalized
-    gradient", and it is the ladder's punchline reusing its own prize: expanding
+    gradient". Expanding
     `‖G − Q‖_F² = ‖G‖_F² − 2⟨G,Q⟩_F + n` (orthogonal `Q` has `‖Q‖_F² = tr(QᵀQ) = n`), minimizing the
     distance is *maximizing* `⟨G,Q⟩_F` over `O(n) ⊆ {contractions}` — exactly the von Neumann bound
     `muon_polar_is_max`, attained at `UVᵀ`. The same inequality that makes `UVᵀ` the steepest

@@ -12,7 +12,8 @@ The tier, in import order: this file (`FloatModel`, per-op `*_close`) →
 `FloatSubnormalBridge` (`FaithfulFloatModel`, the subnormal-honest superset) →
 `FloatComposeBridge` (`FloatClose`, the one closeness form, and `.comp`) → the per-layer
 bridges (`BnFloatBridge`, `ConvMixedFloatBridge`, `DepthwiseFloatBridge`, the ResNet-34 block) →
-`Binary32Instance` / `RndP` (binary32, bf16, E4M3 as instances).
+`RndP` / `Binary32Instance` (`binary32` and `fp8E4M3` as named `FloatModel`s; `rndP`
+is the grid rounding operator behind them and behind the bf16 sharding lemmas).
 
 The model is *hypothesis-style*, like the suite's `0 < ε` / off-the-kink
 hypotheses: a `FloatModel` is any rounding operator `rnd` with relative error
@@ -23,11 +24,13 @@ underflow — the subnormal absolute-error term is `FloatSubnormalBridge`'s). `e
 inhabited and collapses every bound to `0`.
 
 Design notes, in suite style:
-* **Order-robustness.** `FloatModel.dot` fixes one association (left fold),
-  but the bound `((1+u)^(n+1) − 1)·Σ|xᵢyᵢ|` is the classical one valid for
-  *every* summation order — so the statement survives a backend that
-  reassociates (IREE tiles reductions), at the cost of not benefiting from
-  pairwise summation's tighter `log n` compounding.
+* **Summation order.** `FloatModel.dot` and `FloatModel.sum` fix one
+  association (the left fold), and `dot_close` / `sum_close` are stated for
+  that fold only. The classical bound `((1+u)^(n+1) − 1)·Σ|xᵢyᵢ|` holds for
+  every summation order, but only the left fold is formalized here; the
+  order-parametric form, which takes any rounded sum meeting a fan-in bound,
+  is `FloatModel.bnMean_close_of` (`BnFloatBridge`). A backend such as XLA
+  may reassociate reductions.
 * **ReLU is exact in floating point** — comparison/selection rounds nothing,
   which is why `mlpF` interleaves bare `relu` with no `rnd` and the bridge
   only needs `relu`'s 1-Lipschitz error propagation (`relu_close`). The op
@@ -54,9 +57,9 @@ structure FloatModel where
 noncomputable def u32 : ℝ := ((2 : ℝ) ^ (24 : ℕ))⁻¹
 
 /-- The normal-range unit roundoff of fp8 **E4M3** (1-4-3, 3 mantissa bits):
-    `2⁻⁴ = 1/16` (6.25%) — the leaf precision of the §3c E4M3 MNIST demo
+    `2⁻⁴ = 1/16` (6.25%) — the leaf precision of the E4M3 MNIST demo
     (`scripts/demos/mnist_e4m3_demo.py`). Outside the normal range (subnormals,
-    near the 448 max) the relative model degrades; see §2/§5 of the plan. -/
+    near the 448 max) the relative model does not hold. -/
 noncomputable def uE4M3 : ℝ := ((2 : ℝ) ^ (4 : ℕ))⁻¹
 
 namespace FloatModel
@@ -70,7 +73,7 @@ noncomputable def add (x y : ℝ) : ℝ := M.rnd (x + y)
 noncomputable def mul (x y : ℝ) : ℝ := M.rnd (x * y)
 
 /-- Rounded dot product, left-fold association (`((x₀y₀ + x₁y₁) + …)`).
-    The bound below is association-independent, so the choice is immaterial. -/
+    `dot_close` is stated for this fold. -/
 noncomputable def dot : {n : Nat} → Vec n → Vec n → ℝ
   | 0, _, _ => 0
   | n + 1, x, y =>
@@ -90,7 +93,7 @@ noncomputable def dense {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) :
     Vec n :=
   fun j => M.add (M.dot x (fun i => W i j)) (b j)
 
-/-- Rounded MLP forward — the float peer of the Tier-1
+/-- Rounded MLP forward — the float peer of the
     `dense W₂ b₂ ∘ relu ∘ dense W₁ b₁ ∘ relu ∘ dense W₀ b₀` composition
     (`MlpTrainStep.lean`). `relu` appears bare: max-with-0 is exact in
     floating point. -/
@@ -219,9 +222,10 @@ private theorem dense_step_bound {u r dt dxt d bb Sxt SE L e C : ℝ}
     `|fl(x·y) − x·y| ≤ ((1+u)^(n+1) − 1)·Σᵢ|xᵢyᵢ|`.
 
     The classical bound (Higham §3.1), in the exact compounded form (no
-    `n·u < 1` side condition); valid for every association of the sum, not
-    just the left fold `dot` fixes. The exponent is `n+1` rather than the
-    optimal `n` because `dot` rounds the seed addition with `0` too. -/
+    `n·u < 1` side condition), for the left fold `M.dot`. (The classical bound
+    holds for every summation order; only the left fold is formalized here.)
+    The exponent is `n+1` rather than the optimal `n` because `dot` rounds the
+    seed addition with `0` too. -/
 theorem dot_close : ∀ {n : ℕ} (x y : Vec n),
     |M.dot x y - ∑ i, x i * y i| ≤
       ((1 + M.u) ^ (n + 1) - 1) * ∑ i, |x i * y i| := by
@@ -932,8 +936,8 @@ theorem mlp_l1_close {d₀ d₁ d₂ : Nat} {W₀ : Mat d₀ d₁} {b₀ : Vec d
     target is `Mat.outer a₂ g i j = emitWeightGrad`'s entry, the quantity
     `mlp_layer2_weight_grad_bridge` proves equal to the pdiv-Jacobian contraction —
     so this chains the float step to the certified gradient. Takes the output
-    cotangent `gt ≈ g` as a hypothesis (the softmax−onehot head needs an `exp`
-    accuracy axiom — future rung). -/
+    cotangent `gt ≈ g` as a hypothesis; `softmax_ce_cot_close` discharges it
+    with `eg := cotErr u eexp δ n`. -/
 theorem mlp_w2_step_float_close {d₀ d₁ d₂ d₃ : Nat}
     {W₀ : Mat d₀ d₁} {b₀ : Vec d₁} {W₁ : Mat d₁ d₂} {b₁ : Vec d₂}
     (W₂ : Mat d₂ d₃) {x : Vec d₀} {gt g : Vec d₃} {lr : ℝ}
@@ -1265,8 +1269,8 @@ theorem mnist_w2_step_float_budget (hMu : M.u ≤ u32)
 /-- Rounded division: `fl(x / y)`. -/
 noncomputable def div (x y : ℝ) : ℝ := M.rnd (x / y)
 
-/-- Rounded sum, left-fold association. Like `dot`, the bound below holds
-    for every association. -/
+/-- Rounded sum, left-fold association. `sum_close` is stated for this
+    fold. -/
 noncomputable def sum : {n : Nat} → Vec n → ℝ
   | 0, _ => 0
   | n + 1, x => M.add (sum (fun i => x i.castSucc)) (x (Fin.last n))
@@ -1274,8 +1278,8 @@ noncomputable def sum : {n : Nat} → Vec n → ℝ
 theorem sum_succ {n : Nat} (x : Vec (n + 1)) :
     M.sum x = M.add (M.sum (fun i => x i.castSucc)) (x (Fin.last n)) := rfl
 
-/-- **Rounded sum forward error** — `((1+u)^(n+1) − 1)·Σ|xᵢ|`, association-
-    independent (exponent `n+1` because the seed addition with `0` rounds). -/
+/-- **Rounded sum forward error** — `((1+u)^(n+1) − 1)·Σ|xᵢ|` for the left
+    fold `M.sum` (exponent `n+1` because the seed addition with `0` rounds). -/
 theorem sum_close : ∀ {n : ℕ} (x : Vec n),
     |M.sum x - ∑ i, x i| ≤ ((1 + M.u) ^ (n + 1) - 1) * ∑ i, |x i| := by
   intro n
@@ -1323,8 +1327,8 @@ theorem sumSgd_step_close (θ : ℝ) {n : ℕ} (x : Vec n) {lr G : ℝ}
 
 /-- The float softmax: rounded `exp`, rounded sum, rounded division — the
     structure of the rendered loss head. `fexp` is hypothesis-supplied
-    (GPU `exp` has no IEEE spec; its accuracy constant is exactly what the
-    repo's `vjp_oracle` harness validates empirically). -/
+    (GPU `exp` has no IEEE spec); its relative accuracy `eexp` is assumed by
+    the theorems that use it, not measured by any harness in the repo. -/
 noncomputable def softmaxF (fexp : ℝ → ℝ) {n : Nat} (z : Vec n) : Vec n :=
   fun k => M.div (fexp (z k)) (M.sum (fun j => fexp (z j)))
 
@@ -1450,8 +1454,7 @@ private theorem smRho_nonneg {eexp : ℝ} {n : ℕ} (heexp : 0 ≤ eexp) :
 
 /-- **`cotErr` is nonnegative** (it bounds an absolute value) — under `eexp ≥ 0`,
     `δ ≥ 0`, and the denominator condition `smRho < 1`. The `cot_step_close`
-    precondition for any backward grad-close that runs the softmax−onehot head
-    (e.g. the per-layer η-composition rungs). -/
+    precondition for any backward grad-close that runs the softmax−onehot head. -/
 theorem cotErr_nonneg {eexp δ : ℝ} {n : ℕ} (heexp : 0 ≤ eexp) (hδ0 : 0 ≤ δ)
     (hρ1 : smRho M.u eexp n < 1) : 0 ≤ cotErr M.u eexp δ n := by
   have hu := M.u_nonneg
@@ -1641,7 +1644,7 @@ theorem softmax_ce_cot_close (fexp : ℝ → ℝ) {eexp δ : ℝ} {n : ℕ}
 
 /-- **Numeric head budget at the committed MNIST output** (`n = 10`): for
     any model at binary32 accuracy, `exp` accurate to `eexp ≤ 10⁻⁶`
-    (GPU `exp` is ~1–2 ULP; the constant is what `vjp_oracle` validates),
+    (an assumed accuracy for GPU `exp`, not measured in the repo),
     and float logits within `δ = 1/100` of real, the rounded
     softmax−onehot cotangent is within **21/1000** of the certified
     gradient — almost all of it the `e^(2δ) − 1 ≈ 2δ` logit-perturbation
@@ -1708,7 +1711,7 @@ theorem mnist_cot_budget (hMu : M.u ≤ u32) (fexp : ℝ → ℝ) {eexp : ℝ}
 -- § §3c: E4M3 argmax-preservation (the honest depth-1 fp8 statement)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Argmax preservation under a bounded logit perturbation** (planning §3c).
+/-- **Argmax preservation under a bounded logit perturbation.**
     If every coordinate of the perturbed logits `z'` is within `B` of the
     reference logits `z`, and `z`'s *strict* top-1 margin at `k` exceeds `2B`
     (`z k − z i > 2B` for every other class `i`), then `k` is still the strict
@@ -1734,7 +1737,7 @@ theorem argmax_preserved {n : ℕ} {z z' : Vec n} {k : Fin n} {B : ℝ}
     so it is one constant `B` over *all* outputs `j` (the input
     `argmax_preserved` needs). The accumulate `u_acc` rides the bias add and the
     fan-in γ-factor `(1+u_acc)^(m+1)`; the leaf `u_leaf` enters only via the flat
-    `(2·u_leaf + u_leaf²)` term — the two-roundoff separation of §1c. -/
+    `(2·u_leaf + u_leaf²)` term (leaf and accumulate roundoffs kept separate). -/
 noncomputable def denseMixedBudget (uacc uleaf : ℝ) (m : ℕ) (w β a : ℝ) : ℝ :=
   uacc * ((m : ℝ) * w * a + β)
     + (1 + uacc) * ((((1 + uacc) ^ (m + 1) - 1) * (1 + uleaf) ^ 2
@@ -1824,7 +1827,7 @@ theorem linear_e4m3_logit_budget (L : FloatModel) (hMu : M.u ≤ u32)
       hsq hleaf).trans ?_
   norm_num
 
-/-- **Verified E4M3 MNIST-linear argmax preservation** (planning §3c capstone).
+/-- **Verified E4M3 MNIST-linear argmax preservation.**
     For the certified linear classifier at E4M3 leaf precision / fp32 accumulate,
     pixels `|x| ≤ 1`, trained `|W| ≤ 3/5`, `|b| ≤ 1`: whenever the exact-ℝ logit
     margin at the top class `k` exceeds `2·61 = 122`, the E4M3-mixed forward keeps

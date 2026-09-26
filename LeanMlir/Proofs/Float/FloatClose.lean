@@ -5,7 +5,8 @@ import LeanMlir.Proofs.Float.FloatBridge
 On inputs within magnitude `A`, the float `fF` is within an error modulus `L e` of the real `f`
 (per coordinate, at input error `e`), and both outputs are within `B`, so the next layer's
 magnitude precondition holds. `FloatClose.comp` composes two (moduli compose, magnitudes thread),
-so a whole-net float certificate is `.comp` folded over the layer list. `of_close` builds one from
+so a whole-net bound would be `.comp` folded over the layer list; no whole-net `FloatClose` is
+assembled in the repo. `of_close` builds one from
 a per-op `*_close` budget; `relu`, `id` and `iterate` are the generic instances. The per-op
 instances for the conv-net op set are in `FloatComposeBridge`.
 -/
@@ -22,8 +23,8 @@ def FloatClose {m n : Nat} (A B : ℝ) (f fF : Vec m → Vec n) (L : ℝ → ℝ
   (∀ vt va e, (∀ k, |va k| ≤ A) → (∀ k, |vt k| ≤ A) → (∀ k, |vt k - va k| ≤ e)
       → ∀ i, |fF vt i - f va i| ≤ L e)
 
-/-- **Float-closeness composes** — the whole-net certificate backbone. Magnitudes
-    thread `A → B → C`, error moduli compose `Lg ∘ Lf`. -/
+/-- **Float-closeness composes.** Magnitudes thread `A → B → C`, error moduli
+    compose `Lg ∘ Lf`. -/
 theorem FloatClose.comp {m n p : Nat} {A B C : ℝ}
     {f fF : Vec m → Vec n} {g gF : Vec n → Vec p} {Lf Lg : ℝ → ℝ}
     (hf : FloatClose A B f fF Lf) (hg : FloatClose B C g gF Lg) :
@@ -66,13 +67,10 @@ theorem floatClose_id {m : Nat} (A : ℝ) :
     FloatClose A A (id : Vec m → Vec m) (id : Vec m → Vec m) (id : ℝ → ℝ) :=
   ⟨fun _v hv i => ⟨hv i, hv i⟩, fun _vt _va _e _ _ hd i => hd i⟩
 
-/-- **THE FINAL FOLD: a magnitude-stable block iterated `n` times is `FloatClose`.**
-    A dim-preserving block that is `FloatClose A A f fF L` (its activations stay
-    within the a-posteriori bound `A` — BN keeps them O(1), as the probe confirms)
-    composes with itself to any depth: `f^[n]` is `FloatClose A A` with modulus
-    `L^[n]`. This is r34's within-stage depth (`n = 3,4,6,3`); the whole net is
-    these iterates `.comp`-joined with the stem / downsamples / GAP / dense. The
-    depth-generic whole-net certificate — no per-depth re-proof. -/
+/-- **A magnitude-stable block iterated `n` times is `FloatClose`.**
+    A dim-preserving block that is `FloatClose A A f fF L` (inputs and outputs
+    within the same bound `A`, taken as a hypothesis) composes with itself to any
+    depth: `f^[n]` is `FloatClose A A` with modulus `L^[n]`. -/
 theorem floatClose_iterate {m : Nat} {A : ℝ} {f fF : Vec m → Vec m} {L : ℝ → ℝ}
     (hf : FloatClose A A f fF L) (n : ℕ) :
     FloatClose A A (f^[n]) (fF^[n]) (L^[n]) := by

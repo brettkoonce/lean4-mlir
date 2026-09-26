@@ -13,13 +13,10 @@ activation, the per-row lifts, the reversed-kernel conv and depthwise backwards,
 zero-upsampling scatters behind every strided conv, and the accumulating scatter of the 3×3/s2
 stem pool. Each is a plain `noncomputable def` on `Vec`, so a tie's closing `rfl` can unfold it.
 
-Until 2026-09-08 these lived inside the `Proofs/Float/*FloatBridge` files, next to their float
-twins and the `FloatClose` budgets — the tier whose numbers were found vacuous and deleted
-(`planning/archive/float_second_pass.md`). The definitions that survived are the ones the ties consume;
-the leaf ties that are one `rfl` from a certified VJP (`decimateBack_eq_vjp`,
-`maxPool3s2FlatBack_eq_vjp_backward`) moved with them. The composite leaf ties that need a proof
-(`convFlatBack_eq_vjp_backward`, `depthwiseFlatBack_eq_vjp_backward`, …) stay in the per-op tie
-files that always held them.
+The leaf ties that are one `rfl` from a certified VJP (`decimateBack_eq_vjp`,
+`maxPool3s2FlatBack_eq_vjp_backward`) are here with their maps. The composite leaf ties that need
+a proof (`convFlatBack_eq_vjp_backward`, `depthwiseFlatBack_eq_vjp_backward`, …) are in the
+per-op tie files.
 
 Net-level chains (`r34InputGradB`, `mnv2InputGradB`, `vitInputGradK`, …) are NOT here: each lives
 beside its own tie. The ConvNeXt/ViT channel-LayerNorm backward is in `ChannelLNBack.lean`, which
@@ -61,7 +58,8 @@ theorem perRowFlat_apply {n d : Nat} (f : Vec d → Vec d) (v : Vec (n * d)) (id
       = f (Mat.unflatten v (finProdFinEquiv.symm idx).1) (finProdFinEquiv.symm idx).2 := rfl
 
 /-- **Per-token-input-aware flat lift.** Each row `r` gets its OWN per-token map `g r`, rather
-    than the single shared `f` of `perRowFlat`. The flat analogue of `rowwise` (`Tensor.lean`):
+    than the single shared `f` of `perRowFlat`. The flat analogue of `rowwiseHasVJPMat`'s row-wise
+    lift (`Tensor.lean`):
     the seam a BACKWARD needs, because a per-token op's input-VJP depends on that token's saved
     activation (LayerNorm-back threads the saved input, GELU-back the saved pre-activation), so
     one shared map cannot carry it. `perRowFlat f` is the special case `g = fun _ => f`
@@ -203,13 +201,13 @@ noncomputable def gapBack (c h w : Nat) (dy : Vec c) : Vec (c * h * w) :=
 -- ════════════════════════════════════════════════════════════════
 
 /-- **3×3/s2 max-pool backward in flat `Vec` space** — the accumulating scatter: each input cell
-    collects `dy` from every output whose 3×3 window selects it. ⛔ `maxPool2`'s windows TILE, so
+    collects `dy` from every output whose 3×3 window selects it. Note: `maxPool2`'s windows TILE, so
     the 2×2 pool's backward (`StableHLO.maxPoolBackFlat`) is a lookup; 3×3/s2 windows OVERLAP, so
     an input cell can be the argmax of up to four outputs and this is a reduction. Spelled as the
     masked sum the kernel performs, which is `maxPool3s2HasVJPAt3`'s backward reindexed
-    (`maxPool3s2FlatBack_eq_vjp_backward`). Found 2026-08 because the per-example r34 chain
-    (retired 2026-09-19) had been written as the reverse of the 2×2 pool while its docstring
-    claimed the committed forward. -/
+    (`maxPool3s2FlatBack_eq_vjp_backward`). -/
+-- History: an earlier per-example ResNet-34 chain had been written with the 2×2 pool's reverse
+-- here while its docstring claimed the committed forward; the overlap is what that missed.
 noncomputable def maxPool3s2FlatBack {c h w : Nat} (x : Tensor3 c (2*h) (2*w)) :
     Vec (c*h*w) → Vec (c*(2*h)*(2*w)) :=
   fun dy idx => ∑ k : Fin (c*h*w), (if maxPool3s2LocalReindex x k = idx then dy k else 0)
@@ -236,9 +234,9 @@ theorem maxPool3s2FlatBack_eq_vjp_backward {c h w : Nat} (x : Tensor3 c (2*h) (2
   rw [hidx]
   split <;> simp
 
-/-- ⭐ **The pool VJP at a `Vec` point, with its backward DEFINITIONALLY `maxPool3s2FlatBack`.**
+/-- **The pool VJP at a `Vec` point, with its backward DEFINITIONALLY `maxPool3s2FlatBack`.**
     `maxPool3s2FlatHasVJPAt` is stated at `Tensor3.flatten x`, and a whole-net chain needs it at
-    the stem's `Vec` output. ⛔ Transporting with `▸`/`rwa` would work for the TYPE and leave a
+    the stem's `Vec` output. Note: Transporting with `▸`/`rwa` would work for the TYPE and leave a
     `backward` field behind an `Eq.mpr` that will not reduce. Building the structure field-by-field
     instead keeps `backward` the leaf itself, which is what lets the whole-net ties
     (`ResNet34BackCertifiedTieB`, `ResNet34FullBVJP`'s batched pool) close by `rfl` at this stage
@@ -282,11 +280,11 @@ noncomputable def mlpInputGrad {d₀ d₁ d₂ d₃ : Nat}
 -- ════════════════════════════════════════════════════════════════
 
 /-- **The batched 3×3/s2 max-pool backward** — `maxPool3s2FlatBack` per example, on that example's
-    OWN saved stem activation. ⛔ It is `batchMapAux` and not `batchMap`: a `batchMap` would hand
+    OWN saved stem activation. Note: It is `batchMapAux` and not `batchMap`: a `batchMap` would hand
     example 0's argmax pattern to every example (`StableHLO.batchMapAux`'s own header records the
     same trap on the emitter side). This IS `den (.maxPool3s2BackB …)`:
     `den_maxPool3s2BackB_eq_flatBackB` below equates the two spellings of the scatter
-    (`ResNet34StepTieB.mpInB` is the `maxPool3s2BackFlat` one). -/
+    (`ResNet34TieB.mpInB` is the `maxPool3s2BackFlat` one). -/
 noncomputable def maxPool3s2FlatBackB (N c h w : Nat) (v : Vec (N * (c * (2*h) * (2*w)))) :
     Vec (N * (c * h * w)) → Vec (N * (c * (2*h) * (2*w))) :=
   StableHLO.batchMapAux N
@@ -320,8 +318,8 @@ theorem maxPool3s2BackFlat_eq_flatBack (c h w : Nat) (xv : Vec (c * (2*h) * (2*w
 
 /-- **The batched stem-pool node the ResNet renders emit denotes the chain's batched scatter**
     — the `.maxPool3s2BackB` bridge at the map `r34InputGradB` / `r50InputGradB` use, with no
-    hypothesis. Until this lemma the only bridge was `maxPool3s2Back_faithful`, at the per-example
-    constructor no shipped render emits. -/
+    hypothesis. (`maxPool3s2Back_faithful` is the bridge at the per-example constructor, which no
+    shipped render emits.) -/
 theorem den_maxPool3s2BackB_eq_flatBackB {N c h w : Nat} (xN : String)
     (x : Vec (N * (c * (2*h) * (2*w)))) (e : StableHLO.SHlo (N * (c * h * w))) :
     StableHLO.den (.maxPool3s2BackB xN x e) = maxPool3s2FlatBackB N c h w x (StableHLO.den e) := by

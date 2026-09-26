@@ -25,7 +25,7 @@ The per-token dense and vector-LayerNorm nodes (`ViTPoCGB`) live in `ViTFoldGB`,
 the per-example bridges they fold; ConvNeXt's channel-LN and layer-scale nodes in
 `ConvNeXtFoldGB`.
 
-⚠ Padding is invisible in the types: the symmetric and XLA-`SAME` strided kinds have identical
+Note: Padding is invisible in the types: the symmetric and XLA-`SAME` strided kinds have identical
 types and identical emitted shapes, and only the certificate tells them apart.
 
 Every lemma is `∀ cot`; pinning each cotangent to the emitted backward subgraph is each net's
@@ -450,7 +450,7 @@ theorem depthwiseBGradB_den {N c h w kH kW : Nat} (cotN : String)
     (batchSlice N (c * h * w) cot n) o
 
 /-- **Batched XLA-`SAME` strided depthwise weight GRADIENT denotes the certified `Σ_n` weight
-    gradient.** The four stride-2 depthwises (b2/b4/b7/b14). ⚠ This is the `Xla` op — its
+    gradient.** The four stride-2 depthwises (b2/b4/b7/b14). Note: This is the `Xla` op — its
     weight-grad correlation keeps the `[p−1, p+1]` pad, the opposite asymmetry from the input-grad,
     and that asymmetry is the whole content of the variant. B0's strided depthwise is the
     SYMMETRIC op, so the two nets do not share this certificate. -/
@@ -494,7 +494,7 @@ namespace Proofs.CnxPoCGB
 open scoped BigOperators
 
 /-- **Batched patchify-stem weight GRADIENT denotes the certified `Σ_n` weight gradient.**
-    ⚠ The emitted convolution contracts the batch axis itself (the transpose trick), so the outer
+    Note: The emitted convolution contracts the batch axis itself (the transpose trick), so the outer
     sum is inside one op rather than across `N` of them — same as the strided ops. -/
 theorem psWGradB_den {N ic oc h w kH kW : Nat} (xN cotN : String)
     (b : Vec oc) (x : Vec (N * (ic * (2 * (2 * h)) * (2 * (2 * w))))) (W : Kernel4 oc ic kH kW)

@@ -4,21 +4,15 @@ import LeanMlir.Proofs.Float.BnFloatBridge
 import LeanMlir.Proofs.Architectures.PerChannelBN
 
 /-!
-# ℝ→Float32 bridge: the ResNet-34 structural ops
+# ℝ→Float32 bridge: global average pooling
 
-Extending the float bridge from CIFAR/BN toward ResNet-34. After the `rsqrt`
-keystone (`BnFloatBridge.lean`), no new *numerical* primitives remain — the r34
-ops are reuses or thin wrappers. This file holds the two that are not one line
-elsewhere:
-
-* **residual skip** `relu(F(x) + skip(x))` — a two-operand `add_close` (the additive
-  peer of `mul_close`);
-* **global-avg-pool** — a per-channel mean, so `gapFlat_close` reduces to
-  `bnMean_close` on the channel slice (`sum_s2` flattens the spatial double sum).
-
-The strided conv is `flatConvF_close` at the decimated coordinate and per-channel BN
-is `bnForward_close_of` per channel row; the `FloatClose` instances
-(`FloatComposeBridge`) compose them.
+The float global-average-pool `gapFlatF` and its budget `gapFlat_close`: GAP is a
+per-channel mean (`globalAvgPoolFlat_eq_bnMean`), so `gapFlat_close` reduces to
+`bnMean_close` on the channel slice (`sum_s2` flattens the spatial double sum).
+The other ResNet-34 ops' float lemmas are elsewhere: the residual add is `add_close`
+(`FloatBridge`), the conv is `flatConvF_close` (`ConvFloat`), per-channel BN is
+`bnForward_close_of` (`BnFloatBridge`), and the `FloatClose` instances are in
+`FloatComposeBridge`.
 -/
 
 namespace Proofs

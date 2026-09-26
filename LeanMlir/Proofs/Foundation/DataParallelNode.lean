@@ -2,46 +2,45 @@ import LeanMlir.Proofs.Foundation.DataParallel
 import LeanMlir.Proofs.Foundation.GradNodesB
 import LeanMlir.Proofs.Codegen.StableHLOPretty
 
-/-! # Data parallelism, piece 2: the collective as an AST node
+/-! # Data parallelism: the collective as an AST node
 
-`DataParallel.lean` (piece 1) is the ℝ-level half: `dpMean`, the replica mean of gradients, IS
-the gradient of the mean of the per-replica losses, and that mean is the global-batch loss for a
-net with no batch coupling and provably is not for a batch-BN net. What it could not say was
-anything about the ARTIFACT, because the collective was `ViTRender.emitGradAllReduce` — emitted
-text outside the `SHlo` AST, a declared trusted carve-out that every train-step tie in the repo
-disclaimed in its own header.
+`DataParallel.lean` is the ℝ-level half: `dpMean`, the replica mean of gradients, IS the
+gradient of the mean of the per-replica losses, and that mean is the global-batch loss for a
+net with no batch coupling and provably is not for a per-replica batch-BN net. This file puts
+the collective in the `SHlo` AST so a tie can say something about the artifact.
 
-Since 2026-09-07 the collective is `SHlo.allReduceMeanF`: `R` graphs of one skeleton (the same
-program on `R` replicas, each with its own values — SPMD), reduced by `all_reduce(add)` and
-divided by `R`. Its `den` is `(1/R) Σ_r den (g r)`, its `skel` reads replica 0, its emit is the
-old text verbatim (`allReduceMeanText`), and the parser round-trip has its case
-(`StableHLOParse.parseStack`). Every batched render now calls `prettyAllReduceMean` where it
-called the text function, and every committed `*dp*` artifact re-rendered byte-identically.
+The collective is `SHlo.allReduceMeanF`: `R` graphs of one skeleton (the same program on `R`
+replicas, each with its own values — SPMD), reduced by `all_reduce(add)` and divided by `R`.
+Its `den` is `(1/R) Σ_r den (g r)`, its `skel` reads replica 0, its emit is
+`allReduceMeanText`, and the parser (`StableHLOParse.parseStack`) has its case. The batched
+renders print it through `prettyAllReduceMean`.
 
 This file is what the node BUYS, stated once:
 
 * `den_allReduceMeanF_eq_dpMean` — the node denotes `dpMean` of its operands' denotations, which
-  is the definition piece 1 is about.
+  is the definition `DataParallel.lean` is about.
 * `skel_allReduceMeanF_of_spmd` — under the SPMD hypothesis (`∀ r, skel (g r) = skel (g 0)`,
   free in every render because a render's operand family is `.operand grad` at every `r`) the
   node's skeleton is each replica's, so `pretty` prints ONE program.
-* `den_allReduceMeanF_eq_lossGrad_meanLoss` — piece 1 composed: if each replica's node denotes
+* `den_allReduceMeanF_eq_lossGrad_meanLoss` — `DataParallel.dpMeanGrad_eq_grad_meanLoss` composed: if each replica's node denotes
   its own loss gradient, the all-reduced node denotes the gradient of the MEAN loss.
-* `den_allReduceMeanF_convWeightGradB` — 4b's fold composed: the all-reduced conv weight-gradient
+* `den_allReduceMeanF_convWeightGradB` — the conv weight-gradient fold composed: the all-reduced conv weight-gradient
   node denotes the replica mean of the certified `Σ_n` gradients. One op kind shown; every other
   `*GradB` composes the same way, by `Finset.sum_congr` over the replicas and its own fold lemma.
 * `adamW_at_allReduceMeanF` — the tail composed: `den (adamW tail (allReduceMeanF …))` is
-  `adamWStep` at `dpMean` of the per-replica gradient nodes. That is
-  `planning/archive/proofs_tier_to_paper_nets.md` §4d piece 2's target statement.
+  `adamWStep` at `dpMean` of the per-replica gradient nodes.
 
 ## What is NOT claimed
-⚠ Piece 3 is untouched: that the `R` graphs' values are the replica slices of ONE host batch,
+That the `R` graphs' values are the replica slices of ONE host batch,
 that every replica starts from the same parameters and that `replica_groups` names all `R`
 devices are the driver's (`VerifiedTrain.lean`, `ffi/pjrt_ffi.c`) and the `*-dp-check` gates'.
-⚠ The per-replica gradient node's operand values differ per replica by construction; nothing
-here says what they are. ⚠ The lowerer's `all_reduce` is trusted exactly as every other op's
-lowering is.
+The per-replica gradient node's operand values differ per replica by construction; nothing
+here says what they are (`DataParallelSync.lean` relates them under sync-BN). The lowerer's
+`all_reduce` is trusted exactly as every other op's lowering is.
 -/
+-- History: the collective was previously emitted as text outside the AST
+-- (`ViTRender.emitGradAllReduce`); moving it into `SHlo` re-rendered every committed `*dp*`
+-- artifact byte-identically.
 
 open Proofs Proofs.StableHLO Proofs.IR
 
@@ -49,7 +48,7 @@ namespace Proofs
 
 open scoped BigOperators
 
-/-- **The node denotes `dpMean` of its operands.** Definitional: `den`'s arm is piece 1's formula. -/
+/-- **The node denotes `dpMean` of its operands.** Definitional: `den`'s arm is `dpMean`'s formula. -/
 theorem den_allReduceMeanF_eq_dpMean {n : Nat} (R : Nat) (hR : 0 < R) (t : String)
     (ds : List Nat) (g : Fin R → SHlo n) :
     den (.allReduceMeanF R hR t ds g) = dpMean (fun r => den (g r)) := rfl
@@ -64,7 +63,7 @@ theorem skel_allReduceMeanF_of_spmd {n : Nat} (R : Nat) (hR : 0 < R) (t : String
   show Raw.allReduceMean R t ds (skel (g ⟨0, hR⟩)) = _
   rw [hsp r]
 
-/-- ⭐ **Piece 1 composed with the node.** If each replica's gradient node denotes the gradient of
+/-- **Piece 1 composed with the node.** If each replica's gradient node denotes the gradient of
     that replica's loss, the all-reduced node denotes the gradient of the MEAN of the per-replica
     losses — the function a data-parallel run minimises (`dpMeanGrad_eq_grad_meanLoss`). -/
 theorem den_allReduceMeanF_eq_lossGrad_meanLoss {P : Nat} (R : Nat) (hR : 0 < R) (t : String)
@@ -76,7 +75,7 @@ theorem den_allReduceMeanF_eq_lossGrad_meanLoss {P : Nat} (R : Nat) (hR : 0 < R)
   rw [h]
   exact dpMeanGrad_eq_grad_meanLoss L θ hdiff
 
-/-- ⭐ **4b's fold composed with the node.** The all-reduced conv weight-gradient node denotes the
+/-- **The conv weight-gradient fold composed with the node.** The all-reduced conv weight-gradient node denotes the
     replica mean of the certified batched `Σ_n` gradients, each at its own replica's activations
     and cotangent. One op kind; every other `*GradB` composes identically (`Finset.sum_congr`
     over the replicas, then its own fold lemma). -/
@@ -97,7 +96,7 @@ theorem den_allReduceMeanF_convWeightGradB {N ic oc h w kH kW : Nat} (R : Nat) (
   intro r _
   exact ResNet34PoCB.convWGradB_den xN cotN b (x r) W (cot r) idx
 
-/-- ⭐⭐ **The optimizer tail at the all-reduced node** — §4d piece 2's target statement:
+/-- **The optimizer tail at the all-reduced node**:
     `den (tail (allReduceMeanF R g))` is `adamWStep` at `dpMean` of the per-replica gradient
     nodes. `adamW_triple_faithful` is `∀ e`, so this is that theorem at `e := allReduceMeanF …`
     and the node's `den`; the same one line closes it for every other certified tail

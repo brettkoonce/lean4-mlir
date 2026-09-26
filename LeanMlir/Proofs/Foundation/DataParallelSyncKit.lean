@@ -5,7 +5,7 @@ import LeanMlir.Proofs.Foundation.SmoothedLossCot
 
 /-! # The sync-BN data-parallel kit — sharding, homogeneity and the collectives, per op kind
 
-Every net's sync-BN twin (T2 forward, T3 step) says that `R` replicas at batch `N`, each running the
+Every net's sync-BN twin (its forward tie and its step tie) says that `R` replicas at batch `N`, each running the
 render's replica program over its shard, compute the single-device step at the global batch `R·N`.
 The per-op facts that argument is assembled from are stated here once:
 
@@ -66,7 +66,7 @@ def bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) (hR : 0 
     (.bnSyncF gN bN es ε γ β (castIdx (la_assoc N oc h w) (x r))
       (syncStats R hR t t' ds ds' (fun r' => castIdx (la_assoc N oc h w) (x r'))))
 
-/-- ⭐⭐ **The sync-BN site on replica `r` is shard `r` of the global-batch BatchNorm.**
+/-- **The sync-BN site on replica `r` is shard `r` of the global-batch BatchNorm.**
     `den_bnSyncF_allReduce` (P1 on the graph), carried across the `mul_assoc` seam: the right-hand
     side is `bnBatchLA` — what `bnBatchF` denotes — at `N := R·N`. -/
 theorem den_bnSyncSiteLA (gN bN es t t' : String) (ds ds' : List Nat) (R : Nat) (hR : 0 < R)
@@ -250,7 +250,7 @@ theorem reassocB_shard {R N oc h w : Nat} (X : Vec ((R * N) * (oc * h * w))) (r 
       = batchShard R N (oc * (h * w)) (reassocB (R * N) oc h w X) r :=
   (batchShard_castIdx (Nat.mul_assoc oc h w) X r).symm
 
-/-- ⭐⭐ **The sync-BN backward on replica `r` is shard `r` of the global-batch BN backward** —
+/-- **The sync-BN backward on replica `r` is shard `r` of the global-batch BN backward** —
     `den_bnSyncBack_allReduce` (P2 on the graph) at the network index. The right-hand side is
     `bnInB`, the single-device chain's BN link, at `N := R·N`. -/
 theorem bnSyncInB_shard (R : Nat) (hR : 0 < R) (N oc h w : Nat) (hm : N * (h * w) ≠ 0) (ε : ℝ)
@@ -372,8 +372,9 @@ theorem inv_mul_R (R : Nat) (hR : 0 < R) (v : ℝ) : 1 / (R : ℝ) * ((R : ℝ) 
   have : (R : ℝ) ≠ 0 := Nat.cast_ne_zero.mpr (Nat.pos_iff_ne_zero.mp hR)
   field_simp
 
-/-- ⭐ **A replica family at `R ×` the shards of `COT` gives the DP tie** — the collective's `1/R`
-    (§4) cancels the `R` homogeneity (§1) carries. The same three lines for every kind below. -/
+/-- **A replica family at `R ×` the shards of `COT` gives the DP tie** — the collective's `1/R`
+    (`inv_mul_R`) cancels the `R` the homogeneity lemmas (`*_smul`) carry. The same three lines for
+    every kind below. -/
 theorem convWSync_of_scaled (R : Nat) (hR : 0 < R) (N h w : Nat) {ic oc kH kW : Nat}
     (t xN cotN : String) (b : Vec oc) (X : Vec ((R * N) * (ic * h * w))) (W : Kernel4 oc ic kH kW)
     (cots : Fin R → Vec (N * (oc * h * w))) (COT : Vec ((R * N) * (oc * h * w)))
@@ -442,7 +443,7 @@ theorem unrowB_shard {R N K : Nat} (Z : Vec ((R * N) * (1 * K))) (r : Fin R) :
     unrowB N K (batchShard R N (1 * K) Z r) = batchShard R N K (unrowB (R * N) K Z) r :=
   (batchShard_castIdx (Nat.one_mul K) Z r).symm
 
-/-- ⭐ **The divisor step.** Replica `r` divides its smoothed-CE cotangent by `B` — the render's
+/-- **The divisor step.** Replica `r` divides its smoothed-CE cotangent by `B` — the render's
     `divConstB` at the per-replica batch — and the single-device step at the global batch divides
     by `R·B`. At the replica's shard of the logits and targets, the replica's cotangent is `R ×`
     its shard of the global one. Nothing else about the loss differs: softmax, the label-smoothing

@@ -2,7 +2,7 @@ import LeanMlir.Proofs.Foundation.BatchedStages
 
 /-! # Batched backward links — the backward graphs and cotangent steps at the batched index
 
-The vocabulary every batched whole-net backward proof and every T3 tie is written in, at the flat
+The vocabulary every batched whole-net backward proof and every step tie is written in, at the flat
 batched index `N·(c·h·w)`. Each graph or cotangent here denotes the `.backward` of a proven VJP
 (`BatchedStages`), so a chain built from them is the loss-driven backward, not a free cotangent.
 
@@ -66,15 +66,15 @@ theorem bnBatchTensor4GradInput_eq_backward (N oc h w : Nat) (ε : ℝ) (hε : 0
     rw [bnBatchTensor4GradInput_correct N oc h w ε hε γ β,
       ← bnBatchTensor4HasVJP_correct N oc h w ε hε γ β]
 
-/-- **`bnBatchBack` (true batch-norm backward) faithfulness.** The first
-    batched-backward primitive: `bnBatchBack` denotes the proven
+/-- **`bnBatchBack` (true batch-norm backward) faithfulness.**
+    `bnBatchBack` denotes the proven
     `bnBatchTensor4` VJP backward (batch-COUPLED batch-norm on `[N,C,H,W]`,
     reduce over `[0,2,3]` per channel) via the renderable three-term
     `bnBatchTensor4GradInput`. This is the genuinely-new op the batched MBConv
     stages need (their bn is `bnBatchLA`, not a per-example `batchMap`); the
     other batched stages (conv/depthwise/SE) are `batchMap` of the per-example
-    backwards already proven above. The `bnBatchLA` layout-reindex wrapper to the
-    network's `N·(oc·h·w)` index is a thin remaining layer. -/
+    backwards already proven above. The network-layout wrapper is
+    `bnBatchLABack_faithful`. -/
 theorem bnBatchBack_faithful {N oc h w : Nat} (gN xN es : String)
     (ε : ℝ) (γ β : Vec oc) (hε : 0 < ε)
     (x : Vec (N * (oc * (h * w)))) (e : SHlo (N * (oc * (h * w)))) :
@@ -88,9 +88,9 @@ theorem bnBatchBack_faithful {N oc h w : Nat} (gN xN es : String)
     VJP of the batched conv `batchMap N (flatConv W b)` — i.e. the per-example
     conv input-grad applied independently across the batch. Conv is linear, so
     its backward ignores the forward activation; the batched backward is a plain
-    `batchMap` of the per-example backward, matching `batchMapHasVJP`. The
-    second batch-separable stage brick (after `seB`); together with `bnBatchBack`
-    these are the batched MBConv's per-stage backward pieces. -/
+    `batchMap` of the per-example backward, matching `batchMapHasVJP`. With
+    `bnBatchBack` and the SE and depthwise peers, one of the batched MBConv's
+    per-stage backward pieces. -/
 theorem convBackBatched_faithful {N ic oc h w kH kW : Nat} (wN : String)
     (W : Kernel4 oc ic kH kW) (b : Vec oc)
     (v : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
@@ -223,7 +223,7 @@ theorem bnBatchLABack_faithful {N oc h w : Nat} (gN xN es : String)
     proven batched `seBHasVJP` backward. SE is non-linear, so — unlike the
     linear `convBackBatched`/`depthwiseBackBatched` — the backward threads each
     example's forward activation `v`; the rowwise `batchMapHasVJP` structure
-    handles that. The fourth (and last) MBConv stage's batch-separable backward. -/
+    handles that. -/
 theorem seBackBatched_faithful {N c h w r : Nat} (w1N b1N w2N b2N vN : String)
     (W₁ : Mat c r) (b₁ : Vec r) (W₂ : Mat r c) (b₂ : Vec c)
     (v : Vec (N * (c * h * w))) (e : SHlo (N * (c * h * w))) :
@@ -338,7 +338,7 @@ noncomputable def bnBackB (N oc h w : Nat) (ε : ℝ) (hε : 0 < ε) (γ β : Ve
     (x dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=
   (bnBatchLAHasVJP N oc h w ε hε γ β).backward x dy
 
-/-- ⭐ **The tie's BN node and the emitted BN node denote one map.** Every batched render emits
+/-- **The tie's BN node and the emitted BN node denote one map.** Every batched render emits
     `.bnBatchBack`, typed at `N·(oc·(h·w))`; the ties state the BN input cotangent at
     `.bnBatchLABack`, its network-layout `N·(oc·h·w)` twin (`ResNet34TieB.bnInB`). The two print
     the same text, and their `den`s differ only by the associativity relabelling `reassocB`: the
@@ -370,7 +370,7 @@ theorem den_bnBatchLABack_eq_bnBatchBack {N oc h w : Nat} (gN xN es : String) (�
   rw [hin]
   rfl
 
-/-- **The certified BN input cotangent every batched T3 tie threads IS the emitted `bnBatchBack`
+/-- **The certified BN input cotangent every batched step tie threads IS the emitted `bnBatchBack`
     node's `den`**, read back through `reassocB`. This is the missing half of
     `bnBatchLABack_faithful`: that lemma certifies the tie's node, this one says the render's node
     computes the same numbers. -/
@@ -443,7 +443,7 @@ noncomputable def reluMaskB (n : Nat) (pre dy : Vec n) : Vec n :=
   fun i => if pre i > 0 then dy i else 0
 
 /-- **Batched STRIDED conv input-VJP** (= `den convStridedBackBatched`; upsamples `h → 2h`). The
-    strided peer of EfficientNet's `cInB`. ⚠ SYMMETRIC padding — `flatConvStride2`, not the
+    strided peer of EfficientNet's `cInB`. Note: SYMMETRIC padding — `flatConvStride2`, not the
     XLA-`SAME` twin. -/
 noncomputable def cStridedInB (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
     (b : Vec oc) (dy : Vec (N * (oc * h * w))) : Vec (N * (ic * (2 * h) * (2 * w))) :=
@@ -452,9 +452,9 @@ noncomputable def cStridedInB (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc 
 /-- **Batched true-BN input-cotangent, as the EMITTED backward computes it.** Written as the `den`
     of the backward op rather than as the certified VJP's `.backward`, because that is the form the
     render's chain is in and `den` ignores the name strings — so every cotangent below is literally
-    what the artifact's bytes compute. ⚠ The render's node is `.bnBatchBack`, typed at
+    what the artifact's bytes compute. Note: The render's node is `.bnBatchBack`, typed at
     `N·(oc·(h·w))`; this is its network-layout twin, and `bnInB_eq_den_bnBatchBack` below says
-    the two denote one map up to `reassocB`. ⭐ It takes no `β`: the BatchNorm input-gradient does not
+    the two denote one map up to `reassocB`. It takes no `β`: the BatchNorm input-gradient does not
     depend on the shift, which `bnInB_eq_bnBackB` records by holding for every `β`. -/
 noncomputable def bnInB (N oc h w : Nat) (ε : ℝ) (γ : Vec oc)
     (x dy : Vec (N * (oc * h * w))) : Vec (N * (oc * h * w)) :=

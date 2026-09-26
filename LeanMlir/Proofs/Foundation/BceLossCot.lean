@@ -10,16 +10,15 @@ instead, and `ResNet50RenderB`'s `bce := true` path swaps the loss cotangent for
 %sm = sigmoidB(logits)      %d0 = %sm − %onehot      %dy = %d0 / (B·K)
 ```
 
-so `dy = (σ(z) − t)/(B·K)`, against softmax-CE's five ops and `/B`. Nothing said that chain is a
-loss's gradient — `planning/archive/proofs_tier_to_paper_nets.md` §3.5 lists "BCE has no cotangent `den`"
-as one of the two items ResNet-50's T3 needs first. This is that item.
+so `dy = (σ(z) − t)/(B·K)`, against softmax-CE's five ops and `/B`. This file proves that chain
+is the gradient of a loss, which ResNet-50's BCE step tie needs.
 
 ## What is proved
 
 * `softplus`, `softplus_hasDerivAt` — `log(1 + eᶻ)` and `d/dz softplus = σ(z)`. The renderer
   already computes the loss in this form (`%lsp = %lmax + %llg`, the stable
   `max(z,0) + log(1 + e^−|z|)`), so the ℝ definition is the reference's own spelling.
-* ⭐⭐ `bceLogits_eq_logSigmoid` — and it IS binary cross-entropy: `softplus(z) − t·z` equals
+* `bceLogits_eq_logSigmoid` — and it IS binary cross-entropy: `softplus(z) − t·z` equals
   `−[t·log σ(z) + (1−t)·log(1 − σ(z))]`, class by class. **Without this the gradient theorem
   would be circular** — defining the loss as whatever has the wanted derivative and then proving
   it has it. The identity is what earns the name.
@@ -32,22 +31,22 @@ as one of the two items ResNet-50's T3 needs first. This is that item.
 
 ## What is NOT claimed
 
-⚠⚠ **The divisor is `B·K`, not `B`, and the theorem carries it as a binder rather than asserting
+Note: **The divisor is `B·K`, not `B`, and the theorem carries it as a binder rather than asserting
 it.** `bceLossCotGraph_row_committed` pins it to `N·K`, which is what `ResNet50RenderB` bakes.
 timm's `BinaryCrossEntropy` is `reduction='mean'` over `B×C`, not the mean of the per-example sum
 over classes; at `K = 1000` the two differ by 1000× on the effective step, and RSB-A2's `lr 5e-3`
 is tuned to this form. `bceLogits` is the per-example SUM over classes, so the `/K` half of the
 divisor is what turns it into the mean.
 
-⚠ **No label smoothing on this path, and that is the recipe.** timm's a3 arg string is `ls0.0`;
+Note: **No label smoothing on this path, and that is the recipe.** timm's a3 arg string is `ls0.0`;
 the soft targets reach `%onehot` from mixup/cutmix on the host, not from a smoothing constant.
 So `smoothTarget` does not appear here and the render emits three ops where CE emits five.
 
-⚠ **`%loss` itself is report-only.** The renderer's `lossCodeBce` block is hand-written text, not
-`pretty` of an AST node (the §5 carve-out), and nothing here is about those lines. What is proved
+Note: **`%loss` itself is report-only.** The renderer's `lossCodeBce` block is hand-written text, not
+`pretty` of an AST node, and nothing here is about those lines. What is proved
 is about the COTANGENT chain, which is on the gradient path and is `pretty(provenGraph)`.
 
-⚠ **One replica**, as everywhere: under `*dp*` each gradient node feeds the
+Note: **One replica**, as everywhere: under `*dp*` each gradient node feeds the
 `allReduceMeanF` node (`DataParallelNode.lean`), which composes this with the replica mean.
 -/
 
@@ -65,7 +64,7 @@ namespace Proofs
     is a floating-point concern and not a different map. -/
 noncomputable def softplus (z : ℝ) : ℝ := Real.log (1 + Real.exp z)
 
-/-- ⭐ **`d/dz softplus(z) = σ(z)`** — the one derivative BCE-with-logits needs, and the reason
+/-- **`d/dz softplus(z) = σ(z)`** — the one derivative BCE-with-logits needs, and the reason
     the loss is written in this form at all. -/
 theorem softplus_hasDerivAt (z : ℝ) : HasDerivAt softplus (sigmoidScalar z) z := by
   have hpos : (0 : ℝ) < 1 + Real.exp z := by positivity
@@ -108,11 +107,11 @@ theorem one_sub_sigmoidScalar (z : ℝ) : 1 - sigmoidScalar z = sigmoidScalar (-
 /-- **BCE-with-logits at one example**, `Σ_k (softplus(z_k) − t_k·z_k)` — the SUM over the `K`
     classes, in the stable form the renderer's own `%loss` block computes. The emitted cotangent
     divides by `B·K`, so the `/K` half of that divisor is what makes the shipped objective the
-    MEAN over `B×K` rather than the mean of these sums (see the module header's ⚠⚠). -/
+    MEAN over `B×K` rather than the mean of these sums (see the module header's note on the divisor). -/
 noncomputable def bceLogits (K : Nat) (t z : Vec K) : ℝ :=
   ∑ k : Fin K, (softplus (z k) - t k * z k)
 
-/-- ⭐⭐ **It IS binary cross-entropy**: class by class, `softplus(z) − t·z` is
+/-- **It IS binary cross-entropy**: class by class, `softplus(z) − t·z` is
     `−[t·log σ(z) + (1−t)·log(1 − σ(z))]`.
 
     This is what earns `bceLogits` its name. Without it, `bceLogits_grad` would be circular —
@@ -132,10 +131,10 @@ theorem bceLogits_eq_logSigmoid (K : Nat) (t z : Vec K) :
 -- ════════════════════════════════════════════════════════════════
 
 
-/-- ⭐ **The emitted cotangent's numerator is this loss's gradient**:
+/-- **The emitted cotangent's numerator is this loss's gradient**:
     `∂/∂z_j Σ_k (softplus(z_k) − t_k·z_k) = σ(z_j) − t_j`.
 
-    ⚠ NO hypothesis on `t`. Softmax-CE's gradient needed `Σ_k t_k = 1` to collapse
+    Note: NO hypothesis on `t`. Softmax-CE's gradient needed `Σ_k t_k = 1` to collapse
     `(Σ t)·softmax − t`; BCE is per-class and separable, so the mixup targets — which are convex
     combinations of one-hots, and the a3 recipe's only source of soft labels — need no clause. -/
 theorem bceLogits_grad (K : Nat) (t z : Vec K) (j : Fin K) :
@@ -167,7 +166,7 @@ theorem bceLogits_grad (K : Nat) (t z : Vec K) (j : Fin K) :
     per example (`m = 1`, `n = K`) and batch `N`. `logits` is the head's output, `t` the graph
     input `%onehot`, and `bk` the baked divisor.
 
-    ⚠ The render emits the sigmoid at `(N := B, n := K)` and re-enters the subtraction through an
+    Note: The render emits the sigmoid at `(N := B, n := K)` and re-enters the subtraction through an
     `.operand` at `N*(1*K)`; the two indices are equal and NOT definitionally so at a variable
     `K`, which the render's own comment records. Stated here at the one index throughout, which
     is legitimate because `sigmoid` is elementwise and carries no row structure —
@@ -185,7 +184,7 @@ theorem bceLossCotGraph_den (N K : Nat) (bk : ℝ) (bStr logN ohN : String)
       = (sigmoid (N * (1 * K)) logits i - t i) / bk := by
   simp only [bceLossCotGraph, denStep, denStepApp]
 
-/-- ⭐ **Each row of the emitted cotangent is BCE-with-logits' gradient at that example's logits,
+/-- **Each row of the emitted cotangent is BCE-with-logits' gradient at that example's logits,
     divided by the baked constant.** `SmoothedLossCot`'s `smoothedLossCotGraph_row` at this loss,
     and with no hypothesis at all where that one needs the target's mass. -/
 theorem bceLossCotGraph_row (N K : Nat) (bk : ℝ) (bStr logN ohN : String)
@@ -205,7 +204,7 @@ theorem bceLossCotGraph_row (N K : Nat) (bk : ℝ) (bStr logN ohN : String)
     simp only [StableHLO.batchSlice, Mat.unflatten]
   rw [bceLossCotGraph_den, bceLogits_grad, hsg, hti]
 
-/-- ⚠⚠ **The committed divisor is `N·K`, the mean over `B×K`.** `ResNet50RenderB` bakes
+/-- Note: **The committed divisor is `N·K`, the mean over `B×K`.** `ResNet50RenderB` bakes
     `{B * nClasses}.0`; softmax-CE's peer bakes `{B}.0`. timm's `BinaryCrossEntropy` is
     `reduction='mean'` over `B×C`, not the mean of the per-example sum over classes, and at
     `K = 1000` the two differ by 1000× on the effective step — RSB-A2's `lr 5e-3` is tuned to

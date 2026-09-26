@@ -1,15 +1,14 @@
 import LeanMlir.Proofs.Foundation.DataParallelNode
 import LeanMlir.Proofs.Architectures.PerChannelBN
 
-/-! # Data parallelism, piece 3: synchronised BatchNorm — the DP step IS the global-batch step
+/-! # Data parallelism with synchronised BatchNorm — the DP step IS the global-batch step
 
-`DataParallel.lean` (piece 1) proved that a data-parallel step on a batch-BN net is a step on
-the mean of `R` per-replica losses and provably NOT the batch-`R·N` step
-(`dpMeanGrad_ne_globalBatchGrad`); `DataParallelNode.lean` (piece 2) put the collective in the
-AST. This is the third piece: with the sync-BN kit (`StableHLO.bnBatchVarAtB`, `bnPackB`,
-`bnSyncF`, `bnSyncDyStatsB`, `bnSyncBack`, `bnSyncGammaGradB`, `bnStatsMeanB`/`VarB` —
-`planning/global_bn_verified.md` §2b) the negative result reverses, and this file is what a
-per-net DP twin walks its chain with.
+`DataParallel.lean` proves that a data-parallel step on a per-replica-BN net is a step on
+the mean of `R` per-replica losses and not the batch-`R·N` step
+(`dpMeanGrad_ne_globalBatchGrad`); `DataParallelNode.lean` puts the collective in the
+AST. With the sync-BN ops (`StableHLO.bnBatchVarAtB`, `bnPackB`, `bnSyncF`, `bnSyncDyStatsB`,
+`bnSyncBack`, `bnSyncGammaGradB`, `bnStatsMeanB`/`VarB`) the negative result reverses, and this
+file is what a per-net DP twin walks its chain with.
 
 ## What is proved
 
@@ -18,10 +17,11 @@ per-net DP twin walks its chain with.
   Every non-BN op in a BN net's chain is `batchMap N` (or `batchMapAux N`, or pointwise) of a
   per-example map, so replica `r`'s value at every such node is `batchShard r` of the global
   batch-`R·N` value whenever its input is. Definitional, all of them.
-* ⭐⭐ **The statistics subgraph** (`syncStats`: μ all-reduced, then Chan's `σ²_r + (μ_r − μ)²`
+* **The statistics subgraph** (`syncStats`: μ all-reduced, then Chan's `σ²_r + (μ_r − μ)²`
   all-reduced, packed) denotes the global `[μ ‖ σ²]` — `den_syncStats_left` / `_right`, the
   latter by `bnVar_row_shard_chan`.
-* ⭐⭐ **P1 / P2 / P2γ at the GRAPH, for any `R`** — `den_bnSyncF_allReduce`,
+* **The sync-BN forward (P1), input-VJP (P2) and γ gradient (P2γ) at the graph, for any
+  `R`** — `den_bnSyncF_allReduce`,
   `den_bnSyncBack_allReduce`, `den_allReduceMeanF_bnSyncGammaGradB`. The sync-BN subgraphs a
   DP render emits, fed by that statistics subgraph, denote
   `batchShard r` of `bnBatchTensor4` / `bnBatchTensor4GradInput` at `N := R·N` (forward and
@@ -31,7 +31,7 @@ per-net DP twin walks its chain with.
 * **The handed-back statistics are the global batch's own**: `den_bnStatsMeanB_allReduce` /
   `den_bnStatsVarB_allReduce` — what a sync render returns for the host's running-stat EMA is
   `bnBatchMeanB` / `bnBatchVarB` at `N := R·N`, on every replica.
-* ⭐⭐ **P4 — the parameter collective is the global-batch gradient.**
+* **P4 — the parameter collective is the global-batch gradient.**
   `den_allReduceMeanF_convWeightGradB_shard`, `den_allReduceMeanF_bnBetaGradB_shard` and the
   γ statement above: the all-reduced mean of the `R` per-replica gradient nodes, each on its
   shard and at the shard-`r` block of the global cotangent, is `(1/R)·` the batch-`R·N`
@@ -51,11 +51,11 @@ instead of threading a factor through every op of the chain.
 
 ## What is NOT claimed
 
-⚠ Nothing here is a whole-net statement. The chain induction is per net (§3.2 onward of the
-plan): this file supplies the BN case and the commutation lemmas the non-BN cases reduce to,
-and each net's DP twin walks its own chain with them. ⚠ That the `R` graphs' host inputs ARE
-the replica shards of one batch — `hx` / `hxv` / `hdy` below — remains the driver's, exactly as
-in piece 2. ⚠ The lowerer's `all_reduce` is trusted as every other op's lowering is.
+Nothing here is a whole-net statement. The chain induction is per net: this file supplies the
+BN case and the commutation lemmas the non-BN cases reduce to, and each net's DP twin walks its
+own chain with them. That the `R` graphs' host inputs ARE the replica shards of one batch —
+`hx` / `hxv` / `hdy` below — remains the driver's, exactly as in `DataParallelNode.lean`. The
+lowerer's `all_reduce` is trusted as every other op's lowering is.
 -/
 
 open Proofs Proofs.StableHLO Proofs.IR
@@ -74,13 +74,13 @@ open scoped BigOperators
 noncomputable def bnchwChan (N oc h w : Nat) (t : Fin (N * (oc * (h * w)))) : Fin oc :=
   (finProdFinEquiv.symm (finProdFinEquiv.symm t).2).1
 
-/-- ⭐⭐ **The sync forward is POINTWISE once its statistics are fixed.**
+/-- **The sync forward is POINTWISE once its statistics are fixed.**
 
     Cell `t` becomes `γ_c·(x_t − μ_c)·(m2_c − μ_c² + ε)^(−1/2) + β_c` with `c` its own channel —
     no other cell is read. Cells mix ONLY when the statistics are computed, and under sync-BN
     that computation has been hoisted out into the collective.
 
-    ⭐ This is what makes the shard argument (`bnSyncTensor4_batchShard`) pure index bookkeeping:
+    This is what makes the shard argument (`bnSyncTensor4_batchShard`) pure index bookkeeping:
     a pointwise map commutes with any reindexing that preserves the channel, and sharding the
     batch does. -/
 theorem bnSyncTensor4_apply (N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Vec oc)
@@ -126,7 +126,7 @@ noncomputable def bnShardEquiv (R N hw : Nat) : Fin R × Fin (N * hw) ≃ Fin ((
     (((Equiv.prodAssoc (Fin R) (Fin N) (Fin hw)).symm).trans
       ((Equiv.prodCongr finProdFinEquiv (Equiv.refl (Fin hw))).trans finProdFinEquiv))
 
-/-- ⭐⭐ **The global channel row, restricted to replica `r`'s block, IS that replica's own
+/-- **The global channel row, restricted to replica `r`'s block, IS that replica's own
     channel row.** The layout fact that connects a batch shard to the `[C, N·H·W]` world
     `bnPerChannelFlat` reduces in — i.e. the one step the `bnchwFwd` relabel was hiding. -/
 theorem bnchwFwd_row_batchShard (R N oc h w : Nat) (X : Vec ((R * N) * (oc * (h * w))))
@@ -137,14 +137,14 @@ theorem bnchwFwd_row_batchShard (R N oc h w : Nat) (X : Vec ((R * N) * (oc * (h 
   simp only [Equiv.trans_apply, Equiv.prodCongr_apply, Equiv.coe_refl, Prod.map_apply, id_eq,
              Equiv.prodAssoc_symm_apply, Equiv.symm_apply_apply]
 
-/-- ⭐⭐ **P1a — the sync forward COMMUTES WITH SHARDING, for any statistics at all.**
+/-- **P1a — the sync forward COMMUTES WITH SHARDING, for any statistics at all.**
 
     `shard_r ∘ (sync BN at μ, m2) = (sync BN at μ, m2) ∘ shard_r`. No hypothesis on `μ`/`m2`:
     once the statistics are fixed the map is pointwise (`bnSyncTensor4_apply`) and sharding
     preserves each cell's channel (`bnchwChan_batchShard`), so there is nothing to prove about
     BatchNorm here — only about indices.
 
-    ⭐ This is the half of P1 that carries no mathematics, and separating it is what leaves the
+    This is the half of P1 that carries no mathematics, and separating it is what leaves the
     real content in one place: whether the handed-in statistics ARE the global ones, which is
     `bnMean_shard`/`bnMeanSq_shard`, i.e. exactly what `allReduceMeanF` computes. -/
 theorem bnSyncTensor4_batchShard (R N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Vec oc)
@@ -155,7 +155,7 @@ theorem bnSyncTensor4_batchShard (R N oc h w : Nat) (ε : ℝ) (γ β μ m2 : Ve
   unfold batchShard
   rw [bnSyncTensor4_apply, bnSyncTensor4_apply, bnchwChan_batchShard]
 
-/-- ⭐⭐ **P1b — the GLOBAL per-channel mean is the mean of the replicas' per-channel means.**
+/-- **P1b — the GLOBAL per-channel mean is the mean of the replicas' per-channel means.**
     `bnMean_shard` transported along the row shard. This is precisely what `syncStats`'s first
     collective — `allReduceMeanF` over the replicas' `bnBatchMeanB` — computes. -/
 theorem bnMean_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠ 0)
@@ -166,7 +166,7 @@ theorem bnMean_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) ≠
   rw [bnMean_shard hR hm (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
-/-- ⭐⭐ **…and so is the global per-channel SECOND MOMENT.** ⛔ There is no such statement for
+/-- **…and so is the global per-channel SECOND MOMENT.** Note: There is no such statement for
     the variance alone — the mean of the shards' variances is not the variance of the union —
     which is why the exchange carries Chan's corrected variance (`bnVar_row_shard_chan`) rather
     than a plain `σ²_r`. -/
@@ -178,7 +178,7 @@ theorem bnMeanSq_row_shard (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w) �
   rw [bnMeanSq_shard hR hm (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
-/-- ⭐⭐ **Chan's parallel variance on the channel rows**: the global channel variance is the
+/-- **Chan's parallel variance on the channel rows**: the global channel variance is the
     replica mean of each replica's own two-pass variance plus its mean's squared offset from the
     global mean. This is what the second collective of a sync-BN forward carries
     (`StableHLO.bnBatchVarAtB`), and it is why no consumer ever forms `E[x²] − μ²`. -/
@@ -197,7 +197,7 @@ theorem bnVar_row_shard_chan (R N oc h w : Nat) (hR : R ≠ 0) (hm : N * (h * w)
   rw [bnVar_shard_chan hR hm (bnShardEquiv R N (h*w))]
   simp only [bnchwFwd_row_batchShard]
 
-/-- ⭐⭐ **P2b's workhorse: a mean over the global batch of ANY pointwise function of two rows
+/-- **P2b's workhorse: a mean over the global batch of ANY pointwise function of two rows
     is the mean of the replicas' means of the same.** Both dy-reductions the sync backward needs
     have this shape — `mdy` reads only `dy`, `mdyx` reads `x` and `dy` together — so one lemma
     covers both, and `bnMean_row_shard` is its one-row special case. -/
@@ -216,14 +216,14 @@ theorem mulR_nhw_ne_zero {R N h w : Nat} (hR : 0 < R) (hm : N * (h * w) ≠ 0) :
     (R * N) * (h * w) ≠ 0 := by
   rw [Nat.mul_assoc]; exact Nat.mul_ne_zero hR.ne' hm
 
-/-- ⭐⭐⭐ **P1 — SYNC-BN ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH BN.**
+/-- **P1 — SYNC-BN ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH BN.**
 
     Handed the GLOBAL statistics — `(1/R)·Σ_r` of each replica's own `bnMean` and `bnMeanSq`,
     which is what `syncStats` denotes once its `σ²` is read back as `m2 = σ² + μ²` — replica
     `r`'s sync forward on its own shard equals `batchShard r` of `bnBatchTensor4` run on the
     whole `R·N` batch.
 
-    ⭐ **The spec does not move**: the right-hand side is the EXISTING `bnBatchTensor4`, at
+    **The spec does not move**: the right-hand side is the EXISTING `bnBatchTensor4`, at
     `N := R·N`. Nothing new is being specified; the render is being shown to hit a target the
     tier already names.
 
@@ -254,7 +254,7 @@ theorem bnSyncTensor4_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0) (hm : N 
   exact congrArg (fun z => batchShard R N (oc * (h * w)) z r)
     (bnSyncTensor4_at_own_stats (R*N) oc h w hM ε γ β X)
 
-/-- ⭐⭐ **A channel's γ gradient over the global batch is the SUM of the replicas' γ gradients
+/-- **A channel's γ gradient over the global batch is the SUM of the replicas' γ gradients
     at the same handed-in statistics** — a sum, not a mean, because this is a parameter
     gradient: the parameter collective's `1/R` is what turns it into the global-batch mean. The
     row split `bnchwFwd_row_batchShard`, under `Σ` instead of `bnMean`. -/
@@ -326,7 +326,7 @@ theorem bnSyncTensor4GradInput_apply (N oc h w : Nat) (ε : ℝ) (γ μ m2 mdy m
     simp only [Equiv.symm_apply_apply]
   rw [hx, hd, hc]
 
-/-- ⭐⭐ **P2a — the sync backward COMMUTES WITH SHARDING, for any statistics at all.**
+/-- **P2a — the sync backward COMMUTES WITH SHARDING, for any statistics at all.**
     The backward twin of `bnSyncTensor4_batchShard`, and equally free of mathematics: pointwise
     plus channel-preserving reindex. -/
 theorem bnSyncTensor4GradInput_batchShard (R N oc h w : Nat) (ε : ℝ)
@@ -371,7 +371,7 @@ theorem bnSyncTensor4GradInput_at_own_stats' (N oc h w : Nat) (hm : N * (h * w) 
   rw [hxh]
   exact bnSyncTensor4GradInput_at_own_stats N oc h w hm ε γ x dy
 
-/-- ⭐⭐⭐ **P2 — THE SYNC BACKWARD ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH
+/-- **P2 — THE SYNC BACKWARD ON REPLICA `r` IS THE SHARD-`r` BLOCK OF THE GLOBAL-BATCH
     INPUT-VJP.**
 
     Handed the four all-reduced statistics — each literally `(1/R)·Σ_r'` of a per-replica
@@ -379,13 +379,13 @@ theorem bnSyncTensor4GradInput_at_own_stats' (N oc h w : Nat) (hm : N * (h * w) 
     denotes — replica `r`'s sync backward equals `batchShard r` of `bnBatchTensor4GradInput`
     run on the whole `R·N` batch.
 
-    ⭐ **Including the cross-shard terms.** `mdyx` averages `x̂·dx̂` with `x̂` built from the GLOBAL
+    **Including the cross-shard terms.** `mdyx` averages `x̂·dx̂` with `x̂` built from the GLOBAL
     `μ`, `m2` — not from the shard's own statistics — which is exactly why `bnSyncDyStatsB`
     consumes the already-reduced vector instead of recomputing one. That is what makes each
     replica's output the true shard-`r` block of the global gradient, and hence the all-reduced
     PARAMETER gradient exact rather than approximate.
 
-    ⭐ **The spec does not move**: the right-hand side is the existing
+    **The spec does not move**: the right-hand side is the existing
     `bnBatchTensor4GradInput` at `N := R·N`. -/
 theorem bnSyncTensor4GradInput_shard_eq_global (R N oc h w : Nat) (hR : R ≠ 0)
     (hm : N * (h * w) ≠ 0) (ε : ℝ) (γ : Vec oc)
@@ -445,7 +445,7 @@ theorem batchSlice_batchShard {R N a : Nat} (X : Vec ((R * N) * a)) (r : Fin R) 
   funext i
   simp only [batchSlice, batchShard, Equiv.symm_apply_apply]
 
-/-- ⭐ **`batchMap` commutes with sharding** — the block analogue of `batchSlice_batchMap`. A
+/-- **`batchMap` commutes with sharding** — the block analogue of `batchSlice_batchMap`. A
     per-example lift applied to the global batch, restricted to replica `r`, is the same lift
     applied to replica `r`'s shard: so every conv, relu, pool, GAP and dense node in a DP render
     denotes `batchShard r` of its batch-`R·N` value as soon as its input does. -/
@@ -496,7 +496,7 @@ def syncStats {N oc h w : Nat} (R : Nat) (hR : 0 < R) (t t' : String) (ds ds' : 
     (.allReduceMeanF R hR t' ds' (fun r => .bnBatchVarAtB (x r)
       (.allReduceMeanF R hR t ds (fun r' => .bnBatchMeanB (x r')))))
 
-/-- ⭐⭐ **The first collective IS the global mean** — `bnMean_shard` on the channel rows. -/
+/-- **The first collective IS the global mean** — `bnMean_shard` on the channel rows. -/
 theorem den_syncStats_left {N oc h w : Nat} (R : Nat) (hR : 0 < R) (hm : N * (h * w) ≠ 0)
     (t t' : String) (ds ds' : List Nat) (x : Fin R → SHlo (N * (oc * (h * w))))
     (X : Vec ((R * N) * (oc * (h * w))))
@@ -506,9 +506,9 @@ theorem den_syncStats_left {N oc h w : Nat} (R : Nat) (hR : 0 < R) (hm : N * (h 
   simp only [syncStats, den_bnPackB, Fin.append_left, den_allReduceMeanF, den_bnBatchMeanB, hx]
   exact (bnMean_row_shard R N oc h w (Nat.pos_iff_ne_zero.mp hR) hm X c).symm
 
-/-- ⭐⭐ **The second collective IS the global variance** — Chan's parallel variance
+/-- **The second collective IS the global variance** — Chan's parallel variance
     (`bnVar_row_shard_chan`): each replica's two-pass `σ²_r` plus `(μ_r − μ)²`, averaged. This
-    is the lemma the one-round `E[x²]` exchange could not have, and the reason it was replaced. -/
+    is the lemma a one-round `E[x²]` exchange does not have. -/
 theorem den_syncStats_right {N oc h w : Nat} (R : Nat) (hR : 0 < R) (hm : N * (h * w) ≠ 0)
     (t t' : String) (ds ds' : List Nat) (x : Fin R → SHlo (N * (oc * (h * w))))
     (X : Vec ((R * N) * (oc * (h * w))))
@@ -531,7 +531,7 @@ theorem global_var_add_sq {N oc h w : Nat} (R : Nat) (hM : (R * N) * (h * w) ≠
       = bnMeanSq ((R * N) * (h * w)) (Mat.unflatten (bnchwFwd (R * N) oc h w X) c) := by
   rw [bnVar_eq_bnMeanSq_sub_sq _ hM]; ring
 
-/-- ⭐⭐ **P1 on the graph, any `R`.** Replica `r`'s `bnSyncF`, fed by the two-round statistics
+/-- **P1 on the graph, any `R`.** Replica `r`'s `bnSyncF`, fed by the two-round statistics
     subgraph over the `R` replicas' inputs, denotes `batchShard r` of the batch-`R·N`
     `bnBatchTensor4` — given that each replica's operand denotes its shard (`hx`, the chain's
     induction hypothesis). `den_bnSyncF_allReduce_R1` is this at `R := 1`. -/
@@ -550,7 +550,7 @@ theorem den_bnSyncF_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
   exact congrArg (fun z => batchShard R N (oc * (h * w)) z r)
     (bnSyncTensor4_at_own_stats (R * N) oc h w hM ε γ β X)
 
-/-- ⭐⭐ **P2 on the graph, any `R`.** Replica `r`'s `bnSyncBack`, fed by the collective over the
+/-- **P2 on the graph, any `R`.** Replica `r`'s `bnSyncBack`, fed by the collective over the
     replicas' `bnSyncDyStatsB` (each reading the packed forward statistics), denotes
     `batchShard r` of the batch-`R·N` `bnBatchTensor4GradInput` — given that each replica's
     saved activation and its incoming cotangent are its shards of the global ones (`hx` / `hxv`,
@@ -584,7 +584,7 @@ theorem den_bnSyncBack_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
 -- § P4 — the parameter collective is 1/R of the global-batch gradient node
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **P2γ on the graph, any `R`, already all-reduced.** The parameter collective over the
+/-- **P2γ on the graph, any `R`, already all-reduced.** The parameter collective over the
     replicas' `bnSyncGammaGradB` — each at its shard, its shard's cotangent and the packed global
     statistics — is `1/R` of `bnPerChannelGradGamma` at `N := R·N`: the committed γ gradient
     at the global batch. The BN γ node is the one parameter gradient sync-BN changes, because it
@@ -623,7 +623,7 @@ theorem den_bnStatsMeanB_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
   simp only [den_bnStatsMeanB, den_syncStats_left R hR hm t t' ds ds' x X hx]
 
 /-- **…and so is the handed-back VARIANCE** — the global batch's `bnVar`, what `bnBatchVarB` at
-    `N := R·N` denotes. ⛔ No per-replica variance is ever averaged on its own: the between-shard
+    `N := R·N` denotes. Note: No per-replica variance is ever averaged on its own: the between-shard
     spread `(μ_r − μ)²` rides along, which is what Chan's formula is. -/
 theorem den_bnStatsVarB_allReduce {N oc h w : Nat} (R : Nat) (hR : 0 < R)
     (hm : N * (h * w) ≠ 0) (t t' : String) (ds ds' : List Nat)
@@ -644,10 +644,10 @@ macro "shard_sum" : tactic => `(tactic| (
   apply Finset.sum_congr rfl; intro _ _
   repeat rw [batchSlice_batchShard]))
 
-/-- ⭐⭐ **P4 for the `Σ_n`-shaped gradients, at the conv weight.** The collective over the
+/-- **P4 for the `Σ_n`-shaped gradients, at the conv weight.** The collective over the
     replicas' `convWeightGradB`, each on its shard at the shard-`r` block of the global
     cotangent, is `1/R` of the batch-`R·N` node at that cotangent. `den_allReduceMeanF_convWeightGradB`
-    (piece 2) is the same collective with NO relation between the replicas' inputs; this is what
+    (`DataParallelNode`) is the same collective with NO relation between the replicas' inputs; this is what
     it becomes once P1–P3 relate them. Every other `Σ_n` gradient (`denseWeightGradB`,
     `denseBiasGradB`, the strided / depthwise / bias kinds) closes by the same `shard_sum`. -/
 theorem den_allReduceMeanF_convWeightGradB_shard {N ic oc h w kH kW : Nat} (R : Nat)

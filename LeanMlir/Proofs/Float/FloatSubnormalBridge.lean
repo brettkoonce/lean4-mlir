@@ -1,46 +1,32 @@
 import LeanMlir.Proofs.Float.FloatBridge
 
-/-! # ℝ → Float32 bridge: the subnormal floor, closed as a lemma (not a caveat)
+/-! # ℝ → Float32 bridge: a rounding model with a subnormal floor
 
-`FloatBridge.lean`'s `FloatModel` carries the **unconditional** relative-error
-axiom `|rnd x − x| ≤ u·|x|`, true for IEEE-754 binary32 round-to-nearest only
-**on the normal range** (its docstring flags the subnormal absolute-error term
-as future work; `planning/archive/floatbridge_certificate_gaps.md` §2). Near `0` the real
-bound is `|rnd x − x| ≤ u·|x| + η`, a gradual-underflow floor `η ≈ 2⁻¹⁵⁰` (½ ULP
-at the smallest subnormal). Deep activations *can* underflow, so the clean
-relative model is, strictly, a TRUSTED simplification.
+`FloatBridge.lean`'s `FloatModel` carries the unconditional relative-error
+bound `|rnd x − x| ≤ u·|x|`, which IEEE-754 binary32 round-to-nearest satisfies
+only on the normal range. Near `0` the real bound is
+`|rnd x − x| ≤ u·|x| + η`, with a gradual-underflow floor `η = 2⁻¹⁵⁰` (½ ULP at
+the smallest subnormal). This file states that model and proves a few facts
+about it; it does not re-derive any `FloatModel` budget under it.
 
-This file closes that gap the way the plan recommends — **not** by polluting
-every downstream budget with an `η` term, but by proving activations **stay
-normal** so the clean relative model genuinely applies, and by showing the
-residual floor (for the genuinely-near-zero coordinates the invariant does not
-cover) is globally negligible.
+* `FaithfulFloatModel` — a rounder with the relative bound `err_rel` on the
+  normal range `minNormal ≤ |x|`, the absolute floor `err_abs` everywhere, and
+  `rnd 0 = 0`. The only instance constructed is `exactFaithful` (`rnd = id`);
+  no binary32 instance is built. The binary32 constants are named
+  (`minNormalF32 = 2⁻¹²⁶`, `subFloorF32 = 2⁻¹⁵⁰`).
+* `toFloatModel` — with `η = 0` the model is a `FloatModel`, so `FloatModel` is
+  its `η = 0` face.
+* `err_of_normal` — on `x = 0` or a normal `x` the bound is the clean
+  `|rnd x − x| ≤ u·|x|`, with no `η`.
+* `bnDenom_normal` / `bnSqrt_normal` / `istd_ge_minNormal` — for `ε ≥ minNormal`
+  and `var ≥ 0`, the BN/LN denominator `var + ε` and its root `√(var+ε)` are
+  `≥ minNormal`; under `√(var+ε) ≤ minNormal⁻¹`, so is `istd = 1/√(var+ε)`.
+  These are statements about the normalization denominator only; that
+  activations stay in the normal range is not proved.
+* `subFloor_total_negligible` — `n ≤ 2⁶⁴` floor terms sum to at most `2⁻⁸⁶`
+  (`n · subFloorF32 ≤ 2⁻⁸⁶`). No theorem connects this to a closeness budget.
 
-The arc:
-
-* `FaithfulFloatModel` — the *honest* model of a real binary32 rounder: the
-  clean relative bound `err_rel` on the normal range, **plus** the honest
-  absolute floor `err_abs` everywhere (subnormals included), plus `rnd 0 = 0`.
-  binary32 RN instantiates it with `u = 2⁻²⁴`, `η = 2⁻¹⁵⁰`, `minNormal = 2⁻¹²⁶`
-  (the IEEE facts — the same TRUSTED instantiation boundary `FloatModel` already
-  relies on, now *stated*, not hidden).
-* `toFloatModel` (`η = 0`) — the honest model with no underflow **is** a
-  `FloatModel`. So `FloatModel` is exactly the `η→0` / stays-normal *face* of the
-  honest model: every existing bridge bound is the normal-range truth.
-* `err_of_normal` — on normal arguments the honest bound collapses to the clean
-  `FloatModel.err`, with **no** `η`. The precise "stays-normal ⇒ the whole bridge
-  applies verbatim".
-* `bnDenom_normal` / `bnSqrt_normal` / `istd_ge_minNormal` — the architecture
-  invariant: BN/LN's `var + ε` denominator, its `√`, and the inverse-stddev
-  `istd = 1/√(var+ε)` are all bounded **below** by `minNormal` (since
-  `ε ≫ minNormal`). The `rsqrt` keystone (`BnFloatBridge.rsqrt_lipschitz`) never
-  touches the subnormal range — this is *why* LN/BN keep activations O(1).
-* `subFloor_total_negligible` — even if *every* one of `n ≤ 2⁶⁴` rounded
-  quantities underflowed, the total extra error is `≤ 2⁻⁸⁶`, below every nonzero
-  budget in the suite. Handles post-ReLU tiny values / softmax tails honestly:
-  the floor cannot move any closeness bound.
-
-3-axiom clean (no `sorry`, no project axioms) — like the rest of the bridge.
+Axioms: `propext`, `Classical.choice`, `Quot.sound` only (no `sorry`).
 -/
 
 namespace Proofs
@@ -163,12 +149,9 @@ theorem istd_ge_minNormal (F : FaithfulFloatModel) {ε var : ℝ}
 -- § The residual floor is globally negligible
 -- ════════════════════════════════════════════════════════════════
 
-/-- **The subnormal floor cannot move any bound.** Even if *every* one of `n`
-    rounded quantities underflowed into the subnormal range, the total extra
-    error is `n · subFloorF32`. For `n ≤ 2⁶⁴` (vastly more ops than any net in
-    the suite), this is `≤ 2⁻⁸⁶` — below every nonzero closeness budget that
-    appears. So the genuinely-near-zero coordinates the stays-normal invariant
-    does not cover (post-ReLU tiny values, softmax tails) are harmless. -/
+/-- If each of `n ≤ 2⁶⁴` rounded quantities incurs the subnormal floor
+    `subFloorF32 = 2⁻¹⁵⁰`, their total is at most `2⁻⁸⁶`. An arithmetic fact;
+    it is not connected here to any closeness budget. -/
 theorem subFloor_total_negligible (n : ℕ) (hn : (n : ℝ) ≤ (2 : ℝ) ^ (64 : ℕ)) :
     (n : ℝ) * subFloorF32 ≤ ((2 : ℝ) ^ (86 : ℕ))⁻¹ := by
   unfold subFloorF32

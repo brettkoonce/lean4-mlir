@@ -185,7 +185,7 @@ def convNetCheckQ {ic oc h w kH kW k : Nat} (W : Fin oc → Fin ic → Fin kH �
     j == y || decide (denseTHiQ Wd bd (convPoolLoQ W b x ε) (convPoolHiQ W b x ε) j
                         < denseTLoQ Wd bd (convPoolLoQ W b x ε) (convPoolHiQ W b x ε) y)
 
-/-- ⭐ **A passing check is a certificate.** For the net built from the cast
+/-- **A passing check is a certificate.** For the net built from the cast
     weights, `convNetCheckQ … = true` gives `CertifiedAtLinf3` at radius `ε` on
     the cast image: `ibp3_certified_of_boxSound` over the composed box transformer,
     with the separation read off the check through the cast lemmas. -/

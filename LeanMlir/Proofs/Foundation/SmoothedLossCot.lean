@@ -2,9 +2,11 @@ import LeanMlir.Proofs.Codegen.StableHLO
 
 /-! # The label-smoothed loss cotangent, at a GENERAL target
 
-Every whole-net T3 tie in the repo pins its top-of-chain cotangent to
-`softmax(logits) − oneHot label` — the gradient of plain cross-entropy at a hard label. That is
-what the SGD-inline per-example renders emit, and it is not what the batched ImageNet renders emit.
+The ties of the per-example SGD-inline renders pin their top-of-chain cotangent to
+`softmax(logits) − oneHot label` — the gradient of plain cross-entropy at a hard label. The
+batched ImageNet renders emit a different, label-smoothed chain (below), and their step ties —
+ResNet-34, ResNet-50, MobileNetV2, MobileNetV4, EfficientNet-B0, ConvNeXt-T and ViT, plus the
+sync-BN twins of the first five — state it through `smoothedLossCotGraph`.
 
 `ResNet34RenderB.lean` composes the head cotangent from six kit ops:
 
@@ -26,7 +28,7 @@ is the cotangent lemma those ties need: at a general target and at the smoothed 
   familiar `softmax − t` is the `Σ t = 1` case.
 * `smoothTarget K α t = (1−α)·t + α/K` is label smoothing as a map on targets, and it preserves
   `Σ = 1` (`smoothTarget_sum`, the one place `0 < K` is needed).
-* ⭐ `smoothedCE_grad`: the gradient of `softCE` at the SMOOTHED target is exactly the expression
+* `smoothedCE_grad`: the gradient of `softCE` at the SMOOTHED target is exactly the expression
   the render emits — `softmax(z)_j − t_j + α·t_j − α/K`. So the six-op chain is not an
   approximation of the smoothed loss's gradient; it is that gradient, rearranged so that the
   smoothing is two extra elementwise ops on the target rather than a change to the target itself.
@@ -36,13 +38,13 @@ is the cotangent lemma those ties need: at a general target and at the smoothed 
 
 ## What is NOT claimed
 
-⚠ **The `/ B` is the batch mean, and it is a convention, not a theorem here.** `smoothedLossCotGraph_row`
+Note: **The `/ B` is the batch mean, and it is a convention, not a theorem here.** `smoothedLossCotGraph_row`
 states the row IS `(1/B)·∂softCE/∂z` at that example's logits; that the sum of `B` such rows is the
 gradient of the mean loss is the linearity step, and a tie against a `*dp*` artifact needs the
-replica mean on top of it (`planning/archive/proofs_tier_to_paper_nets.md` 4d).
+replica mean on top of it (`DataParallelNode.lean`).
 
-⚠ **`α` is a free real.** The committed renders bake `0.1`, and the `ls0` twins bake `0`; both are
-instances. ⚠ Nothing here says `t` is a probability vector — only `Σ t = 1` is ever used, which is
+Note: **`α` is a free real.** The committed renders bake `0.1`, and the `ls0` twins bake `0`; both are
+instances. Note: Nothing here says `t` is a probability vector — only `Σ t = 1` is ever used, which is
 what mixup's convex combination of two one-hots satisfies.
 -/
 
@@ -109,7 +111,7 @@ theorem smoothTarget_sum (K : Nat) (hK : 0 < K) (α : ℝ) (t : Vec K) (ht : ∑
   field_simp
   ring
 
-/-- ⭐ **The emitted expression IS the smoothed loss's gradient.** `∂/∂z_j` of soft-target CE at
+/-- **The emitted expression IS the smoothed loss's gradient.** `∂/∂z_j` of soft-target CE at
     the SMOOTHED target `(1−α)t + α/K` equals `softmax(z)_j − t_j + α·t_j − α/K`, which is exactly
     what the render's `softmaxRow → subB → scaleB → addVB → shiftB` chain computes, before the
     batch divide. -/
@@ -145,7 +147,7 @@ theorem smoothedLossCotGraph_den (N K : Nat) (α B : ℝ) (aStr negAK bStr logN 
           + -(α / K)) / B := by
   simp only [smoothedLossCotGraph, denStep, denStepApp, denOp]
 
-/-- ⭐ **Each row of the emitted cotangent is the smoothed loss's gradient at that example's
+/-- **Each row of the emitted cotangent is the smoothed loss's gradient at that example's
     logits, divided by the batch.** `Mat.unflatten` splits the flat `N·(1·K)` activation into its
     `N` per-example rows; `smoothedCE_grad` supplies the gradient. The hypothesis is only that the
     example's target sums to 1 — a one-hot, a mixup convex combination, or any distribution. -/
@@ -203,7 +205,7 @@ theorem smoothedLossCotGraphDiv_den (N K : Nat) (α B : ℝ) (aStr negAK bStr lo
   simp only [smoothedLossCotGraphDiv, denStepApp, denOp, StableHLO.batchMap, softmax,
     Equiv.symm_apply_apply]
 
-/-- ⭐ **Each example's row of the emitted cotangent is the smoothed loss's gradient at that
+/-- **Each example's row of the emitted cotangent is the smoothed loss's gradient at that
     example's logits, divided by the batch** — `smoothedLossCotGraph_row` at the `softmaxDiv`
     spelling and the plain `N·K` index, where the example is `batchSlice N K · n` with no
     `Mat.unflatten`. The hypothesis is only that the example's target sums to 1. -/

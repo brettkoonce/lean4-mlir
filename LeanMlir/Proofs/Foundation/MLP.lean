@@ -17,6 +17,8 @@ namespace Proofs
 -- § Dense Layer:  y = xW + b
 -- ════════════════════════════════════════════════════════════════
 
+/-- Affine layer `x ↦ xW + b` in the row-vector convention: `W : Mat m n` maps `Vec m → Vec n`,
+    and `W i j` connects input `i` to output `j`. -/
 noncomputable def dense {m n : Nat} (W : Mat m n) (b : Vec n) (x : Vec m) : Vec n :=
   fun j => (∑ i : Fin m, x i * W i j) + b j
 
@@ -62,9 +64,8 @@ noncomputable def denseHasVJP {m n : Nat} (W : Mat m n) (b : Vec n) :
 noncomputable def mnistLinear {m n : Nat} (W : Mat m n) (b : Vec n) : Vec m → Vec n :=
   dense W b
 
-/-- Whole-model VJP contract for the linear classifier — the degenerate
-simplest case of the per-architecture `*HasVJP_correct` capstones, built
-straight from the Chapter-1 kit. -/
+/-- `denseHasVJP`'s `correct` field, restated for `mnistLinear` so it can be cited by
+name. -/
 theorem mnistLinearHasVJP_correct {m n : Nat} (W : Mat m n) (b : Vec n)
     (x : Vec m) (dy : Vec n) (i : Fin m) :
     (denseHasVJP W b).backward x dy i =
@@ -80,12 +81,10 @@ theorem dense_differentiable {m n : Nat} (W : Mat m n) (b : Vec n) :
     Differentiable ℝ (dense W b) := by
   unfold dense; fun_prop
 
-/-- **Dense weight gradient is the outer product** — theorem (Phase 7).
+/-- **Dense weight gradient is the outer product.**
 
     `Mat.outer x dy` is the cotangent-contracted Jacobian of `dense(W, b, x)`
-    with respect to `W`, at every index. This promotes the previous vacuous
-    `rfl` about `Mat.outer` into a real theorem connecting the outer product
-    to the actual weight gradient of `dense`.
+    with respect to `W`, at every index.
 
     `(Mat.outer x dy) i j = ∑ k, pdiv (…) (Mat.flatten W) (fPF (i, j)) k · dy k` -/
 theorem denseWeightGrad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
@@ -96,7 +95,7 @@ theorem denseWeightGrad_correct {m n : Nat} (W : Mat m n) (b : Vec n)
              (Mat.flatten W) (finProdFinEquiv (i, j)) k * dy k := by
   simp [pdiv_dense_W, Mat.outer]
 
-/-- **Dense bias gradient is identity** — theorem (Phase 7).
+/-- **Dense bias gradient is identity.**
 
     `∂ dense(W, b, x)_j / ∂ b_{j'} = δ(j, j')`, so the bias backward is
     just `dy` itself: `b' ↦ dense W b' x` is the identity plus a constant (`pdiv_of_affine`). -/
@@ -127,6 +126,7 @@ def denseBiasGrad {n : Nat} (dy : Vec n) : Vec n := dy
 -- § ReLU:  y = max(x, 0)
 -- ════════════════════════════════════════════════════════════════
 
+/-- ReLU, coordinatewise: `x i` if `x i > 0`, else `0`. -/
 noncomputable def relu (n : Nat) (x : Vec n) : Vec n :=
   fun i => if x i > 0 then x i else 0
 
@@ -261,14 +261,17 @@ noncomputable def reluHasVJPAt (n : Nat) (x : Vec n)
 -- § Softmax Cross-Entropy Loss
 -- ════════════════════════════════════════════════════════════════
 
+/-- Softmax over `c` classes: `exp (z j) / Σ_k exp (z k)`. -/
 noncomputable def softmax (c : Nat) (z : Vec c) : Vec c :=
   let e : Vec c := fun j => Real.exp (z j)
   let total := ∑ k : Fin c, e k
   fun j => e j / total
 
+/-- The one-hot vector of `label` over `c` classes. -/
 noncomputable def oneHot (c : Nat) (label : Fin c) : Vec c :=
   fun j => if j = label then 1 else 0
 
+/-- Cross-entropy at a hard label: `−log (softmax logits)_label`. -/
 noncomputable def crossEntropy (c : Nat) (logits : Vec c) (label : Fin c) : ℝ :=
   -(Real.log (softmax c logits label))
 
@@ -288,6 +291,7 @@ theorem crossEntropy_def (c : Nat) (logits : Vec c) (label : Fin c) :
 -- § MLP Composition
 -- ════════════════════════════════════════════════════════════════
 
+/-- The three-layer MLP forward: `dense → relu → dense → relu → dense`. -/
 noncomputable def mlpForward {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
@@ -316,9 +320,8 @@ noncomputable def mlpHasVJP {d₀ d₁ d₂ d₃ : Nat}
     through `dense → relu_at → dense → relu_at → dense`. Requires the
     intermediate pre-activations `dense W₀ b₀ x` and `dense W₁ b₁ z₀`
     to avoid zero (no coordinate ties the ReLU kink) — exactly the
-    "smooth input" condition. Replaces the vacuous
-    `mlpHasVJP.correct := rfl` with a real chain-rule proof at
-    smooth inputs. -/
+    "smooth input" condition. Unlike the canonical `mlpHasVJP`, the
+    backward here is built by the chain rule. -/
 noncomputable def mlpHasVJPAt {d₀ d₁ d₂ d₃ : Nat}
     (W₀ : Mat d₀ d₁) (b₀ : Vec d₁)
     (W₁ : Mat d₁ d₂) (b₁ : Vec d₂)
@@ -397,6 +400,7 @@ theorem mlpHasVJPAt_correct {d₀ d₁ d₂ d₃ : Nat}
 -- § ReLU6  y = min(max(x,0), 6)   (MobileNetV2 activation)
 -- ════════════════════════════════════════════════════════════════
 
+/-- ReLU6, coordinatewise: `min (max (x i) 0) 6` (MobileNetV2's activation). -/
 noncomputable def relu6 (n : Nat) (x : Vec n) : Vec n :=
   fun i => min (max (x i) 0) 6
 
@@ -455,7 +459,7 @@ noncomputable def relu6HasVJPAt (n : Nat) (x : Vec n)
 
 /-- **ReLU6 is the identity inside its window.** Wherever every coordinate is strictly inside
     `(0,6)`, `min (max · 0) 6` does nothing — the step every structural witness takes to collapse a
-    relu6 stage to its BatchNorm. ⭐ Stated at the top level rather than inside a witness namespace:
+    relu6 stage to its BatchNorm. Stated at the top level rather than inside a witness namespace:
     it is a fact about the op, and `BatchSeal`'s consumers outlive any one witness. -/
 theorem relu6_id_window (n : Nat) (y : Vec n) (hy : ∀ k, 0 < y k ∧ y k < 6) :
     relu6 n y = y := by

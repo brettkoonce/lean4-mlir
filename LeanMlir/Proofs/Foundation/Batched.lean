@@ -26,8 +26,8 @@ noncomputable def batchMap (N : Nat) {a b : Nat} (f : Vec a → Vec b) :
 
 /-- The `n`-th example's slice of a batch laid out row-major `[N, a]`. A shared
     weight's batched gradient is the sum over `n` of the per-example gradient on
-    `batchSlice n` — the form the batched param-SGD dens take (so the §1 fold closes
-    via the per-example cert + sum-linearity). -/
+    `batchSlice n` — the form the batched param-SGD dens take (so a batched parameter fold
+    closes via the per-example cert + sum-linearity). -/
 def batchSlice (N a : Nat) (v : Vec (N * a)) (n : Fin N) : Vec a :=
   fun i => v (finProdFinEquiv (n, i))
 

@@ -6,21 +6,21 @@ import LeanMlir.Proofs.Float.ResNet34BlockBridge
 import LeanMlir.Proofs.Architectures.MaxPool3s2
 
 /-!
-# ℝ→Float32 bridge: the composition backbone (whole-net certificate)
+# ℝ→Float32 bridge: per-op `FloatClose` instances for the conv-net op set
 
-A whole-net float certificate is a *fold* of the per-op budgets. `FloatClose`
-packages exactly what's needed to fold: on inputs within magnitude `A`, the float
+`FloatClose` (`FloatClose.lean`): on inputs within magnitude `A`, the float
 `fF` is within an error modulus `L e` of the real `f` (per coordinate, at input
 error `e`), and both real and float outputs are within `B` (so the next layer's
-magnitude precondition is met). `FloatClose.comp` proves this **composes** — the
-moduli compose as `Lg ∘ Lf`, magnitudes thread `A → B → C` — so a whole net is
-`FloatClose` with the composed modulus, no per-net re-proof.
+magnitude precondition is met). `FloatClose.comp` composes two — the moduli
+compose as `Lg ∘ Lf`, magnitudes thread `A → B → C`.
 
-Instances proved here: `relu` (exact in float, modulus `id`), `flatConv`
-(modulus = the conv-fan-in `layerBudget`), and the rest of the r34 op set below —
-BN (use the operating-point `bnIstd_close_at` for the `eistd`, else the budget is
-vacuous), the pools, and the residual block. A whole-net certificate is then `.comp`
-folded over the layer list.
+Instances proved here: `floatClose_flatConv` (modulus = the conv-fan-in
+`layerBudget`), `floatClose_dense`, the pools (`floatClose_maxPool`,
+`floatClose_maxPool3s2`, `floatClose_gap`), the skips (`floatClose_addResidual`,
+`floatClose_residualBlock`, `floatClose_residual`), `floatClose_bn` (use the
+operating-point `bnIstd_close_at` for the `eistd`, else the budget is vacuous),
+and `floatClose_r34_stages`. A whole-net bound would be `.comp` of these; none is
+assembled in the repo.
 -/
 
 namespace Proofs
@@ -45,8 +45,8 @@ theorem floatClose_flatConv {ic oc h w kH kW : Nat} (M : FloatModel)
 
 /-- **Dense layer is `FloatClose`** with modulus the fan-in `layerBudget` (the dense
     analogue of `floatClose_flatConv`). Real output ≤ `layerAct`; float output ≤ that
-    + the fresh-input rounding `layerBudget(e=0)`. The SE excite/reduce denses and the
-    classifier head are this instance; the ViT MLP denses reuse it too. -/
+    + the fresh-input rounding `layerBudget(e=0)`. Stated for any `dense W b`; nothing in
+    the repo instantiates it. -/
 theorem floatClose_dense {m n : Nat} (M : FloatModel) (W : Mat m n) (b : Vec n)
     {w' β A : ℝ} (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hm : 0 < m)
     (hW : ∀ i j, |W i j| ≤ w') (hb : ∀ j, |b j| ≤ β) :
@@ -68,11 +68,10 @@ theorem floatClose_maxPool {c h w : Nat} (A : ℝ) :
   ⟨fun _v hv i => ⟨maxPoolFlat_abs_le hv i, maxPoolFlat_abs_le hv i⟩,
    fun vt va _e _ _ hd i => maxPoolFlat_close vt va hd i⟩
 
-/-- ⭐ **He et al.'s 3×3/s2 stem pool is `FloatClose`** — the peer of `floatClose_maxPool`, and
-    identical in shape: a max is EXACT (it selects an existing cell, so the modulus is `id` and the
-    magnitude is unchanged) whatever the window size. The overlap that makes the *backward*
-    accumulate is invisible here, because the forward at one output still reads one cell.
-    `planning/archive/rsb_a3_r50_verified.md` §4b. -/
+/-- **He et al.'s 3×3/s2 stem pool is `FloatClose`** — the peer of `floatClose_maxPool`, and
+    identical in shape: a max is exact (it selects an existing cell, so the modulus is `id` and the
+    magnitude is unchanged) whatever the window size. The overlap that makes the backward
+    accumulate is invisible here, because the forward at one output still reads one cell. -/
 theorem floatClose_maxPool3s2 {c h w : Nat} (A : ℝ) :
     FloatClose A A (maxPool3s2Flat c h w) (maxPool3s2Flat c h w) (fun e => e) :=
   ⟨fun _v hv i => ⟨maxPool3s2Flat_abs_le hv i, maxPool3s2Flat_abs_le hv i⟩,
@@ -160,8 +159,8 @@ theorem floatClose_residualBlock {m : Nat} (M : FloatModel) {A B : ℝ}
     stats on the magnitude domain — discharged by `bnMean_close` / `bnVar_close` +
     `bnIstd_close_at` when instantiated). Error from `bnStep_close` (rounding
     `bnForward_close_of` + input-shift `bnForward_input_close`); magnitude the real
-    `|γ|·|x̂| + |β|` plus that rounding. The BN-before-swish steps in EfficientNet's MBConv (and
-    BN-before-GELU positions generally) are this instance. -/
+    `|γ|·|x̂| + |β|` plus that rounding. Stated for a BN with no trailing activation (the form a
+    BN-before-swish or BN-before-GELU position would use); nothing in the repo instantiates it. -/
 theorem floatClose_bn {m : Nat} (M : FloatModel)
     {ε γ β emean eistd D S G Bbnd A : ℝ} (fμ fistdv : Vec m → ℝ)
     (hn : 0 < m) (hε : 0 < ε) (hγ : |γ| ≤ G) (hβ : |β| ≤ Bbnd)
@@ -190,11 +189,10 @@ theorem floatClose_bn {m : Nat} (M : FloatModel)
 -- § The final fold: a block iterated to depth (r34's [3,4,6,3] stages)
 -- ════════════════════════════════════════════════════════════════
 
-/-- **r34's four stages, folded.** Given an identity block that is magnitude-stable
-    `FloatClose A A` (the a-posteriori-bounded regime), the `[3,4,6,3]` block stack
-    of each stage is `FloatClose A A` — the four `floatClose_iterate` instances at
-    r34's depths. The full `r34_float_close` is these `.comp` the stem / strided
-    downsamples / GAP / dense (each its own `FloatClose` instance). -/
+/-- **The `[3,4,6,3]` iterates.** Given a dim-preserving block that is `FloatClose A A`
+    (magnitude bound `A` taken as a hypothesis), its 3-, 4-, 6- and 3-fold iterates are
+    `FloatClose A A` — `floatClose_iterate` at ResNet-34's per-stage block counts, for one
+    block `blk` at one width `m`. No whole-net ResNet-34 float bound exists in the repo. -/
 theorem floatClose_r34_stages {m : Nat} {A : ℝ} {blk blkF : Vec m → Vec m} {L : ℝ → ℝ}
     (hblk : FloatClose A A blk blkF L) :
     FloatClose A A (blk^[3]) (blkF^[3]) (L^[3]) ∧

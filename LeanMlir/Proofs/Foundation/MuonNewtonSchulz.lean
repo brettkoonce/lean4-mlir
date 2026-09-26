@@ -3,27 +3,31 @@ import Mathlib.Logic.Function.Iterate
 import Mathlib.Topology.Order.MonotoneConvergence
 import Mathlib.Dynamics.FixedPoints.Topology
 
-/-! # Newton–Schulz convergence, P1: the iteration is a *scalar* map in disguise
+/-! # Newton–Schulz iteration for the polar factor
 
-The capstone of the Muon-geometry ladder (`planning/archive/muon_ns_convergence.md`,
-`planning/archive/muon_geometry.md`, [`LeanMlir/Proofs/Foundation/MuonGeometry.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/LeanMlir/Proofs/Foundation/MuonGeometry.lean)). L1–L6 proved that the polar factor
-`UVᵀ` is the *right object* — operator-norm steepest descent (L3, von Neumann), the nuclear norm's
-argmax, Shampoo's single step (L5), the nearest orthogonal matrix to `G` (L6). **What remains is that
-Muon's matmul iteration computes it:**
-`X ↦ aX + b(XXᵀ)X + c(XXᵀ)²X` converges to `UVᵀ`.
+`MuonGeometry` proves the polar factor `UVᵀ` is the operator-norm steepest-ascent direction, the
+nuclear norm's argmax, Shampoo's single step, and the nearest orthogonal matrix to `G`. This file
+asks when the matmul iteration `X ↦ aX + b(XXᵀ)X + c(XXᵀ)²X` (`nsStep`) converges to it:
 
-**This file is P1 — the spectral-step lemma, the bridge that turns the whole problem scalar.** The one
-idea: a Newton–Schulz step never touches the singular *directions*, only the singular *values*. With
-`X = U Σ Vᵀ` (`U,V` orthonormal, `Σ = diagonal σ`), since `XXᵀ = U Σ² Uᵀ`,
-```
-(XXᵀ)X = U Σ³ Vᵀ,   (XXᵀ)²X = U Σ⁵ Vᵀ   ⟹   nsStep a b c X = U (diagonal (φ ∘ σ)) Vᵀ,
-```
-where `φ(t) = a t + b t³ + c t⁵` (`nsScalar`) is applied per singular value, with `U,V` carried along
-unchanged (`nsStep_spectral`). Iterating, `nsStep^[k] X = U (diagonal (φ^[k] ∘ σ)) Vᵀ`
-(`nsStep_iterate_spectral`): **matrix convergence to `UVᵀ` reduces to scalar convergence `φ^[k](σᵢ) → 1`
-per singular value.** This is the same `U Σ Vᵀ ↦ U f(Σ) Vᵀ` motif as L5's `conj_diag_pow`, now for the
-polynomial `φ`. The downstream scalar analysis (P2) and the matrix-continuity assembly (P3) build on
-these two lemmas. All `propext / Classical.choice / Quot.sound`-clean. -/
+* **Spectral step** (`nsStep_spectral`, `nsStep_iterate_spectral`). A Newton–Schulz step never
+  touches the singular directions, only the singular values. With `X = U Σ Vᵀ` (`U,V`
+  orthonormal, `Σ = diagonal σ`), since `XXᵀ = U Σ² Uᵀ`,
+  ```
+  (XXᵀ)X = U Σ³ Vᵀ,   (XXᵀ)²X = U Σ⁵ Vᵀ   ⟹   nsStep a b c X = U (diagonal (φ ∘ σ)) Vᵀ,
+  ```
+  where `φ(t) = a t + b t³ + c t⁵` (`nsScalar`). So matrix convergence to `UVᵀ` reduces to scalar
+  convergence `φ^[k](σᵢ) → 1` per singular value.
+* **Scalar convergence** (`scalar_iterate_tendsto_one`), instantiated for the classic cubic
+  `(3/2, −1/2, 0)` (`gCubic_iterate_tendsto_one`) and Higham's quintic `(15/8, −5/4, 3/8)`
+  (`q5Scalar_iterate_tendsto_one`).
+* **The lift to matrices** (`nsStep_iterate_tendsto_polar`, and its cubic and quintic instances):
+  for pre-normalized full-rank `G` with every `σᵢ ∈ (0,1]`, the iterate converges to `UVᵀ`
+  whenever the scalar map drives `(0,1]` to `1`.
+* **Muon's tuned quintic** `(3.4445, −4.7750, 2.0315)` does not satisfy that hypothesis
+  (`qScalar_not_le_one`, `qScalar_one_lt_one`); what is proved for it is a five-step band bound
+  at `σ = 1/2` (`qScalar_iterate_band_half`).
+
+All `propext / Classical.choice / Quot.sound`-clean. -/
 
 namespace Proofs.MuonNewtonSchulz
 
@@ -44,13 +48,13 @@ def nsStep (a b c : ℝ) (X : Matrix (Fin n) (Fin n) ℝ) : Matrix (Fin n) (Fin 
     the matrix iteration's convergence is exactly this scalar iteration's (`φ^[k](σᵢ) → 1`). -/
 def nsScalar (a b c t : ℝ) : ℝ := a * t + b * t ^ 3 + c * t ^ 5
 
-/-- **P1 — the spectral-step lemma: a Newton–Schulz step is `nsScalar` applied per singular value.**
+/-- **The spectral-step lemma: a Newton–Schulz step is `nsScalar` applied per singular value.**
     For `X = U (diagonal σ) Vᵀ` with `U,V` orthonormal (`UᵀU = VᵀV = 1`),
     `nsStep a b c X = U (diagonal (fun i ↦ nsScalar a b c (σ i))) Vᵀ`. The singular vectors `U,V` are
     carried through untouched; only the singular values move, by the scalar polynomial `φ`. This is
     the **only matrix-level work** in the convergence proof — everything downstream is scalar.
 
-    The proof is pure `UᵀU = 1` / `VᵀV = 1` collapse algebra (the `conj_diag_pow` motif of L5): the
+    The proof is pure `UᵀU = 1` / `VᵀV = 1` collapse algebra (the `MuonGeometry.conj_diag_pow` motif): the
     Gram matrix `XXᵀ = U (diagonal σ²) Uᵀ`, and each higher monomial `(XXᵀ)ᵏX` collapses to
     `U (diagonal σ^{2k+1}) Vᵀ` because the inner `UᵀU` contracts to the identity; the three scalar
     coefficients `a, b, c` ride through `•` onto the diagonal and sum pointwise to `φ`. -/
@@ -106,12 +110,12 @@ theorem nsStep_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ) (σ : F
       show (fun i => a * σ i + b * (σ i * σ i * σ i) + c * (σ i * σ i * (σ i * σ i * σ i)))
         = (fun i => nsScalar a b c (σ i)) from funext fun i => by simp only [nsScalar]; ring]
 
-/-- **P1, iterated: `k` Newton–Schulz steps act as `nsScalar^[k]` per singular value.**
+/-- **The spectral-step lemma, iterated: `k` Newton–Schulz steps act as `nsScalar^[k]` per singular value.**
     `(nsStep a b c)^[k] (U (diagonal σ) Vᵀ) = U (diagonal (fun i ↦ (nsScalar a b c)^[k] (σ i))) Vᵀ`.
     A one-line induction reusing `nsStep_spectral` at each step: the singular vectors `U,V` are
     invariant under the whole orbit, so **convergence of the matrix iteration `nsStep^[k] X → UVᵀ`
     reduces to the scalar fixed-point convergence `(nsScalar a b c)^[k] (σ i) → 1`** for each singular
-    value — the entry point for P2 (the cubic monotone argument) and P3 (the matrix-continuity glue). -/
+    value (`scalar_iterate_tendsto_one`, then `nsStep_iterate_tendsto_polar`). -/
 theorem nsStep_iterate_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ) (σ : Fin n → ℝ)
     (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (k : ℕ) :
     (nsStep a b c)^[k] (U * Matrix.diagonal σ * Vᵀ)
@@ -137,7 +141,7 @@ theorem nsStep_iterate_spectral (a b c : ℝ) (U V : Matrix (Fin n) (Fin n) ℝ)
     continuity makes `L` a fixed point (`isFixedPt_of_tendsto_iterate`), and `hfix` pins `L = 1`.
 
     Both the cubic (`gCubic_iterate_tendsto_one`) and the *principled* convergent quintic
-    (`q5Scalar_iterate_tendsto_one`) instantiate this. Muon's *tuned* quintic (P4) fails `g t ≤ 1` —
+    (`q5Scalar_iterate_tendsto_one`) instantiate this. Muon's *tuned* quintic (`qScalar`) fails `g t ≤ 1` —
     that single broken hypothesis is exactly why it bands instead of converging. -/
 theorem scalar_iterate_tendsto_one (g : ℝ → ℝ) (hcont : Continuous g)
     (hge : ∀ t : ℝ, 0 ≤ t → t ≤ 1 → t ≤ g t) (hle : ∀ t : ℝ, 0 ≤ t → t ≤ 1 → g t ≤ 1)
@@ -179,7 +183,7 @@ noncomputable def gCubic (t : ℝ) : ℝ := (3 * t - t ^ 3) / 2
 theorem gCubic_eq_nsScalar : gCubic = nsScalar (3 / 2) (-1 / 2) 0 := by
   funext t; simp only [gCubic, nsScalar]; ring
 
-/-- **P2 (cubic) — `gCubic^[k](t₀) → 1` on `(0,1]`** (second-order convergent). Instantiates the
+/-- **`gCubic^[k](t₀) → 1` on `(0,1]`** (second-order convergent). Instantiates the
     `scalar_iterate_tendsto_one` engine: increasing toward `1` on `[0,1]`
     (`g t − t = t(1−t)(1+t)/2 ≥ 0`, `1 − g t = (1−t)²(2+t)/2 ≥ 0`) with fixed points
     `g t = t ⟺ t(1−t²)=0 ⟺ t ∈ {0,±1}` — only `1` lies in `(0,1]`. -/
@@ -204,14 +208,14 @@ theorem gCubic_iterate_tendsto_one {t₀ : ℝ} (h0 : 0 < t₀) (h1 : t₀ ≤ 1
 /-- **The principled convergent quintic** `q₅(t) = (15t − 10t³ + 3t⁵)/8` — Higham's order-5
     Newton–Schulz iteration for the matrix sign / polar function, `nsScalar (15/8) (−5/4) (3/8)`. This
     is the answer to "does a *quintic* converge?": **yes — if you pick these coefficients.** Unlike
-    Muon's tuned quintic (P4), here `q₅(1) = 1` is a fixed point and the iteration converges — in fact
+    Muon's tuned quintic (`qScalar`), here `q₅(1) = 1` is a fixed point and the iteration converges — in fact
     *faster* than the cubic (third-order: `1 − q₅(t) = (1−t)³(3t²+9t+8)/8`). Convergence is a property
     of the chosen polynomial, not of its degree. -/
 noncomputable def q5Scalar (t : ℝ) : ℝ := nsScalar (15 / 8) (-5 / 4) (3 / 8) t
 
 theorem q5Scalar_eq_nsScalar : q5Scalar = nsScalar (15 / 8) (-5 / 4) (3 / 8) := rfl
 
-/-- **P2 (principled quintic) — `q5Scalar^[k](t₀) → 1` on `(0,1]`** (third-order convergent). The same
+/-- **`q5Scalar^[k](t₀) → 1` on `(0,1]`** (third-order convergent). The same
     `scalar_iterate_tendsto_one` engine as the cubic: `q₅` is increasing (`q₅′(t) = 15(1−t²)²/8 ≥ 0`),
     `q₅ t − t = t(7−3t²)(1−t²)/8 ≥ 0` and `1 − q₅ t = (1−t)³(3t²+9t+8)/8 ≥ 0` on `[0,1]`, and its only
     fixed point in `(0,1]` is `1` (`q₅ L = L ⟺ L(7−3L²)(1−L)(1+L)=0`, and `7−3L² > 0` there). -/
@@ -240,20 +244,20 @@ theorem q5Scalar_iterate_tendsto_one {t₀ : ℝ} (h0 : 0 < t₀) (h1 : t₀ ≤
 -- § P3 — assemble: a *convergent* Newton–Schulz matrix iterate lands on the polar factor `UVᵀ`
 -- ════════════════════════════════════════════════════════════════
 
-/-- **P3 — the matrix glue: any convergent scalar Newton–Schulz map lifts to `nsStep^[k] G → UVᵀ`.**
+/-- **Any convergent scalar Newton–Schulz map lifts to `nsStep^[k] G → UVᵀ`.**
     For a pre-normalized full-rank `G = U (diagonal σ) Vᵀ` with every singular value `σᵢ ∈ (0,1]` (the
     implementation's `G / ‖G‖` step), if the scalar map `g = nsScalar a b c` drives `(0,1] → 1`
     (`hconv`), then the matmul iterate `(nsStep a b c)^[k] G` converges to the polar factor `U Vᵀ` —
-    exactly the object L3–L6 proved optimal (operator-norm steepest descent / nuclear-norm argmax /
-    Shampoo's step / nearest orthogonal matrix). **This closes the loop: the thing the hardware
-    computes is the thing the theory says is optimal.**
-
-    The §0 spectral reduction cashed out: `nsStep_iterate_spectral` (P1) makes the matrix iterate
-    `U (diagonal (g^[k] ∘ σ)) Vᵀ`; each diagonal entry `g^[k](σᵢ) → 1` by `hconv`; pointwise
-    convergence in `Fin n → ℝ` (`tendsto_pi_nhds`) plus continuity of `d ↦ U (diagonal d) Vᵀ`
-    (`Continuous.matrix_diagonal`/`Continuous.matrix_mul`) pushes the limit through to
-    `U (diagonal 1) Vᵀ = U Vᵀ` (`Matrix.diagonal_one`). The rank hypothesis `σᵢ > 0` is what makes the
-    per-value limit `1`; `σᵢ = 0` would stay `0`, giving the partial isometry `U (diagonal 1_{σ>0}) Vᵀ`. -/
+    the object `MuonGeometry.muon_polar_steepest` proves is the operator-norm steepest-ascent
+    direction. `hconv` is proved here for the classic cubic and Higham's quintic
+    (`nsStep_cubic_iterate_tendsto_polar`, `nsStep_q5_iterate_tendsto_polar`), not for Muon's
+    tuned quintic, which violates it (`qScalar_not_le_one`) and only bands
+    (`qScalar_iterate_band_half`). The rank hypothesis `σᵢ > 0` is what makes the per-value limit
+    `1`; `σᵢ = 0` would stay `0`. -/
+-- Proof: `nsStep_iterate_spectral` makes the matrix iterate `U (diagonal (g^[k] ∘ σ)) Vᵀ`; each
+-- diagonal entry `g^[k](σᵢ) → 1` by `hconv`; pointwise convergence in `Fin n → ℝ`
+-- (`tendsto_pi_nhds`) plus continuity of `d ↦ U (diagonal d) Vᵀ` pushes the limit through to
+-- `U (diagonal 1) Vᵀ = U Vᵀ` (`Matrix.diagonal_one`).
 theorem nsStep_iterate_tendsto_polar (a b c : ℝ) (g : ℝ → ℝ) (hbridge : g = nsScalar a b c)
     (hconv : ∀ t₀ : ℝ, 0 < t₀ → t₀ ≤ 1 → Filter.Tendsto (fun k => g^[k] t₀) Filter.atTop (nhds 1))
     (U V : Matrix (Fin n) (Fin n) ℝ) (σ : Fin n → ℝ)
@@ -277,8 +281,9 @@ theorem nsStep_iterate_tendsto_polar (a b c : ℝ) (g : ℝ → ℝ) (hbridge : 
     rw [Matrix.diagonal_one, Matrix.mul_one]]
   exact hcomp
 
-/-- **The cubic matmul iteration converges to the polar factor `UVᵀ`** — P2 (cubic) through the P3
-    glue. The classic `(3/2, −1/2, 0)` Newton–Schulz iteration provably computes Muon's update. -/
+/-- **The cubic matmul iteration converges to the polar factor `UVᵀ`** — `gCubic_iterate_tendsto_one`
+    through `nsStep_iterate_tendsto_polar`. The classic `(3/2, −1/2, 0)` Newton–Schulz iteration
+    computes `UVᵀ` in the limit. -/
 theorem nsStep_cubic_iterate_tendsto_polar
     (U V : Matrix (Fin n) (Fin n) ℝ) (σ : Fin n → ℝ)
     (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hσ : ∀ i, 0 < σ i ∧ σ i ≤ 1) :
@@ -289,7 +294,8 @@ theorem nsStep_cubic_iterate_tendsto_polar
 
 /-- **The principled convergent quintic's matmul iteration also lands on `UVᵀ`** — same polar factor,
     one degree up, *faster* (third-order). Convergence is the coefficient choice, not the degree:
-    `(15/8, −5/4, 3/8)` converges (this theorem), Muon's tuned `(3.4445, −4.7750, 2.0315)` bands (P4). -/
+    `(15/8, −5/4, 3/8)` converges (this theorem), Muon's tuned `(3.4445, −4.7750, 2.0315)` bands
+    (`qScalar_iterate_band_half`). -/
 theorem nsStep_q5_iterate_tendsto_polar
     (U V : Matrix (Fin n) (Fin n) ℝ) (σ : Fin n → ℝ)
     (hU : Uᵀ * U = 1) (hV : Vᵀ * V = 1) (hσ : ∀ i, 0 < σ i ∧ σ i ≤ 1) :
@@ -303,7 +309,7 @@ theorem nsStep_q5_iterate_tendsto_polar
 -- ════════════════════════════════════════════════════════════════
 
 /-- **Muon's actual tuned Newton–Schulz quintic** `φ(t) = 3.4445 t − 4.7750 t³ + 2.0315 t⁵`
-    (Jordan 2024 — `planning/archive/muon.md`). This is *not* a statement about quintics in general — the
+    (Jordan 2024). This is *not* a statement about quintics in general — the
     *principled* quintic `q5Scalar` `(15/8, −5/4, 3/8)` converges (`q5Scalar_iterate_tendsto_one`,
     faster than the cubic even). Convergence is the **coefficient choice**: Jordan tuned *these*
     coefficients for *speed to a band near 1 in ~5 steps*, deliberately giving up asymptotic
@@ -326,19 +332,19 @@ theorem qScalar_half_gt_one : 1 < qScalar (1 / 2) := by
 
 /-- **The cubic's key bound fails for the tuned quintic** — `qScalar` is *not* `≤ 1` on `[0,1]` (it
     overshoots at `1/2`). This is exactly the hypothesis `g(t) ≤ 1` that powered the monotone-bounded
-    convergence of `gCubic_iterate_tendsto_one` (P2); its failure is *why* the clean `→ 1` proof does
+    convergence of `gCubic_iterate_tendsto_one`; its failure is *why* the clean `→ 1` proof does
     not transfer to Muon's quintic, and why claiming `qScalar^[k] → 1` would be an overclaim. -/
 theorem qScalar_not_le_one : ¬ ∀ t : ℝ, 0 ≤ t → t ≤ 1 → qScalar t ≤ 1 := by
   intro h
   linarith [h (1 / 2) (by norm_num) (by norm_num), qScalar_half_gt_one]
 
-/-- **The honest *positive* statement: a finite-5-step band bound** (the form P4 actually supports).
+/-- **A finite-5-step band bound for the tuned quintic.**
     Five steps of Muon's tuned quintic from `σ = 1/2` land within `0.3` of `1`:
     `|qScalar^[5] (1/2) − 1| ≤ 3/10` (the orbit `0.5 → 1.19 → 0.90 → 0.83 → 0.94 → 0.77` oscillates in a
     band around `1`, never reaching it). This matches the implementation's fixed-5-step, "rough is
-    fine — we recompute next optimizer step anyway" design (`planning/archive/muon.md`): not convergence, a
-    *band*. The universal interval version `∀ σ ∈ [σ_min, 1], |φ^[5](σ) − 1| ≤ δ` is a degree-5⁵
-    polynomial bound over an interval (genuine interval arithmetic) and is left open by hand. -/
+    fine — we recompute next optimizer step anyway" design: not convergence, a *band*. Stated at the
+    single point `σ = 1/2`; the interval version `∀ σ ∈ [σ_min, 1], |φ^[5](σ) − 1| ≤ δ` (a degree-5⁵
+    polynomial bound over an interval) is not proved. -/
 theorem qScalar_iterate_band_half : |qScalar^[5] (1 / 2) - 1| ≤ 3 / 10 := by
   simp only [qScalar, Function.iterate_succ, Function.iterate_zero, Function.comp_apply, id_eq,
     nsScalar]

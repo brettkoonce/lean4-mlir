@@ -15,23 +15,23 @@ import LeanMlir.Proofs.Nets.ResNet.ResNet34FullB
 import LeanMlir.Proofs.Codegen.StableHLO
 import LeanMlir.Proofs.Nets.Small.ChapterGraphTies
 
-/-! # Spec → math (the verification tie), Rung 1: the linear classifier
+/-! # Spec → math: each committed `VerifiedNetSpec` denotes its proven forward
 
 The shape `#guard` beside `resnet34Verified` in `VerifiedNetsCore.lean` only checks the
-*parameter interface*
-(typechecking). This file is the first rung of connecting a readable `VerifiedNetSpec`
-to the actual **math** — the proven VJP — on the simplest net, the Chapter-1 linear
-classifier (`dense 784→10`).
+*parameter interface* (typechecking). This file ties each committed spec's layer list —
+the linear classifier, MLP, MNIST CNN, CIFAR CNN, MobileNetV2, ResNet-34, EfficientNet-B0,
+ConvNeXt-T and ViT-Tiny — to the math the proofs are about. Per net, up to three pieces:
 
-The pattern (extends to MLP → conv nets, each rigid/per-net):
-  1. `denote` maps the spec's layers to the Mathlib math function the proofs are about;
-  2. a `rfl` lemma ties the spec's denotation to that named function (`mnistLinear`);
-  3. the whole-model VJP theorem is stated about *the spec's denotation* and discharged
-     by the audited op-level VJP (`denseHasVJP`).
-
-If the spec's `layers` drifts from `[.dense 784 10]`, step 2/3 stop reducing and the
-proofs fail to typecheck — so the readable architecture is provably the verified one,
-at the math level, not just the shape level.
+  1. a denotation `denote*` mapping the spec's layer list to the proven forward function, and
+     a `*_denote_eq` lemma equating the two by `rfl` (drift-sensitive: any other layer list
+     denotes `0`, so editing the spec's `layers` breaks the `rfl`);
+  2. a VJP witness for that denotation (`*VerifiedHasVJP`). For the linear classifier it is
+     `denseHasVJP`, for ViT-Tiny `vitForwardKVHasVJP`, and at a smooth input the MLP has the
+     folded `mlpVerifiedHasVJPAt`. The others (MLP global, CNN, CIFAR, MobileNetV2,
+     ResNet-34, EfficientNet-B0, ConvNeXt-T) are `HasVJP.canonical`, which exists for every
+     function and adds no content; each docstring names the net's real witness;
+  3. a `*_fwd_faithful` lemma composing the forward graph's faithfulness theorem with the
+     tie, so the generated forward MLIR denotes the spec's function.
 -/
 
 open Proofs
@@ -55,9 +55,8 @@ noncomputable def denoteLinear (layers : List VLayer) (W : Mat 784 10) (b : Vec 
 theorem linearVerified_denote_eq (W : Mat 784 10) (b : Vec 10) :
     denoteLinear linearVerified.layers W b = mnistLinear W b := rfl
 
-/-- **The spec carries the math.** The linear spec's denotation has the proven VJP —
-    discharged by the audited `denseHasVJP`. This is the whole-model verification
-    stated about the *readable layer list*, not a hand-written function. -/
+/-- **A VJP for the linear spec's denotation**: `denseHasVJP`, the hand-written dense
+    backward with its correctness proof, at the spec's denotation. -/
 noncomputable def linearVerifiedHasVJP (W : Mat 784 10) (b : Vec 10) :
     HasVJP (denoteLinear linearVerified.layers W b) :=
   denseHasVJP W b
@@ -70,7 +69,7 @@ theorem linearVerifiedHasVJP_correct (W : Mat 784 10) (b : Vec 10)
       = ∑ j : Fin 10, pdiv (denoteLinear linearVerified.layers W b) x i j * dy j :=
   (linearVerifiedHasVJP W b).correct x dy i
 
-/-! ## Rung 2: the MLP — the first genuine `vjpComp` fold
+/-! ## The MLP — a `vjpCompAt` fold
 
 The linear model was the degenerate case (one layer, no fold). The MLP's denotation is a
 *chain* — `dense ∘ relu ∘ dense ∘ relu ∘ dense` (`mlpForward`) — and its VJP is built by
@@ -92,18 +91,17 @@ theorem mlpVerified_denote_eq (W₀ : Mat 784 512) (b₀ : Vec 512)
     (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) :
     denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂ = mlpForward W₀ b₀ W₁ b₁ W₂ b₂ := rfl
 
-/-- **The spec carries the math (canonical witness).** The MLP spec's denotation has a
-    VJP — the global `pdiv`-derived witness (`mlpHasVJP`; relu uses the framework
-    subgradient convention at the kinks, per `Proofs/README.md`). -/
+/-- **The canonical witness at the MLP spec's denotation.** `mlpHasVJP` is
+    `HasVJP.canonical`, which exists for every function and adds no content; the folded VJP
+    is `mlpVerifiedHasVJPAt`. -/
 noncomputable def mlpVerifiedHasVJP (W₀ : Mat 784 512) (b₀ : Vec 512)
     (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) :
     HasVJP (denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂) :=
   mlpHasVJP W₀ b₀ W₁ b₁ W₂ b₂
 
-/-- **The spec carries the math (the real fold).** At a smooth input — the two ReLU
-    pre-activations avoid zero — the MLP spec's denotation has a VJP built by *folding*
-    `vjpCompAt` through `dense → relu → dense → relu → dense` (no `rfl` escape at the
-    kinks). This is the chain rule applied to the spec, the step linear couldn't show. -/
+/-- **The folded VJP at a smooth input.** When the two ReLU pre-activations avoid zero
+    (`h0`, `h1`), the MLP spec's denotation has a VJP built by folding `vjpCompAt` through
+    `dense → relu → dense → relu → dense` (`mlpHasVJPAt`). -/
 noncomputable def mlpVerifiedHasVJPAt (W₀ : Mat 784 512) (b₀ : Vec 512)
     (W₁ : Mat 512 512) (b₁ : Vec 512) (W₂ : Mat 512 10) (b₂ : Vec 10) (x : Vec 784)
     (h0 : ∀ k, dense W₀ b₀ x k ≠ 0)
@@ -119,14 +117,14 @@ theorem mlpVerifiedHasVJP_correct (W₀ : Mat 784 512) (b₀ : Vec 512)
       = ∑ j : Fin 10, pdiv (denoteMLP mlpVerified.layers W₀ b₀ W₁ b₁ W₂ b₂) x i j * dy j :=
   (mlpVerifiedHasVJP W₀ b₀ W₁ b₁ W₂ b₂).correct x dy i
 
-/-! ## Rung 3: the CNN — the fold now runs through conv + maxpool
+/-! ## The MNIST CNN
 
 The CNN's denotation is `mnistCnnNoBnForward` — a flat `Vec 784 → Vec 10` chain
 `flatConv → relu → flatConv → relu → maxPoolFlat → dense → relu → dense → relu → dense`.
 The honest chain-rule fold (via `vjpCompAt` through conv/maxpool/dense) is the audited
-`mnistCnnNoBnHasVJPAt`, conditional on the four ReLU kinks + the maxpool being smooth at
-the input. Here we headline the unconditional canonical witness (`mlpHasVJP` style); the
-spec is exactly the subject of that conditional fold via `cnnVerified_denote_eq`. -/
+`mnistCnnNoBnHasVJPAt`, conditional on its ReLU and max-pool smoothness hypotheses at the
+input. The witness below is the canonical one; the spec is the subject of that conditional
+fold via `cnnVerified_denote_eq`. -/
 
 /-- Math denotation of the CNN spec: the 11-layer list denotes to `mnistCnnNoBnForward`
     (`c=32`, `h=w=14`, the Chapter-3 MNIST CNN). -/
@@ -148,15 +146,15 @@ theorem cnnVerified_denote_eq (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
     denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅
       = mnistCnnNoBnForward (h := 14) (w := 14) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ := rfl
 
-/-- **The spec carries the math.** The CNN spec's denotation (conv→relu→conv→relu→maxpool
-    →dense→…) has a VJP — the canonical `pdiv`-derived witness. The conditional chain-rule
-    fold through conv/maxpool is the audited `mnistCnnNoBnHasVJPAt`. -/
+/-- **The canonical witness at the CNN spec's denotation** (conv→relu→conv→relu→maxpool
+    →dense→…). `HasVJP.canonical` exists for every function and adds no content; the
+    conditional chain-rule fold through conv/maxpool is `mnistCnnNoBnHasVJPAt`. -/
 noncomputable def cnnVerifiedHasVJP (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
     (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32) (W₃ : Mat 6272 512) (b₃ : Vec 512)
     (W₄ : Mat 512 512) (b₄ : Vec 512) (W₅ : Mat 512 10) (b₅ : Vec 10) :
     HasVJP (denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅) := HasVJP.canonical _
 
-/-! ## Rung E (linear): the spec ↔ the *generated MLIR*
+/-! ## Linear: the spec ↔ the generated MLIR
 
 The ties above connect the spec to the **math** (`denote` = the proven forward, which has
 the proven VJP). This connects the spec to the **StableHLO the trainer actually compiles
@@ -187,7 +185,7 @@ theorem linearVerified_lossCot_isCEgrad (W : Mat 784 10) (b : Vec 10) (x : Vec 7
              (denoteLinear linearVerified.layers W b x) j 0 := by
   exact lossCotGraph_isCEgrad W b x label j
 
-/-! ## Rung E (MLP): the spec ↔ the generated MLIR — both forward *and* backward
+/-! ## MLP: the spec ↔ the generated MLIR — both forward and backward
 
 The MLP has faithfulness for the whole forward graph (`mlpFwdGraph_faithful`, the graph
 `mlp_fwd.mlir` prints) AND for a whole backward input-VJP graph (`mlpBackGraph_faithful`).
@@ -219,7 +217,7 @@ theorem mlpVerified_back_faithful (W₀ : Mat 784 512) (b₀ : Vec 512)
       = (mlpVerifiedHasVJPAt W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1).backward dy := by
   exact mlpBackGraph_faithful W₀ b₀ W₁ b₁ W₂ b₂ x h0 h1 dy
 
-/-! ## Rung E (CNN): the spec ↔ the generated MLIR (forward)
+/-! ## MNIST CNN: the spec ↔ the generated MLIR (forward)
 
 The generated CNN forward graph (`flatConv→relu→flatConv→relu→maxPoolFlat→dense→relu→
 dense→relu→dense`) denotes the spec's forward. The backward graph faithfulness exists too
@@ -238,12 +236,12 @@ theorem cnnVerified_fwd_faithful (W₁ : Kernel4 32 1 3 3) (b₁ : Vec 32)
       = denoteCNN cnnVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x := by
   exact cnnFwdGraph_faithful (h := 14) (w := 14) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ x
 
-/-! ## Rung 4 + E (CIFAR): completing the ch5 ladder
+/-! ## The CIFAR CNN (no BN)
 
 The CIFAR-10 net (ic=3, c1=32, c2=64, h=w=8 — spatial 32→16→8) gets the spec→math
-denotation (= `cifarCnnForward` by `rfl`), the canonical witness VJP, and the forward
+denotation (= `cifarCnnForward` by `rfl`), the canonical witness, and the forward
 spec→generated-MLIR tie (`cifarFwdGraph_faithful`). The conditional fold is
-`cifarCnnHasVJPAt` (six ReLU kinks + two maxpools). -/
+`cifarCnnHasVJPAt` (ReLU and max-pool smoothness hypotheses at the input). -/
 
 noncomputable def denoteCifar (layers : List VLayer)
     (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32)
@@ -265,7 +263,8 @@ theorem cifarVerified_denote_eq
     denoteCifar cifarVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇
       = cifarCnnForward (h := 8) (w := 8) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ := rfl
 
-/-- **The (no-BN) CIFAR spec carries the math.** -/
+/-- **The canonical witness at the (no-BN) CIFAR spec's denotation.** `HasVJP.canonical`
+    adds no content; the conditional fold is `cifarCnnHasVJPAt`. -/
 noncomputable def cifarVerifiedHasVJP
     (W₁ : Kernel4 32 3 3 3) (b₁ : Vec 32) (W₂ : Kernel4 32 32 3 3) (b₂ : Vec 32)
     (W₃ : Kernel4 64 32 3 3) (b₃ : Vec 64) (W₄ : Kernel4 64 64 3 3) (b₄ : Vec 64)
@@ -285,17 +284,15 @@ theorem cifarVerified_fwd_faithful
       = denoteCifar cifarVerified.layers W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x := by
   exact cifarFwdGraph_faithful (h := 8) (w := 8) W₁ b₁ W₂ b₂ W₃ b₃ W₄ b₄ W₅ b₅ W₆ b₆ W₇ b₇ x
 
-/-! ## Rung B/C/E (ch7 MobileNetV2, FULL, batched): the committed spec ↔ the batch-BN net
+/-! ## MobileNetV2 (full, batched): the committed spec ↔ the batch-BN net
 
 `denoteMobilenetB` maps `mobilenetv2Verified.layers` — the committed 21-entry full-paper
 `[t,c,n,s]` list the trainer runs (stem-s2 3→32 → 17 bottlenecks → 1×1 head 320→1280 → GAP →
 dense 1280→10) — to `mobilenetv2ForwardBFull` (`MobileNetV2FullB.lean`: batch BN throughout,
 the t=1 no-expand first block, 4 stride-2 depthwise downsamples 224→7), at every batch size.
 Weights ride in the `MNV2BWeights` bundle, so the tie stays readable. The `rfl` is
-drift-sensitive: any `[t,c,n,s]` edit to the spec stops the match reducing — the tripwire the
-6→17-block promotion once fired while the per-example twin of this section was orphaned;
-certs.yml re-elaborates it on every spec push. (That per-example twin, at the forward of the
-retired SGD artifact, was retired on 2026-09-19.) -/
+drift-sensitive: any `[t,c,n,s]` edit to the spec stops the match reducing; certs.yml
+re-elaborates it on every spec push. -/
 
 -- ── MobileNetV2 (FULL, BATCHED): the same 21-entry spec ↔ mobilenetv2ForwardBFull ──
 
@@ -324,13 +321,14 @@ noncomputable def denoteMobilenetB (N : Nat) (layers : List VLayer) (w : MNV2BWe
 theorem mobilenetv2VerifiedB_denote_eq (N : Nat) (w : MNV2BWeights 10) :
     denoteMobilenetB N mobilenetv2Verified.layers w = mobilenetv2ForwardBFull N w := rfl
 
-/-- **The committed spec carries the math at batch BN** — canonical `pdiv` witness (relu6 is
-    kinked; the pointwise whole-net VJP is `mobilenetv2ForwardBFullHasVJPAt_correct`). -/
+/-- **The canonical witness at the committed MobileNetV2 spec, batch BN.** `HasVJP.canonical`
+    adds no content (relu6 is kinked); the pointwise whole-net VJP is
+    `mobilenetv2ForwardBFullHasVJPAt_correct`. -/
 noncomputable def mobilenetv2VerifiedBHasVJP (N : Nat) (w : MNV2BWeights 10) :
     HasVJP (denoteMobilenetB N mobilenetv2Verified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
-/-- **Rung E at the committed spec, batched.** The typed graph the shipped MobileNetV2
+/-- **Forward graph ↔ the committed spec, batched.** The typed graph the shipped MobileNetV2
     artifacts are printed from denotes the committed spec's function at batch BN:
     `mobilenetv2FwdGraphBFull_faithful` composed with the tie. -/
 theorem mobilenetv2VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : MNV2BWeights 10)
@@ -341,26 +339,25 @@ theorem mobilenetv2VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : MNV2B
     (congrFun (mobilenetv2VerifiedB_denote_eq N w).symm (den e))
 
 
-/-! ## Rung B/C/E (FULL, unified weight bundles): r34 / enet / convnext / vit
+/-! ## ResNet-34, EfficientNet-B0, ConvNeXt-T, ViT-Tiny (full, weight bundles)
 
 The mnv2 full-paper pattern applied to the remaining imagenette nets: each committed
 spec's ENTIRE layer list (literal dims, drift-sensitive) denotes the full proven
 forward, with weights riding a structure bundle so the ties stay readable. Existing
 bundles are reused where the Full module already has one (`B0Weights`,
 `CnxTWeightsCh`, `R34BWeights`); vit gets its bundle here (`ViTTinyWeights`, SpecVJP-local so
-no proof module's signature changes). Rung E composes each net's
-full graph-faithfulness apex with the tie (vit's is `vitFwdGraphKMHV_faithful`,
-ViTDepthK §3 — the depth-`k` multi-head vector-LN graph). Rung C is the canonical
-witness except vit: all-smooth, so vit's rung C is the REAL whole-net VJP
-`vitForwardKVHasVJP` (only `0 < ε`) at the committed spec. -/
+no proof module's signature changes). Each `*_fwd_faithful` composes the net's
+full graph-faithfulness theorem with the tie (vit's is `vitFwdGraphKMHV_faithful`, the
+depth-`k` multi-head vector-LN graph of `ViTDepthK`). The VJP witness is the canonical
+one except for ViT: all-smooth, so it is the whole-net VJP `vitForwardKVHasVJP`
+(only `0 < ε`) at the committed spec. -/
 
 -- ── ResNet-34 (FULL, batched): the committed 8-entry spec ↔ resnet34ForwardBFull ──
 
 /-- Math denotation of the committed ResNet-34 spec at batch BN: the 8-entry stage-level list
     denotes to `resnet34ForwardBFull` — the batch-statistics net every shipped ResNet-34
     artifact runs (`ResNet34FullB.lean`), at every batch size `N`. Any other list is not the net
-    (`0`), so the tie below is drift-sensitive. (The per-example rung, at the forward of the
-    retired SGD artifact, was retired with it on 2026-09-19.) -/
+    (`0`), so the tie below is drift-sensitive. -/
 noncomputable def denoteR34FullB (N : Nat) (layers : List VLayer) (w : R34BWeights 10) :
     Vec (N * (3 * 224 * 224)) → Vec (N * 10) :=
   match layers with
@@ -375,13 +372,14 @@ noncomputable def denoteR34FullB (N : Nat) (layers : List VLayer) (w : R34BWeigh
 theorem resnet34VerifiedB_denote_eq (N : Nat) (w : R34BWeights 10) :
     denoteR34FullB N resnet34Verified.layers w = resnet34ForwardBFull N w := rfl
 
-/-- **The committed spec carries the math at batch BN** — canonical `pdiv` witness (relu is
-    kinked; the pointwise whole-net VJP is `resnet34ForwardBFullHasVJPAt`). -/
+/-- **The canonical witness at the committed ResNet-34 spec, batch BN.** `HasVJP.canonical`
+    adds no content (relu is kinked); the pointwise whole-net VJP is
+    `resnet34ForwardBFullHasVJPAt`. -/
 noncomputable def resnet34VerifiedBHasVJP (N : Nat) (w : R34BWeights 10) :
     HasVJP (denoteR34FullB N resnet34Verified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
-/-- **Rung E at the committed spec, batched.** The typed graph the shipped ResNet-34 artifacts
+/-- **Forward graph ↔ the committed spec, batched.** The typed graph the shipped ResNet-34 artifacts
     are printed from denotes the committed spec's function at batch BN:
     `resnet34FwdGraphBFull_faithful` composed with the tie. -/
 theorem resnet34VerifiedB_fwd_faithful (N : Nat) (epsStr : String) (w : R34BWeights 10)
@@ -418,14 +416,15 @@ theorem efficientnetVerified_denote_eq (N : Nat) (w : B0Weights) :
     denoteEfficientnetB0 N efficientnetVerified.layers w
       = efficientnetForwardBFull N w := rfl
 
-/-- **The committed spec carries the math** — canonical `pdiv` witness (swish/SE are
-    smooth but relu6 clamps; the per-block differentiability lemmas live in
-    `EfficientNetFullB0.lean`). -/
+/-- **The canonical witness at the committed EfficientNet-B0 spec.** `HasVJP.canonical`
+    adds no content. B0 has no kinked activation (swish, SE sigmoid, batch BN); its
+    whole-net VJP is `efficientnetForwardBFullHasVJP` (hypothesis `w.EpsPos`), stated on
+    the ∘-chain form of the forward. -/
 noncomputable def efficientnetVerifiedHasVJP (N : Nat) (w : B0Weights) :
     HasVJP (denoteEfficientnetB0 N efficientnetVerified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
-/-- **Rung E at the committed spec (batched).** The full 16-MBConv batched graph denotes
+/-- **Forward graph ↔ the committed spec (batched).** The full 16-MBConv batched graph denotes
     the committed spec's function: `efficientnetFwdGraphBFull_faithful` ∘ the tie. -/
 theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Weights)
     (x : Vec (N * (3 * 224 * 224))) :
@@ -437,21 +436,15 @@ theorem efficientnetVerified_fwd_faithful (N : Nat) (epsStr : String) (w : B0Wei
 -- ── ConvNeXt-T (FULL): the committed 27-entry spec ↔ convNextForwardTCh ──
 
 /-- Math denotation of the committed ConvNeXt-T spec: the 29-entry `[3,3,9,3]` layer list
-    denotes to `convNextForwardTCh` — the **channel**-LayerNorm net (§2m), whose 23 LN sites
-    are 1 stem + 18 block + 3 downsample + 1 **head**, the first 22 reducing over the `c` channels
+    denotes to `convNextForwardTCh` — the channel-LayerNorm net, whose 23 LN sites
+    are 1 stem + 18 block + 3 downsample + 1 head, the first 22 reducing over the `c` channels
     at one spatial position with a per-channel `[c]` affine and the head one over the `[768]` GAP
-    output (which is the same function at one spatial position — `rowLNVecFlat 1 768`).
-
-    ⚠ The head LN was RESTORED 2026-08-30 (`planning/archive/next_session_execution_and_parity.md` §7.1).
-    §2m/§2n had deleted it to match the JAX reference, which was itself missing it against both
-    the paper and timm; the parameter count was short by exactly 2×768.
-
-    ⚠ This used to match a `.convNextBlock`/`.bn` list and denote the SCALAR-LN net: one mean and
-    one variance over the whole `c·h·w` map, two scalars, and no stem LN but a head LN. §2n
-    deleted that chain outright, so the trap it guarded against — silently re-pointing this at the
-    scalar function, which would typecheck by `rfl` and assert that the channel-LN layer list
-    denotes the scalar-LN one (§2k's own sin, one level down) — is no longer expressible. Keeping
-    the note because the SHAPE of that mistake is what §2k was about, not the specific symbol. -/
+    output (which is the same function at one spatial position — `rowLNVecFlat 1 768`). -/
+-- History: the head LN was restored after it had been deleted to match a JAX reference that
+-- itself lacked it (against both the paper and timm; the parameter count was short by 2×768).
+-- An earlier version matched a `.convNextBlock`/`.bn` list and denoted a scalar-LN net (one
+-- mean/variance over the whole `c·h·w` map); that chain has been deleted, so re-pointing this
+-- denotation at a scalar-LN function is no longer expressible.
 noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh 10) :
     Vec (3 * 224 * 224) → Vec 10 :=
   match layers with
@@ -474,14 +467,15 @@ noncomputable def denoteConvnextT (layers : List VLayer) (w : CnxTWeightsCh 10) 
 theorem convnextVerified_denote_eq (w : CnxTWeightsCh 10) :
     denoteConvnextT convnextVerified.layers w = convNextForwardTCh w := rfl
 
-/-- **The committed spec carries the math** — canonical `pdiv` witness; the REAL
-    whole-net VJP exists at full depth (`convNextForwardTChHasVJP_correct`,
-    all-smooth, the 22 LN positivities only) on the ∘-chain form. -/
+/-- **The canonical witness at the committed ConvNeXt-T spec.** `HasVJP.canonical` adds no
+    content; the whole-net VJP of `convNextForwardTCh` is `convNextForwardTChHasVJP_correct`
+    (all-smooth; hypotheses: the 23 LN `ε` positivities — stem, 18 blocks, 3 downsamples,
+    head). -/
 noncomputable def convnextVerifiedHasVJP (w : CnxTWeightsCh 10) :
     HasVJP (denoteConvnextT convnextVerified.layers w) := HasVJP.canonical _
 
 open Proofs.StableHLO in
-/-- **Rung E at the committed spec.** The committed-config [3,3,9,3] channel-LN graph denotes
+/-- **Forward graph ↔ the committed spec.** The committed-config [3,3,9,3] channel-LN graph denotes
     the committed spec's function: `convNextFwdGraphTCh_faithful` ∘ the tie. -/
 theorem convnextVerified_fwd_faithful (epsStr : String) (w : CnxTWeightsCh 10)
     (x : Vec (3 * 224 * 224)) :
@@ -528,26 +522,23 @@ noncomputable def denoteVitTiny (layers : List VLayer) (w : ViTTinyWeights) :
 
 /-- **Spec ≡ the full proven net.** `vitVerified`'s denotation is exactly
     `vitForwardKV` at the committed config (depth-12 DISTINCT-param multi-head,
-    per-token vector-LN — `ViTDepthK.lean`) — by `rfl`. Retires the rep tie's
-    weight-shared scalar-LN caveats at the spec level. -/
+    per-token vector-LN — `ViTDepthK.lean`) — by `rfl`. -/
 theorem vitVerified_denote_eq (w : ViTTinyWeights) :
     denoteVitTiny vitVerified.layers w = vitForwardTiny w := rfl
 
-/-- **The committed spec carries the math — the REAL whole-net VJP.** ViT is all-smooth
-    (GELU/softmax/LN), so unlike the conv nets the honest chain-rule fold applies
-    globally: `vitForwardKVHasVJP` at the committed config, hypothesis `0 < ε` only.
-    The strongest rung C in this file — no canonical-witness fallback needed. -/
+/-- **The whole-net VJP at the committed ViT-Tiny spec.** ViT is all-smooth
+    (GELU/softmax/LN), so the chain-rule fold applies globally: `vitForwardKVHasVJP` at the
+    committed config, hypothesis `0 < ε` only. Not the canonical witness. -/
 noncomputable def vitVerifiedHasVJP (w : ViTTinyWeights) (hε : 0 < w.ε) :
     HasVJP (denoteVitTiny vitVerified.layers w) :=
   vitForwardKVHasVJP 3 224 224 16 196 768 3 64 10 12
     w.Wc w.bc w.cls w.pos w.ε hε w.blocks w.γF w.βF w.Wcls w.bcls
 
 open Proofs.StableHLO in
-/-- **Rung E at the committed spec.** The depth-12 3-head vector-LN forward graph
-    (`vitFwdGraphKMHV`, ViTDepthK §3 — patch embed → 12 spelled multi-head blocks →
+/-- **Forward graph ↔ the committed spec.** The depth-12 3-head vector-LN forward graph
+    (`vitFwdGraphKMHV` — patch embed → 12 spelled multi-head blocks →
     final vector-LN → CLS → head) denotes the committed spec's function:
-    `vitFwdGraphKMHV_faithful` composed with the tie. Completes the B/C/E ladder for
-    all five imagenette nets. -/
+    `vitFwdGraphKMHV_faithful` composed with the tie. -/
 theorem vitVerified_fwd_faithful (epsStr sStr oneStr zeroStr : String)
     (w : ViTTinyWeights) (x : Vec (3 * 224 * 224)) :
     den (vitFwdGraphKMHV (ic := 3) (H := 224) (W := 224) (P := 16) (N := 196)

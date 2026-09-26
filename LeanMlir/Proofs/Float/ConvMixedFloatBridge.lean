@@ -7,21 +7,20 @@ The accuracy half of the bf16 conv ops in
 `Proofs.StableHLO` (`BatchableOp.convBf16`, `flatConvFBf16`, and the dgrad/wgrad twins).
 
 `FloatBridge` stops at dense: it has `dot_close_mixed` / `dense_close_mixed` and no conv peer,
-and `planning/archive/bf16_renderer.md` calls that gap "the single biggest item in this document",
-because every net where bf16 pays is conv-dominated.
+and every net where bf16 pays is conv-dominated.
 
-▶ It turns out not to be a new hard theorem. A convolution output **is** a dot product over its
+It is not a new hard theorem. A convolution output **is** a dot product over its
 flattened receptive field (`conv2d_eq_flat_dot`), so the whole thing is
 `dot_close_mixed_uniform` instantiated at fan-in `ic·kH·kW`, plus one leaf rounding for the
 bf16 STORE and one accumulate rounding for the bias add.
 
-⚠ The store term is the part that has no analogue in `dense_close_mixed`, and it is forced by
+Note: The store term is the part that has no analogue in `dense_close_mixed`, and it is forced by
 the hardware rather than chosen: a conv with bf16 operands and an f32-typed result has its
 casts deleted by XLA and runs entirely in fp32 (measured — see `BatchableOp.convBf16`). The
 only emit shape that reaches the tensor cores gives the convolution a **bf16-typed result**, so
 the accumulator is rounded on store and the error model has to say so.
 
-⭐ **Non-vacuous, and the fan-in is not what costs.** `convBr` at fp32 accumulate
+**Non-vacuous, and the fan-in is not what costs.** `convBr` at fp32 accumulate
 (`M.u = 2⁻²⁴`) and bf16 leaf (`L.u = 2⁻⁸`), evaluated at ResNet-34's own layers — arithmetic
 outside Lean, quoted as illustration, not proved here:
 
@@ -63,7 +62,7 @@ noncomputable def convWindow3 {ic h w : Nat} (kH kW : Nat) (x : Tensor3 ic h w)
 noncomputable def convSlice {ic oc kH kW : Nat} (W : Kernel4 oc ic kH kW) (o : Fin oc) :
     Tensor3 ic kH kW := fun c kh kw => W o c kh kw
 
-/-- ⭐ **A convolution output is a DOT PRODUCT** of length `ic·kH·kW` over the flattened
+/-- **A convolution output is a DOT PRODUCT** of length `ic·kH·kW` over the flattened
     receptive field. This is the whole reason `conv_close_mixed` is not a new hard theorem:
     it lets the conv reuse `dot_close_mixed_uniform` at that fan-in. -/
 theorem conv2d_eq_flat_dot {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
@@ -110,7 +109,7 @@ noncomputable def convFanS {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
 namespace FloatModel
 variable (M : FloatModel)
 
-/-- ⭐ **The mixed-precision store-then-bias step, once.** A dot accumulated at `M` over leaves
+/-- **The mixed-precision store-then-bias step, once.** A dot accumulated at `M` over leaves
     rounded to `L` (`dotMixed`), rounded to `L` again on store, then a bias added at `M`: three
     terms, one per rounding — the dot (`convBr`, fan-in `n`), the store (`L.u`) and the bias add
     (`M.u`). `conv_close_mixed` and `depthwise_close_mixed` are this at their receptive fields. -/
@@ -144,7 +143,7 @@ theorem storeBias_close (L : FloatModel) {n : Nat} (x y : Vec n) (β : ℝ) :
     the leaf precision `L` and accumulated at `M` (`dotMixed`), the accumulator then rounded to
     `L` again — the **bf16-typed result**, i.e. the store — and only then the bias added at `M`.
 
-    ⚠ The second `L.rnd` is what distinguishes this from `denseMixed`, and it is not optional:
+    Note: The second `L.rnd` is what distinguishes this from `denseMixed`, and it is not optional:
     `BatchableOp.convBf16` must give the convolution a bf16-typed result or XLA deletes the
     casts and runs the whole conv in f32. The store is a consequence of the only emit shape
     that reaches the tensor cores, so the error model has to carry it. -/
@@ -154,11 +153,11 @@ noncomputable def convMixed (L : FloatModel) {ic oc h w kH kW : Nat}
     M.add (L.rnd (M.dotMixed L (Tensor3.flatten (convSlice W o))
                                (Tensor3.flatten (convWindow3 kH kW x hi wi)))) (b o)
 
-/-- ⭐⭐ **Mixed-precision convolution forward error.** Three terms, one per rounding the
+/-- **Mixed-precision convolution forward error.** Three terms, one per rounding the
     emitted graph performs: the dot (`convBr`, fan-in `ic·kH·kW`), the bf16 STORE of the
     accumulator (`L.u`), and the f32 bias add (`M.u`).
 
-    ▶ It is `dot_close_mixed_uniform` instantiated at the conv's fan-in, because a convolution
+    It is `dot_close_mixed_uniform` instantiated at the conv's fan-in, because a convolution
     output IS a dot product over its flattened receptive field (`conv2d_eq_flat_dot`). The
     fan-in wall therefore still sits at `1/M.u = 2²⁴` and not at the leaf precision — the same
     reason bf16-mixed is non-vacuous for dense. -/

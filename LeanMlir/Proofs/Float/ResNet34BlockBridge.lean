@@ -35,8 +35,8 @@ noncomputable def bnReluBudget (u D S G Bbnd emean eistd A e1 ε : ℝ) : ℝ :=
     and the usual BN magnitude bounds, the rounded `bnForwardF vt` is within
     `bnReluBudget` of `bnForward va`. The composition split: rounding
     (`bnForward_close_of`) + input-shift (`bnForward_input_close`). This is the
-    pre-activation bound (compose `relu_close` for the activation); the BN-before-swish
-    path in EfficientNet's MBConv uses it directly. -/
+    pre-activation bound (compose `relu_close` for the activation); `floatClose_bn` wraps
+    it as a `FloatClose` instance. -/
 theorem bnStep_close {n : Nat} {ε γ β emean eistd D S G Bbnd A e1 fμ fistdv : ℝ}
     (vt va : Vec n) (i : Fin n) (hn : 0 < n) (hε : 0 < ε)
     (he1 : ∀ k, |vt k - va k| ≤ e1)

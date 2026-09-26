@@ -1,10 +1,10 @@
 import LeanMlir.Proofs.Codegen.StableHLO
 
-/-! # PoC: the E4M3 (fp8) quantized MNIST-linear render-tie (planning §3b)
+/-! # The E4M3 (fp8) quantized MNIST-linear render-tie
 
-`planning/archive/floatbridge_quantization.md` §3b: the **structural faithfulness** of the
-low-precision scheme. Where §3c bounds the *accuracy* of E4M3-mixed inference, this
-file proves the *correctness of the implementation*: the emitted block-scaled-E4M3
+The **structural faithfulness** of the low-precision scheme. Where
+`linear_e4m3_argmax_preserved` (`FloatBridge`) bounds the *accuracy* of E4M3-mixed inference,
+this file proves the *correctness of the implementation*: the emitted block-scaled-E4M3
 matmul graph **denotes** the intended algorithm, with **no accuracy claim**.
 
 The deployed fp8 kernel is *block-scaled with fp32 accumulate*: weights are quantized
@@ -28,8 +28,7 @@ render-tie is the genuine "the bytes implement block-scaled-E4M3 matmul with fp3
 accumulate" claim.
 
 All theorems kernel-close under `[propext, Classical.choice, Quot.sound]`
-([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)). (Namespace/name kept short for the audit's per-line
-`#print axioms` grep — cf. `LinearFold.lean`.)
+([`tests/AuditAxioms.lean`](https://github.com/brettkoonce/lean4-mlir/blob/main/tests/AuditAxioms.lean)).
 -/
 
 open Proofs Proofs.StableHLO
@@ -67,7 +66,7 @@ noncomputable def quantLinear (q : ℝ → ℝ) (sx : ℝ) (sW : Vec n)
   mnistLinear (fun i j => sW j * q (W i j / sW j)) b (fun i => sx * q (x i / sx))
 
 /-- **The block-scale factors out of the fp32 accumulate** — the arithmetic heart of
-    §3b. "Int matmul then one per-output dequant" equals "dequantize each operand then
+    the tie. "Int matmul then one per-output dequant" equals "dequantize each operand then
     matmul"; the per-output scale `sx·sWⱼ` is constant across the reduction, so it pulls
     through the `∑`. (This is *why* fp32 accumulate is the faithful choice.) -/
 theorem dequant_factors (q : ℝ → ℝ) (sx : ℝ) (sW : Vec n)
@@ -77,7 +76,7 @@ theorem dequant_factors (q : ℝ → ℝ) (sx : ℝ) (sW : Vec n)
   rw [Finset.mul_sum]
   exact Finset.sum_congr rfl (fun i _ => by ring)
 
-/-- **E4M3 render-tie (structural faithfulness, planning §3b).** The emitted
+/-- **E4M3 render-tie (structural faithfulness).** The emitted
     block-scaled int-matmul graph denotes exactly the intended dequant-first
     algorithm, for **any** quantizer `q` and scales `sx`, `sW`. The proof is the
     `dequant_factors` identity composed with the `den` of each (verified-faithful)

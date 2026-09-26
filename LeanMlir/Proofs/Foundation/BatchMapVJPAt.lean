@@ -2,25 +2,21 @@ import LeanMlir.Proofs.Foundation.Batched
 
 /-! # `batchMap` at a POINT — the pointwise peer of `batchMapHasVJP`
 
-`EfficientNetChainClose.lean` lifts a batch-separable op's VJP to the whole batch in the GLOBAL
-form: `batchMapHasVJP` takes `HasVJP f` and `Differentiable ℝ f`. EfficientNet never needed
-anything weaker — swish is smooth everywhere and B0's stem has no pooling — so the pointwise peer
-was never written.
+The global lift `batchMapHasVJP` (below) takes `HasVJP f` and `Differentiable ℝ f`; that is
+enough for EfficientNet-B0, whose swish is smooth everywhere and whose stem has no pooling.
+`batchMapHasVJPAt` is its pointwise peer, which ResNet-34's stem needs: the stem is
+`batchMap N (maxPool3s2Flat c h w) ∘ cbReluStridedB`, and a max-pool has no derivative at a tie,
+so `maxPool3s2FlatHasVJPAtVec` (`BackwardMaps`) is `_at` by nature.
 
-ResNet-34 needs it. Its stem is `batchMap N (maxPool3s2Flat c h w) ∘ cbReluStridedB`, and a
-max-pool has no derivative at a tie: `maxPool3s2FlatHasVJPAtVec` is `_at` by nature. Without
-the lift below, r34's whole-net VJP at batch BN cannot be assembled — the one thing standing
-between `ResNet34FullB.lean` and T1.
-
-⭐ **The weakening is exactly as narrow as it looks.** `pdivMat_rowIndep` requires
+**The weakening is exactly as narrow as it looks.** `pdivMat_rowIndep` requires
 `Differentiable ℝ g`, and its docstring explains why (a non-differentiable coordinate makes
 `fderiv` junk and breaks the per-row decomposition) — but every use of that hypothesis is at a
 ROW of the matrix it is stated about. So it weakens to `∀ r, DifferentiableAt ℝ g (A r)`, which
 is how `Tensor.lean`'s `pdivMat_rowIndep_perRow_at` states it; `pdivMat_rowIndep_at` below is that
 lemma with the same map on every row.
 
-⚠ The r34 stem's instance lives with r34's VJP, not here — `maxPool3s2FlatHasVJPAtVec` is
-in the `Float` tier and this is a `Foundation` file. It is two lines there:
+The r34 stem's instance lives with r34's VJP (`ResNet34FullBVJP`) and in `HeadLayers`. It is
+two lines:
 `batchMapHasVJPAt _ v (fun r => maxPool3s2FlatHasVJPAtVec (Mat.unflatten v r) (hs r))
 (fun r => maxPool3s2Flat_differentiableAt_vec (Mat.unflatten v r) (hs r) hc hh hw)`, with no
 glue between the two, which is what says the lemma below has the right shape.
@@ -72,12 +68,12 @@ theorem pdiv_batchMap_at {N a b : Nat} (f : Vec a → Vec b) (v : Vec (N * a))
   simp only [Mat.flatten_unflatten, Prod.mk.eta, Equiv.apply_symm_apply] at h
   exact h
 
-/-- ⭐ **`batchMap N f`'s VJP at a point** — the pointwise peer of `batchMapHasVJP`, and the lift
+/-- **`batchMap N f`'s VJP at a point** — the pointwise peer of `batchMapHasVJP`, and the lift
     a batch-separable op with a KINK needs. The backward reshapes to `[N, ·]` and runs each
     example's own `_at` backward on its own row, exactly as the global one runs `f.backward`
     row-wise.
 
-    ⚠ Unlike `batchMapHasVJP` this is built field by field rather than transported along
+    Note: Unlike `batchMapHasVJP` this is built field by field rather than transported along
     `batchMap_eq_rowwiseFlat` with `▸`: an `Eq.mpr` blocks `.backward` from reducing, which a
     whole-net certified-backward tie later needs. -/
 noncomputable def batchMapHasVJPAt {N a b : Nat} (f : Vec a → Vec b) (v : Vec (N * a))

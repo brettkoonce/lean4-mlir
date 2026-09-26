@@ -9,9 +9,9 @@ globally certified (GAP is linear, dense is affine), so `ok := True`. Written on
 by MobileNetV4, ResNet-34 and ResNet-50. The ResNets' 3×3/s2 stem pool (`r34PoolLayer`) is here
 too; it is certified where no example's window ties (`R34PoolSmoothAt`).
 
-⭐ **Both backward graphs tie by `rfl`.** `den` of `.gapBackBatched` is definitionally the row-wise
+**Both backward graphs tie by `rfl`.** `den` of `.gapBackBatched` is definitionally the row-wise
 GAP VJP, and `den` of `.denseRowBack` is `rowDenseBackFlat`, which is what `batchMapHasVJP`
-reduces to. ⚠ GAP's VJP does not depend on its input, and `den .gapBackBatched` uses that by
+reduces to. Note: GAP's VJP does not depend on its input, and `den .gapBackBatched` uses that by
 evaluating the backward at `fun _ => 0`. That is sound because GAP is linear, and it is why the tie
 holds at every `x`.
 -/

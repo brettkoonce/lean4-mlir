@@ -1,7 +1,7 @@
 import LeanMlir.Proofs.Float.FloatComposeBridge
 import LeanMlir.Proofs.Float.ConvMixedFloatBridge
 
-/-! # The mixed-precision conv as a `FloatClose` — the whole-net bf16 bound
+/-! # The mixed-precision conv as a `FloatClose`
 
 `FloatModel.conv_close_mixed` bounds **one** bf16-mixed convolution against exact ℝ at
 an **exactly-represented input**. That is not enough to compose: a net feeds each layer the
@@ -9,12 +9,10 @@ an **exactly-represented input**. That is not enough to compose: a net feeds eac
 from inherited input error to output error — plus a magnitude bound to thread forward. That pair
 is `FloatClose` (`FloatComposeBridge.lean`), and this file supplies its mixed-precision conv instance.
 
-⭐⭐ **The composition backbone is PRECISION-AGNOSTIC, and that is the whole reason this is
-small.** `FloatClose A B f fF L` says nothing about how `fF` rounds — only that it stays within
+`FloatClose A B f fF L` says nothing about how `fF` rounds — only that it stays within
 `L e` of `f`. So `floatClose_relu`, `floatClose_bn`, `floatClose_maxPool3s2`, `floatClose_gap`,
-`floatClose_residualBlock`, `floatClose_iterate` and `FloatClose.comp` apply to a bf16 conv
-UNCHANGED. One new instance buys the entire existing fold (the `[3,4,6,3]` assembly it once
-fed, `Resnet34WholeFloatBridge`, was deleted with the whole-net budgets on 2026-09-08).
+`floatClose_residualBlock`, `floatClose_iterate` and `FloatClose.comp` compose with the bf16
+conv instance here unchanged. No whole-net bf16 (or f32) float bound is assembled in the repo.
 
 What genuinely had to be proved here, none of which the `e = 0` bound gives:
 
@@ -25,12 +23,13 @@ What genuinely had to be proved here, none of which the `e = 0` bound gives:
 3. `convMixedBudget` / `convMixed_close_prop` — the two combined, at an input that is both
    perturbed (`E`) and magnitude-bounded (`A`).
 
-⚠ **The budget is evaluated at `A + E`, not `A`.** The float conv runs on the PERTURBED input, so
+Note: the budget is evaluated at `A + E`, not `A`. The float conv runs on the perturbed input, so
 its own rounding scales with the perturbed magnitude; only the real conv sees `A`. Writing `A`
-there would understate the bound — the unsound direction.
+there would understate the bound.
 
-▶ `n = ic·kH·kW` throughout, and the fan-in amplification rides `uacc` (fp32) while `uleaf`
-(bf16) enters flat — the §9.3 separation that makes this non-vacuous at R50's n = 4608.
+`n = ic·kH·kW` throughout. The fan-in amplification rides `uacc` (fp32) while `uleaf` (bf16)
+enters flat, so the per-layer relative factor is `1 + O(u)`; composed depth-first, the bound is
+still vacuous in absolute terms (see `convMixedGain_factor`).
 -/
 
 namespace Proofs
@@ -69,7 +68,7 @@ theorem convWindow3_abs_le {ic h w kH kW : Nat} {x : Tensor3 ic h w} {A : ℝ}
   · exact hx _ _ _
   · simpa using hA
 
-/-- ⭐ The window inherits the input's PERTURBATION. The padding branch is the same branch for
+/-- The window inherits the input's PERTURBATION. The padding branch is the same branch for
     both tensors (it depends only on the indices), so it contributes `|0 - 0| = 0 ≤ E`. -/
 theorem convWindow3_sub_abs_le {ic h w kH kW : Nat} {xt xa : Tensor3 ic h w} {E : ℝ}
     (hE : 0 ≤ E) (hd : ∀ c i j, |xt c i j - xa c i j| ≤ E) (hi : Fin h) (wi : Fin w) :
@@ -108,7 +107,7 @@ theorem convFanS_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW}
 -- § The real convolution is Lipschitz in its input
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **`conv2d` is `n·w`-Lipschitz.** THE term with no analogue at `e = 0`: it is how a
+/-- **`conv2d` is `n·w`-Lipschitz.** THE term with no analogue at `e = 0`: it is how a
     predecessor layer's error reaches this layer's output. The bias cancels (it is the same in
     both), so the difference is one dot product against the window difference. -/
 theorem conv2d_sub_abs_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW} {b : Vec oc}
@@ -145,16 +144,16 @@ theorem conv2d_sub_abs_le {ic oc h w kH kW : Nat} {W : Kernel4 oc ic kH kW} {b :
 -- § The mixed-precision conv budget, with an INHERITED error
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **The mixed-precision conv budget — the `layerBudget` peer, and the object this whole
+/-- **The mixed-precision conv budget — the `layerBudget` peer, and the object this whole
     file exists to produce.** Four terms:
 
     * `uacc * (… + β)` — the f32 bias add,
     * `uleaf * (1+br) * …` — the **bf16 store** of the accumulator (the bf16-TYPED conv result,
-      forced by the only emit shape that reaches tensor cores; §9.2),
+      forced by the only emit shape that reaches tensor cores),
     * `br * …` — the dot itself, fan-in `n` amplified at the ACCUMULATE precision,
     * `n·w·E` — **the inherited error**, carried through by the real conv's Lipschitz constant.
 
-    ⚠ The first three are evaluated at `A + E`, not `A`: the float conv runs on the PERTURBED
+    Note: The first three are evaluated at `A + E`, not `A`: the float conv runs on the PERTURBED
     input, so its own rounding scales with the perturbed magnitude. Only the fourth term is
     linear in `E` alone. -/
 noncomputable def convMixedBudget (uacc uleaf : ℝ) (n : ℕ) (w β A E : ℝ) : ℝ :=
@@ -167,7 +166,7 @@ noncomputable def convMixedBudget (uacc uleaf : ℝ) (n : ℕ) (w β A E : ℝ) 
 -- § The propagating bound
 -- ════════════════════════════════════════════════════════════════
 
-/-- ⭐⭐ **Mixed-precision convolution against exact ℝ at a PERTURBED input.** The composable
+/-- **Mixed-precision convolution against exact ℝ at a PERTURBED input.** The composable
     peer of `conv_close_mixed`, which is this at `E = 0` and with the data-dependent `convFanS`
     left in place.
 
@@ -245,14 +244,12 @@ theorem FloatModel.flatConvMixed_close (M L : FloatModel) {ic oc h w kH kW : Nat
   simp only [FloatModel.flatConvMixed, flatConv, Tensor3.flatten]
   exact M.convMixed_close_prop L W b _ _ hw' hA hE hW hb huf_a huf_d _ _ _
 
-/-- ⭐⭐⭐ **THE INSTANCE: a bf16-mixed convolution is `FloatClose`.** Magnitude `A` in, real
-    output `≤ layerAct` and float output `≤ layerAct + convMixedBudget(E := 0)` out; error
-    modulus `E ↦ convMixedBudget … E`.
-
-    ▶ This is the ONLY thing the whole-net bf16 bound needed. Everything the f32 fold already
-    has — `floatClose_relu`, `floatClose_bn`, `floatClose_maxPool3s2`, `floatClose_gap`,
-    `floatClose_residualBlock`, `floatClose_iterate`, `FloatClose.comp` — is stated on
-    `FloatClose` and therefore applies to this verbatim. -/
+/-- **A mixed-precision (leaf `L`, accumulate `M`) convolution is `FloatClose`.** Magnitude
+    `A` in, real output `≤ layerAct` and float output `≤ layerAct + convMixedBudget(E := 0)`
+    out; error modulus `E ↦ convMixedBudget … E`. The other `FloatClose` instances
+    (`floatClose_relu`, `floatClose_bn`, `floatClose_maxPool3s2`, `floatClose_gap`,
+    `floatClose_residualBlock`, `floatClose_iterate`, `FloatClose.comp`) compose with it
+    unchanged; nothing in the repo instantiates it. -/
 theorem floatClose_flatConvMixed {ic oc h w kH kW : Nat} (M L : FloatModel)
     (W : Kernel4 oc ic kH kW) (b : Vec oc) {w' β A : ℝ}
     (hw' : 0 ≤ w') (_hβ : 0 ≤ β) (hA : 0 ≤ A) (hn : 0 < ic * h * w)
@@ -278,7 +275,7 @@ noncomputable def convMixedGain (uacc uleaf : ℝ) (n : ℕ) (w : ℝ) : ℝ :=
   (n : ℝ) * w * (1 + convBrR uacc uleaf n + uleaf * (1 + convBrR uacc uleaf n)
     + uacc * ((1 + uleaf) * (1 + convBrR uacc uleaf n)))
 
-/-- ⭐ **`convMixedBudget` is AFFINE in the inherited error**, with slope `convMixedGain`. So
+/-- **`convMixedBudget` is affine in the inherited error**, with slope `convMixedGain`. So
     composing `d` of these is `gain^d` on the input error plus a geometric sum of the additive
     terms — the shape every composed forward-error bound has. -/
 theorem convMixedBudget_affine (uacc uleaf : ℝ) (n : ℕ) (w β A E : ℝ) :
@@ -287,35 +284,26 @@ theorem convMixedBudget_affine (uacc uleaf : ℝ) (n : ℕ) (w β A E : ℝ) :
   simp only [convMixedBudget, convMixedGain]; ring
 
 /-- **The f32 peer, for comparison.** `layerBudget` is affine in `E` too, with slope
-    `m·w·(1+u)^(m+2)`. ▶ Both slopes are `fan-in · weight-bound` times a factor that is
-    `1 + O(roundoff)`, which is the point of the next comment. -/
+    `m·w·(1+u)^(m+2)`. Both slopes are `fan-in · weight-bound` times a factor that is
+    `1 + O(roundoff)` (`convMixedGain_factor`). -/
 theorem layerBudget_affine (u : ℝ) (m : ℕ) (w β A E : ℝ) :
     layerBudget u m w β A E
       = layerBudget u m w β A 0 + (m : ℝ) * w * (1 + u) ^ (m + 2) * E := by
   simp only [layerBudget]; ring
 
-/-- ⭐⭐ **THE HONEST READING, and it is the useful result of this file.**
-
-    Both gains factor as `n·w · (1 + ε)`:
-
-    * f32: `ε = (1+u_acc)^(n+2) − 1`, which at `u_acc = 2⁻²⁴`, `n = 4608` is **2.7e-4**;
-    * bf16-mixed: `ε ≈ br + u_leaf(1+br) + u_acc(1+u_leaf)(1+br)`, which at `u_leaf = 2⁻⁸` is
-      **1.20e-2** — dominated by `br`'s flat leaf term, exactly as §9.3 found for one layer.
-
-    ▶ **So bf16 does NOT change the whole-net bound's growth RATE — it changes a `1+ε` factor.**
-    `(1.012043/1.000275)^d` over `d` conv layers: **1.52× at R34's 36** and **1.86× at R50's 53**.
-    Under a factor of two on the certificate, for a 1.41×/1.55× speedup. (Arithmetic outside
-    Lean, quoted as illustration; the affine decomposition above is what is proved.)
-
-    ⚠⚠ **AND BOTH BOUNDS ARE VACUOUS IN ABSOLUTE TERMS, which this file will not pretend
-    otherwise.** The shared `n·w` factor is ≫ 1 at any real layer (n = 4608, w' ≈ 0.05 gives
-    ~230), so `gain^53` is astronomical for the f32 bound and the bf16 one alike. That is a
-    property of worst-case forward-error analysis composed depth-first — every term assumes the
-    adversarial sign — not a property of bf16, and the f32 whole-net bridges the repo carried
-    until 2026-09-08 had exactly the same factor. ▶ What is meaningful here is the
-    RATIO: bf16's certificate is ~2× the f32 certificate, not exponentially worse. Anyone
-    wanting a non-vacuous absolute number needs a different analysis (probabilistic rounding,
-    or a bound that exploits BN's renormalisation at each layer), not a tighter conv lemma. -/
+-- Illustration (arithmetic outside Lean): the f32 gain's `ε = (1+u_acc)^(n+2) − 1` is 2.7e-4 at
+-- `u_acc = 2⁻²⁴`, `n = 4608`; the bf16-mixed `ε` is 1.20e-2 at `u_leaf = 2⁻⁸`, dominated by
+-- `br`'s flat leaf term. `(1.012043/1.000275)^d` is 1.52× at d = 36 conv layers (R34) and 1.86×
+-- at d = 53 (R50). Both bounds are vacuous in absolute terms: the shared `n·w` factor is ≫ 1 at
+-- a real layer (n = 4608, w' ≈ 0.05 gives ~230), so `gain^53` is astronomical for f32 and bf16
+-- alike — a property of worst-case forward-error analysis composed depth-first (every term takes
+-- the adversarial sign), not of bf16. A non-vacuous absolute number needs a different analysis
+-- (probabilistic rounding, or a bound that uses BN's renormalisation at each layer).
+/-- **The per-layer gain factors as `n·w·(1+ε)`**, with
+    `ε = br + u_leaf(1+br) + u_acc(1+u_leaf)(1+br)` (`br = convBrR u_acc u_leaf n`).
+    Relative to f32 (`layerBudget_affine`, `ε = (1+u)^(n+2) − 1`), bf16-mixed changes only the
+    `1+ε` factor, not the `n·w` growth rate. Composed over depth, both bounds grow as
+    `(n·w)^d` and are vacuous in absolute terms at real layer sizes. -/
 theorem convMixedGain_factor (uacc uleaf : ℝ) (n : ℕ) (w : ℝ) :
     convMixedGain uacc uleaf n w
       = (n : ℝ) * w * (1 + (convBrR uacc uleaf n + uleaf * (1 + convBrR uacc uleaf n)

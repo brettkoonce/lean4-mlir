@@ -8,32 +8,25 @@ The whole `FloatBridge` suite is `∀ M : FloatModel, …` — abstract over any
 operator satisfying the standard relative-error model `|rnd x − x| ≤ u·|x|`. This file
 provides the named hardware-precision inhabitants `binary32` / `fp8E4M3`.
 
-Historically it did so via two explicit axioms (`ieeeRnd`/`ieeeRnd_err` — "a rounding
-operator at unit roundoff `u` satisfying the standard model exists"), quarantined from
-the zero-axiom `Proofs` suite. Those axioms are now DISCHARGED (post_audit_roadmap §2):
-`rndP p` is round-to-nearest on the unbounded-exponent `p`-bit-significand grid —
-exactly the idealization the old axiom's docstring said it modeled ("the `∀x` form
-abstracts away overflow and the subnormal floor") — and `rndP_err` PROVES the standard
+The models are constructed, not assumed: `rndP p` is round-to-nearest on the
+unbounded-exponent `p`-bit-significand grid (the `∀x` form abstracts away overflow and the
+subnormal floor), and `rndP_err` proves the standard
 model `|rndP p x − x| ≤ 2⁻¹⁻ᵖ·|x|` (Higham §2.2) from Mathlib alone: scale into the
 binade via `Int.zpow_log_le_self`, `|t − round t| ≤ 1/2`, unscale. `binary32` = the
 `p = 23` grid at `u32 = 2⁻²⁴`; `fp8E4M3` = the `p = 3` grid at `uE4M3 = 2⁻⁴`.
 
-With the named models in hand, the 2026-06 audit's gaps 2 and 3 stay realized:
-* **gap 2** — `binary32_e4m3_argmax_preserved`: the fp8 argmax-preservation theorem, an
-  *unconditional* corollary about the named hardware models (no `∀ M ∀ L`).
-* **gap 3** — `binary32_linear_sgd_descends_concrete`: one binary32 SGD step on a concrete
-  linear classifier provably decreases the real loss, with the descent smallness conditions
+Two corollaries about the named models:
+* `binary32_e4m3_argmax_preserved`: the fp8 argmax-preservation theorem, a corollary about
+  the named hardware models (no `∀ M ∀ L`).
+* `binary32_linear_sgd_descends_concrete`: one binary32 SGD step on a concrete
+  linear classifier (2 inputs, 2 classes, all-zero weights `W0`) provably decreases the real loss, with the descent smallness conditions
   `hsmall`/`h1`/`h2` *discharged* (not assumed) for a concrete `(W, x, lr)`.
 
-WHAT THE DISCHARGE DOES **NOT** BUY (kept honest): the kernel↔model boundary — FMA
-contraction, reduction reassociation, "the GPU behaves like round-to-nearest on this
-grid" — remains trusted exactly as before (`planning/archive/floatbridge_certificate_gaps.md`);
-true binary32 also has overflow and a subnormal floor `rndP` idealizes away
-(`FloatSubnormalBridge` models the latter hypothesis-style). The trust moves from "an
-operator with this bound exists" (mathematically mild — `id` satisfies it at any `u ≥ 0`)
-to a CONCRETE, inspectable operator with the bound proved. The win is hygiene and
-inspectability: the repo now contains zero `axiom` declarations anywhere, and this file
-sits inside the ordinary `Proofs`/`AuditAxioms` 3-axiom closure like everything else.
+What stays trusted: the kernel↔model boundary — FMA contraction, reduction reassociation,
+"the GPU behaves like round-to-nearest on this grid". True binary32 also has overflow and a
+subnormal floor that `rndP` idealizes away (`FloatSubnormalBridge` states a model with the
+latter, hypothesis-style). The file declares no `axiom` and sits inside the ordinary
+`Proofs`/`AuditAxioms` 3-axiom closure.
 -/
 
 namespace Proofs
@@ -56,7 +49,7 @@ noncomputable def gridModel (p : ℕ) (u : ℝ) (hu : ((2 : ℝ) ^ (p + 1))⁻¹
     (mul_le_mul_of_nonneg_right hu (abs_nonneg x))
 
 /-- **binary32** (IEEE-754 single, fp32 accumulate): the `p = 23` grid (24-bit
-    significand) at unit roundoff `u32 = 2⁻²⁴` — the bound is tight for the grid. -/
+    significand) at unit roundoff `u32 = 2⁻²⁴` (the standard-model constant for this grid). -/
 noncomputable def binary32 : FloatModel := gridModel 23 u32 (by norm_num [u32])
 
 /-- **fp8 E4M3** (the low-precision leaf): the `p = 3` grid (3 mantissa bits) at
@@ -73,7 +66,7 @@ theorem u32_le_uE4M3 : u32 ≤ uE4M3 := by norm_num [u32, uE4M3]
 -- § Gap 2 — fp8 argmax preservation, now unconditional on the models
 -- ════════════════════════════════════════════════════════════════
 
-/-- **Gap 2: the fp8 guarantee for the named hardware models.** For the certified
+/-- **The fp8 guarantee for the named hardware models.** For the certified
     MNIST-linear classifier evaluated with an **fp32 accumulate (`binary32`) / fp8-E4M3 leaf
     (`fp8E4M3`)** mixed forward, with trained `|W| ≤ 3/5`, `|b| ≤ 1`, pixels `|x| ≤ 1`:
     whenever the exact-`ℝ` logit margin at the top class `k` exceeds `122`, the deployed
@@ -91,13 +84,11 @@ theorem binary32_e4m3_argmax_preserved {n : ℕ}
   binary32.linear_e4m3_argmax_preserved fp8E4M3
     (by simp) (by simp) hW hb hx k hmargin
 
-/-- **Gap 2, the "loose 122" is a fan-in artifact.** The worst-case fp8 logit budget at
-    the MNIST input dimension (784) is `≤ 61`, forcing a `> 122` margin. That figure is
-    `≈ 2·uE4M3 · (m·w·a)` — *linear in the input dimension `m`*. At a small input
-    (`m = 4`) the same worst-case budget is already `≤ 1/2`, so a margin of just `> 1`
-    certifies the prediction. This makes precise why the deployed net (errors not aligned,
-    activations far below the `m·w·a` ceiling) needs only the measured `0.38` drift, not
-    `61`: the bound scales with realized fan-in, not the worst-case 784. -/
+/-- **The fp8 budget at input width 4.** The worst-case fp8 logit budget at the MNIST
+    input dimension (784) is `≤ 61`, forcing a `> 122` margin; that figure is
+    `≈ 2·uE4M3 · (m·w·a)`, linear in the input dimension `m`. The same worst-case budget at
+    `m = 4` is `≤ 1/2`. (That the deployed 784-wide net drifts only a measured `0.38` is an
+    empirical observation, not proved here.) -/
 theorem binary32_e4m3_budget_small :
     FloatModel.denseMixedBudget binary32.u fp8E4M3.u 4 (3 / 5) 1 1 ≤ 1 / 2 := by
   simp only [binary32_u, fp8E4M3_u, FloatModel.denseMixedBudget]
@@ -153,7 +144,7 @@ noncomputable def b0 : Vec 2 := fun _ => 0
 noncomputable def x0 : Vec 2 := fun i => if i = 0 then 1 else 0
 def lbl : Fin 2 := 0
 
-/-- **Gap 3: one binary32 SGD step provably decreases the real loss, with the descent
+/-- **One binary32 SGD step provably decreases the real loss, with the descent
     smallness conditions discharged (not assumed).** The step uses the *actual*
     float-computed gradient `binary32.linearFloatGrad`; the conclusion bounds the *real*
     cross-entropy after the step by the real cross-entropy before minus `lr·‖∇‖²/2`. All

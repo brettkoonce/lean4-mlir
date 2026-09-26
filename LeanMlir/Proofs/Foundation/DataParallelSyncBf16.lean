@@ -18,7 +18,7 @@ is what those six kinds do under sharding.
 The first four round per element of a per-example map, so replica `r`'s value is `batchShard r`
 of the same node at batch `R·N`, exactly as at f32.
 
-⭐⭐ **The weight gradients are not.** The emitted weight-gradient convolution contracts the batch
+**The weight gradients are not.** The emitted weight-gradient convolution contracts the batch
 in one op and stores bf16 once, so the node's `den` is `rnd (Σ_n …)` with the rounding outside
 the batch sum (`den_convWeightGradBBf16_eq_rnd`). On `R` replicas each rounds its OWN partial
 sum `S_r` before the f32 all-reduce; on one device the global sum `Σ_r S_r` is rounded once. So
@@ -37,9 +37,9 @@ the repo's rounding model at every power of two — so for bf16 (`rndP 7`) at `R
 
 ## What is NOT claimed
 
-⚠ No whole-net statement: there is no single-device bf16 chain for either net to tie a twin to,
+Note: No whole-net statement: there is no single-device bf16 chain for either net to tie a twin to,
 here or in the f32 tier. These are the per-node cases a bf16 twin would walk its chain with.
-⚠ `rndP` has an unbounded exponent (`RndP.lean`): bf16 overflow and subnormals are
+Note: `rndP` has an unbounded exponent (`RndP.lean`): bf16 overflow and subnormals are
 outside it, where scaling by 4 can move a value across the format's boundary.
 -/
 
@@ -150,7 +150,7 @@ noncomputable def convStridedWGradShardSum {R N ic oc h w kH kW : Nat} (rnd : �
   den (.convStridedWeightGradB xN b (batchShard R N (ic * (2 * h) * (2 * w)) (fun i => rnd (X i)) r)
     W (.operand cotN (batchShard R N (oc * h * w) (fun i => rnd (DY i)) r))) idx
 
-/-- ⭐ **The all-reduced bf16 weight gradient is the mean of the replicas' ROUNDED partial
+/-- **The all-reduced bf16 weight gradient is the mean of the replicas' ROUNDED partial
     sums.** Each replica on its shard, at the shard-`r` block of the global cotangent. -/
 theorem den_allReduceMeanF_convWeightGradBBf16_shard {N ic oc h w kH kW : Nat} (R : Nat)
     (hR : 0 < R) (rnd : ℝ → ℝ) (t xN cotN : String) (ds : List Nat) (b : Vec oc)
@@ -166,7 +166,7 @@ theorem den_allReduceMeanF_convWeightGradBBf16_shard {N ic oc h w kH kW : Nat} (
   rw [den_convWeightGradBBf16_eq_rnd rnd xN cotN, hdy]
   rfl
 
-/-- ⭐ **The batch-`R·N` bf16 weight gradient rounds the SUM of the same partial sums, once.** -/
+/-- **The batch-`R·N` bf16 weight gradient rounds the SUM of the same partial sums, once.** -/
 theorem den_convWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R : Nat) (rnd : ℝ → ℝ)
     (xN cotN : String) (b : Vec oc) (W : Kernel4 oc ic kH kW) (X : Vec ((R * N) * (ic * h * w)))
     (DY : Vec ((R * N) * (oc * h * w))) (idx : Fin (oc * ic * kH * kW)) :
@@ -182,7 +182,7 @@ theorem den_convWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R : Nat)
   -- depends on it (as in `den_allReduceMeanF_convWeightGradB_shard`).
   rw [batchSlice_batchShard, batchSlice_batchShard]
 
-/-- ⭐⭐ **The one difference, exactly.** The all-reduced bf16 weight gradient minus `1/R` of the
+/-- **The one difference, exactly.** The all-reduced bf16 weight gradient minus `1/R` of the
     batch-`R·N` bf16 node is `1/R` of (sum of the rounded partial sums − the rounded sum). -/
 theorem den_allReduceMeanF_convWeightGradBBf16_sub_global {N ic oc h w kH kW : Nat} (R : Nat)
     (hR : 0 < R) (rnd : ℝ → ℝ) (t xN cotN : String) (ds : List Nat) (b : Vec oc)
@@ -212,7 +212,7 @@ theorem den_allReduceMeanF_convWeightGradBBf16_shard_id {N ic oc h w kH kW : Nat
   rw [den_allReduceMeanF_convWeightGradBBf16_shard R hR _ t xN cotN ds b W X DY dy hdy,
       den_convWeightGradBBf16_global_split R _ xN cotN b W X DY]
 
-/-- ⭐ **Strided: the all-reduced bf16 weight gradient is the mean of the rounded partial sums.** -/
+/-- **Strided: the all-reduced bf16 weight gradient is the mean of the rounded partial sums.** -/
 theorem den_allReduceMeanF_convStridedWeightGradBBf16_shard {N ic oc h w kH kW : Nat} (R : Nat)
     (hR : 0 < R) (rnd : ℝ → ℝ) (t xN cotN : String) (ds : List Nat) (b : Vec oc)
     (W : Kernel4 oc ic kH kW) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
@@ -228,7 +228,7 @@ theorem den_allReduceMeanF_convStridedWeightGradBBf16_shard {N ic oc h w kH kW :
   rw [den_convStridedWeightGradBBf16_eq_rnd rnd xN cotN, hdy]
   rfl
 
-/-- ⭐ **Strided: the batch-`R·N` node rounds the sum of the same partial sums, once.** -/
+/-- **Strided: the batch-`R·N` node rounds the sum of the same partial sums, once.** -/
 theorem den_convStridedWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R : Nat)
     (rnd : ℝ → ℝ) (xN cotN : String) (b : Vec oc) (W : Kernel4 oc ic kH kW)
     (X : Vec ((R * N) * (ic * (2 * h) * (2 * w)))) (DY : Vec ((R * N) * (oc * h * w)))
@@ -243,7 +243,7 @@ theorem den_convStridedWeightGradBBf16_global_split {N ic oc h w kH kW : Nat} (R
   apply Finset.sum_congr rfl; intro n _
   rw [batchSlice_batchShard, batchSlice_batchShard]
 
-/-- ⭐⭐ **Strided: the one difference, exactly.** -/
+/-- **Strided: the one difference, exactly.** -/
 theorem den_allReduceMeanF_convStridedWeightGradBBf16_sub_global {N ic oc h w kH kW : Nat}
     (R : Nat) (hR : 0 < R) (rnd : ℝ → ℝ) (t xN cotN : String) (ds : List Nat) (b : Vec oc)
     (W : Kernel4 oc ic kH kW) (X : Vec ((R * N) * (ic * (2 * h) * (2 * w))))
@@ -291,7 +291,7 @@ theorem int_log_abs_two_pow_mul (k : ℕ) {x : ℝ} (hx : x ≠ 0) :
   rw [abs_mul, abs_of_pos (by positivity : (0 : ℝ) < (2 : ℝ) ^ k)]
   exact int_log_two_pow_mul k (abs_pos.mpr hx)
 
-/-- ⭐ **The repo's rounding model commutes with scaling by a power of two** — the grid at
+/-- **The repo's rounding model commutes with scaling by a power of two** — the grid at
     `2^k·x` is the grid at `x` scaled by `2^k`, because the exponent is unbounded. -/
 theorem rndP_two_pow_mul (p k : ℕ) (x : ℝ) :
     rndP p ((2 : ℝ) ^ k * x) = (2 : ℝ) ^ k * rndP p x := by
