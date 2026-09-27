@@ -2275,8 +2275,8 @@ script imagenette do
 
 /-- The ImageNet tier's rows in chapter order, each chapter's side quest right after it (the
     `imagenette` convention): (job config, the exe it runs, the book's row). The seven Track-4
-    rows are the ones with chapter numbers; the five side quests have job configs and no number
-    yet. Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
+    rows are the ones with chapter numbers; the five side quests have job configs, and only
+    MobileNetV4's has run (once, as a consistency check on its pair). Axis siblings — `r34-default-4gpu`, `r50-2018-4gpu`, `r50-a3-4gpu`, `r50-a3-wxclip-4gpu`,
     `r50-a3-wxclip-bf16-4gpu` (RSB-A3 at 8 × 64: the same effective 2048 at a BatchNorm group of 256),
     `vit-default-4gpu`, `cnx-default-emabf16-4gpu` (ConvNeXt-T with the EMA shadow), the MNv4 100-epoch JAX side `mnv4-default-jax-4gpu` (run, like its verified side, as
     overnight chunks, `START_AT`/`STOP_AT`), `selftest`, `chunktest` — stay `scripts/supervise.sh`-only.

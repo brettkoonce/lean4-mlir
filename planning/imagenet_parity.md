@@ -386,11 +386,17 @@ is not a like-for-like check. (The canonical B0 77.15 and ConvNeXt 81.53 checkpo
 | K5 | B0 9153, ~8896, 9030–9031 | "staircase" (code is continuous); "194 logistic" is now 178, "147 splats of 1e-5" now 196: pin to the run's commit or update |
 | K6 | ConvNeXt 9974–9975, 10030–10036, 10128–10137, 10208–10210, 10360–10378 | "no deviation remains" omits the batch, clip, tanh GELU and erasing mode; "four of six knobs / no artifact combines EMA" is false since e38e56ab; "7.4% discordance is the run-to-run spread" was never measured (no two-seed pair); the S/B side quest shows global 128; settle top-5 95.50 vs the log's 95.51 |
 
+**Status (2026-09-27):** K3 ✅ — §6.6 rewritten into the reference / verified / side-by-side shape on
+the 100-epoch pair (76.57 / 92.98 JAX, 76.68 / 93.14 verified, +0.11); `\imagenetphasenote` and
+`\imagenettimmnote` deleted (that was their last use); EMA row says the paper runs none; resolution
+row added; MNv4 in the Track-4 table; the 500-epoch TODO stays. §5.2 decision (a), the user,
+2026-09-27: EMA goes — the book carries `[TODO: remove EMA]` next to it; the next pair scores live weights.
+
 ## 7. Runs (schedule once the net's code is closed; each needs the user's word)
 
 | # | run | absorbs | est. | box |
 |---|---|---|---|---|
-| R1 | MNv4 100-ep pair: `mnv4-default-4gpu` + `mnv4-default-jax-4gpu` | the rescope | ~42 h + ~16–18 h | ares, chunks |
+| R1 | ✅ 2026-09-27 MNv4 100-ep pair: `mnv4-default-4gpu` + `mnv4-default-jax-4gpu` — 76.68 / 76.57, `runs/2026-09-26-mnv4-{verified,jax}-bf16-100ep/` | the rescope | 18.5 h + 16.2 h measured | 3060 box, 24/7 |
 | R2 | ConvNeXt-T EMA: smoke + resume, then the 300-ep run | CX-1, G5 | smoke ≤1 h; ~100 h | |
 | R3 | ViT-Ti JAX `vit-default-jax-4gpu` rerun with smoothing | §5.5 decisions, C6 if landed | ~34 h (3060 box) | |
 | R4 | MNv2 JAX rerun (ReLU6 stem/head) + verified rerun (sync-BN, dropout, α = 0) | M2-1, §5.1 decisions, C6 | ~38 h + ~51 h | |

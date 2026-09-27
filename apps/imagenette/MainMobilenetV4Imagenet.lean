@@ -11,9 +11,10 @@ The sixth scale-tier trainer, and the last of the Imagenette nets to get one. Bu
 ⭐ **Conv-M, on the timm `mobilenetv4_conv_medium` layout since 90e4af7e** (stride on the
 post-DW, BN-only pre-DW, ReLU stage 0, symmetric stem, head pooled before `conv_head`), the same
 network as jax/MainMobilenetV4Imagenet.lean; `scripts/parity/mnv4_timm_parity.py` ties both to timm on
-shared weights. 9,715,512 parameters. The reference's 75.48% / 92.37% was trained on the pre-timm
-layout, so it is not this driver's target; the 100-epoch pair on the timm net is
-(`mnv4-default-4gpu` here, `mnv4-default-jax-4gpu` on the JAX path).
+shared weights. 9,715,512 parameters. The 100-epoch pair on the timm net landed 2026-09-27:
+**76.68 / 93.14** here (`mnv4-default-4gpu`, runs/2026-09-26-mnv4-verified-bf16-100ep) against
+76.57 / 92.98 on the JAX path (`mnv4-default-jax-4gpu`, runs/2026-09-26-mnv4-jax-bf16-100ep), a
+tie inside one Wilson half-width. The pre-timm reference's 75.48 was a different network.
 
 ✅ **The 4× renders are tied.** `mnv4-dp-check` (duplicated batch) covers the 4-replica renders,
 and `imagenet-syncbn-check mnv4` (split batch: 4×64 IS 1×256) covers `adamdp64`. Since
