@@ -23,6 +23,14 @@
 
 : "${CKPT_BASE:?jax_job.sh needs CKPT_BASE}" "${PY_REL:?jax_job.sh needs PY_REL}"
 
+# Which box, and so which python (the verified confs' _box.sh). ares trains on the repo's pinned
+# .venv (cuda12, jax_job's lock); the 3060 box has no usable .venv/bin/python — its JAX stack is
+# /home/skoonce/.venv-cuda (cuda13, jax 0.11.1 since 2026-08-24), which every JAX run on that box
+# has trained on, the 72.31 ViT-Ti reference included. JAX_PY is relative to jax/ (CMD cds there).
+. "$(dirname "${BASH_SOURCE[0]}")/../jobs/_box.sh"
+if [ "$BOX" = ares ]; then JAX_PY=../.venv/bin/python; JAX_PIN_WANT=""
+else JAX_PY="$BOX_PY"; JAX_PIN_WANT=0.11.1; fi
+
 CMD=(bash -c '
   set -u
   base='"$CKPT_BASE"'
@@ -39,7 +47,7 @@ CMD=(bash -c '
   exec env JAX_COMPILATION_CACHE_DIR=/home/skoonce/.jax_cache \
     LEAN_MLIR_PARAMS_OUT="$base" LEAN_MLIR_CKPT_EVERY=1 \
     TFDS_DATA_DIR="${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}" \
-    "${resume[@]}" ../.venv/bin/python -u '"$PY_REL"'
+    "${resume[@]}" '"$JAX_PY"' -u '"$PY_REL"'
 ')
 
 epoch_now() {
@@ -64,9 +72,10 @@ pc_jax_trainer() {
   pc_jax_box || ok=1
   [ -d "${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}/imagenet2012" ] || {
     echo "⛔ no imagenet2012 under ${TFDS_DATA_DIR:-/home/skoonce/tensorflow_datasets}"; ok=1; }
-  # the pinned stack only (other jax versions break bf16 convs); the pin is READ from the lock
-  local pin; pin="$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)"
-  .venv/bin/python -c "import jax,sys; sys.exit(0 if jax.__version__ == '$pin' else 1)" \
-    2>/dev/null || { echo "⛔ .venv's jax is not the pinned $pin (jax/requirements-cuda-lock.txt)"; ok=1; }
+  # the pinned stack only (other jax versions break bf16 convs); on ares the pin is READ from the
+  # lock, on the 3060 box it is that box's own cuda13 stack (the lock is ares' cuda12 one)
+  local pin; pin="${JAX_PIN_WANT:-$(sed -n 's/^jax==//p' jax/requirements-cuda-lock.txt)}"
+  (cd jax && "$JAX_PY" -c "import jax,sys; sys.exit(0 if jax.__version__ == '$pin' else 1)" 2>/dev/null) \
+    || { echo "⛔ $BOX's jax ($JAX_PY) is not the pinned $pin"; ok=1; }
   return $ok
 }
