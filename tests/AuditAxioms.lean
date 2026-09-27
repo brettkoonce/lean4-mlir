@@ -148,6 +148,7 @@ import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ParamGrad
 import LeanMlir.Proofs.Nets.MobileNet.MobileNetV4ParamGrad
 import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetParamGrad
 import LeanMlir.Proofs.Nets.ConvNeXt.ConvNeXtParamGrad
+import LeanMlir.Proofs.Nets.ViT.ViTParamGrad
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
@@ -1180,6 +1181,26 @@ open Proofs
 #print axioms Proofs.CnxTiePoCGB.cnx_logitsB_eq
 #print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad
 #print axioms Proofs.CnxTiePoCGB.cnx_net_lossGrad_smoothedCE
+-- ViT-Tiny: every parameter gradient node IS the loss's derivative (ViTParamGrad.lean)
+#print axioms Proofs.ViTTiePoCGB.pdivMat_colIndepH
+#print axioms Proofs.ViTTiePoCGB.colSlabwiseHasVJPMatH
+#print axioms Proofs.ViTTiePoCGB.attnCoreQHasVJPMat
+#print axioms Proofs.ViTTiePoCGB.attnCoreKHasVJPMat
+#print axioms Proofs.ViTTiePoCGB.attnCoreVHasVJPMat
+#print axioms Proofs.ViTTiePoCGB.attnCoreQ_backward
+#print axioms Proofs.ViTTiePoCGB.vitMlpSub_hasGradAt
+#print axioms Proofs.ViTTiePoCGB.vitPostQ_hasGradAt
+#print axioms Proofs.ViTTiePoCGB.vitPostL1_hasGradAt
+#print axioms Proofs.ViTTiePoCGB.vitPostL2_hasGradAt
+#print axioms Proofs.ViTTiePoCGB.vitPostF1_hasGradAt
+#print axioms Proofs.ViTTiePoCGB.vit_fwd_Wq
+#print axioms Proofs.ViTTiePoCGB.vit_block_lossTiedGB
+#print axioms Proofs.ViTTiePoCGB.vit_head_lossTiedGB
+#print axioms Proofs.ViTTiePoCGB.vit_embed_lossTiedGB
+#print axioms Proofs.ViTTiePoCGB.vit_factor_b1
+#print axioms Proofs.ViTTiePoCGB.vit_logitsB_eq
+#print axioms Proofs.ViTTiePoCGB.vit_net_lossGrad
+#print axioms Proofs.ViTTiePoCGB.vit_net_lossGrad_smoothedCE
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment
