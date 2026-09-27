@@ -853,7 +853,7 @@ def efficientnetFwdFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bo
   let F : ENetFwd := (enetFwdChain B nClasses .train epsStr convBias sd cd).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd({enetFwdSig B nClasses .train epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── EfficientNet-B0 forward: every line is pretty(verified AST node) ──\n" ++
+  s!"    // ── EfficientNet-B0 forward: every op is pretty(verified AST node){if convBias then "" else " except the %zb zero-bias constants"} ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -872,7 +872,7 @@ def efficientnetFwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias 
   let F : ENetFwd := (enetFwdChain B nClasses .eval epsStr convBias sd cd).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{fwdEvalEntry slug epsStr}({enetFwdSig B nClasses .eval epsStr convBias sd cd}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── EfficientNet-B0 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
+  s!"    // ── EfficientNet-B0 eval forward (running-stats BN): every op is pretty(verified AST node){if convBias then "" else " except the %zb zero-bias constants"} ──\n" ++
   zeroBiasPrelude convBias enetBiasWidths ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -1049,7 +1049,7 @@ def efficientnetTrainStepFaithfulV (B nClasses : Nat) (epsStr lrStr : String)
     let (code, outNames, _, _, _) ← enetBackAll B nClasses epsStr lrStr false none convBias
     let outTypes : List String := (enetSig nClasses convBias).map (fun p => ty p.2)
     pure <|
-      "    // ── EfficientNet-B0 (16-MBConv) train step: every line is pretty(verified AST node) ──\n" ++
+      s!"    // ── EfficientNet-B0 (16-MBConv) train step: every op is pretty(verified AST node){if convBias then "" else " except the %zb zero-bias constants"} ──\n" ++
       zeroBiasPrelude convBias enetBiasWidths ++ code ++
       s!"    return {String.intercalate ", " outNames} : {String.intercalate ", " outTypes}\n"
   let sigList := enetSig nClasses convBias
@@ -1292,7 +1292,7 @@ def efficientnetAdamTrainStepFaithful (B nClasses : Nat) (epsStr : String)
         "    // ── EfficientNet-B0 AdamW train step: gradients + optimizer are pretty(AST node) ──\n"
        else
         s!"    // ── EfficientNet-B0 AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++

@@ -1,6 +1,6 @@
 module @m {
   func.func @cnn_train_step(%x: tensor<128x784xf32>, %W1: tensor<32x1x3x3xf32>, %b1: tensor<32xf32>, %W2: tensor<32x32x3x3xf32>, %b2: tensor<32xf32>, %W3: tensor<6272x512xf32>, %b3: tensor<512xf32>, %W4: tensor<512x512xf32>, %b4: tensor<512xf32>, %W5: tensor<512x10xf32>, %b5: tensor<10xf32>, %lslot: tensor<f32>, %onehot: tensor<128x10xf32>) -> (tensor<32x1x3x3xf32>, tensor<32xf32>, tensor<32x32x3x3xf32>, tensor<32xf32>, tensor<6272x512xf32>, tensor<512xf32>, tensor<512x512xf32>, tensor<512xf32>, tensor<512x10xf32>, tensor<10xf32>, tensor<f32>) {
-    // ── cnn train step: every line is pretty(verified AST node) ──
+    // ── cnn train step: every op is pretty(verified AST node) except the marked report-only %loss ──
     %v0 = stablehlo.reshape %x : (tensor<128x784xf32>) -> tensor<128x1x28x28xf32>
     %v1 = stablehlo.convolution(%v0, %W1)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],

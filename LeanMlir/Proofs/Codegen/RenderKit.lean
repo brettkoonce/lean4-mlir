@@ -178,6 +178,13 @@ def bnEpsMarker (epsStr : String) : String :=
 def fwdEvalEntry (slug epsStr : String) : String :=
   match bnEpsMarker epsStr with | "" => s!"{slug}_fwd_eval" | m => s!"{slug}_fwd_eval_{m}"
 
+/-- The banner clause of a batch-BN train step: which of its lines are not `pretty` of a node.
+    `acc` adds the accumulation β scalars, which the render computes from `%aup` by hand. -/
+def trainStepHandNote (acc : Bool := false) : String :=
+  "every op is pretty(verified AST node) except the constants, " ++
+    (if acc then "the β scalars computed from %aup, " else "") ++
+    "the input passthroughs and the marked report-only %loss"
+
 /-- The `%wdz` declaration an excluding render needs. Emitted only when the flag is on, so at
     `wdExclude := false` not one byte moves and every committed artifact is untouched. `params`
     names which parameters take it, in the banner comment only. -/

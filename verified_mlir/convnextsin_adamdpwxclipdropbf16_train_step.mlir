@@ -7,7 +7,7 @@ module @m {
     %one = stablehlo.constant dense<1.0> : tensor<f32>
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
     // ── ConvNeXt-S AdamW train step, DATA-PARALLEL over 4 replicas ──
-    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
+    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
     // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
     // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph
     // at the batch it was rendered for; the collective averages that function's gradients

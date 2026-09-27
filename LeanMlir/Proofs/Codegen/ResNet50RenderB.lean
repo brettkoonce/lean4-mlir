@@ -979,15 +979,15 @@ def resnet50TrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       ["tensor<f32>", "tensor<f32>", "tensor<f32>"] ++ accScalarTys ++ statTypes
     pure <|
       (if replicas ≤ 1 then
-        s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
+        s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step: {trainStepHandNote accOn} ──\n"
        else if !sync then
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN\n" ++
         "    // of the per-replica gradient nodes (4d piece 2). BatchNorm is PER REPLICA here.\n"
        else
         s!"    // ── ResNet-50 bottleneck batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
@@ -1195,7 +1195,7 @@ def resnet50FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   let (code, logits) := (fwr.code, fwr.logits)
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── ResNet-50 forward: every line is pretty(verified AST node) ──\n" ++
+  "    // ── ResNet-50 forward: every op is pretty(verified AST node) except the %zb zero-bias constants ──\n" ++
   zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ code ++
   s!"    return {logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -1211,7 +1211,7 @@ def resnet50FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let (code, logits) := (r50FwdChain B nClasses epsStr q).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── ResNet-50 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
+  "    // ── ResNet-50 eval forward (running-stats BN): every op is pretty(verified AST node) except the %zb zero-bias constants ──\n" ++
   zeroBiasPrelude false [64, 128, 256, 512, 1024, 2048] ++ code ++
   s!"    return {logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"

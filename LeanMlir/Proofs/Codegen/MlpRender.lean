@@ -90,7 +90,7 @@ def mlpTrainStepFaithfulV (B d₀ d₁ d₂ d₃ : Nat) (lrStr : String)
   -- smallest possible size, so the loss can be returned without touching the C ABI
   -- that every other net's tie and DP harness depends on.
   s!"  func.func @mlp_train_step(%x: {ty [B,d₀]}, %W0: {ty [d₀,d₁]}, %b0: {ty [d₁]}, %W1: {ty [d₁,d₂]}, %b1: {ty [d₂]}, %W2: {ty [d₂,d₃]}, %b2: {ty [d₃]}, %lslot: tensor<f32>, %onehot: {ty [B,d₃]}) -> ({ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}, tensor<f32>) " ++ "{\n" ++
-  "    // ── mlp train step: every line is pretty(verified AST node) ──\n" ++
+  "    // ── mlp train step: every op is pretty(verified AST node) except the marked report-only %loss ──\n" ++
   body ++
   lossCode ++
   s!"    return {nW0}, {nb0}, {nW1}, {nb1}, {nW2}, {nb2}, %loss : {ty [d₀,d₁]}, {ty [d₁]}, {ty [d₁,d₂]}, {ty [d₂]}, {ty [d₂,d₃]}, {ty [d₃]}, tensor<f32>\n" ++

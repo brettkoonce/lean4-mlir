@@ -1,6 +1,6 @@
 module @m {
   func.func @mlp_train_step(%x: tensor<128x784xf32>, %W0: tensor<784x512xf32>, %b0: tensor<512xf32>, %W1: tensor<512x512xf32>, %b1: tensor<512xf32>, %W2: tensor<512x10xf32>, %b2: tensor<10xf32>, %lslot: tensor<f32>, %onehot: tensor<128x10xf32>) -> (tensor<784x512xf32>, tensor<512xf32>, tensor<512x512xf32>, tensor<512xf32>, tensor<512x10xf32>, tensor<10xf32>, tensor<f32>) {
-    // ── mlp train step: every line is pretty(verified AST node) ──
+    // ── mlp train step: every op is pretty(verified AST node) except the marked report-only %loss ──
     %v0 = stablehlo.dot_general %x, %W0, contracting_dims = [1] x [0], precision = [DEFAULT, DEFAULT] : (tensor<128x784xf32>, tensor<784x512xf32>) -> tensor<128x512xf32>
     %v1 = stablehlo.broadcast_in_dim %b0, dims = [1] : (tensor<512xf32>) -> tensor<128x512xf32>
     %v2 = stablehlo.add %v0, %v1 : tensor<128x512xf32>

@@ -11,8 +11,8 @@ module @m {
     //    %bc1/%bc2 are Adam bias corrections: unused here, passed through unchanged.
     //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not
     //    an implementation detail, since this optimizer is not bias-corrected.
-    // ── MobileNetV2 batch-BN AdamW train step, DATA-PARALLEL over 2 replicas ──
-    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
+    // ── MobileNetV2 batch-BN RMSProp train step, DATA-PARALLEL over 2 replicas ──
+    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /
     // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of
     // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN
     // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel

@@ -547,7 +547,7 @@ def mnv4FwdFaithfulV (B nClasses : Nat) (epsStr : String)
   let r := (mnv4FwdChainB B nClasses epsStr .train).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── MobileNetV4-Conv-M forward: every line is pretty(verified AST node) ──\n" ++
+  "    // ── MobileNetV4-Conv-M forward: every op is pretty(verified AST node) except the %zb zero-bias constants ──\n" ++
   zeroBiasPrelude false mnv4ZbWidths ++ r.code ++
   s!"    return {r.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -568,7 +568,7 @@ def mnv4FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let r := (mnv4FwdChainB B nClasses epsStr .eval (f := s / 32)).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval{vSuffix}({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── MobileNetV4-Conv-M eval forward (running-stats BN): every line is pretty(AST node) ──\n" ++
+  "    // ── MobileNetV4-Conv-M eval forward (running-stats BN): every op is pretty(verified AST node) except the %zb zero-bias constants ──\n" ++
   zeroBiasPrelude false mnv4ZbWidths ++ r.code ++
   s!"    return {r.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -819,6 +819,15 @@ def mnv4AdamVariant (B replicas : Nat)
     (bf16 : Bool := false) : String :=
   (if replicas ≤ 1 then "adam" else "adamdp") ++ (if B == 32 then "" else toString B) ++
   (if bf16 then "bf16" else "")
+
+/-- The optimizer's name in the train step's banner: `none` is the committed AdamW tail. -/
+def mnv4OptLabel : Option R34Opt → String
+  | none | some .adamw   => "AdamW"
+  | some .heavyBall     => "heavy-ball momentum + coupled L2"
+  | some .sgd           => "plain SGD + coupled L2 (no momentum)"
+  | some .lamb          => "LAMB (per-tensor trust ratio)"
+  | some (.adamwAccum k) => s!"AdamW over {k} ACCUMULATED micro-batches"
+  | some (.lambAccum k)  => s!"LAMB (per-tensor trust ratio) over {k} ACCUMULATED micro-batches"
 
 /-- **The variant slug of a recipe render** — the JAX reference's recipe renders. `opt = none` is `mnv4AdamVariant`, so every committed spelling
     is unchanged. Markers in the order the driver's predicates read them (`VerifiedVariant`):
@@ -1083,10 +1092,10 @@ def mobilenetv4AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
       (if cd then [ty [B, 1280]] else [])
     pure <|
       (if replicas ≤ 1 then
-        "    // ── MobileNetV4-Conv-M batch-BN AdamW train step: every line is pretty(AST node) ──\n"
+        s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step: {trainStepHandNote accOn} ──\n"
        else
-        s!"    // ── MobileNetV4-Conv-M batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        s!"    // ── MobileNetV4-Conv-M batch-BN {mnv4OptLabel opt} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++

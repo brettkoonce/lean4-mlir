@@ -557,7 +557,7 @@ def vitTrainStepRenderV (funcName : String := "vit_train_step") (lrStr : String 
     let retTys := [ty [192,3,16,16], ty [192], ty [192], ty [197,192]] ++
       ((List.range vDEPTH).flatMap (fun _ => blkRetTys)) ++ [ty [192], ty [192], ty [192,nClasses], ty [10]]
     pure <|
-      "    // ── ViT-Tiny depth-12 train step: every line is pretty(verified AST node) ──\n" ++
+      "    // ── ViT-Tiny depth-12 train step: every op is pretty(verified AST node) except the prelude above (the %one/%zero/%sc constants, the %x→%ximg reshape) ──\n" ++
       code ++
       s!"    return {String.intercalate ", " retNames} : {String.intercalate ", " retTys}\n"
   let body : String := go.run' (0, [])

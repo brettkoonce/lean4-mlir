@@ -4,7 +4,7 @@ module @m {
     %zero = stablehlo.constant dense<0.0> : tensor<f32>
     %sc = stablehlo.constant dense<0.0> : tensor<f32>
     %ximg = stablehlo.reshape %x : (tensor<32x150528xf32>) -> tensor<32x3x224x224xf32>
-    // ── ViT-Tiny depth-12 train step: every line is pretty(verified AST node) ──
+    // ── ViT-Tiny depth-12 train step: every op is pretty(verified AST node) except the prelude above (the %one/%zero/%sc constants, the %x→%ximg reshape) ──
     %v0 = stablehlo.reshape %x : (tensor<32x150528xf32>) -> tensor<32x3x224x224xf32>
     %v1 = stablehlo.convolution(%v0, %wConv)
       dim_numbers = [b, f, 0, 1]x[o, i, 0, 1]->[b, f, 0, 1],

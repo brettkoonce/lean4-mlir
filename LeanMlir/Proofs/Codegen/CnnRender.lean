@@ -103,7 +103,7 @@ def cnnTrainStepFaithfulV (B ic c h w d1 nClasses kH kW : Nat) (lrStr : String)
     s!"    %loss = stablehlo.negate %lossm : tensor<f32>\n"
   "module @m {\n" ++
   s!"  func.func @cnn_train_step(%x: {ty [B,ic*(2*h)*(2*w)]}, %W1: {ty [c,ic,kH,kW]}, %b1: {ty [c]}, %W2: {ty [c,c,kH,kW]}, %b2: {ty [c]}, %W3: {ty [flat,d1]}, %b3: {ty [d1]}, %W4: {ty [d1,d1]}, %b4: {ty [d1]}, %W5: {ty [d1,nClasses]}, %b5: {ty [nClasses]}, %lslot: tensor<f32>, %onehot: {ty [B,nClasses]}) -> ({ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}, tensor<f32>) " ++ "{\n" ++
-  "    // ── cnn train step: every line is pretty(verified AST node) ──\n" ++
+  "    // ── cnn train step: every op is pretty(verified AST node) except the marked report-only %loss ──\n" ++
   body ++
   lossCode ++
   s!"    return {n1W}, {n1b}, {n2W}, {n2b}, {n3W}, {n3b}, {n4W}, {n4b}, {n5W}, {n5b}, %loss : {ty [c,ic,kH,kW]}, {ty [c]}, {ty [c,c,kH,kW]}, {ty [c]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}, tensor<f32>\n" ++
@@ -190,7 +190,7 @@ def cifarTrainStepFaithfulV (B ic c1 c2 h w d1 nClasses kH kW : Nat) (lrStr : St
   let (body, r1W, r1b, r2W, r2b, r3W, r3b, r4W, r4b, r5W, r5b, r6W, r6b, r7W, r7b) := act.run' (0, [])
   "module @m {\n" ++
   s!"  func.func @cifar_train_step(%x: {ty [B,ic*(2*(2*h))*(2*(2*w))]}, %W1: {ty [c1,ic,kH,kW]}, %b1: {ty [c1]}, %W2: {ty [c1,c1,kH,kW]}, %b2: {ty [c1]}, %W3: {ty [c2,c1,kH,kW]}, %b3: {ty [c2]}, %W4: {ty [c2,c2,kH,kW]}, %b4: {ty [c2]}, %W5: {ty [flat,d1]}, %b5: {ty [d1]}, %W6: {ty [d1,d1]}, %b6: {ty [d1]}, %W7: {ty [d1,nClasses]}, %b7: {ty [nClasses]}, %onehot: {ty [B,nClasses]}) -> ({ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}) " ++ "{\n" ++
-  "    // ── cifar train step: every line is pretty(verified AST node) ──\n" ++
+  "    // ── cifar train step: every op is pretty(verified AST node) ──\n" ++
   body ++
   s!"    return {r1W}, {r1b}, {r2W}, {r2b}, {r3W}, {r3b}, {r4W}, {r4b}, {r5W}, {r5b}, {r6W}, {r6b}, {r7W}, {r7b} : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n" ++
   "  }\n}\n"
@@ -322,7 +322,7 @@ def cifar8TrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (lrS
       cW5g ++ cb5g ++ cW6g ++ cb6g ++ cW7g ++ cb7g ++ cW8g ++ cb8g ++
       cW9 ++ cb9 ++ cWa ++ cba ++ cWb ++ cbb
     pure <|
-      "    // ── cifar8 train step: every line is pretty(verified AST node) ──\n" ++ body ++
+      "    // ── cifar8 train step: every op is pretty(verified AST node) ──\n" ++ body ++
       s!"    return {nW1g}, {nb1g}, {nW2g}, {nb2g}, {nW3g}, {nb3g}, {nW4g}, {nb4g}, {nW5g}, {nb5g}, {nW6g}, {nb6g}, {nW7g}, {nb7g}, {nW8g}, {nb8g}, {nW9}, {nb9}, {nWa}, {nba}, {nWb}, {nbb} : {ty [c1,ic,kH,kW]}, {ty [c1]}, {ty [c1,c1,kH,kW]}, {ty [c1]}, {ty [c2,c1,kH,kW]}, {ty [c2]}, {ty [c2,c2,kH,kW]}, {ty [c2]}, {ty [c3,c2,kH,kW]}, {ty [c3]}, {ty [c3,c3,kH,kW]}, {ty [c3]}, {ty [c4,c3,kH,kW]}, {ty [c4]}, {ty [c4,c4,kH,kW]}, {ty [c4]}, {ty [flat,d1]}, {ty [d1]}, {ty [d1,d1]}, {ty [d1]}, {ty [d1,nClasses]}, {ty [nClasses]}\n"
   let inner : String := go.run' (0, [])
   "module @m {\n" ++
@@ -346,6 +346,12 @@ inductive CifarOpt
   /-- `v' = μ·v + g`, `θ' = θ − lr·(g + μ·v')`; velocity in the `v` slot, `m` untouched. -/
   | nesterov
 deriving DecidableEq, Repr
+
+/-- The optimizer's name in an artifact's banner. -/
+def CifarOpt.label : CifarOpt → String
+  | .adamw    => "AdamW"
+  | .sgd      => "SGD"
+  | .nesterov => "Nesterov momentum"
 
 /-- One parameter's optimizer tail. The gradient is emitted **once** and every optimizer output
     reads it back by SSA name (`.operand gradSSA`), so the outputs share one gradient subgraph
@@ -573,8 +579,8 @@ def cifar8AdamTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let vns := [vW1, vb1, vW2, vb2, vW3, vb3, vW4, vb4, vW5, vb5, vW6, vb6, vW7, vb7, vW8, vb8,
                 vW9, vb9, vWa, vba, vWb, vbb]
     pure <|
-      "    // ── cifar8 AdamW train step: every line is pretty(verified AST node), except the\n" ++
-      "    //    marked report-only loss + the %bc passthroughs ──\n" ++
+      s!"    // ── cifar8 {opt.label} train step: every op is pretty(verified AST node) except the\n" ++
+      "    //    constants below, the marked report-only loss and the %bc passthroughs ──\n" ++
       -- NB `%sc`/`%sa`/`%sb`/`%sd` are RESERVED: maxPoolBack's select_and_scatter emitter
       -- hardcodes them as region block arguments, and a top-level def of the same name is a
       -- redefinition error at parse time. Hence `%lzero`.
@@ -831,8 +837,8 @@ def cifar8AdamTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
     let vns := [vW1, vb1, vW2, vb2, vW3, vb3, vW4, vb4, vW5, vb5, vW6, vb6, vW7, vb7, vW8, vb8,
                 vW9, vb9, vWa, vba, vWb, vbb]
     pure <|
-      "    // ── cifar8 AdamW train step: every line is pretty(verified AST node), except the\n" ++
-      "    //    marked report-only loss + the %bc passthroughs ──\n" ++
+      s!"    // ── cifar8 {opt.label} train step: every op is pretty(verified AST node) except the\n" ++
+      "    //    constants below, the marked report-only loss and the %bc passthroughs ──\n" ++
       -- NB `%sc`/`%sa`/`%sb`/`%sd` are RESERVED: maxPoolBack's select_and_scatter emitter
       -- hardcodes them as region block arguments, and a top-level def of the same name is a
       -- redefinition error at parse time. Hence `%lzero`.
@@ -1226,10 +1232,10 @@ def cifar8BnTrainStepFaithfulV (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat) (e
         s!"    %wd = stablehlo.constant dense<{wdStr}> : tensor<f32>\n" ++
         (if o == .nesterov then "    %mu = stablehlo.constant dense<0.9> : tensor<f32>\n" else "")
     let hdr := match opt with
-      | none   => "    // ── cifar8-bn train step: every line is pretty(verified AST node) ──\n"
-      | some _ =>
-        "    // ── cifar8-bn train step: every line is pretty(verified AST node), except the\n" ++
-        "    //    marked report-only loss + the %bc passthroughs ──\n"
+      | none   => "    // ── cifar8-bn train step: every op is pretty(verified AST node) ──\n"
+      | some o =>
+        s!"    // ── cifar8-bn {o.label} train step: every op is pretty(verified AST node) except the\n" ++
+        "    //    constants below, the marked report-only loss and the %bc passthroughs ──\n"
     pure <|
       hdr ++ constBlk ++ body ++
       s!"    return {String.intercalate ", " retVals} : {String.intercalate ", " retTys}\n"
@@ -1549,8 +1555,9 @@ def cifar8BnTrainStepFaithfulB (B ic c1 c2 c3 c4 h w d1 nClasses kH kW : Nat)
                 vW5, vb5, vg5, vt5, vW6, vb6, vg6, vt6, vW7, vb7, vg7, vt7, vW8, vb8, vg8, vt8,
                 vW9, vb9, vWa, vba, vWb, vbb]
     pure <|
-      "    // ── cifar8-BN train step, BATCHED op family: every line is pretty(verified AST\n" ++
-      "    //    node), except the marked report-only loss + the %bc passthroughs ──\n" ++
+      s!"    // ── cifar8-BN {opt.label} train step, BATCHED op family: every op is pretty(verified\n" ++
+      "    //    AST node) except the constants below, the marked report-only loss and the %bc\n" ++
+      "    //    passthroughs ──\n" ++
       -- NB `%sc`/`%sa`/`%sb`/`%sd` are RESERVED: maxPoolBack's select_and_scatter emitter
       -- hardcodes them as region block arguments. Hence `%lzero`.
       "    %lzero = stablehlo.constant dense<0.0> : tensor<f32>\n" ++

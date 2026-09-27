@@ -612,7 +612,7 @@ def mobilenetv2FwdFaithfulB (B nClasses : Nat) (epsStr : String)
   let F : MNV2FwdRecB := (mnv2FwdChainB B nClasses epsStr convBias bf16).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // -- MobileNetV2 (17-block paper) batch-BN forward: every line is pretty(verified AST node) --\n" ++
+  s!"    // ── MobileNetV2 (17-block paper) batch-BN forward: every op is pretty(verified AST node){if convBias then "" else " except the %zb zero-bias constants"} ──\n" ++
   zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ F.code ++
   s!"    return {F.log} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -894,10 +894,10 @@ def mobilenetv2AdamTrainStepFaithfulB (B nClasses : Nat) (epsStr : String)
          "    //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not\n" ++
          "    //    an implementation detail, since this optimizer is not bias-corrected.\n") ++
       (if replicas ≤ 1 then
-        "    // ── MobileNetV2 batch-BN AdamW train step: every line is pretty(verified AST node) ──\n"
+        s!"    // ── MobileNetV2 batch-BN {opt.label} train step: {trainStepHandNote} ──\n"
        else
-        s!"    // ── MobileNetV2 batch-BN AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        s!"    // ── MobileNetV2 batch-BN {opt.label} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
+        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++
@@ -1215,7 +1215,7 @@ def mnv2FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String) (convBias : Bool :
   let F : MNV2Fwd := (mnv2FwdChain B nClasses epsStr convBias).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{entry}({mnv2FwdSig B nClasses epsStr convBias}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // -- MobileNetV2 eval forward (running-stats BN): every line is pretty(verified AST node) --\n" ++
+  s!"    // ── MobileNetV2 eval forward (running-stats BN): every op is pretty(verified AST node){if convBias then "" else " except the %zb zero-bias constants"} ──\n" ++
   zeroBiasPrelude convBias [16, 24, 32, 64, 96, 128, 144, 160, 192, 256, 320, 384, 576, 960, 1280] ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"

@@ -4593,6 +4593,11 @@ inductive OptKind where
   | rmsprop
 deriving DecidableEq, Repr
 
+/-- The optimizer's name in an artifact's banner. -/
+def OptKind.label : OptKind → String
+  | .adamw   => "AdamW"
+  | .rmsprop => "RMSProp"
+
 /-- The RMSProp hyperparameters, as the JAX reference configs state them. `ρ`/`μ` are 0.9 on both
     nets that use this optimizer; **ε and wd are what differ**, and ε differs in the way that
     matters most (see `Proofs.rmsBufNext_eps_placement_at_zero`). -/
@@ -4742,7 +4747,7 @@ def linTrainStepFaithfulV (B m n : Nat) (lrStr : String)
   "module @m {\n" ++
   s!"  func.func @linear_train_step(%x: {ty [B,m]}, %W0: {ty [m,n]}, %b0: {ty [n]}, " ++
   s!"%onehot: {ty [B,n]}) -> ({ty [m,n]}, {ty [n]}) " ++ "{\n" ++
-  "    // ── linear train step: every line is pretty(verified AST node) ──\n" ++
+  "    // ── linear train step: every op is pretty(verified AST node) ──\n" ++
   body ++
   s!"    return {wRes}, {bRes} : {ty [m,n]}, {ty [n]}\n" ++
   "  }\n}\n"

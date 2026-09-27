@@ -8,6 +8,11 @@ needs. `doc_honesty_pass.md` is still the parent plan (its §0 protocol applies 
 
 ## ▶ Start here
 
+**Status 2026-09-27:** §1–§3 done on branch `docs-followups` (`0a7eeea7`, then the banner
+pass: 174 artifacts say which lines are hand-written and name the right optimizer). Left in §1:
+the ⭐/⛔/⚠ markers in `--` comments (the D4 sweep). Left in §3: the `179 of 180` ConvNeXt
+test note, which is a dated measurement and consistent with itself.
+
 Pick a section. §1–§3 are small and mechanical; §4 is the book pass (the plan's §1, minus what
 this pass already did on the landing page); §5 are Lean changes decided in D1; §6 are leads for a
 correctness pass, not doc work.

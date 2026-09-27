@@ -11,7 +11,7 @@ module @m {
     //    %bc1/%bc2 are Adam bias corrections: unused here, passed through unchanged.
     //    ⚠ The mean-square must be INITIALISED TO 1.0, not 0 — part of the recipe, not
     //    an implementation detail, since this optimizer is not bias-corrected.
-    // ── MobileNetV2 batch-BN AdamW train step: every line is pretty(verified AST node) ──
+    // ── MobileNetV2 batch-BN RMSProp train step: every op is pretty(verified AST node) except the constants, the input passthroughs and the marked report-only %loss ──
     // §2l step B: the conv biases are gone from the signature (BN removes them; He et al.'s
     // `.convBn` has none). The proven conv ops still take a bias operand, so it is bound to a
     // zero constant here — same op, `bias = 0`, and `x + 0.0` is exact.

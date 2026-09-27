@@ -219,7 +219,7 @@ def resnet34FwdEvalFaithfulV (B nClasses : Nat) (epsStr : String)
   let F : R34Fwd := (r34FwdChain B nClasses epsStr convBias).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd_eval({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── ResNet-34 eval forward (running-stats BN): every line is pretty(verified AST node) ──\n" ++
+  s!"    // ── ResNet-34 eval forward (running-stats BN): every op is pretty(verified AST node){if convBias then "" else " except the %zb zero-bias constants"} ──\n" ++
   zeroBiasPrelude convBias [64, 128, 256, 512] ++ F.code ++
   s!"    return {F.logits} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -1265,7 +1265,7 @@ def resnet34FwdFaithfulB (B nClasses : Nat) (epsStr : String)
   let F : R34FwdRecB := (r34FwdChainB B nClasses epsStr convBias bf16).run' (0, [])
   "module @m {\n" ++
   s!"  func.func @{slug}_fwd({inSig}) -> {ty [B, nClasses]} " ++ "{\n" ++
-  "    // ── ResNet-34 batch-BN forward: every line is pretty(verified AST node) ──\n" ++
+  s!"    // ── ResNet-34 batch-BN forward: every op is pretty(verified AST node){if convBias then "" else " except the %zb zero-bias constants"} ──\n" ++
   zeroBiasPrelude convBias [64, 128, 256, 512] ++ F.code ++
   s!"    return {F.log} : {ty [B, nClasses]}\n" ++
   "  }\n}\n"
@@ -1481,10 +1481,10 @@ here first"
       -- With `optLabel = "AdamW"` these are the committed byte sequences character for character;
       -- interpolating a constant changes the source, not the output (gate 1 checks exactly that).
       (if replicas ≤ 1 then
-        s!"    // ── ResNet-34 batch-BN {optLabel} train step: every line is pretty(verified AST node) ──\n"
+        s!"    // ── ResNet-34 batch-BN {optLabel} train step: {trainStepHandNote} ──\n"
        else
         s!"    // ── ResNet-34 batch-BN {optLabel} train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes (4d piece 2). BatchNorm is SYNCHRONISED: every BN\n" ++
         "    // layer all-reduces its mu, then var_r + (mu_r - mu)^2 (bnBatchVarAtB, Chan's parallel\n" ++

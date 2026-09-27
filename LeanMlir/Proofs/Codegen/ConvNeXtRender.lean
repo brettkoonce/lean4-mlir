@@ -670,7 +670,7 @@ def convNextFwdFaithfulV (funcName : String := "convnext_fwd") (nClasses : Nat :
     -- byte-identical "ConvNeXt-T" every committed artifact carries, and at ConvNeXt-S the banner
     -- cannot go on claiming T. `cnxFwdBanner` restates this line for the batched chain, so
     -- the two must agree — which they do at the default, and the tie is a T-only gate.
-    s!"    // ── {cnxModelName V} forward: every line is pretty(verified AST node) ──\n" ++
+    s!"    // ── {cnxModelName V} forward: every op is pretty(verified AST node) except the %one/%zero LayerNorm constants ──\n" ++
     chLnPrelude ++ F.code ++
     s!"    return {F.logits} : {ty [cBS,nClasses]}\n" ++ "  }\n}\n"
 
@@ -1074,7 +1074,7 @@ def convNextAdamTrainStepFaithful (alphaStr negAlphaKStr bStr : String)
         "    // flatConvStride4WeightGradHasVJP; emit-side odd/even split sWGradGeom).\n"
        else
         s!"    // ── {cnxModelName V} AdamW train step, DATA-PARALLEL over {replicas} replicas ──\n" ++
-        "    // Every line is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
+        "    // Every gradient and update op is pretty(verified AST node), the per-parameter `%arsum*` all_reduce /\n" ++
         "    // `%armean*` blocks included: pretty(allReduceMeanF), whose den is the replica MEAN of\n" ++
         "    // the per-replica gradient nodes (4d piece 2). Each replica evaluates the same tied graph\n" ++
         "    // at the batch it was rendered for; the collective averages that function's gradients\n" ++

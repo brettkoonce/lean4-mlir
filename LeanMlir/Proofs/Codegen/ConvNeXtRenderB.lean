@@ -303,7 +303,7 @@ def convNextFwdChainB (nClasses : Nat := 10) (sd : Bool := false)
     `convnext-fwd-b-tie` renders the per-example chain against these bytes. -/
 def convNextFwdRenderB (funcName : String := "convnext_fwd_b") (nClasses : Nat := 10)
     (banner : String :=
-      "    // ── ConvNeXt-T forward at the BATCHED index N := B: every line is pretty(batchOp …) ──\n")
+      "    // ── ConvNeXt-T forward at the BATCHED index N := B: every op is pretty(batchOp …) except the %one/%zero LayerNorm constants ──\n")
     -- ⚠ TRAILING, per §2m: a parameter inserted mid-list captures an existing positional argument
     -- at every call site, which is how the mnv2 `convBias` threading went wrong.
     (sd : Bool := false)
@@ -679,7 +679,7 @@ def convNextAdamTrainStepFaithfulB (alphaStr negAlphaKStr bStr : String)
     `convnextsin_fwd` / `convnextbin_fwd` carry, which is why it takes the size: the model name
     is derived from the stage table, exactly as the per-example line derives it. -/
 def cnxFwdBanner (V : CnxDims := bTiny) : String :=
-  s!"    // ── {cnxModelName V} forward: every line is pretty(verified AST node) ──\n"
+  s!"    // ── {cnxModelName V} forward: every op is pretty(verified AST node) except the %one/%zero LayerNorm constants ──\n"
 
 /-- The SD forward's banner. Its own, and not `cnxFwdBanner`, because these bytes ARE a
     different render and a banner claiming otherwise would misdescribe the artifact it heads. -/
