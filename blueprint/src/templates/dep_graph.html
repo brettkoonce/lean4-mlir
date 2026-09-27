@@ -111,9 +111,9 @@ const height = graphContainer.node().clientHeight;
 // the graph reads like the book: one cluster per chapter, stacked in chapter
 // order top to bottom (invisible anchor edges enforce the order), a chapter
 // whose statements span several sections split into them; a dependency on another
-// chapter's statement is drawn as a dashed "portal" node inside the chapter
-// that uses it (clicking it opens the original), so no edge crosses a
-// chapter boundary; and a statement used by AMBIENT_CHAPTERS or more other
+// chapter's (or, in a split chapter, another section's) statement is drawn as a
+// dashed "portal" node inside the cluster that uses it (clicking it opens the
+// original), so no edge crosses a cluster boundary; and a statement used by AMBIENT_CHAPTERS or more other
 // chapters — the base definitions every proof is about — is drawn once, at
 // home, and named in the note above the graph. The node -> chapter/section
 // maps are generated at build time from the plasTeX document tree, so they
@@ -220,8 +220,8 @@ function clusterizeDot(dot) {
   const kept = [], portals = {};   // portals[key][src] = [dst, ...]
   for (const e of edges) {
     const ca = chapterOf(e.a), cb = chapterOf(e.b);
-    if (ca === undefined || cb === undefined || ca === cb) { kept.push(e); continue; }
-    if (ambient.has(e.a)) continue;
+    if (ca === undefined || cb === undefined || (ca === cb && keyOf(e.a) === keyOf(e.b))) { kept.push(e); continue; }
+    if (ambient.has(e.a) && ca !== cb) continue;
     const k = keyOf(e.b);
     ((portals[k] = portals[k] || {})[e.a] = portals[k][e.a] || []).push(e.b);
   }
@@ -255,8 +255,8 @@ function clusterizeDot(dot) {
       }
       for (const src of Object.keys(portals[k] || {}).sort()) {
         const pid = portalId(k, src);
-        out += '"' + pid + '" [label="' + shortLabel(src) + '\\n(ch ' +
-               ((CHAPTER_NUM[chapterOf(src)] || '').trim() || CHAPTER_TITLE[chapterOf(src)]) +
+        out += '"' + pid + '" [label="' + shortLabel(src) + '\\n(' + (chapterOf(src) == k.slice(0, k.indexOf('|')) ? 'above' : 'ch ' +
+               ((CHAPTER_NUM[chapterOf(src)] || '').trim() || CHAPTER_TITLE[chapterOf(src)])) +
                ')", shape=box, style="dashed,rounded", color=gray50, fontcolor=gray35, fontsize=10]; ';
         members[k].push(pid);
       }
@@ -270,6 +270,24 @@ function clusterizeDot(dot) {
     for (const src in portals[k])
       for (const dst of portals[k][src])
         out += '"' + portalId(k, src) + '" -> "' + dst + '" [style=dashed, color=gray55]; ';
+  // One row per net: a chapter that certifies two nets (ResNet-34/50,
+  // MobileNetV2/V4) would otherwise lay all their whole-net statements out
+  // in one long row; an invisible edge drops the second net's row below
+  // the first's.
+  for (const k of leafOrder) {
+    const byNet = {};
+    for (const id of members[k]) {
+      const m = id.match(/^thm:([a-z]+\d+)(?:_|Full)/);
+      if (m) (byNet[m[1]] = byNet[m[1]] || []).push(id);
+    }
+    const nets = Object.keys(byNet).sort();
+    if (nets.length < 2) continue;
+    for (const n of nets)
+      out += '{ rank=same; ' + byNet[n].map(id => '"' + id + '"').join('; ') + '; } ';
+    for (let i = 0; i + 1 < nets.length; i++)
+      for (const id of byNet[nets[i + 1]])
+        out += '"' + byNet[nets[i]][0] + '" -> "' + id + '" [style=invis, weight=0]; ';
+  }
   // Anchors: every member of leaf cluster i -> anchor -> every member of
   // leaf cluster i+1, so chapters (and the sections inside a split chapter)
   // stack in document order instead of wherever the ranking lands them.
@@ -310,7 +328,7 @@ function interactive() {
 
     $('#graph_note').text(
       'Chapters read top to bottom. A dashed box is a statement from another ' +
-      'chapter, drawn where it is used; click it to open the original.' +
+      'chapter or section, drawn where it is used; click it to open the original.' +
       (ambientNames.length
         ? ' Drawn once, in their own chapter, because every chapter uses them: ' +
           ambientNames.join(', ') + '.'
