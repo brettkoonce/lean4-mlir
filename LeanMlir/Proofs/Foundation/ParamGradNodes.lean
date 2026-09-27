@@ -44,6 +44,76 @@ theorem dInB_eq_batchMapBackward {N c h w kH kW : Nat} (W : DepthwiseKernel c kH
           (depthwiseFlat_differentiable W b)).backward x dy :=
   depthwiseBackBatched_faithful "" W b x (.operand "" dy)
 
+/-- `dStridedInB` — the emitted (symmetric) strided depthwise input-cotangent — is the batched
+    strided depthwise VJP's backward, at any saved input. -/
+theorem dStridedInB_eq_batchMapBackward {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+    (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) (dy : Vec (N * (c * h * w))) :
+    dStridedInB N W b dy
+      = (batchMapHasVJP (depthwiseStride2Flat W b) (depthwiseStride2FlatHasVJP W b)
+          (depthwiseStride2Flat_differentiable W b)).backward x dy :=
+  depthwiseStridedBackBatched_faithful "" W b x (.operand "" dy)
+
+-- ════════════════════════════════════════════════════════════════
+-- § One stage back: the loss gradient pulled through each emitted backward op
+--   Each lemma is `HasGradAt.comp` through a certified VJP, restated at the cotangent the render
+--   emits (`bnInB`, `reluMaskB`, `cInB`, …), so a net's chain is one line per stage.
+-- ════════════════════════════════════════════════════════════════
+
+/-- Back through batch BN: the gradient at its input is `bnInB` of the gradient at its output. -/
+theorem hasGradAt_bnBatchLA {N c h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+    (z : Vec (N * (c * h * w))) {G : Vec (N * (c * h * w)) → Vec 1} {dy : Vec (N * (c * h * w))}
+    (hG : HasGradAt G (bnBatchLA N c h w ε γ β z) dy) :
+    HasGradAt (fun z' => G (bnBatchLA N c h w ε γ β z')) z (bnInB N c h w ε γ z dy) :=
+  (hG.comp ((bnBatchLA_differentiable N c h w ε hε γ β) _)
+    ((bnBatchLAHasVJP N c h w ε hε γ β).toHasVJPAt _)).of_eq
+    (bnInB_eq_bnBackB N c h w ε hε γ β _ _).symm
+
+/-- Back through relu, off its kink: `reluMaskB`. -/
+theorem hasGradAt_relu {n : Nat} (x : Vec n) (hs : ∀ k, x k ≠ 0) {G : Vec n → Vec 1} {dy : Vec n}
+    (hG : HasGradAt G (relu n x) dy) :
+    HasGradAt (fun u => G (relu n u)) x (reluMaskB n x dy) :=
+  HasGradAt.comp (f := relu n) (x := x) hG (relu_differentiableAt_of_smooth _ _ hs)
+    (reluHasVJPAt _ _ hs)
+
+/-- Back through a batched conv: `cInB`. -/
+theorem hasGradAt_conv {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Vec (N * (ic * h * w))) {G : Vec (N * (oc * h * w)) → Vec 1} {dy : Vec (N * (oc * h * w))}
+    (hG : HasGradAt G (batchMap N (flatConv W b) x) dy) :
+    HasGradAt (fun y => G (batchMap N (flatConv W b) y)) x (cInB N W b dy) :=
+  (hG.comp ((batchMap_differentiable _ (flatConv_differentiable W b)) _)
+    ((batchMapHasVJP _ (flatConvHasVJP W b) (flatConv_differentiable W b)).toHasVJPAt _)).of_eq
+    (cInB_eq_batchMapBackward (h := h) (w := w) W b _ _).symm
+
+/-- Back through a batched symmetric strided conv: `cStridedInB`. -/
+theorem hasGradAt_convStrided {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) {G : Vec (N * (oc * h * w)) → Vec 1}
+    {dy : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (flatConvStride2 W b) x) dy) :
+    HasGradAt (fun y => G (batchMap N (flatConvStride2 W b) y)) x (cStridedInB N W b dy) :=
+  (hG.comp ((batchMap_differentiable _ (flatConvStride2_differentiable W b)) _)
+    ((batchMapHasVJP _ (flatConvStride2HasVJP W b)
+      (flatConvStride2_differentiable W b)).toHasVJPAt _)).of_eq
+    (cStridedInB_eq_batchMapBackward (h := h) (w := w) W b _ _).symm
+
+/-- Back through a batched depthwise: `dInB`. -/
+theorem hasGradAt_depthwise {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (b : Vec c)
+    (x : Vec (N * (c * h * w))) {G : Vec (N * (c * h * w)) → Vec 1} {dy : Vec (N * (c * h * w))}
+    (hG : HasGradAt G (batchMap N (depthwiseFlat W b) x) dy) :
+    HasGradAt (fun y => G (batchMap N (depthwiseFlat W b) y)) x (dInB N W b dy) :=
+  (hG.comp ((batchMap_differentiable _ (depthwiseFlat_differentiable W b)) _)
+    ((batchMapHasVJP _ (depthwiseFlatHasVJP W b)
+      (depthwiseFlat_differentiable W b)).toHasVJPAt _)).of_eq
+    (dInB_eq_batchMapBackward (h := h) (w := w) W b _ _).symm
+
+/-- Back through a batched symmetric strided depthwise: `dStridedInB`. -/
+theorem hasGradAt_depthwiseStrided {N c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+    (b : Vec c) (x : Vec (N * (c * (2 * h) * (2 * w)))) {G : Vec (N * (c * h * w)) → Vec 1}
+    {dy : Vec (N * (c * h * w))} (hG : HasGradAt G (batchMap N (depthwiseStride2Flat W b) x) dy) :
+    HasGradAt (fun y => G (batchMap N (depthwiseStride2Flat W b) y)) x (dStridedInB N W b dy) :=
+  (hG.comp ((batchMap_differentiable _ (depthwiseStride2Flat_differentiable W b)) _)
+    ((batchMapHasVJP _ (depthwiseStride2FlatHasVJP W b)
+      (depthwiseStride2Flat_differentiable W b)).toHasVJPAt _)).of_eq
+    (dStridedInB_eq_batchMapBackward (h := h) (w := w) W b _ _).symm
+
 -- ════════════════════════════════════════════════════════════════
 -- § Convolutions and dense layers
 -- ════════════════════════════════════════════════════════════════
@@ -174,6 +244,28 @@ theorem depthwiseB_eq_pdiv {N c h w kH kW : Nat} (cotN : String) (W : DepthwiseK
   rw [depthwiseBGradB_den, hG.pdiv_param_batchMap (fun θ y => depthwiseFlat (h := h) (w := w) W θ y) x
     (fun y => (depthwise_bias_differentiable W (Tensor3.unflatten y)) _) o]
   rfl
+
+/-- **Symmetric strided depthwise weight node = `∂G/∂W`** (MobileNetV4's `dw_mid` at its three
+    downsampling rows). -/
+theorem depthwiseStridedW_eq_pdiv {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
+    (x : Vec (N * (c * (2 * h) * (2 * w)))) (W : DepthwiseKernel c kH kW)
+    {G : Vec (N * (c * h * w)) → Vec 1} {cot : Vec (N * (c * h * w))}
+    (hG : HasGradAt G (batchMap N (depthwiseStride2Flat W b) x) cot) (idx : Fin (c * kH * kW)) :
+    den (SHlo.depthwiseStridedWeightGradB xN b x W (.operand cotN cot)) idx
+      = pdiv (fun θ => G (batchMap N (depthwiseStride2Flat (Tensor3.unflatten θ) b) x))
+          (Tensor3.flatten W) idx 0 := by
+  rw [depthwiseStridedWGradB_den]
+  have hG' : HasGradAt G
+      (batchMap N ((fun θ y => (depthwiseStride2Flat
+        (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y : Vec (c * h * w)))
+        (Tensor3.flatten W)) x) cot := by
+    simpa only [Tensor3.unflatten_flatten] using hG
+  rw [hG'.pdiv_param_batchMap (fun θ y => (depthwiseStride2Flat
+      (Tensor3.unflatten θ : DepthwiseKernel c kH kW) b y : Vec (c * h * w))) x
+    (fun y => by
+      unfold depthwiseStride2Flat decimateFlat
+      exact ((reindexCLM _).differentiable.comp
+        (depthwise_weight_differentiable (h := 2 * h) (w := 2 * w) b (Tensor3.unflatten y))) _) idx]
 
 /-- **XLA-`SAME` strided depthwise weight node = `∂G/∂W`.** -/
 theorem depthwiseStridedXlaW_eq_pdiv {N c h w kH kW : Nat} (xN cotN : String) (b : Vec c)
