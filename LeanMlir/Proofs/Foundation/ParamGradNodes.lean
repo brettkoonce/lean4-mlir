@@ -10,7 +10,9 @@ at the layer's output (`HasGradAt`), and the node becomes `∂G/∂θ` with the 
 varied: one lemma per node kind, shared by every net.
 
 The BatchNorm γ/β nodes are stated in the transposed `[C, N·H·W]` layout at the `reassocB`
-index; their lemmas re-sum the Jacobian over that permutation (`bnLA_perm`).
+index; their lemmas re-sum the Jacobian over that permutation (`bnLA_perm`). A conv or depthwise
+bias that the render reads with the β op (EfficientNet-B0's) is `biasBeta_eq_pdiv`: the bias enters
+as a channel broadcast (`*_bias_split`), so the channel sum the β node computes is its derivative.
 -/
 
 namespace Proofs.GradNodeB
@@ -74,6 +76,22 @@ theorem hasGradAt_relu {n : Nat} (x : Vec n) (hs : ∀ k, x k ≠ 0) {G : Vec n 
     HasGradAt (fun u => G (relu n u)) x (reluMaskB n x dy) :=
   HasGradAt.comp (f := relu n) (x := x) hG (relu_differentiableAt_of_smooth _ _ hs)
     (reluHasVJPAt _ _ hs)
+
+/-- Back through batch BN, at the certified backward's own spelling `bnBackB` (EfficientNet-B0's
+    tie threads this form; the ResNets and MobileNets emit `bnInB`). -/
+theorem hasGradAt_bnBackB {N c h w : Nat} (ε : ℝ) (hε : 0 < ε) (γ β : Vec c)
+    (z : Vec (N * (c * h * w))) {G : Vec (N * (c * h * w)) → Vec 1} {dy : Vec (N * (c * h * w))}
+    (hG : HasGradAt G (bnBatchLA N c h w ε γ β z) dy) :
+    HasGradAt (fun z' => G (bnBatchLA N c h w ε γ β z')) z (bnBackB N c h w ε hε γ β z dy) :=
+  hG.comp ((bnBatchLA_differentiable N c h w ε hε γ β) _)
+    ((bnBatchLAHasVJP N c h w ε hε γ β).toHasVJPAt _)
+
+/-- Back through swish: `swBackB`. Swish has no kink, so there is no smoothness hypothesis. -/
+theorem hasGradAt_swish {n : Nat} (x : Vec n) {G : Vec n → Vec 1} {dy : Vec n}
+    (hG : HasGradAt G (swish n x) dy) :
+    HasGradAt (fun u => G (swish n u)) x (swBackB n x dy) :=
+  HasGradAt.comp (f := swish n) (x := x) hG ((swish_differentiable n) x)
+    ((swishHasVJP n).toHasVJPAt x)
 
 /-- Back through a batched conv: `cInB`. -/
 theorem hasGradAt_conv {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
@@ -398,5 +416,104 @@ theorem bnBeta_eq_pdiv {N oc h w : Nat} (cotN : String) (ε : ℝ) (γ β : Vec 
   exact (bnLA_param_pdiv
     (fun θ => bnPerChannelFlat oc (N * (h * w)) ε γ θ (bnchwFwd N oc h w (reassocB N oc h w v)))
     (bnPerChannelFlat_beta_differentiable _ _ _ _ _) hG c).symm
+
+-- ════════════════════════════════════════════════════════════════
+-- § A conv or depthwise bias, emitted as a BatchNorm β node
+--   EfficientNet-B0's render computes every conv and depthwise bias gradient with the
+--   `bnBetaGradB` op, the channel sum of the op's output cotangent. The bias enters each of these
+--   ops as a channel broadcast (`*_bias_split`), so that channel sum is `∂G/∂b`.
+-- ════════════════════════════════════════════════════════════════
+
+/-- The emitted β node's cell `(o, (n, s))` is the network cell `(n, (o, s))`. -/
+private theorem reassocB_bnchwFwd {N oc h w : Nat} (cot : Vec (N * (oc * h * w))) (o : Fin oc)
+    (n : Fin N) (hi : Fin h) (wi : Fin w) :
+    bnchwFwd N oc h w (reassocB N oc h w cot)
+        (finProdFinEquiv (o, finProdFinEquiv (n, finProdFinEquiv (hi, wi))))
+      = batchSlice N (oc * h * w) cot n (finProdFinEquiv (finProdFinEquiv (o, hi), wi)) := by
+  simp only [bnchwFwd, reassocB, bnchwFwdIdx, batchSlice, Equiv.symm_apply_apply]
+  congr 1
+  apply Fin.ext
+  simp only [Fin.val_cast, finProdFinEquiv_apply_val]
+  ring
+
+/-- **A channel-broadcast bias, read by the β node, = `∂G/∂b`.** For any per-example op whose
+    bias enters as `per 0 y + broadcast b`, the emitted `bnBetaGradB` on the op's output cotangent
+    is the loss derivative in the bias. -/
+theorem biasBeta_eq_pdiv {N a oc h w : Nat} (cotN : String)
+    (per : Vec oc → Vec a → Vec (oc * h * w))
+    (hsplit : ∀ θ y, per θ y = fun k => per 0 y k + broadcastFlat oc h w θ k)
+    (x : Vec (N * a)) (b : Vec oc) {G : Vec (N * (oc * h * w)) → Vec 1}
+    {cot : Vec (N * (oc * h * w))} (hG : HasGradAt G (batchMap N (per b) x) cot) (o : Fin oc) :
+    den (SHlo.bnBetaGradB (N := N) (oc := oc) (h := h) (w := w)
+        (.operand cotN (reassocB N oc h w cot))) o
+      = pdiv (fun θ => G (batchMap N (per θ) x)) b o 0 := by
+  have hfun : ∀ y, (fun θ => per θ y) = fun θ => fun k => per 0 y k + broadcastFlat oc h w θ k :=
+    fun y => funext fun θ => hsplit θ y
+  have hd : ∀ y, DifferentiableAt ℝ (fun θ => per θ y) b := fun y => by
+    rw [hfun y]
+    exact (differentiableAt_const (per 0 y)).add ((broadcastFlat_differentiable oc h w) b)
+  rw [hG.pdiv_param_batchMap per x hd o]
+  have hp : ∀ y j, pdiv (fun θ => per θ y) b o j = if o = flatChannel oc h w j then 1 else 0 := by
+    intro y j
+    rw [hfun y, pdiv_add (fun _ => per 0 y) (broadcastFlat oc h w) b (differentiableAt_const _)
+      ((broadcastFlat_differentiable oc h w) b), pdiv_const, zero_add]
+    exact pdiv_reindex (flatChannel oc h w) b o j
+  simp_rw [hp]
+  show bnPerChannelGradBeta oc (N * (h * w)) (bnchwFwd N oc h w (reassocB N oc h w cot)) o = _
+  unfold bnPerChannelGradBeta
+  rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
+  refine Finset.sum_congr rfl fun n _ => ?_
+  rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
+  rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
+  rw [← finProdFinEquiv.sum_comp, Fintype.sum_prod_type]
+  simp only [flatChannel, Equiv.symm_apply_apply, ite_mul, one_mul, zero_mul, reassocB_bnchwFwd]
+  rw [Fintype.sum_eq_single o fun c hc => by simp [Ne.symm hc]]
+  simp
+
+/-- A conv's bias is a channel broadcast. -/
+theorem flatConv_bias_split {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (θ : Vec oc)
+    (y : Vec (ic * h * w)) :
+    (flatConv W θ y : Vec (oc * h * w)) = fun k => flatConv W 0 y k + broadcastFlat oc h w θ k := by
+  funext k
+  simp only [flatConv, Tensor3.flatten, conv2d, broadcastFlat, flatChannel, Pi.zero_apply, zero_add]
+  ring
+
+/-- A depthwise conv's bias is a channel broadcast. -/
+theorem depthwiseFlat_bias_split {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW) (θ : Vec c)
+    (y : Vec (c * h * w)) :
+    (depthwiseFlat W θ y : Vec (c * h * w))
+      = fun k => depthwiseFlat W 0 y k + broadcastFlat c h w θ k := by
+  funext k
+  simp only [depthwiseFlat, Tensor3.flatten, depthwiseConv2d, broadcastFlat, flatChannel,
+    Pi.zero_apply, zero_add]
+  ring
+
+private theorem flatChannel_decimateIdx (c h w : Nat) (k : Fin (c * h * w)) :
+    flatChannel c (2 * h) (2 * w) (decimateIdx c h w k) = flatChannel c h w k := by
+  simp [flatChannel, decimateIdx]
+
+private theorem flatChannel_decimateOddIdx (c h w : Nat) (k : Fin (c * h * w)) :
+    flatChannel c (2 * h) (2 * w) (decimateOddIdx c h w k) = flatChannel c h w k := by
+  simp [flatChannel, decimateOddIdx]
+
+/-- A symmetric strided depthwise conv's bias is a channel broadcast: decimation keeps channels. -/
+theorem depthwiseStride2Flat_bias_split {c h w kH kW : Nat} (W : DepthwiseKernel c kH kW)
+    (θ : Vec c) (y : Vec (c * (2 * h) * (2 * w))) :
+    (depthwiseStride2Flat W θ y : Vec (c * h * w))
+      = fun k => depthwiseStride2Flat W 0 y k + broadcastFlat c h w θ k := by
+  funext k
+  simp only [depthwiseStride2Flat, Function.comp_apply, decimateFlat]
+  rw [depthwiseFlat_bias_split W θ y]
+  simp only [broadcastFlat, flatChannel_decimateIdx]
+
+/-- An XLA-`SAME` strided conv's bias is a channel broadcast. -/
+theorem flatConvStride2Xla_bias_split {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (θ : Vec oc) (y : Vec (ic * (2 * h) * (2 * w))) :
+    (flatConvStride2Xla W θ y : Vec (oc * h * w))
+      = fun k => flatConvStride2Xla W 0 y k + broadcastFlat oc h w θ k := by
+  funext k
+  simp only [flatConvStride2Xla, Function.comp_apply, decimateOddFlat]
+  rw [flatConv_bias_split W θ y]
+  simp only [broadcastFlat, flatChannel_decimateOddIdx]
 
 end Proofs.GradNodeB

@@ -181,6 +181,7 @@ lean_lib «Certs» where
              `LeanMlir.Proofs.Nets.ResNet.ResNet50ParamGrad,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ParamGrad,
              `LeanMlir.Proofs.Nets.MobileNet.MobileNetV4ParamGrad,
+             `LeanMlir.Proofs.Nets.EfficientNet.EfficientNetParamGrad,
              `LeanMlir.Proofs.Foundation.BackwardMaps,
              `LeanMlir.Proofs.Architectures.ChannelLNBack,
              `LeanMlir.Proofs.Nets.ResNet.ResNetBackChains,

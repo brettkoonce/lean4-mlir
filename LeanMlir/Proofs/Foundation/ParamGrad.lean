@@ -76,6 +76,14 @@ theorem HasGradAt.comp {m n : Nat} {G : Vec n → Vec 1} {f : Vec m → Vec n} {
   rw [pdiv_comp f G x hf hG.1 i 0, vf.correct dy i]
   simp_rw [hG.2]
 
+/-- `HasGradAt.comp` through a global VJP, the cotangent spelled `vf.backward x dy`. At a large
+    certified VJP the two spellings are definitionally equal but the unifier reaches the equality
+    by unfolding the witness; stated once here, the equality is checked at a variable. -/
+theorem HasGradAt.comp_global {m n : Nat} {G : Vec n → Vec 1} {f : Vec m → Vec n} {x : Vec m}
+    {dy : Vec n} (hG : HasGradAt G (f x) dy) (hf : Differentiable ℝ f) (vf : HasVJP f) :
+    HasGradAt (fun y => G (f y)) x (vf.backward x dy) :=
+  hG.comp (hf x) (vf.toHasVJPAt x)
+
 /-- Restate a gradient at an equal cotangent. -/
 theorem HasGradAt.of_eq {m : Nat} {G : Vec m → Vec 1} {x dy dy' : Vec m}
     (hG : HasGradAt G x dy) (h : dy = dy') : HasGradAt G x dy' := h ▸ hG
