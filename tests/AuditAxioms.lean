@@ -1356,6 +1356,11 @@ open Proofs
 #print axioms Mnv4TieB.mnv4_stem_tiedB
 #print axioms Mnv4TieB.mnv4_fused_tiedB
 #print axioms Mnv4TieB.mnv4_head_tiedB
+#print axioms Mnv4TieB.mnv4BodyCotIn_eq_vjp
+#print axioms Mnv4TieB.mnv4SBodyCotIn_eq_vjp
+#print axioms Mnv4TieB.mnv4SkipCotIn_eq_vjp
+#print axioms Mnv4TieB.mnv4FusedCotIn_eq_vjp
+#print axioms Mnv4TieB.mnv4HeadCotIn_eq_vjp
 #print axioms Mnv4TieB.mnv4_net_tiedB
 #print axioms Mnv4TieB.mnv4_lossCot_is_smoothedCE_grad
 

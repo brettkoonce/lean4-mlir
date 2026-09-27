@@ -61,6 +61,12 @@ clause per site, where MobileNetV2's `.selectMid` carries two. The stem's and th
 are bound here (`conv_head`'s at the pooled `1×1`); the ones inside the fused stage and the blocks
 are `CertLayer.comp`'s and are never written down.
 
+**The train step reads the same backwards.** The cotangent `MobileNetV4StepTieB.mnv4_net_tiedB`
+hands each block's parameter nodes is that block's certified VJP backward, one block at a time
+(`mnv4HeadCotIn_eq_vjp`, `mnv4BodyCotIn_eq_vjp` with `mnv4SkipCotIn_eq_vjp`,
+`mnv4SBodyCotIn_eq_vjp`, `mnv4FusedCotIn_eq_vjp`), wherever that block is certified. This file
+composes the same layers into the whole-net input gradient.
+
 **Scope.** One device's batch `N`: the data-parallel artifacts (`mnv4in_adamdp64*`) normalise
 over the global batch, so this describes them only at `N := R·N`. It is about the input gradient;
 the 233 parameter gradients are `MobileNetV4StepTieB.lean`'s tie.

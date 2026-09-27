@@ -22,9 +22,12 @@ mask, and where its skip branch carries the masked cotangent. Here the skip fan-
 `addVB (body dx) dyOut`, unmasked.
 
 **And every block's `*CotIn_eq_vjp` is its block layer's `.faithful`, not a new derivation.** The
-UIB bodies are `CertLayer`s, so `den (graph x e) = vjp.backward (den e)` is already a theorem one
-tier down — the very fact the r34, mnv2 and R50 ties re-derive per block. This file
-composes certified VJPs; it does not re-prove them.
+UIB bodies, the fused stage and the head are `CertLayer`s, so `den (graph x e) = vjp.backward
+(den e)` is already a theorem one tier down — the fact the r34, mnv2 and R50 ties re-derive per
+block. `mnv4BodyCotIn_eq_vjp`, `mnv4SBodyCotIn_eq_vjp`, `mnv4SkipCotIn_eq_vjp`,
+`mnv4FusedCotIn_eq_vjp` and `mnv4HeadCotIn_eq_vjp` state it for each constructed cotangent the
+capstone threads: each is the layer's `.faithful` plus a definitional match. The stem has none:
+no render emits a gradient into `%x`.
 
 ## No new fp32 op-kind lemmas — MNv4's nine kinds are ResNet-34's and EfficientNet-B0's
 
@@ -703,6 +706,131 @@ theorem mnv4_head_tiedB (N h w : Nat) {c mid oc nCls : Nat}
 
 
 -- ════════════════════════════════════════════════════════════════
+-- § Every block's input cotangent is its certified VJP's backward
+-- ════════════════════════════════════════════════════════════════
+
+/-! The capstone below threads `dy21 … dyStem` through `mnv4HeadCotIn`, `mnv4BodyCotIn` +
+`mnv4SkipCotIn`, `mnv4SBodyCotIn` and `mnv4FusedCotIn`. Each is stated here to be the backward
+of the certified `CertLayer` VJP it stands for, at a block input where that layer is certified
+(its `.ok`). Every proof is the layer's `.faithful` at `e := .operand "" dyOut`, then a
+definitional match with the constructed chain. -/
+
+/-- **A stride-1 UIB body's input cotangent is its certified VJP's backward.** The chain the
+    render emits (`mnv4BodyCotIn`, through `mnv4CotQc … mnv4CotPc`) is
+    `(mnv4BodyOfRow N s p).vjp`'s backward at the block input, for every row: the four
+    `preDWk`/`postDWk` cases (ExtraDW, ConvNeXt-like, FFN, and the IB shape no Conv-M row uses)
+    each reduce to the body layer's `.faithful`. -/
+theorem mnv4BodyCotIn_eq_vjp (N : Nat) (s : UibSpec) (p : UibParams s)
+    (xin : Vec (N * (s.ic * s.h * s.h))) (dyOut : Vec (N * (s.oc * s.h * s.h)))
+    (hok : (mnv4BodyOfRow N s p).ok xin) :
+    mnv4BodyCotIn N s p xin dyOut = ((mnv4BodyOfRow N s p).vjp xin hok).backward dyOut := by
+  have h := (mnv4BodyOfRow N s p).faithful xin hok (.operand "" dyOut)
+  have he : den (SHlo.operand "" dyOut) = dyOut := rfl
+  rw [he] at h
+  rw [← h]
+  by_cases hq : s.preDWk = 0 <;> by_cases hd : s.postDWk = 0 <;>
+    simp only [mnv4BodyCotIn, mnv4CotQc, mnv4CotQn, mnv4CotEc, mnv4CotEn, mnv4CotDc, mnv4CotDn,
+      mnv4CotPc, mnv4BodyOfRow, mnv4UibBody, mnv4PreDWSlot, mnv4PostDWSlot, hq, hd, ↓reduceIte,
+      CertLayer.comp, CertLayer.id', mnv4DWBnLayer, mnv4DWReluLayer, cbReluLayer, projLayer] <;>
+    rfl
+
+/-- **A strided UIB body's input cotangent is its certified VJP's backward** — rows 1, 3, 11,
+    at `2h`. -/
+theorem mnv4SBodyCotIn_eq_vjp (N : Nat) (s : UibSpec) (p : UibParams s)
+    (xin : Vec (N * (s.ic * (2 * s.h) * (2 * s.h)))) (dyOut : Vec (N * (s.oc * s.h * s.h)))
+    (hok : (mnv4StridedBodyOfRow N s p).ok xin) :
+    mnv4SBodyCotIn N s p xin dyOut = ((mnv4StridedBodyOfRow N s p).vjp xin hok).backward dyOut := by
+  have h := (mnv4StridedBodyOfRow N s p).faithful xin hok (.operand "" dyOut)
+  have he : den (SHlo.operand "" dyOut) = dyOut := rfl
+  rw [he] at h
+  rw [← h]
+  by_cases hq : s.preDWk = 0 <;>
+    simp only [mnv4SBodyCotIn, mnv4SCotQc, mnv4SCotQn, mnv4SCotEc, mnv4SCotEn, mnv4SCotDc,
+      mnv4SCotDn, mnv4SCotPc, mnv4StridedBodyOfRow, mnv4UibStridedBody, mnv4PreDWSlot, hq,
+      ↓reduceIte, CertLayer.comp, CertLayer.id', mnv4DWBnLayer, mnv4DWReluStridedLayer,
+      cbReluLayer, projLayer] <;>
+    rfl
+
+
+/-- **The skip fan-in is the residual layer's backward**: `body dx + dyOut`, with `body dx` the
+    body's certified backward, is `CertLayer.residual`'s. Generic in the body, so at a stride-1 row
+    it composes with `mnv4BodyCotIn_eq_vjp` (the add needs `s.oc = s.ic`, which is `rfl` at every
+    concrete row and not at a row binder). -/
+theorem mnv4SkipCotIn_eq_vjp {N n : Nat} (L : CertLayer (N * n) (N * n)) (x : Vec (N * n))
+    (hok : L.ok x) (dyOut : Vec (N * n)) :
+    mnv4SkipCotIn ((L.vjp x hok).backward dyOut) dyOut
+      = ((CertLayer.residual L).vjp x hok).backward dyOut := by
+  have h := (CertLayer.residual L).faithful x hok (.operand "" dyOut)
+  have hL := L.faithful x hok (.operand "" dyOut)
+  have he : den (SHlo.operand "" dyOut) = dyOut := rfl
+  rw [he] at h hL
+  rw [← h]
+  funext i
+  show _ = den (L.graph x (.operand "" dyOut)) i + dyOut i
+  rw [hL]; rfl
+
+/-- **The fused stage's input cotangent is its certified VJP's backward.** -/
+theorem mnv4FusedCotIn_eq_vjp (N h w : Nat) {ic mid oc kH kW : Nat} (Wc : Kernel4 mid ic kH kW)
+    (bc : Vec mid) (εc : ℝ) (hεc : 0 < εc) (γc βc : Vec mid) (Wp : Kernel4 oc mid 1 1) (bp : Vec oc)
+    (εp : ℝ) (hεp : 0 < εp) (γp βp : Vec oc) (xin : Vec (N * (ic * (2 * h) * (2 * w))))
+    (dyF : Vec (N * (oc * h * w)))
+    (hok : (mnv4FusedStage N (cbReluStridedLayer (h := h) (w := w) N Wc bc εc hεc γc βc)
+      (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).ok xin) :
+    mnv4FusedCotIn N h w Wc bc εc γc βc Wp bp εp γp βp xin dyF
+      = ((mnv4FusedStage N (cbReluStridedLayer (h := h) (w := w) N Wc bc εc hεc γc βc)
+          (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).vjp xin hok).backward dyF := by
+  have h := (mnv4FusedStage N (cbReluStridedLayer (h := h) (w := w) N Wc bc εc hεc γc βc)
+      (projLayer (h := h) (w := w) N Wp bp εp hεp γp βp)).faithful xin hok (.operand "" dyF)
+  have he : den (SHlo.operand "" dyF) = dyF := rfl
+  rw [he] at h
+  rw [← h]
+  rfl
+
+
+-- `den` pushed through the head's stage graphs, generic in the incoming graph `e`, so the head's
+-- two `castIdx` relabellings (`h ▸ e`, which `rfl` cannot see through) can be rewritten by
+-- `den_castIdx` rather than unfolded.
+private theorem den_cbReluBack {N ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW) (b : Vec oc)
+    (ε : ℝ) (γ β : Vec oc) (x : Vec (N * (ic * h * w))) (e : SHlo (N * (oc * h * w))) :
+    den (cbReluBackBatchedGraph W b ε γ β x e)
+      = cInB N W b (bnInB N oc h w ε γ (batchMap N (flatConv W b) x)
+          (reluMaskB (N * (oc * h * w)) (bnBatchLA N oc h w ε γ β (batchMap N (flatConv W b) x))
+            (den e))) := rfl
+
+private theorem den_gapBack {N c h w : Nat} (e : SHlo (N * c)) :
+    den (SHlo.gapBackBatched (N := N) (c := c) (h := h) (w := w) e) = gapInB N c h w (den e) := rfl
+
+private theorem den_denseRowBack {N a nC : Nat} (W : Mat a nC) (e : SHlo (N * nC)) :
+    den (SHlo.denseRowBack (N := N) (a := a) (c := nC) "%Wd" W e)
+      = rowDenseBackFlat N a nC W (den e) := rfl
+
+/-- **The head's input cotangent — block 21's `dyOut` — is its certified VJP's backward**, at
+    any loss cotangent `g`. -/
+theorem mnv4HeadCotIn_eq_vjp (N h w : Nat) {c mid oc nCls : Nat}
+    (W1 : Kernel4 mid c 1 1) (b1 : Vec mid) (ε1 : ℝ) (hε1 : 0 < ε1) (γ1 β1 : Vec mid)
+    (W2 : Kernel4 oc mid 1 1) (b2 : Vec oc) (ε2 : ℝ) (hε2 : 0 < ε2) (γ2 β2 : Vec oc)
+    (Wd : Mat oc nCls) (bd : Vec nCls)
+    (xin : Vec (N * (c * h * w))) (g : Vec (N * nCls))
+    (hok : (mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
+      (gapLayer N (c := mid) (h := h) (w := w))
+      (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) (denseLayer N Wd bd)).ok xin) :
+    mnv4HeadCotIn N h w W1 b1 ε1 γ1 β1 W2 b2 ε2 γ2 β2 Wd bd xin g
+      = ((mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
+          (gapLayer N (c := mid) (h := h) (w := w))
+          (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) (denseLayer N Wd bd)).vjp
+            xin hok).backward g := by
+  have h := (mnv4Head N (cbReluLayer (h := h) (w := w) N W1 b1 ε1 hε1 γ1 β1)
+      (gapLayer N (c := mid) (h := h) (w := w))
+      (cbReluLayer (h := 1) (w := 1) N W2 b2 ε2 hε2 γ2 β2) (denseLayer N Wd bd)).faithful
+        xin hok (.operand "" g)
+  have he : den (SHlo.operand "" g) = g := rfl
+  rw [he] at h
+  rw [← h]
+  simp only [mnv4Head, CertLayer.comp, castLayer, gapLayer, denseLayer, cbReluLayer,
+    den_cbReluBack, den_gapBack, den_castIdx, den_denseRowBack, he, reindexCLM_apply]
+  rfl
+
+-- ════════════════════════════════════════════════════════════════
 -- § The whole-net capstone
 -- ════════════════════════════════════════════════════════════════
 
@@ -800,8 +928,10 @@ noncomputable def mnv4Blk21 (N : Nat) {nCls : Nat} (w : Mnv4BWeights nCls)
   (CertLayer.residual (mnv4BodyOfRow N mnv4Row21 w.b21)).fwd (mnv4Blk20 N w x)
 
 /-- **The whole batch-BN MobileNetV4-Conv-M train step, tied.** Threading the net's own forward
-    prefixes as the block inputs and an arbitrary loss cotangent `g` down through the certified
-    head backward, the 21 certified UIB block backwards and the fused stage, every parameter
+    prefixes as the block inputs and an arbitrary loss cotangent `g` down through the head, the 21
+    UIB blocks and the fused stage — each `dy` is that layer's certified VJP backward wherever the
+    layer is certified (`mnv4HeadCotIn_eq_vjp`, `mnv4BodyCotIn_eq_vjp` with
+    `mnv4SkipCotIn_eq_vjp`, `mnv4SBodyCotIn_eq_vjp`, `mnv4FusedCotIn_eq_vjp`) — every parameter
     GRADIENT node of the net — stem 3, fused 6, thirteen ExtraDW blocks × 12, four
     ConvNeXt-like × 9, four FFN × 6, head 8 — denotes the certified batched `Σ_n` gradient. That is
     **233**, the render's own census and `mnv4_fwd.mlir`'s signature minus `%x`. No free activation
