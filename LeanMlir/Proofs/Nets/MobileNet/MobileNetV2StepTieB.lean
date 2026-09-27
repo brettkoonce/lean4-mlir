@@ -17,8 +17,9 @@ emitted backward subgraphs denote them. The four `*CotIn_eq_vjp` lemmas below
 (`mnv2NoExpCotIn_eq_vjp`, `mnv2ExpOnlyCotIn_eq_vjp`, `mnv2ResidCotIn_eq_vjp`,
 `mnv2StridedCotIn_eq_vjp`) are those statements in this file's vocabulary: each says one block
 kind's constructed input cotangent is its certified block VJP's backward, under that block's
-positivity and smoothness hypotheses. The head segment (`mnv2HeadCotBlk`) and the stem segment
-(`mnv2StemCotN`, `mnv2StemCotC`) of the chain are not tied to a VJP.
+positivity and smoothness hypotheses. The two ends are tied the same way: `mnv2HeadCotBlk_eq_vjp`
+(the cotangent the head hands to `b17`) and `mnv2StemCotC_eq_vjp` (the stem's conv-output
+cotangent, through the conv input-VJP the render does not emit).
 
 **One parameter-tie bundle covers twelve of the seventeen blocks.** A skip block and a stride-1
 widening have the SAME parameter cotangents — the identity skip changes only the `dx` handed to the
@@ -380,6 +381,26 @@ noncomputable def mnv2StemCotC (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 o
   bnInB N oc h w εs γs (batchMap N (flatConvStride2Xla Ws bs) x)
     (mnv2StemCotN N h w Ws bs εs γs βs x cotStem)
 
+/-- Batched XLA-`SAME` STRIDED conv input-VJP (upsamples `h → 2h`). The render emits none — its
+    backward stops at the stem's weight gradient — so this exists only to state the stem tie. -/
+noncomputable def cStridedXlaInB (N : Nat) {ic oc h w kH kW : Nat} (W : Kernel4 oc ic kH kW)
+    (b : Vec oc) (dy : Vec (N * (oc * h * w))) : Vec (N * (ic * (2 * h) * (2 * w))) :=
+  batchMap N (fun d => (flatConvStride2XlaHasVJP W b).backward (fun _ => 0) d) dy
+
+/-- **The stem's emitted cotangents are its certified VJP's.** The conv-output cotangent
+    `mnv2StemCotC` — what `sW`/`sb` read, and `mnv2StemCotN` before it, what `sg`/`sbt` read —
+    pushed through the stem conv's input-VJP is `mnv2StemBHasVJPAt`'s backward, at a stem input
+    with `MNV2StemSmoothAtB`. -/
+theorem mnv2StemCotC_eq_vjp (N h w : Nat) {ic oc kH kW : Nat} (Ws : Kernel4 oc ic kH kW)
+    (bs : Vec oc) (εs : ℝ) (hεs : 0 < εs) (γs βs : Vec oc)
+    (x : Vec (N * (ic * (2 * h) * (2 * w)))) (cotStem : Vec (N * (oc * h * w)))
+    (hs : MNV2StemSmoothAtB N h w Ws bs εs γs βs x) :
+    cStridedXlaInB N Ws bs (mnv2StemCotC N h w Ws bs εs γs βs x cotStem)
+      = (mnv2StemBHasVJPAt N h w Ws bs εs hεs γs βs x hs).backward cotStem := by
+  unfold mnv2StemCotC
+  rw [bnInB_eq_bnBackB N oc h w εs hεs γs βs]
+  rfl
+
 -- ════════════════════════════════════════════════════════════════
 -- § The head — 1x1 conv-BN-relu6, GAP, dense; then the loss cotangent
 -- ════════════════════════════════════════════════════════════════
@@ -426,6 +447,23 @@ noncomputable def mnv2HeadCotBlk (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 
     (bh : Vec oc) (εh : ℝ) (γh βh : Vec oc) (Wd : Mat oc nCls)
     (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls)) : Vec (N * (ic * h * w)) :=
   cInB N Wh bh (mnv2HeadCotHc N h w Wh bh εh γh βh Wd xin g)
+
+/-- **The cotangent the head hands to `b17` is the certified head VJP's backward**, at any loss
+    cotangent `g` and a trunk output with `MNV2HeadSmoothAtB`: the conv-BN-relu6 stage by
+    `cbrBackBatchedGraph_faithful`, the GAP and dense backwards definitionally. -/
+theorem mnv2HeadCotBlk_eq_vjp (N h w : Nat) {ic oc nCls : Nat} (Wh : Kernel4 oc ic 1 1)
+    (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc) (Wd : Mat oc nCls) (bd : Vec nCls)
+    (xin : Vec (N * (ic * h * w))) (g : Vec (N * nCls))
+    (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh xin) :
+    mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin g
+      = (mnv2HeadBHasVJPAt N h w Wh bh εh hεh γh βh Wd bd xin hs).backward g := by
+  have hc := cbrBackBatchedGraph_faithful Wh bh εh hεh γh βh xin
+    (.operand "" (gapInB N oc h w (mnv2HeadCotGapIn N Wd g))) hs
+  calc mnv2HeadCotBlk N h w Wh bh εh γh βh Wd xin g
+      = den (cbrBackBatchedGraph Wh bh εh γh βh xin
+          (.operand "" (gapInB N oc h w (mnv2HeadCotGapIn N Wd g)))) := rfl
+    _ = _ := hc
+    _ = _ := rfl
 
 
 -- ════════════════════════════════════════════════════════════════
@@ -652,9 +690,9 @@ theorem mnv2_head_tiedB (N h w : Nat) {ic oc nCls : Nat} (xN cotN vN epsStr : St
 
     **`N` is a binder and there is no smoothness hypothesis.** The folds are `∀ cot` statements
     instantiated at explicitly-constructed cotangents, so the capstone needs neither `0 < ε` nor a
-    relu6-kink condition. Those enter only in the four block-level `*CotIn_eq_vjp` lemmas, which
-    say each block's constructed backward is its certified block VJP's backward. The head and stem
-    segments of the chain are not separately tied to a VJP.
+    relu6-kink condition. Those enter only in the `*_eq_vjp` lemmas, which say each segment's
+    constructed backward is its certified VJP's backward: the four block kinds' `*CotIn_eq_vjp`,
+    the head's `mnv2HeadCotBlk_eq_vjp` and the stem's `mnv2StemCotC_eq_vjp`.
 
     Of the 210 conjunct slots, the committed artifacts exercise **158**: `MobileNetV2RenderB`
     runs `convBias := false`, so the 52 bias nodes are not emitted (each bias is folded into the

@@ -1919,6 +1919,8 @@ open Proofs
 #print axioms Proofs.MobileNetV2TieB.mnv2ExpOnlyCotIn_eq_vjp
 #print axioms Proofs.MobileNetV2TieB.mnv2ResidCotIn_eq_vjp
 #print axioms Proofs.MobileNetV2TieB.mnv2StridedCotIn_eq_vjp
+#print axioms Proofs.MobileNetV2TieB.mnv2HeadCotBlk_eq_vjp
+#print axioms Proofs.MobileNetV2TieB.mnv2StemCotC_eq_vjp
 #print axioms Proofs.MobileNetV2TieB.mnv2_stem_tiedB
 #print axioms Proofs.MobileNetV2TieB.mnv2_noexp_tiedB
 #print axioms Proofs.MobileNetV2TieB.mnv2_stride1_tiedB

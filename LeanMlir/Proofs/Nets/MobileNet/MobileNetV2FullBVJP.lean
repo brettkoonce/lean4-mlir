@@ -196,7 +196,7 @@ private theorem mnv2StridedB_differentiableAt (N h w : Nat) {ic mid oc : Nat} (p
     both `batchMap` of a per-example op, so both lift with the GLOBAL `batchMapHasVJP`.
     Unlike r34's, this head is not hypothesis-free: MobileNetV2 puts a relu6 in front of the
     pool, so the head carries the net's 35th kink site. -/
-private noncomputable def mnv2HeadBHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
+noncomputable def mnv2HeadBHasVJPAt (N h w : Nat) {ic oc nCls : Nat}
     (Wh : Kernel4 oc ic 1 1) (bh : Vec oc) (εh : ℝ) (hεh : 0 < εh) (γh βh : Vec oc)
     (Wd : Mat oc nCls) (bd : Vec nCls) (v : Vec (N * (ic * h * w)))
     (hs : MNV2HeadSmoothAtB N h w Wh bh εh γh βh v) :
