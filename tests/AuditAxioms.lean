@@ -142,6 +142,7 @@ import LeanMlir.Proofs.Nets.EfficientNet.EfficientNetBackNet
 import LeanMlir.Proofs.Nets.Small.LinearFold
 import LeanMlir.Proofs.Float.E4M3Fold
 import LeanMlir.Proofs.Float.Bf16Fold
+import LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
@@ -1069,6 +1070,14 @@ open Proofs
 #print axioms Proofs.Bf16PoC.bf16_render_faithful_emit
 #print axioms Proofs.Bf16PoC.bf16_emit_eq_prerounded
 #print axioms Proofs.Bf16PoC.bf16_render_faithful_depth2
+-- The loss gradient in one layer's parameters, through a certified suffix VJP (ParamGrad.lean)
+#print axioms Proofs.addConstHasVJPAt
+#print axioms Proofs.pdiv_param_chain
+#print axioms Proofs.pdiv_param_chain_batchMap
+-- ResNet-34: block e1's conv₂ weight gradient node IS ∂L/∂W₂ of the whole net
+#print axioms Proofs.ResNet34TieB.r34E1W2_forward_factor
+#print axioms Proofs.ResNet34TieB.r34E1C2Suffix_backward
+#print axioms Proofs.ResNet34TieB.r34E1ConvW2Grad_eq_pdiv_loss
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment
