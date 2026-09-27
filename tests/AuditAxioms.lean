@@ -309,6 +309,7 @@ open Proofs
 #print axioms mnistCnnNoBnHasVJPAt_correct
 -- the reusable MaxPool2Smooth discharge
 #print axioms maxPool2Smooth_of_injective
+#print axioms maxPool2Smooth_of_pairwise
 -- Chapter-3 MLP: concrete whole-network instance, every ReLU smoothness hypothesis discharged
 #print axioms MlpConcrete.mlpConcreteHasVJP_correct
 -- ResNet-style CNN *with* BN
@@ -1112,7 +1113,6 @@ open Proofs
 #print axioms sum_window_cells
 #print axioms maxPoolFlat_apply
 #print axioms maxPoolFlat_l1_contract
-#print axioms ne_of_gap_of_close
 #print axioms lt_of_lt_gap_of_close
 #print axioms MaxPool2MarginQ.smooth_of_close
 #print axioms MaxPool2MarginQ.smooth

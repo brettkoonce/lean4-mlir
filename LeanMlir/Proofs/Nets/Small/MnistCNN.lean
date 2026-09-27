@@ -194,8 +194,8 @@ theorem mnistCnnNoBnHasVJPAt_correct
 -- § Reusable discharge lemmas for the smoothness hypotheses
 --
 -- Discharging `MaxPool2Smooth` by `fin_cases` over each 2×2 window does
--- not scale: `MaxPool2Smooth` is `6·c·h·w` pairwise inequalities, so a realistic spatial size turns it
--- into thousands of `decide`s. These lemmas replace the case-bashing
+-- not scale: the pairwise route (`maxPool2Smooth_of_pairwise`) is `6·c·h·w` inequalities, so a
+-- realistic spatial size turns it into thousands of `decide`s. These lemmas replace the case-bashing
 -- with structural arguments (positional injectivity for the no-tie
 -- condition; positivity propagation for the ReLU `≠ 0` conditions), so a
 -- many-window instance is dischargeable — and stays inside the
@@ -204,12 +204,13 @@ theorem mnistCnnNoBnHasVJPAt_correct
 
 /-- **Positional injectivity ⇒ `MaxPool2Smooth`.** If, on each channel,
     the position map `(r, s) ↦ x ci r s` is injective, then every 2×2
-    window has pairwise-distinct values. One injectivity argument in
+    window has pairwise-distinct values, so its max is attained once. One injectivity argument in
     place of `6·c·h·w` per-window `decide`s. -/
 theorem maxPool2Smooth_of_injective {c h w : Nat} (x : Tensor3 c (2*h) (2*w))
     (hinj : ∀ (ci : Fin c) (r r' : Fin (2*h)) (s s' : Fin (2*w)),
               x ci r s = x ci r' s' → r = r' ∧ s = s') :
     MaxPool2Smooth x := by
+  refine maxPool2Smooth_of_pairwise x ?_
   intro ci hi_out wi_out ab ab' hne hval
   apply hne
   obtain ⟨hr, hs⟩ := hinj ci _ _ _ _ hval

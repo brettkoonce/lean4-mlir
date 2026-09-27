@@ -17,10 +17,11 @@ dense`). What's genuinely new versus the MLP:
   needed (the MLP statements are generic in the fixed activation vector).
 
 * **The max-pool needs a quantitative SELECTION margin.** `MaxPool2Smooth`
-  (pairwise-distinct window cells) is the qualitative off-the-kink
+  (every window's max attained at one cell) is the qualitative off-the-kink
   condition; descent needs its quantitative form `MaxPool2MarginQ δ`
-  (pairwise window gaps exceed `2δ`): a perturbation of at most `δ` per
-  entry then cannot reorder any window, so the argmax — hence the
+  (each window's max exceeds the window's other cells by more than `2δ`;
+  those cells may tie with each other): a perturbation of at most `δ` per
+  entry then cannot tie the max or move it, so the argmax — hence the
   pool's routing pattern — FREEZES along the step segment
   (`MaxPool2MarginQ.isArgmax_iff`), exactly as the ReLU margins freeze the
   masks. The pool is also `ℓ1`-contractive across entries

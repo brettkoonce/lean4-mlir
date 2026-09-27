@@ -199,19 +199,6 @@ theorem maxPoolFlat_l1_contract {c h w : Nat}
 -- § The selection margin: window gaps beyond 2δ freeze the argmax
 -- ════════════════════════════════════════════════════════════════
 
-/-- Two values farther apart than `2δ` cannot be equalized by
-    `δ`-perturbations. -/
-theorem ne_of_gap_of_close {xa xb ya yb δ : ℝ} (hgap : 2 * δ < |xa - xb|)
-    (ha : |ya - xa| ≤ δ) (hb : |yb - xb| ≤ δ) : ya ≠ yb := by
-  intro heq
-  have h1 := abs_le.mp ha
-  have h2 := abs_le.mp hb
-  have heq' : ya - yb = 0 := by rw [heq]; ring
-  have hle : |xa - xb| ≤ 2 * δ :=
-    abs_le.mpr ⟨by linarith [h1.1, h1.2, h2.1, h2.2],
-      by linarith [h1.1, h1.2, h2.1, h2.2]⟩
-  linarith
-
 /-- Strict order survives `δ`-perturbations across a `2δ` gap. -/
 theorem lt_of_lt_gap_of_close {xa xb ya yb δ : ℝ}
     (hlt : 2 * δ < xb - xa) (ha : |ya - xa| ≤ δ) (hb : |yb - xb| ≤ δ) :
@@ -220,27 +207,45 @@ theorem lt_of_lt_gap_of_close {xa xb ya yb δ : ℝ}
   have h2 := abs_le.mp hb
   linarith [h1.1, h1.2, h2.1, h2.2]
 
-/-- **Quantitative pool-selection margin**: every two cells of every 2×2
-    window differ by more than `2δ`. The quantitative form of
-    `MaxPool2Smooth` — a perturbation of at most `δ` per entry can neither
-    create a tie nor reorder a window, so the pool's argmax routing
-    freezes. The pool peer of the ReLU margin `a·D < |zⱼ|`. -/
+/-- **Quantitative pool-selection margin**: in every 2×2 window, a cell that dominates the
+    window is more than `2δ` above every other cell of it. The quantitative form of
+    `MaxPool2Smooth` — a perturbation of at most `δ` per entry can neither tie the max nor move
+    it to another cell, so the pool's argmax routing freezes. The other cells may tie with each
+    other. The pool peer of the ReLU margin `a·D < |zⱼ|`. -/
 def MaxPool2MarginQ {c h w : Nat} (δ : ℝ)
     (x : Tensor3 c (2*h) (2*w)) : Prop :=
   ∀ (ci : Fin c) (ho : Fin h) (wo : Fin w)
     (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
-    2 * δ < |x ci (winRowInv ho ab.1) (winColInv wo ab.2) -
-             x ci (winRowInv ho ab'.1) (winColInv wo ab'.2)|
+    (∀ cd : Fin 2 × Fin 2,
+      x ci (winRowInv ho cd.1) (winColInv wo cd.2) ≤
+      x ci (winRowInv ho ab.1) (winColInv wo ab.2)) →
+    2 * δ < x ci (winRowInv ho ab.1) (winColInv wo ab.2) -
+             x ci (winRowInv ho ab'.1) (winColInv wo ab'.2)
 
-/-- Every point within `δ` of a margined point is smooth (no window
-    ties). -/
+/-- Within `δ` of a margined point, a cell that dominates its window at the perturbed point is
+    the cell that dominates it at the margined point. -/
+private theorem MaxPool2MarginQ.dom_eq {c h w : Nat} {δ : ℝ}
+    {x y : Tensor3 c (2*h) (2*w)} (hm : MaxPool2MarginQ δ x)
+    (hclose : ∀ ci hi wi, |y ci hi wi - x ci hi wi| ≤ δ)
+    (ci : Fin c) (ho : Fin h) (wo : Fin w) (ab : Fin 2 × Fin 2)
+    (hy : ∀ cd : Fin 2 × Fin 2,
+      y ci (winRowInv ho cd.1) (winColInv wo cd.2) ≤
+      y ci (winRowInv ho ab.1) (winColInv wo ab.2)) :
+    ab = maxPool2Argmax x ci ho wo := by
+  by_contra hne
+  have hgap := hm ci ho wo _ ab (Ne.symm hne) (maxPool2Argmax_max x ci ho wo)
+  exact absurd (hy (maxPool2Argmax x ci ho wo))
+    (not_le.mpr (lt_of_lt_gap_of_close hgap (hclose _ _ _) (hclose _ _ _)))
+
+/-- Every point within `δ` of a margined point is smooth (every window's max is attained once). -/
 theorem MaxPool2MarginQ.smooth_of_close {c h w : Nat} {δ : ℝ}
     {x y : Tensor3 c (2*h) (2*w)} (hm : MaxPool2MarginQ δ x)
     (hclose : ∀ ci hi wi, |y ci hi wi - x ci hi wi| ≤ δ) :
-    MaxPool2Smooth y := fun ci ho wo ab ab' hne =>
-  ne_of_gap_of_close (hm ci ho wo ab ab' hne)
-    (hclose ci (winRowInv ho ab.1) (winColInv wo ab.2))
-    (hclose ci (winRowInv ho ab'.1) (winColInv wo ab'.2))
+    MaxPool2Smooth y := fun ci ho wo ab ab' hne hy => by
+  have hab := hm.dom_eq hclose ci ho wo ab hy
+  subst hab
+  exact lt_of_lt_gap_of_close (hm ci ho wo _ ab' hne (maxPool2Argmax_max x ci ho wo))
+    (hclose _ _ _) (hclose _ _ _)
 
 /-- A margined point is itself smooth. -/
 theorem MaxPool2MarginQ.smooth {c h w : Nat} {δ : ℝ} (hδ0 : 0 ≤ δ)
@@ -262,40 +267,23 @@ theorem MaxPool2MarginQ.isArgmax_iff {c h w : Nat} {δ : ℝ}
       (winColInv (winCol wi) (winColMod wi)) = y ci hi wi := by
     rw [winRowInv_winRow, winColInv_winCol]
   constructor
-  · -- y-argmax at (hi,wi) ⇒ x-argmax at (hi,wi), by contraposition on cells
-    intro hy a b
-    by_contra hnot
-    have hlt : x ci hi wi <
-        x ci (winRowInv (winRow hi) a) (winColInv (winCol wi) b) :=
-      not_le.mp hnot
-    have hne : ((a, b) : Fin 2 × Fin 2) ≠ (winRowMod hi, winColMod wi) := by
-      rintro ⟨⟩
-      rw [hxw] at hlt
-      exact lt_irrefl _ hlt
-    have hgap := hm ci (winRow hi) (winCol wi) (a, b)
-      (winRowMod hi, winColMod wi) hne
-    rw [hxw] at hgap
-    have hgap' : 2 * δ <
-        x ci (winRowInv (winRow hi) a) (winColInv (winCol wi) b) -
-          x ci hi wi := by
-      rwa [abs_of_pos (by linarith)] at hgap
-    have hylt : y ci hi wi <
-        y ci (winRowInv (winRow hi) a) (winColInv (winCol wi) b) :=
-      lt_of_lt_gap_of_close hgap' (hclose ci hi wi)
-        (hclose ci (winRowInv (winRow hi) a) (winColInv (winCol wi) b))
-    exact absurd (hy a b) (not_le.mpr hylt)
+  · -- a y-argmax cell is the x-argmax cell, which dominates at x
+    intro hy
+    have hdom := hm.dom_eq hclose ci (winRow hi) (winCol wi) (winRowMod hi, winColMod wi)
+      (fun cd => by rw [hyw]; exact hy cd.1 cd.2)
+    intro a b
+    have h := maxPool2Argmax_max x ci (winRow hi) (winCol wi) (a, b)
+    rw [← hdom, hxw] at h
+    exact h
   · -- x-argmax at (hi,wi) ⇒ y-argmax at (hi,wi)
     intro hx a b
     by_cases hEq : ((a, b) : Fin 2 × Fin 2) = (winRowMod hi, winColMod wi)
     · cases hEq; rw [hyw]
-    · have hle := hx a b
-      have hgap := hm ci (winRow hi) (winCol wi)
+    · have hgap := hm ci (winRow hi) (winCol wi)
         (winRowMod hi, winColMod wi) (a, b) (Ne.symm hEq)
+        (fun cd => by rw [hxw]; exact hx cd.1 cd.2)
       rw [hxw] at hgap
-      have hgap' : 2 * δ < x ci hi wi -
-          x ci (winRowInv (winRow hi) a) (winColInv (winCol wi) b) := by
-        rwa [abs_of_nonneg (sub_nonneg.mpr hle)] at hgap
-      exact le_of_lt (lt_of_lt_gap_of_close hgap'
+      exact le_of_lt (lt_of_lt_gap_of_close hgap
         (hclose ci (winRowInv (winRow hi) a) (winColInv (winCol wi) b))
         (hclose ci hi wi))
 

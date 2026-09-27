@@ -400,7 +400,8 @@ inductive SHlo : Nat → Type where
   | convBack   {ic oc h w kH kW : Nat} (wName : String)
       (W : Kernel4 oc ic kH kW) (b : Vec oc) (v : Vec (ic*h*w)) : SHlo (oc*h*w) → SHlo (ic*h*w)
   -- Max-pool backward (`select_and_scatter`, route dy to the window argmax);
-  -- `x` is the saved pre-pool input. Conditional (no-ties) like the ReLU kink.
+  -- `x` is the saved pre-pool input. Conditional (each window's max attained once,
+  -- `MaxPool2Smooth`), like the ReLU kink.
   | maxPoolBack {c h w : Nat} (xName : String) (x : Vec (c*(2*h)*(2*w))) : SHlo (c*h*w) → SHlo (c*(2*h)*(2*w))
   -- The **3×3/s2** peer of `maxPoolBack`. Same `select_and_scatter`, wider window, symmetric
   -- padding — and **nothing else changes**, because `select_and_scatter` scatters with an
@@ -642,7 +643,7 @@ inductive SHlo : Nat → Type where
   -- `BatchableOp`: the mask is per-example data, so this cannot be a descriptor.
   -- Batched 2×2 max-pool BACKWARD. `x` is the WHOLE-BATCH saved pre-pool input; `den` is
   -- `batchMapAux`, which hands example `n` its OWN slice of `x` (a `batchMap` descriptor would
-  -- hand every example one example's input). Conditional (no window ties), like the unbatched op.
+  -- hand every example one example's input). Conditional (each window's max attained once), like the unbatched op.
   | maxPoolBackB {N c h w : Nat} (xName : String) (x : Vec (N*(c*(2*h)*(2*w)))) :
       SHlo (N*(c*h*w)) → SHlo (N*(c*(2*h)*(2*w)))
   -- Batched **3×3/s2** max-pool backward — `maxPoolBackB`'s peer at the paper's stem pool.

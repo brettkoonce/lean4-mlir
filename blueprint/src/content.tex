@@ -3264,7 +3264,8 @@ See \leandocref{Proofs.CnnPoC.cnn\_train\_step\_tied\_certified}.
   \uses{ax:conv2d, ax:conv2dWeightGradHasVJP, ax:maxPool2, ax:pdiv, ax:pdiv_comp,
       ax:pdiv_dense, ax:pdiv_relu, ax:softmaxCE_grad, def:hasvjp}
   With a margin at the ReLUs after \(\mathrm{conv}_2\) and in the dense head, a
-  strict maximum in every pooling window, an \(\eta\)-accurate gradient oracle
+  margin between every pooling window's maximum and its other cells, an
+  \(\eta\)-accurate gradient oracle
   and the small-step and dominance conditions: \Prove{} one SGD step on the
   second convolution's kernel \(W_2\) decreases the cross-entropy loss by at
   least \(\alpha\,\|\nabla L\|_2^2/2\). \texttt{cnn\_conv1\_sgd\_descends}

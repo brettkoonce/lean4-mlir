@@ -7,7 +7,8 @@ smoothness hypothesis discharged from exact rational arithmetic:
 
   h1  : all 72 conv1 pre-activations != 0
   h2  : all 72 conv2 pre-activations != 0
-  h_mp: every 2x2 maxpool window of relu(conv2) has 4 pairwise-distinct values
+  h_mp: every 2x2 maxpool window of relu(conv2) attains its max once (discharged from the
+        stronger fact that its 4 values are pairwise distinct)
   h3  : all 8 dense3 pre-activations != 0
   h4  : all 8 dense4 pre-activations != 0
 
@@ -18,8 +19,8 @@ relu, maxpool 2x2 -> 2x3x3, flatten (C-order = Tensor3.flatten), dense 18->8,
 relu, dense 8->8, relu, dense 8->10.
 
 conv2d semantics mirrored from LeanMlir/Proofs/Architectures/CNN.lean:130 (cross-correlation,
-SAME zero padding pH=pW=1). The witness search enforces the h_mp condition
-(relu zeros collide, so each window may contain at most one negative conv2
+SAME zero padding pH=pW=1). The witness search enforces pairwise-distinct windows, which
+implies h_mp (relu zeros collide, so each window may contain at most one negative conv2
 pre-activation, and the positive values must be pairwise distinct exactly).
 
 Not in CI: it needs MNIST in data/ (directly or through the generator it imports), which CI
@@ -393,9 +394,10 @@ def smooth_rows():
       | (simp [r2V, winRowInv, winColInv]; try norm_num)
 """)
     bullets = "\n".join(f"  · exact r2sm_c{ci}h{ho} wo ab ab' hne" for ci in range(2) for ho in range(3))
-    out.append(f"""/-- **Every 2×2 window of relu(conv2) has pairwise-distinct values** —
-    the `MaxPool2Smooth` hypothesis, discharged from the trained tables. -/
+    out.append(f"""/-- **Every 2×2 window of relu(conv2) has pairwise-distinct values**, so its max is attained
+    once — the `MaxPool2Smooth` hypothesis, discharged from the trained tables. -/
 theorem r2_smooth : MaxPool2Smooth (c := 2) (h := 3) (w := 3) r2V := by
+  refine maxPool2Smooth_of_pairwise (c := 2) (h := 3) (w := 3) r2V ?_
   intro ci ho wo ab ab' hne
   fin_cases ci <;> fin_cases ho
 {bullets}
@@ -423,8 +425,9 @@ engineered:
 
 * h1/h2 — all 72+72 conv pre-activations are nonzero (`conv1_eq`/`conv2_eq`
   value tables + `c1_ne`/`c2_ne`);
-* h_mp — every 2×2 max-pool window of relu(conv2) has four pairwise-distinct
-  values (`r2_smooth`). ReLU zeros collide, so this needs ≤ 1 negative conv2
+* h_mp — every 2×2 max-pool window of relu(conv2) attains its max once
+  (`r2_smooth`), discharged from the stronger fact that the window's four values are
+  pairwise distinct. ReLU zeros collide, so that needs ≤ 1 negative conv2
   pre-activation per window — trained in via a pool-tie margin regularizer
   (the h_mp analogue of the scorecard's spectral cap: the training method
   decides whether the hypotheses hold);
@@ -658,7 +661,7 @@ noncomputable def trainedCnnHasVJPAt :
         rw [he]
         exact flatten_ne_zero
           (fun o hi wi => by rw [conv2_eq]; exact c2_ne o hi wi) k)
-    -- h_mp: no max-pool ties
+    -- h_mp: every max-pool window's max is attained once
     (by rw [blockZ_eq, Tensor3.unflatten_flatten]
         exact r2_smooth)
     -- h3: dense3 pre-activations nonzero

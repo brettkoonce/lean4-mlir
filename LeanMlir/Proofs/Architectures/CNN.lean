@@ -886,14 +886,28 @@ theorem winColInv_one {w : Nat} (wo : Fin w) :
 
 -- Smoothness / argmax predicates ----------------------------------
 
-/-- **Smoothness:** every 2×2 window of `x` has pairwise-distinct
-    values (so a unique strict argmax). The natural domain on which
-    `maxPool2` is differentiable. -/
+/-- **Smoothness:** every 2×2 window of `x` attains its max at exactly one cell — a cell that
+    dominates its window is strictly above every other cell of it. The other cells may tie with
+    each other (a post-ReLU window `[5, 0, 0, 0]` qualifies); a window whose max is attained twice
+    (an all-zero post-ReLU window) does not, and there `maxPool2` has no derivative. -/
 def MaxPool2Smooth {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w)) : Prop :=
   ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w)
     (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
-    x ci (winRowInv hi_out ab.1) (winColInv wi_out ab.2) ≠
-    x ci (winRowInv hi_out ab'.1) (winColInv wi_out ab'.2)
+    (∀ cd : Fin 2 × Fin 2,
+      x ci (winRowInv hi_out cd.1) (winColInv wi_out cd.2) ≤
+      x ci (winRowInv hi_out ab.1) (winColInv wi_out ab.2)) →
+    x ci (winRowInv hi_out ab'.1) (winColInv wi_out ab'.2) <
+    x ci (winRowInv hi_out ab.1) (winColInv wi_out ab.2)
+
+/-- Pairwise-distinct windows are smooth: a dominating cell is `≥` every other cell and differs
+    from it. -/
+theorem maxPool2Smooth_of_pairwise {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
+    (hd : ∀ (ci : Fin c) (hi_out : Fin h) (wi_out : Fin w)
+      (ab ab' : Fin 2 × Fin 2), ab ≠ ab' →
+      x ci (winRowInv hi_out ab.1) (winColInv wi_out ab.2) ≠
+      x ci (winRowInv hi_out ab'.1) (winColInv wi_out ab'.2)) :
+    MaxPool2Smooth x :=
+  fun ci ho wo ab ab' hne hmax => lt_of_le_of_ne (hmax ab') (hd ci ho wo ab' ab (Ne.symm hne))
 
 /-- Input position `(ci, hi_in, wi_in)` attains the max of its window. -/
 def MaxPool2IsArgmax {c h w : Nat} (x : Tensor3 c (2 * h) (2 * w))
@@ -982,9 +996,7 @@ private theorem maxPool2_argmax_unique {c h w : Nat}
       x ci (winRowInv ho ab'.1) (winColInv wo ab'.2)) :
     ab = ab' := by
   by_contra h_ne
-  have h1 := h_ab' ab
-  have h2 := h_ab ab'
-  exact h_smooth ci ho wo ab ab' h_ne (le_antisymm h1 h2)
+  exact absurd (h_ab' ab) (not_le.mpr (h_smooth ci ho wo ab ab' h_ne h_ab))
 
 /-- Under smoothness, `MaxPool2IsArgmax` pins `maxPool2Argmax` to the
     `(winRowMod, winColMod)` position of the witness. -/
@@ -1049,8 +1061,8 @@ theorem maxPool2_flat_hasFDerivAt {c h w : Nat}
     by_cases hab : (a', b') = maxPool2Argmax x co ho wo
     · exact Filter.Eventually.of_forall fun _ => by rw [← hab]
     · refine ((hcont _ _ _).eventually_lt (hcont _ _ _) ?_).mono fun _ => le_of_lt
-      simpa [Tensor3.unflatten_flatten] using lt_of_le_of_ne (maxPool2Argmax_max x co ho wo (a', b'))
-        (h_smooth co ho wo _ _ hab)
+      simpa [Tensor3.unflatten_flatten] using
+        h_smooth co ho wo _ (a', b') (Ne.symm hab) (maxPool2Argmax_max x co ho wo)
   filter_upwards [hmax] with y hy
   funext k_out
   exact maxPool2_eq_at_max (Tensor3.unflatten y) _ _ _ _ _ (hy _ _ _)
