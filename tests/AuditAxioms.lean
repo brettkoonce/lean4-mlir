@@ -144,6 +144,7 @@ import LeanMlir.Proofs.Float.E4M3Fold
 import LeanMlir.Proofs.Float.Bf16Fold
 import LeanMlir.Proofs.Nets.ResNet.ResNet34ParamGrad
 import LeanMlir.Proofs.Nets.ResNet.ResNet50ParamGrad
+import LeanMlir.Proofs.Nets.MobileNet.MobileNetV2ParamGrad
 import LeanMlir.Proofs.Nets.Small.MlpFold
 import LeanMlir.Proofs.Nets.Small.CnnFold
 import LeanMlir.Proofs.Nets.Small.CifarFold
@@ -1094,6 +1095,13 @@ open Proofs
 #print axioms Proofs.GradNodeB.bnGamma_eq_pdiv
 #print axioms Proofs.GradNodeB.bnBeta_eq_pdiv
 #print axioms Proofs.GradNodeB.cStridedInB_eq_batchMapBackward
+#print axioms Proofs.GradNodeB.dInB_eq_batchMapBackward
+#print axioms Proofs.GradNodeB.convStridedXlaW_eq_pdiv
+#print axioms Proofs.GradNodeB.convStridedXlaB_eq_pdiv
+#print axioms Proofs.GradNodeB.depthwiseW_eq_pdiv
+#print axioms Proofs.GradNodeB.depthwiseB_eq_pdiv
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaW_eq_pdiv
+#print axioms Proofs.GradNodeB.depthwiseStridedXlaB_eq_pdiv
 -- ResNet-34: every parameter gradient node IS the batched smoothed loss's derivative (ResNet34ParamGrad.lean)
 #print axioms Proofs.ResNet34TieB.r34_idblock_lossTiedB
 #print axioms Proofs.ResNet34TieB.r34_downblock_lossTiedB
@@ -1109,6 +1117,16 @@ open Proofs
 #print axioms Proofs.ResNet50TieB.r50_net_lossGrad
 #print axioms Proofs.ResNet50TieB.r50_net_lossGrad_smoothedCE
 #print axioms Proofs.ResNet50TieB.r50_net_lossGrad_bce
+-- MobileNetV2: every parameter gradient node IS the loss's derivative (MobileNetV2ParamGrad.lean)
+#print axioms Proofs.MobileNetV2TieB.mnv2_stem_lossTiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_noexp_lossTiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_stride1_lossTiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_resid_lossTiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_stride2_lossTiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_head_lossTiedB
+#print axioms Proofs.MobileNetV2TieB.mnv2_factor_b1
+#print axioms Proofs.MobileNetV2TieB.mnv2_net_lossGrad
+#print axioms Proofs.MobileNetV2TieB.mnv2_net_lossGrad_smoothedCE
 -- Inexact-gradient descent over ℝ (SgdDescent/Basic.lean)
 #print axioms fderiv_apply_eq_sum_grad
 #print axioms descent_segment
