@@ -1,0 +1,20 @@
+=== RUN ENDED at 2026-09-27 11:54:13 UTC ===
+[sup] 2026-09-27 08:54:01 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+[sup] 2026-09-27 08:54:01 eta: ~42 h for 100 ep on 4x 4060 Ti (MEASURED ~1,516 s/epoch, eval included) — about five 8 h overnight chunks
+[sup] 2026-09-27 08:54:01 attempt 1: resuming at epoch 84/100 (next rest: 999)
+[sup] 2026-09-27 08:54:01   launched PID=2149749 PGID=2149749
+[sup]   last line: done (trained MobileNetV4-Conv-M (ImageNet-1k) emaaccdp8x128wxdowd005bf16 + cosine/warmup via packed threading).
+[sup] 2026-09-27 11:53:47 ✅ COMPLETE — 100/100 epochs
+--- final evals ---
+  epoch 98: eval skipped (valEveryEpochs = 5; next scored epoch 100)
+  epoch 99: eval skipped (valEveryEpochs = 5; next scored epoch 100)
+  epoch 100: test_acc = 38339/50000 = 76.678000%  top5 = 46572/50000 = 93.144000%  [95% CI 76.31–77.05]
+--- loaders at end ---
+  pid 1896515  age  15.2 h  rss  6.64 GiB  arena  4.54 GiB  maps 360
+  pid 1896611  age  15.2 h  rss  7.29 GiB  arena  5.12 GiB  maps 365
+  pid 1896800  age  15.2 h  rss  7.69 GiB  arena  5.63 GiB  maps 385
+  pid 1896983  age  15.2 h  rss 10.10 GiB  arena  8.19 GiB  maps 438
+  pid 2152314  age   2.8 h  rss  6.46 GiB  arena  4.63 GiB  maps 366
+  pid 2152437  age   2.8 h  rss  6.40 GiB  arena  4.53 GiB  maps 362
+  pid 2152618  age   2.8 h  rss  6.12 GiB  arena  4.43 GiB  maps 366
+  pid 2152816  age   2.8 h  rss  6.61 GiB  arena  4.57 GiB  maps 369

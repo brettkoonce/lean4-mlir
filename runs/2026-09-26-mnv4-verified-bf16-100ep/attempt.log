@@ -1,0 +1,653 @@
+I0927 08:54:02.648257 2149756 service.cc:154] XLA service 0x75626c052930 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0927 08:54:02.648307 2149756 service.cc:170]   StreamExecutor [0]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0927 08:54:02.648315 2149756 service.cc:170]   StreamExecutor [1]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0927 08:54:02.648319 2149756 service.cc:170]   StreamExecutor [2]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0927 08:54:02.648323 2149756 service.cc:170]   StreamExecutor [3]: NVIDIA GeForce RTX 3060, Compute Capability 8.6 (Driver: 13.3.0[610.57.4]; Runtime: 13.3.0; Toolkit: 13.0.0; DNN: 9.24.0)
+I0927 08:54:02.651823 2149756 se_gpu_pjrt_client.cc:1450] Using BFC allocator.
+I0927 08:54:02.651877 2149756 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 0 for BFCAllocator.
+I0927 08:54:02.652113 2149756 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 1 for BFCAllocator.
+I0927 08:54:02.652122 2149756 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 2 for BFCAllocator.
+I0927 08:54:02.652131 2149756 gpu_helpers.cc:162] XLA backend allocating 8.72GiB (9365880832 bytes) on device 3 for BFCAllocator.
+[pjrt_ffi] XLA backend: PJRT 0.114, 4 device(s)
+[pjrt_ffi] command buffers: enabled (CUDA default)
+I0927 08:54:02.807126 2149756 se_gpu_pjrt_compiler.cc:382] Found GPU target config and a PjRtClient with matching configuration. Performing a JIT compilation.
+I0927 08:54:06.797145 2149756 cuda_dnn.cc:442] Loaded cuDNN version 92400
+W0927 08:54:09.680928 2149837 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0927 08:54:09.920708 2149837 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0927 08:54:12.025973 2149837 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+W0927 08:54:13.005026 2149837 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0927 08:54:13.471723 2149829 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 88 bytes spill stores, 56 bytes spill loads
+
+I0927 08:54:13.926042 2149837 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_2', 80 bytes spill stores, 48 bytes spill loads
+
+W0927 08:54:13.988739 2149822 cuda_timer.cc:88] Delay kernel timed out: measured time has sub-optimal accuracy. There may be a missing warmup execution, please investigate in Nsight Systems.
+I0927 08:54:15.094702 2149829 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot_6', 96 bytes spill stores, 60 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/mnv4in_emaaccdp8x128wxdowd005bf16_train_step.mlir (@mnv4in_emaaccdp8x128wxdowd005bf16_train_step, 1327 outputs, 4 replicas) in 70682 ms
+I0927 08:55:15.247583 2149829 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 112 bytes spill stores, 112 bytes spill loads
+
+I0927 08:55:15.594502 2149826 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 12 bytes spill stores, 12 bytes spill loads
+
+I0927 08:55:15.683345 2149842 subprocess_compilation.cc:349] ptxas warning : Registers are spilled to local memory in function 'gemm_fusion_dot', 872 bytes spill stores, 616 bytes spill loads
+
+[pjrt_ffi] compiled verified_mlir/mnv4in_fwd.mlir (@mnv4in_fwd, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 5866 ms
+[pjrt_ffi] compiled verified_mlir/mnv4in_fwd_eval.mlir (@mnv4in_fwd_eval, 1 outputs, 4 replicas, SHARDED — outputs gathered from every replica) in 384 ms
+MobileNetV4-Conv-M on full 1000-class ImageNet via the VERIFIED renderer → XLA/PJRT → GPU, with the tfds batch shim supplying the MNv4 reference augmentation
+  xla/pjrt verified_mlir/mnv4in_emaaccdp8x128wxdowd005bf16_train_step.mlir
+  xla/pjrt verified_mlir/mnv4in_fwd.mlir  (eval, SHARDED over 4 replicas)
+  xla/pjrt verified_mlir/mnv4in_fwd_eval.mlir  (eval, SHARDED over 4 replicas)
+  imagenet: val streams per pass (50,000 images at eval width 150528) — nothing is held
+  train 1281167, test 50000; bs 128, MobileNetV4-Conv-M (ImageNet-1k) emaaccdp8x128wxdowd005bf16 (cosine+warmup 5ep, baseLR 0.004000), He init
+  ▸ CLASSIFIER DROPOUT: keep 0.900000, mask tensor<512x1280xf32> (PER-ELEMENT, one Bernoulli per example×feature — not per-example like the drop scales), host-drawn per step at seed+999983, 1/keep folded in. Eval is the identity (drop-free forward).
+  ▸ EMA: region 4 of 5 [θ|m|v|G|ema], shadow starts AT the weights, decay min(0.999900, (1+t)/(10+t)) — TF warmup-corrected. EVAL AND CHECKPOINT SCORE THE SHADOW. ⚠ It advances on APPLY micro-batches only — once per optimizer step, as the reference does.
+  ▸ GRADIENT ACCUMULATION: k = 8, blob region 3 of 5 [θ|m|v|G|ema]. Micro-batch 512 x 8 = EFFECTIVE BATCH 4096. 2496 micro-batches/epoch = 312 updates/epoch; the LR schedule and Adam's bias correction run on UPDATES, the augmentation and the prefetch on micro-batches.
+  eval batch 64 (the batch @mnv4in_fwd_eval was RENDERED at) != train batch 128 — sound because eval is class-batch-independent
+  running-stats BN: 77 layers, 67904 stat floats → eval via @mnv4in_fwd_eval
+     decay 0.990000 (TF sense; = PyTorch/timm momentum 0.010000), new-batch weight 0.001256 = 1 − 0.990000^(1/8), compensated for grad-accum
+  DATA-PARALLEL: 4 replicas x bs 128 = global batch 512, 2496 steps/epoch
+  EVAL SHARDED: 4 replicas x 64 = 256 test images per invoke, 196 invokes, last one 80 real + 176 pad
+  ▸ resuming from checkpoint at epoch 84
+  ▸ resumed BN running stats + ema_bn from .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (hash 16583250202580742875)
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499320.455258 2152314 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790499320.682720 2152314 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499322.417720 2152314 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499325.182841 2152437 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790499325.211060 2152437 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1790499325.718829 2152463 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499326.858490 2152437 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499329.626355 2152618 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790499329.653555 2152618 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1790499330.154394 2152644 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499331.288713 2152618 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499334.044309 2152816 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790499334.072928 2152816 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+I0000 00:00:1790499334.546928 2152841 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790499335.672805 2152816 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+[pjrt_ffi] RESIDENT: @mnv4in_emaaccdp8x128wxdowd005bf16_train_step holds 1165 parameter tensors (185.3 MB) on 4 devices; they stop crossing PCIe from here
+I0000 00:00:1790499339.791280 2153027 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+I0927 08:55:40.358717 2149813 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I0927 08:55:40.360732 2149810 cuda_dnn.cc:442] Loaded cuDNN version 92400
+I0927 08:55:40.360865 2149816 cuda_dnn.cc:442] Loaded cuDNN version 92400
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 1)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 2)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 3)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — train split, batch 512, 150528 floats/img (seed 4)
+  imagenet shim: 4 sharded producers (round-robin over batches)
+  ▸ SHIM PREFETCH: ON (depth 4 over 4 producer handle(s) — each step's read is issued before the previous step's invoke, one in flight PER HANDLE, so every producer drains during compute instead of blocking in write()). Measured 377 → 224 ms/step on R34/ImageNet 4×bs64 for depth 1. Batch buffers are allocated and freed on the main thread; the pool only fills them.
+  step 0/2496: loss=2.274532
+  step 1/2496: loss=2.272229
+  step 2/2496: loss=1.925041
+  step 100/2496: loss=2.089136
+  step 200/2496: loss=2.170626
+  step 300/2496: loss=1.838091
+  step 400/2496: loss=2.192600
+  step 500/2496: loss=1.911630
+  step 600/2496: loss=1.664772
+  step 700/2496: loss=2.127711
+  step 800/2496: loss=1.747407
+  step 900/2496: loss=2.042311
+  step 1000/2496: loss=2.143323
+  step 1100/2496: loss=2.157889
+  step 1200/2496: loss=2.194156
+  step 1300/2496: loss=1.948182
+  step 1400/2496: loss=2.063396
+  step 1500/2496: loss=2.260067
+  step 1600/2496: loss=2.091158
+  step 1700/2496: loss=1.880981
+  step 1800/2496: loss=2.141691
+  step 1900/2496: loss=2.271578
+  step 2000/2496: loss=1.998428
+  step 2100/2496: loss=2.057745
+  step 2200/2496: loss=2.167403
+  step 2300/2496: loss=2.118807
+  step 2400/2496: loss=2.216366
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790500021.368469 2157455 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790500021.396057 2157455 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790500022.734984 2157455 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790500023.567674 2157566 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790500024.035698 2157643 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790500024.080577 2157643 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790500025.215609 2157643 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790500025.928698 2157743 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @mnv4in_fwd_eval holds 387 parameter tensors (37.3 MB) on 4 devices; they stop crossing PCIe from here
+Epoch 85/100: loss=2.072399 lr=0.000241
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 1)
+  imagenet shim: 2 sharded producers (round-robin over batches)
+  ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held (the 30 GB drain is gone; planning/streaming_val.md)
+  ▸ val = all 50000 streamed (timm's denominator)
+  epoch 85: test_acc = 38336/50000 = 76.672000%  top5 = 46543/50000 = 93.086000%  [95% CI 76.30–77.04]
+    per-example top-1 bitmap -> runs/2026-09-26-mnv4-verified-bf16-100ep/bitmaps/mnv4_emaaccdp8x128wxdowd005bf16_e85.bin (50000 bytes)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 6380008368877644210)
+  step 0/2496: loss=2.072136
+  step 1/2496: loss=2.074183
+  step 2/2496: loss=2.072663
+  step 100/2496: loss=2.079412
+  step 200/2496: loss=2.215930
+  step 300/2496: loss=1.899648
+  step 400/2496: loss=2.042397
+  step 500/2496: loss=2.107408
+  step 600/2496: loss=2.218237
+  step 700/2496: loss=2.056603
+  step 800/2496: loss=1.825089
+  step 900/2496: loss=2.258008
+  step 1000/2496: loss=2.105421
+  step 1100/2496: loss=1.989540
+  step 1200/2496: loss=2.227719
+  step 1300/2496: loss=1.966094
+  step 1400/2496: loss=2.068522
+  step 1500/2496: loss=2.193274
+  step 1600/2496: loss=2.009243
+  step 1700/2496: loss=1.958598
+  step 1800/2496: loss=1.793120
+  step 1900/2496: loss=2.055618
+  step 2000/2496: loss=1.859745
+  step 2100/2496: loss=2.128974
+  step 2200/2496: loss=1.993659
+  step 2300/2496: loss=2.020476
+  step 2400/2496: loss=1.949651
+Epoch 86/100: loss=2.061376 lr=0.000211
+  epoch 86: eval skipped (valEveryEpochs = 5; next scored epoch 90)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 11874219438505858687)
+  step 0/2496: loss=2.149923
+  step 1/2496: loss=2.033832
+  step 2/2496: loss=1.824246
+  step 100/2496: loss=1.987023
+  step 200/2496: loss=2.039392
+  step 300/2496: loss=2.226839
+  step 400/2496: loss=2.113865
+  step 500/2496: loss=1.928637
+  step 600/2496: loss=2.148645
+  step 700/2496: loss=2.295309
+  step 800/2496: loss=1.925956
+  step 900/2496: loss=1.847520
+  step 1000/2496: loss=2.025850
+  step 1100/2496: loss=1.971274
+  step 1200/2496: loss=2.108207
+  step 1300/2496: loss=2.224247
+  step 1400/2496: loss=2.385070
+  step 1500/2496: loss=2.045470
+  step 1600/2496: loss=2.068667
+  step 1700/2496: loss=2.006547
+  step 1800/2496: loss=2.196690
+  step 1900/2496: loss=2.002425
+  step 2000/2496: loss=2.097559
+  step 2100/2496: loss=1.973446
+  step 2200/2496: loss=2.120045
+  step 2300/2496: loss=2.182471
+  step 2400/2496: loss=1.869410
+Epoch 87/100: loss=2.053812 lr=0.000182
+  epoch 87: eval skipped (valEveryEpochs = 5; next scored epoch 90)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 14044894727445540719)
+  step 0/2496: loss=1.924082
+  step 1/2496: loss=2.069516
+  step 2/2496: loss=2.246096
+  step 100/2496: loss=2.190756
+  step 200/2496: loss=2.302510
+  step 300/2496: loss=2.219024
+  step 400/2496: loss=2.207280
+  step 500/2496: loss=2.055551
+  step 600/2496: loss=1.928421
+  step 700/2496: loss=2.132489
+  step 800/2496: loss=2.029240
+  step 900/2496: loss=1.944211
+  step 1000/2496: loss=1.842188
+  step 1100/2496: loss=2.113168
+  step 1200/2496: loss=2.177448
+  step 1300/2496: loss=2.051027
+  step 1400/2496: loss=1.965008
+  step 1500/2496: loss=1.920271
+  step 1600/2496: loss=1.944273
+  step 1700/2496: loss=1.988390
+  step 1800/2496: loss=2.044529
+  step 1900/2496: loss=1.955990
+  step 2000/2496: loss=2.138211
+  step 2100/2496: loss=2.338835
+  step 2200/2496: loss=1.953761
+  step 2300/2496: loss=1.967107
+  step 2400/2496: loss=2.414389
+Epoch 88/100: loss=2.051527 lr=0.000155
+  epoch 88: eval skipped (valEveryEpochs = 5; next scored epoch 90)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 3681343328360372520)
+  step 0/2496: loss=2.148821
+  step 1/2496: loss=1.930060
+  step 2/2496: loss=2.157123
+  step 100/2496: loss=1.983648
+  step 200/2496: loss=2.259464
+  step 300/2496: loss=2.046424
+  step 400/2496: loss=2.001050
+  step 500/2496: loss=2.151071
+  step 600/2496: loss=2.108735
+  step 700/2496: loss=2.007317
+  step 800/2496: loss=2.027735
+  step 900/2496: loss=2.129341
+  step 1000/2496: loss=2.023178
+  step 1100/2496: loss=1.994543
+  step 1200/2496: loss=2.174891
+  step 1300/2496: loss=2.155245
+  step 1400/2496: loss=2.102264
+  step 1500/2496: loss=2.209029
+  step 1600/2496: loss=2.080536
+  step 1700/2496: loss=1.911780
+  step 1800/2496: loss=2.088500
+  step 1900/2496: loss=1.918968
+  step 2000/2496: loss=1.982602
+  step 2100/2496: loss=2.126054
+  step 2200/2496: loss=2.293593
+  step 2300/2496: loss=1.919854
+  step 2400/2496: loss=1.875200
+Epoch 89/100: loss=2.042638 lr=0.000131
+  epoch 89: eval skipped (valEveryEpochs = 5; next scored epoch 90)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 12229251999495634737)
+  step 0/2496: loss=2.268954
+  step 1/2496: loss=1.962838
+  step 2/2496: loss=2.214351
+  step 100/2496: loss=2.121277
+  step 200/2496: loss=2.022219
+  step 300/2496: loss=1.920590
+  step 400/2496: loss=2.102014
+  step 500/2496: loss=2.088074
+  step 600/2496: loss=2.379050
+  step 700/2496: loss=1.928401
+  step 800/2496: loss=1.964481
+  step 900/2496: loss=2.167015
+  step 1000/2496: loss=2.182516
+  step 1100/2496: loss=1.940310
+  step 1200/2496: loss=2.054521
+  step 1300/2496: loss=1.957135
+  step 1400/2496: loss=2.241509
+  step 1500/2496: loss=1.882957
+  step 1600/2496: loss=2.205735
+  step 1700/2496: loss=2.148718
+  step 1800/2496: loss=2.252082
+  step 1900/2496: loss=1.943980
+  step 2000/2496: loss=1.852436
+  step 2100/2496: loss=2.073324
+  step 2200/2496: loss=1.886662
+  step 2300/2496: loss=1.881541
+  step 2400/2496: loss=2.014486
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790503348.985582 2172931 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790503349.014445 2172931 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790503350.446955 2172931 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790503351.328013 2173049 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790503353.980266 2173054 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790503354.045789 2173054 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790503355.524683 2173054 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790503356.381723 2173237 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @mnv4in_fwd_eval holds 387 parameter tensors (37.3 MB) on 4 devices; they stop crossing PCIe from here
+Epoch 90/100: loss=2.038239 lr=0.000108
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 1)
+  imagenet shim: 2 sharded producers (round-robin over batches)
+  ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held (the 30 GB drain is gone; planning/streaming_val.md)
+  ▸ val = all 50000 streamed (timm's denominator)
+  epoch 90: test_acc = 38345/50000 = 76.690000%  top5 = 46568/50000 = 93.136000%  [95% CI 76.32–77.06]
+    per-example top-1 bitmap -> runs/2026-09-26-mnv4-verified-bf16-100ep/bitmaps/mnv4_emaaccdp8x128wxdowd005bf16_e90.bin (50000 bytes)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 10388140760569675095)
+  step 0/2496: loss=1.851102
+  step 1/2496: loss=1.967218
+  step 2/2496: loss=2.147295
+  step 100/2496: loss=2.042203
+  step 200/2496: loss=1.811040
+  step 300/2496: loss=2.055888
+  step 400/2496: loss=2.073712
+  step 500/2496: loss=1.970803
+  step 600/2496: loss=2.157171
+  step 700/2496: loss=2.164676
+  step 800/2496: loss=2.071961
+  step 900/2496: loss=1.990835
+  step 1000/2496: loss=2.158437
+  step 1100/2496: loss=1.952323
+  step 1200/2496: loss=2.075139
+  step 1300/2496: loss=1.993809
+  step 1400/2496: loss=2.136748
+  step 1500/2496: loss=1.953502
+  step 1600/2496: loss=2.087495
+  step 1700/2496: loss=2.063103
+  step 1800/2496: loss=1.833480
+  step 1900/2496: loss=2.101259
+  step 2000/2496: loss=1.961916
+  step 2100/2496: loss=1.843524
+  step 2200/2496: loss=2.023259
+  step 2300/2496: loss=1.783751
+  step 2400/2496: loss=2.024794
+Epoch 91/100: loss=2.028807 lr=0.000088
+  epoch 91: eval skipped (valEveryEpochs = 5; next scored epoch 95)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 18119556836842306866)
+  step 0/2496: loss=2.174870
+  step 1/2496: loss=2.141020
+  step 2/2496: loss=2.070418
+  step 100/2496: loss=2.114829
+  step 200/2496: loss=1.667209
+  step 300/2496: loss=1.609010
+  step 400/2496: loss=2.289967
+  step 500/2496: loss=2.039125
+  step 600/2496: loss=1.755252
+  step 700/2496: loss=2.244077
+  step 800/2496: loss=2.076446
+  step 900/2496: loss=1.914608
+  step 1000/2496: loss=1.898998
+  step 1100/2496: loss=2.118743
+  step 1200/2496: loss=2.115709
+  step 1300/2496: loss=1.950091
+  step 1400/2496: loss=2.291557
+  step 1500/2496: loss=2.094984
+  step 1600/2496: loss=1.828662
+  step 1700/2496: loss=2.090341
+  step 1800/2496: loss=2.056543
+  step 1900/2496: loss=2.054656
+  step 2000/2496: loss=2.010000
+  step 2100/2496: loss=1.822191
+  step 2200/2496: loss=2.137133
+  step 2300/2496: loss=1.871525
+  step 2400/2496: loss=2.041231
+Epoch 92/100: loss=2.030860 lr=0.000070
+  epoch 92: eval skipped (valEveryEpochs = 5; next scored epoch 95)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 12403052693599677202)
+  step 0/2496: loss=1.972748
+  step 1/2496: loss=1.919332
+  step 2/2496: loss=1.961325
+  step 100/2496: loss=2.028336
+  step 200/2496: loss=1.918680
+  step 300/2496: loss=2.109062
+  step 400/2496: loss=2.091888
+  step 500/2496: loss=2.258876
+  step 600/2496: loss=1.988462
+  step 700/2496: loss=2.216599
+  step 800/2496: loss=2.097620
+  step 900/2496: loss=2.229430
+  step 1000/2496: loss=2.079700
+  step 1100/2496: loss=2.095860
+  step 1200/2496: loss=2.165184
+  step 1300/2496: loss=2.001265
+  step 1400/2496: loss=2.252015
+  step 1500/2496: loss=1.968072
+  step 1600/2496: loss=1.863627
+  step 1700/2496: loss=2.096172
+  step 1800/2496: loss=2.024198
+  step 1900/2496: loss=2.178868
+  step 2000/2496: loss=2.069419
+  step 2100/2496: loss=1.898175
+  step 2200/2496: loss=2.217048
+  step 2300/2496: loss=1.944662
+  step 2400/2496: loss=2.199722
+Epoch 93/100: loss=2.033656 lr=0.000053
+  epoch 93: eval skipped (valEveryEpochs = 5; next scored epoch 95)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 9402308578549385050)
+  step 0/2496: loss=2.048331
+  step 1/2496: loss=2.039782
+  step 2/2496: loss=2.086197
+  step 100/2496: loss=2.060559
+  step 200/2496: loss=1.872329
+  step 300/2496: loss=2.040902
+  step 400/2496: loss=1.943847
+  step 500/2496: loss=1.816161
+  step 600/2496: loss=2.164004
+  step 700/2496: loss=2.053757
+  step 800/2496: loss=2.089828
+  step 900/2496: loss=1.882879
+  step 1000/2496: loss=1.738637
+  step 1100/2496: loss=2.051894
+  step 1200/2496: loss=2.127033
+  step 1300/2496: loss=2.058959
+  step 1400/2496: loss=1.933890
+  step 1500/2496: loss=1.980819
+  step 1600/2496: loss=2.193455
+  step 1700/2496: loss=2.048841
+  step 1800/2496: loss=2.086125
+  step 1900/2496: loss=2.127597
+  step 2000/2496: loss=2.185792
+  step 2100/2496: loss=1.858913
+  step 2200/2496: loss=2.065420
+  step 2300/2496: loss=2.252000
+  step 2400/2496: loss=2.254577
+Epoch 94/100: loss=2.022004 lr=0.000039
+  epoch 94: eval skipped (valEveryEpochs = 5; next scored epoch 95)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 6671219078624586819)
+  step 0/2496: loss=1.925690
+  step 1/2496: loss=2.161462
+  step 2/2496: loss=1.924274
+  step 100/2496: loss=1.875286
+  step 200/2496: loss=1.781162
+  step 300/2496: loss=1.800385
+  step 400/2496: loss=1.780865
+  step 500/2496: loss=2.047973
+  step 600/2496: loss=2.080172
+  step 700/2496: loss=2.065620
+  step 800/2496: loss=2.124418
+  step 900/2496: loss=2.193431
+  step 1000/2496: loss=2.147978
+  step 1100/2496: loss=1.896144
+  step 1200/2496: loss=2.137788
+  step 1300/2496: loss=1.956201
+  step 1400/2496: loss=1.986347
+  step 1500/2496: loss=2.056595
+  step 1600/2496: loss=1.916378
+  step 1700/2496: loss=2.150311
+  step 1800/2496: loss=1.968631
+  step 1900/2496: loss=2.158520
+  step 2000/2496: loss=2.153286
+  step 2100/2496: loss=2.000700
+  step 2200/2496: loss=1.993210
+  step 2300/2496: loss=2.013925
+  step 2400/2496: loss=1.821769
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790506653.736950 2187849 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790506654.154610 2187849 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790506656.427462 2187849 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790506657.657493 2187953 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790506658.633086 2187960 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790506658.695837 2187960 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790506660.147452 2187960 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790506661.066371 2188158 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @mnv4in_fwd_eval holds 387 parameter tensors (37.3 MB) on 4 devices; they stop crossing PCIe from here
+Epoch 95/100: loss=2.020524 lr=0.000027
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 1)
+  imagenet shim: 2 sharded producers (round-robin over batches)
+  ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held (the 30 GB drain is gone; planning/streaming_val.md)
+  ▸ val = all 50000 streamed (timm's denominator)
+  epoch 95: test_acc = 38323/50000 = 76.646000%  top5 = 46556/50000 = 93.112000%  [95% CI 76.27–77.01]
+    per-example top-1 bitmap -> runs/2026-09-26-mnv4-verified-bf16-100ep/bitmaps/mnv4_emaaccdp8x128wxdowd005bf16_e95.bin (50000 bytes)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 7449027219985106569)
+  step 0/2496: loss=1.731464
+  step 1/2496: loss=1.718906
+  step 2/2496: loss=2.075972
+  step 100/2496: loss=2.093443
+  step 200/2496: loss=1.871925
+  step 300/2496: loss=2.127378
+  step 400/2496: loss=1.978961
+  step 500/2496: loss=2.049427
+  step 600/2496: loss=1.835865
+  step 700/2496: loss=2.043250
+  step 800/2496: loss=2.046320
+  step 900/2496: loss=2.116443
+  step 1000/2496: loss=1.790274
+  step 1100/2496: loss=2.354674
+  step 1200/2496: loss=2.083022
+  step 1300/2496: loss=1.868197
+  step 1400/2496: loss=2.047333
+  step 1500/2496: loss=2.070870
+  step 1600/2496: loss=2.053572
+  step 1700/2496: loss=1.908998
+  step 1800/2496: loss=1.747468
+  step 1900/2496: loss=2.005187
+  step 2000/2496: loss=1.982317
+  step 2100/2496: loss=2.039076
+  step 2200/2496: loss=1.855615
+  step 2300/2496: loss=1.953018
+  step 2400/2496: loss=2.268218
+Epoch 96/100: loss=2.021295 lr=0.000017
+  epoch 96: eval skipped (valEveryEpochs = 5; next scored epoch 100)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 17252141175641654786)
+  step 0/2496: loss=2.187213
+  step 1/2496: loss=1.993192
+  step 2/2496: loss=1.862945
+  step 100/2496: loss=1.835873
+  step 200/2496: loss=2.141806
+  step 300/2496: loss=2.027744
+  step 400/2496: loss=2.259065
+  step 500/2496: loss=1.929988
+  step 600/2496: loss=1.906224
+  step 700/2496: loss=1.916200
+  step 800/2496: loss=1.965814
+  step 900/2496: loss=2.266294
+  step 1000/2496: loss=2.036516
+  step 1100/2496: loss=1.857814
+  step 1200/2496: loss=2.244282
+  step 1300/2496: loss=1.950752
+  step 1400/2496: loss=1.834801
+  step 1500/2496: loss=1.803843
+  step 1600/2496: loss=1.843753
+  step 1700/2496: loss=1.836100
+  step 1800/2496: loss=1.783409
+  step 1900/2496: loss=1.861027
+  step 2000/2496: loss=1.839126
+  step 2100/2496: loss=1.839695
+  step 2200/2496: loss=2.243177
+  step 2300/2496: loss=1.847903
+  step 2400/2496: loss=2.019031
+Epoch 97/100: loss=2.015764 lr=0.000010
+  epoch 97: eval skipped (valEveryEpochs = 5; next scored epoch 100)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 11045106979335752035)
+  step 0/2496: loss=2.005790
+  step 1/2496: loss=2.000759
+  step 2/2496: loss=2.131488
+  step 100/2496: loss=2.172693
+  step 200/2496: loss=2.107554
+  step 300/2496: loss=1.904584
+  step 400/2496: loss=1.922153
+  step 500/2496: loss=2.269246
+  step 600/2496: loss=1.891741
+  step 700/2496: loss=1.776621
+  step 800/2496: loss=2.145774
+  step 900/2496: loss=2.226260
+  step 1000/2496: loss=1.745288
+  step 1100/2496: loss=1.989857
+  step 1200/2496: loss=1.807495
+  step 1300/2496: loss=2.023021
+  step 1400/2496: loss=2.135917
+  step 1500/2496: loss=1.895295
+  step 1600/2496: loss=2.050822
+  step 1700/2496: loss=1.997391
+  step 1800/2496: loss=1.992142
+  step 1900/2496: loss=2.058858
+  step 2000/2496: loss=2.025523
+  step 2100/2496: loss=2.106811
+  step 2200/2496: loss=1.814822
+  step 2300/2496: loss=1.929543
+  step 2400/2496: loss=2.036381
+Epoch 98/100: loss=2.020244 lr=0.000004
+  epoch 98: eval skipped (valEveryEpochs = 5; next scored epoch 100)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 5138111790022049639)
+  step 0/2496: loss=1.870291
+  step 1/2496: loss=2.142740
+  step 2/2496: loss=1.913438
+  step 100/2496: loss=2.187355
+  step 200/2496: loss=1.945690
+  step 300/2496: loss=1.955391
+  step 400/2496: loss=2.034643
+  step 500/2496: loss=2.029288
+  step 600/2496: loss=1.854665
+  step 700/2496: loss=2.008680
+  step 800/2496: loss=2.195045
+  step 900/2496: loss=1.872514
+  step 1000/2496: loss=2.109212
+  step 1100/2496: loss=2.016831
+  step 1200/2496: loss=1.984102
+  step 1300/2496: loss=2.007335
+  step 1400/2496: loss=2.081955
+  step 1500/2496: loss=1.997481
+  step 1600/2496: loss=1.837521
+  step 1700/2496: loss=1.898643
+  step 1800/2496: loss=2.089792
+  step 1900/2496: loss=1.971052
+  step 2000/2496: loss=2.116028
+  step 2100/2496: loss=1.879389
+  step 2200/2496: loss=2.132944
+  step 2300/2496: loss=2.170166
+  step 2400/2496: loss=2.008859
+Epoch 99/100: loss=2.020537 lr=0.000001
+  epoch 99: eval skipped (valEveryEpochs = 5; next scored epoch 100)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 16420681259364486061)
+  step 0/2496: loss=1.908613
+  step 1/2496: loss=2.303848
+  step 2/2496: loss=1.858609
+  step 100/2496: loss=2.011366
+  step 200/2496: loss=2.155913
+  step 300/2496: loss=2.165290
+  step 400/2496: loss=1.822864
+  step 500/2496: loss=2.104430
+  step 600/2496: loss=2.020263
+  step 700/2496: loss=2.204887
+  step 800/2496: loss=1.858852
+  step 900/2496: loss=1.820047
+  step 1000/2496: loss=2.180662
+  step 1100/2496: loss=2.129544
+  step 1200/2496: loss=2.007836
+  step 1300/2496: loss=1.978681
+  step 1400/2496: loss=2.031764
+  step 1500/2496: loss=1.969311
+  step 1600/2496: loss=2.001858
+  step 1700/2496: loss=1.978353
+  step 1800/2496: loss=2.178743
+  step 1900/2496: loss=1.864867
+  step 2000/2496: loss=1.842386
+  step 2100/2496: loss=2.279322
+  step 2200/2496: loss=2.161081
+  step 2300/2496: loss=2.098334
+  step 2400/2496: loss=1.903454
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790509965.473002 2202824 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790509965.585717 2202824 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790509967.186846 2202824 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790509968.142063 2202928 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790509970.166252 2202934 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790509972.084327 2202934 cpu_feature_guard.cc:227] This TensorFlow binary is optimized to use available CPU instructions in performance-critical operations.
+To enable the following instructions: AVX2 AVX512F AVX512_VNNI AVX512_BF16 AVX512_FP16 AVX_VNNI AMX_TILE AMX_INT8 AMX_BF16 FMA, in other operations, rebuild TensorFlow with the appropriate compiler flags.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1790509988.255392 2202934 port.cc:153] oneDNN custom operations are on. You may see slightly different numerical results due to floating-point round-off errors from different computation orders. To turn them off, set the environment variable `TF_ENABLE_ONEDNN_OPTS=0`.
+I0000 00:00:1790509989.183895 2203172 tf_record_dataset_op.cc:396] The default buffer size is 262144, which is overridden by the user specified `buffer_size` of 8388608
+[pjrt_ffi] RESIDENT: @mnv4in_fwd_eval holds 387 parameter tensors (37.3 MB) on 4 devices; they stop crossing PCIe from here
+Epoch 100/100: loss=2.018229 lr=0.000000
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 0)
+  imagenet shim: jax/.lake/build/generated_mobilenet_v4_imagenet_shim.py — validation split, batch 256, 150528 floats/img (seed 1)
+  imagenet shim: 2 sharded producers (round-robin over batches)
+  ▸ val: STREAMED per pass — 2 batch-block producer(s), 256-row blocks k, k+2, … read round-robin, nothing held (the 30 GB drain is gone; planning/streaming_val.md)
+  ▸ val = all 50000 streamed (timm's denominator)
+  epoch 100: test_acc = 38339/50000 = 76.678000%  top5 = 46572/50000 = 93.144000%  [95% CI 76.31–77.05]
+    per-example top-1 bitmap -> runs/2026-09-26-mnv4-verified-bf16-100ep/bitmaps/mnv4_emaaccdp8x128wxdowd005bf16_e100.bin (50000 bytes)
+    BN companion -> .lake/build/mnv4in_emaaccdp8x128wxdowd005bf16_ckpt_xla_e100.bin.bn (67904 floats x 2, hash 9676748872006086753)
+done (trained MobileNetV4-Conv-M (ImageNet-1k) emaaccdp8x128wxdowd005bf16 + cosine/warmup via packed threading).

@@ -1,0 +1,11 @@
+⚠⚠ SUSTAINED LOADER FAULT at 2026-09-27 08:41:27 UTC
+3+ consecutive epochs over threshold with host memory healthy: e83=1095s thr=786s base=629s avail=131.6GiB
+⛔ The loaders run BARE on this conf (no LEAN_MLIR_SHIM_RESPAWN_EPOCHS), and R34's
+   flip-only shim never degraded; A3's shim runs RandAugment m6 (B0-like). A sustained fault here is a new
+   finding. Record it in RESULTS.md verbatim, then kill right after a checkpoint and
+   resume with LEAN_MLIR_SHIM_RESPAWN_EPOCHS=10, or REST_EPOCHS every 40 (B0's cure).
+loaders at detection:
+  pid 1896515  age  15.2 h  rss  6.64 GiB  arena  4.54 GiB  maps 360
+  pid 1896611  age  15.2 h  rss  7.29 GiB  arena  5.12 GiB  maps 365
+  pid 1896800  age  15.2 h  rss  7.69 GiB  arena  5.63 GiB  maps 385
+  pid 1896983  age  15.2 h  rss 10.10 GiB  arena  8.19 GiB  maps 438

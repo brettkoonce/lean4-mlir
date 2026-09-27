@@ -1,0 +1,13 @@
+[sup] 2026-09-26 17:26:09 START job=mnv4-default-4gpu devs=0,1,2,3 epochs=100 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-26-mnv4-verified-bf16-100ep
+[sup] 2026-09-26 17:26:09 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+[sup] 2026-09-26 17:26:09 eta: ~42 h for 100 ep on 4x 4060 Ti (MEASURED ~1,516 s/epoch, eval included) — about five 8 h overnight chunks
+[sup] 2026-09-26 17:26:09 attempt 1: resuming at epoch 0/100 (next rest: 999)
+[sup] 2026-09-26 17:26:09   launched PID=1893917 PGID=1893917
+[sup] 2026-09-27 08:53:37 supervisor exiting — taking the run down (PID=1893917 PGID=1893917)
+[sup] 2026-09-27 08:54:01 START job=mnv4-default-4gpu devs=0,1,2,3 epochs=100 rest_after=[none] temp_max=78 stall=1800s logs=runs/2026-09-26-mnv4-verified-bf16-100ep
+[sup] 2026-09-27 08:54:01 cmd: .lake/build/bin/mobilenetv4-imagenet-verified data
+[sup] 2026-09-27 08:54:01 eta: ~42 h for 100 ep on 4x 4060 Ti (MEASURED ~1,516 s/epoch, eval included) — about five 8 h overnight chunks
+[sup] 2026-09-27 08:54:01 attempt 1: resuming at epoch 84/100 (next rest: 999)
+[sup] 2026-09-27 08:54:01   launched PID=2149749 PGID=2149749
+[sup]   last line: done (trained MobileNetV4-Conv-M (ImageNet-1k) emaaccdp8x128wxdowd005bf16 + cosine/warmup via packed threading).
+[sup] 2026-09-27 11:53:47 ✅ COMPLETE — 100/100 epochs
